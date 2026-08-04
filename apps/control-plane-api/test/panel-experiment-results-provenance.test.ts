@@ -54,7 +54,7 @@ beforeAll(async () => {
   };
 });
 
-async function readResults(): Promise<PanelExperimentResultsOutput> {
+async function readResults(): Promise<Extract<PanelExperimentResultsOutput, { state: "ready" }>> {
   const response = await callPanelResults(
     analysisReturning(Response.json(analysisEnvelope(target.runId, statsOutput()))),
     target,
@@ -62,7 +62,11 @@ async function readResults(): Promise<PanelExperimentResultsOutput> {
   if (response.status !== 200) {
     throw new Error(`results read failed: ${response.status} ${await response.text()}`);
   }
-  return (await response.json()) as PanelExperimentResultsOutput;
+  const body = (await response.json()) as PanelExperimentResultsOutput;
+  if (body.state !== "ready") {
+    throw new Error(`expected ready results, got ${body.state}`);
+  }
+  return body;
 }
 
 describe("Results Control provenance", () => {

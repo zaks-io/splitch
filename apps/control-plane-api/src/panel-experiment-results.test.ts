@@ -56,7 +56,10 @@ function repository(overrides: Record<string, unknown> = {}): Repository {
 }
 
 /** Echoes back the Run it was asked for, as the real Analysis Worker does. */
-function analysisReturning(stats: StatsOutput, envelope: Partial<AnalysisResultsEnvelope> = {}) {
+function analysisReturning(
+  stats: StatsOutput,
+  envelope: Partial<Extract<AnalysisResultsEnvelope, { state: "ready" }>> = {},
+) {
   return vi.fn(async (request: Request) => {
     const { runId } = (await request.clone().json()) as { runId: string };
     return Response.json(analysisEnvelope(runId, stats, envelope));
@@ -155,6 +158,8 @@ describe("panel Experiment Results read", () => {
     const body = (await response.json()) as PanelExperimentResultsOutput;
 
     expect(response.status).toBe(200);
+    expect(body.state).toBe("ready");
+    if (body.state !== "ready") throw new Error("expected ready");
     expect(body.control).toEqual({
       state: "unresolvable",
       variantId: "variant_from_a_later_edit",
@@ -170,6 +175,28 @@ describe("panel Experiment Results read", () => {
   it("emits a payload the Panel contract accepts", async () => {
     const response = await results(analysisReturning(statsOutput()));
     expect(parsePanelExperimentResultsOutput(await response.json()).success).toBe(true);
+  });
+
+  it("passes through Analysis no_data without inventing zeroed stats", async () => {
+    const analysis = vi.fn(async (request: Request) => {
+      const { runId } = (await request.clone().json()) as { runId: string };
+      return Response.json({
+        state: "no_data",
+        run_id: runId,
+        control_variant: "control",
+        missing: "metric_events",
+      });
+    });
+    const response = await results(analysis);
+    const body = (await response.json()) as PanelExperimentResultsOutput;
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      state: "no_data",
+      runId: LATEST_RUN_ID,
+      missing: "metric_events",
+    });
+    expect(body).not.toHaveProperty("stats");
   });
 
   it("evaluates the ship gate here and blocks with the failing check named", async () => {

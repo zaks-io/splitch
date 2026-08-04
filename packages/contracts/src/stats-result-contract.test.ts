@@ -229,7 +229,12 @@ describe("StatsEngine", () => {
  * same Run's frozen Variant set (`resolveFrozenControlIdentity`).
  */
 describe("declared /results response contract", () => {
-  const envelope = { run_id: "run_1", control_variant: "control", stats: statsOutput };
+  const envelope = {
+    state: "ready" as const,
+    run_id: "run_1",
+    control_variant: "control",
+    stats: statsOutput,
+  };
 
   function declaredResponse(operationId: string) {
     const route = getRoute(operationId);
@@ -247,9 +252,24 @@ describe("declared /results response contract", () => {
     expect(response.safeParse(statsOutput).success).toBe(false);
   });
 
-  it.each(["run_id", "control_variant"] as const)("%s is required on the envelope", (field) => {
+  it.each([
+    "run_id",
+    "control_variant",
+    "state",
+  ] as const)("%s is required on the envelope", (field) => {
     const { [field]: _dropped, ...withoutField } = envelope;
 
     expect(declaredResponse("experiment_results_get").safeParse(withoutField).success).toBe(false);
+  });
+
+  it("accepts a no_data envelope that names the missing input", () => {
+    expect(
+      declaredResponse("experiment_results_get").safeParse({
+        state: "no_data",
+        run_id: "run_1",
+        control_variant: "control",
+        missing: "metric_events",
+      }).success,
+    ).toBe(true);
   });
 });

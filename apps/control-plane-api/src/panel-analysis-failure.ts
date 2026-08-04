@@ -8,10 +8,11 @@ import { AnalysisResultsError } from "@splitch/control-plane-sdk/panel-experimen
  * A caller cannot tell a transient outage from a broken integrity guarantee
  * from the outside, so the response has to. Reporting a Run-provenance mismatch
  * as "retry in 30s" would teach the caller to poll through a fault that polling
- * can never clear (ADR-0036). Typed Analysis bodies (including SPL-302
- * insufficient-data VALIDATION_ERROR) pass through with their details intact;
- * HTTP status is taken from the error code, not the upstream status line, so a
- * permanent code that arrived as 503 stays permanent.
+ * can never clear (ADR-0036). Typed Analysis error bodies pass through with
+ * their details intact; HTTP status is taken from the error code, not the
+ * upstream status line, so a permanent code that arrived as 503 stays permanent.
+ * Early-Run collecting (`state: "no_data"`) is a 200 from Analysis and never
+ * reaches this helper.
  */
 export function panelAnalysisFailureResponse(cause: unknown): Response {
   if (cause instanceof AnalysisResultsError) {

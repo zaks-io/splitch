@@ -67,13 +67,16 @@ async function parseAnalysisResponse(
   return unwrapEnvelope(response, expectedRunId);
 }
 
-async function unwrapEnvelope(response: Response, expectedRunId: string): Promise<StatsOutput> {
+async function unwrapEnvelope(
+  response: Response,
+  expectedRunId: string,
+): Promise<StatsOutput | null> {
   try {
-    // Analysis answers with AnalysisResultsEnvelope ({ run_id, control_variant,
-    // stats }), not bare StatsOutput. Parsing the envelope as StatsOutput fails
-    // Zod and was promoted to SERVICE_UNAVAILABLE for every successful read
-    // (SPL-290). Panel results already unwrap via parseAnalysisResults; this
-    // reader must do the same and keep the no-pooling Run check.
+    // Analysis answers with AnalysisResultsEnvelope ({ state, run_id, ... }),
+    // not bare StatsOutput. Parsing the envelope as StatsOutput fails Zod and
+    // was promoted to SERVICE_UNAVAILABLE for every successful read (SPL-290).
+    // Panel results already unwrap via parseAnalysisResults; this reader must
+    // do the same and keep the no-pooling Run check.
     const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
     // Match the Analysis Worker (results.ts): a Run-provenance mismatch is a
     // permanent integrity failure. Mapping it to AnalysisResultsUnavailableError
@@ -84,6 +87,9 @@ async function unwrapEnvelope(response: Response, expectedRunId: string): Promis
         `analysis answered for Run ${envelope.run_id}, not Run ${expectedRunId}`,
       );
     }
+    // Same early-Run collecting state as attention-rollup `no_data`: Exposures
+    // without Metric Events is not an Analysis outage (SPL-302).
+    if (envelope.state === "no_data") return null;
     return envelope.stats;
   } catch (cause) {
     if (cause instanceof AnalysisResultsUnavailableError) throw cause;

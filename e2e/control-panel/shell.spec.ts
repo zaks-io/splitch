@@ -110,7 +110,8 @@ test.describe("Control Panel local full-stack harness", () => {
       }),
     );
     // The analysis-api /results read answers with an AnalysisResultsEnvelope
-    // (run_id, control_variant, stats), not a bare StatsOutput (#200): srm
+    // (state, run_id, control_variant, stats|missing), not a bare StatsOutput
+    // (#200 / SPL-302): srm
     // lives under `.stats`, alongside the run_id provenance the envelope now
     // carries.
     expect(

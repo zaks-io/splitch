@@ -60,16 +60,21 @@ describe("MCP recover_from_error attention fan-out", () => {
     expect(experimentSchema?.properties).not.toHaveProperty("srm");
     expect(experimentSchema?.properties).not.toHaveProperty("guardrail_results");
 
-    // experiment_results_get's 200 body is the AnalysisResultsEnvelope, whose
-    // `stats` field is StatsOutput and carries the SRM/Guardrail health.
+    // experiment_results_get's 200 body is AnalysisResultsEnvelope. The ready
+    // branch carries StatsOutput on `stats` (SRM/Guardrail health); no_data does
+    // not invent zeros.
     const resultsSchema = resultsTool.outputSchema as unknown as JsonSchemaLike;
-    const statsSchema = resultsSchema.properties?.stats;
+    const readyBranch = resultsSchema.oneOf?.find(
+      (branch) => branch.properties?.state?.const === "ready",
+    );
+    const statsSchema = readyBranch?.properties?.stats ?? resultsSchema.properties?.stats;
     expect(statsSchema?.properties).toHaveProperty("srm");
     expect(statsSchema?.properties).toHaveProperty("guardrail_results");
   });
 });
 
 interface JsonSchemaLike {
-  properties?: Record<string, JsonSchemaLike>;
+  properties?: Record<string, JsonSchemaLike & { const?: string }>;
   items?: JsonSchemaLike;
+  oneOf?: JsonSchemaLike[];
 }

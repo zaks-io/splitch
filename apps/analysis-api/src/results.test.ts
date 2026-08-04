@@ -50,6 +50,8 @@ describe("GET/POST experiment results", () => {
     const envelope = AnalysisResultsEnvelopeSchema.parse(await res.json());
     // The Run's frozen baseline travels with the numbers so no caller has to
     // re-derive it from mutable Experiment configuration.
+    expect(envelope.state).toBe("ready");
+    if (envelope.state !== "ready") throw new Error("expected ready");
     expect(envelope.run_id).toBe(RUN_ID);
     expect(envelope.control_variant).toBe("control");
     const output = envelope.stats;

@@ -72,10 +72,21 @@ export async function parseAnalysisResults(
 }
 
 /**
- * True when Analysis refused because a locked Run is missing Exposures or
- * Metric Events (SPL-302). Attention / list-health treat this like
- * RUN_NOT_FOUND (no_data); an explicit Results read still surfaces the typed
- * body to the caller.
+ * True when Analysis answered 200 `state: "no_data"` — a locked Run still
+ * waiting on Exposures or Metric Events (SPL-302). Attention / list-health
+ * treat this like RUN_NOT_FOUND; an explicit Results read surfaces `missing`
+ * to the Panel waiting state.
+ */
+export function isAnalysisResultsNoData(
+  envelope: AnalysisResultsEnvelope,
+): envelope is Extract<AnalysisResultsEnvelope, { state: "no_data" }> {
+  return envelope.state === "no_data";
+}
+
+/**
+ * Legacy: older Analysis builds mapped insufficient inputs to VALIDATION_ERROR.
+ * Prefer `isAnalysisResultsNoData` on 200 envelopes. Kept so attention / list
+ * health do not regress to SERVICE_UNAVAILABLE against a mixed fleet.
  */
 export function isAnalysisInsufficientData(
   error: Pick<AnalysisResultsError, "code" | "details"> | ErrorResponse,
@@ -88,8 +99,6 @@ export function isAnalysisInsufficientData(
   return issues.some((issue) => {
     if (!issue || typeof issue !== "object" || !("path" in issue)) return false;
     const path = (issue as { path?: unknown }).path;
-    // Exact single-element paths only. A Zod path like ["exposures", 0, "variant"]
-    // is a schema fault, not the SPL-302 insufficient-data signal.
     return (
       Array.isArray(path) &&
       path.length === 1 &&

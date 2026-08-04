@@ -52,18 +52,21 @@ export function materializeRunInput(row: unknown): RunFields {
 /**
  * Fail loud when a locked Run is missing the inputs analysis needs. Empty
  * Metric values with a non-empty decision family used to reach StatsEngine as
- * zeros and look like a real result; callers must see the missing input named.
+ * zeros and look like a real result; callers must see the missing input named
+ * on a 200 `no_data` envelope (not a zeroed StatsOutput, not a 4xx).
  */
 export function assertAnalysisInputsPresent(input: {
+  run_id: string;
+  control_variant: string;
   decision_family: readonly unknown[];
   exposures: readonly unknown[];
   metric_values: readonly unknown[];
 }): void {
   if (input.exposures.length === 0) {
-    throw new ResultsInsufficientDataError("exposures");
+    throw new ResultsInsufficientDataError("exposures", input.run_id, input.control_variant);
   }
   if (input.decision_family.length > 0 && input.metric_values.length === 0) {
-    throw new ResultsInsufficientDataError("metric_events");
+    throw new ResultsInsufficientDataError("metric_events", input.run_id, input.control_variant);
   }
 }
 

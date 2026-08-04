@@ -15,6 +15,7 @@ const SCOPE = {
 
 function analysisEnvelope(stats = statsOutput()) {
   return {
+    state: "ready" as const,
     run_id: SCOPE.runId,
     control_variant: "control",
     stats,
@@ -90,16 +91,12 @@ describe("createAnalysisResultsReader three-state envelope unwrap", () => {
   it("maps Metric-Events insufficient-data to null (no_data), not SERVICE_UNAVAILABLE", async () => {
     const reader = createAnalysisResultsReader({
       fetch: async () =>
-        Response.json(
-          {
-            code: "VALIDATION_ERROR",
-            message: "no Metric Events for this Run",
-            details: {
-              issues: [{ path: ["metric_events"], message: "no Metric Events for this Run" }],
-            },
-          },
-          { status: 400 },
-        ),
+        Response.json({
+          state: "no_data",
+          run_id: SCOPE.runId,
+          control_variant: "control",
+          missing: "metric_events",
+        }),
     });
 
     await expect(reader.read(SCOPE, "actor_1")).resolves.toBeNull();

@@ -60,12 +60,26 @@ export function makeResultsHandler(deps: ResultsDeps) {
       const output = await statsEngine.analyze(statsInput);
       return Response.json(
         AnalysisResultsEnvelopeSchema.parse({
+          state: "ready",
           run_id: statsInput.run_id,
           control_variant: statsInput.control_variant,
           stats: StatsOutputSchema.parse(output),
         }),
       );
     } catch (cause) {
+      // Early-Run collecting state: Exposures without Metric Events (or no
+      // Exposures yet) is healthy, not invalid. Same `no_data` discriminator
+      // as app-attention-rollup (SPL-290 / SPL-302).
+      if (cause instanceof ResultsInsufficientDataError) {
+        return Response.json(
+          AnalysisResultsEnvelopeSchema.parse({
+            state: "no_data",
+            run_id: cause.runId,
+            control_variant: cause.controlVariant,
+            missing: cause.missing,
+          }),
+        );
+      }
       return renderError(errorFor(cause), { requestId });
     }
   };
@@ -105,6 +119,8 @@ export async function readStatsInputFromTinybird(
   const exposures = exposureRows.map((row) => materializeExposure(row, scope));
   const metric_values = metricRows.map(materializeMetricRow);
   assertAnalysisInputsPresent({
+    run_id: run.run_id,
+    control_variant: run.control_variant,
     decision_family: run.decision_family,
     exposures,
     metric_values,
@@ -205,20 +221,6 @@ function errorFor(cause: unknown): ErrorResponse {
   }
   if (cause instanceof ResultsForbiddenError) {
     return { code: "FORBIDDEN", message: cause.message, details: {} };
-  }
-  if (cause instanceof ResultsInsufficientDataError) {
-    return {
-      code: "VALIDATION_ERROR",
-      message: cause.message,
-      details: {
-        issues: [
-          {
-            path: [cause.missing === "exposures" ? "exposures" : "metric_events"],
-            message: cause.message,
-          },
-        ],
-      },
-    };
   }
   if (cause instanceof ResultsInputError || isZodError(cause)) {
     return {

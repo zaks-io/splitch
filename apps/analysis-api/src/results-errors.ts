@@ -34,11 +34,16 @@ export class AnalysisIsolationError extends Error {
 }
 
 /**
- * A locked Run is readable but missing an analysis input the caller needs to
- * distinguish from an upstream break (SPL-302).
+ * A locked Run is readable but missing an analysis input. Mapped to HTTP 200
+ * `state: "no_data"` (same discriminator as attention-rollup), not a 4xx/5xx
+ * (SPL-302 / SPL-290).
  */
 export class ResultsInsufficientDataError extends Error {
-  constructor(readonly missing: "exposures" | "metric_events") {
+  constructor(
+    readonly missing: "exposures" | "metric_events",
+    readonly runId: string,
+    readonly controlVariant: string,
+  ) {
     super(missing === "exposures" ? "no Exposures for this Run" : "no Metric Events for this Run");
     this.name = "ResultsInsufficientDataError";
   }

@@ -13,12 +13,12 @@ import { createTinybirdReadTransport } from "./tinybird";
 
 /**
  * SPL-302: opaque `analysis failed` must not be the terminal state. A Run with
- * Exposures but no Metric Events names Metric Events; a full input set returns
- * a result. Production Run Snapshots still carry D1 MetricRef[] in
- * decision_family — that shape must not 500 either.
+ * Exposures but no Metric Events is 200 `no_data` (attention-rollup parity);
+ * a full input set returns `ready`. Production Run Snapshots still carry D1
+ * MetricRef[] in decision_family — that shape must not 500 either.
  */
 describe("GET experiment results insufficient-data typing (SPL-302)", () => {
-  it("returns VALIDATION_ERROR naming Metric Events when Exposures exist but Metric pipes are empty", async () => {
+  it("returns 200 no_data naming Metric Events when Exposures exist but Metric pipes are empty", async () => {
     const { app } = makeResultsHarness({
       ...rowsByPipe(),
       analysis_metric_values: [],
@@ -27,18 +27,16 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
 
     const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
 
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as ErrorResponse;
-    expect(body).toMatchObject({
-      code: "VALIDATION_ERROR",
-      message: "no Metric Events for this Run",
-      details: {
-        issues: [{ path: ["metric_events"], message: "no Metric Events for this Run" }],
-      },
+    expect(res.status).toBe(200);
+    expect(AnalysisResultsEnvelopeSchema.parse(await res.json())).toEqual({
+      state: "no_data",
+      run_id: RUN_ID,
+      control_variant: "control",
+      missing: "metric_events",
     });
   });
 
-  it("returns VALIDATION_ERROR naming Exposures when the Run has no Exposure rows", async () => {
+  it("returns 200 no_data naming Exposures when the Run has no Exposure rows", async () => {
     const { app } = makeResultsHarness({
       ...rowsByPipe(),
       analysis_deduped_exposures: [],
@@ -46,24 +44,24 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
 
     const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
 
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as ErrorResponse;
-    expect(body).toMatchObject({
-      code: "VALIDATION_ERROR",
-      message: "no Exposures for this Run",
-      details: {
-        issues: [{ path: ["exposures"], message: "no Exposures for this Run" }],
-      },
+    expect(res.status).toBe(200);
+    expect(AnalysisResultsEnvelopeSchema.parse(await res.json())).toEqual({
+      state: "no_data",
+      run_id: RUN_ID,
+      control_variant: "control",
+      missing: "exposures",
     });
   });
 
-  it("expands production MetricRef decision_family and returns a result when Metric rows exist", async () => {
+  it("expands production MetricRef decision_family and returns ready when Metric rows exist", async () => {
     const { app } = makeResultsHarness(productionShapedRows());
 
     const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
 
     expect(res.status).toBe(200);
     const envelope = AnalysisResultsEnvelopeSchema.parse(await res.json());
+    expect(envelope.state).toBe("ready");
+    if (envelope.state !== "ready") throw new Error("expected ready");
     expect(envelope.run_id).toBe(RUN_ID);
     expect(envelope.stats.arm_results.length).toBeGreaterThan(0);
   });
@@ -76,12 +74,25 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
 
     const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
 
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as ErrorResponse;
-    expect(body.code).toBe("VALIDATION_ERROR");
-    expect(body.details).toMatchObject({
-      issues: [{ path: ["metric_events"] }],
-    });
+    expect(res.status).toBe(200);
+    const envelope = AnalysisResultsEnvelopeSchema.parse(await res.json());
+    expect(envelope).toMatchObject({ state: "no_data", missing: "metric_events" });
+  });
+
+  it("expands one MetricRef across every non-Control Variant and returns arm_results for each", async () => {
+    const { app } = makeResultsHarness(multiTreatmentRows());
+
+    const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+
+    expect(res.status).toBe(200);
+    const envelope = AnalysisResultsEnvelopeSchema.parse(await res.json());
+    expect(envelope.state).toBe("ready");
+    if (envelope.state !== "ready") throw new Error("expected ready");
+    const members = envelope.stats.arm_results
+      .filter((arm) => arm.in_bh_family)
+      .map((arm) => `${arm.metric_id}/${arm.variant}`)
+      .sort();
+    expect(members).toEqual(["conversion/treatment_a", "conversion/treatment_b"]);
   });
 
   it("puts a named fault on INTERNAL_SERVER_ERROR rather than empty details", async () => {
@@ -117,7 +128,7 @@ describe("GET experiment results real Tinybird transport path (SPL-302)", () => 
     baseUrl = undefined;
   });
 
-  it("materializes fixture pipe JSON through createTinybirdReadTransport into a StatsOutput", async () => {
+  it("materializes fixture pipe JSON through createTinybirdReadTransport into a ready envelope", async () => {
     const fixture = productionShapedRows();
     ({ server, baseUrl } = await listenPipeServer(fixture));
     const tinybird = createTinybirdReadTransport(pipeEnv(baseUrl));
@@ -129,6 +140,8 @@ describe("GET experiment results real Tinybird transport path (SPL-302)", () => 
 
     expect(res.status).toBe(200);
     const envelope = AnalysisResultsEnvelopeSchema.parse(await res.json());
+    expect(envelope.state).toBe("ready");
+    if (envelope.state !== "ready") throw new Error("expected ready");
     expect(envelope.run_id).toBe(RUN_ID);
     expect(envelope.control_variant).toBe("control");
     expect(envelope.stats.health.deduped_counts).toEqual({ control: 2, treatment: 2 });
@@ -144,11 +157,10 @@ describe("GET experiment results real Tinybird transport path (SPL-302)", () => 
       resultsAuthInit("GET"),
     );
 
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as ErrorResponse;
-    expect(body).toMatchObject({
-      code: "VALIDATION_ERROR",
-      details: { issues: [{ path: ["metric_events"] }] },
+    expect(res.status).toBe(200);
+    expect(AnalysisResultsEnvelopeSchema.parse(await res.json())).toMatchObject({
+      state: "no_data",
+      missing: "metric_events",
     });
   });
 });
@@ -166,6 +178,67 @@ function productionShapedRows(): RowsByPipe {
         guardrail_decisions: JSON.stringify([{ metricId: "guardrail_conversion" }]),
       },
     ],
+  };
+}
+
+/**
+ * Two treatment Variants: MetricRef expansion fans out to every non-Control
+ * arm. arm_results must cover each expanded (metric, variant) pair or FDR
+ * throws at applyDecisionFamilyCorrection.
+ */
+function multiTreatmentRows(): RowsByPipe {
+  const rows = rowsByPipe();
+  const [runInput] = rows.analysis_run_inputs as Record<string, unknown>[];
+  return {
+    ...rows,
+    analysis_run_inputs: [
+      {
+        ...runInput,
+        allocation: JSON.stringify({ control: 34, treatment_a: 33, treatment_b: 33 }),
+        decision_family: JSON.stringify([{ metricId: "conversion" }]),
+        guardrail_decisions: JSON.stringify([]),
+      },
+    ],
+    analysis_deduped_exposures: [
+      exposure("control", "control_0"),
+      exposure("control", "control_1"),
+      exposure("treatment_a", "treatment_a_0"),
+      exposure("treatment_a", "treatment_a_1"),
+      exposure("treatment_b", "treatment_b_0"),
+      exposure("treatment_b", "treatment_b_1"),
+    ],
+    analysis_metric_values: [
+      metricValue("control_0", 1),
+      metricValue("control_1", 0),
+      metricValue("treatment_a_0", 1),
+      metricValue("treatment_a_1", 1),
+      metricValue("treatment_b_0", 0),
+      metricValue("treatment_b_1", 1),
+    ],
+  };
+}
+
+function exposure(variant: string, targetingKeyHash: string) {
+  return {
+    app_id: "app_checkout",
+    environment_id: "env_prod",
+    id_type: "user",
+    targeting_key_hash: targetingKeyHash,
+    run_id: RUN_ID,
+    variant,
+    first_exposure_ts: "2026-07-01T00:00:00.000Z",
+    window_anchor: "2026-07-01T00:00:00.000Z",
+  };
+}
+
+function metricValue(targetingKeyHash: string, value: number) {
+  return {
+    targeting_key_hash: targetingKeyHash,
+    run_id: RUN_ID,
+    metric_id: "conversion",
+    metric_type: "binomial",
+    value,
+    in_window: 1,
   };
 }
 

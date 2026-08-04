@@ -1,4 +1,4 @@
-import type { PanelExperimentResultsOutput } from "@splitch/control-plane-sdk/panel-experiments";
+import type { PanelExperimentResultsReady } from "@splitch/control-plane-sdk/panel-experiments";
 import { ExperimentResultsCiPlot } from "./experiment-results-ci-plot";
 import { baselineLabel, ExperimentResultsControlIntegrity } from "./experiment-results-control";
 import { ExperimentResultsDecision } from "./experiment-results-decision";
@@ -15,7 +15,7 @@ import { ExperimentResultsSrm } from "./experiment-results-srm";
  * last and is the only thing a failing check is allowed to withhold.
  */
 
-export function ExperimentResults({ results }: { results: PanelExperimentResultsOutput }) {
+export function ExperimentResults({ results }: { results: PanelExperimentResultsReady }) {
   return (
     <section aria-labelledby="results-heading" className="grid gap-6">
       <header className="grid gap-1">
@@ -82,6 +82,45 @@ export function ExperimentResultsEmpty() {
         This Experiment has no Run yet. Start it to open Run 1 and begin collecting exposures.
         Nothing is measured, and no decision can be made, until a Run exists.
       </p>
+    </section>
+  );
+}
+
+/**
+ * Healthy early-Run collecting state: Analysis answered 200 `no_data` (same
+ * discriminator as attention-rollup). Distinct from a failed read, which the
+ * route `errorComponent` surfaces as "Results unavailable".
+ */
+export function ExperimentResultsWaiting({
+  missing,
+  runNumber,
+}: {
+  missing: "exposures" | "metric_events";
+  runNumber: number;
+}) {
+  const waitingOn =
+    missing === "exposures"
+      ? "Exposures have not arrived for this Run yet."
+      : "Exposures are in; Metric Events have not arrived yet.";
+
+  return (
+    <section
+      aria-labelledby="results-heading"
+      className="rounded-lg border border-border bg-card p-6 shadow-sm"
+      data-testid="results-waiting"
+    >
+      <header className="grid gap-1">
+        <p className="font-mono text-muted-foreground text-xs uppercase tracking-[0.16em]">
+          Run {runNumber} · collecting
+        </p>
+        <h2 className="font-semibold text-foreground text-xl" id="results-heading">
+          Waiting for data
+        </h2>
+        <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
+          {waitingOn} Results will appear here once both inputs are present. This is not an outage —
+          a freshly started Run always looks like this until the data plane catches up.
+        </p>
+      </header>
     </section>
   );
 }
