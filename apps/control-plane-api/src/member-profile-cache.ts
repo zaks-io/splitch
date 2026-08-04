@@ -1,8 +1,6 @@
 import { memberProfileCacheKey, MemberProfileCacheSchema } from "@splitch/contracts";
 import type { MemberProfileResolver } from "./org-handlers";
 
-export { memberProfileCacheKey };
-
 /**
  * Resolve Org-member email from the shared SESSION_STORE identity cache.
  * Auth-api (device flow / claim) and the Control Panel AuthKit callback write
