@@ -65,11 +65,13 @@ describe("api command exit codes", () => {
 });
 
 describe("approval command exit codes", () => {
+  const FLAG_1 = [{ id: "flag_1", key: "flag-1", name: "Flag 1" }] as const;
+
   it("flags promote --confirm returns 0 on success", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
-      ...scopeResolutionStubs(),
+      ...scopeResolutionStubs({ flags: FLAG_1 }),
       {
         match: (request) => request.url.includes("/promote") && request.method === "POST",
         status: 200,
@@ -106,7 +108,7 @@ describe("approval command exit codes", () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
-      ...scopeResolutionStubs(),
+      ...scopeResolutionStubs({ flags: FLAG_1 }),
       {
         match: (request) => request.url.includes("/config") && request.method === "PATCH",
         status: 200,

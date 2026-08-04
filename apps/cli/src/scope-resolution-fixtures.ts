@@ -7,6 +7,9 @@ const scopeStamp = "2026-07-03T00:00:00.000Z";
  * runs when `--app` / `--env` (or SPLITCH_*) carry a flag/env selector. Put
  * these ahead of the operation stub so FakeCliTransport matches the list
  * calls first.
+ *
+ * Also stubs `flags_list` when `flags` is provided (ID-then-key Flag resolution).
+ * Omit it for commands that ARE `flags_list` — that operation shares the URL.
  */
 export function scopeResolutionStubs(options?: {
   readonly appId?: string;
@@ -17,6 +20,13 @@ export function scopeResolutionStubs(options?: {
     readonly key: string;
     readonly name?: string;
   }>;
+  readonly flags?: ReadonlyArray<{
+    readonly id: string;
+    readonly key: string;
+    readonly name?: string;
+  }>;
+  readonly flagsReadTruncated?: boolean;
+  readonly flagsReadLimit?: number;
 }): FakeResponse[] {
   const appId = options?.appId ?? "app_1";
   const appKey = options?.appKey ?? "checkout";
@@ -60,7 +70,7 @@ export function scopeResolutionStubs(options?: {
       createdAt: scopeStamp,
       updatedAt: scopeStamp,
     }));
-  return [
+  const stubs: FakeResponse[] = [
     oauthTokenMint(),
     {
       match: (request) =>
@@ -98,13 +108,24 @@ export function scopeResolutionStubs(options?: {
       body: { items: envItemsFor("app_flag") },
     },
   ];
+  if (options?.flags) {
+    stubs.push(
+      flagKeyResolutionStub({
+        appId,
+        flags: options.flags,
+        readTruncated: options.flagsReadTruncated,
+        readLimit: options.flagsReadLimit,
+      }),
+    );
+  }
+  return stubs;
 }
 
 /**
- * Stub for Flag key → ID resolution via `flags_list`. Place after
- * `scopeResolutionStubs` and before the operation under test.
+ * Stub for Flag ID-then-key resolution via `flags_list`. Prefer passing `flags`
+ * through `scopeResolutionStubs` so the list sits with the other scope stubs.
  */
-export function flagKeyResolutionStub(options?: {
+function flagKeyResolutionStub(options?: {
   readonly appId?: string;
   readonly flags?: ReadonlyArray<{
     readonly id: string;

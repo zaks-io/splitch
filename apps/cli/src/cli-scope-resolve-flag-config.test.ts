@@ -11,12 +11,14 @@ afterEach(async () => {
   await cleanupTempHomes();
 });
 
+const FLAG_1 = [{ id: "flag_1", key: "flag-1", name: "Flag 1" }] as const;
+
 describe("flag-config get --app/--env slug resolution", () => {
   it("accepts an Environment slug and calls the API with the canonical ID", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
-      ...scopeResolutionStubs({ appKey: "cold-test-app" }),
+      ...scopeResolutionStubs({ appKey: "cold-test-app", flags: FLAG_1 }),
       {
         match: (request) =>
           request.method === "GET" &&
@@ -43,7 +45,7 @@ describe("flag-config get --app/--env slug resolution", () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
-      ...scopeResolutionStubs(),
+      ...scopeResolutionStubs({ flags: FLAG_1 }),
       {
         match: (request) =>
           request.method === "GET" &&
@@ -64,6 +66,7 @@ describe("flag-config get --app/--env slug resolution", () => {
   it("fails with CLI_SCOPE_UNRESOLVED naming the unknown Environment slug", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    // Env fails before Flag resolution, so no flags stub is required.
     const transport = new FakeCliTransport([...scopeResolutionStubs()]);
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 

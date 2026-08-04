@@ -11,12 +11,14 @@ afterEach(async () => {
   await cleanupTempHomes();
 });
 
+const FLAG_1 = [{ id: "flag_1", key: "flag-1", name: "Flag 1" }] as const;
+
 describe("flags promote --env slug resolution", () => {
   it("accepts a target Environment slug and promotes to the canonical ID", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
-      ...scopeResolutionStubs(),
+      ...scopeResolutionStubs({ flags: FLAG_1 }),
       {
         match: (request) =>
           request.method === "POST" &&
@@ -55,7 +57,7 @@ describe("flags promote --env slug resolution", () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
-      ...scopeResolutionStubs(),
+      ...scopeResolutionStubs({ flags: FLAG_1 }),
       {
         match: (request) =>
           request.method === "POST" &&

@@ -26,8 +26,9 @@ export interface NamedResource {
  * ID shapes.
  *
  * Flag positionals (`:flagId`) follow the same seam via `resolveFlagSelector`:
- * `flag_…` IDs pass through; keys resolve through `flags_list` within the
- * selected App, failing loud when the catalog read is truncated.
+ * always ID-then-key within the selected App (Flag keys are unconstrained and
+ * may collide with `flag_…` ID shapes). When the catalog read is truncated and
+ * the selector is absent from the page, fail loud.
  */
 export async function resolveContextSelectors(
   deps: CliDeps,
@@ -138,42 +139,38 @@ export async function resolveEnvironmentSelector(
 
 /**
  * Resolve a Flag positional that may be a canonical `flag_…` ID or a Flag key.
- * There is no by-key API route, so keys resolve via `flags_list` within the
- * selected App. Canonical IDs pass through without a list round-trip: Flag
- * keys use the shared slug alphabet (no `_`), so a `flag_` prefix cannot be a
- * key. When the catalog read is truncated and the key is absent from the page,
- * fail loud — never treat a partial page as proof the key does not exist.
+ * There is no by-key API route, so selectors resolve via `flags_list` within
+ * the selected App. Always match ID then key — Flag keys are unconstrained
+ * `z.string()` values and may equal a `flag_…` ID shape, so a prefix fast path
+ * would skip a real key (the SPL-288 collision class). When the catalog read is
+ * truncated and the selector is absent from the page, fail loud — never treat a
+ * partial page as proof the Flag does not exist.
  */
 export async function resolveFlagSelector(
   deps: CliDeps,
   appId: string,
   selector: string,
 ): Promise<NamedResource> {
-  if (looksLikeFlagId(selector)) {
-    return { id: selector };
-  }
   const listed = await listFlagsForResolution(deps, appId);
-  const match = listed.items.find((flag) => flag.key === selector);
+  const match =
+    listed.items.find((flag) => flag.id === selector) ??
+    listed.items.find((flag) => flag.key === selector);
   if (match) return match;
   if (listed.readTruncated) {
     throw new SplitchCliError({
       code: "CLI_SCOPE_UNRESOLVED",
-      causeSummary: `Flag key "${selector}" was not found among the first ${listed.readLimit} Flags of App ${appId}, and that App's catalog exceeds the flags-list read ceiling`,
+      causeSummary: `Flag selector "${selector}" was not found among the first ${listed.readLimit} Flags of App ${appId}, and that App's catalog exceeds the flags-list read ceiling`,
       remediation:
-        "Pass the canonical Flag ID (flag_…) instead of the key, or reduce the App's Flag count below the read ceiling before resolving by key",
+        "Pass a Flag ID or key that appears in the current flags list page, or reduce the App's Flag count below the read ceiling before resolving by key",
     });
   }
   throw new SplitchCliError({
     code: "CLI_SCOPE_UNRESOLVED",
-    causeSummary: `No Flag matching key "${selector}" exists on App ${appId}. Available: ${
+    causeSummary: `No Flag matching "${selector}" exists on App ${appId}. Available: ${
       listed.items.length ? listed.items.map((flag) => flag.key ?? flag.id).join(", ") : "(none)"
     }`,
     remediation: "Pass an existing Flag ID or key within the selected App",
   });
-}
-
-function looksLikeFlagId(selector: string): boolean {
-  return selector.startsWith("flag_");
 }
 
 interface FlagListPage {
@@ -189,20 +186,22 @@ async function listFlagsForResolution(deps: CliDeps, appId: string): Promise<Fla
     readTruncated?: boolean;
     readLimit?: number;
   };
-  if (!Array.isArray(page.items) || typeof page.readTruncated !== "boolean") {
+  if (
+    !Array.isArray(page.items) ||
+    typeof page.readTruncated !== "boolean" ||
+    typeof page.readLimit !== "number"
+  ) {
     throw new SplitchCliError({
       code: "CLI_SCOPE_UNRESOLVED",
       causeSummary:
-        "flags_list returned an unexpected envelope while resolving a Flag key (missing items or readTruncated)",
+        "flags_list returned an unexpected envelope while resolving a Flag selector (missing items, readTruncated, or readLimit)",
       remediation: "Update the CLI or report the flags_list response shape before retrying",
     });
   }
   return {
     items: page.items,
     readTruncated: page.readTruncated,
-    // readLimit travels with truncation so the error can name the ceiling
-    // without hardcoding the server constant; default only if the field is absent.
-    readLimit: typeof page.readLimit === "number" ? page.readLimit : page.items.length,
+    readLimit: page.readLimit,
   };
 }
 
