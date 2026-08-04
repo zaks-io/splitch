@@ -35,12 +35,14 @@ One Experiment controls one Flag. `targetingKey` lives here, not on each Run. Mu
 | `createdAt`          | `string` (ISO 8601) | yes      | —                                                                                                                                                                           |
 | `updatedAt`          | `string` (ISO 8601) | yes      | —                                                                                                                                                                           |
 
-`ExperimentStatus` enum: `'draft' | 'running' | 'ended'`
+`ExperimentStatus` enum: `'draft' | 'running' | 'ended' | 'archived'`
 
 - `draft` — no live Run; new Entities see Default Variant.
 - `running` — at least one Start has occurred; `liveRunId` is non-null.
 - `ended` — no further Runs; all Runs are frozen archives.
   Pause lives on Experiment.
+- `archived` — soft-deleted via `DELETE /experiments/:id`; retained with its Runs for analysis
+  replayability. Hidden from default list/get surfaces.
 
 `MetricRef`: `{ metricId: string }` — reference to a Metric in the same App.
 

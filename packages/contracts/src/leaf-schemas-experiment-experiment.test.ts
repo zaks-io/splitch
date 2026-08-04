@@ -35,7 +35,7 @@ describe("ExperimentStatusSchema", () => {
 
   it("rejects a value outside the enum", () => {
     expect(ExperimentStatusSchema.safeParse("paused").success).toBe(false);
-    expect(ExperimentStatusSchema.safeParse("archived").success).toBe(false);
+    expect(ExperimentStatusSchema.safeParse("deleted").success).toBe(false);
     expect(ExperimentStatusSchema.safeParse("").success).toBe(false);
   });
 });

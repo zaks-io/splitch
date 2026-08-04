@@ -19,7 +19,7 @@ import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
 // ExperimentStatus
 // ---------------------------------------------------------------------------
 
-export const experimentStatuses = ["draft", "running", "ended"] as const;
+export const experimentStatuses = ["draft", "running", "ended", "archived"] as const;
 
 export const ExperimentStatusSchema = z.enum(experimentStatuses);
 export type ExperimentStatus = z.infer<typeof ExperimentStatusSchema>;

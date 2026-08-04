@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import { experiments, metrics, runs } from "../schema/index";
 import type { Db } from "./client";
 import { makeEndRun } from "./experiment-end-run";
@@ -7,6 +7,7 @@ import { assertMintedScope, type EnvScope, type TenantScope } from "./scope";
 import { type ReadOptions, scopedTable } from "./scoped-table";
 
 const RUN_STATUS_UPDATE_KEYS = new Set(["status", "endedAt", "endReason"]);
+const ARCHIVED = "archived";
 
 /**
  * Experiment-domain repository. Per-Environment (require an EnvScope):
@@ -29,7 +30,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
   const metricsTable = scopedTable(db, metrics);
   const startRun = makeStartRun(d1, experimentsTable, runsTable);
   const endRun = makeEndRun(d1, experimentsTable, runsTable);
-  const removeExperiment = makeRemoveExperiment(d1);
+  const archiveExperiment = makeArchiveExperiment(d1);
   const findRunningExperimentsForFlag = (scope: EnvScope, flagId: string) =>
     experimentsTable.findMany(
       scope,
@@ -43,13 +44,12 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
     runs: runsWithoutUpdate,
     metrics: metricsTable,
 
-    getExperiment(scope: EnvScope, experimentId: string) {
-      return experimentsTable.findOne(scope, eq(experiments.id, experimentId));
-    },
-
-    listExperiments(scope: EnvScope) {
-      return experimentsTable.findMany(scope);
-    },
+    getExperiment: makeGetExperiment(experimentsTable),
+    /** Includes archived rows — delete idempotency and retention-aware callers. */
+    peekExperiment: (scope: EnvScope, experimentId: string) =>
+      experimentsTable.findOne(scope, eq(experiments.id, experimentId)),
+    listExperiments: (scope: EnvScope) =>
+      experimentsTable.findMany(scope, ne(experiments.status, ARCHIVED)),
 
     /**
      * Compare-and-set on `liveRunId`, the same token `startRun` and `endRun`
@@ -104,7 +104,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
         .then((rows) => rows[0] ?? null);
     },
 
-    removeExperiment,
+    archiveExperiment,
 
     findRunningExperimentsForFlag,
 
@@ -220,60 +220,57 @@ function liveRunIdIs(expected: string | null) {
   return expected === null ? isNull(experiments.liveRunId) : eq(experiments.liveRunId, expected);
 }
 
+type ExperimentsTable = ReturnType<typeof scopedTable<typeof experiments>>;
+
+/** Default get hides archived rows (soft-delete list/read surfaces). */
+function makeGetExperiment(table: ExperimentsTable) {
+  return async (scope: EnvScope, experimentId: string) => {
+    const row = await table.findOne(scope, eq(experiments.id, experimentId));
+    return row && row.status !== ARCHIVED ? row : null;
+  };
+}
+
 /**
- * Delete an Experiment and every D1 Run row it owns, in one D1 batch.
+ * Soft-delete an Experiment: set `status = archived`, keep every Run row.
  *
- * `runs.experiment_id` is a real FK with ON DELETE NO ACTION, so a bare
- * Experiment DELETE 500s once any ended Run exists (SPL-289). Cascading the
- * Run rows here is intentional: D1 Run snapshots are Experiment-owned
- * control-plane history and leave with the Experiment. Tinybird raw event
- * logs remain the system of record for analysis replay. Both statements are
- * tenant-scoped (`app_id` + `environment_id`) so a forged experiment id cannot
- * reach another tenant's Runs.
- *
- * Both DELETEs refuse when a Run is `running` or `live_run_id` is set, so a
- * Start that commits after the handler's guard read but before this batch
- * cannot be wiped by an unconditional cascade (fail closed → 0 changes).
+ * Refuses when a Run is `running` or `live_run_id` is set, so a Start that
+ * commits after the handler's guard read but before this write cannot be
+ * archived out from under a live sample (fail closed → 0 changes). Already
+ * archived rows are a no-op for the UPDATE (`status != archived` guard); the
+ * handler treats a re-read of `archived` as idempotent success.
  */
-function makeRemoveExperiment(d1: D1Database) {
-  return async function removeExperiment(scope: EnvScope, experimentId: string): Promise<number> {
+function makeArchiveExperiment(d1: D1Database) {
+  return async function archiveExperiment(
+    scope: EnvScope,
+    experimentId: string,
+    updatedAt: string,
+  ): Promise<number> {
     assertMintedScope(scope);
-    const scopeParams = [scope.appId, scope.environmentId, experimentId] as const;
-    const results = await d1.batch([
-      d1
-        .prepare(
-          `DELETE FROM runs
-           WHERE app_id = ? AND environment_id = ? AND experiment_id = ?
-             AND NOT EXISTS (
-               SELECT 1 FROM runs AS live
-               WHERE live.app_id = ? AND live.environment_id = ? AND live.experiment_id = ?
-                 AND live.status = 'running'
-             )
-             AND EXISTS (
-               SELECT 1 FROM experiments AS exp
-               WHERE exp.app_id = ? AND exp.environment_id = ? AND exp.id = ?
-                 AND exp.live_run_id IS NULL
-             )`,
-        )
-        .bind(...scopeParams, ...scopeParams, ...scopeParams),
-      d1
-        .prepare(
-          `DELETE FROM experiments
-           WHERE app_id = ? AND environment_id = ? AND id = ?
-             AND live_run_id IS NULL
-             AND NOT EXISTS (
-               SELECT 1 FROM runs AS live
-               WHERE live.app_id = ? AND live.environment_id = ? AND live.experiment_id = ?
-                 AND live.status = 'running'
-             )`,
-        )
-        .bind(...scopeParams, ...scopeParams),
-    ]);
-    const experimentDelete = results[1];
-    if (!experimentDelete) {
-      throw new Error("removeExperiment: D1 batch missing experiment DELETE result");
-    }
-    return experimentDelete.meta.changes;
+    const result = await d1
+      .prepare(
+        `UPDATE experiments
+         SET status = 'archived', live_run_id = NULL, updated_at = ?
+         WHERE app_id = ? AND environment_id = ? AND id = ?
+           AND live_run_id IS NULL
+           AND status != 'archived'
+           AND NOT EXISTS (
+             SELECT 1 FROM runs AS live
+             WHERE live.app_id = ? AND live.environment_id = ? AND live.experiment_id = ?
+               AND live.status = 'running'
+           )
+         RETURNING id`,
+      )
+      .bind(
+        updatedAt,
+        scope.appId,
+        scope.environmentId,
+        experimentId,
+        scope.appId,
+        scope.environmentId,
+        experimentId,
+      )
+      .run();
+    return result.meta.changes;
   };
 }
 

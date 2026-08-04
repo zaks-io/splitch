@@ -224,12 +224,12 @@ export function configStoreUnavailable(requestId: string): Response {
   );
 }
 
-/** Batch refused to delete an Experiment that still exists (e.g. concurrent End). */
+/** Archive UPDATE refused on a still-visible Experiment (e.g. concurrent End). */
 export function experimentDeleteConflict(requestId: string): Response {
   return renderError(
     {
       code: "SERVICE_UNAVAILABLE",
-      message: "experiment delete lost a race; retry",
+      message: "experiment archive lost a race; retry",
       details: { retryAfterMs: 0 },
     },
     { requestId },

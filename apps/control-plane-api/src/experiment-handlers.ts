@@ -168,8 +168,16 @@ async function deleteExperiment(
   args: HandlerArgs<unknown>,
 ): Promise<Response> {
   const scope = envScope(pathParam(args.input, "appId"), pathParam(args.input, "environmentId"));
-  const experiment = await experimentFromPath(deps, args.input);
+  // peek includes archived rows so repeat DELETE can be an idempotent success;
+  // getExperiment / experimentFromPath hide archived (soft-delete surfaces).
+  const experiment = await deps.repo.experiments.peekExperiment(
+    scope,
+    pathParam(args.input, "experimentId"),
+  );
   if (!experiment) return experimentNotFound(args.requestId);
+  if (experiment.status === "archived") {
+    return Response.json({ deleted: true });
+  }
   const writeError = await requireWritableEnvironment(deps, scope, args.principal, args.requestId);
   if (writeError) return writeError;
   const runningRun = await runningRunForExperiment(deps.repo, scope, experiment);
@@ -180,25 +188,39 @@ async function deleteExperiment(
       args.requestId,
     );
   }
-  const deleted = await deps.repo.experiments.removeExperiment(scope, experiment.id);
-  if (deleted === 0) {
-    // Start, End, or another delete won the race after the guard read. Re-read
-    // so we never return a false `{ deleted: true }`. 404 only when the row is
-    // gone; an existing row that the batch refused is a retryable conflict
-    // (e.g. concurrent End cleared live_run_id — retry will delete).
-    const current = await deps.repo.experiments.getExperiment(scope, experiment.id);
-    if (!current) return experimentNotFound(args.requestId);
-    const raced = await runningRunForExperiment(deps.repo, scope, current);
-    if (raced) {
-      return runningExperimentError(
-        { experimentId: current.id, runId: raced.id },
-        "DELETE_EXPERIMENT",
-        args.requestId,
-      );
-    }
-    return experimentDeleteConflict(args.requestId);
+  // Guaranteed UPDATE: a concurrent Start winning the race cannot make DELETE
+  // report `{ deleted: true }` while the Experiment remains non-archived. If
+  // live_run_id / a running Run exists at commit time, D1 applies zero changes
+  // and we fail closed with EXPERIMENT_RUNNING. Run rows are retained.
+  const archived = await deps.repo.experiments.archiveExperiment(
+    scope,
+    experiment.id,
+    nowIso(deps),
+  );
+  if (archived === 0) {
+    return resolveArchiveRace(deps, scope, experiment.id, args.requestId);
   }
-  // Ended (and any other non-running) D1 Run rows for this Experiment were
-  // removed with it inside removeExperiment. Tinybird event logs are untouched.
   return Response.json({ deleted: true });
+}
+
+async function resolveArchiveRace(
+  deps: ExperimentDeps,
+  scope: EnvScope,
+  experimentId: string,
+  requestId: string,
+): Promise<Response> {
+  const current = await deps.repo.experiments.peekExperiment(scope, experimentId);
+  if (!current) return experimentNotFound(requestId);
+  if (current.status === "archived") {
+    return Response.json({ deleted: true });
+  }
+  const raced = await runningRunForExperiment(deps.repo, scope, current);
+  if (raced) {
+    return runningExperimentError(
+      { experimentId: current.id, runId: raced.id },
+      "DELETE_EXPERIMENT",
+      requestId,
+    );
+  }
+  return experimentDeleteConflict(requestId);
 }

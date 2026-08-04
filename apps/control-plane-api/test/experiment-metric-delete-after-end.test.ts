@@ -12,14 +12,14 @@ import { errorBody, request } from "../src/flag-definition-test-harness";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 let ctx: ExperimentRunHarness;
-let beforeRemove: (() => Promise<void>) | null = null;
+let beforeArchive: (() => Promise<void>) | null = null;
 
 beforeEach(async () => {
-  beforeRemove = null;
+  beforeArchive = null;
   ctx = await makeExperimentRunHarness(makeLocalBindings, {
-    beforeRemoveExperiment: async () => {
-      const pending = beforeRemove;
-      beforeRemove = null;
+    beforeArchiveExperiment: async () => {
+      const pending = beforeArchive;
+      beforeArchive = null;
       await pending?.();
     },
   });
@@ -28,7 +28,7 @@ beforeEach(async () => {
 afterEach(async () => ctx.h.bindings.dispose());
 
 describe("experiment and metric delete after Run end (SPL-289)", () => {
-  it("deletes an Experiment (and its ended Runs) after End, never 500s", async () => {
+  it("archives an Experiment after End, retains Run rows, and is idempotent", async () => {
     const fx = await experimentFixture(ctx);
     const experiment = await createExperimentDraft(ctx, fx, {
       key: "delete-after-end",
@@ -62,8 +62,45 @@ describe("experiment and metric delete after Run end (SPL-289)", () => {
     );
     expect(del.status).toBe(200);
     expect(await del.json()).toEqual({ deleted: true });
+
+    // Soft-delete surfaces: default get/list hide the row; Runs stay in D1.
     expect(await ctx.repo.experiments.getExperiment(scope, experiment.id)).toBeNull();
-    expect(await ctx.repo.experiments.listRunsForExperiment(scope, experiment.id)).toEqual([]);
+    expect(await ctx.repo.experiments.peekExperiment(scope, experiment.id)).toMatchObject({
+      status: "archived",
+      liveRunId: null,
+    });
+    expect(await ctx.repo.experiments.listRunsForExperiment(scope, experiment.id)).toHaveLength(1);
+    const listed = await request(
+      ctx.h,
+      "GET",
+      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments`,
+      fx.jwt,
+    );
+    expect(listed.status).toBe(200);
+    const listBody = (await listed.json()) as { items: Array<{ id: string }> };
+    expect(listBody.items.map((item) => item.id)).not.toContain(experiment.id);
+
+    const get = await request(
+      ctx.h,
+      "GET",
+      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experiment.id}`,
+      fx.jwt,
+    );
+    expect(get.status).toBe(404);
+
+    // Repeat DELETE of an archived Experiment is a no-op success.
+    const again = await request(
+      ctx.h,
+      "DELETE",
+      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experiment.id}`,
+      fx.jwt,
+    );
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({ deleted: true });
+    expect(await ctx.repo.experiments.peekExperiment(scope, experiment.id)).toMatchObject({
+      status: "archived",
+    });
+    expect(await ctx.repo.experiments.listRunsForExperiment(scope, experiment.id)).toHaveLength(1);
   });
 
   it("refuses Experiment delete while a Run is still running", async () => {
@@ -97,7 +134,7 @@ describe("experiment and metric delete after Run end (SPL-289)", () => {
     ).not.toBeNull();
   });
 
-  it("fails closed when a Run Starts between the delete guard and the cascade write", async () => {
+  it("fails closed when a Run Starts between the delete guard and the archive write", async () => {
     const fx = await experimentFixture(ctx);
     await ctx.repo.identity.updateEnvironment(appScope(fx.appId), fx.environmentId, {
       policy: JSON.stringify({
@@ -113,7 +150,7 @@ describe("experiment and metric delete after Run end (SPL-289)", () => {
       salt: "delete-vs-start-race-salt",
     });
     let startedRunId: string | null = null;
-    beforeRemove = async () => {
+    beforeArchive = async () => {
       const response = await startExperiment(ctx, fx, experiment.id);
       expect(response.status, "interleaved Start must succeed").toBe(200);
       startedRunId = ((await response.json()) as StartResponse).run.id;

@@ -139,7 +139,7 @@ export const experimentRoutes = [
     owner: OWNER,
     method: "DELETE",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId",
-    summary: "Delete an Experiment and its Runs (blocked while a Run is running).",
+    summary: "Archive an Experiment; Runs are retained (blocked while a Run is running).",
     request: { params: ExperimentParams },
     response: DeletedResponse,
     auth: AUTH,

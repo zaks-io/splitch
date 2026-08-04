@@ -57,6 +57,9 @@ export async function panelExperimentsList(
   const items = await Promise.all(
     experimentRows.map(async (row): Promise<PanelExperimentListItem> => {
       const experiment = experimentResponse(row);
+      if (experiment.status === "archived") {
+        throw new Error(`listExperiments returned archived Experiment ${experiment.id}`);
+      }
       const flagName = flags.get(experiment.flagId);
       if (!flagName) throw new Error(`Experiment ${experiment.id} references a missing Flag`);
       return {
