@@ -87,21 +87,28 @@ export function ExperimentResultsEmpty() {
 }
 
 /**
- * Healthy early-Run collecting state: Analysis answered 200 `no_data` (same
- * discriminator as attention-rollup). Distinct from a failed read, which the
- * route `errorComponent` surfaces as "Results unavailable".
+ * Analysis answered 200 `no_data` (same discriminator as attention-rollup).
+ * Distinct from a failed read, which the route `errorComponent` surfaces as
+ * "Results unavailable". An ended Run is not collecting: nothing more will
+ * arrive for a missing input.
  */
 export function ExperimentResultsWaiting({
   missing,
   runNumber,
+  runStatus,
 }: {
   missing: "exposures" | "metric_events";
   runNumber: number;
+  runStatus: "running" | "ended";
 }) {
-  const waitingOn =
-    missing === "exposures"
-      ? "Exposures have not arrived for this Run yet."
-      : "Exposures are in; Metric Events have not arrived yet.";
+  const ended = runStatus === "ended";
+  const detail = ended
+    ? missing === "exposures"
+      ? "This Run ended with no Exposures. There is nothing to measure."
+      : "This Run ended with Exposures but no Metric Events. Nothing further will arrive."
+    : missing === "exposures"
+      ? "Exposures have not arrived for this Run yet. Results will appear here once both inputs are present."
+      : "Exposures are in; Metric Events have not arrived yet. Results will appear here once both inputs are present.";
 
   return (
     <section
@@ -111,15 +118,12 @@ export function ExperimentResultsWaiting({
     >
       <header className="grid gap-1">
         <p className="font-mono text-muted-foreground text-xs uppercase tracking-[0.16em]">
-          Run {runNumber} · collecting
+          Run {runNumber} · {runStatus}
         </p>
         <h2 className="font-semibold text-foreground text-xl" id="results-heading">
-          Waiting for data
+          {ended ? "No data for this Run" : "Waiting for data"}
         </h2>
-        <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
-          {waitingOn} Results will appear here once both inputs are present. This is not an outage —
-          a freshly started Run always looks like this until the data plane catches up.
-        </p>
+        <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">{detail}</p>
       </header>
     </section>
   );

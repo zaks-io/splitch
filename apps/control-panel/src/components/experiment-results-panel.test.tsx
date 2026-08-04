@@ -32,16 +32,17 @@ const resultsRoute = await import(
 /**
  * Route-facing Results seam (SPL-302): early-Run `no_data` must render the
  * waiting state through ExperimentResultsPanel. The route errorComponent is
- * only for failed reads — healthy collecting must never look like an outage.
+ * only for failed reads; healthy collecting must never look like an outage.
+ * An ended Run must not be told the data plane is still catching up.
  */
-describe("Experiment Results route — no_data waiting state", () => {
+describe("Experiment Results route no_data waiting state", () => {
   it("wires ExperimentResultsPanel on the Results tab with an errorComponent for real faults", () => {
     expect(resultsRoute.Route.options.component?.name).toBe("ExperimentResultsTab");
     expect(resultsRoute.Route.options.errorComponent).toBeTypeOf("function");
   });
 
-  it("renders waiting-for-data for Analysis no_data instead of the error page copy", () => {
-    resultsData.current = resultsNoDataFixture({ missing: "metric_events" });
+  it("renders waiting-for-data for a running Run with no_data instead of the error page copy", () => {
+    resultsData.current = resultsNoDataFixture({ missing: "metric_events", runStatus: "running" });
 
     const html = renderToStaticMarkup(
       <ExperimentResultsPanel
@@ -53,13 +54,15 @@ describe("Experiment Results route — no_data waiting state", () => {
     );
 
     expect(html).toContain('data-testid="results-waiting"');
+    expect(html).toContain("Run 2 · running");
     expect(html).toContain("Waiting for data");
     expect(html).toContain("Metric Events have not arrived yet");
     expect(html).not.toContain("Results unavailable");
+    expect(html).not.toContain("collecting");
   });
 
-  it("names Exposures when that is the missing input", () => {
-    resultsData.current = resultsNoDataFixture({ missing: "exposures" });
+  it("names Exposures when that is the missing input on a running Run", () => {
+    resultsData.current = resultsNoDataFixture({ missing: "exposures", runStatus: "running" });
 
     const html = renderToStaticMarkup(
       <ExperimentResultsPanel
@@ -71,6 +74,27 @@ describe("Experiment Results route — no_data waiting state", () => {
     );
 
     expect(html).toContain("Exposures have not arrived for this Run yet");
+  });
+
+  it("does not tell an ended Run that data is still arriving", () => {
+    resultsData.current = resultsNoDataFixture({ missing: "metric_events", runStatus: "ended" });
+
+    const html = renderToStaticMarkup(
+      <ExperimentResultsPanel
+        appId="app_1"
+        environmentId="env_1"
+        experimentId="exp_1"
+        run={{ ...runningRun(), status: "ended", endedAt: "2026-07-20T00:00:00.000Z" }}
+      />,
+    );
+
+    expect(html).toContain('data-testid="results-waiting"');
+    expect(html).toContain("Run 2 · ended");
+    expect(html).toContain("No data for this Run");
+    expect(html).toContain("Nothing further will arrive");
+    expect(html).not.toContain("Waiting for data");
+    expect(html).not.toContain("will appear here once");
+    expect(html).not.toContain("Results unavailable");
   });
 
   it("still renders measured Results when Analysis answers ready", () => {

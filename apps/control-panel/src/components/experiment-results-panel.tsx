@@ -12,8 +12,9 @@ import {
  *
  * A Run-less Experiment renders the empty state without issuing a read, so a
  * draft never asks the Analysis Worker for statistics that cannot exist.
- * A Run that is still collecting inputs renders the waiting state from the
- * 200 `no_data` discriminator — never the route error page.
+ * A Run with incomplete inputs renders the `no_data` waiting state from the
+ * 200 envelope, never the route error page. Copy branches on runStatus so an
+ * ended Run is not described as still collecting.
  */
 export function ExperimentResultsPanel({
   appId,
@@ -52,7 +53,13 @@ function ExperimentResultsForRun({
     experimentResultsQuery({ appId, environmentId, experimentId, runId }),
   );
   if (data.state === "no_data") {
-    return <ExperimentResultsWaiting missing={data.missing} runNumber={data.runNumber} />;
+    return (
+      <ExperimentResultsWaiting
+        missing={data.missing}
+        runNumber={data.runNumber}
+        runStatus={data.runStatus}
+      />
+    );
   }
   return <ExperimentResults results={data} />;
 }
