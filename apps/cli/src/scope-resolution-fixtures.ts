@@ -99,3 +99,47 @@ export function scopeResolutionStubs(options?: {
     },
   ];
 }
+
+/**
+ * Stub for Flag key → ID resolution via `flags_list`. Place after
+ * `scopeResolutionStubs` and before the operation under test.
+ */
+export function flagKeyResolutionStub(options?: {
+  readonly appId?: string;
+  readonly flags?: ReadonlyArray<{
+    readonly id: string;
+    readonly key: string;
+    readonly name?: string;
+  }>;
+  readonly readTruncated?: boolean;
+  readonly readLimit?: number;
+}): FakeResponse {
+  const appId = options?.appId ?? "app_1";
+  const flags = options?.flags ?? [
+    {
+      id: "flag_checkout_banner",
+      key: "checkout-banner",
+      name: "Checkout banner",
+    },
+  ];
+  return {
+    match: (request) =>
+      request.method === "GET" && new URL(request.url).pathname === `/apps/${appId}/flags`,
+    status: 200,
+    body: {
+      items: flags.map((flag) => ({
+        id: flag.id,
+        appId,
+        key: flag.key,
+        name: flag.name ?? flag.key,
+        schema: null,
+        variants: [{ id: "var_on", name: "on", value: true }],
+        defaultVariantId: "var_on",
+        createdAt: scopeStamp,
+        updatedAt: scopeStamp,
+      })),
+      readTruncated: options?.readTruncated ?? false,
+      readLimit: options?.readLimit ?? 200,
+    },
+  };
+}

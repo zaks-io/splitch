@@ -24,6 +24,10 @@ export interface NamedResource {
  * so an `app_` prefix cannot be a key. Environment selectors always resolve —
  * Environment keys are unconstrained and could otherwise collide with `env_…`
  * ID shapes.
+ *
+ * Flag positionals (`:flagId`) follow the same seam via `resolveFlagSelector`:
+ * `flag_…` IDs pass through; keys resolve through `flags_list` within the
+ * selected App, failing loud when the catalog read is truncated.
  */
 export async function resolveContextSelectors(
   deps: CliDeps,
@@ -132,12 +136,92 @@ export async function resolveEnvironmentSelector(
   return match;
 }
 
+/**
+ * Resolve a Flag positional that may be a canonical `flag_…` ID or a Flag key.
+ * There is no by-key API route, so keys resolve via `flags_list` within the
+ * selected App. Canonical IDs pass through without a list round-trip: Flag
+ * keys use the shared slug alphabet (no `_`), so a `flag_` prefix cannot be a
+ * key. When the catalog read is truncated and the key is absent from the page,
+ * fail loud — never treat a partial page as proof the key does not exist.
+ */
+export async function resolveFlagSelector(
+  deps: CliDeps,
+  appId: string,
+  selector: string,
+): Promise<NamedResource> {
+  if (looksLikeFlagId(selector)) {
+    return { id: selector };
+  }
+  const listed = await listFlagsForResolution(deps, appId);
+  const match = listed.items.find((flag) => flag.key === selector);
+  if (match) return match;
+  if (listed.readTruncated) {
+    throw new SplitchCliError({
+      code: "CLI_SCOPE_UNRESOLVED",
+      causeSummary: `Flag key "${selector}" was not found among the first ${listed.readLimit} Flags of App ${appId}, and that App's catalog exceeds the flags-list read ceiling`,
+      remediation:
+        "Pass the canonical Flag ID (flag_…) instead of the key, or reduce the App's Flag count below the read ceiling before resolving by key",
+    });
+  }
+  throw new SplitchCliError({
+    code: "CLI_SCOPE_UNRESOLVED",
+    causeSummary: `No Flag matching key "${selector}" exists on App ${appId}. Available: ${
+      listed.items.length ? listed.items.map((flag) => flag.key ?? flag.id).join(", ") : "(none)"
+    }`,
+    remediation: "Pass an existing Flag ID or key within the selected App",
+  });
+}
+
+function looksLikeFlagId(selector: string): boolean {
+  return selector.startsWith("flag_");
+}
+
+interface FlagListPage {
+  readonly items: NamedResource[];
+  readonly readTruncated: boolean;
+  readonly readLimit: number;
+}
+
+async function listFlagsForResolution(deps: CliDeps, appId: string): Promise<FlagListPage> {
+  const data = await callOperation(deps, "flags_list", { appId }, { kind: "app", selector: appId });
+  const page = data as {
+    items?: NamedResource[];
+    readTruncated?: boolean;
+    readLimit?: number;
+  };
+  if (!Array.isArray(page.items) || typeof page.readTruncated !== "boolean") {
+    throw new SplitchCliError({
+      code: "CLI_SCOPE_UNRESOLVED",
+      causeSummary:
+        "flags_list returned an unexpected envelope while resolving a Flag key (missing items or readTruncated)",
+      remediation: "Update the CLI or report the flags_list response shape before retrying",
+    });
+  }
+  return {
+    items: page.items,
+    readTruncated: page.readTruncated,
+    // readLimit travels with truncation so the error can name the ceiling
+    // without hardcoding the server constant; default only if the field is absent.
+    readLimit: typeof page.readLimit === "number" ? page.readLimit : page.items.length,
+  };
+}
+
 async function callList(
   deps: CliDeps,
   operationId: string,
   input: Record<string, unknown>,
   binding?: TokenBinding,
 ): Promise<NamedResource[]> {
+  const data = await callOperation(deps, operationId, input, binding);
+  return (data as { items: NamedResource[] }).items;
+}
+
+async function callOperation(
+  deps: CliDeps,
+  operationId: string,
+  input: Record<string, unknown>,
+  binding?: TokenBinding,
+): Promise<unknown> {
   const result = await withAuthorizationRetry(
     deps,
     async (authorization) => {
@@ -156,5 +240,5 @@ async function callList(
       remediation: "Fix the reported API failure and retry the command",
     });
   }
-  return (result.data as { items: NamedResource[] }).items;
+  return result.data;
 }

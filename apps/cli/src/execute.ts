@@ -1,6 +1,6 @@
 import type { CliCommandDefinition } from "./command-registry.js";
 import { findCommand } from "./command-registry.js";
-import { resolveContext } from "./context.js";
+import { resolveContext, type ResolvedContext } from "./context.js";
 import { consoleIo, emit } from "./execute-io.js";
 import {
   executeApiOperation,
@@ -17,7 +17,7 @@ import { CliInputError } from "./flag-create-input.js";
 import { writeCliError } from "./errors.js";
 import { buildOperationInput } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
-import { resolveContextSelectors } from "./scope-resolve.js";
+import { resolveContextSelectors, resolveFlagSelector } from "./scope-resolve.js";
 
 export type { CliDeps, CliResult } from "./execute-types.js";
 
@@ -146,10 +146,34 @@ async function executeCommand(
   let input: Record<string, unknown>;
   try {
     input = buildOperationInput(command, invocation, context);
+    input = await resolveFlagIdInInput(deps, context, input);
   } catch (error) {
     return handleInputError(error, invocation, io);
   }
   return executeApiOperation(command.operationId, input, invocation, deps, io);
+}
+
+/**
+ * Commands whose route carries `:flagId` accept a Flag key as well as a
+ * canonical ID. Resolve keys to IDs within the selected App before the request
+ * hits the wire; leave non-flag operations untouched.
+ */
+async function resolveFlagIdInInput(
+  deps: CliDeps,
+  context: ResolvedContext,
+  input: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (typeof input.flagId !== "string" || !input.flagId) {
+    return input;
+  }
+  if (!context.appId) {
+    return input;
+  }
+  const resolved = await resolveFlagSelector(deps, context.appId, input.flagId);
+  if (resolved.id === input.flagId) {
+    return input;
+  }
+  return { ...input, flagId: resolved.id };
 }
 
 function handleInputError(error: unknown, invocation: ParsedInvocation, io: CliIo): CliResult {

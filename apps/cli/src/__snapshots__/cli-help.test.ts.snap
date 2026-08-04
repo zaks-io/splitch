@@ -492,7 +492,7 @@ Example:
     "flag-config get": "Get a Flag's per-Environment Configuration.
 
 Usage:
-  splitch flag-config get <flag-id> [flags]
+  splitch flag-config get <flag-id-or-key> [flags]
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
@@ -501,11 +501,11 @@ Flags:
   -h, --help           [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch flag-config get <flag-id> --json",
+  splitch flag-config get <flag-id-or-key> --json",
     "flag-config update": "Update enabled state / available Variants (Policy-gated change types).
 
 Usage:
-  splitch flag-config update <flag-id> [flags]
+  splitch flag-config update <flag-id-or-key> [flags]
 
 Flags:
   --app <app>               [type: string; default: SPLITCH_APP or config] App ID or slug.
@@ -519,11 +519,11 @@ Flags:
   -h, --help                [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch flag-config update <flag-id> --body-json '<json>' --json",
+  splitch flag-config update <flag-id-or-key> --body-json '<json>' --json",
     "flag-targeting-rules replace": "Full-replace this Environment's ordered Targeting Rule list.
 
 Usage:
-  splitch flag-targeting-rules replace <flag-id> [flags]
+  splitch flag-targeting-rules replace <flag-id-or-key> [flags]
 
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
@@ -535,11 +535,11 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch flag-targeting-rules replace <flag-id> --body-json '<json>' --json",
+  splitch flag-targeting-rules replace <flag-id-or-key> --body-json '<json>' --json",
     "flag-variants create": "Add a Variant to the App-level catalog.
 
 Usage:
-  splitch flag-variants create <flag-id> [flags]
+  splitch flag-variants create <flag-id-or-key> [flags]
 
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
@@ -550,11 +550,11 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch flag-variants create <flag-id> --body-json '<json>' --json",
+  splitch flag-variants create <flag-id-or-key> --body-json '<json>' --json",
     "flag-variants delete": "Remove a catalog Variant (blocked if available or in a running Run).
 
 Usage:
-  splitch flag-variants delete <flag-id> <variant-name> [flags]
+  splitch flag-variants delete <flag-id-or-key> <variant-name> [flags]
 
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
@@ -563,11 +563,11 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch flag-variants delete <flag-id> <variant-name> --json",
+  splitch flag-variants delete <flag-id-or-key> <variant-name> --json",
     "flag-variants update": "Update a catalog Variant (value is Run-frozen).
 
 Usage:
-  splitch flag-variants update <flag-id> <variant-name> [flags]
+  splitch flag-variants update <flag-id-or-key> <variant-name> [flags]
 
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
@@ -579,7 +579,7 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch flag-variants update <flag-id> <variant-name> --body-json '<json>' --json",
+  splitch flag-variants update <flag-id-or-key> <variant-name> --body-json '<json>' --json",
     "flags create": "Create a Flag definition (key, schema, Variant catalog).
 
 Usage:
@@ -600,7 +600,7 @@ Example:
     "flags delete": "Delete a Flag (blocked if referenced by a running Experiment).
 
 Usage:
-  splitch flags delete <flag-id> [flags]
+  splitch flags delete <flag-id-or-key> [flags]
 
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
@@ -609,11 +609,11 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch flags delete <flag-id> --json",
+  splitch flags delete <flag-id-or-key> --json",
     "flags get": "Get a Flag definition.
 
 Usage:
-  splitch flags get <flag-id> [flags]
+  splitch flags get <flag-id-or-key> [flags]
 
 Flags:
   --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
@@ -621,7 +621,7 @@ Flags:
   -h, --help   [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch flags get <flag-id> --json",
+  splitch flags get <flag-id-or-key> --json",
     "flags list": "List Flag definitions in an App (bounded; reports its own truncation).
 
 Usage:
@@ -637,7 +637,7 @@ Example:
     "flags promote": "Promote selected Flag Configuration field-groups between Environments.
 
 Usage:
-  splitch flags promote <flag-id> [flags]
+  splitch flags promote <flag-id-or-key> [flags]
 
 Flags:
   --app <app>                 [type: string; default: SPLITCH_APP or config] App ID or slug.
@@ -650,7 +650,7 @@ Flags:
   -h, --help                  [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch flags promote <flag-id> --body-json '<json>' --json",
+  splitch flags promote <flag-id-or-key> --body-json '<json>' --json",
     "flags test-eval": "Dry-run resolve a Flag with the full resolution reason without firing an Exposure.
 
 Usage:
@@ -670,7 +670,7 @@ Example:
     "flags update": "Update a Flag definition's name/description/schema.
 
 Usage:
-  splitch flags update <flag-id> [flags]
+  splitch flags update <flag-id-or-key> [flags]
 
 Flags:
   --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
@@ -680,7 +680,7 @@ Flags:
   -h, --help          [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch flags update <flag-id> --body-json '<json>' --json",
+  splitch flags update <flag-id-or-key> --body-json '<json>' --json",
     "flags verify": "Verify a Flag KEY through the data plane without firing an Exposure.
 
 Usage:
