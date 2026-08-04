@@ -56,8 +56,9 @@ function positionalDisplayName(param: string): string {
 }
 
 /**
- * First required positional that is neither present on argv nor satisfied by a
- * known alternate (`--org` for `org-id`, or a string field in `--body-json`).
+ * First required path param that is unsatisfied after consulting every source
+ * for that slot (`--org`, `--body-json`, then the next unused argv positional).
+ * Argv is bound only to slots still empty — never before knowing which are filled.
  */
 export function missingRequiredPositional(
   command: CliCommandDefinition,
@@ -67,18 +68,12 @@ export function missingRequiredPositional(
   const body = parseBodyJsonRecord(invocation.flags.bodyJson);
   let positionalIndex = 0;
   for (const spec of specs) {
+    if (pathParamAlreadyFilled(spec.param, invocation.flags.org, body)) {
+      continue;
+    }
     const token = invocation.positionals[positionalIndex];
     if (token) {
       positionalIndex += 1;
-      continue;
-    }
-    // Documented `--org` flag fills `:orgId` without a positional (quickstart /
-    // mcp-and-cli surfaces teach `apps create --org <orgId>`).
-    if (spec.param === "orgId" && invocation.flags.org) {
-      continue;
-    }
-    const fromBody = body?.[spec.param];
-    if (typeof fromBody === "string" && fromBody.length > 0) {
       continue;
     }
     return spec.display;
@@ -86,6 +81,22 @@ export function missingRequiredPositional(
   return undefined;
 }
 
+/** True when `--org` or a non-empty `--body-json` string already fills this path param. */
+function pathParamAlreadyFilled(
+  param: string,
+  orgFlag: string | undefined,
+  body: Record<string, unknown> | undefined,
+): boolean {
+  // Documented `--org` flag fills `:orgId` without a positional (quickstart /
+  // mcp-and-cli surfaces teach `apps create --org <orgId>`).
+  if (param === "orgId" && orgFlag) {
+    return true;
+  }
+  const fromBody = body?.[param];
+  return typeof fromBody === "string" && fromBody.length > 0;
+}
+
+/** Parse `--body-json` into a record when present and well-formed; else undefined. */
 function parseBodyJsonRecord(bodyJson: string | undefined): Record<string, unknown> | undefined {
   if (!bodyJson) {
     return undefined;
@@ -122,13 +133,13 @@ export function assertPathParamsPresent(
 }
 
 export function missingPositionalError(
-  command: CliCommandDefinition,
+  _command: CliCommandDefinition,
   display: string,
 ): SplitchCliError {
-  const usage = commandUsageLine(command);
   return new SplitchCliError({
     code: "CLI_USAGE_INVALID",
     causeSummary: `Missing required argument <${display}>`,
-    remediation: `Pass <${display}>. Usage: ${usage}`,
+    // Usage is printed as its own block by execute.ts — keep remediation one clause.
+    remediation: `Pass <${display}>`,
   });
 }

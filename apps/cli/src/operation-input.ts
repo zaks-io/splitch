@@ -93,19 +93,41 @@ function applyPositionalFields(
   input: Record<string, unknown>,
 ): void {
   const route = getRoute(command.operationId);
-  const pathParams = route ? [...route.path.matchAll(/:([A-Za-z0-9_]+)/g)].map((m) => m[1]) : [];
+  const pathParams = (
+    route ? [...route.path.matchAll(/:([A-Za-z0-9_]+)/g)].map((m) => m[1]) : []
+  ).filter(
+    (param): param is string =>
+      Boolean(param) &&
+      param !== "appId" &&
+      param !== "environmentId" &&
+      param !== "targetEnvironmentId",
+  );
+
+  const alreadyFilled = (param: string): boolean => {
+    const existing = input[param];
+    return typeof existing === "string" && existing.length > 0;
+  };
+
+  const unfilled = pathParams.filter((param) => !alreadyFilled(param));
+  const positionals = invocation.positionals;
+
+  // When --body-json / --org already filled some slots and argv has enough tokens
+  // for the remainder, bind argv only to the empty slots (mixed-source case).
+  // Otherwise keep classic by-index overwrite so an explicit positional still
+  // beats a body value for the same path param.
+  if (unfilled.length > 0 && positionals.length >= unfilled.length) {
+    let positionalIndex = 0;
+    for (const param of unfilled) {
+      input[param] = positionals[positionalIndex];
+      positionalIndex += 1;
+    }
+    return;
+  }
+
   let positionalIndex = 0;
   for (const param of pathParams) {
-    if (
-      !param ||
-      param === "appId" ||
-      param === "environmentId" ||
-      param === "targetEnvironmentId"
-    ) {
-      continue;
-    }
-    if (positionalIndex < invocation.positionals.length) {
-      input[param] = invocation.positionals[positionalIndex];
+    if (positionalIndex < positionals.length) {
+      input[param] = positionals[positionalIndex];
       positionalIndex += 1;
     }
   }

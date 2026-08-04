@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
-import { CLI_COMMANDS, findCommand } from "./command-registry.js";
+import { CLI_COMMANDS, findCommand, type CliCommandDefinition } from "./command-registry.js";
 import {
   commandUsageLine,
   missingRequiredPositional,
@@ -9,6 +9,7 @@ import {
 } from "./command-positionals.js";
 import { EXIT_USAGE } from "./exit-codes.js";
 import { renderCommandHelp } from "./help.js";
+import { buildOperationInput } from "./operation-input.js";
 import { parseInvocation } from "./parse-args.js";
 
 afterEach(() => {
@@ -19,6 +20,22 @@ afterEach(() => {
 const COMMANDS_WITH_REQUIRED_POSITIONALS = CLI_COMMANDS.filter(
   (command) => requiredPositionals(command).length > 0,
 );
+
+/** Multi-positional routes named by the SPL-306 review for mixed-source coverage. */
+const MULTI_POSITIONAL_PATHS = [
+  ["runs", "get"],
+  ["flag-variants", "update"],
+  ["organization-members", "update"],
+  ["organization-members", "remove"],
+] as const;
+
+function requireCommand(path: readonly string[]): CliCommandDefinition {
+  const command = findCommand(path);
+  if (!command) {
+    throw new Error(`no CLI command registered for "${path.join(" ")}"`);
+  }
+  return command;
+}
 
 describe("required positionals (SPL-306)", () => {
   it("registers at least one command with a required positional in each major group", () => {
@@ -70,7 +87,9 @@ describe("required positionals (SPL-306)", () => {
     const errorLine = stderr.join("\n");
     expect(errorLine).toContain("CLI_USAGE_INVALID");
     expect(errorLine).toContain(`Missing required argument <${missing}>`);
-    expect(errorLine).toContain(usage);
+    expect(errorLine).toContain(`Pass <${missing}>`);
+    // Usage lives only in the stdout block — not embedded in remediation.
+    expect(errorLine).not.toContain("Usage:");
     expect(errorLine).not.toContain("CLI_UNEXPECTED_ERROR");
     expect(errorLine).not.toContain("control-plane-sdk");
     expect(errorLine).not.toContain("missing path param");
@@ -109,6 +128,7 @@ describe("required positionals (SPL-306)", () => {
     const errorLine = stderr.join("\n");
     expect(errorLine).toContain("CLI_USAGE_INVALID");
     expect(errorLine).toContain("Missing required argument <experiment-id>");
+    expect(errorLine).not.toContain("Usage:");
     expect(errorLine).not.toContain("CLI_UNEXPECTED_ERROR");
     expect(errorLine).not.toContain("control-plane-sdk");
     expect(errorLine).not.toContain("missing path param");
@@ -117,15 +137,58 @@ describe("required positionals (SPL-306)", () => {
   it("accepts --org in place of the <org-id> positional for apps create", () => {
     // Quickstart documents `apps create --org <orgId>`; that must not become a
     // false usage error now that positionals are validated.
-    const command = findCommand(["apps", "create"]);
-    if (!command) {
-      throw new Error("apps create is not registered");
-    }
+    const command = requireCommand(["apps", "create"]);
     expect(
       missingRequiredPositional(
         command,
         parseInvocation(["apps", "create", "--org", "org_1", "--name", "New App"]),
       ),
     ).toBeUndefined();
+  });
+
+  describe("mixed body-json + argv on multi-positional routes", () => {
+    it.each(
+      MULTI_POSITIONAL_PATHS.map((path) => ({ path: path.join(" "), segments: path })),
+    )("first via --body-json plus second via argv succeeds for $path", ({ segments }) => {
+      const command = requireCommand(segments);
+      const specs = requiredPositionalSpecs(command);
+      expect(specs.length).toBeGreaterThanOrEqual(2);
+      const [first, second] = specs;
+      if (!first || !second) {
+        throw new Error(`expected two path params for ${segments.join(" ")}`);
+      }
+
+      const invocation = parseInvocation([
+        ...segments,
+        "--body-json",
+        JSON.stringify({ [first.param]: "from_body" }),
+        "from_argv",
+      ]);
+
+      expect(missingRequiredPositional(command, invocation)).toBeUndefined();
+
+      const input = buildOperationInput(command, invocation, {
+        appId: "app_1",
+        environmentId: "env_1",
+      });
+      expect(input[first.param]).toBe("from_body");
+      expect(input[second.param]).toBe("from_argv");
+    });
+
+    it.each(
+      MULTI_POSITIONAL_PATHS.map((path) => ({ path: path.join(" "), segments: path })),
+    )("first via argv plus second omitted names the second for $path", ({ segments }) => {
+      const command = requireCommand(segments);
+      const specs = requiredPositionalSpecs(command);
+      expect(specs.length).toBeGreaterThanOrEqual(2);
+      const second = specs[1];
+      if (!second) {
+        throw new Error(`expected a second path param for ${segments.join(" ")}`);
+      }
+
+      expect(missingRequiredPositional(command, parseInvocation([...segments, "only_first"]))).toBe(
+        second.display,
+      );
+    });
   });
 });

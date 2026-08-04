@@ -45,9 +45,8 @@ describe("flags verify transport", () => {
     expect(error).toHaveBeenCalledWith(
       expect.stringContaining("CLI_USAGE_INVALID: Cause: Missing required argument <flag-key>."),
     );
-    expect(error).toHaveBeenCalledWith(
-      expect.stringContaining("Usage: splitch flags verify <flag-key> [flags]"),
-    );
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("Remediation: Pass <flag-key>."));
+    expect(error).not.toHaveBeenCalledWith(expect.stringContaining("Usage:"));
     expect(log).toHaveBeenCalledWith("Usage:\n  splitch flags verify <flag-key> [flags]");
   });
 
