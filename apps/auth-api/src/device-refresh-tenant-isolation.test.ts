@@ -178,6 +178,7 @@ describe("refresh rebind tenant isolation", () => {
         },
         refreshProviderToken: async () => ({
           userId: "user_device",
+          email: "device@splitch.test",
           refreshToken: "refresh_rotated",
           providerSessionId: "session_isolated",
         }),
