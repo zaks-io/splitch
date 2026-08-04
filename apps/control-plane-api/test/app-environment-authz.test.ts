@@ -215,11 +215,14 @@ describe("control-plane App and Environment role gates", () => {
     const prod = created.environments.find((env) => env.key === "prod");
     expect(prod).toBeDefined();
 
+    // JWT already carries app:...:owner; refusing with INSUFFICIENT_SCOPES that
+    // lists the same scope as both required and held is self-contradictory
+    // (SPL-298). Live-membership failure is FORBIDDEN.
     const patchApp = await request("PATCH", `/apps/${created.app.id}`, forgedOwnerJwt, {
       name: "Forged Owner",
     });
     expect(patchApp.status).toBe(403);
-    expect((await errorBody(patchApp)).code).toBe("INSUFFICIENT_SCOPES");
+    expect((await errorBody(patchApp)).code).toBe("FORBIDDEN");
 
     const patchEnv = await request(
       "PATCH",
@@ -228,7 +231,7 @@ describe("control-plane App and Environment role gates", () => {
       { name: "Forged Prod" },
     );
     expect(patchEnv.status).toBe(403);
-    expect((await errorBody(patchEnv)).code).toBe("INSUFFICIENT_SCOPES");
+    expect((await errorBody(patchEnv)).code).toBe("FORBIDDEN");
 
     const deleteEnv = await request(
       "DELETE",
@@ -236,11 +239,11 @@ describe("control-plane App and Environment role gates", () => {
       forgedOwnerJwt,
     );
     expect(deleteEnv.status).toBe(403);
-    expect((await errorBody(deleteEnv)).code).toBe("INSUFFICIENT_SCOPES");
+    expect((await errorBody(deleteEnv)).code).toBe("FORBIDDEN");
 
     const deleteApp = await request("DELETE", `/apps/${created.app.id}`, forgedOwnerJwt);
     expect(deleteApp.status).toBe(403);
-    expect((await errorBody(deleteApp)).code).toBe("INSUFFICIENT_SCOPES");
+    expect((await errorBody(deleteApp)).code).toBe("FORBIDDEN");
   });
 
   it("denies narrowed member credentials held by live owners without narrowing reads", async () => {

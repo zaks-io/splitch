@@ -143,15 +143,22 @@ export async function deleteAppBlockedByChildren(
     if (blocker) return blocker;
   }
 
-  for (const check of [
-    ["flags", deps.repo.flags.flags.findMany(scope)],
-    ["segments", deps.repo.flags.segments.findMany(scope)],
-    ["metrics", deps.repo.experiments.metrics.findMany(scope)],
-    ["entity_deletions", deps.repo.privacy.listEntityDeletions(scope)],
-    ["privacy_requests", deps.repo.privacy.listPrivacyRequestsForApp(app.organizationId, app.id)],
-  ] as const) {
-    const [childType, rows] = check;
-    const childCount = (await rows).length;
+  const childCounts: ReadonlyArray<readonly [string, number]> = [
+    ["flags", (await deps.repo.flags.flags.findMany(scope)).length],
+    ["segments", (await deps.repo.flags.segments.findMany(scope)).length],
+    ["metrics", (await deps.repo.experiments.metrics.findMany(scope)).length],
+    ["entity_deletions", (await deps.repo.privacy.listEntityDeletions(scope)).length],
+    [
+      "privacy_requests",
+      (await deps.repo.privacy.listPrivacyRequestsForApp(app.organizationId, app.id)).length,
+    ],
+    // Approval rows FK to apps with ON DELETE no action. Leaving them out of the
+    // emptiness guard lets the cascade destroy memberships before the final App
+    // DELETE fails under FK enforcement (SPL-298).
+    ["approval_requests", await deps.repo.approvals.countRequests(scope, {})],
+    ["approval_reviews", await deps.repo.approvals.countReviews(scope)],
+  ];
+  for (const [childType, childCount] of childCounts) {
     if (childCount > 0) {
       return resourceNotEmpty("app", app.id, childType, childCount, "DELETE_APP", requestId);
     }

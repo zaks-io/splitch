@@ -125,6 +125,16 @@ export function makeApprovalRepo(db: Db) {
       return rows[0]?.total ?? 0;
     },
 
+    /** App-scoped Review count for parent-teardown emptiness guards (SPL-298). */
+    async countReviews(scope: TenantScope): Promise<number> {
+      assertMintedScope(scope);
+      const rows = await db
+        .select({ total: sql<number>`count(*)` })
+        .from(approvalReviews)
+        .where(eq(approvalReviews.appId, scope.appId));
+      return rows[0]?.total ?? 0;
+    },
+
     latestReview(scope: TenantScope, requestId: string) {
       assertMintedScope(scope);
       return db

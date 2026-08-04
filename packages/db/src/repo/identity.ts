@@ -7,6 +7,7 @@ import {
   organizations,
   orgMemberships,
 } from "../schema/index";
+import { makeDeleteAppCascade } from "./app-delete-cascade";
 import type { Db } from "./client";
 import { makeDemoReaper } from "./identity-demo-reaper";
 import { makeOrgMutations } from "./identity-org-mutations";
@@ -43,10 +44,12 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
   const sessionReads = makeSessionReads(db);
   const demoReaper = makeDemoReaper(db, d1);
   const createOrganization = makeCreateOrganization(db, d1);
+  const deleteAppCascade = makeDeleteAppCascade(d1);
 
   return {
     environments: environmentsTable,
     appMemberships: appMembershipsTable,
+    deleteAppCascade,
 
     listEnvironments(scope: TenantScope, options?: ReadOptions) {
       return environmentsTable.findMany(scope, undefined, options);

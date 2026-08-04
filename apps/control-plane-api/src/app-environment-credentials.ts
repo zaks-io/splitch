@@ -41,6 +41,30 @@ export async function deleteEnvironmentCredentials(
   throw new Error("credential delete did not quiesce");
 }
 
+/**
+ * Write revoked KV tombstones for every credential in the Environment without
+ * mutating D1. Used by App delete before the atomic cascade batch so a rolled-
+ * back D1 transaction cannot leave memberships gone while hot validation still
+ * serves live key material (SPL-298).
+ */
+export async function tombstoneEnvironmentCredentials(
+  deps: CredentialDeleteDeps,
+  appId: string,
+  environmentId: string,
+): Promise<void> {
+  const scope = envScope(appId, environmentId);
+  const [apiKeys, clientKeys] = await Promise.all([
+    deps.repo.credentials.listApiKeys(scope),
+    deps.repo.credentials.listClientKeys(scope),
+  ]);
+  for (const row of apiKeys) {
+    await writeApiKeyCache(deps, row, true, null, true);
+  }
+  for (const row of clientKeys) {
+    await writeClientKeyCache(deps, row, true, null, true);
+  }
+}
+
 async function writeRevokedTombstones(
   deps: CredentialDeleteDeps,
   scope: ReturnType<typeof envScope>,

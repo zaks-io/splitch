@@ -1,8 +1,8 @@
 import { deriveSlug } from "@splitch/contracts";
-import { appScope, envScope } from "@splitch/db";
+import { appScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz";
-import { deleteEnvironmentCredentials } from "./app-environment-credentials";
+import { tombstoneEnvironmentCredentials } from "./app-environment-credentials";
 import {
   ALLOW_POLICY,
   type AppEnvironmentDeps,
@@ -164,16 +164,11 @@ async function deleteAppRows(
   appId: string,
   environments: readonly EnvironmentRow[],
 ): Promise<void> {
-  const scope = appScope(appId);
+  // KV tombstones first (fail-closed for hot validation). D1 credential rows,
+  // Environments, memberships, and the App commit in one batch so a late FK
+  // failure cannot strand the App without live membership (SPL-298).
   for (const env of environments) {
-    await deleteEnvironmentCredentials(deps, appId, env.id);
-    await deps.repo.experiments.purgeArchivedExperimentsInEnvironment(envScope(appId, env.id));
-    if ((await deps.repo.identity.deleteEnvironment(scope, env.id)) !== 1) {
-      throw new Error("environment delete did not reach D1");
-    }
+    await tombstoneEnvironmentCredentials(deps, appId, env.id);
   }
-  await deps.repo.identity.deleteAppMemberships(scope);
-  if ((await deps.repo.identity.deleteApp(appId)) !== 1) {
-    throw new Error("app delete did not reach D1");
-  }
+  await deps.repo.identity.deleteAppCascade(appScope(appId));
 }
