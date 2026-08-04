@@ -28,7 +28,7 @@ beforeEach(async () => {
 afterEach(async () => ctx.h.bindings.dispose());
 
 describe("experiment and metric delete after Run end (SPL-289)", () => {
-  it("deletes an Experiment (and its ended D1 Runs) after End, never 500s", async () => {
+  it("deletes an Experiment (and its ended Runs) after End, never 500s", async () => {
     const fx = await experimentFixture(ctx);
     const experiment = await createExperimentDraft(ctx, fx, {
       key: "delete-after-end",
@@ -186,5 +186,34 @@ describe("experiment and metric delete after Run end (SPL-289)", () => {
     expect(afterEnd.status).toBe(200);
     expect(await afterEnd.json()).toEqual({ deleted: true });
     expect(await ctx.repo.experiments.getMetric(appScope(fx.appId), fx.metricId)).toBeNull();
+  });
+
+  it("refuses Start when a draft still names a Metric that was deleted", async () => {
+    const fx = await experimentFixture(ctx);
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "start-after-metric-delete",
+      allocation: { control: 50, treatment: 50 },
+      salt: "start-after-metric-delete-salt",
+    });
+
+    const deleted = await request(
+      ctx.h,
+      "DELETE",
+      `/apps/${fx.appId}/metrics/${fx.metricId}`,
+      fx.jwt,
+    );
+    expect(deleted.status).toBe(200);
+
+    const start = await startExperiment(ctx, fx, experiment.id);
+    expect(start.status).toBe(400);
+    const body = await errorBody(start);
+    expect(body.code).toBe("VALIDATION_ERROR");
+    expect(JSON.stringify(body.details)).toContain(fx.metricId);
+    expect(
+      await ctx.repo.experiments.listRunsForExperiment(
+        envScope(fx.appId, fx.environmentId),
+        experiment.id,
+      ),
+    ).toEqual([]);
   });
 });

@@ -104,7 +104,10 @@ export async function validateMetricRefs(
   ];
   for (const ref of refs) {
     if (!(await repo.experiments.getMetric(appScope(appId), ref.metricId))) {
-      return validationError(requestId, [["body", "metrics"], "Metric must belong to this App"]);
+      return validationError(requestId, [
+        ["body", "metrics"],
+        `Metric ${ref.metricId} must belong to this App`,
+      ]);
     }
   }
   return null;

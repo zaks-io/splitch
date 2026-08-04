@@ -7,6 +7,7 @@ import {
   segmentReferenceMissing,
   variantNotAvailable,
 } from "./experiment-errors";
+import { validateMetricRefs } from "./experiment-handler-shared";
 import {
   jsonArray,
   jsonArrayOrNull,
@@ -46,6 +47,45 @@ export async function prepareStart(
   const allocationError = validateAllocation(allocation, requestId);
   if (allocationError) return { ok: false, response: allocationError };
 
+  const variants = await frozenVariantSet(repo, scope, experiment, allocation, requestId);
+  if (!variants.ok) return variants;
+
+  const resolved = await resolvedTargetingRules(repo, scope, experiment, requestId);
+  if (!resolved.ok) return resolved;
+  const targetingRules = resolved.value;
+
+  const metricsReady = await frozenMetricRefs(repo, scope.appId, experiment, requestId);
+  if (!metricsReady.ok) return metricsReady;
+
+  const salt = experiment.draftSalt ?? `salt_${randomHex(12)}`;
+  const configHash = await runConfigHash({
+    salt,
+    allocation,
+    variantSet: variants.value.variantSet,
+    targetingRules,
+  });
+  return {
+    ok: true,
+    value: {
+      allocation,
+      salt,
+      variantSet: variants.value.variantSet,
+      controlVariantId: variants.value.controlVariantId,
+      targetingRules,
+      configHash,
+      decisionFamily: metricsReady.value.metrics,
+      guardrailDecisions: metricsReady.value.guardrailMetrics,
+    },
+  };
+}
+
+async function frozenVariantSet(
+  repo: Repository,
+  scope: EnvScope,
+  experiment: ExperimentRow,
+  allocation: Record<string, number>,
+  requestId: string,
+): Promise<Result<{ variantSet: Variant[]; controlVariantId: string }>> {
   const flagConfig = await repo.flags.getFlagConfig(scope, experiment.flagId);
   const flag = await repo.flags.getFlag(appScope(scope.appId), experiment.flagId);
   if (!flag || !flagConfig) return { ok: false, response: flagNotFound(requestId) };
@@ -83,30 +123,36 @@ export async function prepareStart(
       ),
     };
   }
+  return { ok: true, value: { variantSet: variantSet.value, controlVariantId } };
+}
 
-  const resolved = await resolvedTargetingRules(repo, scope, experiment, requestId);
-  if (!resolved.ok) return resolved;
-  const targetingRules = resolved.value;
-  const salt = experiment.draftSalt ?? `salt_${randomHex(12)}`;
-  const configHash = await runConfigHash({
-    salt,
-    allocation,
-    variantSet: variantSet.value,
-    targetingRules,
-  });
-  return {
-    ok: true,
-    value: {
-      allocation,
-      salt,
-      variantSet: variantSet.value,
-      controlVariantId,
-      targetingRules,
-      configHash,
-      decisionFamily: jsonArray<MetricRef>(experiment.metrics),
-      guardrailDecisions: jsonArray<MetricRef>(experiment.guardrailMetrics),
+/**
+ * Metric delete after End is allowed (SPL-289), so a draft can still name a
+ * Metric that no longer exists. Re-check with the same Create/PATCH helper
+ * before freezing the decision family into the Run.
+ */
+async function frozenMetricRefs(
+  repo: Repository,
+  appId: string,
+  experiment: ExperimentRow,
+  requestId: string,
+): Promise<Result<{ metrics: MetricRef[]; guardrailMetrics: MetricRef[] }>> {
+  const metrics = jsonArray<MetricRef>(experiment.metrics);
+  const guardrailMetrics = jsonArray<MetricRef>(experiment.guardrailMetrics);
+  const metricError = await validateMetricRefs(
+    repo,
+    appId,
+    {
+      metrics,
+      guardrailMetrics,
+      ...(experiment.activationMetricId
+        ? { activationMetricId: experiment.activationMetricId }
+        : {}),
     },
-  };
+    requestId,
+  );
+  if (metricError) return { ok: false, response: metricError };
+  return { ok: true, value: { metrics, guardrailMetrics } };
 }
 
 function isFrozenControlVariant(

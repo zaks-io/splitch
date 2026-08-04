@@ -2,7 +2,7 @@ import { type EnvScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
 import { randomHex } from "./credential-cache";
-import { experimentNotFound } from "./experiment-errors";
+import { experimentDeleteConflict, experimentNotFound } from "./experiment-errors";
 import {
   draftPatch,
   type ExperimentDeps,
@@ -182,8 +182,10 @@ async function deleteExperiment(
   }
   const deleted = await deps.repo.experiments.removeExperiment(scope, experiment.id);
   if (deleted === 0) {
-    // Start (or another delete) won the race after the guard read. Re-read so
-    // we return EXPERIMENT_RUNNING or NOT_FOUND — never a false `{ deleted: true }`.
+    // Start, End, or another delete won the race after the guard read. Re-read
+    // so we never return a false `{ deleted: true }`. 404 only when the row is
+    // gone; an existing row that the batch refused is a retryable conflict
+    // (e.g. concurrent End cleared live_run_id — retry will delete).
     const current = await deps.repo.experiments.getExperiment(scope, experiment.id);
     if (!current) return experimentNotFound(args.requestId);
     const raced = await runningRunForExperiment(deps.repo, scope, current);
@@ -194,7 +196,7 @@ async function deleteExperiment(
         args.requestId,
       );
     }
-    return experimentNotFound(args.requestId);
+    return experimentDeleteConflict(args.requestId);
   }
   // Ended (and any other non-running) D1 Run rows for this Experiment were
   // removed with it inside removeExperiment. Tinybird event logs are untouched.

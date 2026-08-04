@@ -250,9 +250,9 @@ function makeRemoveExperiment(d1: D1Database) {
                  AND live.status = 'running'
              )
              AND EXISTS (
-               SELECT 1 FROM experiments
-               WHERE app_id = ? AND environment_id = ? AND id = ?
-                 AND live_run_id IS NULL
+               SELECT 1 FROM experiments AS exp
+               WHERE exp.app_id = ? AND exp.environment_id = ? AND exp.id = ?
+                 AND exp.live_run_id IS NULL
              )`,
         )
         .bind(...scopeParams, ...scopeParams, ...scopeParams),
@@ -262,14 +262,18 @@ function makeRemoveExperiment(d1: D1Database) {
            WHERE app_id = ? AND environment_id = ? AND id = ?
              AND live_run_id IS NULL
              AND NOT EXISTS (
-               SELECT 1 FROM runs
-               WHERE app_id = ? AND environment_id = ? AND experiment_id = ?
-                 AND status = 'running'
+               SELECT 1 FROM runs AS live
+               WHERE live.app_id = ? AND live.environment_id = ? AND live.experiment_id = ?
+                 AND live.status = 'running'
              )`,
         )
         .bind(...scopeParams, ...scopeParams),
     ]);
-    return results[1]?.meta.changes ?? 0;
+    const experimentDelete = results[1];
+    if (!experimentDelete) {
+      throw new Error("removeExperiment: D1 batch missing experiment DELETE result");
+    }
+    return experimentDelete.meta.changes;
   };
 }
 

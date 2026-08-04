@@ -79,9 +79,9 @@ export async function runningMetricReference(
 ): Promise<RunningBlocker | null> {
   // Metric delete/patch only blocks on a *running* Run (route contract + SPL-289).
   // Draft or ended Experiments may still name the Metric; that is not
-  // EXPERIMENT_RUNNING. Start copies Metric refs into the frozen decision
-  // family, so a dangling draft reference fails loud at Start rather than
-  // pretending a finished Experiment is still running.
+  // EXPERIMENT_RUNNING. Start re-checks Metric refs via validateMetricRefs so a
+  // dangling draft reference fails loud with VALIDATION_ERROR rather than
+  // freezing a nonexistent Metric into the Run's decision family.
   return anyRunningReference(deps, appId, (experiment) =>
     experimentReferencesMetric(experiment, metricId),
   );
