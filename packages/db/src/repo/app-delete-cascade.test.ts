@@ -67,9 +67,9 @@ afterAll(async () => {
 });
 
 describe("deleteAppCascade atomicity (SPL-298)", () => {
-  it("rolls back memberships and credentials when Approval Requests block the App DELETE", async () => {
+  it("purges Approval history with the App in one batch", async () => {
     const created = await repo.approvals.createRequest(appScope(APP_ID), {
-      id: "apr_cascade_block",
+      id: "apr_cascade_purge",
       operation: "update_flag_config",
       targetType: "flag_config",
       targetId: "cfg_missing",
@@ -84,10 +84,59 @@ describe("deleteAppCascade atomicity (SPL-298)", () => {
       resultingTargetVersion: null,
       resultingResourceType: null,
       resultingResourceId: null,
-      idempotencyKey: "idem_cascade_block",
-      requestHash: "hash_cascade_block",
+      idempotencyKey: "idem_cascade_purge",
+      requestHash: "hash_cascade_purge",
     });
     expect(created.ok).toBe(true);
+
+    await repo.identity.deleteAppCascade(appScope(APP_ID));
+
+    expect(await repo.identity.getApp(APP_ID)).toBeNull();
+    expect(await repo.identity.getAppMembership(appScope(APP_ID), USER_ID)).toBeNull();
+    expect(
+      await local.d1
+        .prepare("SELECT COUNT(*) AS n FROM approval_requests WHERE app_id = ?")
+        .bind(APP_ID)
+        .first<{ n: number }>(),
+    ).toMatchObject({ n: 0 });
+  });
+
+  it("rolls back memberships and credentials when a non-cascaded Flag blocks App DELETE", async () => {
+    // Re-seed the App after the successful purge above.
+    await local.d1
+      .prepare(
+        `INSERT INTO apps (id, organization_id, name, key, created_at, updated_at)
+         VALUES (?, ?, 'Cascade App', 'cascade-app', ?, ?)`,
+      )
+      .bind(APP_ID, ORG_ID, NOW, NOW)
+      .run();
+    await local.d1
+      .prepare(
+        `INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)`,
+      )
+      .bind(APP_ID, USER_ID, NOW)
+      .run();
+    await local.d1
+      .prepare(
+        `INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at)
+         VALUES (?, ?, 'dev', 'Dev', '{}', ?, ?)`,
+      )
+      .bind(ENV_ID, APP_ID, NOW, NOW)
+      .run();
+    await local.d1
+      .prepare(
+        `INSERT INTO client_keys (key_id, app_id, environment_id, key_material, created_at)
+         VALUES ('ck_cascade', ?, ?, 'material_cascade', ?)`,
+      )
+      .bind(APP_ID, ENV_ID, NOW)
+      .run();
+    await local.d1
+      .prepare(
+        `INSERT INTO flags (id, app_id, key, name, schema, default_variant_id, created_at, updated_at)
+         VALUES ('flag_cascade_block', ?, 'cascade-block', 'Cascade Block', '{}', NULL, ?, ?)`,
+      )
+      .bind(APP_ID, NOW, NOW)
+      .run();
 
     await expect(repo.identity.deleteAppCascade(appScope(APP_ID))).rejects.toThrow(
       /FOREIGN KEY constraint failed|app delete did not reach D1/,

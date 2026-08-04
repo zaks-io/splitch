@@ -140,11 +140,28 @@ async function seedApprovalRequest(appId: string, suffix: string) {
   expect(created.ok).toBe(true);
 }
 
+async function seedFlag(appId: string, suffix: string) {
+  await h.bindings.d1
+    .prepare(
+      `INSERT INTO flags (id, app_id, key, name, schema, default_variant_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, '{}', NULL, ?, ?)`,
+    )
+    .bind(
+      `flag_delete_atomic_${suffix}`,
+      appId,
+      `flag-${suffix}`,
+      `Flag ${suffix}`,
+      NOW_ISO,
+      NOW_ISO,
+    )
+    .run();
+}
+
 describe("apps delete atomicity and emptiness guards (SPL-298)", () => {
-  it("returns RESOURCE_NOT_EMPTY for Approval Requests and leaves app-scoped access intact", async () => {
-    const created = await createDefaultApp("approval-child");
+  it("returns RESOURCE_NOT_EMPTY for Flags and leaves app-scoped access intact", async () => {
+    const created = await createDefaultApp("flag-child");
     const jwt = await appToken(created.app.id);
-    await seedApprovalRequest(created.app.id, "guard");
+    await seedFlag(created.app.id, "guard");
 
     const del = await h.app.request(`/apps/${created.app.id}`, {
       method: "DELETE",
@@ -153,7 +170,7 @@ describe("apps delete atomicity and emptiness guards (SPL-298)", () => {
     expect(del.status).toBe(409);
     expect((await del.json()) as ErrorResponse).toMatchObject({
       code: "RESOURCE_NOT_EMPTY",
-      details: { childType: "approval_requests", attemptedOp: "DELETE_APP" },
+      details: { childType: "flags", attemptedOp: "DELETE_APP" },
     });
 
     const read = await h.app.request(`/apps/${created.app.id}`, {
@@ -184,14 +201,41 @@ describe("apps delete atomicity and emptiness guards (SPL-298)", () => {
     });
   });
 
+  it("deletes an App that still has Approval history without stranding membership", async () => {
+    const created = await createDefaultApp("approval-cascade");
+    const jwt = await appToken(created.app.id);
+    await seedApprovalRequest(created.app.id, "cascade");
+
+    const del = await h.app.request(`/apps/${created.app.id}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${jwt}` },
+    });
+    expect(del.status).toBe(200);
+    expect(await del.json()).toEqual({ deleted: true });
+
+    const read = await h.app.request(`/apps/${created.app.id}`, {
+      headers: { authorization: `Bearer ${jwt}` },
+    });
+    expect(read.status).toBe(404);
+
+    const repo = createRepository(h.bindings.d1);
+    expect(await repo.identity.getAppMembership(appScope(created.app.id), OWNER)).toBeNull();
+    expect(
+      await h.bindings.d1
+        .prepare("SELECT COUNT(*) AS n FROM approval_requests WHERE app_id = ?")
+        .bind(created.app.id)
+        .first<{ n: number }>(),
+    ).toMatchObject({ n: 0 });
+  });
+
   it("keeps live membership after a cascade FK failure races past the guard", async () => {
     const created = await createDefaultApp("cascade-race");
     const jwt = await appToken(created.app.id);
     const repo = createRepository(h.bindings.d1);
 
-    // Simulate the pre-fix path: emptiness guard skipped, cascade hits the
-    // Approval Request FK. Membership and credentials must survive the rollback.
-    await seedApprovalRequest(created.app.id, "race");
+    // Simulate the pre-fix path: emptiness guard skipped, cascade hits a
+    // non-cascaded Flag FK. Membership and credentials must survive the rollback.
+    await seedFlag(created.app.id, "race");
     await expect(repo.identity.deleteAppCascade(appScope(created.app.id))).rejects.toThrow(
       /FOREIGN KEY constraint failed|app delete did not reach D1/,
     );

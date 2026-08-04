@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { resolveAppSelectionForUser } from "./membership-authority";
 
 /**
- * SPL-298: after a failed App cascade (FK from leftover Approval Requests),
+ * SPL-298: after a failed App cascade (FK from a non-cascaded Flag),
  * grant issuance must still resolve the App from live membership — the same
  * path `/oauth2/token` uses when selecting an App.
  */
@@ -57,27 +57,13 @@ describe("App grant issuance after failed delete cascade (SPL-298)", () => {
       )
       .bind(ENV_ID, APP_ID, NOW, NOW)
       .run();
-
-    const created = await repo.approvals.createRequest(appScope(APP_ID), {
-      id: "apr_grant_after_fail",
-      operation: "update_flag_config",
-      targetType: "flag_config",
-      targetId: "cfg_grant_after_fail",
-      targetVersion: "1",
-      policyContexts: "[]",
-      diff: "{}",
-      status: "pending",
-      proposedBy: USER_ID,
-      proposedVia: "id_jag",
-      proposedAt: NOW,
-      resolvedAt: null,
-      resultingTargetVersion: null,
-      resultingResourceType: null,
-      resultingResourceId: null,
-      idempotencyKey: "idem_grant_after_fail",
-      requestHash: "hash_grant_after_fail",
-    });
-    expect(created.ok).toBe(true);
+    await local.d1
+      .prepare(
+        `INSERT INTO flags (id, app_id, key, name, schema, default_variant_id, created_at, updated_at)
+         VALUES ('flag_grant_after_fail', ?, 'grant-fail', 'Grant Fail', '{}', NULL, ?, ?)`,
+      )
+      .bind(APP_ID, NOW, NOW)
+      .run();
 
     await expect(repo.identity.deleteAppCascade(appScope(APP_ID))).rejects.toThrow(
       /FOREIGN KEY constraint failed|app delete did not reach D1/,

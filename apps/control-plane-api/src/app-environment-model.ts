@@ -152,11 +152,9 @@ export async function deleteAppBlockedByChildren(
       "privacy_requests",
       (await deps.repo.privacy.listPrivacyRequestsForApp(app.organizationId, app.id)).length,
     ],
-    // Approval rows FK to apps with ON DELETE no action. Leaving them out of the
-    // emptiness guard lets the cascade destroy memberships before the final App
-    // DELETE fails under FK enforcement (SPL-298).
-    ["approval_requests", await deps.repo.approvals.countRequests(scope, {})],
-    ["approval_reviews", await deps.repo.approvals.countReviews(scope)],
+    // Approval Requests / Reviews are cascaded inside deleteAppCascade — they
+    // have no public delete API, so counting them here would permanently strand
+    // any App that ever completed a Policy-gated change (SPL-298 / dark-launch).
   ];
   for (const [childType, childCount] of childCounts) {
     if (childCount > 0) {
