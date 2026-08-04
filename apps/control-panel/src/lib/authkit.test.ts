@@ -1,7 +1,7 @@
 import type { Repository } from "@splitch/db";
 import { describe, expect, it } from "vitest";
 import type { AuthKitClient } from "./authkit";
-import { completeAuthKitCallback } from "./authkit";
+import { AuthKitEmailUnverifiedError, completeAuthKitCallback } from "./authkit";
 
 const NOW = Date.UTC(2026, 6, 5, 12, 0, 0);
 
@@ -81,7 +81,7 @@ describe("WorkOS AuthKit callback materialization", () => {
         repo: repository(),
         request: new Request("https://app.splitch.dev/auth/callback"),
       }),
-    ).rejects.toThrow(/verified email/);
+    ).rejects.toThrow(AuthKitEmailUnverifiedError);
   });
 
   it("rejects a WorkOS access token without a bounded JWT expiry", async () => {

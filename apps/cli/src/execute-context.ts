@@ -1,5 +1,6 @@
 import { ensurePrincipalEmail } from "./auth-email-backfill.js";
 import { type ResolvedContext, resolveContext } from "./context.js";
+import { emailUnavailableReason } from "./credentials.js";
 import { writeCliError } from "./errors.js";
 import { emit } from "./execute-io.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
@@ -35,13 +36,18 @@ export async function executeContext(
   }
 
   // Prefer a real email when refresh can backfill one. When the Worker cannot
-  // supply it yet, proceed with `{ userId }` only — never invent `"unknown"`.
+  // supply it yet, proceed with `{ userId }` plus a reason — never invent
+  // `"unknown"`. Permanent unverified-email faults fail loud (ADR-0036).
   const session = await ensurePrincipalEmail(deps);
+  const reason = emailUnavailableReason(session);
   const payload = {
     authenticated: true,
     principal: session.principal.email
       ? { userId: session.principal.userId, email: session.principal.email }
-      : { userId: session.principal.userId },
+      : {
+          userId: session.principal.userId,
+          ...(reason ? { emailUnavailableReason: reason } : {}),
+        },
     ...context,
     nextSteps: nextSteps(context),
   };

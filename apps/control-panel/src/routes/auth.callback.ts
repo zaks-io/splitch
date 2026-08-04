@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { env as workerEnv } from "cloudflare:workers";
+import { createFileRoute } from "@tanstack/react-router";
 import {
+  AuthKitEmailUnverifiedError,
   completeAuthKitCallback,
   createAuthKitClient,
   createControlPanelRepository,
@@ -25,19 +26,26 @@ export const Route = createFileRoute("/auth/callback")({
           return unauthorizedResponse([consumedState.clearCookie]);
         }
 
-        const callback = await completeAuthKitCallback({
-          authKit: createAuthKitClient(bindings),
-          clientId: bindings.WORKOS_CLIENT_ID,
-          code,
-          kv: bindings.SESSION_STORE,
-          repo: createControlPanelRepository(bindings),
-          request,
-        });
+        try {
+          const callback = await completeAuthKitCallback({
+            authKit: createAuthKitClient(bindings),
+            clientId: bindings.WORKOS_CLIENT_ID,
+            code,
+            kv: bindings.SESSION_STORE,
+            repo: createControlPanelRepository(bindings),
+            request,
+          });
 
-        return redirectResponse(consumedState.returnTo, [
-          consumedState.clearCookie,
-          callback.cookie,
-        ]);
+          return redirectResponse(consumedState.returnTo, [
+            consumedState.clearCookie,
+            callback.cookie,
+          ]);
+        } catch (error) {
+          if (error instanceof AuthKitEmailUnverifiedError) {
+            return textResponse(error.message, 403, [consumedState.clearCookie]);
+          }
+          throw error;
+        }
       },
     },
   },

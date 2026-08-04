@@ -120,6 +120,9 @@ async function pollDeviceApproval(
 
 function buildCredentialFile(body: DeviceTokenBody): CliCredentialFile {
   if (!body.user_id) {
+    // Storing a placeholder identity is worse than failing: every later command
+    // reads this file, so an unnamed principal turns a broken token response
+    // into a mystery three commands downstream.
     throw new SplitchCliError({
       code: "CLI_DEVICE_TOKEN_EXCHANGE_FAILED",
       causeSummary: "Device token response carried no user_id to identify the session",
@@ -149,6 +152,12 @@ function buildCredentialFile(body: DeviceTokenBody): CliCredentialFile {
   };
 }
 
+/**
+ * Clear the local credential first, then fail loud if the server kept the
+ * session: dropping the local file is what the caller asked for and must always
+ * happen, but "logged out" while a live refresh session survives on the server
+ * is exactly the silent half-failure the credential holder must not be told.
+ */
 export async function logout(deps: AuthDeps): Promise<void> {
   const stored = await deps.credentialStore.load();
   let revocation: Response | null = null;
@@ -173,11 +182,19 @@ export async function logout(deps: AuthDeps): Promise<void> {
   }
 }
 
+/**
+ * Run an authorized call with a token bound to `binding` (or the session's
+ * default when no binding is named), minting through the refresh grant when
+ * the stored token is expired or bound elsewhere. A 401 buys exactly one
+ * fresh mint and retry before failing loud.
+ */
 export async function withAuthorizationRetry<T>(
   deps: AuthDeps,
   run: (authorization: string) => Promise<{ status: number; value: T }>,
   binding?: TokenBinding,
 ): Promise<T> {
+  // Refresh first when the principal lacks a real email so member-profile
+  // backfill runs before any control-plane call (SPL-293).
   const stored = await ensurePrincipalEmail(deps);
   const usable = binding === undefined || storedBinding(stored) === bindingKey(binding);
   const current =
@@ -200,6 +217,10 @@ export async function withAuthorizationRetry<T>(
   return retry.value;
 }
 
+/**
+ * Credential files written before rebinding existed carry no binding label;
+ * their access token was always bound to the login-selected App.
+ */
 function storedBinding(stored: CliCredentialFile): string {
   return (
     stored.credential.accessTokenBinding ??

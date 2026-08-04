@@ -5,6 +5,18 @@ import type { ControlPanelBindings } from "./bindings";
 import { buildSessionPrincipal } from "./membership";
 import { createSession } from "./session";
 
+/**
+ * Fail-loud when AuthKit returns an account without a verified email. The
+ * callback maps this to a 403 with the same verify-then-sign-in guidance the
+ * CLI gives for `CLI_EMAIL_UNVERIFIED` — never an opaque 500.
+ */
+export class AuthKitEmailUnverifiedError extends Error {
+  constructor() {
+    super("Verify your email address with the identity provider, then sign in again");
+    this.name = "AuthKitEmailUnverifiedError";
+  }
+}
+
 export interface AuthKitClient {
   getAuthorizationUrl(options: { clientId: string; redirectUri: string; state: string }): string;
   authenticateWithCode(options: {
@@ -91,9 +103,7 @@ export async function completeAuthKitCallback(input: CompleteAuthKitCallbackInpu
   // Same gate as ID-JAG / device flow: only a verified address may enter the
   // member-profile identity cache (spoofable display identity otherwise).
   if (!authentication.user.email || authentication.user.emailVerified !== true) {
-    throw new Error(
-      "WorkOS AuthKit callback returned a user without a verified email; verify the email address before signing in",
-    );
+    throw new AuthKitEmailUnverifiedError();
   }
   await rememberMemberProfile(input.kv, authentication.user.id, authentication.user.email);
 

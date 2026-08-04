@@ -104,6 +104,10 @@ export function emailUnverifiedError(detail: string | undefined): SplitchCliErro
  * Refresh tokens are single-use, so a concurrent splitch process may have
  * rotated ours away between our load and this mint. If the file on disk now
  * holds a NEWER token, the session is alive and this mint deserves one retry.
+ *
+ * The principal must match: a concurrent `splitch login` that switched accounts
+ * also leaves a different token on disk, and silently retrying with it would
+ * run the command as someone else while the caller believes it is still theirs.
  */
 async function reloadRotatedCredential(
   deps: AuthDeps,
@@ -121,14 +125,24 @@ function mintedCredential(
   body: RefreshTokenBody,
   mint: { binding: TokenBinding | null; explicitBinding: boolean },
 ): CliCredentialFile {
+  // Label the token with what the server actually bound, not what we asked
+  // for: a key selector ("checkout") resolves server-side to a canonical ID,
+  // so labelling the request would make every later ID-keyed call re-mint.
   const mintedBinding = body.app_id
     ? `app:${body.app_id}`
     : mint.explicitBinding
       ? bindingKey(mint.binding)
       : "";
+  // The session's App is its login-time identity. A per-command rebind must
+  // not rewrite it, exactly as the server refuses to rewrite the session's
+  // selectedAppSelector on a rebind mint.
   const selectedAppId = mint.explicitBinding ? stored.credential.selectedAppId : body.app_id;
   const email = mintEmail(body.email, stored.principal.email);
-  const { emailBackfillUnavailable, ...credentialRest } = stored.credential;
+  const {
+    emailBackfillUnavailable: _legacyUnavailable,
+    emailBackfillUnavailableUntil: _previousUntil,
+    ...credentialRest
+  } = stored.credential;
   return {
     ...stored,
     principal: email
@@ -141,7 +155,6 @@ function mintedCredential(
       accessTokenExpiresAt: new Date(Date.now() + (body.expires_in ?? 3600) * 1000).toISOString(),
       accessTokenBinding: mintedBinding,
       ...(selectedAppId ? { selectedAppId } : {}),
-      ...(!email && emailBackfillUnavailable ? { emailBackfillUnavailable: true } : {}),
     },
   };
 }

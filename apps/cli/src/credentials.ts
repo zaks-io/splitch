@@ -27,8 +27,18 @@ interface DeviceFlowCredential {
   readonly accessTokenBinding?: string;
   readonly selectedAppId?: string;
   /**
-   * Set after a best-effort email backfill refresh that failed or returned no
-   * email, so later commands do not burn refresh-token rotations forever.
+   * Access-token expiry (ISO) at the moment a best-effort email backfill miss
+   * was recorded. While it still equals `accessTokenExpiresAt` and that token
+   * is live, skip another refresh so we do not burn rotations. Cleared
+   * automatically when the access token rotates or expires — context-only
+   * users never hit `withAuthorizationRetry`, so the marker must not stick
+   * forever after the Worker starts supplying email.
+   */
+  readonly emailBackfillUnavailableUntil?: string;
+  /**
+   * @deprecated Prefer `emailBackfillUnavailableUntil`. Kept so credentials
+   * written during the boolean-marker window still suppress retries until the
+   * current access token rotates.
    */
   readonly emailBackfillUnavailable?: boolean;
 }
@@ -104,17 +114,52 @@ function realPrincipalEmail(email: string | undefined): string | undefined {
 }
 
 export function principalNeedsEmailBackfill(file: CliCredentialFile): boolean {
-  if (file.credential.emailBackfillUnavailable) {
+  if (realPrincipalEmail(file.principal.email) !== undefined) {
     return false;
   }
-  return realPrincipalEmail(file.principal.email) === undefined;
+  if (emailBackfillBlocked(file)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * A miss is sticky only for the access-token lifetime it was recorded against.
+ * Once that token expires or a concurrent mint rotates `accessTokenExpiresAt`,
+ * allow another backfill attempt (Worker may now supply email).
+ */
+function emailBackfillBlocked(file: CliCredentialFile): boolean {
+  if (isAccessTokenExpired(file.credential.accessTokenExpiresAt)) {
+    return false;
+  }
+  const until =
+    file.credential.emailBackfillUnavailableUntil ??
+    (file.credential.emailBackfillUnavailable ? file.credential.accessTokenExpiresAt : undefined);
+  return until === file.credential.accessTokenExpiresAt;
 }
 
 export function withEmailBackfillUnavailable(file: CliCredentialFile): CliCredentialFile {
+  const { emailBackfillUnavailable: _legacy, ...credentialRest } = file.credential;
   return {
     ...file,
-    credential: { ...file.credential, emailBackfillUnavailable: true },
+    credential: {
+      ...credentialRest,
+      emailBackfillUnavailableUntil: file.credential.accessTokenExpiresAt,
+    },
   };
+}
+
+export type EmailUnavailableReason = "backfill_unavailable" | "unverified";
+
+export function emailUnavailableReason(
+  file: CliCredentialFile,
+): EmailUnavailableReason | undefined {
+  if (realPrincipalEmail(file.principal.email) !== undefined) {
+    return undefined;
+  }
+  // Success-path absences are backfill misses. Permanent unverified-email
+  // faults fail loud via CLI_EMAIL_UNVERIFIED before context emits.
+  return "backfill_unavailable";
 }
 
 function credentialStoreError(error: unknown, operation: "read" | "clear"): SplitchCliError {
