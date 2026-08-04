@@ -9,7 +9,7 @@ importers:
   .:
     devDependencies:
       '@biomejs/biome':
-        specifier: ^2.5.5
+        specifier: ^2.5.2
         version: 2.5.6
       '@cloudflare/workers-types':
         specifier: ^5.20260724.1

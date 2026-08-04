@@ -88,7 +88,7 @@
     "verify:push": "turbo run //#knip //#format:check //#secrets:range //#tinybird:local //#d1:migrate:local //#d1:migrate:populated lint typecheck"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.5",
+    "@biomejs/biome": "^2.5.2",
     "@cloudflare/workers-types": "^5.20260724.1",
     "@playwright/test": "^1.62.0",
     "@sentry/cli": "^3.6.2",
