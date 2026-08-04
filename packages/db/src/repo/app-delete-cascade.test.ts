@@ -17,28 +17,13 @@ const ENV_ID = "env_app_delete_cascade";
 let local: LocalD1;
 let repo: ReturnType<typeof createRepository>;
 
-beforeAll(async () => {
-  local = await createLocalD1();
-  repo = createRepository(local.d1);
-  await local.d1
-    .prepare(
-      `INSERT INTO organizations (id, name, slug, plan, is_provisional, created_at, updated_at)
-       VALUES (?, 'Cascade Co', 'cascade-co', 'free', 0, ?, ?)`,
-    )
-    .bind(ORG_ID, NOW, NOW)
-    .run();
+async function seedAppWithLiveClientKey(keyId: string): Promise<void> {
   await local.d1
     .prepare(
       `INSERT INTO apps (id, organization_id, name, key, created_at, updated_at)
        VALUES (?, ?, 'Cascade App', 'cascade-app', ?, ?)`,
     )
     .bind(APP_ID, ORG_ID, NOW, NOW)
-    .run();
-  await local.d1
-    .prepare(
-      `INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)`,
-    )
-    .bind(ORG_ID, USER_ID, NOW)
     .run();
   await local.d1
     .prepare(
@@ -56,10 +41,29 @@ beforeAll(async () => {
   await local.d1
     .prepare(
       `INSERT INTO client_keys (key_id, app_id, environment_id, key_material, created_at)
-       VALUES ('ck_cascade', ?, ?, 'material_cascade', ?)`,
+       VALUES (?, ?, ?, 'material_cascade', ?)`,
     )
-    .bind(APP_ID, ENV_ID, NOW)
+    .bind(keyId, APP_ID, ENV_ID, NOW)
     .run();
+}
+
+beforeAll(async () => {
+  local = await createLocalD1();
+  repo = createRepository(local.d1);
+  await local.d1
+    .prepare(
+      `INSERT INTO organizations (id, name, slug, plan, is_provisional, created_at, updated_at)
+       VALUES (?, 'Cascade Co', 'cascade-co', 'free', 0, ?, ?)`,
+    )
+    .bind(ORG_ID, NOW, NOW)
+    .run();
+  await local.d1
+    .prepare(
+      `INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)`,
+    )
+    .bind(ORG_ID, USER_ID, NOW)
+    .run();
+  await seedAppWithLiveClientKey("ck_cascade");
 });
 
 afterAll(async () => {
@@ -67,7 +71,7 @@ afterAll(async () => {
 });
 
 describe("deleteAppCascade atomicity (SPL-298)", () => {
-  it("purges Approval history with the App in one batch", async () => {
+  it("purges Approval history with the App in one batch once credentials are revoked", async () => {
     const created = await repo.approvals.createRequest(appScope(APP_ID), {
       id: "apr_cascade_purge",
       operation: "update_flag_config",
@@ -89,6 +93,11 @@ describe("deleteAppCascade atomicity (SPL-298)", () => {
     });
     expect(created.ok).toBe(true);
 
+    await local.d1
+      .prepare(`UPDATE client_keys SET revoked_at = ? WHERE app_id = ?`)
+      .bind(NOW, APP_ID)
+      .run();
+
     await repo.identity.deleteAppCascade(appScope(APP_ID));
 
     expect(await repo.identity.getApp(APP_ID)).toBeNull();
@@ -101,34 +110,44 @@ describe("deleteAppCascade atomicity (SPL-298)", () => {
     ).toMatchObject({ n: 0 });
   });
 
-  it("rolls back memberships and credentials when a non-cascaded Flag blocks App DELETE", async () => {
-    // Re-seed the App after the successful purge above.
+  it("rolls back when a live Client Key appears after the revoke scan", async () => {
+    await seedAppWithLiveClientKey("ck_cascade_revoked");
     await local.d1
-      .prepare(
-        `INSERT INTO apps (id, organization_id, name, key, created_at, updated_at)
-         VALUES (?, ?, 'Cascade App', 'cascade-app', ?, ?)`,
-      )
-      .bind(APP_ID, ORG_ID, NOW, NOW)
+      .prepare(`UPDATE client_keys SET revoked_at = ? WHERE key_id = ?`)
+      .bind(NOW, "ck_cascade_revoked")
       .run();
-    await local.d1
-      .prepare(
-        `INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)`,
-      )
-      .bind(APP_ID, USER_ID, NOW)
-      .run();
-    await local.d1
-      .prepare(
-        `INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at)
-         VALUES (?, ?, 'dev', 'Dev', '{}', ?, ?)`,
-      )
-      .bind(ENV_ID, APP_ID, NOW, NOW)
-      .run();
+    // Concurrent mint after quiesce: live key keeps the Env FK and aborts the batch.
     await local.d1
       .prepare(
         `INSERT INTO client_keys (key_id, app_id, environment_id, key_material, created_at)
-         VALUES ('ck_cascade', ?, ?, 'material_cascade', ?)`,
+         VALUES ('ck_cascade_race', ?, ?, 'material_race', ?)`,
       )
       .bind(APP_ID, ENV_ID, NOW)
+      .run();
+
+    await expect(repo.identity.deleteAppCascade(appScope(APP_ID))).rejects.toThrow(
+      /FOREIGN KEY constraint failed|app delete did not reach D1/,
+    );
+
+    expect(await repo.identity.getApp(APP_ID)).toMatchObject({ id: APP_ID });
+    expect(await repo.identity.getAppMembership(appScope(APP_ID), USER_ID)).toMatchObject({
+      role: "owner",
+    });
+    expect(await repo.identity.listEnvironments(appScope(APP_ID))).toHaveLength(1);
+    const keys = await repo.credentials.listClientKeys(envScope(APP_ID, ENV_ID));
+    expect(keys.map((row) => row.keyId).sort()).toEqual(["ck_cascade_race", "ck_cascade_revoked"]);
+    expect(keys.find((row) => row.keyId === "ck_cascade_race")?.revokedAt).toBeNull();
+  });
+
+  it("rolls back memberships and credentials when a non-cascaded Flag blocks App DELETE", async () => {
+    await local.d1.prepare(`DELETE FROM client_keys WHERE app_id = ?`).bind(APP_ID).run();
+    await local.d1.prepare(`DELETE FROM environments WHERE app_id = ?`).bind(APP_ID).run();
+    await local.d1.prepare(`DELETE FROM app_memberships WHERE app_id = ?`).bind(APP_ID).run();
+    await local.d1.prepare(`DELETE FROM apps WHERE id = ?`).bind(APP_ID).run();
+    await seedAppWithLiveClientKey("ck_cascade_flag");
+    await local.d1
+      .prepare(`UPDATE client_keys SET revoked_at = ? WHERE app_id = ?`)
+      .bind(NOW, APP_ID)
       .run();
     await local.d1
       .prepare(
