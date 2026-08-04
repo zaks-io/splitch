@@ -200,6 +200,7 @@ export function deviceAuthorizationResponse() {
     device_code: "device-code-1",
     user_code: "ABCD-1234",
     verification_uri: "https://auth.test/device",
+    verification_uri_complete: "https://auth.test/device?user_code=ABCD-1234",
     interval: 0,
   };
 }

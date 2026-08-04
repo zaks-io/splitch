@@ -1,15 +1,16 @@
 import {
   bindingKey,
   bindingParams,
-  deviceAuthorizationError,
   describeOAuthFault,
+  deviceAuthorizationError,
   readOAuthFault,
   type TokenBinding,
 } from "./auth-binding.js";
+import { openDeviceApproval } from "./auth-device-approval.js";
 import type { CliCredentialFile, CredentialStore } from "./credentials.js";
 import { isAccessTokenExpired } from "./credentials.js";
-import { resolveAuthBaseUrl, type SdkFactoryOptions } from "./sdks.js";
 import { SplitchCliError } from "./errors.js";
+import { resolveAuthBaseUrl, type SdkFactoryOptions } from "./sdks.js";
 
 const DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 const REFRESH_GRANT = "refresh_token";
@@ -47,8 +48,11 @@ export async function loginWithDeviceFlow(
     interval?: number;
   };
 
-  const verificationUrl = grant.verification_uri_complete ?? grant.verification_uri;
-  console.error(`Open ${verificationUrl} and enter code ${grant.user_code}`);
+  await openDeviceApproval({
+    verificationUri: grant.verification_uri,
+    verificationUriComplete: grant.verification_uri_complete,
+    userCode: grant.user_code,
+  });
 
   const intervalMs = (grant.interval ?? 5) * 1000;
   const maxAttempts = 30;

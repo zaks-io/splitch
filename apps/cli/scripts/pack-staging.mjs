@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_DEPENDENCIES = ["@hono/zod-openapi", "@sentry/node", "hono", "zod"];
+const EXPECTED_DEPENDENCIES = ["@hono/zod-openapi", "@sentry/node", "hono", "open", "zod"];
 const REQUIRED_FILES = [
   "package/LICENSE.md",
   "package/README.md",

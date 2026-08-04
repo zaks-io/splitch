@@ -1,6 +1,7 @@
 import { constants } from "node:fs";
 import { access, readFile, writeFile } from "node:fs/promises";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import open from "open";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK } from "./exit-codes.js";
 import {
@@ -12,6 +13,13 @@ import {
   storedCredential,
 } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
+
+vi.mock("open", () => ({ default: vi.fn() }));
+
+beforeEach(() => {
+  vi.mocked(open).mockReset();
+  vi.mocked(open).mockResolvedValue(undefined as never);
+});
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -40,6 +48,8 @@ describe("login exit code", () => {
       fetch: transport.fetch,
     });
     expect(code).toBe(EXIT_OK);
+    expect(open).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledWith("https://auth.test/device?user_code=ABCD-1234");
     expect(transport.requests.map((request) => request.body?.app)).toEqual([
       "checkout-app",
       undefined,
@@ -51,7 +61,9 @@ describe("login exit code", () => {
     expect(saved.credential.refreshToken).toBe("fixture-refresh-token");
     expect(saved.credential.selectedAppId).toBe("app_1");
   });
+});
 
+describe("login exit code", () => {
   it("names the logged-in principal by its user id and stores no fabricated identity", async () => {
     // The auth port returns the opaque user_id and nothing PII, so the CLI used
     // to fill the gap with `email: "unknown"` and greet every operator as
