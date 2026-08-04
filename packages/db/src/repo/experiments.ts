@@ -227,27 +227,47 @@ function liveRunIdIs(expected: string | null) {
  * Experiment DELETE 500s once any ended Run exists (SPL-289). Cascading the
  * Run rows here is intentional: D1 Run snapshots are Experiment-owned
  * control-plane history and leave with the Experiment. Tinybird raw event
- * logs remain the system of record for analysis replay (assignment-store
- * prune on Experiment delete). Both statements are tenant-scoped
- * (`app_id` + `environment_id`) so a forged experiment id cannot reach
- * another tenant's Runs.
+ * logs remain the system of record for analysis replay. Both statements are
+ * tenant-scoped (`app_id` + `environment_id`) so a forged experiment id cannot
+ * reach another tenant's Runs.
+ *
+ * Both DELETEs refuse when a Run is `running` or `live_run_id` is set, so a
+ * Start that commits after the handler's guard read but before this batch
+ * cannot be wiped by an unconditional cascade (fail closed → 0 changes).
  */
 function makeRemoveExperiment(d1: D1Database) {
   return async function removeExperiment(scope: EnvScope, experimentId: string): Promise<number> {
     assertMintedScope(scope);
+    const scopeParams = [scope.appId, scope.environmentId, experimentId] as const;
     const results = await d1.batch([
       d1
         .prepare(
           `DELETE FROM runs
-           WHERE app_id = ? AND environment_id = ? AND experiment_id = ?`,
+           WHERE app_id = ? AND environment_id = ? AND experiment_id = ?
+             AND NOT EXISTS (
+               SELECT 1 FROM runs AS live
+               WHERE live.app_id = ? AND live.environment_id = ? AND live.experiment_id = ?
+                 AND live.status = 'running'
+             )
+             AND EXISTS (
+               SELECT 1 FROM experiments
+               WHERE app_id = ? AND environment_id = ? AND id = ?
+                 AND live_run_id IS NULL
+             )`,
         )
-        .bind(scope.appId, scope.environmentId, experimentId),
+        .bind(...scopeParams, ...scopeParams, ...scopeParams),
       d1
         .prepare(
           `DELETE FROM experiments
-           WHERE app_id = ? AND environment_id = ? AND id = ?`,
+           WHERE app_id = ? AND environment_id = ? AND id = ?
+             AND live_run_id IS NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM runs
+               WHERE app_id = ? AND environment_id = ? AND experiment_id = ?
+                 AND status = 'running'
+             )`,
         )
-        .bind(scope.appId, scope.environmentId, experimentId),
+        .bind(...scopeParams, ...scopeParams),
     ]);
     return results[1]?.meta.changes ?? 0;
   };

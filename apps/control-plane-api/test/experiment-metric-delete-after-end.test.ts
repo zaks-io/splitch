@@ -12,9 +12,17 @@ import { errorBody, request } from "../src/flag-definition-test-harness";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 let ctx: ExperimentRunHarness;
+let beforeRemove: (() => Promise<void>) | null = null;
 
 beforeEach(async () => {
-  ctx = await makeExperimentRunHarness(makeLocalBindings);
+  beforeRemove = null;
+  ctx = await makeExperimentRunHarness(makeLocalBindings, {
+    beforeRemoveExperiment: async () => {
+      const pending = beforeRemove;
+      beforeRemove = null;
+      await pending?.();
+    },
+  });
 });
 
 afterEach(async () => ctx.h.bindings.dispose());
@@ -87,6 +95,51 @@ describe("experiment and metric delete after Run end (SPL-289)", () => {
     expect(
       await ctx.repo.experiments.getExperiment(envScope(fx.appId, fx.environmentId), experiment.id),
     ).not.toBeNull();
+  });
+
+  it("fails closed when a Run Starts between the delete guard and the cascade write", async () => {
+    const fx = await experimentFixture(ctx);
+    await ctx.repo.identity.updateEnvironment(appScope(fx.appId), fx.environmentId, {
+      policy: JSON.stringify({
+        variantAvailability: "allow",
+        targetingRolloutValue: "allow",
+        enabledState: "allow",
+        startExperimentRun: "allow",
+      }),
+    });
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "delete-vs-start-race",
+      allocation: { control: 50, treatment: 50 },
+      salt: "delete-vs-start-race-salt",
+    });
+    let startedRunId: string | null = null;
+    beforeRemove = async () => {
+      const response = await startExperiment(ctx, fx, experiment.id);
+      expect(response.status, "interleaved Start must succeed").toBe(200);
+      startedRunId = ((await response.json()) as StartResponse).run.id;
+    };
+
+    const del = await request(
+      ctx.h,
+      "DELETE",
+      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experiment.id}`,
+      fx.jwt,
+    );
+    expect(del.status).toBe(409);
+    expect(await errorBody(del)).toMatchObject({
+      code: "EXPERIMENT_RUNNING",
+      details: {
+        experimentId: experiment.id,
+        runningRunId: startedRunId,
+        attemptedOp: "DELETE_EXPERIMENT",
+      },
+    });
+    const scope = envScope(fx.appId, fx.environmentId);
+    expect(await ctx.repo.experiments.getExperiment(scope, experiment.id)).toMatchObject({
+      status: "running",
+      liveRunId: startedRunId,
+    });
+    expect(await ctx.repo.experiments.listRunsForExperiment(scope, experiment.id)).toHaveLength(1);
   });
 
   it("allows Metric delete after End, and still blocks while a Run is running", async () => {

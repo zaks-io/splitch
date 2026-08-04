@@ -180,7 +180,22 @@ async function deleteExperiment(
       args.requestId,
     );
   }
-  await deps.repo.experiments.removeExperiment(scope, experiment.id);
+  const deleted = await deps.repo.experiments.removeExperiment(scope, experiment.id);
+  if (deleted === 0) {
+    // Start (or another delete) won the race after the guard read. Re-read so
+    // we return EXPERIMENT_RUNNING or NOT_FOUND — never a false `{ deleted: true }`.
+    const current = await deps.repo.experiments.getExperiment(scope, experiment.id);
+    if (!current) return experimentNotFound(args.requestId);
+    const raced = await runningRunForExperiment(deps.repo, scope, current);
+    if (raced) {
+      return runningExperimentError(
+        { experimentId: current.id, runId: raced.id },
+        "DELETE_EXPERIMENT",
+        args.requestId,
+      );
+    }
+    return experimentNotFound(args.requestId);
+  }
   // Ended (and any other non-running) D1 Run rows for this Experiment were
   // removed with it inside removeExperiment. Tinybird event logs are untouched.
   return Response.json({ deleted: true });
