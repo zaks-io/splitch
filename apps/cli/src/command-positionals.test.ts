@@ -149,82 +149,81 @@ describe("required positionals (SPL-306)", () => {
 });
 
 describe("mixed path-param sources on multi-positional routes (SPL-306)", () => {
-  it.each(MULTI_POSITIONAL_PATHS.map((path) => ({ path: path.join(" "), segments: path })))(
-    "first via --body-json plus second via argv succeeds for $path",
-    ({ segments }) => {
-      const command = requireCommand(segments);
-      const specs = requiredPositionalSpecs(command);
-      expect(specs.length).toBeGreaterThanOrEqual(2);
-      const [first, second] = specs;
-      if (!first || !second) {
-        throw new Error(`expected two path params for ${segments.join(" ")}`);
-      }
+  it.each(
+    MULTI_POSITIONAL_PATHS.map((path) => ({ path: path.join(" "), segments: path })),
+  )("first via --body-json plus second via argv succeeds for $path", ({ segments }) => {
+    const command = requireCommand(segments);
+    const specs = requiredPositionalSpecs(command);
+    expect(specs.length).toBeGreaterThanOrEqual(2);
+    const [first, second] = specs;
+    if (!first || !second) {
+      throw new Error(`expected two path params for ${segments.join(" ")}`);
+    }
 
-      const invocation = parseInvocation([
-        ...segments,
-        "--body-json",
-        JSON.stringify({ [first.param]: "from_body" }),
-        "from_argv",
-      ]);
+    const invocation = parseInvocation([
+      ...segments,
+      "--body-json",
+      JSON.stringify({ [first.param]: "from_body" }),
+      "from_argv",
+    ]);
 
-      expect(missingRequiredPositional(command, invocation)).toBeUndefined();
-      expect(conflictingSuppliedPositional(command, invocation)).toBeUndefined();
+    expect(missingRequiredPositional(command, invocation)).toBeUndefined();
+    expect(conflictingSuppliedPositional(command, invocation)).toBeUndefined();
 
-      const input = buildOperationInput(command, invocation, {
-        appId: "app_1",
-        environmentId: "env_1",
-      });
-      expect(input[first.param]).toBe("from_body");
-      expect(input[second.param]).toBe("from_argv");
-    },
-  );
+    const input = buildOperationInput(command, invocation, {
+      appId: "app_1",
+      environmentId: "env_1",
+    });
+    expect(input[first.param]).toBe("from_body");
+    expect(input[second.param]).toBe("from_argv");
+  });
 
-  it.each(MULTI_POSITIONAL_PATHS.map((path) => ({ path: path.join(" "), segments: path })))(
-    "first via argv plus second omitted names the second for $path",
-    ({ segments }) => {
-      const command = requireCommand(segments);
-      const specs = requiredPositionalSpecs(command);
-      expect(specs.length).toBeGreaterThanOrEqual(2);
-      const second = specs[1];
-      if (!second) {
-        throw new Error(`expected a second path param for ${segments.join(" ")}`);
-      }
+  it.each(
+    MULTI_POSITIONAL_PATHS.map((path) => ({ path: path.join(" "), segments: path })),
+  )("first via argv plus second omitted names the second for $path", ({ segments }) => {
+    const command = requireCommand(segments);
+    const specs = requiredPositionalSpecs(command);
+    expect(specs.length).toBeGreaterThanOrEqual(2);
+    const second = specs[1];
+    if (!second) {
+      throw new Error(`expected a second path param for ${segments.join(" ")}`);
+    }
 
-      expect(missingRequiredPositional(command, parseInvocation([...segments, "only_first"]))).toBe(
-        second.display,
-      );
-    },
-  );
+    expect(missingRequiredPositional(command, parseInvocation([...segments, "only_first"]))).toBe(
+      second.display,
+    );
+  });
 
-  it.each(MULTI_POSITIONAL_PATHS.map((path) => ({ path: path.join(" "), segments: path })))(
-    "positional colliding with --body-json field is CLI_USAGE_INVALID for $path",
-    ({ segments }) => {
-      const command = requireCommand(segments);
-      const specs = requiredPositionalSpecs(command);
-      const [first, second] = specs;
-      if (!first || !second) {
-        throw new Error(`expected two path params for ${segments.join(" ")}`);
-      }
+  it.each(
+    MULTI_POSITIONAL_PATHS.map((path) => ({ path: path.join(" "), segments: path })),
+  )("positional colliding with --body-json field is CLI_USAGE_INVALID for $path", ({
+    segments,
+  }) => {
+    const command = requireCommand(segments);
+    const specs = requiredPositionalSpecs(command);
+    const [first, second] = specs;
+    if (!first || !second) {
+      throw new Error(`expected two path params for ${segments.join(" ")}`);
+    }
 
-      const invocation = parseInvocation([
-        ...segments,
-        "--body-json",
-        JSON.stringify({ [first.param]: "from_body" }),
-        "from_argv_first",
-        "from_argv_second",
-      ]);
+    const invocation = parseInvocation([
+      ...segments,
+      "--body-json",
+      JSON.stringify({ [first.param]: "from_body" }),
+      "from_argv_first",
+      "from_argv_second",
+    ]);
 
-      expect(conflictingSuppliedPositional(command, invocation)).toBe(first.display);
-      expect(() =>
-        buildOperationInput(command, invocation, { appId: "app_1", environmentId: "env_1" }),
-      ).toThrowError(
-        expect.objectContaining({
-          code: "CLI_USAGE_INVALID",
-          causeSummary: expect.stringContaining(`<${first.display}> was supplied more than once`),
-        }),
-      );
-    },
-  );
+    expect(conflictingSuppliedPositional(command, invocation)).toBe(first.display);
+    expect(() =>
+      buildOperationInput(command, invocation, { appId: "app_1", environmentId: "env_1" }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "CLI_USAGE_INVALID",
+        causeSummary: expect.stringContaining(`<${first.display}> was supplied more than once`),
+      }),
+    );
+  });
 
   it.each(
     (["organization-members update", "organization-members remove"] as const).map((path) => ({
