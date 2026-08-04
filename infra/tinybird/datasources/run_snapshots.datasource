@@ -1,0 +1,22 @@
+SCHEMA >
+    `app_id` String `json:$.app_id`,
+    `environment_id` String `json:$.environment_id`,
+    `experiment_id` String `json:$.experiment_id`,
+    `run_id` String `json:$.run_id`,
+    `started_at` DateTime64(3) `json:$.started_at`,
+    `snapshot_at` DateTime64(3) `json:$.snapshot_at`,
+    `confidence_level` Float64 `json:$.confidence_level`,
+    `horizon` LowCardinality(String) `json:$.horizon`,
+    `target_n` Nullable(UInt64) `json:$.target_n`,
+    `sample_size_locked` Nullable(UInt64) `json:$.sample_size_locked`,
+    `allocation` String `json:$.allocation`,
+    `control_variant` String `json:$.control_variant`,
+    `control_variant_id` String `json:$.control_variant_id`,
+    `decision_family` String `json:$.decision_family`,
+    `guardrail_decisions` String `json:$.guardrail_decisions`,
+    `dimensions` String `json:$.dimensions`,
+    `config_hash` String `json:$.config_hash`
+
+ENGINE "MergeTree"
+ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, started_at"
+TOKEN run_snapshots_ingest APPEND

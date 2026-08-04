@@ -33,6 +33,7 @@ import { runDecisionSpecFromBody, startProposalFields } from "./experiment-start
 import { validateStartRequest } from "./experiment-start-request";
 import { readEnvironmentPolicy } from "./flag-config-policy";
 import { objectBody, pathParam } from "./handler-input";
+import { shipCommittedRunSnapshot } from "./run-snapshot";
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: start validation and Approval gating must precede every state mutation
 export async function startExperiment(
@@ -154,12 +155,19 @@ export async function startExperiment(
   }
 
   await syncExperimentConfigFromD1(configStore, scope, experiment.id);
+  const runSnapshotShipped = await shipCommittedRunSnapshot(
+    deps.runSnapshotDelivery,
+    committed.run,
+    scope,
+    nowIso(deps),
+  );
 
   return Response.json({
     experimentId: experiment.id,
     run: runResponse(committed.run),
     previousRunId: committed.previous?.id ?? null,
     approvalRequest: null,
+    runSnapshotShipped,
   });
 }
 

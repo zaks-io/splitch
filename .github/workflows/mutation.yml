@@ -7,6 +7,16 @@ name: mutation
 
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Package scope to mutate
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - sdk
+          - contracts
   schedule:
     - cron: "0 6 * * 1"
 
@@ -18,10 +28,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  mutation:
-    name: Mutation
+  plan:
+    name: Plan Mutation Scope
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 30
+    timeout-minutes: 2
+    outputs:
+      matrix: ${{ steps.scope.outputs.matrix }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Select package scope
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_SCOPE: ${{ inputs.scope }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk='{"name":"sdk","workspace":"@splitch/sdk","report_dir":"packages/sdk/reports/mutation"}'
+          contracts='{"name":"contracts","workspace":"@splitch/contracts","report_dir":"packages/contracts/reports/mutation"}'
+
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            week="$(date -u +%V)"
+            if [ "$((10#$week % 2))" -eq 0 ]; then
+              matrix="{\"include\":[$sdk]}"
+            else
+              matrix="{\"include\":[$contracts]}"
+            fi
+          else
+            case "$REQUESTED_SCOPE" in
+              sdk) matrix="{\"include\":[$sdk]}" ;;
+              contracts) matrix="{\"include\":[$contracts]}" ;;
+              all) matrix="{\"include\":[$sdk,$contracts]}" ;;
+              *) echo "::error::Unknown mutation scope: $REQUESTED_SCOPE"; exit 1 ;;
+            esac
+          fi
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  mutation:
+    name: Mutation (${{ matrix.name }})
+    needs: plan
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ vars.TURBO_TEAM }}
@@ -54,19 +109,33 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Restore mutation baseline
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ${{ matrix.report_dir }}/stryker-incremental.json
+          key: mutation-${{ runner.os }}-${{ matrix.name }}-${{ github.sha }}
+          restore-keys: |
+            mutation-${{ runner.os }}-${{ matrix.name }}-
+
       - name: Build
-        run: pnpm build
+        run: pnpm turbo run build --filter="${{ matrix.workspace }}"
 
       - name: Mutation test
-        run: pnpm test:mutation
+        timeout-minutes: 18
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p "${{ matrix.report_dir }}"
+          pnpm --filter "${{ matrix.workspace }}" test:mutation 2>&1 | tee "${{ matrix.report_dir }}/mutation.log"
 
       - name: Upload mutation reports
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: mutation-reports
+          name: mutation-${{ matrix.name }}-reports
           path: |
-            packages/*/reports/mutation/mutation.html
-            apps/*/reports/mutation/mutation.html
-          if-no-files-found: ignore
+            ${{ matrix.report_dir }}/mutation.html
+            ${{ matrix.report_dir }}/stryker-incremental.json
+            ${{ matrix.report_dir }}/mutation.log
+          if-no-files-found: error
           retention-days: 14

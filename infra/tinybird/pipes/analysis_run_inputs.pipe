@@ -1,0 +1,36 @@
+NODE run_inputs
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(experiment_id) %}
+    {{error('experiment_id is required')}}
+    {% end %}
+    SELECT
+        run_id,
+        confidence_level,
+        horizon,
+        target_n,
+        sample_size_locked,
+        allocation,
+        control_variant,
+        control_variant_id,
+        decision_family,
+        guardrail_decisions,
+        dimensions,
+        started_at
+    FROM run_snapshots
+    WHERE app_id = {{String(app_id)}}
+        AND environment_id = {{String(environment_id)}}
+        AND experiment_id = {{String(experiment_id)}}
+        {% if defined(run_id) %}
+        AND run_id = {{String(run_id)}}
+        {% end %}
+    ORDER BY started_at DESC, snapshot_at DESC
+    LIMIT 1
+
+TYPE ENDPOINT
