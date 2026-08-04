@@ -36,7 +36,7 @@ function matchesCondition(
   // Absent and null are the same policy: the Condition cannot match, so the
   // Targeting Rule falls through. A context that simply lacks an optional
   // attribute is not malformed config (evaluate-path-orchestration.md
-  // § Condition matching).
+  // § Absent or null Condition attribute).
   if (actual.value === null || actual.value === undefined) {
     options.logger?.warn("condition_attribute_absent", {
       attribute: condition.attribute,
