@@ -19,7 +19,12 @@ describe("Approval Request route contracts", () => {
     expect(
       list?.input.safeParse({
         params: { appId: "app_1" },
-        query: { status: "pending", target_kind: "flag_variant", limit: "25" },
+        query: {
+          status: "pending",
+          target_kind: "flag_variant",
+          environmentId: "env_prod",
+          limit: "25",
+        },
       }).success,
     ).toBe(true);
     expect(

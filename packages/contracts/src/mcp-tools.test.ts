@@ -116,6 +116,7 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
         appId: "app_1",
         status: "pending",
         target_kind: "flag_configuration",
+        environmentId: "env_prod",
       }).success,
     ).toBe(true);
 
