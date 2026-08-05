@@ -10,7 +10,7 @@ export interface RequestBodyFieldHelp {
 export function describeObjectFields(schema: z.ZodObject): RequestBodyFieldHelp[] {
   return Object.entries(schema.shape).map(([name, fieldSchema]) => {
     const { required, defaultValue, nullable, inner } = unwrapField(fieldSchema as z.ZodTypeAny);
-    const label = typeLabel(inner);
+    const label = fieldTypeLabel(name, inner);
     return {
       name,
       required,
@@ -104,6 +104,14 @@ export function zodLiteralValues(schema: z.ZodTypeAny): unknown[] {
   return (zodDef(schema).values as unknown[] | undefined) ?? [];
 }
 
+/** Allocation keys are Variant names, not Variant ids (CONTEXT.md). */
+function fieldTypeLabel(name: string, schema: z.ZodTypeAny): string {
+  if (name === "allocation" && zodDefType(schema) === "record") {
+    return `Record<Variant name, ${typeLabel(zodValueType(schema))}>`;
+  }
+  return typeLabel(schema);
+}
+
 function typeLabel(schema: z.ZodTypeAny): string {
   const type = zodDefType(schema);
   switch (type) {
@@ -116,6 +124,10 @@ function typeLabel(schema: z.ZodTypeAny): string {
       return "boolean";
     case "null":
       return "null";
+    case "unknown":
+    case "any":
+      // Present in leaf schemas for JSON-ish values (condition value, Variant value).
+      return type;
     case "literal": {
       return (
         zodLiteralValues(schema)
@@ -147,35 +159,19 @@ function typeLabel(schema: z.ZodTypeAny): string {
     case "default":
       return typeLabel(unwrapField(schema).inner);
     default:
-      return type ?? "unknown";
+      throw new Error(
+        `request-body-help: unsupported Zod type "${type ?? "undefined"}" for help rendering`,
+      );
   }
 }
 
+/** Expand nested objects fully so enums and shapes stay discoverable at any depth. */
 function objectTypeLabel(schema: z.ZodObject): string {
   const parts = Object.entries(schema.shape).map(([name, fieldSchema]) => {
     const { required, nullable, inner } = unwrapField(fieldSchema as z.ZodTypeAny);
-    const nested = compactNestedType(inner);
+    const nested = fieldTypeLabel(name, inner);
     const withNull = nullable ? `${nested} | null` : nested;
     return `${name}${required ? "" : "?"}: ${withNull}`;
   });
   return `{ ${parts.join("; ")} }`;
-}
-
-function compactNestedType(schema: z.ZodTypeAny): string {
-  const type = zodDefType(schema);
-  if (type === "object") return "object";
-  if (type === "array") {
-    const element = zodElement(schema);
-    const elementType = zodDefType(unwrapField(element).inner);
-    return elementType === "object" ? "object[]" : `${typeLabel(element)}[]`;
-  }
-  if (type === "union" || type === "xor") {
-    return zodOptions(schema)
-      .map((option) => compactNestedType(unwrapField(option).inner))
-      .join(" | ");
-  }
-  if (type === "nullable") {
-    return `${compactNestedType((schema as z.ZodNullable).unwrap() as z.ZodTypeAny)} | null`;
-  }
-  return typeLabel(schema);
 }

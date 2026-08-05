@@ -99,4 +99,44 @@ describe("describeRequestBody", () => {
     );
     expect(ReplaceTargetingRulesRequestSchema.safeParse(help.example).success).toBe(true);
   });
+
+  it("expands nested Targeting Rule enums instead of collapsing to object", () => {
+    const help = describeRequestBody(ReplaceTargetingRulesRequestSchema);
+    const rules = help.fields.find((field) => field.name === "targetingRules");
+    expect(rules?.typeLabel).toContain('"eq"');
+    expect(rules?.typeLabel).toContain('"not_matches"');
+    expect(rules?.typeLabel).toContain("percentage");
+    expect(rules?.typeLabel).not.toMatch(/conditions:\s*object\[\]/);
+    expect(rules?.typeLabel).not.toMatch(/percentageRollout\?:?\s*object(\s|\||$)/);
+  });
+
+  it("uses schema defaults for numbers instead of field-name special cases", () => {
+    const create = describeRequestBody(CreateExperimentRequestSchema);
+    const confidence = create.fields.find((field) => field.name === "confidenceLevel");
+    expect(confidence?.defaultValue).toBe(0.95);
+
+    const patch = describeRequestBody(PatchExperimentRequestSchema);
+    const example = patch.example as Record<string, unknown>;
+    // Patch confidenceLevel is unconstrained z.number() with no default — never
+    // invent 50 via a field-name special case (that drifted from create's 0.95).
+    expect(example.confidenceLevel).toBe(1);
+  });
+
+  it("labels allocation keys as Variant names", () => {
+    const patch = describeRequestBody(PatchExperimentRequestSchema);
+    const allocation = patch.fields.find((field) => field.name === "allocation");
+    expect(allocation?.typeLabel).toBe("Record<Variant name, number>");
+  });
+
+  it("fails loud for non-object request body roots", () => {
+    expect(() => describeRequestBody(z.array(z.string()))).toThrow(/must be a Zod object/);
+    expect(() => describeRequestBody(z.record(z.string(), z.number()))).toThrow(
+      /must be a Zod object/,
+    );
+  });
+
+  it("fails loud for unsupported Zod field types instead of printing raw def names", () => {
+    const schema = z.object({ weird: z.custom<() => void>(() => true) });
+    expect(() => describeRequestBody(schema)).toThrow(/unsupported Zod type/);
+  });
 });

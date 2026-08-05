@@ -16,28 +16,46 @@ export function exampleForObject(
   schema: z.ZodObject,
   fields: readonly RequestBodyFieldHelp[],
 ): Record<string, unknown> {
+  const example = buildExampleCandidate(schema, fields);
+  assertExampleParses(schema, example);
+  return example;
+}
+
+function buildExampleCandidate(
+  schema: z.ZodObject,
+  fields: readonly RequestBodyFieldHelp[],
+): Record<string, unknown> {
   const requiredNames = new Set(
     fields.filter((field) => field.required).map((field) => field.name),
   );
-  const optionalNames = requiredNames.size === 0 ? optionalExampleFieldNames(fields) : null;
+  // Include shallow optionals when the body is all-optional, or when the only
+  // required field is idempotency_key (otherwise Policy-gated patches look like no-ops).
+  const includeOptionals =
+    requiredNames.size === 0 || (requiredNames.size === 1 && requiredNames.has("idempotency_key"));
+  const optionalNames = includeOptionals ? optionalExampleFieldNames(fields) : null;
+  const byName = new Map(fields.map((field) => [field.name, field]));
   const example: Record<string, unknown> = {};
   for (const [name, fieldSchema] of Object.entries(schema.shape)) {
     const { required, inner } = unwrapField(fieldSchema as z.ZodTypeAny);
     if (!required && !(optionalNames?.has(name) ?? false)) continue;
-    example[name] = exampleValue(inner, name);
-  }
-  const parsed = schema.safeParse(example);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    throw new Error(
-      `request-body-help: derived example failed schema validation` +
-        (issue ? ` at ${issue.path.join(".") || "(root)"}: ${issue.message}` : ""),
-    );
+    const help = byName.get(name);
+    example[name] =
+      help?.defaultValue !== undefined ? help.defaultValue : exampleValue(inner, name);
   }
   return example;
 }
 
-export function exampleValue(schema: z.ZodTypeAny, fieldName: string): unknown {
+function assertExampleParses(schema: z.ZodObject, example: Record<string, unknown>): void {
+  const parsed = schema.safeParse(example);
+  if (parsed.success) return;
+  const issue = parsed.error.issues[0];
+  throw new Error(
+    `request-body-help: derived example failed schema validation` +
+      (issue ? ` at ${issue.path.join(".") || "(root)"}: ${issue.message}` : ""),
+  );
+}
+
+function exampleValue(schema: z.ZodTypeAny, fieldName: string): unknown {
   const { inner } = unwrapField(schema);
   const type = zodDefType(inner);
   switch (type) {
@@ -45,10 +63,13 @@ export function exampleValue(schema: z.ZodTypeAny, fieldName: string): unknown {
       return exampleString(fieldName);
     case "number":
     case "int":
-      return exampleNumber(inner, fieldName);
+      return exampleNumber(inner);
     case "boolean":
       return true;
     case "null":
+      return null;
+    case "unknown":
+    case "any":
       return null;
     case "literal":
       return literalExample(inner);
@@ -66,15 +87,22 @@ export function exampleValue(schema: z.ZodTypeAny, fieldName: string): unknown {
     case "nullable":
       return exampleValue((inner as z.ZodNullable).unwrap() as z.ZodTypeAny, fieldName);
     default:
-      return null;
+      throw new Error(
+        `request-body-help: unsupported Zod type "${type ?? "undefined"}" for example generation`,
+      );
   }
 }
 
+/**
+ * Prefer shallow scalars, enums, arrays of scalars, and records. Skip nested
+ * object shapes / object arrays so all-optional Examples stay writable.
+ */
 function optionalExampleFieldNames(fields: readonly RequestBodyFieldHelp[]): Set<string> {
   const preferred = fields.filter((field) => {
+    if (field.name === "idempotency_key") return false;
     const label = field.typeLabel;
-    if (label.includes("object[]")) return false;
-    if (label.startsWith("{ ") && !label.startsWith("{ percentage")) return false;
+    if (label.startsWith("{ ")) return false;
+    if (label.includes("}[]")) return false;
     return true;
   });
   const names = preferred.length > 0 ? preferred : fields.slice(0, 1);
@@ -109,24 +137,47 @@ function exampleString(fieldName: string): string {
   return fieldName;
 }
 
-function exampleNumber(schema: z.ZodTypeAny, fieldName: string): number {
-  if (fieldName === "percentage" || fieldName === "confidenceLevel") return 50;
-  if (fieldName === "priority") return 0;
+/** Prefer schema bounds; never special-case field names (SPL-309 review). */
+function exampleNumber(schema: z.ZodTypeAny): number {
   return numberFromChecks(schema) ?? 1;
 }
 
 function numberFromChecks(schema: z.ZodTypeAny): number | undefined {
+  const { min, max } = numberBounds(schema);
+  if (min !== undefined && max !== undefined) return (min + max) / 2;
+  if (min !== undefined) return min;
+  if (max !== undefined) return max;
+  return undefined;
+}
+
+function numberBounds(schema: z.ZodTypeAny): { min?: number; max?: number } {
+  const bounds = readNumberBounds(schema);
+  const minBound = bounds.find((bound) => bound.kind === "min");
+  const maxBound = bounds.find((bound) => bound.kind === "max");
+  return {
+    ...(minBound ? { min: minBound.inclusive ? minBound.value : minBound.value + 1 } : {}),
+    ...(maxBound ? { max: maxBound.inclusive ? maxBound.value : maxBound.value - 1 } : {}),
+  };
+}
+
+function readNumberBounds(
+  schema: z.ZodTypeAny,
+): readonly { kind: "min" | "max"; value: number; inclusive: boolean }[] {
   const checks = zodDef(schema).checks as
-    | readonly { _zod?: { def?: { check?: string; value?: number } } }[]
+    | readonly { _zod?: { def?: { check?: string; value?: number; inclusive?: boolean } } }[]
     | undefined;
+  const bounds: { kind: "min" | "max"; value: number; inclusive: boolean }[] = [];
   for (const check of checks ?? []) {
     const def = check._zod?.def;
-    if (def?.check === "greater_than" && typeof def.value === "number") return def.value + 1;
-    if (def?.check === "less_than" && typeof def.value === "number") {
-      return Math.max(0, def.value - 1);
+    if (typeof def?.value !== "number") continue;
+    if (def.check === "greater_than") {
+      bounds.push({ kind: "min", value: def.value, inclusive: def.inclusive !== false });
+    }
+    if (def.check === "less_than") {
+      bounds.push({ kind: "max", value: def.value, inclusive: def.inclusive !== false });
     }
   }
-  return undefined;
+  return bounds;
 }
 
 function arrayMin(schema: z.ZodTypeAny): number {

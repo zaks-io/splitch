@@ -1,9 +1,11 @@
 import type { z } from "zod";
-import { exampleForObject, exampleValue } from "./request-body-help-example";
+import { exampleForObject } from "./request-body-help-example";
 import {
   describeObjectFields,
   type RequestBodyFieldHelp,
+  unwrapField,
   unwrapToObject,
+  zodDefType,
 } from "./request-body-help-unwrap";
 import { getRoute } from "./route-registry";
 
@@ -32,7 +34,10 @@ export function requestBodySchemaForOperation(operationId: string): z.ZodTypeAny
 export function describeRequestBody(schema: z.ZodTypeAny): RequestBodyHelp {
   const objectSchema = unwrapToObject(schema);
   if (!objectSchema) {
-    return { fields: [], example: exampleValue(schema, "body") };
+    const type = zodDefType(unwrapField(schema).inner);
+    throw new Error(
+      `request-body-help: request body must be a Zod object (got ${type ?? "unknown"}; ADR-0036)`,
+    );
   }
   const fields = describeObjectFields(objectSchema);
   return { fields, example: exampleForObject(objectSchema, fields) };

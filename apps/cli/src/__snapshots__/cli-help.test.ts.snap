@@ -510,9 +510,9 @@ Request body (--body-json):
   activationMetricId  optional  string | null
   conversionWindowMs  optional; default 0  number
   dimensions          optional; default []  string[]
-  allocation          optional  Record<string, number>
+  allocation          optional  Record<Variant name, number>
   salt                optional  string
-  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: object[]; variantId: string; percentageRollout?: object | null }[]
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
   segmentIds          optional  string[]
   idempotency_key     optional  string
   Example:
@@ -580,7 +580,7 @@ Request body (--body-json):
   sampleSizeLocked  optional  number | null
   idempotency_key   required  string
   Example:
-    {"idempotency_key":"idem-1"}
+    {"reason":"approved","horizon":"sequential","sampleSizeLocked":1,"idempotency_key":"idem-1"}
 
 Behavior:
   Start freezes the Experiment draft Targeting Rules into the new Run; the response field frozenTargetingRules is that snapshot (same as run.targetingRules).
@@ -588,7 +588,7 @@ Behavior:
   Without --json, the CLI prints a frozen-targeting summary to stderr.
 
 Example:
-  splitch experiments start <experiment-id> --body-json '{"idempotency_key":"idem-1"}' --json",
+  splitch experiments start <experiment-id> --body-json '{"reason":"approved","horizon":"sequential","sampleSizeLocked":1,"idempotency_key":"idem-1"}' --json",
     "experiments update": "Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED). Staged Targeting Rule edits under a live Run leave evaluation on the frozen Run.
 
 Usage:
@@ -612,10 +612,10 @@ Request body (--body-json):
   targetingKey        optional  string
   targetingKeyType    optional  string
   activationMetricId  optional  string | null
-  allocation          optional  Record<string, number>
+  allocation          optional  Record<Variant name, number>
   salt                optional  string
   variantSet          optional  { id: string; name: string; value: boolean | string | number | Record<string, unknown>; description?: string }[]
-  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: object[]; variantId: string; percentageRollout?: object | null }[]
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
   segmentIds          optional  string[]
   metrics             optional  { metricId: string }[]
   guardrailMetrics    optional  { metricId: string }[]
@@ -624,7 +624,7 @@ Request body (--body-json):
   confidenceLevel     optional  number
   stageForNextRun     optional  true
   Example:
-    {"name":"Checkout","description":"description","hypothesis":"hypothesis","owner":"owner","tags":[],"flagId":"flag_1","targetingKey":"userId","targetingKeyType":"user","activationMetricId":"activationMetric_1","allocation":{"control":1,"treatment":1},"salt":"salt","segmentIds":[],"conversionWindowMs":1,"dimensions":[],"confidenceLevel":50,"stageForNextRun":true}
+    {"name":"Checkout","description":"description","hypothesis":"hypothesis","owner":"owner","tags":[],"flagId":"flag_1","targetingKey":"userId","targetingKeyType":"user","activationMetricId":"activationMetric_1","allocation":{"control":1,"treatment":1},"salt":"salt","segmentIds":[],"conversionWindowMs":1,"dimensions":[],"confidenceLevel":1,"stageForNextRun":true}
 
 Behavior:
   While a Run is live, assignment fields (including Targeting Rules) require stageForNextRun and write only the next-Run draft.
@@ -632,7 +632,7 @@ Behavior:
   Without --json, the CLI prints that the live Run is unaffected.
 
 Example:
-  splitch experiments update <experiment-id> --body-json '{"name":"Checkout","description":"description","hypothesis":"hypothesis","owner":"owner","tags":[],"flagId":"flag_1","targetingKey":"userId","targetingKeyType":"user","activationMetricId":"activationMetric_1","allocation":{"control":1,"treatment":1},"salt":"salt","segmentIds":[],"conversionWindowMs":1,"dimensions":[],"confidenceLevel":50,"stageForNextRun":true}' --json",
+  splitch experiments update <experiment-id> --body-json '{"name":"Checkout","description":"description","hypothesis":"hypothesis","owner":"owner","tags":[],"flagId":"flag_1","targetingKey":"userId","targetingKeyType":"user","activationMetricId":"activationMetric_1","allocation":{"control":1,"treatment":1},"salt":"salt","segmentIds":[],"conversionWindowMs":1,"dimensions":[],"confidenceLevel":1,"stageForNextRun":true}' --json",
     "flag-config get": "Get a Flag's per-Environment Configuration.
 
 Usage:
@@ -669,10 +669,10 @@ Request body (--body-json):
   review                 optional  { action: "approve_and_apply" }
   idempotency_key        required  string
   Example:
-    {"idempotency_key":"idem-1"}
+    {"enabled":true,"availableVariantNames":[],"idempotency_key":"idem-1"}
 
 Example:
-  splitch flag-config update <flag-id-or-key> --body-json '{"idempotency_key":"idem-1"}' --json",
+  splitch flag-config update <flag-id-or-key> --body-json '{"enabled":true,"availableVariantNames":[],"idempotency_key":"idem-1"}' --json",
     "flag-targeting-rules replace": "Full-replace this Environment's ordered Targeting Rule list.
 
 Usage:
@@ -688,7 +688,7 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  targetingRules   required  { id: string; flagId: string; priority: number; conditions: object[]; variantId: string; percentageRollout?: object | null }[]
+  targetingRules   required  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
   review           optional  { action: "approve_and_apply" }
   idempotency_key  required  string
   Example:
@@ -760,10 +760,10 @@ Request body (--body-json):
   review           optional  { action: "approve_and_apply" }
   idempotency_key  required  string
   Example:
-    {"idempotency_key":"idem-1"}
+    {"name":"Checkout","value":"US","description":"description","idempotency_key":"idem-1"}
 
 Example:
-  splitch flag-variants update <flag-id-or-key> <variant-name> --body-json '{"idempotency_key":"idem-1"}' --json",
+  splitch flag-variants update <flag-id-or-key> <variant-name> --body-json '{"name":"Checkout","value":"US","description":"description","idempotency_key":"idem-1"}' --json",
     "flags create": "Create a Flag definition (key, schema, Variant catalog).
 
 Usage:

@@ -9,22 +9,85 @@ import { CLI_COMMANDS, type CliCommandDefinition } from "./command-registry.js";
 import { renderCommandHelp } from "./help.js";
 import { commandBodySchemaHelp, commandHasBodyJson, formatBodyJsonHelp } from "./help-body-json.js";
 
-const BODY_JSON_COMMANDS = CLI_COMMANDS.filter(commandHasBodyJson);
+/** Commands whose help advertises `--body-json` (must stay in sync with binding). */
+function bodyJsonHelpCommands(): CliCommandDefinition[] {
+  return CLI_COMMANDS.filter((command) =>
+    renderCommandHelp(command).includes("--body-json <json>"),
+  );
+}
 
 function requireCommand(
   predicate: (command: CliCommandDefinition) => boolean,
   label: string,
 ): CliCommandDefinition {
-  const command = BODY_JSON_COMMANDS.find(predicate);
+  const command = CLI_COMMANDS.find(predicate);
   expect(command, label).toBeDefined();
   if (!command) throw new Error(label);
   return command;
 }
 
-describe("CLI --body-json schema help (SPL-309)", () => {
+function fieldRows(bodySection: string): string[] {
+  return bodySection.split("\n").filter((line) => {
+    const trimmed = line.trimStart();
+    return (
+      trimmed.length > 0 &&
+      !trimmed.startsWith("Example:") &&
+      !trimmed.startsWith("{") &&
+      !trimmed.startsWith("(empty")
+    );
+  });
+}
+
+function assertBodyJsonExampleValid(command: CliCommandDefinition): void {
+  const help = commandBodySchemaHelp(command);
+  const schema =
+    command.kind === "env_policy_set"
+      ? EnvironmentPolicySchema
+      : requestBodySchemaForOperation(command.operationId);
+  expect(schema, `${command.path.join(" ")} missing schema`).toBeDefined();
+  if (!schema) return;
+  const parsed = schema.safeParse(help.example);
+  expect(
+    parsed.success,
+    `${command.path.join(" ")} example invalid: ${parsed.success ? "" : parsed.error.message}`,
+  ).toBe(true);
+  expect(JSON.stringify(help.example)).not.toMatch(/secret|token|password|api[_-]?key/i);
+}
+
+function assertHandWrittenKindPolicy(kind: CliCommandDefinition["kind"]): void {
+  const commands = CLI_COMMANDS.filter((command) => command.kind === kind);
+  for (const command of commands) {
+    assertOneHandWrittenCommand(kind, command);
+  }
+}
+
+function assertOneHandWrittenCommand(
+  kind: CliCommandDefinition["kind"],
+  command: CliCommandDefinition,
+): void {
+  if (kind === "flags_verify" || kind === "env_policy_get") {
+    expect(commandHasBodyJson(command)).toBe(false);
+    expect(renderCommandHelp(command)).not.toContain("Request body (--body-json):");
+    return;
+  }
+  if (kind === "env_policy_set") {
+    expect(commandHasBodyJson(command)).toBe(true);
+    expect(renderCommandHelp(command)).toContain("Request body (--body-json):");
+    expect(
+      commandBodySchemaHelp(command)
+        .fields.map((field) => field.name)
+        .sort(),
+    ).toEqual(Object.keys(EnvironmentPolicySchema.shape).sort());
+    return;
+  }
+  expect.fail(`hand-written kind "${kind}" on ${command.path.join(" ")} has no body-schema policy`);
+}
+
+describe("CLI --body-json schema help coverage (SPL-309)", () => {
   it("covers every --body-json command, not a sampled subset", () => {
-    expect(BODY_JSON_COMMANDS.length).toBeGreaterThan(20);
-    const paths = BODY_JSON_COMMANDS.map((command) => command.path.join(" "));
+    const commands = bodyJsonHelpCommands();
+    expect(commands.length).toBeGreaterThan(20);
+    const paths = commands.map((command) => command.path.join(" "));
     expect(paths).toEqual(
       expect.arrayContaining([
         "flag-config update",
@@ -37,22 +100,46 @@ describe("CLI --body-json schema help (SPL-309)", () => {
     );
   });
 
-  it("prints contract-required field names in --help for every --body-json command", () => {
-    for (const command of BODY_JSON_COMMANDS) {
+  it("prints contract-required field names in the Request body section", () => {
+    for (const command of bodyJsonHelpCommands()) {
       const helpText = renderCommandHelp(command);
       expect(helpText).toContain("--body-json <json>");
       expect(helpText).toContain("Request body (--body-json):");
 
       const schemaHelp = commandBodySchemaHelp(command);
+      const bodySection = formatBodyJsonHelp(schemaHelp).join("\n");
+      const rows = fieldRows(bodySection);
       for (const field of schemaHelp.fields.filter((item) => item.required)) {
         expect(
-          helpText,
-          `${command.path.join(" ")} missing required field ${field.name}`,
-        ).toContain(field.name);
+          rows.some((row) => row.trimStart().startsWith(field.name) && row.includes("required")),
+          `${command.path.join(" ")} missing required field row for ${field.name}`,
+        ).toBe(true);
       }
-      expect(helpText).toContain("Example:");
-      expect(helpText).toContain(JSON.stringify(schemaHelp.example));
+      expect(bodySection).toContain("Example:");
+      expect(bodySection).toContain(JSON.stringify(schemaHelp.example));
     }
+  });
+
+  it("derives a schema-valid example for every --body-json command", () => {
+    for (const command of bodyJsonHelpCommands()) {
+      assertBodyJsonExampleValid(command);
+    }
+  });
+});
+
+describe("CLI --body-json schema help details (SPL-309)", () => {
+  it("lists nested enums for targeting-rules replace (not bare object[])", () => {
+    const command = requireCommand(
+      (candidate) => candidate.operationId === "flag_targeting_rules_replace",
+      "flag-targeting-rules replace",
+    );
+    const bodySection = formatBodyJsonHelp(commandBodySchemaHelp(command)).join("\n");
+    expect(bodySection).toContain("targetingRules");
+    expect(bodySection).toContain('"eq"');
+    expect(bodySection).toContain('"not_matches"');
+    expect(bodySection).toContain("percentage");
+    expect(bodySection).not.toMatch(/conditions:\s*object\[\]/);
+    expect(bodySection).not.toMatch(/percentageRollout\?:?\s*object/);
   });
 
   it("lists enum-constrained values in help for Environment Policy and review action", () => {
@@ -85,14 +172,26 @@ describe("CLI --body-json schema help (SPL-309)", () => {
     expect(routeSchema).toBeDefined();
     if (!routeSchema) throw new Error("flag_config_update body schema missing");
     const fromSchema = describeRequestBody(routeSchema);
-    const fromHelp = renderCommandHelp(
-      requireCommand(
-        (command) => command.operationId === "flag_config_update",
-        "flag-config update",
+    const bodySection = formatBodyJsonHelp(
+      commandBodySchemaHelp(
+        requireCommand(
+          (command) => command.operationId === "flag_config_update",
+          "flag-config update",
+        ),
       ),
-    );
+    ).join("\n");
     for (const field of fromSchema.fields) {
-      expect(fromHelp).toContain(field.name);
+      expect(fieldRows(bodySection).some((row) => row.trimStart().startsWith(field.name))).toBe(
+        true,
+      );
+    }
+  });
+
+  it("requires an explicit body-schema policy for every non-api command kind", () => {
+    const kinds = new Set(CLI_COMMANDS.map((command) => command.kind));
+    for (const kind of kinds) {
+      if (kind === "api") continue;
+      assertHandWrittenKindPolicy(kind);
     }
   });
 
@@ -118,25 +217,18 @@ describe("CLI --body-json schema help (SPL-309)", () => {
     expect(EnvironmentPolicySchema.safeParse(help.example).success).toBe(true);
   });
 
-  it("derives a schema-valid example for every --body-json command", () => {
-    for (const command of BODY_JSON_COMMANDS) {
-      assertBodyJsonExampleValid(command);
-    }
+  it("includes a non-idempotency mutation field in flag-config update example", () => {
+    const help = commandBodySchemaHelp(
+      requireCommand(
+        (command) => command.operationId === "flag_config_update",
+        "flag-config update",
+      ),
+    );
+    expect(help.example).toEqual(
+      expect.objectContaining({
+        idempotency_key: expect.any(String),
+      }),
+    );
+    expect(Object.keys(help.example as Record<string, unknown>).length).toBeGreaterThan(1);
   });
 });
-
-function assertBodyJsonExampleValid(command: CliCommandDefinition): void {
-  const help = commandBodySchemaHelp(command);
-  const schema =
-    command.kind === "env_policy_set"
-      ? EnvironmentPolicySchema
-      : requestBodySchemaForOperation(command.operationId);
-  expect(schema, `${command.path.join(" ")} missing schema`).toBeDefined();
-  if (!schema) return;
-  const parsed = schema.safeParse(help.example);
-  expect(
-    parsed.success,
-    `${command.path.join(" ")} example invalid: ${parsed.success ? "" : parsed.error.message}`,
-  ).toBe(true);
-  expect(JSON.stringify(help.example)).not.toMatch(/secret|token|password|api[_-]?key/i);
-}
