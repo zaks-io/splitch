@@ -1,6 +1,4 @@
 import { getRoute } from "@splitch/contracts";
-import type { CliCommandDefinition } from "./command-registry.js";
-import { findCommand } from "./command-registry.js";
 import {
   assertPathParamsPresent,
   commandUsageLine,
@@ -9,6 +7,8 @@ import {
   missingPositionalError,
   missingRequiredPositional,
 } from "./command-positionals.js";
+import type { CliCommandDefinition } from "./command-registry.js";
+import { findCommand } from "./command-registry.js";
 
 import { type ResolvedContext, resolveContext } from "./context.js";
 import { SplitchCliError, writeCliError } from "./errors.js";

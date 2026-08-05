@@ -143,12 +143,23 @@ Auth: App `owner` or `admin`.
 
 Blocked if any Experiment has `status = running` in any Environment. Returns `EXPERIMENT_RUNNING`.
 Also blocked with `RESOURCE_NOT_EMPTY` while non-cascaded child resources remain, including Flags,
-Segments, Metrics, privacy rows, and non-archived Experiments. Credentials are revoked and
-tombstoned before the cascade, then hard-deleted with Environments, Approval Requests / Reviews,
-archived Experiments (and their Runs), memberships, and the App row inside one atomic D1 batch —
-so a late FK failure cannot remove memberships or credential rows while leaving the App stranded.
-A failed delete must leave App membership and credential management intact (no partial cascade).
-Auth: App `owner`.
+Segments, Metrics, privacy rows, and non-archived Experiments. The error's `details.blockers` lists
+**every** current blocker group with child IDs and the CLI command that removes each child, using
+CLI vocabulary (`flag-config`, not `flag_configs`).
+
+Query flags (mutually exclusive):
+
+- `dryRun=true` — return `{ deleted: false, dryRun: true, blockers }` and mutate nothing.
+- `force=true` — cascade non-gated children in dependency order and return a removal manifesto.
+  Policy-gated Flag deletes create Approval Requests and stop with
+  `{ deleted: false, force: true, removed, pendingApprovals }` (force never auto-resolves Reviews).
+  Retry `--force` after Review to finish.
+
+Credentials are revoked and tombstoned before the cascade, then hard-deleted with Environments,
+Approval Requests / Reviews, archived Experiments (and their Runs), memberships, and the App row
+inside one atomic D1 batch — so a late FK failure cannot remove memberships or credential rows while
+leaving the App stranded. A failed delete must leave App membership and credential management intact
+(no partial cascade). Auth: App `owner`.
 Account-closure privacy deletion is the only exception; see
 [endpoints-privacy-data.md](endpoints-privacy-data.md).
 

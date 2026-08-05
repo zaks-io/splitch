@@ -14,3 +14,15 @@ export function objectBody(input: unknown): Record<string, unknown> {
   }
   return value as Record<string, unknown>;
 }
+
+/**
+ * Read optional boolean query flags after Zod has coerced query/MCP input.
+ * Absent flags are false.
+ */
+export function queryFlags(input: unknown): { dryRun: boolean; force: boolean } {
+  const query = (input as { query?: Record<string, unknown> } | null)?.query ?? {};
+  return {
+    dryRun: query.dryRun === true,
+    force: query.force === true,
+  };
+}

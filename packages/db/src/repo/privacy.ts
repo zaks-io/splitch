@@ -45,6 +45,31 @@ export function makePrivacyRepo(db: Db) {
         .where(and(eq(privacyRequests.orgId, orgId), eq(privacyRequests.appId, appId)));
     },
 
+    /**
+     * Cascade helper for App teardown (`--force`). Entity tombstones have no
+     * public delete API; force removes the App's ledger rows after gated
+     * children are cleared (SPL-326).
+     */
+    async deleteEntityDeletionsForApp(scope: TenantScope): Promise<number> {
+      const rows = await db
+        .delete(entityDeletions)
+        .where(eq(entityDeletions.appId, scope.appId))
+        .returning();
+      return rows.length;
+    },
+
+    /**
+     * Cascade helper for App teardown (`--force`). Removes App-scoped privacy
+     * request rows; org-wide requests (`app_id` null) are untouched.
+     */
+    async deletePrivacyRequestsForApp(orgId: string, appId: string): Promise<number> {
+      const rows = await db
+        .delete(privacyRequests)
+        .where(and(eq(privacyRequests.orgId, orgId), eq(privacyRequests.appId, appId)))
+        .returning();
+      return rows.length;
+    },
+
     async getPrivacyRequest(
       orgId: string,
       requestId: string,

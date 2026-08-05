@@ -95,6 +95,25 @@ export async function writeNearestConfig(
   return path;
 }
 
+/**
+ * After a successful App delete, drop a stale `use` selection that pointed at
+ * the deleted App so the next command fails with a clear scope error (or
+ * succeeds unbound) instead of a membership refusal that used to recommend
+ * re-login (SPL-326).
+ */
+export async function clearDeletedAppFromConfig(
+  cwd: string,
+  deletedAppId: string,
+): Promise<boolean> {
+  const discovered = await discoverConfig(cwd);
+  if (!discovered || discovered.config.app !== deletedAppId) {
+    return false;
+  }
+  const next: SplitchConfig = { version: 1 };
+  await writeFile(discovered.path, `${JSON.stringify(next, null, 2)}\n`);
+  return true;
+}
+
 function resolveFlagAndEnv(
   flags: ContextFlags,
   env: Record<string, string | undefined>,

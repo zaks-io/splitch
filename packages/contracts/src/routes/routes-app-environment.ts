@@ -2,6 +2,10 @@ import { z } from "@hono/zod-openapi";
 import { AppSchema, EnvironmentSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
+  ResourceDeleteModeQuerySchema,
+  ResourceDeleteResponseSchema,
+} from "../resource-delete-tree";
+import {
   CreateAppRequestSchema,
   CreateAppResponseSchema,
   PatchAppRequestSchema,
@@ -87,13 +91,20 @@ export const appEnvironmentRoutes = [
     owner: OWNER,
     method: "DELETE",
     path: "/apps/:appId",
-    summary: "Delete an App (blocked while any Experiment is running).",
-    request: { params: AppParams },
-    response: DeletedResponse,
+    summary:
+      "Delete an App. Use dryRun to list every blocker with IDs and remove commands; use force to cascade non-gated children and stop with pending Approval Request IDs when Policy requires Review. Blocked while any Experiment is running.",
+    request: { params: AppParams, query: ResourceDeleteModeQuerySchema },
+    response: ResourceDeleteResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING", "RESOURCE_NOT_EMPTY"],
+    errors: [
+      "APP_NOT_FOUND",
+      "FORBIDDEN",
+      "EXPERIMENT_RUNNING",
+      "RESOURCE_NOT_EMPTY",
+      "VALIDATION_ERROR",
+    ],
   }),
   defineApiRoute({
     operationId: "environments_list",

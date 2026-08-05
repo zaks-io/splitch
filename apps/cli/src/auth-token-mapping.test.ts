@@ -74,13 +74,26 @@ describe("refresh-grant fault mapping", () => {
     expect(error.causeSummary).toBe(`${reason}.`);
     expect(error.remediation.toLowerCase()).not.toContain("login");
     expect(error.remediation.toLowerCase()).not.toContain("authenticate");
-    expect(error.remediation).toMatch(/membership/i);
+    expect(error.remediation).toMatch(/splitch use/i);
     expect(
       tokenBindingRefusedError({ status: 400, error: "invalid_grant", description: reason }).code,
     ).toBe("CLI_TOKEN_BINDING_REFUSED");
     expect(
       isTokenBindingRefusal({ status: 400, error: "invalid_grant", description: reason }),
     ).toBe(true);
+  });
+
+  it("maps an unreachable App refusal to CLI_TOKEN_BINDING_REFUSED naming splitch use", () => {
+    const reason = "selected App is not reachable by live membership";
+    const error = mintFailureError({
+      status: 400,
+      error: "invalid_grant",
+      description: reason,
+    });
+
+    expect(error.code).toBe("CLI_TOKEN_BINDING_REFUSED");
+    expect(error.remediation).toMatch(/splitch use --app/i);
+    expect(error.remediation.toLowerCase()).not.toMatch(/log ?in/);
   });
 
   it("maps an org-binding refusal to CLI_TOKEN_BINDING_REFUSED without re-login remediation", () => {
