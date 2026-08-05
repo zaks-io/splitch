@@ -24,7 +24,7 @@
       "entry": ["src/sdk-data-plane-surface.ts", "src/leaves/**/*.ts"]
     },
     "apps/cli": {
-      "ignoreDependencies": ["@hono/zod-openapi", "@sentry/node", "tsx", "zod"]
+      "ignoreDependencies": ["@hono/zod-openapi", "@sentry/node", "tsx"]
     }
   }
 }
