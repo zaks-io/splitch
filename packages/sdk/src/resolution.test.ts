@@ -1,5 +1,5 @@
-import { ResolutionDetailsSchema } from "./generated/contract-surface.js";
 import { describe, expect, it } from "vitest";
+import { ResolutionDetailsSchema } from "./generated/contract-surface.js";
 import { errorCodeForStatus, synthesizeDetails } from "./resolution";
 import type { TransportResult } from "./transport";
 
@@ -44,15 +44,15 @@ describe("synthesizeDetails: 200 success rows", () => {
 describe("synthesizeDetails: canonical HTTP-status -> reason/errorCode mapping", () => {
   // Each row maps an HTTP status to the WIRE ErrorCode the contract validates
   // (public-evaluate-endpoint.md §"Error responses"; see resolution.ts for the
-  // OpenFeature-vs-wire drift note).
-  const rows: { status: number | null; errorCode: string }[] = [
+  // OpenFeature-vs-wire drift note). Local transport failures use SDK_TRANSPORT_*
+  // codes set by the transport — not this status table.
+  const rows: { status: number; errorCode: string }[] = [
     { status: 401, errorCode: "UNAUTHORIZED" },
     { status: 403, errorCode: "FORBIDDEN" },
     { status: 404, errorCode: "FLAG_NOT_FOUND" },
     { status: 400, errorCode: "VALIDATION_ERROR" },
     { status: 429, errorCode: "RATE_LIMITED" },
     { status: 503, errorCode: "SERVICE_UNAVAILABLE" },
-    { status: null, errorCode: "SERVICE_UNAVAILABLE" }, // network / timeout / parse
   ];
 
   for (const row of rows) {
@@ -71,5 +71,28 @@ describe("synthesizeDetails: canonical HTTP-status -> reason/errorCode mapping",
 
   it("an unexpected status (e.g. 500) folds to SERVICE_UNAVAILABLE", () => {
     expect(errorCodeForStatus(500)).toBe("SERVICE_UNAVAILABLE");
+  });
+
+  it("status null without a transport code falls back to SDK_TRANSPORT_NETWORK, not SERVICE_UNAVAILABLE", () => {
+    expect(errorCodeForStatus(null)).toBe("SDK_TRANSPORT_NETWORK");
+    const details = synthesizeDetails(result({ status: null }), DEFAULT_VALUE);
+    expect(details.errorCode).toBe("SDK_TRANSPORT_NETWORK");
+    // SDK client codes are outside the wire ResolutionDetailsSchema.
+    expect(ResolutionDetailsSchema.safeParse(details).success).toBe(false);
+  });
+
+  it("preserves distinct SDK_TRANSPORT_* codes from the transport", () => {
+    for (const errorCode of [
+      "SDK_TRANSPORT_NETWORK",
+      "SDK_TRANSPORT_TIMEOUT",
+      "SDK_TRANSPORT_PARSE",
+    ] as const) {
+      const details = synthesizeDetails(
+        result({ status: null, errorCode, errorMessage: `${errorCode} detail` }),
+        DEFAULT_VALUE,
+      );
+      expect(details.errorCode).toBe(errorCode);
+      expect(details.errorMessage).toBe(`${errorCode} detail`);
+    }
   });
 });

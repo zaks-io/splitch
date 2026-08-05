@@ -1,5 +1,5 @@
-import type { VariantValue } from "./generated/contract-surface.js";
 import { SplitchSdkError } from "./errors";
+import type { VariantValue } from "./generated/contract-surface.js";
 import type { AttributeValue } from "./transport";
 
 /**

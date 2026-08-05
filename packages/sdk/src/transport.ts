@@ -1,4 +1,5 @@
-import type { ErrorCode, ResolutionDetails, VariantValue } from "./generated/contract-surface.js";
+import type { SplitchSdkErrorCode } from "./errors";
+import type { ResolutionDetails, VariantValue } from "./generated/contract-surface.js";
 
 /**
  * Allowed evaluation-attribute values: scalars or arrays, never a nested
@@ -15,7 +16,9 @@ export type AttributeValue = boolean | string | number | readonly unknown[];
  * A transport returns a STRUCTURED outcome, never a raw Response: the SDK core
  * never inspects HTTP status or parses bodies itself. `status` is the HTTP
  * status for an HTTP outcome, or `null` for a transport-level failure (network
- * error, timeout, body-parse failure); both fold into `reason: ERROR`.
+ * error, timeout, body-parse failure); both fold into `reason: ERROR`. Client
+ * failures carry a distinct `SDK_TRANSPORT_*` code — never the server's
+ * `SERVICE_UNAVAILABLE` — and preserve the underlying `cause` for loud logging.
  *
  * `runId` identifies the live experiment Run. It arrives as response metadata
  * (a header in the real adapter), never inside the wire body, and is present
@@ -34,9 +37,14 @@ export interface TransportRequest {
 export interface TransportFailure {
   /** HTTP status for an HTTP response, or `null` for a transport-level failure. */
   readonly status: number | null;
-  /** Wire error code when the endpoint returned one; otherwise SDK-synthesized. */
-  readonly errorCode?: ErrorCode;
+  /**
+   * Wire `ErrorCode` when the endpoint returned one, or an `SDK_TRANSPORT_*`
+   * code when the failure was local (throw / timeout / unparseable body).
+   */
+  readonly errorCode?: SplitchSdkErrorCode;
   readonly errorMessage?: string;
+  /** Underlying throw / parse rejection; passed to `logger.error` without truncation. */
+  readonly cause?: unknown;
 }
 
 export interface TransportResult extends TransportFailure {

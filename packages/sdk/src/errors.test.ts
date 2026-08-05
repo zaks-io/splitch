@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveErrorDocsUrl, sdkClientErrorCodes, sdkErrorCodes, SplitchSdkError } from "./errors";
+import { resolveErrorDocsUrl, SplitchSdkError, sdkClientErrorCodes, sdkErrorCodes } from "./errors";
 
 describe("SDK actionable error catalog", () => {
   it("extends server ErrorCode values with every SDK-only failure code", () => {

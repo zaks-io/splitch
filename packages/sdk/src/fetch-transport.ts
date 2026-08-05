@@ -1,3 +1,4 @@
+import { SplitchSdkError } from "./errors";
 import {
   DataPlaneEvaluateResponseSchema,
   ErrorCodeSchema,
@@ -11,7 +12,6 @@ import type {
   TransportResult,
   VerifyTransportResult,
 } from "./transport";
-import { SplitchSdkError } from "./errors";
 
 // `X-Run-Id` carries the live Run id as non-revealing operational metadata
 // alongside the `{ variant }` body, so the seen-set key has its runId without the
@@ -30,10 +30,59 @@ export interface FetchTransportConfig {
   readonly fetchImpl: typeof fetch;
 }
 
+function isAbortError(error: unknown): boolean {
+  return (
+    (typeof DOMException !== "undefined" &&
+      error instanceof DOMException &&
+      error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.length > 0 ? error.message : fallback;
+}
+
+/** Local throw / network failure that never produced an HTTP response. */
+function networkFailure(cause: unknown): TransportFailure {
+  return {
+    status: null,
+    errorCode: "SDK_TRANSPORT_NETWORK",
+    errorMessage: errorMessage(cause, "transport request failed"),
+    cause,
+  };
+}
+
+/** Per-call timeout or AbortSignal abort. */
+function timeoutFailure(cause: unknown): TransportFailure {
+  return {
+    status: null,
+    errorCode: "SDK_TRANSPORT_TIMEOUT",
+    errorMessage: errorMessage(cause, "request timed out"),
+    cause,
+  };
+}
+
+/** Response body that could not be parsed as the expected shape. */
+function parseFailure(cause: unknown): TransportFailure {
+  return {
+    status: null,
+    errorCode: "SDK_TRANSPORT_PARSE",
+    errorMessage: errorMessage(cause, "response body was unparseable"),
+    cause,
+  };
+}
+
+function classifyCaughtError(error: unknown): TransportFailure {
+  return isAbortError(error) ? timeoutFailure(error) : networkFailure(error);
+}
+
 /**
  * The real network adapter: distinct `evaluate`, `peek`, and `verify` routes.
  * Folds every transport outcome (HTTP status, network error, timeout,
  * body-parse failure) into structured results so the SDK core never touches the wire.
+ * Client-side failures keep their underlying `cause` and a distinct
+ * `SDK_TRANSPORT_*` code — never the server's `SERVICE_UNAVAILABLE`.
  */
 export function createFetchTransport(config: FetchTransportConfig): Transport {
   const urls = {
@@ -89,9 +138,8 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
         return await withTimeout(async (signal) =>
           readEvaluateResponse(await post("evaluate", request, signal)),
         );
-      } catch {
-        // Network error or timeout (abort): a transport-level failure, status null.
-        return { status: null, variant: null, variantName: null, runId: null };
+      } catch (error) {
+        return { ...classifyCaughtError(error), variant: null, variantName: null, runId: null };
       }
     },
     async peek(request: TransportRequest): Promise<TransportResult> {
@@ -99,8 +147,8 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
         return await withTimeout(async (signal) =>
           readPeekResponse(await post("peek", request, signal)),
         );
-      } catch {
-        return { status: null, variant: null, variantName: null, runId: null };
+      } catch (error) {
+        return { ...classifyCaughtError(error), variant: null, variantName: null, runId: null };
       }
     },
     async verify(request: TransportRequest): Promise<VerifyTransportResult> {
@@ -108,8 +156,8 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
         return await withTimeout(async (signal) =>
           readVerifyResponse(await post("verify", request, signal)),
         );
-      } catch {
-        return { status: null, details: null };
+      } catch (error) {
+        return { ...classifyCaughtError(error), details: null };
       }
     },
     async recordCachedEvaluation(event) {
@@ -155,9 +203,10 @@ async function readEvaluateResponse(response: Response): Promise<TransportResult
       variantName: encodedVariantName === null ? null : decodeURIComponent(encodedVariantName),
       runId,
     };
-  } catch {
-    // A 200 with an unparseable body is a parse failure -> fail loud as status null.
-    return { status: null, variant: null, variantName: null, runId: null };
+  } catch (error) {
+    // A 200 with an unparseable body is a parse failure -> fail loud with a
+    // distinct client code, not the server's SERVICE_UNAVAILABLE.
+    return { ...parseFailure(error), variant: null, variantName: null, runId: null };
   }
 }
 
@@ -168,8 +217,8 @@ async function readPeekResponse(response: Response): Promise<TransportResult> {
   try {
     const body = PeekEvaluateResponseSchema.parse(await response.json());
     return { status: response.status, variant: body.variant, variantName: null, runId: null };
-  } catch {
-    return { status: null, variant: null, variantName: null, runId: null };
+  } catch (error) {
+    return { ...parseFailure(error), variant: null, variantName: null, runId: null };
   }
 }
 
@@ -182,8 +231,8 @@ async function readVerifyResponse(response: Response): Promise<VerifyTransportRe
       status: response.status,
       details: ResolutionDetailsSchema.parse(await response.json()),
     };
-  } catch {
-    return { status: null, details: null };
+  } catch (error) {
+    return { ...parseFailure(error), details: null };
   }
 }
 

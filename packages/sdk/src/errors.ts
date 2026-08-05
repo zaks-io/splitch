@@ -1,4 +1,4 @@
-import { ErrorCodeSchema, type ErrorCode } from "./generated/contract-surface.js";
+import { type ErrorCode, ErrorCodeSchema } from "./generated/contract-surface.js";
 
 export const sdkClientErrorCodes = [
   "SDK_CREDENTIAL_CONFIGURATION_INVALID",
@@ -6,6 +6,12 @@ export const sdkClientErrorCodes = [
   "SDK_SEEN_SET_MAX_SIZE_INVALID",
   "SDK_SEEN_SET_TTL_INVALID",
   "SDK_CACHED_TELEMETRY_FAILED",
+  /** Local throw before/during fetch (network down, illegal invocation, etc.). */
+  "SDK_TRANSPORT_NETWORK",
+  /** Per-call timeout / AbortSignal abort — the request did not complete in time. */
+  "SDK_TRANSPORT_TIMEOUT",
+  /** HTTP 200 (or error body) that could not be parsed as the expected shape. */
+  "SDK_TRANSPORT_PARSE",
 ] as const;
 
 export type SdkClientErrorCode = (typeof sdkClientErrorCodes)[number];

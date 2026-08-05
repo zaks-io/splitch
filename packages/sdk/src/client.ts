@@ -1,8 +1,9 @@
+import { SplitchSdkError } from "./errors";
 import type { EvaluateContext, EvaluateDeps, EvaluationContext, Logger } from "./evaluate";
 import { runEvaluate, runPeekVariant, runVerify } from "./evaluate";
-import { SplitchSdkError } from "./errors";
 import { createFetchTransport } from "./fetch-transport";
-import type { ResolutionDetails, VariantValue } from "./generated/contract-surface.js";
+import type { VariantValue } from "./generated/contract-surface.js";
+import type { SdkResolutionDetails } from "./resolution";
 import { SeenSet } from "./seen-set";
 import type { Transport } from "./transport";
 
@@ -60,7 +61,7 @@ export interface SplitchClient {
    */
   evaluate(flagKey: string, context: EvaluationContext): Promise<VariantValue>;
   /** Resolve a Flag and return the full OpenFeature ResolutionDetails. Fires an Exposure. */
-  evaluateDetails(flagKey: string, context: EvaluationContext): Promise<ResolutionDetails>;
+  evaluateDetails(flagKey: string, context: EvaluationContext): Promise<SdkResolutionDetails>;
   /**
    * Resolve a Flag without firing an Exposure, for inspecting a resolution
    * outside the real user path. API Key only; throws `SplitchSdkError`
@@ -71,7 +72,7 @@ export interface SplitchClient {
    * Confirm setup end to end without firing an Exposure: same response shape
    * as `evaluateDetails`, safe to call repeatedly. Client Key or API Key.
    */
-  verify(flagKey: string, context: EvaluateContext): Promise<ResolutionDetails>;
+  verify(flagKey: string, context: EvaluateContext): Promise<SdkResolutionDetails>;
 }
 
 const DEFAULT_ENDPOINT = "https://edge.splitch.dev";

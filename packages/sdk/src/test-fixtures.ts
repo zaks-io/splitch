@@ -1,11 +1,11 @@
 import type { Logger } from "./evaluate";
 import { createFetchTransport } from "./fetch-transport";
 import type {
+  CachedEvaluationTelemetry,
   Transport,
   TransportRequest,
   TransportResult,
   VerifyTransportResult,
-  CachedEvaluationTelemetry,
 } from "./transport";
 
 /** A minimal well-formed wire request, for tests asserting on the response side. */
@@ -121,8 +121,22 @@ export function httpError(
   return { status, variant: null, variantName: null, runId: null, errorCode, errorMessage };
 }
 
-export function transportFailure(): TransportResult {
-  return { status: null, variant: null, variantName: null, runId: null };
+export function transportFailure(
+  errorCode:
+    | "SDK_TRANSPORT_NETWORK"
+    | "SDK_TRANSPORT_TIMEOUT"
+    | "SDK_TRANSPORT_PARSE" = "SDK_TRANSPORT_NETWORK",
+  cause: unknown = new TypeError("network down"),
+): TransportResult {
+  return {
+    status: null,
+    variant: null,
+    variantName: null,
+    runId: null,
+    errorCode,
+    errorMessage: cause instanceof Error ? cause.message : "transport request failed",
+    cause,
+  };
 }
 
 export function verifyOk(

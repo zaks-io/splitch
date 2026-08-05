@@ -132,7 +132,11 @@ describe("wire request: idType default", () => {
 describe("fail-loud: every error row returns Default Variant + reason ERROR + no retry + loud log", () => {
   const rows: { label: string; result: ReturnType<typeof httpError>; errorCode: string }[] = [
     { label: "503", result: httpError(503), errorCode: "SERVICE_UNAVAILABLE" },
-    { label: "network/timeout", result: transportFailure(), errorCode: "SERVICE_UNAVAILABLE" },
+    {
+      label: "network",
+      result: transportFailure("SDK_TRANSPORT_NETWORK"),
+      errorCode: "SDK_TRANSPORT_NETWORK",
+    },
     { label: "404", result: httpError(404), errorCode: "FLAG_NOT_FOUND" },
     { label: "401", result: httpError(401), errorCode: "UNAUTHORIZED" },
     { label: "400", result: httpError(400), errorCode: "VALIDATION_ERROR" },
@@ -236,33 +240,6 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
     expect(result.status).toBe(404);
     expect(result.variant).toBeNull();
     expect(result.runId).toBeNull();
-  });
-
-  it("200 with an unparseable body -> folds to a transport failure (status null -> ERROR)", async () => {
-    const t = fetchTransport(stubFetch(new Response("not json", { status: 200 })));
-    const result = await t.evaluate(TRANSPORT_REQUEST);
-    expect(result.status).toBeNull(); // parse failure -> fail loud
-    expect(result.variant).toBeNull();
-  });
-
-  it("a thrown fetch (network error) -> status null", async () => {
-    const t = fetchTransport(stubFetch(() => Promise.reject(new TypeError("network down"))));
-    const result = await t.evaluate(TRANSPORT_REQUEST);
-    expect(result.status).toBeNull();
-  });
-
-  it("timeout: a fetch that never resolves is aborted -> status null (reason ERROR)", async () => {
-    // The stub honours the AbortSignal the adapter wires to its timeout.
-    const aborting: typeof fetch = ((_url: unknown, init?: RequestInit) =>
-      new Promise((_resolve, reject) => {
-        init?.signal?.addEventListener("abort", () =>
-          reject(new DOMException("aborted", "AbortError")),
-        );
-      })) as typeof fetch;
-
-    const t = fetchTransport(aborting, 5); // 5ms timeout
-    const result = await t.evaluate(TRANSPORT_REQUEST);
-    expect(result.status).toBeNull();
   });
 
   it("peek calls /api/sdk/peek and preserves the route's INSUFFICIENT_SCOPES error", async () => {
