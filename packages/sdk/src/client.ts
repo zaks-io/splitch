@@ -121,7 +121,11 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
         credential,
         endpoint: options.endpoint ?? DEFAULT_ENDPOINT,
         timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-        fetchImpl: options.fetch ?? fetch,
+        // Window.fetch (and similar host objects) must keep their receiver.
+        // Storing the unbound global on the transport config and calling it as a
+        // method throws "Illegal invocation" in every browser; Node's undici
+        // tolerates the unbound call, so Node-only tests cannot catch this.
+        fetchImpl: options.fetch ?? globalThis.fetch.bind(globalThis),
       }),
     seenSet: new SeenSet(options.seenSetMaxSize, options.revalidateMs),
     logger: options.logger ?? console,
