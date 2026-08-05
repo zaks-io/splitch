@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appScope, createRepository, envScope, type TenantScope } from "../index";
-import { createLocalD1, type LocalD1 } from "./test-d1";
+import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 
 /**
  * Scope-tampering proofs for the HIGH-severity isolation bypasses found on the

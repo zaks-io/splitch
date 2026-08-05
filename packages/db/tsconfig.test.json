@@ -2,7 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "src"
+    "rootDir": "src",
+    "types": ["@cloudflare/vitest-pool-workers/types", "@cloudflare/workers-types", "node"]
   },
   "include": ["src/**/*.ts"]
 }

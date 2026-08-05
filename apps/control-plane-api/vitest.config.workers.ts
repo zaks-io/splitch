@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
+import { D1_TEST_FILES } from "./vitest.d1-tests";
 
 /**
  * Every `services` binding in wrangler.jsonc must resolve or the pool refuses to
@@ -41,6 +42,10 @@ export default defineConfig(async () => {
           .pathname,
         // Ordered before the bare "@splitch/db" alias: that one is a prefix match
         // and would otherwise rewrite the subpath into `index.ts/test-d1`.
+        "@splitch/db/test-d1-pool": new URL(
+          "../../packages/db/src/repo/test-d1-pool.ts",
+          import.meta.url,
+        ).pathname,
         "@splitch/db/test-d1": new URL("../../packages/db/src/repo/test-d1.ts", import.meta.url)
           .pathname,
         "@splitch/db": new URL("../../packages/db/src/index.ts", import.meta.url).pathname,
@@ -52,8 +57,7 @@ export default defineConfig(async () => {
     },
     test: {
       name: "workers",
-      include: ["test/**/*.{test,spec}.ts"],
-      passWithNoTests: true,
+      include: ["test/**/*.{test,spec}.ts", ...D1_TEST_FILES],
       setupFiles: ["./test/apply-migrations.ts"],
       // Miniflare startup plus CPU contention from the parallel verify graph
       // makes the 5s default flaky (SPL-231).

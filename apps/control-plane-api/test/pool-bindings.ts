@@ -1,5 +1,8 @@
-import { env } from "cloudflare:workers";
-import type { LocalBindings } from "../src/test-fixtures";
+import {
+  makePoolBindings as makeSourcePoolBindings,
+  makePoolBindingsWithConfig as makeSourcePoolBindingsWithConfig,
+  type PoolBindingsWithConfig as SourcePoolBindingsWithConfig,
+} from "../src/test-bindings-pool";
 
 /**
  * `makeLocalBindings` for tests running INSIDE workerd.
@@ -12,29 +15,15 @@ import type { LocalBindings } from "../src/test-fixtures";
  *
  * Under the Workers pool the bindings are the real in-process ones, so the same
  * suite costs zero sockets. The signature matches `makeLocalBindings` so the
- * migrated tests read identically; `dispose` is a no-op because there is no
- * runtime to tear down.
+ * migrated tests read identically; `dispose` clears the shared KV namespaces
+ * because the Workers pool isolates storage per file rather than per test.
  */
-export async function makePoolBindings(): Promise<LocalBindings> {
-  return {
-    d1: env.DB,
-    kv: env.SESSION_STORE,
-    credentialKv: env.CREDENTIAL_STORE,
-    dispose: async () => {},
-  };
+export type PoolBindingsWithConfig = SourcePoolBindingsWithConfig;
+
+export async function makePoolBindings() {
+  return makeSourcePoolBindings();
 }
 
-export interface PoolBindingsWithConfig extends LocalBindings {
-  configKv: KVNamespace;
-}
-
-/**
- * The same bindings plus the Flag-Configuration KV, for suites that assert on
- * what the config store wrote. Under Miniflare this needed a second fixture with
- * its own instance and its own hand-written schema; here it is one more binding
- * off the same `env`, and the D1 behind it is the real migration set rather than
- * a hand-maintained copy.
- */
-export async function makePoolBindingsWithConfig(): Promise<PoolBindingsWithConfig> {
-  return { ...(await makePoolBindings()), configKv: env.CONFIG_STORE };
+export async function makePoolBindingsWithConfig() {
+  return makeSourcePoolBindingsWithConfig();
 }

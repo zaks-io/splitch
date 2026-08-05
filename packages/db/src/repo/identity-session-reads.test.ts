@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRepository } from "../index";
-import { createLocalD1, type LocalD1 } from "./test-d1";
+import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 
 /**
  * The batched session reads, against the real generated schema.

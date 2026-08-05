@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appScope, createRepository, envScope } from "../index";
 import type { ApprovalCommit } from "./approval-types";
-import { createLocalD1, type LocalD1 } from "./test-d1";
+import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 import { type SeededTenants, seedTwoTenants } from "./test-seed";
 
 /**
