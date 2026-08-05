@@ -84,19 +84,19 @@ async function refreshAccessTokenFault(
       ? await reloadRotatedCredential(deps, stored)
       : null;
   if (!rotated) {
-    throw mintFailureError(fault, explicitBinding);
+    throw mintFailureError(fault);
   }
   return refreshAccessToken(deps, rotated, binding, explicitBinding, false);
 }
 
 /**
  * Map a failed refresh-grant response to the cause the CLI has established.
- * An `invalid_grant` on an explicit App/Org rebind is a binding refusal when
- * the server names a non-session reason; only a dead or missing session is
- * `CLI_SESSION_EXPIRED`.
+ * An `invalid_grant` whose reason names a membership/selector refusal is
+ * `CLI_TOKEN_BINDING_REFUSED`; only a dead or missing session (or opaque
+ * fault) is `CLI_SESSION_EXPIRED`.
  */
-export function mintFailureError(fault: OAuthFault, explicitBinding: boolean): SplitchCliError {
-  if (isTokenBindingRefusal(fault, explicitBinding)) {
+export function mintFailureError(fault: OAuthFault): SplitchCliError {
+  if (isTokenBindingRefusal(fault)) {
     return tokenBindingRefusedError(fault);
   }
   return sessionExpiredError(describeOAuthFault(fault));
