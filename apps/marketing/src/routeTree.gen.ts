@@ -14,6 +14,8 @@ import { Route as HealthRouteImport } from './routes/health'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as QuickstartRouteImport } from './routes/quickstart'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
+import { Route as DocsFlagsRouteImport } from './routes/docs.flags'
+import { Route as DocsFlagsDotmdRouteImport } from './routes/docs.flags[.]md'
 import { Route as DocsErrorCodeRouteImport } from './routes/docs.error.$code'
 import { Route as DocsSdkTopicRouteImport } from './routes/docs.sdk.$topic'
 
@@ -42,6 +44,16 @@ const DocsIndexRoute = DocsIndexRouteImport.update({
   path: '/docs/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocsFlagsRoute = DocsFlagsRouteImport.update({
+  id: '/docs/flags',
+  path: '/docs/flags',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsFlagsDotmdRoute = DocsFlagsDotmdRouteImport.update({
+  id: '/docs/flags.md',
+  path: '/docs/flags.md',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocsErrorCodeRoute = DocsErrorCodeRouteImport.update({
   id: '/docs/error/$code',
   path: '/docs/error/$code',
@@ -58,6 +70,8 @@ export interface FileRoutesByFullPath {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/docs/flags': typeof DocsFlagsRoute
+  '/docs/flags.md': typeof DocsFlagsDotmdRoute
   '/docs/': typeof DocsIndexRoute
   '/docs/error/$code': typeof DocsErrorCodeRoute
   '/docs/sdk/$topic': typeof DocsSdkTopicRoute
@@ -67,6 +81,8 @@ export interface FileRoutesByTo {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/docs/flags': typeof DocsFlagsRoute
+  '/docs/flags.md': typeof DocsFlagsDotmdRoute
   '/docs': typeof DocsIndexRoute
   '/docs/error/$code': typeof DocsErrorCodeRoute
   '/docs/sdk/$topic': typeof DocsSdkTopicRoute
@@ -77,6 +93,8 @@ export interface FileRoutesById {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/docs/flags': typeof DocsFlagsRoute
+  '/docs/flags.md': typeof DocsFlagsDotmdRoute
   '/docs/': typeof DocsIndexRoute
   '/docs/error/$code': typeof DocsErrorCodeRoute
   '/docs/sdk/$topic': typeof DocsSdkTopicRoute
@@ -88,6 +106,8 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/docs/flags'
+    | '/docs/flags.md'
     | '/docs/'
     | '/docs/error/$code'
     | '/docs/sdk/$topic'
@@ -97,6 +117,8 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/docs/flags'
+    | '/docs/flags.md'
     | '/docs'
     | '/docs/error/$code'
     | '/docs/sdk/$topic'
@@ -106,6 +128,8 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/docs/flags'
+    | '/docs/flags.md'
     | '/docs/'
     | '/docs/error/$code'
     | '/docs/sdk/$topic'
@@ -116,6 +140,8 @@ export interface RootRouteChildren {
   HealthRoute: typeof HealthRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   QuickstartRoute: typeof QuickstartRoute
+  DocsFlagsRoute: typeof DocsFlagsRoute
+  DocsFlagsDotmdRoute: typeof DocsFlagsDotmdRoute
   DocsIndexRoute: typeof DocsIndexRoute
   DocsErrorCodeRoute: typeof DocsErrorCodeRoute
   DocsSdkTopicRoute: typeof DocsSdkTopicRoute
@@ -158,6 +184,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/docs/flags': {
+      id: '/docs/flags'
+      path: '/docs/flags'
+      fullPath: '/docs/flags'
+      preLoaderRoute: typeof DocsFlagsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/flags.md': {
+      id: '/docs/flags.md'
+      path: '/docs/flags.md'
+      fullPath: '/docs/flags.md'
+      preLoaderRoute: typeof DocsFlagsDotmdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/docs/error/$code': {
       id: '/docs/error/$code'
       path: '/docs/error/$code'
@@ -180,6 +220,8 @@ const rootRouteChildren: RootRouteChildren = {
   HealthRoute: HealthRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   QuickstartRoute: QuickstartRoute,
+  DocsFlagsRoute: DocsFlagsRoute,
+  DocsFlagsDotmdRoute: DocsFlagsDotmdRoute,
   DocsIndexRoute: DocsIndexRoute,
   DocsErrorCodeRoute: DocsErrorCodeRoute,
   DocsSdkTopicRoute: DocsSdkTopicRoute,

@@ -7,6 +7,7 @@ import {
   surfaceForCode,
   surfaceLabels,
 } from "./errors";
+import { flagsDoc } from "./flags";
 import { type SdkTopic, sdkTopics } from "./sdk";
 import { DOCS_ORIGIN, docsPath } from "./site";
 
@@ -16,6 +17,15 @@ export function sdkTopicMarkdown(topic: SdkTopic): string {
     topic.summary,
     blocksToMarkdown(topic.blocks),
     `Source: ${DOCS_ORIGIN}${docsPath.sdkTopic(topic.slug)}`,
+  ].join("\n\n");
+}
+
+export function flagsDocMarkdown(): string {
+  return [
+    `# ${flagsDoc.title}`,
+    flagsDoc.summary,
+    blocksToMarkdown(flagsDoc.blocks),
+    `Source: ${DOCS_ORIGIN}${docsPath.flags()}`,
   ].join("\n\n");
 }
 
@@ -65,6 +75,8 @@ export function llmsTxt(): string {
     "# splitch",
     "> Feature flags and A/B experimentation with agent parity: every capability a person has in the panel is available to an agent over MCP, the CLI, and the SDK. Failures are always observable and never disguised as a default.",
     "Every page below is also served as HTML at the same URL without the `.md` suffix.",
+    "## Flags",
+    `- [${flagsDoc.title}](${DOCS_ORIGIN}${docsPath.flagsMarkdown()}): ${flagsDoc.summary}`,
     "## SDK",
     topicLines.join("\n"),
     "## Errors",

@@ -8,6 +8,8 @@ export const DOCS_ORIGIN = "https://splitch.dev";
 
 export const docsPath = {
   index: () => "/docs",
+  flags: () => "/docs/flags",
+  flagsMarkdown: () => "/docs/flags.md",
   sdkTopic: (slug: string) => `/docs/sdk/${slug}`,
   sdkTopicMarkdown: (slug: string) => `/docs/sdk/${slug}.md`,
   errorCode: (code: string) => `/docs/error/${code}`,

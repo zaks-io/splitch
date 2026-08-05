@@ -43,7 +43,7 @@ function QuickstartRoute() {
           <CodeSnippet
             code={`authenticate → pick an Org → create an App (dev+prod Envs auto-provisioned)
             → select the dev Environment → get a Client Key → create a Flag
-            → VERIFY (one round-trip) → wire the SDK → first real Exposure`}
+            → enable + rollout → VERIFY (reason SPLIT) → wire the SDK → first real Exposure`}
           />
         </header>
 
