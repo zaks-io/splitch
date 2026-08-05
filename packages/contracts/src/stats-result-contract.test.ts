@@ -272,4 +272,20 @@ describe("declared /results response contract", () => {
       }).success,
     ).toBe(true);
   });
+
+  it("accepts a no_run envelope that names Start, without inventing a Run id", () => {
+    expect(
+      declaredResponse("experiment_results_get").safeParse({
+        state: "no_run",
+        recommended_action: "START_A_RUN",
+      }).success,
+    ).toBe(true);
+    expect(
+      declaredResponse("experiment_results_get").safeParse({
+        state: "no_run",
+        recommended_action: "START_A_RUN",
+        run_id: "run_placeholder",
+      }).success,
+    ).toBe(false);
+  });
 });

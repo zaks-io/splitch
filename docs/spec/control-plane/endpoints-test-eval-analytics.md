@@ -85,11 +85,17 @@ contracts live in [endpoints-web-analytics.md](./endpoints-web-analytics.md).
 
 ### `POST /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/results`
 
-Returns `StatsOutput` for the live Run, or a specified `runId`, over this Environment's Exposures.
-`GET` accepts `?runId=...`; `POST` accepts `{ "runId": "..." }`. The caller never supplies
-`app_id` or `environment_id` as Tinybird parameters. The Analysis Worker injects those from the
-validated control-plane token and path context, then calls the app-scoped Tinybird pipes and
-`StatsEngine.analyze`.
+Returns an `AnalysisResultsEnvelope` for the live Run, or a specified `runId`, over
+this Environment's Exposures. `GET` accepts `?runId=...`; `POST` accepts
+`{ "runId": "..." }`. The caller never supplies `app_id` or `environment_id` as
+Tinybird parameters. The Control Plane resolves Experiment existence and Run
+selection in D1 first (ADR-0018): a missing or out-of-scope Experiment is
+`EXPERIMENT_NOT_FOUND`; a draft Experiment with no Run answers `200` with
+`state: "no_run"` and `recommended_action: "START_A_RUN"` (SPL-305); otherwise
+the Analysis Worker injects App/Environment from the validated control-plane
+token and path context, then calls the app-scoped Tinybird pipes and
+`StatsEngine.analyze`. A locked Run still missing Exposures or Metric Events
+answers `200` with `state: "no_data"` naming `missing` (SPL-302).
 
 ### `GET /orgs/{org_id}/usage`
 

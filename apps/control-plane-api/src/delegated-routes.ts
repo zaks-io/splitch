@@ -5,11 +5,16 @@ import {
   delegatedRequest,
   type HandlerArgs,
   type Registrar,
-  renderError,
   type RouteHandler,
+  renderError,
 } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
+import {
+  analysisResultsNoRunEnvelope,
+  resolveExperimentResultsTarget,
+} from "./analysis-results-request";
 import { appNotFound } from "./app-environment-model";
+import { experimentNotFound, runNotFound } from "./experiment-errors";
 import { environmentExists } from "./experiment-handler-shared";
 import { controlPlaneRoute } from "./routes";
 
@@ -26,6 +31,10 @@ import { controlPlaneRoute } from "./routes";
  * needs the tenant tables: that the Environment in the path belongs to the App in
  * the path (see environmentScopeError). Nothing crosses the binding until it has
  * passed, because the owner Worker trusts what arrives over it.
+ *
+ * Experiment results additionally resolve Experiment existence and Run selection
+ * here (SPL-305): Analysis only sees Tinybird, which cannot tell a draft
+ * Experiment from a missing id.
  */
 export type DelegationBindings = Partial<Record<RouteOwner, Fetcher>>;
 
@@ -71,21 +80,14 @@ function delegatingHandler(
   repo: Repository,
 ): RouteHandler<unknown> {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
-    if (!binding) {
-      // A deployed control plane without the owner's binding cannot answer this
-      // route at all. Saying so beats a 404 that reads as "no such operation".
-      return renderError(
-        {
-          code: "SERVICE_UNAVAILABLE",
-          message: `${route.operationId} is executed by ${route.owner}, whose service binding is not configured`,
-          details: { retryAfterMs: 30_000 },
-        },
-        { requestId },
-      );
-    }
+    if (!binding) return missingOwnerBinding(route, requestId);
+
     const parts = inputParts(input);
     const scopeError = await environmentScopeError(repo, parts.params ?? {}, requestId);
     if (scopeError) return scopeError;
+
+    const pinned = await pinExperimentResultsRun(route, repo, parts, requestId);
+    if (pinned instanceof Response) return pinned;
 
     return binding.fetch(
       delegatedRequest(route, delegatedIdentityFrom(route, principal, parts.params ?? {}), {
@@ -94,6 +96,109 @@ function delegatingHandler(
       }),
     );
   };
+}
+
+function missingOwnerBinding(route: ApiRouteContract, requestId: string): Response {
+  // A deployed control plane without the owner's binding cannot answer this
+  // route at all. Saying so beats a 404 that reads as "no such operation".
+  return renderError(
+    {
+      code: "SERVICE_UNAVAILABLE",
+      message: `${route.operationId} is executed by ${route.owner}, whose service binding is not configured`,
+      details: { retryAfterMs: 30_000 },
+    },
+    { requestId },
+  );
+}
+
+/**
+ * For experiment results: resolve Experiment/Run in D1 and either return a
+ * finished Response (draft / missing) or mutate `parts` to pin the Run id on
+ * the hop. Other delegated routes pass through unchanged.
+ */
+async function pinExperimentResultsRun(
+  route: ApiRouteContract,
+  repo: Repository,
+  parts: {
+    params?: Record<string, string>;
+    query?: Record<string, unknown>;
+    body?: unknown;
+  },
+  requestId: string,
+): Promise<Response | undefined> {
+  if (!isExperimentResultsRoute(route.operationId)) return undefined;
+
+  const gated = await experimentResultsBeforeHop(repo, parts, requestId);
+  if (gated.response) return gated.response;
+
+  // Pin the resolved Run on the hop so Analysis never guesses from empty
+  // Tinybird rows. GET carries runId in the query; POST in the body.
+  if (route.method === "GET") {
+    parts.query = { ...parts.query, runId: gated.runId };
+  } else {
+    parts.body = { ...(isRecord(parts.body) ? parts.body : {}), runId: gated.runId };
+  }
+  return undefined;
+}
+
+function isExperimentResultsRoute(
+  operationId: string,
+): operationId is "experiment_results_get" | "experiment_results_post" {
+  return operationId === "experiment_results_get" || operationId === "experiment_results_post";
+}
+
+/**
+ * Separate Experiment existence from Run existence before Analysis sees the
+ * request. Returns a finished Response for draft / missing cases, or the Run
+ * id to pin on the hop so Analysis never has to guess from empty Tinybird rows.
+ */
+async function experimentResultsBeforeHop(
+  repo: Repository,
+  parts: {
+    params?: Record<string, string>;
+    query?: Record<string, unknown>;
+    body?: unknown;
+  },
+  requestId: string,
+): Promise<{ response: Response; runId?: undefined } | { response?: undefined; runId: string }> {
+  const params = parts.params ?? {};
+  const appId = params.appId;
+  const environmentId = params.environmentId;
+  const experimentId = params.experimentId;
+  if (appId === undefined || environmentId === undefined || experimentId === undefined) {
+    return { response: experimentNotFound(requestId) };
+  }
+
+  const requestedRunId = optionalRunId(parts);
+  const resolved = await resolveExperimentResultsTarget(repo, {
+    appId,
+    environmentId,
+    experimentId,
+    ...(requestedRunId !== undefined ? { runId: requestedRunId } : {}),
+  });
+
+  switch (resolved.outcome) {
+    case "experiment_not_found":
+      return { response: experimentNotFound(requestId) };
+    case "no_run":
+      return { response: Response.json(analysisResultsNoRunEnvelope()) };
+    case "run_not_found":
+      return { response: runNotFound(requestId) };
+    case "run":
+      return { runId: resolved.runId };
+  }
+}
+
+function optionalRunId(parts: {
+  query?: Record<string, unknown>;
+  body?: unknown;
+}): string | undefined {
+  const fromQuery = parts.query?.runId;
+  if (typeof fromQuery === "string" && fromQuery.length > 0) return fromQuery;
+  if (isRecord(parts.body) && typeof parts.body.runId === "string" && parts.body.runId.length > 0) {
+    return parts.body.runId;
+  }
+  return undefined;
 }
 
 /**

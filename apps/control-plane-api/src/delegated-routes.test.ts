@@ -5,7 +5,7 @@ import {
   DELEGATED_IDENTITY_HEADER,
   type RateLimiter,
 } from "@splitch/worker-runtime";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 import type { DelegationBindings } from "./delegated-routes";
 
@@ -14,8 +14,12 @@ import type { DelegationBindings } from "./delegated-routes";
  * Worker executes. The delegation protocol itself is covered in worker-runtime;
  * what is wired here is that the guard chain runs BEFORE the hop and that a
  * missing binding is a loud refusal rather than a door that reads as absent.
+ *
+ * SPL-305: Experiment results also resolve Experiment / Run in D1 before the
+ * hop so a draft never arrives at Analysis as EXPERIMENT_NOT_FOUND.
  */
 const RESULTS_PATH = "/apps/app_1/envs/env_1/experiments/exp_1/results";
+const OTHER_TENANT_RESULTS_PATH = "/apps/app_1/envs/env_1/experiments/exp_tenant_b/results";
 
 describe("delegated control-plane routes", () => {
   it("forwards an authorized request to the owner with the authorized identity", async () => {
@@ -109,6 +113,116 @@ describe("delegated control-plane routes", () => {
   });
 });
 
+describe("experiment results Experiment vs Run resolution (SPL-305)", () => {
+  it("returns typed no_run for a draft Experiment without calling Analysis", async () => {
+    const forwarded: Request[] = [];
+    const analysis = binding(forwarded, Response.json({ ok: false }));
+    const response = await createApp(
+      deps({
+        bindings: { "analysis-api": analysis },
+        experiments: {
+          getExperiment: vi.fn(async () => ({ id: "exp_1", status: "draft" })),
+          listRunsForExperiment: vi.fn(async () => []),
+        },
+      }),
+    ).request(RESULTS_PATH, { headers: { authorization: "Bearer stub" } });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      state: "no_run",
+      recommended_action: "START_A_RUN",
+    });
+    expect(forwarded).toHaveLength(0);
+  });
+
+  it("returns EXPERIMENT_NOT_FOUND for a genuinely nonexistent id without calling Analysis", async () => {
+    const forwarded: Request[] = [];
+    const analysis = binding(forwarded, Response.json({ ok: false }));
+    const response = await createApp(
+      deps({
+        bindings: { "analysis-api": analysis },
+        experiments: {
+          getExperiment: vi.fn(async () => null),
+          listRunsForExperiment: vi.fn(async () => {
+            throw new Error("must not list Runs when Experiment is missing");
+          }),
+        },
+      }),
+    ).request(RESULTS_PATH, { headers: { authorization: "Bearer stub" } });
+
+    expect(response.status).toBe(404);
+    expect(((await response.json()) as { code: string }).code).toBe("EXPERIMENT_NOT_FOUND");
+    expect(forwarded).toHaveLength(0);
+  });
+
+  it("returns EXPERIMENT_NOT_FOUND for another tenant's Experiment id (existence is not leaked)", async () => {
+    // Two distinct tenants, distinct ids. Tenant A's scoped getExperiment returns
+    // null for Tenant B's Experiment — same as missing. Must stay indistinguishable
+    // from nonexistent (never 403) so a future refactor cannot "fix" isolation
+    // into an existence leak.
+    const tenantA = {
+      appId: "app_1",
+      environmentId: "env_1",
+      experimentId: "exp_tenant_a",
+    };
+    const tenantB = {
+      appId: "app_2",
+      environmentId: "env_2",
+      experimentId: "exp_tenant_b",
+    };
+    const forwarded: Request[] = [];
+    const analysis = binding(forwarded, Response.json({ ok: false }));
+    const getExperiment = vi.fn(async (scope: { appId: string }, experimentId: string) => {
+      if (scope.appId === tenantA.appId && experimentId === tenantA.experimentId) {
+        return { id: tenantA.experimentId, status: "draft" };
+      }
+      if (scope.appId === tenantB.appId && experimentId === tenantB.experimentId) {
+        return { id: tenantB.experimentId, status: "draft" };
+      }
+      return null;
+    });
+
+    const response = await createApp(
+      deps({
+        bindings: { "analysis-api": analysis },
+        experiments: {
+          getExperiment,
+          listRunsForExperiment: vi.fn(async () => []),
+        },
+      }),
+    ).request(OTHER_TENANT_RESULTS_PATH, { headers: { authorization: "Bearer stub" } });
+
+    expect(response.status).toBe(404);
+    expect(((await response.json()) as { code: string }).code).toBe("EXPERIMENT_NOT_FOUND");
+    expect(forwarded).toHaveLength(0);
+    expect(getExperiment).toHaveBeenCalledWith(
+      expect.objectContaining({ appId: tenantA.appId, environmentId: tenantA.environmentId }),
+      tenantB.experimentId,
+    );
+  });
+
+  it("pins the latest Run on the hop when the Experiment has Runs and no runId was requested", async () => {
+    const forwarded: Request[] = [];
+    const analysis = binding(forwarded, Response.json({ state: "ready" }));
+    const response = await createApp(
+      deps({
+        bindings: { "analysis-api": analysis },
+        experiments: {
+          getExperiment: vi.fn(async () => ({ id: "exp_1", status: "running" })),
+          listRunsForExperiment: vi.fn(async () => [
+            { id: "run_1", runNumber: 1 },
+            { id: "run_2", runNumber: 2 },
+          ]),
+        },
+      }),
+    ).request(RESULTS_PATH, { headers: { authorization: "Bearer stub" } });
+
+    expect(response.status).toBe(200);
+    expect(forwarded).toHaveLength(1);
+    expect(new URL(forwarded[0]?.url ?? "").searchParams.get("runId")).toBe("run_2");
+  });
+});
+
 /**
  * The path a route declares, aimed at an Environment that exists under a DIFFERENT
  * App. `:appId` stays the caller's own App so the generic co-scope guard passes
@@ -142,7 +256,14 @@ function binding(forwarded: Request[], response: Response): Fetcher {
   } as unknown as Fetcher;
 }
 
-function deps(options: { bindings?: DelegationBindings; appId?: string }) {
+function deps(options: {
+  bindings?: DelegationBindings;
+  appId?: string;
+  experiments?: {
+    getExperiment: ReturnType<typeof vi.fn>;
+    listRunsForExperiment: ReturnType<typeof vi.fn>;
+  };
+}) {
   const authResolver: AuthResolver = () => ({
     ok: true as const,
     principal: {
@@ -159,7 +280,7 @@ function deps(options: { bindings?: DelegationBindings; appId?: string }) {
   return {
     authResolver,
     rateLimiter,
-    repo: stubRepo(),
+    repo: stubRepo(options.experiments),
     ...(options.bindings ? { delegationBindings: options.bindings } : {}),
   };
 }
@@ -168,14 +289,24 @@ function deps(options: { bindings?: DelegationBindings; appId?: string }) {
  * `env_9` exists, but under app_2. The read is scoped by App exactly as D1 is
  * (ADR-0018), so an Environment id from another tenant simply is not found --
  * which is the whole check.
+ *
+ * Default Experiment fixtures give the forward-path tests a Run so the SPL-305
+ * gate does not turn every hop into no_run.
  */
 const ENVIRONMENTS = new Set(["app_1/env_1", "app_2/env_9"]);
 
-function stubRepo(): Repository {
+function stubRepo(experiments?: {
+  getExperiment: ReturnType<typeof vi.fn>;
+  listRunsForExperiment: ReturnType<typeof vi.fn>;
+}): Repository {
   return {
     identity: {
       getEnvironment: async ({ appId }: { appId: string }, environmentId: string) =>
         ENVIRONMENTS.has(`${appId}/${environmentId}`) ? { id: environmentId } : null,
+    },
+    experiments: experiments ?? {
+      getExperiment: vi.fn(async () => ({ id: "exp_1", status: "running" })),
+      listRunsForExperiment: vi.fn(async () => [{ id: "run_7", runNumber: 1 }]),
     },
   } as unknown as Repository;
 }
