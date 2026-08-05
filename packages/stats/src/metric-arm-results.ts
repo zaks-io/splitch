@@ -9,8 +9,12 @@ import { FixedHorizonCI } from "./fixed-horizon-ci";
 import { metricTypesById } from "./metric-discovery";
 import { fiellerRelativeCi } from "./relative-ci";
 import { SequentialCI, type CIAdapter, type CIResult } from "./sequential-ci";
-import { estimateMetricComparison } from "./variance-estimators";
-import type { MetricArmEstimate, MetricComparisonEstimate } from "./variance-estimator-types";
+import { estimateMetricComparisons } from "./variance-estimators";
+import type {
+  MetricArmEstimate,
+  MetricComparisonEstimate,
+  MetricComparisonsEstimate,
+} from "./variance-estimator-types";
 
 export interface ArmResultAdapters {
   readonly sequentialCI: CIAdapter;
@@ -36,15 +40,19 @@ export function analyzeMetricArmResults(
   const armResults: ArmResult[] = [];
 
   for (const [metricId, metricType] of metricTypes) {
-    const comparisons = variants
-      .filter((variant) => variant !== input.control_variant)
-      .map((variant) => comparisonFor(input, metricId, metricType, variant, exposures));
-    const firstComparison = comparisons[0];
-    if (firstComparison === undefined) {
+    const treatmentVariants = variants.filter((variant) => variant !== input.control_variant);
+    if (treatmentVariants.length === 0) {
       continue;
     }
+    const { control, comparisons } = comparisonsFor(
+      input,
+      metricId,
+      metricType,
+      treatmentVariants,
+      exposures,
+    );
 
-    armResults.push(controlArmResult(firstComparison.control));
+    armResults.push(controlArmResult(control));
 
     for (const comparison of comparisons) {
       armResults.push(treatmentArmResult(input, comparison, adapters));
@@ -74,29 +82,36 @@ function orderedVariants(
   ];
 }
 
-function comparisonFor(
+function comparisonsFor(
   input: StatsInput,
   metricId: string,
   metricType: MetricKind,
-  treatmentVariant: string,
+  treatmentVariants: readonly string[],
   exposures: readonly DedupeExposureRow[],
-): MetricComparisonEstimate {
+): MetricComparisonsEstimate {
   // The Run froze the variance-reduction rule at Start (variance-reduction.md).
   // A Metric absent from the array states no rule, so the estimator's own
   // defaults apply — passing `undefined` is what selects them.
   const variance = input.metric_variance_config?.find((config) => config.metric_id === metricId);
-  return estimateMetricComparison({
+  return estimateMetricComparisons({
     run_id: input.run_id,
     metric_id: metricId,
     metric_type: metricType,
     control_variant: input.control_variant,
-    treatment_variant: treatmentVariant,
+    treatment_variants: treatmentVariants,
     exposures,
     metric_values: input.metric_values,
     pre_period_covariates: input.pre_period_covariates,
     winsorize: variance?.winsorize,
     winsorize_pct: variance?.winsorize_pct,
+    cuped: variance?.cuped,
     cuped_coverage_threshold_pct: variance?.cuped_coverage_threshold_pct,
+    // A fixed-horizon Run is decision-valid for the pre-registered sample only,
+    // so the estimator analyzes the first `sample_size_locked` Entities per arm
+    // and ignores whatever accrued past the lock.
+    ...(input.horizon === "fixed" && input.sample_size_locked !== undefined
+      ? { fixed_horizon_sample_size: input.sample_size_locked }
+      : {}),
   });
 }
 

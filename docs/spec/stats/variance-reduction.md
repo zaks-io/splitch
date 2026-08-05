@@ -64,15 +64,21 @@ the same confidence level.
 
 ### Gating conditions
 
-CUPED applies only when **both** conditions are met:
+CUPED applies only when **all** conditions are met:
 
 | Condition              | Rule                                          | Config field                                 |
 | ---------------------- | --------------------------------------------- | -------------------------------------------- |
-| Pre-period data exists | Coverage ≥ threshold, in **both** arms        | `cuped_coverage_threshold_pct` (default 70%) |
+| CUPED enabled          | Metric opts out with `cuped: false`           | `cuped` (default true)                       |
+| Pre-period data exists | Coverage ≥ threshold, in **every** arm        | `cuped_coverage_threshold_pct` (default 70%) |
 | Coverage definition    | Fraction of arm Entities with pre-period data | same                                         |
 
-Coverage = `count(Entities with pre_period_value) / n` per arm. If either arm falls below the
-threshold, CUPED does not apply (for consistency; both arms must use the same technique).
+Coverage = `count(Entities with pre_period_value) / n` per arm. If any arm falls below the
+threshold, CUPED does not apply (for consistency; every arm must use the same technique).
+
+The slope θ and the centering constant are fit once over **every** arm of the Run, and the
+winsorization cap is likewise pooled over every arm. Scoping either to one (Control, Treatment)
+pair would make the Control arm's published estimate depend on which Treatment it was paired
+with, so renaming a Treatment would move the reported baseline.
 
 ### Pre-period window
 

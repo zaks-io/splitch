@@ -153,6 +153,7 @@ function materializeVarianceConfig(
     metric_id: row.metric_id,
     winsorize: row.winsorize,
     winsorize_pct: row.winsorize_pct,
+    cuped: row.cuped,
     cuped_coverage_threshold_pct: row.cuped_coverage_threshold_pct,
   }));
 }
@@ -164,6 +165,7 @@ function isMetricVarianceConfig(value: unknown): value is MetricVarianceConfig {
     typeof row.metric_id === "string" &&
     typeof row.winsorize === "boolean" &&
     typeof row.winsorize_pct === "number" &&
+    typeof row.cuped === "boolean" &&
     typeof row.cuped_coverage_threshold_pct === "number"
   );
 }

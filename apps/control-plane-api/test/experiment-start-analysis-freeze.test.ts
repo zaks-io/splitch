@@ -122,12 +122,14 @@ describe("Experiment Start freezes the analysis config", () => {
       // the Metric asks for.
       winsorize: false,
       winsorize_pct: 99.9,
+      cuped: true,
       cuped_coverage_threshold_pct: 70,
     });
     expect(frozen).toContainEqual({
       metric_id: revenueId,
       winsorize: true,
       winsorize_pct: 99,
+      cuped: true,
       cuped_coverage_threshold_pct: 70,
     });
   });

@@ -17,6 +17,7 @@ describe("root stats gate wiring", () => {
 
   it("exposes root stats and spec lint scripts used by verify:ci", () => {
     expect(rootPackageJson.scripts["spec:lint"]).toBe("node scripts/spec-lint.mjs");
+    expect(rootPackageJson.scripts["stats:audit"]).toBe("turbo run stats:audit");
     expect(rootPackageJson.scripts["stats:golden"]).toBe("turbo run stats:golden");
     expect(rootPackageJson.scripts["stats:property"]).toBe("turbo run stats:property");
     expect(rootPackageJson.scripts["stats:simulation"]).toBe("turbo run stats:simulation");

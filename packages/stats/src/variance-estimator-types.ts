@@ -48,6 +48,30 @@ export interface MetricComparisonEstimateInput {
   readonly cuped?: boolean;
   readonly cuped_coverage_threshold_pct?: number;
   readonly pre_period_covariates?: readonly CupedCovariateRow[];
+  /**
+   * Set only for a fixed-horizon Run: the pre-registered Entities-per-arm from
+   * `sample_size_locked`. Each arm is truncated to its first this-many Entities
+   * by exposure time before anything is estimated. Absent means analyze every
+   * exposed Entity, which is what a sequential Run does.
+   */
+  readonly fixed_horizon_sample_size?: number;
+}
+
+/**
+ * Every arm of one Metric, estimated together.
+ *
+ * Winsorization pools across all arms and the CUPED fit spans all arms, so the
+ * Control arm has one published estimate per Metric rather than one per
+ * Treatment it is compared against.
+ */
+export interface MetricComparisonsEstimateInput
+  extends Omit<MetricComparisonEstimateInput, "treatment_variant"> {
+  readonly treatment_variants: readonly string[];
+}
+
+export interface MetricComparisonsEstimate {
+  readonly control: MetricArmEstimate;
+  readonly comparisons: readonly MetricComparisonEstimate[];
 }
 
 export interface MetricComparisonEstimate {
@@ -85,8 +109,8 @@ export interface EntityAggregate {
 }
 
 export interface CupedAdjustment {
-  readonly controlEntities: readonly EntityAggregate[];
-  readonly treatmentEntities: readonly EntityAggregate[];
+  /** Adjusted entities per arm, positionally aligned with the arms passed in. */
+  readonly arms: readonly (readonly EntityAggregate[])[];
   readonly method: CupedMethod;
   readonly attribute: string | null;
   readonly attributeSource: CupedAttributeSource | null;

@@ -117,6 +117,7 @@ UNIQUE constraint: `(experiment_id, run_number)` — run numbers are dense and u
 | `winsorize`                    | boolean     | nullable; null means the engine default                                                                  |
 | `winsorize_pct`                | real        | nullable; percent, null means the engine default                                                         |
 | `downside_threshold_pct`       | real        | nullable; percent, on the same scale as `relative_lift_pct`. Set to make this a Guardrail Metric         |
+| `cuped`                        | boolean     | nullable; null means the engine default                                                                  |
 | `cuped_coverage_threshold_pct` | real        | nullable; percent, null means the engine default                                                         |
 | `created_at`                   | timestamptz | not null                                                                                                 |
 | `updated_at`                   | timestamptz | not null                                                                                                 |

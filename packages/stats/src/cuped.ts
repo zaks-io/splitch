@@ -2,7 +2,7 @@ import {
   type CupedAttributeSource,
   DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT,
 } from "@splitch/contracts";
-import { adjustCupedArms } from "./cuped-fit";
+import { type CupedArm, adjustCupedArms } from "./cuped-fit";
 import { finiteValue, sampleVariance } from "./variance-math";
 import type {
   CupedAdjustment,
@@ -17,8 +17,8 @@ interface CupedCandidate {
   readonly method: CupedAdjustment["method"];
   readonly attribute: string | null;
   readonly attributeSource: CupedAttributeSource | null;
-  readonly controlValues: ReadonlyMap<string, number>;
-  readonly treatmentValues: ReadonlyMap<string, number>;
+  /** Covariate values per arm, positionally aligned with the arms under fit. */
+  readonly armValues: readonly ReadonlyMap<string, number>[];
   readonly coveragePct: number;
 }
 
@@ -32,41 +32,41 @@ type RuntimeCupedCovariateRow = Omit<CupedCovariateRow, "covariate_source"> & {
   readonly covariate_source?: string;
 };
 
+/**
+ * Select and apply one CUPED adjustment across every arm of the Run.
+ *
+ * `arms` is Control first, then each Treatment. Selection (coverage, attribute
+ * choice) and the fit itself span all arms, so the adjustment a Run publishes
+ * for any one arm does not depend on which other arms it is compared against.
+ */
 export function applyCupedAdjustment(
-  input: MetricComparisonEstimateInput,
-  controlEntities: readonly EntityAggregate[],
-  treatmentEntities: readonly EntityAggregate[],
+  input: Omit<MetricComparisonEstimateInput, "treatment_variant">,
+  arms: readonly (readonly EntityAggregate[])[],
 ): CupedAdjustment {
   if (input.cuped === false || input.metric_type === "ratio") {
-    return none(controlEntities, treatmentEntities, null);
+    return none(arms, null);
   }
 
   const thresholdPct = cupedCoverageThresholdPct(input.cuped_coverage_threshold_pct);
   const covariates = input.pre_period_covariates ?? [];
-  validateCovariates(covariates, [...controlEntities, ...treatmentEntities]);
+  validateCovariates(covariates, arms.flat());
 
-  const prePeriod = prePeriodCandidate(input, controlEntities, treatmentEntities, covariates);
+  const prePeriod = prePeriodCandidate(input, arms, covariates);
   if (prePeriod.coveragePct >= thresholdPct) {
-    return adjustmentForCandidate(prePeriod, controlEntities, treatmentEntities);
+    return adjustmentForCandidate(prePeriod, arms);
   }
 
-  const attribute = bestAttributeCandidate(
-    controlEntities,
-    treatmentEntities,
-    covariates,
-    thresholdPct,
-  );
+  const attribute = bestAttributeCandidate(arms, covariates, thresholdPct);
   if (attribute) {
-    return adjustmentForCandidate(attribute, controlEntities, treatmentEntities);
+    return adjustmentForCandidate(attribute, arms);
   }
 
-  return none(controlEntities, treatmentEntities, prePeriod.coveragePct);
+  return none(arms, prePeriod.coveragePct);
 }
 
 function prePeriodCandidate(
   input: Pick<MetricComparisonEstimateInput, "metric_id">,
-  controlEntities: readonly EntityAggregate[],
-  treatmentEntities: readonly EntityAggregate[],
+  arms: readonly (readonly EntityAggregate[])[],
   covariates: readonly CupedCovariateRow[],
 ): CupedCandidate {
   const values = new Map<string, number>();
@@ -80,15 +80,13 @@ function prePeriodCandidate(
     method: "pre_period",
     attribute: null,
     attributeSource: null,
-    controlValues: valuesForArm(controlEntities, values),
-    treatmentValues: valuesForArm(treatmentEntities, values),
-    coveragePct: minCoveragePct(controlEntities, treatmentEntities, values),
+    armValues: arms.map((entities) => valuesForArm(entities, values)),
+    coveragePct: minCoveragePct(arms, values),
   };
 }
 
 function bestAttributeCandidate(
-  controlEntities: readonly EntityAggregate[],
-  treatmentEntities: readonly EntityAggregate[],
+  arms: readonly (readonly EntityAggregate[])[],
   covariates: readonly CupedCovariateRow[],
   thresholdPct: number,
 ): CupedCandidate | null {
@@ -99,16 +97,15 @@ function bestAttributeCandidate(
       method: "attribute_covariate",
       attribute: group.attribute,
       attributeSource: group.source,
-      controlValues: valuesForArm(controlEntities, group.values),
-      treatmentValues: valuesForArm(treatmentEntities, group.values),
-      coveragePct: minCoveragePct(controlEntities, treatmentEntities, group.values),
+      armValues: arms.map((entities) => valuesForArm(entities, group.values)),
+      coveragePct: minCoveragePct(arms, group.values),
     };
 
     if (candidate.coveragePct < thresholdPct) {
       continue;
     }
 
-    const score = varianceReductionScore(candidate, controlEntities, treatmentEntities);
+    const score = varianceReductionScore(candidate, arms);
     if (score > MIN_VARIANCE_REDUCTION && (!best || score > best.score)) {
       best = { candidate, score };
     }
@@ -153,19 +150,10 @@ function attributeSourceFor(row: CupedCovariateRow): CupedAttributeSource {
 
 function adjustmentForCandidate(
   candidate: CupedCandidate,
-  controlEntities: readonly EntityAggregate[],
-  treatmentEntities: readonly EntityAggregate[],
+  arms: readonly (readonly EntityAggregate[])[],
 ): CupedAdjustment {
-  const adjusted = adjustCupedArms(
-    controlEntities,
-    candidate.controlValues,
-    treatmentEntities,
-    candidate.treatmentValues,
-  );
-
   return {
-    controlEntities: adjusted.control,
-    treatmentEntities: adjusted.treatment,
+    arms: adjustCupedArms(cupedArmsFor(candidate, arms)),
     method: candidate.method,
     attribute: candidate.attribute,
     attributeSource: candidate.attributeSource,
@@ -175,19 +163,28 @@ function adjustmentForCandidate(
 
 function varianceReductionScore(
   candidate: CupedCandidate,
-  controlEntities: readonly EntityAggregate[],
-  treatmentEntities: readonly EntityAggregate[],
+  arms: readonly (readonly EntityAggregate[])[],
 ): number {
-  const rawVariance = armSamplingVariance(controlEntities) + armSamplingVariance(treatmentEntities);
-  const adjusted = adjustCupedArms(
-    controlEntities,
-    candidate.controlValues,
-    treatmentEntities,
-    candidate.treatmentValues,
-  );
-  const adjustedVariance =
-    armSamplingVariance(adjusted.control) + armSamplingVariance(adjusted.treatment);
+  const rawVariance = totalSamplingVariance(arms);
+  const adjustedVariance = totalSamplingVariance(adjustCupedArms(cupedArmsFor(candidate, arms)));
   return rawVariance - adjustedVariance;
+}
+
+function cupedArmsFor(
+  candidate: CupedCandidate,
+  arms: readonly (readonly EntityAggregate[])[],
+): CupedArm[] {
+  return arms.map((entities, index) => {
+    const values = candidate.armValues[index];
+    if (values === undefined) {
+      throw new Error("CUPED candidate is missing covariate values for an arm.");
+    }
+    return { entities, values };
+  });
+}
+
+function totalSamplingVariance(arms: readonly (readonly EntityAggregate[])[]): number {
+  return arms.reduce((total, entities) => total + armSamplingVariance(entities), 0);
 }
 
 function armSamplingVariance(entities: readonly EntityAggregate[]): number {
@@ -210,12 +207,15 @@ function valuesForArm(
   return armValues;
 }
 
+/** The weakest arm gates the adjustment: one uncovered arm makes the fit unusable. */
 function minCoveragePct(
-  controlEntities: readonly EntityAggregate[],
-  treatmentEntities: readonly EntityAggregate[],
+  arms: readonly (readonly EntityAggregate[])[],
   values: ReadonlyMap<string, number>,
 ): number {
-  return Math.min(coveragePct(controlEntities, values), coveragePct(treatmentEntities, values));
+  if (arms.length === 0) {
+    return 0;
+  }
+  return Math.min(...arms.map((entities) => coveragePct(entities, values)));
 }
 
 function coveragePct(
@@ -254,13 +254,11 @@ function validateCovariates(
 }
 
 function none(
-  controlEntities: readonly EntityAggregate[],
-  treatmentEntities: readonly EntityAggregate[],
+  arms: readonly (readonly EntityAggregate[])[],
   coveragePct: number | null,
 ): CupedAdjustment {
   return {
-    controlEntities,
-    treatmentEntities,
+    arms,
     method: "none",
     attribute: null,
     attributeSource: null,

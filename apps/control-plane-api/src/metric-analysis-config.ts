@@ -12,6 +12,7 @@ export interface MetricAnalysisConfig {
   downsideThresholdPct: number | null;
   winsorize: boolean | null;
   winsorizePct: number | null;
+  cuped: boolean | null;
   cupedCoverageThresholdPct: number | null;
 }
 
@@ -19,6 +20,7 @@ const FIELDS = [
   "downsideThresholdPct",
   "winsorize",
   "winsorizePct",
+  "cuped",
   "cupedCoverageThresholdPct",
 ] as const satisfies readonly (keyof MetricAnalysisConfig)[];
 
@@ -38,6 +40,7 @@ export function metricAnalysisConfig(
     downsideThresholdPct: resolve("downsideThresholdPct"),
     winsorize: resolve("winsorize"),
     winsorizePct: resolve("winsorizePct"),
+    cuped: resolve("cuped"),
     cupedCoverageThresholdPct: resolve("cupedCoverageThresholdPct"),
   };
 }

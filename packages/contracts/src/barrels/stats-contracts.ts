@@ -21,6 +21,7 @@ export {
   CupedCovariateRowSchema,
   CupedCovariateSourceSchema,
   DecisionFamilyMemberSchema,
+  DEFAULT_CUPED,
   DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT,
   DEFAULT_WINSORIZE,
   DEFAULT_WINSORIZE_PCT,

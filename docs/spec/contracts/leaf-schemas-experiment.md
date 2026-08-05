@@ -108,6 +108,7 @@ a finished Run still reflects exactly the population it actually randomized. Thi
 | `conversionWindowMs`        | `number \| null`    | no       | Per-Metric override; null inherits Experiment default                                        |
 | `winsorize`                 | `boolean \| null`   | no       | Rejected on binomial; null means the engine default (true for additive Metrics)              |
 | `winsorizePct`              | `number \| null`    | no       | Percent, > 0 and <= 100; null means the engine default 99.9; ignored when winsorize is false |
+| `cuped`                     | `boolean \| null`   | no       | Null means the engine default (true); ignored on ratio, which the delta method estimates     |
 | `cupedCoverageThresholdPct` | `number \| null`    | no       | Percent, > 0 and <= 100; null means the engine default 70                                    |
 | `downsideThresholdPct`      | `number \| null`    | no       | Percent, same scale as `relativeLiftPct`. Set to make this a Guardrail Metric                |
 | `createdAt`                 | `string` (ISO 8601) | yes      | —                                                                                            |
