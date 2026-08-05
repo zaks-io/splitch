@@ -213,13 +213,40 @@ Applied response:
   run: RunResponse
   previousRunId: string | null
   approvalRequest: ApprovalRequest | null
+  frozenTargetingRules: TargetingRule[]  // sibling of run; same snapshot evaluation uses; [] = all eligible
+  runSnapshotShipped?: boolean           // present on the direct (allow) Start door
 }
 ```
+
+`frozenTargetingRules` is a Start-response sibling of `run`, not a field on the Run object. It is
+the resolved Targeting Rule snapshot frozen into the Run and matches `run.targetingRules` and the
+`RunConfigKV` evaluation reads. An empty array means all Entities are eligible via allocation; Flag
+Configuration Targeting Rules do not apply while this Run is live.
+
+Deploy order: `frozenTargetingRules` is required on `StartRunResponseSchema` and control-plane
+clients parse Start responses strictly. Deploy the Worker that emits the field before CLI or SDK
+clients that validate against this schema, or every `experiments start` fails body parse.
 
 `approvalRequest` is null under `allow` and contains the applied request and latest Review under
 `confirm`. When required Review is omitted or future `approve` awaits a distinct reviewer, the
 mutation returns the canonical `APPROVAL_REVIEW_REQUIRED` error with the durable pending request ID;
 no Run response is synthesized.
+
+### PatchExperimentRequest response under a live Run
+
+A successful PATCH that stages assignment fields (`allocation`, `salt`, `targetingRules`,
+`segmentIds`) with `stageForNextRun: true` **while a Run is live** returns the Experiment leaf plus:
+
+```
+liveRunUnaffected?: {
+  runId: string
+  frozenTargetingRules: TargetingRule[]
+}
+```
+
+The notice is omitted when no Run is live, and when the PATCH does not stage an assignment field.
+The draft write succeeded; evaluation continues on the named Run's frozen snapshot until the next
+Start.
 
 ### PatchRunRequest (non-material only)
 
@@ -239,6 +266,10 @@ Accepted Zod shape uses `.strict()` to fail on any unrecognized key.
 
 Returns full Run leaf. `configHash` included for integrity verification. `variantSet` and `allocation`
 are included (immutable snapshots). `endedAt` is `null` on running Runs.
+
+GET also returns `draftTargetingRules` (nullable): the Experiment's current next-Run draft Targeting
+Rules, so operators can compare the frozen `targetingRules` on this Run against the draft without a
+second call. List and Start nested `run` objects omit this field.
 
 ## Sources
 

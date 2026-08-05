@@ -10,6 +10,7 @@ import { normalizeCliError, SplitchCliError, writeCliError } from "./errors.js";
 import { emit } from "./execute-io.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
+import { emitOperationNotices } from "./operation-notices.js";
 import { parseEvaluationContext } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { createOperationSdks, resolveDataPlaneBaseUrl, sdkForRoute } from "./sdks.js";
@@ -224,6 +225,7 @@ export async function executeApiOperation(
     }
     const projected = project ? project(payload.data) : payload.data;
     emit(io, invocation.flags.json, projected);
+    emitOperationNotices(operationId, projected, invocation.flags.json, io);
     return { exitCode: EXIT_OK, payload: projected };
   } catch (error) {
     return handleExecutionError(error, io);

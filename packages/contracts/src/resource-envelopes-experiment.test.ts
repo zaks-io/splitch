@@ -238,4 +238,32 @@ describe("RunResponseSchema", () => {
     });
     expect(res.endedAt).toBeNull();
   });
+
+  it("accepts draftTargetingRules for frozen-vs-draft comparison on GET", () => {
+    const res = RunResponseSchema.parse({
+      id: "run_1",
+      experimentId: "exp_1",
+      environmentId: "env_prod",
+      status: "running",
+      targetingKeyType: "user",
+      salt: "salt-1",
+      allocation: { control: 50, treatment: 50 },
+      variantSet: [variantControl, variantTreatment],
+      targetingRules: [],
+      draftTargetingRules: [
+        {
+          id: "rule_draft",
+          flagId: "flag_1",
+          priority: 0,
+          conditions: [{ attribute: "plan", operator: "eq", value: "team" }],
+          variantId: "var_1",
+        },
+      ],
+      configHash: "hash-1",
+      startedAt: "2026-06-28T00:00:00.000Z",
+      endedAt: null,
+      createdAt: "2026-06-28T00:00:00.000Z",
+    });
+    expect(res.draftTargetingRules).toHaveLength(1);
+  });
 });
