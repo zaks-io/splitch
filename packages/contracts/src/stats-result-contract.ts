@@ -154,7 +154,26 @@ export const StatsOutputSchema = z
 export type StatsOutput = z.infer<typeof StatsOutputSchema>;
 
 /**
+ * What a locked Run is still waiting on before StatsEngine can run.
+ *
+ * Same early-Run concept as `app-attention-rollup`'s `state: "no_data"` (SPL-290):
+ * Exposures without Metric Events (or vice versa) is a healthy collecting state,
+ * not a request validation failure and not an Analysis outage (SPL-302).
+ */
+const AnalysisResultsMissingInputSchema = z.enum(["exposures", "metric_events"]);
+
+/**
  * What the Analysis Worker answers a /results read with.
+ *
+ * `state` mirrors the attention-rollup discriminator: `no_data` keeps "nothing
+ * measurable yet" distinct from a measured `ready` result. Naming `missing`
+ * tells the caller which input is still empty without turning that into a 4xx.
+ *
+ * `no_run` is a separate member (SPL-305), not a `missing` value on `no_data`:
+ * a draft Experiment has no Run at all, so `run_id` / `control_variant` cannot
+ * be populated without fabricating a placeholder. `recommended_action` names
+ * Start (`START_A_RUN`) as the step that produces results. `EXPERIMENT_NOT_FOUND`
+ * is reserved for a missing or out-of-scope Experiment id.
  *
  * `run_id` is provenance and is checked: a read whose answer names a different
  * Run than the one asked for is refused rather than relabelled (ADR-0006).
@@ -166,13 +185,30 @@ export type StatsOutput = z.infer<typeof StatsOutputSchema>;
  * (`resolveFrozenControlIdentity`, ADR-0002, ADR-0003), which is what the
  * Control Panel Results read does.
  */
-export const AnalysisResultsEnvelopeSchema = z
-  .object({
-    run_id: z.string().min(1),
-    control_variant: z.string().min(1),
-    stats: StatsOutputSchema,
-  })
-  .strict();
+export const AnalysisResultsEnvelopeSchema = z.discriminatedUnion("state", [
+  z
+    .object({
+      state: z.literal("ready"),
+      run_id: z.string().min(1),
+      control_variant: z.string().min(1),
+      stats: StatsOutputSchema,
+    })
+    .strict(),
+  z
+    .object({
+      state: z.literal("no_data"),
+      run_id: z.string().min(1),
+      control_variant: z.string().min(1),
+      missing: AnalysisResultsMissingInputSchema,
+    })
+    .strict(),
+  z
+    .object({
+      state: z.literal("no_run"),
+      recommended_action: z.literal("START_A_RUN"),
+    })
+    .strict(),
+]);
 export type AnalysisResultsEnvelope = z.infer<typeof AnalysisResultsEnvelopeSchema>;
 
 export interface StatsEngine {

@@ -3,6 +3,12 @@ import { createExperimentsClient } from "./experiments-client";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
 import {
+  AnalysisResultsError,
+  isAnalysisInsufficientData,
+  isAnalysisResultsNoData,
+  parseAnalysisResults,
+} from "./panel-analysis-results";
+import {
   type PanelExperimentDetailInput,
   type PanelExperimentDetailOutput,
   parsePanelExperimentDetailOutput,
@@ -18,7 +24,6 @@ import {
   type PanelExperimentsListOutput,
   parsePanelExperimentsListOutput,
 } from "./panel-experiments-list";
-import { AnalysisResultsError, parseAnalysisResults } from "./panel-analysis-results";
 
 /**
  * The Panel's read/write surface for Experiments. This module is the package
@@ -35,7 +40,10 @@ export type {
 } from "./panel-experiment-detail";
 export type {
   PanelExperimentResultsInput,
+  PanelExperimentResultsNoData,
+  PanelExperimentResultsNoRun,
   PanelExperimentResultsOutput,
+  PanelExperimentResultsReady,
 } from "./panel-experiment-results";
 export type {
   PanelExperimentHealth,
@@ -45,8 +53,10 @@ export type {
 } from "./panel-experiments-list";
 export {
   AnalysisResultsError,
-  parseAnalysisResults,
+  isAnalysisInsufficientData,
+  isAnalysisResultsNoData,
   PanelExperimentResultsOutputSchema,
+  parseAnalysisResults,
   parsePanelExperimentDetailOutput,
   parsePanelExperimentResultsOutput,
 };

@@ -19,19 +19,39 @@ The seen-set is:
 
 ## Seen-set key
 
+The seen-set keeps **two** concerns under one Exposure slot. They must not share a
+single undifferentiated key:
+
 ```
-SeenKey = (flagKey, runId, idType, targetingKey)
+ExposureKey = (flagKey, runId, idType, targetingKey)
+ValueKey    = (ExposureKey, attributesFingerprint)
 ```
 
-`idType` is required in the key because Entity identity is `(idType, targetingKey)`:
+`attributesFingerprint` is a stable serialization of the Evaluation Context
+`attributes` map (sorted keys, so insertion order does not affect equality). An
+empty / omitted attribute map fingerprints as `{}`.
+
+| Concern              | Key           | Behavior within the revalidation window                                       |
+| -------------------- | ------------- | ----------------------------------------------------------------------------- |
+| Exposure suppression | `ExposureKey` | One Exposure per Entity/Run. Attribute churn must not fire a second Exposure. |
+| Value replay         | `ValueKey`    | A cached Variant is valid only for the attribute set that produced it.        |
+
+`idType` is required in the Exposure key because Entity identity is `(idType, targetingKey)`:
 "user 42" and "workspace 42" are different Entities that may hold different Variants,
 so one must never replay the other's cached value.
 
-The cached value is the WIRE variant of the resolution; a 200 no-match is cached as
-an explicit no-match marker, and a replay re-applies the CURRENT call's Default
-Variant — one call site's local `defaultValue` must never leak into another's result.
+The cached value depends on which path wrote the entry:
 
-`runId` is required in the key. Without it, a Run-boundary event would be
+- **Exposure-bearing `evaluate` (miss):** the WIRE variant is stored. A 200 no-match
+  (`variant: null`) is cached as an explicit no-match marker, and a `CACHED` replay
+  re-applies the CURRENT call's Default Variant — one call site's local `defaultValue`
+  must never leak into another's result from a wire null.
+- **Context-miss (`verify` re-resolve):** the resolved `details.value` is stored for
+  every non-ERROR reason, including `DEFAULT` and `DISABLED`. A later `CACHED` replay
+  returns that same served value so identical inputs cannot flip between the server
+  result and the caller's `defaultValue`.
+
+`runId` is required in the Exposure key. Without it, a Run-boundary event would be
 incorrectly suppressed:
 
 - Entity is exposed under Run N → seen-set entry created for `(flagKey, runN, targetingKey)`.
@@ -42,9 +62,28 @@ incorrectly suppressed:
 Without `runId`, the key `(flagKey, targetingKey)` would suppress the Run N+1 Exposure,
 causing under-exposure in the new Run — a correctness error, not just an optimization gap.
 
+### Attributes and value replay
+
+Replaying a resolved Variant across different Evaluation Contexts is incorrect: a
+Targeting Rule that keys on an attribute (for example `plan`) can resolve a different
+arm when attributes change. The seen-set therefore:
+
+1. **Value hit** — same `ExposureKey` and same `attributesFingerprint` within the
+   window → `reason: CACHED`, no transport call, no second Exposure.
+2. **Context miss** — same `ExposureKey` still fresh, but `attributesFingerprint`
+   differs → re-resolve the Variant through the non-exposing `verify` transport
+   (Client Key and API Key), cache the resolved `details.value` under its fingerprint
+   (including `DEFAULT` / `DISABLED`; never collapse those to a null marker), and
+   return the live reason (not `CACHED`). No second Exposure-bearing `evaluate`.
+3. **Miss** — never seen, or past the revalidation window → Exposure-bearing
+   `evaluate` as today.
+
+Never serve a plausible wrong value from cache. A cache may only replay a result for
+inputs that would resolve identically.
+
 ### Bounded optimistic suppression for a pure-HTTP client (revalidation TTL)
 
-The key above assumes the SDK already knows the **current** `runId` before it decides to
+The Exposure key above assumes the SDK already knows the **current** `runId` before it decides to
 suppress. A pure-HTTP client does not: the public data-plane response is the bare
 `{ variant, variantName }` (non-revealing, ADR-0018: which arm, never how it was chosen) and the
 SDK only learns the live `runId` **from** an evaluate call — the very call a seen-set hit is trying
@@ -73,14 +112,20 @@ of seen-set staleness, and the seen-set is a wire optimization, not the dedup au
 
 ```
 SeenSet config {
-  maxSize:        number    -- LRU capacity; default 10,000 entries
-  evictionPolicy: 'lru'     -- least-recently-used eviction when at capacity
-  revalidateMs:   number    -- revalidation window; default 60,000 (see above)
+  maxSize:             number    -- client option; LRU capacity for Exposure identities; default 10,000
+  revalidateMs:        number    -- client option; revalidation window; default 60,000 (see above)
+  maxValuesPerEntry:   number    -- internal constant (not a client option); LRU capacity for
+                                    attribute fingerprints per identity; default 64
+  evictionPolicy:      'lru'     -- least-recently-used eviction when at capacity
 }
 ```
 
-When at capacity, the oldest entry is evicted. The evicted entry may cause a redundant
-Exposure on the next `evaluate` call — acceptable, because the pipeline dedup collapses it.
+When at Exposure-identity capacity, the oldest identity is evicted. The evicted entry may cause a
+redundant Exposure on the next `evaluate` call — acceptable, because the pipeline dedup collapses
+it. Within one identity, attribute-fingerprint values are also LRU-capped so high-cardinality
+context churn cannot grow unbounded inside a single TTL window; an evicted fingerprint re-resolves
+via the context-miss path (no second Exposure while the identity is still fresh). Exposing
+`maxValuesPerEntry` as a client option is a separate slice; 64 is the shipped internal default.
 
 ## What the seen-set does NOT prevent
 

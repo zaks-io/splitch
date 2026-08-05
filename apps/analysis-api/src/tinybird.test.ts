@@ -4,8 +4,8 @@ import {
   createTinybirdReadTransport,
   scopedUsagePipeParams,
   TinybirdCopyError,
-  tinybirdDateTime64,
   TinybirdReadError,
+  tinybirdDateTime64,
 } from "./tinybird";
 
 describe("Tinybird read transport", () => {

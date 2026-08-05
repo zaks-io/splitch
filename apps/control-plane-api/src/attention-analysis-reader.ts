@@ -4,6 +4,7 @@ import {
   ErrorResponseSchema,
   type StatsOutput,
 } from "@splitch/contracts";
+import { isAnalysisInsufficientData } from "@splitch/control-plane-sdk/panel-experiments";
 import { type AnalysisResultsScope, analysisResultsRequest } from "./analysis-results-request";
 import { ExperimentIntegrityError } from "./attention-rollup-errors";
 
@@ -61,17 +62,25 @@ async function parseAnalysisResponse(
   expectedRunId: string,
 ): Promise<StatsOutput | null> {
   if (!response.ok) {
-    const error = await safeError(response);
-    if (response.status === 404 && isMissingAnalysisResult(error)) return null;
-    throw new AnalysisResultsUnavailableError(error);
+    return refuseOrNull(await safeError(response), response.status);
   }
+  return unwrapEnvelope(response, expectedRunId);
+}
+
+async function unwrapEnvelope(
+  response: Response,
+  expectedRunId: string,
+): Promise<StatsOutput | null> {
   try {
-    // Analysis answers with AnalysisResultsEnvelope ({ run_id, control_variant,
-    // stats }), not bare StatsOutput. Parsing the envelope as StatsOutput fails
-    // Zod and was promoted to SERVICE_UNAVAILABLE for every successful read
-    // (SPL-290). Panel results already unwrap via parseAnalysisResults; this
-    // reader must do the same and keep the no-pooling Run check.
+    // Analysis answers with AnalysisResultsEnvelope ({ state, run_id, ... }),
+    // not bare StatsOutput. Parsing the envelope as StatsOutput fails Zod and
+    // was promoted to SERVICE_UNAVAILABLE for every successful read (SPL-290).
+    // Panel results already unwrap via parseAnalysisResults; this reader must
+    // do the same and keep the no-pooling Run check.
     const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
+    // `no_run` is resolved on the Control Plane before the hop (SPL-305). A
+    // running Experiment's attention read should never see it; treat as empty.
+    if (envelope.state === "no_run") return null;
     // Match the Analysis Worker (results.ts): a Run-provenance mismatch is a
     // permanent integrity failure. Mapping it to AnalysisResultsUnavailableError
     // would render as retryable SERVICE_UNAVAILABLE and teach a polling agent to
@@ -81,12 +90,24 @@ async function parseAnalysisResponse(
         `analysis answered for Run ${envelope.run_id}, not Run ${expectedRunId}`,
       );
     }
+    // Same early-Run collecting state as attention-rollup `no_data`: Exposures
+    // without Metric Events is not an Analysis outage (SPL-302).
+    if (envelope.state === "no_data") return null;
     return envelope.stats;
   } catch (cause) {
     if (cause instanceof AnalysisResultsUnavailableError) throw cause;
     if (cause instanceof ExperimentIntegrityError) throw cause;
     throw new AnalysisResultsUnavailableError(cause);
   }
+}
+
+function refuseOrNull(error: ErrorResponse | { status: number }, status: number): null {
+  if (status === 404 && isMissingAnalysisResult(error)) return null;
+  // Exposures without Metric Events (or vice versa) is an early-Run state,
+  // not an Analysis outage. Treating it as unavailable would regress the
+  // attention rollup to SERVICE_UNAVAILABLE (SPL-290 / SPL-302).
+  if (isInsufficientAnalysisData(error)) return null;
+  throw new AnalysisResultsUnavailableError(error);
 }
 
 async function safeError(response: Response): Promise<ErrorResponse | { status: number }> {
@@ -105,6 +126,12 @@ function isMissingAnalysisResult(
   return (
     "code" in error && (error.code === "EXPERIMENT_NOT_FOUND" || error.code === "RUN_NOT_FOUND")
   );
+}
+
+function isInsufficientAnalysisData(
+  error: ErrorResponse | { status: number },
+): error is Extract<ErrorResponse, { code: "VALIDATION_ERROR" }> {
+  return "code" in error && isAnalysisInsufficientData(error);
 }
 
 /**

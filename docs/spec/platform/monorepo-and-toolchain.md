@@ -42,14 +42,14 @@ Cached package tasks:
 
 Cached root guards (explicit input globs, so unrelated changes replay from cache):
 
-| Task                   | Cache | Contract                                                                       |
-| ---------------------- | ----- | ------------------------------------------------------------------------------ |
-| `spec:lint`            | yes   | inputs: `docs/spec/**` and the linter script                                   |
-| `check:cli-mcp-parity` | yes   | inputs: CLI/MCP/contracts source trees and the parity scripts                  |
-| `test:scripts`         | yes   | inputs: `scripts/**`, `.github/workflows/**`, and the files those tests assert |
-| `test:connect-snippet` | yes   | inputs: snippet source + compile guard; chains the `@splitch/sdk#build` hash   |
-| `format:check`         | yes   | inputs: every tracked file (`$TURBO_DEFAULT$`); pure function of file content  |
-| `knip`                 | yes   | inputs: tracked files minus Markdown/`.github/**`; chains SDK/CLI build hashes |
+| Task                   | Cache | Contract                                                                                                                                              |
+| ---------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `spec:lint`            | yes   | inputs: `docs/spec/**` and the linter script                                                                                                          |
+| `check:cli-mcp-parity` | yes   | inputs: CLI/MCP/contracts source trees and the parity scripts; `dependsOn` `@splitch/sdk#build` (help → command-positionals → errors imports the SDK) |
+| `test:scripts`         | yes   | inputs: `scripts/**`, `.github/workflows/**`, and the files those tests assert                                                                        |
+| `test:connect-snippet` | yes   | inputs: snippet source + compile guard; chains the `@splitch/sdk#build` hash                                                                          |
+| `format:check`         | yes   | inputs: every tracked file (`$TURBO_DEFAULT$`); pure function of file content                                                                         |
+| `knip`                 | yes   | inputs: tracked files minus Markdown/`.github/**`; chains SDK/CLI build hashes                                                                        |
 
 Root-task input rule: use `$TURBO_DEFAULT$` (all tracked, gitignore-respecting files) plus
 exclusions — never bare filesystem globs like `**`, which hash `node_modules/` and build outputs and

@@ -88,6 +88,7 @@ describe("attention rollup Organization isolation", { timeout: ATTENTION_TEST_TI
       createAnalysisResultsReader({
         fetch: async () =>
           Response.json({
+            state: "ready",
             run_id: "run_some_other_run",
             control_variant: "control",
             stats: statsOutput(),
@@ -171,6 +172,7 @@ describe("Analysis results boundary", { timeout: ATTENTION_TEST_TIMEOUT }, () =>
     const fetcher = {
       fetch: vi.fn(async (_request: Request) =>
         Response.json({
+          state: "ready",
           run_id: ids.liveRunId,
           control_variant: "control",
           stats: statsOutput({ srm: true }),

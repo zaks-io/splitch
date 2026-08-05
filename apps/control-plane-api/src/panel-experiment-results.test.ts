@@ -56,7 +56,10 @@ function repository(overrides: Record<string, unknown> = {}): Repository {
 }
 
 /** Echoes back the Run it was asked for, as the real Analysis Worker does. */
-function analysisReturning(stats: StatsOutput, envelope: Partial<AnalysisResultsEnvelope> = {}) {
+function analysisReturning(
+  stats: StatsOutput,
+  envelope: Partial<Extract<AnalysisResultsEnvelope, { state: "ready" }>> = {},
+) {
   return vi.fn(async (request: Request) => {
     const { runId } = (await request.clone().json()) as { runId: string };
     return Response.json(analysisEnvelope(runId, stats, envelope));
@@ -155,6 +158,8 @@ describe("panel Experiment Results read", () => {
     const body = (await response.json()) as PanelExperimentResultsOutput;
 
     expect(response.status).toBe(200);
+    expect(body.state).toBe("ready");
+    if (body.state !== "ready") throw new Error("expected ready");
     expect(body.control).toEqual({
       state: "unresolvable",
       variantId: "variant_from_a_later_edit",
@@ -170,6 +175,28 @@ describe("panel Experiment Results read", () => {
   it("emits a payload the Panel contract accepts", async () => {
     const response = await results(analysisReturning(statsOutput()));
     expect(parsePanelExperimentResultsOutput(await response.json()).success).toBe(true);
+  });
+
+  it("passes through Analysis no_data without inventing zeroed stats", async () => {
+    const analysis = vi.fn(async (request: Request) => {
+      const { runId } = (await request.clone().json()) as { runId: string };
+      return Response.json({
+        state: "no_data",
+        run_id: runId,
+        control_variant: "control",
+        missing: "metric_events",
+      });
+    });
+    const response = await results(analysis);
+    const body = (await response.json()) as PanelExperimentResultsOutput;
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      state: "no_data",
+      runId: LATEST_RUN_ID,
+      missing: "metric_events",
+    });
+    expect(body).not.toHaveProperty("stats");
   });
 
   it("evaluates the ship gate here and blocks with the failing check named", async () => {
@@ -228,5 +255,32 @@ describe("panel Experiment Results read", () => {
       "conversion / treatment",
     );
     expect(body.stats.arm_results[0]?.point_estimate).toBe(0.8);
+  });
+});
+
+describe("panel Experiment Results draft vs missing (SPL-305)", () => {
+  it("returns typed no_run for a draft Experiment instead of EXPERIMENT_NOT_FOUND or RUN_NOT_FOUND", async () => {
+    const analysis = analysisReturning(statsOutput());
+    const response = await results(
+      analysis,
+      {},
+      repository({ runs: [], experiment: experimentRow(ids) }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      state: "no_run",
+      recommendedAction: "START_A_RUN",
+    });
+    expect(analysis).not.toHaveBeenCalled();
+  });
+
+  it("returns EXPERIMENT_NOT_FOUND for a missing Experiment before any analysis read", async () => {
+    const analysis = analysisReturning(statsOutput());
+    const response = await results(analysis, {}, repository({ experiment: null }));
+
+    expect(response.status).toBe(404);
+    expect(((await response.json()) as { code: string }).code).toBe("EXPERIMENT_NOT_FOUND");
+    expect(analysis).not.toHaveBeenCalled();
   });
 });

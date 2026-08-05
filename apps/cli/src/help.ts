@@ -1,5 +1,7 @@
 import { deriveMcpTools, getRoute } from "@splitch/contracts";
 import { CLI_COMMANDS, type CliCommandDefinition, META_COMMANDS } from "./command-registry.js";
+import { commandUsageLine, requiredPositionals } from "./command-positionals.js";
+import { operationBehaviorNotes } from "./help-behavior-notes.js";
 import { META_DESCRIPTIONS, META_EXAMPLES } from "./help-meta.js";
 
 interface HelpFlag {
@@ -68,19 +70,20 @@ export function renderMetaHelp(command: (typeof META_COMMANDS)[number]): string 
 }
 
 export function renderCommandHelp(command: CliCommandDefinition): string {
-  const path = command.path.join(" ");
   const notes = credentialNotes(command);
+  const behaviorNotes = operationBehaviorNotes(command);
   return [
     commandDescription(command),
     "",
     "Usage:",
-    `  splitch ${path}${positionals(command)
-      .map((value) => ` <${value}>`)
-      .join("")} [flags]`,
+    `  ${commandUsageLine(command)}`,
     "",
     "Flags:",
     formatFlags(commandFlags(command)),
     ...(notes.length > 0 ? ["", "Credential semantics:", ...notes.map((note) => `  ${note}`)] : []),
+    ...(behaviorNotes.length > 0
+      ? ["", "Behavior:", ...behaviorNotes.map((note) => `  ${note}`)]
+      : []),
     "",
     "Example:",
     `  ${commandExample(command)}`,
@@ -119,23 +122,6 @@ function commandDescription(command: CliCommandDefinition): string {
   if (command.kind === "env_policy_get") return "Get the selected Environment Policy.";
   if (command.kind === "env_policy_set") return "Update the selected Environment Policy.";
   return TOOL_BY_OPERATION.get(command.operationId)?.description ?? `Run ${command.operationId}.`;
-}
-
-function positionals(command: CliCommandDefinition): string[] {
-  if (command.kind === "flags_verify") return ["flag-key"];
-  const route = getRoute(command.operationId);
-  if (!route) return [];
-  return [...route.path.matchAll(/:([A-Za-z0-9_]+)/g)]
-    .map((match) => match[1])
-    .filter(
-      (name): name is string =>
-        Boolean(name) && !["appId", "environmentId", "targetEnvironmentId"].includes(name ?? ""),
-    )
-    .map((value) => {
-      const kebab = value.replaceAll(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
-      // Mirror "--app <app> … ID or slug": Flag ID routes accept a key too.
-      return kebab === "flag-id" ? "flag-id-or-key" : kebab;
-    });
 }
 
 function commandFlags(command: CliCommandDefinition): HelpFlag[] {
@@ -262,7 +248,11 @@ function commandExample(command: CliCommandDefinition): string {
     return "splitch flags create --key checkout --variants on,off --json";
   if (command.kind === "flags_verify")
     return "splitch flags verify checkout --targeting-key user-123 --json";
-  const parts = ["splitch", ...command.path, ...positionals(command).map((name) => `<${name}>`)];
+  const parts = [
+    "splitch",
+    ...command.path,
+    ...requiredPositionals(command).map((name) => `<${name}>`),
+  ];
   if (command.operationId === "flags_test_eval") parts.push("--targeting-key", "user-123");
   else if (hasRequestBody(command.operationId)) parts.push("--body-json", "'<json>'");
   parts.push("--json");

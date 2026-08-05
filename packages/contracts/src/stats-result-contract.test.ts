@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { StatsEngine, StatsInput, StatsOutput } from "./index";
 import {
   ArmResultSchema,
   DimensionResultSchema,
@@ -8,7 +9,6 @@ import {
   StatsOutputSchema,
   VarianceTechniquesSchema,
 } from "./index";
-import type { StatsEngine, StatsInput, StatsOutput } from "./index";
 import { getRoute } from "./route-registry";
 
 const varianceTechniques = {
@@ -229,7 +229,12 @@ describe("StatsEngine", () => {
  * same Run's frozen Variant set (`resolveFrozenControlIdentity`).
  */
 describe("declared /results response contract", () => {
-  const envelope = { run_id: "run_1", control_variant: "control", stats: statsOutput };
+  const envelope = {
+    state: "ready" as const,
+    run_id: "run_1",
+    control_variant: "control",
+    stats: statsOutput,
+  };
 
   function declaredResponse(operationId: string) {
     const route = getRoute(operationId);
@@ -247,9 +252,48 @@ describe("declared /results response contract", () => {
     expect(response.safeParse(statsOutput).success).toBe(false);
   });
 
-  it.each(["run_id", "control_variant"] as const)("%s is required on the envelope", (field) => {
+  it.each([
+    "run_id",
+    "control_variant",
+    "state",
+  ] as const)("%s is required on the envelope", (field) => {
     const { [field]: _dropped, ...withoutField } = envelope;
 
     expect(declaredResponse("experiment_results_get").safeParse(withoutField).success).toBe(false);
+  });
+
+  it("accepts a no_data envelope that names the missing input", () => {
+    expect(
+      declaredResponse("experiment_results_get").safeParse({
+        state: "no_data",
+        run_id: "run_1",
+        control_variant: "control",
+        missing: "metric_events",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts a no_run envelope that names Start, without inventing a Run id", () => {
+    expect(
+      declaredResponse("experiment_results_get").safeParse({
+        state: "no_run",
+        recommended_action: "START_A_RUN",
+      }).success,
+    ).toBe(true);
+    expect(
+      declaredResponse("experiment_results_get").safeParse({
+        state: "no_run",
+        recommended_action: "START_A_RUN",
+        run_id: "run_placeholder",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a no_run envelope that omits recommended_action", () => {
+    // Handler tests alone would still pass if recommended_action were optional;
+    // pin the requirement at the contract layer (SPL-305 review).
+    expect(declaredResponse("experiment_results_get").safeParse({ state: "no_run" }).success).toBe(
+      false,
+    );
   });
 });

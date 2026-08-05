@@ -56,7 +56,8 @@ describe("Experiment Start Run Snapshot delivery", () => {
       allocation: stored?.allocation,
       control_variant: "control",
       control_variant_id: stored?.controlVariantId,
-      decision_family: stored?.decisionFamily,
+      // D1 keeps MetricRef[]; the snapshot expands to DecisionFamilyMember[].
+      decision_family: analysisDecisionFamilyFromD1(stored?.decisionFamily ?? "[]"),
       guardrail_decisions: stored?.guardrailDecisions,
       dimensions: "[]",
       config_hash: stored?.configHash,
@@ -197,4 +198,9 @@ function capturedRow(): RunSnapshotRow {
     "Bearer snapshot-token",
   );
   return JSON.parse(String(captures[0]?.init?.body)) as RunSnapshotRow;
+}
+
+function analysisDecisionFamilyFromD1(raw: string): string {
+  const refs = JSON.parse(raw) as Array<{ metricId: string }>;
+  return JSON.stringify(refs.map((ref) => ({ metric_id: ref.metricId, variant: "treatment" })));
 }

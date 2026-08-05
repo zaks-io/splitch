@@ -60,6 +60,27 @@ describe("CreateExperimentRequestSchema (defaultVariantId is Worker-copied)", ()
     void targetingKey;
     expect(CreateExperimentRequestSchema.safeParse(noKey).success).toBe(false);
   });
+
+  it("rejects a typo-shaped targetingKeyType", () => {
+    const result = CreateExperimentRequestSchema.safeParse({
+      ...validCreateExperiment,
+      targetingKeyType: "User",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]?.path).toEqual(["targetingKeyType"]);
+    expect(result.error.issues[0]?.message).toBe(
+      "must be lowercase alphanumerics separated by single underscores",
+    );
+  });
+
+  it("accepts a non-blessed Entity type on create", () => {
+    const req = CreateExperimentRequestSchema.parse({
+      ...validCreateExperiment,
+      targetingKeyType: "restaurant",
+    });
+    expect(req.targetingKeyType).toBe("restaurant");
+  });
 });
 
 describe("PatchExperimentRequestSchema", () => {
@@ -91,6 +112,21 @@ describe("PatchExperimentRequestSchema", () => {
 
   it("rejects an unknown field (strict)", () => {
     expect(PatchExperimentRequestSchema.safeParse({ liveRunId: "run_1" }).success).toBe(false);
+  });
+
+  it("rejects a typo-shaped targetingKeyType", () => {
+    const result = PatchExperimentRequestSchema.safeParse({ targetingKeyType: "user-type" });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]?.path).toEqual(["targetingKeyType"]);
+    expect(result.error.issues[0]?.message).toBe(
+      "must be lowercase alphanumerics separated by single underscores",
+    );
+  });
+
+  it("accepts a non-blessed Entity type on update", () => {
+    const req = PatchExperimentRequestSchema.parse({ targetingKeyType: "account" });
+    expect(req.targetingKeyType).toBe("account");
   });
 });
 
@@ -201,5 +237,33 @@ describe("RunResponseSchema", () => {
       createdAt: "2026-06-28T00:00:00.000Z",
     });
     expect(res.endedAt).toBeNull();
+  });
+
+  it("accepts draftTargetingRules for frozen-vs-draft comparison on GET", () => {
+    const res = RunResponseSchema.parse({
+      id: "run_1",
+      experimentId: "exp_1",
+      environmentId: "env_prod",
+      status: "running",
+      targetingKeyType: "user",
+      salt: "salt-1",
+      allocation: { control: 50, treatment: 50 },
+      variantSet: [variantControl, variantTreatment],
+      targetingRules: [],
+      draftTargetingRules: [
+        {
+          id: "rule_draft",
+          flagId: "flag_1",
+          priority: 0,
+          conditions: [{ attribute: "plan", operator: "eq", value: "team" }],
+          variantId: "var_1",
+        },
+      ],
+      configHash: "hash-1",
+      startedAt: "2026-06-28T00:00:00.000Z",
+      endedAt: null,
+      createdAt: "2026-06-28T00:00:00.000Z",
+    });
+    expect(res.draftTargetingRules).toHaveLength(1);
   });
 });

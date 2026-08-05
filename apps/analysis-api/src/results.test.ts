@@ -50,6 +50,8 @@ describe("GET/POST experiment results", () => {
     const envelope = AnalysisResultsEnvelopeSchema.parse(await res.json());
     // The Run's frozen baseline travels with the numbers so no caller has to
     // re-derive it from mutable Experiment configuration.
+    expect(envelope.state).toBe("ready");
+    if (envelope.state !== "ready") throw new Error("expected ready");
     expect(envelope.run_id).toBe(RUN_ID);
     expect(envelope.control_variant).toBe("control");
     const output = envelope.stats;
@@ -109,30 +111,27 @@ describe("GET/POST experiment results", () => {
 });
 
 describe("GET/POST experiment results isolation", () => {
-  it("returns RUN_NOT_FOUND when a requested Run has no Tinybird run-input rows", async () => {
-    const { app, tinybird } = makeHarness({
+  it("returns RUN_NOT_FOUND when Tinybird has no run-input rows (Experiment existence is Control Plane's)", async () => {
+    const withRunId = makeHarness({
+      ...rowsByPipe(),
+      analysis_run_inputs: [],
+    });
+    const liveSelector = makeHarness({
       ...rowsByPipe(),
       analysis_run_inputs: [],
     });
 
-    const res = await app.request(`${PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+    const pinned = await withRunId.app.request(`${PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+    const live = await liveSelector.app.request(PATH, resultsAuthInit("GET"));
 
-    expect(res.status).toBe(404);
-    expect(((await res.json()) as ErrorResponse).code).toBe("RUN_NOT_FOUND");
-    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_inputs"]);
-  });
-
-  it("returns EXPERIMENT_NOT_FOUND when the live Run selector has no Tinybird run-input rows", async () => {
-    const { app, tinybird } = makeHarness({
-      ...rowsByPipe(),
-      analysis_run_inputs: [],
-    });
-
-    const res = await app.request(PATH, resultsAuthInit("GET"));
-
-    expect(res.status).toBe(404);
-    expect(((await res.json()) as ErrorResponse).code).toBe("EXPERIMENT_NOT_FOUND");
-    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_inputs"]);
+    expect(pinned.status).toBe(404);
+    expect(((await pinned.json()) as ErrorResponse).code).toBe("RUN_NOT_FOUND");
+    expect(live.status).toBe(404);
+    expect(((await live.json()) as ErrorResponse).code).toBe("RUN_NOT_FOUND");
+    expect(withRunId.tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_inputs"]);
+    expect(liveSelector.tinybird.calls.map((call) => call.pipeName)).toEqual([
+      "analysis_run_inputs",
+    ]);
   });
 
   it("rejects missing and invalid control-plane tokens before any Tinybird read", async () => {
@@ -261,6 +260,10 @@ describe("GET/POST experiment results isolation", () => {
     const body = (await res.json()) as ErrorResponse;
     expect(body.code).toBe("INTERNAL_SERVER_ERROR");
     expect(body.message).toBe("analysis run provenance mismatch");
+    expect(body.details).toEqual({
+      fault:
+        "analysis_run_inputs returned Run run_some_other_run for requested Run run_checkout_banner_1",
+    });
     expect(body.details).not.toHaveProperty("retryAfterMs");
   });
 

@@ -10,7 +10,7 @@ function requireCommand(path: string[]): CliCommandDefinition {
 }
 
 describe("buildOperationInput", () => {
-  it("flags update keeps explicit appId and flagId over --body-json route overrides", () => {
+  it("flags update keeps context appId and positional flagId over --body-json appId", () => {
     const command = requireCommand(["flags", "update"]);
     const invocation = parseInvocation([
       "flags",
@@ -22,7 +22,6 @@ describe("buildOperationInput", () => {
       "--body-json",
       JSON.stringify({
         appId: "app_body",
-        flagId: "flag_body",
         name: "Renamed",
       }),
     ]);
@@ -34,7 +33,7 @@ describe("buildOperationInput", () => {
     expect(input.name).toBe("Renamed");
   });
 
-  it("flag-config update keeps explicit appId, environmentId, and flagId over --body-json", () => {
+  it("flag-config update keeps context ids and positional flagId over --body-json scope fields", () => {
     const command = requireCommand(["flag-config", "update"]);
     const invocation = parseInvocation([
       "flag-config",
@@ -51,7 +50,6 @@ describe("buildOperationInput", () => {
       JSON.stringify({
         appId: "app_body",
         environmentId: "env_body",
-        flagId: "flag_body",
         enabled: false,
       }),
     ]);
@@ -106,7 +104,7 @@ describe("buildOperationInput", () => {
     ).toThrowError(expect.objectContaining({ code: "CLI_USAGE_INVALID" }));
   });
 
-  it("flags promote keeps explicit target environment over --body-json", () => {
+  it("flags promote keeps context target environment and positional flagId over --body-json", () => {
     const command = requireCommand(["flags", "promote"]);
     const invocation = parseInvocation([
       "flags",
@@ -123,7 +121,6 @@ describe("buildOperationInput", () => {
       JSON.stringify({
         appId: "app_body",
         targetEnvironmentId: "env_body",
-        flagId: "flag_body",
         fromEnvironmentId: "env_body_source",
       }),
     ]);
@@ -137,6 +134,61 @@ describe("buildOperationInput", () => {
     expect(input.targetEnvironmentId).toBe("env_target");
     expect(input.flagId).toBe("flag_cli");
     expect(input.fromEnvironmentId).toBe("env_source");
+  });
+});
+
+describe("path-param double supply", () => {
+  it("rejects positional flagId that collides with --body-json flagId (replaces old overwrite precedence)", () => {
+    const command = requireCommand(["flags", "update"]);
+    expect(() =>
+      buildOperationInput(
+        command,
+        parseInvocation([
+          "flags",
+          "update",
+          "--json",
+          "--app",
+          "app_flag",
+          "flag_pos",
+          "--body-json",
+          JSON.stringify({
+            appId: "app_body",
+            flagId: "flag_body",
+            name: "Renamed",
+          }),
+        ]),
+        { appId: "app_flag" },
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "CLI_USAGE_INVALID",
+        causeSummary: expect.stringContaining("<flag-id-or-key> was supplied more than once"),
+      }),
+    );
+  });
+
+  it("rejects a positional that collides with --body-json flagId", () => {
+    const command = requireCommand(["flags", "update"]);
+    expect(() =>
+      buildOperationInput(
+        command,
+        parseInvocation([
+          "flags",
+          "update",
+          "--app",
+          "app_flag",
+          "flag_pos",
+          "--body-json",
+          JSON.stringify({ flagId: "flag_body", name: "Renamed" }),
+        ]),
+        { appId: "app_flag" },
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "CLI_USAGE_INVALID",
+        causeSummary: expect.stringContaining("<flag-id-or-key> was supplied more than once"),
+      }),
+    );
   });
 });
 
