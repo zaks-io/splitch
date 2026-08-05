@@ -3,7 +3,9 @@ import {
   type MembershipAuthorityRepo,
   narrowMembershipAuthority,
   parseRequestedScopes,
+  resolveAppSelectionForUser,
   resolveMembershipAuthority,
+  resolveOrgSelectionForUser,
 } from "./membership-authority";
 
 const USER = "user_device";
@@ -50,5 +52,78 @@ describe("device membership authority", () => {
         [`app:${VICTIM_APP}:admin`],
       ),
     ).toEqual([]);
+  });
+});
+
+/**
+ * CLI allow-list in apps/cli/src/auth-binding.ts matches these four
+ * error_description literals. Rewording any of them silently remaps live-session
+ * binding refusals to CLI_SESSION_EXPIRED — pin them here so that break fails loud.
+ */
+describe("refresh-binding invalid_grant prose (CLI allow-list contract)", () => {
+  it("refuses a reachable App the user is not a member of with the authorized literal", async () => {
+    const repo = {
+      identity: {
+        listOrgMembershipsForUser: async () => [{ orgId: "org_1", role: "owner" }],
+        listAppsForOrg: async () => [{ id: SELECTED_APP, key: "checkout" }],
+        getAppMembership: async () => null,
+      },
+    } as unknown as MembershipAuthorityRepo;
+
+    await expect(resolveAppSelectionForUser(repo, USER, SELECTED_APP)).rejects.toMatchObject({
+      code: "invalid_grant",
+      message: "selected App is not authorized by live membership",
+    });
+  });
+
+  it("refuses an unreachable App selector with the reachable literal", async () => {
+    const repo = {
+      identity: {
+        listOrgMembershipsForUser: async () => [{ orgId: "org_1", role: "owner" }],
+        listAppsForOrg: async () => [{ id: SELECTED_APP, key: "checkout" }],
+        getAppMembership: async () => ({ role: "admin" }),
+      },
+    } as unknown as MembershipAuthorityRepo;
+
+    await expect(resolveAppSelectionForUser(repo, USER, "missing-app")).rejects.toMatchObject({
+      code: "invalid_grant",
+      message: "selected App is not reachable by live membership",
+    });
+  });
+
+  it("refuses an ambiguous App key with the matches-more-than-one literal", async () => {
+    const repo = {
+      identity: {
+        listOrgMembershipsForUser: async () => [
+          { orgId: "org_a", role: "owner" },
+          { orgId: "org_b", role: "owner" },
+        ],
+        listAppsForOrg: async (orgId: string) =>
+          orgId === "org_a"
+            ? [{ id: "app_a", key: "checkout" }]
+            : [{ id: "app_b", key: "checkout" }],
+        getAppMembership: async () => ({ role: "admin" }),
+      },
+    } as unknown as MembershipAuthorityRepo;
+
+    await expect(resolveAppSelectionForUser(repo, USER, "checkout")).rejects.toMatchObject({
+      code: "invalid_grant",
+      message:
+        'App selector "checkout" matches more than one App across your Organizations; pass the canonical App ID',
+    });
+  });
+
+  it("refuses an unreachable Organization with the org reachable literal", async () => {
+    const repo = {
+      identity: {
+        listOrgMembershipsForUser: async () => [{ orgId: "org_1", role: "owner" }],
+        getOrg: async () => ({ id: "org_1", slug: "acme" }),
+      },
+    } as unknown as MembershipAuthorityRepo;
+
+    await expect(resolveOrgSelectionForUser(repo, USER, "missing-org")).rejects.toMatchObject({
+      code: "invalid_grant",
+      message: "selected Organization is not reachable by live membership",
+    });
   });
 });

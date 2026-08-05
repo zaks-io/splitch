@@ -2,6 +2,8 @@ import {
   bindingKey,
   bindingParams,
   describeOAuthFault,
+  isTokenBindingRefusal,
+  type OAuthFault,
   readOAuthFault,
   type TokenBinding,
 } from "./auth-binding.js";
@@ -82,9 +84,22 @@ async function refreshAccessTokenFault(
       ? await reloadRotatedCredential(deps, stored)
       : null;
   if (!rotated) {
-    throw sessionExpiredError(describeOAuthFault(fault));
+    throw mintFailureError(fault);
   }
   return refreshAccessToken(deps, rotated, binding, explicitBinding, false);
+}
+
+/**
+ * Map a failed refresh-grant response to the cause the CLI has established.
+ * An `invalid_grant` whose reason names a membership/selector refusal is
+ * `CLI_TOKEN_BINDING_REFUSED`; only a dead or missing session (or opaque
+ * fault) is `CLI_SESSION_EXPIRED`.
+ */
+export function mintFailureError(fault: OAuthFault): SplitchCliError {
+  if (isTokenBindingRefusal(fault)) {
+    return tokenBindingRefusedError(fault);
+  }
+  return sessionExpiredError(describeOAuthFault(fault));
 }
 
 export async function formPost(
@@ -113,6 +128,27 @@ export function sessionExpiredError(detail: string): SplitchCliError {
     causeSummary: `The CLI login session could not mint a usable token: ${detail}`,
     remediation: "Run splitch login again before retrying the command",
   });
+}
+
+export function tokenBindingRefusedError(fault: OAuthFault): SplitchCliError {
+  // Surface the server's own reason verbatim — never replace it with a session message.
+  const reason = fault.description?.trim() || describeOAuthFault(fault);
+  return new SplitchCliError({
+    code: "CLI_TOKEN_BINDING_REFUSED",
+    causeSummary: reason,
+    remediation: tokenBindingRemediation(reason),
+  });
+}
+
+/**
+ * Membership refusals need a different next step from ambiguous-selector
+ * refusals: the latter already has membership — only the canonical ID fixes it.
+ */
+function tokenBindingRemediation(reason: string): string {
+  if (/matches more than one App/i.test(reason)) {
+    return "Pass the canonical App ID instead of the ambiguous key";
+  }
+  return "Select an App or Organization your live membership authorizes, or restore membership for the selected resource";
 }
 
 export function emailUnverifiedError(detail: string | undefined): SplitchCliError {
