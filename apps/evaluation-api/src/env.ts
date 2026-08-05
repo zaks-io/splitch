@@ -18,6 +18,10 @@ export interface EvaluationApiEnv {
   MCP_EVALUATION_DELEGATION_SECRET?: string;
   MCP_DELEGATION_REPLAY?: McpDelegationReplayDurableObjectNamespace;
   EVALUATION_PRIVACY_SALT?: string;
+  /** HMAC key for Exposure Ticket minting (ADR-0048). */
+  EXPOSURE_TICKET_KEY?: string;
+  /** Previous ticket key retained during rotation so in-flight tickets verify. */
+  EXPOSURE_TICKET_KEY_PREVIOUS?: string;
   SPLITCH_EVENT_INGEST_TOKEN?: string;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;

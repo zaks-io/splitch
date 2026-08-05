@@ -30,6 +30,7 @@ import type { EvaluationApiEnv } from "./env";
 import { makeHttpEvaluationCommitSink } from "./evaluation-commit-sink";
 import { makeHttpEvaluationUsageSink } from "./evaluation-usage-sink";
 import { makeEnvSaltStore } from "./local-salt-store";
+import { exposureTicketKeyFromEnv } from "./local-ticket-key";
 import { KvProvider } from "./provider/kv-provider";
 
 const service = "splitch-evaluation-api";
@@ -102,6 +103,10 @@ async function handleRequest(
     exposureAssembly: {
       saltStore,
       sourceId: env.SPLITCH_SOURCE_ID ?? "local",
+    },
+    exposureTicket: {
+      saltStore,
+      ticketKey: exposureTicketKeyFromEnv(env),
     },
     evaluationCommitSink: makeHttpEvaluationCommitSink({
       endpoint: env.EVENT_INGEST_URL,

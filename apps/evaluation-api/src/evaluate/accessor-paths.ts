@@ -40,6 +40,19 @@ export async function verify(
   return resolveWithoutExposure(input, deps);
 }
 
+/**
+ * Bulk Precomputed Evaluations accessor (ADR-0048). Structurally identical to
+ * verify: evaluatePath only, empty exposures. Ticket minting and ETag live in
+ * the evaluate-all handler, not here — this function is the proof that the
+ * resolve port has no Exposure-assembly path for the bulk fetch.
+ */
+export async function evaluateAllFlag(
+  input: EvaluatePathInput,
+  deps: EvaluatePathDeps,
+): Promise<NonExposingAccessorResult> {
+  return resolveWithoutExposure(input, deps);
+}
+
 async function resolveWithoutExposure(
   input: EvaluatePathInput,
   deps: EvaluatePathDeps,

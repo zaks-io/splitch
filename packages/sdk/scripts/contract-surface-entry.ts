@@ -5,8 +5,16 @@
  */
 export {
   DataPlaneEvaluateResponseSchema,
+  EvaluateAllEntrySchema,
+  EvaluateAllReasonSchema,
+  EvaluateAllRequestSchema,
+  EvaluateAllResponseSchema,
   PeekEvaluateResponseSchema,
   ResolutionDetailsSchema,
+  type EvaluateAllEntry,
+  type EvaluateAllReason,
+  type EvaluateAllRequest,
+  type EvaluateAllResponse,
   type ResolutionDetails,
   type ResolutionReason,
   type VariantValue,

@@ -5,6 +5,8 @@ import {
   CachedEvaluationTelemetryResponseSchema,
   DataPlaneEvaluateRequestSchema,
   DataPlaneEvaluateResponseSchema,
+  EvaluateAllRequestSchema,
+  EvaluateAllResponseSchema,
   PeekEvaluateResponseSchema,
 } from "../wire-envelopes-core";
 
@@ -13,14 +15,17 @@ import {
  * `:appId` path param — `app_id` is the credential's alone (ADR-0018), so the
  * tenant-crossing footgun is absent at the route level. They are NOT MCP tools.
  *
- * - evaluate: Client Key only; fires an Exposure as a structural side effect.
- * - peek:     API Key only; fires no Exposure and writes no Assignment Store row.
- * - verify:   mixed Client Key | API Key (data-plane-key, ADR-0037); fires no
- *             Exposure; reuses the evaluate request and returns tiered
- *             ResolutionDetails.
+ * - evaluate:     Client Key only; fires an Exposure as a structural side effect.
+ * - peek:         API Key only; fires no Exposure and writes no Assignment Store row.
+ * - verify:       mixed Client Key | API Key (data-plane-key, ADR-0037); fires no
+ *                 Exposure; reuses the evaluate request and returns tiered
+ *                 ResolutionDetails.
+ * - evaluate-all: mixed Client Key | API Key; bulk Precomputed Evaluations for one
+ *                 Evaluation Context (ADR-0048); structurally non-exposing; mints
+ *                 Exposure Tickets for fresh live-Run assignments.
  *
  * Endpoint canon: docs/spec/sdk/public-evaluate-endpoint.md,
- * exposure-accessor.md, verify-endpoint.md.
+ * exposure-accessor.md, verify-endpoint.md, evaluate-all-endpoint.md.
  */
 
 const OWNER = "evaluation-api" as const;
@@ -112,6 +117,32 @@ export const dataPlaneRoutes = [
       "APP_MISMATCH",
       "ORIGIN_NOT_ALLOWED",
       "FLAG_NOT_FOUND",
+      "VALIDATION_ERROR",
+      "RATE_LIMITED",
+      "SERVICE_UNAVAILABLE",
+    ],
+  }),
+  defineApiRoute({
+    operationId: "sdk_evaluate_all",
+    owner: OWNER,
+    method: "POST",
+    path: "/api/sdk/evaluate-all",
+    summary:
+      "Resolve every Flag for one Evaluation Context (Precomputed Evaluations; no Exposure).",
+    request: { body: EvaluateAllRequestSchema },
+    response: EvaluateAllResponseSchema,
+    auth: "data-plane-key",
+    scopes: ["data-plane:evaluate"],
+    rateLimit: "client-key",
+    // Batch Evaluation usage is billed by this caller-owned logical fetch id
+    // (ADR-0033); retries with the same key must not double-charge.
+    idempotency: "required",
+    errors: [
+      "UNAUTHORIZED",
+      "CREDENTIAL_REVOKED",
+      "INSUFFICIENT_SCOPES",
+      "APP_MISMATCH",
+      "ORIGIN_NOT_ALLOWED",
       "VALIDATION_ERROR",
       "RATE_LIMITED",
       "SERVICE_UNAVAILABLE",

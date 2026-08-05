@@ -99,6 +99,7 @@
         "required": [
           "SENTRY_DSN",
           "EVALUATION_PRIVACY_SALT",
+          "EXPOSURE_TICKET_KEY",
           "SPLITCH_EVENT_INGEST_TOKEN",
           "MCP_EVALUATION_DELEGATION_SECRET"
         ]
@@ -165,6 +166,7 @@
         "required": [
           "SENTRY_DSN",
           "EVALUATION_PRIVACY_SALT",
+          "EXPOSURE_TICKET_KEY",
           "SPLITCH_EVENT_INGEST_TOKEN",
           "MCP_EVALUATION_DELEGATION_SECRET"
         ]

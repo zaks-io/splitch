@@ -5,16 +5,28 @@
  * existing contract tests. See `sdk-data-plane-surface.parity.test.ts`.
  */
 // biome-ignore lint/performance/noBarrelFile: intentional narrow public SDK contract surface
+export { type ErrorCode, ErrorCodeSchema } from "./errors";
 export {
-  DataPlaneEvaluateResponseSchema,
-  PeekEvaluateResponseSchema,
   type DataPlaneEvaluateResponse,
+  DataPlaneEvaluateResponseSchema,
   type PeekEvaluateResponse,
+  PeekEvaluateResponseSchema,
 } from "./leaves/data-plane-evaluate-wire";
 export {
-  ResolutionDetailsSchema,
+  type EvaluateAllEntry,
+  EvaluateAllEntrySchema,
+  type EvaluateAllReason,
+  EvaluateAllReasonSchema,
+  type EvaluateAllResponse,
+  EvaluateAllResponseSchema,
+} from "./leaves/evaluate-all-wire";
+export {
   type ResolutionDetails,
+  ResolutionDetailsSchema,
   type VariantValue,
 } from "./leaves/resolution-details";
 export type { ResolutionReason } from "./leaves/resolution-reason";
-export { ErrorCodeSchema, type ErrorCode } from "./errors";
+export {
+  type EvaluateAllRequest,
+  EvaluateAllRequestSchema,
+} from "./wire-envelopes-core";
