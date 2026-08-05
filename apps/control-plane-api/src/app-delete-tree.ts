@@ -159,13 +159,17 @@ function command(rest: string): string {
   return `splitch ${rest}`;
 }
 
-/** Stable dependency order for `--force` removals (children before App cascade). */
+/** Stable dependency order for `--force` removals (children before App cascade).
+ *
+ * Privacy ledger rows (`entity-privacy`, `privacy-requests`) are intentionally
+ * absent: they depend only on the App FK and must not be wiped until
+ * `finishForceDelete` — otherwise a confirm-policy Flag stop would destroy
+ * GDPR tombstones on a delete that never happens (SPL-326 security audit).
+ */
 export const APP_FORCE_DELETE_ORDER: readonly ResourceDeleteChildType[] = [
   "experiments",
   "segments",
   "metrics",
-  "entity-privacy",
-  "privacy-requests",
   "flags",
   "flag-config",
   "flag-targeting-rules",

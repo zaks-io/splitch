@@ -32,7 +32,9 @@ import { deleteFlagD1Cascade, purgeFlagConfigsKvForFlag } from "./flag-config-li
  * Walks the blocker tree in dependency order. Non-gated children are removed
  * through the same repository seams individual delete commands use. Policy-gated
  * Flag deletes create Approval Requests and STOP — force never auto-resolves
- * Reviews. Privacy ledger rows have no public delete API and are cascaded here.
+ * Reviews. Privacy ledger rows have no public delete API and are wiped only in
+ * `finishForceDelete`, after every gated child is clear and the App is about to
+ * die — never earlier in the phase loop (GDPR tombstones must survive a stop).
  */
 
 export interface ForceDeleteAppResult {
@@ -115,12 +117,6 @@ async function runForcePhase(
         state.removed,
       );
       return;
-    case "entity-privacy":
-      await forceDeletePrivacyLedger(deps, app, "entity-privacy", state);
-      return;
-    case "privacy-requests":
-      await forceDeletePrivacyLedger(deps, app, "privacy-requests", state);
-      return;
     case "flags":
       await forceDeleteFlags(
         deps,
@@ -130,6 +126,10 @@ async function runForcePhase(
         state.removed,
         state.pendingApprovals,
       );
+      return;
+    case "entity-privacy":
+    case "privacy-requests":
+      // Wiped only in finishForceDelete once the App is about to die.
       return;
     case "flag-config":
     case "flag-targeting-rules":
@@ -152,13 +152,20 @@ async function finishForceDelete(
 ): Promise<ForceDeleteAppResult> {
   const liveEnvironments = await deps.repo.identity.listEnvironments(appScope(app.id));
   const remaining = await collectAppDeleteBlockers(deps, app, liveEnvironments);
-  if (remaining.length > 0) {
+  const nonPrivacy = remaining.filter(
+    (blocker) => blocker.childType !== "entity-privacy" && blocker.childType !== "privacy-requests",
+  );
+  if (nonPrivacy.length > 0) {
     throw new Error(
-      `apps delete --force left blockers after cascade: ${remaining
+      `apps delete --force left blockers after cascade: ${nonPrivacy
         .map((b) => `${b.childType}:${b.children.map((c) => c.id).join(",")}`)
         .join("; ")}`,
     );
   }
+
+  // Privacy depends only on the App FK. Wipe it here — and only here — so a
+  // confirm-policy stop cannot destroy tombstones on a live App.
+  await wipePrivacyLedgerForAppDelete(deps, app, remaining, removed);
 
   await deleteAppRows(deps, app.id, liveEnvironments);
   removed.push({ childType: "apps", id: app.id });
@@ -168,19 +175,26 @@ async function finishForceDelete(
   return { response: { deleted: true, force: true, removed } };
 }
 
-async function forceDeletePrivacyLedger(
+async function wipePrivacyLedgerForAppDelete(
   deps: AppEnvironmentDeps,
   app: AppRow,
-  childType: "entity-privacy" | "privacy-requests",
-  state: ForceState,
+  blockers: Blockers,
+  removed: ResourceDeleteRemoved[],
 ): Promise<void> {
-  const count =
-    childType === "entity-privacy"
-      ? await deps.repo.privacy.deleteEntityDeletionsForApp(appScope(app.id))
-      : await deps.repo.privacy.deletePrivacyRequestsForApp(app.organizationId, app.id);
-  if (count === 0) return;
-  for (const child of flattenBlockerChildren(state.blockers, childType)) {
-    state.removed.push({ childType, id: child.id });
+  const entityCount = await deps.repo.privacy.deleteEntityDeletionsForApp(appScope(app.id));
+  if (entityCount > 0) {
+    for (const child of flattenBlockerChildren(blockers, "entity-privacy")) {
+      removed.push({ childType: "entity-privacy", id: child.id });
+    }
+  }
+  const requestCount = await deps.repo.privacy.deletePrivacyRequestsForApp(
+    app.organizationId,
+    app.id,
+  );
+  if (requestCount > 0) {
+    for (const child of flattenBlockerChildren(blockers, "privacy-requests")) {
+      removed.push({ childType: "privacy-requests", id: child.id });
+    }
   }
 }
 

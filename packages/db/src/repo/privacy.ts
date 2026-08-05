@@ -46,23 +46,27 @@ export function makePrivacyRepo(db: Db) {
     },
 
     /**
-     * Cascade helper for App teardown (`--force`). Entity tombstones have no
-     * public delete API; force removes the App's ledger rows after gated
-     * children are cleared (SPL-326).
+     * Cascade helper for App teardown (`--force` finish only). Entity
+     * tombstones have no public delete API; force removes the App's ledger
+     * rows only once gated children are clear and the App is about to die
+     * (SPL-326). Routes through `scopedTable.remove` so ADR-0018 mint-scope
+     * enforcement cannot be bypassed.
      */
     async deleteEntityDeletionsForApp(scope: TenantScope): Promise<number> {
-      const rows = await db
-        .delete(entityDeletions)
-        .where(eq(entityDeletions.appId, scope.appId))
-        .returning();
-      return rows.length;
+      return entityDeletionsTable.remove(scope);
     },
 
     /**
-     * Cascade helper for App teardown (`--force`). Removes App-scoped privacy
-     * request rows; org-wide requests (`app_id` null) are untouched.
+     * Cascade helper for App teardown (`--force` finish only). Removes
+     * App-scoped privacy request rows; org-wide requests (`app_id` null) are
+     * untouched. Bound by BOTH org_id AND app_id so a dropped predicate cannot
+     * wipe another tenant's ledger (privacy_requests is not app-scoped via
+     * `scopedTable` because `app_id` is nullable).
      */
     async deletePrivacyRequestsForApp(orgId: string, appId: string): Promise<number> {
+      if (!orgId || !appId) {
+        throw new Error("deletePrivacyRequestsForApp: orgId and appId are required");
+      }
       const rows = await db
         .delete(privacyRequests)
         .where(and(eq(privacyRequests.orgId, orgId), eq(privacyRequests.appId, appId)))
