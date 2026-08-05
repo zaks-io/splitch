@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DraftAllocationSchema } from "./draft-allocation";
 
 export interface RequestBodyFieldHelp {
   readonly name: string;
@@ -7,10 +8,12 @@ export interface RequestBodyFieldHelp {
   readonly defaultValue?: unknown;
 }
 
+const MAX_TYPE_DEPTH = 16;
+
 export function describeObjectFields(schema: z.ZodObject): RequestBodyFieldHelp[] {
   return Object.entries(schema.shape).map(([name, fieldSchema]) => {
     const { required, defaultValue, nullable, inner } = unwrapField(fieldSchema as z.ZodTypeAny);
-    const label = fieldTypeLabel(name, inner);
+    const label = typeLabel(inner);
     return {
       name,
       required,
@@ -35,7 +38,7 @@ export function unwrapField(schema: z.ZodTypeAny): {
   let optional = false;
   let nullable = false;
   let defaultValue: unknown;
-  for (let guard = 0; guard < 16; guard += 1) {
+  for (let guard = 0; guard < MAX_TYPE_DEPTH; guard += 1) {
     const step = unwrapOne(current);
     if (!step) break;
     if (step.optional) optional = true;
@@ -104,15 +107,12 @@ export function zodLiteralValues(schema: z.ZodTypeAny): unknown[] {
   return (zodDef(schema).values as unknown[] | undefined) ?? [];
 }
 
-/** Allocation keys are Variant names, not Variant ids (CONTEXT.md). */
-function fieldTypeLabel(name: string, schema: z.ZodTypeAny): string {
-  if (name === "allocation" && zodDefType(schema) === "record") {
-    return `Record<Variant name, ${typeLabel(zodValueType(schema))}>`;
+function typeLabel(schema: z.ZodTypeAny, depth = 0): string {
+  if (depth >= MAX_TYPE_DEPTH) {
+    throw new Error(
+      `request-body-help: type label exceeded max depth ${MAX_TYPE_DEPTH} (self-referential schema?)`,
+    );
   }
-  return typeLabel(schema);
-}
-
-function typeLabel(schema: z.ZodTypeAny): string {
   const type = zodDefType(schema);
   switch (type) {
     case "string":
@@ -140,24 +140,28 @@ function typeLabel(schema: z.ZodTypeAny): string {
       return `string (${options.map((value) => JSON.stringify(value)).join(" | ")})`;
     }
     case "array": {
-      return `${typeLabel(zodElement(schema))}[]`;
+      return `${typeLabel(zodElement(schema), depth + 1)}[]`;
     }
     case "record": {
-      return `Record<string, ${typeLabel(zodValueType(schema))}>`;
+      // Identity check — rename the field, keep the schema, label stays.
+      if (schema === DraftAllocationSchema) {
+        return `Record<Variant name, ${typeLabel(zodValueType(schema), depth + 1)}>`;
+      }
+      return `Record<string, ${typeLabel(zodValueType(schema), depth + 1)}>`;
     }
     case "object":
-      return objectTypeLabel(schema as z.ZodObject);
+      return objectTypeLabel(schema as z.ZodObject, depth);
     case "union":
     case "xor": {
       return zodOptions(schema)
-        .map((option) => typeLabel(option))
+        .map((option) => typeLabel(option, depth + 1))
         .join(" | ");
     }
     case "nullable":
-      return `${typeLabel((schema as z.ZodNullable).unwrap() as z.ZodTypeAny)} | null`;
+      return `${typeLabel((schema as z.ZodNullable).unwrap() as z.ZodTypeAny, depth + 1)} | null`;
     case "optional":
     case "default":
-      return typeLabel(unwrapField(schema).inner);
+      return typeLabel(unwrapField(schema).inner, depth + 1);
     default:
       throw new Error(
         `request-body-help: unsupported Zod type "${type ?? "undefined"}" for help rendering`,
@@ -166,10 +170,10 @@ function typeLabel(schema: z.ZodTypeAny): string {
 }
 
 /** Expand nested objects fully so enums and shapes stay discoverable at any depth. */
-function objectTypeLabel(schema: z.ZodObject): string {
+function objectTypeLabel(schema: z.ZodObject, depth: number): string {
   const parts = Object.entries(schema.shape).map(([name, fieldSchema]) => {
     const { required, nullable, inner } = unwrapField(fieldSchema as z.ZodTypeAny);
-    const nested = fieldTypeLabel(name, inner);
+    const nested = typeLabel(inner, depth + 1);
     const withNull = nullable ? `${nested} | null` : nested;
     return `${name}${required ? "" : "?"}: ${withNull}`;
   });

@@ -85,7 +85,8 @@ function exampleValue(schema: z.ZodTypeAny, fieldName: string): unknown {
     case "xor":
       return unionExample(inner, fieldName);
     case "nullable":
-      return exampleValue((inner as z.ZodNullable).unwrap() as z.ZodTypeAny, fieldName);
+      // Prefer null over inventing a scalar — clearer for optional nullable fields.
+      return null;
     default:
       throw new Error(
         `request-body-help: unsupported Zod type "${type ?? "undefined"}" for example generation`,
@@ -94,33 +95,33 @@ function exampleValue(schema: z.ZodTypeAny, fieldName: string): unknown {
 }
 
 /**
- * Prefer shallow scalars, enums, arrays of scalars, and records. Skip nested
- * object shapes / object arrays so all-optional Examples stay writable.
+ * Prefer constrained scalars, enums, arrays, and records. Skip nested object
+ * shapes and unconstrained string/number fields so idempotency-only Examples
+ * stay copy-pasteable without domain-confused placeholder values.
  */
 function optionalExampleFieldNames(fields: readonly RequestBodyFieldHelp[]): Set<string> {
   const preferred = fields.filter((field) => {
     if (field.name === "idempotency_key") return false;
-    const label = field.typeLabel;
-    if (label.startsWith("{ ")) return false;
-    if (label.includes("}[]")) return false;
-    return true;
+    return isConstrainedOptionalLabel(field.typeLabel);
   });
   const names = preferred.length > 0 ? preferred : fields.slice(0, 1);
   return new Set(names.map((field) => field.name));
 }
 
+function isConstrainedOptionalLabel(label: string): boolean {
+  if (label.startsWith("{ ")) return false;
+  if (label.includes("}[]")) return false;
+  if (label === "string" || label === "number") return false;
+  if (label.startsWith("number |")) return false;
+  if (label.startsWith("string |")) return false;
+  return true;
+}
+
+/** Fixtures only for open-vocabulary strings whose field name is not schema-valid. */
 const EXAMPLE_STRINGS: Readonly<Record<string, string>> = {
   idempotency_key: "idem-1",
   targetingKey: "userId",
   targetingKeyType: "user",
-  attribute: "country",
-  operator: "eq",
-  value: "US",
-  key: "checkout",
-  name: "Checkout",
-  slug: "acme",
-  reason: "approved",
-  originAllowlist: "https://app.example.com",
 };
 
 function exampleString(fieldName: string): string {
@@ -234,23 +235,24 @@ function unionExampleRank(schema: z.ZodTypeAny): number {
     );
   }
   switch (type) {
-    case "string":
+    case "boolean":
+      return 0;
     case "enum":
     case "literal":
-      return 0;
+      return 1;
     case "number":
     case "int":
-      return 1;
+      return 2;
+    case "string":
+      return 3;
     case "object":
     case "record":
-      return 2;
-    case "boolean":
-      return 3;
-    case "array":
       return 4;
-    case "null":
+    case "array":
       return 5;
-    default:
+    case "null":
       return 6;
+    default:
+      return 7;
   }
 }

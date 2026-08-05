@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { DraftAllocationSchema } from "./draft-allocation";
 import { EnvironmentPolicySchema } from "./leaf-schemas-runtime";
 import { describeRequestBody, requestBodySchemaForOperation } from "./request-body-help";
 import {
   CreateExperimentRequestSchema,
   PatchExperimentRequestSchema,
+  StartRunRequestSchema,
 } from "./resource-envelopes-experiment";
 import {
   PatchFlagConfigRequestSchema,
@@ -117,15 +119,37 @@ describe("describeRequestBody", () => {
 
     const patch = describeRequestBody(PatchExperimentRequestSchema);
     const example = patch.example as Record<string, unknown>;
-    // Patch confidenceLevel is unconstrained z.number() with no default — never
-    // invent 50 via a field-name special case (that drifted from create's 0.95).
-    expect(example.confidenceLevel).toBe(1);
+    // Unconstrained optional numbers are not preferred for all-optional examples.
+    expect(example).not.toHaveProperty("confidenceLevel");
   });
 
-  it("labels allocation keys as Variant names", () => {
+  it("labels DraftAllocationSchema keys as Variant names by schema identity", () => {
     const patch = describeRequestBody(PatchExperimentRequestSchema);
     const allocation = patch.fields.find((field) => field.name === "allocation");
     expect(allocation?.typeLabel).toBe("Record<Variant name, number>");
+
+    // Rename the field — label follows the schema, not the string "allocation".
+    const renamed = describeRequestBody(z.object({ weights: DraftAllocationSchema }));
+    expect(renamed.fields[0]?.typeLabel).toBe("Record<Variant name, number>");
+
+    // A fresh record does not inherit the Variant-name label.
+    const anonymous = describeRequestBody(
+      z.object({ allocation: z.record(z.string(), z.number()) }),
+    );
+    expect(anonymous.fields[0]?.typeLabel).toBe("Record<string, number>");
+  });
+
+  it("prefers constrained optionals over free-form strings for idempotency-only bodies", () => {
+    const start = describeRequestBody(StartRunRequestSchema);
+    const example = start.example as Record<string, unknown>;
+    expect(example).toEqual(
+      expect.objectContaining({
+        idempotency_key: expect.any(String),
+        horizon: "sequential",
+      }),
+    );
+    expect(example).not.toHaveProperty("sampleSizeLocked");
+    expect(example).not.toHaveProperty("reason");
   });
 
   it("fails loud for non-object request body roots", () => {
@@ -138,5 +162,14 @@ describe("describeRequestBody", () => {
   it("fails loud for unsupported Zod field types instead of printing raw def names", () => {
     const schema = z.object({ weird: z.custom<() => void>(() => true) });
     expect(() => describeRequestBody(schema)).toThrow(/unsupported Zod type/);
+  });
+
+  it("fails loud when object type expansion exceeds depth", () => {
+    const cyclic = z.object({
+      get self() {
+        return cyclic;
+      },
+    });
+    expect(() => describeRequestBody(cyclic)).toThrow(/max depth/);
   });
 });

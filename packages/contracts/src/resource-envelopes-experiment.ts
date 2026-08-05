@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DraftAllocationSchema } from "./draft-allocation";
 import { ExperimentSchema, MetricRefSchema, RunSchema } from "./leaf-schemas-experiment";
 import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
 import {
@@ -30,9 +31,6 @@ export {
   TARGETING_KEY_TYPE_SHAPE_MESSAGE,
   TargetingKeyTypeSchema,
 } from "./targeting-key-type";
-
-// ---------------------------------------------------------------------------
-const DraftAllocationSchema = z.record(z.string(), z.number());
 
 // ---------------------------------------------------------------------------
 // CreateExperimentRequest

@@ -1,20 +1,15 @@
 import {
   describeRequestBody,
   EnvironmentPolicySchema,
+  isMcpToolRoute,
   requestBodySchemaForOperation,
+  routeRegistry,
 } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { CLI_COMMANDS, type CliCommandDefinition } from "./command-registry.js";
 import { renderCommandHelp } from "./help.js";
 import { commandBodySchemaHelp, commandHasBodyJson, formatBodyJsonHelp } from "./help-body-json.js";
-
-/** Commands whose help advertises `--body-json` (must stay in sync with binding). */
-function bodyJsonHelpCommands(): CliCommandDefinition[] {
-  return CLI_COMMANDS.filter((command) =>
-    renderCommandHelp(command).includes("--body-json <json>"),
-  );
-}
 
 function requireCommand(
   predicate: (command: CliCommandDefinition) => boolean,
@@ -83,29 +78,53 @@ function assertOneHandWrittenCommand(
   expect.fail(`hand-written kind "${kind}" on ${command.path.join(" ")} has no body-schema policy`);
 }
 
+/** Control-plane routes that declare a JSON request body (the enforceable criterion-3 set). */
+function mcpRoutesWithJsonBody() {
+  return routeRegistry.filter(
+    (route) =>
+      isMcpToolRoute(route) && requestBodySchemaForOperation(route.operationId) !== undefined,
+  );
+}
+
 describe("CLI --body-json schema help coverage (SPL-309)", () => {
-  it("covers every --body-json command, not a sampled subset", () => {
-    const commands = bodyJsonHelpCommands();
-    expect(commands.length).toBeGreaterThan(20);
-    const paths = commands.map((command) => command.path.join(" "));
-    expect(paths).toEqual(
+  it("renders a Request body section for every MCP route with a JSON body", () => {
+    const bodyRoutes = mcpRoutesWithJsonBody();
+    expect(bodyRoutes.length).toBeGreaterThan(20);
+    expect(bodyRoutes.map((route) => route.operationId)).toEqual(
       expect.arrayContaining([
-        "flag-config update",
-        "flag-targeting-rules replace",
-        "experiments create",
-        "experiments update",
-        "env-policy set",
-        "approval-request-reviews create",
+        "flag_config_update",
+        "flag_targeting_rules_replace",
+        "experiments_create",
+        "experiments_update",
+        "environments_update",
+        "approval_request_reviews_create",
+        "flags_promote",
       ]),
     );
+
+    for (const route of bodyRoutes) {
+      const command = requireCommand(
+        (candidate) => candidate.kind === "api" && candidate.operationId === route.operationId,
+        `api command for body route ${route.operationId}`,
+      );
+      const helpText = renderCommandHelp(command);
+      expect(
+        helpText,
+        `${command.path.join(" ")} missing --body-json for route ${route.operationId}`,
+      ).toContain("--body-json <json>");
+      expect(
+        helpText,
+        `${command.path.join(" ")} missing Request body section for route ${route.operationId}`,
+      ).toContain("Request body (--body-json):");
+    }
   });
 
   it("prints contract-required field names in the Request body section", () => {
-    for (const command of bodyJsonHelpCommands()) {
-      const helpText = renderCommandHelp(command);
-      expect(helpText).toContain("--body-json <json>");
-      expect(helpText).toContain("Request body (--body-json):");
-
+    for (const route of mcpRoutesWithJsonBody()) {
+      const command = requireCommand(
+        (candidate) => candidate.kind === "api" && candidate.operationId === route.operationId,
+        `api command for ${route.operationId}`,
+      );
       const schemaHelp = commandBodySchemaHelp(command);
       const bodySection = formatBodyJsonHelp(schemaHelp).join("\n");
       const rows = fieldRows(bodySection);
@@ -120,10 +139,18 @@ describe("CLI --body-json schema help coverage (SPL-309)", () => {
     }
   });
 
-  it("derives a schema-valid example for every --body-json command", () => {
-    for (const command of bodyJsonHelpCommands()) {
-      assertBodyJsonExampleValid(command);
+  it("derives a schema-valid example for every MCP body route and env-policy set", () => {
+    for (const route of mcpRoutesWithJsonBody()) {
+      assertBodyJsonExampleValid(
+        requireCommand(
+          (candidate) => candidate.kind === "api" && candidate.operationId === route.operationId,
+          `api command for ${route.operationId}`,
+        ),
+      );
     }
+    assertBodyJsonExampleValid(
+      requireCommand((command) => command.kind === "env_policy_set", "env-policy set"),
+    );
   });
 });
 
@@ -230,5 +257,27 @@ describe("CLI --body-json schema help details (SPL-309)", () => {
       }),
     );
     expect(Object.keys(help.example as Record<string, unknown>).length).toBeGreaterThan(1);
+  });
+
+  it("avoids domain-confused placeholders on flag-variants update and experiments start", () => {
+    const variants = commandBodySchemaHelp(
+      requireCommand(
+        (command) => command.operationId === "flag_variants_update",
+        "flag-variants update",
+      ),
+    );
+    expect(JSON.stringify(variants.example)).not.toContain("Checkout");
+    expect(JSON.stringify(variants.example)).not.toContain('"US"');
+
+    const start = commandBodySchemaHelp(
+      requireCommand((command) => command.operationId === "experiments_start", "experiments start"),
+    );
+    expect(start.example).not.toHaveProperty("sampleSizeLocked");
+    expect(start.example).toEqual(
+      expect.objectContaining({
+        horizon: "sequential",
+        idempotency_key: expect.any(String),
+      }),
+    );
   });
 });
