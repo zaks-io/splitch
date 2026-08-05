@@ -3,6 +3,11 @@
  * Browser smoke: load the built SDK `dist` in real Chromium with the default
  * global `fetch` (no override) and assert a non-ERROR resolution against a stub
  * edge. Node/undici cannot catch the Window.fetch "Illegal invocation" bug.
+ *
+ * Manual: `pnpm -F @splitch/sdk test:browser-smoke`. Deliberately out of `test`,
+ * and so out of `verify:ci`. It downloads Chromium, headless shell, and ffmpeg
+ * from cdn.playwright.dev on a cache miss, which does not belong on the path
+ * that gates merges and the production deploy. Run it before an SDK release.
  */
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
