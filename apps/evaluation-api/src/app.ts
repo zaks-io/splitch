@@ -6,6 +6,8 @@ import { makeApiKeyOnlyAuthResolver, makeClientKeyOnlyAuthResolver } from "./dat
 import { makeEvaluateHandler } from "./evaluate";
 import type { EvaluatePathDeps } from "./evaluate/evaluate-path";
 import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
+import type { MintExposureTicketDeps } from "./evaluate/exposure-ticket";
+import { makeEvaluateAllHandler } from "./evaluate-all";
 import type { EvaluationCommitSink } from "./evaluation-commit-sink";
 import type { EvaluationUsageSink } from "./evaluation-usage-sink";
 import { makePeekHandler } from "./peek";
@@ -33,6 +35,7 @@ export interface AppDeps extends EvaluatePathDeps {
   authResolver: AuthResolver;
   dataPlaneAuthResolver: AuthResolver;
   exposureAssembly: ExposureAssemblyDeps;
+  exposureTicket: MintExposureTicketDeps;
   evaluationCommitSink: EvaluationCommitSink;
   evaluationUsageSink: EvaluationUsageSink;
   rateLimiter: RateLimiter;
@@ -74,6 +77,7 @@ export function createApp(deps: AppDeps): Hono {
   );
   registrar.mount(app, evaluationRoute("sdk_peek"), makePeekHandler(deps));
   registrar.mount(app, evaluationRoute("sdk_verify"), makeVerifyHandler(deps));
+  registrar.mount(app, evaluationRoute("sdk_evaluate_all"), makeEvaluateAllHandler(deps));
   if (deps.door === "binding") {
     registrar.mount(app, evaluationRoute("flags_test_eval"), makeTestEvaluationHandler(deps));
   }
@@ -85,7 +89,7 @@ function evaluationCorsHeaders(): Headers {
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "POST, OPTIONS",
     "access-control-allow-headers":
-      "authorization, content-type, idempotency-key, x-splitch-sdk-runtime",
-    "access-control-expose-headers": "x-request-id, x-run-id, x-variant-name",
+      "authorization, content-type, idempotency-key, if-none-match, x-splitch-sdk-runtime",
+    "access-control-expose-headers": "etag, x-request-id, x-run-id, x-variant-name",
   });
 }

@@ -5,8 +5,9 @@ export interface EvaluationUsageEvent {
   readonly environmentId: string;
   readonly flagKey: string;
   readonly sdkRuntime: string;
-  readonly evaluationCount: 0 | 1;
-  readonly isBatch: false;
+  /** Successful Flag resolutions billed by this write (0 only when isCached). */
+  readonly evaluationCount: number;
+  readonly isBatch: boolean;
   readonly isCached: boolean;
   readonly hasExposure: boolean;
 }

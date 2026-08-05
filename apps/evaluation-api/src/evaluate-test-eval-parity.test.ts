@@ -143,6 +143,10 @@ async function makeParityHttpHarness() {
       saltStore: new StaticSaltStore(),
       sourceId: "pop-parity",
     },
+    exposureTicket: {
+      saltStore: new StaticSaltStore(),
+      ticketKey: "splitch-test-exposure-ticket-key-32chars",
+    },
     evaluationCommitSink: new RecordingEvaluationCommitSink(
       new RecordingExposureSink(),
       new RecordingEvaluationUsageSink(),

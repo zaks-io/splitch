@@ -2,7 +2,7 @@ import { ExposureEventSchema } from "@splitch/contracts";
 import { computeTargetingKeyHash } from "@splitch/privacy";
 import { describe, expect, it } from "vitest";
 import { StaticSaltStore } from "../assignment/assignment-store-test-fixtures";
-import { evaluate, peekVariant, verify } from "./accessor-paths";
+import { evaluate, peekVariant, verify, evaluateAllFlag } from "./accessor-paths";
 import { assembleEvaluateExposures, type ExposureAssemblyDeps } from "./exposure-assembly";
 import type { FreshAssignmentEvaluateResult } from "./evaluate-path-types";
 import {
@@ -157,8 +157,8 @@ describe("evaluate Exposure assembly", () => {
     expect(exposures[0]?.runId).toBe("run-from-result");
   });
 
-  it("keeps peekVariant and verify structurally no-exposure with no Assignment Store put", async () => {
-    for (const accessor of [peekVariant, verify]) {
+  it("keeps peekVariant, verify, and evaluateAllFlag structurally no-exposure with no Assignment Store put", async () => {
+    for (const accessor of [peekVariant, verify, evaluateAllFlag]) {
       const store = new RecordingAssignmentStore();
       const provider = new RecordingProvider({
         experiment: experimentConfig({

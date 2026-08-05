@@ -80,6 +80,10 @@ function makeHarness() {
       saltStore: new StaticSaltStore(),
       sourceId: "pop-test",
     },
+    exposureTicket: {
+      saltStore: new StaticSaltStore(),
+      ticketKey: "splitch-test-exposure-ticket-key-32chars",
+    },
     evaluationCommitSink: new RecordingEvaluationCommitSink(
       new RecordingExposureSink(),
       new RecordingEvaluationUsageSink(),

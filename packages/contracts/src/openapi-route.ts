@@ -50,6 +50,11 @@ export interface DefineApiRouteInput {
   request?: ApiRouteRequest;
   /** The 200 response body Zod schema. */
   response: z.ZodTypeAny;
+  /**
+   * When true, OpenAPI also advertises HTTP 304 with an empty body
+   * (If-None-Match revalidation).
+   */
+  notModifiedResponse?: boolean;
   auth: AuthKind;
   scopes?: readonly string[];
   rateLimit: RateLimitClass;
@@ -172,6 +177,13 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
           description: input.summary,
           content: { [JSON_CONTENT]: { schema: input.response } },
         },
+        ...(input.notModifiedResponse
+          ? {
+              304: {
+                description: "Not Modified — cached response is still current.",
+              },
+            }
+          : {}),
       },
     } as const),
   };

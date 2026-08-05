@@ -55,6 +55,8 @@ interface SdkRouteHarnessOptions {
   readonly holdovers?: Map<string, { runId: string; variant: string }>;
   readonly runOverrides?: Partial<RunConfigKV>;
   readonly legacyClientKey?: boolean;
+  /** Override Exposure Ticket issued_at for ETag-stability tests. */
+  readonly ticketNow?: () => Date;
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -199,6 +201,11 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
       newEventId: () => "evt-route-1",
       now: () => new Date("2026-07-03T00:00:00.000Z"),
     },
+    exposureTicket: {
+      saltStore: new StaticSaltStore(),
+      ticketKey: "splitch-test-exposure-ticket-key-32chars",
+      now: options.ticketNow ?? (() => new Date("2026-07-03T00:00:00.000Z")),
+    },
     evaluationCommitSink,
     evaluationUsageSink,
   });
@@ -233,6 +240,27 @@ export function sdkRouteInit(
       attributes: baseInput().evaluationContext.attributes,
       ...bodyOverrides,
     }),
+  };
+}
+
+/** evaluate-all request body: DataPlaneEvaluateRequest minus flagKey. */
+export function evaluateAllRouteInit(
+  credential?: string,
+  extraHeaders: Record<string, string> = {},
+  bodyOverrides: Record<string, unknown> = {},
+): RequestInit {
+  const { flagKey: _flagKey, ...body } = JSON.parse(
+    String(sdkRouteInit(credential, extraHeaders, bodyOverrides).body),
+  ) as Record<string, unknown>;
+  return {
+    method: "POST",
+    headers: {
+      ...(credential === undefined ? {} : { authorization: `Bearer ${credential}` }),
+      "content-type": "application/json",
+      "idempotency-key": "test-logical-evaluate-all",
+      ...extraHeaders,
+    },
+    body: JSON.stringify(body),
   };
 }
 

@@ -6,11 +6,29 @@ import {
   type PeekEvaluateResponse,
   PeekEvaluateResponseSchema,
 } from "./leaves/data-plane-evaluate-wire";
+import {
+  type EvaluateAllEntry,
+  EvaluateAllEntrySchema,
+  type EvaluateAllReason,
+  EvaluateAllReasonSchema,
+  type EvaluateAllRequest,
+  EvaluateAllRequestSchema,
+  type EvaluateAllResponse,
+  EvaluateAllResponseSchema,
+} from "./leaves/evaluate-all-wire";
 import { VariantValueSchema } from "./leaves/variant-value";
 
 export {
   type DataPlaneEvaluateResponse,
   DataPlaneEvaluateResponseSchema,
+  type EvaluateAllEntry,
+  EvaluateAllEntrySchema,
+  type EvaluateAllReason,
+  EvaluateAllReasonSchema,
+  type EvaluateAllRequest,
+  EvaluateAllRequestSchema,
+  type EvaluateAllResponse,
+  EvaluateAllResponseSchema,
   type PeekEvaluateResponse,
   PeekEvaluateResponseSchema,
 };
