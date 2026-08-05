@@ -27,8 +27,12 @@ function detailSuffix(details: Record<string, unknown>): string {
   ) {
     return ` (frozenFields: ${details.frozenFields.join(", ")})`;
   }
-  if (typeof details.fault === "string") {
-    return ` (fault: ${details.fault})`;
+  // Map internal fault slugs to operator prose; never print the slug itself.
+  if (details.fault === "approval_changed_fields_undetermined") {
+    return " (changed-field set could not be determined)";
+  }
+  if (details.fault === "approval_empty_change") {
+    return " (no Flag Configuration field to apply)";
   }
   return "";
 }
@@ -70,23 +74,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /** Louder remediation when the API refusal already names frozen fields. */
 export function remediationForServerError(error: ErrorResponse): string {
-  if (error.code === "RUN_FROZEN" && "frozenFields" in error.details) {
-    const fields = error.details.frozenFields;
-    const action =
-      "recommendedAction" in error.details && typeof error.details.recommendedAction === "string"
-        ? error.details.recommendedAction
-        : "END_RUNNING_RUN_FIRST";
-    return `End the running Run first (${action}); frozen fields: ${Array.isArray(fields) ? fields.join(", ") : "unknown"}`;
-  }
+  const frozen = runFrozenRemediation(error);
+  if (frozen) return frozen;
   if (error.code === "APPROVAL_REQUEST_STALE") {
     return "Refresh the target and re-propose; a stale Approval Request cannot be applied";
   }
-  if (
-    error.code === "INTERNAL_SERVER_ERROR" &&
-    "fault" in error.details &&
-    error.details.fault === "approval_changed_fields_undetermined"
-  ) {
+  const undetermined = undeterminedChangeRemediation(error);
+  if (undetermined) return undetermined;
+  return "Correct the reported API failure and retry the command";
+}
+
+function runFrozenRemediation(error: ErrorResponse): string | null {
+  if (error.code !== "RUN_FROZEN" || !("frozenFields" in error.details)) return null;
+  const fields = error.details.frozenFields;
+  const action =
+    "recommendedAction" in error.details && typeof error.details.recommendedAction === "string"
+      ? error.details.recommendedAction
+      : "END_RUNNING_RUN_FIRST";
+  return `End the running Run first (${action}); frozen fields: ${Array.isArray(fields) ? fields.join(", ") : "unknown"}`;
+}
+
+function undeterminedChangeRemediation(error: ErrorResponse): string | null {
+  if (error.code !== "INTERNAL_SERVER_ERROR" || !("fault" in error.details)) return null;
+  if (error.details.fault === "approval_empty_change") {
+    return "Re-propose the change; this Approval Request does not change any Flag Configuration field that can be applied";
+  }
+  if (error.details.fault === "approval_changed_fields_undetermined") {
     return "Re-propose the change; this Approval Request's changed-field set cannot be determined and will not apply";
   }
-  return "Correct the reported API failure and retry the command";
+  return null;
 }

@@ -244,6 +244,17 @@ export function mapApprovedFlagConfigFailure(
       },
     };
   }
+  if (result.reason === "APPROVAL_EMPTY_CHANGE") {
+    return {
+      ok: false as const,
+      unapplicable: {
+        code: "INTERNAL_SERVER_ERROR",
+        message:
+          "Approval Request does not change any Flag Configuration field that can be applied",
+        details: { fault: "approval_empty_change" },
+      },
+    };
+  }
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return {
       ok: false as const,

@@ -110,7 +110,8 @@ describe("warnStaleApprovalDiscard", () => {
         },
       },
     );
-    expect(error.mock.calls[0]?.[0]).toContain("approval_changed_fields_undetermined");
+    expect(error.mock.calls[0]?.[0]).toContain("changed-field set could not be determined");
+    expect(error.mock.calls[0]?.[0]).not.toContain("approval_changed_fields_undetermined");
   });
 
   it("stays quiet for a version-race stale with no recorded cause", () => {

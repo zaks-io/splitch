@@ -70,8 +70,11 @@ describe("approve_and_apply freeze uses the request's changed-field set", () => 
     expect(proposed.status).toBe(409);
     const requestId = proposed.approvalRequestId as string;
 
-    // Live rollout diverges from the mint-time proposed snapshot without a
-    // version bump — the structural hole the entries-gated patch closes.
+    // Production writers bump `flag_configs.version`, so a post-mint direct
+    // PATCH makes the Request stale before apply. This raw UPDATE skips the
+    // bump to pin the entries-gated patch against the TOCTOU window between the
+    // staleness read and apply's independent re-read — a concurrent PATCH in
+    // that window would satisfy CAS without the gate.
     const liveRollout = JSON.stringify({ percentage: 40, salt: "post-mint" });
     await h.d1
       .prepare("UPDATE flag_configs SET rollout = ? WHERE app_id = ? AND environment_id = ?")
@@ -155,6 +158,35 @@ describe("approve_and_apply freeze uses the request's changed-field set", () => 
       code: "RUN_FROZEN",
       details: {
         frozenFields: ["flagConfig.rollout"],
+        currentRunId: ids.liveRunId,
+        recommendedAction: "END_RUNNING_RUN_FIRST",
+      },
+    });
+  });
+
+  it("refuses an approved availability change once a Run owns the field", async () => {
+    await narrowSeededAvailability(h.d1, ["control", "treatment"]);
+    const proposed = await patchConfig(h, "idem_propose_availability", {
+      availableVariantNames: ["control"],
+    });
+    expect(proposed.status).toBe(409);
+    expect(proposed.code).toBe("APPROVAL_REVIEW_REQUIRED");
+    const requestId = proposed.approvalRequestId as string;
+
+    const read = await getApprovalRequests(h, requestId);
+    const request = (await read.json()) as { diff: { entries: Array<{ path: string }> } };
+    expect(
+      request.diff.entries.some((entry) => entry.path.startsWith("/availableVariantNames")),
+    ).toBe(true);
+
+    await startSeededExperiment(h.d1);
+    const res = await reviewRequest(h, requestId, "idem_review_availability_frozen");
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      code: "RUN_FROZEN",
+      details: {
+        frozenFields: ["flagConfig.availableVariantNames"],
         currentRunId: ids.liveRunId,
         recommendedAction: "END_RUNNING_RUN_FIRST",
       },

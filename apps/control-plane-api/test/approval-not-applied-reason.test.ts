@@ -112,4 +112,21 @@ describe("the approved flag-configuration write distinguishes its failure reason
 
     expect(result).toMatchObject({ ok: false, reason: "FLAG_NOT_FOUND" });
   });
+
+  it("refuses a version-only entry set instead of applying an empty patch", async () => {
+    const requestId = await proposeA(h);
+    const row = await h.repo.approvals.getRequest(appScope(ids.appId), requestId);
+    if (!row) throw new Error("missing Approval Request");
+
+    const result = await applyApprovedFlagConfig(deps(), {
+      appId: ids.appId,
+      environmentId: ids.environmentId,
+      flagId: ids.flagId,
+      proposed: await proposal(ids.flagId),
+      diffEntries: [{ path: "/version" }],
+      approval: commitFor(requestId, row),
+    });
+
+    expect(result).toMatchObject({ ok: false, reason: "APPROVAL_EMPTY_CHANGE" });
+  });
 });

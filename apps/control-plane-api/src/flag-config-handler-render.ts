@@ -62,7 +62,8 @@ export function renderFlagConfigWriteResult(
     return rolloutAmbiguous(result.availableVariantNames, requestId);
   }
   if (result.reason === "RUN_FROZEN") return runFrozenResponse(result, requestId);
-  // Direct writers never produce APPROVAL_NOT_APPLIED or CHANGED_FIELDS_UNDETERMINED.
+  // Direct writers never produce APPROVAL_NOT_APPLIED, CHANGED_FIELDS_UNDETERMINED,
+  // or APPROVAL_EMPTY_CHANGE.
   return flagConfigNotFound(requestId);
 }
 
@@ -83,6 +84,7 @@ export function renderPromotionResult(
     return rolloutAmbiguous(result.availableVariantNames, requestId);
   }
   if (result.reason === "RUN_FROZEN") return runFrozenResponse(result, requestId);
-  // Direct writers never produce APPROVAL_NOT_APPLIED or CHANGED_FIELDS_UNDETERMINED.
+  // Direct writers never produce APPROVAL_NOT_APPLIED, CHANGED_FIELDS_UNDETERMINED,
+  // or APPROVAL_EMPTY_CHANGE.
   return flagConfigNotFound(requestId);
 }

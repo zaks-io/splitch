@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { approvedConfigPatch } from "./config-store-approved-write";
+import { approvedConfigPatch, approvedPatchMovesConfig } from "./config-store-approved-write";
 import type { ApplyApprovedFlagConfigInput } from "./config-store-types";
 
 /**
  * SPL-304 follow-up: an entries-based freeze that then writes every proposed
- * field is still a hole. These pins fail if `availableVariantNames` / `rollout`
- * leave the patch without a matching entry.
+ * field is still a hole. These pins fail if a gated field leaves the patch
+ * without a matching entry — including the `enabled` omit direction.
  */
 describe("approvedConfigPatch", () => {
   const base = {
@@ -51,6 +51,17 @@ describe("approvedConfigPatch", () => {
     });
   });
 
+  it("omits enabled when entries do not touch it", () => {
+    // Mutation proof: writing enabled unconditionally would still pass the
+    // enabled-only case above; this omit direction is what kills that hole.
+    expect(
+      approvedConfigPatch({
+        ...base,
+        diffEntries: [{ path: "/rollout/percentage" }, { path: "/version" }],
+      }).enabled,
+    ).toBeUndefined();
+  });
+
   it("includes rollout only when entries touch it", () => {
     expect(
       approvedConfigPatch({
@@ -81,5 +92,32 @@ describe("approvedConfigPatch", () => {
         diffEntries: [{ path: "/enabled" }],
       }).availableVariantNames,
     ).toBeUndefined();
+  });
+
+  it("treats version-only and experiment-only patches as empty config moves", () => {
+    expect(
+      approvedPatchMovesConfig(
+        approvedConfigPatch({
+          ...base,
+          diffEntries: [{ path: "/version" }],
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      approvedPatchMovesConfig(
+        approvedConfigPatch({
+          ...base,
+          diffEntries: [{ path: "/experiment" }],
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      approvedPatchMovesConfig(
+        approvedConfigPatch({
+          ...base,
+          diffEntries: [{ path: "/enabled" }],
+        }),
+      ),
+    ).toBe(true);
   });
 });

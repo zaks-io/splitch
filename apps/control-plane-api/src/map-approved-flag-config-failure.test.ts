@@ -42,4 +42,22 @@ describe("mapApprovedFlagConfigFailure", () => {
       unapplicable: { code: "RUN_FROZEN" },
     });
   });
+
+  it("resolves APPROVAL_EMPTY_CHANGE terminally", () => {
+    expect(
+      mapApprovedFlagConfigFailure(
+        { ok: false, reason: "APPROVAL_EMPTY_CHANGE" },
+        "flag_1",
+        "env_1",
+      ),
+    ).toEqual({
+      ok: false,
+      unapplicable: {
+        code: "INTERNAL_SERVER_ERROR",
+        message:
+          "Approval Request does not change any Flag Configuration field that can be applied",
+        details: { fault: "approval_empty_change" },
+      },
+    });
+  });
 });

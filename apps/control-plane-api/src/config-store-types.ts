@@ -102,6 +102,12 @@ type FlagConfigWriteFailure =
    */
   | { ok: false; reason: "CHANGED_FIELDS_UNDETERMINED" }
   /**
+   * The request's entries touch no Flag Configuration field this write can
+   * apply (for example only `/version` or `/experiment`). Refuse rather than
+   * bump version and report applied while writing nothing (SPL-304).
+   */
+  | { ok: false; reason: "APPROVAL_EMPTY_CHANGE" }
+  /**
    * A live Run in this Environment owns a field the write would move. Raised by
    * the store rather than by a route so every caller of the write — the
    * Configuration PATCH, the Targeting PUT, a Promotion into this Environment,

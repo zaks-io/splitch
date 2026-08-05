@@ -39,12 +39,18 @@ export async function applyApprovedFlagConfig(
   const frozen = await approvedProposalFreeze(deps, input);
   if (frozen) return frozen;
 
-  // Write only fields the request's own entries move. An enabled-only proposal
-  // carries mint-time `availableVariantNames` / `rollout` in `proposed`; writing
-  // them unconditionally would revert live state a Run now owns after the
-  // entries-based freeze correctly let the kill-switch through (SPL-304).
+  // Write only fields the request's own entries move. Production writers bump
+  // `flag_configs.version`, so a post-mint direct PATCH makes the Request stale
+  // before apply (`approval-service` target hash). The gate still matters for the
+  // TOCTOU window between that staleness read and this function's independent
+  // re-read: `updateFlagConfig` CASes the version it just read, not the approved
+  // version, so a concurrent PATCH in that window is invisible to staleness and
+  // would otherwise overwrite live frozen fields from mint-time `proposed`.
   const patch = approvedConfigPatch(input);
   const rulesChanged = diffEntriesTouch(input.diffEntries, "targetingRules");
+  if (!rulesChanged && !approvedPatchMovesConfig(patch)) {
+    return { ok: false, reason: "APPROVAL_EMPTY_CHANGE" };
+  }
   const updated = rulesChanged
     ? await deps.repo.flags.replaceTargetingRules(
         scope,
@@ -86,6 +92,15 @@ export function approvedConfigPatch(input: ApplyApprovedFlagConfigInput): {
     patch.rollout = input.proposed.rollout ? json(input.proposed.rollout) : null;
   }
   return patch;
+}
+
+/** True when the patch would move a Flag Configuration column (not only `updatedAt`). */
+export function approvedPatchMovesConfig(patch: ReturnType<typeof approvedConfigPatch>): boolean {
+  return (
+    patch.enabled !== undefined ||
+    patch.availableVariantNames !== undefined ||
+    patch.rollout !== undefined
+  );
 }
 
 function validateProposal(
