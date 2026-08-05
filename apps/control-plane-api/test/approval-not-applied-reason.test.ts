@@ -3,7 +3,7 @@ import type { ApprovalCommit } from "@splitch/db";
 import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyApprovedFlagConfig } from "../src/config-store-approved-write";
-import { type Harness, ids, setProdPolicy } from "../src/config-store-harness-core";
+import { type Harness, ids, setProdPolicy, USER_ID } from "../src/config-store-harness-core";
 import type { ConfigStoreDeps } from "../src/config-store-types";
 import { clearFrozenRun, confirmPolicy, proposeA } from "./approval-harness";
 import { makePoolHarness } from "./config-store-pool-harness";
@@ -113,20 +113,34 @@ describe("the approved flag-configuration write distinguishes its failure reason
     expect(result).toMatchObject({ ok: false, reason: "FLAG_NOT_FOUND" });
   });
 
-  it("refuses a version-only entry set instead of applying an empty patch", async () => {
+  it("refuses a version-only entry set without bumping version (APPROVAL_EMPTY_CHANGE)", async () => {
     const requestId = await proposeA(h);
     const row = await h.repo.approvals.getRequest(appScope(ids.appId), requestId);
     if (!row) throw new Error("missing Approval Request");
 
+    const before = await h.repo.flags.getFlagConfig(
+      envScope(ids.appId, ids.environmentId),
+      ids.flagId,
+    );
+    if (!before) throw new Error("missing Flag Config");
+
+    // Legitimate Project member: a non-member would refuse as APPROVAL_NOT_APPLIED
+    // before this gate can prove the ADR-0036 harm (version bump + applied with
+    // no field write). Assert version stays put after the empty-change refusal.
     const result = await applyApprovedFlagConfig(deps(), {
       appId: ids.appId,
       environmentId: ids.environmentId,
       flagId: ids.flagId,
       proposed: await proposal(ids.flagId),
       diffEntries: [{ path: "/version" }],
-      approval: commitFor(requestId, row),
+      approval: { ...commitFor(requestId, row), reviewedBy: USER_ID },
     });
 
     expect(result).toMatchObject({ ok: false, reason: "APPROVAL_EMPTY_CHANGE" });
+    const after = await h.repo.flags.getFlagConfig(
+      envScope(ids.appId, ids.environmentId),
+      ids.flagId,
+    );
+    expect(after?.version).toBe(before.version);
   });
 });

@@ -114,6 +114,33 @@ describe("warnStaleApprovalDiscard", () => {
     expect(error.mock.calls[0]?.[0]).not.toContain("approval_changed_fields_undetermined");
   });
 
+  it("explains an empty applyable change without printing the fault slug", () => {
+    const error = vi.fn();
+    warnStaleApprovalDiscard(
+      { error },
+      {
+        ...staleApprovalRequest({}),
+        latestReview: {
+          id: approvalReviewId,
+          approvalRequestId,
+          action: "approve_and_apply",
+          outcome: "stale",
+          actor,
+          reviewedAt: "2026-08-05T00:01:00.000Z",
+          reason: null,
+          idempotencyKey: "review-1",
+          resultingTargetVersion: null,
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            details: { fault: "approval_empty_change" },
+          },
+        },
+      },
+    );
+    expect(error.mock.calls[0]?.[0]).toContain("no Flag Configuration field to apply");
+    expect(error.mock.calls[0]?.[0]).not.toContain("approval_empty_change");
+  });
+
   it("stays quiet for a version-race stale with no recorded cause", () => {
     const error = vi.fn();
     warnStaleApprovalDiscard(
@@ -168,6 +195,17 @@ describe("remediationForServerError", () => {
     });
     expect(line).toContain("Re-propose");
     expect(line.toLowerCase()).not.toContain("retry the command");
+  });
+
+  it("does not invite a retry for an empty applyable change", () => {
+    const line = remediationForServerError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Approval Request does not change any Flag Configuration field",
+      details: { fault: "approval_empty_change" },
+    });
+    expect(line).toContain("does not change any Flag Configuration field");
+    expect(line.toLowerCase()).not.toContain("retry the command");
+    expect(line).not.toContain("approval_empty_change");
   });
 });
 
