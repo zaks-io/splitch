@@ -33,11 +33,15 @@ describe("mintExposureTicket", () => {
     expect(payload?.length).toBeGreaterThan(10);
     expect(signature?.length).toBeGreaterThan(10);
     expect(extra).toBeUndefined();
-    // Opaque: raw targeting key never appears in the ticket bytes.
-    expect(ticket).not.toContain("user-1");
     expect(payload).toBeDefined();
     if (payload === undefined) throw new Error("expected ticket payload");
-    expect(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))).toContain(FLAG_KEY);
+    const decodedPayload = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const decoded = JSON.parse(decodedPayload) as Record<string, unknown>;
+    expect(decoded).toMatchObject({
+      flag_key: FLAG_KEY,
+      targeting_key_hash: expect.any(String),
+    });
+    expect(decodedPayload).not.toContain("user-1");
   });
 
   it("rejects a short ticket key", () => {

@@ -23,7 +23,7 @@ import { EvaluationUsageSinkError } from "./evaluation-usage-sink";
 import type { FlagConfig } from "./provider/provider";
 
 /**
- * Batch Flag key used on the Evaluation usage row for an evaluate-all fetch.
+ * Batch Flag Key used on the Evaluation usage row for an evaluate-all fetch.
  * Per-Flag breakdown for batches is a reporting concern on `is_batch` + count;
  * the Idempotency-Key is the single billing replay identity (ADR-0033).
  */
@@ -54,7 +54,15 @@ export function makeEvaluateAllHandler(deps: EvaluateAllRouteDeps) {
     if (!payload.ok) return renderError(payload.error, { requestId });
 
     const body = EvaluateAllResponseSchema.parse({ evaluations: payload.evaluations });
-    const etag = await strongEtag(etagMaterial(body));
+    const etag = await strongEtag(
+      etagMaterial(body, {
+        appId: scope.value.appId,
+        environmentId: scope.value.environmentId,
+        targetingKey: parsed.body.targetingKey,
+        idType: parsed.body.idType,
+        attributes: parsed.body.attributes,
+      }),
+    );
     if (ifNoneMatchMatches(request.headers.get("if-none-match"), etag)) {
       return new Response(null, {
         status: 304,
@@ -147,7 +155,7 @@ async function entryFor(
 
 function reasonFor(result: Exclude<EvaluateResult, { kind: "error" }>): EvaluateAllReason {
   // Ticket-bearing resolutions are always SPLIT: ADR-0048 mints a ticket exactly
-  // when evaluate would seal an Exposure (including live-Run no-match defaults).
+  // when evaluate would seal an Exposure (including live Experiment Run no-match defaults).
   if (result.exposure !== null) return "SPLIT";
   if (result.kind === "disabled") return "DISABLED";
   if (result.kind === "no_match_default" || result.kind === "null_experiment") return "DEFAULT";
@@ -272,8 +280,19 @@ function memoizeGetAll(store: AssignmentStore): AssignmentStore {
 /**
  * ETag material excludes Exposure Tickets: tickets embed issued_at and would
  * make every revalidation miss (ADR-0048 freshness is config+context, not remint).
+ * Evaluation Context is included so a tag is never reusable across contexts
+ * (docs/spec/sdk/evaluate-all-endpoint.md).
  */
-function etagMaterial(body: ReturnType<typeof EvaluateAllResponseSchema.parse>): string {
+function etagMaterial(
+  body: ReturnType<typeof EvaluateAllResponseSchema.parse>,
+  context: {
+    appId: string;
+    environmentId: string;
+    targetingKey: string;
+    idType: string;
+    attributes: EvaluateAllRequest["attributes"];
+  },
+): string {
   const keys = Object.keys(body.evaluations).sort();
   const evaluations: Record<
     string,
@@ -294,7 +313,27 @@ function etagMaterial(body: ReturnType<typeof EvaluateAllResponseSchema.parse>):
       errorCode: entry.errorCode,
     };
   }
-  return JSON.stringify({ evaluations });
+  return JSON.stringify({
+    appId: context.appId,
+    environmentId: context.environmentId,
+    targetingKey: context.targetingKey,
+    idType: context.idType,
+    attributes: canonicalizeJson(context.attributes),
+    evaluations,
+  });
+}
+
+function canonicalizeJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeJson);
+  if (value !== null && typeof value === "object") {
+    const recordValue = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(recordValue).sort()) {
+      out[key] = canonicalizeJson(recordValue[key]);
+    }
+    return out;
+  }
+  return value;
 }
 
 async function strongEtag(canonical: string): Promise<string> {

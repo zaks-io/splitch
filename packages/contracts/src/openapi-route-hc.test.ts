@@ -1,9 +1,8 @@
-import { describe, expect, it } from "vitest";
 import { createRoute } from "@hono/zod-openapi";
-import { defineApiRoute } from "./openapi-route";
-import { AppParams } from "./routes/route-shapes";
-import { z } from "./openapi-route";
+import { describe, expect, it } from "vitest";
+import { defineApiRoute, z } from "./openapi-route";
 import { FlagResponseSchema } from "./resource-envelopes-flag";
+import { AppParams } from "./routes/route-shapes";
 
 const fromHelper = defineApiRoute({
   operationId: "flags_list",
@@ -42,5 +41,27 @@ describe("openapi route parity", () => {
     expect(fromHelper.openapi.path).toBe(fromConfig.path);
     expect(fromHelper.openapi.method).toBe(fromConfig.method);
     expect(fromHelper.openapi.operationId).toBe(fromConfig.operationId);
+  });
+
+  it("defineApiRoute can advertise an empty-body 304 response", () => {
+    const withNotModified = defineApiRoute({
+      operationId: "sdk_evaluate_all",
+      owner: "evaluation-api",
+      method: "POST",
+      path: "/api/sdk/evaluate-all",
+      summary: "Resolve every Flag for one Evaluation Context.",
+      request: { body: z.object({ targetingKey: z.string(), idType: z.string() }) },
+      response: z.object({ evaluations: z.record(z.string(), z.unknown()) }),
+      notModifiedResponse: true,
+      auth: "data-plane-key",
+      rateLimit: "client-key",
+      idempotency: "required",
+      errors: ["UNAUTHORIZED"],
+    });
+
+    expect(withNotModified.openapi.responses).toMatchObject({
+      200: expect.objectContaining({ description: expect.any(String) }),
+      304: { description: "Not Modified — cached response is still current." },
+    });
   });
 });

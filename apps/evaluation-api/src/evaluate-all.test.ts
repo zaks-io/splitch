@@ -1,9 +1,9 @@
 import {
-  clientKeyCacheKey,
   CredentialCacheKVSchema,
-  flagConfigKey,
+  clientKeyCacheKey,
   type ErrorResponse,
   type EvaluateAllResponse,
+  flagConfigKey,
 } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { targetingRule } from "./evaluate/evaluate-path-test-fixtures";
@@ -14,13 +14,13 @@ import {
   CLIENT_KEY,
   ENVIRONMENT_ID,
   EXPERIMENT_ID,
+  evaluateAllRouteInit,
   FLAG_KEY,
   LOCKED_CLIENT_KEY,
-  REVOKED_CLIENT_KEY,
-  UNSCOPED_API_KEY,
-  evaluateAllRouteInit,
   makeSdkRouteHarness,
+  REVOKED_CLIENT_KEY,
   sha256Hex,
+  UNSCOPED_API_KEY,
 } from "./sdk-route-test-fixtures";
 
 const PATH = "/api/sdk/evaluate-all";
@@ -143,6 +143,7 @@ describe("POST /api/sdk/evaluate-all: ETag and tickets", () => {
     expect(harness.evaluationUsageSink.writes[0]).toMatchObject({
       evaluationCount: 1,
       isBatch: true,
+      flagKey: "*",
       hasExposure: false,
     });
 
@@ -162,6 +163,46 @@ describe("POST /api/sdk/evaluate-all: ETag and tickets", () => {
     });
     const changedRes = await changed.app.request(PATH, evaluateAllRouteInit(CLIENT_KEY));
     expect(changedRes.headers.get("etag")).not.toBe(etag);
+  });
+
+  it("scopes ETag to Evaluation Context when resolutions match", async () => {
+    // 100% treatment so both Targeting Keys resolve identically; only context differs.
+    const harness = await makeSdkRouteHarness({
+      liveRun: true,
+      runOverrides: { allocation: { control: 0, treatment: 100 } },
+    });
+
+    const first = await harness.app.request(
+      PATH,
+      evaluateAllRouteInit(CLIENT_KEY, {}, { targetingKey: "user-a" }),
+    );
+    const firstBody = (await first.json()) as EvaluateAllResponse;
+    const firstEtag = first.headers.get("etag");
+    expect(first.status).toBe(200);
+    expect(firstBody.evaluations[FLAG_KEY]).toMatchObject({
+      variantName: "treatment",
+      exposureTicket: expect.any(String),
+    });
+
+    const second = await harness.app.request(
+      PATH,
+      evaluateAllRouteInit(
+        CLIENT_KEY,
+        { "if-none-match": firstEtag ?? "", "idempotency-key": "evaluate-all-user-b" },
+        { targetingKey: "user-b" },
+      ),
+    );
+    const secondBody = (await second.json()) as EvaluateAllResponse;
+
+    expect(second.status).toBe(200);
+    expect(second.headers.get("etag")).not.toBe(firstEtag);
+    expect(secondBody.evaluations[FLAG_KEY]).toMatchObject({
+      variantName: "treatment",
+      exposureTicket: expect.any(String),
+    });
+    expect(secondBody.evaluations[FLAG_KEY]?.exposureTicket).not.toBe(
+      firstBody.evaluations[FLAG_KEY]?.exposureTicket,
+    );
   });
 
   it("keeps ETag stable when Exposure Ticket issued_at advances", async () => {
@@ -196,7 +237,7 @@ describe("POST /api/sdk/evaluate-all: ETag and tickets", () => {
     expect(late.evaluationUsageSink.writes).toHaveLength(1);
   });
 
-  it("emits SPLIT + ticket for live-Run no-match defaults (evaluate would expose)", async () => {
+  it("emits SPLIT + ticket for live Experiment Run no-match defaults (evaluate would expose)", async () => {
     const { app } = await makeSdkRouteHarness({
       liveRun: true,
       runOverrides: {

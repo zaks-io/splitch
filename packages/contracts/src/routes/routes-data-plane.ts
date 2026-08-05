@@ -22,7 +22,7 @@ import {
  *                 ResolutionDetails.
  * - evaluate-all: mixed Client Key | API Key; bulk Precomputed Evaluations for one
  *                 Evaluation Context (ADR-0048); structurally non-exposing; mints
- *                 Exposure Tickets for fresh live-Run assignments.
+ *                 Exposure Tickets for fresh assignments for a live Experiment Run.
  *
  * Endpoint canon: docs/spec/sdk/public-evaluate-endpoint.md,
  * exposure-accessor.md, verify-endpoint.md, evaluate-all-endpoint.md.
@@ -131,6 +131,7 @@ export const dataPlaneRoutes = [
       "Resolve every Flag for one Evaluation Context (Precomputed Evaluations; no Exposure).",
     request: { body: EvaluateAllRequestSchema },
     response: EvaluateAllResponseSchema,
+    notModifiedResponse: true,
     auth: "data-plane-key",
     scopes: ["data-plane:evaluate"],
     rateLimit: "client-key",

@@ -13,7 +13,7 @@ export function exposureTicketKeyFromEnv(env: {
 }
 
 function localOnlyTicketKey(target: string | undefined): string {
-  if (target === undefined || target === "local" || target === "pr-ci") {
+  if (target === "local" || target === "pr-ci") {
     return "splitch-local-exposure-ticket-key-do-not-use-outside-local";
   }
   throw new Error("evaluation-api: EXPOSURE_TICKET_KEY is required outside local targets");
