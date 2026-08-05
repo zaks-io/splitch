@@ -174,7 +174,7 @@ export function missingPositionalError(display: string): SplitchCliError {
   });
 }
 
-export function conflictingPositionalError(display: string): SplitchCliError {
+function conflictingPositionalError(display: string): SplitchCliError {
   return new SplitchCliError({
     code: "CLI_USAGE_INVALID",
     causeSummary: `<${display}> was supplied more than once`,
@@ -182,7 +182,7 @@ export function conflictingPositionalError(display: string): SplitchCliError {
   });
 }
 
-export function unexpectedPositionalError(token: string): SplitchCliError {
+function unexpectedPositionalError(token: string): SplitchCliError {
   return new SplitchCliError({
     code: "CLI_USAGE_INVALID",
     causeSummary: `Unexpected argument ${token}`,
