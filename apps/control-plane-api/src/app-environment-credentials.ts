@@ -60,14 +60,19 @@ export async function revokeEnvironmentCredentialsForAppDelete(
       deps.repo.credentials.listApiKeys(scope),
       deps.repo.credentials.listClientKeys(scope),
     ]);
-    const liveApi = apiKeys.filter((row) => row.revokedAt === null);
-    const liveClient = clientKeys.filter((row) => row.revokedAt === null);
+    if (apiKeys.length === 0 && clientKeys.length === 0) return;
     // Always (re)tombstone the full snapshot — including rows already revoked in
     // D1 — so a prior pass that set revokedAt but failed the KV write still
     // recovers on retry instead of skipping those keys (SPL-298).
-    if (apiKeys.length > 0 || clientKeys.length > 0) {
-      await writeRevokedTombstones(deps, scope, apiKeys, clientKeys);
-    }
+    await writeRevokedTombstones(deps, scope, apiKeys, clientKeys);
+    // Recompute liveness from D1 after revoke/tombstone. Using the pre-revoke
+    // snapshot would force a redundant second pass on the normal path.
+    const [apiAfter, clientAfter] = await Promise.all([
+      deps.repo.credentials.listApiKeys(scope),
+      deps.repo.credentials.listClientKeys(scope),
+    ]);
+    const liveApi = apiAfter.filter((row) => row.revokedAt === null);
+    const liveClient = clientAfter.filter((row) => row.revokedAt === null);
     if (liveApi.length === 0 && liveClient.length === 0) return;
   }
   throw new Error("credential revoke did not quiesce");
