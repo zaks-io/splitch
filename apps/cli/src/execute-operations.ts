@@ -242,7 +242,7 @@ export function handleExecutionError(error: unknown, io: CliIo): CliResult {
   ) {
     return { exitCode: EXIT_AUTH };
   }
-  if (cliError.code === "CLI_SCOPE_UNRESOLVED") {
+  if (cliError.code === "CLI_SCOPE_UNRESOLVED" || cliError.code === "CLI_TOKEN_BINDING_REFUSED") {
     return { exitCode: EXIT_SCOPE };
   }
   return { exitCode: EXIT_USAGE };

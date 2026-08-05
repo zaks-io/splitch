@@ -107,12 +107,14 @@ session context is never persisted server-side beyond the session and never wide
 
 **Auto-refresh on 401:** CLI exchanges the refresh token or identity_assertion for a new access token
 silently. Device refresh tokens rotate. Auth API retains the canonical selected App authority and
-reintersects it with the WorkOS Organization grant and live membership before minting. Only prompts
-for re-login if refresh fails because the provider session, selected authority, or live membership is
-no longer valid. On re-login for device flow, CLI opens `verification_uri_complete` when supplied,
-otherwise `verification_uri`, in the default browser, prints the URL and code as a remote-terminal
-fallback, and polls until approved. A browser launch failure is visible but does not prevent manual
-approval.
+reintersects it with the WorkOS Organization grant and live membership before minting. A dead or
+missing provider session fails with `CLI_SESSION_EXPIRED` (exit 2) and remediates with re-login. An
+`invalid_grant` that refuses an App/Org rebind against an otherwise-live session fails with
+`CLI_TOKEN_BINDING_REFUSED` (exit 3), surfaces the server's reason verbatim, and remediates with
+membership or selector repair — never re-login. On re-login for device flow, CLI opens
+`verification_uri_complete` when supplied, otherwise `verification_uri`, in the default browser,
+prints the URL and code as a remote-terminal fallback, and polls until approved. A browser launch
+failure is visible but does not prevent manual approval.
 
 ### Command structure (illustrative; mirrors endpoint inventory)
 

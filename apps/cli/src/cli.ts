@@ -5,7 +5,7 @@ import { createFileCredentialStore } from "./credentials.js";
 import { normalizeCliError, writeCliError } from "./errors.js";
 import { executeInvocation } from "./execute.js";
 import { consoleIo } from "./execute-io.js";
-import { EXIT_AUTH, EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
+import { EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
 import { renderHelp, renderRootHelp } from "./help.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { longestMatchingCommandPath, parseInvocation } from "./parse-args.js";
@@ -121,7 +121,9 @@ async function executeParsedInvocation(
       cliError.code === "CLI_SESSION_EXPIRED" ||
       cliError.code === "CLI_EMAIL_UNVERIFIED"
       ? EXIT_AUTH
-      : EXIT_USAGE;
+      : cliError.code === "CLI_TOKEN_BINDING_REFUSED"
+        ? EXIT_SCOPE
+        : EXIT_USAGE;
   }
 }
 

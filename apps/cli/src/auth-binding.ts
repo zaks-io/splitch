@@ -19,11 +19,39 @@ export function bindingParams(binding: TokenBinding | null): Record<string, stri
   return binding ? { [binding.kind]: binding.selector } : {};
 }
 
-interface OAuthFault {
+export interface OAuthFault {
   readonly status: number;
   readonly error?: string;
   readonly description?: string;
   readonly refreshToken?: string;
+}
+
+/**
+ * True when the auth service refused an otherwise-valid session's attempt to
+ * mint a token bound to a named App or Organization. Distinct from a dead
+ * refresh session: re-login cannot fix membership or selector refusals.
+ *
+ * The CLI only claims this cause when it asked for an explicit binding and the
+ * server returned `invalid_grant` with a reason that is not session death.
+ */
+export function isTokenBindingRefusal(fault: OAuthFault, explicitBinding: boolean): boolean {
+  if (!explicitBinding || fault.error !== "invalid_grant") {
+    return false;
+  }
+  const description = fault.description?.trim() ?? "";
+  if (description.length === 0) {
+    // Opaque invalid_grant: the CLI has not established a binding refusal.
+    return false;
+  }
+  return !isRefreshSessionDeathDescription(description);
+}
+
+function isRefreshSessionDeathDescription(description: string): boolean {
+  return (
+    /refresh token/i.test(description) ||
+    /session is unknown/i.test(description) ||
+    /provider refresh authority/i.test(description)
+  );
 }
 
 /**

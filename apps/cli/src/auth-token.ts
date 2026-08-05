@@ -2,6 +2,8 @@ import {
   bindingKey,
   bindingParams,
   describeOAuthFault,
+  isTokenBindingRefusal,
+  type OAuthFault,
   readOAuthFault,
   type TokenBinding,
 } from "./auth-binding.js";
@@ -82,9 +84,22 @@ async function refreshAccessTokenFault(
       ? await reloadRotatedCredential(deps, stored)
       : null;
   if (!rotated) {
-    throw sessionExpiredError(describeOAuthFault(fault));
+    throw mintFailureError(fault, explicitBinding);
   }
   return refreshAccessToken(deps, rotated, binding, explicitBinding, false);
+}
+
+/**
+ * Map a failed refresh-grant response to the cause the CLI has established.
+ * An `invalid_grant` on an explicit App/Org rebind is a binding refusal when
+ * the server names a non-session reason; only a dead or missing session is
+ * `CLI_SESSION_EXPIRED`.
+ */
+export function mintFailureError(fault: OAuthFault, explicitBinding: boolean): SplitchCliError {
+  if (isTokenBindingRefusal(fault, explicitBinding)) {
+    return tokenBindingRefusedError(fault);
+  }
+  return sessionExpiredError(describeOAuthFault(fault));
 }
 
 export async function formPost(
@@ -112,6 +127,17 @@ export function sessionExpiredError(detail: string): SplitchCliError {
     code: "CLI_SESSION_EXPIRED",
     causeSummary: `The CLI login session could not mint a usable token: ${detail}`,
     remediation: "Run splitch login again before retrying the command",
+  });
+}
+
+export function tokenBindingRefusedError(fault: OAuthFault): SplitchCliError {
+  // Surface the server's own reason verbatim — never replace it with a session message.
+  const reason = fault.description?.trim() || describeOAuthFault(fault);
+  return new SplitchCliError({
+    code: "CLI_TOKEN_BINDING_REFUSED",
+    causeSummary: reason,
+    remediation:
+      "Select an App or Organization your live membership authorizes, or restore membership for the selected resource",
   });
 }
 
