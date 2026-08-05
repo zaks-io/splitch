@@ -12,3 +12,5 @@ export {
 } from "../cli-command-path";
 export type { McpProtocolToolDefinition, McpToolDefinition } from "../mcp-tools";
 export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute } from "../mcp-tools";
+export type { RequestBodyFieldHelp, RequestBodyHelp } from "../request-body-help";
+export { describeRequestBody, requestBodySchemaForOperation } from "../request-body-help";

@@ -18,27 +18,27 @@ live in [request-response-envelopes-conventions.md](./request-response-envelopes
 
 ### CreateExperimentRequest
 
-| Field                | Required | Notes                                                                                                        |
-| -------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `appId`              | yes      | —                                                                                                            |
-| `environmentId`      | yes      | Co-scoped with `appId`; Experiment is per-Environment (ADR-0027)                                             |
-| `name`               | yes      | —                                                                                                            |
-| `key`                | yes      | Unique per `(App, Environment)`                                                                              |
-| `flagId`             | yes      | One Flag per Experiment                                                                                      |
-| `targetingKey`       | yes      | EC field name to bucket on; inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN`        |
-| `targetingKeyType`   | yes      | Entity type label (the `id_type`); inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN` |
-| `description`        | no       | —                                                                                                            |
-| `hypothesis`         | no       | —                                                                                                            |
-| `confidenceLevel`    | no       | Defaults to `0.95`                                                                                           |
-| `metrics`            | yes      | `MetricRef[]`, min 0                                                                                         |
-| `guardrailMetrics`   | no       | Defaults to `[]`                                                                                             |
-| `activationMetricId` | no       | Assignment-affecting when set                                                                                |
-| `conversionWindowMs` | no       | Defaults to `0` (unbounded)                                                                                  |
-| `dimensions`         | no       | Defaults to `[]`                                                                                             |
-| `allocation`         | no       | Draft assignment field staged for the first Start; must sum to 100 at Start                                  |
-| `salt`               | no       | Draft assignment field staged for the first Start; generated at Start when omitted                           |
-| `targetingRules`     | no       | Draft assignment field staged for the first Start                                                            |
-| `segmentIds`         | no       | Draft assignment field staged for the first Start; resolved to frozen targeting rules at Start               |
+| Field                | Required | Notes                                                                                                                                                                      |
+| -------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `appId`              | yes      | —                                                                                                                                                                          |
+| `environmentId`      | yes      | Co-scoped with `appId`; Experiment is per-Environment (ADR-0027)                                                                                                           |
+| `name`               | yes      | —                                                                                                                                                                          |
+| `key`                | yes      | Unique per `(App, Environment)`                                                                                                                                            |
+| `flagId`             | yes      | One Flag per Experiment                                                                                                                                                    |
+| `targetingKey`       | yes      | EC field name to bucket on; inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN`                                                                      |
+| `targetingKeyType`   | yes      | Entity type label (the `id_type`); open vocabulary, typo-shaped values rejected at create/patch; inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN` |
+| `description`        | no       | —                                                                                                                                                                          |
+| `hypothesis`         | no       | —                                                                                                                                                                          |
+| `confidenceLevel`    | no       | Defaults to `0.95`                                                                                                                                                         |
+| `metrics`            | yes      | `MetricRef[]`, min 0                                                                                                                                                       |
+| `guardrailMetrics`   | no       | Defaults to `[]`                                                                                                                                                           |
+| `activationMetricId` | no       | Assignment-affecting when set                                                                                                                                              |
+| `conversionWindowMs` | no       | Defaults to `0` (unbounded)                                                                                                                                                |
+| `dimensions`         | no       | Defaults to `[]`                                                                                                                                                           |
+| `allocation`         | no       | Draft assignment field staged for the first Start; must sum to 100 at Start                                                                                                |
+| `salt`               | no       | Draft assignment field staged for the first Start; generated at Start when omitted                                                                                         |
+| `targetingRules`     | no       | Draft assignment field staged for the first Start                                                                                                                          |
+| `segmentIds`         | no       | Draft assignment field staged for the first Start; resolved to frozen targeting rules at Start                                                                             |
 
 Worker sets: `id`, `status = 'draft'`, `liveRunId = null`, `createdAt`, `updatedAt`, and
 `defaultVariantId` — copied from the bound Flag's per-Environment `defaultVariantId` (resolved via
@@ -213,13 +213,40 @@ Applied response:
   run: RunResponse
   previousRunId: string | null
   approvalRequest: ApprovalRequest | null
+  frozenTargetingRules: TargetingRule[]  // sibling of run; same snapshot evaluation uses; [] = all eligible
+  runSnapshotShipped?: boolean           // present on the direct (allow) Start door
 }
 ```
+
+`frozenTargetingRules` is a Start-response sibling of `run`, not a field on the Run object. It is
+the resolved Targeting Rule snapshot frozen into the Run and matches `run.targetingRules` and the
+`RunConfigKV` evaluation reads. An empty array means all Entities are eligible via allocation; Flag
+Configuration Targeting Rules do not apply while this Run is live.
+
+Deploy order: `frozenTargetingRules` is required on `StartRunResponseSchema` and control-plane
+clients parse Start responses strictly. Deploy the Worker that emits the field before CLI or SDK
+clients that validate against this schema, or every `experiments start` fails body parse.
 
 `approvalRequest` is null under `allow` and contains the applied request and latest Review under
 `confirm`. When required Review is omitted or future `approve` awaits a distinct reviewer, the
 mutation returns the canonical `APPROVAL_REVIEW_REQUIRED` error with the durable pending request ID;
 no Run response is synthesized.
+
+### PatchExperimentRequest response under a live Run
+
+A successful PATCH that stages assignment fields (`allocation`, `salt`, `targetingRules`,
+`segmentIds`) with `stageForNextRun: true` **while a Run is live** returns the Experiment leaf plus:
+
+```
+liveRunUnaffected?: {
+  runId: string
+  frozenTargetingRules: TargetingRule[]
+}
+```
+
+The notice is omitted when no Run is live, and when the PATCH does not stage an assignment field.
+The draft write succeeded; evaluation continues on the named Run's frozen snapshot until the next
+Start.
 
 ### PatchRunRequest (non-material only)
 
@@ -239,6 +266,10 @@ Accepted Zod shape uses `.strict()` to fail on any unrecognized key.
 
 Returns full Run leaf. `configHash` included for integrity verification. `variantSet` and `allocation`
 are included (immutable snapshots). `endedAt` is `null` on running Runs.
+
+GET also returns `draftTargetingRules` (nullable): the Experiment's current next-Run draft Targeting
+Rules, so operators can compare the frozen `targetingRules` on this Run against the draft without a
+second call. List and Start nested `run` objects omit this field.
 
 ## Sources
 

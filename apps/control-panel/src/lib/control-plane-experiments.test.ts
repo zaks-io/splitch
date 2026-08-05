@@ -123,6 +123,7 @@ describe("Control Panel Experiment mutation transport", () => {
                 // What the Worker returns when the Environment Policy allows the
                 // Start outright, i.e. no Approval Request was ever created.
                 approvalRequest: null,
+                frozenTargetingRules: [],
               })
             : Response.json(experimentResponse());
         }),

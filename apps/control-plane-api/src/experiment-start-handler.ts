@@ -27,7 +27,7 @@ import {
   requireWritableEnvironment,
   syncExperimentConfigFromD1,
 } from "./experiment-handler-shared";
-import { type ExperimentRow, json, runResponse } from "./experiment-model";
+import { type ExperimentRow, json, jsonArray, runResponse } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
 import { runDecisionSpecFromBody, startProposalFields } from "./experiment-start-decision-spec";
 import { validateStartRequest } from "./experiment-start-request";
@@ -169,6 +169,9 @@ export async function startExperiment(
     previousRunId: committed.previous?.id ?? null,
     approvalRequest: null,
     runSnapshotShipped,
+    // Same snapshot the committed Run row holds (and evaluation reads). Read the
+    // committed row so this door stays symmetric with the approval-applied path.
+    frozenTargetingRules: jsonArray(committed.run.targetingRules),
   });
 }
 
@@ -230,6 +233,7 @@ async function appliedExperimentStartResponse(
     run: runResponse(run),
     previousRunId: typeof previousRunId === "string" ? previousRunId : null,
     approvalRequest,
+    frozenTargetingRules: jsonArray(run.targetingRules),
   });
 }
 

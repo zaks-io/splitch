@@ -202,15 +202,33 @@ describe("control-plane route contract", () => {
         expect(((await response.json()) as ErrorResponse).code).toBe("FORBIDDEN");
       }
     }
-    for (const jwt of [memberAppJwt, outsiderAppJwt]) {
-      for (const response of await Promise.all([
-        request("POST", `/apps/${PRIMARY.appId}/privacy/export`, jwt),
-        request("POST", `/apps/${PRIMARY.appId}/privacy/entities/export`, jwt, entityBody()),
-        request("POST", `/apps/${PRIMARY.appId}/privacy/entities/delete`, jwt, entityBody()),
-      ])) {
-        expect(response.status).toBe(403);
-        expect(((await response.json()) as ErrorResponse).code).toBe("INSUFFICIENT_SCOPES");
-      }
+    for (const response of await Promise.all([
+      request("POST", `/apps/${PRIMARY.appId}/privacy/export`, memberAppJwt),
+      request("POST", `/apps/${PRIMARY.appId}/privacy/entities/export`, memberAppJwt, entityBody()),
+      request("POST", `/apps/${PRIMARY.appId}/privacy/entities/delete`, memberAppJwt, entityBody()),
+    ])) {
+      expect(response.status).toBe(403);
+      expect(((await response.json()) as ErrorResponse).code).toBe("INSUFFICIENT_SCOPES");
+    }
+    // Scope-valid outsider JWT with no live App membership is FORBIDDEN, not
+    // self-contradicting INSUFFICIENT_SCOPES (SPL-298).
+    for (const response of await Promise.all([
+      request("POST", `/apps/${PRIMARY.appId}/privacy/export`, outsiderAppJwt),
+      request(
+        "POST",
+        `/apps/${PRIMARY.appId}/privacy/entities/export`,
+        outsiderAppJwt,
+        entityBody(),
+      ),
+      request(
+        "POST",
+        `/apps/${PRIMARY.appId}/privacy/entities/delete`,
+        outsiderAppJwt,
+        entityBody(),
+      ),
+    ])) {
+      expect(response.status).toBe(403);
+      expect(((await response.json()) as ErrorResponse).code).toBe("FORBIDDEN");
     }
   });
 

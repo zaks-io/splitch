@@ -44,6 +44,31 @@ describe("credential scope and live membership intersection", () => {
     ]);
     expect(appWrite?.status).toBe(403);
     expect(orgWrite?.status).toBe(403);
+    await expect(appWrite?.json()).resolves.toMatchObject({ code: "FORBIDDEN" });
+    await expect(orgWrite?.json()).resolves.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("never answers INSUFFICIENT_SCOPES when held scopes already include the required App role", async () => {
+    const actor = { id: OWNER_ID, scopes: [`app:${APP_ID}:owner`] };
+    const missingMembership = {
+      repo: {
+        identity: {
+          getAppMembership: async () => null,
+        },
+      },
+    };
+
+    const denied = await requireAppDelete(missingMembership, APP_ID, actor, "request_stale_owner");
+    expect(denied?.status).toBe(403);
+    const body = await denied?.json();
+    expect(body).toMatchObject({ code: "FORBIDDEN" });
+    expect(body).not.toMatchObject({
+      code: "INSUFFICIENT_SCOPES",
+      details: {
+        requiredScopes: [`app:${APP_ID}:owner`],
+        heldScopes: [`app:${APP_ID}:owner`],
+      },
+    });
   });
 
   it("preserves admin writes and owner-only deletes when both authorities agree", async () => {
