@@ -33,8 +33,10 @@ in this config; refresh them from Linear during each workflow run.
   scale `0`, `1`, `2`, `4`, `8`, `16`.
 - GitHub read-only checks: `gh repo view`, `gh workflow list`, `gh pr list`,
   `gh pr checks`, `gh run list`, and environment/branch-protection API reads.
-- Configured hosted PR check name: `Verify` from the `ci` workflow (its
-  affected `verify:ci` graph includes `spec:lint`). `Control Panel E2E` runs
+- Configured hosted PR check names: `Verify`, `Validate Tinybird`, and
+  `Validate D1`, all from the `ci` workflow. They run in parallel; the two
+  validators no-op unless their inputs changed (`Verify`'s affected `verify:ci`
+  graph includes `spec:lint`). `Control Panel E2E` runs
   weekly in the standalone `e2e` workflow (plus manual dispatch), not in `ci`;
   it is signal-only and never blocks deploys. Secret scanning is
   a step inside `Verify`; the standalone `gitleaks` workflow was removed. See
@@ -60,10 +62,14 @@ in this config; refresh them from Linear during each workflow run.
 - Full local pre-push gate: `pnpm verify:push` (one parallel Turbo graph:
   `knip`, `format:check`, `lint`, `typecheck`, `secrets:range`,
   `tinybird:local`, `d1:migrate:local`, `d1:migrate:populated`).
-- CI gate: `.github/workflows/ci.yml` job `Verify` runs affected `pnpm verify:ci`
-  (`format:check`, `lint`, `typecheck`, `knip`, `spec:lint`, `test:scripts`,
-  `test`, `stats:golden`, `stats:property`, `build`), conditionally runs local
-  Tinybird and D1 validators for their changed inputs, and then runs `pnpm secrets:range`.
+- CI gate: `.github/workflows/ci.yml` job `Verify` runs `pnpm secrets:range` and
+  then affected `pnpm verify:ci` (`format:check`, `lint`, `typecheck`, `knip`,
+  `spec:lint`, `test:scripts`, `test`, `stats:golden`, `stats:property`,
+  `build`). Jobs `Validate Tinybird` and `Validate D1` run beside it, each
+  gating its own steps on `scripts/plan-ci-verification.mjs` so it no-ops unless
+  its inputs changed. A lockfile bump revalidates D1 (it shells out to
+  `pnpm exec wrangler`) but not Tinybird (`tb` is curl-installed and the
+  validator imports node builtins only).
 - Separate hosted checks: `Control Panel E2E` runs the local full-stack
   Playwright harness weekly in the `e2e` workflow and on manual dispatch while
   SPL-181 is open; a red run is signal-only. The stats
@@ -272,7 +278,8 @@ real package API boundary.
 - Merge method: use GitHub squash merge through `gh pr merge --squash` with
   `--match-head-commit <sha>` after refreshing PR head, base, checks, reviews,
   Linear state, and local refs. Do not use merge commits.
-- Required-check enforcement: require the hosted `Verify` check from the `ci`
+- Required-check enforcement: require the hosted `Verify`, `Validate Tinybird`,
+  and `Validate D1` checks from the `ci`
   workflow to pass on the current PR head. Also require any package-specific
   checks named in the issue handoff and a clean exact-head `ziw-code-review`
   verdict recorded as `code-review-passed`.
@@ -300,8 +307,8 @@ real package API boundary.
 
 ## Pull Requests
 
-- PR CI workflow source: `.github/workflows/ci.yml`; configured hosted check name:
-  `Verify`.
+- PR CI workflow source: `.github/workflows/ci.yml`; configured hosted check
+  names: `Verify`, `Validate Tinybird`, `Validate D1`.
 - Secret scanning lives in the `ci` workflow as dedicated `Install gitleaks` +
   `Scan for secrets` steps (the `Scan` step runs `pnpm secrets:range`, scoped to
   the PR/push commit range, not the whole tree). The standalone `gitleaks`
@@ -329,8 +336,8 @@ real package API boundary.
 - Automation merge gate for low/normal-risk PRs:
   1. PR is open, non-draft, mergeable/clean, and based on current `origin/main`.
   2. Current PR head matches the reviewed head SHA recorded in Linear.
-  3. Hosted `Verify` and every applicable package-specific check pass on the
-     current PR head.
+  3. Hosted `Verify`, `Validate Tinybird`, `Validate D1`, and every applicable
+     package-specific check pass on the current PR head.
   4. Worker-required local checks passed and are recorded in the handoff.
   5. Exact-head `ziw-code-review` is clean and `code-review-passed` is applied
      with PR URL plus reviewed head SHA.
@@ -411,8 +418,9 @@ real package API boundary.
       Low/normal-risk automation merge authority, squash merge method, hosted
       required-check enforcement, and CodeRabbit-on-demand behavior are now set
       in `Pull Requests`.
-- [x] Hosted PR check name configured: `Verify`; secret scanning and
-      `spec:lint` are steps inside it.
+- [x] Hosted PR check names configured: `Verify` (secret scanning and
+      `spec:lint` are steps inside it), plus the parallel `Validate Tinybird`
+      and `Validate D1`.
       `Control Panel E2E` is limited to the weekly `e2e` workflow and manual
       dispatches.
       See `Pull Requests`.

@@ -8,10 +8,21 @@ const ZERO_SHA = "0".repeat(40);
 const GLOBAL_VALIDATION_INPUTS = new Set([
   ".github/workflows/ci.yml",
   "package.json",
-  "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
   "scripts/plan-ci-verification.mjs",
   "turbo.json",
+]);
+// The D1 validators shell out to `pnpm exec wrangler`, so a resolved-dependency
+// change can alter what they prove. The Tinybird validator cannot: `tb` is
+// curl-installed rather than a workspace dependency, and check-tinybird-local.mjs
+// and its helpers import node builtins only. Triggering a ~95s Tinybird spin-up
+// on every lockfile bump bought nothing.
+const DEPENDENCY_GRAPH_INPUTS = new Set(["pnpm-lock.yaml", "pnpm-workspace.yaml"]);
+const TINYBIRD_INPUTS = new Set([
+  "scripts/check-tinybird-local.mjs",
+  "scripts/lib/tinybird-metric-stub-tripwire.mjs",
+  "scripts/lib/tinybird-process.mjs",
+  "scripts/machine-lock.mjs",
+  "tinybird.config.json",
 ]);
 const CACHE_POLICY_INPUTS = new Set([
   ".github/workflows/ci.yml",
@@ -25,11 +36,13 @@ export function classifyCiChanges(paths) {
   const changedPaths = paths.map(normalizePath).filter(Boolean);
   const productionPlan = classifyProductionChanges(changedPaths);
   const globalValidationChanged = changedPaths.some((path) => GLOBAL_VALIDATION_INPUTS.has(path));
+  const dependencyGraphChanged = changedPaths.some((path) => DEPENDENCY_GRAPH_INPUTS.has(path));
 
   return {
     cachePolicyChanged: changedPaths.some((path) => CACHE_POLICY_INPUTS.has(path)),
     d1:
       globalValidationChanged ||
+      dependencyGraphChanged ||
       changedPaths.some(
         (path) =>
           path.startsWith("packages/db/") ||
@@ -41,13 +54,7 @@ export function classifyCiChanges(paths) {
     ),
     tinybird:
       globalValidationChanged ||
-      changedPaths.some(
-        (path) =>
-          path.startsWith("infra/tinybird/") ||
-          path === "tinybird.config.json" ||
-          path === "scripts/check-tinybird-local.mjs" ||
-          path === "scripts/lib/tinybird-process.mjs",
-      ),
+      changedPaths.some((path) => path.startsWith("infra/tinybird/") || TINYBIRD_INPUTS.has(path)),
   };
 }
 

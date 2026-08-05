@@ -70,34 +70,6 @@ jobs:
           PUSH_AFTER_SHA: ${{ github.sha }}
         run: node scripts/plan-ci-verification.mjs
 
-      - name: Install Tinybird CLI
-        if: steps.plan.outputs.tinybird == 'true'
-        timeout-minutes: 5
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSL --max-time 120 https://tinybird.co | sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Validate Tinybird locally
-        if: steps.plan.outputs.tinybird == 'true'
-        run: pnpm tinybird:local
-
-      - name: Validate D1 migrations locally
-        if: steps.plan.outputs.d1 == 'true'
-        run: pnpm d1:migrate:local && pnpm d1:migrate:populated
-
-      - name: Verify
-        timeout-minutes: 15
-        env:
-          USE_AFFECTED: ${{ steps.plan.outputs.use_affected }}
-        run: |
-          if [ "$USE_AFFECTED" = "true" ]; then
-            pnpm verify:ci --affected --output-logs=new-only
-          else
-            pnpm verify:ci --output-logs=new-only
-          fi
-
       - name: Install gitleaks
         timeout-minutes: 5
         shell: bash
@@ -120,14 +92,127 @@ jobs:
           SECRETS_RANGE_AFTER: ${{ github.sha }}
         run: pnpm secrets:range
 
+      - name: Verify
+        timeout-minutes: 15
+        env:
+          USE_AFFECTED: ${{ steps.plan.outputs.use_affected }}
+        run: |
+          if [ "$USE_AFFECTED" = "true" ]; then
+            pnpm verify:ci --affected --output-logs=new-only
+          else
+            pnpm verify:ci --output-logs=new-only
+          fi
+
       - name: Require signed Turbo remote cache
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: node scripts/check-turbo-remote-cache-env.mjs --required
+
+  # Tinybird and D1 validation share no data with Verify, so they run beside it
+  # rather than ahead of it. Each job re-runs the planner instead of depending on
+  # a shared plan job: the planner is a side-effect-free ~0s script, while a
+  # fan-out job would add its whole setup cost to the majority of runs that skip
+  # both validators. The jobs stay unconditional and gate at the step level so a
+  # skipped job can never skip the production deploy that needs them.
+  tinybird:
+    name: Validate Tinybird
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 15
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      # No `pnpm install`: check-tinybird-local.mjs and its helpers import node
+      # builtins only, and `tb` is curl-installed. Installing the workspace here
+      # would add ~15s and put the lockfile back on this job's critical path.
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.17.0
+
+      - name: Plan CI verification
+        id: plan
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_AFTER_SHA: ${{ github.sha }}
+        run: node scripts/plan-ci-verification.mjs
+
+      - name: Install Tinybird CLI
+        if: steps.plan.outputs.tinybird == 'true'
+        timeout-minutes: 5
+        uses: ./.github/actions/setup-tinybird-cli
+
+      - name: Validate Tinybird locally
+        if: steps.plan.outputs.tinybird == 'true'
+        timeout-minutes: 10
+        run: pnpm tinybird:local
+
+  d1:
+    name: Validate D1
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+
+      - name: Plan CI verification
+        id: plan
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_AFTER_SHA: ${{ github.sha }}
+        run: node scripts/plan-ci-verification.mjs
+
+      - name: Install
+        if: steps.plan.outputs.d1 == 'true'
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate D1 migrations locally
+        if: steps.plan.outputs.d1 == 'true'
+        timeout-minutes: 10
+        run: pnpm d1:migrate:local && pnpm d1:migrate:populated
 
   deploy-production:
     name: Deploy Production
     needs:
       - verify
+      - tinybird
+      - d1
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/deploy-production.yml
     permissions:
