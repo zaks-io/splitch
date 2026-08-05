@@ -11,16 +11,22 @@ Usage:
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
-  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  scopes           required  string ("data-plane:evaluate" | "data-plane:write")[]
+  idempotency_key  optional  string
+  Example:
+    {"scopes":[]}
 
 Credential semantics:
   API Key is secret and server-side only; a newly created value is shown once and cannot be read back.
 
 Example:
-  splitch api-keys create --body-json '<json>' --json",
+  splitch api-keys create --body-json '{"scopes":[]}' --json",
     "api-keys list": "List API Key metadata (no secrets).
 
 Usage:
@@ -45,15 +51,20 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
-  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  (empty object)
+  Example:
+    {}
 
 Credential semantics:
   API Key is secret and server-side only; a newly created value is shown once and cannot be read back.
 
 Example:
-  splitch api-keys revoke <key-id> --body-json '<json>' --json",
+  splitch api-keys revoke <key-id> --body-json '{}' --json",
     "app-attention-rollup get": "Read explicit per-Environment SRM and Guardrail attention for one App.
 
 Usage:
@@ -85,13 +96,20 @@ Usage:
 
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  action           required  string ("approve_and_apply" | "decline")
+  reason           optional  string
+  idempotency_key  required  string
+  Example:
+    {"action":"approve_and_apply","idempotency_key":"idem-1"}
+
 Example:
-  splitch approval-request-reviews create <id> --body-json '<json>' --json",
+  splitch approval-request-reviews create <id> --body-json '{"action":"approve_and_apply","idempotency_key":"idem-1"}' --json",
     "approval-requests get": "Get one full Approval Request projection.
 
 Usage:
@@ -126,13 +144,21 @@ Flags:
   --org <organization>     [type: string; default: none] Organization ID.
   --name <name>            [type: string; default: none] Resource name.
   --key <key>              [type: string; default: none] Resource key.
-  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  name             required  string
+  key              optional  string
+  description      optional  string
+  idempotency_key  optional  string
+  Example:
+    {"name":"name"}
+
 Example:
-  splitch apps create <org-id> --body-json '<json>' --json",
+  splitch apps create <org-id> --body-json '{"name":"name"}' --json",
     "apps delete": "Delete an App (blocked while any Experiment is running).
 
 Usage:
@@ -177,12 +203,18 @@ Usage:
 Flags:
   --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
   --name <name>       [type: string; default: none] Resource name.
-  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
   --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help          [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  name         optional  string
+  description  optional  string
+  Example:
+    {"name":"name"}
+
 Example:
-  splitch apps update --body-json '<json>' --json",
+  splitch apps update --body-json '{"name":"name"}' --json",
     "client-key get": "Get the Environment's public Client Key (never 404s for a live Env).
 
 Usage:
@@ -223,15 +255,21 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
-  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  originAllowlist  optional  string[] | null
+  rateLimitRps     optional  number
+  Example:
+    {"originAllowlist":["https://app.example.com"]}
 
 Credential semantics:
   Client Key is public and safe for untrusted clients; flags verify fetches it automatically.
 
 Example:
-  splitch client-key update --body-json '<json>' --json",
+  splitch client-key update --body-json '{"originAllowlist":["https://app.example.com"]}' --json",
     "current-user delete": "Request deletion of the authenticated User.
 
 Usage:
@@ -261,12 +299,18 @@ Usage:
 
 Flags:
   --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
   --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help          [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  idType        required  string
+  targetingKey  required  string
+  Example:
+    {"idType":"idType","targetingKey":"userId"}
+
 Example:
-  splitch entity-privacy delete --body-json '<json>' --json",
+  splitch entity-privacy delete --body-json '{"idType":"idType","targetingKey":"userId"}' --json",
     "entity-privacy export": "Export an Entity's data-subject records (Targeting Key hashed server-side).
 
 Usage:
@@ -274,12 +318,18 @@ Usage:
 
 Flags:
   --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
   --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help          [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  idType        required  string
+  targetingKey  required  string
+  Example:
+    {"idType":"idType","targetingKey":"userId"}
+
 Example:
-  splitch entity-privacy export --body-json '<json>' --json",
+  splitch entity-privacy export --body-json '{"idType":"idType","targetingKey":"userId"}' --json",
     "env-policy get": "Get the selected Environment Policy.
 
 Usage:
@@ -302,12 +352,20 @@ Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
   --name <name>        [type: string; default: none] Resource name.
-  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  variantAvailability    required  string ("allow" | "confirm")
+  targetingRolloutValue  required  string ("allow" | "confirm")
+  enabledState           required  string ("allow" | "confirm")
+  startExperimentRun     required  string ("allow" | "confirm")
+  Example:
+    {"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}
+
 Example:
-  splitch env-policy set --body-json '<json>' --json",
+  splitch env-policy set --body-json '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}' --json",
     "envs create": "Create an Environment (auto-provisions its Client Key).
 
 Usage:
@@ -317,12 +375,19 @@ Flags:
   --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
   --name <name>       [type: string; default: none] Resource name.
   --key <key>         [type: string; default: none] Resource key.
-  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
   --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help          [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  key     required  string
+  name    optional  string
+  policy  optional  { variantAvailability: string ("allow" | "confirm"); targetingRolloutValue: string ("allow" | "confirm"); enabledState: string ("allow" | "confirm"); startExperimentRun: string ("allow" | "confirm") }
+  Example:
+    {"key":"key"}
+
 Example:
-  splitch envs create --body-json '<json>' --json",
+  splitch envs create --body-json '{"key":"key"}' --json",
     "envs delete": "Delete an Environment (blocked if running or last Environment).
 
 Usage:
@@ -370,12 +435,18 @@ Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
   --name <name>        [type: string; default: none] Resource name.
-  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  name    optional  string
+  policy  optional  { variantAvailability: string ("allow" | "confirm"); targetingRolloutValue: string ("allow" | "confirm"); enabledState: string ("allow" | "confirm"); startExperimentRun: string ("allow" | "confirm") }
+  Example:
+    {"name":"name"}
+
 Example:
-  splitch envs update --body-json '<json>' --json",
+  splitch envs update --body-json '{"name":"name"}' --json",
     "experiment-results get": "Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.
 
 Usage:
@@ -397,12 +468,17 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
-  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  runId  optional  string
+  Example:
+    {"runId":"run_1"}
+
 Example:
-  splitch experiment-results post <experiment-id> --body-json '<json>' --json",
+  splitch experiment-results post <experiment-id> --body-json '{"runId":"run_1"}' --json",
     "experiments create": "Create an Experiment draft.
 
 Usage:
@@ -413,13 +489,37 @@ Flags:
   --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
   --name <name>            [type: string; default: none] Resource name.
   --key <key>              [type: string; default: none] Resource key.
-  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  appId               required  string
+  environmentId       required  string
+  name                required  string
+  key                 required  string
+  flagId              required  string
+  targetingKey        required  string
+  targetingKeyType    required  string
+  description         optional  string
+  hypothesis          optional  string
+  confidenceLevel     optional; default 0.95  number
+  metrics             required  { metricId: string }[]
+  guardrailMetrics    optional; default []  { metricId: string }[]
+  activationMetricId  optional  string | null
+  conversionWindowMs  optional; default 0  number
+  dimensions          optional; default []  string[]
+  allocation          optional  Record<Variant name, number>
+  salt                optional  string
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
+  segmentIds          optional  string[]
+  idempotency_key     optional  string
+  Example:
+    {"appId":"app_1","environmentId":"environment_1","name":"name","key":"key","flagId":"flag_1","targetingKey":"userId","targetingKeyType":"user","metrics":[{"metricId":"metric_1"}]}
+
 Example:
-  splitch experiments create --body-json '<json>' --json",
+  splitch experiments create --body-json '{"appId":"app_1","environmentId":"environment_1","name":"name","key":"key","flagId":"flag_1","targetingKey":"userId","targetingKeyType":"user","metrics":[{"metricId":"metric_1"}]}' --json",
     "experiments delete": "Archive an Experiment; Runs are retained (blocked while a Run is running).
 
 Usage:
@@ -467,11 +567,20 @@ Usage:
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
-  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  review            optional  { action: "approve_and_apply" }
+  reason            optional  string
+  horizon           optional  string ("sequential" | "fixed")
+  sampleSizeLocked  optional  number | null
+  idempotency_key   required  string
+  Example:
+    {"horizon":"sequential","idempotency_key":"idem-1"}
 
 Behavior:
   Start freezes the Experiment draft Targeting Rules into the new Run; the response field frozenTargetingRules is that snapshot (same as run.targetingRules).
@@ -479,7 +588,7 @@ Behavior:
   Without --json, the CLI prints a frozen-targeting summary to stderr.
 
 Example:
-  splitch experiments start <experiment-id> --body-json '<json>' --json",
+  splitch experiments start <experiment-id> --body-json '{"horizon":"sequential","idempotency_key":"idem-1"}' --json",
     "experiments update": "Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED). Staged Targeting Rule edits under a live Run leave evaluation on the frozen Run.
 
 Usage:
@@ -489,9 +598,33 @@ Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
   --name <name>        [type: string; default: none] Resource name.
-  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  name                optional  string
+  description         optional  string
+  hypothesis          optional  string
+  owner               optional  string
+  tags                optional  string[]
+  flagId              optional  string
+  targetingKey        optional  string
+  targetingKeyType    optional  string
+  activationMetricId  optional  string | null
+  allocation          optional  Record<Variant name, number>
+  salt                optional  string
+  variantSet          optional  { id: string; name: string; value: boolean | string | number | Record<string, unknown>; description?: string }[]
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
+  segmentIds          optional  string[]
+  metrics             optional  { metricId: string }[]
+  guardrailMetrics    optional  { metricId: string }[]
+  conversionWindowMs  optional  number
+  dimensions          optional  string[]
+  confidenceLevel     optional  number
+  stageForNextRun     optional  true
+  Example:
+    {"tags":[],"allocation":{"control":1,"treatment":1},"segmentIds":[],"dimensions":[],"stageForNextRun":true}
 
 Behavior:
   While a Run is live, assignment fields (including Targeting Rules) require stageForNextRun and write only the next-Run draft.
@@ -499,7 +632,7 @@ Behavior:
   Without --json, the CLI prints that the live Run is unaffected.
 
 Example:
-  splitch experiments update <experiment-id> --body-json '<json>' --json",
+  splitch experiments update <experiment-id> --body-json '{"tags":[],"allocation":{"control":1,"treatment":1},"segmentIds":[],"dimensions":[],"stageForNextRun":true}' --json",
     "flag-config get": "Get a Flag's per-Environment Configuration.
 
 Usage:
@@ -523,14 +656,23 @@ Flags:
   --env <environment>       [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
   --enabled <boolean>       [type: boolean; default: current value] Set the Flag enabled state.
   --rollout <percent|none>  [type: number | none; default: current value] Set or clear the baseline rollout.
-  --body-json <json>        [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>        [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>   [type: string; default: generated] Stable retry key for this mutation.
   --confirm                 [type: boolean; default: false] Approve and apply a Policy-gated change.
   --json                    [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help                [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  enabled                optional  boolean
+  availableVariantNames  optional  string[]
+  rollout                optional  { percentage: number } | null
+  review                 optional  { action: "approve_and_apply" }
+  idempotency_key        required  string
+  Example:
+    {"enabled":true,"availableVariantNames":[],"idempotency_key":"idem-1"}
+
 Example:
-  splitch flag-config update <flag-id-or-key> --body-json '<json>' --json",
+  splitch flag-config update <flag-id-or-key> --body-json '{"enabled":true,"availableVariantNames":[],"idempotency_key":"idem-1"}' --json",
     "flag-targeting-rules replace": "Full-replace this Environment's ordered Targeting Rule list.
 
 Usage:
@@ -539,18 +681,25 @@ Usage:
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
-  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  targetingRules   required  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
+  review           optional  { action: "approve_and_apply" }
+  idempotency_key  required  string
+  Example:
+    {"targetingRules":[{"id":"id_1","flagId":"flag_1","priority":0,"conditions":[{"attribute":"attribute","operator":"eq","value":true}],"variantId":"variant_1"}],"idempotency_key":"idem-1"}
 
 Behavior:
   While a Run is live on this Flag, replace is refused with RUN_FROZEN (end the Run first).
   A live Run evaluates its own frozen Targeting Rule snapshot, not this Flag Configuration list.
 
 Example:
-  splitch flag-targeting-rules replace <flag-id-or-key> --body-json '<json>' --json",
+  splitch flag-targeting-rules replace <flag-id-or-key> --body-json '{"targetingRules":[{"id":"id_1","flagId":"flag_1","priority":0,"conditions":[{"attribute":"attribute","operator":"eq","value":true}],"variantId":"variant_1"}],"idempotency_key":"idem-1"}' --json",
     "flag-variants create": "Add a Variant to the App-level catalog.
 
 Usage:
@@ -559,13 +708,24 @@ Usage:
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --name <name>            [type: string; default: none] Resource name.
-  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  appId            required  string
+  flagId           required  string
+  name             required  string
+  value            required  boolean | string | number | Record<string, unknown>
+  isDefault        optional  boolean
+  description      optional  string
+  idempotency_key  required  string
+  Example:
+    {"appId":"app_1","flagId":"flag_1","name":"name","value":true,"idempotency_key":"idem-1"}
+
 Example:
-  splitch flag-variants create <flag-id-or-key> --body-json '<json>' --json",
+  splitch flag-variants create <flag-id-or-key> --body-json '{"appId":"app_1","flagId":"flag_1","name":"name","value":true,"idempotency_key":"idem-1"}' --json",
     "flag-variants delete": "Remove a catalog Variant (blocked if available or in a running Run).
 
 Usage:
@@ -587,14 +747,23 @@ Usage:
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --name <name>            [type: string; default: none] Resource name.
-  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  name             optional  string
+  value            optional  boolean | string | number | Record<string, unknown>
+  description      optional  string
+  review           optional  { action: "approve_and_apply" }
+  idempotency_key  required  string
+  Example:
+    {"value":true,"idempotency_key":"idem-1"}
+
 Example:
-  splitch flag-variants update <flag-id-or-key> <variant-name> --body-json '<json>' --json",
+  splitch flag-variants update <flag-id-or-key> <variant-name> --body-json '{"value":true,"idempotency_key":"idem-1"}' --json",
     "flags create": "Create a Flag definition (key, schema, Variant catalog).
 
 Usage:
@@ -605,10 +774,21 @@ Flags:
   --name <name>            [type: string; default: none] Resource name.
   --key <key>              [type: string; default: none] Flag KEY.
   --variants <names>       [type: comma-separated strings; default: none] Boolean Variant names.
-  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  appId            required  string
+  name             required  string
+  key              required  string
+  schema           optional  Record<string, unknown> | null
+  variants         required  { name: string; value: boolean | string | number | Record<string, unknown>; isDefault: boolean; description?: string }[]
+  description      optional  string
+  idempotency_key  required  string
+  Example:
+    {"appId":"app_1","name":"name","key":"key","variants":[{"name":"name","value":true,"isDefault":true}],"idempotency_key":"idem-1"}
 
 Example:
   splitch flags create --key checkout --variants on,off --json",
@@ -658,14 +838,22 @@ Flags:
   --app <app>                 [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>         [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
   --from-environment-id <id>  [type: string; default: none] Source Environment ID.
-  --body-json <json>          [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>          [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>     [type: string; default: generated] Stable retry key for this mutation.
   --confirm                   [type: boolean; default: false] Approve and apply a Policy-gated change.
   --json                      [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help                  [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  fromEnvironmentId  required  string
+  select             required  { availability?: string[]; targeting?: true; rollout?: true; enabled?: true }
+  review             optional  { action: "approve_and_apply" }
+  idempotency_key    required  string
+  Example:
+    {"fromEnvironmentId":"fromEnvironment_1","select":{"availability":[],"targeting":true,"rollout":true,"enabled":true},"idempotency_key":"idem-1"}
+
 Example:
-  splitch flags promote <flag-id-or-key> --body-json '<json>' --json",
+  splitch flags promote <flag-id-or-key> --body-json '{"fromEnvironmentId":"fromEnvironment_1","select":{"availability":[],"targeting":true,"rollout":true,"enabled":true},"idempotency_key":"idem-1"}' --json",
     "flags test-eval": "Dry-run resolve a Flag with the full resolution reason without firing an Exposure.
 
 Usage:
@@ -676,9 +864,14 @@ Flags:
   --env <environment>    [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
   --targeting-key <key>  [type: string; default: none] Entity Targeting Key.
   --context-json <json>  [type: JSON object; default: {"attributes":{}}] Evaluation Context fields.
-  --body-json <json>     [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>     [type: JSON object; default: none] Request body fields; see Request body below.
   --json                 [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help             [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  evaluationContext  required  { targetingKey: string; idType: string; attributes: Record<string, boolean | string | number | unknown[]> }
+  Example:
+    {"evaluationContext":{"targetingKey":"userId","idType":"idType","attributes":{"control":true,"treatment":true}}}
 
 Example:
   splitch flags test-eval <flag-key> --targeting-key user-123 --json",
@@ -690,12 +883,19 @@ Usage:
 Flags:
   --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
   --name <name>       [type: string; default: none] Resource name.
-  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
   --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help          [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  name         optional  string
+  schema       optional  Record<string, unknown> | null
+  description  optional  string
+  Example:
+    {"schema":{"control":null,"treatment":null}}
+
 Example:
-  splitch flags update <flag-id-or-key> --body-json '<json>' --json",
+  splitch flags update <flag-id-or-key> --body-json '{"schema":{"control":null,"treatment":null}}' --json",
     "flags verify": "Verify a Flag KEY through the data plane without firing an Exposure.
 
 Usage:
@@ -723,13 +923,26 @@ Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --name <name>            [type: string; default: none] Resource name.
   --key <key>              [type: string; default: none] Resource key.
-  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  appId            required  string
+  name             required  string
+  key              required  string
+  kind             required  string ("binomial" | "count" | "revenue" | "ratio")
+  eventName        required  string
+  eventValueField  optional  string
+  denominator      optional  { metricId: string }
+  description      optional  string
+  idempotency_key  optional  string
+  Example:
+    {"appId":"app_1","name":"name","key":"key","kind":"binomial","eventName":"eventName"}
+
 Example:
-  splitch metrics create --body-json '<json>' --json",
+  splitch metrics create --body-json '{"appId":"app_1","name":"name","key":"key","kind":"binomial","eventName":"eventName"}' --json",
     "metrics delete": "Delete a Metric (blocked if referenced by a running Experiment).
 
 Usage:
@@ -775,12 +988,23 @@ Flags:
   --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
   --name <name>       [type: string; default: none] Resource name.
   --key <key>         [type: string; default: none] Resource key.
-  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
   --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help          [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  name             optional  string
+  key              optional  string
+  kind             optional  string ("binomial" | "count" | "revenue" | "ratio")
+  eventName        optional  string
+  eventValueField  optional  string
+  denominator      optional  { metricId: string }
+  description      optional  string
+  Example:
+    {"kind":"binomial"}
+
 Example:
-  splitch metrics update <metric-id> --body-json '<json>' --json",
+  splitch metrics update <metric-id> --body-json '{"kind":"binomial"}' --json",
     "organization-members add": "Add a member to an organization.
 
 Usage:
@@ -788,12 +1012,18 @@ Usage:
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
-  --body-json <json>    [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>    [type: JSON object; default: none] Request body fields; see Request body below.
   --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help            [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  userId  required  string
+  role    required  string ("owner" | "admin" | "member")
+  Example:
+    {"userId":"user_1","role":"owner"}
+
 Example:
-  splitch organization-members add <org-id> --body-json '<json>' --json",
+  splitch organization-members add <org-id> --body-json '{"userId":"user_1","role":"owner"}' --json",
     "organization-members list": "List organization members.
 
 Usage:
@@ -825,12 +1055,17 @@ Usage:
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
-  --body-json <json>    [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>    [type: JSON object; default: none] Request body fields; see Request body below.
   --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help            [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  role  required  string ("owner" | "admin" | "member")
+  Example:
+    {"role":"owner"}
+
 Example:
-  splitch organization-members update <org-id> <user-id> --body-json '<json>' --json",
+  splitch organization-members update <org-id> <user-id> --body-json '{"role":"owner"}' --json",
     "organization-privacy export": "Export an Organization's data.
 
 Usage:
@@ -862,12 +1097,18 @@ Usage:
 
 Flags:
   --name <name>       [type: string; default: none] Resource name.
-  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
   --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help          [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  name  required  string
+  slug  optional  string
+  Example:
+    {"name":"name"}
+
 Example:
-  splitch orgs create --body-json '<json>' --json",
+  splitch orgs create --body-json '{"name":"name"}' --json",
     "orgs delete": "Delete an organization (requires a prior dry-run confirmation token).
 
 Usage:
@@ -911,12 +1152,18 @@ Usage:
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
   --name <name>         [type: string; default: none] Resource name.
-  --body-json <json>    [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>    [type: JSON object; default: none] Request body fields; see Request body below.
   --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help            [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  name  optional  string
+  plan  optional  string ("free" | "pro" | "enterprise")
+  Example:
+    {"plan":"free"}
+
 Example:
-  splitch orgs update <org-id> --body-json '<json>' --json",
+  splitch orgs update <org-id> --body-json '{"plan":"free"}' --json",
     "privacy-requests get": "Get a privacy request's status (and its job, if any).
 
 Usage:
@@ -936,12 +1183,17 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
-  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  reason  optional  string
+  Example:
+    {"reason":"reason"}
+
 Example:
-  splitch runs end <run-id> --body-json '<json>' --json",
+  splitch runs end <run-id> --body-json '{"reason":"reason"}' --json",
     "runs get": "Get a full Run (frozen assignment + measurement config + status).
 
 Usage:
@@ -976,13 +1228,21 @@ Usage:
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --name <name>            [type: string; default: none] Resource name.
-  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  name             required  string
+  description      optional  string
+  conditions       required  { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]
+  idempotency_key  optional  string
+  Example:
+    {"name":"name","conditions":[{"attribute":"attribute","operator":"eq","value":true}]}
+
 Example:
-  splitch segments create --body-json '<json>' --json",
+  splitch segments create --body-json '{"name":"name","conditions":[{"attribute":"attribute","operator":"eq","value":true}]}' --json",
     "segments delete": "Delete a Segment (blocked if referenced by a running Experiment).
 
 Usage:
@@ -1027,12 +1287,19 @@ Usage:
 Flags:
   --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
   --name <name>       [type: string; default: none] Resource name.
-  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
   --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help          [type: boolean; default: false] Show help and exit.
 
+Request body (--body-json):
+  name         optional  string
+  description  optional  string
+  conditions   optional  { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]
+  Example:
+    {"name":"name"}
+
 Example:
-  splitch segments update <segment-id> --body-json '<json>' --json",
+  splitch segments update <segment-id> --body-json '{"name":"name"}' --json",
   },
   "groups": {
     "api-keys": "Manage api-keys resources.
