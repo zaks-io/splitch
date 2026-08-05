@@ -111,30 +111,27 @@ describe("GET/POST experiment results", () => {
 });
 
 describe("GET/POST experiment results isolation", () => {
-  it("returns RUN_NOT_FOUND when a requested Run has no Tinybird run-input rows", async () => {
-    const { app, tinybird } = makeHarness({
+  it("returns RUN_NOT_FOUND when Tinybird has no run-input rows (Experiment existence is Control Plane's)", async () => {
+    const withRunId = makeHarness({
+      ...rowsByPipe(),
+      analysis_run_inputs: [],
+    });
+    const liveSelector = makeHarness({
       ...rowsByPipe(),
       analysis_run_inputs: [],
     });
 
-    const res = await app.request(`${PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+    const pinned = await withRunId.app.request(`${PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+    const live = await liveSelector.app.request(PATH, resultsAuthInit("GET"));
 
-    expect(res.status).toBe(404);
-    expect(((await res.json()) as ErrorResponse).code).toBe("RUN_NOT_FOUND");
-    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_inputs"]);
-  });
-
-  it("returns EXPERIMENT_NOT_FOUND when the live Run selector has no Tinybird run-input rows", async () => {
-    const { app, tinybird } = makeHarness({
-      ...rowsByPipe(),
-      analysis_run_inputs: [],
-    });
-
-    const res = await app.request(PATH, resultsAuthInit("GET"));
-
-    expect(res.status).toBe(404);
-    expect(((await res.json()) as ErrorResponse).code).toBe("EXPERIMENT_NOT_FOUND");
-    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_inputs"]);
+    expect(pinned.status).toBe(404);
+    expect(((await pinned.json()) as ErrorResponse).code).toBe("RUN_NOT_FOUND");
+    expect(live.status).toBe(404);
+    expect(((await live.json()) as ErrorResponse).code).toBe("RUN_NOT_FOUND");
+    expect(withRunId.tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_inputs"]);
+    expect(liveSelector.tinybird.calls.map((call) => call.pipeName)).toEqual([
+      "analysis_run_inputs",
+    ]);
   });
 
   it("rejects missing and invalid control-plane tokens before any Tinybird read", async () => {

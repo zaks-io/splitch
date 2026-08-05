@@ -40,7 +40,7 @@ export const analysisRoutes = [
     method: "GET",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/results",
     summary:
-      "Get an Experiment's results envelope: state ready with StatsOutput, or state no_data naming the missing input.",
+      "Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.",
     request: { params: ExperimentParams, query: ResultsSelectorSchema },
     response: AnalysisResultsEnvelopeSchema,
     auth: AUTH,
@@ -65,7 +65,7 @@ export const analysisRoutes = [
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/results",
     summary:
-      "Get an Experiment's results envelope: state ready with StatsOutput, or state no_data naming the missing input.",
+      "Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.",
     request: { params: ExperimentParams, body: OptionalResultsSelectorSchema },
     response: AnalysisResultsEnvelopeSchema,
     auth: AUTH,

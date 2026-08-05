@@ -257,3 +257,30 @@ describe("panel Experiment Results read", () => {
     expect(body.stats.arm_results[0]?.point_estimate).toBe(0.8);
   });
 });
+
+describe("panel Experiment Results draft vs missing (SPL-305)", () => {
+  it("returns typed no_run for a draft Experiment instead of EXPERIMENT_NOT_FOUND or RUN_NOT_FOUND", async () => {
+    const analysis = analysisReturning(statsOutput());
+    const response = await results(
+      analysis,
+      {},
+      repository({ runs: [], experiment: experimentRow(ids) }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      state: "no_run",
+      recommendedAction: "START_A_RUN",
+    });
+    expect(analysis).not.toHaveBeenCalled();
+  });
+
+  it("returns EXPERIMENT_NOT_FOUND for a missing Experiment before any analysis read", async () => {
+    const analysis = analysisReturning(statsOutput());
+    const response = await results(analysis, {}, repository({ experiment: null }));
+
+    expect(response.status).toBe(404);
+    expect(((await response.json()) as { code: string }).code).toBe("EXPERIMENT_NOT_FOUND");
+    expect(analysis).not.toHaveBeenCalled();
+  });
+});

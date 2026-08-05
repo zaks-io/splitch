@@ -93,9 +93,11 @@ export async function readStatsInputFromTinybird(
   const runInputs = await pipeRows(tinybird, RUN_INPUTS_PIPE, baseParams);
   const runInput = runInputs[0];
   if (runInput === undefined) {
-    throw new ResultsNotFoundError(
-      scope.runId === undefined ? "EXPERIMENT_NOT_FOUND" : "RUN_NOT_FOUND",
-    );
+    // Analysis only sees Tinybird. Empty run-input rows mean "no Run inputs
+    // here", not "no such Experiment" — Experiment existence is resolved on the
+    // Control Plane before the hop (SPL-305). Claiming EXPERIMENT_NOT_FOUND
+    // from this pipe alone conflated drafts with missing ids.
+    throw new ResultsNotFoundError("RUN_NOT_FOUND");
   }
   const run = materializeRunInput(runInput);
   // Every downstream read is keyed on the Run the inputs pipe returned. If that
