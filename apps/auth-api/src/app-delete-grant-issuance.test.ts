@@ -1,5 +1,5 @@
 import { appScope, createRepository } from "@splitch/db";
-import { createLocalD1 } from "@splitch/db/test-d1";
+import { createLocalD1 } from "@splitch/db/test-d1-pool";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { resolveAppSelectionForUser } from "./membership-authority";
 

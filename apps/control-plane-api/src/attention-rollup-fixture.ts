@@ -5,7 +5,7 @@ import { afterEach, beforeEach, type Mock, vi } from "vitest";
 import { createApp } from "./app";
 import type { AnalysisResultsReader } from "./attention-analysis-reader";
 import { ids, NOW, seedConfigGraph, startSeededExperiment } from "./config-store-fixture-data";
-import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
+import type { LocalBindings } from "./test-fixtures";
 
 export const USER_ID = "user_attention";
 export const OTHER_APP_ID = "app_other_attention";
@@ -14,9 +14,8 @@ export const QA_ENVIRONMENT_ID = "env_qa";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 
 /**
- * Every test here boots a real local harness (Miniflare + D1 migrations) in
- * beforeEach, and the fan-out cases seed hundreds of rows through it. That costs
- * well over the 5s vitest default on a loaded CI runner.
+ * The fan-out cases seed hundreds of rows, so they retain a larger timeout for
+ * loaded CI runners even though D1 now comes from the in-process Workers pool.
  */
 export const ATTENTION_TEST_TIMEOUT = 60_000;
 
@@ -25,7 +24,12 @@ let bindings: LocalBindings;
 /** The App under test: two seeded Environments plus QA, one running Run in dev. */
 export function setupAttentionRollupFixture(): void {
   beforeEach(async () => {
-    bindings = await makeLocalBindings();
+    const [{ makePoolBindings }, { resetD1Database }] = await Promise.all([
+      import("./test-bindings-pool"),
+      import("@splitch/db/test-d1-pool"),
+    ]);
+    bindings = await makePoolBindings();
+    await resetD1Database(bindings.d1);
     await seedConfigGraph(bindings.d1);
     // Attention is about work in flight, so the seeded prod Experiment has to be
     // actually running here.

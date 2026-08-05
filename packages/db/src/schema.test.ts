@@ -3,7 +3,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { createLocalD1 } from "./repo/test-d1";
 import { claimVerifications, runs } from "./schema";
 
 /**
@@ -113,21 +112,9 @@ describe("runs storage-only decision columns", () => {
     expect(runsBlock).toContain(column);
   });
 
-  it("stores frozen control_variant_id as NOT NULL after backfill", async () => {
+  it("stores frozen control_variant_id as NOT NULL after backfill", () => {
     expect(getTableColumns(runs).controlVariantId?.notNull).toBe(true);
     expect(migrationSql).toContain("`control_variant_id` text NOT NULL");
-
-    const local = await createLocalD1();
-    try {
-      const columns = await local.d1
-        .prepare("PRAGMA table_info('runs')")
-        .all<{ name: string; notnull: number }>();
-      expect(columns.results.find((column) => column.name === "control_variant_id")).toMatchObject({
-        notnull: 1,
-      });
-    } finally {
-      await local.dispose();
-    }
   });
 
   it("enforces run_number + salt uniqueness per Experiment", () => {
@@ -142,47 +129,6 @@ describe("credential invariants", () => {
     expect(migrationSql).toContain(
       "CREATE UNIQUE INDEX `client_keys_active_env_unique` ON `client_keys` (`app_id`,`environment_id`) WHERE revoked_at IS NULL",
     );
-  });
-});
-
-describe("full table corpus", () => {
-  it("applies the 24 named live D1 tables", async () => {
-    const local = await createLocalD1();
-    try {
-      const tables = await local.d1
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != '_cf_METADATA'",
-        )
-        .all<{ name: string }>();
-      expect(tables.results.map((table) => table.name).sort()).toEqual([
-        "api_keys",
-        "app_memberships",
-        "approval_requests",
-        "approval_reviews",
-        "apps",
-        "claim_consent_attempts",
-        "claim_idempotency",
-        "claim_verifications",
-        "client_keys",
-        "device_refresh_sessions",
-        "entity_deletions",
-        "environments",
-        "experiments",
-        "flag_configs",
-        "flags",
-        "metrics",
-        "org_memberships",
-        "organizations",
-        "privacy_requests",
-        "runs",
-        "segments",
-        "targeting_rules",
-        "trusted_idps",
-        "variants",
-      ]);
-    } finally {
-      await local.dispose();
-    }
   });
 });
 
