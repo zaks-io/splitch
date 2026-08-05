@@ -21,6 +21,12 @@ function accessTokenKid(jwk: Record<string, unknown>): string {
   return typeof jwk.kid === "string" && jwk.kid.length > 0 ? jwk.kid : DEFAULT_ACCESS_TOKEN_KID;
 }
 
+function hasRsaPrivateKeyFields(jwk: Record<string, unknown>): boolean {
+  return ["n", "e", "d", "p", "q", "dp", "dq", "qi"].every(
+    (field) => typeof jwk[field] === "string" && jwk[field].length > 0,
+  );
+}
+
 export function accessTokenPrivateJwkFromSecret(secret: string): JsonWebKey | null {
   const trimmed = secret.trim();
   if (!trimmed.startsWith("{")) {
@@ -34,13 +40,7 @@ export function accessTokenPrivateJwkFromSecret(secret: string): JsonWebKey | nu
     throw new Error("ACCESS_TOKEN_SECRET JSON is invalid");
   }
 
-  if (
-    !isRecord(parsed) ||
-    parsed.kty !== "RSA" ||
-    typeof parsed.n !== "string" ||
-    typeof parsed.e !== "string" ||
-    typeof parsed.d !== "string"
-  ) {
+  if (!isRecord(parsed) || parsed.kty !== "RSA" || !hasRsaPrivateKeyFields(parsed)) {
     throw new Error("ACCESS_TOKEN_SECRET JSON must be an RSA private JWK");
   }
 
@@ -92,12 +92,9 @@ export async function accessTokenSigningKey(jwk: JsonWebKey): Promise<CryptoKey>
 /**
  * Prove the secret can sign, not merely that it parses as a JWK.
  *
- * WHY the import and not the field check alone: WebCrypto needs the CRT
- * parameters (p, q, dp, dq, qi) an exported RSA private JWK carries, so a
- * hand-built `{kty, n, e, d}` satisfies every structural rule above and then
- * fails at importKey on the first mint. That is the same invisible outage as an
- * opaque secret, one shape narrower. Importing is the only check that asks the
- * question the signer asks.
+ * The explicit private-key field check keeps validation consistent across
+ * WebCrypto implementations. Importing then asks the same runtime the signer
+ * uses whether the complete key is usable.
  */
 export async function assertAccessTokenSecretCanSign(secret: string): Promise<void> {
   const jwk = accessTokenPrivateJwkFromSecret(secret);

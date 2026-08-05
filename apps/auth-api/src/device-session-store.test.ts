@@ -1,7 +1,7 @@
 import { createRepository } from "@splitch/db";
 import { describe, expect, it } from "vitest";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
-import { makeLocalBindings } from "./test-fixtures";
+import { makePoolBindings } from "./test-bindings-pool";
 
 const NOW_MS = 1_780_000_000_000;
 const SESSION = {
@@ -24,7 +24,7 @@ function staleMissCache(keys: string[] = []): KVNamespace {
 
 describe("D1 device refresh session store", () => {
   it("falls back to D1 when KV stale-misses after remember", async () => {
-    const local = await makeLocalBindings();
+    const local = await makePoolBindings();
     try {
       const store = makeD1DeviceRefreshSessionStore(createRepository(local.d1), {
         cache: staleMissCache(),
@@ -40,7 +40,7 @@ describe("D1 device refresh session store", () => {
   });
 
   it("round-trips an unbound cold-start session through the NOT NULL '' columns", async () => {
-    const local = await makeLocalBindings();
+    const local = await makePoolBindings();
     try {
       const store = makeD1DeviceRefreshSessionStore(createRepository(local.d1), {
         cache: staleMissCache(),
@@ -64,7 +64,7 @@ describe("D1 device refresh session store", () => {
   });
 
   it("reads a legacy row that stored a full membership scope as its selector", async () => {
-    const local = await makeLocalBindings();
+    const local = await makePoolBindings();
     try {
       const store = makeD1DeviceRefreshSessionStore(createRepository(local.d1), {
         cache: staleMissCache(),
@@ -85,7 +85,7 @@ describe("D1 device refresh session store", () => {
   });
 
   it("returns null for unknown refresh tokens", async () => {
-    const local = await makeLocalBindings();
+    const local = await makePoolBindings();
     try {
       const store = makeD1DeviceRefreshSessionStore(createRepository(local.d1), {
         cache: staleMissCache(),
@@ -99,7 +99,7 @@ describe("D1 device refresh session store", () => {
   });
 
   it("stores only hashed refresh tokens in D1 and KV keys", async () => {
-    const local = await makeLocalBindings();
+    const local = await makePoolBindings();
     try {
       const keys: string[] = [];
       const rawRefreshToken = "provider-refresh-token-secret";
@@ -137,7 +137,7 @@ describe("D1 device refresh session store", () => {
   });
 
   it("rotates durable authority and removes the previous refresh-token hash", async () => {
-    const local = await makeLocalBindings();
+    const local = await makePoolBindings();
     try {
       const store = makeD1DeviceRefreshSessionStore(createRepository(local.d1), {
         cache: staleMissCache(),

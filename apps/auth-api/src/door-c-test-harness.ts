@@ -5,12 +5,8 @@ import { DEVICE_CODE_GRANT, makeFixtureDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import { makeJtiCache } from "./jti-cache";
 import { makeKvRevocationStore } from "./revocation";
-import {
-  type LocalBindings,
-  makeDoorBDeps,
-  makeFixtureKeypair,
-  makeLocalBindings,
-} from "./test-fixtures";
+import { makePoolBindings } from "./test-bindings-pool";
+import { type LocalBindings, makeDoorBDeps, makeFixtureKeypair } from "./test-fixtures";
 import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import { makeFixtureWorkOs } from "./workos";
 
@@ -30,7 +26,7 @@ export function setupDoorCHarness() {
   let signer: TokenSigner;
 
   beforeAll(async () => {
-    local = await makeLocalBindings();
+    local = await makePoolBindings();
     signer = makeTokenSigner({
       assertionSecret: ASSERTION_SECRET,
       accessSecret: ACCESS_SECRET,

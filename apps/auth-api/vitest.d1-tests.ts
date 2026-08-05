@@ -1,0 +1,21 @@
+import { defineTestFileManifest } from "../../scripts/vitest-test-manifest";
+
+export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
+  "src/app-delete-grant-issuance.test.ts",
+  "src/claim-lifetime-security.test.ts",
+  "src/claim-reservation-boundaries.test.ts",
+  "src/claim-reservation-security.test.ts",
+  "src/claim-review-security.test.ts",
+  "src/claim-security.test.ts",
+  "src/claim.test.ts",
+  "src/device-session-store.test.ts",
+  "src/door-b-control-plane-authz.test.ts",
+  "src/door-b-mcp-claim.test.ts",
+  "src/door-b.test.ts",
+  "src/door-c.test.ts",
+  "src/idjag.test.ts",
+  "src/index.test.ts",
+  "src/mcp-local-integration.test.ts",
+  "src/oauth-routes.test.ts",
+  "src/trusted-idp-crud.test.ts",
+]);

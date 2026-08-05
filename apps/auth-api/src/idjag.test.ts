@@ -7,12 +7,12 @@ import { verifyIdJag } from "./idjag-verify";
 import { makeJtiCache } from "./jti-cache";
 import type { Jwks } from "./jwks";
 import { makeKvRevocationStore } from "./revocation";
+import { makePoolBindings } from "./test-bindings-pool";
 import {
   type FixtureKeypair,
   type LocalBindings,
   makeDoorBDeps,
   makeFixtureKeypair,
-  makeLocalBindings,
   signIdJag,
 } from "./test-fixtures";
 import { makeFixtureWorkOs } from "./workos";
@@ -108,7 +108,7 @@ function validClaims(overrides: Record<string, unknown> = {}): Record<string, un
 }
 
 beforeAll(async () => {
-  local = await makeLocalBindings();
+  local = await makePoolBindings();
   keys = await makeFixtureKeypair();
   await seedIdp(keys.jwks, true);
 });

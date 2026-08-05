@@ -5,12 +5,12 @@ import { makeFixtureDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import { makeJtiCache } from "./jti-cache";
 import { makeKvRevocationStore } from "./revocation";
+import { makePoolBindings, resetPoolKv } from "./test-bindings-pool";
 import {
   type DoorBFixtures,
   type LocalBindings,
   makeDoorBDeps,
   makeFixtureKeypair,
-  makeLocalBindings,
 } from "./test-fixtures";
 import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import { FIXTURE_TURNSTILE_TOKEN } from "./turnstile";
@@ -34,7 +34,7 @@ let local: LocalBindings;
 let signer: TokenSigner;
 
 beforeAll(async () => {
-  local = await makeLocalBindings();
+  local = await makePoolBindings();
   signer = makeTokenSigner({
     assertionSecret: ASSERTION_SECRET,
     accessSecret: ACCESS_SECRET,
@@ -50,6 +50,7 @@ afterAll(async () => {
 
 /** A fresh schema per test so row-count assertions are not cross-contaminated. */
 async function resetDb(): Promise<void> {
+  await resetPoolKv(local);
   for (const table of [
     "environments",
     "app_memberships",

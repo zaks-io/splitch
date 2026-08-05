@@ -1,5 +1,4 @@
 import type { Repository } from "@splitch/db";
-import { Miniflare } from "miniflare";
 import type { ClaimDeps } from "./claim";
 import type { Jwks } from "./jwks";
 import {
@@ -22,21 +21,6 @@ const TEST_SIGNER_CONFIG = {
   issuer: "https://auth.splitch.test",
   controlPlaneAudience: "https://cp.splitch.test",
 } as const;
-
-/**
- * Local FIXTURE substrate for the auth-door tests — no real IdP, no real WorkOS.
- *
- * - A throwaway RSA keypair signs fixture ID-JAG tokens; its public half is the
- *   fixture JWKS the verifier checks against (so signature verification is REAL,
- *   just against a key we control).
- * - A Miniflare local D1 carries only the tables the doors touch (trusted_idps,
- *   organizations, org_memberships, apps, app_memberships, environments — Door B
- *   provisions the latter three); the full migration set is gated by @splitch/db's
- *   own suite, so the door test stays self-contained.
- * - A Miniflare local KV backs the jti replay cache.
- *
- * NO real secrets: everything here is generated at test time and discarded.
- */
 
 const KID = "fixture-key-1";
 
@@ -90,46 +74,11 @@ export async function signIdJag(
   return `${input}.${b64url(new Uint8Array(sig))}`;
 }
 
-const SCHEMA = [
-  `CREATE TABLE trusted_idps (idp_id TEXT PRIMARY KEY NOT NULL, org_id TEXT, issuer TEXT NOT NULL, jwks_uri TEXT NOT NULL, client_ids TEXT NOT NULL, enabled INTEGER DEFAULT 1 NOT NULL, created_at TEXT NOT NULL)`,
-  `CREATE UNIQUE INDEX trusted_idps_org_issuer_unique ON trusted_idps (org_id, issuer)`,
-  `CREATE TABLE organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, claim_acquired_at TEXT, claim_acquisition_token TEXT, claim_acquisition_key_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
-  `CREATE UNIQUE INDEX organizations_slug_unique ON organizations (slug)`,
-  `CREATE TABLE org_memberships (org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (org_id, user_id))`,
-  `CREATE TABLE apps (id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
-  `CREATE UNIQUE INDEX apps_org_key_unique ON apps (organization_id, key)`,
-  `CREATE TABLE app_memberships (app_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (app_id, user_id))`,
-  `CREATE TABLE environments (id TEXT PRIMARY KEY NOT NULL, app_id TEXT NOT NULL, key TEXT NOT NULL, name TEXT NOT NULL, policy TEXT DEFAULT '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}' NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
-  `CREATE UNIQUE INDEX environments_app_key_unique ON environments (app_id, key)`,
-  `CREATE TABLE device_refresh_sessions (refresh_token_hash TEXT PRIMARY KEY NOT NULL, provider_session_id TEXT NOT NULL, user_id TEXT NOT NULL, provider_organization_id TEXT NOT NULL, selected_app_scope TEXT NOT NULL, created_at TEXT NOT NULL)`,
-  `CREATE TABLE claim_verifications (id TEXT PRIMARY KEY NOT NULL, provisional_user_hash TEXT NOT NULL, email_hash TEXT NOT NULL, selected_resource TEXT, expires_at TEXT NOT NULL, attempts INTEGER DEFAULT 0 NOT NULL, verified_at TEXT, consumed_at TEXT, created_at TEXT NOT NULL)`,
-  `CREATE TABLE claim_consent_attempts (id TEXT PRIMARY KEY NOT NULL, verification_id TEXT NOT NULL, existing_user_hash TEXT NOT NULL, expires_at TEXT NOT NULL, approved_at TEXT, consumed_at TEXT, created_at TEXT NOT NULL)`,
-  `CREATE TABLE claim_idempotency (key_hash TEXT NOT NULL, verification_id TEXT NOT NULL, provisional_user_hash TEXT NOT NULL, email_hash TEXT NOT NULL, organization_hash TEXT NOT NULL, app_hash TEXT NOT NULL, verified_user_hash TEXT NOT NULL, selected_resource TEXT, completed_at TEXT, provider_confirmation_started_at TEXT, expires_at TEXT NOT NULL, PRIMARY KEY (key_hash, provisional_user_hash, email_hash, organization_hash, app_hash, verified_user_hash))`,
-];
-
 export interface LocalBindings {
   d1: D1Database;
   kv: KVNamespace;
   sessionKv: KVNamespace;
   dispose: () => Promise<void>;
-}
-
-/** Spin up a fresh local D1 (door tables) + KV (jti cache). */
-export async function makeLocalBindings(): Promise<LocalBindings> {
-  const mf = new Miniflare({
-    modules: true,
-    script: "export default {};",
-    d1Databases: { DB: ":memory:" },
-    kvNamespaces: { JTI_CACHE: "jti", SESSION_STORE: "sessions" },
-  });
-  const d1 = (await mf.getD1Database("DB")) as unknown as D1Database;
-  const kv = (await mf.getKVNamespace("JTI_CACHE")) as unknown as KVNamespace;
-  const sessionKv = (await mf.getKVNamespace("SESSION_STORE")) as unknown as KVNamespace;
-  // One batch, not a loop of `exec`: Miniflare's D1 is a real workerd process
-  // over loopback and each `exec` burns an ephemeral port that lands in
-  // TIME_WAIT, which is how this suite used to exhaust the port range.
-  await d1.batch(SCHEMA.map((statement) => d1.prepare(statement)));
-  return { d1, kv, sessionKv, dispose: () => mf.dispose() };
 }
 
 /**

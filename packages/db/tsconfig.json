@@ -6,5 +6,11 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts", "src/repo/test-d1.ts", "src/repo/test-seed.ts"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/repo/test-d1.ts",
+    "src/repo/test-d1-pool.ts",
+    "src/repo/test-d1-pool-setup.ts",
+    "src/repo/test-seed.ts"
+  ]
 }

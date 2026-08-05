@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appScope, createRepository, envScope } from "../index";
-import { createLocalD1, type LocalD1 } from "./test-d1";
-import { seedTwoTenants, type SeededTenants } from "./test-seed";
+import { createLocalD1, type LocalD1 } from "./test-d1-pool";
+import { type SeededTenants, seedTwoTenants } from "./test-seed";
 
 /**
  * Write-side tenant-isolation breach tests (the audit-found CROSS-TENANT WRITE).
