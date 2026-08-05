@@ -224,8 +224,8 @@ the resolved Targeting Rule snapshot frozen into the Run and matches `run.target
 Configuration Targeting Rules do not apply while this Run is live.
 
 Deploy order: `frozenTargetingRules` is required on `StartRunResponseSchema` and control-plane
-clients parse Start responses strictly. Publish / deploy the Worker that emits the field before CLI
-or SDK clients that validate against this schema, or every `experiments start` fails body parse.
+clients parse Start responses strictly. Deploy the Worker that emits the field before CLI or SDK
+clients that validate against this schema, or every `experiments start` fails body parse.
 
 `approvalRequest` is null under `allow` and contains the applied request and latest Review under
 `confirm`. When required Review is omitted or future `approve` awaits a distinct reviewer, the
