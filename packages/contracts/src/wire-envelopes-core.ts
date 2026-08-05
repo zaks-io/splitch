@@ -11,6 +11,8 @@ import {
   EvaluateAllEntrySchema,
   type EvaluateAllReason,
   EvaluateAllReasonSchema,
+  type EvaluateAllRequest,
+  EvaluateAllRequestSchema,
   type EvaluateAllResponse,
   EvaluateAllResponseSchema,
 } from "./leaves/evaluate-all-wire";
@@ -23,6 +25,8 @@ export {
   EvaluateAllEntrySchema,
   type EvaluateAllReason,
   EvaluateAllReasonSchema,
+  type EvaluateAllRequest,
+  EvaluateAllRequestSchema,
   type EvaluateAllResponse,
   EvaluateAllResponseSchema,
   type PeekEvaluateResponse,
@@ -103,19 +107,6 @@ export const DataPlaneEvaluateRequestSchema = z.object({
   attributes: EvaluationContextSchema.shape.attributes.default({}),
 });
 export type DataPlaneEvaluateRequest = z.infer<typeof DataPlaneEvaluateRequestSchema>;
-
-/**
- * Bulk Precomputed Evaluations request: DataPlaneEvaluateRequest minus `flagKey`
- * (the Flag set is every Flag in the credential's Environment). ADR-0048;
- * docs/spec/sdk/evaluate-all-endpoint.md.
- */
-export const EvaluateAllRequestSchema = z.object({
-  appId: NonEmptyDataPlaneStringSchema.optional(),
-  targetingKey: NonEmptyDataPlaneStringSchema,
-  idType: NonEmptyDataPlaneStringSchema,
-  attributes: EvaluationContextSchema.shape.attributes.default({}),
-});
-export type EvaluateAllRequest = z.infer<typeof EvaluateAllRequestSchema>;
 
 /** Non-billable, privacy-minimal SDK cache-hit telemetry. */
 export const CachedEvaluationTelemetryRequestSchema = z

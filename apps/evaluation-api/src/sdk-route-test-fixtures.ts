@@ -55,6 +55,8 @@ interface SdkRouteHarnessOptions {
   readonly holdovers?: Map<string, { runId: string; variant: string }>;
   readonly runOverrides?: Partial<RunConfigKV>;
   readonly legacyClientKey?: boolean;
+  /** Override Exposure Ticket issued_at for ETag-stability tests. */
+  readonly ticketNow?: () => Date;
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -202,7 +204,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     exposureTicket: {
       saltStore: new StaticSaltStore(),
       ticketKey: "splitch-test-exposure-ticket-key-32chars",
-      now: () => new Date("2026-07-03T00:00:00.000Z"),
+      now: options.ticketNow ?? (() => new Date("2026-07-03T00:00:00.000Z")),
     },
     evaluationCommitSink,
     evaluationUsageSink,

@@ -17,6 +17,8 @@ export {
   EvaluateAllEntrySchema,
   type EvaluateAllReason,
   EvaluateAllReasonSchema,
+  type EvaluateAllRequest,
+  EvaluateAllRequestSchema,
   type EvaluateAllResponse,
   EvaluateAllResponseSchema,
 } from "./leaves/evaluate-all-wire";
@@ -26,7 +28,3 @@ export {
   type VariantValue,
 } from "./leaves/resolution-details";
 export type { ResolutionReason } from "./leaves/resolution-reason";
-export {
-  type EvaluateAllRequest,
-  EvaluateAllRequestSchema,
-} from "./wire-envelopes-core";

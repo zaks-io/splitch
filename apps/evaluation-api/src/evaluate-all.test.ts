@@ -129,7 +129,9 @@ describe("POST /api/sdk/evaluate-all: response contract", () => {
     });
     expect(body.evaluations).toHaveProperty(FLAG_KEY);
   });
+});
 
+describe("POST /api/sdk/evaluate-all: ETag and tickets", () => {
   it("returns a stable ETag and 304 on If-None-Match", async () => {
     const harness = await makeSdkRouteHarness({ liveRun: true });
 
@@ -160,6 +162,66 @@ describe("POST /api/sdk/evaluate-all: response contract", () => {
     });
     const changedRes = await changed.app.request(PATH, evaluateAllRouteInit(CLIENT_KEY));
     expect(changedRes.headers.get("etag")).not.toBe(etag);
+  });
+
+  it("keeps ETag stable when Exposure Ticket issued_at advances", async () => {
+    const early = await makeSdkRouteHarness({
+      liveRun: true,
+      ticketNow: () => new Date("2026-07-03T00:00:00.000Z"),
+    });
+    const late = await makeSdkRouteHarness({
+      liveRun: true,
+      ticketNow: () => new Date("2026-07-04T00:00:00.000Z"),
+    });
+
+    const first = await early.app.request(PATH, evaluateAllRouteInit(CLIENT_KEY));
+    const second = await late.app.request(PATH, evaluateAllRouteInit(CLIENT_KEY));
+    const firstBody = (await first.json()) as EvaluateAllResponse;
+    const secondBody = (await second.json()) as EvaluateAllResponse;
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(first.headers.get("etag")).toBe(second.headers.get("etag"));
+    expect(firstBody.evaluations[FLAG_KEY]?.exposureTicket).not.toBe(
+      secondBody.evaluations[FLAG_KEY]?.exposureTicket,
+    );
+
+    const revalidate = await late.app.request(
+      PATH,
+      evaluateAllRouteInit(CLIENT_KEY, {
+        "if-none-match": first.headers.get("etag") ?? "",
+      }),
+    );
+    expect(revalidate.status).toBe(304);
+    expect(late.evaluationUsageSink.writes).toHaveLength(1);
+  });
+
+  it("emits SPLIT + ticket for live-Run no-match defaults (evaluate would expose)", async () => {
+    const { app } = await makeSdkRouteHarness({
+      liveRun: true,
+      runOverrides: {
+        targetingRules: [
+          targetingRule({
+            id: "rule-enterprise",
+            conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
+          }),
+        ],
+      },
+      flagOverrides: { targetingRules: [] },
+    });
+
+    const res = await app.request(
+      PATH,
+      evaluateAllRouteInit(CLIENT_KEY, {}, { attributes: { plan: "free" } }),
+    );
+    const body = (await res.json()) as EvaluateAllResponse;
+
+    expect(res.status).toBe(200);
+    expect(body.evaluations[FLAG_KEY]).toMatchObject({
+      reason: "SPLIT",
+      exposureTicket: expect.any(String),
+      errorCode: null,
+    });
   });
 });
 

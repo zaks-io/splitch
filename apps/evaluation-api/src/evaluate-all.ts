@@ -54,7 +54,7 @@ export function makeEvaluateAllHandler(deps: EvaluateAllRouteDeps) {
     if (!payload.ok) return renderError(payload.error, { requestId });
 
     const body = EvaluateAllResponseSchema.parse({ evaluations: payload.evaluations });
-    const etag = await strongEtag(canonicalBody(body));
+    const etag = await strongEtag(etagMaterial(body));
     if (ifNoneMatchMatches(request.headers.get("if-none-match"), etag)) {
       return new Response(null, {
         status: 304,
@@ -146,6 +146,9 @@ async function entryFor(
 }
 
 function reasonFor(result: Exclude<EvaluateResult, { kind: "error" }>): EvaluateAllReason {
+  // Ticket-bearing resolutions are always SPLIT: ADR-0048 mints a ticket exactly
+  // when evaluate would seal an Exposure (including live-Run no-match defaults).
+  if (result.exposure !== null) return "SPLIT";
   if (result.kind === "disabled") return "DISABLED";
   if (result.kind === "no_match_default" || result.kind === "null_experiment") return "DEFAULT";
   return "SPLIT";
@@ -266,12 +269,30 @@ function memoizeGetAll(store: AssignmentStore): AssignmentStore {
   };
 }
 
-function canonicalBody(body: ReturnType<typeof EvaluateAllResponseSchema.parse>): string {
+/**
+ * ETag material excludes Exposure Tickets: tickets embed issued_at and would
+ * make every revalidation miss (ADR-0048 freshness is config+context, not remint).
+ */
+function etagMaterial(body: ReturnType<typeof EvaluateAllResponseSchema.parse>): string {
   const keys = Object.keys(body.evaluations).sort();
-  const evaluations: Record<string, EvaluateAllEntry> = {};
+  const evaluations: Record<
+    string,
+    {
+      variant: EvaluateAllEntry["variant"];
+      variantName: EvaluateAllEntry["variantName"];
+      reason: EvaluateAllEntry["reason"];
+      errorCode: EvaluateAllEntry["errorCode"];
+    }
+  > = {};
   for (const key of keys) {
     const entry = body.evaluations[key];
-    if (entry !== undefined) evaluations[key] = entry;
+    if (entry === undefined) continue;
+    evaluations[key] = {
+      variant: entry.variant,
+      variantName: entry.variantName,
+      reason: entry.reason,
+      errorCode: entry.errorCode,
+    };
   }
   return JSON.stringify({ evaluations });
 }

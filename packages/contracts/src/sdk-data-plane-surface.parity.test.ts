@@ -10,11 +10,10 @@ import {
   ResolutionDetailsSchema as SdkResolutionDetailsSchema,
 } from "./sdk-data-plane-surface";
 import {
-  DataPlaneEvaluateResponseSchema,
   EvaluateAllRequestSchema,
   EvaluateAllResponseSchema,
-  PeekEvaluateResponseSchema,
-} from "./wire-envelopes-core";
+} from "./leaves/evaluate-all-wire";
+import { DataPlaneEvaluateResponseSchema, PeekEvaluateResponseSchema } from "./wire-envelopes-core";
 
 describe("sdk-data-plane-surface parity", () => {
   it("re-exports the canonical ResolutionDetails schema", () => {
