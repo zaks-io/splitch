@@ -60,6 +60,27 @@ describe("CreateExperimentRequestSchema (defaultVariantId is Worker-copied)", ()
     void targetingKey;
     expect(CreateExperimentRequestSchema.safeParse(noKey).success).toBe(false);
   });
+
+  it("rejects a typo-shaped targetingKeyType", () => {
+    const result = CreateExperimentRequestSchema.safeParse({
+      ...validCreateExperiment,
+      targetingKeyType: "User",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]?.path).toEqual(["targetingKeyType"]);
+    expect(result.error.issues[0]?.message).toBe(
+      "must be lowercase alphanumerics separated by single underscores",
+    );
+  });
+
+  it("accepts a non-blessed Entity type on create", () => {
+    const req = CreateExperimentRequestSchema.parse({
+      ...validCreateExperiment,
+      targetingKeyType: "restaurant",
+    });
+    expect(req.targetingKeyType).toBe("restaurant");
+  });
 });
 
 describe("PatchExperimentRequestSchema", () => {
@@ -91,6 +112,21 @@ describe("PatchExperimentRequestSchema", () => {
 
   it("rejects an unknown field (strict)", () => {
     expect(PatchExperimentRequestSchema.safeParse({ liveRunId: "run_1" }).success).toBe(false);
+  });
+
+  it("rejects a typo-shaped targetingKeyType", () => {
+    const result = PatchExperimentRequestSchema.safeParse({ targetingKeyType: "user-type" });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]?.path).toEqual(["targetingKeyType"]);
+    expect(result.error.issues[0]?.message).toBe(
+      "must be lowercase alphanumerics separated by single underscores",
+    );
+  });
+
+  it("accepts a non-blessed Entity type on update", () => {
+    const req = PatchExperimentRequestSchema.parse({ targetingKeyType: "account" });
+    expect(req.targetingKeyType).toBe("account");
   });
 });
 
