@@ -17,9 +17,9 @@ call an Experiment Run result decision-valid.
 These names are package scripts and CI jobs. Math slices add their own fixtures to the matching gate.
 
 `stats:audit` is deliberately outside CI on CPU cost. Its files run as parallel Monte Carlo loops
-that use every available core for 2–3 minutes, which starved unrelated packages badly enough to push
-their tests past the default 5s timeout. Run it on its own, by hand, before a statistics change
-ships; see [packages/stats/audit/README.md](../../../packages/stats/audit/README.md). Its sources are
+that use every available core for 2–3 minutes, which roughly doubles the wall clock of any graph it
+shares a machine with. Run it on its own, by hand, before a statistics change ships; see
+[packages/stats/audit/README.md](../../../packages/stats/audit/README.md). Its sources are
 type-checked on every CI run, so a contract change breaks it loudly rather than leaving it to rot.
 
 ## Contract tests

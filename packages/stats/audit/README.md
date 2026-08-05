@@ -15,9 +15,9 @@ core the machine has for its whole duration. Measured wall clock is roughly 2 mi
 machine and closer to 3 under contention; the single any-time Type-I test accounts for about 90
 seconds of that on its own.
 
-The practical consequence is that nothing else should be running against the same cores. When this
-suite ran inside the CI graph it starved unrelated packages badly enough to push their tests past
-the default 5s timeout, in a different package on each run. Run it on its own, by hand, before a
+The practical consequence is that nothing else should be running against the same cores. Two minutes
+of full-core load roughly doubles the wall clock of the CI graph it shares a machine with, and it
+leaves no headroom for any test that measures elapsed time. Run it on its own, by hand, before a
 statistics change ships.
 
 Its sources are type-checked on every CI run via `tsconfig.audit.json`, so a contract change fails

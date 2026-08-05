@@ -9,38 +9,38 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as KitchenSinkRouteImport } from './routes/kitchen-sink'
-import { Route as HealthRouteImport } from './routes/health'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as HealthRouteImport } from './routes/health'
+import { Route as KitchenSinkRouteImport } from './routes/kitchen-sink'
 import { Route as OrgSlugIndexRouteImport } from './routes/$orgSlug.index'
-import { Route as AuthLogoutRouteImport } from './routes/auth.logout'
-import { Route as AuthLoginRouteImport } from './routes/auth.login'
-import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as OrgSlugClaimRouteImport } from './routes/$orgSlug.claim'
-import { Route as ClaimConsentAttemptIdRouteImport } from './routes/claim.consent.$attemptId'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as AuthLoginRouteImport } from './routes/auth.login'
+import { Route as AuthLogoutRouteImport } from './routes/auth.logout'
 import { Route as OrgSlugAppSlugEnvRouteImport } from './routes/$orgSlug.$appSlug.$env'
+import { Route as ClaimConsentAttemptIdRouteImport } from './routes/claim.consent.$attemptId'
 import { Route as OrgSlugAppSlugEnvIndexRouteImport } from './routes/$orgSlug.$appSlug.$env.index'
-import { Route as OrgSlugAppSlugEnvSettingsRouteImport } from './routes/$orgSlug.$appSlug.$env.settings'
-import { Route as OrgSlugAppSlugEnvMetricsRouteImport } from './routes/$orgSlug.$appSlug.$env.metrics'
 import { Route as OrgSlugAppSlugEnvExperimentsRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments'
-import { Route as OrgSlugAppSlugEnvFlagsIndexRouteImport } from './routes/$orgSlug.$appSlug.$env.flags.index'
+import { Route as OrgSlugAppSlugEnvMetricsRouteImport } from './routes/$orgSlug.$appSlug.$env.metrics'
+import { Route as OrgSlugAppSlugEnvSettingsRouteImport } from './routes/$orgSlug.$appSlug.$env.settings'
 import { Route as OrgSlugAppSlugEnvExperimentsIndexRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.index'
-import { Route as OrgSlugAppSlugEnvFlagsFlagKeyRouteImport } from './routes/$orgSlug.$appSlug.$env.flags.$flagKey'
-import { Route as OrgSlugAppSlugEnvExperimentsNewRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.new'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId'
+import { Route as OrgSlugAppSlugEnvExperimentsNewRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.new'
+import { Route as OrgSlugAppSlugEnvFlagsIndexRouteImport } from './routes/$orgSlug.$appSlug.$env.flags.index'
+import { Route as OrgSlugAppSlugEnvFlagsFlagKeyRouteImport } from './routes/$orgSlug.$appSlug.$env.flags.$flagKey'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdIndexRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.index'
-import { Route as OrgSlugAppSlugEnvFlagsFlagKeyPromoteRouteImport } from './routes/$orgSlug.$appSlug.$env.flags.$flagKey_.promote'
-import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdDraftRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments_.$experimentId.draft'
-import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdSetupRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.setup'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdResultsRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.results'
+import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdSetupRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.setup'
+import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdDraftRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments_.$experimentId.draft'
+import { Route as OrgSlugAppSlugEnvFlagsFlagKeyPromoteRouteImport } from './routes/$orgSlug.$appSlug.$env.flags.$flagKey_.promote'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.runs.$runId'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdIndexRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.runs.$runId.index'
-import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdSetupRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.runs.$runId.setup'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdResultsRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.runs.$runId.results'
+import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdSetupRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.runs.$runId.setup'
 
-const KitchenSinkRoute = KitchenSinkRouteImport.update({
-  id: '/kitchen-sink',
-  path: '/kitchen-sink',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HealthRoute = HealthRouteImport.update({
@@ -48,9 +48,9 @@ const HealthRoute = HealthRouteImport.update({
   path: '/health',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const KitchenSinkRoute = KitchenSinkRouteImport.update({
+  id: '/kitchen-sink',
+  path: '/kitchen-sink',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrgSlugIndexRoute = OrgSlugIndexRouteImport.update({
@@ -58,14 +58,9 @@ const OrgSlugIndexRoute = OrgSlugIndexRouteImport.update({
   path: '/$orgSlug/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthLogoutRoute = AuthLogoutRouteImport.update({
-  id: '/auth/logout',
-  path: '/auth/logout',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthLoginRoute = AuthLoginRouteImport.update({
-  id: '/auth/login',
-  path: '/auth/login',
+const OrgSlugClaimRoute = OrgSlugClaimRouteImport.update({
+  id: '/$orgSlug/claim',
+  path: '/$orgSlug/claim',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -73,14 +68,14 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
-const OrgSlugClaimRoute = OrgSlugClaimRouteImport.update({
-  id: '/$orgSlug/claim',
-  path: '/$orgSlug/claim',
+const AuthLoginRoute = AuthLoginRouteImport.update({
+  id: '/auth/login',
+  path: '/auth/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ClaimConsentAttemptIdRoute = ClaimConsentAttemptIdRouteImport.update({
-  id: '/claim/consent/$attemptId',
-  path: '/claim/consent/$attemptId',
+const AuthLogoutRoute = AuthLogoutRouteImport.update({
+  id: '/auth/logout',
+  path: '/auth/logout',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrgSlugAppSlugEnvRoute = OrgSlugAppSlugEnvRouteImport.update({
@@ -88,15 +83,20 @@ const OrgSlugAppSlugEnvRoute = OrgSlugAppSlugEnvRouteImport.update({
   path: '/$orgSlug/$appSlug/$env',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ClaimConsentAttemptIdRoute = ClaimConsentAttemptIdRouteImport.update({
+  id: '/claim/consent/$attemptId',
+  path: '/claim/consent/$attemptId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrgSlugAppSlugEnvIndexRoute = OrgSlugAppSlugEnvIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => OrgSlugAppSlugEnvRoute,
 } as any)
-const OrgSlugAppSlugEnvSettingsRoute =
-  OrgSlugAppSlugEnvSettingsRouteImport.update({
-    id: '/settings',
-    path: '/settings',
+const OrgSlugAppSlugEnvExperimentsRoute =
+  OrgSlugAppSlugEnvExperimentsRouteImport.update({
+    id: '/experiments',
+    path: '/experiments',
     getParentRoute: () => OrgSlugAppSlugEnvRoute,
   } as any)
 const OrgSlugAppSlugEnvMetricsRoute =
@@ -105,16 +105,10 @@ const OrgSlugAppSlugEnvMetricsRoute =
     path: '/metrics',
     getParentRoute: () => OrgSlugAppSlugEnvRoute,
   } as any)
-const OrgSlugAppSlugEnvExperimentsRoute =
-  OrgSlugAppSlugEnvExperimentsRouteImport.update({
-    id: '/experiments',
-    path: '/experiments',
-    getParentRoute: () => OrgSlugAppSlugEnvRoute,
-  } as any)
-const OrgSlugAppSlugEnvFlagsIndexRoute =
-  OrgSlugAppSlugEnvFlagsIndexRouteImport.update({
-    id: '/flags/',
-    path: '/flags/',
+const OrgSlugAppSlugEnvSettingsRoute =
+  OrgSlugAppSlugEnvSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
     getParentRoute: () => OrgSlugAppSlugEnvRoute,
   } as any)
 const OrgSlugAppSlugEnvExperimentsIndexRoute =
@@ -123,11 +117,11 @@ const OrgSlugAppSlugEnvExperimentsIndexRoute =
     path: '/',
     getParentRoute: () => OrgSlugAppSlugEnvExperimentsRoute,
   } as any)
-const OrgSlugAppSlugEnvFlagsFlagKeyRoute =
-  OrgSlugAppSlugEnvFlagsFlagKeyRouteImport.update({
-    id: '/flags/$flagKey',
-    path: '/flags/$flagKey',
-    getParentRoute: () => OrgSlugAppSlugEnvRoute,
+const OrgSlugAppSlugEnvExperimentsExperimentIdRoute =
+  OrgSlugAppSlugEnvExperimentsExperimentIdRouteImport.update({
+    id: '/$experimentId',
+    path: '/$experimentId',
+    getParentRoute: () => OrgSlugAppSlugEnvExperimentsRoute,
   } as any)
 const OrgSlugAppSlugEnvExperimentsNewRoute =
   OrgSlugAppSlugEnvExperimentsNewRouteImport.update({
@@ -135,11 +129,17 @@ const OrgSlugAppSlugEnvExperimentsNewRoute =
     path: '/new',
     getParentRoute: () => OrgSlugAppSlugEnvExperimentsRoute,
   } as any)
-const OrgSlugAppSlugEnvExperimentsExperimentIdRoute =
-  OrgSlugAppSlugEnvExperimentsExperimentIdRouteImport.update({
-    id: '/$experimentId',
-    path: '/$experimentId',
-    getParentRoute: () => OrgSlugAppSlugEnvExperimentsRoute,
+const OrgSlugAppSlugEnvFlagsIndexRoute =
+  OrgSlugAppSlugEnvFlagsIndexRouteImport.update({
+    id: '/flags/',
+    path: '/flags/',
+    getParentRoute: () => OrgSlugAppSlugEnvRoute,
+  } as any)
+const OrgSlugAppSlugEnvFlagsFlagKeyRoute =
+  OrgSlugAppSlugEnvFlagsFlagKeyRouteImport.update({
+    id: '/flags/$flagKey',
+    path: '/flags/$flagKey',
+    getParentRoute: () => OrgSlugAppSlugEnvRoute,
   } as any)
 const OrgSlugAppSlugEnvExperimentsExperimentIdIndexRoute =
   OrgSlugAppSlugEnvExperimentsExperimentIdIndexRouteImport.update({
@@ -147,17 +147,11 @@ const OrgSlugAppSlugEnvExperimentsExperimentIdIndexRoute =
     path: '/',
     getParentRoute: () => OrgSlugAppSlugEnvExperimentsExperimentIdRoute,
   } as any)
-const OrgSlugAppSlugEnvFlagsFlagKeyPromoteRoute =
-  OrgSlugAppSlugEnvFlagsFlagKeyPromoteRouteImport.update({
-    id: '/flags/$flagKey_/promote',
-    path: '/flags/$flagKey/promote',
-    getParentRoute: () => OrgSlugAppSlugEnvRoute,
-  } as any)
-const OrgSlugAppSlugEnvExperimentsExperimentIdDraftRoute =
-  OrgSlugAppSlugEnvExperimentsExperimentIdDraftRouteImport.update({
-    id: '/experiments_/$experimentId/draft',
-    path: '/experiments/$experimentId/draft',
-    getParentRoute: () => OrgSlugAppSlugEnvRoute,
+const OrgSlugAppSlugEnvExperimentsExperimentIdResultsRoute =
+  OrgSlugAppSlugEnvExperimentsExperimentIdResultsRouteImport.update({
+    id: '/results',
+    path: '/results',
+    getParentRoute: () => OrgSlugAppSlugEnvExperimentsExperimentIdRoute,
   } as any)
 const OrgSlugAppSlugEnvExperimentsExperimentIdSetupRoute =
   OrgSlugAppSlugEnvExperimentsExperimentIdSetupRouteImport.update({
@@ -165,11 +159,17 @@ const OrgSlugAppSlugEnvExperimentsExperimentIdSetupRoute =
     path: '/setup',
     getParentRoute: () => OrgSlugAppSlugEnvExperimentsExperimentIdRoute,
   } as any)
-const OrgSlugAppSlugEnvExperimentsExperimentIdResultsRoute =
-  OrgSlugAppSlugEnvExperimentsExperimentIdResultsRouteImport.update({
-    id: '/results',
-    path: '/results',
-    getParentRoute: () => OrgSlugAppSlugEnvExperimentsExperimentIdRoute,
+const OrgSlugAppSlugEnvExperimentsExperimentIdDraftRoute =
+  OrgSlugAppSlugEnvExperimentsExperimentIdDraftRouteImport.update({
+    id: '/experiments_/$experimentId/draft',
+    path: '/experiments/$experimentId/draft',
+    getParentRoute: () => OrgSlugAppSlugEnvRoute,
+  } as any)
+const OrgSlugAppSlugEnvFlagsFlagKeyPromoteRoute =
+  OrgSlugAppSlugEnvFlagsFlagKeyPromoteRouteImport.update({
+    id: '/flags/$flagKey_/promote',
+    path: '/flags/$flagKey/promote',
+    getParentRoute: () => OrgSlugAppSlugEnvRoute,
   } as any)
 const OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdRoute =
   OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdRouteImport.update({
@@ -184,17 +184,17 @@ const OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdIndexRoute =
     getParentRoute: () =>
       OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdRoute,
   } as any)
-const OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdSetupRoute =
-  OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdSetupRouteImport.update({
-    id: '/setup',
-    path: '/setup',
-    getParentRoute: () =>
-      OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdRoute,
-  } as any)
 const OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdResultsRoute =
   OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdResultsRouteImport.update({
     id: '/results',
     path: '/results',
+    getParentRoute: () =>
+      OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdRoute,
+  } as any)
+const OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdSetupRoute =
+  OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdSetupRouteImport.update({
+    id: '/setup',
+    path: '/setup',
     getParentRoute: () =>
       OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdRoute,
   } as any)
@@ -390,11 +390,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/kitchen-sink': {
-      id: '/kitchen-sink'
-      path: '/kitchen-sink'
-      fullPath: '/kitchen-sink'
-      preLoaderRoute: typeof KitchenSinkRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/health': {
@@ -404,11 +404,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HealthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/kitchen-sink': {
+      id: '/kitchen-sink'
+      path: '/kitchen-sink'
+      fullPath: '/kitchen-sink'
+      preLoaderRoute: typeof KitchenSinkRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$orgSlug/': {
@@ -418,18 +418,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSlugIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/logout': {
-      id: '/auth/logout'
-      path: '/auth/logout'
-      fullPath: '/auth/logout'
-      preLoaderRoute: typeof AuthLogoutRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth/login': {
-      id: '/auth/login'
-      path: '/auth/login'
-      fullPath: '/auth/login'
-      preLoaderRoute: typeof AuthLoginRouteImport
+    '/$orgSlug/claim': {
+      id: '/$orgSlug/claim'
+      path: '/$orgSlug/claim'
+      fullPath: '/$orgSlug/claim'
+      preLoaderRoute: typeof OrgSlugClaimRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/callback': {
@@ -439,18 +432,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/$orgSlug/claim': {
-      id: '/$orgSlug/claim'
-      path: '/$orgSlug/claim'
-      fullPath: '/$orgSlug/claim'
-      preLoaderRoute: typeof OrgSlugClaimRouteImport
+    '/auth/login': {
+      id: '/auth/login'
+      path: '/auth/login'
+      fullPath: '/auth/login'
+      preLoaderRoute: typeof AuthLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/claim/consent/$attemptId': {
-      id: '/claim/consent/$attemptId'
-      path: '/claim/consent/$attemptId'
-      fullPath: '/claim/consent/$attemptId'
-      preLoaderRoute: typeof ClaimConsentAttemptIdRouteImport
+    '/auth/logout': {
+      id: '/auth/logout'
+      path: '/auth/logout'
+      fullPath: '/auth/logout'
+      preLoaderRoute: typeof AuthLogoutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$orgSlug/$appSlug/$env': {
@@ -460,25 +453,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSlugAppSlugEnvRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/claim/consent/$attemptId': {
+      id: '/claim/consent/$attemptId'
+      path: '/claim/consent/$attemptId'
+      fullPath: '/claim/consent/$attemptId'
+      preLoaderRoute: typeof ClaimConsentAttemptIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$orgSlug/$appSlug/$env/': {
       id: '/$orgSlug/$appSlug/$env/'
       path: '/'
       fullPath: '/$orgSlug/$appSlug/$env/'
       preLoaderRoute: typeof OrgSlugAppSlugEnvIndexRouteImport
-      parentRoute: typeof OrgSlugAppSlugEnvRoute
-    }
-    '/$orgSlug/$appSlug/$env/settings': {
-      id: '/$orgSlug/$appSlug/$env/settings'
-      path: '/settings'
-      fullPath: '/$orgSlug/$appSlug/$env/settings'
-      preLoaderRoute: typeof OrgSlugAppSlugEnvSettingsRouteImport
-      parentRoute: typeof OrgSlugAppSlugEnvRoute
-    }
-    '/$orgSlug/$appSlug/$env/metrics': {
-      id: '/$orgSlug/$appSlug/$env/metrics'
-      path: '/metrics'
-      fullPath: '/$orgSlug/$appSlug/$env/metrics'
-      preLoaderRoute: typeof OrgSlugAppSlugEnvMetricsRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvRoute
     }
     '/$orgSlug/$appSlug/$env/experiments': {
@@ -488,11 +474,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvRoute
     }
-    '/$orgSlug/$appSlug/$env/flags/': {
-      id: '/$orgSlug/$appSlug/$env/flags/'
-      path: '/flags'
-      fullPath: '/$orgSlug/$appSlug/$env/flags/'
-      preLoaderRoute: typeof OrgSlugAppSlugEnvFlagsIndexRouteImport
+    '/$orgSlug/$appSlug/$env/metrics': {
+      id: '/$orgSlug/$appSlug/$env/metrics'
+      path: '/metrics'
+      fullPath: '/$orgSlug/$appSlug/$env/metrics'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvMetricsRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvRoute
+    }
+    '/$orgSlug/$appSlug/$env/settings': {
+      id: '/$orgSlug/$appSlug/$env/settings'
+      path: '/settings'
+      fullPath: '/$orgSlug/$appSlug/$env/settings'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvSettingsRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvRoute
     }
     '/$orgSlug/$appSlug/$env/experiments/': {
@@ -502,12 +495,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsIndexRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvExperimentsRoute
     }
-    '/$orgSlug/$appSlug/$env/flags/$flagKey': {
-      id: '/$orgSlug/$appSlug/$env/flags/$flagKey'
-      path: '/flags/$flagKey'
-      fullPath: '/$orgSlug/$appSlug/$env/flags/$flagKey'
-      preLoaderRoute: typeof OrgSlugAppSlugEnvFlagsFlagKeyRouteImport
-      parentRoute: typeof OrgSlugAppSlugEnvRoute
+    '/$orgSlug/$appSlug/$env/experiments/$experimentId': {
+      id: '/$orgSlug/$appSlug/$env/experiments/$experimentId'
+      path: '/$experimentId'
+      fullPath: '/$orgSlug/$appSlug/$env/experiments/$experimentId'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvExperimentsRoute
     }
     '/$orgSlug/$appSlug/$env/experiments/new': {
       id: '/$orgSlug/$appSlug/$env/experiments/new'
@@ -516,12 +509,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsNewRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvExperimentsRoute
     }
-    '/$orgSlug/$appSlug/$env/experiments/$experimentId': {
-      id: '/$orgSlug/$appSlug/$env/experiments/$experimentId'
-      path: '/$experimentId'
-      fullPath: '/$orgSlug/$appSlug/$env/experiments/$experimentId'
-      preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRouteImport
-      parentRoute: typeof OrgSlugAppSlugEnvExperimentsRoute
+    '/$orgSlug/$appSlug/$env/flags/': {
+      id: '/$orgSlug/$appSlug/$env/flags/'
+      path: '/flags'
+      fullPath: '/$orgSlug/$appSlug/$env/flags/'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvFlagsIndexRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvRoute
+    }
+    '/$orgSlug/$appSlug/$env/flags/$flagKey': {
+      id: '/$orgSlug/$appSlug/$env/flags/$flagKey'
+      path: '/flags/$flagKey'
+      fullPath: '/$orgSlug/$appSlug/$env/flags/$flagKey'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvFlagsFlagKeyRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvRoute
     }
     '/$orgSlug/$appSlug/$env/experiments/$experimentId/': {
       id: '/$orgSlug/$appSlug/$env/experiments/$experimentId/'
@@ -530,19 +530,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdIndexRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRoute
     }
-    '/$orgSlug/$appSlug/$env/flags/$flagKey_/promote': {
-      id: '/$orgSlug/$appSlug/$env/flags/$flagKey_/promote'
-      path: '/flags/$flagKey/promote'
-      fullPath: '/$orgSlug/$appSlug/$env/flags/$flagKey/promote'
-      preLoaderRoute: typeof OrgSlugAppSlugEnvFlagsFlagKeyPromoteRouteImport
-      parentRoute: typeof OrgSlugAppSlugEnvRoute
-    }
-    '/$orgSlug/$appSlug/$env/experiments_/$experimentId/draft': {
-      id: '/$orgSlug/$appSlug/$env/experiments_/$experimentId/draft'
-      path: '/experiments/$experimentId/draft'
-      fullPath: '/$orgSlug/$appSlug/$env/experiments/$experimentId/draft'
-      preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdDraftRouteImport
-      parentRoute: typeof OrgSlugAppSlugEnvRoute
+    '/$orgSlug/$appSlug/$env/experiments/$experimentId/results': {
+      id: '/$orgSlug/$appSlug/$env/experiments/$experimentId/results'
+      path: '/results'
+      fullPath: '/$orgSlug/$appSlug/$env/experiments/$experimentId/results'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdResultsRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRoute
     }
     '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup': {
       id: '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup'
@@ -551,12 +544,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdSetupRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRoute
     }
-    '/$orgSlug/$appSlug/$env/experiments/$experimentId/results': {
-      id: '/$orgSlug/$appSlug/$env/experiments/$experimentId/results'
-      path: '/results'
-      fullPath: '/$orgSlug/$appSlug/$env/experiments/$experimentId/results'
-      preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdResultsRouteImport
-      parentRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRoute
+    '/$orgSlug/$appSlug/$env/experiments_/$experimentId/draft': {
+      id: '/$orgSlug/$appSlug/$env/experiments_/$experimentId/draft'
+      path: '/experiments/$experimentId/draft'
+      fullPath: '/$orgSlug/$appSlug/$env/experiments/$experimentId/draft'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdDraftRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvRoute
+    }
+    '/$orgSlug/$appSlug/$env/flags/$flagKey_/promote': {
+      id: '/$orgSlug/$appSlug/$env/flags/$flagKey_/promote'
+      path: '/flags/$flagKey/promote'
+      fullPath: '/$orgSlug/$appSlug/$env/flags/$flagKey/promote'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvFlagsFlagKeyPromoteRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvRoute
     }
     '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId': {
       id: '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId'
@@ -572,18 +572,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdIndexRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdRoute
     }
-    '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/setup': {
-      id: '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/setup'
-      path: '/setup'
-      fullPath: '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/setup'
-      preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdSetupRouteImport
-      parentRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdRoute
-    }
     '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/results': {
       id: '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/results'
       path: '/results'
       fullPath: '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/results'
       preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdResultsRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdRoute
+    }
+    '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/setup': {
+      id: '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/setup'
+      path: '/setup'
+      fullPath: '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/setup'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdSetupRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdRoute
     }
   }
