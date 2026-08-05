@@ -25,10 +25,16 @@ export const systemErrorDocs = {
   },
   SERVICE_UNAVAILABLE: {
     cause:
-      "The Provider configuration could not be resolved. This is retryable and does not mean your Flag is misconfigured.",
-    fix: 'Retry after `details.retryAfterMs`. In the SDK this surfaces as OpenFeature `PROVIDER_NOT_READY`, and evaluation returns your `defaultValue` with `reason: "ERROR"` rather than pretending a Variant resolved.',
+      "The edge returned HTTP 503: Provider configuration could not be resolved. This is retryable and does not mean your Flag is misconfigured.",
+    fix: 'Retry after `details.retryAfterMs`. In the SDK this surfaces as `errorCode: "SERVICE_UNAVAILABLE"` with `reason: "ERROR"` and your `defaultValue` — never as a pretended Variant. Client-side transport failures (local throw, timeout, unparseable body) use distinct `SDK_TRANSPORT_*` codes instead of this one.',
     details: "{ retryAfterMs: number }",
-    related: ["RATE_LIMITED", "INTERNAL_SERVER_ERROR"],
+    related: [
+      "RATE_LIMITED",
+      "INTERNAL_SERVER_ERROR",
+      "SDK_TRANSPORT_NETWORK",
+      "SDK_TRANSPORT_TIMEOUT",
+      "SDK_TRANSPORT_PARSE",
+    ],
   },
   PRIVACY_JOB_FAILED: {
     cause:

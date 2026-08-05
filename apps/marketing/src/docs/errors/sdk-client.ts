@@ -1,9 +1,9 @@
 import type { ErrorDoc } from "./types";
 
 /**
- * Raised by `@splitch/sdk` itself, before any request goes out. Every one of
- * these is a construction-time misconfiguration: the SDK refuses to start
- * rather than run in a shape that would corrupt Exposure data.
+ * Raised by `@splitch/sdk` itself. Construction-time misconfiguration refuses
+ * to start; transport codes are runtime failures that never left the client
+ * process (distinct from the server's `SERVICE_UNAVAILABLE`).
  */
 export const sdkErrorDocs = {
   SDK_CREDENTIAL_CONFIGURATION_INVALID: {
@@ -29,6 +29,24 @@ export const sdkErrorDocs = {
   SDK_CACHED_TELEMETRY_FAILED: {
     cause: "A cached-evaluation telemetry report could not be delivered.",
     fix: "This concerns telemetry for a replayed local resolution, not the resolution itself: the value your code received is unaffected. Check network reachability to the endpoint if it repeats. It is reported rather than dropped so a silent telemetry gap never looks like an absence of traffic.",
-    related: ["SERVICE_UNAVAILABLE"],
+    related: ["SERVICE_UNAVAILABLE", "SDK_TRANSPORT_NETWORK"],
+  },
+  SDK_TRANSPORT_NETWORK: {
+    cause:
+      "The SDK's transport threw before receiving an HTTP response — for example a network failure, a cancelled request that was not a timeout, or a local `fetch` misconfiguration such as an unbound `Window.fetch`.",
+    fix: "Inspect `logger.error`'s `cause` (name, message, stack): the request never left the client. Fix the local fetch/network setup. Do not treat this as a platform outage; `SERVICE_UNAVAILABLE` is reserved for an actual HTTP 503 from the edge.",
+    related: ["SDK_TRANSPORT_TIMEOUT", "SDK_TRANSPORT_PARSE", "SERVICE_UNAVAILABLE"],
+  },
+  SDK_TRANSPORT_TIMEOUT: {
+    cause:
+      "The per-call request timeout elapsed (or the request was aborted) before a response arrived.",
+    fix: "Increase `timeoutMs` if cold starts are expected, or check connectivity. The underlying abort is on `logger.error`'s `cause`. This is not an HTTP 503 from the server.",
+    related: ["SDK_TRANSPORT_NETWORK", "SERVICE_UNAVAILABLE"],
+  },
+  SDK_TRANSPORT_PARSE: {
+    cause:
+      "The transport received a response body that could not be parsed as the expected evaluate/peek/verify shape.",
+    fix: "Confirm the `endpoint` points at a splitch data-plane edge and that intermediaries are not rewriting the body. The parse rejection is on `logger.error`'s `cause`. This is not an HTTP 503 from the server.",
+    related: ["SDK_TRANSPORT_NETWORK", "SERVICE_UNAVAILABLE"],
   },
 } satisfies Record<string, ErrorDoc>;

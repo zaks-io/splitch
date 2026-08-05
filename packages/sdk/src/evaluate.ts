@@ -1,6 +1,6 @@
-import type { ResolutionDetails, VariantValue } from "./generated/contract-surface.js";
 import { formatSdkErrorMessage, SplitchSdkError } from "./errors";
-import { errorCodeForStatus, synthesizeDetails } from "./resolution";
+import type { VariantValue } from "./generated/contract-surface.js";
+import { errorCodeForStatus, type SdkResolutionDetails, synthesizeDetails } from "./resolution";
 import type { SeenSet } from "./seen-set";
 import type { AttributeValue, Transport, TransportFailure, TransportRequest } from "./transport";
 
@@ -68,6 +68,7 @@ function sdkErrorForFailure(operation: string, result: TransportFailure): Splitc
     causeSummary: result.errorMessage ?? `${operation} failed with ${code}`,
     remediation: SERVER_ERROR_REMEDIATION,
     status: result.status,
+    originalError: result.cause,
   });
 }
 
@@ -85,8 +86,9 @@ function logEvaluateError(
   deps: EvaluateDeps,
   flagKey: string,
   targetingKey: string,
-  details: ResolutionDetails,
+  details: SdkResolutionDetails,
   status: number | null,
+  cause?: unknown,
 ): void {
   deps.logger.error(
     formatSdkErrorMessage({
@@ -94,12 +96,15 @@ function logEvaluateError(
       causeSummary: "Evaluation failed loud to the Default Variant",
       remediation: SERVER_ERROR_REMEDIATION,
       status,
+      originalError: cause,
     }),
     {
       flagKey,
       targetingKey,
       status,
       errorCode: details.errorCode,
+      // Preserve the underlying error object (name, message, stack) — never truncate.
+      cause,
     },
   );
 }
@@ -110,7 +115,7 @@ function replayCachedHit(
   context: EvaluationContext,
   cached: { variant: VariantValue | null; variantName: string | null },
   defaultValue: VariantValue,
-): ResolutionDetails {
+): SdkResolutionDetails {
   deps.logger.debug("[splitch] seen-set hit: suppress Exposure", {
     flagKey,
     targetingKey: context.targetingKey,
@@ -159,7 +164,7 @@ async function resolveContextMiss(
   attributes: Readonly<Record<string, AttributeValue>>,
   defaultValue: VariantValue,
   runId: string,
-): Promise<ResolutionDetails> {
+): Promise<SdkResolutionDetails> {
   const { targetingKey } = context;
   deps.logger.debug("[splitch] seen-set context-miss: re-resolve without Exposure", {
     flagKey,
@@ -176,12 +181,13 @@ async function resolveContextMiss(
         runId: null,
         errorCode: verified.errorCode,
         errorMessage: verified.errorMessage,
+        cause: verified.cause,
       },
       defaultValue,
     );
 
   if (details.reason === "ERROR") {
-    logEvaluateError(deps, flagKey, targetingKey, details, verified.status);
+    logEvaluateError(deps, flagKey, targetingKey, details, verified.status, verified.cause);
     return details;
   }
 
@@ -231,7 +237,7 @@ export async function runEvaluate(
   deps: EvaluateDeps,
   flagKey: string,
   context: EvaluationContext,
-): Promise<ResolutionDetails> {
+): Promise<SdkResolutionDetails> {
   const { targetingKey } = context;
   const idType = context.idType ?? DEFAULT_ID_TYPE;
   const defaultValue = context.defaultValue ?? FALLBACK_DEFAULT_VALUE;
@@ -262,7 +268,7 @@ export async function runEvaluate(
   if (details.reason === "ERROR") {
     // Loud, never silent: observable in logs AND via the ERROR reason the caller
     // branches on. No cache write, no Exposure, no retry.
-    logEvaluateError(deps, flagKey, targetingKey, details, result.status);
+    logEvaluateError(deps, flagKey, targetingKey, details, result.status, result.cause);
     return details;
   }
 
@@ -301,6 +307,7 @@ export async function runPeekVariant(
     targetingKey: context.targetingKey,
     status: error.status,
     errorCode: error.code,
+    cause: result.cause,
   });
   throw error;
 }
@@ -309,7 +316,7 @@ export async function runVerify(
   deps: EvaluateDeps,
   flagKey: string,
   context: EvaluateContext,
-): Promise<ResolutionDetails> {
+): Promise<SdkResolutionDetails> {
   const defaultValue = context.defaultValue ?? FALLBACK_DEFAULT_VALUE;
   const result = await deps.transport.verify(requestFor(flagKey, context));
   const details =
@@ -322,6 +329,7 @@ export async function runVerify(
         runId: null,
         errorCode: result.errorCode,
         errorMessage: result.errorMessage,
+        cause: result.cause,
       },
       defaultValue,
     );
@@ -333,12 +341,14 @@ export async function runVerify(
         causeSummary: "Verification failed loud to the Default Variant",
         remediation: SERVER_ERROR_REMEDIATION,
         status: result.status,
+        originalError: result.cause,
       }),
       {
         flagKey,
         targetingKey: context.targetingKey,
         status: result.status,
         errorCode: details.errorCode,
+        cause: result.cause,
       },
     );
   }
