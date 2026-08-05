@@ -28,6 +28,7 @@ describe("apps delete dry-run and force (SPL-326)", () => {
     const prod = created.environments.find((env) => env.key === "prod");
     expect(prod).toBeDefined();
     const seeded = await h.seedChildren(created.app.id, prod?.id ?? "", "dry");
+    await h.seedPrivacyLedger(created.app.id, ORG.orgId, "dry");
     const jwt = await h.appToken(created.app.id);
 
     const res = await h.app.request(`/apps/${created.app.id}?dryRun=true`, {
@@ -45,10 +46,18 @@ describe("apps delete dry-run and force (SPL-326)", () => {
     expect(childTypes).toContain("flag-config");
     expect(childTypes).toContain("flags");
     expect(childTypes).toContain("metrics");
+    expect(childTypes).toContain("segments");
+    expect(childTypes).toContain("entity-privacy");
+    expect(childTypes).toContain("privacy-requests");
     const experiment = body.blockers.find((b) => b.childType === "experiments");
     expect(experiment?.children[0]).toMatchObject({
       id: seeded.experimentId,
       removeCommand: expect.stringContaining("splitch experiments delete"),
+    });
+    const segment = body.blockers.find((b) => b.childType === "segments");
+    expect(segment?.children[0]).toMatchObject({
+      id: seeded.segmentId,
+      removeCommand: expect.stringContaining("splitch segments delete"),
     });
     const flagConfig = body.blockers.find((b) => b.childType === "flag-config");
     expect(flagConfig?.children[0]?.removeCommand).toContain(
@@ -59,6 +68,7 @@ describe("apps delete dry-run and force (SPL-326)", () => {
       headers: { authorization: `Bearer ${jwt}` },
     });
     expect(stillThere.status).toBe(200);
+    expect(await h.privacyCounts(created.app.id, ORG.orgId)).toEqual({ entities: 1, requests: 1 });
   });
 
   it("RESOURCE_NOT_EMPTY reports all blockers with CLI vocabulary and IDs", async () => {
@@ -111,6 +121,9 @@ describe("apps delete dry-run and force (SPL-326)", () => {
       throw new Error("expected force completed response");
     }
     expect(body.removed.some((r) => r.childType === "apps" && r.id === created.app.id)).toBe(true);
+    expect(body.removed.some((r) => r.childType === "segments")).toBe(true);
+    expect(body.removed.some((r) => r.childType === "metrics")).toBe(true);
+    expect(body.removed.some((r) => r.childType === "experiments")).toBe(true);
     expect(body.removed.some((r) => r.childType === "entity-privacy")).toBe(true);
     expect(body.removed.some((r) => r.childType === "privacy-requests")).toBe(true);
 
@@ -146,6 +159,8 @@ describe("apps delete dry-run and force (SPL-326)", () => {
       "splitch approval-request-reviews create",
     );
     expect(body.removed.some((r) => r.childType === "experiments")).toBe(true);
+    expect(body.removed.some((r) => r.childType === "segments")).toBe(true);
+    expect(body.removed.some((r) => r.childType === "metrics")).toBe(true);
     expect(body.removed.some((r) => r.childType === "entity-privacy")).toBe(false);
     expect(body.removed.some((r) => r.childType === "privacy-requests")).toBe(false);
     expect(await h.privacyCounts(created.app.id, ORG.orgId)).toEqual({ entities: 1, requests: 1 });

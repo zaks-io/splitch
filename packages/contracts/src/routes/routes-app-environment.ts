@@ -92,7 +92,7 @@ export const appEnvironmentRoutes = [
     method: "DELETE",
     path: "/apps/:appId",
     summary:
-      "Delete an App. Use dryRun to list every blocker with IDs and remove commands; use force to cascade non-gated children and stop with pending Approval Request IDs when Policy requires Review. Blocked while any Experiment is running.",
+      "Delete an App. Dry-run mode lists every blocker with IDs and remove commands; force mode cascades non-gated children and stops with pending Approval Request IDs when Policy requires Review. Blocked while any Experiment is running.",
     request: { params: AppParams, query: ResourceDeleteModeQuerySchema },
     response: ResourceDeleteResponseSchema,
     auth: AUTH,

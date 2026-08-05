@@ -53,7 +53,12 @@ export interface CascadeHarness {
     appId: string,
     environmentId: string,
     suffix: string,
-  ): Promise<{ flagId: string; metricId: string; experimentId: string }>;
+  ): Promise<{
+    flagId: string;
+    metricId: string;
+    experimentId: string;
+    segmentId: string;
+  }>;
   seedPrivacyLedger(
     appId: string,
     orgId: string,
@@ -157,6 +162,7 @@ export async function makeCascadeHarness(): Promise<CascadeHarness> {
     async seedChildren(appId, environmentId, suffix) {
       const repo = createRepository(bindings.d1);
       const flagId = `flag_cascade_${suffix}`;
+      const segmentId = `segment_cascade_${suffix}`;
       await repo.flags.flags.insert(appScope(appId), {
         id: flagId,
         appId,
@@ -172,6 +178,14 @@ export async function makeCascadeHarness(): Promise<CascadeHarness> {
         flagId,
         enabled: false,
         availableVariantNames: "[]",
+        createdAt: NOW_ISO,
+        updatedAt: NOW_ISO,
+      });
+      await repo.flags.segments.insert(appScope(appId), {
+        id: segmentId,
+        appId,
+        name: `Cascade segment ${suffix}`,
+        conditions: JSON.stringify([{ attribute: "plan", operator: "eq", value: "paid" }]),
         createdAt: NOW_ISO,
         updatedAt: NOW_ISO,
       });
@@ -207,6 +221,7 @@ export async function makeCascadeHarness(): Promise<CascadeHarness> {
         flagId,
         metricId: `metric_cascade_${suffix}`,
         experimentId: `exp_cascade_${suffix}`,
+        segmentId,
       };
     },
     async seedPrivacyLedger(appId, orgId, suffix) {

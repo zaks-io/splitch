@@ -159,13 +159,15 @@ Request body (--body-json):
 
 Example:
   splitch apps create <org-id> --body-json '{"name":"name"}' --json",
-    "apps delete": "Delete an App (blocked while any Experiment is running).
+    "apps delete": "Delete an App. Dry-run mode lists every blocker with IDs and remove commands; force mode cascades non-gated children and stops with pending Approval Request IDs when Policy requires Review. Blocked while any Experiment is running.
 
 Usage:
   splitch apps delete [flags]
 
 Flags:
   --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --dry-run    [type: boolean; default: false] List every delete blocker with IDs and remove commands; delete nothing.
+  --force      [type: boolean; default: false] Cascade non-gated children in dependency order; stop with pending Approval Request IDs when Policy requires Review.
   --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help   [type: boolean; default: false] Show help and exit.
 
@@ -1388,7 +1390,7 @@ Commands:
   create          Create an App (provisions dev + prod Environments and Client Keys).
   get             Get one App.
   update          Rename an App.
-  delete          Delete an App (blocked while any Experiment is running).
+  delete          Delete an App. Dry-run mode lists every blocker with IDs and remove commands; force mode cascades non-gated children and stops with pending Approval Request IDs when Policy requires Review. Blocked while any Experiment is running.
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.
