@@ -1,5 +1,5 @@
-import type { ResolutionDetails, ResolutionReason } from "@splitch/contracts";
-import { createSplitchClient } from "@splitch/sdk";
+import type { ResolutionReason } from "@splitch/contracts";
+import { createSplitchClient, type ResolutionDetails } from "@splitch/sdk";
 
 /**
  * The Panel's "Test this Flag" seam.
