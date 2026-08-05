@@ -96,7 +96,7 @@ function comparisonFor(
     pre_period_covariates: input.pre_period_covariates,
     winsorize: variance?.winsorize,
     winsorize_pct: variance?.winsorize_pct,
-    cuped_coverage_threshold: variance?.cuped_coverage_threshold,
+    cuped_coverage_threshold_pct: variance?.cuped_coverage_threshold_pct,
   });
 }
 

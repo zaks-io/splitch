@@ -41,7 +41,7 @@ export function applyCupedAdjustment(
     return none(controlEntities, treatmentEntities, null);
   }
 
-  const thresholdPct = cupedCoverageThresholdPct(input.cuped_coverage_threshold);
+  const thresholdPct = cupedCoverageThresholdPct(input.cuped_coverage_threshold_pct);
   const covariates = input.pre_period_covariates ?? [];
   validateCovariates(covariates, [...controlEntities, ...treatmentEntities]);
 
@@ -268,11 +268,13 @@ function none(
   };
 }
 
+// Percent, never a fraction. A previous version rescaled values under 1 as if
+// they were fractions, which silently turned a legal 0.5 ("half a percent
+// coverage") into 50 and decided whether CUPED ran at all on a 100x error.
 function cupedCoverageThresholdPct(value: number | undefined): number {
-  const threshold = value ?? DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT;
-  const pct = threshold > 0 && threshold < 1 ? threshold * 100 : threshold;
+  const pct = value ?? DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT;
   if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
-    throw new Error("cuped_coverage_threshold must be > 0 and <= 100.");
+    throw new Error("cuped_coverage_threshold_pct must be a percent > 0 and <= 100.");
   }
   return pct;
 }

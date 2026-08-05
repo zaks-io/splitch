@@ -159,10 +159,10 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
           | "eventName"
           | "eventValueField"
           | "denominatorMetricId"
-          | "downsideThreshold"
+          | "downsideThresholdPct"
           | "winsorize"
           | "winsorizePct"
-          | "cupedCoverageThreshold"
+          | "cupedCoverageThresholdPct"
         >
       >,
     ): Promise<typeof metrics.$inferSelect | null> {

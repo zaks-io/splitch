@@ -42,7 +42,7 @@ export async function frozenAnalysisConfig(
   const bounded: Array<{ metricId: string; threshold: number }> = [];
   const unbounded: string[] = [];
   for (const metricId of guardrailIds) {
-    const threshold = rows.get(metricId)?.downsideThreshold;
+    const threshold = rows.get(metricId)?.downsideThresholdPct;
     if (typeof threshold === "number") bounded.push({ metricId, threshold });
     else unbounded.push(metricId);
   }
@@ -52,7 +52,7 @@ export async function frozenAnalysisConfig(
       response: experimentStartInvalid(
         unbounded.map((metricId) => ({
           path: ["body", "guardrailMetrics", metricId],
-          message: `guardrail Metric ${metricId} has no downsideThreshold, so no result could ever breach it. PATCH the Metric with a downsideThreshold, then Start.`,
+          message: `guardrail Metric ${metricId} has no downsideThresholdPct, so no result could ever breach it. PATCH the Metric with a downsideThresholdPct, then Start.`,
         })),
         requestId,
       ),
@@ -81,7 +81,7 @@ export async function frozenAnalysisConfig(
         treatments.map((variant) => ({
           metric_id: metricId,
           variant,
-          downside_threshold: threshold,
+          downside_threshold_pct: threshold,
           guardrail_locked_at_run_start: true,
           threshold_locked_at_run_start: true,
         })),
@@ -123,7 +123,8 @@ function varianceConfig(rows: Map<string, MetricRow>, metricId: string): MetricV
     metric_id: metricId,
     winsorize: row.kind === "binomial" ? false : (row.winsorize ?? DEFAULT_WINSORIZE),
     winsorize_pct: row.winsorizePct ?? DEFAULT_WINSORIZE_PCT,
-    cuped_coverage_threshold: row.cupedCoverageThreshold ?? DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT,
+    cuped_coverage_threshold_pct:
+      row.cupedCoverageThresholdPct ?? DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT,
   };
 }
 

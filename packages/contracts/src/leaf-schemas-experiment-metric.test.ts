@@ -44,9 +44,9 @@ describe("MetricSchema — binomial", () => {
     expect(m.kind).toBe("binomial");
   });
 
-  it("parses a regular Metric carrying a downsideThreshold", () => {
-    const m = MetricSchema.parse({ ...baseMetric, kind: "binomial", downsideThreshold: -0.005 });
-    expect(m.downsideThreshold).toBe(-0.005);
+  it("parses a regular Metric carrying a downsideThresholdPct", () => {
+    const m = MetricSchema.parse({ ...baseMetric, kind: "binomial", downsideThresholdPct: -0.5 });
+    expect(m.downsideThresholdPct).toBe(-0.5);
   });
 });
 

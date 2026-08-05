@@ -269,7 +269,7 @@ function isGuardrailDecision(value: unknown): boolean {
     value !== null &&
     typeof (value as { metric_id?: unknown }).metric_id === "string" &&
     typeof (value as { variant?: unknown }).variant === "string" &&
-    typeof (value as { downside_threshold?: unknown }).downside_threshold === "number" &&
+    typeof (value as { downside_threshold_pct?: unknown }).downside_threshold_pct === "number" &&
     typeof (value as { guardrail_locked_at_run_start?: unknown }).guardrail_locked_at_run_start ===
       "boolean" &&
     typeof (value as { threshold_locked_at_run_start?: unknown }).threshold_locked_at_run_start ===

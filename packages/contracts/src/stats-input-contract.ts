@@ -108,7 +108,7 @@ export const GuardrailDecisionSchema = z
   .object({
     metric_id: MetricIdSchema,
     variant: z.string(),
-    downside_threshold: z.number(),
+    downside_threshold_pct: z.number(),
     guardrail_locked_at_run_start: z.boolean(),
     threshold_locked_at_run_start: z.boolean(),
   })
@@ -137,7 +137,7 @@ export const MetricVarianceConfigSchema = z
     metric_id: MetricIdSchema,
     winsorize: z.boolean(),
     winsorize_pct: z.number().gt(0).max(100),
-    cuped_coverage_threshold: z.number().gt(0).max(100),
+    cuped_coverage_threshold_pct: z.number().gt(0).max(100),
   })
   .strict();
 export type MetricVarianceConfig = z.infer<typeof MetricVarianceConfigSchema>;

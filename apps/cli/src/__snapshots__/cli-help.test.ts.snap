@@ -929,19 +929,19 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  appId                   required  string
-  name                    required  string
-  key                     required  string
-  kind                    required  string ("binomial" | "count" | "revenue" | "ratio")
-  eventName               required  string
-  eventValueField         optional  string
-  denominator             optional  { metricId: string }
-  description             optional  string
-  downsideThreshold       optional  number | null
-  winsorize               optional  boolean | null
-  winsorizePct            optional  number | null
-  cupedCoverageThreshold  optional  number | null
-  idempotency_key         optional  string
+  appId                      required  string
+  name                       required  string
+  key                        required  string
+  kind                       required  string ("binomial" | "count" | "revenue" | "ratio")
+  eventName                  required  string
+  eventValueField            optional  string
+  denominator                optional  { metricId: string }
+  description                optional  string
+  downsideThresholdPct       optional  number | null
+  winsorize                  optional  boolean | null
+  winsorizePct               optional  number | null
+  cupedCoverageThresholdPct  optional  number | null
+  idempotency_key            optional  string
   Example:
     {"appId":"app_1","name":"name","key":"key","kind":"binomial","eventName":"eventName"}
 
@@ -997,17 +997,17 @@ Flags:
   -h, --help          [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  name                    optional  string
-  key                     optional  string
-  kind                    optional  string ("binomial" | "count" | "revenue" | "ratio")
-  eventName               optional  string
-  eventValueField         optional  string
-  denominator             optional  { metricId: string }
-  description             optional  string
-  downsideThreshold       optional  number | null
-  winsorize               optional  boolean | null
-  winsorizePct            optional  number | null
-  cupedCoverageThreshold  optional  number | null
+  name                       optional  string
+  key                        optional  string
+  kind                       optional  string ("binomial" | "count" | "revenue" | "ratio")
+  eventName                  optional  string
+  eventValueField            optional  string
+  denominator                optional  { metricId: string }
+  description                optional  string
+  downsideThresholdPct       optional  number | null
+  winsorize                  optional  boolean | null
+  winsorizePct               optional  number | null
+  cupedCoverageThresholdPct  optional  number | null
   Example:
     {"kind":"binomial"}
 

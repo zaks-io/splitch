@@ -6,15 +6,15 @@ import { armResult } from "./decision-family-fdr-test-helpers";
 describe("applyGuardrailBoundChecks", () => {
   it("populates GuardrailResult from the relative-lift CI lower bound", () => {
     const [result] = applyGuardrailBoundChecks({
-      arm_results: [guardrailArm({ ci_lower: -0.004, relative_lift_pct: -0.8 })],
-      guardrails: [guardrailThreshold({ downside_threshold: -0.005 })],
+      arm_results: [guardrailArm({ ci_lower: -0.4, relative_lift_pct: -0.2 })],
+      guardrails: [guardrailThreshold({ downside_threshold_pct: -0.5 })],
     });
 
     expect(result).toEqual({
       metric_id: "guardrail_latency",
       variant: "treatment",
-      ci_lower: -0.004,
-      threshold: -0.005,
+      ci_lower: -0.4,
+      threshold: -0.5,
       is_breached: false,
       in_bh_family: false,
       exploratory: false,
@@ -59,10 +59,12 @@ describe("applyGuardrailBoundChecks", () => {
 });
 
 function guardrailArm(overrides: Parameters<typeof armResult>[3] = {}) {
+  // Percent, like every other relative-lift field, and wide enough to contain
+  // the point estimate: a 1% drop, interval 2% worse to 0.3% better.
   return armResult("guardrail_latency", "treatment", 0.8, {
     relative_lift_pct: -1,
-    ci_lower: -0.02,
-    ci_upper: 0.03,
+    ci_lower: -2,
+    ci_upper: 0.3,
     ...overrides,
   });
 }
@@ -71,7 +73,7 @@ function guardrailThreshold(overrides: Partial<GuardrailThreshold> = {}): Guardr
   return {
     metric_id: "guardrail_latency",
     variant: "treatment",
-    downside_threshold: -0.005,
+    downside_threshold_pct: -0.5,
     guardrail_locked_at_run_start: true,
     threshold_locked_at_run_start: true,
     ...overrides,

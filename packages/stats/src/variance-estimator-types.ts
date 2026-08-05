@@ -46,7 +46,7 @@ export interface MetricComparisonEstimateInput {
   readonly winsorize?: boolean;
   readonly winsorize_pct?: number;
   readonly cuped?: boolean;
-  readonly cuped_coverage_threshold?: number;
+  readonly cuped_coverage_threshold_pct?: number;
   readonly pre_period_covariates?: readonly CupedCovariateRow[];
 }
 

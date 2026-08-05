@@ -69,7 +69,7 @@ function analysisInput(environmentId, experimentId, runId, counts, options = {})
         {
           metric_id: options.guardrailMetric,
           variant: "treatment",
-          downside_threshold: -10,
+          downside_threshold_pct: -10,
           guardrail_locked_at_run_start: true,
           threshold_locked_at_run_start: true,
         },

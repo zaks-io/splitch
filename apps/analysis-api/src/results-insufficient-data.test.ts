@@ -96,7 +96,7 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
   });
 
   it("refuses MetricRef guardrail_decisions instead of analysing an unbounded Run", async () => {
-    // A MetricRef carries no downside_threshold, so a Run frozen before Start
+    // A MetricRef carries no downside_threshold_pct, so a Run frozen before Start
     // resolved thresholds has nothing to check against. Reading it as "no
     // guardrails declared" would pass every guardrail silently.
     const rows = rowsByPipe();

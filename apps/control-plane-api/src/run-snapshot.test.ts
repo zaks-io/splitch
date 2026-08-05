@@ -59,7 +59,7 @@ describe("runSnapshotRow", () => {
       {
         metric_id: "metric_guard",
         variant: "treatment",
-        downside_threshold: -0.02,
+        downside_threshold_pct: -2,
         guardrail_locked_at_run_start: true,
         threshold_locked_at_run_start: true,
       },

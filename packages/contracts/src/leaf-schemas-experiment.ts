@@ -59,7 +59,7 @@ export type MetricRef = z.infer<typeof MetricRefSchema>;
 // `denominator` is required for ratio (numerator/denominator per Entity). Both
 // are otherwise null. Conditionals are enforced loudly at parse time.
 //
-// `winsorize`, `winsorizePct`, and `cupedCoverageThreshold` are the per-Metric
+// `winsorize`, `winsorizePct`, and `cupedCoverageThresholdPct` are the per-Metric
 // variance-reduction knobs from variance-reduction.md. Null means "engine
 // default" and is stored as null rather than as the default value, so a later
 // change to the default reaches Metrics that never stated a preference. Run
@@ -77,10 +77,10 @@ const BaseMetricSchema = z.object({
   eventName: z.string(),
   eventValueField: z.string().nullable().optional(),
   denominator: MetricRefSchema.nullable().optional(),
-  downsideThreshold: z.number().nullable().optional(),
+  downsideThresholdPct: z.number().nullable().optional(),
   winsorize: z.boolean().nullable().optional(),
   winsorizePct: z.number().gt(0).max(100).nullable().optional(),
-  cupedCoverageThreshold: z.number().gt(0).max(100).nullable().optional(),
+  cupedCoverageThresholdPct: z.number().gt(0).max(100).nullable().optional(),
   createdAt: z.string(),
 });
 

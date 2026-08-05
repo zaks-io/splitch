@@ -118,7 +118,7 @@ function materializeGuardrailDecisions(
     return raw.map((row) => ({
       metric_id: row.metric_id,
       variant: row.variant,
-      downside_threshold: row.downside_threshold,
+      downside_threshold_pct: row.downside_threshold_pct,
       guardrail_locked_at_run_start: row.guardrail_locked_at_run_start,
       threshold_locked_at_run_start: row.threshold_locked_at_run_start,
     }));
@@ -153,7 +153,7 @@ function materializeVarianceConfig(
     metric_id: row.metric_id,
     winsorize: row.winsorize,
     winsorize_pct: row.winsorize_pct,
-    cuped_coverage_threshold: row.cuped_coverage_threshold,
+    cuped_coverage_threshold_pct: row.cuped_coverage_threshold_pct,
   }));
 }
 
@@ -164,7 +164,7 @@ function isMetricVarianceConfig(value: unknown): value is MetricVarianceConfig {
     typeof row.metric_id === "string" &&
     typeof row.winsorize === "boolean" &&
     typeof row.winsorize_pct === "number" &&
-    typeof row.cuped_coverage_threshold === "number"
+    typeof row.cuped_coverage_threshold_pct === "number"
   );
 }
 
@@ -214,7 +214,7 @@ function isDecisionFamilyMember(value: unknown): value is {
 function isGuardrailDecision(value: unknown): value is {
   metric_id: string;
   variant: string;
-  downside_threshold: number;
+  downside_threshold_pct: number;
   guardrail_locked_at_run_start: boolean;
   threshold_locked_at_run_start: boolean;
 } {
@@ -223,7 +223,7 @@ function isGuardrailDecision(value: unknown): value is {
     value !== null &&
     typeof (value as { metric_id?: unknown }).metric_id === "string" &&
     typeof (value as { variant?: unknown }).variant === "string" &&
-    typeof (value as { downside_threshold?: unknown }).downside_threshold === "number" &&
+    typeof (value as { downside_threshold_pct?: unknown }).downside_threshold_pct === "number" &&
     typeof (value as { guardrail_locked_at_run_start?: unknown }).guardrail_locked_at_run_start ===
       "boolean" &&
     typeof (value as { threshold_locked_at_run_start?: unknown }).threshold_locked_at_run_start ===

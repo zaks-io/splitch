@@ -145,8 +145,9 @@ decision and Guardrail paths.
 
 ## Guardrail Metric behavior
 
-A Guardrail Metric is a regular Metric carrying a `downside_threshold` (a relative-lift lower
-bound). After the full CI pipeline, `guardrail_breached = ci_lower < downside_threshold`. A
+A Guardrail Metric is a regular Metric carrying a `downside_threshold_pct` (a relative-lift lower
+bound in percent, on the same scale as `relative_lift_pct` and `ci_lower`). After the full CI
+pipeline, `guardrail_breached = ci_lower < downside_threshold_pct`. A
 breached Guardrail fires regardless of significance status. Guardrail Metrics are **excluded from
 the BH FDR family** — they do not consume multiplicity budget.
 

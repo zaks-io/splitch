@@ -9,17 +9,17 @@ import type { MetricRow } from "./metric-segment-shared";
  * the Run, so editing a Metric mid-Run cannot move an already-decided result.
  */
 export interface MetricAnalysisConfig {
-  downsideThreshold: number | null;
+  downsideThresholdPct: number | null;
   winsorize: boolean | null;
   winsorizePct: number | null;
-  cupedCoverageThreshold: number | null;
+  cupedCoverageThresholdPct: number | null;
 }
 
 const FIELDS = [
-  "downsideThreshold",
+  "downsideThresholdPct",
   "winsorize",
   "winsorizePct",
-  "cupedCoverageThreshold",
+  "cupedCoverageThresholdPct",
 ] as const satisfies readonly (keyof MetricAnalysisConfig)[];
 
 /**
@@ -35,10 +35,10 @@ export function metricAnalysisConfig(
       ? (body[field] as MetricAnalysisConfig[K])
       : ((current?.[field] ?? null) as MetricAnalysisConfig[K]);
   return {
-    downsideThreshold: resolve("downsideThreshold"),
+    downsideThresholdPct: resolve("downsideThresholdPct"),
     winsorize: resolve("winsorize"),
     winsorizePct: resolve("winsorizePct"),
-    cupedCoverageThreshold: resolve("cupedCoverageThreshold"),
+    cupedCoverageThresholdPct: resolve("cupedCoverageThresholdPct"),
   };
 }
 

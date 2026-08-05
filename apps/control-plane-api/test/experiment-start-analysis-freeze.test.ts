@@ -49,7 +49,7 @@ async function metric(
 describe("Experiment Start freezes the analysis config", () => {
   it("freezes a guardrail bound against the treatment Variant, never the Control", async () => {
     const fx = await experimentFixture(ctx);
-    const guardrailId = await metric(fx.appId, "metric_errors", { downsideThreshold: -0.02 });
+    const guardrailId = await metric(fx.appId, "metric_errors", { downsideThresholdPct: -2 });
     const experiment = await createExperimentDraft(ctx, fx, {
       key: "guardrail-freeze",
       allocation: { control: 50, treatment: 50 },
@@ -68,7 +68,7 @@ describe("Experiment Start freezes the analysis config", () => {
       {
         metric_id: guardrailId,
         variant: "treatment",
-        downside_threshold: -0.02,
+        downside_threshold_pct: -2,
         guardrail_locked_at_run_start: true,
         threshold_locked_at_run_start: true,
       },
@@ -122,13 +122,13 @@ describe("Experiment Start freezes the analysis config", () => {
       // the Metric asks for.
       winsorize: false,
       winsorize_pct: 99.9,
-      cuped_coverage_threshold: 70,
+      cuped_coverage_threshold_pct: 70,
     });
     expect(frozen).toContainEqual({
       metric_id: revenueId,
       winsorize: true,
       winsorize_pct: 99,
-      cuped_coverage_threshold: 70,
+      cuped_coverage_threshold_pct: 70,
     });
   });
 });

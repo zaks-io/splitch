@@ -12,12 +12,13 @@ describe("guardrail bound check metamorphic properties", () => {
     const decisionFamily = familyMembers(6);
 
     for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
-      const ciLower = randomBetween(random, -0.08, 0.04);
-      const threshold = randomBetween(random, -0.06, 0.02);
+      const ciLower = randomBetween(random, -8, 4);
+      const ciUpper = ciLower + randomBetween(random, 0.1, 10);
+      const threshold = randomBetween(random, -6, 2);
       const guardrailArm = armResult("guardrail_latency", "treatment", random(), {
-        relative_lift_pct: randomBetween(random, -10, 10),
+        relative_lift_pct: randomBetween(random, ciLower, ciUpper),
         ci_lower: ciLower,
-        ci_upper: ciLower + randomBetween(random, 0.001, 0.1),
+        ci_upper: ciUpper,
       });
       const withoutFamily = applyDecisionFamilyCorrection({
         confidence_level: 0.95,
@@ -44,9 +45,9 @@ describe("guardrail bound check metamorphic properties", () => {
     const random = seededRandom(419_522);
 
     for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
-      const ciLower = randomBetween(random, -0.1, 0.1);
-      const threshold = ciLower + randomBetween(random, 0.0001, 0.1);
-      const tightenedThreshold = threshold + randomBetween(random, 0.0001, 0.1);
+      const ciLower = randomBetween(random, -10, 10);
+      const threshold = ciLower + randomBetween(random, 0.01, 10);
+      const tightenedThreshold = threshold + randomBetween(random, 0.01, 10);
 
       expect(guardrailResult([boundArm(ciLower)], threshold).is_breached).toBe(true);
       expect(guardrailResult([boundArm(ciLower)], tightenedThreshold).is_breached).toBe(true);
@@ -58,7 +59,7 @@ describe("guardrail bound check metamorphic properties", () => {
 
     for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
       const relativeLiftIsNull = random() < 0.5;
-      const result = guardrailResult([relativeLiftArm(random, relativeLiftIsNull)], -0.005);
+      const result = guardrailResult([relativeLiftArm(random, relativeLiftIsNull)], -0.5);
 
       expect(result.is_breached === null).toBe(relativeLiftIsNull);
     }
@@ -75,7 +76,7 @@ function guardrailResult(
       {
         metric_id: "guardrail_latency",
         variant: "treatment",
-        downside_threshold: threshold,
+        downside_threshold_pct: threshold,
         guardrail_locked_at_run_start: true,
         threshold_locked_at_run_start: true,
       },
@@ -89,9 +90,9 @@ function guardrailResult(
 
 function boundArm(ciLower: number) {
   return armResult("guardrail_latency", "treatment", 0.8, {
-    relative_lift_pct: -1,
+    relative_lift_pct: ciLower + 5,
     ci_lower: ciLower,
-    ci_upper: ciLower + 0.1,
+    ci_upper: ciLower + 10,
   });
 }
 
@@ -104,10 +105,12 @@ function relativeLiftArm(random: () => number, relativeLiftIsNull: boolean) {
     });
   }
 
+  const ciLower = randomBetween(random, -8, 4);
+  const ciUpper = randomBetween(random, 5, 15);
   return armResult("guardrail_latency", "treatment", random(), {
-    relative_lift_pct: randomBetween(random, -20, 20),
-    ci_lower: randomBetween(random, -0.08, 0.04),
-    ci_upper: randomBetween(random, 0.05, 0.15),
+    relative_lift_pct: randomBetween(random, ciLower, ciUpper),
+    ci_lower: ciLower,
+    ci_upper: ciUpper,
   });
 }
 

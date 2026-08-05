@@ -43,7 +43,7 @@ export function countStatsInput(random: () => number, shape: CountArmShape): Sta
             {
               metric_id: "conversion",
               variant: "treatment",
-              downside_threshold: shape.guardrailThreshold,
+              downside_threshold_pct: shape.guardrailThreshold,
               guardrail_locked_at_run_start: true,
               threshold_locked_at_run_start: true,
             },

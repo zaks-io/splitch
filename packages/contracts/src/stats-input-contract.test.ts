@@ -266,7 +266,7 @@ describe("StatsInputSchema", () => {
         {
           metric_id: "guardrail_latency",
           variant: "treatment",
-          downside_threshold: -5,
+          downside_threshold_pct: -5,
           guardrail_locked_at_run_start: true,
           threshold_locked_at_run_start: true,
         },
@@ -275,7 +275,7 @@ describe("StatsInputSchema", () => {
 
     expect(input.guardrail_decisions[0]).toMatchObject({
       metric_id: "guardrail_latency",
-      downside_threshold: -5,
+      downside_threshold_pct: -5,
     });
   });
 });

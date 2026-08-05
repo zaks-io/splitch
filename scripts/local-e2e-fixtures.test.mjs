@@ -108,7 +108,7 @@ test("fixture App has explicit Environments and Run-scoped Experiment health sta
     {
       metric_id: "checkout-reliability",
       variant: "treatment",
-      downside_threshold: -10,
+      downside_threshold_pct: -10,
       guardrail_locked_at_run_start: true,
       threshold_locked_at_run_start: true,
     },

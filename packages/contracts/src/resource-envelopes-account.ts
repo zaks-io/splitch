@@ -36,16 +36,16 @@ import { SlugSchema } from "./slug";
 // ratio denominator belongs to the same App. The envelope keeps them optional so
 // the conditional lives in one place (the Worker), matching the spec table.
 //
-// `downsideThreshold` and the three variance-reduction knobs accept an explicit
+// `downsideThresholdPct` and the three variance-reduction knobs accept an explicit
 // null on patch, which is how a Metric goes back to the engine default. Leaving
 // the field out means "unchanged"; sending null means "no preference".
 // ---------------------------------------------------------------------------
 
 const MetricAnalysisFields = {
-  downsideThreshold: MetricSchema.shape.downsideThreshold,
+  downsideThresholdPct: MetricSchema.shape.downsideThresholdPct,
   winsorize: MetricSchema.shape.winsorize,
   winsorizePct: MetricSchema.shape.winsorizePct,
-  cupedCoverageThreshold: MetricSchema.shape.cupedCoverageThreshold,
+  cupedCoverageThresholdPct: MetricSchema.shape.cupedCoverageThresholdPct,
 };
 
 export const CreateMetricRequestSchema = z.object({

@@ -45,7 +45,7 @@ export function binomialStatsInput(options: {
               // Above the fixture's Fieller lower bound (~29.99%) so this stays
               // a breach case. The delta-method interval this replaced ran much
               // wider on the low side and breached at 10.
-              downside_threshold: 35,
+              downside_threshold_pct: 35,
               guardrail_locked_at_run_start: true,
               threshold_locked_at_run_start: true,
             },
