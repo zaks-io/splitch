@@ -18,27 +18,27 @@ live in [request-response-envelopes-conventions.md](./request-response-envelopes
 
 ### CreateExperimentRequest
 
-| Field                | Required | Notes                                                                                                                         |
-| -------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `appId`              | yes      | —                                                                                                                             |
-| `environmentId`      | yes      | Co-scoped with `appId`; Experiment is per-Environment (ADR-0027)                                                              |
-| `name`               | yes      | —                                                                                                                             |
-| `key`                | yes      | Unique per `(App, Environment)`                                                                                               |
-| `flagId`             | yes      | One Flag per Experiment                                                                                                       |
-| `targetingKey`       | yes      | EC field name to bucket on; inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN`                         |
-| `targetingKeyType`   | yes      | Entity type (`'user' \| 'session' \| 'workspace'`); inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN` |
-| `description`        | no       | —                                                                                                                             |
-| `hypothesis`         | no       | —                                                                                                                             |
-| `confidenceLevel`    | no       | Defaults to `0.95`                                                                                                            |
-| `metrics`            | yes      | `MetricRef[]`, min 0                                                                                                          |
-| `guardrailMetrics`   | no       | Defaults to `[]`                                                                                                              |
-| `activationMetricId` | no       | Assignment-affecting when set                                                                                                 |
-| `conversionWindowMs` | no       | Defaults to `0` (unbounded)                                                                                                   |
-| `dimensions`         | no       | Defaults to `[]`                                                                                                              |
-| `allocation`         | no       | Draft assignment field staged for the first Start; must sum to 100 at Start                                                   |
-| `salt`               | no       | Draft assignment field staged for the first Start; generated at Start when omitted                                            |
-| `targetingRules`     | no       | Draft assignment field staged for the first Start                                                                             |
-| `segmentIds`         | no       | Draft assignment field staged for the first Start; resolved to frozen targeting rules at Start                                |
+| Field                | Required | Notes                                                                                                                                                                      |
+| -------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `appId`              | yes      | —                                                                                                                                                                          |
+| `environmentId`      | yes      | Co-scoped with `appId`; Experiment is per-Environment (ADR-0027)                                                                                                           |
+| `name`               | yes      | —                                                                                                                                                                          |
+| `key`                | yes      | Unique per `(App, Environment)`                                                                                                                                            |
+| `flagId`             | yes      | One Flag per Experiment                                                                                                                                                    |
+| `targetingKey`       | yes      | EC field name to bucket on; inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN`                                                                      |
+| `targetingKeyType`   | yes      | Entity type label (the `id_type`); open vocabulary, typo-shaped values rejected at create/patch; inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN` |
+| `description`        | no       | —                                                                                                                                                                          |
+| `hypothesis`         | no       | —                                                                                                                                                                          |
+| `confidenceLevel`    | no       | Defaults to `0.95`                                                                                                                                                         |
+| `metrics`            | yes      | `MetricRef[]`, min 0                                                                                                                                                       |
+| `guardrailMetrics`   | no       | Defaults to `[]`                                                                                                                                                           |
+| `activationMetricId` | no       | Assignment-affecting when set                                                                                                                                              |
+| `conversionWindowMs` | no       | Defaults to `0` (unbounded)                                                                                                                                                |
+| `dimensions`         | no       | Defaults to `[]`                                                                                                                                                           |
+| `allocation`         | no       | Draft assignment field staged for the first Start; must sum to 100 at Start                                                                                                |
+| `salt`               | no       | Draft assignment field staged for the first Start; generated at Start when omitted                                                                                         |
+| `targetingRules`     | no       | Draft assignment field staged for the first Start                                                                                                                          |
+| `segmentIds`         | no       | Draft assignment field staged for the first Start; resolved to frozen targeting rules at Start                                                                             |
 
 Worker sets: `id`, `status = 'draft'`, `liveRunId = null`, `createdAt`, `updatedAt`, and
 `defaultVariantId` — copied from the bound Flag's per-Environment `defaultVariantId` (resolved via

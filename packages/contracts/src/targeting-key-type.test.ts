@@ -3,9 +3,11 @@ import {
   CreateExperimentRequestSchema,
   PatchExperimentRequestSchema,
 } from "./resource-envelopes-experiment";
-import { TargetingKeyTypeSchema, targetingKeyTypes } from "./targeting-key-type";
-
-const allowedMessage = `allowed targetingKeyType values: ${targetingKeyTypes.join(", ")}`;
+import {
+  TARGETING_KEY_TYPE_MAX_LENGTH,
+  TARGETING_KEY_TYPE_SHAPE_MESSAGE,
+  TargetingKeyTypeSchema,
+} from "./targeting-key-type";
 
 const validCreateExperiment = {
   appId: "app_1",
@@ -18,55 +20,74 @@ const validCreateExperiment = {
   metrics: [{ metricId: "m_1" }],
 };
 
-describe("targetingKeyTypes vocabulary", () => {
-  it("accepts every canonical Entity type", () => {
-    for (const type of targetingKeyTypes) {
-      expect(TargetingKeyTypeSchema.parse(type)).toBe(type);
-    }
+describe("TargetingKeyTypeSchema shape", () => {
+  it.each([
+    "user",
+    "session",
+    "workspace",
+    "account",
+    "restaurant",
+    "service_account",
+  ])("accepts open-vocabulary type %s", (targetingKeyType) => {
+    expect(TargetingKeyTypeSchema.parse(targetingKeyType)).toBe(targetingKeyType);
   });
 
-  it("rejects an unrecognized type and names the allowed set", () => {
-    const result = TargetingKeyTypeSchema.safeParse("bogus");
+  it.each([
+    ["empty", ""],
+    ["uppercase", "User"],
+    ["hyphen separator", "user-type"],
+    ["space", "user type"],
+    ["leading underscore", "_user"],
+    ["trailing underscore", "user_"],
+    ["double underscore", "user__type"],
+    ["too long", "a".repeat(TARGETING_KEY_TYPE_MAX_LENGTH + 1)],
+  ])("rejects typo-shaped value (%s)", (_label, value) => {
+    const result = TargetingKeyTypeSchema.safeParse(value);
+    expect(result.success).toBe(false);
+  });
+
+  it("names the shape rule when a typo is rejected", () => {
+    const result = TargetingKeyTypeSchema.safeParse("User");
     expect(result.success).toBe(false);
     if (result.success) return;
-    expect(result.error.issues[0]?.message).toBe(allowedMessage);
+    expect(
+      result.error.issues.some((issue) => issue.message === TARGETING_KEY_TYPE_SHAPE_MESSAGE),
+    ).toBe(true);
   });
 });
 
-describe("CreateExperimentRequestSchema targetingKeyType guard", () => {
-  it.each([...targetingKeyTypes])("accepts recognized type %s", (targetingKeyType) => {
+describe("CreateExperimentRequestSchema targetingKeyType shape", () => {
+  it("accepts a non-blessed Entity type", () => {
     const req = CreateExperimentRequestSchema.parse({
       ...validCreateExperiment,
-      targetingKeyType,
+      targetingKeyType: "restaurant",
     });
-    expect(req.targetingKeyType).toBe(targetingKeyType);
+    expect(req.targetingKeyType).toBe("restaurant");
   });
 
-  it("rejects an unrecognized targetingKeyType and lists the accepted values", () => {
+  it("rejects a typo-shaped targetingKeyType", () => {
     const result = CreateExperimentRequestSchema.safeParse({
       ...validCreateExperiment,
-      targetingKeyType: "bogus",
+      targetingKeyType: "User",
     });
     expect(result.success).toBe(false);
     if (result.success) return;
-    const issue = result.error.issues[0];
-    expect(issue?.path).toEqual(["targetingKeyType"]);
-    expect(issue?.message).toBe(allowedMessage);
+    expect(result.error.issues[0]?.path).toEqual(["targetingKeyType"]);
+    expect(result.error.issues[0]?.message).toBe(TARGETING_KEY_TYPE_SHAPE_MESSAGE);
   });
 });
 
-describe("PatchExperimentRequestSchema targetingKeyType guard", () => {
-  it.each([...targetingKeyTypes])("accepts recognized type %s on update", (targetingKeyType) => {
-    const req = PatchExperimentRequestSchema.parse({ targetingKeyType });
-    expect(req.targetingKeyType).toBe(targetingKeyType);
+describe("PatchExperimentRequestSchema targetingKeyType shape", () => {
+  it("accepts a non-blessed Entity type on update", () => {
+    const req = PatchExperimentRequestSchema.parse({ targetingKeyType: "account" });
+    expect(req.targetingKeyType).toBe("account");
   });
 
-  it("rejects an unrecognized targetingKeyType on update and lists the accepted values", () => {
-    const result = PatchExperimentRequestSchema.safeParse({ targetingKeyType: "bogus" });
+  it("rejects a typo-shaped targetingKeyType on update", () => {
+    const result = PatchExperimentRequestSchema.safeParse({ targetingKeyType: "user-type" });
     expect(result.success).toBe(false);
     if (result.success) return;
-    const issue = result.error.issues[0];
-    expect(issue?.path).toEqual(["targetingKeyType"]);
-    expect(issue?.message).toBe(allowedMessage);
+    expect(result.error.issues[0]?.path).toEqual(["targetingKeyType"]);
+    expect(result.error.issues[0]?.message).toBe(TARGETING_KEY_TYPE_SHAPE_MESSAGE);
   });
 });

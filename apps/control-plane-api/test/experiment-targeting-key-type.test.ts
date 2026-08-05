@@ -1,3 +1,4 @@
+import { appScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createExperimentDraft,
@@ -5,13 +6,13 @@ import {
   experimentFixture,
   makeExperimentRunHarness,
   patchExperiment,
+  startExperiment,
+  type StartResponse,
 } from "../src/experiment-run-test-fixture";
 import { errorBody, request } from "../src/flag-definition-test-harness";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
-/** Mirrors `targetingKeyTypes` in `@splitch/contracts` — keep in sync. */
-const targetingKeyTypes = ["user", "session", "workspace"] as const;
-const allowedMessage = `allowed targetingKeyType values: ${targetingKeyTypes.join(", ")}`;
+const SHAPE_MESSAGE = "must be lowercase alphanumerics separated by single underscores";
 
 let ctx: ExperimentRunHarness;
 
@@ -21,8 +22,19 @@ beforeEach(async () => {
 
 afterEach(async () => ctx.h.bindings.dispose());
 
-describe("control-plane Experiment targetingKeyType vocabulary", () => {
-  it("rejects an unrecognized targetingKeyType on create and lists the accepted values", async () => {
+async function allowStart(fx: Awaited<ReturnType<typeof experimentFixture>>) {
+  await ctx.repo.identity.updateEnvironment(appScope(fx.appId), fx.environmentId, {
+    policy: JSON.stringify({
+      variantAvailability: "allow",
+      targetingRolloutValue: "allow",
+      enabledState: "allow",
+      startExperimentRun: "allow",
+    }),
+  });
+}
+
+describe("control-plane Experiment targetingKeyType shape", () => {
+  it("rejects a typo-shaped targetingKeyType on create and names the shape rule", async () => {
     const fx = await experimentFixture(ctx);
     const res = await request(
       ctx.h,
@@ -32,11 +44,11 @@ describe("control-plane Experiment targetingKeyType vocabulary", () => {
       {
         appId: fx.appId,
         environmentId: fx.environmentId,
-        name: "bogus-type",
-        key: "bogus-type",
+        name: "typo-type",
+        key: "typo-type",
         flagId: fx.flag.id,
         targetingKey: "userId",
-        targetingKeyType: "bogus",
+        targetingKeyType: "User",
         metrics: [{ metricId: fx.metricId }],
       },
     );
@@ -47,26 +59,24 @@ describe("control-plane Experiment targetingKeyType vocabulary", () => {
     expect(err.details.issues).toEqual([
       {
         path: ["body", "targetingKeyType"],
-        message: allowedMessage,
+        message: SHAPE_MESSAGE,
       },
     ]);
   });
 
-  it.each([
-    ...targetingKeyTypes,
-  ])("accepts recognized targetingKeyType %s on create", async (targetingKeyType) => {
+  it("accepts a non-blessed Entity type on create", async () => {
     const fx = await experimentFixture(ctx);
     const experiment = await createExperimentDraft(ctx, fx, {
-      key: `type-${targetingKeyType}`,
-      targetingKeyType,
+      key: "type-restaurant",
+      targetingKeyType: "restaurant",
     });
     expect(experiment.id).toMatch(/^exp_/);
   });
 
-  it("rejects an unrecognized targetingKeyType on update and lists the accepted values", async () => {
+  it("rejects a typo-shaped targetingKeyType on update and names the shape rule", async () => {
     const fx = await experimentFixture(ctx);
-    const experiment = await createExperimentDraft(ctx, fx, { key: "patch-type" });
-    const res = await patchExperiment(ctx, fx, experiment.id, { targetingKeyType: "bogus" });
+    const experiment = await createExperimentDraft(ctx, fx, { key: "patch-typo" });
+    const res = await patchExperiment(ctx, fx, experiment.id, { targetingKeyType: "user-type" });
     expect(res.status).toBe(400);
     const err = await errorBody(res);
     expect(err.code).toBe("VALIDATION_ERROR");
@@ -74,21 +84,43 @@ describe("control-plane Experiment targetingKeyType vocabulary", () => {
     expect(err.details.issues).toEqual([
       {
         path: ["body", "targetingKeyType"],
-        message: allowedMessage,
+        message: SHAPE_MESSAGE,
       },
     ]);
   });
 
-  it.each([
-    ...targetingKeyTypes,
-  ])("accepts recognized targetingKeyType %s on update", async (targetingKeyType) => {
+  it("accepts a non-blessed Entity type on update", async () => {
     const fx = await experimentFixture(ctx);
-    const experiment = await createExperimentDraft(ctx, fx, {
-      key: `patch-ok-${targetingKeyType}`,
-    });
-    const res = await patchExperiment(ctx, fx, experiment.id, { targetingKeyType });
+    const experiment = await createExperimentDraft(ctx, fx, { key: "patch-account" });
+    const res = await patchExperiment(ctx, fx, experiment.id, { targetingKeyType: "account" });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { targetingKeyType: string };
-    expect(body.targetingKeyType).toBe(targetingKeyType);
+    expect(body.targetingKeyType).toBe("account");
+  });
+
+  it("still Starts an Experiment stored with a legal non-blessed Entity type", async () => {
+    const fx = await experimentFixture(ctx);
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "account-start",
+      targetingKeyType: "account",
+      allocation: { control: 50, treatment: 50 },
+      salt: "account-start-salt",
+    });
+    await allowStart(fx);
+
+    // Echo the stored type through a draft patch the way the Control Panel does
+    // on Start (read-then-resend). A closed enum would make this permanently
+    // un-startable; shape validation must keep the value echoable.
+    const staged = await patchExperiment(ctx, fx, experiment.id, {
+      stageForNextRun: true,
+      targetingKeyType: "account",
+      allocation: { control: 50, treatment: 50 },
+    });
+    expect(staged.status).toBe(200);
+
+    const started = await startExperiment(ctx, fx, experiment.id);
+    expect(started.status).toBe(200);
+    const body = (await started.json()) as StartResponse;
+    expect(body.run.targetingKeyType).toBe("account");
   });
 });
