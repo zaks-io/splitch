@@ -16,10 +16,16 @@ import { ApprovalRequestIdSchema } from "./approval-identifiers";
 /**
  * Query/MCP boolean: URL query strings are always text, while MCP/CLI flat
  * inputs send real booleans. Accept both; reject everything else loudly.
+ *
+ * Must stay JSON-Schema-representable (`z.preprocess`, not `.transform`) so
+ * `deriveMcpProtocolTools` can advertise `apps_delete` dryRun/force to agents
+ * (CLI/MCP parity; SPL-326).
  */
-export const QueryBooleanSchema = z
-  .union([z.boolean(), z.literal("true"), z.literal("false")])
-  .transform((value) => value === true || value === "true");
+export const QueryBooleanSchema = z.preprocess((value) => {
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+  return value;
+}, z.boolean());
 
 export const ResourceDeleteModeQuerySchema = z
   .object({

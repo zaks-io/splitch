@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { ErrorResponseSchema } from "./errors";
 import { deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
 import { getRoute, routeRegistry } from "./route-registry";
@@ -172,6 +173,18 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
       update?.inputSchema.safeParse({ appId: "app_1", flagId: "flag_1", name: "Checkout" }).success,
     ).toBe(true);
     expect(update?.inputSchema.safeParse({ name: "Checkout" }).success).toBe(false);
+  });
+
+  it("apps_delete advertises dryRun and force for MCP/CLI parity (SPL-326)", () => {
+    const del = tools.find((tool) => tool.name === "apps_delete");
+    const shape = objectShape(del?.inputSchema);
+    expect(Object.keys(shape)).toEqual(expect.arrayContaining(["appId", "dryRun", "force"]));
+    expect(del?.inputSchema.safeParse({ appId: "app_1", dryRun: true }).success).toBe(true);
+    expect(del?.inputSchema.safeParse({ appId: "app_1", force: true }).success).toBe(true);
+    expect(z.toJSONSchema(del?.inputSchema as z.ZodTypeAny).properties).toMatchObject({
+      dryRun: { type: "boolean" },
+      force: { type: "boolean" },
+    });
   });
 
   it("tool output = the route 200 response schema", () => {
