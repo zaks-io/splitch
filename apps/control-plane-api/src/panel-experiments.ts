@@ -9,6 +9,8 @@ import {
 import {
   AnalysisResultsError,
   guardrailBreached,
+  isAnalysisInsufficientData,
+  isAnalysisResultsNoData,
   type PanelExperimentHealth,
   type PanelExperimentListItem,
   type PanelExperimentResultsOutput,
@@ -218,11 +220,24 @@ export async function panelExperimentResults(
   // resolves at read time; it is validated on arrival but deliberately not the
   // label, because a read-time value cannot describe a frozen Run.
   const control = resolveFrozenControlIdentity(run.controlVariantId, run.variantSet);
+  const runStatus = run.status === "ended" ? ("ended" as const) : ("running" as const);
+  if (isAnalysisResultsNoData(results)) {
+    const output: PanelExperimentResultsOutput = {
+      state: "no_data",
+      runId: run.id,
+      runNumber: run.runNumber,
+      runStatus,
+      control,
+      missing: results.missing,
+    };
+    return Response.json(output);
+  }
   const stats = results.stats;
   const output: PanelExperimentResultsOutput = {
+    state: "ready",
     runId: run.id,
     runNumber: run.runNumber,
-    runStatus: run.status === "ended" ? "ended" : "running",
+    runStatus,
     control,
     stats,
     srm: experimentSrmDiagnostics(stats),
@@ -275,10 +290,13 @@ async function runningHealth(
   const results = await parseAnalysisResults(response, experiment.liveRunId).catch(
     (cause: unknown) => {
       if (cause instanceof AnalysisResultsError && cause.code === "RUN_NOT_FOUND") return null;
+      // Legacy Analysis builds used VALIDATION_ERROR for early-Run missing
+      // inputs; current builds answer 200 `no_data` (handled below).
+      if (cause instanceof AnalysisResultsError && isAnalysisInsufficientData(cause)) return null;
       throw cause;
     },
   );
-  if (!results) return collecting;
+  if (!results || isAnalysisResultsNoData(results)) return collecting;
   const stats = results.stats;
   return {
     // The same family the gate reads, so list health cannot call a Run

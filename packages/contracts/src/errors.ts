@@ -320,7 +320,10 @@ const errorMembers = [
     "PRIVACY_JOB_FAILED",
     z.object({ requestId: z.string(), failedStores: z.array(z.string()) }),
   ),
-  member("INTERNAL_SERVER_ERROR", EmptyDetails),
+  // Optional `fault` lets a 5xx name the broken seam without inventing a
+  // recommendedAction token. `{}` remains valid for call sites that only have a
+  // message (see flag-definition-errors).
+  member("INTERNAL_SERVER_ERROR", z.object({ fault: z.string().optional() }).strict()),
 ] as const;
 
 export const ErrorResponseSchema = z.discriminatedUnion("code", errorMembers);

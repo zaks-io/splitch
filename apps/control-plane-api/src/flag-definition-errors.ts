@@ -90,10 +90,9 @@ export function variantWriteRefusal(refusal: VariantWriteRefusal, requestId: str
  * lose, so this means the Variant moved under a concurrent writer between the
  * read and the batch: no client input can be corrected to fix it, which makes it
  * a server fault worth surfacing loudly rather than a 404 the caller would read
- * as "it was never there". `details` stays `{}` because the error contract
- * declares `INTERNAL_SERVER_ERROR` details strictly empty; the reason lives in
- * the message, and inventing a `recommendedAction` token for a 500 would widen
- * the shared enum for one call site.
+ * as "it was never there". `details` stays `{}` (optional `fault` is unused
+ * here); the reason lives in the message, and inventing a `recommendedAction`
+ * token for a 500 would widen the shared enum for one call site.
  */
 function variantWriteNotApplied(requestId: string): Response {
   return renderError(

@@ -89,9 +89,9 @@ export function runRow(ids: PanelExperimentIds, runNumber: 1 | 2) {
 export function analysisEnvelope(
   runId: string,
   stats: StatsOutput,
-  overrides: Partial<AnalysisResultsEnvelope> = {},
+  overrides: Partial<Extract<AnalysisResultsEnvelope, { state: "ready" }>> = {},
 ): AnalysisResultsEnvelope {
-  return { run_id: runId, control_variant: "control", stats, ...overrides };
+  return { state: "ready", run_id: runId, control_variant: "control", stats, ...overrides };
 }
 
 /** A clean, powered, decision-valid Run. Override one branch per failure case. */

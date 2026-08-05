@@ -7,15 +7,16 @@ import {
   resultsAuthInit,
 } from "./results-test-harness";
 import { RUN_ID, rowsByPipe } from "./results-test-support";
-import { TinybirdReadError, type PipeParams, type TinybirdReadTransport } from "./tinybird";
+import { type PipeParams, TinybirdReadError, type TinybirdReadTransport } from "./tinybird";
 
 /**
- * Three observable states for Results reads (SPL-290 / ADR-0036):
- * data present → StatsOutput envelope; no Run snapshot yet → typed 404;
- * Tinybird outage → SERVICE_UNAVAILABLE. Empty Metric stubs are "data present".
+ * Three observable states for Results reads (SPL-290 / SPL-302 / ADR-0036):
+ * full inputs → ready StatsOutput envelope; incomplete locked inputs → 200
+ * `no_data` naming the missing input (same discriminator as attention-rollup);
+ * no Run snapshot → typed 404; Tinybird outage → SERVICE_UNAVAILABLE.
  */
-describe("GET experiment results three-state distinction (SPL-290)", () => {
-  it("returns a StatsOutput envelope when Exposures exist and Metric pipes are empty", async () => {
+describe("GET experiment results three-state distinction (SPL-290/SPL-302)", () => {
+  it("returns 200 no_data naming Metric Events when Exposures exist but Metric pipes are empty", async () => {
     const { app, tinybird } = makeResultsHarness({
       ...rowsByPipe(),
       analysis_metric_values: [],
@@ -25,10 +26,13 @@ describe("GET experiment results three-state distinction (SPL-290)", () => {
     const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
 
     expect(res.status).toBe(200);
-    const envelope = AnalysisResultsEnvelopeSchema.parse(await res.json());
-    expect(envelope.run_id).toBe(RUN_ID);
-    expect(envelope.stats.health.deduped_counts).toEqual({ control: 2, treatment: 2 });
-    expect(envelope.stats.arm_results.length).toBeGreaterThan(0);
+    const body = AnalysisResultsEnvelopeSchema.parse(await res.json());
+    expect(body).toEqual({
+      state: "no_data",
+      run_id: RUN_ID,
+      control_variant: "control",
+      missing: "metric_events",
+    });
     expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
       "analysis_run_inputs",
       "analysis_deduped_exposures",

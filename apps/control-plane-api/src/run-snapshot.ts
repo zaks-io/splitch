@@ -49,6 +49,7 @@ export function runSnapshotRow(run: RunRow, scope: EnvScope, snapshotAt: string)
       `Run ${run.id} Control Variant ${run.controlVariantId} is absent from variantSet`,
     );
   }
+  const allocation = parseAllocation(run.allocation);
   return {
     app_id: scope.appId,
     environment_id: scope.environmentId,
@@ -63,8 +64,13 @@ export function runSnapshotRow(run: RunRow, scope: EnvScope, snapshotAt: string)
     allocation: run.allocation,
     control_variant: controlVariant.name,
     control_variant_id: run.controlVariantId,
-    decision_family: run.decisionFamily,
-    guardrail_decisions: run.guardrailDecisions,
+    // D1 stores MetricRef[]; analysis reads DecisionFamilyMember[]. Expand here
+    // so Tinybird never holds the D1 shape (SPL-302).
+    decision_family: analysisDecisionFamily(run.decisionFamily, allocation, controlVariant.name),
+    // Guardrail thresholds live on Metric rows and are not frozen on the Run yet.
+    // Shipping MetricRefs would break StatsInputSchema; empty keeps Results
+    // readable until Start freezes GuardrailDecision.
+    guardrail_decisions: analysisGuardrailDecisions(run.guardrailDecisions),
     // Dimension config has no backing data until SPL-183 lands.
     dimensions: "[]",
     config_hash: run.configHash,
@@ -162,4 +168,100 @@ function parseVariantSet(raw: string): Array<{ id: string; name: string }> {
     throw new Error("Run variantSet is unparseable");
   }
   return parsed as Array<{ id: string; name: string }>;
+}
+
+function parseAllocation(raw: string): Record<string, number> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error("Run allocation is unparseable", { cause });
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("Run allocation is unparseable");
+  }
+  const allocation: Record<string, number> = {};
+  for (const [variant, share] of Object.entries(parsed)) {
+    if (typeof share !== "number") throw new Error("Run allocation is unparseable");
+    allocation[variant] = share;
+  }
+  return allocation;
+}
+
+/**
+ * Expand D1 `MetricRef[]` into the Stats-engine `DecisionFamilyMember[]` the
+ * analysis_run_inputs pipe must return. Already-stats-shaped JSON is passed
+ * through so a reconciled snapshot is not double-expanded.
+ */
+function analysisDecisionFamily(
+  raw: string,
+  allocation: Record<string, number>,
+  controlVariant: string,
+): string {
+  const parsed = parseJsonArray(raw, "decision_family");
+  if (parsed.length === 0) return "[]";
+  if (parsed.every(isDecisionFamilyMember)) return JSON.stringify(parsed);
+  if (!parsed.every(isMetricRef)) {
+    throw new Error("Run decision_family is neither MetricRef[] nor DecisionFamilyMember[]");
+  }
+  const treatments = Object.keys(allocation)
+    .filter((variant) => variant !== controlVariant)
+    .sort();
+  if (treatments.length === 0) {
+    throw new Error("Run decision_family needs a non-Control Variant in allocation");
+  }
+  return JSON.stringify(
+    parsed.flatMap((ref) => treatments.map((variant) => ({ metric_id: ref.metricId, variant }))),
+  );
+}
+
+function analysisGuardrailDecisions(raw: string): string {
+  const parsed = parseJsonArray(raw, "guardrail_decisions");
+  if (parsed.length === 0) return "[]";
+  if (parsed.every(isGuardrailDecision)) return JSON.stringify(parsed);
+  if (parsed.every(isMetricRef)) return "[]";
+  throw new Error("Run guardrail_decisions is neither MetricRef[] nor GuardrailDecision[]");
+}
+
+function parseJsonArray(raw: string, field: string): unknown[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error(`Run ${field} is unparseable`, { cause });
+  }
+  if (!Array.isArray(parsed)) throw new Error(`Run ${field} is unparseable`);
+  return parsed;
+}
+
+function isMetricRef(value: unknown): value is { metricId: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { metricId?: unknown }).metricId === "string" &&
+    (value as { metric_id?: unknown }).metric_id === undefined
+  );
+}
+
+function isDecisionFamilyMember(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { metric_id?: unknown }).metric_id === "string" &&
+    typeof (value as { variant?: unknown }).variant === "string"
+  );
+}
+
+function isGuardrailDecision(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { metric_id?: unknown }).metric_id === "string" &&
+    typeof (value as { variant?: unknown }).variant === "string" &&
+    typeof (value as { downside_threshold?: unknown }).downside_threshold === "number" &&
+    typeof (value as { guardrail_locked_at_run_start?: unknown }).guardrail_locked_at_run_start ===
+      "boolean" &&
+    typeof (value as { threshold_locked_at_run_start?: unknown }).threshold_locked_at_run_start ===
+      "boolean"
+  );
 }

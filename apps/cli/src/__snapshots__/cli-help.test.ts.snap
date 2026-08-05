@@ -376,7 +376,7 @@ Flags:
 
 Example:
   splitch envs update --body-json '<json>' --json",
-    "experiment-results get": "Get an Experiment's results envelope (Run id, Control Variant, StatsOutput).
+    "experiment-results get": "Get an Experiment's results envelope: state ready with StatsOutput, or state no_data naming the missing input.
 
 Usage:
   splitch experiment-results get <experiment-id> [flags]
@@ -389,7 +389,7 @@ Flags:
 
 Example:
   splitch experiment-results get <experiment-id> --json",
-    "experiment-results post": "Get an Experiment's results envelope (Run id, Control Variant, StatsOutput).
+    "experiment-results post": "Get an Experiment's results envelope: state ready with StatsOutput, or state no_data naming the missing input.
 
 Usage:
   splitch experiment-results post <experiment-id> [flags]
@@ -1198,8 +1198,8 @@ Usage:
   splitch experiment-results <action> [arguments] [flags]
 
 Commands:
-  get             Get an Experiment's results envelope (Run id, Control Variant, StatsOutput).
-  post            Get an Experiment's results envelope (Run id, Control Variant, StatsOutput).
+  get             Get an Experiment's results envelope: state ready with StatsOutput, or state no_data naming the missing input.
+  post            Get an Experiment's results envelope: state ready with StatsOutput, or state no_data naming the missing input.
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.

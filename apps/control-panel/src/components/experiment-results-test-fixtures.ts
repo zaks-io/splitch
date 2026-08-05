@@ -4,7 +4,10 @@ import {
   experimentSignificanceDisplays,
   experimentSrmDiagnostics,
 } from "@splitch/contracts";
-import type { PanelExperimentResultsOutput } from "@splitch/control-plane-sdk/panel-experiments";
+import type {
+  PanelExperimentResultsNoData,
+  PanelExperimentResultsReady,
+} from "@splitch/control-plane-sdk/panel-experiments";
 
 /**
  * Panel fixtures built the way the Worker builds the payload: the gate is
@@ -161,9 +164,10 @@ function frozenControl(): FrozenControlIdentity {
 /** Mirrors the Worker: gate and srm derived once, then transported as data. */
 export function resultsFixture(
   stats: StatsOutput,
-  overrides: Partial<PanelExperimentResultsOutput> = {},
-): PanelExperimentResultsOutput {
+  overrides: Partial<PanelExperimentResultsReady> = {},
+): PanelExperimentResultsReady {
   return {
+    state: "ready",
     runId: "run_2",
     runNumber: 2,
     runStatus: "running",
@@ -172,6 +176,20 @@ export function resultsFixture(
     srm: experimentSrmDiagnostics(stats),
     gate: evaluateExperimentDecisionGate(stats, overrides.control ?? frozenControl()),
     significance: experimentSignificanceDisplays(stats),
+    ...overrides,
+  };
+}
+
+export function resultsNoDataFixture(
+  overrides: Partial<PanelExperimentResultsNoData> = {},
+): PanelExperimentResultsNoData {
+  return {
+    state: "no_data",
+    runId: "run_2",
+    runNumber: 2,
+    runStatus: "running",
+    control: frozenControl(),
+    missing: "metric_events",
     ...overrides,
   };
 }

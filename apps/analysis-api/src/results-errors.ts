@@ -1,6 +1,7 @@
 /**
  * The refusals a Results read can raise, kept as types so the response layer
- * can tell a transient fault from a permanent integrity failure.
+ * can tell a transient fault from a permanent integrity failure or a named
+ * missing input.
  */
 
 export class ResultsNotFoundError extends Error {
@@ -29,5 +30,29 @@ export class AnalysisIsolationError extends Error {
   constructor() {
     super("Tinybird returned a row outside the requested App/Environment scope");
     this.name = "AnalysisIsolationError";
+  }
+}
+
+/**
+ * A locked Run is readable but missing an analysis input. Mapped to HTTP 200
+ * `state: "no_data"` (same discriminator as attention-rollup), not a 4xx/5xx
+ * (SPL-302 / SPL-290).
+ */
+export class ResultsInsufficientDataError extends Error {
+  constructor(
+    readonly missing: "exposures" | "metric_events",
+    readonly runId: string,
+    readonly controlVariant: string,
+  ) {
+    super(missing === "exposures" ? "no Exposures for this Run" : "no Metric Events for this Run");
+    this.name = "ResultsInsufficientDataError";
+  }
+}
+
+/** A Run Snapshot field could not be materialized into StatsInput. */
+export class ResultsInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ResultsInputError";
   }
 }

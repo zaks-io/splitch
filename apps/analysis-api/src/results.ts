@@ -12,19 +12,20 @@ import {
   AnalysisIsolationError,
   AnalysisProvenanceError,
   ResultsForbiddenError,
+  ResultsInputError,
+  ResultsInsufficientDataError,
   ResultsNotFoundError,
 } from "./results-errors";
 import {
   booleanField,
-  compact,
   jsonField,
-  optionalNumber,
   optionalObject,
   optionalString,
   requiredPrincipalContext,
   rowObject,
   stringField,
 } from "./results-row-fields";
+import { assertAnalysisInputsPresent, materializeRunInput } from "./results-run-input";
 import { scopedPipeParams, TinybirdReadError, type TinybirdReadTransport } from "./tinybird";
 
 const RUN_INPUTS_PIPE = "analysis_run_inputs";
@@ -59,12 +60,26 @@ export function makeResultsHandler(deps: ResultsDeps) {
       const output = await statsEngine.analyze(statsInput);
       return Response.json(
         AnalysisResultsEnvelopeSchema.parse({
+          state: "ready",
           run_id: statsInput.run_id,
           control_variant: statsInput.control_variant,
           stats: StatsOutputSchema.parse(output),
         }),
       );
     } catch (cause) {
+      // Early-Run collecting state: Exposures without Metric Events (or no
+      // Exposures yet) is healthy, not invalid. Same `no_data` discriminator
+      // as app-attention-rollup (SPL-290 / SPL-302).
+      if (cause instanceof ResultsInsufficientDataError) {
+        return Response.json(
+          AnalysisResultsEnvelopeSchema.parse({
+            state: "no_data",
+            run_id: cause.runId,
+            control_variant: cause.controlVariant,
+            missing: cause.missing,
+          }),
+        );
+      }
       return renderError(errorFor(cause), { requestId });
     }
   };
@@ -102,10 +117,19 @@ export async function readStatsInputFromTinybird(
   ]);
 
   const exposures = exposureRows.map((row) => materializeExposure(row, scope));
+  const metric_values = metricRows.map(materializeMetricRow);
+  assertAnalysisInputsPresent({
+    run_id: run.run_id,
+    control_variant: run.control_variant,
+    decision_family: run.decision_family,
+    exposures,
+    metric_values,
+  });
+
   const input = StatsInputSchema.parse({
     ...run,
     exposures,
-    metric_values: metricRows.map(materializeMetricRow),
+    metric_values,
     ...(prePeriodRows.length > 0
       ? { pre_period_covariates: prePeriodRows.map((row) => rowObject(row)) }
       : {}),
@@ -123,22 +147,6 @@ async function pipeRows(
   params: Record<string, string>,
 ): Promise<readonly unknown[]> {
   return tinybird.readPipe(pipeName, params);
-}
-
-function materializeRunInput(row: unknown): Omit<StatsInput, "exposures" | "metric_values"> {
-  const source = rowObject(row);
-  return compact({
-    run_id: stringField(source, "run_id"),
-    confidence_level: optionalNumber(source.confidence_level),
-    horizon: optionalString(source.horizon),
-    target_n: optionalNumber(source.target_n),
-    sample_size_locked: optionalNumber(source.sample_size_locked),
-    allocation: jsonField(source, "allocation"),
-    control_variant: stringField(source, "control_variant"),
-    decision_family: jsonField(source, "decision_family"),
-    guardrail_decisions: jsonField(source, "guardrail_decisions") ?? [],
-    dimensions: jsonField(source, "dimensions"),
-  }) as Omit<StatsInput, "exposures" | "metric_values">;
 }
 
 function materializeExposure(row: unknown, scope: ResultsScope): Record<string, unknown> {
@@ -214,6 +222,15 @@ function errorFor(cause: unknown): ErrorResponse {
   if (cause instanceof ResultsForbiddenError) {
     return { code: "FORBIDDEN", message: cause.message, details: {} };
   }
+  if (cause instanceof ResultsInputError || isZodError(cause)) {
+    return {
+      code: "VALIDATION_ERROR",
+      message: "analysis inputs failed schema validation",
+      details: {
+        issues: zodOrInputIssues(cause),
+      },
+    };
+  }
   if (cause instanceof TinybirdReadError) {
     return {
       code: "SERVICE_UNAVAILABLE",
@@ -228,17 +245,51 @@ function errorFor(cause: unknown): ErrorResponse {
     return {
       code: "INTERNAL_SERVER_ERROR",
       message: "analysis run provenance mismatch",
-      details: {},
+      details: { fault: cause.message },
     };
   }
   if (cause instanceof AnalysisIsolationError) {
     return {
       code: "INTERNAL_SERVER_ERROR",
       message: "analysis isolation failure",
-      details: {},
+      details: { fault: cause.message },
     };
   }
-  return { code: "INTERNAL_SERVER_ERROR", message: "analysis failed", details: {} };
+  return {
+    code: "INTERNAL_SERVER_ERROR",
+    message: "analysis failed",
+    details: { fault: faultMessage(cause) },
+  };
+}
+
+function zodOrInputIssues(
+  cause: ResultsInputError | ZodLikeError,
+): Array<{ path: string[]; message: string }> {
+  if (cause instanceof ResultsInputError) {
+    return [{ path: ["analysis_run_inputs"], message: cause.message }];
+  }
+  return cause.issues.map((issue) => ({
+    path: issue.path.map(String),
+    message: issue.message,
+  }));
+}
+
+interface ZodLikeError {
+  issues: Array<{ path: PropertyKey[]; message: string }>;
+}
+
+function isZodError(cause: unknown): cause is ZodLikeError {
+  return (
+    typeof cause === "object" &&
+    cause !== null &&
+    (cause as { name?: unknown }).name === "ZodError" &&
+    Array.isArray((cause as { issues?: unknown }).issues)
+  );
+}
+
+function faultMessage(cause: unknown): string {
+  if (cause instanceof Error && cause.message.length > 0) return cause.message;
+  return "unexpected analysis failure";
 }
 
 export type { ResultsDeps, ResultsScope };

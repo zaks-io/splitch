@@ -15,6 +15,7 @@ const SCOPE = {
 
 function analysisEnvelope(stats = statsOutput()) {
   return {
+    state: "ready" as const,
     run_id: SCOPE.runId,
     control_variant: "control",
     stats,
@@ -82,6 +83,20 @@ describe("createAnalysisResultsReader three-state envelope unwrap", () => {
           { code: "RUN_NOT_FOUND", message: "Experiment Run not found", details: {} },
           { status: 404 },
         ),
+    });
+
+    await expect(reader.read(SCOPE, "actor_1")).resolves.toBeNull();
+  });
+
+  it("maps Metric-Events insufficient-data to null (no_data), not SERVICE_UNAVAILABLE", async () => {
+    const reader = createAnalysisResultsReader({
+      fetch: async () =>
+        Response.json({
+          state: "no_data",
+          run_id: SCOPE.runId,
+          control_variant: "control",
+          missing: "metric_events",
+        }),
     });
 
     await expect(reader.read(SCOPE, "actor_1")).resolves.toBeNull();
