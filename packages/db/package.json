@@ -12,6 +12,10 @@
     "./test-d1": {
       "types": "./src/repo/test-d1.ts",
       "default": "./src/repo/test-d1.ts"
+    },
+    "./test-d1-pool": {
+      "types": "./src/repo/test-d1-pool.ts",
+      "default": "./src/repo/test-d1-pool.ts"
     }
   },
   "files": [
@@ -31,6 +35,7 @@
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.18.8",
     "drizzle-kit": "^0.31.10",
     "miniflare": "^4.20260722.0"
   }

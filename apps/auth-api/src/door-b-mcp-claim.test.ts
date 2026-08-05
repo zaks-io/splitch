@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthApiEnv } from "./env";
 import worker from "./index";
 import { FIXTURE_OTP } from "./otp";
-import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
+import { makePoolBindings } from "./test-bindings-pool";
+import type { LocalBindings } from "./test-fixtures";
 import { FIXTURE_TURNSTILE_TOKEN } from "./turnstile";
 
 const MCP_RESOURCE = "https://mcp.splitch.test/mcp";
@@ -11,7 +12,7 @@ let env: AuthApiEnv;
 let disposeLocal: (() => void) | undefined;
 
 beforeAll(async () => {
-  local = await makeLocalBindings();
+  local = await makePoolBindings();
   disposeLocal = local.dispose;
   env = {
     DB: local.d1,

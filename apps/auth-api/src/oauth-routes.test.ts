@@ -4,7 +4,7 @@ import type { DeviceFlowPort } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import type { MembershipAuthorityRepo } from "./membership-authority";
 import { form, routeApp, selectedDeviceCode, unusedRefreshStore } from "./oauth-route-test-harness";
-import { makeLocalBindings } from "./test-fixtures";
+import { makePoolBindings } from "./test-bindings-pool";
 
 function staleMissCache(keys: string[] = []): KVNamespace {
   return {
@@ -76,7 +76,7 @@ describe("OAuth revoke route", () => {
   });
 
   it("returns the provider refresh token and immediately revokes it through D1 on KV stale miss", async () => {
-    const local = await makeLocalBindings();
+    const local = await makePoolBindings();
     try {
       const providerRevokes: Array<{ token: string; sessionId: string }> = [];
       const kvKeys: string[] = [];

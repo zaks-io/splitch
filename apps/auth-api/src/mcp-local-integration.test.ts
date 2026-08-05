@@ -3,7 +3,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthApiEnv } from "./env";
 import worker from "./index";
 import { makeKvRevocationStore } from "./revocation";
-import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
+import { makePoolBindings } from "./test-bindings-pool";
+import type { LocalBindings } from "./test-fixtures";
 
 let local: LocalBindings;
 let env: AuthApiEnv;
@@ -16,7 +17,7 @@ const VICTIM_APP = "app_victim";
 const NOW_ISO = "2026-07-20T00:00:00.000Z";
 
 beforeAll(async () => {
-  local = await makeLocalBindings();
+  local = await makePoolBindings();
   disposeLocal = local.dispose;
   env = {
     DB: local.d1,

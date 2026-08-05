@@ -3,12 +3,8 @@ import { afterAll, beforeAll, beforeEach } from "vitest";
 import { initiateClaim, verifyClaim } from "./claim";
 import { FIXTURE_OTP } from "./otp";
 import { registerAnonymous } from "./register";
-import {
-  type DoorBFixtures,
-  type LocalBindings,
-  makeDoorBDeps,
-  makeLocalBindings,
-} from "./test-fixtures";
+import { makePoolBindings } from "./test-bindings-pool";
+import { type DoorBFixtures, type LocalBindings, makeDoorBDeps } from "./test-fixtures";
 import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 
 /**
@@ -54,7 +50,7 @@ export function setupClaimHarness(): ClaimHarness {
   let turnstileSeq = 0;
 
   beforeAll(async () => {
-    local = await makeLocalBindings();
+    local = await makePoolBindings();
     signer = makeTokenSigner({
       assertionSecret: "test-assertion-secret",
       accessSecret: "test-access-secret",

@@ -3,7 +3,8 @@ import { makeEphemeralAccessTokenPrivateJwk } from "./access-token-key";
 import type { AuthApiEnv } from "./env";
 import worker from "./index";
 import { FIXTURE_OTP } from "./otp";
-import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
+import { makePoolBindings } from "./test-bindings-pool";
+import type { LocalBindings } from "./test-fixtures";
 import { FIXTURE_TURNSTILE_TOKEN } from "./turnstile";
 
 /**
@@ -32,7 +33,7 @@ let hostedAccessTokenSecret: string;
 
 beforeAll(async () => {
   hostedAccessTokenSecret = await makeEphemeralAccessTokenPrivateJwk();
-  local = await makeLocalBindings();
+  local = await makePoolBindings();
   env = {
     DB: local.d1,
     JTI_CACHE: local.kv,
@@ -232,6 +233,7 @@ function hostedEnvWith(overrides: Partial<AuthApiEnv>): AuthApiEnv {
   return {
     ...env,
     SPLITCH_PLATFORM_TARGET: "production",
+    SPLITCH_DEPLOYED_COMMIT_SHA: "a".repeat(40),
     WORKOS_API_KEY: "test-workos-api-key",
     WORKOS_CLIENT_ID: "test-workos-client-id",
     WORKOS_JWKS_URI: "https://api.workos.test/jwks",
@@ -250,8 +252,8 @@ function hostedEnvWith(overrides: Partial<AuthApiEnv>): AuthApiEnv {
 describe("index.ts: hosted ACCESS_TOKEN_SECRET signability is config, not a mint-time surprise", () => {
   /**
    * A hand-built JWK carrying only the fields a structural check looks at.
-   * WebCrypto refuses it because the CRT parameters are missing, which is the
-   * same invisible outage one shape narrower than the opaque string.
+   * Workers WebCrypto accepts this abbreviated shape, so config validation must
+   * explicitly require the CRT parameters emitted with a complete private JWK.
    */
   async function jwkWithoutCrtParams(): Promise<string> {
     const { kty, n, e, d } = JSON.parse(hostedAccessTokenSecret) as Record<string, string>;
