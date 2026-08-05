@@ -37,7 +37,7 @@
     "build": "pnpm run generate && npx tsup --config tsup.config.ts && node scripts/write-build-stamp.mjs",
     "clean": "rm -rf dist coverage src/generated/contract-surface.js src/generated/contract-surface.d.ts",
     "lint": "biome lint src",
-    "test": "vitest run --passWithNoTests && node scripts/browser-smoke.mjs",
+    "test": "vitest run --passWithNoTests",
     "test:browser-smoke": "node scripts/browser-smoke.mjs",
     "test:consumer-smoke": "node scripts/consumer-smoke.mjs",
     "test:mutation": "stryker run",
