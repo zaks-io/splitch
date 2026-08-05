@@ -9,13 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as QuickstartRouteImport } from './routes/quickstart'
-import { Route as HealthRouteImport } from './routes/health'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as HealthRouteImport } from './routes/health'
+import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
+import { Route as QuickstartRouteImport } from './routes/quickstart'
+import { Route as DocsIndexRouteImport } from './routes/docs.index'
+import { Route as DocsErrorCodeRouteImport } from './routes/docs.error.$code'
+import { Route as DocsSdkTopicRouteImport } from './routes/docs.sdk.$topic'
 
-const QuickstartRoute = QuickstartRouteImport.update({
-  id: '/quickstart',
-  path: '/quickstart',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HealthRoute = HealthRouteImport.update({
@@ -23,49 +27,107 @@ const HealthRoute = HealthRouteImport.update({
   path: '/health',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
+  id: '/llms.txt',
+  path: '/llms.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QuickstartRoute = QuickstartRouteImport.update({
+  id: '/quickstart',
+  path: '/quickstart',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsIndexRoute = DocsIndexRouteImport.update({
+  id: '/docs/',
+  path: '/docs/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsErrorCodeRoute = DocsErrorCodeRouteImport.update({
+  id: '/docs/error/$code',
+  path: '/docs/error/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsSdkTopicRoute = DocsSdkTopicRouteImport.update({
+  id: '/docs/sdk/$topic',
+  path: '/docs/sdk/$topic',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/docs/': typeof DocsIndexRoute
+  '/docs/error/$code': typeof DocsErrorCodeRoute
+  '/docs/sdk/$topic': typeof DocsSdkTopicRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/docs': typeof DocsIndexRoute
+  '/docs/error/$code': typeof DocsErrorCodeRoute
+  '/docs/sdk/$topic': typeof DocsSdkTopicRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/docs/': typeof DocsIndexRoute
+  '/docs/error/$code': typeof DocsErrorCodeRoute
+  '/docs/sdk/$topic': typeof DocsSdkTopicRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/health' | '/quickstart'
+  fullPaths:
+    | '/'
+    | '/health'
+    | '/llms.txt'
+    | '/quickstart'
+    | '/docs/'
+    | '/docs/error/$code'
+    | '/docs/sdk/$topic'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/health' | '/quickstart'
-  id: '__root__' | '/' | '/health' | '/quickstart'
+  to:
+    | '/'
+    | '/health'
+    | '/llms.txt'
+    | '/quickstart'
+    | '/docs'
+    | '/docs/error/$code'
+    | '/docs/sdk/$topic'
+  id:
+    | '__root__'
+    | '/'
+    | '/health'
+    | '/llms.txt'
+    | '/quickstart'
+    | '/docs/'
+    | '/docs/error/$code'
+    | '/docs/sdk/$topic'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HealthRoute: typeof HealthRoute
+  LlmsDottxtRoute: typeof LlmsDottxtRoute
   QuickstartRoute: typeof QuickstartRoute
+  DocsIndexRoute: typeof DocsIndexRoute
+  DocsErrorCodeRoute: typeof DocsErrorCodeRoute
+  DocsSdkTopicRoute: typeof DocsSdkTopicRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/quickstart': {
-      id: '/quickstart'
-      path: '/quickstart'
-      fullPath: '/quickstart'
-      preLoaderRoute: typeof QuickstartRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/health': {
@@ -75,11 +137,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HealthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/llms.txt': {
+      id: '/llms.txt'
+      path: '/llms.txt'
+      fullPath: '/llms.txt'
+      preLoaderRoute: typeof LlmsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/quickstart': {
+      id: '/quickstart'
+      path: '/quickstart'
+      fullPath: '/quickstart'
+      preLoaderRoute: typeof QuickstartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/': {
+      id: '/docs/'
+      path: '/docs'
+      fullPath: '/docs/'
+      preLoaderRoute: typeof DocsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/error/$code': {
+      id: '/docs/error/$code'
+      path: '/docs/error/$code'
+      fullPath: '/docs/error/$code'
+      preLoaderRoute: typeof DocsErrorCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/sdk/$topic': {
+      id: '/docs/sdk/$topic'
+      path: '/docs/sdk/$topic'
+      fullPath: '/docs/sdk/$topic'
+      preLoaderRoute: typeof DocsSdkTopicRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -88,7 +178,11 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HealthRoute: HealthRoute,
+  LlmsDottxtRoute: LlmsDottxtRoute,
   QuickstartRoute: QuickstartRoute,
+  DocsIndexRoute: DocsIndexRoute,
+  DocsErrorCodeRoute: DocsErrorCodeRoute,
+  DocsSdkTopicRoute: DocsSdkTopicRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

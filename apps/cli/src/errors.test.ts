@@ -44,7 +44,15 @@ describe("CLI actionable error catalog", () => {
         causeSummary: "A required value is absent",
         remediation: "Pass the required value",
       }).docsUrl,
-    ).toBeUndefined();
+    ).toBe("https://splitch.dev/docs/error/CLI_USAGE_INVALID");
+  });
+
+  it("points every CLI-only code at its published error page", () => {
+    for (const code of cliClientErrorCodes) {
+      expect(
+        new SplitchCliError({ code, causeSummary: "cause", remediation: "remedy" }).docsUrl,
+      ).toBe(`https://splitch.dev/docs/error/${code}`);
+    }
   });
 
   it("preserves an SDK error code and exception chain on stderr", () => {

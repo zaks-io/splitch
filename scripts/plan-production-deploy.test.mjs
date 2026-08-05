@@ -15,7 +15,6 @@ test("documentation and non-deployable application changes skip production mutat
       "docs/spec/platform/deployment-pipeline.md",
       "docs/spec/quickstart.md",
       ".github/workflows/deploy-production.yml",
-      "apps/cli/src/index.ts",
     ]),
     {
       d1: false,
@@ -30,19 +29,31 @@ test("documentation and non-deployable application changes skip production mutat
 });
 
 /**
- * `packages/sdk` was in the case above until SPL-123 made `@splitch/sdk` a
- * runtime dependency of the Control Panel: `apps/control-panel/src/lib/panel-verify.ts`
- * imports `createSplitchClient` and the built Worker bundle inlines it. An SDK
- * source change now genuinely ships new Panel code, so "SDK is not deployable"
- * stopped being true. Asserting the real edge is worth more than the old
- * assumption, and it fails loudly if the dependency is ever dropped.
+ * `packages/sdk` and `apps/cli` were both in the case above until two edges
+ * appeared. SPL-123 made `@splitch/sdk` a runtime dependency of the Control
+ * Panel: `apps/control-panel/src/lib/panel-verify.ts` imports
+ * `createSplitchClient` and the built Worker bundle inlines it. SPL-247 then
+ * made the marketing site depend on both packages so `/docs/error/{code}`
+ * covers every code the SDK and CLI can emit, and the compiler fails the build
+ * on an undocumented one. Asserting the real edges is worth more than the old
+ * assumption, and it fails loudly if either dependency is ever dropped.
  */
-test("SDK source changes deploy the Worker that bundles the SDK", () => {
+test("SDK source changes deploy the Workers that depend on the SDK", () => {
   const plan = classifyProductionChanges(["packages/sdk/src/index.ts"]);
 
   assert.equal(plan.shouldDeploy, true);
   assert.equal(plan.workers, true);
-  assert.deepEqual(plan.workerPackages, ["@splitch/control-panel"]);
+  assert.deepEqual(plan.workerPackages, ["@splitch/control-panel", "@splitch/marketing"]);
+  assert.equal(plan.tinybird, false);
+  assert.equal(plan.d1, false);
+});
+
+test("CLI source changes deploy the marketing Worker that documents its error codes", () => {
+  const plan = classifyProductionChanges(["apps/cli/src/index.ts"]);
+
+  assert.equal(plan.shouldDeploy, true);
+  assert.equal(plan.workers, true);
+  assert.deepEqual(plan.workerPackages, ["@splitch/marketing"]);
   assert.equal(plan.tinybird, false);
   assert.equal(plan.d1, false);
 });

@@ -151,7 +151,33 @@ Run `splitch --help` for the root map, `splitch <resource> --help` for a resourc
 | `entity-privacy`           | `export`, `delete`                                                            |
 | `privacy-requests`         | `get`                                                                         |
 
+## Errors and exit codes
+
+Every failure prints one line carrying a stable code, the cause, what to do, and a link:
+
+```text
+CLI_SCOPE_UNRESOLVED: Cause: ... Remediation: ... Docs: https://splitch.dev/docs/error/CLI_SCOPE_UNRESOLVED
+```
+
+Scripts branch on the exit code; the printed code says which failure within that class:
+
+| Exit | Meaning                                                                |
+| ---- | ---------------------------------------------------------------------- |
+| `0`  | Success                                                                |
+| `1`  | Usage, input, or local-state failure                                   |
+| `2`  | Not authenticated, session expired, or email unverified                |
+| `3`  | Scope could not be resolved, or the token could not be bound to it     |
+| `4`  | The API refused the request; the code is the control-plane `ErrorCode` |
+
+Every code the CLI, the SDK, and the API can emit has a page at
+`https://splitch.dev/docs/error/{code}`, indexed at
+<https://splitch.dev/docs#errors>. Append `.md` to any page for plain markdown.
+
 ## Full quickstart
 
 Read the [public quickstart](https://splitch.dev/quickstart) for the complete path from authentication
 through the first real Exposure.
+
+- Error catalog: <https://splitch.dev/docs#errors>
+- SDK guide: <https://splitch.dev/docs/sdk/install>
+- Machine-readable index: <https://splitch.dev/llms.txt>

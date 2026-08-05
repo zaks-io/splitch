@@ -55,7 +55,7 @@ export class SplitchCliError extends Error {
   readonly code: SplitchCliErrorCode;
   readonly causeSummary: string;
   readonly remediation: string;
-  readonly docsUrl: string | undefined;
+  readonly docsUrl: string;
 
   constructor(detail: CliErrorDetail) {
     super(formatSdkErrorMessage(detail), { cause: detail.originalError });

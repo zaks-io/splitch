@@ -10,6 +10,15 @@ const columns = [
     ],
   },
   {
+    heading: "Reference",
+    links: [
+      ["/docs", "Docs"],
+      ["/docs/sdk/install", "SDK guide"],
+      ["/docs#errors", "Error catalog"],
+      ["/llms.txt", "llms.txt"],
+    ],
+  },
+  {
     heading: "Operate",
     links: [
       ["https://app.splitch.dev", "Control panel"],
@@ -21,7 +30,7 @@ const columns = [
 export function SiteFooter() {
   return (
     <footer className="border-border border-t bg-background px-4 py-12 sm:px-6">
-      <div className="mx-auto grid w-full max-w-6xl gap-10 sm:grid-cols-[1fr_auto_auto] sm:gap-16">
+      <div className="mx-auto grid w-full max-w-6xl gap-10 sm:grid-cols-[1fr_auto_auto_auto] sm:gap-16">
         <div className="grid content-start gap-3">
           <BrandMark />
           <p className="max-w-xs text-muted-foreground text-sm leading-relaxed">

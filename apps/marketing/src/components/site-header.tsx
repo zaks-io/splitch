@@ -14,6 +14,7 @@ const links = [
   ["/#product", "Product"],
   ["/#rigor", "Rigor"],
   ["/quickstart", "Quickstart"],
+  ["/docs", "Docs"],
 ] as const;
 
 export function SiteHeader() {
