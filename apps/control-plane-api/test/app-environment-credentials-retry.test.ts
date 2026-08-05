@@ -96,7 +96,9 @@ describe("revokeEnvironmentCredentialsForAppDelete retry (SPL-298)", () => {
       ENV_ID,
     );
 
-    expect(putCount).toBeGreaterThanOrEqual(2);
+    // Exact 2 pins the post-revoke liveness recompute: the old double-pass
+    // (stale pre-revoke snapshot) produced 3 puts for this fixture.
+    expect(putCount).toBe(2);
     expect(putCredentials.every((c) => c.kind === "client_key" && c.keyId === KEY_ID)).toBe(true);
     for (const raw of putValues) {
       const envelope = JSON.parse(raw) as {

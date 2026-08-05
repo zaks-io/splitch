@@ -71,6 +71,32 @@ beforeEach(async () => {
       requestHash: `hash_${tenant.appId}`,
     });
     expect(created.ok).toBe(true);
+
+    // Prove approval_reviews and archived-experiments cascade DELETEs stay
+    // scoped. Without these rows, `OR 1=1` on those statements is invisible.
+    await local.d1
+      .prepare(
+        `INSERT INTO approval_reviews (
+           id, app_id, approval_request_id, action, outcome,
+           reviewed_by, reviewed_via, reviewed_at, reason,
+           idempotency_key, request_hash
+         ) VALUES (?, ?, ?, 'approve', 'applied', ?, 'id_jag', ?, NULL, ?, ?)`,
+      )
+      .bind(
+        `aprv_${tenant.appId}`,
+        tenant.appId,
+        `apr_${tenant.appId}`,
+        userId,
+        NOW,
+        `idem_review_${tenant.appId}`,
+        `hash_review_${tenant.appId}`,
+      )
+      .run();
+
+    await local.d1
+      .prepare(`UPDATE experiments SET status = 'archived', updated_at = ? WHERE id = ?`)
+      .bind(NOW, tenant.experimentId)
+      .run();
   }
 });
 
@@ -129,6 +155,24 @@ describe("deleteAppCascade tenant isolation (SPL-298)", () => {
     ).toMatchObject({ n: 1 });
     expect(
       await local.d1
+        .prepare("SELECT COUNT(*) AS n FROM approval_reviews WHERE app_id = ?")
+        .bind(seed.b.appId)
+        .first<{ n: number }>(),
+    ).toMatchObject({ n: 1 });
+    expect(
+      await local.d1
+        .prepare("SELECT COUNT(*) AS n FROM experiments WHERE app_id = ?")
+        .bind(seed.b.appId)
+        .first<{ n: number }>(),
+    ).toMatchObject({ n: 1 });
+    expect(
+      await local.d1
+        .prepare("SELECT COUNT(*) AS n FROM runs WHERE app_id = ?")
+        .bind(seed.b.appId)
+        .first<{ n: number }>(),
+    ).toMatchObject({ n: 1 });
+    expect(
+      await local.d1
         .prepare("SELECT COUNT(*) AS n FROM app_memberships WHERE app_id = ?")
         .bind(seed.b.appId)
         .first<{ n: number }>(),
@@ -149,7 +193,7 @@ describe("deleteAppCascade tenant isolation (SPL-298)", () => {
 
   it("rejects a forged TenantScope that was never minted", async () => {
     await expect(repo.identity.deleteAppCascade({ appId: seed.b.appId } as never)).rejects.toThrow(
-      /minted|scope/i,
+      "scope: not minted by appScope/envScope — a forged scope is rejected",
     );
   });
 });
