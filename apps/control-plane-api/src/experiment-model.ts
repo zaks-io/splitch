@@ -1,8 +1,10 @@
 import {
   ExperimentSchema,
-  RunSchema,
+  ExperimentUpdateResponseSchema,
   type Experiment,
+  type LiveRunUnaffected,
   type MetricRef,
+  RunResponseSchema,
   type Run,
   type TargetingRule,
   type Variant,
@@ -46,8 +48,26 @@ export function experimentResponse(row: ExperimentRow): Experiment {
   });
 }
 
-export function runResponse(row: RunRow): Run {
-  return RunSchema.parse({
+/**
+ * Experiment PATCH response. When the write staged assignment fields under a
+ * live Run, `liveRunUnaffected` names that Run and its frozen Targeting Rules
+ * so the operator can tell the draft edit did not change evaluation (SPL-307).
+ */
+export function experimentUpdateResponse(
+  row: ExperimentRow,
+  liveRunUnaffected?: LiveRunUnaffected,
+) {
+  return ExperimentUpdateResponseSchema.parse({
+    ...experimentResponse(row),
+    ...(liveRunUnaffected ? { liveRunUnaffected } : {}),
+  });
+}
+
+export function runResponse(
+  row: RunRow,
+  options?: { draftTargetingRules?: TargetingRule[] | null },
+): Run & { draftTargetingRules?: TargetingRule[] | null } {
+  return RunResponseSchema.parse({
     id: row.id,
     experimentId: row.experimentId,
     environmentId: row.environmentId,
@@ -62,6 +82,9 @@ export function runResponse(row: RunRow): Run {
     startedAt: row.startedAt,
     endedAt: row.endedAt,
     createdAt: row.createdAt,
+    ...(options && "draftTargetingRules" in options
+      ? { draftTargetingRules: options.draftTargetingRules ?? null }
+      : {}),
   });
 }
 

@@ -1,6 +1,7 @@
 import { deriveMcpTools, getRoute } from "@splitch/contracts";
 import { CLI_COMMANDS, type CliCommandDefinition, META_COMMANDS } from "./command-registry.js";
 import { commandUsageLine, requiredPositionals } from "./command-positionals.js";
+import { operationBehaviorNotes } from "./help-behavior-notes.js";
 import { META_DESCRIPTIONS, META_EXAMPLES } from "./help-meta.js";
 
 interface HelpFlag {
@@ -70,6 +71,7 @@ export function renderMetaHelp(command: (typeof META_COMMANDS)[number]): string 
 
 export function renderCommandHelp(command: CliCommandDefinition): string {
   const notes = credentialNotes(command);
+  const behaviorNotes = operationBehaviorNotes(command);
   return [
     commandDescription(command),
     "",
@@ -79,6 +81,9 @@ export function renderCommandHelp(command: CliCommandDefinition): string {
     "Flags:",
     formatFlags(commandFlags(command)),
     ...(notes.length > 0 ? ["", "Credential semantics:", ...notes.map((note) => `  ${note}`)] : []),
+    ...(behaviorNotes.length > 0
+      ? ["", "Behavior:", ...behaviorNotes.map((note) => `  ${note}`)]
+      : []),
     "",
     "Example:",
     `  ${commandExample(command)}`,

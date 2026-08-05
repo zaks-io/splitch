@@ -13,6 +13,7 @@ import type {
 import {
   type CreateExperimentRequestSchema,
   ExperimentResponseSchema,
+  type ExperimentUpdateResponseSchema,
   type PatchExperimentRequestSchema,
   type StartRunRequestSchema,
   type StartRunResponseSchema,
@@ -101,7 +102,7 @@ export type ExperimentsGetInput = z.infer<typeof ExperimentParams>;
 export type ExperimentsGetOutput = z.infer<typeof ExperimentResponseSchema>;
 export type ExperimentsUpdateInput = z.infer<typeof ExperimentParams> &
   z.infer<typeof PatchExperimentRequestSchema>;
-export type ExperimentsUpdateOutput = z.infer<typeof ExperimentResponseSchema>;
+export type ExperimentsUpdateOutput = z.infer<typeof ExperimentUpdateResponseSchema>;
 export type ExperimentsStartInput = z.infer<typeof ExperimentParams> &
   z.infer<typeof StartRunRequestSchema>;
 export type ExperimentsStartOutput = z.infer<typeof StartRunResponseSchema>;

@@ -14,7 +14,7 @@ import {
   requireWritableEnvironment,
   syncExperimentConfigFromD1,
 } from "./experiment-handler-shared";
-import { runResponse } from "./experiment-model";
+import { jsonArrayOrNull, runResponse } from "./experiment-model";
 import { pathParam } from "./handler-input";
 
 export function makeRunHandlers(deps: ExperimentDeps) {
@@ -33,14 +33,24 @@ async function listRuns(
   const experiment = await experimentFromPath(deps, input);
   if (!experiment) return experimentNotFound(requestId);
   const rows = await deps.repo.experiments.listRunsForExperiment(scope, experiment.id);
-  return Response.json({ items: rows.sort((a, b) => b.runNumber - a.runNumber).map(runResponse) });
+  return Response.json({
+    items: rows.sort((a, b) => b.runNumber - a.runNumber).map((row) => runResponse(row)),
+  });
 }
 
 async function getRun(deps: ExperimentDeps, { input, requestId }: HandlerArgs<unknown>) {
   const scope = envScope(pathParam(input, "appId"), pathParam(input, "environmentId"));
+  const experimentId = pathParam(input, "experimentId");
   const run = await deps.repo.experiments.getRun(scope, pathParam(input, "runId"));
-  if (!run || run.experimentId !== pathParam(input, "experimentId")) return runNotFound(requestId);
-  return Response.json(runResponse(run));
+  if (!run || run.experimentId !== experimentId) return runNotFound(requestId);
+  // Frozen rules live on the Run; draft rules live on the Experiment. Carry
+  // both on GET so an operator can compare without a second call (SPL-307).
+  const experiment = await deps.repo.experiments.getExperiment(scope, experimentId);
+  return Response.json(
+    runResponse(run, {
+      draftTargetingRules: experiment ? jsonArrayOrNull(experiment.draftTargetingRules) : null,
+    }),
+  );
 }
 
 async function endRun(deps: ExperimentDeps, args: HandlerArgs<unknown>): Promise<Response> {

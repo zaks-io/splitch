@@ -173,6 +173,7 @@ export const startRunResponse = {
   },
   previousRunId: null,
   approvalRequest: null,
+  frozenTargetingRules: [],
 };
 
 export const testEvalResponse = {

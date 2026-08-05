@@ -32,6 +32,7 @@ export type Fixture = Awaited<ReturnType<typeof experimentFixture>>;
 export type StartResponse = {
   previousRunId: string | null;
   runSnapshotShipped?: boolean;
+  frozenTargetingRules?: Array<{ id?: string; conditions: unknown[] }>;
   run: {
     id: string;
     allocation: Record<string, number>;
