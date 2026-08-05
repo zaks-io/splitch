@@ -105,6 +105,7 @@ function frozenWriterCalls(): Record<string, () => Promise<{ ok: boolean }>> {
           rollout: null,
           experiment: null,
         },
+        diffEntries: [{ path: "/availableVariantNames" }],
         approval: APPROVAL,
       }),
   };

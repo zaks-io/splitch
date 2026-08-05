@@ -13,6 +13,7 @@ import {
   writeSnapshotAndBroadcast,
 } from "./config-store-shared";
 import { baselineIsUnresolvable } from "./flag-config-rollout";
+import { diffEntriesTouch } from "./flag-config-run-freeze-proposal";
 
 /**
  * The write an approved Approval Request performs. It is separate from the
@@ -29,21 +30,27 @@ export async function applyApprovedFlagConfig(
   if (!current) return { ok: false, reason: "FLAG_NOT_FOUND" };
   const invalid = validateProposal(current, input);
   if (invalid) return invalid;
-  // Judged against the CURRENT Configuration, not against the proposal's own
-  // snapshot: a Run started after the proposal was minted bumps no Flag
-  // Configuration version, so the optimistic staleness guard cannot see it and
-  // this is the only thing standing between an approver and a frozen field.
-  const frozen = await approvedProposalFreeze(deps, input, current);
+  // Judged against the request's own changed-field set (`diff.entries`), not
+  // against a re-diff of the complete proposed snapshot: a Run started after
+  // the proposal was minted bumps no Flag Configuration version, so the
+  // optimistic staleness guard cannot see it, and this is the only thing
+  // standing between an approver and a frozen field. Using the entries (SPL-304)
+  // keeps an `/enabled`-only proposal applicable under a live Run.
+  const frozen = await approvedProposalFreeze(deps, input);
   if (frozen) return frozen;
 
-  const patch = {
-    enabled: input.proposed.enabled,
-    availableVariantNames: json(input.proposed.availableVariantNames),
-    rollout: input.proposed.rollout ? json(input.proposed.rollout) : null,
-    updatedAt: input.approval.reviewedAt,
-  };
-  const rulesChanged =
-    JSON.stringify(current.flag.targetingRules) !== JSON.stringify(input.proposed.targetingRules);
+  // Write only fields the request's own entries move. Production writers bump
+  // `flag_configs.version`, so a post-mint direct PATCH makes the Request stale
+  // before apply (`approval-service` target hash). The gate still matters for the
+  // TOCTOU window between that staleness read and this function's independent
+  // re-read: `updateFlagConfig` CASes the version it just read, not the approved
+  // version, so a concurrent PATCH in that window is invisible to staleness and
+  // would otherwise overwrite live frozen fields from mint-time `proposed`.
+  const patch = approvedConfigPatch(input);
+  const rulesChanged = diffEntriesTouch(input.diffEntries, "targetingRules");
+  if (!rulesChanged && !approvedPatchMovesConfig(patch)) {
+    return { ok: false, reason: "APPROVAL_EMPTY_CHANGE" };
+  }
   const updated = rulesChanged
     ? await deps.repo.flags.replaceTargetingRules(
         scope,
@@ -60,6 +67,40 @@ export async function applyApprovedFlagConfig(
   const committed = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
   if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
   return writeSnapshotAndBroadcast(deps, scope, input.flagId, committed);
+}
+
+/** Patch keys whose JSON Pointer appears in `diff.entries` (plus `updatedAt`). */
+export function approvedConfigPatch(input: ApplyApprovedFlagConfigInput): {
+  updatedAt: string;
+  enabled?: boolean;
+  availableVariantNames?: string;
+  rollout?: string | null;
+} {
+  const patch: {
+    updatedAt: string;
+    enabled?: boolean;
+    availableVariantNames?: string;
+    rollout?: string | null;
+  } = { updatedAt: input.approval.reviewedAt };
+  if (diffEntriesTouch(input.diffEntries, "enabled")) {
+    patch.enabled = input.proposed.enabled;
+  }
+  if (diffEntriesTouch(input.diffEntries, "availableVariantNames")) {
+    patch.availableVariantNames = json(input.proposed.availableVariantNames);
+  }
+  if (diffEntriesTouch(input.diffEntries, "rollout")) {
+    patch.rollout = input.proposed.rollout ? json(input.proposed.rollout) : null;
+  }
+  return patch;
+}
+
+/** True when the patch would move a Flag Configuration column (not only `updatedAt`). */
+export function approvedPatchMovesConfig(patch: ReturnType<typeof approvedConfigPatch>): boolean {
+  return (
+    patch.enabled !== undefined ||
+    patch.availableVariantNames !== undefined ||
+    patch.rollout !== undefined
+  );
 }
 
 function validateProposal(

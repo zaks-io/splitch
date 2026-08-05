@@ -204,13 +204,19 @@ async function applyFlagConfiguration(
       environmentId,
       flagId: proposed.flagId,
       proposed,
+      diffEntries: request.diff.entries,
       approval: commit,
     });
   if (result.ok) return { ok: true as const };
-  return configFailure(result, proposed.flagId, environmentId);
+  return mapApprovedFlagConfigFailure(result, proposed.flagId, environmentId);
 }
 
-function configFailure(
+/**
+ * Map a refused approved Flag Configuration write to a Review outcome.
+ * Exported so deleting the terminal `CHANGED_FIELDS_UNDETERMINED` branch is a
+ * red unit test rather than a silent fall-through to a retryable 500.
+ */
+export function mapApprovedFlagConfigFailure(
   result: Extract<FlagConfigWriteResult, { ok: false }>,
   flagId: string,
   environmentId: string,
@@ -223,6 +229,31 @@ function configFailure(
   if (result.reason === "RUN_FROZEN") {
     const { message, details } = runFrozenError(result);
     return { ok: false as const, unapplicable: { code: "RUN_FROZEN", message, details } };
+  }
+  // A proposal whose changed-field set cannot be read must not apply. Resolve
+  // terminally with the recorded cause so an operator sees why, not a silent
+  // pending retry (SPL-304 / ADR-0036).
+  if (result.reason === "CHANGED_FIELDS_UNDETERMINED") {
+    return {
+      ok: false as const,
+      unapplicable: {
+        code: "INTERNAL_SERVER_ERROR",
+        message:
+          "Approval Request changed-field set could not be determined; refuse rather than apply",
+        details: { fault: "approval_changed_fields_undetermined" },
+      },
+    };
+  }
+  if (result.reason === "APPROVAL_EMPTY_CHANGE") {
+    return {
+      ok: false as const,
+      unapplicable: {
+        code: "INTERNAL_SERVER_ERROR",
+        message:
+          "Approval Request does not change any Flag Configuration field that can be applied",
+        details: { fault: "approval_empty_change" },
+      },
+    };
   }
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return {
