@@ -8,6 +8,8 @@
  * (`useExperimentRunStart`), never by anything defined here.
  */
 
+import { TargetingKeyTypeSchema } from "@splitch/contracts";
+
 export const EXPERIMENT_DRAFT_STEPS = ["measurement", "decision", "run"] as const;
 export type ExperimentDraftStep = (typeof EXPERIMENT_DRAFT_STEPS)[number];
 
@@ -41,9 +43,7 @@ export function experimentBasicsIssues(
     targetingKey: draft.targetingKey.trim()
       ? null
       : "A Targeting Key is required: it is the field traffic is bucketed on.",
-    targetingKeyType: draft.targetingKeyType.trim()
-      ? null
-      : "An Entity type is required: it names what the Targeting Key identifies.",
+    targetingKeyType: targetingKeyTypeIssue(draft.targetingKeyType),
   };
 }
 
@@ -53,6 +53,20 @@ function keyIssue(key: string): string | null {
   return /^[a-z0-9][a-z0-9._-]*$/.test(trimmed)
     ? null
     : "Use lowercase letters, digits, dots, dashes, or underscores.";
+}
+
+/**
+ * Same predicate the Worker applies to `targetingKeyType` at create/patch, so the
+ * Panel never enables Start (or create) for a value that is guaranteed to 400.
+ */
+export function targetingKeyTypeIssue(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "An Entity type is required: it names what the Targeting Key identifies.";
+  }
+  return TargetingKeyTypeSchema.safeParse(trimmed).success
+    ? null
+    : "Use lowercase letters, digits, and single underscores.";
 }
 
 export function hasIssue(issues: Record<string, string | null>): boolean {

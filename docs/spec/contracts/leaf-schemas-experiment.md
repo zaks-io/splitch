@@ -23,7 +23,7 @@ One Experiment controls one Flag. `targetingKey` lives here, not on each Run. Mu
 | `hypothesis`         | `string`            | no       | Formal statement of expected effect                                                                                                                                                                                                                                                                    |
 | `status`             | `ExperimentStatus`  | yes      | See state machine below                                                                                                                                                                                                                                                                                |
 | `targetingKey`       | `string`            | yes      | EC **field name** to bucket on (e.g. `"userId"`); inherited by every Run; changing it requires a new Run                                                                                                                                                                                               |
-| `targetingKeyType`   | `string`            | yes      | **Entity type** the key identifies (e.g. `"user"`, `"workspace"`, `"restaurant"`); stamped as `id_type` on every Exposure and validated against requests; changing it requires a new Run. Create/patch reject typo-shaped values only (lowercase alphanumerics with single underscores, length-capped) |
+| `targetingKeyType`   | `string`            | yes      | **Entity type** the key identifies (e.g. `"user"`, `"workspace"`, `"restaurant"`); stamped as `id_type` on every Exposure and validated against requests; changing it requires a new Run. Create/patch reject typo-shaped values only (lowercase alphanumerics with single underscores, max length 63) |
 | `confidenceLevel`    | `number`            | yes      | Default `0.95`; per-Experiment                                                                                                                                                                                                                                                                         |
 | `defaultVariantId`   | `string`            | yes      | Served before first Start. Not caller-supplied — the Worker copies it from the bound Flag's per-Environment `defaultVariantId` at create time (see CreateExperimentRequest)                                                                                                                            |
 | `metrics`            | `MetricRef[]`       | yes      | Goal Metrics                                                                                                                                                                                                                                                                                           |
@@ -37,16 +37,16 @@ One Experiment controls one Flag. `targetingKey` lives here, not on each Run. Mu
 
 `ExperimentStatus` enum: `'draft' | 'running' | 'ended' | 'archived'`
 
-Create/patch write boundary for `targetingKeyType`: nonempty lowercase alphanumerics with
-single internal underscores, length-capped (typo-shaped values only — Entity types remain an
-open vocabulary). The Experiment/Run leaf and storage shapes keep a plain `string`.
-
 - `draft` — no live Run; new Entities see Default Variant.
 - `running` — at least one Start has occurred; `liveRunId` is non-null.
 - `ended` — no further Runs; all Runs are frozen archives.
   Pause lives on Experiment.
 - `archived` — soft-deleted via `DELETE /experiments/:id`; retained with its Runs for analysis
   replayability. Hidden from default list/get surfaces.
+
+Create/patch write boundary for `targetingKeyType`: nonempty lowercase alphanumerics with
+single internal underscores, max length 63 (typo-shaped values only — Entity types remain an
+open vocabulary). The Experiment/Run leaf and storage shapes keep a plain `string`.
 
 `MetricRef`: `{ metricId: string }` — reference to a Metric in the same App.
 

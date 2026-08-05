@@ -1,3 +1,4 @@
+import { TARGETING_KEY_TYPE_SHAPE_MESSAGE } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -11,8 +12,6 @@ import {
 } from "../src/experiment-run-test-fixture";
 import { errorBody, request } from "../src/flag-definition-test-harness";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
-
-const SHAPE_MESSAGE = "must be lowercase alphanumerics separated by single underscores";
 
 let ctx: ExperimentRunHarness;
 
@@ -59,7 +58,7 @@ describe("control-plane Experiment targetingKeyType shape", () => {
     expect(err.details.issues).toEqual([
       {
         path: ["body", "targetingKeyType"],
-        message: SHAPE_MESSAGE,
+        message: TARGETING_KEY_TYPE_SHAPE_MESSAGE,
       },
     ]);
   });
@@ -84,7 +83,7 @@ describe("control-plane Experiment targetingKeyType shape", () => {
     expect(err.details.issues).toEqual([
       {
         path: ["body", "targetingKeyType"],
-        message: SHAPE_MESSAGE,
+        message: TARGETING_KEY_TYPE_SHAPE_MESSAGE,
       },
     ]);
   });

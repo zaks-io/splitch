@@ -3,6 +3,7 @@ import type {
   PanelExperimentRun,
 } from "@splitch/control-plane-sdk/panel-experiments";
 import { useState } from "react";
+import { targetingKeyTypeIssue } from "./experiment-draft-model";
 import {
   allocationError,
   horizonError,
@@ -27,7 +28,7 @@ export function useRunDraftState(
     allocation: allocationError(draft.allocation),
     horizon: horizonError(draft.horizon, draft.sampleSize),
     targetingKey: draft.targetingKey.trim() ? null : "A Targeting Key is required.",
-    targetingKeyType: draft.targetingKeyType.trim() ? null : "An Entity type is required.",
+    targetingKeyType: targetingKeyTypeIssue(draft.targetingKeyType),
     targetingRules: targetingRulesError(draft.targetingRules),
   };
   return {

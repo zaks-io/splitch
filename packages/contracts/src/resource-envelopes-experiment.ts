@@ -20,6 +20,11 @@ import { TargetingKeyTypeSchema } from "./targeting-key-type";
  *     so carrying ANY of them fails at parse time (ADR-0002/0003 enforced in Zod).
  */
 
+// Re-export so Panel local validators and Worker tests can import the write-boundary
+// shape without growing packages/contracts/src/index.ts past the 300-line ratchet.
+// biome-ignore lint/performance/noBarrelFile: shared write-boundary vocabulary for Panel + Worker tests
+export { TARGETING_KEY_TYPE_SHAPE_MESSAGE, TargetingKeyTypeSchema } from "./targeting-key-type";
+
 // ---------------------------------------------------------------------------
 const DraftAllocationSchema = z.record(z.string(), z.number());
 
