@@ -147,10 +147,17 @@ ci_lower, ci_upper = ((b -/+ sqrt(b^2 - a*c)) / a - 1) * 100   # when a > 0
 ci_lower, ci_upper = -Infinity, +Infinity                      # when a <= 0
 ```
 
-`a <= 0` means the Control mean is not separated from zero at the confidence level, so the ratio is
-unbounded. The interval is reported unbounded rather than truncated to a finite-looking range.
+`a <= 0` means the Control mean is not itself separated from zero at the confidence level. Fieller's
+exact set is then not an interval: for `a < 0` it is the two rays outside the roots, and for `a = 0`
+it is a half-line. The engine reports the **convex hull** of that set, `(-Infinity, +Infinity)`,
+rather than truncating to a finite-looking range or publishing a set the result contract cannot
+represent. This is deliberately conservative: the hull can contain 0% where the exact rays exclude
+it, so an unbounded relative interval means "uninformative", never "no effect".
+
 Because a ratio of 1 reduces Fieller's quadratic to the absolute test, the published relative
-interval contains 0% if and only if the decision interval contains zero.
+interval contains 0% if and only if the decision interval contains zero — **when `a > 0`**. The
+unbounded case carries no such equivalence, which is why the absolute-lift interval, not the
+relative one, is the decision.
 
 For a Binomial comparison with a non-zero effect but a zero plug-in variance at a boundary, the
 decision or relative-reporting standard error uses the documented Agresti-Caffo plus-two variance
@@ -166,6 +173,20 @@ pipeline, `guardrail_breached = ci_lower < downside_threshold_pct`, where `ci_lo
 Fieller-derived relative lower bound in percentage points defined above. A
 breached Guardrail fires regardless of significance status. Guardrail Metrics are **excluded from
 the BH FDR family** — they do not consume multiplicity budget.
+
+The comparison is only reached when a relative lower bound exists. `guardrail_breached` is
+**`null`, meaning unevaluated**, in three cases, and the null is never compared numerically:
+
+| Case                                                        | `ci_lower`  | `guardrail_breached` |
+| ----------------------------------------------------------- | ----------- | -------------------- |
+| Relative lift undefined (`R_c = 0`)                         | `null`      | `null`               |
+| Arm not yet decisionable (status is neither ready, stopped) | any         | `null`               |
+| Fieller unbounded (`a <= 0`)                                | `-Infinity` | `null`               |
+
+An unbounded lower bound is unevaluated rather than breached: `-Infinity` is below every threshold,
+so comparing it would fire every Guardrail on a Run whose Control mean is merely noisy. Any other
+disagreement between the two fields is a contract violation and throws: a defined relative lift with
+a `null` `ci_lower`, an undefined relative lift with a finite `ci_lower`, or a `NaN` bound.
 
 ## Benjamini-Hochberg FDR (step 8)
 
