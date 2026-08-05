@@ -106,11 +106,47 @@ describe("transport failure modes: distinct codes + preserved cause (SPL-323)", 
     expect(details.errorCode).toBe("SERVICE_UNAVAILABLE");
     expect(logger.errors).toHaveLength(1);
   });
+});
+
+describe("transport failure modes: body-read abort and peek/verify parity (SPL-323)", () => {
+  it("abort while reading the response body -> SDK_TRANSPORT_TIMEOUT (not PARSE)", async () => {
+    const aborted = new DOMException("The operation was aborted.", "AbortError");
+    const stalledBody = {
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: () => Promise.reject(aborted),
+    } as unknown as Response;
+
+    const logger = new FakeLogger();
+    const client = createSplitchClient({
+      clientKey: "ck_test",
+      fetch: stubFetch(stalledBody),
+      logger,
+    });
+
+    const details = await client.evaluateDetails("flag", {
+      targetingKey: "u1",
+      defaultValue: "control",
+      idempotencyKey: "transport-body-abort-1",
+    });
+
+    expect(details.reason).toBe("ERROR");
+    expect(details.errorCode).toBe("SDK_TRANSPORT_TIMEOUT");
+    expect(details.errorCode).not.toBe("SDK_TRANSPORT_PARSE");
+    expect(logger.errors).toHaveLength(1);
+    expect(logger.errors[0]?.message).toContain("SDK_TRANSPORT_TIMEOUT");
+    expect(logger.errors[0]?.detail).toMatchObject({ cause: aborted });
+  });
 
   it("peek and verify classify the same three transport modes", async () => {
     const thrown = new TypeError("network down");
     const network = fetchTransport(stubFetch(() => Promise.reject(thrown)));
-    const parse = fetchTransport(stubFetch(new Response("{", { status: 200 })));
+    // Fresh Response per call — a shared instance would make verify see
+    // "body already used" rather than a malformed body.
+    const parse = fetchTransport(
+      stubFetch(() => Promise.resolve(new Response("{", { status: 200 }))),
+    );
     const aborting: typeof fetch = ((_url: unknown, init?: RequestInit) =>
       new Promise((_resolve, reject) => {
         init?.signal?.addEventListener("abort", () =>

@@ -78,6 +78,14 @@ function classifyCaughtError(error: unknown): TransportFailure {
 }
 
 /**
+ * Body-read failures land here (inside the timeout scope). An AbortError is a
+ * timeout that fired while the body was still streaming — not a parse error.
+ */
+function classifyBodyReadError(error: unknown): TransportFailure {
+  return isAbortError(error) ? timeoutFailure(error) : parseFailure(error);
+}
+
+/**
  * The real network adapter: distinct `evaluate`, `peek`, and `verify` routes.
  * Folds every transport outcome (HTTP status, network error, timeout,
  * body-parse failure) into structured results so the SDK core never touches the wire.
@@ -204,9 +212,10 @@ async function readEvaluateResponse(response: Response): Promise<TransportResult
       runId,
     };
   } catch (error) {
-    // A 200 with an unparseable body is a parse failure -> fail loud with a
-    // distinct client code, not the server's SERVICE_UNAVAILABLE.
-    return { ...parseFailure(error), variant: null, variantName: null, runId: null };
+    // Abort during the body read is a timeout (timer still armed); anything else
+    // is an unparseable body. Do not route either through classifyCaughtError —
+    // that would label a genuine parse error as SDK_TRANSPORT_NETWORK.
+    return { ...classifyBodyReadError(error), variant: null, variantName: null, runId: null };
   }
 }
 
@@ -218,7 +227,7 @@ async function readPeekResponse(response: Response): Promise<TransportResult> {
     const body = PeekEvaluateResponseSchema.parse(await response.json());
     return { status: response.status, variant: body.variant, variantName: null, runId: null };
   } catch (error) {
-    return { ...parseFailure(error), variant: null, variantName: null, runId: null };
+    return { ...classifyBodyReadError(error), variant: null, variantName: null, runId: null };
   }
 }
 
@@ -232,7 +241,7 @@ async function readVerifyResponse(response: Response): Promise<VerifyTransportRe
       details: ResolutionDetailsSchema.parse(await response.json()),
     };
   } catch (error) {
-    return { ...parseFailure(error), details: null };
+    return { ...classifyBodyReadError(error), details: null };
   }
 }
 

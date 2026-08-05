@@ -10,7 +10,7 @@ export const sdkClientErrorCodes = [
   "SDK_TRANSPORT_NETWORK",
   /** Per-call timeout / AbortSignal abort — the request did not complete in time. */
   "SDK_TRANSPORT_TIMEOUT",
-  /** HTTP 200 (or error body) that could not be parsed as the expected shape. */
+  /** HTTP 200 body that could not be parsed as the expected shape. */
   "SDK_TRANSPORT_PARSE",
 ] as const;
 
