@@ -126,16 +126,38 @@ fails only if the arm-level denominator mean `B = 0`.
 
 ### Relative-lift CI
 
-Relative lift `R_t / R_c - 1` is reported separately from the decision statistic. The base
-interval and p-value are always computed on absolute lift `R_t - R_c`. Relative-lift reporting and
-relative Guardrail bounds retain their delta-method interval. If the Control estimate is zero,
-relative lift and its interval are undefined, while the absolute-lift decision remains available.
+Relative lift is reported separately from the decision statistic. The base interval and p-value are
+always computed on absolute lift `R_t - R_c`. Relative-lift reporting and relative Guardrail bounds
+are the **Fieller inversion of that same absolute interval**, never a second independent estimate
+(ADR-0015 rule 4). If the Control estimate is zero, relative lift and its interval are undefined,
+while the absolute-lift decision remains available.
+
+Both the point estimate and the interval bounds are reported in **percentage points**:
 
 ```
-relative_lift = R_t / R_c - 1
-sampling_var_relative =
-  (1 / R_c^2) * sampling_var_t + (R_t^2 / R_c^4) * sampling_var_c
+relative_lift_pct = (R_t / R_c - 1) * 100
+
+# Fieller: invert (R_t - k_ratio * R_c)^2 <= k^2 * (v_t + k_ratio^2 * v_c) for k_ratio,
+# with k the same critical value the absolute decision interval uses.
+a = R_c^2 - k^2 * v_c
+b = R_t * R_c
+c = R_t^2 - k^2 * v_t
+
+ci_lower, ci_upper = ((b -/+ sqrt(b^2 - a*c)) / a - 1) * 100   # when a > 0
+ci_lower, ci_upper = -Infinity, +Infinity                      # when a <= 0
 ```
+
+`a <= 0` means the Control mean is not itself separated from zero at the confidence level. Fieller's
+exact set is then not an interval: for `a < 0` it is the two rays outside the roots, and for `a = 0`
+it is a half-line. The engine reports the **convex hull** of that set, `(-Infinity, +Infinity)`,
+rather than truncating to a finite-looking range or publishing a set the result contract cannot
+represent. This is deliberately conservative: the hull can contain 0% where the exact rays exclude
+it, so an unbounded relative interval means "uninformative", never "no effect".
+
+Because a ratio of 1 reduces Fieller's quadratic to the absolute test, the published relative
+interval contains 0% if and only if the decision interval contains zero — **when `a > 0`**. The
+unbounded case carries no such equivalence, which is why the absolute-lift interval, not the
+relative one, is the decision.
 
 For a Binomial comparison with a non-zero effect but a zero plug-in variance at a boundary, the
 decision or relative-reporting standard error uses the documented Agresti-Caffo plus-two variance
@@ -145,10 +167,26 @@ decision and Guardrail paths.
 
 ## Guardrail Metric behavior
 
-A Guardrail Metric is a regular Metric carrying a `downside_threshold` (a relative-lift lower
-bound). After the full CI pipeline, `guardrail_breached = ci_lower < downside_threshold`. A
+A Guardrail Metric is a regular Metric carrying a `downside_threshold_pct` (a relative-lift lower
+bound in percent, on the same scale as `relative_lift_pct` and `ci_lower`). After the full CI
+pipeline, `guardrail_breached = ci_lower < downside_threshold_pct`, where `ci_lower` is the
+Fieller-derived relative lower bound in percentage points defined above. A
 breached Guardrail fires regardless of significance status. Guardrail Metrics are **excluded from
 the BH FDR family** — they do not consume multiplicity budget.
+
+The comparison is only reached when a relative lower bound exists. `guardrail_breached` is
+**`null`, meaning unevaluated**, in three cases, and the null is never compared numerically:
+
+| Case                                                        | `ci_lower`  | `guardrail_breached` |
+| ----------------------------------------------------------- | ----------- | -------------------- |
+| Relative lift undefined (`R_c = 0`)                         | `null`      | `null`               |
+| Arm not yet decisionable (status is neither ready, stopped) | any         | `null`               |
+| Fieller unbounded (`a <= 0`)                                | `-Infinity` | `null`               |
+
+An unbounded lower bound is unevaluated rather than breached: `-Infinity` is below every threshold,
+so comparing it would fire every Guardrail on a Run whose Control mean is merely noisy. Any other
+disagreement between the two fields is a contract violation and throws: a defined relative lift with
+a `null` `ci_lower`, an undefined relative lift with a finite `ci_lower`, or a `NaN` bound.
 
 ## Benjamini-Hochberg FDR (step 8)
 

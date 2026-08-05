@@ -114,6 +114,28 @@ describe("StatsEngine.analyze zero-event Metrics", () => {
     expect(treatment.p_value).toBeGreaterThan(0);
     expect(treatment.p_value).toBeLessThan(0.000001);
   });
+
+  it("leaves a Guardrail unevaluated rather than breached when the Control mean is zero", async () => {
+    const output = await analyzeStats(
+      binomialStatsInput({
+        controlN: 100,
+        treatmentN: 100,
+        controlConversions: 0,
+        treatmentConversions: 100,
+        horizon: "fixed",
+        sampleSizeLocked: 100,
+        includeGuardrail: true,
+      }),
+    );
+
+    expect(output.guardrail_results[0]).toMatchObject({
+      metric_id: "guardrail_conversion",
+      variant: "treatment",
+      ci_lower: null,
+      is_breached: null,
+      breach_reason: null,
+    });
+  });
 });
 
 function armResult(
@@ -139,6 +161,7 @@ function zeroEventDecisionFamilyStatsInput(): StatsInput {
     control_variant: "control",
     decision_family: [{ metric_id: "empty_conversion", variant: "treatment" }],
     guardrail_decisions: [],
+    metric_variance_config: [],
     exposures: [
       exposure("control", "control_0"),
       exposure("control", "control_1"),

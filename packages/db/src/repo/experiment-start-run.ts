@@ -30,10 +30,11 @@ export type StartRunInput = {
     RunInsert,
     "appId" | "environmentId" | "experimentId" | "runNumber" | "status" | "controlVariantId"
   > &
-    // `horizon` has a column default, which would make it optional here and let a
-    // caller register a stopping rule it never chose. The Run is the only home
-    // for it (ADR-0014), so Start must state it (ADR-0036).
-    Required<Pick<RunInsert, "horizon">>;
+    // `horizon` and `metricVarianceConfig` have column defaults, which would make
+    // them optional here and let a caller register a stopping rule or a
+    // variance-reduction rule it never chose. The Run is the only home for both
+    // (ADR-0014, variance-reduction.md), so Start must state them (ADR-0036).
+    Required<Pick<RunInsert, "horizon" | "metricVarianceConfig">>;
   endedAt: string;
   updatedAt: string;
   updatedBy?: string | null;

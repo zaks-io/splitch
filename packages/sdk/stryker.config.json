@@ -1,5 +1,0 @@
-{
-  "$schema": "../../node_modules/@stryker-mutator/core/schema/stryker-schema.json",
-  "extends": "../../stryker.base.json",
-  "mutate": ["src/**/*.ts", "!src/**/*.test.ts"]
-}

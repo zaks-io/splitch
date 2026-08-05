@@ -6,6 +6,12 @@ import { randomHex } from "./credential-cache";
 import { runningExperimentError, validationError } from "./flag-definition-errors";
 import { objectBody, pathParam } from "./handler-input";
 import {
+  type MetricAnalysisConfig,
+  metricAnalysisConfig,
+  metricAnalysisIssue,
+  metricAnalysisPatch,
+} from "./metric-analysis-config";
+import {
   decisionLockedError,
   fail,
   type MetricRow,
@@ -65,6 +71,7 @@ async function createMetric(
     eventName: prepared.value.eventName,
     eventValueField: prepared.value.eventValueField,
     denominatorMetricId: prepared.value.denominatorMetricId,
+    ...prepared.value.analysis,
     createdAt: nowIso(deps),
     createdBy: principal.id,
   });
@@ -130,6 +137,7 @@ interface PreparedMetricWrite {
   eventName: string;
   eventValueField: string | null;
   denominatorMetricId: string | null;
+  analysis: MetricAnalysisConfig;
 }
 
 async function prepareMetricWrite(
@@ -153,6 +161,7 @@ async function prepareMetricWrite(
     eventName: (body.eventName ?? current?.eventName) as string,
     eventValueField: metricField(body, current),
     denominatorMetricId: metricDenominator(body, current),
+    analysis: metricAnalysisConfig(body, current),
   };
   return (await validateMetricShape(deps, scope, current?.id, prepared, requestId)) ?? ok(prepared);
 }
@@ -196,6 +205,16 @@ function metricShapeIssue(
   metricId: string | undefined,
   requestId: string,
 ): Response | null {
+  const valueFieldIssue = metricValueFieldIssue(prepared, requestId);
+  if (valueFieldIssue) return valueFieldIssue;
+  const denominatorIssue = metricDenominatorIssue(prepared, metricId, requestId);
+  if (denominatorIssue) return denominatorIssue;
+  const analysisIssue = metricAnalysisIssue(prepared.kind, prepared.analysis);
+  if (analysisIssue) return metricIssue(requestId, analysisIssue.field, analysisIssue.message);
+  return null;
+}
+
+function metricValueFieldIssue(prepared: PreparedMetricWrite, requestId: string): Response | null {
   if ((prepared.kind === "count" || prepared.kind === "revenue") && !prepared.eventValueField) {
     return metricIssue(
       requestId,
@@ -203,14 +222,22 @@ function metricShapeIssue(
       `${prepared.kind} Metric requires eventValueField`,
     );
   }
+  if (prepared.kind === "binomial" && prepared.eventValueField) {
+    return metricIssue(requestId, "eventValueField", "binomial Metric cannot set eventValueField");
+  }
+  return null;
+}
+
+function metricDenominatorIssue(
+  prepared: PreparedMetricWrite,
+  metricId: string | undefined,
+  requestId: string,
+): Response | null {
   if (prepared.kind === "ratio" && !prepared.denominatorMetricId) {
     return metricIssue(requestId, "denominator", "ratio Metric requires denominator");
   }
   if (prepared.kind !== "ratio" && prepared.denominatorMetricId) {
     return metricIssue(requestId, "denominator", "only ratio Metrics may set denominator");
-  }
-  if (prepared.kind === "binomial" && prepared.eventValueField) {
-    return metricIssue(requestId, "eventValueField", "binomial Metric cannot set eventValueField");
   }
   if (prepared.denominatorMetricId === metricId) {
     return metricIssue(requestId, "denominator", "Metric cannot use itself as denominator");
@@ -245,5 +272,6 @@ function metricPatch(
     ...(body.denominator !== undefined
       ? { denominatorMetricId: prepared.denominatorMetricId }
       : {}),
+    ...metricAnalysisPatch(body, prepared.analysis),
   };
 }

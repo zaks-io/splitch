@@ -166,6 +166,7 @@ function activationGatedStatsInput(): StatsInput {
       },
     ],
     guardrail_decisions: [],
+    metric_variance_config: [],
     exposures: [
       gatedExposure("control", controlActivated, ACTIVATION_TS, { country: "US" }),
       gatedExposure("control", controlUnactivated, FIRST_EXPOSURE_TS, { country: "CA" }),
@@ -249,6 +250,7 @@ function fixedHorizonDimensionStatsInput(): StatsInput {
       },
     ],
     guardrail_decisions: [],
+    metric_variance_config: [],
     exposures: [
       ...dimensionExposures("control", "US", 99),
       ...dimensionExposures("treatment", "US", 99),

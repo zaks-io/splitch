@@ -3,7 +3,7 @@
   "ignoreBinaries": ["gitleaks", "tb"],
   "ignoreDependencies": ["cloudflare"],
   "stryker": {
-    "config": ["stryker.base.json", "packages/*/stryker.config.json"]
+    "config": ["stryker.base.mjs", "packages/*/stryker.config.mjs"]
   },
   "ignore": [".agents/**", ".claude/**"],
   "workspaces": {
@@ -19,6 +19,11 @@
       "vite": false,
       "ignore": ["vite.config.ts"],
       "ignoreDependencies": ["@cloudflare/vite-plugin", "@tailwindcss/vite", "@vitejs/plugin-react"]
+    },
+    "packages/stats": {
+      "vitest": {
+        "config": ["vitest.config.ts", "vitest.*.config.ts"]
+      }
     },
     "packages/contracts": {
       "entry": ["src/sdk-data-plane-surface.ts", "src/leaves/**/*.ts"]

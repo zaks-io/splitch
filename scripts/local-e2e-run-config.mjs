@@ -62,7 +62,7 @@ export const LOCAL_E2E_RUN_CONFIG = Object.freeze({
  * — `[{"metricId": "..."}]` — which is what `experiment-start.ts` writes.
  *
  * Tinybird's `analysis_run_inputs` has columns with the SAME TWO NAMES holding a
- * different, snake_case shape (`metric_id`, `variant`, `downside_threshold`, …),
+ * different, snake_case shape (`metric_id`, `variant`, `downside_threshold_pct`, …),
  * because that one feeds `StatsInputSchema`. Two stores, two shapes, one pair of
  * names. Three seed rows had the Tinybird shape in the D1 column, which nothing
  * read until the Setup tab did, and then `metricIds` returned `[undefined]` and

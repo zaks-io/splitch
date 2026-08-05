@@ -15,7 +15,7 @@ const SMOKE_LOOKS = [20, 50, 100, 200, 400] as const;
 describe("SequentialCI audit simulation", () => {
   const mode = process.env.SPLITCH_STATS_SIMULATION_MODE === "audit" ? "audit" : "smoke";
   const seed = process.env.SPLITCH_STATS_SIMULATION_SEED ?? "424242";
-  const iterations = Number.parseInt(process.env.SPLITCH_STATS_SIMULATION_ITERATIONS ?? "25", 10);
+  const iterations = Number.parseInt(process.env.SPLITCH_STATS_SIMULATION_ITERATIONS ?? "300", 10);
   const lookSchedule = mode === "audit" ? AUDIT_LOOKS : SMOKE_LOOKS;
   const tolerance = monteCarloTolerance(SIMULATION_ALPHA, iterations);
 

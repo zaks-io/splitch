@@ -51,6 +51,7 @@ describe("StatsEngine.analyze", () => {
       control_variant: "control",
       decision_family: [{ metric_id: "huge_count", variant: "treatment" }],
       guardrail_decisions: [],
+      metric_variance_config: [],
       exposures: [
         exposure("control", "control_0"),
         exposure("control", "control_1"),
@@ -116,7 +117,7 @@ describe("StatsEngine.analyze", () => {
         metric_id: "guardrail_conversion",
         variant: "treatment",
         ci_lower: Number.NEGATIVE_INFINITY,
-        threshold: 10,
+        threshold: 35,
         is_breached: null,
         in_bh_family: false,
         exploratory: false,

@@ -178,8 +178,13 @@ Body:
   denominator_metric_id?: string;
 
   conversion_window_ms?: number;
-  winsorize?: boolean;
-  winsorize_pct?: number;
+
+  // Analysis knobs. Null means "engine default"; Run Start resolves each one and
+  // freezes the answer on the Run. Every threshold below is a percent.
+  winsorize?: boolean | null;         // rejected on binomial: 0/1 has no tail to cap
+  winsorize_pct?: number | null;      // > 0, <= 100
+  cuped_coverage_threshold_pct?: number | null;  // > 0, <= 100
+  downside_threshold_pct?: number | null;    // set to make this a Guardrail Metric
 }
 ```
 

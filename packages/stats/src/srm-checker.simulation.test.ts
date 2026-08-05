@@ -7,7 +7,10 @@ const BASE_TS = "2026-07-01T00:00:00.000Z";
 
 describe("SRMChecker simulation smoke", () => {
   it("trips SRM with high probability under biased allocation", () => {
-    const iterations = Number.parseInt(process.env.SPLITCH_STATS_SIMULATION_ITERATIONS ?? "25", 10);
+    const iterations = Number.parseInt(
+      process.env.SPLITCH_STATS_SIMULATION_ITERATIONS ?? "300",
+      10,
+    );
     const seed = Number.parseInt(process.env.SPLITCH_STATS_SIMULATION_SEED ?? "424242", 10);
     const random = seededRandom(seed);
     let tripped = 0;

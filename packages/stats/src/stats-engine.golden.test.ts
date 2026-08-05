@@ -63,8 +63,8 @@ describe("StatsEngine golden fixtures", () => {
         delta_method: false,
       },
     });
-    expect(conversionTreatment?.ci_lower).toBeCloseTo(8.06954030815487, 12);
-    expect(conversionTreatment?.ci_upper).toBeCloseTo(191.93045969184513, 12);
+    expect(conversionTreatment?.ci_lower).toBeCloseTo(29.99054528272098, 12);
+    expect(conversionTreatment?.ci_upper).toBeCloseTo(242.63183062606558, 12);
     expect(conversionTreatment?.p_value).toBeCloseTo(0.0015655340676916651, 12);
 
     expect(guardrailTreatment?.ci_lower).toBe(conversionTreatment?.ci_lower);
@@ -73,12 +73,12 @@ describe("StatsEngine golden fixtures", () => {
         metric_id: "guardrail_conversion",
         variant: "treatment",
         ci_lower: guardrailTreatment?.ci_lower,
-        threshold: 10,
+        threshold: 35,
         is_breached: true,
         in_bh_family: false,
         exploratory: false,
         decision_valid: true,
-        breach_reason: `CI lower bound ${guardrailTreatment?.ci_lower} < threshold 10`,
+        breach_reason: `CI lower bound ${guardrailTreatment?.ci_lower} < threshold 35`,
       },
     ]);
   });
@@ -151,6 +151,7 @@ function dimensionGoldenInput(): StatsInput {
       })),
     ],
     guardrail_decisions: [],
+    metric_variance_config: [],
     dimensions: [{ dimension_id: "plan", class: "secondary", values: ["pro"] }],
     exposures: slices.flatMap((slice) => [
       ...dimensionExposures("control", slice.country, slice.plan, 100),

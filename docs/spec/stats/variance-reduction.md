@@ -66,10 +66,10 @@ the same confidence level.
 
 CUPED applies only when **both** conditions are met:
 
-| Condition              | Threshold                                     | Config field                             |
-| ---------------------- | --------------------------------------------- | ---------------------------------------- |
-| Pre-period data exists | Coverage ≥ threshold                          | `cuped_coverage_threshold` (default 70%) |
-| Coverage > threshold   | Fraction of arm Entities with pre-period data | same                                     |
+| Condition              | Rule                                          | Config field                                 |
+| ---------------------- | --------------------------------------------- | -------------------------------------------- |
+| Pre-period data exists | Coverage ≥ threshold, in **both** arms        | `cuped_coverage_threshold_pct` (default 70%) |
+| Coverage definition    | Fraction of arm Entities with pre-period data | same                                         |
 
 Coverage = `count(Entities with pre_period_value) / n` per arm. If either arm falls below the
 threshold, CUPED does not apply (for consistency; both arms must use the same technique).

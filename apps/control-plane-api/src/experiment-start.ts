@@ -1,4 +1,11 @@
-import type { Condition, MetricRef, TargetingRule, Variant } from "@splitch/contracts";
+import type {
+  Condition,
+  GuardrailDecision,
+  MetricRef,
+  MetricVarianceConfig,
+  TargetingRule,
+  Variant,
+} from "@splitch/contracts";
 import { appScope, type EnvScope, type Repository } from "@splitch/db";
 import { randomHex } from "./credential-cache";
 import {
@@ -7,6 +14,7 @@ import {
   segmentReferenceMissing,
   variantNotAvailable,
 } from "./experiment-errors";
+import { frozenAnalysisConfig } from "./experiment-start-analysis";
 import { validateMetricRefs } from "./experiment-handler-shared";
 import {
   jsonArray,
@@ -33,7 +41,8 @@ export async function prepareStart(
     targetingRules: TargetingRule[];
     configHash: string;
     decisionFamily: MetricRef[];
-    guardrailDecisions: MetricRef[];
+    guardrailDecisions: GuardrailDecision[];
+    metricVarianceConfig: MetricVarianceConfig[];
   }>
 > {
   const allocation = jsonObject<Record<string, number>>(experiment.draftAllocation);
@@ -57,6 +66,15 @@ export async function prepareStart(
   const metricsReady = await frozenMetricRefs(repo, scope.appId, experiment, requestId);
   if (!metricsReady.ok) return metricsReady;
 
+  const analysis = await frozenAnalysisConfig(
+    repo,
+    scope.appId,
+    metricsReady.value,
+    treatmentVariants(allocation, variants.value),
+    requestId,
+  );
+  if (!analysis.ok) return analysis;
+
   const salt = experiment.draftSalt ?? `salt_${randomHex(12)}`;
   const configHash = await runConfigHash({
     salt,
@@ -74,9 +92,27 @@ export async function prepareStart(
       targetingRules,
       configHash,
       decisionFamily: metricsReady.value.metrics,
-      guardrailDecisions: metricsReady.value.guardrailMetrics,
+      guardrailDecisions: analysis.value.guardrailDecisions,
+      metricVarianceConfig: analysis.value.metricVarianceConfig,
     },
   };
+}
+
+/**
+ * Allocation is keyed by Variant NAME and the Control is identified by id, so
+ * the frozen Variant set is the only place the two meet. Sorted for a stable
+ * frozen order, matching how the Run Snapshot expands the decision family.
+ */
+function treatmentVariants(
+  allocation: Record<string, number>,
+  variants: { variantSet: Variant[]; controlVariantId: string },
+): string[] {
+  const control = variants.variantSet.find(
+    (variant) => variant.id === variants.controlVariantId,
+  )?.name;
+  return Object.keys(allocation)
+    .filter((name) => name !== control)
+    .sort();
 }
 
 async function frozenVariantSet(

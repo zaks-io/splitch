@@ -22,6 +22,7 @@ describe("runSnapshotRow", () => {
       control_variant_id: "variant_control",
       decision_family: '[{"metric_id":"metric_1","variant":"treatment"}]',
       guardrail_decisions: "[]",
+      metric_variance_config: "[]",
       dimensions: "[]",
       config_hash: "sha256:run-1",
     });
@@ -45,13 +46,26 @@ describe("runSnapshotRow", () => {
     ]);
   });
 
-  it("drops MetricRef guardrail_decisions rather than inventing thresholds", () => {
-    const row = runSnapshotRow(
-      run({ guardrailDecisions: '[{"metricId":"metric_guard"}]' }),
-      scope,
-      "now",
-    );
-    expect(row.guardrail_decisions).toBe("[]");
+  it("refuses MetricRef guardrail_decisions rather than shipping an unbounded Run", () => {
+    // Before thresholds were frozen at Start these degraded to "[]", which reads
+    // downstream as "this Run declared no guardrails" and passes every check.
+    expect(() =>
+      runSnapshotRow(run({ guardrailDecisions: '[{"metricId":"metric_guard"}]' }), scope, "now"),
+    ).toThrow("must be re-Started");
+  });
+
+  it("ships frozen GuardrailDecision rows verbatim", () => {
+    const frozen = [
+      {
+        metric_id: "metric_guard",
+        variant: "treatment",
+        downside_threshold_pct: -2,
+        guardrail_locked_at_run_start: true,
+        threshold_locked_at_run_start: true,
+      },
+    ];
+    const row = runSnapshotRow(run({ guardrailDecisions: JSON.stringify(frozen) }), scope, "now");
+    expect(JSON.parse(row.guardrail_decisions)).toEqual(frozen);
   });
 
   it("throws when variantSet is unparseable", () => {
@@ -158,6 +172,7 @@ function run(overrides: Partial<RunRow> = {}): RunRow {
     sampleSizeLocked: 2000,
     decisionFamily: '[{"metricId":"metric_1"}]',
     guardrailDecisions: "[]",
+    metricVarianceConfig: "[]",
     configHash: "sha256:run-1",
     startedAt: "2026-08-03T12:00:00.000Z",
     endedAt: null,

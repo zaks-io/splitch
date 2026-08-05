@@ -30,6 +30,7 @@ export interface RunSnapshotRow {
   control_variant_id: string;
   decision_family: string;
   guardrail_decisions: string;
+  metric_variance_config: string;
   dimensions: string;
   config_hash: string;
 }
@@ -67,10 +68,10 @@ export function runSnapshotRow(run: RunRow, scope: EnvScope, snapshotAt: string)
     // D1 stores MetricRef[]; analysis reads DecisionFamilyMember[]. Expand here
     // so Tinybird never holds the D1 shape (SPL-302).
     decision_family: analysisDecisionFamily(run.decisionFamily, allocation, controlVariant.name),
-    // Guardrail thresholds live on Metric rows and are not frozen on the Run yet.
-    // Shipping MetricRefs would break StatsInputSchema; empty keeps Results
-    // readable until Start freezes GuardrailDecision.
+    // Start freezes GuardrailDecision[] directly (thresholds and all), so this
+    // only has to reject the pre-freeze MetricRef shape rather than convert it.
     guardrail_decisions: analysisGuardrailDecisions(run.guardrailDecisions),
+    metric_variance_config: run.metricVarianceConfig,
     // Dimension config has no backing data until SPL-183 lands.
     dimensions: "[]",
     config_hash: run.configHash,
@@ -215,11 +216,21 @@ function analysisDecisionFamily(
   );
 }
 
+/**
+ * Runs started before Start froze thresholds hold `MetricRef[]`, which carries
+ * no bound. Shipping those as an empty guardrail set is what let every guardrail
+ * check pass silently; refuse the snapshot instead so the gap is visible
+ * (ADR-0036). Such a Run has to be re-Started to be analyzable.
+ */
 function analysisGuardrailDecisions(raw: string): string {
   const parsed = parseJsonArray(raw, "guardrail_decisions");
   if (parsed.length === 0) return "[]";
   if (parsed.every(isGuardrailDecision)) return JSON.stringify(parsed);
-  if (parsed.every(isMetricRef)) return "[]";
+  if (parsed.every(isMetricRef)) {
+    throw new Error(
+      "Run guardrail_decisions froze MetricRef[] with no thresholds; the Run predates guardrail freezing and must be re-Started",
+    );
+  }
   throw new Error("Run guardrail_decisions is neither MetricRef[] nor GuardrailDecision[]");
 }
 
@@ -258,7 +269,7 @@ function isGuardrailDecision(value: unknown): boolean {
     value !== null &&
     typeof (value as { metric_id?: unknown }).metric_id === "string" &&
     typeof (value as { variant?: unknown }).variant === "string" &&
-    typeof (value as { downside_threshold?: unknown }).downside_threshold === "number" &&
+    typeof (value as { downside_threshold_pct?: unknown }).downside_threshold_pct === "number" &&
     typeof (value as { guardrail_locked_at_run_start?: unknown }).guardrail_locked_at_run_start ===
       "boolean" &&
     typeof (value as { threshold_locked_at_run_start?: unknown }).threshold_locked_at_run_start ===

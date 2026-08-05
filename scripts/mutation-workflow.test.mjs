@@ -4,12 +4,27 @@ import test from "node:test";
 
 const workflow = readFileSync(".github/workflows/mutation.yml", "utf8");
 
-test("scheduled mutation alternates packages and manual runs expose explicit scopes", () => {
+test("scheduled mutation rotates packages and manual runs expose explicit scopes", () => {
   assert.match(workflow, /scope:\n\s+description: Package scope to mutate/);
-  assert.match(workflow, /- all\n\s+- sdk\n\s+- contracts/);
-  assert.match(workflow, /week="\$\(date -u \+%V\)"/);
-  assert.match(workflow, /10#\$week % 2/);
+  assert.match(workflow, /- all\n\s+- sdk\n\s+- contracts\n\s+- stats/);
+  assert.match(workflow, /epoch_week="\$\(\( \$\(date -u \+%s\) \/ 604800 \)\)"/);
+  assert.match(workflow, /epoch_week % 3/);
   assert.match(workflow, /matrix: \$\{\{ fromJSON\(needs\.plan\.outputs\.matrix\) \}\}/);
+});
+
+test("the rotation stays continuous across an ISO year boundary", () => {
+  const [, secondsPerWeek] = workflow.match(/date -u \+%s\) \/ (\d+) \)\)/) ?? [];
+  assert.ok(secondsPerWeek, "workflow must derive the rotation index from epoch seconds");
+
+  const selections = [
+    // ISO 2026-W53, ISO 2027-W01, ISO 2027-W02. An ISO-week index restarts at 1
+    // over this boundary and repeats a package; an epoch-week index does not.
+    Date.UTC(2026, 11, 30),
+    Date.UTC(2027, 0, 6),
+    Date.UTC(2027, 0, 13),
+  ].map((ms) => Math.floor(ms / 1000 / Number(secondsPerWeek)) % 3);
+
+  assert.equal(new Set(selections).size, 3);
 });
 
 test("each package has an independent budget, baseline cache, and complete artifact", () => {

@@ -8,7 +8,7 @@ type GuardrailResultFields = Pick<
 export interface GuardrailThreshold {
   readonly metric_id: string;
   readonly variant: string;
-  readonly downside_threshold: number;
+  readonly downside_threshold_pct: number;
   readonly guardrail_locked_at_run_start: boolean;
   readonly threshold_locked_at_run_start: boolean;
 }
@@ -36,14 +36,14 @@ export function applyGuardrailBoundChecks<Result extends GuardrailResultFields>(
       metric_id: guardrail.metric_id,
       variant: guardrail.variant,
       ci_lower: result.ci_lower,
-      threshold: guardrail.downside_threshold,
+      threshold: guardrail.downside_threshold_pct,
       is_breached: isBreached,
       in_bh_family: false,
       exploratory: !decisionValid(guardrail),
       decision_valid: decisionValid(guardrail),
       breach_reason:
         isBreached === true
-          ? `CI lower bound ${result.ci_lower} < threshold ${guardrail.downside_threshold}`
+          ? `CI lower bound ${result.ci_lower} < threshold ${guardrail.downside_threshold_pct}`
           : null,
     };
   });
@@ -81,7 +81,7 @@ function breached(result: GuardrailResultFields, guardrail: GuardrailThreshold):
   if (!Number.isFinite(result.ci_lower)) {
     return null;
   }
-  return result.ci_lower < guardrail.downside_threshold;
+  return result.ci_lower < guardrail.downside_threshold_pct;
 }
 
 function isDecisionable(result: GuardrailResultFields): boolean {
@@ -114,11 +114,11 @@ function validateRelativeLiftCi(result: GuardrailResultFields): void {
 
 function validateThreshold(guardrail: GuardrailThreshold): void {
   if (
-    Number.isNaN(guardrail.downside_threshold) ||
-    !Number.isFinite(guardrail.downside_threshold)
+    Number.isNaN(guardrail.downside_threshold_pct) ||
+    !Number.isFinite(guardrail.downside_threshold_pct)
   ) {
     throw new Error(
-      `downside_threshold for ${guardrail.metric_id}/${guardrail.variant} must be finite.`,
+      `downside_threshold_pct for ${guardrail.metric_id}/${guardrail.variant} must be finite.`,
     );
   }
 }

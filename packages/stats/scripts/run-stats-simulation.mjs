@@ -3,10 +3,14 @@
 import { spawn } from "node:child_process";
 import process from "node:process";
 
+// 25 smoke iterations put the Monte Carlo tolerance at 0.13, which passes a
+// sequence rejecting the null 18% of the time. Smoke is a shorter look schedule,
+// not a weaker bound: 300 iterations tightens the tolerance to 0.038 and still
+// finishes in seconds.
 const defaultsByMode = {
   smoke: {
     seed: "424242",
-    iterations: "25",
+    iterations: "300",
   },
   audit: {
     seed: "424242",

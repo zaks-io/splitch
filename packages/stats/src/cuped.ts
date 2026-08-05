@@ -1,5 +1,9 @@
-import type { CupedAttributeSource } from "@splitch/contracts";
-import { finiteValue, mean, sampleCovariance, sampleVariance } from "./variance-math";
+import {
+  type CupedAttributeSource,
+  DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT,
+} from "@splitch/contracts";
+import { adjustCupedArms } from "./cuped-fit";
+import { finiteValue, sampleVariance } from "./variance-math";
 import type {
   CupedAdjustment,
   CupedCovariateRow,
@@ -7,7 +11,6 @@ import type {
   MetricComparisonEstimateInput,
 } from "./variance-estimator-types";
 
-const DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT = 70;
 const MIN_VARIANCE_REDUCTION = 1e-12;
 
 interface CupedCandidate {
@@ -38,7 +41,7 @@ export function applyCupedAdjustment(
     return none(controlEntities, treatmentEntities, null);
   }
 
-  const thresholdPct = cupedCoverageThresholdPct(input.cuped_coverage_threshold);
+  const thresholdPct = cupedCoverageThresholdPct(input.cuped_coverage_threshold_pct);
   const covariates = input.pre_period_covariates ?? [];
   validateCovariates(covariates, [...controlEntities, ...treatmentEntities]);
 
@@ -153,42 +156,21 @@ function adjustmentForCandidate(
   controlEntities: readonly EntityAggregate[],
   treatmentEntities: readonly EntityAggregate[],
 ): CupedAdjustment {
+  const adjusted = adjustCupedArms(
+    controlEntities,
+    candidate.controlValues,
+    treatmentEntities,
+    candidate.treatmentValues,
+  );
+
   return {
-    controlEntities: adjustArm(controlEntities, candidate.controlValues),
-    treatmentEntities: adjustArm(treatmentEntities, candidate.treatmentValues),
+    controlEntities: adjusted.control,
+    treatmentEntities: adjusted.treatment,
     method: candidate.method,
     attribute: candidate.attribute,
     attributeSource: candidate.attributeSource,
     coveragePct: candidate.coveragePct,
   };
-}
-
-function adjustArm(
-  entities: readonly EntityAggregate[],
-  covariates: ReadonlyMap<string, number>,
-): EntityAggregate[] {
-  const covered = entities.filter((entity) => covariates.has(entity.targeting_key_hash));
-  if (covered.length === 0) {
-    return entities.map((entity) => ({ ...entity }));
-  }
-
-  const yValues = covered.map((entity) => entity.value);
-  const xValues = covered.map((entity) => covariateValue(covariates, entity.targeting_key_hash));
-  const xVariance = sampleVariance(xValues);
-  const theta = xVariance === 0 ? 0 : sampleCovariance(yValues, xValues) / xVariance;
-  const xBar = mean(xValues);
-
-  return entities.map((entity) => {
-    const xValue = covariates.get(entity.targeting_key_hash);
-    if (xValue === undefined) {
-      return { ...entity };
-    }
-    return {
-      ...entity,
-      value: entity.value - theta * (xValue - xBar),
-      cuped_adjusted: true,
-    };
-  });
 }
 
 function varianceReductionScore(
@@ -197,9 +179,14 @@ function varianceReductionScore(
   treatmentEntities: readonly EntityAggregate[],
 ): number {
   const rawVariance = armSamplingVariance(controlEntities) + armSamplingVariance(treatmentEntities);
+  const adjusted = adjustCupedArms(
+    controlEntities,
+    candidate.controlValues,
+    treatmentEntities,
+    candidate.treatmentValues,
+  );
   const adjustedVariance =
-    armSamplingVariance(adjustArm(controlEntities, candidate.controlValues)) +
-    armSamplingVariance(adjustArm(treatmentEntities, candidate.treatmentValues));
+    armSamplingVariance(adjusted.control) + armSamplingVariance(adjusted.treatment);
   return rawVariance - adjustedVariance;
 }
 
@@ -266,14 +253,6 @@ function validateCovariates(
   }
 }
 
-function covariateValue(values: ReadonlyMap<string, number>, entityId: string): number {
-  const value = values.get(entityId);
-  if (value === undefined) {
-    throw new Error("CUPED adjustment missing covered covariate value.");
-  }
-  return value;
-}
-
 function none(
   controlEntities: readonly EntityAggregate[],
   treatmentEntities: readonly EntityAggregate[],
@@ -289,11 +268,13 @@ function none(
   };
 }
 
+// Percent, never a fraction. A previous version rescaled values under 1 as if
+// they were fractions, which silently turned a legal 0.5 ("half a percent
+// coverage") into 50 and decided whether CUPED ran at all on a 100x error.
 function cupedCoverageThresholdPct(value: number | undefined): number {
-  const threshold = value ?? DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT;
-  const pct = threshold > 0 && threshold < 1 ? threshold * 100 : threshold;
+  const pct = value ?? DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT;
   if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
-    throw new Error("cuped_coverage_threshold must be > 0 and <= 100.");
+    throw new Error("cuped_coverage_threshold_pct must be a percent > 0 and <= 100.");
   }
   return pct;
 }

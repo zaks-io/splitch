@@ -117,6 +117,10 @@ export const runs = sqliteTable(
     decisionFamily: text("decision_family").notNull(), // locked at Start
     // JSON: locked thresholds/directions.
     guardrailDecisions: text("guardrail_decisions").notNull(), // locked at Start
+    // JSON MetricVarianceConfig[]: the winsorization and CUPED-coverage rule per
+    // Metric, resolved from the Metric rows at Start so a re-analysis reproduces
+    // the original numbers even after the Metric is edited.
+    metricVarianceConfig: text("metric_variance_config").notNull().default("[]"), // locked at Start
     configHash: text("config_hash").notNull(), // computed SHA-256. immutable
     startedAt: text("started_at").notNull(),
     endedAt: text("ended_at"),
@@ -146,6 +150,12 @@ export const metrics = sqliteTable(
     eventName: text("event_name").notNull(),
     eventValueField: text("event_value_field"),
     denominatorMetricId: text("denominator_metric_id"),
+    // Guardrail bound and variance-reduction knobs. Null means "engine default";
+    // Run Start resolves and freezes them onto the Run.
+    downsideThresholdPct: real("downside_threshold_pct"),
+    winsorize: integer("winsorize", { mode: "boolean" }),
+    winsorizePct: real("winsorize_pct"),
+    cupedCoverageThresholdPct: real("cuped_coverage_threshold_pct"),
     createdAt: createdAt(),
     createdBy: userRef("created_by"),
   },

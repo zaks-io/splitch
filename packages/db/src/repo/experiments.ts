@@ -153,7 +153,16 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       patch: Partial<
         Pick<
           typeof metrics.$inferInsert,
-          "key" | "name" | "description" | "eventName" | "eventValueField" | "denominatorMetricId"
+          | "key"
+          | "name"
+          | "description"
+          | "eventName"
+          | "eventValueField"
+          | "denominatorMetricId"
+          | "downsideThresholdPct"
+          | "winsorize"
+          | "winsorizePct"
+          | "cupedCoverageThresholdPct"
         >
       >,
     ): Promise<typeof metrics.$inferSelect | null> {

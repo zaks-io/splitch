@@ -144,7 +144,7 @@ interface DimensionInput {
 interface GuardrailDecision {
   metric_id: string;
   variant: string;                       // non-Control Variant
-  downside_threshold: number;            // relative-lift CI lower-bound threshold
+  downside_threshold_pct: number;            // relative-lift CI lower-bound threshold, percent
   guardrail_locked_at_run_start: boolean;
   threshold_locked_at_run_start: boolean;
 }

@@ -9,7 +9,7 @@ dist/
 .turbo/
 .wrangler/
 .tinyb
-reports/mutation/
+**/reports/mutation/
 .stryker-tmp/
 playwright-report/
 test-results/

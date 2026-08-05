@@ -21,6 +21,7 @@ SQL >
         control_variant_id,
         decision_family,
         guardrail_decisions,
+        metric_variance_config,
         dimensions,
         started_at
     FROM run_snapshots

@@ -892,10 +892,10 @@ Request body (--body-json):
   schema       optional  Record<string, unknown> | null
   description  optional  string
   Example:
-    {"schema":{"control":null,"treatment":null}}
+    {"name":"name"}
 
 Example:
-  splitch flags update <flag-id-or-key> --body-json '{"schema":{"control":null,"treatment":null}}' --json",
+  splitch flags update <flag-id-or-key> --body-json '{"name":"name"}' --json",
     "flags verify": "Verify a Flag KEY through the data plane without firing an Exposure.
 
 Usage:
@@ -929,15 +929,19 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  appId            required  string
-  name             required  string
-  key              required  string
-  kind             required  string ("binomial" | "count" | "revenue" | "ratio")
-  eventName        required  string
-  eventValueField  optional  string
-  denominator      optional  { metricId: string }
-  description      optional  string
-  idempotency_key  optional  string
+  appId                      required  string
+  name                       required  string
+  key                        required  string
+  kind                       required  string ("binomial" | "count" | "revenue" | "ratio")
+  eventName                  required  string
+  eventValueField            optional  string
+  denominator                optional  { metricId: string }
+  description                optional  string
+  downsideThresholdPct       optional  number | null
+  winsorize                  optional  boolean | null
+  winsorizePct               optional  number | null
+  cupedCoverageThresholdPct  optional  number | null
+  idempotency_key            optional  string
   Example:
     {"appId":"app_1","name":"name","key":"key","kind":"binomial","eventName":"eventName"}
 
@@ -993,13 +997,17 @@ Flags:
   -h, --help          [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  name             optional  string
-  key              optional  string
-  kind             optional  string ("binomial" | "count" | "revenue" | "ratio")
-  eventName        optional  string
-  eventValueField  optional  string
-  denominator      optional  { metricId: string }
-  description      optional  string
+  name                       optional  string
+  key                        optional  string
+  kind                       optional  string ("binomial" | "count" | "revenue" | "ratio")
+  eventName                  optional  string
+  eventValueField            optional  string
+  denominator                optional  { metricId: string }
+  description                optional  string
+  downsideThresholdPct       optional  number | null
+  winsorize                  optional  boolean | null
+  winsorizePct               optional  number | null
+  cupedCoverageThresholdPct  optional  number | null
   Example:
     {"kind":"binomial"}
 

@@ -69,7 +69,7 @@ function analysisInput(environmentId, experimentId, runId, counts, options = {})
         {
           metric_id: options.guardrailMetric,
           variant: "treatment",
-          downside_threshold: -10,
+          downside_threshold_pct: -10,
           guardrail_locked_at_run_start: true,
           threshold_locked_at_run_start: true,
         },
@@ -87,6 +87,9 @@ function analysisInput(environmentId, experimentId, runId, counts, options = {})
     counts,
     decisionFamily,
     guardrailDecisions,
+    // Binomial Metrics throughout, so every knob is the engine default and no
+    // Metric needs an entry here.
+    metricVarianceConfig: [],
     exposures: Object.entries(counts).flatMap(([variant, count]) =>
       Array.from({ length: count }, (_, index) => ({
         app_id: "app_checkout_e2e",

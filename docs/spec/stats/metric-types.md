@@ -71,14 +71,14 @@ ratio   = SUM(num_i) / SUM(denom_i)   (population-level)
 
 ### Guardrail Metric
 
-A regular Metric (any type) annotated with a `downside_threshold`.
+A regular Metric (any type) annotated with a `downside_threshold_pct`.
 
-| Field                | Type     | Meaning                                                       |
-| -------------------- | -------- | ------------------------------------------------------------- |
-| `base_metric_id`     | `string` | The underlying Metric being guarded                           |
-| `downside_threshold` | `number` | Minimum acceptable relative-lift lower bound (e.g., `-0.005`) |
+| Field                    | Type     | Meaning                                                                                               |
+| ------------------------ | -------- | ----------------------------------------------------------------------------------------------------- |
+| `base_metric_id`         | `string` | The underlying Metric being guarded                                                                   |
+| `downside_threshold_pct` | `number` | Minimum acceptable relative-lift lower bound, in percent (e.g., `-0.5` for "no worse than 0.5% down") |
 
-Guardrail fires when `ci_lower < downside_threshold`. Excluded from the BH FDR family (see
+Guardrail fires when `ci_lower < downside_threshold_pct`. Excluded from the BH FDR family (see
 [multiple-comparisons-fdr.md](multiple-comparisons-fdr.md)).
 
 ## Conversion Window
@@ -113,18 +113,18 @@ activation rows satisfy this invariant.
 
 ## Metric definition fields
 
-| Field                   | Type                                    | Required | Meaning                                                                 |
-| ----------------------- | --------------------------------------- | -------- | ----------------------------------------------------------------------- |
-| `metric_id`             | `string`                                | yes      | Unique within App                                                       |
-| `metric_type`           | `binomial \| count \| revenue \| ratio` | yes      |                                                                         |
-| `event_definition_id`   | `string \| null`                        | cond.    | Required for non-Ratio Metrics                                          |
-| `event_field_name`      | `string \| null`                        | cond.    | Declared number field; required for Count and Revenue                   |
-| `numerator_metric_id`   | `string \| null`                        | cond.    | Ratio-only, same-App non-Ratio Metric                                   |
-| `denominator_metric_id` | `string \| null`                        | cond.    | Ratio-only, same-App non-Ratio Metric                                   |
-| `window_duration`       | `duration`                              | yes      | Per-Metric window override                                              |
-| `winsorize`             | `boolean`                               | yes      | Default `true` for count/revenue/ratio, `false` for binomial (ADR-0016) |
-| `winsorize_pct`         | `number`                                | yes      | Default `99.9`; ignored if winsorize=false                              |
-| `downside_threshold`    | `number \| null`                        | no       | Set to make this a Guardrail Metric                                     |
+| Field                    | Type                                    | Required | Meaning                                                                 |
+| ------------------------ | --------------------------------------- | -------- | ----------------------------------------------------------------------- |
+| `metric_id`              | `string`                                | yes      | Unique within App                                                       |
+| `metric_type`            | `binomial \| count \| revenue \| ratio` | yes      |                                                                         |
+| `event_definition_id`    | `string \| null`                        | cond.    | Required for non-Ratio Metrics                                          |
+| `event_field_name`       | `string \| null`                        | cond.    | Declared number field; required for Count and Revenue                   |
+| `numerator_metric_id`    | `string \| null`                        | cond.    | Ratio-only, same-App non-Ratio Metric                                   |
+| `denominator_metric_id`  | `string \| null`                        | cond.    | Ratio-only, same-App non-Ratio Metric                                   |
+| `window_duration`        | `duration`                              | yes      | Per-Metric window override                                              |
+| `winsorize`              | `boolean`                               | yes      | Default `true` for count/revenue/ratio, `false` for binomial (ADR-0016) |
+| `winsorize_pct`          | `number`                                | yes      | Default `99.9`; ignored if winsorize=false                              |
+| `downside_threshold_pct` | `number \| null`                        | no       | Percent. Set to make this a Guardrail Metric                            |
 
 The Analysis Worker reads `serve_deduped_metric_events` after its aggregate-state merge, not physical
 `metric_events` rows and not the Exposure/Activation `raw_events` log. For a non-Ratio Metric it

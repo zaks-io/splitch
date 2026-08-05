@@ -42,12 +42,16 @@ export function binomialStatsInput(options: {
             {
               metric_id: "guardrail_conversion",
               variant: "treatment",
-              downside_threshold: 10,
+              // Above the fixture's Fieller lower bound (~29.99%) so this stays
+              // a breach case. The delta-method interval this replaced ran much
+              // wider on the low side and breached at 10.
+              downside_threshold_pct: 35,
               guardrail_locked_at_run_start: true,
               threshold_locked_at_run_start: true,
             },
           ]
         : [],
+    metric_variance_config: [],
     exposures,
     metric_values,
   };
