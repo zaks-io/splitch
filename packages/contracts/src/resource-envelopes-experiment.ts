@@ -126,7 +126,8 @@ export type ExperimentResponse = z.infer<typeof ExperimentResponseSchema>;
  * A staged assignment edit under a live Run writes only the Experiment draft.
  * This notice names the Run that evaluation still uses and its frozen Targeting
  * Rule snapshot, so an operator cannot mistake the draft write for a live change
- * (SPL-307 / ADR-0036).
+ * (SPL-307 / ADR-0036). Omitted when no Run is live or the PATCH did not stage
+ * an assignment field.
  */
 export const LiveRunUnaffectedSchema = z
   .object({
@@ -184,7 +185,8 @@ export const StartRunResponseSchema = z
     // shipped a snapshot for, and Approval-applied Starts report shipping at
     // application time instead.
     runSnapshotShipped: z.boolean().optional(),
-    // Explicit frozen Targeting Rule snapshot — the same set evaluation uses.
+    // Explicit frozen Targeting Rule snapshot — a sibling of `run`, not a field
+    // on it. Same set as `run.targetingRules` / RunConfigKV evaluation uses.
     // Empty means all Entities are eligible via allocation; Flag Configuration
     // Targeting Rules do not apply while this Run is live (SPL-307).
     frozenTargetingRules: z.array(TargetingRuleSchema),

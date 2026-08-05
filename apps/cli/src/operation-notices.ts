@@ -53,7 +53,7 @@ export function formatFrozenTargetingNotice(
 ): string {
   if (rules.length === 0) {
     return (
-      `Frozen targeting rules for ${runId}: (none — all Entities eligible via allocation; ` +
+      `Frozen targeting rules for ${runId}: (none; all Entities eligible via allocation; ` +
       "Flag Configuration targeting rules do not apply while this Run is live)"
     );
   }

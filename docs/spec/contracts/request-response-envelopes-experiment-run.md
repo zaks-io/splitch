@@ -213,14 +213,19 @@ Applied response:
   run: RunResponse
   previousRunId: string | null
   approvalRequest: ApprovalRequest | null
-  frozenTargetingRules: TargetingRule[]  // same snapshot evaluation uses; [] = all eligible
+  frozenTargetingRules: TargetingRule[]  // sibling of run; same snapshot evaluation uses; [] = all eligible
   runSnapshotShipped?: boolean           // present on the direct (allow) Start door
 }
 ```
 
-`frozenTargetingRules` is the resolved Targeting Rule snapshot frozen into the Run. It matches
-`run.targetingRules` and the `RunConfigKV` evaluation reads. An empty array means all Entities are
-eligible via allocation; Flag Configuration Targeting Rules do not apply while this Run is live.
+`frozenTargetingRules` is a Start-response sibling of `run`, not a field on the Run object. It is
+the resolved Targeting Rule snapshot frozen into the Run and matches `run.targetingRules` and the
+`RunConfigKV` evaluation reads. An empty array means all Entities are eligible via allocation; Flag
+Configuration Targeting Rules do not apply while this Run is live.
+
+Deploy order: `frozenTargetingRules` is required on `StartRunResponseSchema` and control-plane
+clients parse Start responses strictly. Publish / deploy the Worker that emits the field before CLI
+or SDK clients that validate against this schema, or every `experiments start` fails body parse.
 
 `approvalRequest` is null under `allow` and contains the applied request and latest Review under
 `confirm`. When required Review is omitted or future `approve` awaits a distinct reviewer, the
@@ -230,7 +235,7 @@ no Run response is synthesized.
 ### PatchExperimentRequest response under a live Run
 
 A successful PATCH that stages assignment fields (`allocation`, `salt`, `targetingRules`,
-`segmentIds`) with `stageForNextRun: true` returns the Experiment leaf plus:
+`segmentIds`) with `stageForNextRun: true` **while a Run is live** returns the Experiment leaf plus:
 
 ```
 liveRunUnaffected?: {
@@ -239,6 +244,7 @@ liveRunUnaffected?: {
 }
 ```
 
+The notice is omitted when no Run is live, and when the PATCH does not stage an assignment field.
 The draft write succeeded; evaluation continues on the named Run's frozen snapshot until the next
 Start.
 

@@ -49,10 +49,11 @@ What happens, ordered:
    version and moves the Approval Request to `applied`.
 5. After D1 commit, project the new Run config and
    `live_run:{app_id}:{environment_id}:{experiment_id}` pointer to KV.
-6. Return the new Run object (including `frozenTargetingRules`, the same Targeting Rule snapshot
-   evaluation uses), and the applied Approval Request inline, or `null` under `allow` (no separate
-   GET needed). An empty frozen set means all Entities are eligible via allocation; Flag
-   Configuration Targeting Rules do not apply while the Run is live.
+6. Return the new Run object with a sibling `frozenTargetingRules` announcement (the same Targeting
+   Rule snapshot evaluation uses — equal to `run.targetingRules`), and the applied Approval Request
+   inline, or `null` under `allow` (no separate GET needed). An empty frozen set means all Entities
+   are eligible via allocation; Flag Configuration Targeting Rules do not apply while the Run is
+   live.
 
 Review authorization and target-version validation precede any canonical mutation. If application
 inside step 4 fails, D1 rolls back the Run mutation and, on an approval-gated path, its Approval
@@ -67,8 +68,9 @@ ADR-0009). The Worker returns the new Run immediately; the edge catches up withi
 **Assignment edits accumulate on the draft; Start is the single reset point.** While a Run is
 running, the PATCH must explicitly carry `stageForNextRun: true`; an ordinary assignment PATCH is
 refused with `RUN_FROZEN`. A successful staged Targeting Rule (or other stageable assignment) edit
-returns `liveRunUnaffected` naming the live Run and its frozen Targeting Rules so the operator can
-tell the draft write did not change evaluation. N staged edits = one sample reset, not N.
+while a Run is live returns `liveRunUnaffected` naming that live Run and its frozen Targeting Rules
+so the operator can tell the draft write did not change evaluation. N staged edits = one sample
+reset, not N.
 
 ### running → ended: `POST /apps/{app_id}/envs/{environment_id}/runs/{run_id}/end`
 

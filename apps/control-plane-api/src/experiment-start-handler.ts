@@ -168,7 +168,9 @@ export async function startExperiment(
     previousRunId: committed.previous?.id ?? null,
     approvalRequest: null,
     runSnapshotShipped,
-    frozenTargetingRules: prepared.value.targetingRules,
+    // Same snapshot the committed Run row holds (and evaluation reads). Read the
+    // committed row so this door stays symmetric with the approval-applied path.
+    frozenTargetingRules: jsonArray(committed.run.targetingRules),
   });
 }
 

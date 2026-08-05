@@ -459,7 +459,7 @@ Flags:
 
 Example:
   splitch experiments list --json",
-    "experiments start": "Start the draft as a new Run; freezes targetingRules into the Run (returned as frozenTargetingRules).
+    "experiments start": "Start the draft as a new Run; ends any running Run (Policy-gated). Freezes draft Targeting Rules into the Run.
 
 Usage:
   splitch experiments start <experiment-id> [flags]
@@ -474,13 +474,13 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Behavior:
-  Start freezes the Experiment draft Targeting Rules into the new Run (returned as frozenTargetingRules).
+  Start freezes the Experiment draft Targeting Rules into the new Run; the response field frozenTargetingRules is that snapshot (same as run.targetingRules).
   An empty frozen set means all Entities are eligible via allocation; Flag Configuration targeting rules do not apply while the Run is live.
   Without --json, the CLI prints a frozen-targeting summary to stderr.
 
 Example:
   splitch experiments start <experiment-id> --body-json '<json>' --json",
-    "experiments update": "Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED). Staged Targeting Rule edits under a live Run return liveRunUnaffected.
+    "experiments update": "Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED). Staged Targeting Rule edits under a live Run leave evaluation on the frozen Run.
 
 Usage:
   splitch experiments update <experiment-id> [flags]
@@ -494,7 +494,7 @@ Flags:
   -h, --help           [type: boolean; default: false] Show help and exit.
 
 Behavior:
-  While a Run is live, assignment fields (including targetingRules) require stageForNextRun: true and write only the next-Run draft.
+  While a Run is live, assignment fields (including Targeting Rules) require stageForNextRun and write only the next-Run draft.
   A successful staged Targeting Rule edit returns liveRunUnaffected naming the Run evaluation still uses.
   Without --json, the CLI prints that the live Run is unaffected.
 
@@ -547,7 +547,7 @@ Flags:
 
 Behavior:
   While a Run is live on this Flag, replace is refused with RUN_FROZEN (end the Run first).
-  A live Run evaluates its own frozen targetingRules snapshot, not this Flag Configuration list.
+  A live Run evaluates its own frozen Targeting Rule snapshot, not this Flag Configuration list.
 
 Example:
   splitch flag-targeting-rules replace <flag-id-or-key> --body-json '<json>' --json",
@@ -1229,8 +1229,8 @@ Commands:
   list            List Experiments in an Environment.
   create          Create an Experiment draft.
   get             Get an Experiment (includes live Run id, draft config).
-  update          Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED). Staged Targeting Rule edits under a live Run return liveRunUnaffected.
-  start           Start the draft as a new Run; freezes targetingRules into the Run (returned as frozenTargetingRules).
+  update          Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED). Staged Targeting Rule edits under a live Run leave evaluation on the frozen Run.
+  start           Start the draft as a new Run; ends any running Run (Policy-gated). Freezes draft Targeting Rules into the Run.
   delete          Archive an Experiment; Runs are retained (blocked while a Run is running).
 
 Flags:

@@ -6,8 +6,8 @@ import { EXIT_OK } from "./exit-codes.js";
 import { renderCommandHelp } from "./help.js";
 import { emitOperationNotices, formatFrozenTargetingNotice } from "./operation-notices.js";
 import { parseInvocation } from "./parse-args.js";
-import { FakeCliTransport, startRunResponse, storedCredential } from "./test-fixtures.js";
 import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
+import { FakeCliTransport, startRunResponse, storedCredential } from "./test-fixtures.js";
 
 describe("SPL-307 CLI frozen targeting notices", () => {
   it("formats an empty frozen set without requiring --json parsing", () => {
@@ -92,16 +92,25 @@ describe("SPL-307 CLI frozen targeting notices", () => {
     if (!start || !update || !targeting) return;
 
     const startHelp = renderCommandHelp(start);
+    expect(startHelp).toContain("ends any running Run (Policy-gated)");
+    expect(startHelp).toContain("Freezes draft Targeting Rules into the Run");
     expect(startHelp).toContain("frozenTargetingRules");
     expect(startHelp).toContain("Flag Configuration targeting rules do not apply");
+    // Wire field name belongs in Behavior once, not in the route summary line.
+    expect(startHelp.indexOf("frozenTargetingRules")).toBeGreaterThan(
+      startHelp.indexOf("Behavior:"),
+    );
 
     const updateHelp = renderCommandHelp(update);
+    expect(updateHelp).toContain("leave evaluation on the frozen Run");
     expect(updateHelp).toContain("liveRunUnaffected");
-    expect(updateHelp).toContain("stageForNextRun");
+    expect(updateHelp.indexOf("liveRunUnaffected")).toBeGreaterThan(
+      updateHelp.indexOf("Behavior:"),
+    );
 
     const targetingHelp = renderCommandHelp(targeting);
     expect(targetingHelp).toContain("RUN_FROZEN");
-    expect(targetingHelp).toContain("frozen targetingRules snapshot");
+    expect(targetingHelp).toContain("frozen Targeting Rule snapshot");
   });
 
   it("surfaces the frozen-targeting line on a successful experiments start", async () => {

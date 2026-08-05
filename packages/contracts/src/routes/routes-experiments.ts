@@ -100,7 +100,7 @@ export const experimentRoutes = [
     method: "PATCH",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId",
     summary:
-      "Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED). Staged Targeting Rule edits under a live Run return liveRunUnaffected.",
+      "Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED). Staged Targeting Rule edits under a live Run leave evaluation on the frozen Run.",
     request: { params: ExperimentParams, body: PatchExperimentRequestSchema },
     response: ExperimentUpdateResponseSchema,
     auth: AUTH,
@@ -121,7 +121,7 @@ export const experimentRoutes = [
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/start",
     summary:
-      "Start the draft as a new Run; freezes targetingRules into the Run (returned as frozenTargetingRules).",
+      "Start the draft as a new Run; ends any running Run (Policy-gated). Freezes draft Targeting Rules into the Run.",
     request: { params: ExperimentParams, body: StartRunRequestSchema },
     response: StartRunResponseSchema,
     auth: AUTH,

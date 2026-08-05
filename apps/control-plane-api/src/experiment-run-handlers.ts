@@ -45,10 +45,15 @@ async function getRun(deps: ExperimentDeps, { input, requestId }: HandlerArgs<un
   if (!run || run.experimentId !== experimentId) return runNotFound(requestId);
   // Frozen rules live on the Run; draft rules live on the Experiment. Carry
   // both on GET so an operator can compare without a second call (SPL-307).
-  const experiment = await deps.repo.experiments.getExperiment(scope, experimentId);
+  // peek includes archived Experiments: archiving retains Runs, and getExperiment
+  // hiding the parent would make a real draft look like "no draft rules".
+  const experiment = await deps.repo.experiments.peekExperiment(scope, experimentId);
+  if (!experiment) {
+    throw new Error(`Run ${run.id} names Experiment ${experimentId}, which does not exist`);
+  }
   return Response.json(
     runResponse(run, {
-      draftTargetingRules: experiment ? jsonArrayOrNull(experiment.draftTargetingRules) : null,
+      draftTargetingRules: jsonArrayOrNull(experiment.draftTargetingRules),
     }),
   );
 }
