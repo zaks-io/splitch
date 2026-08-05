@@ -14,7 +14,8 @@ import {
  * draft never asks the Analysis Worker for statistics that cannot exist.
  * A Run with incomplete inputs renders the `no_data` waiting state from the
  * 200 envelope, never the route error page. Copy branches on runStatus so an
- * ended Run is not described as still collecting.
+ * ended Run is not described as still collecting. `no_run` from the API (SPL-305)
+ * is the same empty surface when a results read somehow arrives without a Run.
  */
 export function ExperimentResultsPanel({
   appId,
@@ -52,6 +53,9 @@ function ExperimentResultsForRun({
   const { data } = useSuspenseQuery(
     experimentResultsQuery({ appId, environmentId, experimentId, runId }),
   );
+  if (data.state === "no_run") {
+    return <ExperimentResultsEmpty />;
+  }
   if (data.state === "no_data") {
     return (
       <ExperimentResultsWaiting

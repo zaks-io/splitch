@@ -195,7 +195,17 @@ export async function panelExperimentResults(
           latest && latest.runNumber > candidate.runNumber ? latest : candidate,
         undefined,
       );
-  if (!run) return runNotFound(requestId);
+  // Draft Experiment: exists, never Started. Typed no_run (not RUN_NOT_FOUND /
+  // EXPERIMENT_NOT_FOUND) so an agent is pointed at Start (SPL-305). A pinned
+  // missing Run id is still RUN_NOT_FOUND — that is a different condition.
+  if (!run) {
+    if (input.runId !== undefined) return runNotFound(requestId);
+    const output: PanelExperimentResultsOutput = {
+      state: "no_run",
+      recommendedAction: "START_A_RUN",
+    };
+    return Response.json(output);
+  }
 
   const results = await parseAnalysisResults(
     await deps.analysis.fetch(

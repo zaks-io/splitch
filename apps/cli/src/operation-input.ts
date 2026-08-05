@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { deriveMcpTools, getRoute } from "@splitch/contracts";
 import type { EvaluateContext } from "@splitch/sdk";
 import type { CliCommandDefinition } from "./command-registry.js";
+import { excessPositionalError, requiredPositionalSpecs } from "./command-positionals.js";
 import type { ResolvedContext } from "./context.js";
 import { SplitchCliError } from "./errors.js";
 import {
@@ -92,20 +93,28 @@ function applyPositionalFields(
   invocation: ParsedInvocation,
   input: Record<string, unknown>,
 ): void {
-  const route = getRoute(command.operationId);
-  const pathParams = route ? [...route.path.matchAll(/:([A-Za-z0-9_]+)/g)].map((m) => m[1]) : [];
-  let positionalIndex = 0;
-  for (const param of pathParams) {
-    if (
-      !param ||
-      param === "appId" ||
-      param === "environmentId" ||
-      param === "targetEnvironmentId"
-    ) {
-      continue;
+  // Same rule as missingRequiredPositional: argv fills only slots still empty
+  // after --body-json / --org. Excess argv means a param was supplied twice —
+  // fail loud rather than sliding tokens into the wrong slots (ADR-0036).
+  const specs = requiredPositionalSpecs(command);
+  const alreadyFilled = (param: string): boolean => {
+    const existing = input[param];
+    return typeof existing === "string" && existing.length > 0;
+  };
+  const unfilled = specs.filter((spec) => !alreadyFilled(spec.param));
+  if (invocation.positionals.length > unfilled.length) {
+    const conflict = specs.find((spec) => alreadyFilled(spec.param));
+    if (conflict) {
+      throw excessPositionalError({ kind: "conflict", display: conflict.display });
     }
-    if (positionalIndex < invocation.positionals.length) {
-      input[param] = invocation.positionals[positionalIndex];
+    const token = invocation.positionals[unfilled.length] ?? "";
+    throw excessPositionalError({ kind: "unexpected", token });
+  }
+  let positionalIndex = 0;
+  for (const spec of unfilled) {
+    const token = invocation.positionals[positionalIndex];
+    if (token) {
+      input[spec.param] = token;
       positionalIndex += 1;
     }
   }

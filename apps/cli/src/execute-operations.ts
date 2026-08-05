@@ -4,12 +4,14 @@ import { remediationForServerError, warnStaleApprovalDiscard } from "./approval-
 import { withAuthorizationRetry } from "./auth.js";
 import type { TokenBinding } from "./auth-binding.js";
 import type { CliCommandDefinition } from "./command-registry.js";
+import { missingPositionalError } from "./command-positionals.js";
 import type { ResolvedContext } from "./context.js";
 import { requireAppScope, requireEnvironmentScope } from "./context.js";
 import { normalizeCliError, SplitchCliError, writeCliError } from "./errors.js";
 import { emit } from "./execute-io.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
+import { emitOperationNotices } from "./operation-notices.js";
 import { parseEvaluationContext } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { createOperationSdks, resolveDataPlaneBaseUrl, sdkForRoute } from "./sdks.js";
@@ -52,6 +54,14 @@ export async function executeFlagsVerify(
     return usageError;
   }
 
+  // Argv-only Flag key — `--body-json` is not a source (matches the positional gate).
+  // Check before the Client Key fetch so a missing key never exits mute after I/O.
+  const flagKey = invocation.positionals[0];
+  if (!flagKey) {
+    writeCliError(io, missingPositionalError("flag-key"));
+    return { exitCode: EXIT_USAGE };
+  }
+
   try {
     let sdkVerifyError: string | undefined;
     const clientKeyResult = await withAuthorizationRetry(
@@ -88,10 +98,6 @@ export async function executeFlagsVerify(
         debug: () => {},
       },
     });
-    const flagKey = invocation.positionals[0];
-    if (!flagKey) {
-      return validateFlagsVerifyUsage(invocation, io) ?? { exitCode: EXIT_USAGE };
-    }
     const verifyDetails = await client.verify(flagKey, evaluationContext);
     emit(io, invocation.flags.json, verifyDetails);
     if (verifyDetails.reason === "ERROR") {
@@ -117,14 +123,7 @@ export function validateFlagsVerifyUsage(
   invocation: ParsedInvocation,
   io: CliIo,
 ): CliResult | null {
-  if (!invocation.positionals[0]) {
-    writeCliError(io, {
-      code: "CLI_USAGE_INVALID",
-      causeSummary: "flags verify requires a Flag key",
-      remediation: "Pass the Flag key as the first positional argument",
-    });
-    return { exitCode: EXIT_USAGE };
-  }
+  // Flag-key positional is validated earlier via requiredPositionals (SPL-306).
   if (!invocation.flags.targetingKey) {
     writeCliError(io, {
       code: "CLI_USAGE_INVALID",
@@ -230,6 +229,7 @@ export async function executeApiOperation(
     // Keyed off payload shape, not operationId: any command that returns an
     // Approval Request (or list) must surface a recorded stale discard.
     warnStaleApprovalDiscard(io, projected);
+    emitOperationNotices(operationId, projected, invocation.flags.json, io);
     return { exitCode: EXIT_OK, payload: projected };
   } catch (error) {
     return handleExecutionError(error, io);
@@ -246,7 +246,7 @@ export function handleExecutionError(error: unknown, io: CliIo): CliResult {
   ) {
     return { exitCode: EXIT_AUTH };
   }
-  if (cliError.code === "CLI_SCOPE_UNRESOLVED") {
+  if (cliError.code === "CLI_SCOPE_UNRESOLVED" || cliError.code === "CLI_TOKEN_BINDING_REFUSED") {
     return { exitCode: EXIT_SCOPE };
   }
   return { exitCode: EXIT_USAGE };

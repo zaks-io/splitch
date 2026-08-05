@@ -16,7 +16,7 @@ import {
   requireWritableEnvironment,
   runningRunForExperiment,
 } from "./experiment-handler-shared";
-import { experimentResponse, json } from "./experiment-model";
+import { experimentResponse, experimentUpdateResponse, json, jsonArray } from "./experiment-model";
 import { makeRunHandlers } from "./experiment-run-handlers";
 import { startExperiment } from "./experiment-start-handler";
 import {
@@ -170,7 +170,26 @@ async function attemptExperimentUpdate(
     patch.value,
     context.experiment.liveRunId,
   );
-  return updated ? Response.json(experimentResponse(updated)) : null;
+  if (!updated) return null;
+
+  // Staged assignment edits under a live Run leave evaluation on the frozen
+  // snapshot. Name that Run and its frozen Targeting Rules so the operator
+  // cannot mistake the draft write for a live change (SPL-307).
+  if (runningRun && stagedAssignmentFields(body).length > 0) {
+    return Response.json(
+      experimentUpdateResponse(updated, {
+        runId: runningRun.id,
+        frozenTargetingRules: jsonArray(runningRun.targetingRules),
+      }),
+    );
+  }
+  return Response.json(experimentUpdateResponse(updated));
+}
+
+function stagedAssignmentFields(body: Record<string, unknown>): string[] {
+  return (["allocation", "salt", "targetingRules", "segmentIds"] as const).filter(
+    (field) => body[field] !== undefined,
+  );
 }
 
 async function deleteExperiment(

@@ -5,6 +5,7 @@ import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
 } from "./routes/route-shapes-approval-request";
+import { TargetingKeyTypeSchema } from "./targeting-key-type";
 
 /**
  * Create/patch/response wire envelopes for the Experiment and Experiment Run
@@ -18,6 +19,17 @@ import {
  *   - `PatchRunRequest` is `.strict()` and never names a frozen assignment field,
  *     so carrying ANY of them fails at parse time (ADR-0002/0003 enforced in Zod).
  */
+
+// Re-export write-boundary vocabulary through the resource-envelopes barrel so
+// `@splitch/contracts` resolves it for Panel validators and Worker tests.
+// `index.ts` is already over the code-line ratchet; adding a dedicated export
+// there (as SlugSchema does) would grow an already-over file and fail the gate.
+// biome-ignore lint/performance/noBarrelFile: shared write-boundary vocabulary for Panel + Worker tests
+export {
+  TARGETING_KEY_TYPE_MAX_LENGTH,
+  TARGETING_KEY_TYPE_SHAPE_MESSAGE,
+  TargetingKeyTypeSchema,
+} from "./targeting-key-type";
 
 // ---------------------------------------------------------------------------
 const DraftAllocationSchema = z.record(z.string(), z.number());
@@ -42,7 +54,7 @@ export const CreateExperimentRequestSchema = z.object({
   flagId: z.string(),
   // EC field + Entity type bucketed on; inherited by all Runs.
   targetingKey: z.string(),
-  targetingKeyType: z.string(),
+  targetingKeyType: TargetingKeyTypeSchema,
   description: z.string().optional(),
   hypothesis: z.string().optional(),
   confidenceLevel: ExperimentSchema.shape.confidenceLevel.default(0.95),
@@ -78,7 +90,7 @@ export const PatchExperimentRequestSchema = z
     tags: z.array(z.string()).optional(),
     flagId: z.string().optional(),
     targetingKey: z.string().optional(),
-    targetingKeyType: z.string().optional(),
+    targetingKeyType: TargetingKeyTypeSchema.optional(),
     activationMetricId: z.string().nullable().optional(),
     allocation: DraftAllocationSchema.optional(),
     salt: z.string().optional(),
@@ -109,6 +121,31 @@ export type PatchExperimentRequest = z.infer<typeof PatchExperimentRequestSchema
 
 export const ExperimentResponseSchema = ExperimentSchema;
 export type ExperimentResponse = z.infer<typeof ExperimentResponseSchema>;
+
+/**
+ * A staged assignment edit under a live Run writes only the Experiment draft.
+ * This notice names the Run that evaluation still uses and its frozen Targeting
+ * Rule snapshot, so an operator cannot mistake the draft write for a live change
+ * (SPL-307 / ADR-0036). Omitted when no Run is live or the PATCH did not stage
+ * an assignment field.
+ */
+export const LiveRunUnaffectedSchema = z
+  .object({
+    runId: z.string(),
+    frozenTargetingRules: z.array(TargetingRuleSchema),
+  })
+  .strict();
+export type LiveRunUnaffected = z.infer<typeof LiveRunUnaffectedSchema>;
+
+/**
+ * Experiment PATCH response. Extends the Experiment leaf with an optional
+ * `liveRunUnaffected` notice when `stageForNextRun` staged assignment fields
+ * (including Targeting Rules) while a Run is live.
+ */
+export const ExperimentUpdateResponseSchema = ExperimentSchema.extend({
+  liveRunUnaffected: LiveRunUnaffectedSchema.optional(),
+});
+export type ExperimentUpdateResponse = z.infer<typeof ExperimentUpdateResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // StartRunRequest (opens a new Experiment Run — the ONLY path to open one)
@@ -148,6 +185,11 @@ export const StartRunResponseSchema = z
     // shipped a snapshot for, and Approval-applied Starts report shipping at
     // application time instead.
     runSnapshotShipped: z.boolean().optional(),
+    // Explicit frozen Targeting Rule snapshot — a sibling of `run`, not a field
+    // on it. Same set as `run.targetingRules` / RunConfigKV evaluation uses.
+    // Empty means all Entities are eligible via allocation; Flag Configuration
+    // Targeting Rules do not apply while this Run is live (SPL-307).
+    frozenTargetingRules: z.array(TargetingRuleSchema),
   })
   .strict();
 export type StartRunResponse = z.infer<typeof StartRunResponseSchema>;
@@ -175,8 +217,12 @@ export type PatchRunRequest = z.infer<typeof PatchRunRequestSchema>;
 // RunResponse
 //
 // Full Run leaf: configHash for integrity, frozen variantSet/allocation, and
-// `endedAt` present-with-null on a running Run.
+// `endedAt` present-with-null on a running Run. GET also carries the Experiment
+// draft Targeting Rules so operators can compare frozen vs draft without a
+// second call (SPL-307).
 // ---------------------------------------------------------------------------
 
-export const RunResponseSchema = RunSchema;
+export const RunResponseSchema = RunSchema.extend({
+  draftTargetingRules: z.array(TargetingRuleSchema).nullable().optional(),
+});
 export type RunResponse = z.infer<typeof RunResponseSchema>;

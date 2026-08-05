@@ -169,6 +169,12 @@ const AnalysisResultsMissingInputSchema = z.enum(["exposures", "metric_events"])
  * measurable yet" distinct from a measured `ready` result. Naming `missing`
  * tells the caller which input is still empty without turning that into a 4xx.
  *
+ * `no_run` is a separate member (SPL-305), not a `missing` value on `no_data`:
+ * a draft Experiment has no Run at all, so `run_id` / `control_variant` cannot
+ * be populated without fabricating a placeholder. `recommended_action` names
+ * Start (`START_A_RUN`) as the step that produces results. `EXPERIMENT_NOT_FOUND`
+ * is reserved for a missing or out-of-scope Experiment id.
+ *
  * `run_id` is provenance and is checked: a read whose answer names a different
  * Run than the one asked for is refused rather than relabelled (ADR-0006).
  *
@@ -194,6 +200,12 @@ export const AnalysisResultsEnvelopeSchema = z.discriminatedUnion("state", [
       run_id: z.string().min(1),
       control_variant: z.string().min(1),
       missing: AnalysisResultsMissingInputSchema,
+    })
+    .strict(),
+  z
+    .object({
+      state: z.literal("no_run"),
+      recommended_action: z.literal("START_A_RUN"),
     })
     .strict(),
 ]);

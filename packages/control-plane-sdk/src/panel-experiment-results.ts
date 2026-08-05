@@ -24,7 +24,9 @@ const PanelResultsMissingInputSchema = z.enum(["exposures", "metric_events"]);
  * `state` mirrors Analysis / attention-rollup: `no_data` is a healthy early-Run
  * collecting state (not an error page). `ready` carries the Worker-evaluated
  * gate, srm, and significance so the Panel never recomputes statistics
- * (ADR-0030).
+ * (ADR-0030). `no_run` is a draft Experiment with no Run yet (SPL-305): it
+ * cannot carry `runId` / `runStatus` without inventing a placeholder, so it is
+ * a separate union member and names Start as the next step.
  */
 export const PanelExperimentResultsOutputSchema = z.discriminatedUnion("state", [
   z
@@ -57,6 +59,12 @@ export const PanelExperimentResultsOutputSchema = z.discriminatedUnion("state", 
       missing: PanelResultsMissingInputSchema,
     })
     .strict(),
+  z
+    .object({
+      state: z.literal("no_run"),
+      recommendedAction: z.literal("START_A_RUN"),
+    })
+    .strict(),
 ]);
 
 export type PanelExperimentResultsOutput = z.infer<typeof PanelExperimentResultsOutputSchema>;
@@ -64,6 +72,10 @@ export type PanelExperimentResultsReady = Extract<PanelExperimentResultsOutput, 
 export type PanelExperimentResultsNoData = Extract<
   PanelExperimentResultsOutput,
   { state: "no_data" }
+>;
+export type PanelExperimentResultsNoRun = Extract<
+  PanelExperimentResultsOutput,
+  { state: "no_run" }
 >;
 
 export function parsePanelExperimentResultsOutput(input: unknown) {

@@ -50,11 +50,23 @@ const TRANSIENT_CODES = new Set(["RATE_LIMITED", "SERVICE_UNAVAILABLE"]);
 export async function parseAnalysisResults(
   response: Response,
   expectedRunId: string,
-): Promise<AnalysisResultsEnvelope> {
+): Promise<Exclude<AnalysisResultsEnvelope, { state: "no_run" }>> {
   if (!response.ok) {
     throw await analysisFailure(response);
   }
   const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
+  // Analysis answers ready/no_data for a locked Run. `no_run` is resolved on the
+  // Control Plane before the hop (SPL-305) and must not arrive from Analysis.
+  if (envelope.state === "no_run") {
+    throw new AnalysisResultsError(
+      500,
+      "analysis answered no_run; Control Plane resolves draft Experiments before the hop",
+      "INTERNAL_SERVER_ERROR",
+      {
+        fault: "analysis answered no_run; Control Plane resolves draft Experiments before the hop",
+      },
+    );
+  }
   // Numbers from one Run rendered under another Run's heading is the exact
   // failure the no-pooling guarantee exists to prevent, and no amount of
   // retrying turns it into the right Run.

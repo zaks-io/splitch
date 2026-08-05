@@ -41,6 +41,7 @@ export type {
 export type {
   PanelExperimentResultsInput,
   PanelExperimentResultsNoData,
+  PanelExperimentResultsNoRun,
   PanelExperimentResultsOutput,
   PanelExperimentResultsReady,
 } from "./panel-experiment-results";

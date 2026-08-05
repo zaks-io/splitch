@@ -376,7 +376,7 @@ Flags:
 
 Example:
   splitch envs update --body-json '<json>' --json",
-    "experiment-results get": "Get an Experiment's results envelope: state ready with StatsOutput, or state no_data naming the missing input.
+    "experiment-results get": "Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.
 
 Usage:
   splitch experiment-results get <experiment-id> [flags]
@@ -389,7 +389,7 @@ Flags:
 
 Example:
   splitch experiment-results get <experiment-id> --json",
-    "experiment-results post": "Get an Experiment's results envelope: state ready with StatsOutput, or state no_data naming the missing input.
+    "experiment-results post": "Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.
 
 Usage:
   splitch experiment-results post <experiment-id> [flags]
@@ -459,7 +459,7 @@ Flags:
 
 Example:
   splitch experiments list --json",
-    "experiments start": "Start the draft as a new Run; ends any running Run (Policy-gated).
+    "experiments start": "Start the draft as a new Run; ends any running Run (Policy-gated). Freezes draft Targeting Rules into the Run.
 
 Usage:
   splitch experiments start <experiment-id> [flags]
@@ -473,9 +473,14 @@ Flags:
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
 
+Behavior:
+  Start freezes the Experiment draft Targeting Rules into the new Run; the response field frozenTargetingRules is that snapshot (same as run.targetingRules).
+  An empty frozen set means all Entities are eligible via allocation; Flag Configuration targeting rules do not apply while the Run is live.
+  Without --json, the CLI prints a frozen-targeting summary to stderr.
+
 Example:
   splitch experiments start <experiment-id> --body-json '<json>' --json",
-    "experiments update": "Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED).
+    "experiments update": "Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED). Staged Targeting Rule edits under a live Run leave evaluation on the frozen Run.
 
 Usage:
   splitch experiments update <experiment-id> [flags]
@@ -487,6 +492,11 @@ Flags:
   --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
+
+Behavior:
+  While a Run is live, assignment fields (including Targeting Rules) require stageForNextRun and write only the next-Run draft.
+  A successful staged Targeting Rule edit returns liveRunUnaffected naming the Run evaluation still uses.
+  Without --json, the CLI prints that the live Run is unaffected.
 
 Example:
   splitch experiments update <experiment-id> --body-json '<json>' --json",
@@ -534,6 +544,10 @@ Flags:
   --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
+
+Behavior:
+  While a Run is live on this Flag, replace is refused with RUN_FROZEN (end the Run first).
+  A live Run evaluates its own frozen Targeting Rule snapshot, not this Flag Configuration list.
 
 Example:
   splitch flag-targeting-rules replace <flag-id-or-key> --body-json '<json>' --json",
@@ -1198,8 +1212,8 @@ Usage:
   splitch experiment-results <action> [arguments] [flags]
 
 Commands:
-  get             Get an Experiment's results envelope: state ready with StatsOutput, or state no_data naming the missing input.
-  post            Get an Experiment's results envelope: state ready with StatsOutput, or state no_data naming the missing input.
+  get             Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.
+  post            Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.
@@ -1215,8 +1229,8 @@ Commands:
   list            List Experiments in an Environment.
   create          Create an Experiment draft.
   get             Get an Experiment (includes live Run id, draft config).
-  update          Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED).
-  start           Start the draft as a new Run; ends any running Run (Policy-gated).
+  update          Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED). Staged Targeting Rule edits under a live Run leave evaluation on the frozen Run.
+  start           Start the draft as a new Run; ends any running Run (Policy-gated). Freezes draft Targeting Rules into the Run.
   delete          Archive an Experiment; Runs are retained (blocked while a Run is running).
 
 Flags:

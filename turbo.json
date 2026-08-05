@@ -103,6 +103,7 @@
       "outputs": []
     },
     "//#check:cli-mcp-parity": {
+      "dependsOn": ["@splitch/sdk#build"],
       "inputs": [
         "scripts/check-cli-mcp-parity.ts",
         "scripts/lib/**",
