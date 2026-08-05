@@ -171,7 +171,7 @@ export function startConfirmationCopy(
   };
 }
 
-export function targetingRulesError(value: string): string | null {
+function targetingRulesError(value: string): string | null {
   try {
     return Array.isArray(JSON.parse(value)) ? null : "Targeting Rules must be a JSON array.";
   } catch {
