@@ -24,7 +24,6 @@ import {
   environmentPolicyContexts,
   requiresReview,
 } from "./approval-target";
-import { randomHex } from "./credential-cache";
 import { deleteFlagD1Cascade, purgeFlagConfigsKvForFlag } from "./flag-config-lifecycle";
 
 /**
@@ -242,6 +241,9 @@ async function proposeFlagDeleteIfGated(
   );
   if (!requiresReview(contexts)) return null;
 
+  // Stable per (app, flag) so a premature --force retry replays the same
+  // pending Approval Request instead of minting a duplicate (SPL-326 author QA).
+  const idempotencyKey = `apps_delete_force_${app.id}_${flag.id}`;
   const approval = await createApproval(
     { ...deps, applyOther: makeOtherApprovalApplication(deps) },
     {
@@ -258,19 +260,21 @@ async function proposeFlagDeleteIfGated(
       proposed: {},
       proposalInput: { flagId: flag.id },
       principal,
-      idempotencyKey: `apps_delete_force_${flag.id}_${randomHex(8)}`,
+      idempotencyKey,
       inlineReview: false,
       requestId,
     },
   );
-  if (!approval.ok) {
-    const body = (await approval.response.clone().json()) as {
-      details?: { approvalRequestId?: string };
-    };
-    const approvalRequestId = body.details?.approvalRequestId;
-    if (typeof approvalRequestId === "string") {
-      return pendingApproval(app.id, approvalRequestId, flag.id);
-    }
+  if (approval.ok) {
+    // Applied replay: Flag delete already took effect; caller removes any remnant.
+    return null;
+  }
+  const body = (await approval.response.clone().json()) as {
+    details?: { approvalRequestId?: string };
+  };
+  const approvalRequestId = body.details?.approvalRequestId;
+  if (typeof approvalRequestId === "string") {
+    return pendingApproval(app.id, approvalRequestId, flag.id);
   }
   throw new Error(`apps delete --force could not propose flags_delete for ${flag.id}`);
 }

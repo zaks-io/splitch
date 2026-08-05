@@ -284,6 +284,19 @@ describe("apps delete dry-run and force (SPL-326)", () => {
     );
     expect(body.removed.some((r) => r.childType === "experiments")).toBe(true);
 
+    const retry = await h.app.request(`/apps/${created.app.id}?force=true`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${jwt}` },
+    });
+    expect(retry.status).toBe(200);
+    const retryBody = (await retry.json()) as ResourceDeleteResponse;
+    if (!("pendingApprovals" in retryBody)) {
+      throw new Error("expected force-blocked retry response");
+    }
+    expect(retryBody.pendingApprovals[0]?.approvalRequestId).toBe(
+      body.pendingApprovals[0]?.approvalRequestId,
+    );
+
     const stillThere = await h.app.request(`/apps/${created.app.id}`, {
       headers: { authorization: `Bearer ${jwt}` },
     });
