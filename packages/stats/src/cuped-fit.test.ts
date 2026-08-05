@@ -27,7 +27,7 @@ describe("adjustCupedArms", () => {
       ["t2", 4],
     ]);
 
-    const adjusted = adjustCupedArms(control, covariates, treatment, covariates);
+    const adjusted = adjustPair(control, treatment, covariates);
 
     // theta is 2 here (y moves 2 per unit of x within each arm), so each entity
     // shifts by -2 * (x - 2).
@@ -45,7 +45,7 @@ describe("adjustCupedArms", () => {
       ["t1", 3],
     ]);
 
-    const adjusted = adjustCupedArms(control, covariates, treatment, covariates);
+    const adjusted = adjustPair(control, treatment, covariates);
 
     expect(adjusted.control.map((entity) => entity.cuped_adjusted)).toEqual([true, true, false]);
     expect(adjusted.treatment.map((entity) => entity.cuped_adjusted)).toEqual([true, true, false]);
@@ -60,7 +60,7 @@ describe("adjustCupedArms", () => {
     const treatment = arm("t", [20, 22]);
     const empty = new Map<string, number>();
 
-    const adjusted = adjustCupedArms(control, empty, treatment, empty);
+    const adjusted = adjustPair(control, treatment, empty);
 
     expect(adjusted.control.map((entity) => entity.value)).toEqual([10, 12]);
     expect(adjusted.control.every((entity) => entity.cuped_adjusted)).toBe(false);
@@ -82,7 +82,7 @@ describe("adjustCupedArms", () => {
       ["t2", 5],
     ]);
 
-    const adjusted = adjustCupedArms(control, covariates, treatment, covariates);
+    const adjusted = adjustPair(control, treatment, covariates);
 
     expect(adjusted.control.map((entity) => entity.value)).toEqual([10, 12, 14]);
     expect(adjusted.treatment.map((entity) => entity.value)).toEqual([20, 22, 24]);
@@ -101,13 +101,48 @@ describe("adjustCupedArms", () => {
       ["t2", 4],
     ]);
 
-    const adjusted = adjustCupedArms(control, covariates, treatment, covariates);
+    const adjusted = adjustPair(control, treatment, covariates);
 
     // theta is 2 from the Treatment arm; xBar is the pooled mean, 3.
     expect(adjusted.control[0]?.value).toBe(10 - 2 * (6 - 3));
     expect(adjusted.treatment.map((entity) => entity.value)).toEqual([26, 26, 26]);
   });
+
+  it("centers a three-arm fit on the mean over all three arms", () => {
+    // The N-arm fit is what lets a Run publish one Control estimate rather than
+    // one per Treatment. Every arm contributes to the slope and to the centering
+    // constant, so a third arm moves the Control arm's adjusted values.
+    const arms = [arm("c", [10, 12, 14]), arm("t", [20, 22, 24]), arm("u", [30, 32, 34])];
+    const covariates = new Map(
+      ["c", "t", "u"].flatMap((prefix, armIndex) =>
+        [0, 1, 2].map((index) => [`${prefix}${index}`, armIndex + index] as const),
+      ),
+    );
+
+    const adjusted = adjustCupedArms(arms.map((entities) => ({ entities, values: covariates })));
+
+    // theta is 2 within every arm; the pooled covariate mean over all nine
+    // entities is 2, so a Control entity at x=0 shifts up by 2 * (2 - 0).
+    expect(adjusted[0]?.map((entity) => entity.value)).toEqual([14, 14, 14]);
+    expect(adjusted[1]?.map((entity) => entity.value)).toEqual([22, 22, 22]);
+    expect(adjusted[2]?.map((entity) => entity.value)).toEqual([30, 30, 30]);
+  });
 });
+
+function adjustPair(
+  control: EntityAggregate[],
+  treatment: EntityAggregate[],
+  values: ReadonlyMap<string, number>,
+): { control: EntityAggregate[]; treatment: EntityAggregate[] } {
+  const [adjustedControl, adjustedTreatment] = adjustCupedArms([
+    { entities: control, values },
+    { entities: treatment, values },
+  ]);
+  if (!adjustedControl || !adjustedTreatment) {
+    throw new Error("adjustCupedArms dropped an arm.");
+  }
+  return { control: adjustedControl, treatment: adjustedTreatment };
+}
 
 function arm(prefix: string, values: readonly number[]): EntityAggregate[] {
   return values.map((value, index) => ({

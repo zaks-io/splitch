@@ -940,6 +940,7 @@ Request body (--body-json):
   downsideThresholdPct       optional  number | null
   winsorize                  optional  boolean | null
   winsorizePct               optional  number | null
+  cuped                      optional  boolean | null
   cupedCoverageThresholdPct  optional  number | null
   idempotency_key            optional  string
   Example:
@@ -1007,6 +1008,7 @@ Request body (--body-json):
   downsideThresholdPct       optional  number | null
   winsorize                  optional  boolean | null
   winsorizePct               optional  number | null
+  cuped                      optional  boolean | null
   cupedCoverageThresholdPct  optional  number | null
   Example:
     {"kind":"binomial"}

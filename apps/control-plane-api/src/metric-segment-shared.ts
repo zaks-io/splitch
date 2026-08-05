@@ -45,6 +45,7 @@ export function metricResponse(row: MetricRow): Metric {
     downsideThresholdPct: row.downsideThresholdPct,
     winsorize: row.winsorize,
     winsorizePct: row.winsorizePct,
+    cuped: row.cuped,
     cupedCoverageThresholdPct: row.cupedCoverageThresholdPct,
     createdAt: row.createdAt,
   };

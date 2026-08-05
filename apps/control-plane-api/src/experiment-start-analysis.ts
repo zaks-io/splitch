@@ -1,4 +1,5 @@
 import {
+  DEFAULT_CUPED,
   DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT,
   DEFAULT_WINSORIZE,
   DEFAULT_WINSORIZE_PCT,
@@ -123,6 +124,9 @@ function varianceConfig(rows: Map<string, MetricRow>, metricId: string): MetricV
     metric_id: metricId,
     winsorize: row.kind === "binomial" ? false : (row.winsorize ?? DEFAULT_WINSORIZE),
     winsorize_pct: row.winsorizePct ?? DEFAULT_WINSORIZE_PCT,
+    // A ratio Metric is estimated by the delta method, which the engine never
+    // CUPED-adjusts; freezing `true` would report a technique that never ran.
+    cuped: row.kind === "ratio" ? false : (row.cuped ?? DEFAULT_CUPED),
     cuped_coverage_threshold_pct:
       row.cupedCoverageThresholdPct ?? DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT,
   };

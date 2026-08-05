@@ -45,6 +45,7 @@ const MetricAnalysisFields = {
   downsideThresholdPct: MetricSchema.shape.downsideThresholdPct,
   winsorize: MetricSchema.shape.winsorize,
   winsorizePct: MetricSchema.shape.winsorizePct,
+  cuped: MetricSchema.shape.cuped,
   cupedCoverageThresholdPct: MetricSchema.shape.cupedCoverageThresholdPct,
 };
 

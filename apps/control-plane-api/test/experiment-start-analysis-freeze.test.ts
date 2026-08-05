@@ -122,13 +122,44 @@ describe("Experiment Start freezes the analysis config", () => {
       // the Metric asks for.
       winsorize: false,
       winsorize_pct: 99.9,
+      cuped: true,
       cuped_coverage_threshold_pct: 70,
     });
     expect(frozen).toContainEqual({
       metric_id: revenueId,
       winsorize: true,
       winsorize_pct: 99,
+      cuped: true,
       cuped_coverage_threshold_pct: 70,
     });
+  });
+
+  it("freezes CUPED off for a Metric that opted out and for every Ratio Metric", async () => {
+    // A Ratio Metric's estimand is a ratio of means, which the CUPED regression
+    // is not fit on, so it is off regardless of what the Metric asks for.
+    const fx = await experimentFixture(ctx);
+    const optedOutId = await metric(fx.appId, "metric_opted_out", { cuped: false });
+    const ratioId = await metric(fx.appId, "metric_ratio", {
+      kind: "ratio",
+      denominatorMetricId: fx.metricId,
+      cuped: true,
+    });
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "cuped-off-freeze",
+      allocation: { control: 50, treatment: 50 },
+      metrics: [{ metricId: optedOutId }, { metricId: ratioId }],
+    });
+
+    const response = await startExperiment(ctx, fx, experiment.id);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as StartResponse;
+    const run = await ctx.repo.experiments.getRun(
+      envScope(fx.appId, fx.environmentId),
+      body.run.id,
+    );
+    const frozen = JSON.parse(run?.metricVarianceConfig ?? "[]") as Array<Record<string, unknown>>;
+    expect(frozen.find((row) => row.metric_id === optedOutId)?.cuped).toBe(false);
+    expect(frozen.find((row) => row.metric_id === ratioId)?.cuped).toBe(false);
   });
 });

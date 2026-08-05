@@ -162,6 +162,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
           | "downsideThresholdPct"
           | "winsorize"
           | "winsorizePct"
+          | "cuped"
           | "cupedCoverageThresholdPct"
         >
       >,

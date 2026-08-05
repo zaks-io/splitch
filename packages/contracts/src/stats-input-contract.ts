@@ -123,6 +123,7 @@ export type GuardrailDecision = z.infer<typeof GuardrailDecisionSchema>;
  */
 export const DEFAULT_WINSORIZE = true;
 export const DEFAULT_WINSORIZE_PCT = 99.9;
+export const DEFAULT_CUPED = true;
 export const DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT = 70;
 
 /**
@@ -137,6 +138,7 @@ export const MetricVarianceConfigSchema = z
     metric_id: MetricIdSchema,
     winsorize: z.boolean(),
     winsorize_pct: z.number().gt(0).max(100),
+    cuped: z.boolean(),
     cuped_coverage_threshold_pct: z.number().gt(0).max(100),
   })
   .strict();

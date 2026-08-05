@@ -24,11 +24,15 @@ export class FixedHorizonCI implements CIAdapter {
       });
     }
 
+    // Callers truncate each arm to `sample_size_locked` Entities before
+    // estimating, so a shortfall here means the Run has not reached its horizon
+    // yet. An over-count means the caller skipped that truncation and is asking
+    // for a fixed-horizon decision on a sample the Run never pre-registered.
     if (params.n_t !== sampleSizeLocked || params.n_c !== sampleSizeLocked) {
       return infiniteResult(params, "warning", [
         {
           code: "FIXED_HORIZON_NOT_AT_LOCKED_SAMPLE",
-          message: "FixedHorizonCI is decision-valid only at sample_size_locked in both arms.",
+          message: `FixedHorizonCI decides at ${sampleSizeLocked} Entities per arm; Control has ${params.n_c} and Treatment has ${params.n_t}.`,
         },
       ]);
     }

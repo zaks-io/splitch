@@ -155,6 +155,7 @@ export const metrics = sqliteTable(
     downsideThresholdPct: real("downside_threshold_pct"),
     winsorize: integer("winsorize", { mode: "boolean" }),
     winsorizePct: real("winsorize_pct"),
+    cuped: integer("cuped", { mode: "boolean" }),
     cupedCoverageThresholdPct: real("cuped_coverage_threshold_pct"),
     createdAt: createdAt(),
     createdBy: userRef("created_by"),

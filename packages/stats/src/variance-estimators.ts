@@ -14,6 +14,8 @@ import type {
   MetricArmEstimateInput,
   MetricComparisonEstimate,
   MetricComparisonEstimateInput,
+  MetricComparisonsEstimate,
+  MetricComparisonsEstimateInput,
   MetricVarianceStatus,
 } from "./variance-estimator-types";
 import { comparisonEstimate } from "./variance-effects";
@@ -30,35 +32,72 @@ export function estimateMetricArm(input: MetricArmEstimateInput): MetricArmEstim
   return estimateMetricArmFromEntities(input, entities, noVarianceTechniques(input.metric_type));
 }
 
+/**
+ * Estimate every arm of one Metric together, then form each Treatment's
+ * comparison against the single Control estimate.
+ *
+ * Winsorization pools over all arms and the CUPED slope is fit over all arms.
+ * Scoping either to one (Control, Treatment) pair would make the Control arm's
+ * published point estimate depend on which Treatment it happened to be paired
+ * with, so renaming a Treatment would move the reported baseline.
+ */
+export function estimateMetricComparisons(
+  input: MetricComparisonsEstimateInput,
+): MetricComparisonsEstimate {
+  const variants = [input.control_variant, ...input.treatment_variants];
+  const entities = variants.map((variant) =>
+    lockedSample(aggregateEntities({ ...input, variant }), input.fixed_horizon_sample_size),
+  );
+  const winsorization = computePooledWinsorization(input, entities.flat());
+  const cuped = applyCupedAdjustment(
+    input,
+    entities.map((armEntities) =>
+      winsorizedEntities(input.metric_type, armEntities, winsorization),
+    ),
+  );
+  const varianceTechniques = varianceTechniquesFor(input.metric_type, winsorization, cuped);
+  const arms = variants.map((variant, index) => {
+    const adjusted = cuped.arms[index];
+    if (adjusted === undefined) {
+      throw new Error(`CUPED adjustment dropped the arm for Variant ${variant}.`);
+    }
+    return estimateMetricArmFromEntities({ ...input, variant }, adjusted, varianceTechniques);
+  });
+
+  const control = arms[0];
+  if (control === undefined) {
+    throw new Error("estimateMetricComparisons requires a Control Variant.");
+  }
+
+  return {
+    control,
+    comparisons: input.treatment_variants.map((treatment_variant, index) => {
+      const treatment = arms[index + 1];
+      if (treatment === undefined) {
+        throw new Error(`missing arm estimate for Treatment ${treatment_variant}.`);
+      }
+      return comparisonEstimate(
+        { ...input, treatment_variant },
+        control,
+        treatment,
+        varianceTechniques,
+      );
+    }),
+  };
+}
+
 export function estimateMetricComparison(
   input: MetricComparisonEstimateInput,
 ): MetricComparisonEstimate {
-  const controlInput = { ...input, variant: input.control_variant };
-  const treatmentInput = { ...input, variant: input.treatment_variant };
-  const controlEntities = aggregateEntities(controlInput);
-  const treatmentEntities = aggregateEntities(treatmentInput);
-  const winsorization = computePooledWinsorization(input, [
-    ...controlEntities,
-    ...treatmentEntities,
-  ]);
-  const cuped = applyCupedAdjustment(
-    input,
-    winsorizedEntities(input.metric_type, controlEntities, winsorization),
-    winsorizedEntities(input.metric_type, treatmentEntities, winsorization),
-  );
-  const varianceTechniques = varianceTechniquesFor(input.metric_type, winsorization, cuped);
-  const control = estimateMetricArmFromEntities(
-    controlInput,
-    cuped.controlEntities,
-    varianceTechniques,
-  );
-  const treatment = estimateMetricArmFromEntities(
-    treatmentInput,
-    cuped.treatmentEntities,
-    varianceTechniques,
-  );
-
-  return comparisonEstimate(input, control, treatment, varianceTechniques);
+  const { comparisons } = estimateMetricComparisons({
+    ...input,
+    treatment_variants: [input.treatment_variant],
+  });
+  const comparison = comparisons[0];
+  if (comparison === undefined) {
+    throw new Error("estimateMetricComparison produced no comparison.");
+  }
+  return comparison;
 }
 
 function estimateMetricArmFromEntities(
@@ -155,6 +194,46 @@ function aggregateEntities(input: MetricArmEstimateInput): EntityAggregate[] {
   }
 
   return [...entities.values()];
+}
+
+/**
+ * Cut a fixed-horizon arm down to the sample the Run pre-registered.
+ *
+ * A fixed-horizon z-test is decision-valid for exactly `sample_size_locked`
+ * Entities per arm, and nothing stops Entities accruing past that: hash-bucketed
+ * assignment never lands both arms on the same count, and a Run keeps collecting
+ * until someone ends it. Analyzing whatever is present would therefore either
+ * never reach the horizon or re-test a growing dataset at every poll, which is
+ * peeking on a test that has no peeking correction. Truncating by exposure time
+ * makes every re-analysis return the same pre-registered test.
+ */
+function lockedSample(
+  entities: EntityAggregate[],
+  sampleSize: number | undefined,
+): EntityAggregate[] {
+  if (sampleSize === undefined || entities.length <= sampleSize) {
+    return entities;
+  }
+  // Parse each timestamp once rather than twice per comparison.
+  return entities
+    .map((entity) => ({ entity, ms: exposureMs(entity) }))
+    .sort(
+      (left, right) =>
+        // Entities exposed in the same millisecond still need a total order, or
+        // which ones survive truncation would depend on row arrival order.
+        left.ms - right.ms ||
+        left.entity.targeting_key_hash.localeCompare(right.entity.targeting_key_hash),
+    )
+    .slice(0, sampleSize)
+    .map((keyed) => keyed.entity);
+}
+
+function exposureMs(entity: EntityAggregate): number {
+  const parsed = Date.parse(entity.first_exposure_ts);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`first_exposure_ts must be an ISO timestamp; got ${entity.first_exposure_ts}`);
+  }
+  return parsed;
 }
 
 function seedExposedEntities(input: MetricArmEstimateInput): Map<string, EntityAggregate> {

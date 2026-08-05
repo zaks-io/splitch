@@ -11,43 +11,33 @@ interface CoveredArm {
   readonly x: readonly number[];
 }
 
-export interface CupedArms {
-  readonly control: EntityAggregate[];
-  readonly treatment: EntityAggregate[];
+export interface CupedArm {
+  readonly entities: readonly EntityAggregate[];
+  readonly values: ReadonlyMap<string, number>;
 }
 
 /**
- * Fit one CUPED adjustment across both arms and apply it.
+ * Fit one CUPED adjustment across every arm in the Run and apply it.
  *
- * Both arms must share one slope and one centering constant. Centering each arm
+ * All arms must share one slope and one centering constant. Centering each arm
  * on its own covariate mean makes the adjustment sum to zero inside the arm, so
  * the lift keeps the full covariate imbalance while the variance drops to the
  * residual: the interval narrows around an uncorrected estimate. Deng, Xu,
  * Kohavi and Walker (WSDM 2013, s3.2) define the adjustment against the grand
  * mean for exactly this reason.
+ *
+ * The fit spans every arm rather than one (Control, Treatment) pair so that a
+ * Run's Control arm has a single adjusted value, not one per Treatment it is
+ * compared against.
  */
-export function adjustCupedArms(
-  controlEntities: readonly EntityAggregate[],
-  controlValues: ReadonlyMap<string, number>,
-  treatmentEntities: readonly EntityAggregate[],
-  treatmentValues: ReadonlyMap<string, number>,
-): CupedArms {
-  const fit = fitCuped([
-    coveredArm(controlEntities, controlValues),
-    coveredArm(treatmentEntities, treatmentValues),
-  ]);
+export function adjustCupedArms(arms: readonly CupedArm[]): EntityAggregate[][] {
+  const fit = fitCuped(arms.map((arm) => coveredArm(arm.entities, arm.values)));
 
   if (!fit) {
-    return {
-      control: controlEntities.map((entity) => ({ ...entity })),
-      treatment: treatmentEntities.map((entity) => ({ ...entity })),
-    };
+    return arms.map((arm) => arm.entities.map((entity) => ({ ...entity })));
   }
 
-  return {
-    control: adjustArm(controlEntities, controlValues, fit),
-    treatment: adjustArm(treatmentEntities, treatmentValues, fit),
-  };
+  return arms.map((arm) => adjustArm(arm.entities, arm.values, fit));
 }
 
 /**

@@ -157,6 +157,11 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    "stats:audit": {
+      "dependsOn": ["^build"],
+      "outputs": [],
+      "cache": false
+    },
     "stats:golden": {
       "dependsOn": ["^build"],
       "outputs": []

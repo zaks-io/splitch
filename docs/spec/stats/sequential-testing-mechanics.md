@@ -86,11 +86,21 @@ No correction for multiple looks is needed — the aCS handles it by constructio
 When `horizon = 'fixed'` and `sample_size_locked = S`:
 
 ```
-1. Collect exactly S Entities per arm.
-2. Compute standard two-sample t-test (or z-test for large N).
-3. Report: point_estimate, absolute_ci, p_value.
-4. No aCS; no peeking supported.
+1. Collect S Entities per arm. Until every arm has S, the Metric stays `running`.
+2. Analyze exactly the first S Entities per arm, ordered by first_exposure_ts
+   and then by targeting_key_hash so Entities exposed in the same millisecond
+   still have one fixed order.
+   Entities that arrive past the lock are excluded, not weighted down.
+3. Compute standard two-sample t-test (or z-test for large N).
+4. Report: point_estimate, absolute_ci, p_value.
+5. No aCS; no peeking supported.
 ```
+
+Step 2 is what makes re-analysis safe. Hash-bucketed assignment never lands both arms on the
+same count, and a live Run keeps accruing Entities until someone ends it, so "exactly S in both
+arms" is a state a real Run never occupies. Analyzing whatever is present instead would re-test
+a growing dataset at every poll, which is peeking on a test that has no peeking correction.
+Truncating by exposure time makes every re-analysis return the same pre-registered test.
 
 The CI under fixed-horizon is narrower than aCS at the same N — more power, but only valid
 at N = S. The trade-off is explicit at Experiment creation.
