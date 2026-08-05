@@ -231,7 +231,15 @@ export async function executeApiOperation(
     warnStaleApprovalDiscard(io, projected);
     emitOperationNotices(operationId, projected, invocation.flags.json, io);
     if (operationId === "apps_delete") {
-      await clearScopeAfterAppDelete(deps, input, projected);
+      // Local session cleanup must not turn a successful delete into a non-zero exit.
+      try {
+        await clearScopeAfterAppDelete(deps, input, projected);
+      } catch (cleanupError) {
+        const message =
+          cleanupError instanceof Error ? cleanupError.message : "unknown cleanup failure";
+        io.error(`Warning: App deleted, but local session cleanup failed: ${message}`);
+        io.error("Run `splitch use` to pick another App if your session still points at it.");
+      }
     }
     return { exitCode: EXIT_OK, payload: projected };
   } catch (error) {

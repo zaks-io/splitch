@@ -46,22 +46,20 @@ export function makePrivacyRepo(db: Db) {
     },
 
     /**
-     * Cascade helper for App teardown (`--force` finish only). Entity
-     * tombstones have no public delete API; force removes the App's ledger
-     * rows only once gated children are clear and the App is about to die
-     * (SPL-326). Routes through `scopedTable.remove` so ADR-0018 mint-scope
-     * enforcement cannot be bypassed.
+     * Scoped entity-deletion wipe (ADR-0018 mint-scope seam). App force-delete
+     * finish path uses `deleteAppCascade`'s atomic batch instead so tombstones
+     * cannot disappear on a rolled-back App DELETE (SPL-326). Kept for
+     * isolation tests and any non-cascade callers that already hold a mint scope.
      */
     async deleteEntityDeletionsForApp(scope: TenantScope): Promise<number> {
       return entityDeletionsTable.remove(scope);
     },
 
     /**
-     * Cascade helper for App teardown (`--force` finish only). Removes
-     * App-scoped privacy request rows; org-wide requests (`app_id` null) are
-     * untouched. Bound by BOTH org_id AND app_id so a dropped predicate cannot
-     * wipe another tenant's ledger (privacy_requests is not app-scoped via
-     * `scopedTable` because `app_id` is nullable).
+     * Org+App-bound privacy-request wipe. App force-delete finish path uses
+     * `deleteAppCascade`'s atomic batch instead (SPL-326). Org-wide requests
+     * (`app_id` null) are untouched. Bound by BOTH org_id AND app_id so a
+     * dropped predicate cannot wipe another Organization's ledger.
      */
     async deletePrivacyRequestsForApp(orgId: string, appId: string): Promise<number> {
       if (!orgId || !appId) {

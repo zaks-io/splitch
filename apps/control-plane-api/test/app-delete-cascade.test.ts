@@ -22,7 +22,7 @@ beforeEach(async () => {
 
 afterEach(async () => h.bindings.dispose());
 
-describe("apps delete dry-run and force (SPL-326)", () => {
+describe("apps delete dry-run and RESOURCE_NOT_EMPTY (SPL-326)", () => {
   it("dry-run lists every blocker with IDs and CLI remove commands without deleting", async () => {
     const created = await h.createDefaultApp("dry");
     const prod = created.environments.find((env) => env.key === "prod");
@@ -63,6 +63,9 @@ describe("apps delete dry-run and force (SPL-326)", () => {
     expect(flagConfig?.children[0]?.removeCommand).toContain(
       `splitch flags delete --app ${created.app.id} ${seeded.flagId}`,
     );
+    const entityPrivacy = body.blockers.find((b) => b.childType === "entity-privacy");
+    expect(entityPrivacy?.children[0]?.id).toMatch(/^tombstone:/);
+    expect(entityPrivacy?.children[0]?.id).not.toContain("hash_");
 
     const stillThere = await h.app.request(`/apps/${created.app.id}`, {
       headers: { authorization: `Bearer ${jwt}` },
@@ -93,6 +96,11 @@ describe("apps delete dry-run and force (SPL-326)", () => {
       throw new Error("expected blockers on RESOURCE_NOT_EMPTY");
     }
     expect(error.details.blockers.length).toBeGreaterThan(1);
+    const totalChildren = error.details.blockers.reduce((sum, b) => sum + b.children.length, 0);
+    expect(error.details.childCount).toBe(totalChildren);
+    expect(error.details.childCount).toBeGreaterThan(
+      error.details.blockers[0]?.children.length ?? 0,
+    );
     expect(error.details.blockers.some((b) => b.childType === "flag-config")).toBe(true);
     expect(error.details.blockers.some((b) => b.childType === "metrics")).toBe(true);
     expect(
@@ -102,6 +110,19 @@ describe("apps delete dry-run and force (SPL-326)", () => {
     ).toBe(true);
   });
 
+  it("rejects dryRun and force together", async () => {
+    const created = await h.createDefaultApp("both");
+    const jwt = await h.appToken(created.app.id);
+    const res = await h.app.request(`/apps/${created.app.id}?dryRun=true&force=true`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${jwt}` },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as ErrorResponse).toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+});
+
+describe("apps delete --force (SPL-326)", () => {
   it("force cascades non-gated children and deletes the App when Policy allows", async () => {
     const created = await h.createDefaultApp("force-ok");
     const dev = created.environments.find((env) => env.key === "dev");
@@ -158,9 +179,12 @@ describe("apps delete dry-run and force (SPL-326)", () => {
     expect(body.pendingApprovals[0]?.reviewCommand).toContain(
       "splitch approval-request-reviews create",
     );
+    // Force order archives Experiments then stops on Flag Approvals — segments
+    // and metrics must still be present so a stopped cascade does not orphan
+    // Flag references (SPL-326 review).
     expect(body.removed.some((r) => r.childType === "experiments")).toBe(true);
-    expect(body.removed.some((r) => r.childType === "segments")).toBe(true);
-    expect(body.removed.some((r) => r.childType === "metrics")).toBe(true);
+    expect(body.removed.some((r) => r.childType === "segments")).toBe(false);
+    expect(body.removed.some((r) => r.childType === "metrics")).toBe(false);
     expect(body.removed.some((r) => r.childType === "entity-privacy")).toBe(false);
     expect(body.removed.some((r) => r.childType === "privacy-requests")).toBe(false);
     expect(await h.privacyCounts(created.app.id, ORG.orgId)).toEqual({ entities: 1, requests: 1 });
@@ -184,16 +208,5 @@ describe("apps delete dry-run and force (SPL-326)", () => {
       headers: { authorization: `Bearer ${jwt}` },
     });
     expect(stillThere.status).toBe(200);
-  });
-
-  it("rejects dryRun and force together", async () => {
-    const created = await h.createDefaultApp("both");
-    const jwt = await h.appToken(created.app.id);
-    const res = await h.app.request(`/apps/${created.app.id}?dryRun=true&force=true`, {
-      method: "DELETE",
-      headers: { authorization: `Bearer ${jwt}` },
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as ErrorResponse).toMatchObject({ code: "VALIDATION_ERROR" });
   });
 });

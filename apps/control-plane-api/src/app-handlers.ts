@@ -162,6 +162,7 @@ async function deleteAppAfterAuth(
       principal,
       requestId,
       deleteAppRows,
+      blockers,
     );
     return Response.json(result.response);
   }

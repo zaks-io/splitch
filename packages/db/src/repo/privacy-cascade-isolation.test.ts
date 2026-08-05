@@ -117,4 +117,42 @@ describe("privacy cascade helpers tenant isolation (SPL-326)", () => {
       /required/,
     );
   });
+
+  it("deleteAppCascade wipes App A's privacy ledger atomically and leaves Org B intact", async () => {
+    await local.d1
+      .prepare(`UPDATE api_keys SET revoked_at = ? WHERE app_id = ?`)
+      .bind(NOW, seed.a.appId)
+      .run();
+    await local.d1.prepare(`DELETE FROM runs WHERE app_id = ?`).bind(seed.a.appId).run();
+    await local.d1.prepare(`DELETE FROM experiments WHERE app_id = ?`).bind(seed.a.appId).run();
+    await local.d1
+      .prepare(`DELETE FROM variants WHERE flag_id IN (SELECT id FROM flags WHERE app_id = ?)`)
+      .bind(seed.a.appId)
+      .run();
+    await local.d1.prepare(`DELETE FROM flags WHERE app_id = ?`).bind(seed.a.appId).run();
+
+    await repo.identity.deleteAppCascade(appScope(seed.a.appId));
+
+    expect(await rawEntityDeletionCount(seed.a.appId)).toBe(0);
+    expect(await rawPrivacyRequestCount(seed.a.orgId, seed.a.appId)).toBe(0);
+    expect(await rawEntityDeletionCount(seed.b.appId)).toBe(1);
+    expect(await rawPrivacyRequestCount(seed.b.orgId, seed.b.appId)).toBe(1);
+  });
+
+  it("failed deleteAppCascade leaves privacy tombstones on the live App", async () => {
+    await local.d1
+      .prepare(`UPDATE api_keys SET revoked_at = ? WHERE app_id = ?`)
+      .bind(NOW, seed.a.appId)
+      .run();
+    // Seeded non-cascaded Flag blocks App DELETE; privacy DELETEs in the same
+    // batch must roll back with the App (SPL-326 atomicity).
+    await expect(repo.identity.deleteAppCascade(appScope(seed.a.appId))).rejects.toThrow(
+      /FOREIGN KEY constraint failed|app delete did not reach D1/,
+    );
+
+    expect(await rawEntityDeletionCount(seed.a.appId)).toBe(1);
+    expect(await rawPrivacyRequestCount(seed.a.orgId, seed.a.appId)).toBe(1);
+    expect(await rawEntityDeletionCount(seed.b.appId)).toBe(1);
+    expect(await rawPrivacyRequestCount(seed.b.orgId, seed.b.appId)).toBe(1);
+  });
 });

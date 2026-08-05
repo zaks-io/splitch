@@ -156,6 +156,7 @@ export function resourceNotEmptyFromBlockers(
   if (!first) {
     throw new Error("resourceNotEmptyFromBlockers requires at least one blocker");
   }
+  const childCount = blockers.reduce((sum, blocker) => sum + blocker.children.length, 0);
   return renderError(
     {
       code: "RESOURCE_NOT_EMPTY",
@@ -164,7 +165,7 @@ export function resourceNotEmptyFromBlockers(
         resourceType,
         resourceId,
         childType: first.childType,
-        childCount: first.children.length,
+        childCount,
         attemptedOp,
         blockers: [...blockers],
       },

@@ -109,13 +109,14 @@ async function collectAppScopedDeleteBlockers(
 
   const entityDeletions = await deps.repo.privacy.listEntityDeletions(scope);
   if (entityDeletions.length > 0) {
+    // Opaque IDs only — never embed targetingKeyHash (privacy surface).
     blockers.push(
       blocker(
         "app",
         app.id,
         "entity-privacy",
-        entityDeletions.map((row) => ({
-          id: `${row.idType}:${row.targetingKeyHash}:${row.deleteBeforeTs}`,
+        entityDeletions.map((row, index) => ({
+          id: `tombstone:${row.idType}:${row.deleteBeforeTs}:${row.requestedAt}:${index}`,
         })),
         () => command(`apps delete --app ${app.id} --force`),
       ),
@@ -161,18 +162,20 @@ function command(rest: string): string {
 
 /** Stable dependency order for `--force` removals (children before App cascade).
  *
- * Privacy ledger rows (`entity-privacy`, `privacy-requests`) are intentionally
- * absent: they depend only on the App FK and must not be wiped until
- * `finishForceDelete` — otherwise a confirm-policy Flag stop would destroy
- * GDPR tombstones on a delete that never happens (SPL-326 security audit).
+ * Flags (and their env configs/rules) before segments/metrics so a confirm-
+ * policy stop does not leave Flags referencing deleted segments. Privacy
+ * ledger rows (`entity-privacy`, `privacy-requests`) are intentionally absent:
+ * they are wiped only inside `deleteAppCascade`'s atomic batch at finish —
+ * otherwise a confirm-policy Flag stop would destroy GDPR tombstones on a
+ * delete that never happens (SPL-326 security audit).
  */
 export const APP_FORCE_DELETE_ORDER: readonly ResourceDeleteChildType[] = [
   "experiments",
-  "segments",
-  "metrics",
   "flags",
   "flag-config",
   "flag-targeting-rules",
+  "segments",
+  "metrics",
 ] as const;
 
 export function flattenBlockerChildren(

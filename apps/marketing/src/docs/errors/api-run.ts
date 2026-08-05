@@ -68,7 +68,7 @@ export const runErrorDocs = {
   RESOURCE_NOT_EMPTY: {
     cause:
       "A destructive delete was refused because child resources still exist under the target and this delete does not cascade.",
-    fix: "`details.blockers` lists every current child by ID and the CLI command that removes it (CLI vocabulary). `childType`/`childCount` summarize the first group for back-compat. Remove the children (or use `apps delete --force`), then delete the parent. The refusal is deliberate: a silent cascade would take down more than the call named.",
+    fix: "`details.blockers` lists every current child by ID and the CLI command that removes it (`removeCommand`, CLI vocabulary). `childType` summarizes the first group; `childCount` is the total child count across all blocker groups. Remove the children via those commands, then delete the parent. For App deletes only, `apps delete --force` can cascade non-gated children (and stop on pending Approvals). The refusal is deliberate: a silent cascade would take down more than the call named.",
     details:
       '{ resourceType: "app" | "environment" | "flag" | "variant" | "organization", resourceId: string, childType: string, childCount: number, attemptedOp: string, blockers?: Array<{ resourceType, resourceId, childType, children: Array<{ id, removeCommand }> }> }',
     related: ["EXPERIMENT_RUNNING", "LAST_ENVIRONMENT_REQUIRED"],
