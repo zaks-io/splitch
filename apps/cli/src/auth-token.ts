@@ -136,9 +136,19 @@ export function tokenBindingRefusedError(fault: OAuthFault): SplitchCliError {
   return new SplitchCliError({
     code: "CLI_TOKEN_BINDING_REFUSED",
     causeSummary: reason,
-    remediation:
-      "Select an App or Organization your live membership authorizes, or restore membership for the selected resource",
+    remediation: tokenBindingRemediation(reason),
   });
+}
+
+/**
+ * Membership refusals need a different next step from ambiguous-selector
+ * refusals: the latter already has membership — only the canonical ID fixes it.
+ */
+function tokenBindingRemediation(reason: string): string {
+  if (/matches more than one App/i.test(reason)) {
+    return "Pass the canonical App ID instead of the ambiguous key";
+  }
+  return "Select an App or Organization your live membership authorizes, or restore membership for the selected resource";
 }
 
 export function emailUnverifiedError(detail: string | undefined): SplitchCliError {

@@ -95,4 +95,22 @@ describe("refresh-grant fault mapping", () => {
     expect(error.causeSummary).toContain(reason);
     expect(error.remediation.toLowerCase()).not.toMatch(/log ?in|authenticate/);
   });
+
+  it("maps an ambiguous App-key selector to CLI_TOKEN_BINDING_REFUSED with a canonical-ID remediation", () => {
+    const reason =
+      'App selector "checkout" matches more than one App across your Organizations; pass the canonical App ID';
+    const error = mintFailureError({
+      status: 400,
+      error: "invalid_grant",
+      description: reason,
+    });
+
+    expect(error.code).toBe("CLI_TOKEN_BINDING_REFUSED");
+    expect(error.causeSummary).toContain(reason);
+    expect(
+      isTokenBindingRefusal({ status: 400, error: "invalid_grant", description: reason }),
+    ).toBe(true);
+    expect(error.remediation.toLowerCase()).toContain("canonical app id");
+    expect(error.remediation.toLowerCase()).not.toMatch(/log ?in|authenticate|membership/);
+  });
 });

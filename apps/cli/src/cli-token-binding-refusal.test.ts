@@ -75,4 +75,31 @@ describe("token-binding refusal vs session expiry (SPL-299)", () => {
     expect(stderr).not.toContain("CLI_SESSION_EXPIRED");
     expect(stderr.toLowerCase()).not.toMatch(/log ?in|authenticate/);
   });
+
+  it("maps CLI_TOKEN_BINDING_REFUSED to EXIT_SCOPE on the meta-command path (splitch use)", async () => {
+    // executeUse has no local try/catch; the throw reaches cli.ts, which is the
+    // only place that maps this code to EXIT_SCOPE for meta commands.
+    const { credentialPath } = await makeTempHome();
+    await writeExpiredCredential(credentialPath);
+    const reason = "selected Organization is not reachable by live membership";
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => request.url.endsWith("/oauth2/token"),
+        status: 400,
+        body: { error: "invalid_grant", error_description: reason },
+      },
+    ]);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli(["use", "--app", "app_1", "--json"], {
+      credentialPath,
+      fetch: transport.fetch,
+    });
+
+    expect(code).toBe(EXIT_SCOPE);
+    const stderr = error.mock.calls.join(" ");
+    expect(stderr).toContain("CLI_TOKEN_BINDING_REFUSED");
+    expect(stderr).toContain(reason);
+    expect(stderr).not.toContain("CLI_SESSION_EXPIRED");
+  });
 });
