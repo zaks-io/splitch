@@ -13,6 +13,7 @@ import {
   writeSnapshotAndBroadcast,
 } from "./config-store-shared";
 import { baselineIsUnresolvable } from "./flag-config-rollout";
+import { diffEntriesTouch } from "./flag-config-run-freeze-proposal";
 
 /**
  * The write an approved Approval Request performs. It is separate from the
@@ -29,11 +30,13 @@ export async function applyApprovedFlagConfig(
   if (!current) return { ok: false, reason: "FLAG_NOT_FOUND" };
   const invalid = validateProposal(current, input);
   if (invalid) return invalid;
-  // Judged against the CURRENT Configuration, not against the proposal's own
-  // snapshot: a Run started after the proposal was minted bumps no Flag
-  // Configuration version, so the optimistic staleness guard cannot see it and
-  // this is the only thing standing between an approver and a frozen field.
-  const frozen = await approvedProposalFreeze(deps, input, current);
+  // Judged against the request's own changed-field set (`diff.entries`), not
+  // against a re-diff of the complete proposed snapshot: a Run started after
+  // the proposal was minted bumps no Flag Configuration version, so the
+  // optimistic staleness guard cannot see it, and this is the only thing
+  // standing between an approver and a frozen field. Using the entries (SPL-304)
+  // keeps an `/enabled`-only proposal applicable under a live Run.
+  const frozen = await approvedProposalFreeze(deps, input);
   if (frozen) return frozen;
 
   const patch = {
@@ -42,8 +45,10 @@ export async function applyApprovedFlagConfig(
     rollout: input.proposed.rollout ? json(input.proposed.rollout) : null,
     updatedAt: input.approval.reviewedAt,
   };
-  const rulesChanged =
-    JSON.stringify(current.flag.targetingRules) !== JSON.stringify(input.proposed.targetingRules);
+  // Rewrite Targeting Rules only when the request's own entries say they move.
+  // A JSON.stringify false positive on untouched rules must not DELETE+INSERT
+  // while a Run is live after the freeze check (correctly) let the write through.
+  const rulesChanged = diffEntriesTouch(input.diffEntries, "targetingRules");
   const updated = rulesChanged
     ? await deps.repo.flags.replaceTargetingRules(
         scope,

@@ -46,6 +46,12 @@ export interface ApplyApprovedFlagConfigInput {
   environmentId: string;
   flagId: string;
   proposed: FlagConfigResult;
+  /**
+   * The Approval Request's own changed-field set (`diff.entries`). The Run-freeze
+   * check keys off this, not a re-diff of `proposed` against live state
+   * (SPL-304 / `flag-config-run-freeze-proposal.ts`).
+   */
+  diffEntries: readonly { path: string }[];
   approval: ApprovalCommit;
 }
 
@@ -89,6 +95,12 @@ type FlagConfigWriteFailure =
   | { ok: false; reason: "APPROVAL_NOT_APPLIED" }
   | { ok: false; reason: "VARIANT_NOT_AVAILABLE"; missingVariants: string[] }
   | { ok: false; reason: "ROLLOUT_AMBIGUOUS"; availableVariantNames: string[] }
+  /**
+   * The Approval Request's changed-field set could not be read. Fail closed: do
+   * not apply a proposal whose freeze check cannot name what it would move
+   * (SPL-304).
+   */
+  | { ok: false; reason: "CHANGED_FIELDS_UNDETERMINED" }
   /**
    * A live Run in this Environment owns a field the write would move. Raised by
    * the store rather than by a route so every caller of the write — the

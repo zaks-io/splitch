@@ -85,6 +85,7 @@ describe("the approved flag-configuration write distinguishes its failure reason
       environmentId: ids.environmentId,
       flagId: ids.flagId,
       proposed: await proposal(ids.flagId),
+      diffEntries: [{ path: "/availableVariantNames" }],
       approval: commitFor(requestId, row),
     });
 
@@ -105,6 +106,7 @@ describe("the approved flag-configuration write distinguishes its failure reason
       environmentId: ids.environmentId,
       flagId: "flag_does_not_exist",
       proposed: { ...(await proposal(ids.flagId)), flagId: "flag_does_not_exist" },
+      diffEntries: [{ path: "/availableVariantNames" }],
       approval: commitFor(requestId, row),
     });
 

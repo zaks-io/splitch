@@ -204,6 +204,7 @@ async function applyFlagConfiguration(
       environmentId,
       flagId: proposed.flagId,
       proposed,
+      diffEntries: request.diff.entries,
       approval: commit,
     });
   if (result.ok) return { ok: true as const };
@@ -223,6 +224,20 @@ function configFailure(
   if (result.reason === "RUN_FROZEN") {
     const { message, details } = runFrozenError(result);
     return { ok: false as const, unapplicable: { code: "RUN_FROZEN", message, details } };
+  }
+  // A proposal whose changed-field set cannot be read must not apply. Resolve
+  // terminally with the recorded cause so an operator sees why, not a silent
+  // pending retry (SPL-304 / ADR-0036).
+  if (result.reason === "CHANGED_FIELDS_UNDETERMINED") {
+    return {
+      ok: false as const,
+      unapplicable: {
+        code: "INTERNAL_SERVER_ERROR",
+        message:
+          "Approval Request changed-field set could not be determined; refuse rather than apply",
+        details: { fault: "approval_changed_fields_undetermined" },
+      },
+    };
   }
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return {

@@ -1,5 +1,6 @@
 import { ErrorCodeSchema, type ErrorResponse, getRoute } from "@splitch/contracts";
 import { createSplitchClient } from "@splitch/sdk";
+import { remediationForServerError, warnStaleApprovalDiscard } from "./approval-stale-warn.js";
 import { withAuthorizationRetry } from "./auth.js";
 import type { TokenBinding } from "./auth-binding.js";
 import type { CliCommandDefinition } from "./command-registry.js";
@@ -226,6 +227,13 @@ export async function executeApiOperation(
     }
     const projected = project ? project(payload.data) : payload.data;
     emit(io, invocation.flags.json, projected);
+    if (
+      operationId === "approval_requests_get" ||
+      operationId === "approval_requests_list" ||
+      operationId === "approval_request_reviews_create"
+    ) {
+      warnStaleApprovalDiscard(io, projected);
+    }
     return { exitCode: EXIT_OK, payload: projected };
   } catch (error) {
     return handleExecutionError(error, io);
@@ -261,6 +269,6 @@ export function writeServerError(io: CliIo, error: ErrorResponse): void {
   writeCliError(io, {
     code: parsedCode.data,
     causeSummary: error.message,
-    remediation: "Correct the reported API failure and retry the command",
+    remediation: remediationForServerError(error),
   });
 }

@@ -4,16 +4,15 @@ import type {
   PatchFlagConfigInput,
   PromoteFlagConfigInput,
   ReplaceTargetingRulesInput,
-  Snapshot,
 } from "./config-store-types";
 import {
   frozenConfigFields,
   frozenPromotionFields,
-  frozenProposalFields,
   frozenTargetingFields,
   frozenWriteFailure,
   type RunFrozenFailure,
 } from "./flag-config-run-freeze";
+import { frozenFieldsFromDiffEntries } from "./flag-config-run-freeze-proposal";
 
 /**
  * One freeze check per KIND of Flag Configuration write, sitting where the write
@@ -70,15 +69,27 @@ export function promotionFreeze(
   );
 }
 
-export function approvedProposalFreeze(
+/**
+ * An approved proposal is judged by the request's own changed-field set
+ * (`diff.entries`), not by re-diffing the complete proposed snapshot against
+ * live state. The latter is what falsely reported `flagConfig.targetingRules`
+ * for an `/enabled`-only request (SPL-304).
+ *
+ * When the changed-field set cannot be determined, refuse rather than apply —
+ * including when no Run is live — so a corrupt proposal never lands as a write.
+ */
+export async function approvedProposalFreeze(
   deps: ConfigStoreDeps,
   input: ApplyApprovedFlagConfigInput,
-  current: Snapshot,
-): Promise<RunFrozenFailure | null> {
+): Promise<RunFrozenFailure | { ok: false; reason: "CHANGED_FIELDS_UNDETERMINED" } | null> {
+  const changed = frozenFieldsFromDiffEntries(input.diffEntries);
+  if (!changed.ok) {
+    return { ok: false, reason: "CHANGED_FIELDS_UNDETERMINED" };
+  }
   return frozenWriteFailure(
     deps.repo,
     { appId: input.appId, environmentId: input.environmentId, flagId: input.flagId },
-    frozenProposalFields(current.flag, input.proposed),
+    changed.frozenFields,
     "APPLY_APPROVED_FLAG_CONFIG",
   );
 }

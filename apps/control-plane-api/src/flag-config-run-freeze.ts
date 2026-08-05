@@ -1,5 +1,10 @@
 import { envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
+import {
+  AVAILABILITY_FIELD,
+  ROLLOUT_FIELD,
+  TARGETING_FIELD,
+} from "./flag-config-run-freeze-proposal";
 
 /**
  * A live Run freezes the Flag Configuration fields it owns, in the Worker.
@@ -32,6 +37,11 @@ import { renderError } from "@splitch/worker-runtime";
  * below are ORDERING, not coverage: they make the refusal land ahead of the
  * Policy gate so a change that can never apply never becomes a pending Approval
  * Request for someone to approve into a refusal.
+ *
+ * An approved proposal's freeze check uses the request's own `diff.entries`
+ * (`flag-config-run-freeze-proposal.ts`), not a re-diff of the complete proposed
+ * snapshot against live state — that second comparison was the SPL-304 false
+ * `RUN_FROZEN` on fields the request never changed.
  */
 
 interface LiveRunFreeze {
@@ -53,11 +63,6 @@ export interface RunFrozenFailure {
   currentRunId: string;
   attemptedChange: string;
 }
-
-/** Names match the wire fields an operator is refused, so the error is self-locating. */
-const AVAILABILITY_FIELD = "flagConfig.availableVariantNames";
-const ROLLOUT_FIELD = "flagConfig.rollout";
-const TARGETING_FIELD = "flagConfig.targetingRules";
 
 /**
  * The one lookup every writer shares. Answers `null` when the write is free to
@@ -120,33 +125,6 @@ export function frozenPromotionFields(select: {
   if (select.availability !== undefined) frozen.push(AVAILABILITY_FIELD);
   if (select.rollout) frozen.push(ROLLOUT_FIELD);
   if (select.targeting) frozen.push(TARGETING_FIELD);
-  return frozen;
-}
-
-/**
- * An approved proposal is COMPLETE state, not a patch, so what it would MOVE is
- * the diff against the Configuration as it stands now. Comparing the diff rather
- * than the payload is what keeps an `enabled`-only proposal — the kill switch
- * routed through the Approval gate — applicable under a live Run.
- */
-export function frozenProposalFields(
-  current: {
-    availableVariantNames: string[];
-    rollout: unknown;
-    targetingRules: unknown;
-  },
-  proposed: {
-    availableVariantNames: string[];
-    rollout: unknown;
-    targetingRules: unknown;
-  },
-): string[] {
-  const frozen: string[] = [];
-  if (differs(current.availableVariantNames, proposed.availableVariantNames)) {
-    frozen.push(AVAILABILITY_FIELD);
-  }
-  if (differs(current.rollout, proposed.rollout)) frozen.push(ROLLOUT_FIELD);
-  if (differs(current.targetingRules, proposed.targetingRules)) frozen.push(TARGETING_FIELD);
   return frozen;
 }
 
@@ -228,8 +206,4 @@ async function liveRunFreezeForFlag(
     // reason to let the write through: the refusal still stands and says so.
     runId: run?.id ?? experiment.liveRunId ?? "unknown",
   };
-}
-
-function differs(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) !== JSON.stringify(right);
 }
