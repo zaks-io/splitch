@@ -142,9 +142,12 @@ Auth: App `owner` or `admin`.
 ### `DELETE /apps/{app_id}`
 
 Blocked if any Experiment has `status = running` in any Environment. Returns `EXPERIMENT_RUNNING`.
-Also blocked with `RESOURCE_NOT_EMPTY` while non-credential child resources remain, including
-non-archived Experiments. Archived Experiments (and their Runs) are hard-purged as part of App /
-Environment teardown once only archived rows remain.
+Also blocked with `RESOURCE_NOT_EMPTY` while non-cascaded child resources remain, including Flags,
+Segments, Metrics, privacy rows, and non-archived Experiments. Credentials are revoked and
+tombstoned before the cascade, then hard-deleted with Environments, Approval Requests / Reviews,
+archived Experiments (and their Runs), memberships, and the App row inside one atomic D1 batch —
+so a late FK failure cannot remove memberships or credential rows while leaving the App stranded.
+A failed delete must leave App membership and credential management intact (no partial cascade).
 Auth: App `owner`.
 Account-closure privacy deletion is the only exception; see
 [endpoints-privacy-data.md](endpoints-privacy-data.md).

@@ -41,6 +41,43 @@ export async function deleteEnvironmentCredentials(
   throw new Error("credential delete did not quiesce");
 }
 
+/**
+ * Quiescing revoke + KV tombstone without removing D1 rows (SPL-298).
+ *
+ * App delete must invalidate credentials in the durable cache writer before the
+ * cascade batch deletes those rows, but must not `remove*` them first: a late
+ * FK failure after remove would leave the App alive with no Client Keys to
+ * rotate or revoke. D1 removal stays inside `deleteAppCascade`.
+ */
+export async function revokeEnvironmentCredentialsForAppDelete(
+  deps: CredentialDeleteDeps,
+  appId: string,
+  environmentId: string,
+): Promise<void> {
+  const scope = envScope(appId, environmentId);
+  for (let pass = 0; pass < MAX_CREDENTIAL_DELETE_PASSES; pass += 1) {
+    const [apiKeys, clientKeys] = await Promise.all([
+      deps.repo.credentials.listApiKeys(scope),
+      deps.repo.credentials.listClientKeys(scope),
+    ]);
+    if (apiKeys.length === 0 && clientKeys.length === 0) return;
+    // Always (re)tombstone the full snapshot — including rows already revoked in
+    // D1 — so a prior pass that set revokedAt but failed the KV write still
+    // recovers on retry instead of skipping those keys (SPL-298).
+    await writeRevokedTombstones(deps, scope, apiKeys, clientKeys);
+    // Recompute liveness from D1 after revoke/tombstone. Using the pre-revoke
+    // snapshot would force a redundant second pass on the normal path.
+    const [apiAfter, clientAfter] = await Promise.all([
+      deps.repo.credentials.listApiKeys(scope),
+      deps.repo.credentials.listClientKeys(scope),
+    ]);
+    const liveApi = apiAfter.filter((row) => row.revokedAt === null);
+    const liveClient = clientAfter.filter((row) => row.revokedAt === null);
+    if (liveApi.length === 0 && liveClient.length === 0) return;
+  }
+  throw new Error("credential revoke did not quiesce");
+}
+
 async function writeRevokedTombstones(
   deps: CredentialDeleteDeps,
   scope: ReturnType<typeof envScope>,

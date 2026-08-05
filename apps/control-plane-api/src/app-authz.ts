@@ -70,7 +70,13 @@ async function requireAppRole(
 
   const membership = await deps.repo.identity.getAppMembership(appScope(appId), actor.id);
   if (membership && allowedRoles.includes(membership.role as AppRole)) return null;
-  return insufficientAppRole(appId, allowedRoles, actor.scopes, requestId);
+  // Scopes already matched; naming the same scope as both required and held under
+  // INSUFFICIENT_SCOPES is self-contradictory and hides a live-membership miss
+  // (SPL-298). Fail closed as FORBIDDEN, matching Org authz.
+  return renderError(
+    { code: "FORBIDDEN", message: "credential is not allowed for this App", details: {} },
+    { requestId },
+  );
 }
 
 function requireAppRoleFromScopes(

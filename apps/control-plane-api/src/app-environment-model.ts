@@ -143,15 +143,20 @@ export async function deleteAppBlockedByChildren(
     if (blocker) return blocker;
   }
 
-  for (const check of [
-    ["flags", deps.repo.flags.flags.findMany(scope)],
-    ["segments", deps.repo.flags.segments.findMany(scope)],
-    ["metrics", deps.repo.experiments.metrics.findMany(scope)],
-    ["entity_deletions", deps.repo.privacy.listEntityDeletions(scope)],
-    ["privacy_requests", deps.repo.privacy.listPrivacyRequestsForApp(app.organizationId, app.id)],
-  ] as const) {
-    const [childType, rows] = check;
-    const childCount = (await rows).length;
+  const childCounts: ReadonlyArray<readonly [string, number]> = [
+    ["flags", (await deps.repo.flags.flags.findMany(scope)).length],
+    ["segments", (await deps.repo.flags.segments.findMany(scope)).length],
+    ["metrics", (await deps.repo.experiments.metrics.findMany(scope)).length],
+    ["entity_deletions", (await deps.repo.privacy.listEntityDeletions(scope)).length],
+    [
+      "privacy_requests",
+      (await deps.repo.privacy.listPrivacyRequestsForApp(app.organizationId, app.id)).length,
+    ],
+    // Approval Requests / Reviews are cascaded inside deleteAppCascade — they
+    // have no public delete API, so counting them here would permanently strand
+    // any App that ever completed a Policy-gated change (SPL-298 / dark-launch).
+  ];
+  for (const [childType, childCount] of childCounts) {
     if (childCount > 0) {
       return resourceNotEmpty("app", app.id, childType, childCount, "DELETE_APP", requestId);
     }
