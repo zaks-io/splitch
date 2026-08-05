@@ -4,8 +4,11 @@ Typed feature flags and experiments, evaluated at the edge. One HTTP call per
 evaluation, no local config to sync, and every failure is loud: an error is
 always observable, never a silently disguised default.
 
-Full platform quickstart (create an App, mint keys, first Flag):
-<https://splitch.dev/quickstart>
+- Full SDK guide: <https://splitch.dev/docs/sdk/install>
+- Platform quickstart (create an App, mint keys, first Flag):
+  <https://splitch.dev/quickstart>
+- Every failure code, with its cause and its fix:
+  <https://splitch.dev/docs#errors>
 
 ## Install
 
@@ -75,7 +78,9 @@ request so the platform can deduplicate the Exposure.
   your `defaultValue` (or `false` when you gave none), log loudly through
   `logger.error`, and report `reason: "ERROR"` plus an `errorCode` in
   `ResolutionDetails`. Branch on `reason` when you need to react.
-- `peekVariant` throws a `SplitchSdkError` carrying `code` and `status`.
+- `peekVariant` throws a `SplitchSdkError` carrying `code`, `status`, and
+  `docsUrl`. Every code resolves to a page at
+  `https://splitch.dev/docs/error/{code}`, and the error message prints it.
 - `retries` must be `0`. A retry is a fresh resolution and would double-count
   Exposures; retry by reusing `idempotencyKey` instead.
 
@@ -102,5 +107,8 @@ Every option is documented in the shipped type declarations
 
 ## Links
 
+- SDK guide: <https://splitch.dev/docs/sdk/install>
+- Error catalog: <https://splitch.dev/docs#errors>
 - Quickstart: <https://splitch.dev/quickstart>
+- Machine-readable index: <https://splitch.dev/llms.txt>
 - Platform: <https://splitch.dev>

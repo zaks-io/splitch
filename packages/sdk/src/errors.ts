@@ -30,12 +30,18 @@ function sentence(value: string): string {
 }
 
 export function formatSdkErrorMessage(detail: ActionableErrorDetail<string>): string {
-  return `${detail.code}: Cause: ${sentence(detail.causeSummary)} Remediation: ${sentence(detail.remediation)}`;
+  return `${detail.code}: Cause: ${sentence(detail.causeSummary)} Remediation: ${sentence(detail.remediation)} Docs: ${resolveErrorDocsUrl(detail.code)}`;
 }
 
-/** Future per-code documentation seam. Keep undefined until real documentation URLs exist. */
-export function resolveErrorDocsUrl(_code: string): string | undefined {
-  return undefined;
+/**
+ * Public documentation origin. Every documented failure code (server `ErrorCode`,
+ * `SDK_*`, `CLI_*`) has a page at `/docs/error/{code}`, so the code itself is the
+ * slug and no lookup table can drift from the enum.
+ */
+const DOCS_ORIGIN = "https://splitch.dev";
+
+export function resolveErrorDocsUrl(code: string): string {
+  return `${DOCS_ORIGIN}/docs/error/${code}`;
 }
 
 export class SplitchSdkError extends Error {
@@ -43,7 +49,7 @@ export class SplitchSdkError extends Error {
   readonly causeSummary: string;
   readonly remediation: string;
   readonly status: number | null;
-  readonly docsUrl: string | undefined;
+  readonly docsUrl: string;
 
   constructor(detail: ActionableErrorDetail) {
     super(formatSdkErrorMessage(detail), { cause: detail.originalError });
