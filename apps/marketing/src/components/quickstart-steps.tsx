@@ -34,13 +34,20 @@ const steps: Step[] = [
   },
   {
     title: "Create a Flag",
-    body: "Flag definition is App-level; serving config is per-Environment. Promote it where you want it served.",
+    body: "Flag definition is App-level; serving config is per-Environment. A fresh Flag starts disabled with rollout null — it only ever serves the Default Variant until you flip Configuration.",
     code: "splitch flags create --key new-checkout --variants on,off",
   },
   {
+    title: "Enable and roll out",
+    body: "Turn the Flag on and set the baseline rollout to 100% so every Targeting Key in this Environment gets the non-default Variant. Configuration fields are documented at /docs/flags.",
+    code: "splitch flag-config update new-checkout --enabled true --rollout 100",
+  },
+  {
     title: "Verify",
-    body: "Confirm the Flag resolves for a Targeting Key without firing an Exposure. One green round-trip proves auth, Environment, credential, and Flag config all line up. A step never ends on “probably fine.”",
-    code: "splitch flags verify new-checkout --targeting-key test-user-1",
+    body: 'Confirm the Flag resolves for a Targeting Key without firing an Exposure. reason "DISABLED" means the Flag is still inert (enabled false) — that is not a pass. After the enable step you should see reason "SPLIT" and value true. One green round-trip with SPLIT proves auth, Environment, credential, and Flag config all line up.',
+    code: `splitch flags verify new-checkout --targeting-key test-user-1 --json
+# before enable: {"value":false,"variantName":"off","reason":"DISABLED"}
+# after enable:  {"value":true,"variantName":"on","reason":"SPLIT"}`,
   },
   {
     title: "Wire the SDK",

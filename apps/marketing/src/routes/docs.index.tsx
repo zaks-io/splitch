@@ -2,6 +2,7 @@ import { Badge } from "@splitch/ui/components/badge";
 import { Button } from "@splitch/ui/components/button";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ErrorCodeIndex } from "../components/error-code-index";
+import { flagsDoc } from "../docs/flags";
 import { sdkTopics } from "../docs/sdk";
 
 export const Route = createFileRoute("/docs/")({
@@ -11,7 +12,7 @@ export const Route = createFileRoute("/docs/")({
       {
         name: "description",
         content:
-          "SDK guide and the full error catalog. Every failure code the API, SDK, and CLI can emit has a page.",
+          "Flags guide, SDK guide, and the full error catalog. Every failure code the API, SDK, and CLI can emit has a page.",
       },
     ],
   }),
@@ -54,6 +55,25 @@ function DocsIndexRoute() {
             </Button>
           </div>
         </header>
+
+        <section className="grid gap-4" id="flags">
+          <h2 className="font-display font-semibold text-2xl text-foreground tracking-tight">
+            Flags
+          </h2>
+          <ul className="grid gap-3">
+            <li className="grid gap-1">
+              <Link
+                className="font-medium text-foreground underline underline-offset-4"
+                to="/docs/flags"
+              >
+                {flagsDoc.title}
+              </Link>
+              <span className="text-muted-foreground text-sm leading-relaxed">
+                {flagsDoc.summary}
+              </span>
+            </li>
+          </ul>
+        </section>
 
         <section className="grid gap-4" id="sdk">
           <h2 className="font-display font-semibold text-2xl text-foreground tracking-tight">

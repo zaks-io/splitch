@@ -14,7 +14,7 @@ serves this file verbatim, so an agent never needs the docs site to onboard (mcp
 ```
 authenticate → pick or create an Org → create an App (dev+prod Envs auto-provisioned)
             → select the dev Environment → get a Client Key → create a Flag
-            → VERIFY (one round-trip) → create an Experiment → Start its Run
+            → enable + rollout → VERIFY (reason SPLIT) → create an Experiment → Start its Run
             → wire the SDK → first real Exposure
 ```
 
@@ -128,21 +128,45 @@ flags_create { key: "new-checkout", variants: [...] }           # MCP tool
 Flag definition is App-level; serving config is per-Environment (ADR-0028). Promote it into your
 Environment with `flags promote` / `flags_promote` when you are ready to serve it there.
 
-A new Flag starts disabled with the false-alias Variant (`off`) as its Default Variant. Enable it in
-the selected Environment before expecting any non-default resolution:
+A new Flag starts with Configuration `enabled: false` and `rollout: null`. Until you change those,
+every evaluation returns the Default Variant (`off`) with `reason: "DISABLED"` — an inert Flag, not
+a successful round-trip.
+
+## 7. Enable and roll out
+
+Turn the Flag on and set the baseline rollout so the non-default Variant is actually served:
 
 ```
-splitch flag-config update <flag-id-or-key> --enabled true             # CLI
-flag_config_update { flagId, enabled: true }                    # MCP tool
+splitch flag-config update new-checkout --enabled true --rollout 100     # CLI
+flag_config_update { flagId, enabled: true, rollout: { percentage: 100 } }   # MCP tool
 ```
 
-## 7. VERIFY — the first-confidence step
+`--enabled true` makes the Flag live. `--rollout 100` puts 100% of fall-through traffic on the
+non-default candidate (`on`). Leaving rollout `null` after enable still serves only the Default
+Variant (`reason: "DEFAULT"`). See the public Flags guide at
+https://splitch.dev/docs/flags for `availableVariantNames` (empty means never narrowed, not
+"nothing promoted") and Targeting Rules.
+
+## 8. VERIFY — the first-confidence step
 
 Confirm the Flag actually resolves for a Targeting Key **without firing an Exposure**:
 
 ```
-splitch flags verify new-checkout --targeting-key test-user-1     # CLI (data-plane, your SDK credential)
+splitch flags verify new-checkout --targeting-key test-user-1 --json     # CLI (data-plane, your SDK credential)
 flags_test_eval { flagId, evaluationContext: { targetingKey, idType: "user" } }   # MCP (control-plane, full reason)
+```
+
+Before step 7, verify returns an inert result that looks like success if you only check the exit code:
+
+```json
+{ "value": false, "variantName": "off", "reason": "DISABLED" }
+```
+
+`DISABLED` means the Flag Configuration is still off — auth and credential may be fine, but the Flag
+is not serving. After step 7 you should see:
+
+```json
+{ "value": true, "variantName": "on", "reason": "SPLIT" }
 ```
 
 - `verify` ([sdk/verify-endpoint.md](sdk/verify-endpoint.md)) uses the **same credential your code
@@ -151,16 +175,17 @@ flags_test_eval { flagId, evaluationContext: { targetingKey, idType: "user" } } 
 - `flags_test_eval` ([sdk/test-evaluation-endpoint.md](sdk/test-evaluation-endpoint.md)) is the
   control-plane, full-reason tier — use it when rule identity matters.
 
-A green verify is your one-call confidence that auth, Environment, credential, and Flag config all
-line up. If it fails, the error is structured and names the next step (see Recovery below).
+A green verify with `reason: "SPLIT"` (or `DEFAULT` if you enabled without a rollout) is your
+one-call confidence that auth, Environment, credential, and Flag config all line up. If it fails, the
+error is structured and names the next step (see Recovery below).
 
-## 8. Roll it out to a percentage (no Experiment required)
+## 9. Dial the baseline rollout (optional)
 
-A verified Flag is already servable. To put it in front of a slice of real traffic, set the Flag
-Configuration's **baseline rollout** — one percentage, no Targeting Rule, no Experiment:
+A verified Flag is already servable. To put it in front of a smaller slice of real traffic, change
+the Flag Configuration's **baseline rollout** — one percentage, no Targeting Rule, no Experiment:
 
 ```
-splitch flag-config update <flag-id-or-key> --rollout 10              # CLI
+splitch flag-config update new-checkout --rollout 10              # CLI
 flag_config_update { flagId, rollout: { percentage: 10 } }     # MCP tool
 ```
 
@@ -177,15 +202,15 @@ canonical `review: { action: "approve_and_apply" }`. If Review is omitted, the c
 `409 APPROVAL_REVIEW_REQUIRED` with the durable request ID. Review that request; do not resend a
 parallel confirmation mutation.
 
-Reach for step 9 when you need to _measure_ the rollout rather than just serve it: Exposures,
+Reach for step 10 when you need to _measure_ the rollout rather than just serve it: Exposures,
 allocation, and statistical results all belong to an Experiment Run.
 
-## 9. Start an Experiment Run, wire the SDK, and fire the first real Exposure
+## 10. Start an Experiment Run, wire the SDK, and fire the first real Exposure
 
 An Exposure is a first-touch fact for an Entity in an **Experiment Run**. It carries the Experiment,
 Run, Variant, and Targeting Key identity used by analysis. A plain Flag evaluation has no Run to own
 that fact, so it records no Exposure. It still resolves normally: Targeting Rules first, then the
-config-level baseline rollout from step 8, then the Default Variant.
+config-level baseline rollout from steps 7–9, then the Default Variant.
 
 Create the smallest useful Experiment draft around the Flag, then Start its first Run. Metrics may be
 empty for this integration checkpoint; Exposure collection does not require statistical-result work.
