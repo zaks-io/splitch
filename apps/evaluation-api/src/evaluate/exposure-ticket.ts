@@ -11,7 +11,7 @@ import type { ExposureDecision } from "./evaluate-path-types";
 
 const MIN_TICKET_KEY_LENGTH = 32;
 
-export interface ExposureTicketPayload {
+interface ExposureTicketPayload {
   readonly app_id: string;
   readonly environment_id: string;
   readonly experiment_id: string;
