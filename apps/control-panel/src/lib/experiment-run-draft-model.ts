@@ -2,6 +2,7 @@ import type {
   PanelExperimentDetailOutput,
   PanelExperimentRun,
 } from "@splitch/control-plane-sdk/panel-experiments";
+import { targetingKeyTypeIssue } from "./experiment-draft-model";
 
 export function initialRunDraft(
   data: PanelExperimentDetailOutput,
@@ -57,7 +58,7 @@ export type RunHorizonChoice = "sequential" | "fixed";
  * the sample size it decides at; a sequential Run never reaches one, so sending
  * a number with it would be stored and never read.
  */
-export function horizonError(horizon: RunHorizonChoice, sampleSize: string): string | null {
+function horizonError(horizon: RunHorizonChoice, sampleSize: string): string | null {
   if (horizon === "sequential") return null;
   const parsed = Number(sampleSize.trim());
   return sampleSize.trim() && Number.isInteger(parsed) && parsed > 0
@@ -176,4 +177,26 @@ export function targetingRulesError(value: string): string | null {
   } catch {
     return "Targeting Rules must be valid JSON.";
   }
+}
+
+/**
+ * Per-field verdicts for the editable Run draft. Pure so the Panel suite can
+ * pin the Start-button predicate without mounting the React hook
+ * (`vitest` is `environment: "node"` with no `renderHook`).
+ */
+export function runDraftErrors(draft: {
+  allocation: Record<string, number>;
+  horizon: RunHorizonChoice;
+  sampleSize: string;
+  targetingKey: string;
+  targetingKeyType: string;
+  targetingRules: string;
+}) {
+  return {
+    allocation: allocationError(draft.allocation),
+    horizon: horizonError(draft.horizon, draft.sampleSize),
+    targetingKey: draft.targetingKey.trim() ? null : "A Targeting Key is required.",
+    targetingKeyType: targetingKeyTypeIssue(draft.targetingKeyType),
+    targetingRules: targetingRulesError(draft.targetingRules),
+  };
 }

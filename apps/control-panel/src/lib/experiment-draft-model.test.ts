@@ -71,8 +71,12 @@ describe("targetingKeyTypeIssue", () => {
     "user.type",
     "_user",
     "user__type",
-  ])("rejects typo-shaped value %j", (value) => {
-    expect(targetingKeyTypeIssue(value)).toMatch(/lowercase/);
+  ])("rejects typo-shaped value %j and names the shape rule", (value) => {
+    expect(targetingKeyTypeIssue(value)).toMatch(/single underscores between segments/);
+  });
+
+  it("names the length cap when the value is already lowercase alphanumerics", () => {
+    expect(targetingKeyTypeIssue("a".repeat(64))).toMatch(/63 characters/);
   });
 
   it.each([

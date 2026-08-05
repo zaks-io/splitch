@@ -3,13 +3,7 @@ import type {
   PanelExperimentRun,
 } from "@splitch/control-plane-sdk/panel-experiments";
 import { useState } from "react";
-import { targetingKeyTypeIssue } from "./experiment-draft-model";
-import {
-  allocationError,
-  horizonError,
-  initialRunDraft,
-  targetingRulesError,
-} from "./experiment-run-draft-model";
+import { initialRunDraft, runDraftErrors } from "./experiment-run-draft-model";
 import type { RunStartDraft } from "./use-experiment-run-start";
 
 /**
@@ -24,13 +18,7 @@ export function useRunDraftState(
   baseRun: PanelExperimentRun | undefined,
 ) {
   const [draft, setDraft] = useState<RunStartDraft>(() => initialRunDraft(data, baseRun));
-  const errors = {
-    allocation: allocationError(draft.allocation),
-    horizon: horizonError(draft.horizon, draft.sampleSize),
-    targetingKey: draft.targetingKey.trim() ? null : "A Targeting Key is required.",
-    targetingKeyType: targetingKeyTypeIssue(draft.targetingKeyType),
-    targetingRules: targetingRulesError(draft.targetingRules),
-  };
+  const errors = runDraftErrors(draft);
   return {
     draft,
     errors,

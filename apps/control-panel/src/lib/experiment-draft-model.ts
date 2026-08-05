@@ -8,7 +8,7 @@
  * (`useExperimentRunStart`), never by anything defined here.
  */
 
-import { TargetingKeyTypeSchema } from "@splitch/contracts";
+import { TARGETING_KEY_TYPE_MAX_LENGTH, TargetingKeyTypeSchema } from "@splitch/contracts";
 
 export const EXPERIMENT_DRAFT_STEPS = ["measurement", "decision", "run"] as const;
 export type ExperimentDraftStep = (typeof EXPERIMENT_DRAFT_STEPS)[number];
@@ -58,15 +58,19 @@ function keyIssue(key: string): string | null {
 /**
  * Same predicate the Worker applies to `targetingKeyType` at create/patch, so the
  * Panel never enables Start (or create) for a value that is guaranteed to 400.
+ * Accept/reject comes from the shared schema; the message names which rule failed.
  */
 export function targetingKeyTypeIssue(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) {
     return "An Entity type is required: it names what the Targeting Key identifies.";
   }
-  return TargetingKeyTypeSchema.safeParse(trimmed).success
-    ? null
-    : "Use lowercase letters, digits, and single underscores.";
+  const parsed = TargetingKeyTypeSchema.safeParse(trimmed);
+  if (parsed.success) return null;
+  if (parsed.error.issues.some((issue) => issue.code === "too_big")) {
+    return `Keep Entity type to ${TARGETING_KEY_TYPE_MAX_LENGTH} characters or fewer.`;
+  }
+  return "Use lowercase letters and digits, with single underscores between segments.";
 }
 
 export function hasIssue(issues: Record<string, string | null>): boolean {

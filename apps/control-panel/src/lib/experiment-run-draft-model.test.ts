@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   allocationError,
   buildRunStartInput,
+  runDraftErrors,
   startConfirmationCopy,
 } from "./experiment-run-draft-model";
 
@@ -109,5 +110,58 @@ describe("buildRunStartInput", () => {
     expect(() =>
       buildRunStartInput({ ...base, allocation: { control: 100, treatment: Number.NaN } }),
     ).toThrow(/treatment.*not a finite number/);
+  });
+});
+
+/**
+ * The Run-start Start button reads `runDraftErrors`. Pinning it here is what
+ * keeps a typo-shaped Entity type from enabling Start and then 400-ing with an
+ * empty FieldError — reverting the shape check to nonempty-only must fail.
+ */
+describe("runDraftErrors", () => {
+  const valid = {
+    allocation: { control: 50, treatment: 50 },
+    horizon: "sequential" as const,
+    sampleSize: "",
+    targetingKey: "userId",
+    targetingKeyType: "user",
+    targetingRules: "[]",
+  };
+
+  it("passes a complete draft", () => {
+    expect(Object.values(runDraftErrors(valid)).every((message) => message === null)).toBe(true);
+  });
+
+  it("rejects a typo-shaped Entity type the Worker would reject", () => {
+    expect(
+      runDraftErrors({ ...valid, targetingKeyType: "delivery-driver" }).targetingKeyType,
+    ).toMatch(/single underscores between segments/);
+    expect(runDraftErrors({ ...valid, targetingKeyType: "User" }).targetingKeyType).toMatch(
+      /single underscores between segments/,
+    );
+  });
+
+  it("accepts a non-blessed Entity type that matches the Worker shape", () => {
+    expect(runDraftErrors({ ...valid, targetingKeyType: "account" }).targetingKeyType).toBeNull();
+  });
+
+  it("names a blank Targeting Key", () => {
+    expect(runDraftErrors({ ...valid, targetingKey: "  " }).targetingKey).toMatch(/Targeting Key/);
+  });
+
+  it("names a blank allocation share", () => {
+    expect(
+      runDraftErrors({ ...valid, allocation: { control: 100, treatment: Number.NaN } }).allocation,
+    ).toMatch(/needs a number/);
+  });
+
+  it("names a fixed horizon without a sample size", () => {
+    expect(runDraftErrors({ ...valid, horizon: "fixed", sampleSize: "" }).horizon).toMatch(
+      /sample size/,
+    );
+  });
+
+  it("names invalid Targeting Rules JSON", () => {
+    expect(runDraftErrors({ ...valid, targetingRules: "{" }).targetingRules).toMatch(/valid JSON/);
   });
 });
