@@ -102,6 +102,9 @@ describe("delegated control-plane routes", () => {
   });
 
   it("fails loud naming the owner when its binding is missing", async () => {
+    // Default stub has a Run, so the hop is required and unbound Analysis stays
+    // SERVICE_UNAVAILABLE. Draft / missing outcomes are covered below: they must
+    // not hide behind this outage.
     const response = await createApp(deps({})).request(RESULTS_PATH, {
       headers: { authorization: "Bearer stub" },
     });
@@ -135,6 +138,24 @@ describe("experiment results Experiment vs Run resolution (SPL-305)", () => {
     expect(forwarded).toHaveLength(0);
   });
 
+  it("returns 200 no_run for a draft even when Analysis binding is unbound", async () => {
+    // D1 finishes this read; ANALYSIS_API must not turn it into SERVICE_UNAVAILABLE.
+    const response = await createApp(
+      deps({
+        experiments: {
+          getExperiment: vi.fn(async () => ({ id: "exp_1", status: "draft" })),
+          listRunsForExperiment: vi.fn(async () => []),
+        },
+      }),
+    ).request(RESULTS_PATH, { headers: { authorization: "Bearer stub" } });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      state: "no_run",
+      recommended_action: "START_A_RUN",
+    });
+  });
+
   it("returns EXPERIMENT_NOT_FOUND for a genuinely nonexistent id without calling Analysis", async () => {
     const forwarded: Request[] = [];
     const analysis = binding(forwarded, Response.json({ ok: false }));
@@ -153,6 +174,22 @@ describe("experiment results Experiment vs Run resolution (SPL-305)", () => {
     expect(response.status).toBe(404);
     expect(((await response.json()) as { code: string }).code).toBe("EXPERIMENT_NOT_FOUND");
     expect(forwarded).toHaveLength(0);
+  });
+
+  it("returns EXPERIMENT_NOT_FOUND for a missing id even when Analysis binding is unbound", async () => {
+    const response = await createApp(
+      deps({
+        experiments: {
+          getExperiment: vi.fn(async () => null),
+          listRunsForExperiment: vi.fn(async () => {
+            throw new Error("must not list Runs when Experiment is missing");
+          }),
+        },
+      }),
+    ).request(RESULTS_PATH, { headers: { authorization: "Bearer stub" } });
+
+    expect(response.status).toBe(404);
+    expect(((await response.json()) as { code: string }).code).toBe("EXPERIMENT_NOT_FOUND");
   });
 
   it("returns EXPERIMENT_NOT_FOUND for another tenant's Experiment id (existence is not leaked)", async () => {

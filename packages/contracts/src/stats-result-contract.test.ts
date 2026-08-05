@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { StatsEngine, StatsInput, StatsOutput } from "./index";
 import {
   ArmResultSchema,
   DimensionResultSchema,
@@ -8,7 +9,6 @@ import {
   StatsOutputSchema,
   VarianceTechniquesSchema,
 } from "./index";
-import type { StatsEngine, StatsInput, StatsOutput } from "./index";
 import { getRoute } from "./route-registry";
 
 const varianceTechniques = {
@@ -287,5 +287,13 @@ describe("declared /results response contract", () => {
         run_id: "run_placeholder",
       }).success,
     ).toBe(false);
+  });
+
+  it("rejects a no_run envelope that omits recommended_action", () => {
+    // Handler tests alone would still pass if recommended_action were optional;
+    // pin the requirement at the contract layer (SPL-305 review).
+    expect(declaredResponse("experiment_results_get").safeParse({ state: "no_run" }).success).toBe(
+      false,
+    );
   });
 });

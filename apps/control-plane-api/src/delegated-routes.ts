@@ -80,14 +80,18 @@ function delegatingHandler(
   repo: Repository,
 ): RouteHandler<unknown> {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
-    if (!binding) return missingOwnerBinding(route, requestId);
-
     const parts = inputParts(input);
     const scopeError = await environmentScopeError(repo, parts.params ?? {}, requestId);
     if (scopeError) return scopeError;
 
+    // Experiment results: D1 can finish the read without Analysis (draft →
+    // no_run, missing → EXPERIMENT_NOT_FOUND). Run that gate before the binding
+    // check so an unbound ANALYSIS_API cannot mask those as SERVICE_UNAVAILABLE
+    // (SPL-305 / production outage class from 31d86f6a).
     const pinned = await pinExperimentResultsRun(route, repo, parts, requestId);
     if (pinned instanceof Response) return pinned;
+
+    if (!binding) return missingOwnerBinding(route, requestId);
 
     return binding.fetch(
       delegatedRequest(route, delegatedIdentityFrom(route, principal, parts.params ?? {}), {
