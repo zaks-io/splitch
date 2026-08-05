@@ -98,6 +98,12 @@ function exampleValue(schema: z.ZodTypeAny, fieldName: string): unknown {
  * Prefer constrained scalars, enums, arrays, and records. Skip nested object
  * shapes and unconstrained string/number fields so idempotency-only Examples
  * stay copy-pasteable without domain-confused placeholder values.
+ *
+ * Nullable optionals are skipped for the same reason: null means "engine
+ * default", so the Example would have to invent the non-null branch, and
+ * whether that branch is legal usually depends on a sibling field. A Metric's
+ * `winsorize` is only accepted on a non-binomial `kind`, so `{"kind":
+ * "binomial","winsorize":true}` parses against the schema and then 400s.
  */
 function optionalExampleFieldNames(fields: readonly RequestBodyFieldHelp[]): Set<string> {
   const preferred = fields.filter((field) => {
@@ -114,6 +120,7 @@ function isConstrainedOptionalLabel(label: string): boolean {
   if (label === "string" || label === "number") return false;
   if (label.startsWith("number |")) return false;
   if (label.startsWith("string |")) return false;
+  if (label.endsWith("| null")) return false;
   return true;
 }
 
