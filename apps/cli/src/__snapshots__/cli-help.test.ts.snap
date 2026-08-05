@@ -263,13 +263,13 @@ Request body (--body-json):
   originAllowlist  optional  string[] | null
   rateLimitRps     optional  number
   Example:
-    {"originAllowlist":["originAllowlist"],"rateLimitRps":1}
+    {"originAllowlist":["https://app.example.com"],"rateLimitRps":1}
 
 Credential semantics:
   Client Key is public and safe for untrusted clients; flags verify fetches it automatically.
 
 Example:
-  splitch client-key update --body-json '{"originAllowlist":["originAllowlist"],"rateLimitRps":1}' --json",
+  splitch client-key update --body-json '{"originAllowlist":["https://app.example.com"],"rateLimitRps":1}' --json",
     "current-user delete": "Request deletion of the authenticated User.
 
 Usage:

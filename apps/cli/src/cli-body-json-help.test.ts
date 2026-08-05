@@ -117,4 +117,26 @@ describe("CLI --body-json schema help (SPL-309)", () => {
     );
     expect(EnvironmentPolicySchema.safeParse(help.example).success).toBe(true);
   });
+
+  it("derives a schema-valid example for every --body-json command", () => {
+    for (const command of BODY_JSON_COMMANDS) {
+      assertBodyJsonExampleValid(command);
+    }
+  });
 });
+
+function assertBodyJsonExampleValid(command: CliCommandDefinition): void {
+  const help = commandBodySchemaHelp(command);
+  const schema =
+    command.kind === "env_policy_set"
+      ? EnvironmentPolicySchema
+      : requestBodySchemaForOperation(command.operationId);
+  expect(schema, `${command.path.join(" ")} missing schema`).toBeDefined();
+  if (!schema) return;
+  const parsed = schema.safeParse(help.example);
+  expect(
+    parsed.success,
+    `${command.path.join(" ")} example invalid: ${parsed.success ? "" : parsed.error.message}`,
+  ).toBe(true);
+  expect(JSON.stringify(help.example)).not.toMatch(/secret|token|password|api[_-]?key/i);
+}

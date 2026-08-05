@@ -26,7 +26,14 @@ export function exampleForObject(
     if (!required && !(optionalNames?.has(name) ?? false)) continue;
     example[name] = exampleValue(inner, name);
   }
-  schema.safeParse(example);
+  const parsed = schema.safeParse(example);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new Error(
+      `request-body-help: derived example failed schema validation` +
+        (issue ? ` at ${issue.path.join(".") || "(root)"}: ${issue.message}` : ""),
+    );
+  }
   return example;
 }
 
@@ -85,11 +92,16 @@ const EXAMPLE_STRINGS: Readonly<Record<string, string>> = {
   name: "Checkout",
   slug: "acme",
   reason: "approved",
+  originAllowlist: "https://app.example.com",
 };
 
 function exampleString(fieldName: string): string {
   const known = EXAMPLE_STRINGS[fieldName];
   if (known) return known;
+  const lower = fieldName.toLowerCase();
+  if (lower.includes("origin") || lower.includes("allowlist") || lower.endsWith("url")) {
+    return "https://app.example.com";
+  }
   if (fieldName.endsWith("Id") || fieldName === "id") {
     return `${fieldName.replace(/Id$/, "") || "id"}_1`;
   }
