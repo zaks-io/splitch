@@ -117,10 +117,18 @@ describe("describeRequestBody", () => {
     const confidence = create.fields.find((field) => field.name === "confidenceLevel");
     expect(confidence?.defaultValue).toBe(0.95);
 
-    const patch = describeRequestBody(PatchExperimentRequestSchema);
-    const example = patch.example as Record<string, unknown>;
-    // Unconstrained optional numbers are not preferred for all-optional examples.
-    expect(example).not.toHaveProperty("confidenceLevel");
+    // Pin example numbers that actually reach the Example body. A field-name
+    // special case returning 50 for percentage/confidenceLevel must fail here
+    // (midpoints differ from 50, and 50 is out of range for these bounds).
+    const percentageProbe = describeRequestBody(
+      z.object({ percentage: z.number().min(0).max(10) }),
+    );
+    expect(percentageProbe.example).toEqual({ percentage: 5 });
+
+    const confidenceProbe = describeRequestBody(
+      z.object({ confidenceLevel: z.number().min(0).max(1) }),
+    );
+    expect(confidenceProbe.example).toEqual({ confidenceLevel: 0.5 });
   });
 
   it("labels DraftAllocationSchema keys as Variant names by schema identity", () => {
