@@ -49,14 +49,17 @@ OpenFeature defines before/after/error/finally hooks on the evaluation lifecycle
 hook system. Adding hooks requires a separate decision on which lifecycle events are relevant
 and whether the exposure-on-read model conflicts with OpenFeature's hook ordering.
 
-**4. Batch flag evaluation (`evaluateAll`)**
-`evaluateAll([flagKeys])` is a natural optimization (one HTTP call for multiple flags in one
-render). The endpoint contract (`POST /api/sdk/evaluate-batch`) is not defined. This is a pure
-ergonomic extension — the data-plane safety model is unchanged.
+**4. Batch flag evaluation (`evaluateAll`)** — **RESOLVED by ADR-0048.**
+`sdk.evaluateAll(context)` and `POST /api/sdk/evaluate-all` return the Precomputed Evaluations for
+one context (all Flags, non-exposing, Exposure Tickets redeemed on first read). See
+[evaluate-all-endpoint.md](./evaluate-all-endpoint.md). The resolution went further than the
+"pure ergonomic extension" imagined here: the safety model gained the ticket redemption seam.
 
-**5. Server-side flag config streaming / SSE**
-Streaming updates to flag config (instead of lazy-fetch on first evaluate) would reduce
-first-call latency. This is deferred.
+**5. Server-side flag config streaming / SSE** — **RESOLVED by ADR-0048** (mechanism differs).
+Freshness for payload-backed clients is ETag revalidation polling on `evaluate-all` (default ~60s;
+[browser-client.md](./browser-client.md)); a data-free WebSocket nudge in the ADR-0019 shape is the
+planned accelerator (tracked in SPL-337), with polling as the permanent fallback. Config never
+streams to clients — only "revalidate now" signals.
 
 **6. Targeting Context _attribute typing_ validation**
 OpenFeature defines a typed `EvaluationContext` with well-known fields. The thin SDK constrains

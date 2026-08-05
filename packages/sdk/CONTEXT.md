@@ -73,6 +73,24 @@ fires Exposure. A separate peek accessor resolves without exposing.
 **Test evaluation / dry-run**:
 A non-exposing evaluation path used for debugging and verification. It records no Exposure.
 
+**Precomputed Evaluations**:
+The per-Flag resolved results for one Evaluation Context across every Flag in the credential's
+App/Environment, fetched in one non-exposing `evaluateAll` / `evaluate-all` call (ADR-0048).
+Contains values, Variant names, non-revealing reasons, and Exposure Tickets — never rule logic.
+The browser client holds them; SSR serializes them as `bootstrap`.
+
+**Exposure Ticket**:
+The opaque, server-minted, HMAC-signed voucher attached to each fresh live-Run assignment inside
+Precomputed Evaluations. The SDK redeems it on first local read via the batched exposures route,
+which is what fires the Exposure and establishes the holdover. Not a secret and not a credential;
+safe inside serialized bootstrap HTML.
+
+**Browser Client**:
+The static-context client at `@splitch/sdk/browser` (`createSplitchBrowserClient`): one Evaluation
+Context for its lifetime, one Precomputed Evaluations fetch, synchronous `evaluate`/
+`evaluateDetails` reads, per-Flag `subscribe`, exposure-on-first-read queue, `bootstrap` input, and
+ETag revalidation. Client Key only.
+
 **Track**:
 The top-level stateless Metric Event accessor:
 `track(eventName, { targetingKey, idType, eventId, fields, dimensions })`. Every call carries
@@ -116,7 +134,16 @@ Opt-in browser instrumentation that emits only explicitly configured Web Events.
 ## SDK behavior rules
 
 - Public clients do remote Evaluation. They do not receive Targeting Rules or local rule-evaluation
-  snapshots.
+  snapshots. Precomputed Evaluations are remote Evaluation results, not rules: holding them local
+  is caching, not local evaluation.
+- The browser client fires Exposure on the first local read of a Flag by redeeming its Exposure
+  Ticket (ADR-0048). Reading is still the exposing act; only the transport moment moved. Fetching
+  or bootstrapping Precomputed Evaluations never fires an Exposure.
+- Browser-client application code manages no idempotency or exposure identity: the SDK owns fetch
+  idempotency keys and per-item `exposureId`s, mirroring the Web Event ID rule.
+- The exposure queue follows the Web Event queue rules: memory-only, batch caps, flush on
+  timer/cap/page-hidden/pagehide, authenticated `fetch` with `keepalive`, no listeners while empty,
+  and loud, never-silent failure handling.
 - Exposure-bearing `evaluate` and `evaluateDetails` require a caller-owned `idempotencyKey`, reused
   for retries of the same logical Evaluation. The server cannot infer retries automatically; a new
   key is a new billable Evaluation. `peek` and `verify` are non-billing and do not require one.
