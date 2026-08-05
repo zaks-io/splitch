@@ -45,6 +45,33 @@ export function makePrivacyRepo(db: Db) {
         .where(and(eq(privacyRequests.orgId, orgId), eq(privacyRequests.appId, appId)));
     },
 
+    /**
+     * Scoped entity-deletion wipe (ADR-0018 mint-scope seam). App force-delete
+     * finish path uses `deleteAppCascade`'s atomic batch instead so tombstones
+     * cannot disappear on a rolled-back App DELETE (SPL-326). Kept for
+     * isolation tests and any non-cascade callers that already hold a mint scope.
+     */
+    async deleteEntityDeletionsForApp(scope: TenantScope): Promise<number> {
+      return entityDeletionsTable.remove(scope);
+    },
+
+    /**
+     * Org+App-bound privacy-request wipe. App force-delete finish path uses
+     * `deleteAppCascade`'s atomic batch instead (SPL-326). Org-wide requests
+     * (`app_id` null) are untouched. Bound by BOTH org_id AND app_id so a
+     * dropped predicate cannot wipe another Organization's ledger.
+     */
+    async deletePrivacyRequestsForApp(orgId: string, appId: string): Promise<number> {
+      if (!orgId || !appId) {
+        throw new Error("deletePrivacyRequestsForApp: orgId and appId are required");
+      }
+      const rows = await db
+        .delete(privacyRequests)
+        .where(and(eq(privacyRequests.orgId, orgId), eq(privacyRequests.appId, appId)))
+        .returning();
+      return rows.length;
+    },
+
     async getPrivacyRequest(
       orgId: string,
       requestId: string,

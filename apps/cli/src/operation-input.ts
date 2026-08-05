@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { deriveMcpTools, getRoute } from "@splitch/contracts";
 import type { EvaluateContext } from "@splitch/sdk";
-import type { CliCommandDefinition } from "./command-registry.js";
 import { excessPositionalError, requiredPositionalSpecs } from "./command-positionals.js";
+import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { SplitchCliError } from "./errors.js";
 import {
@@ -134,6 +134,16 @@ function applyNamedFlags(
   if (command.supportsConfirm && flags.confirm) {
     input.review = { action: "approve_and_apply" };
   }
+  if (supportsDeleteMode(command.operationId)) {
+    if (flags.dryRun) input.dryRun = true;
+    if (flags.force) input.force = true;
+  }
+}
+
+function supportsDeleteMode(operationId: string): boolean {
+  // organizations_delete adopts the same query shape when implemented; until
+  // then only apps_delete accepts dryRun/force (SPL-326).
+  return operationId === "apps_delete";
 }
 
 function applyRequiredIdempotencyKey(

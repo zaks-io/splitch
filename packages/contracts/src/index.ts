@@ -6,6 +6,8 @@ export { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-iden
 export * from "./barrels/parity-skins";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped route registry API
 export * from "./barrels/route-registry";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped stats input/result API
+export * from "./barrels/stats-contracts";
 export { type CanonicalJsonSha256, CanonicalJsonSha256Schema } from "./canonical-hash";
 export {
   ClientOriginSchema,
@@ -187,6 +189,8 @@ export {
   overviewExperimentsUnavailableReasons,
   overviewFailureReasons,
 } from "./panel-overview-contract";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the shared delete-tree contract
+export * from "./resource-delete-tree";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped resource envelope API
 export * from "./resource-envelopes";
 export {
@@ -237,8 +241,6 @@ export {
   approvalTargetTypes,
 } from "./routes/route-shapes-approvals";
 export { deriveSlug, SLUG_MAX_LENGTH, SLUG_MIN_LENGTH, SLUG_PATTERN, SlugSchema } from "./slug";
-// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped stats input/result API
-export * from "./barrels/stats-contracts";
 // `./experiment-rigor` exports a different DecisionFamilyMember; naming this one
 // explicitly keeps the stats-input shape as the package's, as it was before the
 // stats exports moved into a sub-barrel.

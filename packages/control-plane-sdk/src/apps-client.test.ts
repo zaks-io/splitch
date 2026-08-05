@@ -112,6 +112,18 @@ describe("control plane sdk Apps client", () => {
     expect(result).toEqual({ ok: true, status: 200, data: { deleted: true } });
   });
 
+  it("passes dryRun and force query flags on App delete", async () => {
+    const { sdk, requests } = appsSdk(() =>
+      Response.json({ deleted: false, dryRun: true, blockers: [] }),
+    );
+
+    await sdk.apps.delete({ appId: "app_checkout", dryRun: true });
+    expect(new URL(requests[0]?.url ?? "").searchParams.get("dryRun")).toBe("true");
+
+    await sdk.apps.delete({ appId: "app_checkout", force: true });
+    expect(new URL(requests[1]?.url ?? "").searchParams.get("force")).toBe("true");
+  });
+
   it("surfaces the Worker's refusal to delete an App with a running Experiment", async () => {
     const experimentRunning = {
       code: "EXPERIMENT_RUNNING",

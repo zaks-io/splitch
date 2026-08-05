@@ -3,16 +3,16 @@ import { createSplitchClient } from "@splitch/sdk";
 import { remediationForServerError, warnStaleApprovalDiscard } from "./approval-stale-warn.js";
 import { withAuthorizationRetry } from "./auth.js";
 import type { TokenBinding } from "./auth-binding.js";
-import type { CliCommandDefinition } from "./command-registry.js";
 import { missingPositionalError } from "./command-positionals.js";
+import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { requireAppScope, requireEnvironmentScope } from "./context.js";
 import { normalizeCliError, SplitchCliError, writeCliError } from "./errors.js";
 import { emit } from "./execute-io.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
-import { emitOperationNotices } from "./operation-notices.js";
 import { parseEvaluationContext } from "./operation-input.js";
+import { emitOperationNotices } from "./operation-notices.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { createOperationSdks, resolveDataPlaneBaseUrl, sdkForRoute } from "./sdks.js";
 
@@ -230,10 +230,53 @@ export async function executeApiOperation(
     // Approval Request (or list) must surface a recorded stale discard.
     warnStaleApprovalDiscard(io, projected);
     emitOperationNotices(operationId, projected, invocation.flags.json, io);
+    if (operationId === "apps_delete") {
+      // Local session cleanup must not turn a successful delete into a non-zero exit.
+      try {
+        await clearScopeAfterAppDelete(deps, input, projected);
+      } catch (cleanupError) {
+        const message =
+          cleanupError instanceof Error ? cleanupError.message : "unknown cleanup failure";
+        io.error(`Warning: App deleted, but local session cleanup failed: ${message}`);
+        io.error("Run `splitch use` to pick another App if your session still points at it.");
+      }
+    }
     return { exitCode: EXIT_OK, payload: projected };
   } catch (error) {
     return handleExecutionError(error, io);
   }
+}
+
+async function clearScopeAfterAppDelete(
+  deps: CliDeps,
+  input: Record<string, unknown>,
+  payload: unknown,
+): Promise<void> {
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    !("deleted" in payload) ||
+    (payload as { deleted: unknown }).deleted !== true
+  ) {
+    return;
+  }
+  const appId = typeof input.appId === "string" ? input.appId : undefined;
+  if (!appId) return;
+  const { clearDeletedAppFromConfig } = await import("./context.js");
+  await clearDeletedAppFromConfig(deps.cwd ?? process.cwd(), appId);
+  const stored = await deps.credentialStore.load();
+  if (stored?.credential.selectedAppId !== appId) return;
+  const { selectedAppId: _removed, ...credentialRest } = stored.credential;
+  await deps.credentialStore.save({
+    ...stored,
+    credential: {
+      ...credentialRest,
+      accessTokenBinding:
+        stored.credential.accessTokenBinding === `app:${appId}`
+          ? ""
+          : stored.credential.accessTokenBinding,
+    },
+  });
 }
 
 export function handleExecutionError(error: unknown, io: CliIo): CliResult {

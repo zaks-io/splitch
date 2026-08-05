@@ -2,6 +2,8 @@ import { deriveSlug } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz";
+import { forceDeleteApp } from "./app-delete-force";
+import { collectAppDeleteBlockers } from "./app-delete-tree";
 import { revokeEnvironmentCredentialsForAppDelete } from "./app-environment-credentials";
 import {
   ALLOW_POLICY,
@@ -11,17 +13,17 @@ import {
   appResponse,
   CONFIRM_POLICY,
   createEnvironmentRecord,
-  deleteAppBlockedByChildren,
   type EnvironmentRow,
   environmentResponse,
   firstRunningExperiment,
   nowIso,
   organizationNotFound,
   provisionEnvironmentClientKeys,
+  resourceNotEmptyFromBlockers,
   unusableAppKey,
 } from "./app-environment-model";
 import { randomHex } from "./credential-cache";
-import { objectBody, pathParam } from "./handler-input";
+import { objectBody, pathParam, queryFlags } from "./handler-input";
 import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, requireOrgRole } from "./org-authz";
 
 export function makeAppHandlers(deps: AppEnvironmentDeps) {
@@ -129,7 +131,8 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
       const deleteError = await requireAppDelete(deps, appId, principal, requestId);
       if (deleteError) return deleteError;
 
-      return deleteAppAfterAuth(deps, app, requestId);
+      const mode = queryFlags(input);
+      return deleteAppAfterAuth(deps, app, principal, requestId, mode);
     },
   };
 }
@@ -137,26 +140,39 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
 async function deleteAppAfterAuth(
   deps: AppEnvironmentDeps,
   app: AppRow,
+  principal: HandlerArgs<unknown>["principal"],
   requestId: string,
+  mode: { dryRun: boolean; force: boolean },
 ): Promise<Response> {
   const environments = await deps.repo.identity.listEnvironments(appScope(app.id));
-  const blocker = await appDeleteBlocker(deps, app, environments, requestId);
-  if (blocker) return blocker;
+  const running = await firstRunningExperiment(deps, app.id, environments, "DELETE_APP", requestId);
+  if (running) return running;
+
+  const blockers = await collectAppDeleteBlockers(deps, app, environments);
+
+  if (mode.dryRun) {
+    return Response.json({ deleted: false, dryRun: true, blockers });
+  }
+
+  if (mode.force) {
+    const result = await forceDeleteApp(
+      deps,
+      app,
+      environments,
+      principal,
+      requestId,
+      deleteAppRows,
+      blockers,
+    );
+    return Response.json(result.response);
+  }
+
+  if (blockers.length > 0) {
+    return resourceNotEmptyFromBlockers(app.id, "app", blockers, "DELETE_APP", requestId);
+  }
 
   await deleteAppRows(deps, app.id, environments);
   return Response.json({ deleted: true });
-}
-
-async function appDeleteBlocker(
-  deps: AppEnvironmentDeps,
-  app: AppRow,
-  environments: readonly EnvironmentRow[],
-  requestId: string,
-): Promise<Response | null> {
-  return (
-    (await firstRunningExperiment(deps, app.id, environments, "DELETE_APP", requestId)) ??
-    (await deleteAppBlockedByChildren(deps, app, environments, requestId))
-  );
 }
 
 async function deleteAppRows(

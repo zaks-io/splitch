@@ -148,6 +148,9 @@ function tokenBindingRemediation(reason: string): string {
   if (/matches more than one App/i.test(reason)) {
     return "Pass the canonical App ID instead of the ambiguous key";
   }
+  if (/not (authorized|reachable) by live membership/i.test(reason)) {
+    return "Run splitch use --app <other-app> (or pass --app) to select a reachable App, or restore membership for the selected resource";
+  }
   return "Select an App or Organization your live membership authorizes, or restore membership for the selected resource";
 }
 

@@ -7,6 +7,7 @@ import {
   commandHasBodyJson,
   renderBodyJsonSection,
 } from "./help-body-json.js";
+import { deleteModeHelpFlags } from "./help-delete-flags.js";
 import { META_DESCRIPTIONS, META_EXAMPLES } from "./help-meta.js";
 
 interface HelpFlag {
@@ -151,6 +152,7 @@ function commandFlags(command: CliCommandDefinition): HelpFlag[] {
   }
   if (command.supportsConfirm)
     flags.push(flag("--confirm", "boolean", "false", "Approve and apply a Policy-gated change."));
+  flags.push(...deleteModeHelpFlags(command));
   flags.push(flag("--json", "boolean", "false", "Write machine-readable JSON to stdout."));
   flags.push(helpFlag());
   return flags;

@@ -87,13 +87,21 @@ export function createAppsClient(
         ),
       );
     },
-    delete: (input, callOptions) =>
-      invokeHcRoute<AppsDeleteOutput>("apps_delete", () =>
+    delete: (input, callOptions) => {
+      const { appId, dryRun, force } = input;
+      return invokeHcRoute<AppsDeleteOutput>("apps_delete", () =>
         hcClient.apps[":appId"].$delete(
-          { param: { appId: input.appId } },
+          {
+            param: { appId },
+            query: {
+              ...(dryRun === true ? { dryRun: "true" } : {}),
+              ...(force === true ? { force: "true" } : {}),
+            },
+          } as never,
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),
-      ),
+      );
+    },
     getAttentionRollup: (input, callOptions) =>
       invokeHcRoute<AppAttentionRollupGetOutput>("app_attention_rollup_get", () =>
         hcClient.apps[":appId"]["attention-rollup"].$get(

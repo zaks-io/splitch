@@ -111,7 +111,7 @@ reintersects it with the WorkOS Organization grant and live membership before mi
 missing provider session fails with `CLI_SESSION_EXPIRED` (exit 2) and remediates with re-login. An
 `invalid_grant` that refuses an App/Org rebind against an otherwise-live session fails with
 `CLI_TOKEN_BINDING_REFUSED` (exit 3), surfaces the server's reason verbatim, and remediates with
-membership or selector repair — never re-login. On re-login for device flow, CLI opens
+`splitch use --app <other>` (or membership/selector repair) — never re-login. On re-login for device flow, CLI opens
 `verification_uri_complete` when supplied, otherwise `verification_uri`, in the default browser,
 prints the URL and code as a remote-terminal fallback, and polls until approved. A browser launch
 failure is visible but does not prevent manual approval.

@@ -3,6 +3,7 @@ import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-iden
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
 import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
+import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
 
 /**
  * Canonical error contract. One base shape, discriminated on `code`, parsed by
@@ -177,11 +178,22 @@ const errorMembers = [
   member(
     "RESOURCE_NOT_EMPTY",
     z.object({
-      resourceType: z.enum(["app", "environment", "flag", "variant"]),
+      resourceType: z.enum(["app", "environment", "flag", "variant", "organization"]),
       resourceId: z.string(),
+      /**
+       * First blocker group's CLI child type (back-compat summary). Prefer
+       * `blockers` for the full tree with child IDs and remove commands.
+       */
       childType: z.string(),
       childCount: z.number(),
       attemptedOp: z.string(),
+      /**
+       * Every current blocker group, each child named by ID and by the CLI
+       * command that removes it. Absent only on legacy flag/variant emptiness
+       * guards that still report a single count (those paths have no cascade
+       * tree yet).
+       */
+      blockers: z.array(ResourceDeleteBlockerSchema).min(1).optional(),
     }),
   ),
 

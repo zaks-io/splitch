@@ -1,6 +1,10 @@
 import { z } from "@hono/zod-openapi";
 import { AppSchema, type ClientKeySchema, EnvironmentSchema } from "./leaf-schemas-runtime";
 import type {
+  ResourceDeleteModeQuerySchema,
+  ResourceDeleteResponseSchema,
+} from "./resource-delete-tree";
+import type {
   AppAttentionRollupResponseSchema,
   CreateAppRequestSchema,
   CreateAppResponseSchema,
@@ -52,9 +56,9 @@ import type {
   ReplaceTargetingRulesRequestSchema,
 } from "./routes/route-shapes";
 import {
-  ApprovalRequestListQuerySchema,
+  type ApprovalRequestListQuerySchema,
   ApprovalRequestSchema,
-  ReviewApprovalRequestSchema,
+  type ReviewApprovalRequestSchema,
 } from "./routes/route-shapes-approval-request";
 import { paginatedResponse } from "./wire-envelopes-core";
 
@@ -142,8 +146,9 @@ export type AppsGetInput = z.infer<typeof AppParams>;
 export type AppsGetOutput = z.infer<typeof AppSchema>;
 export type AppsUpdateInput = z.infer<typeof AppParams> & z.infer<typeof PatchAppRequestSchema>;
 export type AppsUpdateOutput = z.infer<typeof AppSchema>;
-export type AppsDeleteInput = z.infer<typeof AppParams>;
-export type AppsDeleteOutput = z.infer<typeof DeletedResponseSchema>;
+export type AppsDeleteInput = z.infer<typeof AppParams> &
+  z.infer<typeof ResourceDeleteModeQuerySchema>;
+export type AppsDeleteOutput = z.infer<typeof ResourceDeleteResponseSchema>;
 
 export type AppAttentionRollupGetInput = z.infer<typeof AppParams>;
 export type AppAttentionRollupGetOutput = z.infer<typeof AppAttentionRollupResponseSchema>;
