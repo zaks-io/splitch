@@ -1,4 +1,6 @@
-export const D1_TEST_FILES = [
+import { defineTestFileManifest } from "../../scripts/vitest-test-manifest";
+
+export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/app-delete-grant-issuance.test.ts",
   "src/claim-lifetime-security.test.ts",
   "src/claim-reservation-boundaries.test.ts",
@@ -16,4 +18,4 @@ export const D1_TEST_FILES = [
   "src/mcp-local-integration.test.ts",
   "src/oauth-routes.test.ts",
   "src/trusted-idp-crud.test.ts",
-];
+]);

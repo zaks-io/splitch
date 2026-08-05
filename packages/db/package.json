@@ -28,7 +28,7 @@
     "lint": "biome lint src",
     "migrate:production": "wrangler d1 migrations apply DB --remote --env production",
     "migrate:shared-preview": "wrangler d1 migrations apply DB --remote --env shared-preview",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "typecheck": "tsc -p tsconfig.test.json"
   },
   "dependencies": {

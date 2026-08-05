@@ -6,6 +6,5 @@ export default defineConfig({
     name: "unit",
     include: ["src/**/*.{test,spec}.ts"],
     exclude: D1_TEST_FILES,
-    passWithNoTests: true,
   },
 });

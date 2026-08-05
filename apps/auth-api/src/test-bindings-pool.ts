@@ -17,7 +17,7 @@ export async function makePoolBindings(): Promise<LocalBindings> {
 
   try {
     await resetD1Database(testEnv.DB);
-    await Promise.all([clearKv(testEnv.JTI_CACHE), clearKv(testEnv.SESSION_STORE)]);
+    await resetPoolKv({ kv: testEnv.JTI_CACHE, sessionKv: testEnv.SESSION_STORE });
   } catch (error) {
     leased = false;
     throw error;
@@ -34,6 +34,12 @@ export async function makePoolBindings(): Promise<LocalBindings> {
       leased = false;
     },
   };
+}
+
+export async function resetPoolKv(
+  bindings: Pick<LocalBindings, "kv" | "sessionKv">,
+): Promise<void> {
+  await Promise.all([clearKv(bindings.kv), clearKv(bindings.sessionKv)]);
 }
 
 async function clearKv(kv: KVNamespace): Promise<void> {

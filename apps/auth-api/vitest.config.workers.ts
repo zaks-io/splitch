@@ -24,7 +24,6 @@ export default defineConfig(async () => {
     test: {
       name: "workers",
       include: D1_TEST_FILES,
-      passWithNoTests: true,
       setupFiles: ["./src/test-bindings-pool-setup.ts"],
       hookTimeout: 30_000,
       testTimeout: 15_000,

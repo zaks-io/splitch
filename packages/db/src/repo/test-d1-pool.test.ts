@@ -4,13 +4,16 @@ import { createLocalD1 } from "./test-d1-pool";
 describe("pooled local D1", () => {
   it("reuses one binding while clearing data between leases", async () => {
     const first = await createLocalD1();
-    await first.d1
-      .prepare(
-        "INSERT INTO organizations (id, name, slug, plan, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-      )
-      .bind("org_pool_probe", "Pool probe", "pool-probe", "free", "2026-08-05", "2026-08-05")
-      .run();
-    await first.dispose();
+    try {
+      await first.d1
+        .prepare(
+          "INSERT INTO organizations (id, name, slug, plan, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind("org_pool_probe", "Pool probe", "pool-probe", "free", "2026-08-05", "2026-08-05")
+        .run();
+    } finally {
+      await first.dispose();
+    }
 
     const second = await createLocalD1();
     try {

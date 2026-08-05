@@ -1,4 +1,6 @@
-export const D1_TEST_FILES = [
+import { defineTestFileManifest } from "../../scripts/vitest-test-manifest";
+
+export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/repo/app-delete-cascade-isolation.test.ts",
   "src/repo/app-delete-cascade.test.ts",
   "src/repo/approval-decline-reviewer-role.test.ts",
@@ -18,4 +20,4 @@ export const D1_TEST_FILES = [
   "src/repo/variant-rename-run-freeze.test.ts",
   "src/repo/write-isolation.test.ts",
   "src/schema-runtime.test.ts",
-];
+]);

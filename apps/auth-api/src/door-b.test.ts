@@ -5,7 +5,7 @@ import { makeFixtureDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import { makeJtiCache } from "./jti-cache";
 import { makeKvRevocationStore } from "./revocation";
-import { makePoolBindings } from "./test-bindings-pool";
+import { makePoolBindings, resetPoolKv } from "./test-bindings-pool";
 import {
   type DoorBFixtures,
   type LocalBindings,
@@ -50,6 +50,7 @@ afterAll(async () => {
 
 /** A fresh schema per test so row-count assertions are not cross-contaminated. */
 async function resetDb(): Promise<void> {
+  await resetPoolKv(local);
   for (const table of [
     "environments",
     "app_memberships",

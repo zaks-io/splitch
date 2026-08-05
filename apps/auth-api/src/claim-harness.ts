@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach } from "vitest";
 import { initiateClaim, verifyClaim } from "./claim";
 import { FIXTURE_OTP } from "./otp";
 import { registerAnonymous } from "./register";
-import { makePoolBindings } from "./test-bindings-pool";
+import { makePoolBindings, resetPoolKv } from "./test-bindings-pool";
 import { type DoorBFixtures, type LocalBindings, makeDoorBDeps } from "./test-fixtures";
 import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 
@@ -62,6 +62,7 @@ export function setupClaimHarness(): ClaimHarness {
   afterAll(() => local.dispose());
 
   beforeEach(async () => {
+    await resetPoolKv(local);
     for (const t of [
       "environments",
       "claim_idempotency",

@@ -15,8 +15,8 @@ import {
  *
  * Under the Workers pool the bindings are the real in-process ones, so the same
  * suite costs zero sockets. The signature matches `makeLocalBindings` so the
- * migrated tests read identically; `dispose` is a no-op because there is no
- * runtime to tear down.
+ * migrated tests read identically; `dispose` clears the shared KV namespaces
+ * because the Workers pool isolates storage per file rather than per test.
  */
 export type PoolBindingsWithConfig = SourcePoolBindingsWithConfig;
 
