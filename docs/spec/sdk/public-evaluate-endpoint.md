@@ -157,8 +157,9 @@ SRM-invisible read under a public key is an allocation oracle. This public endpo
   emits a loud error log / error hook (ADR-0036). **This is never silent** — the caller can
   always tell a failure-fallback from a real resolution via `reason`. A degraded-to-default
   result keeps the customer's app running; a _hidden_ one is forbidden.
-- Single-flag-per-call. Batch evaluation (`evaluateAll`) is deferred; no `/evaluate-batch` endpoint
-  is defined.
+- Single-flag-per-call. Bulk resolution is the separate non-exposing
+  [`POST /api/sdk/evaluate-all`](./evaluate-all-endpoint.md) (Precomputed Evaluations, ADR-0048);
+  this endpoint stays one Flag, one Exposure decision.
 
 ## Edge binding
 

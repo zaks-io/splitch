@@ -1,9 +1,12 @@
 # SDK area spec index
 
-Spine: the SDK is a thin JS/TS HTTP client. `evaluate`/`evaluateDetails` fire an Exposure,
-`peekVariant` and `verify` resolve without one, top-level `track()` submits a strictly validated
-Metric Event, `web.track()` queues an explicitly submitted Web Event, and `web.flush()` awaits an
-acknowledged batch result. `web.instrument()` separately registers explicitly selected automatic
+Spine: the SDK is a thin JS/TS HTTP client in two paradigms. On the dynamic-context (server)
+client, `evaluate`/`evaluateDetails` fire an Exposure, `peekVariant` and `verify` resolve without
+one, and `evaluateAll` fetches the non-exposing Precomputed Evaluations (ADR-0048). The
+static-context browser client holds those Precomputed Evaluations for one Evaluation Context,
+serves synchronous reads, and fires Exposure on first read by redeeming Exposure Tickets.
+Top-level `track()` submits a strictly validated Metric Event, `web.track()` queues an explicitly
+submitted Web Event, and `web.flush()` awaits an acknowledged batch result. `web.instrument()` separately registers explicitly selected automatic
 browser signals and returns their scoped cleanup. Browser Web Events use a tab-scoped Web Session by
 default and remain outside Experiment measurement. Every evaluation accessor speaks the OpenFeature
 `ResolutionDetails` shape and is **fail-loud** — a failure-fallback always carries
@@ -20,6 +23,9 @@ deferred; the `ResolutionDetails` _shape_ is not.
 | [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)                 | `POST /api/sdk/evaluate` contract: request/response shapes, safety invariants, edge binding                                            |
 | [exposure-accessor.md](./exposure-accessor.md#peek-endpoint-shape)           | `POST /api/sdk/peek` contract: API-Key-only non-exposing Variant resolution                                                            |
 | [verify-endpoint.md](./verify-endpoint.md)                                   | `POST /api/sdk/verify` contract: non-exposing setup confirmation, reason tiered by credential (ADR-0037)                               |
+| [evaluate-all-endpoint.md](./evaluate-all-endpoint.md)                       | `POST /api/sdk/evaluate-all` contract: Precomputed Evaluations, non-exposing, Exposure Tickets, ETag (ADR-0048)                        |
+| [exposures-endpoint.md](./exposures-endpoint.md)                             | `POST /api/sdk/exposures` contract: batched Exposure Ticket redemption, forgery-proof, deferred Assignment Store write                 |
+| [browser-client.md](./browser-client.md)                                     | Static-context browser client: sync reads, exposure-on-first-read queue, SSR bootstrap, ETag revalidation                              |
 | [exposure-accessor.md](./exposure-accessor.md)                               | `evaluate` (fires Exposure), `peekVariant` + `verify` (no Exposure)                                                                    |
 | [seen-set.md](./seen-set.md)                                                 | SDK-local per-instance exposure dedup cache (hot-path optimization only)                                                               |
 | [assignment-store-integration.md](./assignment-store-integration.md)         | How the SDK consumes the Assignment Store (holdover pre-load, evaluate-path ordering)                                                  |

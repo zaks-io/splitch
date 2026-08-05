@@ -88,6 +88,16 @@ Exposure data, never Run config.
 **Exposure**: the event that an Entity actually encountered its assigned Variant. Analysis counts
 Exposures, not Assignments. See [`apps/event-ingest-api/CONTEXT.md`](./apps/event-ingest-api/CONTEXT.md).
 
+**Precomputed Evaluations**: the per-Flag resolved results (non-revealing Resolution Details) for
+one Evaluation Context across every Flag in an App/Environment, returned by one non-exposing
+`evaluate-all` call. What static-context clients hold and SSR bootstraps serialize. Never contains
+Targeting Rules, salts, or allocation. See [`packages/sdk/CONTEXT.md`](./packages/sdk/CONTEXT.md).
+
+**Exposure Ticket**: the opaque, server-minted voucher inside Precomputed Evaluations that binds
+one fresh live-Run assignment. Redeeming it on first local read is what fires the Exposure; a
+client cannot report an Exposure the server did not resolve. See
+[`packages/sdk/CONTEXT.md`](./packages/sdk/CONTEXT.md).
+
 **Event Definition**: an App-level schema for one named Metric Event or Web Event. Its immutable
 family is selected when created, and its immutable published versions are shared across
 Environments.
