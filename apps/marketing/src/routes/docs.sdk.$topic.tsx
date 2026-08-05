@@ -42,7 +42,7 @@ export const Route = createFileRoute("/docs/sdk/$topic")({
   notFoundComponent: () => (
     <DocNotFound
       title="No such SDK topic"
-      body="The SDK guide is split into the topics listed below."
+      body="The SDK guide is split into topics, and the docs index lists every one of them."
     />
   ),
   component: SdkTopicRoute,

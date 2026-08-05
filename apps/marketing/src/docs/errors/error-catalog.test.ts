@@ -52,6 +52,14 @@ describe("error catalog", () => {
     }
   });
 
+  it("rejects inherited object properties as codes", () => {
+    // `value in errorDocs` would clear the guard for every Object.prototype
+    // member, and `/docs/error/toString` would render a page built from a method.
+    for (const name of ["toString", "constructor", "valueOf", "hasOwnProperty"]) {
+      expect(isDocumentedErrorCode(name), name).toBe(false);
+    }
+  });
+
   it("serves the exact URL the SDK and CLI print in error messages", () => {
     // Both sides build the URL from the code, independently. If either scheme
     // moves, every printed `Docs:` link 404s, so the agreement is a test rather

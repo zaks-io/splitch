@@ -22,7 +22,7 @@ export const methodsTopic: SdkTopic = {
     {
       kind: "list",
       items: [
-        "`evaluate` on the real user path. This is the only call that belongs in production request handling.",
+        "`evaluate` or `evaluateDetails` on the real user path. These are the calls that belong in production request handling; reach for `evaluateDetails` when the handler needs `ResolutionDetails`.",
         "`peekVariant` to inspect a resolution without polluting experiment data: admin screens, support tooling, debugging.",
         "`verify` to confirm setup end to end. Same shape as `evaluateDetails`, no Exposure, safe to run repeatedly in CI.",
       ],

@@ -54,7 +54,9 @@ export const errorDocs: Record<DocumentedErrorCode, ErrorDoc> = catalog;
 export const documentedErrorCodes = Object.keys(errorDocs).sort() as DocumentedErrorCode[];
 
 export function isDocumentedErrorCode(value: string): value is DocumentedErrorCode {
-  return value in errorDocs;
+  // Own-property, not `in`: `in` reaches Object.prototype, so `/docs/error/toString`
+  // would clear the guard and then render a page built from a method.
+  return Object.hasOwn(errorDocs, value);
 }
 
 /**

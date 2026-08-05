@@ -42,7 +42,7 @@ function DocsIndexRoute() {
             </a>{" "}
             indexes all of them. Building with an agent? Point it at{" "}
             <span className="font-mono text-foreground">mcp.splitch.dev</span> and it gets the same
-            material in-band.
+            material without leaving the tools it already has.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button render={<Link to="/quickstart" />}>Quickstart</Button>

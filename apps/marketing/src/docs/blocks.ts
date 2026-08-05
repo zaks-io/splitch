@@ -46,7 +46,9 @@ export function parseInline(text: string): InlineSpan[] {
 }
 
 function renderRow(cells: readonly string[]): string {
-  return `| ${cells.join(" | ")} |`;
+  // An unescaped `|` in a cell opens a new markdown column, so the `.md` table
+  // would gain a column the rendered page does not have.
+  return `| ${cells.map((cell) => cell.replaceAll("|", "\\|")).join(" | ")} |`;
 }
 
 function blockToMarkdown(block: DocBlock): string {

@@ -10,7 +10,7 @@ const surfaces = [
   {
     key: "api" as const,
     title: "API",
-    blurb: "Returned on the wire by the control plane and the edge, with an HTTP status.",
+    blurb: "Returned by the splitch API, with an HTTP status.",
   },
   {
     key: "sdk" as const,

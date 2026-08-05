@@ -63,7 +63,7 @@ export function llmsTxt(): string {
 
   return [
     "# splitch",
-    "> Feature flags and experiments with agent parity: every capability a person has in the panel is available to an agent over MCP, the CLI, and the SDK. Failures are always observable and never disguised as a default.",
+    "> Feature flags and A/B experimentation with agent parity: every capability a person has in the panel is available to an agent over MCP, the CLI, and the SDK. Failures are always observable and never disguised as a default.",
     "Every page below is also served as HTML at the same URL without the `.md` suffix.",
     "## SDK",
     topicLines.join("\n"),
