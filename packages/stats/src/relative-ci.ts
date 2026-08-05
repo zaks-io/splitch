@@ -70,7 +70,8 @@ export function fiellerRelativeCi(
 
   // a <= 0 means the Control mean is not itself separated from zero at this
   // level, so no bounded interval for the ratio exists. A Control mean of
-  // exactly zero lands here too, since a is then -k^2 vC.
+  // exactly zero never reaches here: relative lift is undefined there, so the
+  // caller publishes a null interval rather than an unbounded one.
   if (a <= 0) {
     return UNBOUNDED;
   }

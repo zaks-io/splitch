@@ -126,16 +126,31 @@ fails only if the arm-level denominator mean `B = 0`.
 
 ### Relative-lift CI
 
-Relative lift `R_t / R_c - 1` is reported separately from the decision statistic. The base
-interval and p-value are always computed on absolute lift `R_t - R_c`. Relative-lift reporting and
-relative Guardrail bounds retain their delta-method interval. If the Control estimate is zero,
-relative lift and its interval are undefined, while the absolute-lift decision remains available.
+Relative lift is reported separately from the decision statistic. The base interval and p-value are
+always computed on absolute lift `R_t - R_c`. Relative-lift reporting and relative Guardrail bounds
+are the **Fieller inversion of that same absolute interval**, never a second independent estimate
+(ADR-0015 rule 4). If the Control estimate is zero, relative lift and its interval are undefined,
+while the absolute-lift decision remains available.
+
+Both the point estimate and the interval bounds are reported in **percentage points**:
 
 ```
-relative_lift = R_t / R_c - 1
-sampling_var_relative =
-  (1 / R_c^2) * sampling_var_t + (R_t^2 / R_c^4) * sampling_var_c
+relative_lift_pct = (R_t / R_c - 1) * 100
+
+# Fieller: invert (R_t - k_ratio * R_c)^2 <= k^2 * (v_t + k_ratio^2 * v_c) for k_ratio,
+# with k the same critical value the absolute decision interval uses.
+a = R_c^2 - k^2 * v_c
+b = R_t * R_c
+c = R_t^2 - k^2 * v_t
+
+ci_lower, ci_upper = ((b -/+ sqrt(b^2 - a*c)) / a - 1) * 100   # when a > 0
+ci_lower, ci_upper = -Infinity, +Infinity                      # when a <= 0
 ```
+
+`a <= 0` means the Control mean is not separated from zero at the confidence level, so the ratio is
+unbounded. The interval is reported unbounded rather than truncated to a finite-looking range.
+Because a ratio of 1 reduces Fieller's quadratic to the absolute test, the published relative
+interval contains 0% if and only if the decision interval contains zero.
 
 For a Binomial comparison with a non-zero effect but a zero plug-in variance at a boundary, the
 decision or relative-reporting standard error uses the documented Agresti-Caffo plus-two variance
@@ -147,7 +162,8 @@ decision and Guardrail paths.
 
 A Guardrail Metric is a regular Metric carrying a `downside_threshold_pct` (a relative-lift lower
 bound in percent, on the same scale as `relative_lift_pct` and `ci_lower`). After the full CI
-pipeline, `guardrail_breached = ci_lower < downside_threshold_pct`. A
+pipeline, `guardrail_breached = ci_lower < downside_threshold_pct`, where `ci_lower` is the
+Fieller-derived relative lower bound in percentage points defined above. A
 breached Guardrail fires regardless of significance status. Guardrail Metrics are **excluded from
 the BH FDR family** — they do not consume multiplicity budget.
 

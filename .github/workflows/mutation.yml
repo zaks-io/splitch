@@ -54,8 +54,8 @@ jobs:
           stats='{"name":"stats","workspace":"@splitch/stats","report_dir":"packages/stats/reports/mutation"}'
 
           if [ "$EVENT_NAME" = "schedule" ]; then
-            week="$(date -u +%V)"
-            case "$((10#$week % 3))" in
+            epoch_week="$(( $(date -u +%s) / 604800 ))"
+            case "$((epoch_week % 3))" in
               0) matrix="{\"include\":[$sdk]}" ;;
               1) matrix="{\"include\":[$contracts]}" ;;
               *) matrix="{\"include\":[$stats]}" ;;
