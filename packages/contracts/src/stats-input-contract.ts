@@ -104,7 +104,7 @@ export const DimensionInputSchema = z
   .strict();
 export type DimensionInput = z.infer<typeof DimensionInputSchema>;
 
-const GuardrailDecisionSchema = z
+export const GuardrailDecisionSchema = z
   .object({
     metric_id: MetricIdSchema,
     variant: z.string(),
@@ -113,6 +113,34 @@ const GuardrailDecisionSchema = z
     threshold_locked_at_run_start: z.boolean(),
   })
   .strict();
+export type GuardrailDecision = z.infer<typeof GuardrailDecisionSchema>;
+
+/**
+ * Engine defaults for the variance-reduction knobs (variance-reduction.md).
+ * They live on the contract rather than in the engine because Run Start resolves
+ * a Metric that states no preference into an explicit frozen value, and the
+ * number Start writes must be the number the engine would have used.
+ */
+export const DEFAULT_WINSORIZE = true;
+export const DEFAULT_WINSORIZE_PCT = 99.9;
+export const DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT = 70;
+
+/**
+ * The variance-reduction rule frozen at Run Start for one Metric
+ * (variance-reduction.md). A Metric absent from the array uses the engine
+ * defaults; a Metric present states every knob, because the point of freezing is
+ * that a re-analysis reproduces the original numbers without consulting the
+ * Metric row, which may have been edited since.
+ */
+export const MetricVarianceConfigSchema = z
+  .object({
+    metric_id: MetricIdSchema,
+    winsorize: z.boolean(),
+    winsorize_pct: z.number().gt(0).max(100),
+    cuped_coverage_threshold: z.number().gt(0).max(100),
+  })
+  .strict();
+export type MetricVarianceConfig = z.infer<typeof MetricVarianceConfigSchema>;
 
 export const StatsInputSchema = z
   .object({
@@ -125,6 +153,7 @@ export const StatsInputSchema = z
     control_variant: z.string(),
     decision_family: z.array(DecisionFamilyMemberSchema),
     guardrail_decisions: z.array(GuardrailDecisionSchema).default([]),
+    metric_variance_config: z.array(MetricVarianceConfigSchema).default([]),
     exposures: z.array(DedupeExposureRowSchema),
     metric_values: z.array(PerEntityMetricRowSchema),
     pre_period_covariates: z.array(CupedCovariateRowSchema).optional(),

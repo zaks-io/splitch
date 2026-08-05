@@ -17,6 +17,7 @@ on:
           - all
           - sdk
           - contracts
+          - stats
   schedule:
     - cron: "0 6 * * 1"
 
@@ -50,19 +51,21 @@ jobs:
           set -euo pipefail
           sdk='{"name":"sdk","workspace":"@splitch/sdk","report_dir":"packages/sdk/reports/mutation"}'
           contracts='{"name":"contracts","workspace":"@splitch/contracts","report_dir":"packages/contracts/reports/mutation"}'
+          stats='{"name":"stats","workspace":"@splitch/stats","report_dir":"packages/stats/reports/mutation"}'
 
           if [ "$EVENT_NAME" = "schedule" ]; then
             week="$(date -u +%V)"
-            if [ "$((10#$week % 2))" -eq 0 ]; then
-              matrix="{\"include\":[$sdk]}"
-            else
-              matrix="{\"include\":[$contracts]}"
-            fi
+            case "$((10#$week % 3))" in
+              0) matrix="{\"include\":[$sdk]}" ;;
+              1) matrix="{\"include\":[$contracts]}" ;;
+              *) matrix="{\"include\":[$stats]}" ;;
+            esac
           else
             case "$REQUESTED_SCOPE" in
               sdk) matrix="{\"include\":[$sdk]}" ;;
               contracts) matrix="{\"include\":[$contracts]}" ;;
-              all) matrix="{\"include\":[$sdk,$contracts]}" ;;
+              stats) matrix="{\"include\":[$stats]}" ;;
+              all) matrix="{\"include\":[$sdk,$contracts,$stats]}" ;;
               *) echo "::error::Unknown mutation scope: $REQUESTED_SCOPE"; exit 1 ;;
             esac
           fi

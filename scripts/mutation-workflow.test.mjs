@@ -4,11 +4,11 @@ import test from "node:test";
 
 const workflow = readFileSync(".github/workflows/mutation.yml", "utf8");
 
-test("scheduled mutation alternates packages and manual runs expose explicit scopes", () => {
+test("scheduled mutation rotates packages and manual runs expose explicit scopes", () => {
   assert.match(workflow, /scope:\n\s+description: Package scope to mutate/);
-  assert.match(workflow, /- all\n\s+- sdk\n\s+- contracts/);
+  assert.match(workflow, /- all\n\s+- sdk\n\s+- contracts\n\s+- stats/);
   assert.match(workflow, /week="\$\(date -u \+%V\)"/);
-  assert.match(workflow, /10#\$week % 2/);
+  assert.match(workflow, /10#\$week % 3/);
   assert.match(workflow, /matrix: \$\{\{ fromJSON\(needs\.plan\.outputs\.matrix\) \}\}/);
 });
 

@@ -28,11 +28,15 @@ export function migrationStatements(): string[] {
   const sql = sqlFiles.map((f) => readFileSync(join(migrationsDir, f), "utf8")).join("\n");
   // drizzle-kit separates statements with a breakpoint marker; split on it and
   // fall back to `;` so a single exec failure surfaces the offending statement.
+  // Comments come off BEFORE the `;` fallback: a semicolon inside a rationale
+  // comment would otherwise split it into a chunk with no `--` left on the
+  // second half, handing d1.exec prose to run as SQL.
   return (
     sql
       .split(/-->\s*statement-breakpoint/)
-      .flatMap((chunk) => chunk.split(";"))
       .map(stripLineComments)
+      .flatMap((chunk) => chunk.split(";"))
+      .map((s) => s.trim())
       .filter((s) => s.length > 0)
       // `d1.exec` treats each line as its own statement, so a multi-line one must
       // be flattened before it is handed over.

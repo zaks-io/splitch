@@ -95,6 +95,30 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
     expect(members).toEqual(["conversion/treatment_a", "conversion/treatment_b"]);
   });
 
+  it("refuses MetricRef guardrail_decisions instead of analysing an unbounded Run", async () => {
+    // A MetricRef carries no downside_threshold, so a Run frozen before Start
+    // resolved thresholds has nothing to check against. Reading it as "no
+    // guardrails declared" would pass every guardrail silently.
+    const rows = rowsByPipe();
+    const [runInput] = rows.analysis_run_inputs as Record<string, unknown>[];
+    const { app } = makeResultsHarness({
+      ...rows,
+      analysis_run_inputs: [
+        {
+          ...runInput,
+          guardrail_decisions: JSON.stringify([{ metricId: "guardrail_conversion" }]),
+        },
+      ],
+    });
+
+    const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as ErrorResponse;
+    expect(body.code).toBe("VALIDATION_ERROR");
+    expect(JSON.stringify(body.details)).toContain("re-Started");
+  });
+
   it("puts a named fault on INTERNAL_SERVER_ERROR rather than empty details", async () => {
     const rows = rowsByPipe();
     const [runInput] = rows.analysis_run_inputs as { run_id: string }[];
@@ -165,7 +189,7 @@ describe("GET experiment results real Tinybird transport path (SPL-302)", () => 
   });
 });
 
-/** The D1 MetricRef shape production snapshots still carry today. */
+/** The D1 MetricRef decision_family production snapshots still carry today. */
 function productionShapedRows(): RowsByPipe {
   const rows = rowsByPipe();
   const [runInput] = rows.analysis_run_inputs as Record<string, unknown>[];
@@ -175,7 +199,7 @@ function productionShapedRows(): RowsByPipe {
       {
         ...runInput,
         decision_family: JSON.stringify([{ metricId: "conversion" }]),
-        guardrail_decisions: JSON.stringify([{ metricId: "guardrail_conversion" }]),
+        guardrail_decisions: JSON.stringify([]),
       },
     ],
   };

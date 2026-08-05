@@ -1,15 +1,18 @@
 /**
  * Materialize `analysis_run_inputs` rows into StatsInput Run fields.
  *
- * D1 freezes `decision_family` / `guardrail_decisions` as `MetricRef[]`
- * (`{ metricId }`). Tinybird's analysis pipes feed `StatsInputSchema`, which
- * expects snake_case `DecisionFamilyMember[]` / `GuardrailDecision[]`. The
- * Run Snapshot bridge historically copied the D1 JSON verbatim (SPL-302), so
- * production rows arrive as MetricRefs. Accept both shapes; expand MetricRefs
- * against the locked allocation and Control Variant.
+ * D1 freezes `decision_family` as `MetricRef[]` (`{ metricId }`) while Tinybird's
+ * analysis pipes feed `StatsInputSchema`, which expects snake_case
+ * `DecisionFamilyMember[]`. The Run Snapshot bridge historically copied the D1
+ * JSON verbatim (SPL-302), so production rows arrive as MetricRefs. Accept both
+ * shapes; expand MetricRefs against the locked allocation and Control Variant.
+ *
+ * `guardrail_decisions` is different: a MetricRef carries no threshold, so there
+ * is nothing to expand it into. Start freezes real `GuardrailDecision[]` now,
+ * and a Run that froze MetricRefs is refused rather than analyzed with no bound.
  */
 
-import type { StatsInput } from "@splitch/contracts";
+import type { MetricVarianceConfig, StatsInput } from "@splitch/contracts";
 import { ResultsInputError, ResultsInsufficientDataError } from "./results-errors";
 import {
   compact,
@@ -44,6 +47,9 @@ export function materializeRunInput(row: unknown): RunFields {
     ),
     guardrail_decisions: materializeGuardrailDecisions(
       jsonField(source, "guardrail_decisions") ?? [],
+    ),
+    metric_variance_config: materializeVarianceConfig(
+      jsonField(source, "metric_variance_config") ?? [],
     ),
     dimensions: jsonField(source, "dimensions"),
   }) as RunFields;
@@ -117,13 +123,49 @@ function materializeGuardrailDecisions(
       threshold_locked_at_run_start: row.threshold_locked_at_run_start,
     }));
   }
-  // D1 freezes MetricRefs only; thresholds live on Metric rows and were never
-  // copied into the snapshot. Dropping them keeps Results readable; a follow-up
-  // must freeze GuardrailDecision at Start. Inventing a threshold would lie.
+  // A MetricRef has no threshold to check against. Returning [] here reported
+  // "no guardrail breached" for a Run whose guardrails were never evaluated;
+  // inventing a threshold would lie just as loudly (ADR-0036).
   if (raw.every(isMetricRef)) {
-    return [];
+    throw new ResultsInputError(
+      "guardrail_decisions froze MetricRefs with no thresholds; this Run predates guardrail freezing and must be re-Started to be analyzable",
+    );
   }
   throw new ResultsInputError("guardrail_decisions is neither MetricRef[] nor GuardrailDecision[]");
+}
+
+/**
+ * The variance-reduction rule frozen at Start. An empty array is legitimate (a
+ * Run with no analyzed Metrics); a malformed one is not, because the engine
+ * would fall back to its own defaults and quietly re-decide a locked Run under
+ * a different cap rule.
+ */
+function materializeVarianceConfig(
+  raw: unknown,
+): NonNullable<StatsInput["metric_variance_config"]> {
+  if (!Array.isArray(raw)) {
+    throw new ResultsInputError("metric_variance_config must be a JSON array");
+  }
+  if (!raw.every(isMetricVarianceConfig)) {
+    throw new ResultsInputError("metric_variance_config is not MetricVarianceConfig[]");
+  }
+  return raw.map((row) => ({
+    metric_id: row.metric_id,
+    winsorize: row.winsorize,
+    winsorize_pct: row.winsorize_pct,
+    cuped_coverage_threshold: row.cuped_coverage_threshold,
+  }));
+}
+
+function isMetricVarianceConfig(value: unknown): value is MetricVarianceConfig {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.metric_id === "string" &&
+    typeof row.winsorize === "boolean" &&
+    typeof row.winsorize_pct === "number" &&
+    typeof row.cuped_coverage_threshold === "number"
+  );
 }
 
 function parseAllocation(raw: unknown): Record<string, number> {

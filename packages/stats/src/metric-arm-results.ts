@@ -7,6 +7,7 @@ import type {
 } from "@splitch/contracts";
 import { FixedHorizonCI } from "./fixed-horizon-ci";
 import { metricTypesById } from "./metric-discovery";
+import { fiellerRelativeCi } from "./relative-ci";
 import { SequentialCI, type CIAdapter, type CIResult } from "./sequential-ci";
 import { estimateMetricComparison } from "./variance-estimators";
 import type { MetricArmEstimate, MetricComparisonEstimate } from "./variance-estimator-types";
@@ -80,6 +81,10 @@ function comparisonFor(
   treatmentVariant: string,
   exposures: readonly DedupeExposureRow[],
 ): MetricComparisonEstimate {
+  // The Run froze the variance-reduction rule at Start (variance-reduction.md).
+  // A Metric absent from the array states no rule, so the estimator's own
+  // defaults apply — passing `undefined` is what selects them.
+  const variance = input.metric_variance_config?.find((config) => config.metric_id === metricId);
   return estimateMetricComparison({
     run_id: input.run_id,
     metric_id: metricId,
@@ -89,6 +94,9 @@ function comparisonFor(
     exposures,
     metric_values: input.metric_values,
     pre_period_covariates: input.pre_period_covariates,
+    winsorize: variance?.winsorize,
+    winsorize_pct: variance?.winsorize_pct,
+    cuped_coverage_threshold: variance?.cuped_coverage_threshold,
   });
 }
 
@@ -117,7 +125,6 @@ function treatmentArmResult(
   adapters: ArmResultAdapters,
 ): ArmResult {
   const decisionCi = decisionCiForComparison(input, comparison, adapters);
-  const relativeCi = relativeCiForComparison(input, comparison, adapters);
   const status = treatmentStatusForOutput(comparison, decisionCi);
 
   return {
@@ -126,8 +133,8 @@ function treatmentArmResult(
     sample_size_n: comparison.treatment.sample_size_n,
     point_estimate: pointEstimateForOutput(comparison.treatment),
     relative_lift_pct: relativeLiftForOutput(comparison),
-    ci_lower: relativeCiBoundForOutput(comparison, relativeCi, "lower"),
-    ci_upper: relativeCiBoundForOutput(comparison, relativeCi, "upper"),
+    ci_lower: relativeCiBoundForOutput(comparison, decisionCi, "lower"),
+    ci_upper: relativeCiBoundForOutput(comparison, decisionCi, "upper"),
     p_value: decisionCi?.p_value ?? 1,
     is_significant: false,
     in_bh_family: false,
@@ -156,31 +163,6 @@ function decisionCiForComparison(
   return adapter.compute({
     estimate: comparison.absolute_lift,
     sampling_var: comparison.absolute_lift_sampling_var,
-    n_t: comparison.treatment.sample_size_n,
-    n_c: comparison.control.sample_size_n,
-    alpha: 1 - input.confidence_level,
-    target_n: input.target_n,
-    sample_size_locked: input.sample_size_locked,
-  });
-}
-
-function relativeCiForComparison(
-  input: StatsInput,
-  comparison: MetricComparisonEstimate,
-  adapters: ArmResultAdapters,
-): CIResult | null {
-  if (
-    comparison.status !== "ready" ||
-    comparison.relative_lift_pct === null ||
-    comparison.sampling_var === null
-  ) {
-    return null;
-  }
-
-  const adapter = input.horizon === "fixed" ? adapters.fixedHorizonCI : adapters.sequentialCI;
-  return adapter.compute({
-    estimate: comparison.relative_lift_pct,
-    sampling_var: comparison.sampling_var,
     n_t: comparison.treatment.sample_size_n,
     n_c: comparison.control.sample_size_n,
     alpha: 1 - input.confidence_level,
@@ -237,7 +219,9 @@ function relativeCiBoundForOutput(
   if (comparison.relative_lift_pct === null || decisionCi === null) {
     return null;
   }
-  return bound === "lower" ? decisionCi.ci_lower : decisionCi.ci_upper;
+
+  const bounds = fiellerRelativeCi(comparison, decisionCi);
+  return bound === "lower" ? bounds.lower : bounds.upper;
 }
 
 function pointEstimateForOutput(arm: MetricArmEstimate): number {

@@ -26,7 +26,10 @@ export function comparisonEstimate(
 function absoluteLiftEffect(
   control: MetricArmEstimate,
   treatment: MetricArmEstimate,
-): Pick<MetricComparisonEstimate, "absolute_lift" | "absolute_lift_sampling_var"> {
+): Pick<
+  MetricComparisonEstimate,
+  "absolute_lift" | "absolute_lift_sampling_var" | "absolute_lift_var_components"
+> {
   const absoluteLift =
     treatment.point_estimate === null || control.point_estimate === null
       ? null
@@ -36,35 +39,55 @@ function absoluteLiftEffect(
       ? null
       : treatment.sampling_var + control.sampling_var;
 
+  if (!boundarySubstitutionApplies(control, treatment, absoluteLift, samplingVar)) {
+    return {
+      absolute_lift: absoluteLift,
+      absolute_lift_sampling_var: samplingVar,
+      absolute_lift_var_components:
+        control.sampling_var === null || treatment.sampling_var === null
+          ? null
+          : { control: control.sampling_var, treatment: treatment.sampling_var },
+    };
+  }
+
+  const components = {
+    control: boundarySafeArmSamplingVar(control),
+    treatment: boundarySafeArmSamplingVar(treatment),
+  };
+
   return {
     absolute_lift: absoluteLift,
-    absolute_lift_sampling_var: boundarySafeAbsoluteLiftSamplingVar(
-      control,
-      treatment,
-      absoluteLift,
-      samplingVar,
-    ),
+    absolute_lift_sampling_var: components.control + components.treatment,
+    absolute_lift_var_components: components,
   };
 }
 
-function boundarySafeAbsoluteLiftSamplingVar(
+/**
+ * A Binomial arm at 0% or 100% has p(1-p) = 0 and so contributes exactly zero
+ * variance. Guarding on the total only catches the case where both arms are on
+ * a boundary; a boundary arm paired with an interior arm still understates the
+ * variance and overstates significance. Substitute per arm.
+ */
+function boundarySubstitutionApplies(
   control: MetricArmEstimate,
   treatment: MetricArmEstimate,
   absoluteLift: number | null,
   samplingVar: number | null,
-): number | null {
-  if (
-    samplingVar === null ||
-    samplingVar !== 0 ||
-    absoluteLift === null ||
-    absoluteLift === 0 ||
-    control.metric_type !== "binomial" ||
-    treatment.metric_type !== "binomial"
-  ) {
-    return samplingVar;
-  }
+): boolean {
+  return (
+    samplingVar !== null &&
+    absoluteLift !== null &&
+    absoluteLift !== 0 &&
+    control.metric_type === "binomial" &&
+    treatment.metric_type === "binomial" &&
+    (control.sampling_var === 0 || treatment.sampling_var === 0)
+  );
+}
 
-  return agrestiCaffoSamplingVar(control) + agrestiCaffoSamplingVar(treatment);
+function boundarySafeArmSamplingVar(arm: MetricArmEstimate): number {
+  return arm.sampling_var === null || arm.sampling_var === 0
+    ? agrestiCaffoSamplingVar(arm)
+    : arm.sampling_var;
 }
 
 function agrestiCaffoSamplingVar(arm: MetricArmEstimate): number {
@@ -124,22 +147,20 @@ function boundarySafeRelativeLiftSamplingVar(
   samplingVar: number,
 ): number {
   if (
-    samplingVar !== 0 ||
     relativeLift === 0 ||
     control.metric_type !== "binomial" ||
     treatment.metric_type !== "binomial" ||
     control.point_estimate === null ||
     treatment.point_estimate === null ||
     control.sampling_var === null ||
-    treatment.sampling_var === null
+    treatment.sampling_var === null ||
+    (control.sampling_var !== 0 && treatment.sampling_var !== 0)
   ) {
     return samplingVar;
   }
 
-  const controlSamplingVar =
-    control.sampling_var === 0 ? agrestiCaffoSamplingVar(control) : control.sampling_var;
-  const treatmentSamplingVar =
-    treatment.sampling_var === 0 ? agrestiCaffoSamplingVar(treatment) : treatment.sampling_var;
+  const controlSamplingVar = boundarySafeArmSamplingVar(control);
+  const treatmentSamplingVar = boundarySafeArmSamplingVar(treatment);
 
   return clampSamplingVariance(
     (treatmentSamplingVar / control.point_estimate ** 2 +

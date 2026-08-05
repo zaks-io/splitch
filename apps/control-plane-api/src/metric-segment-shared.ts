@@ -39,6 +39,13 @@ export function metricResponse(row: MetricRow): Metric {
     eventName: row.eventName,
     ...(row.eventValueField ? { eventValueField: row.eventValueField } : {}),
     ...(row.denominatorMetricId ? { denominator: { metricId: row.denominatorMetricId } } : {}),
+    // Analysis config is reported as an explicit null when unset, not omitted:
+    // "no preference, engine default applies" is an answer a caller acts on, and
+    // an absent key reads as "this build does not have the field".
+    downsideThreshold: row.downsideThreshold,
+    winsorize: row.winsorize,
+    winsorizePct: row.winsorizePct,
+    cupedCoverageThreshold: row.cupedCoverageThreshold,
     createdAt: row.createdAt,
   };
 }

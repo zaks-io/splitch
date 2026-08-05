@@ -74,6 +74,7 @@ function pipeRows(pipeName, params) {
         control_variant: "control",
         decision_family: JSON.stringify(fixture.decisionFamily),
         guardrail_decisions: JSON.stringify(fixture.guardrailDecisions),
+        metric_variance_config: JSON.stringify(fixture.metricVarianceConfig),
         dimensions: "[]",
       },
     ];

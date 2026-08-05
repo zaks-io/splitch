@@ -20,6 +20,12 @@ new-Entity slice (first-touch Entities, onboarding flows). So:
   a CUPED that assumed history it didn't have.
 - **Never select fallback covariates from post-treatment outcomes**: attribute covariates must be declared
   before Run start or selected from pre-period / historical data without using post-exposure outcomes.
+- **Fit one slope and one centering constant across both arms.** `Y_cuped = Y − θ(X − X̄)` uses the pooled
+  covariate mean and a single θ, as Deng/Xu/Kohavi/Walker define it (§3.2). Centering each arm on its own
+  covariate mean makes the adjustment sum to zero inside that arm, so the lift keeps the full covariate
+  imbalance while the reported variance still falls to the residual: the interval narrows around an
+  uncorrected estimate, and the realized Type-I error climbs with the covariate correlation. θ itself is fit
+  from within-arm-centered cross products, so a real treatment effect cannot leak into the slope.
 
 CUPED is a regression adjustment, so it composes into the same CI object before the always-valid sequence
 (ADR-0014): delta-method variance (ADR-0015) → CUPED adjustment → always-valid CI.
@@ -48,6 +54,10 @@ consensus we inherited. The percentile is configurable and winsorization can be 
 - **Winsorization on binary Metrics** — rejected: meaningless and slightly biasing; additive-only.
 - **Per-arm winsorization caps** — rejected: different caps by arm can change each arm's estimand
   differently and mask tail effects.
+- **Per-arm CUPED centering** — rejected for a sharper version of the same reason. A per-arm cap biases the
+  estimand; a per-arm-centered CUPED leaves the estimand uncorrected while shrinking the interval around
+  it, which is a Type-I error inflation rather than a bias. At ρ = 0.9 it takes a nominal 5% false-positive
+  rate past 40%.
 
 ## Consequences
 
@@ -55,8 +65,14 @@ Both techniques are default-on, so users get tighter CIs and shorter experiments
 are gated so they cannot corrupt results when their precondition is absent. The thresholds (CUPED coverage
 %, winsorization percentile) are configurable; the _gating behavior_ is not. Together with ADR-0014/0015 this
 completes the one CI object: delta-method variance → winsorization (additive) → CUPED (gated) → always-valid
-sequence → relative-lift CI → Guardrail bound → Benjamini-Hochberg FDR across the goal-metric × variant
-family (guardrails excluded).
+sequence → relative-lift CI derived by Fieller → Guardrail bound → Benjamini-Hochberg FDR across the
+goal-metric × variant family (guardrails excluded).
+
+The pooled-centering rule carries a testing obligation. "The CUPED adjustment does not shift the null mean"
+is true of a per-arm-centered implementation for **every** covariate, so that assertion cannot certify the
+adjustment no matter how many covariates it is run against. Only a realized A/A rejection rate can
+distinguish the two, so an A/A Type-I simulation across a range of covariate correlations is a permanent
+part of the stats suite, not an optional extra.
 
 ## Sources
 

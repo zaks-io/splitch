@@ -139,6 +139,7 @@ function zeroEventDecisionFamilyStatsInput(): StatsInput {
     control_variant: "control",
     decision_family: [{ metric_id: "empty_conversion", variant: "treatment" }],
     guardrail_decisions: [],
+    metric_variance_config: [],
     exposures: [
       exposure("control", "control_0"),
       exposure("control", "control_1"),

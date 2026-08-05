@@ -9,7 +9,10 @@ const Q = 0.1;
 
 describe("decision_family FDR simulation smoke", () => {
   it("controls false-discovery proportion near configured q across Metric families", () => {
-    const iterations = Number.parseInt(process.env.SPLITCH_STATS_SIMULATION_ITERATIONS ?? "25", 10);
+    const iterations = Number.parseInt(
+      process.env.SPLITCH_STATS_SIMULATION_ITERATIONS ?? "300",
+      10,
+    );
     const seed = Number.parseInt(process.env.SPLITCH_STATS_SIMULATION_SEED ?? "424242", 10);
     const random = seededRandom(seed);
     const decisionFamily = metricFamily();

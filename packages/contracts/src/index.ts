@@ -237,63 +237,12 @@ export {
   approvalTargetTypes,
 } from "./routes/route-shapes-approvals";
 export { deriveSlug, SLUG_MAX_LENGTH, SLUG_MIN_LENGTH, SLUG_PATTERN, SlugSchema } from "./slug";
-export type {
-  ActivationRow,
-  CupedCovariateRow,
-  CupedCovariateSource,
-  DecisionFamilyMember,
-  DedupeExposureRow,
-  DimensionInput,
-  PerEntityMetricRow,
-  PrePeriodRow,
-  StatsInput,
-} from "./stats-input-contract";
-export {
-  ActivationRowSchema,
-  CupedCovariateRowSchema,
-  CupedCovariateSourceSchema,
-  DecisionFamilyMemberSchema,
-  DedupeExposureRowSchema,
-  DimensionInputSchema,
-  PerEntityMetricRowSchema,
-  PrePeriodRowSchema,
-  StatsInputSchema,
-} from "./stats-input-contract";
-export type {
-  AnalysisResultsEnvelope,
-  ArmResult,
-  CupedAttributeSource,
-  CupedMethod,
-  DimensionClass,
-  DimensionResult,
-  GuardrailResult,
-  HealthMetrics,
-  SrmResult,
-  StatsEngine,
-  StatsOutput,
-  StatsResultStatus,
-  VarianceTechniques,
-  WinsorizeCap,
-} from "./stats-result-contract";
-export {
-  AnalysisResultsEnvelopeSchema,
-  ArmResultSchema,
-  CupedAttributeSourceSchema,
-  CupedMethodSchema,
-  cupedAttributeSources,
-  cupedMethods,
-  DimensionClassSchema,
-  DimensionResultSchema,
-  dimensionClasses,
-  GuardrailResultSchema,
-  HealthMetricsSchema,
-  SrmResultSchema,
-  StatsOutputSchema,
-  StatsResultStatusSchema,
-  statsResultStatuses,
-  VarianceTechniquesSchema,
-  WinsorizeCapSchema,
-} from "./stats-result-contract";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped stats input/result API
+export * from "./barrels/stats-contracts";
+// `./experiment-rigor` exports a different DecisionFamilyMember; naming this one
+// explicitly keeps the stats-input shape as the package's, as it was before the
+// stats exports moved into a sub-barrel.
+export type { DecisionFamilyMember } from "./stats-input-contract";
 export {
   apiKeyCacheKey,
   assignmentKey,

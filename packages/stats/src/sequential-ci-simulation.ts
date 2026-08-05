@@ -1,7 +1,29 @@
 import type { CIAdapter } from "./sequential-ci";
 import { fixedHorizonPValue } from "./fixed-horizon-ci";
+import {
+  drawNullExperiment,
+  lookAt,
+  type NullExperimentDraw,
+  seededNormal,
+  SIMULATION_CONTROL_VARIANT,
+  SIMULATION_METRIC_ID,
+  SIMULATION_METRIC_TYPE,
+  SIMULATION_RUN_ID,
+  SIMULATION_TREATMENT_VARIANT,
+} from "./simulation-null-draws";
+import { estimateMetricComparison } from "./variance-estimators";
 
-export interface RepeatedLookSimulationConfig {
+/**
+ * The variance-reduction knobs the certified draw runs under. Omitting them
+ * selects the engine defaults, which is what a Metric that states no preference
+ * gets in production; a case that wants the layer off says so explicitly.
+ */
+interface SimulationVarianceConfig {
+  readonly winsorize?: boolean;
+  readonly winsorize_pct?: number;
+}
+
+export interface RepeatedLookSimulationConfig extends SimulationVarianceConfig {
   readonly adapter: CIAdapter;
   readonly method: "sequential" | "fixed-horizon";
   readonly alpha: number;
@@ -11,7 +33,7 @@ export interface RepeatedLookSimulationConfig {
   readonly target_n?: number;
 }
 
-export interface FixedHorizonSimulationConfig {
+export interface FixedHorizonSimulationConfig extends SimulationVarianceConfig {
   readonly adapter: CIAdapter;
   readonly alpha: number;
   readonly seed: string;
@@ -37,6 +59,13 @@ export interface FixedHorizonSimulationResult {
   readonly rejectionRate: number;
   readonly alpha: number;
   readonly sample_size_locked: number;
+}
+
+interface NullComparison {
+  readonly estimate: number;
+  readonly sampling_var: number;
+  readonly n_t: number;
+  readonly n_c: number;
 }
 
 export function runRepeatedLookSimulation(
@@ -86,25 +115,11 @@ export function runFixedHorizonSimulation(
 }
 
 function runOneNullExperiment(config: RepeatedLookSimulationConfig, rng: () => number): boolean {
-  const treatment = new RunningStats();
-  const control = new RunningStats();
-  const maxLook = Math.max(...config.lookSchedule);
-  let lookIndex = 0;
+  const draw = drawNullExperiment(rng, Math.max(...config.lookSchedule));
 
-  for (let sample = 1; sample <= maxLook; sample += 1) {
-    treatment.push(rng());
-    control.push(rng());
-
-    if (sample !== config.lookSchedule[lookIndex]) {
-      continue;
-    }
-    if (pValueAtLook(config, treatment, control) <= config.alpha) {
+  for (const look of config.lookSchedule) {
+    if (pValueAtLook(config, draw, look) <= config.alpha) {
       return true;
-    }
-
-    lookIndex += 1;
-    if (lookIndex >= config.lookSchedule.length) {
-      return false;
     }
   }
 
@@ -115,21 +130,10 @@ function runOneLockedNullExperiment(
   config: FixedHorizonSimulationConfig,
   rng: () => number,
 ): boolean {
-  const treatment = new RunningStats();
-  const control = new RunningStats();
-
-  for (let sample = 1; sample <= config.sample_size_locked; sample += 1) {
-    treatment.push(rng());
-    control.push(rng());
-  }
-
-  const samplingVar = treatment.variance / treatment.count + control.variance / control.count;
-  const estimate = treatment.mean - control.mean;
+  const draw = drawNullExperiment(rng, config.sample_size_locked);
+  const comparison = nullComparison(config, draw, config.sample_size_locked);
   const result = config.adapter.compute({
-    estimate,
-    sampling_var: samplingVar,
-    n_t: treatment.count,
-    n_c: control.count,
+    ...comparison,
     alpha: config.alpha,
     sample_size_locked: config.sample_size_locked,
   });
@@ -143,24 +147,57 @@ function runOneLockedNullExperiment(
 
 function pValueAtLook(
   config: RepeatedLookSimulationConfig,
-  treatment: RunningStats,
-  control: RunningStats,
+  draw: NullExperimentDraw,
+  look: number,
 ): number {
-  const samplingVar = treatment.variance / treatment.count + control.variance / control.count;
-  const estimate = treatment.mean - control.mean;
+  const comparison = nullComparison(config, draw, look);
 
   if (config.method === "fixed-horizon") {
-    return fixedHorizonPValue(estimate, Math.sqrt(samplingVar));
+    return fixedHorizonPValue(comparison.estimate, Math.sqrt(comparison.sampling_var));
   }
 
   return config.adapter.compute({
-    estimate,
-    sampling_var: samplingVar,
-    n_t: treatment.count,
-    n_c: control.count,
+    ...comparison,
     alpha: config.alpha,
     target_n: config.target_n,
   }).p_value;
+}
+
+/**
+ * The absolute lift and its sampling variance exactly as `analyzeMetricArmResults`
+ * hands them to a CI adapter, so a defect in the estimator moves the certified
+ * Type-I rate instead of hiding behind a variance the simulation recomputed.
+ */
+function nullComparison(
+  config: SimulationVarianceConfig,
+  draw: NullExperimentDraw,
+  look: number,
+): NullComparison {
+  const rows = lookAt(draw, look);
+  const comparison = estimateMetricComparison({
+    run_id: SIMULATION_RUN_ID,
+    metric_id: SIMULATION_METRIC_ID,
+    metric_type: SIMULATION_METRIC_TYPE,
+    control_variant: SIMULATION_CONTROL_VARIANT,
+    treatment_variant: SIMULATION_TREATMENT_VARIANT,
+    exposures: rows.exposures,
+    metric_values: rows.metricValues,
+    winsorize: config.winsorize,
+    winsorize_pct: config.winsorize_pct,
+  });
+
+  if (comparison.absolute_lift === null || comparison.absolute_lift_sampling_var === null) {
+    throw new Error(
+      `null simulation produced no absolute lift at look ${look}; the estimator refused a complete draw.`,
+    );
+  }
+
+  return {
+    estimate: comparison.absolute_lift,
+    sampling_var: comparison.absolute_lift_sampling_var,
+    n_t: comparison.treatment.sample_size_n,
+    n_c: comparison.control.sample_size_n,
+  };
 }
 
 export function monteCarloTolerance(alpha: number, iterations: number): number {
@@ -172,61 +209,4 @@ export function meetsAlwaysValidBound(
   tolerance: number,
 ): boolean {
   return result.rejectionRate <= result.alpha + tolerance;
-}
-
-class RunningStats {
-  count = 0;
-  mean = 0;
-  #m2 = 0;
-
-  get variance(): number {
-    return this.count > 1 ? this.#m2 / (this.count - 1) : 0;
-  }
-
-  push(value: number): void {
-    this.count += 1;
-    const delta = value - this.mean;
-    this.mean += delta / this.count;
-    this.#m2 += delta * (value - this.mean);
-  }
-}
-
-function seededNormal(seed: string): () => number {
-  const uniform = mulberry32(fnv1a(seed));
-  let spare: number | undefined;
-
-  return () => {
-    if (spare !== undefined) {
-      const value = spare;
-      spare = undefined;
-      return value;
-    }
-
-    const first = Math.max(Number.MIN_VALUE, uniform());
-    const second = uniform();
-    const radius = Math.sqrt(-2 * Math.log(first));
-    const angle = 2 * Math.PI * second;
-    spare = radius * Math.sin(angle);
-    return radius * Math.cos(angle);
-  };
-}
-
-function mulberry32(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let next = state;
-    next = Math.imul(next ^ (next >>> 15), next | 1);
-    next ^= next + Math.imul(next ^ (next >>> 7), next | 61);
-    return ((next ^ (next >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function fnv1a(input: string): number {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
 }

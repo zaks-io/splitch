@@ -208,6 +208,7 @@ describe("StatsEngine", () => {
       control_variant: "control",
       decision_family: [{ metric_id: "metric_1", variant: "treatment" }],
       guardrail_decisions: [],
+      metric_variance_config: [],
       exposures: [],
       metric_values: [],
     };

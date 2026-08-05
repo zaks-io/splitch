@@ -23,6 +23,7 @@
     "stats:simulation:vitest": "vitest run --config vitest.simulation.config.ts",
     "stats:unit": "vitest run --config vitest.config.ts",
     "test": "pnpm stats:unit",
+    "test:mutation": "stryker run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

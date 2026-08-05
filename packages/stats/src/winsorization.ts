@@ -1,11 +1,15 @@
-import type { MetricKind, VarianceTechniques, WinsorizeCap } from "@splitch/contracts";
+import {
+  DEFAULT_WINSORIZE_PCT,
+  type MetricKind,
+  type VarianceTechniques,
+  type WinsorizeCap,
+} from "@splitch/contracts";
 import type {
   CupedAdjustment,
   EntityAggregate,
   MetricComparisonEstimateInput,
 } from "./variance-estimator-types";
 
-const DEFAULT_WINSORIZE_PCT = 99.9;
 const ADDITIVE_METRIC_TYPES = new Set<MetricKind>(["count", "revenue", "ratio"]);
 
 export interface PooledWinsorization {

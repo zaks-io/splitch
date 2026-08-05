@@ -35,7 +35,18 @@ import { SlugSchema } from "./slug";
 // required — the Worker validates the kind→field correspondence and that the
 // ratio denominator belongs to the same App. The envelope keeps them optional so
 // the conditional lives in one place (the Worker), matching the spec table.
+//
+// `downsideThreshold` and the three variance-reduction knobs accept an explicit
+// null on patch, which is how a Metric goes back to the engine default. Leaving
+// the field out means "unchanged"; sending null means "no preference".
 // ---------------------------------------------------------------------------
+
+const MetricAnalysisFields = {
+  downsideThreshold: MetricSchema.shape.downsideThreshold,
+  winsorize: MetricSchema.shape.winsorize,
+  winsorizePct: MetricSchema.shape.winsorizePct,
+  cupedCoverageThreshold: MetricSchema.shape.cupedCoverageThreshold,
+};
 
 export const CreateMetricRequestSchema = z.object({
   appId: z.string(),
@@ -46,6 +57,7 @@ export const CreateMetricRequestSchema = z.object({
   eventValueField: z.string().optional(),
   denominator: MetricRefSchema.optional(),
   description: z.string().optional(),
+  ...MetricAnalysisFields,
   idempotency_key: z.string().optional(),
 });
 export type CreateMetricRequest = z.infer<typeof CreateMetricRequestSchema>;
@@ -62,6 +74,7 @@ export const PatchMetricRequestSchema = z
     eventValueField: z.string().optional(),
     denominator: MetricRefSchema.optional(),
     description: z.string().optional(),
+    ...MetricAnalysisFields,
   })
   .strict();
 export type PatchMetricRequest = z.infer<typeof PatchMetricRequestSchema>;

@@ -57,6 +57,17 @@ export interface MetricComparisonEstimate {
   readonly treatment: MetricArmEstimate;
   readonly absolute_lift: number | null;
   readonly absolute_lift_sampling_var: number | null;
+  /**
+   * The two per-arm variances that sum to absolute_lift_sampling_var, after any
+   * boundary-safe substitution. A Binomial arm sitting at 0% or 100% has a raw
+   * sampling variance of zero, so the substituted value is only recoverable
+   * here: rescaling the raw arm variances to the corrected total would leave it
+   * at zero.
+   */
+  readonly absolute_lift_var_components: {
+    readonly control: number;
+    readonly treatment: number;
+  } | null;
   readonly relative_lift_pct: number | null;
   readonly sampling_var: number | null;
   readonly status: MetricVarianceStatus;

@@ -1,4 +1,3 @@
-import type { MetricRef } from "@splitch/contracts";
 import {
   evaluateExperimentDecisionGate,
   experimentSignificanceDisplays,
@@ -257,8 +256,18 @@ export async function panelExperimentResults(
   return Response.json(output);
 }
 
+/**
+ * `decision_family` freezes as `MetricRef[]`, `guardrail_decisions` as
+ * `GuardrailDecision[]` (snake_case, one entry per treatment Variant). The Panel
+ * wants the Metric identity out of either, listed once each.
+ */
 function metricIds(raw: string): string[] {
-  return jsonArray<MetricRef>(raw).map((metric) => metric.metricId);
+  const ids = jsonArray<{ metricId?: string; metric_id?: string }>(raw).map((entry) => {
+    const id = entry.metricId ?? entry.metric_id;
+    if (!id) throw new Error("Run decision entry carries no Metric id");
+    return id;
+  });
+  return [...new Set(ids)];
 }
 
 function availableVariants(

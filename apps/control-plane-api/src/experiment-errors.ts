@@ -215,6 +215,25 @@ export function variantSetNotPatchable(requestId: string): Response {
   );
 }
 
+/**
+ * Start refused because the Experiment cannot be frozen into a decision-valid
+ * Run. Rendered as VALIDATION_ERROR because the fix is an edit to the
+ * Experiment or its Metrics, not a retry.
+ */
+export function experimentStartInvalid(
+  issues: Array<{ path: string[]; message: string }>,
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "VALIDATION_ERROR",
+      message: "request failed schema validation",
+      details: { issues },
+    },
+    { requestId },
+  );
+}
+
 export function decisionLocked(
   runId: string,
   fields: string[],

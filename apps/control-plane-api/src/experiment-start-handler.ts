@@ -131,6 +131,7 @@ export async function startExperiment(
       sampleSizeLocked: decisionSpec.value.sampleSizeLocked,
       decisionFamily: json(prepared.value.decisionFamily),
       guardrailDecisions: json(prepared.value.guardrailDecisions),
+      metricVarianceConfig: json(prepared.value.metricVarianceConfig),
       configHash: prepared.value.configHash,
       startedAt: now,
       startReason: startContext.body.reason as string | undefined,

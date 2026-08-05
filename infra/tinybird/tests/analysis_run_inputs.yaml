@@ -2,12 +2,12 @@
   parameters: "app_id=app_checkout&environment_id=env_prod&experiment_id=exp_checkout&run_id=run_checkout_1"
   expected_http_status: 200
   expected_result: |
-    {"run_id":"run_checkout_1","confidence_level":0.95,"horizon":"sequential","target_n":1000,"sample_size_locked":null,"allocation":"{\"control\":50,\"treatment\":50}","control_variant":"control","control_variant_id":"variant_control","decision_family":"[{\"metric_id\":\"metric_signup\"}]","guardrail_decisions":"[]","dimensions":"[]","started_at":"2026-07-01 10:00:00.000"}
+    {"run_id":"run_checkout_1","confidence_level":0.95,"horizon":"sequential","target_n":1000,"sample_size_locked":null,"allocation":"{\"control\":50,\"treatment\":50}","control_variant":"control","control_variant_id":"variant_control","decision_family":"[{\"metric_id\":\"metric_signup\"}]","guardrail_decisions":"[]","metric_variance_config":"[{\"metric_id\":\"metric_signup\",\"winsorize\":false,\"winsorize_pct\":99.9,\"cuped_coverage_threshold\":70}]","dimensions":"[]","started_at":"2026-07-01 10:00:00.000"}
 - name: omitted_run_id_returns_latest_started_run
   parameters: "app_id=app_checkout&environment_id=env_prod&experiment_id=exp_checkout"
   expected_http_status: 200
   expected_result: |
-    {"run_id":"run_checkout_2","confidence_level":0.99,"horizon":"fixed","target_n":null,"sample_size_locked":2000,"allocation":"{\"control\":40,\"treatment\":60}","control_variant":"control","control_variant_id":"variant_control","decision_family":"[{\"metric_id\":\"metric_purchase\"}]","guardrail_decisions":"[{\"metric_id\":\"metric_errors\",\"direction\":\"decrease\"}]","dimensions":"[]","started_at":"2026-07-02 10:00:00.000"}
+    {"run_id":"run_checkout_2","confidence_level":0.99,"horizon":"fixed","target_n":null,"sample_size_locked":2000,"allocation":"{\"control\":40,\"treatment\":60}","control_variant":"control","control_variant_id":"variant_control","decision_family":"[{\"metric_id\":\"metric_purchase\"}]","guardrail_decisions":"[{\"metric_id\":\"metric_errors\",\"variant\":\"treatment\",\"downside_threshold\":-0.02,\"guardrail_locked_at_run_start\":true,\"threshold_locked_at_run_start\":true}]","metric_variance_config":"[{\"metric_id\":\"metric_purchase\",\"winsorize\":true,\"winsorize_pct\":99.0,\"cuped_coverage_threshold\":70},{\"metric_id\":\"metric_errors\",\"winsorize\":true,\"winsorize_pct\":99.9,\"cuped_coverage_threshold\":70}]","dimensions":"[]","started_at":"2026-07-02 10:00:00.000"}
 - name: scope_isolation_returns_no_rows
   parameters: "app_id=app_checkout&environment_id=env_staging&experiment_id=exp_checkout"
   expected_http_status: 200
