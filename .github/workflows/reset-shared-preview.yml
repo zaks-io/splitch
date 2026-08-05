@@ -74,11 +74,8 @@ jobs:
           done
 
       - name: Install Tinybird CLI
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSL https://tinybird.co | sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        timeout-minutes: 5
+        uses: ./.github/actions/setup-tinybird-cli
 
       - name: Reset preview-only state
         id: reset

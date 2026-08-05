@@ -1,0 +1,31 @@
+name: Setup Tinybird CLI
+description: Install a pinned Tinybird CLI (`tb`) and put it on PATH.
+
+# `curl https://tinybird.co | sh` always resolves to the latest release, so an
+# upstream publish could turn CI or a deploy red with no repo change, and CI
+# could validate a different `tb` than the one that deploys minutes later. This
+# pins the artifact and gives the version one owner instead of six copies
+# drifting apart. uv is the installer rather than the thing under test, so it
+# stays floating; the `tb --version` call at the end is the fail-loud proof that
+# the pin actually produced a working binary.
+
+inputs:
+  version:
+    description: Tinybird CLI version to install.
+    required: false
+    default: 4.6.14
+
+runs:
+  using: composite
+  steps:
+    - name: Install pinned Tinybird CLI
+      shell: bash
+      env:
+        TINYBIRD_CLI_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        curl -LsSf --max-time 120 https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+        uv tool install --force --python 3.11 "tinybird==${TINYBIRD_CLI_VERSION}"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        tb --no-version-warning --version

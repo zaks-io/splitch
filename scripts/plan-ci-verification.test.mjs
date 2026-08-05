@@ -110,6 +110,29 @@ test("Tinybird, D1, and production Vite inputs are classified independently", ()
   assert.equal(classifyCiChanges(["packages/ui/src/button.tsx"]).productionVite, true);
 });
 
+test("a lockfile bump revalidates D1 but not Tinybird", () => {
+  // `d1:migrate:*` shell out to `pnpm exec wrangler`, so the resolved dependency
+  // graph changes what they prove. `tb` is curl-installed and the Tinybird
+  // validator imports node builtins only, so a lockfile bump cannot affect it.
+  for (const lockfilePath of ["pnpm-lock.yaml", "pnpm-workspace.yaml"]) {
+    const plan = classifyCiChanges([lockfilePath]);
+    assert.equal(plan.d1, true, `${lockfilePath} must revalidate D1`);
+    assert.equal(plan.tinybird, false, `${lockfilePath} must not revalidate Tinybird`);
+  }
+});
+
+test("every helper the Tinybird validator imports triggers it", () => {
+  for (const helperPath of [
+    "scripts/check-tinybird-local.mjs",
+    "scripts/lib/tinybird-process.mjs",
+    "scripts/lib/tinybird-metric-stub-tripwire.mjs",
+    "scripts/machine-lock.mjs",
+    "tinybird.config.json",
+  ]) {
+    assert.equal(classifyCiChanges([helperPath]).tinybird, true, `${helperPath} must trigger`);
+  }
+});
+
 function ok(stdout) {
   return { ok: true, stderr: "", stdout };
 }

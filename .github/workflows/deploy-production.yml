@@ -316,11 +316,8 @@ jobs:
 
       - name: Install Tinybird CLI
         if: needs.validate.outputs.tinybird == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSL https://tinybird.co | sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        timeout-minutes: 5
+        uses: ./.github/actions/setup-tinybird-cli
 
       - name: Revalidate current release after production gate
         id: revalidate
