@@ -227,13 +227,9 @@ export async function executeApiOperation(
     }
     const projected = project ? project(payload.data) : payload.data;
     emit(io, invocation.flags.json, projected);
-    if (
-      operationId === "approval_requests_get" ||
-      operationId === "approval_requests_list" ||
-      operationId === "approval_request_reviews_create"
-    ) {
-      warnStaleApprovalDiscard(io, projected);
-    }
+    // Keyed off payload shape, not operationId: any command that returns an
+    // Approval Request (or list) must surface a recorded stale discard.
+    warnStaleApprovalDiscard(io, projected);
     return { exitCode: EXIT_OK, payload: projected };
   } catch (error) {
     return handleExecutionError(error, io);

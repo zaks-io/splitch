@@ -208,10 +208,15 @@ async function applyFlagConfiguration(
       approval: commit,
     });
   if (result.ok) return { ok: true as const };
-  return configFailure(result, proposed.flagId, environmentId);
+  return mapApprovedFlagConfigFailure(result, proposed.flagId, environmentId);
 }
 
-function configFailure(
+/**
+ * Map a refused approved Flag Configuration write to a Review outcome.
+ * Exported so deleting the terminal `CHANGED_FIELDS_UNDETERMINED` branch is a
+ * red unit test rather than a silent fall-through to a retryable 500.
+ */
+export function mapApprovedFlagConfigFailure(
   result: Extract<FlagConfigWriteResult, { ok: false }>,
   flagId: string,
   environmentId: string,

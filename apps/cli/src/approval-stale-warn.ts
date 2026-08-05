@@ -14,15 +14,23 @@ export function warnStaleApprovalDiscard(
     if (request.status !== "stale") continue;
     const review = request.latestReview;
     if (review?.outcome !== "stale" || review.error === null) continue;
-    const fields =
-      Array.isArray(review.error.details.frozenFields) &&
-      review.error.details.frozenFields.every((field) => typeof field === "string")
-        ? ` (frozenFields: ${review.error.details.frozenFields.join(", ")})`
-        : "";
     io.error(
-      `Approval Request ${request.id} is stale and was not applied: ${review.error.code}${fields}. Re-propose against the current state.`,
+      `Approval Request ${request.id} is stale and was not applied: ${review.error.code}${detailSuffix(review.error.details)}. Re-propose against the current state.`,
     );
   }
+}
+
+function detailSuffix(details: Record<string, unknown>): string {
+  if (
+    Array.isArray(details.frozenFields) &&
+    details.frozenFields.every((field) => typeof field === "string")
+  ) {
+    return ` (frozenFields: ${details.frozenFields.join(", ")})`;
+  }
+  if (typeof details.fault === "string") {
+    return ` (fault: ${details.fault})`;
+  }
+  return "";
 }
 
 function approvalRequestsFromPayload(payload: unknown): StaleCandidate[] {
@@ -72,6 +80,13 @@ export function remediationForServerError(error: ErrorResponse): string {
   }
   if (error.code === "APPROVAL_REQUEST_STALE") {
     return "Refresh the target and re-propose; a stale Approval Request cannot be applied";
+  }
+  if (
+    error.code === "INTERNAL_SERVER_ERROR" &&
+    "fault" in error.details &&
+    error.details.fault === "approval_changed_fields_undetermined"
+  ) {
+    return "Re-propose the change; this Approval Request's changed-field set cannot be determined and will not apply";
   }
   return "Correct the reported API failure and retry the command";
 }

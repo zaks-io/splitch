@@ -59,6 +59,33 @@ describe("approve_and_apply freeze uses the request's changed-field set", () => 
     expect((await readProdConfig()).enabled).toBe(true);
   });
 
+  it("does not revert live rollout when applying an enabled-only proposal", async () => {
+    await narrowSeededAvailability(h.d1, ["control", "treatment"]);
+    expect(
+      (await patchConfig(h, "idem_disable_before_rollout_preserve", { enabled: false })).status,
+    ).toBe(200);
+    const proposed = await patchConfig(h, "idem_propose_enable_preserve_rollout", {
+      enabled: true,
+    });
+    expect(proposed.status).toBe(409);
+    const requestId = proposed.approvalRequestId as string;
+
+    // Live rollout diverges from the mint-time proposed snapshot without a
+    // version bump — the structural hole the entries-gated patch closes.
+    const liveRollout = JSON.stringify({ percentage: 40, salt: "post-mint" });
+    await h.d1
+      .prepare("UPDATE flag_configs SET rollout = ? WHERE app_id = ? AND environment_id = ?")
+      .bind(liveRollout, ids.appId, ids.environmentId)
+      .run();
+
+    await startSeededExperiment(h.d1);
+    expect((await reviewRequest(h, requestId, "idem_review_preserve_rollout")).status).toBe(200);
+
+    const after = await readProdConfig();
+    expect(after.enabled).toBe(true);
+    expect(after.rollout).toEqual({ percentage: 40, salt: "post-mint" });
+  });
+
   it("refuses a genuine frozen-field proposal naming only that field", async () => {
     await narrowSeededAvailability(h.d1, ["control", "treatment"]);
     await insertProdTargetingRule();
@@ -108,12 +135,43 @@ describe("approve_and_apply freeze uses the request's changed-field set", () => 
       },
     });
   });
+
+  it("refuses an approved rollout change once a Run owns the field", async () => {
+    await narrowSeededAvailability(h.d1, ["control", "treatment"]);
+    const proposed = await patchConfig(h, "idem_propose_rollout", { rollout: { percentage: 30 } });
+    expect(proposed.status).toBe(409);
+    expect(proposed.code).toBe("APPROVAL_REVIEW_REQUIRED");
+    const requestId = proposed.approvalRequestId as string;
+
+    const read = await getApprovalRequests(h, requestId);
+    const request = (await read.json()) as { diff: { entries: Array<{ path: string }> } };
+    expect(request.diff.entries.some((entry) => entry.path.startsWith("/rollout"))).toBe(true);
+
+    await startSeededExperiment(h.d1);
+    const res = await reviewRequest(h, requestId, "idem_review_rollout_frozen");
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      code: "RUN_FROZEN",
+      details: {
+        frozenFields: ["flagConfig.rollout"],
+        currentRunId: ids.liveRunId,
+        recommendedAction: "END_RUNNING_RUN_FIRST",
+      },
+    });
+  });
 });
 
-async function readProdConfig(): Promise<{ enabled: boolean }> {
+async function readProdConfig(): Promise<{
+  enabled: boolean;
+  rollout: { percentage: number; salt: string } | null;
+}> {
   const row = await h.repo.flags.getFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId);
   if (!row) throw new Error("readProdConfig: no Flag Configuration");
-  return { enabled: row.enabled };
+  return {
+    enabled: row.enabled,
+    rollout: row.rollout ? (JSON.parse(row.rollout) as { percentage: number; salt: string }) : null,
+  };
 }
 
 /**

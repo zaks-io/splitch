@@ -39,15 +39,11 @@ export async function applyApprovedFlagConfig(
   const frozen = await approvedProposalFreeze(deps, input);
   if (frozen) return frozen;
 
-  const patch = {
-    enabled: input.proposed.enabled,
-    availableVariantNames: json(input.proposed.availableVariantNames),
-    rollout: input.proposed.rollout ? json(input.proposed.rollout) : null,
-    updatedAt: input.approval.reviewedAt,
-  };
-  // Rewrite Targeting Rules only when the request's own entries say they move.
-  // A JSON.stringify false positive on untouched rules must not DELETE+INSERT
-  // while a Run is live after the freeze check (correctly) let the write through.
+  // Write only fields the request's own entries move. An enabled-only proposal
+  // carries mint-time `availableVariantNames` / `rollout` in `proposed`; writing
+  // them unconditionally would revert live state a Run now owns after the
+  // entries-based freeze correctly let the kill-switch through (SPL-304).
+  const patch = approvedConfigPatch(input);
   const rulesChanged = diffEntriesTouch(input.diffEntries, "targetingRules");
   const updated = rulesChanged
     ? await deps.repo.flags.replaceTargetingRules(
@@ -65,6 +61,31 @@ export async function applyApprovedFlagConfig(
   const committed = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
   if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
   return writeSnapshotAndBroadcast(deps, scope, input.flagId, committed);
+}
+
+/** Patch keys whose JSON Pointer appears in `diff.entries` (plus `updatedAt`). */
+export function approvedConfigPatch(input: ApplyApprovedFlagConfigInput): {
+  updatedAt: string;
+  enabled?: boolean;
+  availableVariantNames?: string;
+  rollout?: string | null;
+} {
+  const patch: {
+    updatedAt: string;
+    enabled?: boolean;
+    availableVariantNames?: string;
+    rollout?: string | null;
+  } = { updatedAt: input.approval.reviewedAt };
+  if (diffEntriesTouch(input.diffEntries, "enabled")) {
+    patch.enabled = input.proposed.enabled;
+  }
+  if (diffEntriesTouch(input.diffEntries, "availableVariantNames")) {
+    patch.availableVariantNames = json(input.proposed.availableVariantNames);
+  }
+  if (diffEntriesTouch(input.diffEntries, "rollout")) {
+    patch.rollout = input.proposed.rollout ? json(input.proposed.rollout) : null;
+  }
+  return patch;
 }
 
 function validateProposal(
