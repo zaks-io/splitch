@@ -9,10 +9,7 @@ import {
   PeekEvaluateResponseSchema as SdkPeekEvaluateResponseSchema,
   ResolutionDetailsSchema as SdkResolutionDetailsSchema,
 } from "./sdk-data-plane-surface";
-import {
-  EvaluateAllRequestSchema,
-  EvaluateAllResponseSchema,
-} from "./leaves/evaluate-all-wire";
+import { EvaluateAllRequestSchema, EvaluateAllResponseSchema } from "./leaves/evaluate-all-wire";
 import { DataPlaneEvaluateResponseSchema, PeekEvaluateResponseSchema } from "./wire-envelopes-core";
 
 describe("sdk-data-plane-surface parity", () => {
