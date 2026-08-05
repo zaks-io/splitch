@@ -214,7 +214,10 @@ describe("mixed path-param sources on multi-positional routes (SPL-306)", () => 
       "from_argv_second",
     ]);
 
-    expect(conflictingSuppliedPositional(command, invocation)).toBe(first.display);
+    expect(conflictingSuppliedPositional(command, invocation)).toEqual({
+      kind: "conflict",
+      display: first.display,
+    });
     expect(() =>
       buildOperationInput(command, invocation, { appId: "app_1", environmentId: "env_1" }),
     ).toThrowError(
@@ -237,12 +240,116 @@ describe("mixed path-param sources on multi-positional routes (SPL-306)", () => 
 
     const invocation = parseInvocation([...segments, "--org", "org_1", "org_1", "user_1"]);
 
-    expect(conflictingSuppliedPositional(command, invocation)).toBe("org-id");
+    expect(conflictingSuppliedPositional(command, invocation)).toEqual({
+      kind: "conflict",
+      display: "org-id",
+    });
     expect(() => buildOperationInput(command, invocation, {})).toThrowError(
       expect.objectContaining({
         code: "CLI_USAGE_INVALID",
         causeSummary: expect.stringContaining("<org-id> was supplied more than once"),
       }),
     );
+  });
+});
+
+describe("unexpected excess positionals (SPL-306)", () => {
+  it("names the unexpected token on a multi-positional command, not a double supply", async () => {
+    const command = requireCommand(["organization-members", "remove"]);
+    const invocation = parseInvocation([
+      "organization-members",
+      "remove",
+      "org_1",
+      "user_1",
+      "extra_1",
+    ]);
+
+    expect(conflictingSuppliedPositional(command, invocation)).toEqual({
+      kind: "unexpected",
+      token: "extra_1",
+    });
+    expect(() => buildOperationInput(command, invocation, {})).toThrowError(
+      expect.objectContaining({
+        code: "CLI_USAGE_INVALID",
+        causeSummary: expect.stringContaining("Unexpected argument extra_1"),
+        remediation: expect.stringContaining("Remove extra_1"),
+      }),
+    );
+    expect(conflictingSuppliedPositional(command, invocation)?.kind).not.toBe("conflict");
+
+    const stderr: string[] = [];
+    const stdout: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      stderr.push(args.join(" "));
+    });
+    vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      stdout.push(args.join(" "));
+    });
+
+    const code = await runCli(["organization-members", "remove", "org_1", "user_1", "extra_1"]);
+    expect(code).toBe(EXIT_USAGE);
+    const errorLine = stderr.join("\n");
+    expect(errorLine).toContain("CLI_USAGE_INVALID");
+    expect(errorLine).toContain("Unexpected argument extra_1");
+    expect(errorLine).not.toContain("supplied more than once");
+    expect(errorLine).not.toContain("Usage:");
+    expect(stdout.join("\n")).toContain(`Usage:\n  ${commandUsageLine(command)}`);
+  });
+
+  it("names the unexpected token on a zero-positional command with a Usage block", async () => {
+    const command = requireCommand(["flags", "list"]);
+    expect(requiredPositionalSpecs(command)).toEqual([]);
+
+    const invocation = parseInvocation(["flags", "list", "extra_1"]);
+    expect(conflictingSuppliedPositional(command, invocation)).toEqual({
+      kind: "unexpected",
+      token: "extra_1",
+    });
+
+    const stderr: string[] = [];
+    const stdout: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      stderr.push(args.join(" "));
+    });
+    vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      stdout.push(args.join(" "));
+    });
+
+    const code = await runCli(["flags", "list", "extra_1"]);
+    expect(code).toBe(EXIT_USAGE);
+    const errorLine = stderr.join("\n");
+    expect(errorLine).toContain("CLI_USAGE_INVALID");
+    expect(errorLine).toContain("Unexpected argument extra_1");
+    expect(errorLine).not.toContain("supplied more than once");
+    expect(errorLine).not.toContain("<argument>");
+    expect(errorLine).not.toContain("Usage:");
+    expect(stdout.join("\n")).toContain(`Usage:\n  ${commandUsageLine(command)}`);
+  });
+
+  it("treats orgs create with a stray positional as unexpected, not double supply", async () => {
+    const command = requireCommand(["orgs", "create"]);
+    expect(requiredPositionalSpecs(command)).toEqual([]);
+
+    const invocation = parseInvocation(["orgs", "create", "acme", "--name", "x"]);
+    expect(conflictingSuppliedPositional(command, invocation)).toEqual({
+      kind: "unexpected",
+      token: "acme",
+    });
+
+    const stderr: string[] = [];
+    const stdout: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      stderr.push(args.join(" "));
+    });
+    vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      stdout.push(args.join(" "));
+    });
+
+    const code = await runCli(["orgs", "create", "acme", "--name", "x"]);
+    expect(code).toBe(EXIT_USAGE);
+    const errorLine = stderr.join("\n");
+    expect(errorLine).toContain("Unexpected argument acme");
+    expect(errorLine).not.toContain("supplied more than once");
+    expect(stdout.join("\n")).toContain(`Usage:\n  ${commandUsageLine(command)}`);
   });
 });

@@ -4,8 +4,8 @@ import { findCommand } from "./command-registry.js";
 import {
   assertPathParamsPresent,
   commandUsageLine,
-  conflictingPositionalError,
   conflictingSuppliedPositional,
+  excessPositionalError,
   missingPositionalError,
   missingRequiredPositional,
 } from "./command-positionals.js";
@@ -178,7 +178,7 @@ function validateRequiredPositionals(
 ): CliResult | null {
   const conflict = conflictingSuppliedPositional(command, invocation);
   if (conflict) {
-    writeCliError(io, conflictingPositionalError(conflict));
+    writeCliError(io, excessPositionalError(conflict));
     io.log(`Usage:\n  ${commandUsageLine(command)}`);
     return { exitCode: EXIT_USAGE };
   }

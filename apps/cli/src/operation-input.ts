@@ -3,7 +3,7 @@ import { deriveMcpTools, getRoute } from "@splitch/contracts";
 import type { EvaluateContext } from "@splitch/sdk";
 import type { CliCommandDefinition } from "./command-registry.js";
 import {
-  conflictingPositionalError,
+  excessPositionalError,
   requiredPositionalSpecs,
   SCOPE_PATH_PARAMS,
 } from "./command-positionals.js";
@@ -109,9 +109,12 @@ function applyPositionalFields(
   };
   const unfilled = specs.filter((spec) => !alreadyFilled(spec.param));
   if (invocation.positionals.length > unfilled.length) {
-    const conflict =
-      specs.find((spec) => alreadyFilled(spec.param))?.display ?? specs[0]?.display ?? "argument";
-    throw conflictingPositionalError(conflict);
+    const conflict = specs.find((spec) => alreadyFilled(spec.param));
+    if (conflict) {
+      throw excessPositionalError({ kind: "conflict", display: conflict.display });
+    }
+    const token = invocation.positionals[unfilled.length] ?? "";
+    throw excessPositionalError({ kind: "unexpected", token });
   }
   let positionalIndex = 0;
   for (const spec of unfilled) {

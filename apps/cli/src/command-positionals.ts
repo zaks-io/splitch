@@ -81,14 +81,20 @@ export function missingRequiredPositional(
   return undefined;
 }
 
+/** Excess argv: either a path param supplied twice, or a token with no slot. */
+export type ExcessPositional =
+  | { readonly kind: "conflict"; readonly display: string }
+  | { readonly kind: "unexpected"; readonly token: string };
+
 /**
- * When argv has more tokens than unfilled path slots, a param was supplied twice
- * (`--org` / `--body-json` plus a positional). Returns that param's display name.
+ * When argv has more tokens than unfilled path slots: if a slot is already
+ * filled (`--org` / `--body-json`), that is a double supply; otherwise the
+ * first leftover token is unexpected (including commands with zero path params).
  */
 export function conflictingSuppliedPositional(
   command: CliCommandDefinition,
   invocation: ParsedInvocation,
-): string | undefined {
+): ExcessPositional | undefined {
   const specs = requiredPositionalSpecs(command);
   const body = parseBodyJsonRecord(invocation.flags.bodyJson);
   const unfilledCount = specs.filter(
@@ -97,10 +103,15 @@ export function conflictingSuppliedPositional(
   if (invocation.positionals.length <= unfilledCount) {
     return undefined;
   }
-  return (
-    specs.find((spec) => pathParamAlreadyFilled(spec.param, invocation.flags.org, body))?.display ??
-    specs[0]?.display
+  const conflict = specs.find((spec) =>
+    pathParamAlreadyFilled(spec.param, invocation.flags.org, body),
   );
+  if (conflict) {
+    return { kind: "conflict", display: conflict.display };
+  }
+  const token = invocation.positionals[unfilledCount];
+  // length > unfilledCount guarantees an argv token at that index.
+  return { kind: "unexpected", token: token ?? "" };
 }
 
 /** True when `--org` or a non-empty `--body-json` string already fills this path param. */
@@ -169,4 +180,19 @@ export function conflictingPositionalError(display: string): SplitchCliError {
     causeSummary: `<${display}> was supplied more than once`,
     remediation: `Pass <${display}> only once (positional or via --org / --body-json)`,
   });
+}
+
+export function unexpectedPositionalError(token: string): SplitchCliError {
+  return new SplitchCliError({
+    code: "CLI_USAGE_INVALID",
+    causeSummary: `Unexpected argument ${token}`,
+    remediation: `Remove ${token}`,
+  });
+}
+
+export function excessPositionalError(excess: ExcessPositional): SplitchCliError {
+  if (excess.kind === "conflict") {
+    return conflictingPositionalError(excess.display);
+  }
+  return unexpectedPositionalError(excess.token);
 }
