@@ -169,7 +169,7 @@ describe("sequential CI under continuous monitoring", () => {
 });
 
 describe("ratio metric (delta method) coverage", () => {
-  it("covers the true ratio at the nominal rate", () => {
+  it("keeps Type-I error near alpha under a true null ratio", () => {
     const TRIALS = 3000;
     const N = 1000;
     let rejections = 0;

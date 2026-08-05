@@ -146,8 +146,13 @@ function materializeVarianceConfig(
   if (!Array.isArray(raw)) {
     throw new ResultsInputError("metric_variance_config must be a JSON array");
   }
-  if (!raw.every(isMetricVarianceConfig)) {
-    throw new ResultsInputError("metric_variance_config is not MetricVarianceConfig[]");
+  const invalid = raw.findIndex((row) => !isMetricVarianceConfig(row));
+  if (invalid !== -1) {
+    throw new ResultsInputError(
+      `metric_variance_config[${invalid}] is not a MetricVarianceConfig: ` +
+        `${describeVarianceConfigDefects(raw[invalid])}. A Run frozen before the ` +
+        "variance-technique fields existed cannot be analyzed under them; re-Start the Run.",
+    );
   }
   return raw.map((row) => ({
     metric_id: row.metric_id,
@@ -168,6 +173,30 @@ function isMetricVarianceConfig(value: unknown): value is MetricVarianceConfig {
     typeof row.cuped === "boolean" &&
     typeof row.cuped_coverage_threshold_pct === "number"
   );
+}
+
+const VARIANCE_CONFIG_FIELDS: readonly (readonly [string, "string" | "boolean" | "number"])[] = [
+  ["metric_id", "string"],
+  ["winsorize", "boolean"],
+  ["winsorize_pct", "number"],
+  ["cuped", "boolean"],
+  ["cuped_coverage_threshold_pct", "number"],
+];
+
+/**
+ * Name the fields that are wrong so the operator does not have to diff a frozen
+ * snapshot against the schema by hand to find out which one moved.
+ */
+function describeVarianceConfigDefects(value: unknown): string {
+  if (typeof value !== "object" || value === null) {
+    return `expected an object, got ${value === null ? "null" : typeof value}`;
+  }
+  const row = value as Record<string, unknown>;
+  return VARIANCE_CONFIG_FIELDS.filter(([field, type]) => typeof row[field] !== type)
+    .map(([field, type]) =>
+      field in row ? `${field} must be a ${type}, got ${typeof row[field]}` : `${field} is missing`,
+    )
+    .join("; ");
 }
 
 function parseAllocation(raw: unknown): Record<string, number> {

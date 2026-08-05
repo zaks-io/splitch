@@ -214,14 +214,18 @@ function lockedSample(
   if (sampleSize === undefined || entities.length <= sampleSize) {
     return entities;
   }
-  return entities.sort(byExposureOrder).slice(0, sampleSize);
-}
-
-function byExposureOrder(left: EntityAggregate, right: EntityAggregate): number {
-  const delta = exposureMs(left) - exposureMs(right);
-  // Entities exposed in the same millisecond still need a total order, or which
-  // ones survive truncation would depend on row arrival order.
-  return delta !== 0 ? delta : left.targeting_key_hash.localeCompare(right.targeting_key_hash);
+  // Parse each timestamp once rather than twice per comparison.
+  return entities
+    .map((entity) => ({ entity, ms: exposureMs(entity) }))
+    .sort(
+      (left, right) =>
+        // Entities exposed in the same millisecond still need a total order, or
+        // which ones survive truncation would depend on row arrival order.
+        left.ms - right.ms ||
+        left.entity.targeting_key_hash.localeCompare(right.entity.targeting_key_hash),
+    )
+    .slice(0, sampleSize)
+    .map((keyed) => keyed.entity);
 }
 
 function exposureMs(entity: EntityAggregate): number {

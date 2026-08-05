@@ -10,7 +10,9 @@ const PRE_TS = "2025-12-01T00:00:00.000Z";
 /** xoshiro-style PRNG independent of anything in packages/stats. */
 export function rng(seed: number): () => number {
   let s0 = seed >>> 0 || 1;
-  let s1 = (seed * 2654435761) >>> 0 || 2;
+  // Math.imul, not `*`: the seeds here run to eight digits and the exact product
+  // exceeds 2^53, so a float multiply drops the low bits the mix depends on.
+  let s1 = Math.imul(seed, 2654435761) >>> 0 || 2;
   return () => {
     s1 ^= s0;
     s0 = ((s0 << 26) | (s0 >>> 6)) ^ s1 ^ (s1 << 9);

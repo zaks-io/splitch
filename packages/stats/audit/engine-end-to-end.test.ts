@@ -10,7 +10,7 @@ function engineInput(
 ): StatsInput {
   const allocationShare = 100 / arms.length;
   const allocation = Object.fromEntries(arms.map((a) => [a.variant, allocationShare]));
-  return {
+  const base: StatsInput = {
     run_id: RUN_ID,
     confidence_level: 0.95,
     horizon: "sequential",
@@ -23,8 +23,8 @@ function engineInput(
     metric_variance_config: [],
     exposures: exposuresFor(arms),
     metric_values: metricRowsFor(arms, "count"),
-    ...overrides,
-  } as StatsInput;
+  };
+  return { ...base, ...overrides };
 }
 
 describe("analyzeStats end-to-end coherence", () => {
@@ -137,7 +137,7 @@ describe("analyzeStats end-to-end coherence", () => {
       ),
     );
 
-    const out = await analyzeStats({
+    const input: StatsInput = {
       run_id: RUN_ID,
       confidence_level: 0.95,
       horizon: "sequential",
@@ -148,7 +148,8 @@ describe("analyzeStats end-to-end coherence", () => {
       metric_variance_config: [],
       exposures,
       metric_values: metricValues,
-    } as StatsInput);
+    };
+    const out = await analyzeStats(input);
 
     const treatments = out.arm_results.filter((r) => r.variant === "treatment");
     expect(treatments).toHaveLength(5);

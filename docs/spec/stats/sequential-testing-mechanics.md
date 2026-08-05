@@ -87,7 +87,9 @@ When `horizon = 'fixed'` and `sample_size_locked = S`:
 
 ```
 1. Collect S Entities per arm. Until every arm has S, the Metric stays `running`.
-2. Analyze exactly the first S Entities per arm, ordered by first_exposure_ts.
+2. Analyze exactly the first S Entities per arm, ordered by first_exposure_ts
+   and then by targeting_key_hash so Entities exposed in the same millisecond
+   still have one fixed order.
    Entities that arrive past the lock are excluded, not weighted down.
 3. Compute standard two-sample t-test (or z-test for large N).
 4. Report: point_estimate, absolute_ci, p_value.

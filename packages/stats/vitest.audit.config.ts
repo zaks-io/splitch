@@ -10,6 +10,5 @@ export default defineConfig({
   test: {
     include: ["audit/**/*.test.ts"],
     testTimeout: 600_000,
-    passWithNoTests: true,
   },
 });

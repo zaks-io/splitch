@@ -69,6 +69,7 @@ CUPED applies only when **all** conditions are met:
 | Condition              | Rule                                          | Config field                                 |
 | ---------------------- | --------------------------------------------- | -------------------------------------------- |
 | CUPED enabled          | Metric opts out with `cuped: false`           | `cuped` (default true)                       |
+| Metric type eligible   | Ratio Metrics never apply CUPED               | `metric_type`                                |
 | Pre-period data exists | Coverage ≥ threshold, in **every** arm        | `cuped_coverage_threshold_pct` (default 70%) |
 | Coverage definition    | Fraction of arm Entities with pre-period data | same                                         |
 

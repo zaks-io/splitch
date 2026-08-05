@@ -97,7 +97,7 @@ describe("CUPED", () => {
     expect(wilson(rejections, TRIALS)[0]).toBeLessThan(0.06);
   });
 
-  it("keeps the covariate imbalance in the lift instead of adjusting it away", () => {
+  it("corrects a covariate imbalance instead of reporting it as lift", () => {
     // Control arm is drawn with a deliberately higher covariate mean. CUPED must
     // correct the outcome for that imbalance, moving the estimate toward truth.
     const N = 4000;
@@ -146,8 +146,9 @@ describe("winsorization defaults", () => {
   it("uses one pooled cap so neither arm is capped differently", () => {
     const N = 1000;
     const draw = normalDraws(rng(16_000_000));
-    // Treatment has a much fatter tail; a per-arm cap would clip it harder and
-    // manufacture a negative lift.
+    // Both arms draw from the same heavy-tailed distribution, so the cap has to
+    // come from the pooled sample. A per-arm cap would clip whichever arm drew
+    // the longer tail harder and manufacture a lift out of sampling noise.
     const control = Array.from({ length: N }, () => Math.exp(1 + 1.0 * draw()));
     const treatment = Array.from({ length: N }, () => Math.exp(1 + 1.0 * draw()));
     const comparison = run(control, treatment);

@@ -159,7 +159,8 @@
     },
     "stats:audit": {
       "dependsOn": ["^build"],
-      "outputs": []
+      "outputs": [],
+      "cache": false
     },
     "stats:golden": {
       "dependsOn": ["^build"],

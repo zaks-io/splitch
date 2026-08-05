@@ -3,7 +3,7 @@
 End-to-end audit of the assembled inference engine: coverage, any-time Type-I error, variance
 reduction, cross-surface consistency, and reference values checked against published sources.
 
-```
+```bash
 pnpm stats:audit
 ```
 
