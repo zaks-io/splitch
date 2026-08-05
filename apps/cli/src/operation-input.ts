@@ -2,11 +2,7 @@ import { randomUUID } from "node:crypto";
 import { deriveMcpTools, getRoute } from "@splitch/contracts";
 import type { EvaluateContext } from "@splitch/sdk";
 import type { CliCommandDefinition } from "./command-registry.js";
-import {
-  excessPositionalError,
-  requiredPositionalSpecs,
-  SCOPE_PATH_PARAMS,
-} from "./command-positionals.js";
+import { excessPositionalError, requiredPositionalSpecs } from "./command-positionals.js";
 import type { ResolvedContext } from "./context.js";
 import { SplitchCliError } from "./errors.js";
 import {
@@ -100,9 +96,7 @@ function applyPositionalFields(
   // Same rule as missingRequiredPositional: argv fills only slots still empty
   // after --body-json / --org. Excess argv means a param was supplied twice —
   // fail loud rather than sliding tokens into the wrong slots (ADR-0036).
-  const specs = requiredPositionalSpecs(command).filter(
-    (spec) => !SCOPE_PATH_PARAMS.has(spec.param),
-  );
+  const specs = requiredPositionalSpecs(command);
   const alreadyFilled = (param: string): boolean => {
     const existing = input[param];
     return typeof existing === "string" && existing.length > 0;

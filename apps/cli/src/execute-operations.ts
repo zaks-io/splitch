@@ -3,6 +3,7 @@ import { createSplitchClient } from "@splitch/sdk";
 import { withAuthorizationRetry } from "./auth.js";
 import type { TokenBinding } from "./auth-binding.js";
 import type { CliCommandDefinition } from "./command-registry.js";
+import { missingPositionalError } from "./command-positionals.js";
 import type { ResolvedContext } from "./context.js";
 import { requireAppScope, requireEnvironmentScope } from "./context.js";
 import { normalizeCliError, SplitchCliError, writeCliError } from "./errors.js";
@@ -51,6 +52,14 @@ export async function executeFlagsVerify(
     return usageError;
   }
 
+  // Argv-only Flag key — `--body-json` is not a source (matches the positional gate).
+  // Check before the Client Key fetch so a missing key never exits mute after I/O.
+  const flagKey = invocation.positionals[0];
+  if (!flagKey) {
+    writeCliError(io, missingPositionalError("flag-key"));
+    return { exitCode: EXIT_USAGE };
+  }
+
   try {
     let sdkVerifyError: string | undefined;
     const clientKeyResult = await withAuthorizationRetry(
@@ -87,10 +96,6 @@ export async function executeFlagsVerify(
         debug: () => {},
       },
     });
-    const flagKey = invocation.positionals[0];
-    if (!flagKey) {
-      return validateFlagsVerifyUsage(invocation, io) ?? { exitCode: EXIT_USAGE };
-    }
     const verifyDetails = await client.verify(flagKey, evaluationContext);
     emit(io, invocation.flags.json, verifyDetails);
     if (verifyDetails.reason === "ERROR") {

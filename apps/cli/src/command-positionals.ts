@@ -4,7 +4,7 @@ import { SplitchCliError } from "./errors.js";
 import type { ParsedInvocation } from "./parse-args.js";
 
 /** Path params filled from `--app` / `--env` context, never as CLI positionals. */
-export const SCOPE_PATH_PARAMS = new Set(["appId", "environmentId", "targetEnvironmentId"]);
+const SCOPE_PATH_PARAMS = new Set(["appId", "environmentId", "targetEnvironmentId"]);
 
 export interface RequiredPositionalSpec {
   /** Control-plane path / input field name, e.g. `experimentId`. */
@@ -59,11 +59,16 @@ function positionalDisplayName(param: string): string {
  * First required path param that is unsatisfied after consulting every source
  * for that slot (`--org`, `--body-json`, then the next unused argv positional).
  * Argv is bound only to slots still empty — never before knowing which are filled.
+ *
+ * `flags verify` is argv-only: it never reads `--body-json` for the Flag key.
  */
 export function missingRequiredPositional(
   command: CliCommandDefinition,
   invocation: ParsedInvocation,
 ): string | undefined {
+  if (command.kind === "flags_verify") {
+    return invocation.positionals[0] ? undefined : "flag-key";
+  }
   const specs = requiredPositionalSpecs(command);
   const body = parseBodyJsonRecord(invocation.flags.bodyJson);
   let positionalIndex = 0;
@@ -95,6 +100,12 @@ export function conflictingSuppliedPositional(
   command: CliCommandDefinition,
   invocation: ParsedInvocation,
 ): ExcessPositional | undefined {
+  if (command.kind === "flags_verify") {
+    if (invocation.positionals.length <= 1) {
+      return undefined;
+    }
+    return { kind: "unexpected", token: invocation.positionals[1] ?? "" };
+  }
   const specs = requiredPositionalSpecs(command);
   const body = parseBodyJsonRecord(invocation.flags.bodyJson);
   const unfilledCount = specs.filter(
@@ -129,20 +140,33 @@ function pathParamAlreadyFilled(
   return typeof fromBody === "string" && fromBody.length > 0;
 }
 
-/** Parse `--body-json` into a record when present and well-formed; else undefined. */
+/**
+ * Parse `--body-json` into a record when present and well-formed.
+ * Throws CLI_USAGE_INVALID on malformed JSON — the positional gate runs before
+ * `applyBodyJson`, so a swallowed parse here would mis-name a missing argument.
+ */
 function parseBodyJsonRecord(bodyJson: string | undefined): Record<string, unknown> | undefined {
   if (!bodyJson) {
     return undefined;
   }
+  let parsed: unknown;
   try {
-    const parsed: unknown = JSON.parse(bodyJson);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
+    parsed = JSON.parse(bodyJson);
   } catch {
-    // Invalid JSON is a later usage/parse failure; do not mask it here.
+    throw malformedBodyJsonError();
   }
-  return undefined;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw malformedBodyJsonError();
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function malformedBodyJsonError(): SplitchCliError {
+  return new SplitchCliError({
+    code: "CLI_USAGE_INVALID",
+    causeSummary: "Malformed --body-json",
+    remediation: "Pass a JSON object with --body-json",
+  });
 }
 
 /**

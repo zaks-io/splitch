@@ -11,7 +11,7 @@ import {
 } from "./command-positionals.js";
 
 import { type ResolvedContext, resolveContext } from "./context.js";
-import { writeCliError } from "./errors.js";
+import { SplitchCliError, writeCliError } from "./errors.js";
 import { consoleIo, emit } from "./execute-io.js";
 import {
   executeApiOperation,
@@ -176,19 +176,29 @@ function validateRequiredPositionals(
   invocation: ParsedInvocation,
   io: CliIo,
 ): CliResult | null {
-  const conflict = conflictingSuppliedPositional(command, invocation);
-  if (conflict) {
-    writeCliError(io, excessPositionalError(conflict));
+  try {
+    const conflict = conflictingSuppliedPositional(command, invocation);
+    if (conflict) {
+      writeCliError(io, excessPositionalError(conflict));
+      io.log(`Usage:\n  ${commandUsageLine(command)}`);
+      return { exitCode: EXIT_USAGE };
+    }
+    const missing = missingRequiredPositional(command, invocation);
+    if (!missing) {
+      return null;
+    }
+    writeCliError(io, missingPositionalError(missing));
     io.log(`Usage:\n  ${commandUsageLine(command)}`);
     return { exitCode: EXIT_USAGE };
+  } catch (error) {
+    // Malformed --body-json throws from the gate's JSON parse.
+    if (error instanceof SplitchCliError) {
+      writeCliError(io, error);
+      io.log(`Usage:\n  ${commandUsageLine(command)}`);
+      return { exitCode: EXIT_USAGE };
+    }
+    throw error;
   }
-  const missing = missingRequiredPositional(command, invocation);
-  if (!missing) {
-    return null;
-  }
-  writeCliError(io, missingPositionalError(missing));
-  io.log(`Usage:\n  ${commandUsageLine(command)}`);
-  return { exitCode: EXIT_USAGE };
 }
 
 /**

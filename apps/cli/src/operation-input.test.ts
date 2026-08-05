@@ -138,6 +138,35 @@ describe("buildOperationInput", () => {
 });
 
 describe("path-param double supply", () => {
+  it("rejects positional flagId that collides with --body-json flagId (replaces old overwrite precedence)", () => {
+    const command = requireCommand(["flags", "update"]);
+    expect(() =>
+      buildOperationInput(
+        command,
+        parseInvocation([
+          "flags",
+          "update",
+          "--json",
+          "--app",
+          "app_flag",
+          "flag_pos",
+          "--body-json",
+          JSON.stringify({
+            appId: "app_body",
+            flagId: "flag_body",
+            name: "Renamed",
+          }),
+        ]),
+        { appId: "app_flag" },
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "CLI_USAGE_INVALID",
+        causeSummary: expect.stringContaining("<flag-id-or-key> was supplied more than once"),
+      }),
+    );
+  });
+
   it("rejects a positional that collides with --body-json flagId", () => {
     const command = requireCommand(["flags", "update"]);
     expect(() =>

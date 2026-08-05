@@ -29,17 +29,17 @@ describe("flags verify transport", () => {
   it("names the positional as a Flag key in the coded usage error", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { credentialPath } = await makeTempHome();
 
-    const code = await runCli([
-      "flags",
-      "verify",
-      "--app",
-      "app_1",
-      "--env",
-      "env_1",
-      "--targeting-key",
-      "user-1",
-    ]);
+    const code = await runCli(
+      ["flags", "verify", "--app", "app_1", "--env", "env_1", "--targeting-key", "user-1"],
+      {
+        credentialPath,
+        fetch: async () => {
+          throw new Error("network must not be reached when Flag key is missing");
+        },
+      },
+    );
 
     expect(code).toBe(EXIT_USAGE);
     expect(error).toHaveBeenCalledWith(

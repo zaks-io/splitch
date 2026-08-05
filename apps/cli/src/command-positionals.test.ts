@@ -12,10 +12,26 @@ import { EXIT_USAGE } from "./exit-codes.js";
 import { renderCommandHelp } from "./help.js";
 import { buildOperationInput } from "./operation-input.js";
 import { parseInvocation } from "./parse-args.js";
+import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
+  await cleanupTempHomes();
 });
+
+/** Keep gate-path runCli calls hermetic even if the gate is mutated away. */
+async function hermeticCliDeps(): Promise<{
+  credentialPath: string;
+  fetch: typeof fetch;
+}> {
+  const { credentialPath } = await makeTempHome();
+  return {
+    credentialPath,
+    fetch: async () => {
+      throw new Error("network must not be reached from positional-gate tests");
+    },
+  };
+}
 
 /** Every registered command that documents at least one required positional. */
 const COMMANDS_WITH_REQUIRED_POSITIONALS = CLI_COMMANDS.filter(
@@ -82,7 +98,7 @@ describe("required positionals (SPL-306)", () => {
 
     // Omit every required positional. No credentials or scope flags — misuse
     // must fail as usage before any control-plane-sdk path build.
-    const code = await runCli([...command.path]);
+    const code = await runCli([...command.path], await hermeticCliDeps());
 
     expect(code).toBe(EXIT_USAGE);
     const errorLine = stderr.join("\n");
@@ -114,16 +130,10 @@ describe("required positionals (SPL-306)", () => {
 
     // Empty --body-json must still fail as usage before control-plane-sdk throws
     // its internal missing-path-param Error (and before auth/scope).
-    const code = await runCli([
-      "runs",
-      "list",
-      "--app",
-      "app_1",
-      "--env",
-      "env_1",
-      "--body-json",
-      "{}",
-    ]);
+    const code = await runCli(
+      ["runs", "list", "--app", "app_1", "--env", "env_1", "--body-json", "{}"],
+      await hermeticCliDeps(),
+    );
 
     expect(code).toBe(EXIT_USAGE);
     const errorLine = stderr.join("\n");
@@ -286,7 +296,10 @@ describe("unexpected excess positionals (SPL-306)", () => {
       stdout.push(args.join(" "));
     });
 
-    const code = await runCli(["organization-members", "remove", "org_1", "user_1", "extra_1"]);
+    const code = await runCli(
+      ["organization-members", "remove", "org_1", "user_1", "extra_1"],
+      await hermeticCliDeps(),
+    );
     expect(code).toBe(EXIT_USAGE);
     const errorLine = stderr.join("\n");
     expect(errorLine).toContain("CLI_USAGE_INVALID");
@@ -315,7 +328,7 @@ describe("unexpected excess positionals (SPL-306)", () => {
       stdout.push(args.join(" "));
     });
 
-    const code = await runCli(["flags", "list", "extra_1"]);
+    const code = await runCli(["flags", "list", "extra_1"], await hermeticCliDeps());
     expect(code).toBe(EXIT_USAGE);
     const errorLine = stderr.join("\n");
     expect(errorLine).toContain("CLI_USAGE_INVALID");
@@ -345,11 +358,82 @@ describe("unexpected excess positionals (SPL-306)", () => {
       stdout.push(args.join(" "));
     });
 
-    const code = await runCli(["orgs", "create", "acme", "--name", "x"]);
+    const code = await runCli(["orgs", "create", "acme", "--name", "x"], await hermeticCliDeps());
     expect(code).toBe(EXIT_USAGE);
     const errorLine = stderr.join("\n");
     expect(errorLine).toContain("Unexpected argument acme");
     expect(errorLine).not.toContain("supplied more than once");
     expect(stdout.join("\n")).toContain(`Usage:\n  ${commandUsageLine(command)}`);
+  });
+});
+
+describe("malformed --body-json in the positional gate (SPL-306)", () => {
+  it("names malformed --body-json instead of a wrong missing argument", async () => {
+    const command = requireCommand(["organization-members", "update"]);
+    const stderr: string[] = [];
+    const stdout: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      stderr.push(args.join(" "));
+    });
+    vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      stdout.push(args.join(" "));
+    });
+
+    const code = await runCli(
+      ["organization-members", "update", "--body-json", '{"orgId":"org_1"', "user_1"],
+      await hermeticCliDeps(),
+    );
+
+    expect(code).toBe(EXIT_USAGE);
+    const errorLine = stderr.join("\n");
+    expect(errorLine).toContain("CLI_USAGE_INVALID");
+    expect(errorLine).toContain("Malformed --body-json");
+    expect(errorLine).not.toContain("Missing required argument");
+    expect(errorLine).not.toContain("<user-id>");
+    expect(stdout.join("\n")).toContain(`Usage:\n  ${commandUsageLine(command)}`);
+  });
+
+  it("rejects --body-json as a Flag key source for flags verify", async () => {
+    const command = requireCommand(["flags", "verify"]);
+    expect(
+      missingRequiredPositional(
+        command,
+        parseInvocation([
+          "flags",
+          "verify",
+          "--targeting-key",
+          "user-1",
+          "--body-json",
+          JSON.stringify({ flagKey: "checkout" }),
+        ]),
+      ),
+    ).toBe("flag-key");
+
+    const stderr: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      stderr.push(args.join(" "));
+    });
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const code = await runCli(
+      [
+        "flags",
+        "verify",
+        "--app",
+        "app_1",
+        "--env",
+        "env_1",
+        "--targeting-key",
+        "user-1",
+        "--body-json",
+        JSON.stringify({ flagKey: "checkout" }),
+      ],
+      await hermeticCliDeps(),
+    );
+
+    expect(code).toBe(EXIT_USAGE);
+    const errorLine = stderr.join("\n");
+    expect(errorLine).toContain("Missing required argument <flag-key>");
+    expect(errorLine).not.toContain("CLI_UNEXPECTED_ERROR");
   });
 });
