@@ -17,6 +17,9 @@ One npm package, subpath exports — never per-environment packages:
 @splitch/sdk/react      -- provider + hooks over this client (react as optional peer)
 ```
 
+The `./react` surface (provider shape, hook API, subscription seam) is specified in
+[react-bindings.md](./react-bindings.md).
+
 Each subpath is a separate bundle entry with its own size budget; server-only code never enters the
 browser entry and vice versa. The published package has no runtime zod (SPL-325); response
 validation uses validators compiled from the contract surface at build time.
@@ -78,7 +81,11 @@ Fail-loud rules (ADR-0036):
 `subscribe(flagKey, listener)` registers a per-Flag listener invoked when a revalidation swap
 changes that Flag's resolution; it returns an unsubscribe function. Subscribing is **not** a read:
 it fires no Exposure until the value is actually read. Errors surface through the injectable
-`logger` — no second hook system (the Web Analytics rule, reused).
+`logger` — no second hook system (the Web Analytics rule, reused). Two guarantees the React
+bindings ([react-bindings.md](./react-bindings.md)) depend on: `subscribe` accepts keys absent
+from the held evaluations (the subscription registers by key and fires if a later swap introduces
+the Flag), and held Variant values are returned by reference — never cloned, treated as immutable —
+so identity is stable until a swap.
 
 ## Exposure queue (redemption)
 
