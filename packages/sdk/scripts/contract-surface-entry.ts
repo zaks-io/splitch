@@ -3,12 +3,16 @@
  * tsup reads this file and emits src/generated/contract-surface.{js,d.ts}.
  * Do not import this module from runtime code outside the build.
  */
+
+export { type ErrorCode, ErrorCodeSchema } from "../../contracts/src/error-code";
 export {
   DataPlaneEvaluateResponseSchema,
+  type EvaluateAllEntry,
+  type EvaluateAllReason,
+  EvaluateAllResponseSchema,
   PeekEvaluateResponseSchema,
-  ResolutionDetailsSchema,
   type ResolutionDetails,
+  ResolutionDetailsSchema,
   type ResolutionReason,
   type VariantValue,
 } from "../../contracts/src/sdk-data-plane-surface";
-export { ErrorCodeSchema, type ErrorCode } from "../../contracts/src/error-code";

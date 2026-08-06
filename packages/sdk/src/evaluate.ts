@@ -53,7 +53,7 @@ export interface EvaluateDeps {
   readonly now: () => number;
 }
 
-const DEFAULT_ID_TYPE = "user";
+export const DEFAULT_ID_TYPE = "user";
 // The Default Variant value when the caller supplies none. `false` is the safe
 // off-state for the canonical boolean flag.
 const FALLBACK_DEFAULT_VALUE: VariantValue = false;
@@ -61,7 +61,7 @@ const FALLBACK_DEFAULT_VALUE: VariantValue = false;
 const SERVER_ERROR_REMEDIATION =
   "Correct the request or credential described by the error, then retry the operation";
 
-function sdkErrorForFailure(operation: string, result: TransportFailure): SplitchSdkError {
+export function sdkErrorForFailure(operation: string, result: TransportFailure): SplitchSdkError {
   const code = result.errorCode ?? errorCodeForStatus(result.status);
   return new SplitchSdkError({
     code,

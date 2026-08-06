@@ -39,30 +39,68 @@ const variant = await splitch.evaluate("new-checkout", {
 
 Construct the client with exactly one credential (anything else throws):
 
-| Option      | Credential                | Where it may live                                  | Unlocks                                 |
-| ----------- | ------------------------- | -------------------------------------------------- | --------------------------------------- |
-| `clientKey` | public Client Key (`pk_`) | browsers, mobile, servers: anything that evaluates | `evaluate`, `evaluateDetails`, `verify` |
-| `apiKey`    | secret API Key (`sk_`)    | servers only; never ship it to a client            | `peekVariant`, `verify`                 |
+| Option      | Credential                | Where it may live                                  | Unlocks                                                |
+| ----------- | ------------------------- | -------------------------------------------------- | ------------------------------------------------------ |
+| `clientKey` | public Client Key (`pk_`) | browsers, mobile, servers: anything that evaluates | `evaluate`, `evaluateDetails`, `verify`, `evaluateAll` |
+| `apiKey`    | secret API Key (`sk_`)    | servers only; never ship it to a client            | `peekVariant`, `verify`, `evaluateAll`                 |
 
 A server-side integration that fires Exposures uses a Client Key, not an API
 Key. The API Key cannot call `evaluate` or `evaluateDetails`; present a Client
 Key on that path (Client Keys are safe to use from servers).
 
-## The four methods
+## The five methods
 
 An **Exposure** is the "this subject saw this Variant" event that experiment
 analysis counts. Which methods fire one is the core thing to get right:
 
-| Method            | Returns                  | Fires an Exposure | Credential            |
-| ----------------- | ------------------------ | ----------------- | --------------------- |
-| `evaluate`        | the Variant value        | yes               | Client Key only       |
-| `evaluateDetails` | full `ResolutionDetails` | yes               | Client Key only       |
-| `peekVariant`     | the Variant value        | no                | API Key only          |
-| `verify`          | full `ResolutionDetails` | no                | Client Key or API Key |
+| Method            | Returns                       | Fires an Exposure | Credential            |
+| ----------------- | ----------------------------- | ----------------- | --------------------- |
+| `evaluate`        | the Variant value             | yes               | Client Key only       |
+| `evaluateDetails` | full `ResolutionDetails`      | yes               | Client Key only       |
+| `peekVariant`     | the Variant value             | no                | API Key only          |
+| `verify`          | full `ResolutionDetails`      | no                | Client Key or API Key |
+| `evaluateAll`     | every Flag, in one round trip | no                | Client Key or API Key |
 
 Use `evaluate` on the real user path. Use `peekVariant` to inspect a resolution
 without polluting experiment data. Use `verify` to confirm setup end to end
-(same shape as `evaluateDetails`, no Exposure, safe to run repeatedly).
+(same shape as `evaluateDetails`, no Exposure, safe to run repeatedly). Use
+`evaluateAll` to render a whole page from one request.
+
+## evaluateAll: every Flag in one round trip
+
+`evaluateAll(context)` resolves every Flag in the credential's App and
+Environment for one Evaluation Context and returns them together with the
+`ETag` they were tagged with:
+
+```ts
+const precomputed = await splitch.evaluateAll({ targetingKey: user.id });
+
+precomputed.context; // { targetingKey, idType, attributes }, defaults applied
+precomputed.evaluations; // { [flagKey]: { variant, variantName, reason, errorCode, exposureTicket } }
+precomputed.etag; // strong validator for revalidation
+```
+
+It fires no Exposure. Each fresh assignment under a live experiment Run carries
+an `exposureTicket` instead, which a client redeems when it actually reads that
+Flag, so a page that renders 20 Flags and shows 3 records 3 Exposures rather
+than 20.
+
+The payload holds evaluated results only: values, Variant names, non-revealing
+reasons, and tickets. It never carries Targeting Rules, rollout percentages, or
+the salt, which is what makes it safe to serialize into a server-rendered page
+for the browser client to hydrate from:
+
+```ts
+// SSR handler
+const precomputed = await splitch.evaluateAll({ targetingKey: user.id });
+html.embed(JSON.stringify(precomputed));
+```
+
+`idempotencyKey` is optional here: the SDK mints one per fetch. Pass your own
+only when you retry an uncertain fetch and want the retry to bill zero.
+
+Unlike `evaluate`, it has no Default Variant to fall back to, so it throws a
+`SplitchSdkError` on failure rather than returning a partial or empty payload.
 
 ## idempotencyKey
 
@@ -78,8 +116,8 @@ request so the platform can deduplicate the Exposure.
   your `defaultValue` (or `false` when you gave none), log loudly through
   `logger.error`, and report `reason: "ERROR"` plus an `errorCode` in
   `ResolutionDetails`. Branch on `reason` when you need to react.
-- `peekVariant` throws a `SplitchSdkError` carrying `code`, `status`, and
-  `docsUrl`. Every code resolves to a page at
+- `peekVariant` and `evaluateAll` throw a `SplitchSdkError` carrying `code`,
+  `status`, and `docsUrl`. Every code resolves to a page at
   `https://splitch.dev/docs/error/{code}`, and the error message prints it.
 - `retries` must be `0`. A retry is a fresh resolution and would double-count
   Exposures; retry by reusing `idempotencyKey` instead.
