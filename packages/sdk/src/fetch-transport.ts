@@ -246,7 +246,6 @@ async function readVerifyResponse(response: Response): Promise<VerifyTransportRe
 }
 
 async function readFailure(response: Response): Promise<TransportFailure> {
-  const fallback: TransportFailure = { status: response.status };
   try {
     const body = (await response.json()) as { code?: unknown; message?: unknown };
     const parsedCode = ErrorCodeSchema.safeParse(body.code);
@@ -255,7 +254,12 @@ async function readFailure(response: Response): Promise<TransportFailure> {
       errorCode: parsedCode.success ? parsedCode.data : undefined,
       errorMessage: typeof body.message === "string" ? body.message : undefined,
     };
-  } catch {
-    return fallback;
+  } catch (error) {
+    // Same classification as the 2xx body reads: an abort here is this SDK's own
+    // timer firing mid-body, so it reports the local timeout rather than the
+    // server's status. A body that merely failed to parse still arrived with a
+    // real status — keep it, so an empty 503 stays SERVICE_UNAVAILABLE.
+    const failure = classifyBodyReadError(error);
+    return failure.errorCode === "SDK_TRANSPORT_TIMEOUT" ? failure : { status: response.status };
   }
 }
