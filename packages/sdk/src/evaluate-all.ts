@@ -87,11 +87,17 @@ export async function runEvaluateAll(
 }
 
 /**
- * Detached from the caller's object, one array level deep, because that is the
- * whole of `AttributeValue`: scalars plus a single array. The payload travels to
- * the browser client, which deep-equality-checks this context, so a caller
- * mutating their own object afterwards must not be able to rewrite what the
- * payload was resolved for — and a spread alone would leave array values shared.
+ * Detaches the map and each array value from the caller's object, so a caller
+ * mutating what they passed cannot afterwards rewrite what the payload claims it
+ * was resolved for. That matters because the browser client deep-equality-checks
+ * this context.
+ *
+ * The guarantee stops one array level down. `AttributeValue` types array elements
+ * as `unknown`, so `{ tags: [{ nested: "x" }] }` still shares the inner object and
+ * a caller can mutate through it. Narrowing the element type to the scalar union
+ * would close that by construction, but it changes a public type used by every
+ * accessor, so it is being decided with the bootstrap deep-equality check in
+ * SPL-332 rather than here.
  */
 function copyAttributes(
   attributes: Readonly<Record<string, AttributeValue>> | undefined,
