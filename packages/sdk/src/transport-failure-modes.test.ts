@@ -179,6 +179,44 @@ describe("transport failure modes: body-read abort and peek/verify parity (SPL-3
     await expect(transport.verify(TRANSPORT_REQUEST)).resolves.toMatchObject(timedOut);
   });
 
+  // A mid-body drop on an error status must not report `cause: undefined`, which
+  // reads exactly like a clean empty-bodied 503.
+  it("non-abort body-read failure keeps the server's status AND the caught error", async () => {
+    const dropped = new TypeError("terminated: body stream failed mid-read");
+    const transport = fetchTransport(stubFetch(() => Promise.resolve(stalledBody(503, dropped))));
+    const kept = { status: 503, cause: dropped };
+
+    const result = await transport.evaluate(TRANSPORT_REQUEST);
+    expect(result).toMatchObject(kept);
+    // Left to the canonical status mapping: 503 is still the server's verdict.
+    expect(result.errorCode).toBeUndefined();
+    await expect(transport.peek(TRANSPORT_REQUEST)).resolves.toMatchObject(kept);
+    await expect(transport.verify(TRANSPORT_REQUEST)).resolves.toMatchObject(kept);
+  });
+
+  it("logger.error receives the mid-body error behind an error status, untruncated", async () => {
+    const dropped = new TypeError("terminated: body stream failed mid-read");
+    const logger = new FakeLogger();
+    const client = createSplitchClient({
+      clientKey: "ck_test",
+      fetch: stubFetch(stalledBody(503, dropped)),
+      logger,
+    });
+
+    const details = await client.evaluateDetails("flag", {
+      targetingKey: "u1",
+      defaultValue: "control",
+      idempotencyKey: "transport-error-body-drop-1",
+    });
+
+    expect(details.errorCode).toBe("SERVICE_UNAVAILABLE");
+    expect(logger.errors).toHaveLength(1);
+    expect(logger.errors[0]?.detail).toMatchObject({ cause: dropped });
+    const detail = logger.errors[0]?.detail as { cause: TypeError };
+    expect(detail.cause.message).toBe(dropped.message);
+    expect(detail.cause.stack).toBe(dropped.stack);
+  });
+
   it("peek and verify classify the same three transport modes", async () => {
     const thrown = new TypeError("network down");
     const network = fetchTransport(stubFetch(() => Promise.reject(thrown)));
