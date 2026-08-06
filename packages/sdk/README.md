@@ -153,6 +153,12 @@ Every option is documented in the shipped type declarations
 | `logger`    | `console`                  | receives every fail-loud report             |
 | `transport` | built-in `fetch` adapter   | injectable seam for tests                   |
 
+`transport` gained a required `evaluateAll` method in the release that added
+`evaluateAll`. It is required rather than optional so a stale transport fails at
+the type level instead of resolving `undefined` into an `await`. If you pass your
+own object literal there, add the method; the type will tell you. Nothing else is
+affected, and the built-in adapter needs no change.
+
 ## Links
 
 - SDK guide: <https://splitch.dev/docs/sdk/install>

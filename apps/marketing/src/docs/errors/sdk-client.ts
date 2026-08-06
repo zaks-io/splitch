@@ -45,9 +45,9 @@ export const sdkErrorDocs = {
   },
   SDK_TRANSPORT_TIMEOUT: {
     cause:
-      "The per-call request timeout elapsed (or the request was aborted) before a response arrived.",
-    fix: "Increase `timeoutMs` if cold starts are expected, or check connectivity. The underlying abort is on `logger.error`'s `cause`. This is not an HTTP 503 from the server.",
-    related: ["SDK_TRANSPORT_NETWORK", "SERVICE_UNAVAILABLE"],
+      "The per-call request timeout elapsed, or the request was aborted. The timeout covers the whole call, so it can fire before any response arrives or while the response body is still streaming.",
+    fix: "Increase `timeoutMs` if cold starts are expected, or check connectivity. The underlying abort is on `logger.error`'s `cause`. An abort mid-body is reported here rather than as `SDK_TRANSPORT_PARSE`, because the body was truncated, not malformed. This is not an HTTP 503 from the server.",
+    related: ["SDK_TRANSPORT_NETWORK", "SDK_TRANSPORT_PARSE", "SERVICE_UNAVAILABLE"],
   },
   SDK_TRANSPORT_PARSE: {
     cause:

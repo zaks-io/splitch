@@ -110,6 +110,18 @@ describe("evaluateAll: Precomputed Evaluations payload", () => {
     expect(precomputed.context.attributes).toEqual({ plan: "pro" });
   });
 
+  it("copies array attributes too, so mutating one through its reference cannot reach the payload", async () => {
+    const fake = new FakeTransport([], { evaluateAll: [evaluateAllOk(EVALUATIONS)] });
+    const { client } = clientWith(fake);
+    // `AttributeValue` admits arrays, so a one-level spread leaves this shared.
+    const cohorts = ["beta"];
+
+    const precomputed = await client.evaluateAll({ targetingKey: "u1", attributes: { cohorts } });
+    cohorts.push("internal");
+
+    expect(precomputed.context.attributes.cohorts).toEqual(["beta"]);
+  });
+
   it("mints a fresh Idempotency-Key per fetch when the caller supplies none", async () => {
     const fake = new FakeTransport([], {
       evaluateAll: [evaluateAllOk(EVALUATIONS), evaluateAllOk(EVALUATIONS)],
@@ -124,6 +136,17 @@ describe("evaluateAll: Precomputed Evaluations payload", () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
     );
     expect(second?.idempotencyKey).not.toBe(first?.idempotencyKey);
+  });
+
+  it("treats an empty-string Idempotency-Key as absent rather than sending it", async () => {
+    const fake = new FakeTransport([], { evaluateAll: [evaluateAllOk(EVALUATIONS)] });
+    const { client } = clientWith(fake);
+
+    await client.evaluateAll({ targetingKey: "u1", idempotencyKey: "" });
+
+    expect(fake.evaluateAllCalls[0]?.idempotencyKey).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
   });
 
   it("fires no Exposure: no evaluate call, and no seen-set entry for a later evaluate", async () => {

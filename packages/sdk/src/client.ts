@@ -82,9 +82,14 @@ export interface SplitchClient {
    * each fresh live-Run assignment carries an Exposure Ticket that a client
    * redeems on first read instead.
    *
-   * Serialize the result as-is to hydrate a browser client — it is that
-   * client's `bootstrap` input, unmodified. Client Key or API Key; disclosure is
-   * identical on both, because the payload is built to be safe on a public page.
+   * Serialize the result as-is to hydrate a browser client: it is that client's
+   * `bootstrap` input, unmodified. Client Key or API Key; disclosure is
+   * identical on both, and the payload carries no rule logic.
+   *
+   * It does echo the Evaluation Context it was resolved for, `targetingKey` and
+   * every attribute included, because the browser client deep-equality-checks
+   * that context. Serializing it into a page publishes those attributes, so
+   * pass only attributes you would publish.
    *
    * Throws `SplitchSdkError` (fields `code`, `status`) on any failure: there is
    * no partial payload and no default one.

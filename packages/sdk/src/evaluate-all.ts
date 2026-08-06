@@ -21,9 +21,14 @@ export interface PrecomputedEvaluationsContext {
  *
  * Keyed by Flag Key. Each entry carries the resolved value, the immutable
  * Variant name, a non-revealing `reason`, and an Exposure Ticket when reading
- * that Flag would create a new Exposure — never Targeting Rules, allocation
- * fractions, or the salt. That makes the object safe to serialize into a page,
- * which is exactly what the browser client consumes as its `bootstrap`.
+ * that Flag would create a new Exposure, never Targeting Rules, allocation
+ * fractions, or the salt. The object is what the browser client consumes as its
+ * `bootstrap`.
+ *
+ * `context` echoes the Evaluation Context this was resolved for, `targetingKey`
+ * and every attribute included, so the browser client can prove it is hydrating
+ * its own Entity's results. Serializing the payload into a page publishes those
+ * attributes: pass only attributes you would publish.
  */
 export interface PrecomputedEvaluations {
   readonly context: PrecomputedEvaluationsContext;
@@ -56,15 +61,17 @@ export async function runEvaluateAll(
   const resolved: PrecomputedEvaluationsContext = {
     targetingKey: context.targetingKey,
     idType: context.idType ?? DEFAULT_ID_TYPE,
-    // Copied, not aliased: the payload travels to the browser client, which
-    // deep-equality-checks this context. A caller mutating their own object
-    // afterwards must not be able to rewrite what the payload was resolved for.
-    attributes: { ...(context.attributes ?? {}) },
+    attributes: copyAttributes(context.attributes),
   };
 
   const result = await deps.transport.evaluateAll({
     ...resolved,
-    idempotencyKey: context.idempotencyKey ?? mintIdempotencyKey(deps, resolved.targetingKey),
+    // An empty string is an absent key, not a key. `??` alone would forward it
+    // and let the edge reject what the SDK could refuse here.
+    idempotencyKey:
+      context.idempotencyKey === undefined || context.idempotencyKey.length === 0
+        ? mintIdempotencyKey(deps, resolved.targetingKey)
+        : context.idempotencyKey,
   });
 
   if (result.status !== 200 || result.evaluations === null || result.etag === null) {
@@ -77,6 +84,24 @@ export async function runEvaluateAll(
   }
 
   return { context: resolved, evaluations: result.evaluations, etag: result.etag };
+}
+
+/**
+ * Detached from the caller's object, one array level deep, because that is the
+ * whole of `AttributeValue`: scalars plus a single array. The payload travels to
+ * the browser client, which deep-equality-checks this context, so a caller
+ * mutating their own object afterwards must not be able to rewrite what the
+ * payload was resolved for — and a spread alone would leave array values shared.
+ */
+function copyAttributes(
+  attributes: Readonly<Record<string, AttributeValue>> | undefined,
+): Readonly<Record<string, AttributeValue>> {
+  return Object.fromEntries(
+    Object.entries(attributes ?? {}).map(([key, value]) => [
+      key,
+      Array.isArray(value) ? [...value] : value,
+    ]),
+  );
 }
 
 /**
