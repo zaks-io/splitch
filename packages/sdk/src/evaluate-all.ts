@@ -1,7 +1,7 @@
-import type { SplitchSdkError } from "./errors";
+import { SplitchSdkError } from "./errors";
 import { DEFAULT_ID_TYPE, type EvaluateContext, type Logger, sdkErrorForFailure } from "./evaluate";
 import type { EvaluateAllEntry } from "./generated/contract-surface.js";
-import type { AttributeValue, EvaluateAllTransportResult, Transport } from "./transport";
+import type { AttributeValue, Transport } from "./transport";
 
 /**
  * The Evaluation Context a Precomputed Evaluations payload was resolved for,
@@ -56,37 +56,69 @@ export async function runEvaluateAll(
   const resolved: PrecomputedEvaluationsContext = {
     targetingKey: context.targetingKey,
     idType: context.idType ?? DEFAULT_ID_TYPE,
-    attributes: context.attributes ?? {},
+    // Copied, not aliased: the payload travels to the browser client, which
+    // deep-equality-checks this context. A caller mutating their own object
+    // afterwards must not be able to rewrite what the payload was resolved for.
+    attributes: { ...(context.attributes ?? {}) },
   };
 
   const result = await deps.transport.evaluateAll({
     ...resolved,
-    // The batch's billing replay identity (ADR-0033): one key per logical fetch.
-    // A caller who retries an uncertain fetch passes their own key to keep the
-    // retry free; otherwise the SDK owns it, because callers of a bulk fetch
-    // have no Exposure to deduplicate and no reason to mint one.
-    idempotencyKey: context.idempotencyKey ?? crypto.randomUUID(),
+    idempotencyKey: context.idempotencyKey ?? mintIdempotencyKey(deps, resolved.targetingKey),
   });
 
   if (result.status !== 200 || result.evaluations === null || result.etag === null) {
-    throw loudFailure(deps, resolved.targetingKey, result);
+    throw loudly(
+      deps,
+      resolved.targetingKey,
+      sdkErrorForFailure("evaluateAll", result),
+      result.cause,
+    );
   }
 
   return { context: resolved, evaluations: result.evaluations, etag: result.etag };
 }
 
-function loudFailure(
+/**
+ * The batch's billing replay identity (ADR-0033): one key per logical fetch.
+ * A caller who retries an uncertain fetch passes their own key to keep the
+ * retry free; otherwise the SDK owns it, because callers of a bulk fetch have
+ * no Exposure to deduplicate and no reason to mint one.
+ *
+ * `crypto.randomUUID` is secure-context-only, so a Client Key caller on a plain
+ * `http://` page arrives here without it. Refuse loudly: substituting a weaker
+ * random source would silently weaken a billing identity, and a bare `TypeError`
+ * would break the structured-error contract this accessor advertises.
+ */
+function mintIdempotencyKey(deps: EvaluateAllDeps, targetingKey: string): string {
+  if (typeof globalThis.crypto?.randomUUID !== "function") {
+    throw loudly(
+      deps,
+      targetingKey,
+      new SplitchSdkError({
+        code: "SDK_IDEMPOTENCY_KEY_UNAVAILABLE",
+        causeSummary:
+          "crypto.randomUUID is unavailable in this runtime, so evaluateAll could not mint the batch's replay identity",
+        remediation:
+          "Pass your own `idempotencyKey` on the context, or serve the page from a secure context (https:// or localhost) where crypto.randomUUID exists",
+      }),
+    );
+  }
+  return globalThis.crypto.randomUUID();
+}
+
+function loudly(
   deps: EvaluateAllDeps,
   targetingKey: string,
-  result: EvaluateAllTransportResult,
+  error: SplitchSdkError,
+  cause?: unknown,
 ): SplitchSdkError {
-  const error = sdkErrorForFailure("evaluateAll", result);
   deps.logger.error(error.message, {
     targetingKey,
     status: error.status,
     errorCode: error.code,
     // Preserve the underlying error object (name, message, stack) — never truncate.
-    cause: result.cause,
+    cause,
   });
   return error;
 }

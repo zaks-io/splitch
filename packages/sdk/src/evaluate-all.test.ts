@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSplitchClient } from "./client";
 import type { PrecomputedEvaluations } from "./evaluate-all";
 import { type EvaluateAllEntry, EvaluateAllResponseSchema } from "./generated/contract-surface.js";
@@ -97,6 +97,19 @@ describe("evaluateAll: Precomputed Evaluations payload", () => {
     expect(precomputed.context.attributes).toEqual({});
   });
 
+  it("copies attributes so a later caller mutation cannot rewrite the resolved context", async () => {
+    const fake = new FakeTransport([], { evaluateAll: [evaluateAllOk(EVALUATIONS)] });
+    const { client } = clientWith(fake);
+    const attributes: Record<string, string> = { plan: "pro" };
+
+    const precomputed = await client.evaluateAll({ targetingKey: "u1", attributes });
+    attributes.plan = "free";
+
+    // The browser client deep-equality-checks this context against its own, so
+    // an aliased object would silently invalidate a payload after the fact.
+    expect(precomputed.context.attributes).toEqual({ plan: "pro" });
+  });
+
   it("mints a fresh Idempotency-Key per fetch when the caller supplies none", async () => {
     const fake = new FakeTransport([], {
       evaluateAll: [evaluateAllOk(EVALUATIONS), evaluateAllOk(EVALUATIONS)],
@@ -134,6 +147,49 @@ describe("evaluateAll: Precomputed Evaluations payload", () => {
     expect(details.reason).toBe("SPLIT");
     expect(fake.evaluateCalls).toHaveLength(1);
     expect(logger.debugs).toHaveLength(0);
+  });
+});
+
+describe("evaluateAll: runtimes without crypto.randomUUID", () => {
+  // `crypto.randomUUID` is secure-context-only, so a Client Key caller on a
+  // plain http:// page has `crypto` but not `randomUUID`. A Node suite cannot
+  // reach that state on its own, which is exactly how SPL-321's unbound `fetch`
+  // shipped, so the browser runtime is simulated here.
+  /** `crypto` present, `randomUUID` absent: what an insecure context exposes. */
+  function stubInsecureContextCrypto(): void {
+    const real = globalThis.crypto;
+    vi.stubGlobal("crypto", { getRandomValues: real.getRandomValues.bind(real) });
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("throws a typed error instead of a bare TypeError, and never calls the transport", async () => {
+    stubInsecureContextCrypto();
+    const fake = new FakeTransport([], { evaluateAll: [evaluateAllOk(EVALUATIONS)] });
+    const { client, logger } = clientWith(fake);
+
+    await expect(client.evaluateAll({ targetingKey: "u1" })).rejects.toMatchObject({
+      name: "SplitchSdkError",
+      code: "SDK_IDEMPOTENCY_KEY_UNAVAILABLE",
+      status: null,
+      docsUrl: "https://splitch.dev/docs/error/SDK_IDEMPOTENCY_KEY_UNAVAILABLE",
+    });
+    expect(logger.errors).toHaveLength(1);
+    expect(logger.errors[0]?.message).toContain("idempotencyKey");
+    expect(fake.evaluateAllCalls).toHaveLength(0);
+  });
+
+  it("succeeds anyway when the caller supplies their own idempotencyKey", async () => {
+    stubInsecureContextCrypto();
+    const fake = new FakeTransport([], { evaluateAll: [evaluateAllOk(EVALUATIONS)] });
+    const { client } = clientWith(fake);
+
+    const precomputed = await client.evaluateAll({ targetingKey: "u1", idempotencyKey: "mine-1" });
+
+    expect(precomputed.evaluations).toEqual(EVALUATIONS);
+    expect(fake.evaluateAllCalls[0]?.idempotencyKey).toBe("mine-1");
   });
 });
 

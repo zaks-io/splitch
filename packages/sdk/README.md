@@ -85,10 +85,10 @@ an `exposureTicket` instead, which a client redeems when it actually reads that
 Flag, so a page that renders 20 Flags and shows 3 records 3 Exposures rather
 than 20.
 
-The payload holds evaluated results only: values, Variant names, non-revealing
-reasons, and tickets. It never carries Targeting Rules, rollout percentages, or
-the salt, which is what makes it safe to serialize into a server-rendered page
-for the browser client to hydrate from:
+The payload carries no rule logic: results are values, Variant names,
+non-revealing reasons, and tickets, never Targeting Rules, rollout percentages,
+or the salt. That is what lets you serialize it into a server-rendered page for
+the browser client to hydrate from:
 
 ```ts
 // SSR handler
@@ -96,8 +96,18 @@ const precomputed = await splitch.evaluateAll({ targetingKey: user.id });
 html.embed(JSON.stringify(precomputed));
 ```
 
+One caveat before you embed it: alongside the results, the payload echoes the
+Evaluation Context it was resolved for, including `targetingKey` and every
+attribute you passed. The browser client deep-equality-checks that context to
+prove it is hydrating its own Entity's results. So anything you put in
+`attributes` (email, plan, country, internal segment names) is published in page
+source. Pass only attributes you would publish, and hash or omit the rest.
+
 `idempotencyKey` is optional here: the SDK mints one per fetch. Pass your own
-only when you retry an uncertain fetch and want the retry to bill zero.
+only when you retry an uncertain fetch and want the retry to bill zero. In a
+runtime without `crypto.randomUUID` (it is secure-context-only, so plain
+`http://` pages lack it) the SDK will not invent a weaker one: the call throws
+`SDK_IDEMPOTENCY_KEY_UNAVAILABLE` and you supply the key yourself.
 
 Unlike `evaluate`, it has no Default Variant to fall back to, so it throws a
 `SplitchSdkError` on failure rather than returning a partial or empty payload.

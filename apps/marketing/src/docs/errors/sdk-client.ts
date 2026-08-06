@@ -31,6 +31,12 @@ export const sdkErrorDocs = {
     fix: "This concerns telemetry for a replayed local resolution, not the resolution itself: the value your code received is unaffected. Check network reachability to the endpoint if it repeats. It is reported rather than dropped so a silent telemetry gap never looks like an absence of traffic.",
     related: ["SERVICE_UNAVAILABLE", "SDK_TRANSPORT_NETWORK"],
   },
+  SDK_IDEMPOTENCY_KEY_UNAVAILABLE: {
+    cause:
+      "`evaluateAll` was called without an `idempotencyKey` in a runtime where `crypto.randomUUID` does not exist. It is secure-context-only, so a page served over plain `http://` reaches this.",
+    fix: "Pass your own `idempotencyKey` on the context, or serve the page from a secure context (`https://` or `localhost`). The SDK refuses to substitute a weaker random source: this key is the batch's billing replay identity, and a colliding one would let a repeated fetch be charged twice.",
+    related: ["SDK_RETRIES_INVALID"],
+  },
   SDK_TRANSPORT_NETWORK: {
     cause:
       "The SDK's transport threw before receiving an HTTP response — for example a network failure, a cancelled request that was not a timeout, or a local `fetch` misconfiguration such as an unbound `Window.fetch`.",
