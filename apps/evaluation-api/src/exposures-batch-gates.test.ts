@@ -34,24 +34,57 @@ describe("POST /api/sdk/exposures: batch gates fail loud", () => {
 
   it("rejects a UTF-8 body over 32 KiB as a whole-request VALIDATION_ERROR", async () => {
     const { app, exposureSink } = await makeSdkRouteHarness({ liveRun: true });
-    const ticket = await mintTicket();
-    // Pad clientTimestamp so the serialized body exceeds the byte cap while staying ≤25 items.
+    // Pad exposureTicket so the serialized body exceeds the byte cap while staying
+    // ≤25 items and keeping clientTimestamp a valid ISO datetime.
     const padding = "x".repeat(EXPOSURE_BATCH_MAX_BODY_BYTES);
-    const res = await app.request(
-      PATH,
-      exposuresInit(CLIENT_KEY, [
-        {
-          exposureId: EXPOSURE_ID_A,
-          exposureTicket: ticket,
-          clientTimestamp: `2026-07-03T00:00:01.000Z-${padding}`,
-        },
-      ]),
-    );
+    const res = await app.request(PATH, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${CLIENT_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        exposures: [
+          {
+            exposureId: EXPOSURE_ID_A,
+            exposureTicket: `ticket.${padding}`,
+            clientTimestamp: "2026-07-03T00:00:01.000Z",
+          },
+        ],
+      }),
+    });
     const body = (await res.json()) as ErrorResponse;
 
     expect(res.status).toBe(400);
     expect(body.code).toBe("VALIDATION_ERROR");
     expect(JSON.stringify(body)).toContain(String(EXPOSURE_BATCH_MAX_BODY_BYTES));
+    expect(exposureSink.writes).toEqual([]);
+  });
+
+  it("rejects a non-datetime clientTimestamp as a whole-request VALIDATION_ERROR", async () => {
+    const { app, exposureSink } = await makeSdkRouteHarness({ liveRun: true });
+    const ticket = await mintTicket();
+
+    const res = await app.request(PATH, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${CLIENT_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        exposures: [
+          {
+            exposureId: EXPOSURE_ID_A,
+            exposureTicket: ticket,
+            clientTimestamp: "not-a-timestamp",
+          },
+        ],
+      }),
+    });
+    const body = (await res.json()) as ErrorResponse;
+
+    expect(res.status).toBe(400);
+    expect(body.code).toBe("VALIDATION_ERROR");
     expect(exposureSink.writes).toEqual([]);
   });
 
@@ -124,6 +157,29 @@ describe("POST /api/sdk/exposures: batch gates fail loud", () => {
 
     expect(body.results).toEqual([
       { exposureId: EXPOSURE_ID_A, status: "rejected", code: "SERVICE_UNAVAILABLE" },
+    ]);
+    expect(assignmentStore.putHashedCalls).toEqual([]);
+  });
+
+  it("maps ingest 4xx to a non-retryable VALIDATION_ERROR", async () => {
+    const failing = new RecordingExposureIngestSink();
+    failing.write = async () => {
+      throw new ExposureIngestSinkError("experiment missing", { status: 404 });
+    };
+    const { app, assignmentStore } = await makeSdkRouteHarness({
+      liveRun: true,
+      exposureIngestSink: failing,
+    });
+    const ticket = await mintTicket();
+
+    const res = await app.request(
+      PATH,
+      exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]),
+    );
+    const body = (await res.json()) as ExposureBatchResponse;
+
+    expect(body.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "VALIDATION_ERROR" },
     ]);
     expect(assignmentStore.putHashedCalls).toEqual([]);
   });

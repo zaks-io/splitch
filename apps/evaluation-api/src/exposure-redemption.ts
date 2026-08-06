@@ -1,7 +1,9 @@
 import type { AssembledExposure } from "./evaluate/exposure-assembly";
 
 /**
- * Durable claim for one Exposure Ticket redemption retry identity (`exposureId`).
+ * Durable claim for one Exposure Ticket redemption retry identity (`exposureId`)
+ * and a second claim keyed on the ticket fingerprint so one ticket cannot be
+ * amplified across fresh client-minted ids (ADR-0048).
  * Recorded only after a successful seal so a failed ingest remains retryable.
  */
 export type ExposureRedemptionLookup =
@@ -25,9 +27,12 @@ export interface ExposureRedemptionClaimStore {
   }): Promise<void>;
 }
 
+const CLAIM_TTL_SECONDS = 24 * 60 * 60;
+
 /** In-memory claim store for unit harnesses (and single-isolate local runs). */
 export class MemoryExposureRedemptionClaimStore implements ExposureRedemptionClaimStore {
-  private readonly claims = new Map<string, string>();
+  private readonly byExposureId = new Map<string, string>();
+  private readonly byTicket = new Set<string>();
 
   async lookup(input: {
     readonly appId: string;
@@ -35,10 +40,17 @@ export class MemoryExposureRedemptionClaimStore implements ExposureRedemptionCla
     readonly exposureId: string;
     readonly ticketFingerprint: string;
   }): Promise<ExposureRedemptionLookup> {
-    const existing = this.claims.get(claimKey(input.appId, input.environmentId, input.exposureId));
-    if (existing === undefined) return { status: "missing" };
-    if (existing === input.ticketFingerprint) return { status: "matched" };
-    return { status: "conflict" };
+    const idKey = exposureClaimKey(input.appId, input.environmentId, input.exposureId);
+    const existing = this.byExposureId.get(idKey);
+    if (existing !== undefined) {
+      return existing === input.ticketFingerprint ? { status: "matched" } : { status: "conflict" };
+    }
+    if (
+      this.byTicket.has(ticketClaimKey(input.appId, input.environmentId, input.ticketFingerprint))
+    ) {
+      return { status: "matched" };
+    }
+    return { status: "missing" };
   }
 
   async record(input: {
@@ -47,10 +59,11 @@ export class MemoryExposureRedemptionClaimStore implements ExposureRedemptionCla
     readonly exposureId: string;
     readonly ticketFingerprint: string;
   }): Promise<void> {
-    this.claims.set(
-      claimKey(input.appId, input.environmentId, input.exposureId),
+    this.byExposureId.set(
+      exposureClaimKey(input.appId, input.environmentId, input.exposureId),
       input.ticketFingerprint,
     );
+    this.byTicket.add(ticketClaimKey(input.appId, input.environmentId, input.ticketFingerprint));
   }
 }
 
@@ -67,11 +80,17 @@ export class KvExposureRedemptionClaimStore implements ExposureRedemptionClaimSt
     readonly exposureId: string;
     readonly ticketFingerprint: string;
   }): Promise<ExposureRedemptionLookup> {
-    const key = kvClaimKey(input.appId, input.environmentId, input.exposureId);
-    const existing = await this.kv.get(key);
-    if (existing === null) return { status: "missing" };
-    if (existing === input.ticketFingerprint) return { status: "matched" };
-    return { status: "conflict" };
+    const existing = await this.kv.get(
+      kvExposureClaimKey(input.appId, input.environmentId, input.exposureId),
+    );
+    if (existing !== null) {
+      return existing === input.ticketFingerprint ? { status: "matched" } : { status: "conflict" };
+    }
+    const ticketClaim = await this.kv.get(
+      kvTicketClaimKey(input.appId, input.environmentId, input.ticketFingerprint),
+    );
+    if (ticketClaim !== null) return { status: "matched" };
+    return { status: "missing" };
   }
 
   async record(input: {
@@ -81,21 +100,32 @@ export class KvExposureRedemptionClaimStore implements ExposureRedemptionClaimSt
     readonly ticketFingerprint: string;
   }): Promise<void> {
     await this.kv.put(
-      kvClaimKey(input.appId, input.environmentId, input.exposureId),
+      kvExposureClaimKey(input.appId, input.environmentId, input.exposureId),
       input.ticketFingerprint,
-      {
-        expirationTtl: 24 * 60 * 60,
-      },
+      { expirationTtl: CLAIM_TTL_SECONDS },
+    );
+    await this.kv.put(
+      kvTicketClaimKey(input.appId, input.environmentId, input.ticketFingerprint),
+      input.exposureId,
+      { expirationTtl: CLAIM_TTL_SECONDS },
     );
   }
 }
 
-function claimKey(appId: string, environmentId: string, exposureId: string): string {
+function exposureClaimKey(appId: string, environmentId: string, exposureId: string): string {
   return `${appId}\u001f${environmentId}\u001f${exposureId}`;
 }
 
-function kvClaimKey(appId: string, environmentId: string, exposureId: string): string {
-  return `exposure-redemption:${claimKey(appId, environmentId, exposureId)}`;
+function ticketClaimKey(appId: string, environmentId: string, ticketFingerprint: string): string {
+  return `${appId}\u001f${environmentId}\u001fticket\u001f${ticketFingerprint}`;
+}
+
+function kvExposureClaimKey(appId: string, environmentId: string, exposureId: string): string {
+  return `exposure-redemption:${exposureClaimKey(appId, environmentId, exposureId)}`;
+}
+
+function kvTicketClaimKey(appId: string, environmentId: string, ticketFingerprint: string): string {
+  return `exposure-redemption-ticket:${ticketClaimKey(appId, environmentId, ticketFingerprint)}`;
 }
 
 export async function ticketFingerprint(ticket: string): Promise<string> {
@@ -104,8 +134,10 @@ export async function ticketFingerprint(ticket: string): Promise<string> {
 }
 
 /**
- * Appends a sealed Exposure through the same Event Ingest seam evaluate uses
- * (`/api/internal/exposures`), without Evaluation usage billing (ADR-0048).
+ * Appends a sealed Exposure via Event Ingest's Exposure-only route
+ * (`POST /api/internal/exposures`). Distinct from evaluate's combined commit path
+ * (`/api/internal/evaluation-commits`); both land in the same Tinybird raw_events
+ * pipeline. No Evaluation usage billing (ADR-0048).
  */
 export interface ExposureIngestSink {
   write(exposure: AssembledExposure): Promise<void>;
@@ -166,7 +198,7 @@ export function makeHttpExposureIngestSink(options: {
   };
 }
 
-/** Test seam: records sealed Exposures the same way evaluate's commit sink does. */
+/** Test seam: records sealed Exposures for in-process harness assertions. */
 export class RecordingExposureIngestSink implements ExposureIngestSink {
   readonly writes: AssembledExposure[] = [];
 

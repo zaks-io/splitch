@@ -70,11 +70,15 @@ export async function assembleEvaluateExposures(
 
 /**
  * Seal a canonical Exposure from a verified ticket. Every Exposure-relevant field
- * comes from the ticket — never from client assertion (ADR-0048).
+ * comes from the ticket — never from client assertion (ADR-0048) — except the
+ * write-scope App/Environment, which come from the authenticated credential so a
+ * future tenant-gate regression cannot mis-attribute a write (ADR-0018).
  * `exposureId` is the retry-stable physical event id (SDK-owned).
  */
 export async function assembleExposureFromTicket(input: {
   readonly ticket: ExposureTicketPayload;
+  readonly appId: string;
+  readonly environmentId: string;
   readonly exposureId: string;
   readonly clientTimestamp: string;
   readonly sourceId: string;
@@ -82,7 +86,7 @@ export async function assembleExposureFromTicket(input: {
 }): Promise<AssembledExposure> {
   const serverReceivedAt = (input.now ?? (() => new Date()))().toISOString();
   const dedupKey = await exposureDedupKey({
-    appId: input.ticket.app_id,
+    appId: input.appId,
     eventId: input.exposureId,
     experimentId: input.ticket.experiment_id,
     idType: input.ticket.id_type,
@@ -93,8 +97,8 @@ export async function assembleExposureFromTicket(input: {
   });
 
   return {
-    appId: input.ticket.app_id,
-    environmentId: input.ticket.environment_id,
+    appId: input.appId,
+    environmentId: input.environmentId,
     experimentId: input.ticket.experiment_id,
     runId: input.ticket.run_id,
     idType: input.ticket.id_type,

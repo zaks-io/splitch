@@ -85,4 +85,34 @@ describe("mintExposureTicket", () => {
       }),
     ).resolves.toMatchObject({ ok: false, reason: "expired" });
   });
+
+  it("rejects a future-dated ticket beyond the clock-skew window", async () => {
+    const deps = {
+      saltStore: new StaticSaltStore(),
+      ticketKey: TICKET_KEY,
+      now: () => new Date("2026-07-03T00:00:00.000Z"),
+    };
+    const future = await mintExposureTicket(
+      {
+        appId: APP_ID,
+        environmentId: ENVIRONMENT_ID,
+        experimentId: EXPERIMENT_ID,
+        flagKey: FLAG_KEY,
+        idType: "user",
+        liveRunId: LIVE_RUN_ID,
+        targetingKey: "user-1",
+        variant: "treatment",
+      },
+      {
+        ...deps,
+        // Issued 10 minutes ahead of verification clock.
+        now: () => new Date("2026-07-03T00:10:00.000Z"),
+      },
+    );
+
+    await expect(verifyExposureTicket(future, deps)).resolves.toEqual({
+      ok: false,
+      reason: "invalid",
+    });
+  });
 });

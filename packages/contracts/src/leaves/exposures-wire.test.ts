@@ -29,10 +29,15 @@ describe("ExposureBatchRequestSchema", () => {
     ).toBe(false);
   });
 
-  it("rejects a non-UUID exposureId and unknown fields", () => {
+  it("rejects a non-UUID exposureId, non-datetime clientTimestamp, and unknown fields", () => {
     expect(
       ExposureBatchRequestSchema.safeParse({
         exposures: [{ ...item, exposureId: "not-a-uuid" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      ExposureBatchRequestSchema.safeParse({
+        exposures: [{ ...item, clientTimestamp: "not-a-timestamp" }],
       }).success,
     ).toBe(false);
     expect(

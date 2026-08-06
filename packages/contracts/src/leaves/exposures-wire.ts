@@ -23,7 +23,7 @@ export const ExposureBatchItemSchema = z
   .object({
     exposureId: UuidSchema,
     exposureTicket: z.string().min(1),
-    clientTimestamp: z.string().min(1),
+    clientTimestamp: z.string().datetime({ offset: true }),
   })
   .strict();
 export type ExposureBatchItem = z.infer<typeof ExposureBatchItemSchema>;

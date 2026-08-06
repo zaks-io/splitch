@@ -8,6 +8,8 @@ export * from "./barrels/parity-skins";
 export * from "./barrels/route-registry";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped stats input/result API
 export * from "./barrels/stats-contracts";
+// biome-ignore lint/performance/noReExportAll: curated wire envelopes live in barrels/wire-envelopes.ts
+export * from "./barrels/wire-envelopes";
 export { type CanonicalJsonSha256, CanonicalJsonSha256Schema } from "./canonical-hash";
 export {
   ClientOriginSchema,
@@ -282,5 +284,3 @@ export {
   RunConfigKVSchema,
   rememberMemberProfile,
 } from "./storage-schemas-kv";
-// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes shared wire envelopes (incl. Exposure batch)
-export * from "./wire-envelopes-core";

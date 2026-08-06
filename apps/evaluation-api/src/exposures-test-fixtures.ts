@@ -4,6 +4,7 @@ import { APP_ID, ENVIRONMENT_ID, EXPERIMENT_ID, FLAG_KEY } from "./sdk-route-tes
 
 export const PATH = "/api/sdk/exposures";
 export const APP_B = "app-B";
+export const ENV_B = "env-B";
 export const CLIENT_KEY_B = "pk_exposures_app_b";
 // Split so secret scanners do not treat the fixture as a live credential.
 const TICKET_KEY = ["splitch-test-exposure-ticket-key", "32chars"].join("-");

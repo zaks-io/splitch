@@ -8,7 +8,9 @@ import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption";
 import {
   APP_B,
   CLIENT_KEY_B,
+  ENV_B,
   EXPOSURE_ID_A,
+  EXPOSURE_ID_B,
   exposuresInit,
   mintTicket,
   PATH,
@@ -49,7 +51,6 @@ describe("POST /api/sdk/exposures: forgery and integrity", () => {
     const { app, exposureSink } = await makeSdkRouteHarness({ liveRun: true });
     const ticket = await mintTicket({ variant: "treatment" });
     const [, signature] = ticket.split(".");
-    // Re-encode a payload claiming a Variant the Worker never assigned.
     const tamperedPayload = {
       app_id: APP_ID,
       environment_id: ENVIRONMENT_ID,
@@ -80,7 +81,6 @@ describe("POST /api/sdk/exposures: forgery and integrity", () => {
   it("rejects an expired ticket loudly", async () => {
     const { app, exposureSink } = await makeSdkRouteHarness({
       liveRun: true,
-      // Verification clock: 48h after the ticket's issued_at.
       ticketNow: () => new Date("2026-07-05T00:00:00.000Z"),
     });
     const expired = await mintTicket({ issuedAt: "2026-07-03T00:00:00.000Z" });
@@ -138,6 +138,32 @@ describe("POST /api/sdk/exposures: forgery and integrity", () => {
     ]);
     expect(exposureSink.writes).toHaveLength(1);
   });
+
+  it("deduplicates the same ticket redeemed under a fresh exposureId (no amplification)", async () => {
+    const claims = new MemoryExposureRedemptionClaimStore();
+    const { app, exposureSink, assignmentStore } = await makeSdkRouteHarness({
+      liveRun: true,
+      exposureRedemptionClaims: claims,
+    });
+    const ticket = await mintTicket();
+
+    const first = await app.request(
+      PATH,
+      exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]),
+    );
+    const second = await app.request(
+      PATH,
+      exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_B, exposureTicket: ticket }]),
+    );
+    const secondBody = (await second.json()) as ExposureBatchResponse;
+
+    expect(first.status).toBe(202);
+    expect(secondBody.results).toEqual([
+      { exposureId: EXPOSURE_ID_B, status: "deduplicated", code: null },
+    ]);
+    expect(exposureSink.writes).toHaveLength(1);
+    expect(assignmentStore.putHashedCalls).toHaveLength(1);
+  });
 });
 
 describe("POST /api/sdk/exposures: cross-tenant", () => {
@@ -149,7 +175,7 @@ describe("POST /api/sdk/exposures: cross-tenant", () => {
       clientKeyCacheKey(await sha256Hex(CLIENT_KEY_B)),
       CredentialCacheKVSchema.parse({
         appId: APP_B,
-        environmentId: ENVIRONMENT_ID,
+        environmentId: ENV_B,
         credentialSchemaVersion: 2,
         organizationId: "org_b",
         kind: "client_key",
@@ -173,5 +199,84 @@ describe("POST /api/sdk/exposures: cross-tenant", () => {
     ]);
     expect(exposureSink.writes).toEqual([]);
     expect(assignmentStore.putHashedCalls).toEqual([]);
+  });
+
+  it("rejects a same-App credential scoped to a different Environment", async () => {
+    const { app, credentialKv, exposureSink, assignmentStore } = await makeSdkRouteHarness({
+      liveRun: true,
+    });
+    const stagingKey = "pk_exposures_staging";
+    credentialKv.put(
+      clientKeyCacheKey(await sha256Hex(stagingKey)),
+      CredentialCacheKVSchema.parse({
+        appId: APP_ID,
+        environmentId: ENV_B,
+        credentialSchemaVersion: 2,
+        organizationId: "org_verify",
+        kind: "client_key",
+        scopes: ["data-plane:evaluate"],
+        originAllowlist: null,
+        rateLimitRps: null,
+        revoked: false,
+        cachedAt: "2026-07-02T00:00:00.000Z",
+      }),
+    );
+    const ticket = await mintTicket({
+      appId: APP_ID,
+      environmentId: ENVIRONMENT_ID,
+    });
+
+    const res = await app.request(
+      PATH,
+      exposuresInit(stagingKey, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]),
+    );
+    const body = (await res.json()) as ExposureBatchResponse;
+
+    expect(body.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "EXPOSURE_TICKET_INVALID" },
+    ]);
+    expect(exposureSink.writes).toEqual([]);
+    expect(assignmentStore.putHashedCalls).toEqual([]);
+  });
+
+  it("isolates claim stores so two Apps may redeem the same exposureId", async () => {
+    const claims = new MemoryExposureRedemptionClaimStore();
+    const { app, credentialKv, exposureSink } = await makeSdkRouteHarness({
+      liveRun: true,
+      exposureRedemptionClaims: claims,
+    });
+    credentialKv.put(
+      clientKeyCacheKey(await sha256Hex(CLIENT_KEY_B)),
+      CredentialCacheKVSchema.parse({
+        appId: APP_B,
+        environmentId: ENV_B,
+        credentialSchemaVersion: 2,
+        organizationId: "org_b",
+        kind: "client_key",
+        scopes: ["data-plane:evaluate"],
+        originAllowlist: null,
+        rateLimitRps: null,
+        revoked: false,
+        cachedAt: "2026-07-02T00:00:00.000Z",
+      }),
+    );
+    const ticketA = await mintTicket({ appId: APP_ID, environmentId: ENVIRONMENT_ID });
+    const ticketB = await mintTicket({ appId: APP_B, environmentId: ENV_B });
+
+    const first = await app.request(
+      PATH,
+      exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticketA }]),
+    );
+    const second = await app.request(
+      PATH,
+      exposuresInit(CLIENT_KEY_B, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticketB }]),
+    );
+    const firstBody = (await first.json()) as ExposureBatchResponse;
+    const secondBody = (await second.json()) as ExposureBatchResponse;
+
+    expect(firstBody.results[0]?.status).toBe("accepted");
+    expect(secondBody.results[0]?.status).toBe("accepted");
+    expect(exposureSink.writes).toHaveLength(2);
+    expect(exposureSink.writes.map((row) => row.appId).sort()).toEqual([APP_B, APP_ID].sort());
   });
 });

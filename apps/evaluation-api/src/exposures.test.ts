@@ -12,7 +12,7 @@ import {
 
 describe("POST /api/sdk/exposures: happy path and pipeline seam", () => {
   it("accepts a valid ticket, seals a shape-identical Exposure, and puts the holdover", async () => {
-    const { app, assignmentStore, exposureSink, exposureIngestSink } = await makeSdkRouteHarness({
+    const { app, assignmentStore, exposureSink } = await makeSdkRouteHarness({
       liveRun: true,
     });
     const ticket = await mintTicket();
@@ -25,8 +25,7 @@ describe("POST /api/sdk/exposures: happy path and pipeline seam", () => {
 
     expect(res.status).toBe(202);
     expect(body.results).toEqual([{ exposureId: EXPOSURE_ID_A, status: "accepted", code: null }]);
-    // Real seam: the redemption sink is the same AssembledExposure shape evaluate seals.
-    expect(exposureIngestSink.writes).toHaveLength(1);
+    // Same AssembledExposure shape evaluate seals; append path proven in exposures-seam.test.ts.
     expect(exposureSink.writes).toHaveLength(1);
     expect(exposureSink.writes[0]).toMatchObject({
       appId: APP_ID,

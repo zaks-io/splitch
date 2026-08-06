@@ -81,7 +81,7 @@ async function redeemOne(
   const sealed = await sealAndRecord(item, verified.payload, fingerprint, scope, deps);
   if (!sealed.ok) return rejected(item.exposureId, sealed.code);
 
-  scheduleHoldoverWrite(verified.payload, deps);
+  scheduleHoldoverWrite(verified.payload, scope, deps);
   return { exposureId: item.exposureId, status: "accepted", code: null };
 }
 
@@ -140,6 +140,8 @@ async function sealAndRecord(
 ): Promise<{ ok: true } | { ok: false; code: ErrorCode }> {
   const exposure = await assembleExposureFromTicket({
     ticket,
+    appId: scope.appId,
+    environmentId: scope.environmentId,
     exposureId: item.exposureId,
     clientTimestamp: item.clientTimestamp,
     sourceId: deps.sourceId,
@@ -148,41 +150,54 @@ async function sealAndRecord(
 
   try {
     await deps.exposureIngestSink.write(exposure);
-  } catch (cause) {
-    if (!(cause instanceof ExposureIngestSinkError)) throw cause;
-    deps.logger?.error("exposure_ingest_sink_failed", {
-      status: cause.status,
+    await deps.exposureRedemptionClaims.record({
       appId: scope.appId,
       environmentId: scope.environmentId,
       exposureId: item.exposureId,
-      causeSummary: cause.message,
+      ticketFingerprint: fingerprint,
+    });
+    return { ok: true };
+  } catch (cause) {
+    if (cause instanceof ExposureIngestSinkError) {
+      deps.logger?.error("exposure_ingest_sink_failed", {
+        status: cause.status,
+        appId: scope.appId,
+        environmentId: scope.environmentId,
+        exposureId: item.exposureId,
+        causeSummary: cause.message,
+      });
+      return { ok: false, code: ingestFailureCode(cause.status) };
+    }
+    deps.logger?.error("exposure_redemption_claim_failed", {
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      exposureId: item.exposureId,
+      cause,
     });
     return { ok: false, code: "SERVICE_UNAVAILABLE" };
   }
+}
 
-  await deps.exposureRedemptionClaims.record({
-    appId: scope.appId,
-    environmentId: scope.environmentId,
-    exposureId: item.exposureId,
-    ticketFingerprint: fingerprint,
-  });
-  return { ok: true };
+/** Permanent contract failures from ingest must not be retried as if transient. */
+function ingestFailureCode(status: number | null): ErrorCode {
+  if (status !== null && status >= 400 && status < 500) return "VALIDATION_ERROR";
+  return "SERVICE_UNAVAILABLE";
 }
 
 function scheduleHoldoverWrite(
   ticket: {
-    readonly app_id: string;
     readonly experiment_id: string;
     readonly id_type: string;
     readonly targeting_key_hash: string;
     readonly run_id: string;
     readonly variant: string;
   },
+  scope: CredentialScope,
   deps: ExposuresRouteDeps,
 ): void {
   const write = deps.assignmentStore
     .putHashed({
-      appId: ticket.app_id,
+      appId: scope.appId,
       experimentId: ticket.experiment_id,
       idType: ticket.id_type,
       targetingKeyHash: ticket.targeting_key_hash,

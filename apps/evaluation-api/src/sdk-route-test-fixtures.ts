@@ -29,6 +29,7 @@ import type { AssembledExposure } from "./evaluate/exposure-assembly";
 import type { EvaluationCommitEvent, EvaluationCommitSink } from "./evaluation-commit-sink";
 import type { EvaluationUsageEvent, EvaluationUsageSink } from "./evaluation-usage-sink";
 import {
+  type ExposureIngestSink,
   MemoryExposureRedemptionClaimStore,
   RecordingExposureIngestSink,
 } from "./exposure-redemption";
@@ -55,7 +56,7 @@ interface SdkRouteHarnessOptions {
   readonly experimentOverrides?: Partial<ExperimentConfigKV>;
   readonly evaluationCommitSink?: EvaluationCommitSink;
   readonly evaluationUsageSink?: RecordingEvaluationUsageSink;
-  readonly exposureIngestSink?: RecordingExposureIngestSink;
+  readonly exposureIngestSink?: ExposureIngestSink;
   readonly exposureRedemptionClaims?: MemoryExposureRedemptionClaimStore;
   readonly flagOverrides?: Partial<FlagConfigKV>;
   readonly holdovers?: Map<string, { runId: string; variant: string }>;
