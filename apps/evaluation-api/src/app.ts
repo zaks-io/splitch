@@ -10,6 +10,8 @@ import type { MintExposureTicketDeps } from "./evaluate/exposure-ticket";
 import { makeEvaluateAllHandler } from "./evaluate-all";
 import type { EvaluationCommitSink } from "./evaluation-commit-sink";
 import type { EvaluationUsageSink } from "./evaluation-usage-sink";
+import type { ExposureIngestSink, ExposureRedemptionClaimStore } from "./exposure-redemption";
+import { makeExposuresHandler } from "./exposures";
 import { makePeekHandler } from "./peek";
 import { evaluationRoute } from "./routes";
 import { makeTestEvaluationHandler } from "./test-evaluation";
@@ -35,7 +37,9 @@ export interface AppDeps extends EvaluatePathDeps {
   authResolver: AuthResolver;
   dataPlaneAuthResolver: AuthResolver;
   exposureAssembly: ExposureAssemblyDeps;
-  exposureTicket: MintExposureTicketDeps;
+  exposureTicket: MintExposureTicketDeps & { previousTicketKey?: string };
+  exposureIngestSink: ExposureIngestSink;
+  exposureRedemptionClaims: ExposureRedemptionClaimStore;
   evaluationCommitSink: EvaluationCommitSink;
   evaluationUsageSink: EvaluationUsageSink;
   rateLimiter: RateLimiter;
@@ -78,6 +82,19 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, evaluationRoute("sdk_peek"), makePeekHandler(deps));
   registrar.mount(app, evaluationRoute("sdk_verify"), makeVerifyHandler(deps));
   registrar.mount(app, evaluationRoute("sdk_evaluate_all"), makeEvaluateAllHandler(deps));
+  registrar.mount(
+    app,
+    evaluationRoute("sdk_exposures"),
+    makeExposuresHandler({
+      assignmentStore: deps.assignmentStore,
+      exposureIngestSink: deps.exposureIngestSink,
+      exposureRedemptionClaims: deps.exposureRedemptionClaims,
+      exposureTicket: deps.exposureTicket,
+      sourceId: deps.exposureAssembly.sourceId,
+      waitUntil: deps.waitUntil,
+      logger: deps.logger,
+    }),
+  );
   if (deps.door === "binding") {
     registrar.mount(app, evaluationRoute("flags_test_eval"), makeTestEvaluationHandler(deps));
   }

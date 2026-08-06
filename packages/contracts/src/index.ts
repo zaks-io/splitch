@@ -282,36 +282,5 @@ export {
   RunConfigKVSchema,
   rememberMemberProfile,
 } from "./storage-schemas-kv";
-export type {
-  DataPlaneEvaluateRequest,
-  DataPlaneEvaluateResponse,
-  EvaluateAllEntry,
-  EvaluateAllReason,
-  EvaluateAllRequest,
-  EvaluateAllResponse,
-  PaginationQuery,
-  PeekEvaluateResponse,
-  RuleSelection,
-  TestEvaluationReason,
-  TestEvaluationRequest,
-  TestEvaluationResponse,
-} from "./wire-envelopes-core";
-export {
-  CachedEvaluationTelemetryRequestSchema,
-  CachedEvaluationTelemetryResponseSchema,
-  DataPlaneEvaluateRequestSchema,
-  DataPlaneEvaluateResponseSchema,
-  EvaluateAllEntrySchema,
-  EvaluateAllReasonSchema,
-  EvaluateAllRequestSchema,
-  EvaluateAllResponseSchema,
-  PAGINATION_DEFAULT_LIMIT,
-  PAGINATION_MAX_LIMIT,
-  PaginationQuerySchema,
-  PeekEvaluateResponseSchema,
-  paginatedResponse,
-  RuleSelectionSchema,
-  TestEvaluationReasonSchema,
-  TestEvaluationRequestSchema,
-  TestEvaluationResponseSchema,
-} from "./wire-envelopes-core";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes shared wire envelopes (incl. Exposure batch)
+export * from "./wire-envelopes-core";

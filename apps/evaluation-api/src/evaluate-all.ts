@@ -7,7 +7,7 @@ import {
   type Variant,
 } from "@splitch/contracts";
 import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
-import type { AssignmentStore } from "./assignment/assignment-store";
+import { memoizeGetAll } from "./assignment/memoize-get-all";
 import { evaluateAllFlag } from "./evaluate/accessor-paths";
 import type {
   EvaluatePathDeps,
@@ -251,30 +251,6 @@ async function writeBatchUsage(
       ),
     };
   }
-}
-
-/**
- * One Assignment Store getAll per evaluate-all request. evaluatePath calls
- * getAll once per experiment-backed Flag; memoizing by identity collapses that
- * to the single read the evaluate-all spec requires.
- */
-function memoizeGetAll(store: AssignmentStore): AssignmentStore {
-  let cached: {
-    key: string;
-    value: ReturnType<AssignmentStore["getAll"]>;
-  } | null = null;
-  return {
-    getAll(input) {
-      const key = `${input.appId}\0${input.idType}\0${input.targetingKey}`;
-      if (cached?.key === key) return cached.value;
-      const value = store.getAll(input);
-      cached = { key, value };
-      return value;
-    },
-    put(input) {
-      return store.put(input);
-    },
-  };
 }
 
 /**

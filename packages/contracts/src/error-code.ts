@@ -7,6 +7,8 @@ export const errorCodes = [
   "ACTIVATION_TIMESTAMP_INVALID",
   "INVALID_PAGINATION",
   "INVALID_SORT",
+  "EXPOSURE_TICKET_INVALID",
+  "EXPOSURE_TICKET_EXPIRED",
 
   // Run / Experiment invariants
   "RUN_FROZEN",
@@ -21,6 +23,7 @@ export const errorCodes = [
   // Uniqueness
   "SLUG_CONFLICT",
   "EXPERIMENT_KEY_CONFLICT",
+  "EVENT_ID_CONFLICT",
 
   // Not found
   "EXPERIMENT_NOT_FOUND",

@@ -17,6 +17,10 @@ import {
   RecordingEvaluationUsageSink,
   RecordingExposureSink,
 } from "./sdk-route-test-fixtures";
+import {
+  MemoryExposureRedemptionClaimStore,
+  RecordingExposureIngestSink,
+} from "./exposure-redemption";
 
 const APP_ID = "app-A";
 const ENVIRONMENT_ID = "env-1";
@@ -84,6 +88,8 @@ function makeHarness() {
       saltStore: new StaticSaltStore(),
       ticketKey: "splitch-test-exposure-ticket-key-32chars",
     },
+    exposureIngestSink: new RecordingExposureIngestSink(),
+    exposureRedemptionClaims: new MemoryExposureRedemptionClaimStore(),
     evaluationCommitSink: new RecordingEvaluationCommitSink(
       new RecordingExposureSink(),
       new RecordingEvaluationUsageSink(),
