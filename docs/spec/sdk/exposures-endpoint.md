@@ -103,8 +103,11 @@ For each accepted item, in order:
    (the commit evaluate performs after its inline seal, deferred to redemption — ADR-0048)
 ```
 
-Seal failure rejects the item loud (`SERVICE_UNAVAILABLE`) and performs no Assignment Store write;
-the SDK retries with the same `exposureId`. Holdover replays and non-live-Run resolutions never had
+Seal failure rejects the item loud and performs no Assignment Store write. Transient or
+platform-side ingest faults (including internal-token drift / 401, config propagation lag /
+404, and rate limits / 429) surface as `SERVICE_UNAVAILABLE` so the SDK retries with the same
+`exposureId`. Only an unambiguous caller-payload fault from ingest (HTTP 400) maps to
+non-retryable `VALIDATION_ERROR`. Holdover replays and non-live-Run resolutions never had
 tickets, so no redemption path exists for them — the no-new-Exposure invariants of
 [assignment-store-integration.md](./assignment-store-integration.md) hold structurally.
 
@@ -116,9 +119,10 @@ These are the proofs the implementing slice must write, verbatim:
    any payload field altered — Variant name, Run, Targeting Key hash) is rejected
    `EXPOSURE_TICKET_INVALID`. There is no code path from client-supplied fields to an Exposure row.
 2. **Cross-tenant**: a valid App-B credential redeeming an App-A ticket is rejected; no row appends.
-3. **Replay**: re-redeeming the same ticket (same or new `exposureId`) appends at most a duplicate
-   raw row that pipeline first-touch dedup collapses (ADR-0005) — analysis denominators are
-   unchanged. Wire-level: an exact `exposureId` retry returns `deduplicated`, no second row.
+3. **Replay**: an exact `exposureId` retry returns `deduplicated` with no second row. Re-redeeming
+   the same ticket under a fresh `exposureId` is also `deduplicated` (ticket-fingerprint claim;
+   ADR-0048 amplification bound) — analysis denominators are unchanged under either path, and
+   pipeline first-touch (ADR-0005) remains the analytical authority if a concurrent race dual-appends.
 4. **Expiry**: an expired ticket is rejected loud, never silently dropped.
 5. **No amplification**: max 25 items / 32 KiB per request; per-key WAF rate limits apply as on
    every Client Key surface (ADR-0034, ADR-0040 posture: fail closed on malformed identity, origin,

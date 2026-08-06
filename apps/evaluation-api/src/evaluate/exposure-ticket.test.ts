@@ -115,4 +115,34 @@ describe("mintExposureTicket", () => {
       reason: "invalid",
     });
   });
+
+  it("accepts a ticket issued within the five-minute clock-skew window", async () => {
+    const deps = {
+      saltStore: new StaticSaltStore(),
+      ticketKey: TICKET_KEY,
+      now: () => new Date("2026-07-03T00:00:00.000Z"),
+    };
+    const nearFuture = await mintExposureTicket(
+      {
+        appId: APP_ID,
+        environmentId: ENVIRONMENT_ID,
+        experimentId: EXPERIMENT_ID,
+        flagKey: FLAG_KEY,
+        idType: "user",
+        liveRunId: LIVE_RUN_ID,
+        targetingKey: "user-1",
+        variant: "treatment",
+      },
+      {
+        ...deps,
+        // Issued 4 minutes ahead — inside the skew window.
+        now: () => new Date("2026-07-03T00:04:00.000Z"),
+      },
+    );
+
+    await expect(verifyExposureTicket(nearFuture, deps)).resolves.toMatchObject({
+      ok: true,
+      payload: { flag_key: FLAG_KEY, variant: "treatment" },
+    });
+  });
 });

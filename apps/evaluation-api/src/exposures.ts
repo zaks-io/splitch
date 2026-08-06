@@ -172,15 +172,19 @@ async function sealAndRecord(
       appId: scope.appId,
       environmentId: scope.environmentId,
       exposureId: item.exposureId,
-      cause,
+      causeSummary: cause instanceof Error ? cause.message : String(cause),
     });
     return { ok: false, code: "SERVICE_UNAVAILABLE" };
   }
 }
 
-/** Permanent contract failures from ingest must not be retried as if transient. */
+/** Only genuine caller-fault ingest statuses map to permanent VALIDATION_ERROR. */
+const CALLER_FAULT_INGEST_STATUSES = new Set([400]);
+
 function ingestFailureCode(status: number | null): ErrorCode {
-  if (status !== null && status >= 400 && status < 500) return "VALIDATION_ERROR";
+  if (status !== null && CALLER_FAULT_INGEST_STATUSES.has(status)) {
+    return "VALIDATION_ERROR";
+  }
   return "SERVICE_UNAVAILABLE";
 }
 

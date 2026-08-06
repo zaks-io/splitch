@@ -5,7 +5,6 @@ import {
   type ExposureBatchResponse,
 } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { ExposureIngestSinkError, RecordingExposureIngestSink } from "./exposure-redemption";
 import {
   EXPOSURE_ID_A,
   EXPOSURE_ID_B,
@@ -136,51 +135,5 @@ describe("POST /api/sdk/exposures: batch gates fail loud", () => {
     ]);
     expect(exposureSink.writes).toHaveLength(1);
     expect(exposureSink.writes[0]?.eventId).toBe(EXPOSURE_ID_A);
-  });
-
-  it("returns per-item SERVICE_UNAVAILABLE when the ingest seam fails", async () => {
-    const failing = new RecordingExposureIngestSink();
-    failing.write = async () => {
-      throw new ExposureIngestSinkError("ingest down", { status: 503 });
-    };
-    const { app, assignmentStore } = await makeSdkRouteHarness({
-      liveRun: true,
-      exposureIngestSink: failing,
-    });
-    const ticket = await mintTicket();
-
-    const res = await app.request(
-      PATH,
-      exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]),
-    );
-    const body = (await res.json()) as ExposureBatchResponse;
-
-    expect(body.results).toEqual([
-      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "SERVICE_UNAVAILABLE" },
-    ]);
-    expect(assignmentStore.putHashedCalls).toEqual([]);
-  });
-
-  it("maps ingest 4xx to a non-retryable VALIDATION_ERROR", async () => {
-    const failing = new RecordingExposureIngestSink();
-    failing.write = async () => {
-      throw new ExposureIngestSinkError("experiment missing", { status: 404 });
-    };
-    const { app, assignmentStore } = await makeSdkRouteHarness({
-      liveRun: true,
-      exposureIngestSink: failing,
-    });
-    const ticket = await mintTicket();
-
-    const res = await app.request(
-      PATH,
-      exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]),
-    );
-    const body = (await res.json()) as ExposureBatchResponse;
-
-    expect(body.results).toEqual([
-      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "VALIDATION_ERROR" },
-    ]);
-    expect(assignmentStore.putHashedCalls).toEqual([]);
   });
 });

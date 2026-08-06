@@ -167,7 +167,7 @@ describe("POST /api/sdk/exposures: forgery and integrity", () => {
 });
 
 describe("POST /api/sdk/exposures: cross-tenant", () => {
-  it("rejects App B credentials redeeming an App A ticket", async () => {
+  it("rejects a different-App credential scoped to the same Environment", async () => {
     const { app, credentialKv, exposureSink, assignmentStore } = await makeSdkRouteHarness({
       liveRun: true,
     });
@@ -175,7 +175,8 @@ describe("POST /api/sdk/exposures: cross-tenant", () => {
       clientKeyCacheKey(await sha256Hex(CLIENT_KEY_B)),
       CredentialCacheKVSchema.parse({
         appId: APP_B,
-        environmentId: ENV_B,
+        // Same Environment as App A — isolates the app_id half of the tenant gate.
+        environmentId: ENVIRONMENT_ID,
         credentialSchemaVersion: 2,
         organizationId: "org_b",
         kind: "client_key",
@@ -186,7 +187,7 @@ describe("POST /api/sdk/exposures: cross-tenant", () => {
         cachedAt: "2026-07-02T00:00:00.000Z",
       }),
     );
-    const ticket = await mintTicket({ appId: APP_ID });
+    const ticket = await mintTicket({ appId: APP_ID, environmentId: ENVIRONMENT_ID });
 
     const res = await app.request(
       PATH,
