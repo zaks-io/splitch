@@ -30,7 +30,8 @@ describe("KILL_SWITCH_OFF_EXEMPTION", () => {
 });
 
 function findLiteralHits(extensions: readonly string[]): string[] {
-  const needle = JSON.stringify(KILL_SWITCH_OFF_EXEMPTION);
+  // Match the sentence under any quote style (double, single, or template).
+  const needle = KILL_SWITCH_OFF_EXEMPTION;
   const hits: string[] = [];
   walk(REPO_ROOT, (absolutePath) => {
     if (!extensions.some((ext) => absolutePath.endsWith(ext))) return;
