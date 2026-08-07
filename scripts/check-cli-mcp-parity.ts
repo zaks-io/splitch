@@ -10,11 +10,17 @@ import { QUICKSTART_MD } from "../apps/mcp-server/src/mcp-resource-files.generat
 import { listMcpResources } from "../apps/mcp-server/src/mcp-resources.js";
 import { MCP_TOOL_DEFINITIONS } from "../apps/mcp-server/src/tool-registry.js";
 import {
+  deriveMcpProtocolTools,
   operationIds,
   recommendedActions,
   routeRegistry,
 } from "../packages/contracts/src/index.js";
-import { assertCliMcpParity, assertPublicAgentSurface } from "./lib/cli-mcp-parity.mjs";
+import {
+  assertCliMcpParity,
+  assertCliMcpSchemaParity,
+  assertPublicAgentSurface,
+} from "./lib/cli-mcp-parity.mjs";
+import { assertSharedOperationParity } from "./lib/cli-mcp-shared-operation.js";
 
 // These routes intentionally do not have equal CLI and MCP exposure. Keeping
 // the list explicit makes every new exception a reviewed contract decision.
@@ -150,6 +156,26 @@ assertPublicAgentSurface({
   })),
 });
 
+// The CLI validates command input against the route-derived Zod schemas
+// (apps/cli/src/operation-input.ts reads `deriveMcpTools()`); MCP publishes the
+// JSON Schema of those same schemas in tools/list. Comparing the canonical
+// derivation against what the tool registry actually ships catches an MCP-side
+// override or wrapper that would let the two skins accept different input.
+const cliSchemas = new Map(
+  deriveMcpProtocolTools()
+    .filter((tool) => mcpOperationIds.includes(tool.name))
+    .map((tool) => [tool.name, { input: tool.inputSchema, output: tool.outputSchema }]),
+);
+const mcpSchemas = new Map(
+  MCP_TOOL_DEFINITIONS.filter((tool) => mcpOperationIds.includes(tool.name)).map((tool) => [
+    tool.name,
+    { input: tool.inputSchema, output: tool.outputSchema },
+  ]),
+);
+const sharedSchemas = assertCliMcpSchemaParity({ cliSchemas, mcpSchemas });
+
+const sharedOperations = await assertSharedOperationParity();
+
 console.log(
-  `CLI/MCP parity and published-surface gate passed: ${cliOperationIds.length} CLI operations, ${mcpOperationIds.length} MCP tools`,
+  `CLI/MCP parity and published-surface gate passed: ${cliOperationIds.length} CLI operations, ${mcpOperationIds.length} MCP tools, ${sharedSchemas} identical tool schemas, ${sharedOperations} shared-operation runs through both surfaces`,
 );

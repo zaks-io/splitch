@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createMcpDelegationHeader,
+  getRoute,
   MCP_DELEGATION_HEADER,
   type McpDelegationReplayGuard,
   parseMcpDelegation,
@@ -26,7 +27,7 @@ describe("MCP delegated credential", () => {
     await expect(
       parseMcpDelegation({
         request: withCredential(request, credential),
-        owner: "control-plane-api",
+        surface: "control-plane-api",
         secret: SECRET,
         replayGuard: memoryReplayGuard(),
         nowSeconds: 100,
@@ -48,13 +49,60 @@ describe("MCP delegated credential", () => {
       await expect(
         parseMcpDelegation({
           request: withCredential(changedRequest, credential),
-          owner: "control-plane-api",
+          surface: "control-plane-api",
           secret: SECRET,
           replayGuard: memoryReplayGuard(),
           nowSeconds: 100,
         }),
       ).resolves.toBeNull();
     }
+  });
+});
+
+/**
+ * SPL-313: MCP addressed an operation at `route.owner`, so an Analysis- or
+ * Evaluation-owned tool reached that Worker directly and skipped the Control
+ * Plane's membership, Environment-scope, and Policy gates. The audience is the
+ * route's public surface, so a credential for an Analysis-owned operation is
+ * only ever accepted by the Control Plane.
+ */
+describe("MCP delegated credential audience", () => {
+  it("addresses a non-Control-Plane-owned operation at the Control Plane", async () => {
+    const url =
+      "https://control-plane.internal/apps/app_one/envs/env_one/experiments/exp_one/results";
+    const request = new Request(url);
+    const credential = await createMcpDelegationHeader({
+      operationId: "experiment_results_get",
+      actor: { subject: "user_one", scopes: ["app:app_one:admin"], authDoor: "id_jag" },
+      request,
+      secret: SECRET,
+      nowSeconds: 100,
+      jti: "delegation-id-results",
+    });
+
+    expect(getRoute("experiment_results_get")?.owner).toBe("analysis-api");
+    await expect(
+      parseMcpDelegation({
+        request: withCredential(request, credential),
+        surface: "control-plane-api",
+        secret: SECRET,
+        replayGuard: memoryReplayGuard(),
+        nowSeconds: 100,
+      }),
+    ).resolves.toEqual({
+      subject: "user_one",
+      scopes: ["app:app_one:admin"],
+      authDoor: "id_jag",
+    });
+    await expect(
+      parseMcpDelegation({
+        request: withCredential(request, credential),
+        surface: "evaluation-api",
+        secret: SECRET,
+        replayGuard: memoryReplayGuard(),
+        nowSeconds: 100,
+      }),
+    ).resolves.toBeNull();
   });
 });
 
@@ -75,7 +123,7 @@ describe("MCP delegated credential rejection", () => {
     await expect(
       parseMcpDelegation({
         request: delegated,
-        owner: "analysis-api",
+        surface: "evaluation-api",
         secret: SECRET,
         replayGuard: memoryReplayGuard(),
         nowSeconds: 100,
@@ -84,7 +132,7 @@ describe("MCP delegated credential rejection", () => {
     await expect(
       parseMcpDelegation({
         request: delegated,
-        owner: "control-plane-api",
+        surface: "control-plane-api",
         secret: OTHER_SECRET,
         replayGuard: memoryReplayGuard(),
         nowSeconds: 100,
@@ -93,7 +141,7 @@ describe("MCP delegated credential rejection", () => {
     await expect(
       parseMcpDelegation({
         request: delegated,
-        owner: "control-plane-api",
+        surface: "control-plane-api",
         secret: SECRET,
         replayGuard: memoryReplayGuard(),
         nowSeconds: 131,
@@ -102,7 +150,7 @@ describe("MCP delegated credential rejection", () => {
 
     const options = {
       request: delegated,
-      owner: "control-plane-api" as const,
+      surface: "control-plane-api" as const,
       secret: SECRET,
       replayGuard,
       nowSeconds: 100,
@@ -163,7 +211,7 @@ describe("MCP delegated credential rejection", () => {
     await expect(
       parseMcpDelegation({
         request: withCredential(changedBody, credential),
-        owner: "control-plane-api",
+        surface: "control-plane-api",
         secret: SECRET,
         replayGuard: memoryReplayGuard(),
         nowSeconds: 100,
@@ -185,7 +233,7 @@ describe("MCP delegated credential rejection", () => {
     await expect(
       parseMcpDelegation({
         request: withCredential(request, credential),
-        owner: "control-plane-api",
+        surface: "control-plane-api",
         secret: SECRET,
         replayGuard: memoryReplayGuard(),
         nowSeconds: 100,

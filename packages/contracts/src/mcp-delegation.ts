@@ -1,4 +1,9 @@
-import { type AuthDoor, AuthDoorSchema, type RouteOwner } from "./route-contract";
+import {
+  type AuthDoor,
+  AuthDoorSchema,
+  type PublicSurface,
+  publicSurfaceFor,
+} from "./route-contract";
 import { getRoute } from "./route-registry";
 
 export const MCP_DELEGATION_HEADER = "x-splitch-mcp-delegation";
@@ -26,7 +31,14 @@ export interface McpDelegationReplayGuard {
 interface McpDelegationCredential {
   version: typeof VERSION;
   issuer: "splitch-mcp-server";
-  audience: RouteOwner;
+  /**
+   * The PUBLIC SURFACE the credential is addressed to, never the Worker that
+   * executes the operation (ADR-0046). MCP holds no owner registry: it hands the
+   * call to the surface the operation's credential kind is addressed at, and that
+   * surface runs the membership, Environment-scope, and Policy gates before it
+   * delegates onward over its own binding.
+   */
+  audience: PublicSurface;
   operationId: string;
   subject: string;
   scopes: string[];
@@ -55,7 +67,7 @@ export async function createMcpDelegationHeader(options: {
   const credential: McpDelegationCredential = {
     version: VERSION,
     issuer: "splitch-mcp-server",
-    audience: route.owner,
+    audience: requirePublicSurface(options.operationId, route),
     operationId: options.operationId,
     subject: options.actor.subject,
     scopes: [...options.actor.scopes],
@@ -73,7 +85,7 @@ export async function createMcpDelegationHeader(options: {
 
 export async function parseMcpDelegation(options: {
   request: Request;
-  owner: RouteOwner;
+  surface: PublicSurface;
   secret: string;
   replayGuard: McpDelegationReplayGuard;
   nowSeconds?: number;
@@ -97,8 +109,8 @@ export async function parseMcpDelegation(options: {
   const route = getRoute(credential.operationId);
   if (
     !route ||
-    route.owner !== options.owner ||
-    credential.audience !== options.owner ||
+    publicSurfaceFor(route) !== options.surface ||
+    credential.audience !== options.surface ||
     route.method !== credential.method ||
     !routePathMatches(route.path, new URL(options.request.url).pathname) ||
     credential.method !== options.request.method ||
@@ -122,6 +134,24 @@ export async function parseMcpDelegation(options: {
     scopes: credential.scopes,
     authDoor: authDoor.success ? authDoor.data : "anonymous",
   };
+}
+
+/**
+ * A binding-only route has no public address, so no MCP tool call can legitimately
+ * be addressed to one. Throwing beats defaulting to a surface: a credential minted
+ * for an unaddressable route would be a request nothing may authorize.
+ */
+function requirePublicSurface(
+  operationId: string,
+  route: Parameters<typeof publicSurfaceFor>[0],
+): PublicSurface {
+  const surface = publicSurfaceFor(route);
+  if (!surface) {
+    throw new Error(
+      `contracts: MCP delegation operation "${operationId}" has no public surface to address`,
+    );
+  }
+  return surface;
 }
 
 function routePathMatches(routePath: string, requestPath: string): boolean {

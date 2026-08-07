@@ -112,3 +112,32 @@ export function assertCliMcpParity({
   assertSurface("MCP tools", expectedOperations(contract, exceptions, "mcp"), mcp);
   assertSkinLocalCapabilities(skinLocalCapabilities);
 }
+
+/**
+ * Equal operation IDs are not equal surfaces: an agent that passes a tool-schema
+ * check and is then rejected by the Worker is the failure ADR-0023 exists to
+ * prevent. Both skins must publish the JSON Schema derived from the one route
+ * contract, so a hand-written tool definition or a skin-local schema override
+ * fails here.
+ */
+export function assertCliMcpSchemaParity({ cliSchemas, mcpSchemas }) {
+  const cliOperations = [...cliSchemas.keys()].sort();
+  const mcpOperations = [...mcpSchemas.keys()].sort();
+  if (cliOperations.join(",") !== mcpOperations.join(",")) {
+    throw new Error(
+      `cli-mcp-parity: schema coverage differs. CLI: ${cliOperations.join(", ")}; MCP: ${mcpOperations.join(", ")}`,
+    );
+  }
+  for (const operationId of cliOperations) {
+    for (const kind of ["input", "output"]) {
+      const cli = JSON.stringify(cliSchemas.get(operationId)[kind]);
+      const mcp = JSON.stringify(mcpSchemas.get(operationId)[kind]);
+      if (cli !== mcp) {
+        throw new Error(
+          `cli-mcp-parity: ${operationId} ${kind} schema differs between surfaces\n  CLI: ${cli}\n  MCP: ${mcp}`,
+        );
+      }
+    }
+  }
+  return cliOperations.length;
+}

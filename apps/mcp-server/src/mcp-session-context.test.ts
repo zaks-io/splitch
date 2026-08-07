@@ -55,7 +55,7 @@ describe("MCP session context", () => {
       expect(
         await parseMcpDelegation({
           request,
-          owner: "control-plane-api",
+          surface: "control-plane-api",
           secret: TEST_MCP_DELEGATION_SECRET,
           replayGuard: memoryMcpDelegationReplayGuard(),
         }),

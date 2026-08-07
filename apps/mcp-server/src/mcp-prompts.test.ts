@@ -247,12 +247,6 @@ async function mcp(
     controlPlaneFetch: async () => {
       throw new Error("prompts must not call the control plane");
     },
-    evaluationFetch: async () => {
-      throw new Error("prompts must not call evaluation");
-    },
-    analysisFetch: async () => {
-      throw new Error("prompts must not call analysis");
-    },
     sessionStore: options.sessionStore ?? trackingSessionStore(),
   });
 }

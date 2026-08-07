@@ -1,4 +1,9 @@
-import { getRoute, parsePlatformTarget, type RouteOwner } from "@splitch/contracts";
+import {
+  type ApiRouteContract,
+  getRoute,
+  parsePlatformTarget,
+  publicSurfaceFor,
+} from "@splitch/contracts";
 import { IdempotencyKeyRequiredError } from "@splitch/control-plane-sdk/idempotency-header";
 import {
   JSON_RPC_INTERNAL_ERROR,
@@ -14,7 +19,11 @@ import {
   type McpAccessTokenVerifier,
   makeHttpMcpAccessTokenVerifier,
 } from "./mcp-access-token";
-import { createOperationSdks, type OperationSdks } from "./mcp-operation-sdks";
+import {
+  createControlPlaneOperationSdk,
+  type OperationSdk,
+  type OperationSdkResolver,
+} from "./mcp-operation-sdks";
 import { getMcpPromptRpc, listMcpPrompts } from "./mcp-prompts";
 import { readJsonRpcRequest } from "./mcp-request";
 import { listMcpResources, readMcpResourceRpc } from "./mcp-resources";
@@ -42,14 +51,8 @@ export interface McpServerRequestOptions {
   readonly platformTarget?: string;
   readonly authBaseUrl?: string;
   readonly controlPlaneBaseUrl?: string;
-  readonly evaluationBaseUrl?: string;
-  readonly analysisBaseUrl?: string;
   readonly controlPlaneFetch?: typeof fetch;
-  readonly evaluationFetch?: typeof fetch;
-  readonly analysisFetch?: typeof fetch;
   readonly controlPlaneDelegationSecret?: string;
-  readonly evaluationDelegationSecret?: string;
-  readonly analysisDelegationSecret?: string;
   readonly sessionStore?: McpSessionStore;
   readonly tokenVerifier?: McpAccessTokenVerifier;
   readonly revocations?: McpRevocationReader;
@@ -89,10 +92,17 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
     return new Response(null, { status: 202, headers: corsHeaders() });
   }
 
-  const sdks = createOperationSdks(options);
+  const controlPlane = createControlPlaneOperationSdk(options);
   const sessionStore = options.sessionStore ?? unconfiguredSessionStore;
   const sessionId = options.request.headers.get("mcp-session-id");
-  const response = await dispatch(request.value, sdks, actor, sessionId, sessionStore, options);
+  const response = await dispatch(
+    request.value,
+    controlPlane,
+    actor,
+    sessionId,
+    sessionStore,
+    options,
+  );
   const responseSessionId =
     request.value.method === "initialize"
       ? await sessionStore.create(sessionTransportFromActor(actor))
@@ -107,7 +117,7 @@ function requiredRevocations(revocations: McpRevocationReader | undefined): McpR
 
 async function dispatch(
   request: JsonRpcRequest,
-  sdks: OperationSdks,
+  controlPlane: OperationSdkResolver,
   actor: McpAccessTokenActor,
   sessionId: string | null,
   sessionStore: McpSessionStore,
@@ -139,7 +149,7 @@ async function dispatch(
     return jsonRpcResult(id, { tools: MCP_TOOL_DEFINITIONS });
   }
   if (request.method === "tools/call") {
-    return callTool(id, request.params, sdks, actor, sessionId, sessionStore);
+    return callTool(id, request.params, controlPlane, actor, sessionId, sessionStore);
   }
   return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
 }
@@ -147,7 +157,7 @@ async function dispatch(
 async function callTool(
   id: JsonRpcId,
   params: unknown,
-  sdks: OperationSdks,
+  controlPlane: OperationSdkResolver,
   actor: McpAccessTokenActor,
   sessionId: string | null,
   sessionStore: McpSessionStore,
@@ -165,7 +175,7 @@ async function callTool(
   }
 
   try {
-    const sdk = sdkForOwner(sdks, route.owner);
+    const sdk = controlPlaneSdkForRoute(controlPlane, route);
     const input = await resolveScope(route.path, call.arguments, sessionId, sessionStore);
     if (!input.ok) {
       return jsonRpcResult(id, toolResult({ message: input.message }, { isError: true }));
@@ -229,14 +239,24 @@ async function contextUse(
   );
 }
 
-function sdkForOwner(
-  sdks: OperationSdks,
-  owner: RouteOwner,
-): ReturnType<OperationSdks["control-plane-api"]> {
-  if (owner === "control-plane-api" || owner === "evaluation-api" || owner === "analysis-api") {
-    return sdks[owner]();
+/**
+ * The one place an MCP tool call acquires a downstream, so there is one place to
+ * check that it is the Control Plane. A management tool is addressed at the
+ * surface its credential belongs to (ADR-0046); a derived tool whose route is
+ * addressed anywhere else would be one the Control Plane's D1 membership,
+ * Environment-scope, and Policy gates never see, so refuse it rather than send it.
+ */
+export function controlPlaneSdkForRoute(
+  controlPlane: OperationSdkResolver,
+  route: ApiRouteContract,
+): OperationSdk {
+  const surface = publicSurfaceFor(route);
+  if (surface !== "control-plane-api") {
+    throw new Error(
+      `mcp-server: tool "${route.operationId}" is addressed at ${surface ?? "no public surface"}, not the Control Plane`,
+    );
   }
-  throw new Error(`mcp-server: no API origin configured for route owner "${owner}"`);
+  return controlPlane();
 }
 
 function initializeResult(): Record<string, unknown> {

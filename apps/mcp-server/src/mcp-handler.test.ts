@@ -244,8 +244,6 @@ async function mcp(
   params?: unknown,
   baseUrls: {
     controlPlaneBaseUrl?: string;
-    evaluationBaseUrl?: string;
-    analysisBaseUrl?: string;
     sessionId?: string;
     authorization?: string;
   } = {},
@@ -266,11 +264,7 @@ async function mcp(
     tokenVerifier: staticMcpTokenVerifier(),
     revocations: allowMcpRevocations(),
     controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
-    evaluationDelegationSecret: TEST_MCP_DELEGATION_SECRET,
-    analysisDelegationSecret: TEST_MCP_DELEGATION_SECRET,
     controlPlaneFetch: origins.controlPlaneBaseUrl ? fetch : undefined,
-    evaluationFetch: origins.evaluationBaseUrl ? fetch : undefined,
-    analysisFetch: origins.analysisBaseUrl ? fetch : undefined,
     ...origins,
   });
 }

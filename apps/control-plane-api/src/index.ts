@@ -138,7 +138,7 @@ async function handleRequest(
   const authResolver =
     authMode === "mcp"
       ? makeMcpDelegationAuthResolver({
-          owner: "control-plane-api",
+          surface: "control-plane-api",
           secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
           replayGuard: makeDurableMcpDelegationReplayGuard(
             requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),

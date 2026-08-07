@@ -8,8 +8,6 @@ export default defineConfig({
       miniflare: {
         serviceBindings: {
           CONTROL_PLANE_API: unavailableService,
-          EVALUATION_API: unavailableService,
-          ANALYSIS_API: unavailableService,
         },
       },
     }),
