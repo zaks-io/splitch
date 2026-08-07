@@ -3,6 +3,7 @@ import {
   apiKeyCacheKey,
   assignmentKey,
   clientKeyCacheKey,
+  credentialRevocationCacheKey,
   experimentConfigKey,
   flagConfigKey,
   liveRunKey,
@@ -39,6 +40,10 @@ describe("credential cache key-pattern constructors", () => {
 
   it("apiKeyCacheKey produces ak:{keyHash}", () => {
     expect(apiKeyCacheKey("def456")).toBe("ak:def456");
+  });
+
+  it("credentialRevocationCacheKey isolates terminal revocation from the mutable entry", () => {
+    expect(credentialRevocationCacheKey(clientKeyCacheKey("abc123"))).toBe("revoked:ck:abc123");
   });
 });
 

@@ -3,7 +3,11 @@ import test from "node:test";
 import { completeCredentialCacheBackfill } from "./complete-credential-cache-backfill.mjs";
 
 test("drives the protected credential cache backfill to a verified done checkpoint", async () => {
-  const checkpoints = [{ kind: "client" }, { kind: "api" }, { kind: "done" }];
+  const checkpoints = [
+    { version: 2, kind: "client" },
+    { version: 2, kind: "api" },
+    { version: 2, kind: "done" },
+  ];
   const calls = [];
 
   await completeCredentialCacheBackfill({
@@ -36,4 +40,15 @@ test("drives the protected credential cache backfill to a verified done checkpoi
       authorization: "Bearer gate-token",
     },
   ]);
+});
+
+test("rejects a completed legacy checkpoint before the marker-aware reader deploys", async () => {
+  await assert.rejects(
+    completeCredentialCacheBackfill({
+      origin: "https://api.example.test",
+      token: "gate-token",
+      fetchImpl: async () => Response.json({ kind: "done" }),
+    }),
+    /invalid checkpoint/u,
+  );
 });

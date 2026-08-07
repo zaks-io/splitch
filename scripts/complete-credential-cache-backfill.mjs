@@ -1,4 +1,5 @@
 const maxBatches = 10_000;
+const requiredCheckpointVersion = 2;
 
 export async function completeCredentialCacheBackfill({ origin, token, fetchImpl = fetch }) {
   if (!origin)
@@ -46,9 +47,7 @@ export async function completeCredentialCacheBackfill({ origin, token, fetchImpl
       );
     }
     const body = await response.json();
-    if (!body || !["client", "api", "done"].includes(body.kind)) {
-      throw new Error("credential cache backfill gate returned an invalid checkpoint");
-    }
+    assertCurrentCheckpoint(body);
     return body;
   }
 
@@ -59,6 +58,15 @@ export async function completeCredentialCacheBackfill({ origin, token, fetchImpl
   if (checkpoint.kind !== "done") {
     throw new Error(`credential cache backfill did not complete within ${maxBatches} batches`);
   }
+}
+
+function assertCurrentCheckpoint(value) {
+  const valid =
+    value !== null &&
+    typeof value === "object" &&
+    value.version === requiredCheckpointVersion &&
+    ["client", "api", "done"].includes(value.kind);
+  if (!valid) throw new Error("credential cache backfill gate returned an invalid checkpoint");
 }
 
 if (process.argv[1] === new URL(import.meta.url).pathname) {

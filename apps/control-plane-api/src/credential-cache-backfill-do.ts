@@ -6,9 +6,11 @@ import type { ControlPlaneApiEnv } from "./env";
 
 const BATCH_SIZE = 25;
 const NEXT_BATCH_DELAY_MS = 1_000;
-const CHECKPOINT_KEY = "credential-cache-backfill-checkpoint";
+const CHECKPOINT_VERSION = 2;
+const CHECKPOINT_KEY = `credential-cache-backfill-checkpoint-v${CHECKPOINT_VERSION}`;
 
 interface Checkpoint {
+  version: typeof CHECKPOINT_VERSION;
   kind: "client" | "api" | "done";
   afterKeyId?: string;
 }
@@ -59,20 +61,35 @@ export class CredentialCacheBackfillDurableObject extends DurableObject<ControlP
   }
 
   private async checkpoint(): Promise<Checkpoint> {
-    return (await this.ctx.storage.get<Checkpoint>(CHECKPOINT_KEY)) ?? { kind: "client" };
+    return (
+      (await this.ctx.storage.get<Checkpoint>(CHECKPOINT_KEY)) ?? {
+        version: CHECKPOINT_VERSION,
+        kind: "client",
+      }
+    );
   }
 
   private async advance(checkpoint: Checkpoint, lastKeyId: string | undefined): Promise<void> {
     if (lastKeyId !== undefined) {
-      await this.ctx.storage.put(CHECKPOINT_KEY, { kind: checkpoint.kind, afterKeyId: lastKeyId });
+      await this.ctx.storage.put(CHECKPOINT_KEY, {
+        version: CHECKPOINT_VERSION,
+        kind: checkpoint.kind,
+        afterKeyId: lastKeyId,
+      });
       await this.ctx.storage.setAlarm(Date.now() + NEXT_BATCH_DELAY_MS);
       return;
     }
     if (checkpoint.kind === "client") {
-      await this.ctx.storage.put(CHECKPOINT_KEY, { kind: "api" } satisfies Checkpoint);
+      await this.ctx.storage.put(CHECKPOINT_KEY, {
+        version: CHECKPOINT_VERSION,
+        kind: "api",
+      } satisfies Checkpoint);
       await this.ctx.storage.setAlarm(Date.now() + NEXT_BATCH_DELAY_MS);
       return;
     }
-    await this.ctx.storage.put(CHECKPOINT_KEY, { kind: "done" } satisfies Checkpoint);
+    await this.ctx.storage.put(CHECKPOINT_KEY, {
+      version: CHECKPOINT_VERSION,
+      kind: "done",
+    } satisfies Checkpoint);
   }
 }

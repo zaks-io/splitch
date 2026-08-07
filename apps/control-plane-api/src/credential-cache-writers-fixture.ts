@@ -8,7 +8,7 @@ import type { CredentialCacheWriter } from "./credential-cache";
 
 const cacheEnvelope = kvEnvelope(CredentialCacheKVSchema);
 
-export class SerialWriter implements CredentialCacheWriter {
+class SerialWriter implements CredentialCacheWriter {
   private tail = Promise.resolve();
 
   constructor(private readonly writes: Map<string, string>) {}
@@ -19,6 +19,33 @@ export class SerialWriter implements CredentialCacheWriter {
     });
     this.tail = write;
     return write;
+  }
+}
+
+export class StaleBackfillWinsStore {
+  private readonly revocationLanded: Promise<void>;
+  private releaseRevocation: () => void = () => {};
+
+  constructor(private readonly writes: Map<string, string>) {
+    this.revocationLanded = new Promise((resolve) => {
+      this.releaseRevocation = resolve;
+    });
+  }
+
+  get(key: string): Promise<string | null> {
+    return Promise.resolve(this.writes.get(key) ?? null);
+  }
+
+  async put(key: string, value: string): Promise<void> {
+    if (key.startsWith("revoked:")) {
+      this.writes.set(key, value);
+      return;
+    }
+
+    const candidate = cacheEnvelope.parse(JSON.parse(value)).data;
+    if (!candidate.revoked) await this.revocationLanded;
+    this.writes.set(key, value);
+    if (candidate.revoked) this.releaseRevocation();
   }
 }
 

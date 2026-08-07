@@ -1,4 +1,9 @@
-import { CredentialCacheKVSchemaV1, kvEnvelope } from "@splitch/contracts";
+import {
+  clientKeyCacheKey,
+  credentialRevocationCacheKey,
+  CredentialCacheKVSchemaV1,
+  kvEnvelope,
+} from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { makeDataPlaneAuthResolver, sha256Hex } from "./data-plane-auth";
 
@@ -14,6 +19,40 @@ class CredentialStore {
 }
 
 describe("data-plane credential cache compatibility", () => {
+  it("gives terminal revocation precedence over a stale active Client Key entry", async () => {
+    const hash = await sha256Hex(CLIENT_KEY);
+    const cacheKey = clientKeyCacheKey(hash);
+    const active = JSON.stringify({
+      schemaVersion: 2,
+      data: {
+        appId: "app_revoked",
+        environmentId: "env_revoked",
+        credentialSchemaVersion: 2,
+        organizationId: "org_revoked",
+        kind: "client_key",
+        scopes: ["data-plane:evaluate"],
+        originAllowlist: null,
+        rateLimitRps: null,
+        revoked: false,
+        cachedAt: "2026-08-07T00:00:00.000Z",
+      },
+    });
+    const store = new CredentialStore(
+      new Map([
+        [cacheKey, active],
+        [credentialRevocationCacheKey(cacheKey), "revoked"],
+      ]),
+    );
+
+    await expect(
+      makeDataPlaneAuthResolver(store)(
+        new Request("https://edge.test/api/sdk/evaluate", {
+          headers: { authorization: `Bearer ${CLIENT_KEY}` },
+        }),
+      ),
+    ).resolves.toEqual({ ok: false, reason: "CREDENTIAL_REVOKED" });
+  });
+
   it("reads schema-v1 credentials with an explicit unscoped migration marker", async () => {
     const key = await sha256Hex(CLIENT_KEY);
     const store = new CredentialStore(

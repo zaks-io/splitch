@@ -1,6 +1,7 @@
 import {
   apiKeyCacheKey,
   clientKeyCacheKey,
+  credentialRevocationCacheKey,
   CredentialCacheKVSchema,
   CredentialCacheKVSchemaV1,
   type ErrorResponse,
@@ -26,6 +27,9 @@ export function makeDataPlaneAuthResolver(credentialStore: CredentialReader): Au
     const cached = await readCredentialByMaterial(credentialStore, credential, hash);
     if (cached === null) {
       return { ok: false, reason: "UNAUTHORIZED" };
+    }
+    if (cached === "revoked") {
+      return { ok: false, reason: "CREDENTIAL_REVOKED" };
     }
 
     const failure = credentialFailure(request, cached);
@@ -87,17 +91,26 @@ async function readCredentialByMaterial(
   credentialStore: CredentialReader,
   credential: string,
   hash: string,
-): Promise<CredentialCache | null> {
+): Promise<CredentialCache | "revoked" | null> {
   if (credential.startsWith("sk_") || credential.startsWith("ak_")) {
-    return readCredential(credentialStore, apiKeyCacheKey(hash));
+    return readCredentialCache(credentialStore, apiKeyCacheKey(hash));
   }
   if (credential.startsWith("pk_") || credential.startsWith("ck_")) {
-    return readCredential(credentialStore, clientKeyCacheKey(hash));
+    return readCredentialCache(credentialStore, clientKeyCacheKey(hash));
   }
   return (
-    (await readCredential(credentialStore, clientKeyCacheKey(hash))) ??
-    (await readCredential(credentialStore, apiKeyCacheKey(hash)))
+    (await readCredentialCache(credentialStore, clientKeyCacheKey(hash))) ??
+    (await readCredentialCache(credentialStore, apiKeyCacheKey(hash)))
   );
+}
+
+async function readCredentialCache(
+  credentialStore: CredentialReader,
+  key: string,
+): Promise<CredentialCache | "revoked" | null> {
+  const revocation = await credentialStore.get(credentialRevocationCacheKey(key));
+  if (revocation !== null) return "revoked";
+  return readCredential(credentialStore, key);
 }
 
 export async function sha256Hex(value: string): Promise<string> {

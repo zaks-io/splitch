@@ -251,6 +251,7 @@ export {
   apiKeyCacheKey,
   assignmentKey,
   clientKeyCacheKey,
+  credentialRevocationCacheKey,
   experimentConfigKey,
   flagConfigKey,
   liveRunKey,

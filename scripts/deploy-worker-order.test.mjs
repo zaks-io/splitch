@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { deploymentCommands } from "./deploy-cloudflare-workers.mjs";
-import { parseWranglerConfigFile } from "./lib/wrangler-config.mjs";
 import { readWorkspacePackages } from "./lib/production-deploy-plan.mjs";
+import { parseWranglerConfigFile } from "./lib/wrangler-config.mjs";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspacePackages = readWorkspacePackages(repoRoot);
@@ -20,6 +20,7 @@ const deployable = workspacePackages.filter((entry) => entry.deployable).map(({ 
  * adding a binding without an ordering entry fails this test instead of failing
  * a production cutover halfway through.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: The test derives edges from nested Wrangler configs.
 function serviceEdges() {
   const workerToPackage = new Map();
   const bindings = new Map();
@@ -60,6 +61,7 @@ function workerNames(config) {
   return names;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Recursive config traversal keeps the derived assertion complete.
 function collectServices(node, found = new Set()) {
   if (Array.isArray(node)) {
     for (const item of node) collectServices(item, found);
@@ -122,7 +124,9 @@ for (const environment of ["production", "shared-preview"]) {
     const order = deployOrder(deploymentCommands(environment, deployable, workspacePackages));
 
     for (const { caller, callee } of serviceEdges()) {
-      const callerAt = order.indexOf(caller);
+      // Compatibility deploys may publish a caller's migration writer before a
+      // changed callee. The final caller must still bind the final callee.
+      const callerAt = order.lastIndexOf(caller);
       const calleeAt = order.indexOf(callee);
       assert.notEqual(calleeAt, -1, `${callee} is bound by ${caller} but never deployed`);
       assert.notEqual(callerAt, -1, `${caller} was never deployed`);
@@ -133,6 +137,7 @@ for (const environment of ["production", "shared-preview"]) {
     }
   });
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: The full-fleet assertion expands composed deploy scripts.
   test(`${environment} full-fleet script orders every service callee before its caller`, () => {
     const chain = packageScripts()[`deploy:cloudflare:${environment}`].split(" && ");
     const order = [];
@@ -149,7 +154,7 @@ for (const environment of ["production", "shared-preview"]) {
     }
 
     for (const { caller, callee } of serviceEdges()) {
-      const callerAt = order.indexOf(caller);
+      const callerAt = order.lastIndexOf(caller);
       const calleeAt = order.indexOf(callee);
       assert.ok(
         calleeAt !== -1 && callerAt !== -1 && calleeAt < callerAt,

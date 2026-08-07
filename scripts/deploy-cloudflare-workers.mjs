@@ -25,6 +25,7 @@ const ORDERED_PREREQUISITES = [
   [ANALYSIS, "analysis"],
   [EVALUATION, "evaluation"],
 ];
+const EVALUATION_DEPLOY = ORDERED_PREREQUISITES.at(-1);
 const SPECIAL_WORKERS = new Set([
   ...ORDERED_PREREQUISITES.map(([packageName]) => packageName),
   CONTROL_PANEL,
@@ -47,25 +48,27 @@ export function deploymentCommands(environment, requestedPackages, workspacePack
     throw new Error("at least one deployable Worker package is required");
   }
 
-  const commands = [];
   const requiresControlPanelCutover = selected.has(CONTROL_PANEL) || selected.has(CONTROL_PLANE);
+  const commands = selectedPrerequisiteCommands(
+    environment,
+    selected,
+    ORDERED_PREREQUISITES.slice(0, -1),
+  );
 
-  // The backfill drains through the Control Plane already serving traffic, so it
-  // runs before the Evaluation Worker that reads what it wrote, which in turn
-  // has to precede the Control Plane that binds its entrypoint.
+  // A changed Control Plane publishes its compatible migration writer before the
+  // gate drains. The marker-aware Evaluation Worker cannot ship until that exact
+  // checkpoint version is done.
+  commands.push(...controlPlaneMigrationCommands(environment, requiresControlPanelCutover));
   if (requiresControlPanelCutover || selected.has(EVALUATION)) {
     commands.push(["run", `credential-cache:backfill:${environment}`]);
   }
 
-  for (const [packageName, scriptName] of ORDERED_PREREQUISITES) {
-    if (selected.has(packageName)) {
-      commands.push(["run", `deploy:cloudflare:${scriptName}:${environment}`]);
-    }
+  if (EVALUATION_DEPLOY && selected.has(EVALUATION_DEPLOY[0])) {
+    commands.push(["run", `deploy:cloudflare:${EVALUATION_DEPLOY[1]}:${environment}`]);
   }
 
   if (requiresControlPanelCutover) {
     commands.push(
-      ["run", `deploy:cloudflare:control-plane-compat:${environment}`],
       ["run", `deploy:cloudflare:control-panel:${environment}`],
       ["run", `deploy:cloudflare:control-plane:${environment}`],
     );
@@ -86,6 +89,16 @@ export function deploymentCommands(environment, requestedPackages, workspacePack
   }
 
   return commands;
+}
+
+function controlPlaneMigrationCommands(environment, required) {
+  return required ? [["run", `deploy:cloudflare:control-plane-compat:${environment}`]] : [];
+}
+
+function selectedPrerequisiteCommands(environment, selected, prerequisites) {
+  return prerequisites
+    .filter(([packageName]) => selected.has(packageName))
+    .map(([, scriptName]) => ["run", `deploy:cloudflare:${scriptName}:${environment}`]);
 }
 
 function main() {
