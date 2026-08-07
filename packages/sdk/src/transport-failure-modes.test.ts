@@ -108,20 +108,23 @@ describe("transport failure modes: distinct codes + preserved cause (SPL-323)", 
   });
 });
 
+/** Headers arrived, then the body read rejects — the stalled-body shape. */
+function stalledBody(status: number, error: unknown): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: new Headers(),
+    json: () => Promise.reject(error),
+  } as unknown as Response;
+}
+
 describe("transport failure modes: body-read abort and peek/verify parity (SPL-323)", () => {
   it("abort while reading the response body -> SDK_TRANSPORT_TIMEOUT (not PARSE)", async () => {
     const aborted = new DOMException("The operation was aborted.", "AbortError");
-    const stalledBody = {
-      ok: true,
-      status: 200,
-      headers: new Headers(),
-      json: () => Promise.reject(aborted),
-    } as unknown as Response;
-
     const logger = new FakeLogger();
     const client = createSplitchClient({
       clientKey: "ck_test",
-      fetch: stubFetch(stalledBody),
+      fetch: stubFetch(stalledBody(200, aborted)),
       logger,
     });
 
@@ -137,6 +140,81 @@ describe("transport failure modes: body-read abort and peek/verify parity (SPL-3
     expect(logger.errors).toHaveLength(1);
     expect(logger.errors[0]?.message).toContain("SDK_TRANSPORT_TIMEOUT");
     expect(logger.errors[0]?.detail).toMatchObject({ cause: aborted });
+  });
+
+  it("abort while reading an ERROR-status body -> SDK_TRANSPORT_TIMEOUT, not the server's code", async () => {
+    const aborted = new DOMException("The operation was aborted.", "AbortError");
+    const logger = new FakeLogger();
+    const client = createSplitchClient({
+      clientKey: "ck_test",
+      fetch: stubFetch(stalledBody(503, aborted)),
+      logger,
+    });
+
+    const details = await client.evaluateDetails("flag", {
+      targetingKey: "u1",
+      defaultValue: "control",
+      idempotencyKey: "transport-error-body-abort-1",
+    });
+
+    expect(details.reason).toBe("ERROR");
+    expect(details.errorCode).toBe("SDK_TRANSPORT_TIMEOUT");
+    expect(details.errorCode).not.toBe("SERVICE_UNAVAILABLE");
+    expect(logger.errors).toHaveLength(1);
+    expect(logger.errors[0]?.message).toContain("SDK_TRANSPORT_TIMEOUT");
+    expect(logger.errors[0]?.detail).toMatchObject({ cause: aborted });
+  });
+
+  // Every call site, on both the 2xx and the error-status body read: a partial
+  // revert at any one of the six goes red here.
+  it.each([200, 503])("body-read abort on HTTP %i times out on every route", async (status) => {
+    const aborted = new DOMException("The operation was aborted.", "AbortError");
+    const transport = fetchTransport(
+      stubFetch(() => Promise.resolve(stalledBody(status, aborted))),
+    );
+    const timedOut = { errorCode: "SDK_TRANSPORT_TIMEOUT", cause: aborted };
+
+    await expect(transport.evaluate(TRANSPORT_REQUEST)).resolves.toMatchObject(timedOut);
+    await expect(transport.peek(TRANSPORT_REQUEST)).resolves.toMatchObject(timedOut);
+    await expect(transport.verify(TRANSPORT_REQUEST)).resolves.toMatchObject(timedOut);
+  });
+
+  // A mid-body drop on an error status must not report `cause: undefined`, which
+  // reads exactly like a clean empty-bodied 503.
+  it("non-abort body-read failure keeps the server's status AND the caught error", async () => {
+    const dropped = new TypeError("terminated: body stream failed mid-read");
+    const transport = fetchTransport(stubFetch(() => Promise.resolve(stalledBody(503, dropped))));
+    const kept = { status: 503, cause: dropped };
+
+    const result = await transport.evaluate(TRANSPORT_REQUEST);
+    expect(result).toMatchObject(kept);
+    // Left to the canonical status mapping: 503 is still the server's verdict.
+    expect(result.errorCode).toBeUndefined();
+    await expect(transport.peek(TRANSPORT_REQUEST)).resolves.toMatchObject(kept);
+    await expect(transport.verify(TRANSPORT_REQUEST)).resolves.toMatchObject(kept);
+  });
+
+  it("logger.error receives the mid-body error behind an error status, untruncated", async () => {
+    const dropped = new TypeError("terminated: body stream failed mid-read");
+    const logger = new FakeLogger();
+    const client = createSplitchClient({
+      clientKey: "ck_test",
+      fetch: stubFetch(stalledBody(503, dropped)),
+      logger,
+    });
+
+    const details = await client.evaluateDetails("flag", {
+      targetingKey: "u1",
+      defaultValue: "control",
+      idempotencyKey: "transport-error-body-drop-1",
+    });
+
+    expect(details.errorCode).toBe("SERVICE_UNAVAILABLE");
+    expect(logger.errors).toHaveLength(1);
+    expect(logger.errors[0]?.detail).toMatchObject({ cause: dropped });
+    const detail = logger.errors[0]?.detail as { cause: TypeError };
+    expect(detail.cause.message).toBe(dropped.message);
+    expect(detail.cause.stack).toBe(dropped.stack);
   });
 
   it("peek and verify classify the same three transport modes", async () => {

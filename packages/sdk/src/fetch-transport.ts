@@ -246,7 +246,6 @@ async function readVerifyResponse(response: Response): Promise<VerifyTransportRe
 }
 
 async function readFailure(response: Response): Promise<TransportFailure> {
-  const fallback: TransportFailure = { status: response.status };
   try {
     const body = (await response.json()) as { code?: unknown; message?: unknown };
     const parsedCode = ErrorCodeSchema.safeParse(body.code);
@@ -255,7 +254,15 @@ async function readFailure(response: Response): Promise<TransportFailure> {
       errorCode: parsedCode.success ? parsedCode.data : undefined,
       errorMessage: typeof body.message === "string" ? body.message : undefined,
     };
-  } catch {
-    return fallback;
+  } catch (error) {
+    // Same classification as the 2xx body reads: an abort here is this SDK's own
+    // timer firing mid-body, so it reports the local timeout rather than the
+    // server's status. Any other body-read failure arrived after a complete
+    // status line, so the server's verdict stands (an empty 503 stays
+    // SERVICE_UNAVAILABLE) — but the caught error rides along, so a mid-body
+    // drop is distinguishable in the log from a clean empty body.
+    return isAbortError(error)
+      ? classifyBodyReadError(error)
+      : { status: response.status, cause: error };
   }
 }
