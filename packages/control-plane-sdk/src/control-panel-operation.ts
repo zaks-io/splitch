@@ -20,6 +20,7 @@ export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 
 export type ControlPanelOperation =
   | { id: "apps_create"; orgId: string }
+  | { id: "organization_usage_get"; orgId: string }
   | { id: "app_attention_rollup_get"; appId: string }
   | { id: "experiments_detail" }
   | { id: "experiments_list" }
@@ -90,6 +91,7 @@ export type ControlPanelOperation =
     };
 
 const APPS_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
+const ORG_USAGE_PATH = /^\/orgs\/([^/]+)\/usage\/?$/;
 const APP_ATTENTION_PATH = /^\/apps\/([^/]+)\/attention-rollup\/?$/;
 const EXPERIMENT_DETAIL_PATH = "/control-panel/experiments/detail";
 const EXPERIMENT_RESULTS_PATH = "/control-panel/experiments/results";
@@ -128,6 +130,7 @@ export function parseControlPanelOperation(
 ): ControlPanelOperation | null {
   return (
     parseAppsCreate(method, pathname) ??
+    parseOrganizationUsage(method, pathname) ??
     parseAppAttention(method, pathname) ??
     parseOrganizationsCreate(method, pathname) ??
     parseExperimentsList(method, pathname) ??
@@ -151,6 +154,18 @@ function parseOrganizationsCreate(method: string, pathname: string): ControlPane
   return method === "POST" && ORGANIZATIONS_PATH.test(pathname)
     ? { id: "organizations_create" }
     : null;
+}
+
+/**
+ * `GET /orgs/:orgId/usage`. Names the Organization it reads, so the resolver
+ * binds the delegation to live Org membership rather than trusting the claim:
+ * usage is Organization-wide (ADR-0033), which makes the Org the tenant boundary
+ * this read must not cross.
+ */
+function parseOrganizationUsage(method: string, pathname: string): ControlPanelOperation | null {
+  const match = pathname.match(ORG_USAGE_PATH);
+  const orgId = match?.[1] ? decodeSegment(match[1]) : null;
+  return method === "GET" && orgId ? { id: "organization_usage_get", orgId } : null;
 }
 
 function parseAppAttention(method: string, pathname: string): ControlPanelOperation | null {

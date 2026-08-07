@@ -49,6 +49,10 @@ const OPERATION_ROUTES: OperationCoverage = {
     route: { method: "POST", pathname: "/orgs/org_1/apps" },
     operation: { id: "apps_create", orgId: "org_1" },
   },
+  organization_usage_get: {
+    route: { method: "GET", pathname: "/orgs/org_1/usage" },
+    operation: { id: "organization_usage_get", orgId: "org_1" },
+  },
   organizations_create: {
     route: { method: "POST", pathname: "/orgs" },
     operation: { id: "organizations_create" },

@@ -36,6 +36,10 @@
     "./panel-settings": {
       "types": "./src/panel-settings.ts",
       "default": "./src/panel-settings.ts"
+    },
+    "./panel-usage": {
+      "types": "./src/panel-usage.ts",
+      "default": "./src/panel-usage.ts"
     }
   },
   "files": [
