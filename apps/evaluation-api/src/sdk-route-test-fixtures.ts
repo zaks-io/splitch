@@ -30,6 +30,7 @@ import type { EvaluationCommitEvent, EvaluationCommitSink } from "./evaluation-c
 import type { EvaluationUsageEvent, EvaluationUsageSink } from "./evaluation-usage-sink";
 import {
   type ExposureIngestSink,
+  type ExposureRedemptionClaimStore,
   MemoryExposureRedemptionClaimStore,
   RecordingExposureIngestSink,
 } from "./exposure-redemption";
@@ -57,7 +58,7 @@ interface SdkRouteHarnessOptions {
   readonly evaluationCommitSink?: EvaluationCommitSink;
   readonly evaluationUsageSink?: RecordingEvaluationUsageSink;
   readonly exposureIngestSink?: ExposureIngestSink;
-  readonly exposureRedemptionClaims?: MemoryExposureRedemptionClaimStore;
+  readonly exposureRedemptionClaims?: ExposureRedemptionClaimStore;
   readonly flagOverrides?: Partial<FlagConfigKV>;
   readonly holdovers?: Map<string, { runId: string; variant: string }>;
   readonly runOverrides?: Partial<RunConfigKV>;

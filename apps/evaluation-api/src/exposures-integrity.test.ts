@@ -162,7 +162,8 @@ describe("POST /api/sdk/exposures: forgery and integrity", () => {
       { exposureId: EXPOSURE_ID_B, status: "deduplicated", code: null },
     ]);
     expect(exposureSink.writes).toHaveLength(1);
-    expect(assignmentStore.putHashedCalls).toHaveLength(1);
+    // Dedup re-schedules the idempotent Assignment Store put (partial-claim recovery).
+    expect(assignmentStore.putHashedCalls).toHaveLength(2);
   });
 });
 

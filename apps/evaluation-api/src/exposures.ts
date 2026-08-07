@@ -76,10 +76,23 @@ async function redeemOne(
 
   const fingerprint = await ticketFingerprint(item.exposureTicket);
   const claim = await claimLookup(item.exposureId, fingerprint, scope, deps);
-  if (claim !== null) return claim;
+  if (claim !== null) {
+    // putIfAbsent is idempotent. Re-schedule on dedup so a prior attempt that
+    // sealed + partially claimed (then 503'd before holdover) still lands the
+    // Assignment Store write on retry.
+    if (claim.status === "deduplicated") {
+      scheduleHoldoverWrite(verified.payload, scope, deps);
+    }
+    return claim;
+  }
 
   const sealed = await sealAndRecord(item, verified.payload, fingerprint, scope, deps);
-  if (!sealed.ok) return rejected(item.exposureId, sealed.code);
+  if (!sealed.ok) {
+    if (sealed.ingestCommitted) {
+      scheduleHoldoverWrite(verified.payload, scope, deps);
+    }
+    return rejected(item.exposureId, sealed.code);
+  }
 
   scheduleHoldoverWrite(verified.payload, scope, deps);
   return { exposureId: item.exposureId, status: "accepted", code: null };
@@ -137,7 +150,7 @@ async function sealAndRecord(
   fingerprint: string,
   scope: CredentialScope,
   deps: ExposuresRouteDeps,
-): Promise<{ ok: true } | { ok: false; code: ErrorCode }> {
+): Promise<{ ok: true } | { ok: false; code: ErrorCode; ingestCommitted?: boolean }> {
   const exposure = await assembleExposureFromTicket({
     ticket,
     appId: scope.appId,
@@ -150,13 +163,6 @@ async function sealAndRecord(
 
   try {
     await deps.exposureIngestSink.write(exposure);
-    await deps.exposureRedemptionClaims.record({
-      appId: scope.appId,
-      environmentId: scope.environmentId,
-      exposureId: item.exposureId,
-      ticketFingerprint: fingerprint,
-    });
-    return { ok: true };
   } catch (cause) {
     if (cause instanceof ExposureIngestSinkError) {
       deps.logger?.error("exposure_ingest_sink_failed", {
@@ -168,7 +174,7 @@ async function sealAndRecord(
       });
       return { ok: false, code: ingestFailureCode(cause.status) };
     }
-    deps.logger?.error("exposure_redemption_claim_failed", {
+    deps.logger?.error("exposure_ingest_sink_failed", {
       appId: scope.appId,
       environmentId: scope.environmentId,
       exposureId: item.exposureId,
@@ -176,6 +182,26 @@ async function sealAndRecord(
     });
     return { ok: false, code: "SERVICE_UNAVAILABLE" };
   }
+
+  try {
+    await deps.exposureRedemptionClaims.record({
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      exposureId: item.exposureId,
+      ticketFingerprint: fingerprint,
+    });
+  } catch (cause) {
+    deps.logger?.error("exposure_redemption_claim_failed", {
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      exposureId: item.exposureId,
+      causeSummary: cause instanceof Error ? cause.message : String(cause),
+    });
+    // Ingest already landed; reject retryable so the SDK re-flushes, and mark
+    // ingestCommitted so redeemOne still schedules the Assignment Store holdover.
+    return { ok: false, code: "SERVICE_UNAVAILABLE", ingestCommitted: true };
+  }
+  return { ok: true };
 }
 
 /** Only genuine caller-fault ingest statuses map to permanent VALIDATION_ERROR. */
