@@ -153,11 +153,13 @@ Targeting Rule CRUD is intentionally not exposed until there is a separate endpo
 
 ### Experiment Runs (Experiment sub-resource, per-Environment)
 
-| Tool        | Method | Path                                                                     | Note                                  |
-| ----------- | ------ | ------------------------------------------------------------------------ | ------------------------------------- |
-| `runs_list` | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs`        | —                                     |
-| `runs_get`  | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId` | —                                     |
-| `runs_end`  | POST   | `/apps/:appId/envs/:environmentId/runs/:runId/end`                       | Transitions Experiment Run to `ended` |
+| Tool                                   | Method | Path                                                                                                                  | Note                                             |
+| -------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `runs_list`                            | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs`                                                     | —                                                |
+| `runs_get`                             | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId`                                              | —                                                |
+| `runs_end`                             | POST   | `/apps/:appId/envs/:environmentId/runs/:runId/end`                                                                    | Standalone End; no conclusion or winner          |
+| `run_conclusions_create`               | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId/conclusions`                                  | Ends, records evidence, creates Approval Request |
+| `conclusion_promotion_requests_create` | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId/conclusions/:conclusionId/promotion-requests` | Re-proposes only after stale target drift        |
 
 ### Metrics
 
@@ -210,15 +212,16 @@ the credential their code holds.
 
 ### Analytics
 
-| Tool                                | Method | Path                                                                            |
-| ----------------------------------- | ------ | ------------------------------------------------------------------------------- |
-| `organization_usage_get`            | GET    | `/orgs/:orgId/usage`                                                            |
-| `experiment_results_get`            | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results`            |
-| `experiment_results_post`           | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results`            |
-| `web_analytics_overview_get`        | GET    | `/apps/:appId/envs/:environmentId/web-analytics/overview`                       |
-| `web_analytics_sessions_list`       | GET    | `/apps/:appId/envs/:environmentId/web-analytics/sessions`                       |
-| `web_analytics_session_events_list` | GET    | `/apps/:appId/envs/:environmentId/web-analytics/sessions/:sessionIdHash/events` |
-| `web_analytics_vitals_get`          | GET    | `/apps/:appId/envs/:environmentId/web-analytics/vitals`                         |
+| Tool                                   | Method | Path                                                                                          |
+| -------------------------------------- | ------ | --------------------------------------------------------------------------------------------- |
+| `organization_usage_get`               | GET    | `/orgs/:orgId/usage`                                                                          |
+| `experiment_results_get`               | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results`                          |
+| `experiment_results_post`              | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results`                          |
+| `experiment_decision_diagnostics_post` | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId/decision-diagnostics` |
+| `web_analytics_overview_get`           | GET    | `/apps/:appId/envs/:environmentId/web-analytics/overview`                                     |
+| `web_analytics_sessions_list`          | GET    | `/apps/:appId/envs/:environmentId/web-analytics/sessions`                                     |
+| `web_analytics_session_events_list`    | GET    | `/apps/:appId/envs/:environmentId/web-analytics/sessions/:sessionIdHash/events`               |
+| `web_analytics_vitals_get`             | GET    | `/apps/:appId/envs/:environmentId/web-analytics/vitals`                                       |
 
 ### Privacy data
 

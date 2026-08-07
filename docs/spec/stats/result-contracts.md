@@ -77,6 +77,27 @@ contract and `StatsEngine` signature live in [data-contracts.md](data-contracts.
 Dimension result shapes (`DimensionResult`) are defined in
 [dimension-slicing.md](dimension-slicing.md).
 
+## Analysis Results envelope
+
+The ready member of the control-plane Results read is:
+
+```ts
+type ReadyAnalysisResults = {
+  state: "ready";
+  run_id: string;
+  control_variant: string;
+  dataWatermark: string;
+  resultToken: `sha256:${string}`;
+  stats: StatsOutput;
+};
+```
+
+`dataWatermark` is the server-selected exclusive `ingest_ts` boundary used by the complete read.
+`resultToken` is SHA-256 over RFC 8785 canonical bytes of
+`{ appId, environmentId, experimentId, runId, runConfigHash, stats }`. It is evidence identity for
+Conclude, not caller authority. The `no_run` and `no_data` members have neither field because no
+decision-bearing result exists.
+
 ## Sources
 
 - [../../adr/0015-variance-delta-method-aggregate-to-randomization-unit.md](../../adr/0015-variance-delta-method-aggregate-to-randomization-unit.md)

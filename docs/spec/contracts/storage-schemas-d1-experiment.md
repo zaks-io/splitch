@@ -99,6 +99,57 @@ at Start.
 UNIQUE constraint: `(experiment_id, salt)` — salt unique per Experiment.
 UNIQUE constraint: `(experiment_id, run_number)` — run numbers are dense and unique per Experiment.
 
+### `experiment_conclusions`
+
+One immutable decision record per concluded Run. Standalone End creates no row. Every lookup and
+insert is first-filtered by `app_id` and co-scoped by Environment, Experiment, and Run.
+
+| Column                        | Type        | Constraints                                                         |
+| ----------------------------- | ----------- | ------------------------------------------------------------------- |
+| `id`                          | text        | PK; `con_` + 26-character ULID                                      |
+| `app_id`                      | text        | FK → apps, not null                                                 |
+| `environment_id`              | text        | FK → environments, not null                                         |
+| `experiment_id`               | text        | FK → experiments, not null                                          |
+| `run_id`                      | text        | FK → runs, not null; unique                                         |
+| `selected_variant`            | text        | not null; member of the Run's frozen Variant set                    |
+| `run_config_hash`             | text        | not null; immutable Run input identity                              |
+| `result_token`                | text        | not null; `sha256:` plus 64 lowercase hexadecimal digits            |
+| `data_watermark`              | timestamptz | not null; exclusive `ingest_ts` boundary                            |
+| `result_snapshot`             | text        | not null; complete server-owned `StatsOutput` JSON, never truncated |
+| `decision_failures`           | text        | not null; JSON `DecisionFailure[]`, always `[]` for a conclusion    |
+| `decision_checks`             | text        | not null; every applicable check plus exact inputs and verdict      |
+| `target_environment_id`       | text        | FK → environments, not null                                         |
+| `target_flag_id`              | text        | FK → flags, not null                                                |
+| `target_config_version`       | integer     | not null; version observed immediately before the conclusion commit |
+| `proposed_flag_configuration` | text        | not null; complete immutable proposed write projection              |
+| `reason`                      | text        | nullable; operator decision rationale, retained without truncation  |
+| `concluded_by`                | text        | not null; resolved WorkOS user ID or deleted-user tombstone         |
+| `concluded_via`               | text        | not null; resolved auth door                                        |
+| `concluded_at`                | timestamptz | not null; same timestamp as the Run's `ended_at`                    |
+| `idempotency_key`             | text        | not null                                                            |
+| `request_hash`                | text        | not null; SHA-256 of RFC 8785 canonical Conclude input              |
+
+UNIQUE constraint: `(app_id, concluded_by, idempotency_key)`. Exact hash retries return the same
+row. Different intent returns `IDEMPOTENCY_KEY_CONFLICT`. No UPDATE or standalone DELETE path exists.
+Only parent App deletion removes the row under the App privacy lifecycle.
+
+### `conclusion_approval_requests`
+
+Append-only linkage between one conclusion and its initial or stale-target replacement Approval
+Requests. It adds no Approval Request status or Review behavior.
+
+| Column                | Type        | Constraints                                |
+| --------------------- | ----------- | ------------------------------------------ |
+| `app_id`              | text        | FK → apps, not null                        |
+| `conclusion_id`       | text        | FK → experiment_conclusions, not null      |
+| `approval_request_id` | text        | FK → approval_requests, not null; unique   |
+| `ordinal`             | integer     | not null; 1-based and dense per conclusion |
+| `created_at`          | timestamptz | not null                                   |
+
+Composite PK: `(conclusion_id, ordinal)`. A new ordinal is allowed only after the preceding request
+is terminal `stale`. Failed application retries the existing pending request; decline creates no
+automatic replacement.
+
 ### `metrics`
 
 | Column                         | Type        | Constraints                                                                                              |

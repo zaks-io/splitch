@@ -13,6 +13,7 @@ capability Workers. Shared contracts come from `@splitch/contracts`; skins stay 
 | [auth-doors.md](auth-doors.md)                                             | How a principal authenticates: the three identity doors (ID-JAG, anonymous/pre-claim, device flow), shared-preview `client_credentials` smoke grant, claim ceremony, `interaction_required` error shape, provisional demo reaping |
 | [access-control-matrix.md](access-control-matrix.md)                       | Scopes + `app:{app_id}:{role}` format, control-plane token claims/validation, trusted-IdP D1 table, Worker responsibility split, revocation                                                                                       |
 | [run-state-machine.md](run-state-machine.md)                               | Run states (`draft → running → ended`), which endpoint triggers each transition, frozen vs mutable fields, Run D1 record shape, error codes for Run invariants                                                                    |
+| [conclusion-and-winner-promotion.md](conclusion-and-winner-promotion.md)   | Ordered Conclude, End, Approval Request, and winner Promotion semantics; stale-result protection, decision failures, idempotency, and immutable evidence                                                                          |
 | [control-plane-endpoint-inventory.md](control-plane-endpoint-inventory.md) | Thin index of the full HTTP endpoint inventory + shared conventions (error shape, pagination); links to the per-resource files below                                                                                              |
 | [endpoints-org-app.md](endpoints-org-app.md)                               | Organization + member management; App CRUD; **Environment CRUD** — request/response shapes                                                                                                                                        |
 | [endpoints-flag-segment.md](endpoints-flag-segment.md)                     | Flag definition (App-level), Flag Configuration + **Promotion** (per-Env), Variant, Targeting Rule, Segment CRUD — request/response shapes                                                                                        |
@@ -34,6 +35,8 @@ capability Workers. Shared contracts come from `@splitch/contracts`; skins stay 
 - The Environment-level surface adds three operations: **Start** (Experiment Run), **Promote** (Flag
   Configuration across Environments, ADR-0028), and **Confirm** (the Environment Policy gate, ADR-0029).
 - Assignment edits accumulate on the draft; Start creates the single sample reset.
+- Conclude Ends the selected Run and records immutable evidence before any winner Promotion; Approval
+  Request application is a later durable commit and never rolls End back.
 - Activation Metric is assignment-affecting and frozen in Run at Start.
 - First Start opens the first Run; `draft` has no live Run.
 - `live_run_id` is explicit KV state (key `live_run:{app_id}:{environment_id}:{experiment_id}`), not
