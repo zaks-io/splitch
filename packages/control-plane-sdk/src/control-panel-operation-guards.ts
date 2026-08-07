@@ -44,6 +44,16 @@ const APPROVAL_OPERATION_IDS = ["approval_request_get", "approval_request_review
 
 const METRIC_RESOURCE_OPERATION_IDS = ["metrics_get", "metrics_update", "metrics_delete"] as const;
 
+const ORG_MEMBER_COLLECTION_OPERATION_IDS = [
+  "organization_members_list",
+  "organization_members_add",
+] as const;
+
+const ORG_MEMBER_RESOURCE_OPERATION_IDS = [
+  "organization_members_update",
+  "organization_members_remove",
+] as const;
+
 type ClaimGuard = (value: Record<string, unknown>) => boolean;
 
 /**
@@ -64,6 +74,8 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ...family(APPROVAL_OPERATION_IDS, isApprovalOperation),
   ...family(SCOPED_OPERATION_IDS, isAppCollectionOperation),
   ...family(METRIC_RESOURCE_OPERATION_IDS, isMetricResourceOperation),
+  ...family(ORG_MEMBER_COLLECTION_OPERATION_IDS, (value) => isResourceOperation(value, "orgId")),
+  ...family(ORG_MEMBER_RESOURCE_OPERATION_IDS, isOrgMemberResourceOperation),
 ]);
 
 function family(ids: readonly string[], guard: ClaimGuard): [string, ClaimGuard][] {
@@ -75,7 +87,7 @@ export function isControlPanelOperation(value: unknown): value is ControlPanelOp
   return CLAIM_GUARDS.get(value.id)?.(value) ?? false;
 }
 
-/** Operations named by exactly one resource id: apps_create (Org) and the App rollup. */
+/** Operations named by exactly one resource id: the Org-scoped ones and the App rollup. */
 function isResourceOperation(value: Record<string, unknown>, key: string): boolean {
   return hasKeys(value, ["id", key]) && isNonEmptyString(value[key]);
 }
@@ -119,6 +131,14 @@ function isMetricResourceOperation(value: Record<string, unknown>): boolean {
     hasKeys(value, ["id", "appId", "environmentId", "metricId"]) &&
     hasAppEnvironment(value) &&
     isNonEmptyString(value.metricId)
+  );
+}
+
+function isOrgMemberResourceOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "orgId", "userId"]) &&
+    isNonEmptyString(value.orgId) &&
+    isNonEmptyString(value.userId)
   );
 }
 

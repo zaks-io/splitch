@@ -14,6 +14,7 @@ import { Route as HealthRouteImport } from './routes/health'
 import { Route as KitchenSinkRouteImport } from './routes/kitchen-sink'
 import { Route as OrgSlugIndexRouteImport } from './routes/$orgSlug.index'
 import { Route as OrgSlugClaimRouteImport } from './routes/$orgSlug.claim'
+import { Route as OrgSlugMembersRouteImport } from './routes/$orgSlug.members'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthLogoutRouteImport } from './routes/auth.logout'
@@ -61,6 +62,11 @@ const OrgSlugIndexRoute = OrgSlugIndexRouteImport.update({
 const OrgSlugClaimRoute = OrgSlugClaimRouteImport.update({
   id: '/$orgSlug/claim',
   path: '/$orgSlug/claim',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrgSlugMembersRoute = OrgSlugMembersRouteImport.update({
+  id: '/$orgSlug/members',
+  path: '/$orgSlug/members',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -204,6 +210,7 @@ export interface FileRoutesByFullPath {
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
+  '/$orgSlug/members': typeof OrgSlugMembersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
@@ -234,6 +241,7 @@ export interface FileRoutesByTo {
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
+  '/$orgSlug/members': typeof OrgSlugMembersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
@@ -261,6 +269,7 @@ export interface FileRoutesById {
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
+  '/$orgSlug/members': typeof OrgSlugMembersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
@@ -293,6 +302,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/kitchen-sink'
     | '/$orgSlug/claim'
+    | '/$orgSlug/members'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/logout'
@@ -323,6 +333,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/kitchen-sink'
     | '/$orgSlug/claim'
+    | '/$orgSlug/members'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/logout'
@@ -349,6 +360,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/kitchen-sink'
     | '/$orgSlug/claim'
+    | '/$orgSlug/members'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/logout'
@@ -380,6 +392,7 @@ export interface RootRouteChildren {
   HealthRoute: typeof HealthRoute
   KitchenSinkRoute: typeof KitchenSinkRoute
   OrgSlugClaimRoute: typeof OrgSlugClaimRoute
+  OrgSlugMembersRoute: typeof OrgSlugMembersRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthLoginRoute: typeof AuthLoginRoute
   AuthLogoutRoute: typeof AuthLogoutRoute
@@ -423,6 +436,13 @@ declare module '@tanstack/react-router' {
       path: '/$orgSlug/claim'
       fullPath: '/$orgSlug/claim'
       preLoaderRoute: typeof OrgSlugClaimRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$orgSlug/members': {
+      id: '/$orgSlug/members'
+      path: '/$orgSlug/members'
+      fullPath: '/$orgSlug/members'
+      preLoaderRoute: typeof OrgSlugMembersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/callback': {
@@ -687,6 +707,7 @@ const rootRouteChildren: RootRouteChildren = {
   HealthRoute: HealthRoute,
   KitchenSinkRoute: KitchenSinkRoute,
   OrgSlugClaimRoute: OrgSlugClaimRoute,
+  OrgSlugMembersRoute: OrgSlugMembersRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   AuthLoginRoute: AuthLoginRoute,
   AuthLogoutRoute: AuthLogoutRoute,

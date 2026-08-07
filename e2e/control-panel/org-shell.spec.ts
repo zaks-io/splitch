@@ -45,7 +45,14 @@ test.describe("Org shell and App list", () => {
     const hrefs = await page
       .locator("a[href]")
       .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href") ?? ""));
-    expect(hrefs.filter((href) => /^\/acme-labs\/[^/?#]+$/.test(href))).toEqual([]);
+    // Matched against the App slugs actually on screen rather than against every
+    // one-segment path, so an Organization-level section (Members) is not read as
+    // a bare App link.
+    const appSlugs = await page
+      .locator("[data-app-card]")
+      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-app-card") ?? ""));
+    expect(appSlugs).toContain("checkout-api");
+    expect(hrefs.filter((href) => appSlugs.includes(href.replace("/acme-labs/", "")))).toEqual([]);
 
     await page.locator("a[href='/acme-labs/checkout-api/prod']").click();
     await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute(

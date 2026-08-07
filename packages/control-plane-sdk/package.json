@@ -29,6 +29,10 @@
       "types": "./src/panel-metrics.ts",
       "default": "./src/panel-metrics.ts"
     },
+    "./panel-org-members": {
+      "types": "./src/panel-org-members.ts",
+      "default": "./src/panel-org-members.ts"
+    },
     "./panel-overview": {
       "types": "./src/panel-overview.ts",
       "default": "./src/panel-overview.ts"

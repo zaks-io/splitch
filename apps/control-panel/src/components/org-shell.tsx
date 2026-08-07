@@ -1,5 +1,7 @@
+import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { ShellMenu, ShellMenuLink, ShellMenuSignOut } from "#components/shell-menu";
+import { orgSectionRegistry } from "#lib/org-shell-navigation";
 import type { OrgMembership } from "#lib/session";
 import { useHydrated } from "#lib/use-hydrated";
 
@@ -67,6 +69,27 @@ export function OrgShell({
           </ShellMenu>
         </div>
       </header>
+
+      <nav
+        aria-label="Organization sections"
+        className="flex flex-wrap gap-1 border-border border-b bg-muted/20 px-4 py-2 lg:px-6"
+      >
+        {orgSectionRegistry.map((section) => (
+          <Link
+            activeOptions={{ exact: section.exact }}
+            activeProps={{
+              className:
+                "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground",
+            }}
+            className="flex min-h-9 items-center rounded-md px-3 py-1.5 font-medium text-muted-foreground text-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+            key={section.label}
+            params={{ orgSlug }}
+            to={section.to}
+          >
+            {section.label}
+          </Link>
+        ))}
+      </nav>
 
       <main className="min-w-0 bg-background p-5 sm:p-7">{children}</main>
     </div>

@@ -182,14 +182,16 @@ async function resolvePanelPrincipal(
   ) {
     return null;
   }
-  if (operation.id === "apps_create") {
+  // Org-scoped operations (App creation, Org membership) name an Organization and
+  // no App, so there is no App membership to derive authority from.
+  if ("orgId" in operation) {
     return {
       ok: true as const,
       principal: {
         kind: "control-plane-token" as const,
         id: delegation.actorId,
         // This ceiling scope binds the delegated path; the handler still rechecks
-        // the actor's live owner/admin role in D1 before creating the App.
+        // the actor's live Org role in D1 before it acts.
         scopes: [`org:${operation.orgId}:owner`],
         orgId: operation.orgId,
         appId: null,
@@ -253,18 +255,18 @@ async function resolveBoundedPanelSessionPrincipal(
   };
 }
 
+/**
+ * Selected on the App id rather than by excluding a list of ids, so a new
+ * operation that names no App cannot land here by default and be co-scoped
+ * against an `operation.appId` it does not have.
+ */
+type AppScopedPanelOperation = Extract<
+  NonNullable<ReturnType<typeof parseControlPanelBindingOperation>>,
+  { appId: string }
+>;
+
 async function resolvePanelResourcePrincipal(
-  operation: Exclude<
-    ReturnType<typeof parseControlPanelBindingOperation>,
-    {
-      id:
-        | "apps_create"
-        | "experiments_detail"
-        | "experiments_list"
-        | "experiments_results"
-        | "organizations_create";
-    } | null
-  >,
+  operation: AppScopedPanelOperation,
   actorId: string,
   panelAccess?: PanelSessionAccess,
 ) {
