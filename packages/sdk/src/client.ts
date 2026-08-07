@@ -1,6 +1,8 @@
 import { SplitchSdkError } from "./errors";
 import type { EvaluateContext, EvaluateDeps, EvaluationContext, Logger } from "./evaluate";
 import { runEvaluate, runPeekVariant, runVerify } from "./evaluate";
+import type { PrecomputedEvaluations } from "./evaluate-all";
+import { runEvaluateAll } from "./evaluate-all";
 import { createFetchTransport } from "./fetch-transport";
 import type { VariantValue } from "./generated/contract-surface.js";
 import type { SdkResolutionDetails } from "./resolution";
@@ -73,6 +75,30 @@ export interface SplitchClient {
    * as `evaluateDetails`, safe to call repeatedly. Client Key or API Key.
    */
   verify(flagKey: string, context: EvaluateContext): Promise<SdkResolutionDetails>;
+  /**
+   * Resolve every Flag in the credential's App and Environment for one
+   * Evaluation Context in a single request, returning the Precomputed
+   * Evaluations plus their `ETag`. Fires no Exposure and touches no seen-set:
+   * each fresh live-Run assignment carries an Exposure Ticket that a client
+   * redeems on first read instead.
+   *
+   * Serialize the result as-is to hydrate a browser client: it is that client's
+   * `bootstrap` input, unmodified. Client Key or API Key; disclosure is
+   * identical on both, and the payload carries no rule logic.
+   *
+   * It does echo the Evaluation Context it was resolved for, `targetingKey` and
+   * every attribute included, because the browser client deep-equality-checks
+   * that context. Serializing it into a page publishes those attributes, so
+   * pass only attributes you would publish.
+   *
+   * Throws `SplitchSdkError` (fields `code`, `status`) on any failure: there is
+   * no partial payload and no default one.
+   *
+   * @example
+   * const precomputed = await splitch.evaluateAll({ targetingKey: user.id });
+   * html.embed(JSON.stringify(precomputed));
+   */
+  evaluateAll(context: EvaluateContext): Promise<PrecomputedEvaluations>;
 }
 
 const DEFAULT_ENDPOINT = "https://edge.splitch.dev";
@@ -146,6 +172,9 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
     },
     verify(flagKey, context) {
       return runVerify(deps, flagKey, context);
+    },
+    evaluateAll(context) {
+      return runEvaluateAll(deps, context);
     },
   };
 }

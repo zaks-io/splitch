@@ -25,13 +25,18 @@ export interface EvaluationContext {
   readonly idempotencyKey: string;
 }
 
-/** Context for the non-Exposure calls `peekVariant` and `verify`. */
+/** Context for the non-Exposure calls `peekVariant`, `verify`, and `evaluateAll`. */
 export interface EvaluateContext {
   readonly targetingKey: string;
   readonly idType?: string;
   readonly attributes?: Readonly<Record<string, AttributeValue>>;
   readonly defaultValue?: VariantValue;
-  /** Optional because peek and verify do not write billable usage. */
+  /**
+   * Optional because none of these calls records an Exposure, so there is no
+   * Exposure to deduplicate. `evaluateAll` does write billable usage and needs a
+   * key regardless; it mints one per fetch when you omit it. Pass your own to
+   * make an uncertain `evaluateAll` free to retry.
+   */
   readonly idempotencyKey?: string;
 }
 
@@ -53,7 +58,7 @@ export interface EvaluateDeps {
   readonly now: () => number;
 }
 
-const DEFAULT_ID_TYPE = "user";
+export const DEFAULT_ID_TYPE = "user";
 // The Default Variant value when the caller supplies none. `false` is the safe
 // off-state for the canonical boolean flag.
 const FALLBACK_DEFAULT_VALUE: VariantValue = false;
@@ -61,7 +66,7 @@ const FALLBACK_DEFAULT_VALUE: VariantValue = false;
 const SERVER_ERROR_REMEDIATION =
   "Correct the request or credential described by the error, then retry the operation";
 
-function sdkErrorForFailure(operation: string, result: TransportFailure): SplitchSdkError {
+export function sdkErrorForFailure(operation: string, result: TransportFailure): SplitchSdkError {
   const code = result.errorCode ?? errorCodeForStatus(result.status);
   return new SplitchSdkError({
     code,

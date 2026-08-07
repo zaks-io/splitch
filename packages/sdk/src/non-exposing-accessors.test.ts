@@ -15,7 +15,10 @@ type Equal<A, B> =
 type Assert<T extends true> = T;
 
 const assertClientSurface: Assert<
-  Equal<keyof SplitchClient, "evaluate" | "evaluateDetails" | "peekVariant" | "verify">
+  Equal<
+    keyof SplitchClient,
+    "evaluate" | "evaluateDetails" | "peekVariant" | "verify" | "evaluateAll"
+  >
 > = true;
 type PublicModule = typeof import("./index");
 const assertModuleSurface: Assert<
@@ -152,7 +155,7 @@ describe("peekVariant: fail-loud errors without Default Variant fallback", () =>
 });
 
 describe("public SDK surface guard", () => {
-  it("exports the client, actionable error contract, and four client accessors", async () => {
+  it("exports the client, actionable error contract, and five client accessors", async () => {
     const publicSdk = await import("./index");
     const fake = new FakeTransport([]);
     const client = createSplitchClient({
@@ -167,6 +170,7 @@ describe("public SDK surface guard", () => {
         "SplitchSdkError",
         "createSplitchClient",
         "evaluate",
+        "evaluateAll",
         "evaluateDetails",
         "formatSdkErrorMessage",
         "peekVariant",
@@ -179,7 +183,7 @@ describe("public SDK surface guard", () => {
     expect(assertClientSurface).toBe(true);
     expect(assertModuleSurface).toBe(true);
 
-    for (const deferred of ["evaluateAll", "track", "setProvider", "hooks"]) {
+    for (const deferred of ["track", "setProvider", "hooks"]) {
       expect(deferred in publicSdk).toBe(false);
       expect(deferred in client).toBe(false);
     }

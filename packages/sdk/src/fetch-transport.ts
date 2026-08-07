@@ -2,10 +2,13 @@ import { SplitchSdkError } from "./errors";
 import {
   DataPlaneEvaluateResponseSchema,
   ErrorCodeSchema,
+  EvaluateAllResponseSchema,
   PeekEvaluateResponseSchema,
   ResolutionDetailsSchema,
 } from "./generated/contract-surface.js";
 import type {
+  EvaluateAllTransportRequest,
+  EvaluateAllTransportResult,
   Transport,
   TransportFailure,
   TransportRequest,
@@ -21,6 +24,10 @@ const RUN_ID_HEADER = "x-run-id";
 // value). It rides a header rather than the body because published SDKs parse
 // that body strictly and would reject an added key; absent means no arm matched.
 const VARIANT_NAME_HEADER = "x-variant-name";
+// The strong validator over the Precomputed Evaluations body. The edge marks it
+// CORS-readable (`Access-Control-Expose-Headers`) so a browser client can
+// revalidate with it.
+const ETAG_HEADER = "etag";
 
 export interface FetchTransportConfig {
   readonly credential: string;
@@ -97,6 +104,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
     evaluate: new URL("/api/sdk/evaluate", config.endpoint),
     peek: new URL("/api/sdk/peek", config.endpoint),
     verify: new URL("/api/sdk/verify", config.endpoint),
+    evaluateAll: new URL("/api/sdk/evaluate-all", config.endpoint),
     telemetry: new URL("/api/sdk/evaluation-telemetry", config.endpoint),
   };
 
@@ -117,6 +125,29 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
       },
       body: JSON.stringify({
         flagKey: request.flagKey,
+        targetingKey: request.targetingKey,
+        idType: request.idType,
+        attributes: request.attributes,
+      }),
+      signal,
+    });
+  }
+
+  // Separate from `post`: the bulk route takes no `flagKey`, and its
+  // Idempotency-Key is required rather than caller-optional.
+  async function postEvaluateAll(
+    request: EvaluateAllTransportRequest,
+    signal: AbortSignal,
+  ): Promise<Response> {
+    return config.fetchImpl(urls.evaluateAll, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${config.credential}`,
+        "content-type": "application/json",
+        "idempotency-key": request.idempotencyKey,
+        "x-splitch-sdk-runtime": "javascript",
+      },
+      body: JSON.stringify({
         targetingKey: request.targetingKey,
         idType: request.idType,
         attributes: request.attributes,
@@ -166,6 +197,15 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
         );
       } catch (error) {
         return { ...classifyCaughtError(error), details: null };
+      }
+    },
+    async evaluateAll(request: EvaluateAllTransportRequest): Promise<EvaluateAllTransportResult> {
+      try {
+        return await withTimeout(async (signal) =>
+          readEvaluateAllResponse(await postEvaluateAll(request, signal)),
+        );
+      } catch (error) {
+        return { ...classifyCaughtError(error), evaluations: null, etag: null };
       }
     },
     async recordCachedEvaluation(event) {
@@ -242,6 +282,25 @@ async function readVerifyResponse(response: Response): Promise<VerifyTransportRe
     };
   } catch (error) {
     return { ...classifyBodyReadError(error), details: null };
+  }
+}
+
+async function readEvaluateAllResponse(response: Response): Promise<EvaluateAllTransportResult> {
+  if (!response.ok) {
+    return { ...(await readFailure(response)), evaluations: null, etag: null };
+  }
+  try {
+    const body = EvaluateAllResponseSchema.parse(await response.json());
+    const etag = response.headers.get(ETAG_HEADER);
+    if (etag === null || etag.length === 0) {
+      // The tag is what a bootstrapped client revalidates with, so a body
+      // without one is an incomplete payload rather than a payload with an
+      // absent optional. Fail loud instead of handing back a fabricated tag.
+      throw new Error("evaluate-all response is missing its ETag header");
+    }
+    return { status: response.status, evaluations: body.evaluations, etag };
+  } catch (error) {
+    return { ...classifyBodyReadError(error), evaluations: null, etag: null };
   }
 }
 

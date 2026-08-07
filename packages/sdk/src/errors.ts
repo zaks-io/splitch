@@ -6,6 +6,8 @@ export const sdkClientErrorCodes = [
   "SDK_SEEN_SET_MAX_SIZE_INVALID",
   "SDK_SEEN_SET_TTL_INVALID",
   "SDK_CACHED_TELEMETRY_FAILED",
+  /** `crypto.randomUUID` is missing, so the SDK cannot mint a replay identity. */
+  "SDK_IDEMPOTENCY_KEY_UNAVAILABLE",
   /** Local throw before/during fetch (network down, illegal invocation, etc.). */
   "SDK_TRANSPORT_NETWORK",
   /** Per-call timeout / AbortSignal abort — the request did not complete in time. */

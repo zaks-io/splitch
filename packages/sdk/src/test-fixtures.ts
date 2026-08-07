@@ -2,6 +2,8 @@ import type { Logger } from "./evaluate";
 import { createFetchTransport } from "./fetch-transport";
 import type {
   CachedEvaluationTelemetry,
+  EvaluateAllTransportRequest,
+  EvaluateAllTransportResult,
   Transport,
   TransportRequest,
   TransportResult,
@@ -48,18 +50,25 @@ export class FakeTransport implements Transport {
   readonly calls: TransportRequest[] = [];
   readonly peekCalls: TransportRequest[] = [];
   readonly verifyCalls: TransportRequest[] = [];
+  readonly evaluateAllCalls: EvaluateAllTransportRequest[] = [];
   recordCachedEvaluation?: (event: CachedEvaluationTelemetry) => Promise<void>;
   private readonly queue: TransportResult[];
   private readonly peekQueue: TransportResult[];
   private readonly verifyQueue: VerifyTransportResult[];
+  private readonly evaluateAllQueue: EvaluateAllTransportResult[];
 
   constructor(
     results: TransportResult[],
-    queues: { peek?: TransportResult[]; verify?: VerifyTransportResult[] } = {},
+    queues: {
+      peek?: TransportResult[];
+      verify?: VerifyTransportResult[];
+      evaluateAll?: EvaluateAllTransportResult[];
+    } = {},
   ) {
     this.queue = [...results];
     this.peekQueue = [...(queues.peek ?? [])];
     this.verifyQueue = [...(queues.verify ?? [])];
+    this.evaluateAllQueue = [...(queues.evaluateAll ?? [])];
   }
 
   evaluate(request: TransportRequest): Promise<TransportResult> {
@@ -86,6 +95,17 @@ export class FakeTransport implements Transport {
     const next = this.verifyQueue.shift();
     if (next === undefined) {
       throw new Error(`FakeTransport: unexpected verify call #${this.verifyCalls.length}`);
+    }
+    return Promise.resolve(next);
+  }
+
+  evaluateAll(request: EvaluateAllTransportRequest): Promise<EvaluateAllTransportResult> {
+    this.evaluateAllCalls.push(request);
+    const next = this.evaluateAllQueue.shift();
+    if (next === undefined) {
+      throw new Error(
+        `FakeTransport: unexpected evaluateAll call #${this.evaluateAllCalls.length}`,
+      );
     }
     return Promise.resolve(next);
   }
@@ -151,4 +171,19 @@ export function verifyHttpError(
   errorMessage?: string,
 ): VerifyTransportResult {
   return { status, details: null, errorCode, errorMessage };
+}
+
+export function evaluateAllOk(
+  evaluations: NonNullable<EvaluateAllTransportResult["evaluations"]>,
+  etag = '"payload-1"',
+): EvaluateAllTransportResult {
+  return { status: 200, evaluations, etag };
+}
+
+export function evaluateAllHttpError(
+  status: number,
+  errorCode?: EvaluateAllTransportResult["errorCode"],
+  errorMessage?: string,
+): EvaluateAllTransportResult {
+  return { status, evaluations: null, etag: null, errorCode, errorMessage };
 }

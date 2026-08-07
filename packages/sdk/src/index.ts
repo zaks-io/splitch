@@ -11,7 +11,13 @@ export {
 } from "./errors";
 export type { EvaluateContext, EvaluationContext, Logger } from "./evaluate";
 export type {
+  PrecomputedEvaluations,
+  PrecomputedEvaluationsContext,
+} from "./evaluate-all";
+export type {
   ErrorCode,
+  EvaluateAllEntry,
+  EvaluateAllReason,
   ResolutionReason,
   VariantValue,
 } from "./generated/contract-surface.js";

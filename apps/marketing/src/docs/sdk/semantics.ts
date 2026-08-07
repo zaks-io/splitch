@@ -2,7 +2,7 @@ import type { SdkTopic } from "./types";
 
 export const methodsTopic: SdkTopic = {
   slug: "methods",
-  title: "The four methods",
+  title: "The five methods",
   summary: "Which calls fire an Exposure, and which credential each needs.",
   blocks: [
     {
@@ -17,6 +17,7 @@ export const methodsTopic: SdkTopic = {
         ["`evaluateDetails`", "full `ResolutionDetails`", "yes", "Client Key only"],
         ["`peekVariant`", "the Variant value", "no", "API Key only"],
         ["`verify`", "full `ResolutionDetails`", "no", "Client Key or API Key"],
+        ["`evaluateAll`", "every Flag, in one round trip", "no", "Client Key or API Key"],
       ],
     },
     {
@@ -25,6 +26,7 @@ export const methodsTopic: SdkTopic = {
         "`evaluate` or `evaluateDetails` on the real user path. These are the calls that belong in production request handling; reach for `evaluateDetails` when the handler needs `ResolutionDetails`.",
         "`peekVariant` to inspect a resolution without polluting experiment data: admin screens, support tooling, debugging.",
         "`verify` to confirm setup end to end. Same shape as `evaluateDetails`, no Exposure, safe to run repeatedly in CI.",
+        "`evaluateAll` to render a whole page from one request. Each fresh assignment under a live Run carries an Exposure Ticket that a client redeems when it actually reads that Flag, so a page holding 20 Flags and showing 3 records 3 Exposures.",
       ],
     },
     { kind: "heading", text: "Reading ResolutionDetails" },

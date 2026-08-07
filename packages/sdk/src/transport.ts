@@ -1,5 +1,9 @@
 import type { SplitchSdkErrorCode } from "./errors";
-import type { ResolutionDetails, VariantValue } from "./generated/contract-surface.js";
+import type {
+  EvaluateAllEntry,
+  ResolutionDetails,
+  VariantValue,
+} from "./generated/contract-surface.js";
 
 /**
  * Allowed evaluation-attribute values: scalars or arrays, never a nested
@@ -65,6 +69,31 @@ export interface VerifyTransportResult extends TransportFailure {
   readonly details: ResolutionDetails | null;
 }
 
+/**
+ * Request for the bulk Precomputed Evaluations fetch. It carries no `flagKey`:
+ * the Flag set is every Flag in the credential's App and Environment, so there
+ * is nothing per-Flag to name. `idempotencyKey` is required rather than optional
+ * because the route bills N Evaluations for N resolved Flags and uses the key as
+ * the billing replay identity (ADR-0033).
+ */
+export interface EvaluateAllTransportRequest {
+  readonly targetingKey: string;
+  readonly idType: string;
+  readonly attributes: Readonly<Record<string, AttributeValue>>;
+  readonly idempotencyKey: string;
+}
+
+export interface EvaluateAllTransportResult extends TransportFailure {
+  /** The wire body's `evaluations` map on a parsed 200 response, else null. */
+  readonly evaluations: Readonly<Record<string, EvaluateAllEntry>> | null;
+  /**
+   * The strong validator from the `ETag` response header, verbatim (quotes
+   * included). Null on any failure; a 200 that omits it is a failure, not a
+   * payload with one field missing.
+   */
+  readonly etag: string | null;
+}
+
 export interface CachedEvaluationTelemetry {
   readonly flagKey: string;
   readonly idempotencyKey: string;
@@ -74,6 +103,7 @@ export interface Transport {
   evaluate(request: TransportRequest): Promise<TransportResult>;
   peek(request: TransportRequest): Promise<TransportResult>;
   verify(request: TransportRequest): Promise<VerifyTransportResult>;
+  evaluateAll(request: EvaluateAllTransportRequest): Promise<EvaluateAllTransportResult>;
   /** Best-effort non-billable telemetry for a local cache result. */
   recordCachedEvaluation?(event: CachedEvaluationTelemetry): Promise<void>;
 }

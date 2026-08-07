@@ -31,6 +31,12 @@ export const sdkErrorDocs = {
     fix: "This concerns telemetry for a replayed local resolution, not the resolution itself: the value your code received is unaffected. Check network reachability to the endpoint if it repeats. It is reported rather than dropped so a silent telemetry gap never looks like an absence of traffic.",
     related: ["SERVICE_UNAVAILABLE", "SDK_TRANSPORT_NETWORK"],
   },
+  SDK_IDEMPOTENCY_KEY_UNAVAILABLE: {
+    cause:
+      "`evaluateAll` was called without an `idempotencyKey` in a runtime where `crypto.randomUUID` does not exist. It is secure-context-only, so a page served over plain `http://` reaches this.",
+    fix: "Pass your own `idempotencyKey` on the context, or serve the page from a secure context (`https://` or `localhost`). The SDK refuses to substitute a weaker random source: this key is the batch's billing replay identity, and a colliding one would let a repeated fetch be charged twice.",
+    related: ["SDK_RETRIES_INVALID"],
+  },
   SDK_TRANSPORT_NETWORK: {
     cause:
       "The SDK's transport threw before receiving an HTTP response — for example a network failure, a cancelled request that was not a timeout, or a local `fetch` misconfiguration such as an unbound `Window.fetch`.",
@@ -39,9 +45,9 @@ export const sdkErrorDocs = {
   },
   SDK_TRANSPORT_TIMEOUT: {
     cause:
-      "The per-call request timeout elapsed (or the request was aborted) before a response arrived.",
-    fix: "Increase `timeoutMs` if cold starts are expected, or check connectivity. The underlying abort is on `logger.error`'s `cause`. This is not an HTTP 503 from the server.",
-    related: ["SDK_TRANSPORT_NETWORK", "SERVICE_UNAVAILABLE"],
+      "The per-call request timeout elapsed, or the request was aborted. The timeout covers the whole call, so it can fire before any response arrives or while the response body is still streaming.",
+    fix: "Increase `timeoutMs` if cold starts are expected, or check connectivity. The underlying abort is on `logger.error`'s `cause`. An abort mid-body is reported here rather than as `SDK_TRANSPORT_PARSE`, because the body was truncated, not malformed. This is not an HTTP 503 from the server.",
+    related: ["SDK_TRANSPORT_NETWORK", "SDK_TRANSPORT_PARSE", "SERVICE_UNAVAILABLE"],
   },
   SDK_TRANSPORT_PARSE: {
     cause:
