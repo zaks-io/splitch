@@ -226,9 +226,9 @@ export async function panelExperimentResults(
   // immutable control_variant_id resolved inside the Variant set that same Run
   // froze (SPL-184, ADR-0002). Reading the Experiment's default Variant here
   // instead would relabel a historical Run's arms whenever somebody edits it.
-  // The Analysis envelope carries its own control_variant, which upstream still
-  // resolves at read time. It cannot relabel the frozen Run, but disagreement is
-  // an integrity failure because the statistics may use a different baseline.
+  // The Analysis envelope carries its own control_variant from the Run Snapshot
+  // written at Start (ADR-0047). It cannot relabel the frozen Run, but disagreement
+  // is an integrity failure because the statistics may use a different Control.
   const control = resolveAnalysisControlIntegrity(
     resolveFrozenControlIdentity(run.controlVariantId, run.variantSet),
     results.control_variant,

@@ -88,6 +88,8 @@ export function controlDisagreementStats(): StatsOutput {
         p_value: 1,
         is_significant: false,
         in_bh_family: false,
+        exploratory: true,
+        decision_valid: false,
       },
       { ...frozenControlResult, variant: "control" },
     ],

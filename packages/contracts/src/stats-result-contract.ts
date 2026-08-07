@@ -184,7 +184,7 @@ const AnalysisResultsMissingInputSchema = z.enum(["exposures", "metric_events"])
  * the displayed Control identity from immutable `runs.control_variant_id`
  * inside that Run's own frozen Variant set, then blocks the decision when that
  * D1 identity and the Analysis Run Snapshot disagree
- * (`resolveFrozenControlIdentity`, ADR-0002, ADR-0003).
+ * (`resolveAnalysisControlIntegrity`, ADR-0002, ADR-0003, ADR-0047).
  */
 export const AnalysisResultsEnvelopeSchema = z.discriminatedUnion("state", [
   z

@@ -36,10 +36,9 @@ export const PanelExperimentResultsOutputSchema = z.discriminatedUnion("state", 
       runNumber: z.number().int().min(1),
       runStatus: z.enum(["running", "ended"]),
       /**
-       * The frozen Run Control used to label every lift in `stats`.
+       * The frozen Run Control identity and its integrity against the Run Snapshot.
        * `unresolvable` means no baseline can be identified; `disagreement` keeps
-       * the frozen baseline visible while naming the different Analysis Control
-       * and blocking the decision.
+       * the frozen Control identity visible beside the arm the Analysis measured against.
        */
       control: FrozenControlIdentitySchema,
       stats: StatsOutputSchema,

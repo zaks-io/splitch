@@ -13,30 +13,31 @@ export function baselineVariant(control: FrozenControlIdentity): string | null {
   return control.state === "disagreement" ? control.analysisVariant : control.variant;
 }
 
-export function baselineLabel(control: FrozenControlIdentity): string {
+function baselineLabel(control: FrozenControlIdentity): string {
   return control.state === "unresolvable" ? "an unidentified Control" : control.variant;
 }
 
 export function ExperimentResultsControlIntegrity({ control }: { control: FrozenControlIdentity }) {
   if (control.state === "frozen") return null;
   if (control.state === "disagreement") {
+    const frozenControl = baselineLabel(control);
+    const measurementAnchor = baselineVariant(control);
+    if (measurementAnchor === null)
+      throw new Error("Analysis Control disagreement has no baseline");
     return (
       <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-5" role="alert">
         <h3 className="font-semibold text-base text-foreground">
           Analysis Control disagrees with the Run
         </h3>
         <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
-          This Run froze{" "}
-          <code className="font-mono text-foreground text-xs">{control.variant}</code> as its
-          Control, but Tinybird returned{" "}
-          <code className="font-mono text-foreground text-xs">{control.analysisVariant}</code> in{" "}
-          <code className="font-mono text-foreground text-xs">control_variant</code> for this
-          Results read.
+          This Run&apos;s frozen Control is{" "}
+          <code className="font-mono text-foreground text-xs">{frozenControl}</code>, but the Run
+          Snapshot measured lift against{" "}
+          <code className="font-mono text-foreground text-xs">{measurementAnchor}</code>. No ship
+          decision can be made until they agree.
         </p>
         <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
-          The numbers below remain visible for diagnosis and the frozen Run Control remains the
-          displayed baseline. The statistics may have used a different Control, so conclude and
-          Promote are blocked until the disagreement is corrected.
+          The numbers below remain visible for diagnosis.
         </p>
       </div>
     );

@@ -80,14 +80,26 @@ describe("ExperimentResults with an Analysis Control disagreement", () => {
     );
   }
 
-  it("names both Controls and keeps the frozen Run Control as the displayed baseline", () => {
+  it("names both Controls while every measurement anchor names the Analysis Control", () => {
     const html = disagreementHtml();
 
     expect(html).toContain("Analysis Control disagrees with the Run");
-    expect(html).toContain("legacy_checkout");
-    expect(html).toContain("control_variant");
-    expect(html).toContain("Relative lift against control");
+    expect(html).toContain(
+      'This Run&#x27;s frozen Control is <code class="font-mono text-foreground text-xs">control</code>, but the Run Snapshot measured lift against <code class="font-mono text-foreground text-xs">legacy_checkout</code>. No ship decision can be made until they agree.',
+    );
+    expect(html).toContain("Relative lift against legacy_checkout");
+    expect(html).toContain(
+      "Relative lift and confidence interval per arm, against legacy_checkout.",
+    );
+    expect(html).toContain(
+      'aria-label="Relative lift with confidence intervals against legacy_checkout"',
+    );
+    expect(html).toContain("relative lift vs legacy_checkout (%)");
     expect(html).toContain("Baseline (legacy_checkout) at zero lift by definition");
+    expect(html).not.toContain("Relative lift against control");
+    expect(html).not.toContain("relative lift vs control (%)");
+    expect(html).not.toContain("Tinybird");
+    expect(html).not.toContain("control_variant");
     expect(html).toContain('role="alert"');
   });
 

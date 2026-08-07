@@ -75,7 +75,7 @@ export function controlIdentityCheck(control: FrozenControlIdentity): DecisionGa
       id: "control_identity",
       status: "fail",
       title: "Analysis Control disagrees with the Run",
-      detail: `This Run froze "${control.variant}" as its Control, but Analysis reported "${control.analysisVariant}". The frozen Run Control remains the displayed baseline, but the statistics may have been computed against a different Control. Conclude and Promote are blocked until the disagreement is corrected.`,
+      detail: `This Run's frozen Control is "${control.variant}", but the Run Snapshot measured lift against "${control.analysisVariant}". No ship decision can be made until they agree.`,
     };
   }
   const froze =

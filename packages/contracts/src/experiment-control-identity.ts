@@ -35,9 +35,9 @@ export const FrozenControlIdentitySchema = z.discriminatedUnion("state", [
     .object({
       state: z.literal("disagreement"),
       variantId: z.string().min(1),
-      /** The frozen Run Control remains the displayed baseline. */
+      /** The frozen Run Control identity shown in the integrity warning. */
       variant: z.string().min(1),
-      /** The Control Variant name reported by the Analysis envelope. */
+      /** The Run Snapshot Control that anchors lift in `stats`. */
       analysisVariant: z.string().min(1),
     })
     .strict(),

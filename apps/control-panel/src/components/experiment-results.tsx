@@ -1,7 +1,7 @@
 import type { FrozenControlIdentity } from "@splitch/contracts";
 import type { PanelExperimentResultsReady } from "@splitch/control-plane-sdk/panel-experiments";
 import { ExperimentResultsCiPlot } from "./experiment-results-ci-plot";
-import { baselineLabel, ExperimentResultsControlIntegrity } from "./experiment-results-control";
+import { baselineVariant, ExperimentResultsControlIntegrity } from "./experiment-results-control";
 import { ExperimentResultsDecision } from "./experiment-results-decision";
 import { ExperimentResultsGuardrails } from "./experiment-results-guardrails";
 import { ExperimentResultsMetricsTable } from "./experiment-results-metrics-table";
@@ -17,6 +17,7 @@ import { ExperimentResultsSrm } from "./experiment-results-srm";
  */
 
 export function ExperimentResults({ results }: { results: PanelExperimentResultsReady }) {
+  const measurementAnchor = baselineVariant(results.control) ?? "an unidentified Control";
   return (
     <section aria-labelledby="results-heading" className="grid gap-6">
       <header className="grid gap-1">
@@ -37,8 +38,8 @@ export function ExperimentResults({ results }: { results: PanelExperimentResults
       <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
         <h3 className="font-semibold text-base text-foreground">Lift by arm</h3>
         <p className="mt-1 mb-4 max-w-prose text-muted-foreground text-sm">
-          Relative lift against {baselineLabel(results.control)}, with an always-valid confidence
-          sequence. Checking mid-Run is safe: the interval already accounts for continuous peeking.
+          Relative lift against {measurementAnchor}, with an always-valid confidence sequence.
+          Checking mid-Run is safe: the interval already accounts for continuous peeking.
         </p>
         <ExperimentResultsCiPlot
           control={results.control}
