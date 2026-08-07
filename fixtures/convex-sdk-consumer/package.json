@@ -1,0 +1,21 @@
+{
+  "name": "convex-sdk-consumer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Convex consumer fixture proving @splitch/sdk in actions and HTTP actions (SPL-336).",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "5.0.0",
+    "convex": "1.43.0",
+    "convex-test": "0.0.55",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

@@ -5,7 +5,7 @@
   "stryker": {
     "config": ["stryker.base.mjs", "packages/*/stryker.config.mjs"]
   },
-  "ignore": [".agents/**", ".claude/**"],
+  "ignore": [".agents/**", ".claude/**", "fixtures/convex-sdk-consumer/**"],
   "workspaces": {
     ".": {
       "entry": [
