@@ -50,7 +50,7 @@ export function onboardNewAppPlan(orgId: string, appName: string): McpPromptPlan
       ),
       toolMessage(
         "flags_test_eval",
-        "Run a test evaluation to confirm the live Run resolves. A test evaluation records no Exposure (ADR-0037). Customer code then evaluates once through the SDK and retries with the same idempotency key.",
+        "Run a test evaluation to confirm the live Run resolves. A test evaluation records no Exposure. Customer code then evaluates once through the SDK and retries with the same idempotency key.",
       ),
       toolMessage(
         "experiment_results_get",
@@ -81,7 +81,7 @@ export function shipAFlagPlan(flagKey: string, variants: string): McpPromptPlan 
       toolMessage("flags_promote", "Promote Variant availability into the active Environment."),
       toolMessage(
         "flags_test_eval",
-        "Confirm the rule set resolves in the active Environment (ADR-0037 time-to-first-confidence).",
+        "Confirm the rule set resolves in the active Environment (one-call confidence, no Exposure).",
       ),
     ],
   };
@@ -112,11 +112,11 @@ export function runAnExperimentPlan(
       ),
       toolMessage(
         "experiments_start",
-        "Start a Run. Environment Policy may require confirm: true (ADR-0029).",
+        "Start a Run. Environment Policy may require confirm: true before Start applies.",
       ),
       toolMessage(
         "flags_test_eval",
-        "Confirm the live Run resolves before treating the Experiment as live (ADR-0037).",
+        "Confirm the live Run resolves before treating the Experiment as live.",
       ),
       toolMessage("experiment_results_get", "Poll results for the running Experiment."),
     ],
@@ -157,7 +157,7 @@ export function diagnoseSetupPlan(): McpPromptPlan {
       toolMessage("client_key_get", "Fetch the Client Key for the active App."),
       toolMessage(
         "flags_test_eval",
-        "Confirm a known Flag resolves in the active Environment (ADR-0037). Report what is and is not wired.",
+        "Confirm a known Flag resolves in the active Environment. Report what is and is not wired.",
       ),
     ],
   };
