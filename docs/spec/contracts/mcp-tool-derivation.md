@@ -158,7 +158,7 @@ Targeting Rule CRUD is intentionally not exposed until there is a separate endpo
 | `runs_list`                            | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs`                                                     | —                                                |
 | `runs_get`                             | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId`                                              | —                                                |
 | `runs_end`                             | POST   | `/apps/:appId/envs/:environmentId/runs/:runId/end`                                                                    | Standalone End; no conclusion or winner          |
-| `run_conclusions_create`               | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId/conclusions`                                  | Ends, records evidence, creates Approval Request |
+| `runs_conclude`                        | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId/conclusions`                                  | Ends, records evidence, creates Approval Request |
 | `conclusion_promotion_requests_create` | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId/conclusions/:conclusionId/promotion-requests` | Re-proposes only after stale target drift        |
 
 ### Metrics

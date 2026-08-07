@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { errorStatusByCode, httpStatusForError } from "./error-status";
 import { ErrorCodeSchema, ErrorResponseSchema, errorCodes } from "./errors";
+import {
+  DecisionFailureSchema,
+  DecisionResultUnavailableDetailsSchema,
+} from "./experiment-conclusion-errors";
 
 describe("ErrorResponse contract", () => {
   it("parses a structured-detail error and narrows details by code", () => {
@@ -62,6 +66,36 @@ describe("ErrorResponse contract", () => {
       details: {},
     });
     expect(result.success).toBe(false);
+  });
+
+  it("keeps decision failures on the shipped gate check ids", () => {
+    const parsed = DecisionFailureSchema.parse({
+      code: "DECISION_CONTROL_IDENTITY_INVALID",
+      checkIds: ["control_identity"],
+      details: {
+        controlVariantId: "var_control",
+        frozenVariantNames: ["control", "winner"],
+        reason: "absent_from_frozen_variant_set",
+      },
+    });
+
+    expect(parsed.checkIds).toEqual(["control_identity"]);
+    expect(
+      DecisionFailureSchema.safeParse({
+        code: "DECISION_GUARDRAIL_BREACHED",
+        checkIds: ["guardrail"],
+        details: {},
+      }).success,
+    ).toBe(false);
+  });
+
+  it("represents unavailable evidence without inventing a current result token", () => {
+    expect(
+      DecisionResultUnavailableDetailsSchema.parse({
+        runId: "run_01",
+        envelopeState: "no_data",
+      }),
+    ).toEqual({ runId: "run_01", envelopeState: "no_data" });
   });
 });
 

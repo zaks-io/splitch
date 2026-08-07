@@ -12,6 +12,7 @@ POST is used because the read has a structured query. The strict body is:
 ```ts
 type DecisionDiagnosticsRequest = {
   expectedResultToken: `sha256:${string}`;
+  dataWatermark: string;
   from: string;
   to: string;
   interval: "hour" | "day";
@@ -22,12 +23,16 @@ type DecisionDiagnosticsRequest = {
 
 `from` and `to` are ISO 8601 instants with `Run.startedAt <= from < to <= dataWatermark`. The server
 does not clamp or default the range. `dimensionIds` is non-empty and every value must be a Dimension
-captured for the Run; missing, unknown, duplicated, or post-Start exploratory Dimensions return
-`VALIDATION_ERROR`. `limit` is an integer from 1 through 100. Pagination never drops auto-cuts or
-changes ranking.
+captured before this Run Started; missing, unknown, duplicated, or post-Start exploratory Dimensions
+return `VALIDATION_ERROR`. Post-Start Dimensions remain valid for non-decision exploratory output,
+but partial capture would make an SRM auto-cut look like a complete-Run diagnostic when it is not.
+`limit` is an integer from 1 through 100. Pagination never drops auto-cuts or changes ranking.
 
-The server re-reads the current server-owned result. If its token differs from
-`expectedResultToken`, it returns `DECISION_RESULT_STALE` rather than diagnosing different evidence.
+The server recomputes the server-owned result at the submitted `dataWatermark`, without advancing or
+quantizing it. If a ready envelope's token differs from `expectedResultToken`, it returns
+`DECISION_RESULT_STALE` rather than diagnosing different evidence. If recomputation returns
+`state: "no_data"` or `state: "no_run"`, it returns `DECISION_RESULT_UNAVAILABLE`; neither state has a
+current result token.
 
 ## Response
 
@@ -43,8 +48,8 @@ type DecisionDiagnosticsResponse = {
 
 type SrmTrendPoint = {
   bucketEnd: string;
-  exposure: SrmSignal;
-  activated: SrmSignal | null;
+  exposure: SrmDiagnostic;
+  activated: SrmDiagnostic | null;
   activationBalance: {
     pValue: number;
     isMismatch: boolean;
@@ -54,9 +59,10 @@ type SrmTrendPoint = {
   multipleCount: number;
 };
 
-type SrmSignal = {
-  pValue: number;
-  isMismatch: boolean;
+type SrmDiagnostic = {
+  tier: "clean" | "possible_imbalance" | "confirmed";
+  pValue: number | null;
+  isMismatch: boolean | null;
   observedCounts: Record<string, number>;
   expectedCounts: Record<string, number>;
 };
@@ -89,8 +95,8 @@ across Variants. `absoluteDeviation` is the sum of `abs(observed - expected)` ac
 The canonical order is confirmed mismatch first, ascending `srmPValue`, descending
 `chiSquareContribution`, descending `absoluteDeviation`, then `dimensionId` and `dimensionValue`
 lexicographically. `rank` is one-based over the complete ordered set and remains stable across pages.
-The cursor encodes the last complete sort tuple plus the bound result token; a cursor reused after the
-result changes returns `DECISION_RESULT_STALE`.
+The cursor encodes the last complete sort tuple plus the bound result token and data watermark; a
+cursor reused with different evidence returns `DECISION_RESULT_STALE`.
 
 These are diagnostic slices only. They never enter the Run's BH family, change `decision_valid`, or
 independently authorize conclusion.
@@ -103,8 +109,8 @@ path. It looks up the Run by the full composite scope and injects `app_id`, `env
 identifier uses the existing non-revealing `RUN_NOT_FOUND`; no diagnostic rows from another App or
 Environment are returned.
 
-All reads use the same half-open `ingest_ts < dataWatermark` boundary and the same deduped Exposure
-source as Results. Raw Targeting Keys are never returned. Dimension values are the declared,
+All reads use the request's half-open `ingest_ts < dataWatermark` boundary and the same deduped
+Exposure source as Results. Raw Targeting Keys are never returned. Dimension values are the declared,
 allowlisted values captured by the Run, not free-form Entity data.
 
 ## Sources

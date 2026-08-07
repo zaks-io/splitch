@@ -27,6 +27,7 @@ The path selects the Run. The strict body is:
 type ConcludeRunRequest = {
   selectedVariant: string;
   expectedResultToken: `sha256:${string}`;
+  dataWatermark: string;
   target: {
     environmentId: string;
     flagId: string;
@@ -44,18 +45,22 @@ type ConcludeRunRequest = {
 };
 ```
 
-`flagId` must be the Flag controlled by the Experiment. The target Environment must be different
-from the Run's Environment and belong to the same App. `selectedVariant` must belong to the Run's
-frozen Variant set and be available in the complete proposed target Configuration. The caller sends
-the complete proposed write projection. The server never guesses a rollout, silently adds a Variant,
-or derives a Configuration from the selected Variant's name. Empty or invalid diffs fail with
-`VALIDATION_ERROR` before End.
+`flagId` must be the Flag controlled by the Experiment. The target Environment belongs to the same
+App and may be the Run's own Environment. `selectedVariant` must belong to the Run's frozen Variant
+set and be available in the complete proposed target Configuration. The caller sends the complete
+proposed write projection. The server never guesses a rollout, silently adds a Variant, or derives a
+Configuration from the selected Variant's name. Empty or invalid diffs fail with `VALIDATION_ERROR`
+before End.
 
-All ordinary Promotion validation runs before End, including target Run freeze, dangling Variant
-references, baseline ambiguity, and Flag Configuration validation. Existing errors such as
-`RUN_FROZEN` and `VARIANT_NOT_AVAILABLE` are reused. If a target Run starts after proposal creation,
-canonical application rechecks the freeze and makes the Approval Request `stale`; it never delays the
-write until that target Run ends.
+All ordinary Promotion validation that does not depend on the Run becoming ended runs before End,
+including dangling Variant references, baseline ambiguity, and Flag Configuration validation.
+Existing errors such as `RUN_FROZEN` and `VARIANT_NOT_AVAILABLE` are reused. For Promotion into the
+Run's own Environment, the Run being concluded is not a target freeze after the conclusion commit;
+canonical application checks the post-End state. Any other target freeze still blocks application.
+If another target Run freezes the Configuration before application, canonical application returns
+`APPROVAL_APPLICATION_FAILED` with the nested `RUN_FROZEN` error and leaves the request `pending`; it
+never delays the write until that target Run ends. Only target Configuration version drift makes the
+Approval Request `stale`.
 
 The server computes the ordinary `ApprovalDiff`; callers cannot submit diff entries. For operation
 `experiment_winner_promote`, both `diff.current` and `diff.proposed` use this projection:
@@ -113,32 +118,42 @@ classification guarantees the required Approval Request even when the ordinary f
 
 ## Result identity and decision gate
 
-A ready Results read returns `dataWatermark` and `resultToken`. `resultToken` is SHA-256 over UTF-8
-RFC 8785 JSON Canonicalization Scheme bytes of
+A conclusion-capable ready `AnalysisResultsEnvelope` returns the all-or-nothing `data_watermark` and
+`result_token` pair. `result_token` is SHA-256 over UTF-8 RFC 8785 JSON Canonicalization Scheme bytes
+of
 `{ appId, environmentId, experimentId, runId, runConfigHash, stats }`. The watermark is excluded from
 the token, so advancing an ingest boundary without changing the computed result does not create
 false staleness.
 
-Conclude captures a fresh server `dataWatermark`, recomputes the selected Run through the half-open
-`ingest_ts < dataWatermark` boundary, and recomputes the token. A mismatch with
-`expectedResultToken` returns `DECISION_RESULT_STALE`. The client cannot submit Stats output or a
-watermark. The immutable evidence records the fresh server result and watermark.
+Conclude recomputes the selected Run through the half-open `ingest_ts < dataWatermark` boundary the
+caller observed. It compares that recomputation with `expectedResultToken`; a mismatch returns
+`DECISION_RESULT_STALE`. The server does not advance or quantize the submitted watermark. New
+Exposures after that boundary do not create a retry race. The client cannot submit Stats output, and
+the server treats the submitted watermark only as the evidence boundary. The token match proves the
+Stats output at that boundary. The immutable evidence records the recomputed server result and that
+exact watermark.
+
+If the recomputation produces an `AnalysisResultsEnvelope` with `state: "no_data"` or
+`state: "no_run"`, Conclude returns `DECISION_RESULT_UNAVAILABLE`. There is no current result token to
+compare in either state, so this case never returns `DECISION_RESULT_STALE`.
 
 The server evaluates every applicable check and returns all failures in one `DECISION_BLOCKED`
 response. It never stops at the first failure.
 
-| Failure code                    | Exact blocking condition                                                                                                          |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `DECISION_RESULT_INVALID`       | No decision-valid locked-family result exists for the selected Variant, or any such result has `status: "error"`                  |
-| `DECISION_UNDERPOWERED`         | Any selected-Variant decision-valid result is not `ready` or `stopped`, or `health.low_n_warning` is true                         |
-| `DECISION_SRM_MISMATCH`         | Full-exposed `srm_is_mismatch` is true, or activated-population `activated_srm_mismatch` is true when an Activation Metric exists |
-| `DECISION_ACTIVATION_IMBALANCE` | An Activation Metric exists and `activation_balance_mismatch` is true                                                             |
-| `MULTIPLE_VARIANT_CONFLICT`     | `health.multiple_rate > 0.01`, the existing `__multiple__` defect threshold                                                       |
-| `DECISION_GUARDRAIL_BREACHED`   | Any decision-valid Guardrail for the selected Variant has `is_breached: true`; `null` is `DECISION_RESULT_INVALID`                |
+| Failure code                        | Failed `decisionGateCheckIds` member     | Exact blocking condition                                                                         |
+| ----------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `DECISION_CONTROL_IDENTITY_INVALID` | `control_identity`                       | The Run's frozen Control Variant cannot be resolved inside its own frozen Variant set            |
+| `DECISION_RESULT_INVALID`           | `engine_status`, `decision_valid_result` | A decision-valid result has `status: "error"`, or the locked decision family has no result       |
+| `DECISION_UNDERPOWERED`             | `underpowered`                           | Any decision-valid result is still collecting or insufficient, or `health.low_n_warning` is true |
+| `DECISION_SRM_MISMATCH`             | `exposure_srm`, `activated_srm`          | Full-exposed SRM fires, or activated-population SRM fires when an Activation Metric exists       |
+| `DECISION_ACTIVATION_IMBALANCE`     | `activation_balance`                     | An Activation Metric exists and the per-Variant activation-rate check fires                      |
 
-The Stats engine's boolean verdict is authoritative for SRM, Activation imbalance, and Guardrail
-breach. A rendering surface never reapplies thresholds. A caution-band SRM whose mismatch boolean is
-false remains diagnostic and does not block.
+This table is a transport projection of the shipped Experiment decision gate. Conclude blocks exactly
+when its `shipAllowed` is false and derives failures only from checks whose `status` is `fail`.
+Guardrail advisories and the `__multiple__` quarantine warning remain visible diagnostics; they are
+not members of `decisionGateCheckIds` and do not block conclusion. The Stats engine's boolean verdict
+is authoritative for SRM and Activation imbalance. A rendering surface never reapplies thresholds.
+A caution-band SRM whose mismatch boolean is false remains diagnostic and does not block.
 
 The strict request schema has no override, bypass, force, or "ship anyway" field. `DECISION_BLOCKED`
 cannot be Reviewed into success. The underlying result must change, or a different valid Run must be
@@ -156,7 +171,7 @@ Conclude is ordered as follows:
 1. Strictly parse, authenticate, authorize, and replay an exact idempotent result if one exists.
 2. Re-read the selected Run and target Flag Configuration inside the App and Environment scopes.
 3. Compare `expectedConfigVersion`; a mismatch stops before analytics or writes.
-4. Capture a server data watermark, recompute Results, compare the result token, and evaluate every gate.
+4. Recompute Results at the caller's `dataWatermark`, return unavailable or stale evidence before any write, and evaluate the shipped decision gate.
 5. In one D1 transaction, recheck Run and target versions, End the Run, insert immutable conclusion evidence, and create the target-versioned pending Approval Request.
 6. After commit, clear the live Run KV projection. A projection failure is loud and retryable; D1 remains canonical.
 7. If inline Review was requested, invoke canonical `approve_and_apply` in a second D1 transaction.

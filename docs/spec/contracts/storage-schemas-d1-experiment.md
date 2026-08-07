@@ -112,7 +112,7 @@ insert is first-filtered by `app_id` and co-scoped by Environment, Experiment, a
 | `experiment_id`               | text        | FK → experiments, not null                                          |
 | `run_id`                      | text        | FK → runs, not null; unique                                         |
 | `selected_variant`            | text        | not null; member of the Run's frozen Variant set                    |
-| `run_config_hash`             | text        | not null; immutable Run input identity                              |
+| `config_hash`                 | text        | not null; copied from immutable `runs.config_hash`                  |
 | `result_token`                | text        | not null; `sha256:` plus 64 lowercase hexadecimal digits            |
 | `data_watermark`              | timestamptz | not null; exclusive `ingest_ts` boundary                            |
 | `result_snapshot`             | text        | not null; complete server-owned `StatsOutput` JSON, never truncated |

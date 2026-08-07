@@ -100,10 +100,11 @@ naming `missing` (SPL-302). MCP tools for this operation dispatch straight at
 the Analysis Worker over a service binding and do not yet run that D1 gate; that
 topology gap is tracked separately and is not closed by SPL-305.
 
-A `state: "ready"` response also carries the server `dataWatermark` and deterministic `resultToken`
-defined in [result-contracts.md](../stats/result-contracts.md#analysis-results-envelope). Reading it
-never Ends the Run or writes a Flag Configuration. Conclude must re-read and match that token; it
-never accepts caller-supplied Stats output.
+A conclusion-capable `state: "ready"` response also carries the server `data_watermark` and
+deterministic `result_token` defined in
+[result-contracts.md](../stats/result-contracts.md#analysis-results-envelope). Reading it never Ends
+the Run or writes a Flag Configuration. Conclude must recompute at that observed watermark and match
+the token; it never accepts caller-supplied Stats output.
 
 ### `POST /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/runs/{run_id}/decision-diagnostics`
 

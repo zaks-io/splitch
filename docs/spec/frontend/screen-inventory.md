@@ -320,8 +320,8 @@ trustworthy-experiments literature) and then adds splitch's enforcement seam.
   anyway" escape hatch** — an escape hatch is the thing that quietly turns an enforced contract back
   into an advisory one. This honors "rigor is enforced" exactly where a mistake is irreversible (the
   ship), without the false-positive cost of masking data the operator legitimately needs to debug.
-- **Guardrails sit alongside a valid result** and never mask the goal-Metric number. A decision-valid
-  breach for the selected Variant blocks conclusion because it is a separate, locked harm signal.
+- **Guardrails sit alongside a valid result** and never mask the goal-Metric number. They remain an
+  advisory surface and are not part of the shipped decision gate.
 - **Activation-gated Experiments** additionally surface the two activation guardrails (activated-
   population SRM and per-arm activation rate, ADR-0012) with the same loud-warning + decision-gate
   treatment.
@@ -331,11 +331,16 @@ trustworthy-experiments literature) and then adds splitch's enforcement seam.
   labels which Metrics are in the corrected family vs exploratory.
 
 **CLI/MCP parity (ADR-0023).** The decision gate is a Worker invariant: `splitch experiment
-conclude` fails with the same cited check for underpower, SRM, Activation imbalance, `__multiple__`,
-or a decision-valid Guardrail breach on every skin. Reading Results and diagnostics remains available
-on all three skins; only the rendering differs. Under `confirm`, "Conclude and promote winner" is one
-interaction over the two durable commits specified in
+conclude` fails with the same cited `control_identity`, `engine_status`, `decision_valid_result`,
+`underpowered`, `exposure_srm`, `activated_srm`, or `activation_balance` check on every skin. Reading
+Results and diagnostics remains available on all three skins; only the rendering differs. Under
+`confirm`, "Conclude and promote winner" is one interaction over the two durable commits specified in
 [conclusion-and-winner-promotion.md](../control-plane/conclusion-and-winner-promotion.md).
+
+That interaction requires the operator to choose the target Environment and author the complete
+target Flag Configuration: enabled state, available Variant names, ordered Targeting Rules, and
+rollout. The selected winner is shown beside those inputs. Submission stays unavailable until the
+complete Configuration validates; the Control Panel never derives missing fields from the winner.
 
 ## Experiment creation — a draft, Started into Run 1
 

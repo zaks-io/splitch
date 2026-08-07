@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { MetricRefSchema } from "./leaf-schemas-experiment";
 import type { StatsInput } from "./stats-input-contract";
 
@@ -191,9 +192,18 @@ export const AnalysisResultsEnvelopeSchema = z.discriminatedUnion("state", [
       state: z.literal("ready"),
       run_id: z.string().min(1),
       control_variant: z.string().min(1),
+      data_watermark: z.string().datetime({ offset: true }).optional(),
+      result_token: CanonicalJsonSha256Schema.optional(),
       stats: StatsOutputSchema,
     })
-    .strict(),
+    .strict()
+    .superRefine((result, context) => {
+      if ((result.data_watermark === undefined) === (result.result_token === undefined)) return;
+      context.addIssue({
+        code: "custom",
+        message: "data_watermark and result_token must be present together",
+      });
+    }),
   z
     .object({
       state: z.literal("no_data"),

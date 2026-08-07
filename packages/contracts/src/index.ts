@@ -32,6 +32,15 @@ export {
   RecommendedActionSchema,
   recommendedActions,
 } from "./errors";
+export type { DecisionFailure } from "./experiment-conclusion-errors";
+export {
+  DecisionBlockedDetailsSchema,
+  DecisionFailureSchema,
+  DecisionResultStaleDetailsSchema,
+  DecisionResultUnavailableDetailsSchema,
+  TargetConfigurationStaleDetailsSchema,
+  decisionFailureCodeByCheckId,
+} from "./experiment-conclusion-errors";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped rigor API
 export * from "./experiment-rigor";
 export type { HealthResponse, PlatformTarget } from "./health-response";

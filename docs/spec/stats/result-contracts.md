@@ -79,21 +79,16 @@ Dimension result shapes (`DimensionResult`) are defined in
 
 ## Analysis Results envelope
 
-The ready member of the control-plane Results read is:
+The control-plane Results read uses the shipped `AnalysisResultsEnvelopeSchema` from
+`@splitch/contracts`; there is no parallel Results type. Its strict `state: "ready"` member contains
+`run_id`, `control_variant`, and `stats`. It admits `data_watermark` and `result_token` only as an
+all-or-nothing pair. A Results read that supports Conclude returns both; the result-delivery runtime
+slice owns populating them. Their absence keeps the current read compatible but provides no evidence
+inputs for Conclude.
 
-```ts
-type ReadyAnalysisResults = {
-  state: "ready";
-  run_id: string;
-  control_variant: string;
-  dataWatermark: string;
-  resultToken: `sha256:${string}`;
-  stats: StatsOutput;
-};
-```
-
-`dataWatermark` is the server-selected exclusive `ingest_ts` boundary used by the complete read.
-`resultToken` is SHA-256 over RFC 8785 canonical bytes of
+`data_watermark` is the server-selected exclusive `ingest_ts` boundary used by the complete read.
+`result_token` is `sha256:` plus 64 lowercase hexadecimal digits, computed as SHA-256 over RFC 8785
+canonical bytes of
 `{ appId, environmentId, experimentId, runId, runConfigHash, stats }`. It is evidence identity for
 Conclude, not caller authority. The `no_run` and `no_data` members have neither field because no
 decision-bearing result exists.
