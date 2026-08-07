@@ -57,13 +57,13 @@ const RESOURCE_DEFINITIONS: readonly McpResourceDefinition[] = [
   {
     uri: "splitch://context",
     name: "context",
-    description: "splitch ubiquitous-language glossary (CONTEXT.md).",
+    description: "splitch ubiquitous-language glossary.",
     mimeType: "text/markdown",
   },
   {
     uri: "splitch://auth",
     name: "auth",
-    description: "Auth doors and scope widening (auth.md).",
+    description: "Auth doors and scope widening.",
     mimeType: "text/markdown",
   },
   {
@@ -81,7 +81,7 @@ const RESOURCE_DEFINITIONS: readonly McpResourceDefinition[] = [
   {
     uri: "splitch://quickstart",
     name: "quickstart",
-    description: "Agent-first onboarding quickstart (docs/spec/quickstart.md).",
+    description: "Agent-first onboarding quickstart.",
     mimeType: "text/markdown",
   },
 ];

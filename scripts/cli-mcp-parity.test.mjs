@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { assertCliMcpParity, assertPublicAgentSurface } from "./lib/cli-mcp-parity.mjs";
+import { findRepoInternalReference } from "./lib/published-agent-surface.mjs";
 
 const completeFixture = {
   contractOperationIds: ["apps_list"],
@@ -8,6 +9,14 @@ const completeFixture = {
   mcpOperationIds: ["apps_list"],
   exceptions: [],
   skinLocalCapabilities: [{ name: "active context selection", cliPresent: true, mcpPresent: true }],
+};
+
+const emptySurface = {
+  cliHelp: [],
+  mcpTools: [],
+  mcpPrompts: [],
+  mcpResources: [],
+  routeSummaries: [],
 };
 
 test("accepts matching contract, CLI, MCP, and skin-local capabilities", () => {
@@ -43,8 +52,8 @@ test("rejects repo-internal references from rendered CLI help", () => {
     assert.throws(
       () =>
         assertPublicAgentSurface({
+          ...emptySurface,
           cliHelp: [{ name: "flags test-eval", text: `Resolve a Flag. See ${reference}` }],
-          mcpTools: [],
         }),
       /published-agent-surface: CLI help "flags test-eval" contains repo-internal reference/,
     );
@@ -55,9 +64,57 @@ test("rejects repo-internal references from derived MCP tool descriptions", () =
   assert.throws(
     () =>
       assertPublicAgentSurface({
-        cliHelp: [],
+        ...emptySurface,
         mcpTools: [{ name: "flags_test_eval", description: "See ADR-0026." }],
       }),
     /published-agent-surface: MCP tool description "flags_test_eval" contains repo-internal reference: ADR-0026/,
   );
+});
+
+test("rejects repo-internal references from MCP prompt text", () => {
+  assert.throws(
+    () =>
+      assertPublicAgentSurface({
+        ...emptySurface,
+        mcpPrompts: [
+          {
+            name: "onboard_new_app:message[0]",
+            text: "Confirm the live Run resolves (ADR-0037).",
+          },
+        ],
+      }),
+    /published-agent-surface: MCP prompt "onboard_new_app:message\[0\]" contains repo-internal reference: ADR-0037/,
+  );
+});
+
+test("rejects repo-internal references from MCP resource contents", () => {
+  assert.throws(
+    () =>
+      assertPublicAgentSurface({
+        ...emptySurface,
+        mcpResources: [
+          {
+            name: "splitch://quickstart",
+            text: "See [CONTEXT.md](../../CONTEXT.md) and ADR-0023.",
+          },
+        ],
+      }),
+    /published-agent-surface: MCP resource "splitch:\/\/quickstart" contains repo-internal reference/,
+  );
+});
+
+test("rejects repo-internal references from route summaries", () => {
+  assert.throws(
+    () =>
+      assertPublicAgentSurface({
+        ...emptySurface,
+        routeSummaries: [{ name: "sdk_peek", text: "Peek a Flag (ADR-0037)." }],
+      }),
+    /published-agent-surface: route summary "sdk_peek" contains repo-internal reference: ADR-0037/,
+  );
+});
+
+test("shared published-agent-surface helper matches the pack-staging refusal shape", () => {
+  assert.equal(findRepoInternalReference("See ADR-0026."), "ADR-0026");
+  assert.equal(findRepoInternalReference("Public prose only."), null);
 });

@@ -4,6 +4,7 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { findRepoInternalReference } from "../../../scripts/lib/published-agent-surface.mjs";
 
 const EXPECTED_DEPENDENCIES = ["@hono/zod-openapi", "@sentry/node", "hono", "open", "zod"];
 const REQUIRED_FILES = [
@@ -155,13 +156,9 @@ function assertPublicReadme(readme) {
   if (nonPublicLink) {
     throw new Error(`release README contains non-public link: ${nonPublicLink[1]}`);
   }
-  const internalReference = readme.match(
-    /(?:^|[\s`(])(?:\.\.\/|\.\/|docs\/|apps\/|packages\/|\.github\/|AGENTS\.md|CONTEXT\.md)|(?:ADR|SPL)-\d+/m,
-  );
+  const internalReference = findRepoInternalReference(readme);
   if (internalReference) {
-    throw new Error(
-      `release README contains repo-internal reference: ${internalReference[0].trim()}`,
-    );
+    throw new Error(`release README contains repo-internal reference: ${internalReference}`);
   }
 }
 
