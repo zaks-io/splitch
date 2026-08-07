@@ -257,6 +257,7 @@ export {
   liveRunKey,
   memberProfileCacheKey,
   runConfigKey,
+  TERMINAL_CREDENTIAL_REVOCATION_MARKER,
 } from "./storage-keys-kv";
 export type {
   AssignmentStoreEntry,

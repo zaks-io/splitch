@@ -58,6 +58,8 @@ export function apiKeyCacheKey(keyHash: string): string {
   return `ak:${keyHash}`;
 }
 
+export const TERMINAL_CREDENTIAL_REVOCATION_MARKER = "1";
+
 /** Terminal marker that takes precedence over a mutable credential cache entry. */
 export function credentialRevocationCacheKey(credentialCacheKey: string): string {
   return `revoked:${credentialCacheKey}`;

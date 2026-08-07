@@ -108,9 +108,12 @@ async function readCredentialCache(
   credentialStore: CredentialReader,
   key: string,
 ): Promise<CredentialCache | "revoked" | null> {
-  const revocation = await credentialStore.get(credentialRevocationCacheKey(key));
+  const [revocation, raw] = await Promise.all([
+    credentialStore.get(credentialRevocationCacheKey(key)),
+    credentialStore.get(key),
+  ]);
   if (revocation !== null) return "revoked";
-  return readCredential(credentialStore, key);
+  return parseCredential(raw);
 }
 
 export async function sha256Hex(value: string): Promise<string> {
@@ -177,11 +180,7 @@ function originNotAllowed(origin: string): ErrorResponse {
   };
 }
 
-async function readCredential(
-  credentialStore: CredentialReader,
-  key: string,
-): Promise<CredentialCache | null> {
-  const raw = await credentialStore.get(key);
+function parseCredential(raw: string | null): CredentialCache | null {
   if (raw === null) return null;
 
   let json: unknown;

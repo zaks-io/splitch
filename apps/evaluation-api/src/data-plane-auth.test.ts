@@ -3,6 +3,7 @@ import {
   credentialRevocationCacheKey,
   CredentialCacheKVSchemaV1,
   kvEnvelope,
+  TERMINAL_CREDENTIAL_REVOCATION_MARKER,
 } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { makeDataPlaneAuthResolver, sha256Hex } from "./data-plane-auth";
@@ -40,7 +41,7 @@ describe("data-plane credential cache compatibility", () => {
     const store = new CredentialStore(
       new Map([
         [cacheKey, active],
-        [credentialRevocationCacheKey(cacheKey), "revoked"],
+        [credentialRevocationCacheKey(cacheKey), TERMINAL_CREDENTIAL_REVOCATION_MARKER],
       ]),
     );
 

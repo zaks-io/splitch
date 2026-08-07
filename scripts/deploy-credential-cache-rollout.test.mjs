@@ -12,9 +12,9 @@ for (const environment of ["production", "shared-preview"]) {
     assert.deepEqual(rollout.split(" && "), [
       `pnpm deploy:cloudflare:event-ingest:${environment}`,
       `pnpm deploy:cloudflare:analysis:${environment}`,
+      `pnpm deploy:cloudflare:evaluation:${environment}`,
       `pnpm deploy:cloudflare:control-plane-compat:${environment}`,
       `pnpm credential-cache:backfill:${environment}`,
-      `pnpm deploy:cloudflare:evaluation:${environment}`,
       `pnpm deploy:cloudflare:control-panel:${environment}`,
       `pnpm deploy:cloudflare:control-plane:${environment}`,
       `pnpm deploy:cloudflare:remaining:${environment}`,
@@ -38,20 +38,20 @@ for (const environment of ["production", "shared-preview"]) {
   });
 
   /**
-   * The compatible Control Plane publishes the current migration version first.
-   * The backfill then has to finish before Evaluation reads its output, and
-   * Evaluation still deploys before the final Control Plane (ADR-0046).
+   * Evaluation understands marker-less legacy entries, so it deploys first. The
+   * compatible Control Plane then publishes and completes the current backfill
+   * before the final Control Plane deploy (ADR-0046).
    */
-  test(`${environment} backfills credentials before deploying the schema-v2 Evaluation Worker`, async () => {
+  test(`${environment} deploys marker-aware Evaluation before the credential backfill`, async () => {
     const { scripts } = JSON.parse(await readFile(packageJson, "utf8"));
     const rollout = scripts[`deploy:cloudflare:${environment}`];
 
     assert.ok(
-      rollout.indexOf(`deploy:cloudflare:control-plane-compat:${environment}`) <
-        rollout.indexOf(`credential-cache:backfill:${environment}`) &&
+      rollout.indexOf(`deploy:cloudflare:evaluation:${environment}`) <
+        rollout.indexOf(`deploy:cloudflare:control-plane-compat:${environment}`) &&
+        rollout.indexOf(`deploy:cloudflare:control-plane-compat:${environment}`) <
+          rollout.indexOf(`credential-cache:backfill:${environment}`) &&
         rollout.indexOf(`credential-cache:backfill:${environment}`) <
-          rollout.indexOf(`deploy:cloudflare:evaluation:${environment}`) &&
-        rollout.indexOf(`deploy:cloudflare:evaluation:${environment}`) <
           rollout.indexOf(`deploy:cloudflare:control-plane:${environment}`),
     );
     assert.equal(scripts[`deploy:cloudflare:evaluation-compat:${environment}`], undefined);

@@ -9,6 +9,7 @@ import {
   liveRunKey,
   memberProfileCacheKey,
   runConfigKey,
+  TERMINAL_CREDENTIAL_REVOCATION_MARKER,
 } from "./storage-keys-kv";
 
 describe("config key-pattern constructors (per-Environment, ADR-0027)", () => {
@@ -44,6 +45,7 @@ describe("credential cache key-pattern constructors", () => {
 
   it("credentialRevocationCacheKey isolates terminal revocation from the mutable entry", () => {
     expect(credentialRevocationCacheKey(clientKeyCacheKey("abc123"))).toBe("revoked:ck:abc123");
+    expect(TERMINAL_CREDENTIAL_REVOCATION_MARKER).toBe("1");
   });
 });
 

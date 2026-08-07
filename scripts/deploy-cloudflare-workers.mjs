@@ -25,7 +25,6 @@ const ORDERED_PREREQUISITES = [
   [ANALYSIS, "analysis"],
   [EVALUATION, "evaluation"],
 ];
-const EVALUATION_DEPLOY = ORDERED_PREREQUISITES.at(-1);
 const SPECIAL_WORKERS = new Set([
   ...ORDERED_PREREQUISITES.map(([packageName]) => packageName),
   CONTROL_PANEL,
@@ -49,23 +48,11 @@ export function deploymentCommands(environment, requestedPackages, workspacePack
   }
 
   const requiresControlPanelCutover = selected.has(CONTROL_PANEL) || selected.has(CONTROL_PLANE);
-  const commands = selectedPrerequisiteCommands(
-    environment,
-    selected,
-    ORDERED_PREREQUISITES.slice(0, -1),
-  );
+  const commands = selectedPrerequisiteCommands(environment, selected, ORDERED_PREREQUISITES);
 
-  // A changed Control Plane publishes its compatible migration writer before the
-  // gate drains. The marker-aware Evaluation Worker cannot ship until that exact
-  // checkpoint version is done.
+  // Evaluation reads both legacy entries and terminal markers, so deploy it before
+  // the compatible writer runs a backfill that can race a live revocation.
   commands.push(...controlPlaneMigrationCommands(environment, requiresControlPanelCutover));
-  if (requiresControlPanelCutover || selected.has(EVALUATION)) {
-    commands.push(["run", `credential-cache:backfill:${environment}`]);
-  }
-
-  if (EVALUATION_DEPLOY && selected.has(EVALUATION_DEPLOY[0])) {
-    commands.push(["run", `deploy:cloudflare:${EVALUATION_DEPLOY[1]}:${environment}`]);
-  }
 
   if (requiresControlPanelCutover) {
     commands.push(
@@ -92,7 +79,12 @@ export function deploymentCommands(environment, requestedPackages, workspacePack
 }
 
 function controlPlaneMigrationCommands(environment, required) {
-  return required ? [["run", `deploy:cloudflare:control-plane-compat:${environment}`]] : [];
+  return required
+    ? [
+        ["run", `deploy:cloudflare:control-plane-compat:${environment}`],
+        ["run", `credential-cache:backfill:${environment}`],
+      ]
+    : [];
 }
 
 function selectedPrerequisiteCommands(environment, selected, prerequisites) {

@@ -42,7 +42,7 @@ test("drives the protected credential cache backfill to a verified done checkpoi
   ]);
 });
 
-test("rejects a completed legacy checkpoint before the marker-aware reader deploys", async () => {
+test("rejects a completed legacy checkpoint before the marker backfill runs", async () => {
   await assert.rejects(
     completeCredentialCacheBackfill({
       origin: "https://api.example.test",

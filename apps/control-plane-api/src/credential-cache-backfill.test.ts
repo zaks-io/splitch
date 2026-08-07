@@ -92,7 +92,8 @@ describe("credential cache schema-v1 backfill", () => {
 
   it("keeps a Client Key revoked when its stale active backfill lands last", async () => {
     const writes = new Map<string, string>();
-    const store = new StaleBackfillWinsStore(writes);
+    const cacheKey = clientKeyCacheKey(await sha256Hex("pk_race"));
+    const store = new StaleBackfillWinsStore(writes, cacheKey);
     const rows: CredentialCacheBackfillRows = {
       clientKeys: [
         {
@@ -122,7 +123,6 @@ describe("credential cache schema-v1 backfill", () => {
       ),
     ]);
 
-    const cacheKey = clientKeyCacheKey(await sha256Hex("pk_race"));
     const raw = writes.get(cacheKey);
     expect(cacheEnvelope.parse(JSON.parse(raw as string)).data.revoked).toBe(false);
     expect(writes.get(credentialRevocationCacheKey(cacheKey))).toBeDefined();

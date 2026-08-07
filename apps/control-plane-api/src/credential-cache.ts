@@ -4,10 +4,10 @@ import {
   CURRENT_KV_SCHEMA_VERSION,
   clientKeyCacheKey,
   credentialRevocationCacheKey,
+  TERMINAL_CREDENTIAL_REVOCATION_MARKER,
 } from "@splitch/contracts";
 
 const REVOKED_TOMBSTONE_TTL_SECONDS = 5 * 60;
-const TERMINAL_REVOCATION_MARKER = "1";
 
 export interface CredentialCacheDeps {
   credentialStore?: KVNamespace;
@@ -162,7 +162,7 @@ export async function putCredentialCacheEntry(
   revoked: boolean,
 ): Promise<void> {
   if (revoked) {
-    await store.put(credentialRevocationCacheKey(write.key), TERMINAL_REVOCATION_MARKER);
+    await store.put(credentialRevocationCacheKey(write.key), TERMINAL_CREDENTIAL_REVOCATION_MARKER);
   }
   await store.put(write.key, write.value, write.options);
 }

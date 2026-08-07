@@ -1,4 +1,9 @@
-import { CredentialCacheKVSchema, kvEnvelope } from "@splitch/contracts";
+import {
+  CredentialCacheKVSchema,
+  credentialRevocationCacheKey,
+  kvEnvelope,
+  TERMINAL_CREDENTIAL_REVOCATION_MARKER,
+} from "@splitch/contracts";
 import type { CredentialCacheWriter } from "./credential-cache";
 
 /**
@@ -26,7 +31,10 @@ export class StaleBackfillWinsStore {
   private readonly revocationLanded: Promise<void>;
   private releaseRevocation: () => void = () => {};
 
-  constructor(private readonly writes: Map<string, string>) {
+  constructor(
+    private readonly writes: Map<string, string>,
+    private readonly credentialCacheKey: string,
+  ) {
     this.revocationLanded = new Promise((resolve) => {
       this.releaseRevocation = resolve;
     });
@@ -37,7 +45,10 @@ export class StaleBackfillWinsStore {
   }
 
   async put(key: string, value: string): Promise<void> {
-    if (key.startsWith("revoked:")) {
+    if (key === credentialRevocationCacheKey(this.credentialCacheKey)) {
+      if (value !== TERMINAL_CREDENTIAL_REVOCATION_MARKER) {
+        throw new Error("test fixture received an invalid terminal revocation marker");
+      }
       this.writes.set(key, value);
       return;
     }
@@ -49,7 +60,7 @@ export class StaleBackfillWinsStore {
   }
 }
 
-/** Mirrors the CredentialCacheWriterDurableObject authority checks. */
+/** Covers the Durable Object's revocation and Client Key restriction authority decisions. */
 export class AuthoritativeSerialWriter extends SerialWriter {
   revoked = false;
   originAllowlist: string[] | null = null;
