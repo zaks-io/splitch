@@ -2,7 +2,11 @@ import type { FrozenControlIdentity } from "@splitch/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ExperimentResults } from "./experiment-results";
-import { resultsFixture, statsFixture } from "./experiment-results-test-fixtures";
+import {
+  controlDisagreementStats,
+  resultsFixture,
+  statsFixture,
+} from "./experiment-results-test-fixtures";
 
 /**
  * What the tab does when the Run's frozen Control cannot be resolved.
@@ -70,7 +74,9 @@ describe("ExperimentResults with an unidentifiable Control", () => {
 describe("ExperimentResults with an Analysis Control disagreement", () => {
   function disagreementHtml() {
     return renderToStaticMarkup(
-      <ExperimentResults results={resultsFixture(statsFixture(), { control: disagreement })} />,
+      <ExperimentResults
+        results={resultsFixture(controlDisagreementStats(), { control: disagreement })}
+      />,
     );
   }
 
@@ -81,8 +87,27 @@ describe("ExperimentResults with an Analysis Control disagreement", () => {
     expect(html).toContain("legacy_checkout");
     expect(html).toContain("control_variant");
     expect(html).toContain("Relative lift against control");
-    expect(html).toContain("Baseline (control) at zero lift by definition");
+    expect(html).toContain("Baseline (legacy_checkout) at zero lift by definition");
     expect(html).toContain('role="alert"');
+  });
+
+  it("anchors computed statistics on the Analysis Control without fabricating the frozen arm", () => {
+    const html = disagreementHtml();
+    const analysisControlRow = metricRow(html, "legacy_checkout");
+    const frozenControlRow = metricRow(html, "control");
+
+    expect(analysisControlRow).toContain("0.0%");
+    expect(analysisControlRow).toContain("baseline, by definition");
+    expect(analysisControlRow).toContain("Baseline");
+    expect(html).toContain(
+      "legacy_checkout · checkout_conversion: baseline, 0% lift by definition",
+    );
+
+    expect(frozenControlRow).toContain("+6.4%");
+    expect(frozenControlRow).toContain("[+1.9, +11.2]");
+    expect(frozenControlRow).not.toContain("0.0%");
+    expect(frozenControlRow).not.toContain("baseline, by definition");
+    expect(html).toContain("control · checkout_conversion: +6.4% lift, [+1.9, +11.2]");
   });
 
   it("keeps the numbers visible and blocks conclude or Promote with the failing check named", () => {
@@ -96,3 +121,11 @@ describe("ExperimentResults with an Analysis Control disagreement", () => {
     expect(html).toMatch(/<button[^>]*\sdisabled=""/);
   });
 });
+
+function metricRow(html: string, variant: string): string {
+  const row = (html.match(/<tr[\s\S]*?<\/tr>/g) ?? []).find((candidate) =>
+    candidate.includes(`>${variant}</td>`),
+  );
+  if (!row) throw new Error(`missing Metric result row for ${variant}`);
+  return row;
+}

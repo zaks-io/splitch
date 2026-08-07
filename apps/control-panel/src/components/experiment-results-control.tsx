@@ -9,7 +9,8 @@ import type { FrozenControlIdentity } from "@splitch/contracts";
  */
 
 export function baselineVariant(control: FrozenControlIdentity): string | null {
-  return control.state === "unresolvable" ? null : control.variant;
+  if (control.state === "unresolvable") return null;
+  return control.state === "disagreement" ? control.analysisVariant : control.variant;
 }
 
 export function baselineLabel(control: FrozenControlIdentity): string {
