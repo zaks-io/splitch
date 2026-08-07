@@ -1,10 +1,14 @@
 import type { ExposureBatchResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
+import type { AssembledExposure } from "./evaluate/exposure-assembly";
+import { type ExposureIngestSink, ExposureIngestSinkError } from "./exposure-redemption";
 import {
+  type ExposureRedemptionAcknowledgeOutcome,
+  type ExposureRedemptionClaimInput,
+  type ExposureRedemptionClaimOutcome,
   type ExposureRedemptionClaimStore,
-  type ExposureRedemptionLookup,
   MemoryExposureRedemptionClaimStore,
-} from "./exposure-redemption";
+} from "./exposure-redemption-claim";
 import { EXPOSURE_ID_A, exposuresInit, mintTicket, PATH } from "./exposures-test-fixtures";
 import {
   APP_ID,
@@ -14,36 +18,40 @@ import {
   makeSdkRouteHarness,
 } from "./sdk-route-test-fixtures";
 
-/** Simulates KvExposureRedemptionClaimStore when the ticket-fingerprint put fails. */
-class PartialTicketClaimStore implements ExposureRedemptionClaimStore {
-  private readonly byExposureId = new Map<string, string>();
+/**
+ * Wraps the memory store and fails the first acknowledge so ingest can land
+ * while the claim remains pending for an exact-ID resume.
+ */
+class FailOnceAcknowledgeStore implements ExposureRedemptionClaimStore {
+  private acknowledgeAttempts = 0;
+  private readonly inner = new MemoryExposureRedemptionClaimStore();
 
-  async lookup(input: {
-    readonly appId: string;
-    readonly environmentId: string;
-    readonly exposureId: string;
-    readonly ticketFingerprint: string;
-  }): Promise<ExposureRedemptionLookup> {
-    const existing = this.byExposureId.get(
-      `${input.appId}\u001f${input.environmentId}\u001f${input.exposureId}`,
-    );
-    if (existing !== undefined) {
-      return existing === input.ticketFingerprint ? { status: "matched" } : { status: "conflict" };
-    }
-    return { status: "missing" };
+  async claim(input: ExposureRedemptionClaimInput): Promise<ExposureRedemptionClaimOutcome> {
+    return this.inner.claim(input);
   }
 
-  async record(input: {
-    readonly appId: string;
-    readonly environmentId: string;
-    readonly exposureId: string;
-    readonly ticketFingerprint: string;
-  }): Promise<void> {
-    this.byExposureId.set(
-      `${input.appId}\u001f${input.environmentId}\u001f${input.exposureId}`,
-      input.ticketFingerprint,
-    );
-    throw new Error("ticket fingerprint KV put failed");
+  async acknowledge(
+    input: ExposureRedemptionClaimInput,
+  ): Promise<ExposureRedemptionAcknowledgeOutcome> {
+    this.acknowledgeAttempts += 1;
+    if (this.acknowledgeAttempts === 1) {
+      throw new Error("acknowledge Durable Object put failed");
+    }
+    return this.inner.acknowledge(input);
+  }
+}
+
+/** Ingest sink that fails once, then succeeds — pending claim must survive. */
+class FailOnceIngestSink implements ExposureIngestSink {
+  readonly writes: AssembledExposure[] = [];
+  private attempts = 0;
+
+  async write(exposure: AssembledExposure): Promise<void> {
+    this.attempts += 1;
+    if (this.attempts === 1) {
+      throw new ExposureIngestSinkError("transient ingest failure", { status: 503 });
+    }
+    this.writes.push(exposure);
   }
 }
 
@@ -108,10 +116,11 @@ describe("POST /api/sdk/exposures: happy path and pipeline seam", () => {
     expect(exposureSink.writes).toHaveLength(1);
   });
 
-  it("schedules holdover when the ticket-fingerprint claim put fails after ingest", async () => {
+  it("resumes a pending claim after acknowledge fails post-ingest", async () => {
+    const claims = new FailOnceAcknowledgeStore();
     const { app, assignmentStore, exposureSink } = await makeSdkRouteHarness({
       liveRun: true,
-      exposureRedemptionClaims: new PartialTicketClaimStore(),
+      exposureRedemptionClaims: claims,
     });
     const ticket = await mintTicket();
     const init = exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]);
@@ -123,17 +132,42 @@ describe("POST /api/sdk/exposures: happy path and pipeline seam", () => {
       { exposureId: EXPOSURE_ID_A, status: "rejected", code: "SERVICE_UNAVAILABLE" },
     ]);
     expect(exposureSink.writes).toHaveLength(1);
-    // Ingest committed — holdover must still run even though the claim failed.
+    // Ingest committed — holdover must still run even though acknowledge failed.
     expect(assignmentStore.putHashedCalls).toHaveLength(1);
 
     const second = await app.request(PATH, init);
     const secondBody = (await second.json()) as ExposureBatchResponse;
     expect(secondBody.results).toEqual([
-      { exposureId: EXPOSURE_ID_A, status: "deduplicated", code: null },
+      { exposureId: EXPOSURE_ID_A, status: "accepted", code: null },
     ]);
-    expect(exposureSink.writes).toHaveLength(1);
-    // Dedup path re-schedules the idempotent put (covers a first attempt that
-    // never reached scheduleHoldoverWrite).
+    // Resume re-seals (pipeline first-touch is authoritative) then acknowledges.
+    expect(exposureSink.writes).toHaveLength(2);
     expect(assignmentStore.putHashedCalls).toHaveLength(2);
+  });
+
+  it("completes an exact-ID retry after transient ingest failure without permanent suppression", async () => {
+    const claims = new MemoryExposureRedemptionClaimStore();
+    const failOnce = new FailOnceIngestSink();
+    const { app } = await makeSdkRouteHarness({
+      liveRun: true,
+      exposureRedemptionClaims: claims,
+      exposureIngestSink: failOnce,
+    });
+    const ticket = await mintTicket();
+    const init = exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]);
+
+    const first = await app.request(PATH, init);
+    const firstBody = (await first.json()) as ExposureBatchResponse;
+    expect(firstBody.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "SERVICE_UNAVAILABLE" },
+    ]);
+    expect(failOnce.writes).toHaveLength(0);
+
+    const second = await app.request(PATH, init);
+    const secondBody = (await second.json()) as ExposureBatchResponse;
+    expect(secondBody.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "accepted", code: null },
+    ]);
+    expect(failOnce.writes).toHaveLength(1);
   });
 });

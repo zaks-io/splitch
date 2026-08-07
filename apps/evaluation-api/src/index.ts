@@ -29,7 +29,9 @@ import { makeDataPlaneAuthResolver } from "./data-plane-auth";
 import type { EvaluationApiEnv } from "./env";
 import { makeHttpEvaluationCommitSink } from "./evaluation-commit-sink";
 import { makeHttpEvaluationUsageSink } from "./evaluation-usage-sink";
-import { KvExposureRedemptionClaimStore, makeHttpExposureIngestSink } from "./exposure-redemption";
+import { makeHttpExposureIngestSink } from "./exposure-redemption";
+import { DurableExposureRedemptionClaimStore } from "./exposure-redemption-claim";
+import { ExposureRedemptionClaimDurableObject } from "./exposure-redemption-do";
 import { makeEnvSaltStore } from "./local-salt-store";
 import { exposureTicketKeyFromEnv } from "./local-ticket-key";
 import { KvProvider } from "./provider/kv-provider";
@@ -115,7 +117,9 @@ async function handleRequest(
       fetcher: env.EVENT_INGEST,
       token: env.SPLITCH_EVENT_INGEST_TOKEN,
     }),
-    exposureRedemptionClaims: new KvExposureRedemptionClaimStore(env.CREDENTIAL_STORE),
+    exposureRedemptionClaims: new DurableExposureRedemptionClaimStore(
+      env.EXPOSURE_REDEMPTION_CLAIMS,
+    ),
     evaluationCommitSink: makeHttpEvaluationCommitSink({
       endpoint: env.EVENT_INGEST_URL,
       fetcher: env.EVENT_INGEST,
@@ -184,4 +188,8 @@ function requiredMcpReplayBinding(
   return binding;
 }
 
-export { AssignmentStoreDurableObject, McpDelegationReplayDurableObject };
+export {
+  AssignmentStoreDurableObject,
+  ExposureRedemptionClaimDurableObject,
+  McpDelegationReplayDurableObject,
+};
