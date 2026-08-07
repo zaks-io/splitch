@@ -1,4 +1,4 @@
-import { findRepoInternalReference } from "./published-agent-surface.mjs";
+import { findRepoInternalReference } from "../../apps/cli/scripts/published-agent-surface.mjs";
 
 function uniqueIds(ids, surface) {
   const unique = new Set(ids);

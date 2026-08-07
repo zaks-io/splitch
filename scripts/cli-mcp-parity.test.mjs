@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { assertCliMcpParity, assertPublicAgentSurface } from "./lib/cli-mcp-parity.mjs";
-import { findRepoInternalReference } from "./lib/published-agent-surface.mjs";
+import { findRepoInternalReference } from "../apps/cli/scripts/published-agent-surface.mjs";
 
 const completeFixture = {
   contractOperationIds: ["apps_list"],

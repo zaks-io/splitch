@@ -3,9 +3,10 @@
  * and any other surface that must stay free of repo-internal references.
  *
  * Two real consumers today: apps/cli/scripts/pack-staging.mjs and
- * scripts/lib/cli-mcp-parity.mjs. Keep the regex here so they cannot drift.
+ * scripts/lib/cli-mcp-parity.mjs. Lives under apps/cli/scripts so the CLI
+ * prepare-artifacts scratch tree (which copies only the package) can resolve it.
  */
-export const REPO_INTERNAL_REFERENCE =
+const REPO_INTERNAL_REFERENCE =
   /(?:^|[\s`(])(?:\.\.\/|\.\/|docs\/|apps\/|packages\/|\.github\/|AGENTS\.md|CONTEXT\.md)|(?:ADR|SPL)-\d+/m;
 
 export function findRepoInternalReference(text) {

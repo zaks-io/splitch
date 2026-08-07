@@ -4,7 +4,7 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findRepoInternalReference } from "../../../scripts/lib/published-agent-surface.mjs";
+import { findRepoInternalReference } from "./published-agent-surface.mjs";
 
 const EXPECTED_DEPENDENCIES = ["@hono/zod-openapi", "@sentry/node", "hono", "open", "zod"];
 const REQUIRED_FILES = [
