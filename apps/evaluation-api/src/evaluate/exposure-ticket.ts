@@ -2,16 +2,19 @@ import { computeTargetingKeyHash, type SaltStore } from "@splitch/privacy";
 import type { ExposureDecision } from "./evaluate-path-types";
 
 /**
- * Opaque Exposure Ticket minting for Precomputed Evaluations (ADR-0048).
+ * Opaque Exposure Ticket minting and verification for Precomputed Evaluations
+ * (ADR-0048).
  *
  * Ticket = base64url(payload) + "." + base64url(HMAC-SHA256(payload, ticketKey))
- * Verification (exposures route) recomputes the MAC; minting is stateless.
+ * Verification recomputes the MAC; minting is stateless.
  * docs/spec/sdk/exposures-endpoint.md
  */
 
 const MIN_TICKET_KEY_LENGTH = 32;
+/** Tickets older than 24 hours are rejected EXPOSURE_TICKET_EXPIRED. */
+const EXPOSURE_TICKET_TTL_MS = 24 * 60 * 60 * 1000;
 
-interface ExposureTicketPayload {
+export interface ExposureTicketPayload {
   readonly app_id: string;
   readonly environment_id: string;
   readonly experiment_id: string;
@@ -28,6 +31,17 @@ export interface MintExposureTicketDeps {
   readonly ticketKey: string;
   readonly now?: () => Date;
 }
+
+export interface VerifyExposureTicketDeps {
+  readonly ticketKey: string;
+  /** Immediately previous key retained during rotation (ADR-0044 posture). */
+  readonly previousTicketKey?: string;
+  readonly now?: () => Date;
+}
+
+export type VerifyExposureTicketResult =
+  | { readonly ok: true; readonly payload: ExposureTicketPayload }
+  | { readonly ok: false; readonly reason: "invalid" | "expired"; readonly issuedAt?: string };
 
 export async function mintExposureTicket(
   exposure: ExposureDecision,
@@ -54,12 +68,125 @@ export async function mintExposureTicket(
   return `${encoded}.${await sign(encoded, deps.ticketKey)}`;
 }
 
+export async function verifyExposureTicket(
+  ticket: string,
+  deps: VerifyExposureTicketDeps,
+): Promise<VerifyExposureTicketResult> {
+  assertStrongTicketKey(deps.ticketKey);
+  if (deps.previousTicketKey !== undefined && deps.previousTicketKey.length > 0) {
+    assertStrongTicketKey(deps.previousTicketKey);
+  }
+
+  const parts = splitTicket(ticket);
+  if (parts === null) return { ok: false, reason: "invalid" };
+
+  const macOk = await macMatchesAnyKey(parts.encoded, parts.signature, [
+    deps.ticketKey,
+    ...(deps.previousTicketKey !== undefined && deps.previousTicketKey.length > 0
+      ? [deps.previousTicketKey]
+      : []),
+  ]);
+  if (!macOk) return { ok: false, reason: "invalid" };
+
+  const payload = decodePayload(parts.encoded);
+  if (payload === null) return { ok: false, reason: "invalid" };
+  return checkTicketFreshness(payload, (deps.now ?? (() => new Date()))().getTime());
+}
+
+function splitTicket(ticket: string): { encoded: string; signature: string } | null {
+  const parts = ticket.split(".");
+  if (parts.length !== 2) return null;
+  const [encoded, signature] = parts;
+  if (
+    encoded === undefined ||
+    signature === undefined ||
+    encoded.length === 0 ||
+    signature.length === 0
+  ) {
+    return null;
+  }
+  return { encoded, signature };
+}
+
+async function macMatchesAnyKey(
+  encoded: string,
+  signature: string,
+  keys: readonly string[],
+): Promise<boolean> {
+  for (const key of keys) {
+    if (await verifyMac(encoded, signature, key)) return true;
+  }
+  return false;
+}
+
+function checkTicketFreshness(
+  payload: ExposureTicketPayload,
+  nowMs: number,
+): VerifyExposureTicketResult {
+  const issuedAtMs = Date.parse(payload.issued_at);
+  if (!Number.isFinite(issuedAtMs)) return { ok: false, reason: "invalid" };
+  if (nowMs - issuedAtMs > EXPOSURE_TICKET_TTL_MS) {
+    return { ok: false, reason: "expired", issuedAt: payload.issued_at };
+  }
+  // Reject tickets from the future beyond a small skew window — treat as invalid.
+  if (issuedAtMs - nowMs > 5 * 60 * 1000) {
+    return { ok: false, reason: "invalid" };
+  }
+  return { ok: true, payload };
+}
+
 export function assertStrongTicketKey(secret: string): void {
   if (secret.length < MIN_TICKET_KEY_LENGTH) {
     throw new Error(
       `evaluation-api: EXPOSURE_TICKET_KEY must be at least ${MIN_TICKET_KEY_LENGTH} characters`,
     );
   }
+}
+
+function decodePayload(encoded: string): ExposureTicketPayload | null {
+  try {
+    const json = new TextDecoder().decode(base64UrlToBytes(encoded));
+    const parsed: unknown = JSON.parse(json);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    const record = parsed as Record<string, unknown>;
+    const required = [
+      "app_id",
+      "environment_id",
+      "experiment_id",
+      "run_id",
+      "flag_key",
+      "variant",
+      "id_type",
+      "targeting_key_hash",
+      "issued_at",
+    ] as const;
+    for (const field of required) {
+      if (typeof record[field] !== "string" || record[field].length === 0) return null;
+    }
+    return {
+      app_id: record.app_id as string,
+      environment_id: record.environment_id as string,
+      experiment_id: record.experiment_id as string,
+      run_id: record.run_id as string,
+      flag_key: record.flag_key as string,
+      variant: record.variant as string,
+      id_type: record.id_type as string,
+      targeting_key_hash: record.targeting_key_hash as string,
+      issued_at: record.issued_at as string,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function verifyMac(payload: string, signature: string, secret: string): Promise<boolean> {
+  const expected = await sign(payload, secret);
+  if (expected.length !== signature.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < expected.length; i += 1) {
+    mismatch |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+  }
+  return mismatch === 0;
 }
 
 async function sign(payload: string, secret: string): Promise<string> {
@@ -78,4 +205,13 @@ function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function base64UrlToBytes(value: string): Uint8Array {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padLength = (4 - (padded.length % 4)) % 4;
+  const binary = atob(padded + "=".repeat(padLength));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }

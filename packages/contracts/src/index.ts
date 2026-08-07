@@ -8,6 +8,8 @@ export * from "./barrels/parity-skins";
 export * from "./barrels/route-registry";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped stats input/result API
 export * from "./barrels/stats-contracts";
+// biome-ignore lint/performance/noReExportAll: curated wire envelopes live in barrels/wire-envelopes.ts
+export * from "./barrels/wire-envelopes";
 export { type CanonicalJsonSha256, CanonicalJsonSha256Schema } from "./canonical-hash";
 export {
   ClientOriginSchema,
@@ -282,36 +284,3 @@ export {
   RunConfigKVSchema,
   rememberMemberProfile,
 } from "./storage-schemas-kv";
-export type {
-  DataPlaneEvaluateRequest,
-  DataPlaneEvaluateResponse,
-  EvaluateAllEntry,
-  EvaluateAllReason,
-  EvaluateAllRequest,
-  EvaluateAllResponse,
-  PaginationQuery,
-  PeekEvaluateResponse,
-  RuleSelection,
-  TestEvaluationReason,
-  TestEvaluationRequest,
-  TestEvaluationResponse,
-} from "./wire-envelopes-core";
-export {
-  CachedEvaluationTelemetryRequestSchema,
-  CachedEvaluationTelemetryResponseSchema,
-  DataPlaneEvaluateRequestSchema,
-  DataPlaneEvaluateResponseSchema,
-  EvaluateAllEntrySchema,
-  EvaluateAllReasonSchema,
-  EvaluateAllRequestSchema,
-  EvaluateAllResponseSchema,
-  PAGINATION_DEFAULT_LIMIT,
-  PAGINATION_MAX_LIMIT,
-  PaginationQuerySchema,
-  PeekEvaluateResponseSchema,
-  paginatedResponse,
-  RuleSelectionSchema,
-  TestEvaluationReasonSchema,
-  TestEvaluationRequestSchema,
-  TestEvaluationResponseSchema,
-} from "./wire-envelopes-core";

@@ -34,6 +34,11 @@ export interface HashedAssignmentPutInput {
 export interface AssignmentStore {
   getAll(input: AssignmentIdentity): Promise<Map<string, AssignmentStoreEntry>>;
   put(input: AssignmentPutInput): Promise<AssignmentStorePutResult>;
+  /**
+   * Holdover write when only the Targeting Key hash is known (Exposure Ticket
+   * redemption — the raw Targeting Key never rides in a ticket).
+   */
+  putHashed(input: HashedAssignmentPutInput): Promise<AssignmentStorePutResult>;
 }
 
 export interface AssignmentStorePutResult {

@@ -40,6 +40,10 @@ import {
   makeSdkRouteHarness,
   sdkRouteInit,
 } from "./sdk-route-test-fixtures";
+import {
+  MemoryExposureRedemptionClaimStore,
+  RecordingExposureIngestSink,
+} from "./exposure-redemption";
 
 const TEST_EVAL_PATH = `/apps/${APP_ID}/envs/${ENVIRONMENT_ID}/flags/${FLAG_KEY}/test-eval`;
 const EVALUATE_PATH = "/api/sdk/evaluate";
@@ -147,6 +151,8 @@ async function makeParityHttpHarness() {
       saltStore: new StaticSaltStore(),
       ticketKey: "splitch-test-exposure-ticket-key-32chars",
     },
+    exposureIngestSink: new RecordingExposureIngestSink(),
+    exposureRedemptionClaims: new MemoryExposureRedemptionClaimStore(),
     evaluationCommitSink: new RecordingEvaluationCommitSink(
       new RecordingExposureSink(),
       new RecordingEvaluationUsageSink(),

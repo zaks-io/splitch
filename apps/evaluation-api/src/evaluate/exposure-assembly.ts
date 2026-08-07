@@ -1,6 +1,7 @@
 import type { ExposureEvent } from "@splitch/contracts";
 import { computeTargetingKeyHash, type SaltStore } from "@splitch/privacy";
 import type { EvaluatePathInput, EvaluateResult } from "./evaluate-path-types";
+import type { ExposureTicketPayload } from "./exposure-ticket";
 
 const EXPOSURE_TYPE = "exposure" as const;
 
@@ -65,6 +66,54 @@ export async function assembleEvaluateExposures(
       ingestTs: timestamp,
     },
   ];
+}
+
+/**
+ * Seal a canonical Exposure from a verified ticket. Every Exposure-relevant field
+ * comes from the ticket — never from client assertion (ADR-0048) — except the
+ * write-scope App/Environment, which come from the authenticated credential so a
+ * future tenant-gate regression cannot mis-attribute a write (ADR-0018).
+ * `exposureId` is the retry-stable physical event id (SDK-owned).
+ */
+export async function assembleExposureFromTicket(input: {
+  readonly ticket: ExposureTicketPayload;
+  readonly appId: string;
+  readonly environmentId: string;
+  readonly exposureId: string;
+  readonly clientTimestamp: string;
+  readonly sourceId: string;
+  readonly now?: () => Date;
+}): Promise<AssembledExposure> {
+  const serverReceivedAt = (input.now ?? (() => new Date()))().toISOString();
+  const dedupKey = await exposureDedupKey({
+    appId: input.appId,
+    eventId: input.exposureId,
+    experimentId: input.ticket.experiment_id,
+    idType: input.ticket.id_type,
+    runId: input.ticket.run_id,
+    sourceId: input.sourceId,
+    targetingKeyHash: input.ticket.targeting_key_hash,
+    type: EXPOSURE_TYPE,
+  });
+
+  return {
+    appId: input.appId,
+    environmentId: input.environmentId,
+    experimentId: input.ticket.experiment_id,
+    runId: input.ticket.run_id,
+    idType: input.ticket.id_type,
+    targetingKeyHash: input.ticket.targeting_key_hash,
+    variantName: input.ticket.variant,
+    type: EXPOSURE_TYPE,
+    eventId: input.exposureId,
+    dedupKey,
+    sourceId: input.sourceId,
+    counterfactual: false,
+    isHoldover: false,
+    clientTimestamp: input.clientTimestamp,
+    serverReceivedAt,
+    ingestTs: serverReceivedAt,
+  };
 }
 
 interface ExposureDedupKeyInput {

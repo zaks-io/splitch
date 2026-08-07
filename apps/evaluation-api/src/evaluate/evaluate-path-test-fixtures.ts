@@ -91,6 +91,7 @@ export function targetingRule(overrides: Partial<TargetingRule> = {}): Targeting
 export class RecordingAssignmentStore implements AssignmentStore {
   readonly getAllCalls: Array<Parameters<AssignmentStore["getAll"]>[0]> = [];
   readonly putCalls: AssignmentPutInput[] = [];
+  readonly putHashedCalls: Array<Parameters<AssignmentStore["putHashed"]>[0]> = [];
   private readonly calls?: string[];
   private readonly holdovers: Map<string, { runId: string; variant: string }>;
 
@@ -112,6 +113,14 @@ export class RecordingAssignmentStore implements AssignmentStore {
 
   async put(input: AssignmentPutInput) {
     this.putCalls.push(input);
+    return {
+      status: "stored" as const,
+      assignment: { runId: input.runId, variant: input.variant },
+    };
+  }
+
+  async putHashed(input: Parameters<AssignmentStore["putHashed"]>[0]) {
+    this.putHashedCalls.push(input);
     return {
       status: "stored" as const,
       assignment: { runId: input.runId, variant: input.variant },

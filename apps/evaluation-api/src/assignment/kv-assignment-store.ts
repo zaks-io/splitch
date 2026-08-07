@@ -38,8 +38,25 @@ export class KvAssignmentStore implements AssignmentStore {
 
   async put(input: AssignmentPutInput): Promise<AssignmentStorePutResult> {
     const { targetingKeyHash } = await hashedAssignmentIdentity(this.saltStore, input);
-    const payload = { ...input, targetingKeyHash };
-    const name = assignmentWriterName(payload);
+    return this.putHashed({
+      appId: input.appId,
+      experimentId: input.experimentId,
+      idType: input.idType,
+      targetingKeyHash,
+      runId: input.runId,
+      variant: input.variant,
+    });
+  }
+
+  async putHashed(input: {
+    appId: string;
+    experimentId: string;
+    idType: string;
+    targetingKeyHash: string;
+    runId: string;
+    variant: string;
+  }): Promise<AssignmentStorePutResult> {
+    const name = assignmentWriterName(input);
     const id = this.writerNamespace.idFromName(name);
     const stub = this.writerNamespace.get(id);
 
@@ -50,7 +67,7 @@ export class KvAssignmentStore implements AssignmentStore {
         appId: input.appId,
         experimentId: input.experimentId,
         idType: input.idType,
-        targetingKeyHash,
+        targetingKeyHash: input.targetingKeyHash,
         runId: input.runId,
         variant: input.variant,
       }),

@@ -10,10 +10,10 @@ import {
   type DelegatedIdentity,
   delegatedAuthResolver,
   delegatedIdentityFor,
+  McpDelegationReplayDurableObject,
   makeDurableMcpDelegationReplayGuard,
   makeMcpDelegationAuthResolver,
   notDelegatedResponse,
-  McpDelegationReplayDurableObject,
   type RateLimiter,
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
@@ -29,6 +29,7 @@ import { makeDataPlaneAuthResolver } from "./data-plane-auth";
 import type { EvaluationApiEnv } from "./env";
 import { makeHttpEvaluationCommitSink } from "./evaluation-commit-sink";
 import { makeHttpEvaluationUsageSink } from "./evaluation-usage-sink";
+import { KvExposureRedemptionClaimStore, makeHttpExposureIngestSink } from "./exposure-redemption";
 import { makeEnvSaltStore } from "./local-salt-store";
 import { exposureTicketKeyFromEnv } from "./local-ticket-key";
 import { KvProvider } from "./provider/kv-provider";
@@ -107,7 +108,14 @@ async function handleRequest(
     exposureTicket: {
       saltStore,
       ticketKey: exposureTicketKeyFromEnv(env),
+      previousTicketKey: env.EXPOSURE_TICKET_KEY_PREVIOUS,
     },
+    exposureIngestSink: makeHttpExposureIngestSink({
+      endpoint: env.EVENT_INGEST_URL,
+      fetcher: env.EVENT_INGEST,
+      token: env.SPLITCH_EVENT_INGEST_TOKEN,
+    }),
+    exposureRedemptionClaims: new KvExposureRedemptionClaimStore(env.CREDENTIAL_STORE),
     evaluationCommitSink: makeHttpEvaluationCommitSink({
       endpoint: env.EVENT_INGEST_URL,
       fetcher: env.EVENT_INGEST,

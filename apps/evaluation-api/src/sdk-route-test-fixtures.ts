@@ -28,6 +28,12 @@ import {
 import type { AssembledExposure } from "./evaluate/exposure-assembly";
 import type { EvaluationCommitEvent, EvaluationCommitSink } from "./evaluation-commit-sink";
 import type { EvaluationUsageEvent, EvaluationUsageSink } from "./evaluation-usage-sink";
+import {
+  type ExposureIngestSink,
+  type ExposureRedemptionClaimStore,
+  MemoryExposureRedemptionClaimStore,
+  RecordingExposureIngestSink,
+} from "./exposure-redemption";
 import { FakeKv } from "./provider/fake-kv";
 import { experimentConfigKV, flagConfigKV, runConfigKV } from "./provider/fixtures";
 import { KvProvider } from "./provider/kv-provider";
@@ -51,12 +57,15 @@ interface SdkRouteHarnessOptions {
   readonly experimentOverrides?: Partial<ExperimentConfigKV>;
   readonly evaluationCommitSink?: EvaluationCommitSink;
   readonly evaluationUsageSink?: RecordingEvaluationUsageSink;
+  readonly exposureIngestSink?: ExposureIngestSink;
+  readonly exposureRedemptionClaims?: ExposureRedemptionClaimStore;
   readonly flagOverrides?: Partial<FlagConfigKV>;
   readonly holdovers?: Map<string, { runId: string; variant: string }>;
   readonly runOverrides?: Partial<RunConfigKV>;
   readonly legacyClientKey?: boolean;
   /** Override Exposure Ticket issued_at for ETag-stability tests. */
   readonly ticketNow?: () => Date;
+  readonly previousTicketKey?: string;
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -186,6 +195,10 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
   const evaluationCommitSink =
     options.evaluationCommitSink ??
     new RecordingEvaluationCommitSink(exposureSink, evaluationUsageSink);
+  const exposureIngestSink =
+    options.exposureIngestSink ?? new RecordingExposureIngestSink(exposureSink);
+  const exposureRedemptionClaims =
+    options.exposureRedemptionClaims ?? new MemoryExposureRedemptionClaimStore();
   const logger = new RecordingLogger();
   const app = createApp({
     logger,
@@ -204,8 +217,11 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     exposureTicket: {
       saltStore: new StaticSaltStore(),
       ticketKey: "splitch-test-exposure-ticket-key-32chars",
+      previousTicketKey: options.previousTicketKey,
       now: options.ticketNow ?? (() => new Date("2026-07-03T00:00:00.000Z")),
     },
+    exposureIngestSink,
+    exposureRedemptionClaims,
     evaluationCommitSink,
     evaluationUsageSink,
   });
@@ -215,6 +231,8 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     configKv,
     credentialKv,
     exposureSink,
+    exposureIngestSink,
+    exposureRedemptionClaims,
     evaluationUsageSink,
     logger,
   };

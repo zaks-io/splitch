@@ -23,6 +23,20 @@ export {
   EvaluateAllResponseSchema,
 } from "./leaves/evaluate-all-wire";
 export {
+  EXPOSURE_BATCH_MAX_BODY_BYTES,
+  EXPOSURE_BATCH_MAX_ITEMS,
+  type ExposureBatchItem,
+  ExposureBatchItemSchema,
+  type ExposureBatchRequest,
+  ExposureBatchRequestSchema,
+  type ExposureBatchResponse,
+  ExposureBatchResponseSchema,
+  type ExposureBatchResult,
+  ExposureBatchResultSchema,
+  type ExposureBatchResultStatus,
+  ExposureBatchResultStatusSchema,
+} from "./leaves/exposures-wire";
+export {
   type ResolutionDetails,
   ResolutionDetailsSchema,
   type VariantValue,

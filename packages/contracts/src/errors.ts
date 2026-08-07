@@ -112,6 +112,8 @@ const errorMembers = [
     z.object({ field: z.enum(["cursor", "limit"]), reason: z.string() }),
   ),
   member("INVALID_SORT", z.object({ field: z.string(), allowedFields: z.array(z.string()) })),
+  member("EXPOSURE_TICKET_INVALID", z.object({ exposureId: z.string() })),
+  member("EXPOSURE_TICKET_EXPIRED", z.object({ exposureId: z.string(), issuedAt: z.string() })),
 
   member(
     "RUN_FROZEN",
@@ -304,6 +306,7 @@ const errorMembers = [
       idempotencyKey: z.string().min(1),
     }),
   ),
+  member("EVENT_ID_CONFLICT", z.object({ eventId: z.string() })),
 
   member(
     "MULTIPLE_VARIANT_CONFLICT",

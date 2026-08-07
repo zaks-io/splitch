@@ -7,6 +7,8 @@ import {
   DataPlaneEvaluateResponseSchema,
   EvaluateAllRequestSchema,
   EvaluateAllResponseSchema,
+  ExposureBatchRequestSchema,
+  ExposureBatchResponseSchema,
   PeekEvaluateResponseSchema,
 } from "../wire-envelopes-core";
 
@@ -23,9 +25,13 @@ import {
  * - evaluate-all: mixed Client Key | API Key; bulk Precomputed Evaluations for one
  *                 Evaluation Context (ADR-0048); structurally non-exposing; mints
  *                 Exposure Tickets for fresh assignments for a live Experiment Run.
+ * - exposures:    mixed Client Key | API Key; batched Exposure Ticket redemption
+ *                 (ADR-0048); seals canonical Exposures and deferred Assignment Store
+ *                 puts; retry identity is per-item `exposureId`.
  *
  * Endpoint canon: docs/spec/sdk/public-evaluate-endpoint.md,
- * exposure-accessor.md, verify-endpoint.md, evaluate-all-endpoint.md.
+ * exposure-accessor.md, verify-endpoint.md, evaluate-all-endpoint.md,
+ * exposures-endpoint.md.
  */
 
 const OWNER = "evaluation-api" as const;
@@ -145,6 +151,32 @@ export const dataPlaneRoutes = [
       "APP_MISMATCH",
       "ORIGIN_NOT_ALLOWED",
       "VALIDATION_ERROR",
+      "RATE_LIMITED",
+      "SERVICE_UNAVAILABLE",
+    ],
+  }),
+  defineApiRoute({
+    operationId: "sdk_exposures",
+    owner: OWNER,
+    method: "POST",
+    path: "/api/sdk/exposures",
+    summary: "Redeem Exposure Tickets in a batch (forgery-proof; deferred Assignment Store put).",
+    request: { body: ExposureBatchRequestSchema },
+    response: ExposureBatchResponseSchema,
+    auth: "data-plane-key",
+    scopes: ["data-plane:evaluate"],
+    rateLimit: "client-key",
+    // Retry identity is per-item exposureId (SDK-owned), not a batch Idempotency-Key.
+    idempotency: "none",
+    errors: [
+      "UNAUTHORIZED",
+      "CREDENTIAL_REVOKED",
+      "INSUFFICIENT_SCOPES",
+      "ORIGIN_NOT_ALLOWED",
+      "VALIDATION_ERROR",
+      "EXPOSURE_TICKET_INVALID",
+      "EXPOSURE_TICKET_EXPIRED",
+      "EVENT_ID_CONFLICT",
       "RATE_LIMITED",
       "SERVICE_UNAVAILABLE",
     ],

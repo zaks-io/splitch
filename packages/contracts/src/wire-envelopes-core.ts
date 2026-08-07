@@ -16,6 +16,20 @@ import {
   type EvaluateAllResponse,
   EvaluateAllResponseSchema,
 } from "./leaves/evaluate-all-wire";
+import {
+  EXPOSURE_BATCH_MAX_BODY_BYTES,
+  EXPOSURE_BATCH_MAX_ITEMS,
+  type ExposureBatchItem,
+  ExposureBatchItemSchema,
+  type ExposureBatchRequest,
+  ExposureBatchRequestSchema,
+  type ExposureBatchResponse,
+  ExposureBatchResponseSchema,
+  type ExposureBatchResult,
+  ExposureBatchResultSchema,
+  type ExposureBatchResultStatus,
+  ExposureBatchResultStatusSchema,
+} from "./leaves/exposures-wire";
 import { VariantValueSchema } from "./leaves/variant-value";
 
 export {
@@ -29,6 +43,18 @@ export {
   EvaluateAllRequestSchema,
   type EvaluateAllResponse,
   EvaluateAllResponseSchema,
+  EXPOSURE_BATCH_MAX_BODY_BYTES,
+  EXPOSURE_BATCH_MAX_ITEMS,
+  type ExposureBatchItem,
+  ExposureBatchItemSchema,
+  type ExposureBatchRequest,
+  ExposureBatchRequestSchema,
+  type ExposureBatchResponse,
+  ExposureBatchResponseSchema,
+  type ExposureBatchResult,
+  ExposureBatchResultSchema,
+  type ExposureBatchResultStatus,
+  ExposureBatchResultStatusSchema,
   type PeekEvaluateResponse,
   PeekEvaluateResponseSchema,
 };
