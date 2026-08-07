@@ -9,15 +9,37 @@ import type { FrozenControlIdentity } from "@splitch/contracts";
  */
 
 export function baselineVariant(control: FrozenControlIdentity): string | null {
-  return control.state === "frozen" ? control.variant : null;
+  return control.state === "unresolvable" ? null : control.variant;
 }
 
 export function baselineLabel(control: FrozenControlIdentity): string {
-  return control.state === "frozen" ? control.variant : "an unidentified Control";
+  return control.state === "unresolvable" ? "an unidentified Control" : control.variant;
 }
 
 export function ExperimentResultsControlIntegrity({ control }: { control: FrozenControlIdentity }) {
   if (control.state === "frozen") return null;
+  if (control.state === "disagreement") {
+    return (
+      <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-5" role="alert">
+        <h3 className="font-semibold text-base text-foreground">
+          Analysis Control disagrees with the Run
+        </h3>
+        <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
+          This Run froze{" "}
+          <code className="font-mono text-foreground text-xs">{control.variant}</code> as its
+          Control, but Tinybird returned{" "}
+          <code className="font-mono text-foreground text-xs">{control.analysisVariant}</code> in{" "}
+          <code className="font-mono text-foreground text-xs">control_variant</code> for this
+          Results read.
+        </p>
+        <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
+          The numbers below remain visible for diagnosis and the frozen Run Control remains the
+          displayed baseline. The statistics may have used a different Control, so conclude and
+          Promote are blocked until the disagreement is corrected.
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-5" role="alert">
       <h3 className="font-semibold text-base text-foreground">Control arm cannot be identified</h3>

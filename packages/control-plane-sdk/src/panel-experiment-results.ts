@@ -36,10 +36,10 @@ export const PanelExperimentResultsOutputSchema = z.discriminatedUnion("state", 
       runNumber: z.number().int().min(1),
       runStatus: z.enum(["running", "ended"]),
       /**
-       * The baseline every lift in `stats` is measured against, resolved from what
-       * the Run froze. `unresolvable` is a real state: a Run backfilled by SPL-184
-       * may carry a Control that is absent from its own frozen Variant set, and no
-       * arm may be substituted for it.
+       * The frozen Run Control used to label every lift in `stats`.
+       * `unresolvable` means no baseline can be identified; `disagreement` keeps
+       * the frozen baseline visible while naming the different Analysis Control
+       * and blocking the decision.
        */
       control: FrozenControlIdentitySchema,
       stats: StatsOutputSchema,

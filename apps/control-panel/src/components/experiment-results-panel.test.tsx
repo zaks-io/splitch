@@ -76,6 +76,30 @@ describe("Experiment Results route no_data waiting state", () => {
     expect(html).toContain("Exposures have not arrived for this Run yet");
   });
 
+  it("surfaces a Control disagreement even while a Run is waiting for data", () => {
+    resultsData.current = resultsNoDataFixture({
+      control: {
+        state: "disagreement",
+        variantId: "variant_control",
+        variant: "control",
+        analysisVariant: "legacy_checkout",
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      <ExperimentResultsPanel
+        appId="app_1"
+        environmentId="env_1"
+        experimentId="exp_1"
+        run={runningRun()}
+      />,
+    );
+
+    expect(html).toContain("Analysis Control disagrees with the Run");
+    expect(html).toContain("legacy_checkout");
+    expect(html).toContain('role="alert"');
+  });
+
   it("does not tell an ended Run that data is still arriving", () => {
     resultsData.current = resultsNoDataFixture({ missing: "metric_events", runStatus: "ended" });
 

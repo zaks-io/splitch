@@ -1,3 +1,4 @@
+import type { FrozenControlIdentity } from "@splitch/contracts";
 import type { PanelExperimentResultsReady } from "@splitch/control-plane-sdk/panel-experiments";
 import { ExperimentResultsCiPlot } from "./experiment-results-ci-plot";
 import { baselineLabel, ExperimentResultsControlIntegrity } from "./experiment-results-control";
@@ -93,10 +94,12 @@ export function ExperimentResultsEmpty() {
  * arrive for a missing input.
  */
 export function ExperimentResultsWaiting({
+  control,
   missing,
   runNumber,
   runStatus,
 }: {
+  control: FrozenControlIdentity;
   missing: "exposures" | "metric_events";
   runNumber: number;
   runStatus: "running" | "ended";
@@ -113,7 +116,7 @@ export function ExperimentResultsWaiting({
   return (
     <section
       aria-labelledby="results-heading"
-      className="rounded-lg border border-border bg-card p-6 shadow-sm"
+      className="grid gap-6 rounded-lg border border-border bg-card p-6 shadow-sm"
       data-testid="results-waiting"
     >
       <header className="grid gap-1">
@@ -125,6 +128,7 @@ export function ExperimentResultsWaiting({
         </h2>
         <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">{detail}</p>
       </header>
+      <ExperimentResultsControlIntegrity control={control} />
     </section>
   );
 }

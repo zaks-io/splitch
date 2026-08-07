@@ -33,6 +33,16 @@ export const FrozenControlIdentitySchema = z.discriminatedUnion("state", [
     .strict(),
   z
     .object({
+      state: z.literal("disagreement"),
+      variantId: z.string().min(1),
+      /** The frozen Run Control remains the displayed baseline. */
+      variant: z.string().min(1),
+      /** The Control Variant name reported by the Analysis envelope. */
+      analysisVariant: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
       state: z.literal("unresolvable"),
       variantId: z.string().min(1),
       reason: UnresolvableControlReasonSchema,
@@ -72,6 +82,19 @@ export function resolveFrozenControlIdentity(
     };
   }
   return { state: "frozen", variantId: controlVariantId, variant: control.name };
+}
+
+export function resolveAnalysisControlIntegrity(
+  control: FrozenControlIdentity,
+  analysisVariant: string,
+): FrozenControlIdentity {
+  if (control.state !== "frozen" || control.variant === analysisVariant) return control;
+  return {
+    state: "disagreement",
+    variantId: control.variantId,
+    variant: control.variant,
+    analysisVariant,
+  };
 }
 
 function readFrozenVariantSet(json: string): { id: string; name: string }[] | null {

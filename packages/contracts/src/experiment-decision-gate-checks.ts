@@ -66,8 +66,16 @@ export function controlIdentityCheck(control: FrozenControlIdentity): DecisionGa
     return {
       id: "control_identity",
       status: "pass",
-      title: "Control arm is the one the Run froze",
-      detail: `Every lift is measured against "${control.variant}", the Control this Run froze at Start. Editing the Experiment's default Variant since then did not move it.`,
+      title: "Analysis Control matches the one the Run froze",
+      detail: `Every lift is measured against "${control.variant}", the Control this Run froze at Start and Analysis reported for this read. Editing the Experiment's default Variant since then did not move it.`,
+    };
+  }
+  if (control.state === "disagreement") {
+    return {
+      id: "control_identity",
+      status: "fail",
+      title: "Analysis Control disagrees with the Run",
+      detail: `This Run froze "${control.variant}" as its Control, but Analysis reported "${control.analysisVariant}". The frozen Run Control remains the displayed baseline, but the statistics may have been computed against a different Control. Conclude and Promote are blocked until the disagreement is corrected.`,
     };
   }
   const froze =

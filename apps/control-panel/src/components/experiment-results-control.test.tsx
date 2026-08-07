@@ -19,6 +19,13 @@ const unresolvable: FrozenControlIdentity = {
   frozenVariantNames: ["control", "treatment"],
 };
 
+const disagreement: FrozenControlIdentity = {
+  state: "disagreement",
+  variantId: "variant_control",
+  variant: "control",
+  analysisVariant: "legacy_checkout",
+};
+
 function unresolvableHtml() {
   const stats = statsFixture();
   return renderToStaticMarkup(
@@ -57,5 +64,35 @@ describe("ExperimentResults with an unidentifiable Control", () => {
 
     expect(html).toContain("an unidentified Control");
     expect(html).not.toContain("against control,");
+  });
+});
+
+describe("ExperimentResults with an Analysis Control disagreement", () => {
+  function disagreementHtml() {
+    return renderToStaticMarkup(
+      <ExperimentResults results={resultsFixture(statsFixture(), { control: disagreement })} />,
+    );
+  }
+
+  it("names both Controls and keeps the frozen Run Control as the displayed baseline", () => {
+    const html = disagreementHtml();
+
+    expect(html).toContain("Analysis Control disagrees with the Run");
+    expect(html).toContain("legacy_checkout");
+    expect(html).toContain("control_variant");
+    expect(html).toContain("Relative lift against control");
+    expect(html).toContain("Baseline (control) at zero lift by definition");
+    expect(html).toContain('role="alert"');
+  });
+
+  it("keeps the numbers visible and blocks conclude or Promote with the failing check named", () => {
+    const html = disagreementHtml();
+
+    expect(html).toContain("+6.4%");
+    expect(html).toContain("<svg");
+    expect(html).toContain('data-testid="ship-blocked"');
+    expect(html).toContain("Analysis Control disagrees with the Run");
+    expect(html).toContain("Conclude and promote winner");
+    expect(html).toMatch(/<button[^>]*\sdisabled=""/);
   });
 });

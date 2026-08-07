@@ -139,6 +139,7 @@ function Ticks({ domain, height }: { domain: CiPlotDomain; height: number }) {
 }
 
 function Legend({ control }: { control: FrozenControlIdentity }) {
+  const baseline = baselineVariant(control);
   return (
     <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-muted-foreground text-xs">
       <li className="flex items-center gap-2">
@@ -146,8 +147,8 @@ function Legend({ control }: { control: FrozenControlIdentity }) {
           aria-hidden="true"
           className="inline-block size-2.5 rounded-full bg-[color:var(--arm-control)]"
         />
-        {control.state === "frozen"
-          ? `Baseline (${control.variant}) at zero lift by definition`
+        {baseline
+          ? `Baseline (${baseline}) at zero lift by definition`
           : "Baseline unidentified, so no arm is drawn at zero lift"}
       </li>
       <li className="flex items-center gap-2">
