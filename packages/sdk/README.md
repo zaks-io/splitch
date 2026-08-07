@@ -16,7 +16,8 @@ always observable, never a silently disguised default.
 npm install @splitch/sdk
 ```
 
-ESM only. Node >= 20, browsers, and edge runtimes. `zod` is the sole dependency.
+ESM only. Node >= 20, browsers, and edge runtimes. Zero runtime dependencies —
+response validation is compiled into the package at build time.
 
 ## Hello world
 
