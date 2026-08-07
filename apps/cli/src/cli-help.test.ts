@@ -1,3 +1,4 @@
+import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { CLI_COMMANDS, META_COMMANDS } from "./command-registry.js";
@@ -54,6 +55,16 @@ describe("published CLI help", () => {
     expect(clientKey).toContain("Client Key is public");
     expect(apiKey).toContain("API Key is secret and server-side only");
     expect(apiKey).toContain("shown once and cannot be read back");
+  });
+
+  it("surfaces the kill-switch-off exemption on flag-config update and env-policy help (SPL-312)", () => {
+    const flagConfigUpdate = renderHelp(["flag-config", "update", "--help"]);
+    const envPolicyGet = renderHelp(["env-policy", "get", "--help"]);
+    const envPolicySet = renderHelp(["env-policy", "set", "--help"]);
+
+    expect(flagConfigUpdate).toContain(KILL_SWITCH_OFF_EXEMPTION);
+    expect(envPolicyGet).toContain(KILL_SWITCH_OFF_EXEMPTION);
+    expect(envPolicySet).toContain(KILL_SWITCH_OFF_EXEMPTION);
   });
 
   it.each([

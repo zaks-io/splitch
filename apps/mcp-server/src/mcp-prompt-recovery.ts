@@ -95,7 +95,10 @@ function recoverySteps(
           "Apply the blocked change on the new draft (use the same write the original call attempted).",
         ),
         toolMessage("experiments_start", "Start the new draft Run."),
-        toolMessage("flags_test_eval", "Confirm the new Run resolves (ADR-0037)."),
+        toolMessage(
+          "flags_test_eval",
+          "Confirm the new Run resolves without recording an Exposure.",
+        ),
       ];
     case "END_RUNNING_RUN_FIRST": {
       const runningRunId =
