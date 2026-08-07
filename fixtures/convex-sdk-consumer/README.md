@@ -28,8 +28,11 @@ tarball, and runs `vitest` under `convex-test`
 
 ## Transport seam
 
-Tests stub the global `fetch` at the fixture seam (no live edge). See
-`convex/testHelpers.ts` and the PR for SPL-336.
+Tests stub the global `fetch` at the fixture seam (no live edge). The stub is a
+**receiver-identity** `function` that throws `Illegal invocation` when called
+detached from `globalThis` — the same failure mode as browser / workerd
+`fetch` — so a missing SDK `.bind(globalThis)` turns the suite red. See
+`convex/testHelpers.ts`.
 
 ## Credentials
 

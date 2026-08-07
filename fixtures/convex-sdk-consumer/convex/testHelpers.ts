@@ -79,7 +79,18 @@ export function stubSplitchEdgeFetch(): {
   const calls: FetchCall[] = [];
   const previous = globalThis.fetch;
 
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  // Regular function (not arrow): replicate host-fetch receiver identity.
+  // Browsers / workerd throw Illegal invocation when fetch is called detached
+  // from its global; a plain arrow would silently pass and hide that class of
+  // bug (SPL-321). The SDK must `.bind(globalThis)` at its default-fetch seam.
+  const windowLikeFetch = async function (
+    this: unknown,
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> {
+    if (this !== globalThis) {
+      throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+    }
     const url = requestUrl(input);
     calls.push({
       url,
@@ -87,7 +98,9 @@ export function stubSplitchEdgeFetch(): {
       authorization: requestHeaders(input, init).get("authorization"),
     });
     return stubbedEdgeResponse(url);
-  }) as typeof fetch;
+  };
+
+  globalThis.fetch = windowLikeFetch as typeof fetch;
 
   return {
     calls,

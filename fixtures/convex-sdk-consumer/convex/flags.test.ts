@@ -80,6 +80,38 @@ describe("Convex action evaluate round-trip (fetch stubbed at fixture seam)", ()
     }
   });
 
+  it("evaluateAndStore upserts so a repeat pair does not break .unique() reads", async () => {
+    process.env.SPLITCH_CLIENT_KEY = "pk_convex_fixture";
+    process.env.SPLITCH_ENDPOINT = "https://edge.test";
+    const edge = stubSplitchEdgeFetch();
+    const t = convexTest(schema, modules);
+
+    try {
+      await t.action(api.flags.evaluateAndStore, {
+        flagKey: "new-checkout",
+        targetingKey: "user-upsert",
+        idempotencyKey: "eval-upsert-1",
+      });
+      await t.action(api.flags.evaluateAndStore, {
+        flagKey: "new-checkout",
+        targetingKey: "user-upsert",
+        idempotencyKey: "eval-upsert-2",
+      });
+
+      const stored = await t.query(api.flags.getStoredEvaluation, {
+        targetingKey: "user-upsert",
+        flagKey: "new-checkout",
+      });
+      expect(stored).toMatchObject({
+        value: true,
+        variantName: "treatment",
+        reason: "SPLIT",
+      });
+    } finally {
+      edge.restore();
+    }
+  });
+
   it("fails loud when SPLITCH_CLIENT_KEY is missing (no silent degradation)", async () => {
     delete process.env.SPLITCH_CLIENT_KEY;
     process.env.SPLITCH_ENDPOINT = "https://edge.test";

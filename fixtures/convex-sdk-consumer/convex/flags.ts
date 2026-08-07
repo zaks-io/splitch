@@ -13,8 +13,10 @@ const storedResolutionValidator = v.object({
 });
 
 /**
- * Persist a resolution as data. Mutations cannot call `@splitch/sdk`
- * (`fetch` is actions-only: https://docs.convex.dev/functions/runtimes).
+ * Persist a resolution as data (upsert by targetingKey+flagKey). Mutations
+ * cannot call `@splitch/sdk` (`fetch` is actions-only:
+ * https://docs.convex.dev/functions/runtimes). Upsert keeps `.unique()` reads
+ * valid across repeat evaluates of the same pair.
  */
 export const storeEvaluation = internalMutation({
   args: {
@@ -27,6 +29,21 @@ export const storeEvaluation = internalMutation({
   },
   returns: v.id("evaluations"),
   handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("evaluations")
+      .withIndex("by_targeting_and_flag", (q) =>
+        q.eq("targetingKey", args.targetingKey).eq("flagKey", args.flagKey),
+      )
+      .unique();
+    if (existing !== null) {
+      await ctx.db.patch(existing._id, {
+        value: args.value,
+        variantName: args.variantName,
+        reason: args.reason,
+        errorCode: args.errorCode,
+      });
+      return existing._id;
+    }
     return await ctx.db.insert("evaluations", args);
   },
 });
