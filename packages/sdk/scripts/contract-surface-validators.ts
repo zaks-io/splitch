@@ -264,11 +264,19 @@ function parseEvaluateAllResponse(input: unknown): EvaluateAllResponse {
   if (!isPlainObject(input.evaluations)) {
     fail("evaluations must be an object");
   }
-  // Null prototype: a flag key of "__proto__" must become an own property, not
-  // mutate Object.prototype (zod's record parse does the same).
-  const evaluations: Record<string, EvaluateAllEntry> = Object.create(null);
+  // Write with defineProperty so a flag key of "__proto__" becomes an own
+  // property instead of hitting Object.prototype.__proto__. The map keeps a
+  // normal Object.prototype so Record consumers can call hasOwnProperty /
+  // toString. (zod 4.4.3 drops the "__proto__" entry entirely — see the
+  // parity suite's divergence pin.)
+  const evaluations: Record<string, EvaluateAllEntry> = {};
   for (const [flagKey, entry] of Object.entries(input.evaluations)) {
-    evaluations[flagKey] = parseEvaluateAllEntry(entry, `evaluations.${flagKey}`);
+    Object.defineProperty(evaluations, flagKey, {
+      value: parseEvaluateAllEntry(entry, `evaluations.${flagKey}`),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
   return { evaluations };
 }
