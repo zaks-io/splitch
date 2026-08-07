@@ -264,7 +264,9 @@ function parseEvaluateAllResponse(input: unknown): EvaluateAllResponse {
   if (!isPlainObject(input.evaluations)) {
     fail("evaluations must be an object");
   }
-  const evaluations: Record<string, EvaluateAllEntry> = {};
+  // Null prototype: a flag key of "__proto__" must become an own property, not
+  // mutate Object.prototype (zod's record parse does the same).
+  const evaluations: Record<string, EvaluateAllEntry> = Object.create(null);
   for (const [flagKey, entry] of Object.entries(input.evaluations)) {
     evaluations[flagKey] = parseEvaluateAllEntry(entry, `evaluations.${flagKey}`);
   }

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 /**
  * Per-entry browser bundle size gate (SPL-325).
  *
@@ -158,7 +158,6 @@ if (manifest.dependencies && Object.keys(manifest.dependencies).length > 0) {
 
 const esbuild = await loadEsbuild();
 const entries = publishedEntries(manifest);
-mkdirSync(join(packageRoot, "dist"), { recursive: true });
 
 for (const entry of entries) {
   try {

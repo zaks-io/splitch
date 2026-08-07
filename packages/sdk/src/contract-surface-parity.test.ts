@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { errorCodes as contractErrorCodes } from "../../contracts/src/error-code";
+import { EvaluateAllReasonSchema as ZodEvaluateAllReasonSchema } from "../../contracts/src/leaves/evaluate-all-wire";
 import { resolutionReasons as contractResolutionReasons } from "../../contracts/src/leaves/resolution-reason";
 import {
   DataPlaneEvaluateResponseSchema as ZodDataPlaneEvaluateResponseSchema,
@@ -22,6 +23,16 @@ function expectParity(compiled: AnySchema, zod: AnySchema, input: unknown, ok: b
   expect(zod.safeParse(input).success).toBe(ok);
 }
 
+function wellFormedEvaluateAllEntry(reason: string) {
+  return {
+    variant: reason === "ERROR" ? null : true,
+    variantName: reason === "ERROR" ? null : "on",
+    reason,
+    errorCode: reason === "ERROR" ? ("INTERNAL_SERVER_ERROR" as const) : null,
+    exposureTicket: reason === "SPLIT" ? "ticket" : null,
+  };
+}
+
 describe("contract-surface zod-free parity", () => {
   it("ErrorCodeSchema.options matches contracts errorCodes", () => {
     expect([...ErrorCodeSchema.options]).toEqual([...contractErrorCodes]);
@@ -42,6 +53,17 @@ describe("contract-surface zod-free parity", () => {
         ...(reason === "TARGETING_MATCH" ? { ruleId: "rule-1" } : {}),
       };
       expectParity(ResolutionDetailsSchema, ZodResolutionDetailsSchema, base, true);
+    }
+  });
+
+  it("evaluate-all reason set matches contracts", () => {
+    for (const reason of ZodEvaluateAllReasonSchema.options) {
+      const input = {
+        evaluations: {
+          "new-checkout": wellFormedEvaluateAllEntry(reason),
+        },
+      };
+      expectParity(EvaluateAllResponseSchema, ZodEvaluateAllResponseSchema, input, true);
     }
   });
 
@@ -134,5 +156,33 @@ describe("contract-surface zod-free parity", () => {
     for (const row of rows) {
       expectParity(EvaluateAllResponseSchema, ZodEvaluateAllResponseSchema, row.input, row.ok);
     }
+  });
+
+  it("EvaluateAllResponseSchema keeps a __proto__ flag key as an own property", () => {
+    // JSON.parse creates __proto__ as an own property; Object.entries yields it.
+    // Assigning into a plain {} would hit the Object.prototype.__proto__ setter.
+    const input = JSON.parse(
+      '{"evaluations":{"__proto__":{"variant":false,"variantName":null,"reason":"DEFAULT","errorCode":null,"exposureTicket":null}}}',
+    ) as unknown;
+
+    const compiled = EvaluateAllResponseSchema.safeParse(input);
+    expect(compiled.success).toBe(true);
+    if (!compiled.success) {
+      return;
+    }
+
+    expect(Object.getPrototypeOf(compiled.data.evaluations)).toBeNull();
+    expect(Object.prototype.hasOwnProperty.call(compiled.data.evaluations, "__proto__")).toBe(true);
+    expect(Object.keys(compiled.data.evaluations)).toEqual(["__proto__"]);
+    expect(compiled.data.evaluations["__proto__"]).toEqual({
+      variant: false,
+      variantName: null,
+      reason: "DEFAULT",
+      errorCode: null,
+      exposureTicket: null,
+    });
+    // Object.prototype itself must stay untouched.
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+    expect(Object.prototype.hasOwnProperty.call(Object.prototype, "variant")).toBe(false);
   });
 });

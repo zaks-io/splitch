@@ -114,13 +114,16 @@ export function assertReleaseBundleJs(bundleJs) {
 }
 
 function assertNoZodInBundle(bundleJs) {
+  // With `external: []` a reintroduced zod is inlined, not imported; the
+  // load-bearing guards are assertZeroRuntimeDependencies and size-check's
+  // metafile scan. These regexes only catch accidental re-externalization.
   if (
     /\bfrom\s*["']zod(?:\/[^"']*)?["']/.test(bundleJs) ||
     /\brequire\s*\(\s*["']zod/.test(bundleJs)
   ) {
     throw new Error("release bundle must not import zod (SPL-325)");
   }
-  if (bundleJs.includes("zod/v4/locales") || bundleJs.includes("zod/v4/locales/")) {
+  if (bundleJs.includes("zod/v4/locales")) {
     throw new Error("release bundle must not contain zod locale modules (SPL-325)");
   }
 }
