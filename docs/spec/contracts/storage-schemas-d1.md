@@ -215,7 +215,7 @@ Pending Approval Requests and their Reviews have no TTL, including Requests that
 stale before a Review materializes that state. A stored terminal `applied`, `declined`, or `stale`
 Request and every Review remain in D1 through 90 days after `resolved_at`. The daily archival worker
 then writes one versioned, canonical, untruncated Request-plus-ordered-Reviews payload to Tinybird,
-verifies its archive version, row count, and SHA-256 content checksum, and only then atomically
+verifies its archive version, archived D1 row count, and SHA-256 content checksum, and only then atomically
 removes the Review rows followed by the Request. A failed append or verification changes no D1
 Request or Review row.
 

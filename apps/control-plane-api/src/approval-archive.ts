@@ -24,7 +24,7 @@ export interface ApprovalArchiveEvent {
   changes: string;
   timestamp: string;
   archive_version: typeof APPROVAL_ARCHIVE_VERSION;
-  archive_row_count: number;
+  archived_d1_row_count: number;
   archive_checksum: string;
   request_status: "applied" | "declined" | "stale";
   target_type: string;
@@ -138,7 +138,7 @@ async function archiveCandidate(
 function assertVerifiedEvent(stored: ApprovalArchiveEvent, expected: ApprovalArchiveEvent): void {
   if (
     stored.archive_version !== expected.archive_version ||
-    stored.archive_row_count !== expected.archive_row_count ||
+    stored.archived_d1_row_count !== expected.archived_d1_row_count ||
     stored.archive_checksum !== expected.archive_checksum
   ) {
     throw new Error(`Approval Request ${expected.resource_id} archive verification mismatch`);
@@ -174,7 +174,7 @@ export async function approvalArchiveEvent(
     changes,
     timestamp: archivedAt,
     archive_version: APPROVAL_ARCHIVE_VERSION,
-    archive_row_count: 1 + reviews.length,
+    archived_d1_row_count: 1 + reviews.length,
     archive_checksum: checksum,
     request_status: status,
     target_type: request.targetType,
@@ -203,7 +203,7 @@ async function verifiedArchivePayload(
   if (payload.archiveVersion !== event.archive_version) {
     throw new Error(`Approval Request ${requestId} archive version mismatch`);
   }
-  if (1 + payload.reviews.length !== event.archive_row_count) {
+  if (1 + payload.reviews.length !== event.archived_d1_row_count) {
     throw new Error(`Approval Request ${requestId} archive row-count mismatch`);
   }
   if ((await canonicalHash(payload)) !== event.archive_checksum) {
@@ -218,8 +218,9 @@ async function verifiedArchivePayload(
 
 export async function archivedApprovalRequest(
   event: ApprovalArchiveEvent,
+  appId: string,
 ): Promise<ApprovalRequest> {
-  const payload = await verifiedArchivePayload(event, event.app_id, event.resource_id);
+  const payload = await verifiedArchivePayload(event, appId, event.resource_id);
   return storedApprovalRequestProjection(payload.request, payload.reviews.at(-1) ?? null);
 }
 

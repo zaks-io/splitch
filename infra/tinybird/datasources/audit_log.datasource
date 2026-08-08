@@ -10,7 +10,7 @@ SCHEMA >
     `changes` String `json:$.changes`,
     `timestamp` DateTime64(3) `json:$.timestamp`,
     `archive_version` Nullable(UInt16) `json:$.archive_version`,
-    `archive_row_count` Nullable(UInt32) `json:$.archive_row_count`,
+    `archived_d1_row_count` Nullable(UInt32) `json:$.archived_d1_row_count`,
     `archive_checksum` Nullable(String) `json:$.archive_checksum`,
     `request_status` Nullable(String) `json:$.request_status`,
     `target_type` Nullable(String) `json:$.target_type`,

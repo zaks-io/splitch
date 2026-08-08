@@ -104,7 +104,7 @@ function parseArchiveEvent(value: unknown): ApprovalArchiveEvent {
   }
   const row = value as Record<string, unknown>;
   const archiveVersion = integer(row.archive_version, "archive_version");
-  const archiveRowCount = integer(row.archive_row_count, "archive_row_count");
+  const archivedD1RowCount = integer(row.archived_d1_row_count, "archived_d1_row_count");
   const event = {
     audit_id: string(row.audit_id, "audit_id"),
     dedup_key: string(row.dedup_key, "dedup_key"),
@@ -117,7 +117,7 @@ function parseArchiveEvent(value: unknown): ApprovalArchiveEvent {
     changes: string(row.changes, "changes"),
     timestamp: string(row.timestamp, "timestamp"),
     archive_version: archiveVersion,
-    archive_row_count: archiveRowCount,
+    archived_d1_row_count: archivedD1RowCount,
     archive_checksum: string(row.archive_checksum, "archive_checksum"),
     request_status: string(row.request_status, "request_status"),
     target_type: string(row.target_type, "target_type"),

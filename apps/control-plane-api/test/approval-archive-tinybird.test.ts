@@ -15,7 +15,7 @@ const EVENT: ApprovalArchiveEvent = {
   changes: '{"archiveVersion":1}',
   timestamp: "2026-08-07T12:00:00.000Z",
   archive_version: 1,
-  archive_row_count: 3,
+  archived_d1_row_count: 3,
   archive_checksum: `sha256:${"a".repeat(64)}`,
   request_status: "declined",
   target_type: "flag_configuration",

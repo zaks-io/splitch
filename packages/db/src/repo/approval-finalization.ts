@@ -41,7 +41,6 @@ export async function finalizeApprovalArchive(
       .prepare(
         `DELETE FROM approval_requests
          WHERE app_id = ? AND id = ? AND status = ? AND resolved_at = ?
-           AND changes() = ?
            AND NOT EXISTS (
              SELECT 1 FROM approval_reviews
              WHERE app_id = ? AND approval_request_id = ?
@@ -53,7 +52,6 @@ export async function finalizeApprovalArchive(
         input.requestId,
         expectedStatus,
         input.resolvedAt,
-        input.reviewCount,
         scope.appId,
         input.requestId,
       ),

@@ -106,7 +106,7 @@ describe("Approval Request terminal archival", () => {
     expect(payload.reviews).toHaveLength(2);
     expect(payload.reviews[0]?.reason).toBe(largeText);
     expect(payload.reviews[0]?.errorDetails).toContain(largeText);
-    expect(existing.archive_row_count).toBe(3);
+    expect(existing.archived_d1_row_count).toBe(3);
   });
 });
 
@@ -188,6 +188,45 @@ describe("Approval Request archival sweep isolation", () => {
       reviews: 2,
     });
   });
+
+  it("keeps every D1 row when a Review appears before finalization", async () => {
+    const requestId = "apr_01J00000000000000000000114";
+    await seedApprovalArchiveFixture(h.d1, { id: requestId, resolvedAt: OLD });
+    const reviews = await h.repo.approvals.listReviews(appScope(ids.appId), requestId);
+    await h.d1
+      .prepare(
+        `INSERT INTO approval_reviews (
+          id, app_id, approval_request_id, action, outcome, reviewed_by,
+          reviewed_via, reviewed_at, reason, idempotency_key, request_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        "rev_01J00000000000000000000114C",
+        ids.appId,
+        requestId,
+        "decline",
+        "declined",
+        "user_archive_race",
+        "id_jag",
+        "2026-05-01T12:00:01.000Z",
+        "inserted during archival",
+        "idem_archive_race",
+        `sha256:${"e".repeat(64)}`,
+      )
+      .run();
+
+    await expect(
+      h.repo.approvals.finalizeArchive(
+        appScope(ids.appId),
+        { requestId, resolvedAt: OLD, reviewCount: reviews.length },
+        "declined",
+      ),
+    ).rejects.toThrow("archive finalization failed");
+    expect(await approvalRowCounts(h.d1, ids.appId, requestId)).toEqual({
+      requests: 1,
+      reviews: 3,
+    });
+  });
 });
 
 describe("Approval Request archive verification failures", () => {
@@ -222,7 +261,7 @@ describe("Approval Request archive verification failures", () => {
       configure(store: MemoryApprovalArchiveStore) {
         store.mutateRead = (event) => ({
           ...event,
-          archive_row_count: event.archive_row_count + 1,
+          archived_d1_row_count: event.archived_d1_row_count + 1,
         });
       },
       message: "row-count mismatch",

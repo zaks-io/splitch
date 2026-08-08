@@ -52,7 +52,7 @@ export function makeApprovalHandlers(deps: ApprovalHandlerDeps) {
         APPROVAL_ARCHIVE_VERSION,
       );
       return archived
-        ? Response.json(await archivedApprovalRequest(archived))
+        ? Response.json(await archivedApprovalRequest(archived, appId))
         : approvalNotFound(requestId);
     },
 
@@ -136,7 +136,7 @@ async function mergedRequestPage(
   ]);
   const [online, archived] = await Promise.all([
     Promise.all(rows.map((row) => approvalRequestProjection(deps.repo, row))),
-    Promise.all(archiveEvents.map(archivedApprovalRequest)),
+    Promise.all(archiveEvents.map((event) => archivedApprovalRequest(event, appId))),
   ]);
   const scanned = [...online, ...archived]
     .sort(compareRequests)
@@ -177,7 +177,7 @@ async function resolveCursor(
   if (!includeArchive) return null;
   const event = await deps.archiveStore?.get(appId, requestId, APPROVAL_ARCHIVE_VERSION);
   if (!event) return null;
-  const archived = await archivedApprovalRequest(event);
+  const archived = await archivedApprovalRequest(event, appId);
   return { id: archived.id, proposedAt: archived.proposedAt };
 }
 

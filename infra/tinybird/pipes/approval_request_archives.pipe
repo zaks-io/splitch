@@ -17,7 +17,7 @@ SQL >
             argMax(auth_method, timestamp) AS auth_method,
             argMax(changes, timestamp) AS changes,
             max(timestamp) AS archived_at,
-            argMax(archive_row_count, timestamp) AS archive_row_count,
+            argMax(archived_d1_row_count, timestamp) AS archived_d1_row_count,
             argMax(archive_checksum, timestamp) AS archive_checksum,
             argMax(request_status, timestamp) AS archived_request_status,
             argMax(target_type, timestamp) AS archived_target_type,
@@ -41,6 +41,7 @@ SQL >
             AND target_type = {{String(target_type)}}
             {% end %}
             {% if defined(environment_id) %}
+            -- policy_contexts is canonical JSON, so this exact serialized property matches D1's JSON predicate.
             AND position(
                 ifNull(policy_contexts, ''),
                 concat('"environmentId":"', {{String(environment_id)}}, '"')
@@ -60,7 +61,7 @@ SQL >
         'approval_request' AS resource_type,
         changes,
         archived_at AS timestamp,
-        archive_row_count,
+        archived_d1_row_count,
         archive_checksum,
         archived_request_status AS request_status,
         archived_target_type AS target_type,

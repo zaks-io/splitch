@@ -147,10 +147,11 @@ Session identifiers follow those filters rather than blocking time-range data sk
 | `timestamp`     | DateTime               | Event time                                                                    |
 
 The physical datasource also carries archive-only indexing and verification columns:
-`dedup_key`, `archive_version`, `archive_row_count`, `archive_checksum`, `request_status`,
+`dedup_key`, `archive_version`, `archived_d1_row_count`, `archive_checksum`, `request_status`,
 `target_type`, `proposed_at`, `resolved_at`, and `policy_contexts`. Ordinary audit rows leave the
-archive-only columns null. The sorting key begins with `app_id`; no read can select an Approval
-Request archive before applying its App scope.
+archive-only columns null. `archived_d1_row_count` counts the Request row plus every Review row in
+the archive payload, not Tinybird rows. The sorting key begins with `app_id`; no read can select an
+Approval Request archive before applying its App scope.
 
 Approval audit rows use this existing `audit_log` datasource, not a new datasource. The minimum
 projection is the ordinary `app_id`, `user_id`, `auth_method`, `action`, `resource_type`,
