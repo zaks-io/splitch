@@ -4,6 +4,8 @@ const maxBatches = 10_000;
 const checkpointReadyTimeoutMs = 30_000;
 const checkpointReadyPollMs = 1_000;
 
+class CheckpointNotReadyError extends Error {}
+
 export async function completeCredentialCacheBackfill({
   origin,
   token,
@@ -33,18 +35,17 @@ export async function completeCredentialCacheBackfill({
     } catch (cause) {
       // The request carries the deploy gate token, so only the error class is
       // reported, never a message that could quote the header back.
-      throw new Error(
+      throw new CheckpointNotReadyError(
         `credential cache backfill gate at ${gate.origin} is unreachable (${cause instanceof Error ? cause.name : "unknown error"}); the compatible Control Plane did not become reachable`,
       );
     }
     if (!response.ok) {
-      const bootstrap =
-        response.status === 404
-          ? "; the compatible Control Plane did not expose the migration gate"
-          : "";
-      throw new Error(
-        `credential cache backfill gate returned HTTP ${response.status}${bootstrap}`,
-      );
+      if (response.status === 404) {
+        throw new CheckpointNotReadyError(
+          "credential cache backfill gate returned HTTP 404; the compatible Control Plane did not expose the migration gate",
+        );
+      }
+      throw new Error(`credential cache backfill gate returned HTTP ${response.status}`);
     }
     return response.json();
   }
@@ -61,14 +62,19 @@ export async function completeCredentialCacheBackfill({
 async function waitForCurrentCheckpoint({ request, sleepImpl, nowMs }) {
   const deadline = nowMs() + checkpointReadyTimeoutMs;
   while (true) {
-    const checkpoint = await request("/status");
+    let checkpoint;
+    try {
+      checkpoint = await request("/status");
+    } catch (error) {
+      if (!(error instanceof CheckpointNotReadyError)) throw error;
+    }
     if (checkpoint?.version === CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION) {
       assertCurrentCheckpoint(checkpoint);
       return checkpoint;
     }
     if (nowMs() >= deadline) {
       throw new Error(
-        `timed out after ${checkpointReadyTimeoutMs}ms waiting for credential cache backfill checkpoint version ${CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION} from the compatible Control Plane`,
+        `timed out after ${checkpointReadyTimeoutMs}ms waiting for credential cache backfill checkpoint version ${CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION} from the compatible Control Plane; the release is half-live because earlier workers are already deployed`,
       );
     }
     await sleepImpl(checkpointReadyPollMs);

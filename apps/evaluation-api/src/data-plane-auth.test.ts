@@ -1,4 +1,5 @@
 import {
+  CredentialCacheKVSchema,
   CredentialCacheKVSchemaV1,
   CURRENT_KV_SCHEMA_VERSION,
   clientKeyCacheKey,
@@ -10,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import { makeDataPlaneAuthResolver, sha256Hex } from "./data-plane-auth";
 
 const CLIENT_KEY = "pk_legacy_client";
+const credentialEnvelope = kvEnvelope(CredentialCacheKVSchema);
 const legacyEnvelope = kvEnvelope(CredentialCacheKVSchemaV1);
 
 class CredentialStore {
@@ -24,21 +26,23 @@ describe("data-plane credential cache compatibility", () => {
   it("gives terminal revocation precedence over a stale active Client Key entry", async () => {
     const hash = await sha256Hex(CLIENT_KEY);
     const cacheKey = clientKeyCacheKey(hash);
-    const active = JSON.stringify({
-      schemaVersion: CURRENT_KV_SCHEMA_VERSION,
-      data: {
-        appId: "app_revoked",
-        environmentId: "env_revoked",
-        credentialSchemaVersion: 2,
-        organizationId: "org_revoked",
-        kind: "client_key",
-        scopes: ["data-plane:evaluate"],
-        originAllowlist: null,
-        rateLimitRps: null,
-        revoked: false,
-        cachedAt: "2026-08-07T00:00:00.000Z",
-      },
-    });
+    const active = JSON.stringify(
+      credentialEnvelope.parse({
+        schemaVersion: CURRENT_KV_SCHEMA_VERSION,
+        data: {
+          appId: "app_revoked",
+          environmentId: "env_revoked",
+          credentialSchemaVersion: 2,
+          organizationId: "org_revoked",
+          kind: "client_key",
+          scopes: ["data-plane:evaluate"],
+          originAllowlist: null,
+          rateLimitRps: null,
+          revoked: false,
+          cachedAt: "2026-08-07T00:00:00.000Z",
+        },
+      }),
+    );
     const store = new CredentialStore(
       new Map([
         [cacheKey, active],
