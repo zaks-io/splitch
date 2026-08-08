@@ -21,7 +21,9 @@
  * `src/contract-surface-assignability.ts` asserts bidirectional type equality
  * against the contracts inference and fails `pnpm typecheck`, and
  * `contract-surface-structural.test.ts` compares the descriptors against
- * `z.toJSONSchema()` of the same contracts schemas.
+ * `z.toJSONSchema()` of the same contracts schemas. Runtime refinements are not
+ * represented by either, so `contract-surface-proto-safe.test.ts` walks the live
+ * contracts schema graph and checks guarded response paths behaviorally.
  *
  * Contracts is reached by relative path rather than by a manifest dependency.
  * `packages/sdk/package.json` must keep zero dependencies AND zero
