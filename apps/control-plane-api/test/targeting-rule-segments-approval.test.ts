@@ -136,6 +136,7 @@ describe("Targeting Rule Segment Approval", () => {
     expect(failed.status).toBe(409);
     expect(await failed.json()).toMatchObject({
       code: "APPROVAL_APPLICATION_FAILED",
+      message: expect.stringContaining("rolled back"),
       details: {
         applicationError: {
           code: "RUN_FROZEN",
@@ -160,11 +161,15 @@ describe("Targeting Rule Segment Approval", () => {
     expect(
       await h.d1
         .prepare(
-          "SELECT outcome, error_code FROM approval_reviews WHERE app_id = ? AND approval_request_id = ?",
+          "SELECT outcome, error_code, target_state FROM approval_reviews WHERE app_id = ? AND approval_request_id = ?",
         )
         .bind(ids.appId, proposal.details.approvalRequestId)
         .first(),
-    ).toMatchObject({ outcome: "failed", error_code: "RUN_FROZEN" });
+    ).toMatchObject({
+      outcome: "failed",
+      error_code: "RUN_FROZEN",
+      target_state: "rolled_back",
+    });
     expect((await kvFlag(ids.environmentId)).targetingRules[0]?.conditions).toEqual([
       { attribute: "plan", operator: "eq", value: "paid" },
     ]);
