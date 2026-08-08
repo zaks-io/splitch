@@ -45,6 +45,41 @@ describe("createSplitchBrowserClient: construction", () => {
     expect(transport.evaluateAllCalls).toHaveLength(0);
     expect(transport.redeemCalls).toHaveLength(0);
   });
+
+  it("binds globalThis.fetch when no fetch option is supplied (M01)", async () => {
+    const bound = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            evaluations: {
+              flag: {
+                variant: true,
+                variantName: "on",
+                reason: "SPLIT",
+                errorCode: null,
+                exposureTicket: null,
+              },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json", etag: '"e"' } },
+        ),
+    ) as unknown as typeof fetch;
+    const bind = vi.fn(() => bound);
+    const original = globalThis.fetch;
+    globalThis.fetch = Object.assign(vi.fn(), { bind }) as unknown as typeof fetch;
+    try {
+      const client = createSplitchBrowserClient({
+        clientKey: "pk_test",
+        context: { targetingKey: "u1" },
+        endpoint: "https://edge.test",
+      });
+      expect(bind).toHaveBeenCalledWith(globalThis);
+      await client.init();
+      expect(bound).toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
 });
 
 describe("createSplitchBrowserClient: sync reads", () => {
