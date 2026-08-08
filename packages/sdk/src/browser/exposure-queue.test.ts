@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { EXPOSURE_BATCH_MAX_ITEMS } from "../generated/contract-surface.js";
 import { FakeLogger } from "../test-fixtures";
 import { ExposureQueue } from "./exposure-queue";
 import type { BrowserExposuresResult } from "./transport";
