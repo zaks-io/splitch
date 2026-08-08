@@ -3,6 +3,8 @@
  * Kept out of the `.test.ts` so both stay under the repo file-size limit.
  */
 
+import { namesKnown, resolveFlagConfigBindings } from "./flag-config-version-writer-sweep-bindings";
+
 export type UpdateSite = {
   file: string;
   line: number;
@@ -82,49 +84,6 @@ export function secondArgObject(source: string, callOpenParen: number): string {
   const comma = topLevelComma(source, callOpenParen, 1);
   if (comma < 0) throw new Error("update call ended before second arg");
   return balancedBraces(source, nextObjectStart(source, comma + 1));
-}
-
-/**
- * Bindings that refer to the flagConfigs table object, including
- * `import { flagConfigs as cfg }` aliases and `const x = flagConfigs`.
- */
-export function tableAliases(source: string): Set<string> {
-  const aliases = new Set<string>();
-  if (/\bflagConfigs\b/.test(source)) aliases.add("flagConfigs");
-  for (const match of source.matchAll(/\bflagConfigs\s+as\s+(\w+)\b/g)) {
-    if (match[1]) aliases.add(match[1]);
-  }
-  for (const match of source.matchAll(/(?:const|let)\s+(\w+)\s*=\s*flagConfigs\b/g)) {
-    if (match[1]) aliases.add(match[1]);
-  }
-  return aliases;
-}
-
-/**
- * Facade bindings whose table is flagConfigs: `scopedTable(db, alias)` locals
- * and any parameter typed `ScopedTable<typeof alias>`, whatever the parameter
- * is named — the type is the closure, not a hardcoded identifier.
- */
-export function scopedFacades(source: string, aliases: Set<string>): Set<string> {
-  const facades = new Set<string>();
-  for (const alias of aliases) {
-    collectFacadeNames(source, alias, facades);
-  }
-  return facades;
-}
-
-function collectFacadeNames(source: string, alias: string, facades: Set<string>): void {
-  const local = new RegExp(
-    `(?:const|let)\\s+(\\w+)\\s*=\\s*scopedTable\\(\\s*\\w+\\s*,\\s*${alias}\\s*\\)`,
-    "g",
-  );
-  for (const match of source.matchAll(local)) {
-    if (match[1]) facades.add(match[1]);
-  }
-  const param = new RegExp(`(\\w+)\\s*:\\s*ScopedTable\\s*<\\s*typeof\\s+${alias}\\s*>`, "g");
-  for (const match of source.matchAll(param)) {
-    if (match[1]) facades.add(match[1]);
-  }
 }
 
 /** Advance `i` past one trivia unit: whitespace, line comment, or block comment. */
@@ -355,9 +314,5 @@ export function drizzleUpdatePattern(alias: string): RegExp {
 
 /** Whether an insert-arg expression names one of the flagConfigs aliases. */
 export function insertArgIsFlagConfigs(arg: string, aliases: Set<string>): boolean {
-  const trimmed = arg.trim();
-  for (const alias of aliases) {
-    if (new RegExp(`^(?:\\w+\\.)*${alias}\\b(?:\\s+as\\s+.+)?$`).test(trimmed)) return true;
-  }
-  return false;
+  return namesKnown(arg, aliases);
 }

@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { resolveFlagConfigBindings } from "./flag-config-version-writer-sweep-bindings";
 import {
   balancedBraces,
   bumpWins,
@@ -13,9 +14,7 @@ import {
   isBumpExpr,
   lineAt,
   nextObjectStart,
-  scopedFacades,
   secondArgObject,
-  tableAliases,
   type UpdateSite,
 } from "./flag-config-version-writer-sweep-lib";
 
@@ -27,18 +26,26 @@ import {
  * writer advances the counter. A new UPDATE that forgets the bump compiles,
  * passes review, and silently disables the CAS for every path that races it.
  *
- * Scan root (asserted below): `packages/db/src/repo`. That is the only directory
- * that can write the table: the exported `repo.flags.flagConfigs` facade is
- * narrowed to findMany/findOne/insert, so callers outside this package cannot
- * call `.update`. Writers here are checked for every UPDATE/UPSERT shape, and
- * the bump must be an allowlisted derivation that WINS after spreads.
+ * Scan root (asserted below): `packages/db/src`. The narrowed
+ * `repo.flags.flagConfigs` export (findMany/findOne/insert only) makes a facade
+ * bypass a compile error in typechecked source and a TypeError everywhere else —
+ * including `apps/control-plane-api/test/` and the three `@splitch/db` importers
+ * in `apps/cli` that sit outside every tsconfig (`quickstart-local-harness.ts`,
+ * `dark-launch-experiment.ts`, `dark-launch-http.ts`), where the runtime
+ * TypeError is what covers them. This sweep catches raw-`db` writers inside
+ * `packages/db/src`. Raw `D1Database.prepare` UPDATEs of `flag_configs` are
+ * outside both and are not guarded.
+ *
+ * Including those harnesses in a tsconfig would typecheck them and their
+ * transitive helpers under CI, lengthening typecheck and likely surfacing latent
+ * harness-only type errors that are currently invisible; left alone on purpose.
  */
 
 /** Repo-relative path of the directory this file sweeps. Stated so it is checked. */
-const SCAN_ROOT = "packages/db/src/repo";
+const SCAN_ROOT = "packages/db/src";
 
-const SRC = fileURLToPath(new URL("./", import.meta.url));
-const REPO_ROOT = resolve(SRC, "../../../..");
+const SRC = fileURLToPath(new URL("../", import.meta.url));
+const REPO_ROOT = resolve(SRC, "../../..");
 
 /**
  * Every module under the scan root allowed to name `flagConfigs` / `flag_configs`,
@@ -46,15 +53,20 @@ const REPO_ROOT = resolve(SRC, "../../../..");
  * module fails the sweep no matter how it writes.
  */
 const FLAG_CONFIGS_MODULES: Record<string, "writer" | string> = {
-  "scope.ts": "EnvScope docs name the table in prose only",
-  "flag-variant-run-freeze.ts": "freeze lookup names the column in prose only",
-  "test-d1-pool.ts": "test-pool cleanup table-name list; no UPDATE",
-  "identity-demo-reaper.ts": "DELETE cascade table-name list; no UPDATE",
-  "flags.ts":
+  "schema/flags.ts": "table definition",
+  "schema/index.ts": "schema re-export",
+  "index.ts": "package export",
+  "repo/scope.ts": "EnvScope docs name the table in prose only",
+  "repo/flag-variant-run-freeze.ts": "freeze lookup names the column in prose only",
+  "repo/test-d1-pool.ts": "test-pool cleanup table-name list; no UPDATE",
+  "repo/identity-demo-reaper.ts": "DELETE cascade table-name list; no UPDATE",
+  "repo/flags.ts":
     "wires scopedTable and DELETE cascade; UPDATEs go through makeFlagConfigOps. Exported flagConfigs is findMany/findOne/insert only",
-  "flag-config-ops.ts": "writer",
-  "flag-variant-approval.ts": "writer",
-  "flag-config-version-writer-sweep-lib.ts": "structural sweep helpers; no production UPDATE",
+  "repo/flag-config-ops.ts": "writer",
+  "repo/flag-variant-approval.ts": "writer",
+  "repo/flag-config-version-writer-sweep-lib.ts": "structural sweep helpers; no production UPDATE",
+  "repo/flag-config-version-writer-sweep-bindings.ts":
+    "structural sweep alias resolver; no production UPDATE",
 };
 
 const WRITER_MODULES = Object.entries(FLAG_CONFIGS_MODULES)
@@ -114,13 +126,30 @@ function scopedTableUpdateSites(rel: string, source: string, facades: Set<string
   return sites;
 }
 
+/** `const { update } = facade; update(scope, values)` — same set-object shape. */
+function directUpdateSites(rel: string, source: string, names: Set<string>): UpdateSite[] {
+  const sites: UpdateSite[] = [];
+  for (const name of names) {
+    // Bare call only — do not match `db.update(` / `foo.update(`.
+    for (const match of source.matchAll(new RegExp(`(?<![.\\w])${name}\\s*\\(`, "g"))) {
+      const at = match.index ?? 0;
+      const open = at + match[0].length - 1;
+      const setSource = secondArgObject(source, open);
+      sites.push({ file: rel, line: lineAt(source, at), kind: "scopedTable.update", setSource });
+    }
+  }
+  return sites;
+}
+
 /**
  * `insert(alias).…onConflictDoUpdate({ set })` is an UPDATE of an existing row.
- * Must be chained to `.insert(…)`; a split-statement upsert fails loud rather
- * than being silently skipped.
+ * Must be chained to `.insert(…)`; a split-statement upsert of flagConfigs fails
+ * loud rather than being silently skipped. Files that never name a flagConfigs
+ * alias are skipped entirely so unrelated upserts cannot false-red.
  */
 function upsertSites(rel: string, source: string, aliases: Set<string>): UpdateSite[] {
   const sites: UpdateSite[] = [];
+  if (aliases.size === 0) return sites;
   for (const match of source.matchAll(/\.onConflictDoUpdate\s*\(/g)) {
     const at = match.index ?? 0;
     const insertArg = insertArgOnUpsertChain(source, at);
@@ -165,19 +194,19 @@ function sqlUpdateSites(rel: string, source: string): UpdateSite[] {
 
 function updateSitesIn(rel: string): UpdateSite[] {
   const source = read(rel);
-  const aliases = tableAliases(source);
-  const facades = scopedFacades(source, aliases);
+  const { tables, facades, directUpdates } = resolveFlagConfigBindings(source);
   return [
-    ...drizzleUpdateSites(rel, source, aliases),
+    ...drizzleUpdateSites(rel, source, tables),
     ...scopedTableUpdateSites(rel, source, facades),
-    ...upsertSites(rel, source, aliases),
+    ...directUpdateSites(rel, source, directUpdates),
+    ...upsertSites(rel, source, tables),
     ...sqlUpdateSites(rel, source),
   ];
 }
 
 describe("every flag_configs UPDATE bumps version", () => {
   it("states a scan root that actually contains the production writers", () => {
-    expect(SCAN_ROOT).toBe("packages/db/src/repo");
+    expect(SCAN_ROOT).toBe("packages/db/src");
     expect(relative(REPO_ROOT, SRC).replaceAll("\\", "/")).toBe(SCAN_ROOT);
 
     const files = sourceFiles(SRC);
@@ -217,5 +246,41 @@ describe("every flag_configs UPDATE bumps version", () => {
     expect(isBumpExpr("current.version + 1")).toBe(true);
     expect(isBumpExpr("patch.version + 1", new Set(["patch"]))).toBe(false);
     expect(isBumpExpr("patch.version ?? current.version + 1")).toBe(false);
+  });
+
+  it("chainedSetAt skips comments between .update and .set", () => {
+    const source = ".update(flagConfigs)\n  // keep going\n  .set({";
+    const after = source.indexOf(")") + 1;
+    expect(chainedSetAt(source, after)).toBe(source.indexOf(".set("));
+  });
+
+  it("insertArgOnUpsertChain returns null for a split-statement upsert", () => {
+    const source =
+      "const q = db.insert(flagConfigs).values(row);\nq.onConflictDoUpdate({ set: {} });";
+    const at = source.indexOf(".onConflictDoUpdate");
+    expect(insertArgOnUpsertChain(source, at)).toBeNull();
+  });
+
+  it("drizzleUpdatePattern matches namespace-qualified table refs", () => {
+    const source = "db.update(schema.flagConfigs).set({ enabled: true });";
+    expect([...source.matchAll(drizzleUpdatePattern("flagConfigs"))]).toHaveLength(1);
+  });
+
+  it("resolveFlagConfigBindings follows aliases to a fixed point", () => {
+    const source = [
+      "const flagConfigsTable = scopedTable(db, flagConfigs);",
+      "const tbl = flagConfigsTable;",
+      "const hop = tbl;",
+      "const { update } = hop;",
+      "const raw = schema.flagConfigs;",
+      "const raw2 = raw;",
+    ].join("\n");
+    const bindings = resolveFlagConfigBindings(source);
+    expect(bindings.facades.has("flagConfigsTable")).toBe(true);
+    expect(bindings.facades.has("tbl")).toBe(true);
+    expect(bindings.facades.has("hop")).toBe(true);
+    expect(bindings.directUpdates.has("update")).toBe(true);
+    expect(bindings.tables.has("raw")).toBe(true);
+    expect(bindings.tables.has("raw2")).toBe(true);
   });
 });
