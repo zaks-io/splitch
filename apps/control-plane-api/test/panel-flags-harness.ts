@@ -7,6 +7,7 @@ import {
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { SignedControlPanelEntrypoint } from "../src/index.js";
+import { ensureMetricEventDefinition } from "./metric-event-definition-fixture";
 
 export const ORIGIN = "https://cp.splitch.test";
 export const NOW = "2026-07-19T00:00:00.000Z";
@@ -133,6 +134,14 @@ export async function seedAppMembership(
     .run();
 }
 
+export async function seedMetricEventDefinition(
+  ids: PanelFlagsIds,
+  name: string,
+  eventFieldName?: string,
+): Promise<string> {
+  return ensureMetricEventDefinition(env.DB, ids.appId, name, NOW, eventFieldName);
+}
+
 /**
  * A fully separate Organization/App/Environment/actor graph. Distinct salts and
  * ids so cross-tenant leakage cannot look like a fixture coincidence.
@@ -166,6 +175,8 @@ export function isolatedTenantAsPanelIds(tenant: IsolatedPanelTenant): PanelFlag
     envId: tenant.envId,
     otherEnvId: `env_seg_unused_${tenant.tag}_${tenant.suffix}`,
     flagId: `flag_seg_unused_${tenant.tag}_${tenant.suffix}`,
+    otherFlagId: `flag_seg_other_unused_${tenant.tag}_${tenant.suffix}`,
+    otherFlagKey: `other-seg-unused-${tenant.tag}-${tenant.suffix}`,
     userId: tenant.userId,
   };
 }

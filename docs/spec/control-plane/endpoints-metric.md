@@ -29,8 +29,10 @@ Body:
 }
 ```
 
-Returns the Event Definition with `current_published_version_id: null`. Creating the definition does
-not create an implicit schema.
+Returns the Event Definition with `state: "draft"` and `current_published_version_id: null`.
+Creating the definition does not create an implicit schema. A legacy Metric migration instead
+reports `state: "incomplete"`: the Event binding is preserved for edits, but the operator must
+publish a complete schema before the Event Definition can accept Metric Events.
 
 ### `GET /apps/{app_id}/event-definitions/{event_definition_id}`
 
@@ -212,7 +214,9 @@ Returns the canonical `Metric`.
 
 ### `PATCH /apps/{app_id}/metrics/{metric_id}`
 
-All create fields except `kind` are patchable subject to the same cross-field validation. A patch is
+All create fields except `kind` are patchable subject to the same cross-field validation. A migrated
+Metric may update metadata and analysis settings while its Event Definition is `incomplete`, but it
+cannot change that Event binding until the operator publishes a complete schema. A patch is
 a measurement edit and recomputes over canonical logical facts from `serve_deduped_exposures` and
 `serve_deduped_metric_events`; it never returns `RUN_FROZEN`. The append-only physical logs remain
 replay and reconciliation truth, not direct request-time serving inputs. If the Metric is in a

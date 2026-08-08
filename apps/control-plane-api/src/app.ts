@@ -20,6 +20,7 @@ import type { ConfigStoreAccess } from "./config-store-do";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
+import { registerEventDefinitionRoutes } from "./event-definition-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
 import { diagnosableHandlers } from "./flag-config-policy";
 import { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
@@ -53,6 +54,7 @@ export interface AppDeps {
   credentialStore?: KVNamespace;
   credentialCacheWriter?: CredentialCacheWriterAccess;
   configStore?: ConfigStoreAccess;
+  eventDefinitionStore?: KVNamespace;
   runSnapshotDelivery?: import("./run-snapshot").RunSnapshotDelivery;
   memberProfileResolver?: MemberProfileResolver;
   nowIso?: () => string;
@@ -225,6 +227,11 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("segments_delete"), metricSegmentHandlers.deleteSegment);
   mountExperimentRoutes(app, registrar, experimentHandlers);
   mountMetricRoutes(app, registrar, metricSegmentHandlers);
+  registerEventDefinitionRoutes(app, registrar, {
+    repo: deps.repo,
+    eventDefinitionStore: deps.eventDefinitionStore,
+    nowIso: deps.nowIso,
+  });
   registrar.mount(app, controlPlaneRoute("client_key_get"), credentialHandlers.getClientKey);
   registrar.mount(app, controlPlaneRoute("client_key_update"), credentialHandlers.updateClientKey);
   registrar.mount(app, controlPlaneRoute("client_key_rotate"), credentialHandlers.rotateClientKey);

@@ -97,6 +97,14 @@ const CANONICAL_OPERATION_IDS = [
   "metrics_get",
   "metrics_update",
   "metrics_delete",
+  // Event Definitions
+  "event_definitions_list",
+  "event_definitions_create",
+  "event_definitions_get",
+  "event_definitions_update",
+  "event_definition_versions_create",
+  "event_definition_versions_list",
+  "event_definition_versions_get",
   // SDK credentials
   "client_key_get",
   "client_key_update",
@@ -125,6 +133,7 @@ const CANONICAL_OPERATION_IDS = [
   "sdk_verify",
   "sdk_evaluate_all",
   "sdk_exposures",
+  "sdk_track",
 ] as const;
 
 describe("route registry: canonical coverage", () => {

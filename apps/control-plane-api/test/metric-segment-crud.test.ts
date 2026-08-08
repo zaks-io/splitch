@@ -12,6 +12,7 @@ import {
   request,
 } from "../src/flag-definition-test-harness";
 import { seedOrgApp } from "../src/test-seeds";
+import { ensureMetricEventDefinition } from "./metric-event-definition-fixture";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 let h: FlagDefinitionHarness;
@@ -31,24 +32,24 @@ describe("control-plane Metric and Segment CRUD", () => {
     const binomial = await createMetric(appId, jwt, {
       key: "signup",
       kind: "binomial",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
     });
     await createMetric(appId, jwt, {
       key: "items-added",
       kind: "count",
-      eventName: "cart_item_added",
-      eventValueField: "quantity",
+      eventDefinitionId: "cart_item_added",
+      eventFieldName: "quantity",
     });
     await createMetric(appId, jwt, {
       key: "purchase-revenue",
       kind: "revenue",
-      eventName: "purchase_completed",
-      eventValueField: "amount",
+      eventDefinitionId: "purchase_completed",
+      eventFieldName: "amount",
     });
     const ratio = await createMetric(appId, jwt, {
       key: "signup-rate",
       kind: "ratio",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
       denominator: { metricId: binomial.id },
     });
 
@@ -105,7 +106,7 @@ describe("control-plane Metric and Segment invariants", () => {
     const metric = await createMetric(appId, jwt, {
       key: "signup",
       kind: "binomial",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
     });
     await seedOrgApp(h.bindings.d1, {
       orgId: "org_other_metric",
@@ -122,14 +123,14 @@ describe("control-plane Metric and Segment invariants", () => {
         key: "visits",
         name: "Visits",
         kind: "binomial",
-        eventName: "visited",
+        eventDefinitionId: "visited",
         createdAt: NOW_ISO,
       },
     );
 
     const typeChange = await request(h, "PATCH", `/apps/${appId}/metrics/${metric.id}`, jwt, {
       kind: "count",
-      eventValueField: "quantity",
+      eventFieldName: "quantity",
     });
     expect(typeChange.status).toBe(400);
     expect((await errorBody(typeChange)).code).toBe("VALIDATION_ERROR");
@@ -139,7 +140,7 @@ describe("control-plane Metric and Segment invariants", () => {
       name: "Bad ratio",
       key: "bad-ratio",
       kind: "ratio",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
       denominator: { metricId: otherMetric.id },
     });
     expect(crossAppRatio.status).toBe(400);
@@ -155,7 +156,7 @@ describe("control-plane Metric and Segment invariants", () => {
     const metric = await createMetric(appId, jwt, {
       key: "signup",
       kind: "binomial",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
     });
     const segment = await createSegment(appId, jwt);
     // A real Flag row: the Experiment's flag_id is a live foreign key, and the
@@ -207,16 +208,24 @@ describe("control-plane Metric and Segment MCP derivation", () => {
 type MetricBody = {
   key: string;
   kind: string;
-  eventName: string;
-  eventValueField?: string;
+  eventDefinitionId: string;
+  eventFieldName?: string;
   denominator?: { metricId: string };
 };
 
 async function createMetric(appId: string, jwt: string, body: MetricBody) {
+  const eventDefinitionId = await ensureMetricEventDefinition(
+    h.bindings.d1,
+    appId,
+    body.eventDefinitionId,
+    NOW_ISO,
+    body.eventFieldName,
+  );
   const res = await request(h, "POST", `/apps/${appId}/metrics`, jwt, {
     appId,
     name: body.key,
     ...body,
+    eventDefinitionId,
   });
   if (res.status !== 200) {
     throw new Error(`create metric failed ${res.status}: ${await res.text()}`);

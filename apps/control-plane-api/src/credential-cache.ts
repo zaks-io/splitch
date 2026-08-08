@@ -183,7 +183,7 @@ function clientKeyCache(
     credentialSchemaVersion: 2,
     organizationId,
     kind: "client_key",
-    scopes: ["data-plane:evaluate"],
+    scopes: ["data-plane:evaluate", "data-plane:write"],
     originAllowlist,
     rateLimitRps: row.rateLimitRps,
     revoked,

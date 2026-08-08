@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { proveAnalysisScopePredicates } from "./lib/tinybird-analysis-scope-proof.mjs";
 import { assertMetricStubsRetiredWhenMetricEventsExist } from "./lib/tinybird-metric-stub-tripwire.mjs";
 import { output, quietExitCode, quietExitCodeWithInput, run } from "./lib/tinybird-process.mjs";
 import { acquireMachineLock } from "./machine-lock.mjs";
@@ -31,6 +32,11 @@ try {
   const tokens = await generateTinybirdLocalTokens(projectDir);
   await resetTinybirdLocal(projectDir, tokens);
   await run("tb", ["--no-version-warning", "build"], projectDir);
+  await proveAnalysisScopePredicates(
+    tinybirdRoot,
+    (sql) => output("tb", ["--no-version-warning", "--output", "json", "sql", sql], projectDir),
+    fail,
+  );
   if (hasTinybirdTests(testsDir)) {
     await run("tb", ["--no-version-warning", "test", "run"], projectDir);
   }

@@ -292,6 +292,9 @@ importers:
       '@splitch/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@splitch/worker-runtime':
+        specifier: workspace:*
+        version: link:../../packages/worker-runtime
 
   apps/marketing:
     dependencies:

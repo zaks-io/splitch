@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { parseConfigFileTextToJson } from "typescript";
 import { describe, expect, it } from "vitest";
+import { METRIC_EVENT_MAX_RETRIES } from "./metric-event-queue";
 
 const config = readWranglerConfig();
 const requiredSecrets = ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"];
@@ -14,15 +15,39 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
     expect(target?.secrets?.required).toEqual(expect.arrayContaining(requiredSecrets));
     expect(target?.vars?.TINYBIRD_INGEST_TOKEN).toBeUndefined();
   });
+
+  /**
+   * The discard log fires on the attempt after the last retry, so the consumer's
+   * retry budget and the constant the handler counts against have to be the same
+   * number. Raise one alone and the log calls an event permanently discarded
+   * while Cloudflare is still retrying it.
+   */
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
+  ])("retries Metric Event delivery as many times as the handler counts for %s", (target, env) => {
+    const consumers = env?.queues?.consumers ?? [];
+
+    expect(consumers.length, `${target} declares no Metric Event consumer`).toBeGreaterThan(0);
+    for (const consumer of consumers) {
+      expect(
+        consumer.max_retries,
+        `${target} max_retries disagrees with METRIC_EVENT_MAX_RETRIES`,
+      ).toBe(METRIC_EVENT_MAX_RETRIES);
+    }
+  });
 });
 
 interface WranglerConfig {
   env?: Record<string, WranglerTarget | undefined>;
+  queues?: { consumers?: Array<{ max_retries?: number }> };
   secrets?: { required?: string[] };
   vars?: Record<string, unknown>;
 }
 
 interface WranglerTarget {
+  queues?: { consumers?: Array<{ max_retries?: number }> };
   secrets?: { required?: string[] };
   vars?: Record<string, unknown>;
 }
