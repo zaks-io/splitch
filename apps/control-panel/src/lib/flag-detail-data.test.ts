@@ -4,15 +4,35 @@ import { isFlagDetailNotFound, readFlagDetail } from "./flag-detail-data";
 
 const scope = { appId: "app_checkout", environmentId: "env_dev" };
 
+const definition = {
+  id: "flag_checkout",
+  appId: "app_checkout",
+  key: "new-checkout",
+  name: "New Checkout",
+  schema: { type: "boolean" as const },
+  variants: [
+    { id: "var_disabled", name: "disabled", value: false },
+    { id: "var_enabled", name: "enabled", value: true },
+  ],
+  defaultVariantId: "var_disabled",
+  createdAt: "2026-07-18T00:00:00.000Z",
+  updatedAt: "2026-07-18T00:00:00.000Z",
+};
+
 describe("Flag detail route data", () => {
-  it("resolves the URL key to the App-level definition and this Environment's config", async () => {
+  it("resolves the URL key via flags_get?by=key and pairs it with this Environment's config", async () => {
+    const get = vi.fn<FlagsClient["get"]>(async () => ({
+      ok: true,
+      status: 200,
+      data: definition,
+    }));
     const getConfig = vi.fn<FlagsClient["getConfig"]>(async (input) => ({
       ok: true,
       status: 200,
       data: config(input.environmentId),
     }));
 
-    const result = await readFlagDetail(flagsClient(getConfig), scope, "new-checkout");
+    const result = await readFlagDetail(flagsClient(get, getConfig), scope, "new-checkout");
 
     expect(result).toMatchObject({
       ok: true,
@@ -21,8 +41,14 @@ describe("Flag detail route data", () => {
         configuration: { environmentId: "env_dev", enabled: true },
       },
     });
-    // Resolving the key must not cost an extra round trip: the list read that
-    // resolves key -> id is the same read that supplies the definition.
+    // Key -> definition is one keyed get, not a catalog scan that can miss past
+    // FLAG_LIST_READ_LIMIT.
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledWith({
+      appId: "app_checkout",
+      flagId: "new-checkout",
+      by: "key",
+    });
     expect(getConfig).toHaveBeenCalledTimes(1);
     expect(getConfig).toHaveBeenCalledWith({
       appId: "app_checkout",
@@ -33,7 +59,10 @@ describe("Flag detail route data", () => {
 
   it("keeps the two grains as separate objects so the boundary survives the read", async () => {
     const result = await readFlagDetail(
-      flagsClient(vi.fn(async () => ({ ok: true as const, status: 200, data: config("env_dev") }))),
+      flagsClient(
+        vi.fn(async () => ({ ok: true as const, status: 200, data: definition })),
+        vi.fn(async () => ({ ok: true as const, status: 200, data: config("env_dev") })),
+      ),
       scope,
       "new-checkout",
     );
@@ -48,6 +77,7 @@ describe("Flag detail route data", () => {
   it("reports an unconfigured Environment as a real state rather than an error", async () => {
     const result = await readFlagDetail(
       flagsClient(
+        vi.fn(async () => ({ ok: true as const, status: 200, data: definition })),
         vi.fn(async () => ({
           ok: false as const,
           status: 404,
@@ -64,6 +94,7 @@ describe("Flag detail route data", () => {
   it("propagates a Configuration read failure instead of showing an empty screen", async () => {
     const result = await readFlagDetail(
       flagsClient(
+        vi.fn(async () => ({ ok: true as const, status: 200, data: definition })),
         vi.fn(async () => ({
           ok: false as const,
           status: 403,
@@ -80,26 +111,67 @@ describe("Flag detail route data", () => {
   it("answers a key that is not in this App with FLAG_NOT_FOUND and no config read", async () => {
     const getConfig = vi.fn<FlagsClient["getConfig"]>();
 
-    const result = await readFlagDetail(flagsClient(getConfig), scope, "from-another-tenant");
+    const result = await readFlagDetail(
+      flagsClient(
+        vi.fn(async () => ({
+          ok: false as const,
+          status: 404,
+          error: { code: "FLAG_NOT_FOUND" as const, message: "not found", details: {} },
+        })),
+        getConfig,
+      ),
+      scope,
+      "from-another-tenant",
+    );
 
     expect(result).toMatchObject({
       ok: true,
-      data: { code: "FLAG_NOT_FOUND", catalogTruncated: false },
+      data: { code: "FLAG_NOT_FOUND" },
     });
     expect(getConfig).not.toHaveBeenCalled();
   });
 
-  it("does not claim a key is absent when the catalog read did not see the whole catalog", async () => {
+  it("propagates a definition get failure that is not FLAG_NOT_FOUND", async () => {
     const getConfig = vi.fn<FlagsClient["getConfig"]>();
 
-    // The key resolves against a BOUNDED list read. When that read truncated,
-    // "not in the page" is not "does not exist", and the screen needs to know
-    // which of the two it has (ADR-0036).
-    const result = await readFlagDetail(flagsClient(getConfig, true), scope, "past-the-ceiling");
+    const result = await readFlagDetail(
+      flagsClient(
+        vi.fn(async () => ({
+          ok: false as const,
+          status: 403,
+          error: { code: "FORBIDDEN" as const, message: "no access", details: {} },
+        })),
+        getConfig,
+      ),
+      scope,
+      "new-checkout",
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(getConfig).not.toHaveBeenCalled();
+  });
+
+  it("turns an unaddressable Flag key into a VALIDATION_ERROR result", async () => {
+    const { FlagSelectorUnaddressableError } = await import(
+      "@splitch/control-plane-sdk/flag-selector-unaddressable-error"
+    );
+    const getConfig = vi.fn<FlagsClient["getConfig"]>();
+
+    const result = await readFlagDetail(
+      flagsClient(
+        vi.fn(async () => {
+          throw new FlagSelectorUnaddressableError(".");
+        }),
+        getConfig,
+      ),
+      scope,
+      ".",
+    );
 
     expect(result).toMatchObject({
-      ok: true,
-      data: { code: "FLAG_NOT_FOUND", catalogTruncated: true },
+      ok: false,
+      status: 400,
+      error: { code: "VALIDATION_ERROR" },
     });
     expect(getConfig).not.toHaveBeenCalled();
   });
@@ -119,34 +191,8 @@ function config(environmentId: string): FlagConfigGetOutput {
 }
 
 function flagsClient(
+  get: FlagsClient["get"],
   getConfig: FlagsClient["getConfig"],
-  readTruncated = false,
-): Pick<FlagsClient, "list" | "getConfig"> {
-  return {
-    getConfig,
-    list: vi.fn(async () => ({
-      ok: true as const,
-      status: 200,
-      data: {
-        readTruncated,
-        readLimit: 200,
-        items: [
-          {
-            id: "flag_checkout",
-            appId: "app_checkout",
-            key: "new-checkout",
-            name: "New Checkout",
-            schema: { type: "boolean" },
-            variants: [
-              { id: "var_disabled", name: "disabled", value: false },
-              { id: "var_enabled", name: "enabled", value: true },
-            ],
-            defaultVariantId: "var_disabled",
-            createdAt: "2026-07-18T00:00:00.000Z",
-            updatedAt: "2026-07-18T00:00:00.000Z",
-          },
-        ],
-      },
-    })),
-  };
+): Pick<FlagsClient, "get" | "getConfig"> {
+  return { get, getConfig };
 }

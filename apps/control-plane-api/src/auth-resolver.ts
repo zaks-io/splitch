@@ -198,7 +198,7 @@ async function resolveDelegatedPrincipal(
         kind: "control-plane-token" as const,
         id: actorId,
         // This ceiling scope binds the delegated path; the handler still rechecks
-        // the actor's live owner/admin role in D1 before creating the App.
+        // the actor's live Org role in D1 before it acts.
         scopes: [`org:${operation.orgId}:owner`],
         orgId: operation.orgId,
         appId: null,
@@ -207,7 +207,16 @@ async function resolveDelegatedPrincipal(
       },
     };
   }
-  if (operation.id === "organization_usage_get") {
+  // Org membership reads and writes name an Organization and no App, and the
+  // usage read is Organization-wide: all of them derive authority from live Org
+  // membership rather than from the claimed orgId.
+  if (
+    operation.id === "organization_usage_get" ||
+    operation.id === "organization_members_list" ||
+    operation.id === "organization_members_add" ||
+    operation.id === "organization_members_update" ||
+    operation.id === "organization_members_remove"
+  ) {
     return resolvePanelOrgPrincipal(operation.orgId, actorId, panelAccess);
   }
   // Unbound operations name no resource, so there is nothing to derive authority
@@ -235,6 +244,13 @@ async function resolveDelegatedPrincipal(
     };
   }
 
+  // Everything left must name an App, because that is the only authority left to
+  // derive. An operation added to the vocabulary without an authority branch
+  // reaches here naming no App: that is a fault, and it fails loud as a 500
+  // rather than being co-scoped against an `appId` it does not have.
+  if (!("appId" in operation)) {
+    throw new Error(`control-plane: no authority derivation for operation ${operation.id}`);
+  }
   return resolvePanelResourcePrincipal(operation, actorId, panelAccess);
 }
 
@@ -302,19 +318,18 @@ async function resolvePanelOrgPrincipal(
   };
 }
 
+/**
+ * Selected on the App id rather than by excluding a list of ids, so a new
+ * operation that names no App cannot land here by default and be co-scoped
+ * against an `operation.appId` it does not have.
+ */
+type AppScopedPanelOperation = Extract<
+  NonNullable<ReturnType<typeof parseControlPanelBindingOperation>>,
+  { appId: string }
+>;
+
 async function resolvePanelResourcePrincipal(
-  operation: Exclude<
-    ReturnType<typeof parseControlPanelBindingOperation>,
-    {
-      id:
-        | "apps_create"
-        | "experiments_detail"
-        | "experiments_list"
-        | "experiments_results"
-        | "organization_usage_get"
-        | "organizations_create";
-    } | null
-  >,
+  operation: AppScopedPanelOperation,
   actorId: string,
   panelAccess?: PanelSessionAccess,
 ) {

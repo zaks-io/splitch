@@ -22,6 +22,12 @@ export const lookupErrorDocs = {
     recommendedAction: "CHOOSE_DIFFERENT_SLUG",
     related: ["ORGANIZATION_NOT_FOUND", "VALIDATION_ERROR"],
   },
+  MEMBERSHIP_CONFLICT: {
+    cause: "The User is already a member of the Organization.",
+    fix: "Use the membership update operation when the existing role should change.",
+    details: '{ existingRole: "owner" | "admin" | "member" }',
+    related: ["USER_NOT_FOUND", "ORGANIZATION_NOT_FOUND"],
+  },
   EXPERIMENT_KEY_CONFLICT: {
     cause:
       "An Experiment already holds this `(App, Environment, key)`. Archiving an Experiment does not free its key, so the holder may be archived rather than live.",

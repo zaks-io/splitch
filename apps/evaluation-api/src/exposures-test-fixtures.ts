@@ -12,6 +12,7 @@ export const PREVIOUS_TICKET_KEY = ["splitch-test-previous-ticket-key", "32ch"].
 
 export const EXPOSURE_ID_A = "550e8400-e29b-41d4-a716-446655440001";
 export const EXPOSURE_ID_B = "550e8400-e29b-41d4-a716-446655440002";
+export const EXPOSURE_ID_C = "550e8400-e29b-41d4-a716-446655440003";
 
 export async function mintTicket(
   overrides: Partial<{
