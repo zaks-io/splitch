@@ -80,8 +80,9 @@ try {
   for (const [fileName, contents] of Object.entries(FAKE_DIST[targetKey])) {
     writeFileSync(join(packageRoot, "dist", fileName), contents);
   }
-  const fixtureDigest = process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST ?? "prepare-contract-fixture";
-  writeBuildStamp(targetKey, repoRoot, { sourceDigest: fixtureDigest });
+  // Scratch has no turbo.json, so write/verify use the fixture-local package
+  // digest — no env-var hatch into production computeSourceDigest.
+  writeBuildStamp(targetKey, repoRoot);
 
   const outputDir = join(scratchRoot, "artifacts");
   const manifestJson = execFileSync(
@@ -95,7 +96,6 @@ try {
     ],
     {
       encoding: "utf8",
-      env: { ...process.env, SPLITCH_BUILD_STAMP_SOURCE_DIGEST: fixtureDigest },
     },
   );
   const manifest = JSON.parse(manifestJson.trim().split("\n").at(-1));

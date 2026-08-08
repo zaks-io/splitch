@@ -12,9 +12,13 @@ interface BuildStamp {
   sourceDigest: string;
   distDigest: string;
 }
-const { computeTreeDigest, computeSourceDigest, verifyBuildStamp, writeBuildStamp } = (await import(
-  pathToFileURL(path.join(repoRoot, "scripts/release/build-stamp.mjs")).href
-)) as {
+const {
+  computeTreeDigest,
+  computeSourceDigest,
+  verifyBuildStamp,
+  writeBuildStamp,
+  buildTaskHashFromDryRun,
+} = (await import(pathToFileURL(path.join(repoRoot, "scripts/release/build-stamp.mjs")).href)) as {
   computeTreeDigest: (dir: string) => string;
   computeSourceDigest: (targetKey: string, repoRoot: string) => string;
   verifyBuildStamp: (targetKey: string, repoRoot: string) => BuildStamp;
@@ -23,6 +27,7 @@ const { computeTreeDigest, computeSourceDigest, verifyBuildStamp, writeBuildStam
     repoRoot: string,
     options?: { sourceDigest?: string },
   ) => BuildStamp;
+  buildTaskHashFromDryRun: (dry: unknown, packageName: string) => string;
 };
 const { RELEASE_TARGETS } = (await import(
   pathToFileURL(path.join(repoRoot, "scripts/release/constants.mjs")).href
@@ -38,7 +43,13 @@ function readTurboBuildDryRun(packageName: string) {
   const out = execFileSync(
     path.join(repoRoot, "node_modules", ".bin", "turbo"),
     ["run", "build", `--filter=${packageName}`, "--dry=json"],
-    { cwd: repoRoot, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, env },
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
   );
   return JSON.parse(out.slice(out.indexOf("{"))) as {
     globalCacheInputs: { files: Record<string, string> };
@@ -79,13 +90,11 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(scratch, { recursive: true, force: true });
-  delete process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST;
 });
 
 describe("build stamp guard (fixture digests)", () => {
   it("accepts a freshly stamped build", () => {
-    writeBuildStamp("sdk", scratch, { sourceDigest: "fixture-digest" });
-    process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST = "fixture-digest";
+    writeBuildStamp("sdk", scratch);
     expect(verifyBuildStamp("sdk", scratch).packageName).toBe("@splitch/sdk");
   });
 
@@ -95,38 +104,44 @@ describe("build stamp guard (fixture digests)", () => {
   });
 
   it("fails loud when sources changed after the stamp", () => {
-    writeBuildStamp("sdk", scratch, { sourceDigest: "before" });
-    process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST = "after";
+    writeBuildStamp("sdk", scratch);
+    writeFileSync(path.join(packageRoot, "src/index.ts"), "export const a = 2;\n");
     expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/dist is stale/);
   });
 
   it("fails loud when the version was bumped after the stamp", () => {
-    writeBuildStamp("sdk", scratch, { sourceDigest: "fixture-digest" });
+    writeBuildStamp("sdk", scratch);
     writeFileSync(path.join(packageRoot, "package.json"), manifest("0.3.0"));
-    process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST = "fixture-digest";
     expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/manifest is @splitch\/sdk@0\.3\.0/);
   });
 
   it("fails loud when dist bytes were modified after the stamp", () => {
-    writeBuildStamp("sdk", scratch, { sourceDigest: "fixture-digest" });
+    writeBuildStamp("sdk", scratch);
     writeFileSync(path.join(packageRoot, "dist/index.js"), "export const a = 999;\n");
-    process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST = "fixture-digest";
     expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/dist was modified after the build/);
   });
 
   it("fails loud when the stamp itself was tampered with", () => {
-    writeBuildStamp("sdk", scratch, { sourceDigest: "fixture-digest" });
+    writeBuildStamp("sdk", scratch);
     const stampFile = path.join(packageRoot, "dist/build-stamp.json");
     const stamp = JSON.parse(readFileSync(stampFile, "utf8")) as { sourceDigest: string };
     stamp.sourceDigest = "0".repeat(16);
     writeFileSync(stampFile, JSON.stringify(stamp));
-    process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST = "fixture-digest";
     expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/dist is stale/);
   });
 
+  it("fails loud when sourceDigest is missing from a degraded stamp", () => {
+    writeBuildStamp("sdk", scratch);
+    const stampFile = path.join(packageRoot, "dist/build-stamp.json");
+    const stamp = JSON.parse(readFileSync(stampFile, "utf8")) as Record<string, unknown>;
+    delete stamp.sourceDigest;
+    writeFileSync(stampFile, `${JSON.stringify(stamp, null, 2)}\n`);
+    expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/degraded: sourceDigest/);
+  });
+
   it("stamps are deterministic and exclude the stamp file itself", () => {
-    const first = writeBuildStamp("sdk", scratch, { sourceDigest: "fixture-digest" });
-    const second = writeBuildStamp("sdk", scratch, { sourceDigest: "fixture-digest" });
+    const first = writeBuildStamp("sdk", scratch);
+    const second = writeBuildStamp("sdk", scratch);
     expect(second.sourceDigest).toBe(first.sourceDigest);
     expect(second.distDigest).toBe(first.distDigest);
   });
@@ -135,6 +150,23 @@ describe("build stamp guard (fixture digests)", () => {
     const before = computeTreeDigest(path.join(packageRoot, "dist"));
     writeFileSync(path.join(packageRoot, "dist/index.js"), "export const a = 3;\n");
     expect(computeTreeDigest(path.join(packageRoot, "dist"))).not.toBe(before);
+  });
+
+  it("does not honor SPLITCH_BUILD_STAMP_SOURCE_DIGEST as a freshness hatch", () => {
+    writeBuildStamp("sdk", scratch);
+    const stampFile = path.join(packageRoot, "dist/build-stamp.json");
+    const stamped = (
+      JSON.parse(readFileSync(stampFile, "utf8")) as { sourceDigest: string }
+    ).sourceDigest;
+    writeFileSync(path.join(packageRoot, "src/index.ts"), "export const a = 2;\n");
+    // If the env hatch still existed, setting it to the *stamped* digest would
+    // make pack/publish accept a tree that no longer matches the stamp.
+    process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST = stamped;
+    try {
+      expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/dist is stale/);
+    } finally {
+      delete process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST;
+    }
   });
 });
 
@@ -173,17 +205,34 @@ describe("build stamp guard (turbo-derived)", () => {
     expect(computeSourceDigest("sdk", repoRoot)).toBe(task.hash);
   });
 
-  it("verifyBuildStamp fails when the turbo hash drifts from the stamp", () => {
+  it("verifyBuildStamp fails when the stamped digest drifts from current sources", () => {
     writeBuildStamp("sdk", scratch, { sourceDigest: "stale-turbo-hash" });
-    process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST = "current-turbo-hash";
     expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/dist is stale/);
   });
 
-  it("live sdk dist stamp matches the current turbo build hash", () => {
-    // Fails when a real turbo build input is added (or edited) and dist is
-    // left unstamped — the same signal pack/publish use. Proven red by
-    // introducing packages/sdk/scripts/t332r11-new-input.mjs into the
-    // generate import graph before rebuilding.
-    expect(() => verifyBuildStamp("sdk", repoRoot)).not.toThrow();
+  it("fails loud when turbo dry-run omits the build task hash", () => {
+    // Shape guard: renaming the hash key (or dropping it) must throw — without
+    // this, writeBuildStamp would emit a stamp with sourceDigest dropped by
+    // JSON.stringify(undefined) and verifyBuildStamp would compare
+    // undefined !== undefined → green forever.
+    expect(() =>
+      buildTaskHashFromDryRun(
+        {
+          tasks: [{ package: "@splitch/sdk", task: "build", hashKey: "not-hash" }],
+        },
+        "@splitch/sdk",
+      ),
+    ).toThrow(/turbo dry-run missing build task hash for @splitch\/sdk/);
+    expect(() =>
+      buildTaskHashFromDryRun(
+        {
+          tasks: [{ package: "@splitch/sdk", task: "build", hash: "" }],
+        },
+        "@splitch/sdk",
+      ),
+    ).toThrow(/turbo dry-run missing build task hash for @splitch\/sdk/);
+    expect(() => buildTaskHashFromDryRun({ tasks: [] }, "@splitch/sdk")).toThrow(
+      /turbo dry-run missing build task hash for @splitch\/sdk/,
+    );
   });
 });

@@ -77,6 +77,24 @@ describe("ExposureQueue: batch-failure remediation by closed (R7)", () => {
     expectNoRetryRemediation(batchFailureMessage(logger));
   });
 
+  it("second close() after a failed close does not re-redeem (NO_RETRY is true)", async () => {
+    const redeemCalls: number[] = [];
+    const queue = new ExposureQueue({
+      transport: {
+        async redeemExposures(exposures) {
+          redeemCalls.push(exposures.length);
+          return unavailable();
+        },
+      },
+      logger: new FakeLogger(),
+      now: () => Date.parse("2026-08-08T00:00:00.000Z"),
+    });
+    queue.enqueue("a", "ticket-a");
+    await expect(queue.close()).rejects.toThrow(/SERVICE_UNAVAILABLE/);
+    await expect(queue.close()).rejects.toThrow(/SERVICE_UNAVAILABLE/);
+    expect(redeemCalls).toEqual([1]);
+  });
+
   it("pagehide failure still promises the 5s retry (closed stays false)", async () => {
     const listeners = new Map<string, Set<() => void>>();
     const fakeWindow = {

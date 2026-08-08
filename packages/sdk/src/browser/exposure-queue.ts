@@ -50,6 +50,8 @@ export class ExposureQueue {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private lifecycleAttached = false;
   private closed = false;
+  /** Shared so a second close() is a no-op (no second redeem); matches NO_RETRY copy. */
+  private closePromise: Promise<readonly ExposureBatchResult[]> | null = null;
   /** In-flight drain; overlapping callers await this then continue. */
   private activeDrain: Promise<readonly ExposureBatchResult[]> | null = null;
   /** Callers currently inside enqueueDrain (includes waiters). */
@@ -109,13 +111,19 @@ export class ExposureQueue {
   }
 
   async close(): Promise<readonly ExposureBatchResult[]> {
+    if (this.closePromise !== null) {
+      return this.closePromise;
+    }
     this.closed = true;
     this.clearTimer();
-    try {
-      return await this.enqueueDrain({ keepalive: false });
-    } finally {
-      this.detachLifecycle();
-    }
+    this.closePromise = (async () => {
+      try {
+        return await this.enqueueDrain({ keepalive: false });
+      } finally {
+        this.detachLifecycle();
+      }
+    })();
+    return this.closePromise;
   }
 
   private async flushBestEffort(options: { keepalive: boolean }): Promise<void> {

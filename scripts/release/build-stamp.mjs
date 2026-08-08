@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { relative, resolve, sep } from "node:path";
 import { getReleaseTarget } from "./constants.mjs";
 
 const STAMP_FILENAME = "build-stamp.json";
@@ -31,12 +31,6 @@ function collectFiles(root, entryPath, files) {
 }
 
 /**
- * Turbo dry-run for `build` on a workspace package. The task hash is Turbo's
- * cache key and already folds globalDependencies (e.g. tsconfig.base.json)
- * plus the full $TURBO_DEFAULT$ input graph — including transitive workspace
- * sources and scripts the package build imports.
- */
-/**
  * Turbo folds `globalEnv` (CI, NODE_ENV) into the task hash. Vitest sets
  * NODE_ENV=test and CI runners set CI=true, which would make a stamp written
  * during `pnpm build` look stale under `vitest`/`pack:check` with no source
@@ -59,11 +53,14 @@ function readTurboBuildDryRun(packageName, repoRoot) {
   }
   let out;
   try {
+    // Pipe stderr so turbo's startup banner does not leak into every stamp
+    // caller's logs (build, pack:check, vitest).
     out = execFileSync(turboBin, ["run", "build", `--filter=${packageName}`, "--dry=json"], {
       cwd: repoRoot,
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
       env: turboStampEnv(),
+      stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -76,40 +73,62 @@ function readTurboBuildDryRun(packageName, repoRoot) {
   return JSON.parse(out.slice(start));
 }
 
-function resolveTurboBuildTask(packageName, repoRoot) {
-  const dry = readTurboBuildDryRun(packageName, repoRoot);
+/**
+ * Extract the build task hash from a turbo `--dry=json` payload. Exported so
+ * the shape guard (missing/empty hash → throw) is unit-testable without a
+ * live turbo binary; production always goes through computeSourceDigest.
+ */
+export function buildTaskHashFromDryRun(dry, packageName) {
   const task = (dry.tasks ?? []).find(
     (entry) => entry.package === packageName && entry.task === "build",
   );
   if (task === undefined || typeof task.hash !== "string" || task.hash.length === 0) {
     throw new Error(`turbo dry-run missing build task hash for ${packageName}`);
   }
-  return { dry, task };
-}
-
-function inspectTurboBuildStamp(packageName, repoRoot) {
-  const { dry, task } = resolveTurboBuildTask(packageName, repoRoot);
-  return {
-    hash: task.hash,
-    inputPaths: Object.keys(task.inputs ?? {}),
-    globalFiles: Object.keys(dry.globalCacheInputs?.files ?? {}),
-  };
+  return task.hash;
 }
 
 /**
- * Source digest = Turbo's build task hash for the release target. There is no
- * hand-maintained stampInputs list: if Turbo keys the build on a file, the
- * stamp moves when that file changes.
- *
- * Hermetic fixtures may set SPLITCH_BUILD_STAMP_SOURCE_DIGEST to bypass Turbo
- * (prepare-artifacts contract tests); production pack/publish never sets it.
+ * Hermetic fixture digest: hash package sources under packageDir, excluding
+ * dist. Used only when repoRoot has no turbo.json (scratch fixtures /
+ * prepare-artifacts contract). Production checkouts always have turbo.json
+ * and take the Turbo path — there is no env-var override.
+ */
+function computeLocalPackageDigest(targetKey, repoRoot) {
+  const target = getReleaseTarget(targetKey);
+  const packageRoot = containedPath(repoRoot, target.packageDir);
+  const hash = createHash("sha256");
+  const files = [];
+  if (existsSync(packageRoot)) {
+    collectFiles(packageRoot, packageRoot, files);
+  }
+  files.sort();
+  for (const filePath of files) {
+    const relativePath = relative(packageRoot, filePath).split(sep).join("/");
+    if (relativePath === "dist" || relativePath.startsWith("dist/")) {
+      continue;
+    }
+    hash.update(relativePath);
+    hash.update("\0");
+    hash.update(readFileSync(filePath));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
+/**
+ * Source digest = Turbo's build task hash for the release target when the
+ * checkout is a real workspace (turbo.json present). Scratch fixtures without
+ * turbo.json hash their own package sources instead — hermetic, no env hatch.
  */
 export function computeSourceDigest(targetKey, repoRoot) {
-  if (typeof process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST === "string") {
-    return process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST;
+  const turboJson = containedPath(repoRoot, "turbo.json");
+  if (!existsSync(turboJson)) {
+    return computeLocalPackageDigest(targetKey, repoRoot);
   }
   const target = getReleaseTarget(targetKey);
-  return inspectTurboBuildStamp(target.packageName, repoRoot).hash;
+  const dry = readTurboBuildDryRun(target.packageName, repoRoot);
+  return buildTaskHashFromDryRun(dry, target.packageName);
 }
 
 /** Digest of an arbitrary directory tree; used to prove a tree was not mutated. */
@@ -157,7 +176,11 @@ function computeDistDigest(targetKey, repoRoot) {
   return hash.digest("hex");
 }
 
-/** Called by each package's build as its final step; the only stamp writer. */
+/**
+ * Called by each package's build as its final step; the only stamp writer.
+ * `options.sourceDigest` is for hermetic tests that need to plant a known
+ * (or deliberately stale) digest; production writers never pass it.
+ */
 export function writeBuildStamp(targetKey, repoRoot, options = {}) {
   const target = getReleaseTarget(targetKey);
   const manifest = JSON.parse(readFileSync(containedPath(repoRoot, target.packagePath), "utf8"));
@@ -186,6 +209,11 @@ export function verifyBuildStamp(targetKey, repoRoot) {
     );
   }
   const stamp = JSON.parse(readFileSync(path, "utf8"));
+  if (typeof stamp.sourceDigest !== "string" || stamp.sourceDigest.length === 0) {
+    throw new Error(
+      `${target.packageDir}/dist/${STAMP_FILENAME} is degraded: sourceDigest must be a non-empty string. Remediation: ${remediation}`,
+    );
+  }
   const manifest = JSON.parse(readFileSync(containedPath(repoRoot, target.packagePath), "utf8"));
   if (stamp.packageName !== target.packageName || stamp.version !== manifest.version) {
     throw new Error(

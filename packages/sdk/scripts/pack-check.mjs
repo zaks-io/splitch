@@ -23,6 +23,9 @@ import {
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const packageRoot = getPackageRoot();
 
+// Live freshness: dist must match the current turbo build hash. This is the
+// sole place that asserts against packages/sdk/dist — repo-lint stays hermetic
+// over scratch fixtures and must not depend on this package's build output.
 verifyBuildStamp("sdk", repoRoot);
 const digestBefore = computeSourceDigest("sdk", repoRoot);
 const distDigestBefore = computeTreeDigest(join(packageRoot, "dist"));
