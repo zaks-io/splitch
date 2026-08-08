@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,8 @@ import {
 import { RELEASE_TARGETS } from "../../../scripts/release/constants.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const sdkPackageRoot = path.join(repoRoot, "packages/sdk");
+const FIXTURE_DIGEST = "fixture-digest";
 
 /** Same CI/NODE_ENV strip the stamp writer uses so hashes match under vitest. */
 function readTurboBuildDryRun(packageName: string) {
@@ -74,8 +76,10 @@ afterEach(() => {
 
 describe("build stamp guard (fixture digests)", () => {
   it("accepts a freshly stamped build", () => {
-    writeBuildStamp("sdk", scratch);
-    expect(verifyBuildStamp("sdk", scratch).packageName).toBe("@splitch/sdk");
+    writeBuildStamp("sdk", scratch, { sourceDigest: FIXTURE_DIGEST });
+    expect(verifyBuildStamp("sdk", scratch, { sourceDigest: FIXTURE_DIGEST }).packageName).toBe(
+      "@splitch/sdk",
+    );
   });
 
   it("fails loud when dist has no stamp", () => {
@@ -84,44 +88,54 @@ describe("build stamp guard (fixture digests)", () => {
   });
 
   it("fails loud when sources changed after the stamp", () => {
-    writeBuildStamp("sdk", scratch);
+    writeBuildStamp("sdk", scratch, { sourceDigest: "before" });
     writeFileSync(path.join(packageRoot, "src/index.ts"), "export const a = 2;\n");
-    expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/dist is stale/);
+    expect(() => verifyBuildStamp("sdk", scratch, { sourceDigest: "after" })).toThrow(
+      /dist is stale/,
+    );
   });
 
   it("fails loud when the version was bumped after the stamp", () => {
-    writeBuildStamp("sdk", scratch);
+    writeBuildStamp("sdk", scratch, { sourceDigest: FIXTURE_DIGEST });
     writeFileSync(path.join(packageRoot, "package.json"), manifest("0.3.0"));
-    expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/manifest is @splitch\/sdk@0\.3\.0/);
+    expect(() => verifyBuildStamp("sdk", scratch, { sourceDigest: FIXTURE_DIGEST })).toThrow(
+      /manifest is @splitch\/sdk@0\.3\.0/,
+    );
   });
 
   it("fails loud when dist bytes were modified after the stamp", () => {
-    writeBuildStamp("sdk", scratch);
+    writeBuildStamp("sdk", scratch, { sourceDigest: FIXTURE_DIGEST });
     writeFileSync(path.join(packageRoot, "dist/index.js"), "export const a = 999;\n");
-    expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/dist was modified after the build/);
+    expect(() => verifyBuildStamp("sdk", scratch, { sourceDigest: FIXTURE_DIGEST })).toThrow(
+      /dist was modified after the build/,
+    );
   });
 
   it("fails loud when the stamp itself was tampered with", () => {
-    writeBuildStamp("sdk", scratch);
+    writeBuildStamp("sdk", scratch, { sourceDigest: FIXTURE_DIGEST });
     const stampFile = path.join(packageRoot, "dist/build-stamp.json");
     const stamp = JSON.parse(readFileSync(stampFile, "utf8")) as { sourceDigest: string };
     stamp.sourceDigest = "0".repeat(16);
     writeFileSync(stampFile, JSON.stringify(stamp));
-    expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/dist is stale/);
+    expect(() => verifyBuildStamp("sdk", scratch, { sourceDigest: FIXTURE_DIGEST })).toThrow(
+      /dist is stale/,
+    );
   });
 
   it("fails loud when sourceDigest is missing from a degraded stamp", () => {
-    writeBuildStamp("sdk", scratch);
+    writeBuildStamp("sdk", scratch, { sourceDigest: FIXTURE_DIGEST });
     const stampFile = path.join(packageRoot, "dist/build-stamp.json");
     const stamp = JSON.parse(readFileSync(stampFile, "utf8")) as Record<string, unknown>;
     delete stamp.sourceDigest;
     writeFileSync(stampFile, `${JSON.stringify(stamp, null, 2)}\n`);
-    expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/degraded: sourceDigest/);
+    expect(() => verifyBuildStamp("sdk", scratch, { sourceDigest: FIXTURE_DIGEST })).toThrow(
+      /degraded: sourceDigest/,
+    );
   });
 
   it("stamps are deterministic and exclude the stamp file itself", () => {
-    const first = writeBuildStamp("sdk", scratch);
-    const second = writeBuildStamp("sdk", scratch);
+    const first = writeBuildStamp("sdk", scratch, { sourceDigest: FIXTURE_DIGEST });
+    const second = writeBuildStamp("sdk", scratch, { sourceDigest: FIXTURE_DIGEST });
     expect(second.sourceDigest).toBe(first.sourceDigest);
     expect(second.distDigest).toBe(first.distDigest);
   });
@@ -133,19 +147,19 @@ describe("build stamp guard (fixture digests)", () => {
   });
 
   it("does not honor SPLITCH_BUILD_STAMP_SOURCE_DIGEST as a freshness hatch", () => {
-    writeBuildStamp("sdk", scratch);
-    const stampFile = path.join(packageRoot, "dist/build-stamp.json");
-    const stamped = (JSON.parse(readFileSync(stampFile, "utf8")) as { sourceDigest: string })
-      .sourceDigest;
-    writeFileSync(path.join(packageRoot, "src/index.ts"), "export const a = 2;\n");
-    // If the env hatch still existed, setting it to the *stamped* digest would
-    // make pack/publish accept a tree that no longer matches the stamp.
-    process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST = stamped;
+    writeBuildStamp("sdk", scratch, { sourceDigest: FIXTURE_DIGEST });
+    process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST = FIXTURE_DIGEST;
     try {
-      expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/dist is stale/);
+      // Scratch has no turbo.json: computeSourceDigest must throw rather than
+      // silently fall back or honor the env var.
+      expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/turbo\.json missing/);
     } finally {
       delete process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST;
     }
+  });
+
+  it("computeSourceDigest fails loud when turbo.json is absent", () => {
+    expect(() => computeSourceDigest("sdk", scratch)).toThrow(/turbo\.json missing/);
   });
 });
 
@@ -156,19 +170,18 @@ describe("build stamp guard (turbo-derived)", () => {
     }
   });
 
-  it("sdk build dry-run includes global tsconfig.base and size-check.mjs", () => {
+  it("sdk build dry-run inputs all resolve on disk and fold global tsconfig.base", () => {
     const { dry, task } = turboBuildTask("@splitch/sdk");
     expect(Object.keys(dry.globalCacheInputs.files)).toEqual(
       expect.arrayContaining(["biome.json", "tsconfig.base.json"]),
     );
-    expect(Object.keys(task.inputs)).toEqual(
-      expect.arrayContaining([
-        expect.stringMatching(/size-check\.mjs$/),
-        expect.stringMatching(/tsup\.browser\.config\.ts$/),
-        expect.stringMatching(/contract-surface-exposures\.ts$/),
-        expect.stringMatching(/generate-contract-surface\.mjs$/),
-      ]),
-    );
+    const inputPaths = Object.keys(task.inputs);
+    expect(inputPaths.length).toBeGreaterThan(0);
+    // No hand-maintained filename list: every Turbo-reported input must exist
+    // under the package root (paths are package-relative).
+    for (const inputPath of inputPaths) {
+      expect(existsSync(path.join(sdkPackageRoot, inputPath)), inputPath).toBe(true);
+    }
   });
 
   it("cli build dry-run folds global tsconfig.base.json", () => {
@@ -186,7 +199,9 @@ describe("build stamp guard (turbo-derived)", () => {
 
   it("verifyBuildStamp fails when the stamped digest drifts from current sources", () => {
     writeBuildStamp("sdk", scratch, { sourceDigest: "stale-turbo-hash" });
-    expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/dist is stale/);
+    expect(() => verifyBuildStamp("sdk", scratch, { sourceDigest: "current-turbo-hash" })).toThrow(
+      /dist is stale/,
+    );
   });
 
   it("fails loud when turbo dry-run omits the build task hash", () => {

@@ -15,7 +15,7 @@ import {
   logZeroProgress,
 } from "./exposure-drain";
 import { resolveDocument, resolveWindow } from "./lifecycle-targets";
-import type { BrowserTransport } from "./transport";
+import type { BrowserExposuresResult, BrowserTransport } from "./transport";
 
 const FLUSH_DELAY_MS = 5_000;
 /**
@@ -267,7 +267,28 @@ export class ExposureQueue {
       }),
     );
 
-    const result = await this.deps.transport.redeemExposures(wireItems, { keepalive });
+    let result: BrowserExposuresResult;
+    try {
+      result = await this.deps.transport.redeemExposures(wireItems, { keepalive });
+    } catch (cause) {
+      // Rejecting transports must not destroy the batch: re-queue and fail loud
+      // exactly like a null-results transport failure (ADR-0036).
+      this.pending.unshift(...batch);
+      throw logBatchFailure(
+        this.deps.logger,
+        {
+          status: null,
+          results: null,
+          errorCode: "SDK_TRANSPORT_NETWORK",
+          errorMessage: cause instanceof Error ? cause.message : "Exposure transport rejected",
+          cause,
+        },
+        batch.length,
+        this.closed
+          ? EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION
+          : EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION,
+      );
+    }
     if (result.results === null) {
       this.pending.unshift(...batch);
       throw logBatchFailure(

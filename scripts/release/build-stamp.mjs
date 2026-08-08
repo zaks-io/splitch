@@ -89,42 +89,17 @@ export function buildTaskHashFromDryRun(dry, packageName) {
 }
 
 /**
- * Hermetic fixture digest: hash package sources under packageDir, excluding
- * dist. Used only when repoRoot has no turbo.json (scratch fixtures /
- * prepare-artifacts contract). Production checkouts always have turbo.json
- * and take the Turbo path — there is no env-var override.
- */
-function computeLocalPackageDigest(targetKey, repoRoot) {
-  const target = getReleaseTarget(targetKey);
-  const packageRoot = containedPath(repoRoot, target.packageDir);
-  const hash = createHash("sha256");
-  const files = [];
-  if (existsSync(packageRoot)) {
-    collectFiles(packageRoot, packageRoot, files);
-  }
-  files.sort();
-  for (const filePath of files) {
-    const relativePath = relative(packageRoot, filePath).split(sep).join("/");
-    if (relativePath === "dist" || relativePath.startsWith("dist/")) {
-      continue;
-    }
-    hash.update(relativePath);
-    hash.update("\0");
-    hash.update(readFileSync(filePath));
-    hash.update("\0");
-  }
-  return hash.digest("hex");
-}
-
-/**
- * Source digest = Turbo's build task hash for the release target when the
- * checkout is a real workspace (turbo.json present). Scratch fixtures without
- * turbo.json hash their own package sources instead — hermetic, no env hatch.
+ * Source digest = Turbo's build task hash for the release target. Requires a
+ * real workspace `turbo.json` — there is no silent file-hash fallback (a missing
+ * turbo.json used to change the digest algorithm without failing the stamp).
+ * Hermetic fixtures pass `options.sourceDigest` to write/verify instead.
  */
 export function computeSourceDigest(targetKey, repoRoot) {
   const turboJson = containedPath(repoRoot, "turbo.json");
   if (!existsSync(turboJson)) {
-    return computeLocalPackageDigest(targetKey, repoRoot);
+    throw new Error(
+      `turbo.json missing at ${turboJson}; cannot derive a Turbo build-stamp source digest for ${targetKey}. Remediation: run from the repo root (or pass sourceDigest explicitly in hermetic fixtures)`,
+    );
   }
   const target = getReleaseTarget(targetKey);
   const dry = readTurboBuildDryRun(target.packageName, repoRoot);
@@ -198,8 +173,11 @@ export function writeBuildStamp(targetKey, repoRoot, options = {}) {
  * Fail-loud freshness check: dist must exist and its stamp must match the
  * current source. Nothing in the pack or publish path may rebuild; a stale
  * tree is an error with one remediation, never a silent rebuild.
+ *
+ * `options.sourceDigest` is for hermetic fixtures only (scratch trees without
+ * turbo.json); production pack/publish never passes it.
  */
-export function verifyBuildStamp(targetKey, repoRoot) {
+export function verifyBuildStamp(targetKey, repoRoot, options = {}) {
   const target = getReleaseTarget(targetKey);
   const remediation = `run \`pnpm --filter ${target.packageName} build\` and retry`;
   const path = stampPath(targetKey, repoRoot);
@@ -220,7 +198,7 @@ export function verifyBuildStamp(targetKey, repoRoot) {
       `${target.packageDir} build stamp is for ${stamp.packageName}@${stamp.version} but the manifest is ${target.packageName}@${manifest.version}. Remediation: ${remediation}`,
     );
   }
-  const digest = computeSourceDigest(targetKey, repoRoot);
+  const digest = options.sourceDigest ?? computeSourceDigest(targetKey, repoRoot);
   if (stamp.sourceDigest !== digest) {
     throw new Error(
       `${target.packageDir}/dist is stale: build stamp digest ${stamp.sourceDigest} does not match current sources (${digest}). Remediation: ${remediation}`,

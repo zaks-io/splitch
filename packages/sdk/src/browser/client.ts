@@ -68,7 +68,7 @@ interface HeldPayload {
  * Create the static-context browser client. Pass a Client Key only — secrets
  * throw. Call `init()` once, then read Flags synchronously.
  *
- * @see https://splitch.dev/docs/sdk/browser
+ * @see https://splitch.dev/docs/sdk/setup
  */
 export function createSplitchBrowserClient(
   options: SplitchBrowserClientOptions,

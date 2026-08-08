@@ -177,3 +177,86 @@ describe("ExposureQueue: close drain", () => {
     expect(listeners.get("pagehide")?.size ?? 0).toBe(0);
   });
 });
+
+describe("ExposureQueue: rejecting transport re-queues (R2)", () => {
+  function pendingLength(queue: ExposureQueue): number {
+    return (queue as unknown as { pending: unknown[] }).pending.length;
+  }
+
+  it("flush() re-queues and logs when redeemExposures throws", async () => {
+    const redeemIds: string[][] = [];
+    let shouldReject = true;
+    const logger = new FakeLogger();
+    const queue = new ExposureQueue({
+      transport: {
+        async redeemExposures(exposures) {
+          redeemIds.push(exposures.map((row) => row.exposureId));
+          if (shouldReject) {
+            throw new Error("custom transport blew up");
+          }
+          return acceptAll(exposures);
+        },
+      },
+      logger,
+      now: () => Date.parse("2026-08-08T00:00:00.000Z"),
+    });
+    queue.enqueue("a", "ticket-a");
+    expect(pendingLength(queue)).toBe(1);
+    expect(logger.errors).toHaveLength(0);
+
+    await expect(queue.flush()).rejects.toThrow(/custom transport blew up/);
+    expect(pendingLength(queue)).toBe(1);
+    expect(logger.errors.length).toBeGreaterThanOrEqual(1);
+    expect(logger.errors.some((row) => row.message.includes("custom transport blew up"))).toBe(
+      true,
+    );
+
+    shouldReject = false;
+    await expect(queue.flush()).resolves.toHaveLength(1);
+    expect(pendingLength(queue)).toBe(0);
+    expect(redeemIds).toHaveLength(2);
+    expect(redeemIds[0]).toEqual(redeemIds[1]);
+  });
+
+  it("5s timer re-queues and logs when redeemExposures throws", async () => {
+    vi.useFakeTimers();
+    try {
+      const redeemIds: string[][] = [];
+      let shouldReject = true;
+      const logger = new FakeLogger();
+      const queue = new ExposureQueue({
+        transport: {
+          async redeemExposures(exposures) {
+            redeemIds.push(exposures.map((row) => row.exposureId));
+            if (shouldReject) {
+              throw new Error("timer transport blew up");
+            }
+            return acceptAll(exposures);
+          },
+        },
+        logger,
+        now: () => Date.parse("2026-08-08T00:00:00.000Z"),
+      });
+      queue.enqueue("a", "ticket-a");
+      expect(pendingLength(queue)).toBe(1);
+      expect(logger.errors).toHaveLength(0);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await Promise.resolve();
+      expect(pendingLength(queue)).toBe(1);
+      expect(logger.errors.length).toBeGreaterThanOrEqual(1);
+      expect(logger.errors.some((row) => row.message.includes("timer transport blew up"))).toBe(
+        true,
+      );
+
+      shouldReject = false;
+      await vi.advanceTimersByTimeAsync(5_000);
+      await Promise.resolve();
+      expect(pendingLength(queue)).toBe(0);
+      expect(redeemIds.length).toBeGreaterThanOrEqual(2);
+      expect(redeemIds[0]).toEqual(redeemIds[1]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

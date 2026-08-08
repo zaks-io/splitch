@@ -2,9 +2,11 @@
 /**
  * Browser pagehide smoke for `@splitch/sdk/browser`.
  *
- * Phase 1 runs with no fetch patch (catches unbound Window.fetch / SPL-321).
- * Phase 2 uses a this-checking fetch wrapper so keepalive is observable without
- * masking Illegal invocation. Authorization is asserted via page.route + stub.
+ * Phase 1 is the happy path (default fetch, no probe): init, sync read, and
+ * pagehide keepalive delivery against a stubbed origin. It does **not** catch
+ * unbound Window.fetch / SPL-321 — that coverage is phase 2 (this-checking
+ * fetch wrapper; bind removal) and phase 3 (user-supplied `fetch: window.fetch`;
+ * member-call receiver). Do not drop phases 2–3 to save Playwright time.
  *
  * Manual: `pnpm -F @splitch/sdk test:browser-pagehide` after build.
  */
@@ -176,6 +178,7 @@ async function installThisCheckingFetchProbe(page) {
     window.__SPLITCH_FETCH_LOG__ = [];
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: must mirror Window.fetch this-checks
     window.fetch = function fetch(input, init) {
+      // biome-ignore lint/suspicious/noRedundantUseStrict: Playwright addInitScript is a classic (sloppy) script; without "use strict", an unbound call coerces this to window and the receiver probe cannot detect the SPL-321 bind bug
       "use strict";
       if (this !== window) {
         throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
@@ -307,7 +310,7 @@ async function main() {
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
-    // Phase 1: no fetch patch — unbound Window.fetch fails if the bind is gone.
+    // Phase 1: happy path with the default fetch (no receiver probe).
     await runUnpatchedPhase(browser, baseUrl, state);
     // Phase 2: this-checking probe for keepalive + Authorization on the call site.
     await runKeepaliveProbePhase(browser, baseUrl, state);

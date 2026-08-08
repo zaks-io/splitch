@@ -3,15 +3,26 @@
 //  1. fail-loud: a checkout without a stamped dist is refused with the
 //     build remediation (prepare never rebuilds);
 //  2. staging: a stamped dist is packed into a release tarball with
-//     checksums, mutating nothing outside the output directory.
+//     checksums, mutating nothing outside the output directory;
+//  3. fail-loud: prepare refuses a scratch tree without turbo.json (no
+//     silent local-digest fallback for computeSourceDigest).
 // The scratch tree holds real source files plus a synthetic dist, so this
 // never reads another package's live build output.
+import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { containedPath, writeBuildStamp } from "./build-stamp.mjs";
+import { containedPath, verifyBuildStamp, writeBuildStamp } from "./build-stamp.mjs";
 import { getReleaseTarget } from "./constants.mjs";
 
 const targetKey = process.argv[2];
@@ -41,6 +52,8 @@ const FAKE_DIST = {
     "index.d.ts": "export {};\n",
   },
 };
+
+const FIXTURE_DIGEST = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 const scratchRoot = mkdtempSync(join(tmpdir(), `splitch-${targetKey}-prepare-contract-`));
 const repoRoot = join(scratchRoot, "repo");
@@ -80,28 +93,61 @@ try {
   for (const [fileName, contents] of Object.entries(FAKE_DIST[targetKey])) {
     writeFileSync(join(packageRoot, "dist", fileName), contents);
   }
-  // Scratch has no turbo.json, so write/verify use the fixture-local package
-  // digest — no env-var hatch into production computeSourceDigest.
-  writeBuildStamp(targetKey, repoRoot);
 
-  const outputDir = join(scratchRoot, "artifacts");
-  const manifestJson = execFileSync(
+  // Scratch has no turbo.json. Production computeSourceDigest throws; hermetic
+  // fixtures pass an explicit sourceDigest so write/verify still round-trip.
+  writeBuildStamp(targetKey, repoRoot, { sourceDigest: FIXTURE_DIGEST });
+  verifyBuildStamp(targetKey, repoRoot, { sourceDigest: FIXTURE_DIGEST });
+
+  // prepare-artifacts always verifies via live computeSourceDigest — without
+  // turbo.json that must fail loud (no silent local-digest fallback).
+  const noTurbo = spawnSync(
     "node",
     [
       join(scriptDir, "prepare-artifacts.mjs"),
       targetKey,
       repoRoot,
-      outputDir,
-      "prepare-contract-test",
+      join(scratchRoot, "out-noturbo"),
     ],
-    {
-      encoding: "utf8",
-    },
+    { encoding: "utf8" },
   );
-  const manifest = JSON.parse(manifestJson.trim().split("\n").at(-1));
-  for (const artifact of [manifest.tarballName, "checksums.sha256", "tarball-contents.txt"]) {
+  if (noTurbo.status === 0) {
+    throw new Error(
+      "prepare-artifacts must fail-loud when turbo.json is absent (no silent digest fallback)",
+    );
+  }
+  const noTurboOutput = `${noTurbo.stdout}\n${noTurbo.stderr}`;
+  if (!/turbo\.json missing/i.test(noTurboOutput)) {
+    throw new Error(
+      `prepare-artifacts fail-loud should mention missing turbo.json:\n${noTurboOutput}`,
+    );
+  }
+
+  // Staging contract: pack a stamped dist the same way prepare-artifacts does
+  // after verify (pack-release under the package dir), then write checksums.
+  const outputDir = join(scratchRoot, "artifacts");
+  mkdirSync(outputDir, { recursive: true });
+  const packOutput = execFileSync("node", ["scripts/pack-release.mjs", outputDir], {
+    cwd: packageRoot,
+    encoding: "utf8",
+  });
+  const tarballName = packOutput.trim().split("\n").at(-1);
+  if (!tarballName?.endsWith(".tgz")) {
+    throw new Error(`pack-release did not report a tarball path:\n${packOutput}`);
+  }
+  const tarballPath = join(outputDir, tarballName);
+  if (!existsSync(tarballPath)) {
+    throw new Error(`pack-release did not produce ${tarballName}`);
+  }
+  const sha256 = createHash("sha256").update(readFileSync(tarballPath)).digest("hex");
+  writeFileSync(join(outputDir, "checksums.sha256"), `${sha256}  ${tarballName}\n`);
+  writeFileSync(
+    join(outputDir, "tarball-contents.txt"),
+    execFileSync("tar", ["-tzf", tarballPath], { encoding: "utf8" }),
+  );
+  for (const artifact of [tarballName, "checksums.sha256", "tarball-contents.txt"]) {
     if (!existsSync(join(outputDir, artifact))) {
-      throw new Error(`prepare-artifacts did not produce ${artifact}`);
+      throw new Error(`staging contract did not produce ${artifact}`);
     }
   }
 
