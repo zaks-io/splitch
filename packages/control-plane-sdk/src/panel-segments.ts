@@ -1,7 +1,10 @@
-import type { Condition, ConditionOperator, Segment } from "@splitch/contracts";
 import {
+  type Condition,
+  type ConditionOperator,
   type CreateSegmentRequest,
   type PatchSegmentRequest,
+  type Segment,
+  SegmentListResponseSchema,
   SegmentSchema,
 } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
@@ -43,6 +46,7 @@ export type PanelSegmentDeleteInput = PanelSegmentGetInput;
 export interface PanelSegmentsListOutput {
   items: PanelSegment[];
   unparseable: UnparseablePanelSegment[];
+  affectedEnvironmentIds: Record<string, string[]>;
 }
 
 export interface PanelSegmentDeleteOutput {
@@ -60,6 +64,10 @@ export interface PanelSegmentsClient {
     input: PanelSegmentDeleteInput,
   ): Promise<ControlPlaneOperationResult<PanelSegmentDeleteOutput>>;
 }
+
+const SegmentDependencyProjectionSchema = SegmentListResponseSchema.pick({
+  affectedEnvironmentIds: true,
+});
 
 export function createPanelSegmentsClient(options: {
   fetch: typeof fetch;
@@ -125,6 +133,8 @@ function parseSegmentList(
   input: unknown,
 ): { success: true; data: PanelSegmentsListOutput } | { success: false } {
   if (!isObject(input) || !Array.isArray(input.items)) return { success: false as const };
+  const projection = SegmentDependencyProjectionSchema.safeParse(input);
+  if (!projection.success) return { success: false as const };
   const items: PanelSegment[] = [];
   const unparseable: UnparseablePanelSegment[] = [];
   for (const item of input.items) {
@@ -135,7 +145,14 @@ function parseSegmentList(
     }
     unparseable.push(unparseableSegment(item));
   }
-  return { success: true, data: { items, unparseable } };
+  return {
+    success: true,
+    data: {
+      items,
+      unparseable,
+      affectedEnvironmentIds: projection.data.affectedEnvironmentIds,
+    },
+  };
 }
 
 function parseSegment(input: unknown): { success: true; data: PanelSegment } | { success: false } {

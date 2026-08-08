@@ -50,7 +50,7 @@ function remedy(code: string): string {
     case "APPROVAL_REVIEW_FORBIDDEN":
       return "This Environment's Policy requires a different reviewer. Ask an App admin who did not propose this change to review it.";
     case "APPROVAL_APPLICATION_FAILED":
-      return "The Review was recorded but applying it failed. The Approval Request stays pending; retry the review once the underlying refusal is resolved.";
+      return "The Review was recorded but application did not complete. The Approval Request stays pending; inspect the failure before retrying the Review.";
     case "RUN_FROZEN":
     case "DECISION_LOCKED":
       return "A running Experiment owns this field. End its Run before changing it here.";

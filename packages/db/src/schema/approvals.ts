@@ -67,6 +67,16 @@ export const approvalReviews = sqliteTable(
     resultingResourceId: text("resulting_resource_id"),
     errorCode: text("error_code"),
     errorDetails: text("error_details"),
+    /**
+     * What a `failed` attempt left behind in the target: `rolled_back`,
+     * `applied`, or `unknown`. Recorded because an exact-key replay has to
+     * repeat the first response, and no other column carries it: one
+     * `error_code` reaches this table from both sides of a mutation.
+     *
+     * NULL on every other outcome, which never attempted the target and says so
+     * in `outcome`, and on `failed` rows written before this column existed.
+     */
+    targetState: text("target_state"),
   },
   (table) => [
     uniqueIndex("approval_reviews_actor_idempotency_unique").on(

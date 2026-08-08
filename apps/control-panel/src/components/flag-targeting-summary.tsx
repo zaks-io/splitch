@@ -6,8 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@splitch/ui/components/table";
-import type { FlagDetailView } from "#lib/flag-detail-view";
-import { formatConditionSummary } from "#lib/segment-form-model";
+import { type FlagDetailView, targetingRuleConditionsText } from "#lib/flag-detail-view";
 
 /**
  * Targeting Rules as read-only truth, for the case where a running Experiment
@@ -41,7 +40,7 @@ export function FlagTargetingSummary({ view }: { view: FlagDetailView }) {
           <TableRow data-targeting-rule={rule.id} key={rule.id}>
             <TableCell className="font-mono">{rule.priority}</TableCell>
             <TableCell className="text-muted-foreground text-xs leading-5">
-              {rule.conditions.map((c) => formatConditionSummary(c)).join(" AND ")}
+              {targetingRuleConditionsText(rule)}
             </TableCell>
             <TableCell className="font-mono">{rule.variantName}</TableCell>
             <TableCell className="text-right text-muted-foreground">

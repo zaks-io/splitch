@@ -101,6 +101,7 @@ export function createApp(deps: AppDeps): Hono {
   );
   const metricSegmentHandlers = makeMetricSegmentHandlers({
     repo: deps.repo,
+    configStore: deps.configStore,
     nowIso: deps.nowIso,
   });
   const experimentHandlers = diagnosableHandlers(

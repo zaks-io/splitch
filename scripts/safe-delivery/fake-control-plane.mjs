@@ -96,7 +96,16 @@ export function fakeControlPlane(overrides = {}) {
       }
       const applied = apply(env, flagId, {
         ...current,
-        targetingRules: clone(body.targetingRules),
+        targetingRules: body.targetingRules.map((rule) => {
+          const segment = rule.segmentId ? segments.get(rule.segmentId) : null;
+          if (rule.segmentId && !segment) {
+            throw new Error(`Targeting Rule references missing Segment ${rule.segmentId}`);
+          }
+          return {
+            ...clone(rule),
+            resolvedConditions: [...clone(rule.conditions), ...clone(segment?.conditions ?? [])],
+          };
+        }),
       });
       return json({ config: applied, approvalRequest: null });
     },
@@ -238,7 +247,7 @@ export function fakeControlPlane(overrides = {}) {
       const defaultVariant = fallback.name;
       if (!config.enabled) return json({ variant: defaultVariant, reason: "DISABLED" });
       const match = config.targetingRules.find((rule) =>
-        rule.conditions.every(
+        rule.resolvedConditions.every(
           (condition) => body.attributes[condition.attribute] === condition.value,
         ),
       );

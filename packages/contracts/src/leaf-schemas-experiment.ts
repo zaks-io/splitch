@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
+import {
+  ResolvedTargetingRuleSchema,
+  TargetingRuleSchema,
+  VariantSchema,
+} from "./leaf-schemas-flag";
 
 /**
  * Canonical Zod leaf schemas for the experiment-side glossary nouns.
@@ -175,7 +179,7 @@ export const RunSchema = z.object({
     { message: "allocation percentages must sum to 100" },
   ),
   variantSet: z.array(VariantSchema),
-  targetingRules: z.array(TargetingRuleSchema),
+  targetingRules: z.array(ResolvedTargetingRuleSchema),
   configHash: z.string(),
   startedAt: z.string(),
   endedAt: z.string().nullable().optional(),

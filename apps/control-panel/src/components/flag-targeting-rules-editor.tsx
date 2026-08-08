@@ -9,9 +9,8 @@ import {
   TableRow,
 } from "@splitch/ui/components/table";
 import { useState } from "react";
-import type { FlagDetailView } from "#lib/flag-detail-view";
+import { type FlagDetailView, targetingRuleConditionsText } from "#lib/flag-detail-view";
 import { addTargetingRuleIntent, removeTargetingRuleIntent } from "#lib/flag-edit-intent";
-import { formatConditionSummary } from "#lib/segment-form-model";
 import type { FlagEditing } from "#lib/use-flag-editing";
 
 /**
@@ -36,8 +35,11 @@ export function FlagTargetingRulesEditor({
   const [attribute, setAttribute] = useState("");
   const [value, setValue] = useState("");
   const [variantId, setVariantId] = useState(view.catalog[0]?.id ?? "");
+  const [segmentId, setSegmentId] = useState("");
 
-  const canAdd = attribute.trim() !== "" && value.trim() !== "" && variantId !== "";
+  const hasCondition = attribute.trim() !== "" && value.trim() !== "";
+  const hasPartialCondition = (attribute.trim() === "") !== (value.trim() === "");
+  const canAdd = !hasPartialCondition && (hasCondition || segmentId !== "") && variantId !== "";
 
   return (
     <div className="grid gap-4" data-flag-targeting-editor="true">
@@ -61,7 +63,7 @@ export function FlagTargetingRulesEditor({
               <TableRow data-targeting-rule={rule.id} key={rule.id}>
                 <TableCell className="font-mono">{rule.priority}</TableCell>
                 <TableCell className="text-muted-foreground text-xs leading-5">
-                  {rule.conditions.map((c) => formatConditionSummary(c)).join(" AND ")}
+                  {targetingRuleConditionsText(rule)}
                 </TableCell>
                 <TableCell className="font-mono">{rule.variantName}</TableCell>
                 <TableCell className="text-right text-muted-foreground">
@@ -91,6 +93,24 @@ export function FlagTargetingRulesEditor({
           Add a rule
         </p>
         <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label="Segment"
+            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+            data-targeting-segment="true"
+            disabled={editing.busy}
+            onChange={(event) => setSegmentId(event.target.value)}
+            value={segmentId}
+          >
+            <option value="">No Segment</option>
+            {view.segments.map((segment) => (
+              <option key={segment.id} value={segment.id}>
+                {segment.name}
+              </option>
+            ))}
+          </select>
+          {segmentId === "" ? null : (
+            <span className="font-mono text-muted-foreground text-xs">AND</span>
+          )}
           <Input
             aria-label="targeting attribute"
             className="w-40"
@@ -131,7 +151,11 @@ export function FlagTargetingRulesEditor({
             onClick={() =>
               void editing.submit(
                 addTargetingRuleIntent(
-                  { attribute: attribute.trim(), value: value.trim(), variantId },
+                  {
+                    ...(hasCondition ? { attribute: attribute.trim(), value: value.trim() } : {}),
+                    ...(segmentId ? { segmentId } : {}),
+                    variantId,
+                  },
                   crypto.randomUUID(),
                 ),
               )
@@ -142,8 +166,9 @@ export function FlagTargetingRulesEditor({
           </Button>
         </div>
         <p className="text-muted-foreground text-xs leading-5">
-          A new rule serves every request that matches. Percentage rollout on a rule is not editable
-          here yet.
+          Choose a Segment, a direct Condition, or both; a rule with both serves only traffic that
+          matches the Segment and the Condition. Percentage rollout on a rule is not editable here
+          yet.
         </p>
       </div>
     </div>
