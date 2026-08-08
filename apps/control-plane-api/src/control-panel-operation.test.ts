@@ -12,6 +12,11 @@ describe("Control Panel binding operation allowlist", () => {
     ["POST", "/apps/app_1/flags", { id: "flags_create", appId: "app_1", environmentId: "env_1" }],
     [
       "GET",
+      "/apps/app_1/segments",
+      { id: "segments_list", appId: "app_1", environmentId: "env_1" },
+    ],
+    [
+      "GET",
       "/apps/app_1/flags/checkout?by=key",
       {
         id: "flag_get",

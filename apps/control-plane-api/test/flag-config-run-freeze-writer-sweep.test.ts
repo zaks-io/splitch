@@ -48,14 +48,12 @@ const APPROVAL: ApprovalCommit = {
 
 /**
  * Exempt, with the reason each one owns no frozen field. `syncExperimentConfig`
- * and `resyncFlagConfig` are the sharpest case: they rewrite the KV snapshot from
- * D1 and mutate no Flag Configuration row at all, so freezing them would break
- * the Run's own publication path.
+ * `syncExperimentConfig` rewrites the Run's own publication path and therefore
+ * cannot be frozen by the Run it is publishing.
  */
 const EXEMPT_WRITERS: Record<string, string> = {
   readFlagConfig: "read-only",
   syncExperimentConfig: "republishes D1 to KV; writes no Flag Configuration row",
-  resyncFlagConfig: "republishes D1 to KV; writes no Flag Configuration row",
   deleteFlagConfig: "removes the KV snapshot after the Flag rows are already gone",
 };
 
@@ -108,6 +106,7 @@ function frozenWriterCalls(): Record<string, () => Promise<{ ok: boolean }>> {
         diffEntries: [{ path: "/availableVariantNames" }],
         approval: APPROVAL,
       }),
+    resyncFlagConfig: () => store.resyncFlagConfig(target),
   };
 }
 

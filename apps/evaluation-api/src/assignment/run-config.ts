@@ -1,4 +1,4 @@
-import type { TargetingRule, Variant } from "@splitch/contracts";
+import type { ResolvedTargetingRule, Variant } from "@splitch/contracts";
 
 /**
  * The clean, assign()-shaped Run configuration.
@@ -19,7 +19,7 @@ export type RunConfig = {
   /** Variant name -> percentage in [0, 100]; percentages sum to 100. */
   allocation: Record<string, number>;
   variantSet: Variant[];
-  targetingRules: TargetingRule[];
+  targetingRules: ResolvedTargetingRule[];
   /** EvaluationContext field name the Experiment buckets on (e.g. "userId"). */
   targetingKey: string;
 };

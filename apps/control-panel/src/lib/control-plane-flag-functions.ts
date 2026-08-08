@@ -5,7 +5,7 @@ import { draftIssues, FlagDraftSchema, flagCreateInput } from "./create-flag-mod
 import { type FlagDetailNotFound, isFlagDetailNotFound, readFlagDetail } from "./flag-detail-data";
 import { type FlagDetailView, flagDetailView } from "./flag-detail-view";
 import { type FlagsPageData, readFlagsPage } from "./flags-page-data";
-import { authorizedFlagsClient } from "./panel-authorized-clients";
+import { authorizedFlagsClient, authorizedSegmentsClient } from "./panel-authorized-clients";
 
 type FlagsPageScope = { appId: string; environmentId: string };
 type CreateFlagResult = ControlPlaneOperationResult<{ key: string }>;
@@ -44,12 +44,28 @@ export const loadControlPanelFlagDetail = createServerFn({ method: "GET" })
       if (!authorized.ok) return authorized.result;
       const detail = await readFlagDetail(authorized.client, data, data.flagKey);
       if (!detail.ok) return detail;
+      if (isFlagDetailNotFound(detail.data)) {
+        return { ok: true, status: detail.status, data: detail.data };
+      }
+      if (detail.data.configuration === null) {
+        return {
+          ok: true,
+          status: detail.status,
+          data: flagDetailView(detail.data, data.env, {
+            items: [],
+            unparseable: [],
+            affectedEnvironmentIds: {},
+          }),
+        };
+      }
+      const segments = await authorizedSegmentsClient(data.environmentId);
+      if (!segments.ok) return segments.result;
+      const segmentList = await segments.client.list({ appId: data.appId });
+      if (!segmentList.ok) return segmentList;
       return {
         ok: true,
         status: detail.status,
-        data: isFlagDetailNotFound(detail.data)
-          ? detail.data
-          : flagDetailView(detail.data, data.env),
+        data: flagDetailView(detail.data, data.env, segmentList.data),
       };
     },
   );

@@ -9,8 +9,8 @@ import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
-import { makeSessionStore } from "./session-store";
 import type { RunSnapshotDelivery } from "./run-snapshot";
+import { makeSessionStore } from "./session-store";
 import type { LocalBindings } from "./test-fixtures";
 import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "./test-seeds";
 
@@ -74,6 +74,7 @@ export function makeAppForRepo(
   configStore?: ConfigStoreAccess,
   credentialStore: KVNamespace = h.bindings.credentialKv,
   runSnapshotDelivery?: RunSnapshotDelivery,
+  eventDefinitionStore?: KVNamespace,
 ): Hono {
   const verifier = makeJwksVerifier({
     fetchJwks: async () => h.signer.jwks,
@@ -90,6 +91,7 @@ export function makeAppForRepo(
     configStore,
     runSnapshotDelivery,
     credentialStore,
+    eventDefinitionStore,
     nowIso: () => NOW_ISO,
   });
 }

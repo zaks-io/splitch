@@ -12,6 +12,7 @@ import {
   request,
 } from "../src/flag-definition-test-harness";
 import { seedOrgApp } from "../src/test-seeds";
+import { ensureMetricEventDefinition } from "./metric-event-definition-fixture";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 let h: FlagDefinitionHarness;
@@ -31,24 +32,24 @@ describe("control-plane Metric and Segment CRUD", () => {
     const binomial = await createMetric(appId, jwt, {
       key: "signup",
       kind: "binomial",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
     });
     await createMetric(appId, jwt, {
       key: "items-added",
       kind: "count",
-      eventName: "cart_item_added",
-      eventValueField: "quantity",
+      eventDefinitionId: "cart_item_added",
+      eventFieldName: "quantity",
     });
     await createMetric(appId, jwt, {
       key: "purchase-revenue",
       kind: "revenue",
-      eventName: "purchase_completed",
-      eventValueField: "amount",
+      eventDefinitionId: "purchase_completed",
+      eventFieldName: "amount",
     });
     const ratio = await createMetric(appId, jwt, {
       key: "signup-rate",
       kind: "ratio",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
       denominator: { metricId: binomial.id },
     });
 
@@ -105,7 +106,7 @@ describe("control-plane Metric and Segment invariants", () => {
     const metric = await createMetric(appId, jwt, {
       key: "signup",
       kind: "binomial",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
     });
     await seedOrgApp(h.bindings.d1, {
       orgId: "org_other_metric",
@@ -122,14 +123,14 @@ describe("control-plane Metric and Segment invariants", () => {
         key: "visits",
         name: "Visits",
         kind: "binomial",
-        eventName: "visited",
+        eventDefinitionId: "visited",
         createdAt: NOW_ISO,
       },
     );
 
     const typeChange = await request(h, "PATCH", `/apps/${appId}/metrics/${metric.id}`, jwt, {
       kind: "count",
-      eventValueField: "quantity",
+      eventFieldName: "quantity",
     });
     expect(typeChange.status).toBe(400);
     expect((await errorBody(typeChange)).code).toBe("VALIDATION_ERROR");
@@ -139,29 +140,29 @@ describe("control-plane Metric and Segment invariants", () => {
       name: "Bad ratio",
       key: "bad-ratio",
       kind: "ratio",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
       denominator: { metricId: otherMetric.id },
     });
     expect(crossAppRatio.status).toBe(400);
     expect((await errorBody(crossAppRatio)).code).toBe("VALIDATION_ERROR");
   });
 
-  it("blocks decision-locked Metric patch and running Experiment deletes", async () => {
+  it("blocks decision-locked Metric changes but lets immutable Run snapshots release Segments", async () => {
     const createdApp = await createDefaultApp(h);
     const appId = createdApp.app.id;
     const jwt = await appToken(h, appId);
     const prod = createdApp.environments.find((env) => env.key === "prod");
-    expect(prod).toBeDefined();
+    if (!prod) throw new Error("App fixture lacks prod Environment");
     const metric = await createMetric(appId, jwt, {
       key: "signup",
       kind: "binomial",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
     });
     const segment = await createSegment(appId, jwt);
     // A real Flag row: the Experiment's flag_id is a live foreign key, and the
     // old invented id only passed because the Node fixture schema had no FKs.
     const flag = await createFlag(h, appId, jwt);
-    await seedRunningExperiment(appId, prod?.id ?? "", metric.id, segment.id, flag.id);
+    await seedRunningExperiment(appId, prod.id, metric.id, flag.id);
 
     const patchMetric = await request(h, "PATCH", `/apps/${appId}/metrics/${metric.id}`, jwt, {
       name: "Renamed while running",
@@ -174,8 +175,7 @@ describe("control-plane Metric and Segment invariants", () => {
     expect((await errorBody(deleteMetric)).code).toBe("EXPERIMENT_RUNNING");
 
     const deleteSegment = await request(h, "DELETE", `/apps/${appId}/segments/${segment.id}`, jwt);
-    expect(deleteSegment.status).toBe(409);
-    expect((await errorBody(deleteSegment)).code).toBe("EXPERIMENT_RUNNING");
+    expect(deleteSegment.status).toBe(200);
   });
 });
 
@@ -208,16 +208,24 @@ describe("control-plane Metric and Segment MCP derivation", () => {
 type MetricBody = {
   key: string;
   kind: string;
-  eventName: string;
-  eventValueField?: string;
+  eventDefinitionId: string;
+  eventFieldName?: string;
   denominator?: { metricId: string };
 };
 
 async function createMetric(appId: string, jwt: string, body: MetricBody) {
+  const eventDefinitionId = await ensureMetricEventDefinition(
+    h.bindings.d1,
+    appId,
+    body.eventDefinitionId,
+    NOW_ISO,
+    body.eventFieldName,
+  );
   const res = await request(h, "POST", `/apps/${appId}/metrics`, jwt, {
     appId,
     name: body.key,
     ...body,
+    eventDefinitionId,
   });
   if (res.status !== 200) {
     throw new Error(`create metric failed ${res.status}: ${await res.text()}`);
@@ -240,7 +248,6 @@ async function seedRunningExperiment(
   appId: string,
   environmentId: string,
   metricId: string,
-  segmentId: string,
   flagId: string,
 ): Promise<void> {
   const repo = createRepository(h.bindings.d1);
@@ -258,7 +265,7 @@ async function seedRunningExperiment(
     metrics: JSON.stringify([{ metricId }]),
     guardrailMetrics: "[]",
     dimensions: "[]",
-    draftSegmentIds: JSON.stringify([segmentId]),
+    draftSegmentIds: "[]",
     liveRunId: "run_metric_segment_guard",
     createdAt: NOW_ISO,
     updatedAt: NOW_ISO,
@@ -281,7 +288,16 @@ async function seedRunningExperiment(
       },
     ]),
     controlVariantId: "variant_control_metric_segment_guard",
-    targetingRules: "[]",
+    targetingRules: JSON.stringify([
+      {
+        id: "rule_metric_segment_guard",
+        flagId,
+        priority: 0,
+        conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
+        variantId: "variant_control_metric_segment_guard",
+        percentageRollout: null,
+      },
+    ]),
     confidenceLevel: 0.95,
     decisionFamily: JSON.stringify([{ metricId }]),
     guardrailDecisions: "[]",

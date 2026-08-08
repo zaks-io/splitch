@@ -25,6 +25,7 @@ const NON_TOOL_OPERATION_IDS = [
   "sdk_verify",
   "sdk_evaluate_all",
   "sdk_exposures",
+  "sdk_track",
   "openapi_document_get",
 ] as const;
 
@@ -36,6 +37,7 @@ describe("mcp tools: surface isolation (CRITICAL)", () => {
     expect(toolNames.has("sdk_verify")).toBe(false);
     expect(toolNames.has("sdk_evaluate_all")).toBe(false);
     expect(toolNames.has("sdk_exposures")).toBe(false);
+    expect(toolNames.has("sdk_track")).toBe(false);
   });
 
   it("derives NO tool for the public OpenAPI discovery doc", () => {

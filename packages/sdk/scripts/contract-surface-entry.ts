@@ -5,7 +5,8 @@
  * `scripts/generate-contract-surface.mjs`, which runs first in the same
  * `generate` script; contracts remains the authoring source of truth. Lockstep
  * guards: `contract-surface-structural.test.ts` (shape),
- * `contract-surface-parity.test.ts` (fixtures / divergences), and
+ * `contract-surface-parity.test.ts` (behavior),
+ * `contract-surface-proto-safe.test.ts` (derived runtime refinements), and
  * `contract-surface-assignability.ts` (types). Do not import this module from
  * runtime code outside the build.
  */
