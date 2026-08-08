@@ -11,7 +11,7 @@ import { makeEvaluateAllHandler } from "./evaluate-all";
 import type { EvaluationCommitSink } from "./evaluation-commit-sink";
 import type { EvaluationUsageSink } from "./evaluation-usage-sink";
 import type { ExposureIngestSink } from "./exposure-redemption";
-import type { ExposureRedemptionClaimStore } from "./exposure-redemption-claim";
+import type { ExposureRedemptionClaimStore } from "./exposure-redemption-claim-core";
 import { makeExposuresHandler } from "./exposures";
 import { makePeekHandler } from "./peek";
 import { evaluationRoute } from "./routes";

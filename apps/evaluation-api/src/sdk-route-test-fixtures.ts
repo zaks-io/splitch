@@ -29,10 +29,8 @@ import type { AssembledExposure } from "./evaluate/exposure-assembly";
 import type { EvaluationCommitEvent, EvaluationCommitSink } from "./evaluation-commit-sink";
 import type { EvaluationUsageEvent, EvaluationUsageSink } from "./evaluation-usage-sink";
 import { type ExposureIngestSink, RecordingExposureIngestSink } from "./exposure-redemption";
-import {
-  type ExposureRedemptionClaimStore,
-  MemoryExposureRedemptionClaimStore,
-} from "./exposure-redemption-claim";
+import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
+import type { ExposureRedemptionClaimStore } from "./exposure-redemption-claim-core";
 import { FakeKv } from "./provider/fake-kv";
 import { experimentConfigKV, flagConfigKV, runConfigKV } from "./provider/fixtures";
 import { KvProvider } from "./provider/kv-provider";

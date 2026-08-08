@@ -1,153 +1,16 @@
-/**
- * Strongly consistent Exposure Ticket redemption claims (SPL-345).
- *
- * One atomic operation owns both the client `exposureId` and the ticket
- * fingerprint so a ticket cannot amplify across fresh IDs, and an exact-ID
- * retry can resume a pending claim after transient ingest failure.
- */
-
-export const EXPOSURE_REDEMPTION_CLAIM_TTL_MS = 24 * 60 * 60 * 1000;
-
-type ExposureRedemptionDelivery = "pending" | "accepted";
-
-export type ExposureRedemptionClaimOutcome =
-  | { readonly status: "acquired" }
-  | { readonly status: "resume" }
-  | { readonly status: "deduplicated" }
-  | { readonly status: "conflict" };
-
-export type ExposureRedemptionAcknowledgeOutcome =
-  | { readonly status: "accepted" }
-  | { readonly status: "already_accepted" };
-
-export interface ExposureRedemptionClaimInput {
-  readonly appId: string;
-  readonly environmentId: string;
-  readonly exposureId: string;
-  readonly ticketFingerprint: string;
-  readonly nowMs?: number;
-}
-
-export interface ExposureRedemptionClaimStore {
-  claim(input: ExposureRedemptionClaimInput): Promise<ExposureRedemptionClaimOutcome>;
-  acknowledge(input: ExposureRedemptionClaimInput): Promise<ExposureRedemptionAcknowledgeOutcome>;
-}
-
-export interface ExposureBindingRecord {
-  readonly ticketFingerprint: string;
-  readonly delivery: ExposureRedemptionDelivery;
-  readonly expiresAt: number;
-}
-
-export interface TicketBindingRecord {
-  readonly ownerExposureId: string;
-  readonly delivery: ExposureRedemptionDelivery;
-  readonly expiresAt: number;
-}
-
-export interface ExposureRedemptionClaimStorage {
-  getExposure(exposureId: string): Promise<ExposureBindingRecord | undefined>;
-  getTicket(ticketFingerprint: string): Promise<TicketBindingRecord | undefined>;
-  putExposure(exposureId: string, record: ExposureBindingRecord): Promise<void>;
-  putTicket(ticketFingerprint: string, record: TicketBindingRecord): Promise<void>;
-  deleteExpired(nowMs: number): Promise<void>;
-  setExpiryAlarm(expiresAt: number): Promise<void>;
-}
-
-/**
- * Pure claim state machine over scoped storage. Callers must serialize
- * concurrent mutations (Durable Object `blockConcurrencyWhile` or equivalent).
- */
-export async function applyExposureRedemptionClaim(
-  storage: ExposureRedemptionClaimStorage,
-  input: {
-    readonly exposureId: string;
-    readonly ticketFingerprint: string;
-    readonly nowMs: number;
-  },
-): Promise<ExposureRedemptionClaimOutcome> {
-  await storage.deleteExpired(input.nowMs);
-
-  const existingExposure = await storage.getExposure(input.exposureId);
-  if (existingExposure !== undefined && existingExposure.expiresAt > input.nowMs) {
-    if (existingExposure.ticketFingerprint !== input.ticketFingerprint) {
-      return { status: "conflict" };
-    }
-    if (existingExposure.delivery === "accepted") {
-      return { status: "deduplicated" };
-    }
-    return { status: "resume" };
-  }
-
-  const existingTicket = await storage.getTicket(input.ticketFingerprint);
-  if (existingTicket !== undefined && existingTicket.expiresAt > input.nowMs) {
-    // Fresh exposureId against an already-owned ticket: bind the ID permanently
-    // to this fingerprint so a later different ticket cannot reuse it.
-    await storage.putExposure(input.exposureId, {
-      ticketFingerprint: input.ticketFingerprint,
-      delivery: existingTicket.delivery,
-      expiresAt: existingTicket.expiresAt,
-    });
-    return { status: "deduplicated" };
-  }
-
-  const expiresAt = input.nowMs + EXPOSURE_REDEMPTION_CLAIM_TTL_MS;
-  await storage.putExposure(input.exposureId, {
-    ticketFingerprint: input.ticketFingerprint,
-    delivery: "pending",
-    expiresAt,
-  });
-  await storage.putTicket(input.ticketFingerprint, {
-    ownerExposureId: input.exposureId,
-    delivery: "pending",
-    expiresAt,
-  });
-  await storage.setExpiryAlarm(expiresAt);
-  return { status: "acquired" };
-}
-
-export async function applyExposureRedemptionAcknowledge(
-  storage: ExposureRedemptionClaimStorage,
-  input: {
-    readonly exposureId: string;
-    readonly ticketFingerprint: string;
-    readonly nowMs: number;
-  },
-): Promise<ExposureRedemptionAcknowledgeOutcome> {
-  await storage.deleteExpired(input.nowMs);
-
-  const existingExposure = await storage.getExposure(input.exposureId);
-  if (
-    existingExposure === undefined ||
-    existingExposure.expiresAt <= input.nowMs ||
-    existingExposure.ticketFingerprint !== input.ticketFingerprint
-  ) {
-    throw new Error("exposure redemption claim is missing or mismatched at acknowledge");
-  }
-
-  if (existingExposure.delivery === "accepted") {
-    return { status: "already_accepted" };
-  }
-
-  const existingTicket = await storage.getTicket(input.ticketFingerprint);
-  const expiresAt =
-    existingTicket !== undefined && existingTicket.expiresAt > input.nowMs
-      ? existingTicket.expiresAt
-      : existingExposure.expiresAt;
-
-  await storage.putExposure(input.exposureId, {
-    ticketFingerprint: input.ticketFingerprint,
-    delivery: "accepted",
-    expiresAt,
-  });
-  await storage.putTicket(input.ticketFingerprint, {
-    ownerExposureId: existingTicket?.ownerExposureId ?? input.exposureId,
-    delivery: "accepted",
-    expiresAt,
-  });
-  await storage.setExpiryAlarm(expiresAt);
-  return { status: "accepted" };
-}
+import {
+  applyExposureRedemptionAcknowledge,
+  applyExposureRedemptionClaim,
+  applyExposureRedemptionMarkSealed,
+  applyExposureRedemptionRelease,
+  type ExposureBindingRecord,
+  type ExposureRedemptionAcknowledgeOutcome,
+  type ExposureRedemptionClaimInput,
+  type ExposureRedemptionClaimOutcome,
+  type ExposureRedemptionClaimStorage,
+  type ExposureRedemptionClaimStore,
+  type TicketBindingRecord,
+} from "./exposure-redemption-claim-core";
 
 export interface ExposureRedemptionClaimNamespace {
   idFromName(name: string): DurableObjectId;
@@ -156,7 +19,7 @@ export interface ExposureRedemptionClaimNamespace {
   };
 }
 
-export function exposureRedemptionClaimScopeName(appId: string, environmentId: string): string {
+function exposureRedemptionClaimScopeName(appId: string, environmentId: string): string {
   return `${appId}\u001f${environmentId}`;
 }
 
@@ -168,6 +31,14 @@ export class DurableExposureRedemptionClaimStore implements ExposureRedemptionCl
     return this.rpc("/claim", input, parseClaimOutcome);
   }
 
+  async release(input: ExposureRedemptionClaimInput): Promise<void> {
+    await this.rpc("/release", input, parseOk);
+  }
+
+  async markSealed(input: ExposureRedemptionClaimInput): Promise<void> {
+    await this.rpc("/markSealed", input, parseOk);
+  }
+
   async acknowledge(
     input: ExposureRedemptionClaimInput,
   ): Promise<ExposureRedemptionAcknowledgeOutcome> {
@@ -175,7 +46,7 @@ export class DurableExposureRedemptionClaimStore implements ExposureRedemptionCl
   }
 
   private async rpc<T>(
-    path: "/claim" | "/acknowledge",
+    path: "/claim" | "/release" | "/markSealed" | "/acknowledge",
     input: ExposureRedemptionClaimInput,
     parse: (value: unknown) => T,
   ): Promise<T> {
@@ -208,9 +79,10 @@ function parseClaimOutcome(value: unknown): ExposureRedemptionClaimOutcome {
     value !== null &&
     "status" in value &&
     (value.status === "acquired" ||
-      value.status === "resume" ||
+      value.status === "resume_ack" ||
       value.status === "deduplicated" ||
-      value.status === "conflict")
+      value.status === "conflict" ||
+      value.status === "busy")
   ) {
     return { status: value.status };
   }
@@ -229,13 +101,35 @@ function parseAcknowledgeOutcome(value: unknown): ExposureRedemptionAcknowledgeO
   throw new Error("exposure redemption acknowledge returned an invalid outcome");
 }
 
+function parseOk(value: unknown): void {
+  if (typeof value === "object" && value !== null && "ok" in value && value.ok === true) {
+    return;
+  }
+  throw new Error("exposure redemption claim returned an invalid ok response");
+}
+
 /** In-memory claim store for unit harnesses (single-isolate). */
 export class MemoryExposureRedemptionClaimStore implements ExposureRedemptionClaimStore {
   private readonly byScope = new Map<string, MemoryClaimScope>();
 
   async claim(input: ExposureRedemptionClaimInput): Promise<ExposureRedemptionClaimOutcome> {
-    const scope = this.scopeFor(input.appId, input.environmentId);
-    return applyExposureRedemptionClaim(scope, {
+    return applyExposureRedemptionClaim(this.scopeFor(input), {
+      exposureId: input.exposureId,
+      ticketFingerprint: input.ticketFingerprint,
+      nowMs: input.nowMs ?? Date.now(),
+    });
+  }
+
+  async release(input: ExposureRedemptionClaimInput): Promise<void> {
+    await applyExposureRedemptionRelease(this.scopeFor(input), {
+      exposureId: input.exposureId,
+      ticketFingerprint: input.ticketFingerprint,
+      nowMs: input.nowMs ?? Date.now(),
+    });
+  }
+
+  async markSealed(input: ExposureRedemptionClaimInput): Promise<void> {
+    await applyExposureRedemptionMarkSealed(this.scopeFor(input), {
       exposureId: input.exposureId,
       ticketFingerprint: input.ticketFingerprint,
       nowMs: input.nowMs ?? Date.now(),
@@ -245,16 +139,15 @@ export class MemoryExposureRedemptionClaimStore implements ExposureRedemptionCla
   async acknowledge(
     input: ExposureRedemptionClaimInput,
   ): Promise<ExposureRedemptionAcknowledgeOutcome> {
-    const scope = this.scopeFor(input.appId, input.environmentId);
-    return applyExposureRedemptionAcknowledge(scope, {
+    return applyExposureRedemptionAcknowledge(this.scopeFor(input), {
       exposureId: input.exposureId,
       ticketFingerprint: input.ticketFingerprint,
       nowMs: input.nowMs ?? Date.now(),
     });
   }
 
-  private scopeFor(appId: string, environmentId: string): MemoryClaimScope {
-    const key = `${appId}\u001f${environmentId}`;
+  private scopeFor(input: ExposureRedemptionClaimInput): MemoryClaimScope {
+    const key = `${input.appId}\u001f${input.environmentId}`;
     const existing = this.byScope.get(key);
     if (existing) return existing;
     const created = new MemoryClaimScope();
@@ -283,16 +176,33 @@ class MemoryClaimScope implements ExposureRedemptionClaimStorage {
     this.byTicket.set(ticketFingerprint, record);
   }
 
-  async deleteExpired(nowMs: number): Promise<void> {
-    for (const [key, record] of this.byExposureId) {
-      if (record.expiresAt <= nowMs) this.byExposureId.delete(key);
-    }
-    for (const [key, record] of this.byTicket) {
-      if (record.expiresAt <= nowMs) this.byTicket.delete(key);
-    }
+  async deleteExposure(exposureId: string): Promise<void> {
+    this.byExposureId.delete(exposureId);
   }
 
-  async setExpiryAlarm(_expiresAt: number): Promise<void> {
-    // No-op in memory; tests drive time via nowMs.
+  async deleteTicket(ticketFingerprint: string): Promise<void> {
+    this.byTicket.delete(ticketFingerprint);
   }
+
+  async deleteExpired(nowMs: number): Promise<number | null> {
+    const nextExposure = purgeExpiredMap(this.byExposureId, nowMs);
+    const nextTicket = purgeExpiredMap(this.byTicket, nowMs);
+    if (nextExposure === null) return nextTicket;
+    if (nextTicket === null) return nextExposure;
+    return Math.min(nextExposure, nextTicket);
+  }
+
+  async setExpiryAlarm(_expiresAt: number): Promise<void> {}
+}
+
+function purgeExpiredMap(map: Map<string, { expiresAt: number }>, nowMs: number): number | null {
+  let next: number | null = null;
+  for (const [key, record] of map) {
+    if (record.expiresAt <= nowMs) {
+      map.delete(key);
+      continue;
+    }
+    next = next === null ? record.expiresAt : Math.min(next, record.expiresAt);
+  }
+  return next;
 }
