@@ -210,7 +210,9 @@ type CredentialCache =
 function principalFromCredential(hash: string, credential: CredentialCache): Principal {
   return {
     kind: credential.kind === "client_key" ? "client-key" : "api-key",
-    id: `${credential.kind}:${hash.slice(0, 16)}`,
+    // Delegated data-plane operations use this identity as the stable rate-limit
+    // key, so truncating it here would merge distinct callers at the owner.
+    id: `${credential.kind}:${hash}`,
     scopes: credential.scopes,
     orgId: credential.organizationId,
     appId: credential.appId,

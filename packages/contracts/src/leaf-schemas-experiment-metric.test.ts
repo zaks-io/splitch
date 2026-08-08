@@ -11,7 +11,7 @@ const baseMetric = {
   appId: "app_1",
   key: "checkout-conversion",
   name: "Checkout Conversion",
-  eventName: "checkout_completed",
+  eventDefinitionId: "checkout_completed",
   createdAt: "2024-01-01T00:00:00Z",
 };
 
@@ -39,7 +39,7 @@ describe("MetricRefSchema", () => {
 });
 
 describe("MetricSchema — binomial", () => {
-  it("parses without eventValueField or denominator", () => {
+  it("parses without eventFieldName or denominator", () => {
     const m = MetricSchema.parse({ ...baseMetric, kind: "binomial" });
     expect(m.kind).toBe("binomial");
   });
@@ -50,24 +50,24 @@ describe("MetricSchema — binomial", () => {
   });
 });
 
-describe("MetricSchema — count / revenue require eventValueField", () => {
-  it("parses count with eventValueField", () => {
-    const m = MetricSchema.parse({ ...baseMetric, kind: "count", eventValueField: "items" });
-    expect(m.eventValueField).toBe("items");
+describe("MetricSchema — count / revenue require eventFieldName", () => {
+  it("parses count with eventFieldName", () => {
+    const m = MetricSchema.parse({ ...baseMetric, kind: "count", eventFieldName: "items" });
+    expect(m.eventFieldName).toBe("items");
   });
 
-  it("parses revenue with eventValueField", () => {
-    const m = MetricSchema.parse({ ...baseMetric, kind: "revenue", eventValueField: "amount" });
+  it("parses revenue with eventFieldName", () => {
+    const m = MetricSchema.parse({ ...baseMetric, kind: "revenue", eventFieldName: "amount" });
     expect(m.kind).toBe("revenue");
   });
 
-  it("rejects count without eventValueField", () => {
+  it("rejects count without eventFieldName", () => {
     expect(MetricSchema.safeParse({ ...baseMetric, kind: "count" }).success).toBe(false);
   });
 
-  it("rejects revenue with a null eventValueField", () => {
+  it("rejects revenue with a null eventFieldName", () => {
     expect(
-      MetricSchema.safeParse({ ...baseMetric, kind: "revenue", eventValueField: null }).success,
+      MetricSchema.safeParse({ ...baseMetric, kind: "revenue", eventFieldName: null }).success,
     ).toBe(false);
   });
 });
@@ -105,8 +105,8 @@ describe("MetricSchema — required fields", () => {
     expect(m.description).toBe("Conv rate");
   });
 
-  it("rejects a missing eventName", () => {
-    const { eventName: _, ...rest } = baseMetric;
+  it("rejects a missing eventDefinitionId", () => {
+    const { eventDefinitionId: _, ...rest } = baseMetric;
     expect(MetricSchema.safeParse({ ...rest, kind: "binomial" }).success).toBe(false);
   });
 

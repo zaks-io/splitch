@@ -63,6 +63,9 @@ interface SdkRouteHarnessOptions {
   /** Override Exposure Ticket issued_at for ETag-stability tests. */
   readonly ticketNow?: () => Date;
   readonly previousTicketKey?: string;
+  readonly eventIngest?: {
+    fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  };
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -97,7 +100,7 @@ async function seededCredentialKv(options: SdkRouteHarnessOptions = {}): Promise
         credentialSchemaVersion: 2,
         organizationId: ORGANIZATION_ID,
         kind: "client_key",
-        scopes: ["data-plane:evaluate"],
+        scopes: ["data-plane:evaluate", "data-plane:write"],
         originAllowlist: null,
         rateLimitRps: null,
         revoked: false,
@@ -203,6 +206,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     authResolver: controlPlaneAuthResolver,
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(credentialKv),
     rateLimiter: allowLimiter,
+    delegationBindings: { "event-ingest-api": options.eventIngest },
     provider: new KvProvider(configKv),
     assignmentStore,
     exposureAssembly: {

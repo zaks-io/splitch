@@ -3,6 +3,7 @@ import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-iden
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
 import { conflictErrorMembers } from "./error-members-conflict";
+import { eventErrorMembers } from "./event-errors";
 import { experimentConclusionErrorMembers } from "./experiment-conclusion-errors";
 import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
 import {
@@ -98,6 +99,7 @@ const ValidationIssue = z.object({
  */
 const errorMembers = [
   member("VALIDATION_ERROR", z.object({ issues: z.array(ValidationIssue) })),
+  ...eventErrorMembers,
   member(
     "ALLOCATION_INVALID",
     z.object({

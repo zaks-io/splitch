@@ -153,6 +153,8 @@ function typeLabel(schema: z.ZodTypeAny, depth = 0): string {
       }
       return `Record<string, ${typeLabel(zodValueType(schema), depth + 1)}>`;
     }
+    case "lazy":
+      return "closed JSON Schema";
     case "object":
       return objectTypeLabel(schema as z.ZodObject, depth);
     case "union":

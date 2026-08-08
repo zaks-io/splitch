@@ -209,6 +209,8 @@ describe("HTTP status map", () => {
     expect(httpStatusForError("DECISION_BLOCKED")).toBe(409);
     expect(httpStatusForError("DECISION_RESULT_UNAVAILABLE")).toBe(409);
     expect(httpStatusForError("EVENT_ID_CONFLICT")).toBe(409);
+    expect(httpStatusForError("EVENT_DEFINITION_UNPUBLISHED")).toBe(409);
+    expect(httpStatusForError("EVENT_DEFINITION_IMMUTABLE")).toBe(409);
     expect(httpStatusForError("EXPOSURE_TICKET_INVALID")).toBe(400);
     expect(httpStatusForError("UNSUPPORTED_OBJECT_KEY")).toBe(400);
     expect(httpStatusForError("EXPOSURE_TICKET_EXPIRED")).toBe(410);

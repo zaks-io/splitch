@@ -30,8 +30,24 @@
     {
       "binding": "CONFIG_STORE",
       "id": "00000000000000000000000000000000"
+    },
+    {
+      "binding": "CREDENTIAL_STORE",
+      "id": "local-credential-store",
+      "preview_id": "local-credential-store"
     }
   ],
+  "queues": {
+    "producers": [{ "binding": "METRIC_EVENTS_QUEUE", "queue": "splitch-metric-events-local" }],
+    "consumers": [
+      {
+        "queue": "splitch-metric-events-local",
+        "max_batch_size": 100,
+        "max_batch_timeout": 5,
+        "max_retries": 7
+      }
+    ]
+  },
   "durable_objects": {
     "bindings": [
       {
@@ -41,6 +57,14 @@
       {
         "name": "EVALUATION_COMMIT_OUTBOX",
         "class_name": "EvaluationCommitOutboxDurableObject"
+      },
+      {
+        "name": "METRIC_EVENT_OUTBOX",
+        "class_name": "MetricEventOutboxDurableObject"
+      },
+      {
+        "name": "METRIC_EVENT_RATE_LIMIT",
+        "class_name": "MetricEventRateLimitDurableObject"
       }
     ]
   },
@@ -52,6 +76,10 @@
     {
       "tag": "v2_evaluation_commit_outbox",
       "new_sqlite_classes": ["EvaluationCommitOutboxDurableObject"]
+    },
+    {
+      "tag": "v3_metric_event_ingest",
+      "new_sqlite_classes": ["MetricEventOutboxDurableObject", "MetricEventRateLimitDurableObject"]
     }
   ],
   "env": {
@@ -74,13 +102,34 @@
       },
       "routes": [{ "pattern": "ingest.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
+        "required": [
+          "SENTRY_DSN",
+          "SPLITCH_EVENT_INGEST_TOKEN",
+          "TINYBIRD_INGEST_TOKEN",
+          "EVALUATION_PRIVACY_SALT"
+        ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
-      "kv_namespaces": [{ "binding": "CONFIG_STORE", "id": "70cc24e1592e4db4a5b37e8d0dd6d6af" }],
+      "kv_namespaces": [
+        { "binding": "CONFIG_STORE", "id": "70cc24e1592e4db4a5b37e8d0dd6d6af" },
+        { "binding": "CREDENTIAL_STORE", "id": "05f656eb41b54063aa0d2d23a6082c5b" }
+      ],
+      "queues": {
+        "producers": [
+          { "binding": "METRIC_EVENTS_QUEUE", "queue": "splitch-metric-events-shared-preview" }
+        ],
+        "consumers": [
+          {
+            "queue": "splitch-metric-events-shared-preview",
+            "max_batch_size": 100,
+            "max_batch_timeout": 5,
+            "max_retries": 7
+          }
+        ]
+      },
       "durable_objects": {
         "bindings": [
           {
@@ -90,6 +139,14 @@
           {
             "name": "EVALUATION_COMMIT_OUTBOX",
             "class_name": "EvaluationCommitOutboxDurableObject"
+          },
+          {
+            "name": "METRIC_EVENT_OUTBOX",
+            "class_name": "MetricEventOutboxDurableObject"
+          },
+          {
+            "name": "METRIC_EVENT_RATE_LIMIT",
+            "class_name": "MetricEventRateLimitDurableObject"
           }
         ]
       },
@@ -101,6 +158,13 @@
         {
           "tag": "v2_evaluation_commit_outbox",
           "new_sqlite_classes": ["EvaluationCommitOutboxDurableObject"]
+        },
+        {
+          "tag": "v3_metric_event_ingest",
+          "new_sqlite_classes": [
+            "MetricEventOutboxDurableObject",
+            "MetricEventRateLimitDurableObject"
+          ]
         }
       ]
     },
@@ -123,13 +187,32 @@
       },
       "routes": [{ "pattern": "ingest.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
+        "required": [
+          "SENTRY_DSN",
+          "SPLITCH_EVENT_INGEST_TOKEN",
+          "TINYBIRD_INGEST_TOKEN",
+          "EVALUATION_PRIVACY_SALT"
+        ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
-      "kv_namespaces": [{ "binding": "CONFIG_STORE", "id": "b67d6cd1db424778a6dec24f64cbaa8d" }],
+      "kv_namespaces": [
+        { "binding": "CONFIG_STORE", "id": "b67d6cd1db424778a6dec24f64cbaa8d" },
+        { "binding": "CREDENTIAL_STORE", "id": "2c0082cdd2f4426f8cfeb4d2bbd62277" }
+      ],
+      "queues": {
+        "producers": [{ "binding": "METRIC_EVENTS_QUEUE", "queue": "splitch-metric-events" }],
+        "consumers": [
+          {
+            "queue": "splitch-metric-events",
+            "max_batch_size": 100,
+            "max_batch_timeout": 5,
+            "max_retries": 7
+          }
+        ]
+      },
       "durable_objects": {
         "bindings": [
           {
@@ -139,6 +222,14 @@
           {
             "name": "EVALUATION_COMMIT_OUTBOX",
             "class_name": "EvaluationCommitOutboxDurableObject"
+          },
+          {
+            "name": "METRIC_EVENT_OUTBOX",
+            "class_name": "MetricEventOutboxDurableObject"
+          },
+          {
+            "name": "METRIC_EVENT_RATE_LIMIT",
+            "class_name": "MetricEventRateLimitDurableObject"
           }
         ]
       },
@@ -150,6 +241,13 @@
         {
           "tag": "v2_evaluation_commit_outbox",
           "new_sqlite_classes": ["EvaluationCommitOutboxDurableObject"]
+        },
+        {
+          "tag": "v3_metric_event_ingest",
+          "new_sqlite_classes": [
+            "MetricEventOutboxDurableObject",
+            "MetricEventRateLimitDurableObject"
+          ]
         }
       ]
     }
