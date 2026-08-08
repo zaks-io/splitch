@@ -6,6 +6,7 @@ import {
 } from "@splitch/contracts";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import type { AssignmentStore } from "./assignment/assignment-store";
+import { errorCauseChain } from "./error-cause-chain";
 import { assembleExposureFromTicket } from "./evaluate/exposure-assembly";
 import {
   type ExposureTicketPayload,
@@ -93,7 +94,7 @@ async function redeemOne(
       appId: scope.appId,
       environmentId: scope.environmentId,
       exposureId: item.exposureId,
-      causeSummary: cause instanceof Error ? cause.message : String(cause),
+      causeChain: errorCauseChain(cause),
     });
     return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
   }

@@ -78,8 +78,8 @@ describe("POST /api/sdk/exposures: batch gates fail loud", () => {
       liveRun: true,
       exposureRedemptionClaims: claims,
     });
-    // Pad exposureTicket so the serialized body exceeds the byte cap while staying
-    // ≤25 items and keeping clientTimestamp a valid ISO datetime.
+    const ticket = await mintTicket();
+    // A valid first item makes the zero-side-effect assertions fail if this gate leaks.
     const padding = "x".repeat(EXPOSURE_BATCH_MAX_BODY_BYTES);
     const res = await app.request(PATH, {
       method: "POST",
@@ -91,6 +91,11 @@ describe("POST /api/sdk/exposures: batch gates fail loud", () => {
         exposures: [
           {
             exposureId: EXPOSURE_ID_A,
+            exposureTicket: ticket,
+            clientTimestamp: "2026-07-03T00:00:01.000Z",
+          },
+          {
+            exposureId: EXPOSURE_ID_B,
             exposureTicket: `ticket.${padding}`,
             clientTimestamp: "2026-07-03T00:00:01.000Z",
           },
@@ -99,12 +104,12 @@ describe("POST /api/sdk/exposures: batch gates fail loud", () => {
     });
     const body = (await res.json()) as ErrorResponse;
 
-    expect(res.status).toBe(400);
-    expect(body.code).toBe("VALIDATION_ERROR");
-    expect(JSON.stringify(body)).toContain(String(EXPOSURE_BATCH_MAX_BODY_BYTES));
     expect(claims.claimInputs).toEqual([]);
     expect(exposureSink.writes).toEqual([]);
     expect(assignmentStore.putHashedCalls).toEqual([]);
+    expect(res.status).toBe(400);
+    expect(body.code).toBe("VALIDATION_ERROR");
+    expect(JSON.stringify(body)).toContain(String(EXPOSURE_BATCH_MAX_BODY_BYTES));
   });
 
   it("rejects a non-datetime clientTimestamp as a whole-request VALIDATION_ERROR", async () => {

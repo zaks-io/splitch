@@ -16,6 +16,7 @@ import {
 import { APP_ID, CLIENT_KEY, ENVIRONMENT_ID, makeSdkRouteHarness } from "./sdk-route-test-fixtures";
 
 const REQUEST_ID = "req_spl_347_mixed_claim_failure";
+const INNER_CAUSE = "Network connection lost: durable object 7f3a stub reset";
 
 class MiddleClaimFailureStore extends MemoryExposureRedemptionClaimStore {
   readonly claimExposureIds: string[] = [];
@@ -23,7 +24,11 @@ class MiddleClaimFailureStore extends MemoryExposureRedemptionClaimStore {
   override claim(input: ExposureRedemptionClaimInput): Promise<ExposureRedemptionClaimOutcome> {
     this.claimExposureIds.push(input.exposureId);
     if (input.exposureId === EXPOSURE_ID_B) {
-      return Promise.reject(new Error("claim Durable Object transport failed"));
+      return Promise.reject(
+        new Error("exposure redemption claim Durable Object transport failed", {
+          cause: new Error(INNER_CAUSE),
+        }),
+      );
     }
     return super.claim(input);
   }
@@ -76,7 +81,7 @@ describe("POST /api/sdk/exposures: per-item claim failure", () => {
           appId: APP_ID,
           environmentId: ENVIRONMENT_ID,
           exposureId: EXPOSURE_ID_B,
-          causeSummary: "claim Durable Object transport failed",
+          causeChain: ["exposure redemption claim Durable Object transport failed", INNER_CAUSE],
         },
       },
     ]);
