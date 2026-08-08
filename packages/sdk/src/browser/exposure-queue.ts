@@ -54,23 +54,15 @@ export class ExposureQueue {
   private activeDrain: Promise<readonly ExposureBatchResult[]> | null = null;
   /** Callers currently inside enqueueDrain (includes waiters). */
   private queuedDrains = 0;
-  /** Remediation for the drain about to run (set by the owning enqueueDrain). */
-  private failureRemediation = EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION;
 
   private readonly onVisibilityChange = (): void => {
     if (resolveDocument(this.deps)?.visibilityState === "hidden") {
-      void this.flushBestEffort({
-        keepalive: true,
-        failureRemediation: EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION,
-      });
+      void this.flushBestEffort({ keepalive: true });
     }
   };
 
   private readonly onPageHide = (): void => {
-    void this.flushBestEffort({
-      keepalive: true,
-      failureRemediation: EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION,
-    });
+    void this.flushBestEffort({ keepalive: true });
   };
 
   constructor(private readonly deps: ExposureQueueDeps) {}
@@ -113,31 +105,22 @@ export class ExposureQueue {
   }
 
   async flush(): Promise<readonly ExposureBatchResult[]> {
-    return this.enqueueDrain({
-      keepalive: false,
-      failureRemediation: EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION,
-    });
+    return this.enqueueDrain({ keepalive: false });
   }
 
   async close(): Promise<readonly ExposureBatchResult[]> {
     this.closed = true;
     this.clearTimer();
     try {
-      return await this.enqueueDrain({
-        keepalive: false,
-        failureRemediation: EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION,
-      });
+      return await this.enqueueDrain({ keepalive: false });
     } finally {
       this.detachLifecycle();
     }
   }
 
-  private async flushBestEffort(options: {
-    keepalive: boolean;
-    failureRemediation: string;
-  }): Promise<void> {
+  private async flushBestEffort(options: { keepalive: boolean }): Promise<void> {
     try {
-      await this.enqueueDrain(options);
+      await this.enqueueDrain({ keepalive: options.keepalive });
     } catch {
       // Best-effort page-lifecycle path: failures already logged in runOneBatch.
     }
@@ -146,10 +129,7 @@ export class ExposureQueue {
   private async flushOverflow(): Promise<void> {
     let failed = false;
     try {
-      await this.enqueueDrain({
-        keepalive: false,
-        failureRemediation: EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION,
-      });
+      await this.enqueueDrain({ keepalive: false });
     } catch {
       failed = true;
     }
@@ -188,10 +168,7 @@ export class ExposureQueue {
    * batch. Hand off remaining pending when another drain is already queued
    * (so pagehide can send with keepalive).
    */
-  private enqueueDrain(options: {
-    keepalive: boolean;
-    failureRemediation: string;
-  }): Promise<readonly ExposureBatchResult[]> {
+  private enqueueDrain(options: { keepalive: boolean }): Promise<readonly ExposureBatchResult[]> {
     this.queuedDrains += 1;
     return (async () => {
       try {
@@ -203,8 +180,6 @@ export class ExposureQueue {
             // close()/flush() still get their own send attempt.
           }
         }
-        // Set only when this caller owns the next drain — never while waiting.
-        this.failureRemediation = options.failureRemediation;
         const work = this.drainPending(options.keepalive);
         this.activeDrain = work;
         try {
@@ -287,7 +262,14 @@ export class ExposureQueue {
     const result = await this.deps.transport.redeemExposures(wireItems, { keepalive });
     if (result.results === null) {
       this.pending.unshift(...batch);
-      throw logBatchFailure(this.deps.logger, result, batch.length, this.failureRemediation);
+      throw logBatchFailure(
+        this.deps.logger,
+        result,
+        batch.length,
+        this.closed
+          ? EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION
+          : EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION,
+      );
     }
 
     const { completed, retained } = correlateBatchResults(
@@ -308,10 +290,7 @@ export class ExposureQueue {
     }
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null;
-      void this.flushBestEffort({
-        keepalive: false,
-        failureRemediation: EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION,
-      });
+      void this.flushBestEffort({ keepalive: false });
     }, FLUSH_DELAY_MS);
   }
 

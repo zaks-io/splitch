@@ -22,26 +22,44 @@ function batchFailureMessage(logger: FakeLogger): string {
   return row?.message ?? "";
 }
 
-describe("ExposureQueue: batch-failure remediation by path (R6)", () => {
+function expectRetryRemediation(message: string): void {
+  expect(message).toContain(EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION);
+  expect(message).not.toContain(EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION);
+  expect(message).toContain("retained for the 5s retry");
+  expect(message).toContain("will not fire if the page is discarded first");
+  expect(message).not.toContain("will not be retried");
+}
+
+function expectNoRetryRemediation(message: string): void {
+  expect(message).toContain(EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION);
+  expect(message).not.toContain(EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION);
+  expect(message).toContain("will not be retried");
+  expect(message).toContain("call flush() before close()");
+  expect(message).not.toContain("retained for the 5s retry");
+}
+
+function failingTransport() {
+  return {
+    async redeemExposures() {
+      return unavailable();
+    },
+  };
+}
+
+describe("ExposureQueue: batch-failure remediation by closed (R7)", () => {
   it("timer-armed failure promises the 5s retry", async () => {
     vi.useFakeTimers();
     try {
       const logger = new FakeLogger();
       const queue = new ExposureQueue({
-        transport: {
-          async redeemExposures() {
-            return unavailable();
-          },
-        },
+        transport: failingTransport(),
         logger,
         now: () => Date.parse("2026-08-08T00:00:00.000Z"),
       });
       queue.enqueue("a", "ticket-a");
       await vi.advanceTimersByTimeAsync(5_000);
       await Promise.resolve();
-      const message = batchFailureMessage(logger);
-      expect(message).toContain(EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION);
-      expect(message).not.toContain(EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION);
+      expectRetryRemediation(batchFailureMessage(logger));
     } finally {
       vi.useRealTimers();
     }
@@ -50,22 +68,16 @@ describe("ExposureQueue: batch-failure remediation by path (R6)", () => {
   it("close() failure says the batch will not be retried", async () => {
     const logger = new FakeLogger();
     const queue = new ExposureQueue({
-      transport: {
-        async redeemExposures() {
-          return unavailable();
-        },
-      },
+      transport: failingTransport(),
       logger,
       now: () => Date.parse("2026-08-08T00:00:00.000Z"),
     });
     queue.enqueue("a", "ticket-a");
     await expect(queue.close()).rejects.toThrow(/SERVICE_UNAVAILABLE/);
-    const message = batchFailureMessage(logger);
-    expect(message).toContain(EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION);
-    expect(message).not.toContain(EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION);
+    expectNoRetryRemediation(batchFailureMessage(logger));
   });
 
-  it("pagehide failure says the batch will not be retried", async () => {
+  it("pagehide failure still promises the 5s retry (closed stays false)", async () => {
     const listeners = new Map<string, Set<() => void>>();
     const fakeWindow = {
       addEventListener(type: string, handler: () => void) {
@@ -82,11 +94,7 @@ describe("ExposureQueue: batch-failure remediation by path (R6)", () => {
     } as unknown as Window;
     const logger = new FakeLogger();
     const queue = new ExposureQueue({
-      transport: {
-        async redeemExposures() {
-          return unavailable();
-        },
-      },
+      transport: failingTransport(),
       logger,
       now: () => Date.parse("2026-08-08T00:00:00.000Z"),
       window: fakeWindow,
@@ -100,8 +108,41 @@ describe("ExposureQueue: batch-failure remediation by path (R6)", () => {
     await vi.waitFor(() => {
       expect(logger.errors.some((row) => row.message.includes("SERVICE_UNAVAILABLE"))).toBe(true);
     });
-    const message = batchFailureMessage(logger);
-    expect(message).toContain(EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION);
-    expect(message).not.toContain(EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION);
+    expectRetryRemediation(batchFailureMessage(logger));
+  });
+
+  it("visibilitychange hidden failure promises the 5s retry", async () => {
+    const listeners = new Map<string, Set<() => void>>();
+    const fakeDocument = {
+      visibilityState: "hidden" as DocumentVisibilityState,
+      addEventListener(type: string, handler: () => void) {
+        let set = listeners.get(type);
+        if (set === undefined) {
+          set = new Set();
+          listeners.set(type, set);
+        }
+        set.add(handler);
+      },
+      removeEventListener(type: string, handler: () => void) {
+        listeners.get(type)?.delete(handler);
+      },
+    } as unknown as Document;
+    const logger = new FakeLogger();
+    const queue = new ExposureQueue({
+      transport: failingTransport(),
+      logger,
+      now: () => Date.parse("2026-08-08T00:00:00.000Z"),
+      document: fakeDocument,
+      window: null,
+    });
+    queue.enqueue("a", "ticket-a");
+    expect(listeners.get("visibilitychange")?.size).toBe(1);
+    for (const handler of listeners.get("visibilitychange") ?? []) {
+      handler();
+    }
+    await vi.waitFor(() => {
+      expect(logger.errors.some((row) => row.message.includes("SERVICE_UNAVAILABLE"))).toBe(true);
+    });
+    expectRetryRemediation(batchFailureMessage(logger));
   });
 });

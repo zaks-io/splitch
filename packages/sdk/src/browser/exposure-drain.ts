@@ -43,7 +43,7 @@ export function logZeroProgress(
 }
 
 export const EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION =
-  "Retry flush(); the pending batch is retained for the 5s retry";
+  "Retry flush(); the pending batch is retained for the 5s retry (which will not fire if the page is discarded first)";
 
 export const EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION =
   "The pending batch was not sent and will not be retried; call flush() before close() or page teardown if redemption must complete";

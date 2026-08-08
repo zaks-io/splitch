@@ -153,6 +153,11 @@ describe("ExposureQueue: retain-on-failure (R4)", () => {
     expect(
       logger.errors.some((row) => row.message.includes(EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION)),
     ).toBe(true);
+    expect(
+      logger.errors.some((row) =>
+        row.message.includes("will not fire if the page is discarded first"),
+      ),
+    ).toBe(true);
 
     await vi.advanceTimersByTimeAsync(5_000);
     expect(redeemSizes).toEqual([EXPOSURE_BATCH_MAX_ITEMS, EXPOSURE_BATCH_MAX_ITEMS]);
