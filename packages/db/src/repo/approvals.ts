@@ -1,5 +1,6 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { approvalRequests, approvalReviews } from "../schema/index";
+import { type ApprovalArchiveCheckpoint, finalizeApprovalArchive } from "./approval-archive";
 import { dispositionQueries, failureInsert } from "./approval-dispositions";
 import type { ApprovalDisposition, ApprovalFailure } from "./approval-types";
 import type { Db } from "./client";
@@ -43,8 +44,51 @@ function pageFilters(
   return conditions;
 }
 
-export function makeApprovalRepo(db: Db) {
+function approvalArchiveQueries(db: Db, d1: D1Database) {
   return {
+    listReviews(scope: TenantScope, requestId: string) {
+      assertMintedScope(scope);
+      return db
+        .select()
+        .from(approvalReviews)
+        .where(
+          and(
+            eq(approvalReviews.appId, scope.appId),
+            eq(approvalReviews.approvalRequestId, requestId),
+          ),
+        )
+        .orderBy(asc(approvalReviews.reviewedAt), asc(approvalReviews.id));
+    },
+
+    /** System sweep only: each returned row mints its App scope before further access. */
+    listArchiveCandidates(resolvedBefore: string, limit: number) {
+      return db
+        .select()
+        .from(approvalRequests)
+        .where(
+          and(
+            inArray(approvalRequests.status, ["applied", "declined", "stale"]),
+            isNotNull(approvalRequests.resolvedAt),
+            lte(approvalRequests.resolvedAt, resolvedBefore),
+          ),
+        )
+        .orderBy(asc(approvalRequests.resolvedAt), asc(approvalRequests.id))
+        .limit(limit);
+    },
+
+    finalizeArchive(
+      scope: TenantScope,
+      checkpoint: ApprovalArchiveCheckpoint,
+      expectedStatus: "applied" | "declined" | "stale",
+    ) {
+      return finalizeApprovalArchive(d1, scope, checkpoint, expectedStatus);
+    },
+  };
+}
+
+export function makeApprovalRepo(db: Db, d1: D1Database) {
+  return {
+    ...approvalArchiveQueries(db, d1),
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the insert/race winner paths enforce one exact idempotency decision
     async createRequest(
       scope: TenantScope,

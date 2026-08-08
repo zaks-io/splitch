@@ -1,4 +1,11 @@
-import { index, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import { apps } from "./identity";
 
 /**
@@ -79,6 +86,37 @@ export const approvalReviews = sqliteTable(
       table.approvalRequestId,
       table.reviewedAt,
       table.id,
+    ),
+  ],
+);
+
+/**
+ * Durable proof that one terminal Approval Request was verified in Tinybird
+ * before its D1 Request and Review rows were removed.
+ */
+export const approvalRequestArchiveCheckpoints = sqliteTable(
+  "approval_request_archive_checkpoints",
+  {
+    approvalRequestId: text("approval_request_id").notNull(),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id),
+    archiveVersion: integer("archive_version").notNull(),
+    contentChecksum: text("content_checksum").notNull(),
+    rowCount: integer("row_count").notNull(),
+    proposedAt: text("proposed_at").notNull(),
+    resolvedAt: text("resolved_at").notNull(),
+    archivedAt: text("archived_at").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "approval_request_archive_checkpoint_identity_pk",
+      columns: [table.approvalRequestId, table.archiveVersion],
+    }),
+    index("approval_request_archive_checkpoints_app_idx").on(
+      table.appId,
+      table.proposedAt,
+      table.approvalRequestId,
     ),
   ],
 );

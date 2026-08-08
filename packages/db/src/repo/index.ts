@@ -30,7 +30,7 @@ export function createRepository(d1: D1Database) {
     claim: makeClaimStateRepo(d1),
     identity: makeIdentityRepo(db, d1),
     privacy: makePrivacyRepo(db),
-    approvals: makeApprovalRepo(db),
+    approvals: makeApprovalRepo(db, d1),
   };
 }
 

@@ -42,6 +42,8 @@ export interface ControlPlaneApiEnv {
   CONTROL_PLANE_ORIGIN?: string;
   TINYBIRD_API_URL?: string;
   TINYBIRD_RUN_SNAPSHOT_TOKEN?: string;
+  TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN?: string;
+  TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN?: string;
   /** Auth-api JWKS endpoint the control-plane token signature is verified against. */
   AUTH_JWKS_URI?: string;
   CONTROL_PANEL_DELEGATION_SECRET?: string;

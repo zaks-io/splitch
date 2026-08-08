@@ -1,0 +1,24 @@
+SCHEMA >
+    `audit_id` String `json:$.audit_id`,
+    `dedup_key` Nullable(String) `json:$.dedup_key`,
+    `app_id` String `json:$.app_id`,
+    `user_id` String `json:$.user_id`,
+    `auth_method` LowCardinality(String) `json:$.auth_method`,
+    `action` String `json:$.action`,
+    `resource_type` LowCardinality(String) `json:$.resource_type`,
+    `resource_id` String `json:$.resource_id`,
+    `changes` String `json:$.changes`,
+    `timestamp` DateTime64(3) `json:$.timestamp`,
+    `archive_version` Nullable(UInt16) `json:$.archive_version`,
+    `archive_row_count` Nullable(UInt32) `json:$.archive_row_count`,
+    `archive_checksum` Nullable(String) `json:$.archive_checksum`,
+    `request_status` Nullable(String) `json:$.request_status`,
+    `target_type` Nullable(String) `json:$.target_type`,
+    `proposed_at` Nullable(DateTime64(3)) `json:$.proposed_at`,
+    `resolved_at` Nullable(DateTime64(3)) `json:$.resolved_at`,
+    `policy_contexts` Nullable(String) `json:$.policy_contexts`
+
+ENGINE "MergeTree"
+ENGINE_PARTITION_KEY "toYYYYMM(timestamp)"
+ENGINE_SORTING_KEY "app_id, action, timestamp, resource_id"
+TOKEN audit_log_ingest APPEND

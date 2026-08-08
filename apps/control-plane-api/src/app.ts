@@ -11,10 +11,8 @@ import { Hono } from "hono";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
 import { makeOtherApprovalApplication } from "./approval-application";
 import { makeApprovalHandlers } from "./approval-handlers";
-import {
-  type AnalysisResultsReader,
-  unavailableAnalysisResults,
-} from "./attention-analysis-reader";
+import type { AnalysisResultsReader } from "./attention-analysis-reader";
+import { unavailableAnalysisResults } from "./attention-analysis-reader";
 import { makeAttentionRollupHandler } from "./attention-rollup";
 import type { ConfigStoreAccess } from "./config-store-do";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
@@ -61,6 +59,7 @@ export interface AppDeps {
   logger?: Pick<Console, "warn">;
   analysisResults?: AnalysisResultsReader;
   delegationBindings?: DelegationBindings;
+  approvalArchiveStore?: import("./approval-archive").ApprovalArchiveStore;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
@@ -130,6 +129,7 @@ export function createApp(deps: AppDeps): Hono {
         runSnapshotDelivery: deps.runSnapshotDelivery,
         nowIso: deps.nowIso,
       }),
+      archiveStore: deps.approvalArchiveStore,
     }),
   );
 

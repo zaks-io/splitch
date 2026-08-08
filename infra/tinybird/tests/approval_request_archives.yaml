@@ -1,0 +1,17 @@
+- name: app_scope_returns_only_its_archive
+  parameters: "app_id=app_a&limit=10"
+  expected_http_status: 200
+  expected_result: |
+    {"resource_id":"apr_A","archive_version":1,"audit_id":"audit-a","dedup_key":"apr_A:1","app_id":"app_a","user_id":"user_a","auth_method":"id_jag","action":"approval_request.archive","resource_type":"approval_request","changes":"{\"archiveVersion\":1,\"request\":{},\"reviews\":[]}","timestamp":"2026-08-01 00:00:00.000","archive_row_count":1,"archive_checksum":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","request_status":"applied","target_type":"flag_configuration","proposed_at":"2026-04-01 00:00:00.000","resolved_at":"2026-04-02 00:00:00.000","policy_contexts":"[{\"environmentId\":\"env_a\"}]"}
+- name: cross_app_request_id_returns_no_rows
+  parameters: "app_id=app_b&request_id=apr_A&limit=1"
+  expected_http_status: 200
+  expected_result: ""
+- name: environment_filter_is_app_scoped
+  parameters: "app_id=app_a&environment_id=env_b&limit=10"
+  expected_http_status: 200
+  expected_result: ""
+- name: missing_app_scope_fails
+  parameters: "limit=10"
+  expected_http_status: 400
+  expected_result: "app_id is required"

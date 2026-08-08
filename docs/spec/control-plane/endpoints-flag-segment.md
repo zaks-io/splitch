@@ -266,6 +266,12 @@ creating a Review. V1 has no staleness TTL. A subsequent Review of that request 
 inside the transaction, materializes the stale Review and terminal state, and returns
 `APPROVAL_REQUEST_STALE`.
 
+List and single reads span D1 and verified Tinybird archives. Both stores use the same
+`(proposed_at DESC, Approval Request ID DESC)` order and the existing opaque cursor value, so a page
+may cross the 90-day boundary without duplicating or skipping a Request. App scope is enforced
+before either archive lookup. The archived projection is schema-checked against the same
+`ApprovalRequest` wire contract as the D1 projection, including deleted-user tombstones.
+
 ### `POST /apps/{app_id}/approval-requests/{id}/reviews`
 
 Body:

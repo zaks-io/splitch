@@ -14,6 +14,7 @@
 const RESET_TABLES = [
   "approval_reviews",
   "approval_requests",
+  "approval_request_archive_checkpoints",
   "api_keys",
   "client_keys",
   "runs",
