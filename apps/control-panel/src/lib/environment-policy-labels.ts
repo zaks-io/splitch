@@ -1,4 +1,5 @@
 import type { EnvironmentPolicy } from "@splitch/contracts";
+import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/contracts";
 
 /**
  * The one label per gated change type, shared by every surface that names them.
@@ -8,10 +9,11 @@ import type { EnvironmentPolicy } from "@splitch/contracts";
  * "enable / disable" would tell an operator mid-incident that shutting a Flag off
  * needs a confirmation it does not need.
  */
-export const ENVIRONMENT_POLICY_LABELS: ReadonlyArray<readonly [keyof EnvironmentPolicy, string]> =
-  [
-    ["variantAvailability", "Variant availability"],
-    ["targetingRolloutValue", "Targeting, rollout, or value"],
-    ["enabledState", "Enabled state (turn on)"],
-    ["startExperimentRun", "Start an Experiment Run"],
-  ];
+export const ENVIRONMENT_POLICY_LABELS: ReadonlyArray<
+  readonly [keyof EnvironmentPolicy, string, string | undefined]
+> = [
+  ["variantAvailability", "Variant availability", undefined],
+  ["targetingRolloutValue", "Targeting, rollout, or value", undefined],
+  ["enabledState", "Enabled state (turn on)", KILL_SWITCH_OFF_EXEMPTION],
+  ["startExperimentRun", "Start an Experiment Run", undefined],
+];

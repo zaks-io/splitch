@@ -1,13 +1,12 @@
 # Quickstart: zero to a resolving Flag
 
 The canonical first-run narrative — the same steps for a human at the CLI, an agent over MCP, and a
-developer in the control panel (the three are skins over one contract, ADR-0023). The
+developer in the control panel (three skins over one typed contract). The
 `onboard_new_app` MCP prompt automates this sequence, and the `splitch://quickstart` MCP resource
-serves this file verbatim, so an agent never needs the docs site to onboard (mcp-discovery.md).
+serves this file verbatim, so an agent never needs the docs site to onboard.
 
 > Glossary note: **Flag**, **Variant**, **Run**, **Exposure**, **Targeting Key**, **Environment** all
-> mean exactly what [CONTEXT.md](../../CONTEXT.md) says. The `splitch://context` MCP resource is the
-> same glossary.
+> mean exactly what the `splitch://context` MCP resource says. That resource is the glossary.
 
 ## The shape of it
 
@@ -19,7 +18,7 @@ authenticate → pick or create an Org → create an App (dev+prod Envs auto-pro
 ```
 
 Every path ends on a **verify** round-trip, so time-to-first-confidence is a single call on any
-credential tier (ADR-0037). A step never ends on "probably fine."
+credential tier. A step never ends on "probably fine."
 
 ---
 
@@ -29,15 +28,14 @@ The CLI ships on npm as [`@splitch/cli`](https://www.npmjs.com/package/@splitch/
 `npm install --global @splitch/cli` puts `splitch` on your PATH, or run one-off with
 `npx @splitch/cli`. Agents over MCP install nothing — they connect to `https://mcp.splitch.dev`.
 
-| You are…                      | Door                | How                                                                                 |
-| ----------------------------- | ------------------- | ----------------------------------------------------------------------------------- |
-| A human at a terminal         | Device flow         | `splitch login` — prints a verification URL, polls until approved                   |
-| An agent with an IdP identity | ID-JAG (preferred)  | MCP OAuth PRM handshake on connect; no on-disk credential (mcp-and-cli-surfaces.md) |
-| An agent with no identity yet | Anonymous bootstrap | Creates a **provisional Org that auto-deletes in 24h** unless claimed — see below   |
+| You are…                      | Door                | How                                                                               |
+| ----------------------------- | ------------------- | --------------------------------------------------------------------------------- |
+| A human at a terminal         | Device flow         | `splitch login` — prints a verification URL, polls until approved                 |
+| An agent with an IdP identity | ID-JAG (preferred)  | MCP OAuth PRM handshake on connect; no on-disk credential                         |
+| An agent with no identity yet | Anonymous bootstrap | Creates a **provisional Org that auto-deletes in 24h** unless claimed — see below |
 
-The three doors are detailed in [control-plane/auth-doors.md](control-plane/auth-doors.md); the agent
-can read them in-band via `splitch://auth`. After auth, `splitch://capabilities` (or `splitch
-context`) shows exactly what your token can do.
+The three doors are detailed in the `splitch://auth` MCP resource. After auth, `splitch://capabilities`
+(or `splitch context`) shows exactly what your token can do.
 
 > **Anonymous door is a demo.** It is the fastest self-serve start (no human approval needed) but the
 > Org carries `demo_expires_at = now + 24h`. To keep your work, claim it (verify an email) before it
@@ -77,8 +75,7 @@ apps_create { orgId, name }                            # MCP tool
 ```
 
 This **auto-provisions a `dev` and a `prod` Environment** — you do not create Environments by hand
-for the common case (mcp-and-cli-surfaces.md). The response includes the App **and** its two
-Environments:
+for the common case. The response includes the App **and** its two Environments:
 
 ```json
 {
@@ -101,20 +98,20 @@ splitch use --app <app|slug> --env dev      # CLI: writes nearest .splitch/confi
 context_use { app, environment: "dev" }     # MCP: carried in the transport session
 ```
 
-Active context is a pure convenience — it fills in IDs, never widens authorization
-(mcp-and-cli-surfaces.md).
+Active context is a pure convenience — it fills in IDs, never widens authorization.
 
 ## 5. Get the credential your code will hold
 
-Use the **Client Key** for browser/mobile, the **API Key** for a trusted server. The placement rule
-and snippets are in [sdk/credentials.md](sdk/credentials.md#which-key-goes-where-first-run-placement).
+Use the **Client Key** for browser/mobile, the **API Key** for a trusted server. Placement rules and
+snippets are in the public credentials guide at
+https://splitch.dev/docs/sdk/credentials.
 
 ```
 splitch client-key get          # public, safe to ship — paste keyMaterial (pk_…), not keyId (ck_…)
 api_keys_create                 # secret, surfaced once — store it in a secret manager
 ```
 
-Your Client Key is **auto-provisioned and open to all origins** so it works immediately (ADR-0034).
+Your Client Key is **auto-provisioned and open to all origins** so it works immediately.
 Before shipping to production, lock it to your app's origins in one step (control panel or
 `PATCH …/client-key`) — the panel flags any open key until you do.
 
@@ -125,7 +122,7 @@ splitch flags create --key new-checkout --variants on,off       # CLI
 flags_create { key: "new-checkout", variants: [...] }           # MCP tool
 ```
 
-Flag definition is App-level; serving config is per-Environment (ADR-0028). Promote it into your
+Flag definition is App-level; serving config is per-Environment. Promote it into your
 Environment with `flags promote` / `flags_promote` when you are ready to serve it there.
 
 A new Flag starts with Configuration `enabled: false` and `rollout: null`. Until you change those,
@@ -169,11 +166,9 @@ is not serving. After step 7 you should see:
 { "value": true, "variantName": "on", "reason": "SPLIT" }
 ```
 
-- `verify` ([sdk/verify-endpoint.md](sdk/verify-endpoint.md)) uses the **same credential your code
-  holds** — it answers "is _my_ setup wired?" Under a Client Key the reason is non-revealing; under an
-  API Key it names the matched rule (ADR-0037).
-- `flags_test_eval` ([sdk/test-evaluation-endpoint.md](sdk/test-evaluation-endpoint.md)) is the
-  control-plane, full-reason tier — use it when rule identity matters.
+- `verify` uses the **same credential your code holds** — it answers "is _my_ setup wired?" Under a
+  Client Key the reason is non-revealing; under an API Key it names the matched rule.
+- `flags_test_eval` is the control-plane, full-reason tier — use it when rule identity matters.
 
 A green verify with `reason: "SPLIT"` (or `DEFAULT` if you enabled without a rollout) is your
 one-call confidence that auth, Environment, credential, and Flag config all line up. If it fails, the
@@ -252,12 +247,12 @@ if (d.reason === "ERROR") renderFallback(d.errorCode);
 else render(d.value);
 ```
 
-For a successful fresh assignment under a live Experiment Run, `evaluate` fires an Exposure (ADR-0004);
+For a successful fresh assignment under a live Experiment Run, `evaluate` fires an Exposure;
 `peekVariant`/`verify` do not. A **disabled** Flag returns the Default Variant outright. Flags without
 a controlling Experiment and Experiments without a live Run still resolve their Targeting Rules and
 baseline rollout; only the Exposure is skipped. Holdovers replay their prior Variant without recording
-a new Exposure. Defaults and the full status→result mapping are in
-[sdk/public-evaluate-endpoint.md](sdk/public-evaluate-endpoint.md#sdk-initialization-defaults).
+a new Exposure. Defaults and the full status→result mapping are in the public SDK methods guide at
+https://splitch.dev/docs/sdk/methods.
 
 **The loop closes here.** Deploy, call `evaluate()` with a real user, and the dashboard's empty
 Exposures state flips to "first Exposure received." Verify proves wiring; the first real `evaluate`
@@ -267,10 +262,10 @@ proves the integration. They are different milestones — onboarding is done at 
 
 ## Recovery: when a step fails
 
-splitch is fail-loud then guide (ADR-0036). Every operational `409` carries a machine-stable
-`details.recommendedAction` token — branch on the token, not on prose
-([contracts/error-responses.md](contracts/error-responses.md#recommendedaction-machine-stable-recovery-guidance)).
-The `recover_from_error` MCP prompt turns a token into a full remediation plan.
+splitch is fail-loud then guide. Every operational `409` carries a machine-stable
+`details.recommendedAction` token — branch on the token, not on prose. Each code has a public page
+under https://splitch.dev/docs/error/{code}. The `recover_from_error` MCP prompt turns a token into
+a full remediation plan.
 
 | You hit…                      | It means…                                             | Do…                                                                              |
 | ----------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
@@ -284,10 +279,9 @@ The `recover_from_error` MCP prompt turns a token into a full remediation plan.
 
 ## Sources
 
-- [ADR-0023](../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md) — one contract, three skins
-- [ADR-0027](../adr/0027-environment-is-a-first-class-axis-under-app.md) — Environment is first-class
-- [ADR-0036](../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md) — fail-loud
-- [ADR-0037](../adr/0037-client-side-configuration-verification-tiered-by-credential.md) — verify ends every workflow
-- [control-plane/endpoints-experiment-run.md](control-plane/endpoints-experiment-run.md) — create and Start the Experiment Run that owns Exposures
-- [control-plane/mcp-discovery.md](control-plane/mcp-discovery.md) — the prompts/resources that automate this
-- [CONTEXT.md](../../CONTEXT.md) — the glossary
+- One contract, three skins (CLI, MCP, control panel)
+- Environment is a first-class axis under App
+- Evaluation is fail-loud — no silent fallback
+- Verify ends every workflow (credential-tiered reason, no Exposure)
+- `splitch://context` — the glossary
+- Public docs index: https://splitch.dev/docs

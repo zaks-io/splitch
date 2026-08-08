@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ErrorResponseSchema } from "./errors";
+import { KILL_SWITCH_OFF_EXEMPTION } from "./kill-switch-off-exemption";
 import type { ApiRouteContract } from "./openapi-route";
 import { routeRegistry } from "./route-registry";
 
@@ -144,11 +145,23 @@ function deriveOutputSchema(route: ApiRouteContract): z.ZodTypeAny {
 function deriveTool(route: ApiRouteContract): McpToolDefinition {
   return {
     name: route.operationId,
-    description: route.summary,
+    description: toolDescription(route),
     inputSchema: deriveInputSchema(route),
     outputSchema: deriveOutputSchema(route),
     errorSchema: ErrorResponseSchema,
   };
+}
+
+/**
+ * MCP/CLI share this description (ADR-0023). Append the kill-switch-off
+ * exemption on Flag Config update so an agent choosing the call sees ADR-0029
+ * before sending `--enabled false` under a confirm Policy.
+ */
+function toolDescription(route: ApiRouteContract): string {
+  if (route.operationId === "flag_config_update") {
+    return `${route.summary} ${KILL_SWITCH_OFF_EXEMPTION}`;
+  }
+  return route.summary;
 }
 
 /**

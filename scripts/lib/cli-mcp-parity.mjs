@@ -1,3 +1,5 @@
+import { findRepoInternalReference } from "../../apps/cli/scripts/published-agent-surface.mjs";
+
 function uniqueIds(ids, surface) {
   const unique = new Set(ids);
   if (unique.size !== ids.length) {
@@ -66,26 +68,32 @@ function assertSkinLocalCapabilities(capabilities) {
   }
 }
 
-const REPO_INTERNAL_REFERENCE =
-  /(?:^|[\s`(])(?:\.\.\/|\.\/|docs\/|apps\/|packages\/|\.github\/|AGENTS\.md|CONTEXT\.md)|(?:ADR|SPL)-\d+/m;
-
 function assertPublicEntries(entries, surface) {
   for (const entry of entries) {
-    const internalReference = entry.text.match(REPO_INTERNAL_REFERENCE);
+    const internalReference = findRepoInternalReference(entry.text);
     if (internalReference) {
       throw new Error(
-        `published-agent-surface: ${surface} "${entry.name}" contains repo-internal reference: ${internalReference[0].trim()}`,
+        `published-agent-surface: ${surface} "${entry.name}" contains repo-internal reference: ${internalReference}`,
       );
     }
   }
 }
 
-export function assertPublicAgentSurface({ cliHelp, mcpTools }) {
+export function assertPublicAgentSurface({
+  cliHelp,
+  mcpTools,
+  mcpPrompts = [],
+  mcpResources = [],
+  routeSummaries = [],
+}) {
   assertPublicEntries(cliHelp, "CLI help");
   assertPublicEntries(
     mcpTools.map((tool) => ({ name: tool.name, text: tool.description })),
     "MCP tool description",
   );
+  assertPublicEntries(mcpPrompts, "MCP prompt");
+  assertPublicEntries(mcpResources, "MCP resource");
+  assertPublicEntries(routeSummaries, "route summary");
 }
 
 export function assertCliMcpParity({
