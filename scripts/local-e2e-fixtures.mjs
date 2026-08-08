@@ -27,22 +27,26 @@ export const LOCAL_E2E_NEWCOMER_SESSION_KEY = `session:${createHash("sha256")
   .digest("hex")}`;
 
 /**
- * The identity cache the Control Plane resolves member email from
- * (`member-profile:{userId}`). Email is never a D1 column, so without these the
- * people-shaped screens can only render "Email not available yet" and two
- * different people are indistinguishable on screen.
+ * A signed-in User with a profile but no Organization membership anywhere: the
+ * person the Members screen adds and then removes. Kept out of `org_memberships`
+ * on purpose, so the add leg starts from a real absence every run.
  */
-export const LOCAL_E2E_MEMBER_PROFILES = Object.freeze({
-  user_local_e2e: "owner@acme-labs.test",
-  user_local_member_e2e: "member@acme-labs.test",
-});
+export const LOCAL_E2E_RECRUIT_USER_ID = "user_local_recruit_e2e";
+export const LOCAL_E2E_PROFILELESS_USER_ID = "user_local_profileless_e2e";
 
 /**
- * `member-profile:{userId}`, mirrored here the same way the session key is: this
- * harness is plain Node and cannot import the TypeScript key helper in
- * `@splitch/contracts` (`memberProfileCacheKey`) without a build step.
+ * `member-profile:{userId}` in SESSION_STORE, mirroring
+ * `memberProfileCacheKey` in @splitch/contracts. Org member responses resolve
+ * email from here (never a D1 column); the profileless fixture below proves the
+ * roster keeps a membership row until that User signs in.
  */
-export function localE2eMemberProfileKey(userId) {
+export const LOCAL_E2E_MEMBER_PROFILES = Object.freeze({
+  user_local_e2e: "owner@acme-labs.e2e",
+  user_local_member_e2e: "member@acme-labs.e2e",
+  [LOCAL_E2E_RECRUIT_USER_ID]: "recruit@acme-labs.e2e",
+});
+
+export function memberProfileKey(userId) {
   return `member-profile:${userId}`;
 }
 
@@ -207,7 +211,8 @@ INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at,
 INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES
   ('org_acme_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
   ('org_orbit_e2e', 'user_local_e2e', 'admin', '${createdAt}'),
-  ('org_acme_e2e', 'user_local_member_e2e', 'member', '${createdAt}');
+  ('org_acme_e2e', 'user_local_member_e2e', 'member', '${createdAt}'),
+  ('org_acme_e2e', '${LOCAL_E2E_PROFILELESS_USER_ID}', 'member', '${createdAt}');
 INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES
   ('app_checkout_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
   ('app_billing_e2e', 'user_local_e2e', 'admin', '${createdAt}'),

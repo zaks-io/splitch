@@ -147,6 +147,8 @@ Full replace of this Environment's Targeting Rule list (ordered; first match win
 Rules may only reference Variants in this Environment's available set. Subject to the Environment's
 "targeting/rollout/value" Policy. Blocked while a running Experiment owns this Flag in this
 Environment, with the same `RUN_FROZEN` refusal and the same ordering ahead of the Policy gate.
+An optional `segmentId` must name a Segment in the same App. Publication AND-merges that Segment's
+Conditions with the rule's direct Conditions and writes only resolved Conditions to KV.
 Returns:
 `{ config: FlagConfiguration, approval_request: ApprovalRequest | null }`. The request is null under
 `allow` and applied under `confirm`.
@@ -186,6 +188,8 @@ sort key, and source and target rule lists routinely differ — that is what Pro
 
 The baseline moves as a **percentage only**: the target keeps its own salt, or mints a fresh one if it
 had no baseline. Adopting the source's salt would reshuffle every already-bucketed Entity in the target.
+
+Promotion preserves each authoring `segmentId` in D1 and republishes a resolved KV projection.
 
 Returns: the updated target Flag Configuration + the immutable Approval diff +
 `approval_request: ApprovalRequest | null`. The request is null under `allow` and applied under
@@ -289,6 +293,9 @@ required.
 
 ### `GET /apps/{app_id}/segments`
 
+Returns the App's Segments plus the Environment ids whose live Flag Configurations reference each
+Segment, so authoring surfaces can show the full republish impact.
+
 ### `POST /apps/{app_id}/segments`
 
 Body: `{ name: string, description?: string, conditions: Condition[] }`
@@ -300,9 +307,15 @@ Returns: `{ segment_id, app_id, name, conditions, created_at }`
 
 Body: `{ name?, description?, conditions? }`
 
+After the D1 update, every dependent live Flag Configuration in every Environment is synchronously
+republished. The request does not succeed until those KV projections contain the new resolved
+Conditions, within the five-second propagation contract.
+
 ### `DELETE /apps/{app_id}/segments/{segment_id}`
 
-Blocked if referenced by a running Experiment.
+Blocked by every dependent live Flag Configuration and Experiment draft. The refusal names each
+mutable dependent. A Run stores only frozen resolved Conditions, so running and ended Run snapshots
+do not block Segment deletion and do not drift after deletion.
 
 ## Sources
 

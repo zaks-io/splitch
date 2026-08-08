@@ -41,15 +41,18 @@ Auth: Org `owner`.
 
 ### `GET /orgs/{org_id}/members`
 
-Returns: `{ items: [{ user_id, email, role, created_at }], total, limit, offset }`
+Returns: `{ items: [{ user_id, email: string | null, role, created_at }], total, limit, offset }`
 Auth: Org `owner` or `admin`.
 `email` is resolved from WorkOS at read time or from the session identity cache; it is not stored in D1.
+`email: null` means the member has not signed in yet. The membership remains in the roster.
 
 ### `POST /orgs/{org_id}/members`
 
 Body: `{ user_id: string, role: "owner" | "admin" | "member" }`
 Returns: `{ user_id, role, created_at }`
 Auth: Org `owner` or `admin`.
+An existing membership returns `409 MEMBERSHIP_CONFLICT` with `details.existingRole`; add never
+changes an existing role.
 
 ### `PATCH /orgs/{org_id}/members/{user_id}`
 

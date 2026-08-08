@@ -10,6 +10,7 @@ import {
   EnvironmentSchema,
   environmentPolicyLevels,
   OrganizationSchema,
+  OrganizationMemberSchema,
   OrgPlanSchema,
   orgPlans,
   reservedEnvironmentPolicyLevels,
@@ -146,6 +147,10 @@ describe("User (WorkOS + membership, NOT a D1 PII table)", () => {
 
   it("rejects an unknown role", () => {
     expect(UserSchema.safeParse({ ...validUser, role: "viewer" }).success).toBe(false);
+  });
+
+  it("represents a member who has not signed in without inventing an email", () => {
+    expect(OrganizationMemberSchema.parse({ ...validUser, email: null }).email).toBeNull();
   });
 
   it("carries no PII storage columns beyond the assembled identity fields", () => {

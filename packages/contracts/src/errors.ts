@@ -4,8 +4,14 @@ import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
 import { conflictErrorMembers } from "./error-members-conflict";
 import { experimentConclusionErrorMembers } from "./experiment-conclusion-errors";
+import {
+  InternalServerErrorDetailsSchema,
+  SegmentRepublishDetailsShape,
+} from "./internal-error-details";
+import { LastOwnerRequiredDetailsSchema } from "./last-owner-error-details";
 import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
 import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
+import { SegmentDependenciesSchema, SegmentNotFoundDetailsSchema } from "./segment-error-details";
 
 /**
  * Canonical error contract. One base shape, discriminated on `code`, parsed by
@@ -133,6 +139,7 @@ const errorMembers = [
       currentRunId: z.string(),
       attemptedChange: z.string(),
       recommendedAction: RecommendedActionSchema,
+      ...SegmentRepublishDetailsShape,
     }),
   ),
   member(
@@ -191,14 +198,14 @@ const errorMembers = [
   member(
     "RESOURCE_NOT_EMPTY",
     z.object({
-      resourceType: z.enum(["app", "environment", "flag", "variant", "organization"]),
+      resourceType: z.enum(["app", "environment", "flag", "variant", "organization", "segment"]),
       resourceId: z.string(),
-      /**
-       * First blocker group's CLI child type (back-compat summary). Prefer
-       * `blockers` for the full tree with child IDs and remove commands.
-       */
+      /** First blocker group's CLI child type (back-compat summary). */
       childType: z.string(),
+      /** Count for `childType`, never a total across unlike child types. */
       childCount: z.number(),
+      /** Complete counts by CLI child type when more than one type can block. */
+      childCounts: z.record(z.string(), z.number().int().nonnegative()).optional(),
       attemptedOp: z.string(),
       /**
        * Every current blocker group, each child named by ID and by the CLI
@@ -207,6 +214,7 @@ const errorMembers = [
        * tree yet).
        */
       blockers: z.array(ResourceDeleteBlockerSchema).min(1).optional(),
+      segmentDependencies: SegmentDependenciesSchema.optional(),
     }),
   ),
 
@@ -221,7 +229,7 @@ const errorMembers = [
   member("ORGANIZATION_NOT_FOUND", EmptyDetails),
   member("USER_NOT_FOUND", EmptyDetails),
   member("CREDENTIAL_NOT_FOUND", EmptyDetails),
-  member("SEGMENT_NOT_FOUND", EmptyDetails),
+  member("SEGMENT_NOT_FOUND", SegmentNotFoundDetailsSchema),
   member("PRIVACY_JOB_NOT_FOUND", EmptyDetails),
   member("APPROVAL_REQUEST_NOT_FOUND", EmptyDetails),
 
@@ -234,16 +242,7 @@ const errorMembers = [
   member("FORBIDDEN", EmptyDetails),
   member("ORIGIN_NOT_ALLOWED", z.object({ origin: z.string(), hint: z.string() })),
   member("APP_MISMATCH", EmptyDetails),
-  /**
-   * Ownership is a per-tier grant, so the refusal names the tier it came from:
-   * `orgId` for the last owner of an Organization, `appId` for the last owner of
-   * an App (`app_memberships`). A single optional-both object would let a caller
-   * receive the refusal without learning WHICH resource would be orphaned.
-   */
-  member(
-    "LAST_OWNER_REQUIRED",
-    z.union([z.object({ orgId: z.string() }), z.object({ appId: z.string() })]),
-  ),
+  member("LAST_OWNER_REQUIRED", LastOwnerRequiredDetailsSchema),
   member("LAST_ENVIRONMENT_REQUIRED", z.object({ appId: z.string() })),
   member(
     "PRIVACY_CONFIRMATION_REQUIRED",
@@ -338,7 +337,7 @@ const errorMembers = [
   // Optional `fault` lets a 5xx name the broken seam without inventing a
   // recommendedAction token. `{}` remains valid for call sites that only have a
   // message (see flag-definition-errors).
-  member("INTERNAL_SERVER_ERROR", z.object({ fault: z.string().optional() }).strict()),
+  member("INTERNAL_SERVER_ERROR", InternalServerErrorDetailsSchema),
 ] as const;
 
 export const ErrorResponseSchema = z.discriminatedUnion("code", errorMembers);

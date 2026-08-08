@@ -9,6 +9,7 @@ import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import { makePanelSessionAccess } from "../src/panel-session-access";
 import { makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import type { PanelDelegationReplayStore } from "../src/panel-identity-replay";
@@ -70,10 +71,12 @@ beforeEach(async () => {
     sessions: makeSessionStore(bindings.kv),
     now: () => NOW_MS,
   };
+  const repo = createRepository(bindings.d1);
   const appDeps = {
     rateLimiter: allowLimiter,
-    repo: createRepository(bindings.d1),
+    repo,
     credentialStore: bindings.credentialKv,
+    memberProfileResolver: () => null,
     nowIso: () => new Date(NOW_MS).toISOString(),
   };
   app = createApp({
@@ -81,6 +84,7 @@ beforeEach(async () => {
     authResolver: makeControlPlaneAuthResolver(authDeps, {
       allowPanelDelegation: true,
       panelDelegationSecret: DELEGATION_SECRET,
+      panelAccess: makePanelSessionAccess(repo),
       panelDelegationReplay: { consume: async () => true } as PanelDelegationReplayStore,
     }),
   });
@@ -152,6 +156,32 @@ describe("Control Panel delegation for apps_create", () => {
 
     expect(response.status).toBe(401);
     expect((await response.json()) satisfies ErrorResponse).toMatchObject({ code: "UNAUTHORIZED" });
+  });
+});
+
+describe("Control Panel delegation for Organization membership", () => {
+  it("resolves an organization_members_list operation to an Org-bound principal", async () => {
+    const request = new Request(`${AUDIENCE}/orgs/${PRIMARY.orgId}/members`);
+    const delegation = await issueControlPanelDelegation(
+      request,
+      { id: "organization_members_list", orgId: PRIMARY.orgId },
+      OWNER,
+      DELEGATION_SECRET,
+      {
+        nowSeconds: NOW_SECONDS,
+        sessionExpiresAt: NOW_SECONDS + 30,
+        nonce: "nonce_members_list_1",
+      },
+    );
+
+    const response = await app.request(`/orgs/${PRIMARY.orgId}/members`, {
+      headers: { [CONTROL_PANEL_DELEGATION_HEADER]: delegation },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      items: expect.arrayContaining([expect.objectContaining({ id: OWNER, role: "owner" })]),
+    });
   });
 });
 

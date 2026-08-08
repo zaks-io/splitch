@@ -1,7 +1,7 @@
 import type { ApprovalRequest } from "@splitch/contracts";
 import type { ConfigStoreWriter } from "./config-store";
 import { variantNotAvailable } from "./experiment-errors";
-import { flagConfigNotFound, rolloutAmbiguous } from "./flag-config-errors";
+import { flagConfigNotFound, flagSegmentNotFound, rolloutAmbiguous } from "./flag-config-errors";
 import { runFrozenResponse } from "./flag-config-run-freeze";
 
 /**
@@ -16,6 +16,15 @@ import { runFrozenResponse } from "./flag-config-run-freeze";
 type FlagConfigWriteResult = Awaited<ReturnType<ConfigStoreWriter["writeFlagConfig"]>>;
 type PromotionResult = Awaited<ReturnType<ConfigStoreWriter["promoteFlagConfig"]>>;
 export type PromotionSelect = Parameters<ConfigStoreWriter["promoteFlagConfig"]>[0]["select"];
+
+export function renderFlagConfigReadFailure(
+  result: Extract<Awaited<ReturnType<ConfigStoreWriter["readFlagConfig"]>>, { ok: false }>,
+  requestId: string,
+): Response {
+  return result.reason === "SEGMENT_NOT_FOUND"
+    ? flagSegmentNotFound(result.missingSegmentIds, requestId)
+    : flagConfigNotFound(requestId);
+}
 
 export function flagConfigPatchInput(
   appId: string,
@@ -61,6 +70,9 @@ export function renderFlagConfigWriteResult(
   if (result.reason === "ROLLOUT_AMBIGUOUS") {
     return rolloutAmbiguous(result.availableVariantNames, requestId);
   }
+  if (result.reason === "SEGMENT_NOT_FOUND") {
+    return flagSegmentNotFound(result.missingSegmentIds, requestId);
+  }
   if (result.reason === "RUN_FROZEN") return runFrozenResponse(result, requestId);
   // Direct writers never produce APPROVAL_NOT_APPLIED, CHANGED_FIELDS_UNDETERMINED,
   // or APPROVAL_EMPTY_CHANGE.
@@ -82,6 +94,9 @@ export function renderPromotionResult(
   }
   if (result.reason === "ROLLOUT_AMBIGUOUS") {
     return rolloutAmbiguous(result.availableVariantNames, requestId);
+  }
+  if (result.reason === "SEGMENT_NOT_FOUND") {
+    return flagSegmentNotFound(result.missingSegmentIds, requestId);
   }
   if (result.reason === "RUN_FROZEN") return runFrozenResponse(result, requestId);
   // Direct writers never produce APPROVAL_NOT_APPLIED, CHANGED_FIELDS_UNDETERMINED,

@@ -10,10 +10,10 @@ import {
   LOCAL_E2E_MEMBER_SESSION_KEY,
   LOCAL_E2E_NEWCOMER_SESSION_KEY,
   LOCAL_E2E_SESSION_KEY,
-  localE2eMemberProfileKey,
   localE2eMemberSession,
   localE2eNewcomerSession,
   localE2eSession,
+  memberProfileKey,
 } from "./local-e2e-fixtures.mjs";
 import { localBindings, localE2eWorkers } from "./local-e2e-fleet-config.mjs";
 import { createFaultTracker, describeFault } from "./local-e2e-fleet-faults.mjs";
@@ -154,41 +154,22 @@ function seedLocalResources() {
     "--command",
     LOCAL_E2E_D1_SEED,
   ]);
-  runWrangler([
-    "kv",
-    "key",
-    "put",
-    LOCAL_E2E_SESSION_KEY,
-    JSON.stringify(localE2eSession()),
-    "--binding",
-    "SESSION_STORE",
-    "--local",
-    "--config",
-    "apps/control-panel/wrangler.jsonc",
-    "--persist-to",
-    persistPath,
-  ]);
-  runWrangler([
-    "kv",
-    "key",
-    "put",
-    LOCAL_E2E_MEMBER_SESSION_KEY,
-    JSON.stringify(localE2eMemberSession()),
-    "--binding",
-    "SESSION_STORE",
-    "--local",
-    "--config",
-    "apps/control-panel/wrangler.jsonc",
-    "--persist-to",
-    persistPath,
-  ]);
-  for (const [userId, email] of Object.entries(LOCAL_E2E_MEMBER_PROFILES)) {
+  const sessionStoreEntries = [
+    [LOCAL_E2E_SESSION_KEY, localE2eSession()],
+    [LOCAL_E2E_MEMBER_SESSION_KEY, localE2eMemberSession()],
+    [LOCAL_E2E_NEWCOMER_SESSION_KEY, localE2eNewcomerSession()],
+    ...Object.entries(LOCAL_E2E_MEMBER_PROFILES).map(([userId, email]) => [
+      memberProfileKey(userId),
+      { email },
+    ]),
+  ];
+  for (const [key, value] of sessionStoreEntries) {
     runWrangler([
       "kv",
       "key",
       "put",
-      localE2eMemberProfileKey(userId),
-      JSON.stringify({ email }),
+      key,
+      JSON.stringify(value),
       "--binding",
       "SESSION_STORE",
       "--local",
@@ -198,20 +179,6 @@ function seedLocalResources() {
       persistPath,
     ]);
   }
-  runWrangler([
-    "kv",
-    "key",
-    "put",
-    LOCAL_E2E_NEWCOMER_SESSION_KEY,
-    JSON.stringify(localE2eNewcomerSession()),
-    "--binding",
-    "SESSION_STORE",
-    "--local",
-    "--config",
-    "apps/control-panel/wrangler.jsonc",
-    "--persist-to",
-    persistPath,
-  ]);
 }
 
 function launchWorker(worker, runId, tracker = faultTracker) {

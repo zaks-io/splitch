@@ -97,18 +97,31 @@ export async function runSafeDeliveryJourney(deps) {
       return match.id;
     };
 
-    await tuneInDev(deps, primary.id, variantId(primary, LAUNCH_VARIANT), keys.primaryRuleId, {
-      rollout: { percentage: DEV_ROLLOUT_PERCENTAGE },
-    });
+    await tuneInDev(
+      deps,
+      primary.id,
+      variantId(primary, LAUNCH_VARIANT),
+      keys.primaryRuleId,
+      segment.id,
+      { rollout: { percentage: DEV_ROLLOUT_PERCENTAGE } },
+    );
     // The dangling probe serves a Variant prod deliberately never makes available.
     await tuneInDev(
       deps,
       dangling.id,
       variantId(dangling, DANGLING_VARIANT),
       keys.danglingRuleId,
+      segment.id,
       {},
     );
-    await tuneInDev(deps, stale.id, variantId(stale, LAUNCH_VARIANT), keys.staleRuleId, {});
+    await tuneInDev(
+      deps,
+      stale.id,
+      variantId(stale, LAUNCH_VARIANT),
+      keys.staleRuleId,
+      segment.id,
+      {},
+    );
     steps.push("dev_tune_ungated");
 
     const devSource = await getFlagConfig(deps, deps.appId, deps.devEnvironmentId, primary.id);

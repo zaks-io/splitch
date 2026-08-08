@@ -231,7 +231,7 @@ export const PromoteResponseSchema = z.object({
 export const CreateSegmentRequestSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
-  conditions: z.array(ConditionSchema),
+  conditions: z.array(ConditionSchema).min(1),
   idempotency_key: z.string().optional(),
 });
 export type CreateSegmentRequest = z.infer<typeof CreateSegmentRequestSchema>;
@@ -240,7 +240,9 @@ export const PatchSegmentRequestSchema = z
   .object({
     name: z.string().optional(),
     description: z.string().optional(),
-    conditions: z.array(ConditionSchema).optional(),
+    conditions: z.array(ConditionSchema).min(1).optional(),
+    review: InlineApproveAndApplyReviewSchema.optional(),
+    idempotency_key: z.string().min(1).optional(),
   })
   .strict();
 export type PatchSegmentRequest = z.infer<typeof PatchSegmentRequestSchema>;

@@ -216,6 +216,16 @@ export const AppMemberSchema = z.object({
 });
 export type AppMember = z.infer<typeof AppMemberSchema>;
 
+/**
+ * An Organization membership row may exist before the User has signed in and
+ * populated the shared profile cache. `email: null` preserves that distinction
+ * without inventing identity data or dropping the membership from the roster.
+ */
+export const OrganizationMemberSchema = UserSchema.extend({
+  email: z.string().nullable(),
+});
+export type OrganizationMember = z.infer<typeof OrganizationMemberSchema>;
+
 // ---------------------------------------------------------------------------
 // ClientKey (public, publishable)
 //

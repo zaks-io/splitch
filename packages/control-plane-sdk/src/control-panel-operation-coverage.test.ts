@@ -58,6 +58,22 @@ const OPERATION_ROUTES: OperationCoverage = {
     route: { method: "POST", pathname: "/orgs" },
     operation: { id: "organizations_create" },
   },
+  organization_members_list: {
+    route: { method: "GET", pathname: "/orgs/org_1/members" },
+    operation: { id: "organization_members_list", orgId: "org_1" },
+  },
+  organization_members_add: {
+    route: { method: "POST", pathname: "/orgs/org_1/members" },
+    operation: { id: "organization_members_add", orgId: "org_1" },
+  },
+  organization_members_update: {
+    route: { method: "PATCH", pathname: "/orgs/org_1/members/user_1" },
+    operation: { id: "organization_members_update", orgId: "org_1", userId: "user_1" },
+  },
+  organization_members_remove: {
+    route: { method: "DELETE", pathname: "/orgs/org_1/members/user_1" },
+    operation: { id: "organization_members_remove", orgId: "org_1", userId: "user_1" },
+  },
   app_attention_rollup_get: {
     route: { method: "GET", pathname: `/apps/${APP}/attention-rollup` },
     operation: { id: "app_attention_rollup_get", appId: APP },

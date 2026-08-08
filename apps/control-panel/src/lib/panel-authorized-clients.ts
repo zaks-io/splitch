@@ -1,5 +1,5 @@
 import { env as workerEnv } from "cloudflare:workers";
-import type { ApprovalsClient, FlagsClient } from "@splitch/control-plane-sdk";
+import type { ApprovalsClient, FlagsClient, PanelSegmentsClient } from "@splitch/control-plane-sdk";
 import { getRequest } from "@tanstack/react-start/server";
 import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelAppSettingsClient } from "./control-plane-app-settings";
@@ -7,6 +7,7 @@ import {
   createControlPanelApprovalsClient,
   createControlPanelFlagsClient,
 } from "./control-plane-apps";
+import { createControlPanelSegmentsClient } from "./control-plane-segments";
 import { loadSessionFromRequest } from "./session";
 import { resyncSessionMemberships } from "./session-resync";
 
@@ -57,6 +58,23 @@ export async function authorizedFlagsClient(
   return {
     ok: true,
     client: createControlPanelFlagsClient(
+      bindings.CONTROL_PLANE_API,
+      actor,
+      environmentId,
+      bindings.CONTROL_PANEL_DELEGATION_SECRET,
+    ),
+  };
+}
+
+export async function authorizedSegmentsClient(
+  environmentId: string,
+): Promise<AuthorizedClient<PanelSegmentsClient>> {
+  const authorized = await panelBindingContext();
+  if (!authorized.ok) return authorized;
+  const { bindings, actor } = authorized;
+  return {
+    ok: true,
+    client: createControlPanelSegmentsClient(
       bindings.CONTROL_PLANE_API,
       actor,
       environmentId,

@@ -10,12 +10,29 @@ import { renderError } from "@splitch/worker-runtime";
 import { approvalReviewId } from "./approval-canonical";
 import { approvalRequestProjection } from "./approval-model";
 import type {
+  ApplicationTargetState,
   ApprovalRequestRow,
   ApprovalResult,
   ApprovalServiceDeps,
   ReviewApprovalInput,
   UnapplicableProposal,
 } from "./approval-service-types";
+
+/**
+ * One message per target state, and no message without one. Keyed by the union
+ * so adding a fourth state is a compile error here rather than a failure that
+ * quietly inherits another state's claim about the operator's data.
+ */
+const APPLICATION_FAILURE_MESSAGES: Record<ApplicationTargetState, string> = {
+  rolled_back: "Approval Request application failed and was rolled back",
+  applied: "Approval Request application changed the target, but a later step failed",
+  unknown:
+    "Approval Request application failed and the target state is unknown; re-read the Approval Request",
+};
+
+export function applicationFailureMessage(targetState: ApplicationTargetState): string {
+  return APPLICATION_FAILURE_MESSAGES[targetState];
+}
 
 export async function materializeStale(
   deps: ApprovalServiceDeps,
@@ -106,6 +123,7 @@ export async function recordApplicationFailure(
   row: ApprovalRequestRow,
   commit: ApprovalCommit,
   error: { code: ErrorCode; details: Record<string, unknown> },
+  targetState: ApplicationTargetState,
   requestId: string,
 ): Promise<ApprovalResult> {
   const code = ErrorCodeSchema.parse(error.code);
@@ -121,6 +139,9 @@ export async function recordApplicationFailure(
     requestHash: commit.requestHash,
     errorCode: code,
     errorDetails: JSON.stringify(errorDetails),
+    // Recorded, not derived: an exact-key replay has to repeat this same claim,
+    // and no other column on the row can answer it.
+    targetState,
   });
   if (!recorded) return resolvedWinner(deps, row.appId, row.id, requestId);
   return {
@@ -128,7 +149,7 @@ export async function recordApplicationFailure(
     response: renderError(
       {
         code: "APPROVAL_APPLICATION_FAILED",
-        message: "Approval Request application failed and was rolled back",
+        message: applicationFailureMessage(targetState),
         details: {
           approvalRequestId: row.id,
           reviewId: commit.reviewId,

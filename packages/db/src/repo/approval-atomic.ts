@@ -14,6 +14,15 @@ import { assertMintedScope } from "./scope";
  * whoever happened to construct the commit.
  */
 
+/**
+ * The Approval Request is still pending, belongs to this App, and its reviewer
+ * and policy preconditions still hold at write time.
+ *
+ * This is an EXISTS over `approval_requests` alone and it is UNCORRELATED to the
+ * row a statement is writing: it proves the Approval Request is the caller's, never
+ * that the target row is. Every statement that rides on it still has to carry its
+ * own `app_id` predicate on its own target table.
+ */
 export function approvalPendingCondition(db: Db, scope: TenantScope, commit: ApprovalCommit) {
   assertMintedScope(scope);
   return exists(
@@ -169,6 +178,7 @@ export function appliedReviewInsert(
             ),
             errorCode: sql<string | null>`NULL`.as("error_code"),
             errorDetails: sql<string | null>`NULL`.as("error_details"),
+            targetState: sql<string | null>`NULL`.as("target_state"),
           })
           .from(approvalRequests)
           .where(

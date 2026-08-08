@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ErrorCode } from "./error-code";
+import { UserRoleSchema } from "./leaf-schemas-runtime";
 
 /**
  * Uniqueness-conflict ErrorResponse members. Split from `errors.ts` so that
@@ -21,6 +22,7 @@ export const conflictErrorMembers = [
       recommendedAction: z.literal("CHOOSE_DIFFERENT_SLUG"),
     }),
   ),
+  member("MEMBERSHIP_CONFLICT", z.object({ existingRole: UserRoleSchema })),
   // An Experiment (live or archived) still holds `(app, env, key)`. Naming an
   // archived id is safe: the caller has Environment write scope and owned it.
   // Live holders omit archivedExperimentId and surface status instead.

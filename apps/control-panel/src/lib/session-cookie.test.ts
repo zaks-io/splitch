@@ -32,6 +32,7 @@ const CREATE_SERVER_FN_POST_WRITES = [
   "lib/control-plane-flag-functions.ts",
   "lib/control-plane-flag-mutations.ts",
   "lib/control-plane-metric-functions.ts",
+  "lib/control-plane-org-member-functions.ts",
   "lib/control-plane-organization-functions.ts",
   "lib/control-plane-segment-functions.ts",
   "lib/control-plane-settings-functions.ts",

@@ -15,6 +15,7 @@ import { Route as KitchenSinkRouteImport } from './routes/kitchen-sink'
 import { Route as OrgSlugIndexRouteImport } from './routes/$orgSlug.index'
 import { Route as OrgSlugBillingRouteImport } from './routes/$orgSlug.billing'
 import { Route as OrgSlugClaimRouteImport } from './routes/$orgSlug.claim'
+import { Route as OrgSlugMembersRouteImport } from './routes/$orgSlug.members'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthLogoutRouteImport } from './routes/auth.logout'
@@ -70,6 +71,11 @@ const OrgSlugBillingRoute = OrgSlugBillingRouteImport.update({
 const OrgSlugClaimRoute = OrgSlugClaimRouteImport.update({
   id: '/$orgSlug/claim',
   path: '/$orgSlug/claim',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrgSlugMembersRoute = OrgSlugMembersRouteImport.update({
+  id: '/$orgSlug/members',
+  path: '/$orgSlug/members',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -232,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/kitchen-sink': typeof KitchenSinkRoute
   '/$orgSlug/billing': typeof OrgSlugBillingRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
+  '/$orgSlug/members': typeof OrgSlugMembersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
@@ -266,6 +273,7 @@ export interface FileRoutesByTo {
   '/kitchen-sink': typeof KitchenSinkRoute
   '/$orgSlug/billing': typeof OrgSlugBillingRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
+  '/$orgSlug/members': typeof OrgSlugMembersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
@@ -296,6 +304,7 @@ export interface FileRoutesById {
   '/kitchen-sink': typeof KitchenSinkRoute
   '/$orgSlug/billing': typeof OrgSlugBillingRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
+  '/$orgSlug/members': typeof OrgSlugMembersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
@@ -332,6 +341,7 @@ export interface FileRouteTypes {
     | '/kitchen-sink'
     | '/$orgSlug/billing'
     | '/$orgSlug/claim'
+    | '/$orgSlug/members'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/logout'
@@ -366,6 +376,7 @@ export interface FileRouteTypes {
     | '/kitchen-sink'
     | '/$orgSlug/billing'
     | '/$orgSlug/claim'
+    | '/$orgSlug/members'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/logout'
@@ -395,6 +406,7 @@ export interface FileRouteTypes {
     | '/kitchen-sink'
     | '/$orgSlug/billing'
     | '/$orgSlug/claim'
+    | '/$orgSlug/members'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/logout'
@@ -430,6 +442,7 @@ export interface RootRouteChildren {
   KitchenSinkRoute: typeof KitchenSinkRoute
   OrgSlugBillingRoute: typeof OrgSlugBillingRoute
   OrgSlugClaimRoute: typeof OrgSlugClaimRoute
+  OrgSlugMembersRoute: typeof OrgSlugMembersRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthLoginRoute: typeof AuthLoginRoute
   AuthLogoutRoute: typeof AuthLogoutRoute
@@ -480,6 +493,13 @@ declare module '@tanstack/react-router' {
       path: '/$orgSlug/claim'
       fullPath: '/$orgSlug/claim'
       preLoaderRoute: typeof OrgSlugClaimRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$orgSlug/members': {
+      id: '/$orgSlug/members'
+      path: '/$orgSlug/members'
+      fullPath: '/$orgSlug/members'
+      preLoaderRoute: typeof OrgSlugMembersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/callback': {
@@ -785,6 +805,7 @@ const rootRouteChildren: RootRouteChildren = {
   KitchenSinkRoute: KitchenSinkRoute,
   OrgSlugBillingRoute: OrgSlugBillingRoute,
   OrgSlugClaimRoute: OrgSlugClaimRoute,
+  OrgSlugMembersRoute: OrgSlugMembersRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   AuthLoginRoute: AuthLoginRoute,
   AuthLogoutRoute: AuthLogoutRoute,
