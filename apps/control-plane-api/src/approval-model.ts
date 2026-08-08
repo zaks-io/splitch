@@ -11,8 +11,8 @@ import {
 import { appScope, type Repository } from "@splitch/db";
 import { approvalTargetVersion } from "./approval-target";
 
-type RequestRow = NonNullable<Awaited<ReturnType<Repository["approvals"]["getRequest"]>>>;
-type ReviewRow = NonNullable<Awaited<ReturnType<Repository["approvals"]["latestReview"]>>>;
+export type RequestRow = NonNullable<Awaited<ReturnType<Repository["approvals"]["getRequest"]>>>;
+export type ReviewRow = NonNullable<Awaited<ReturnType<Repository["approvals"]["latestReview"]>>>;
 
 export async function approvalRequestProjection(
   repo: Repository,
@@ -34,6 +34,15 @@ export async function approvalRequestProjection(
   const status =
     storedStatus === "pending" && currentVersion !== row.targetVersion ? "stale" : storedStatus;
 
+  return storedApprovalRequestProjection(row, latest, status);
+}
+
+export function storedApprovalRequestProjection(
+  row: RequestRow,
+  latest: ReviewRow | null,
+  status: ApprovalRequest["status"] = ApprovalRequestStatusSchema.parse(row.status),
+): ApprovalRequest {
+  const contexts = ApprovalPolicyContextSchema.array().parse(JSON.parse(row.policyContexts));
   return ApprovalRequestSchema.parse({
     id: row.id,
     appId: row.appId,

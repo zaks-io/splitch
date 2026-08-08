@@ -72,7 +72,13 @@
     "McpDelegationReplayDurableObject": { "type": "durable-object", "storage": "sqlite" }
   },
   "secrets": {
-    "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN", "TINYBIRD_RUN_SNAPSHOT_TOKEN"]
+    "required": [
+      "SENTRY_DSN",
+      "SPLITCH_DEPLOY_GATE_TOKEN",
+      "TINYBIRD_RUN_SNAPSHOT_TOKEN",
+      "TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN",
+      "TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN"
+    ]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
@@ -119,6 +125,8 @@
           "SENTRY_DSN",
           "SPLITCH_DEPLOY_GATE_TOKEN",
           "TINYBIRD_RUN_SNAPSHOT_TOKEN",
+          "TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN",
+          "TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN",
           "CONTROL_PANEL_DELEGATION_SECRET",
           "MCP_CONTROL_PLANE_DELEGATION_SECRET"
         ]
@@ -194,6 +202,8 @@
           "SENTRY_DSN",
           "SPLITCH_DEPLOY_GATE_TOKEN",
           "TINYBIRD_RUN_SNAPSHOT_TOKEN",
+          "TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN",
+          "TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN",
           "CONTROL_PANEL_DELEGATION_SECRET",
           "MCP_CONTROL_PLANE_DELEGATION_SECRET"
         ]

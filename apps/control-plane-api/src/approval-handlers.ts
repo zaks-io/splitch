@@ -3,6 +3,11 @@ import { type ApprovalCommit, appScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { requireAppMember } from "./app-authz";
+import {
+  APPROVAL_ARCHIVE_VERSION,
+  type ApprovalArchiveStore,
+  archivedApprovalRequest,
+} from "./approval-archive";
 import { approvalRequestProjection } from "./approval-model";
 import { reviewApproval } from "./approval-service";
 import type { ApplicationOutcome } from "./approval-service-types";
@@ -14,6 +19,15 @@ interface ApprovalHandlerDeps {
   configStore?: ConfigStoreAccess;
   nowIso?: () => string;
   applyOther?: (request: ApprovalRequest, commit: ApprovalCommit) => Promise<ApplicationOutcome>;
+  archiveStore?: ApprovalArchiveStore;
+}
+
+interface ApprovalListQuery {
+  status?: string;
+  target_kind?: string;
+  environmentId?: string;
+  limit?: number;
+  cursor?: string | null;
 }
 
 export function makeApprovalHandlers(deps: ApprovalHandlerDeps) {
@@ -31,8 +45,14 @@ export function makeApprovalHandlers(deps: ApprovalHandlerDeps) {
       const memberError = await requireAppMember(deps, appId, principal, requestId);
       if (memberError) return memberError;
       const row = await deps.repo.approvals.getRequest(appScope(appId), pathParam(input, "id"));
-      return row
-        ? Response.json(await approvalRequestProjection(deps.repo, row))
+      if (row) return Response.json(await approvalRequestProjection(deps.repo, row));
+      const archived = await deps.archiveStore?.get(
+        appId,
+        pathParam(input, "id"),
+        APPROVAL_ARCHIVE_VERSION,
+      );
+      return archived
+        ? Response.json(await archivedApprovalRequest(archived, appId))
         : approvalNotFound(requestId);
     },
 
@@ -58,19 +78,13 @@ export function makeApprovalHandlers(deps: ApprovalHandlerDeps) {
 async function listApprovalRequests(
   deps: ApprovalHandlerDeps,
   appId: string,
-  query: {
-    status?: string;
-    target_kind?: string;
-    environmentId?: string;
-    limit?: number;
-    cursor?: string | null;
-  },
+  query: ApprovalListQuery,
   requestId: string,
 ): Promise<Response> {
   const limit = query.limit ?? 50;
   const scope = appScope(appId);
   const after = query.cursor
-    ? await deps.repo.approvals.getRequest(scope, query.cursor)
+    ? await resolveCursor(deps, appId, query.cursor, archiveCanMatch(query.status))
     : undefined;
   if (query.cursor && !after) {
     return renderError(
@@ -91,23 +105,97 @@ async function listApprovalRequests(
     targetType: query.target_kind,
     environmentId: query.environmentId,
   };
-  const rows = await deps.repo.approvals.listRequestPage(scope, {
-    ...filters,
-    limit: limit + 1,
-    ...(after ? { after: { proposedAt: after.proposedAt, id: after.id } } : {}),
-  });
-  const page = rows.slice(0, limit);
-  const items = (
-    await Promise.all(page.map((row) => approvalRequestProjection(deps.repo, row)))
-  ).filter((request) => !query.status || request.status === query.status);
+  const cursor = after ? { proposedAt: after.proposedAt, id: after.id } : undefined;
+  const page = await mergedRequestPage(deps, appId, query, filters, cursor, limit);
   return Response.json({
-    items,
-    cursor: rows.length > limit ? (page.at(-1)?.id ?? null) : null,
+    items: page.items,
+    cursor: page.cursor,
     limit,
-    // A `pending`/`stale` filter is resolved after projection, so no SQL count
-    // can state it honestly. `null` is the contract's "not computed".
-    total: effectiveOnly ? null : await deps.repo.approvals.countRequests(scope, filters),
+    // Production lists merge D1 and Tinybird, so an exact count is not computed.
+    // Pending/stale filters additionally resolve effective status after projection.
+    // `index.ts` always passes an `archiveStore` (approvalArchiveStoreFromEnv
+    // never returns undefined), so in production `deps.archiveStore` is always
+    // truthy and this expression always takes the `null` branch. The
+    // `countRequests` call below only runs in tests whose harness omits the
+    // store — it is not reachable in production.
+    total:
+      effectiveOnly || deps.archiveStore
+        ? null
+        : await deps.repo.approvals.countRequests(scope, filters),
   });
+}
+
+async function mergedRequestPage(
+  deps: ApprovalHandlerDeps,
+  appId: string,
+  query: ApprovalListQuery,
+  filters: { storedStatus?: readonly string[]; targetType?: string; environmentId?: string },
+  cursor: { proposedAt: string; id: string } | undefined,
+  limit: number,
+): Promise<{ items: ApprovalRequest[]; cursor: string | null }> {
+  const scanLimit = limit + 1;
+  const onlineQuery = { ...filters, limit: scanLimit, ...(cursor ? { after: cursor } : {}) };
+  const [rows, archiveEvents] = await Promise.all([
+    deps.repo.approvals.listRequestPage(appScope(appId), onlineQuery),
+    archiveRequestPage(deps.archiveStore, appId, query, cursor, scanLimit),
+  ]);
+  const [online, archived] = await Promise.all([
+    Promise.all(rows.map((row) => approvalRequestProjection(deps.repo, row))),
+    Promise.all(archiveEvents.map((event) => archivedApprovalRequest(event, appId))),
+  ]);
+  const scanned = [...online, ...archived]
+    .sort(compareRequests)
+    .filter((request, index, all) => all.findIndex((item) => item.id === request.id) === index);
+  const window = scanned.slice(0, limit);
+  return {
+    items: window.filter((request) => !query.status || request.status === query.status),
+    cursor: scanned.length > limit ? (window.at(-1)?.id ?? null) : null,
+  };
+}
+
+function archiveRequestPage(
+  store: ApprovalArchiveStore | undefined,
+  appId: string,
+  query: ApprovalListQuery,
+  cursor: { proposedAt: string; id: string } | undefined,
+  limit: number,
+) {
+  if (!store || !archiveCanMatch(query.status)) return Promise.resolve([]);
+  return store.list({
+    appId,
+    limit,
+    ...(query.status ? { status: query.status } : {}),
+    ...(query.target_kind ? { targetType: query.target_kind } : {}),
+    ...(query.environmentId ? { environmentId: query.environmentId } : {}),
+    ...(cursor ? { after: cursor } : {}),
+  });
+}
+
+async function resolveCursor(
+  deps: ApprovalHandlerDeps,
+  appId: string,
+  requestId: string,
+  includeArchive: boolean,
+): Promise<{ id: string; proposedAt: string } | null> {
+  const online = await deps.repo.approvals.getRequest(appScope(appId), requestId);
+  if (online) return { id: online.id, proposedAt: online.proposedAt };
+  if (!includeArchive) return null;
+  const event = await deps.archiveStore?.get(appId, requestId, APPROVAL_ARCHIVE_VERSION);
+  if (!event) return null;
+  const archived = await archivedApprovalRequest(event, appId);
+  return { id: archived.id, proposedAt: archived.proposedAt };
+}
+
+function archiveCanMatch(status: string | undefined): boolean {
+  return (
+    status === undefined || status === "applied" || status === "declined" || status === "stale"
+  );
+}
+
+function compareRequests(left: ApprovalRequest, right: ApprovalRequest): number {
+  if (left.proposedAt !== right.proposedAt) return left.proposedAt > right.proposedAt ? -1 : 1;
+  if (left.id === right.id) return 0;
+  return left.id > right.id ? -1 : 1;
 }
 
 function statusFilter(status: string | undefined): readonly string[] | undefined {
@@ -123,13 +211,7 @@ function statusFilter(status: string | undefined): readonly string[] | undefined
 function queryInput(input: unknown) {
   const query = (input as { query?: unknown }).query;
   return query && typeof query === "object" && !Array.isArray(query)
-    ? (query as {
-        status?: string;
-        target_kind?: string;
-        environmentId?: string;
-        limit?: number;
-        cursor?: string | null;
-      })
+    ? (query as ApprovalListQuery)
     : {};
 }
 
