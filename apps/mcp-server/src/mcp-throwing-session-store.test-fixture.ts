@@ -1,9 +1,6 @@
 import { handleMcpServerRequest } from "./mcp-handler";
-import type {
-  McpSessionContext,
-  McpSessionStore,
-  McpSessionTransport,
-} from "./mcp-session-context";
+import { memorySessionStore } from "./mcp-oauth-prm-harness";
+import type { McpSessionStore } from "./mcp-session-context";
 import {
   allowMcpRevocations,
   staticMcpTokenVerifier,
@@ -64,34 +61,4 @@ export async function callWithThrowingSessionStore(): Promise<ThrowingSessionSto
   });
 
   return { body: (await response.json()) as ThrowingSessionStoreProbe["body"], calls };
-}
-
-function memorySessionStore(): McpSessionStore {
-  const sessions = new Map<
-    string,
-    { context?: McpSessionContext; transport?: McpSessionTransport }
-  >();
-  return {
-    async create(transport) {
-      const id = crypto.randomUUID();
-      sessions.set(id, { transport });
-      return id;
-    },
-    async get(id) {
-      if (!sessions.has(id)) throw new Error("mcp-server: MCP session is unknown or expired");
-      return sessions.get(id)?.context;
-    },
-    async getTransport(id) {
-      if (!sessions.has(id)) throw new Error("mcp-server: MCP session is unknown or expired");
-      return sessions.get(id)?.transport;
-    },
-    async set(id, context) {
-      if (!sessions.has(id)) throw new Error("mcp-server: MCP session is unknown or expired");
-      const record = sessions.get(id);
-      sessions.set(id, { ...record, context });
-    },
-    async end(id) {
-      sessions.delete(id);
-    },
-  };
 }
