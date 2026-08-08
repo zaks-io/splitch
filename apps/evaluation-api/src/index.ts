@@ -11,8 +11,6 @@ import {
   delegatedAuthResolver,
   delegatedIdentityFor,
   McpDelegationReplayDurableObject,
-  makeDurableMcpDelegationReplayGuard,
-  makeMcpDelegationAuthResolver,
   notDelegatedResponse,
   type RateLimiter,
 } from "@splitch/worker-runtime";
@@ -48,12 +46,6 @@ const handler = {
 
 export default wrapWorkerHandler(handler, { surface: "evaluation-api" });
 
-export class McpEntrypoint extends WorkerEntrypoint<EvaluationApiEnv> {
-  override async fetch(request: Request): Promise<Response> {
-    return handleRequest(request, this.env, this.ctx, { kind: "mcp" });
-  }
-}
-
 /**
  * Binding-only entrypoint for `flags_test_eval`. The operation takes a
  * control-plane token, so it is addressed at `api.splitch.dev` even though this
@@ -68,9 +60,7 @@ export class ControlPlaneEntrypoint extends WorkerEntrypoint<EvaluationApiEnv> {
   }
 }
 
-type EvaluationRequestAuthority =
-  | { kind: "mcp" }
-  | { kind: "control-plane"; identity: DelegatedIdentity };
+type EvaluationRequestAuthority = { kind: "control-plane"; identity: DelegatedIdentity };
 
 async function handleRequest(
   request: Request,
@@ -150,15 +140,6 @@ function requestAuthResolver(
   if (authority?.kind === "control-plane") {
     return delegatedAuthResolver(authority.identity);
   }
-  if (authority?.kind === "mcp") {
-    return makeMcpDelegationAuthResolver({
-      owner: "evaluation-api",
-      secret: requiredMcpDelegationSecret(env.MCP_EVALUATION_DELEGATION_SECRET),
-      replayGuard: makeDurableMcpDelegationReplayGuard(
-        requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
-      ),
-    });
-  }
   const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? url.origin;
   const jwksUri = env.AUTH_JWKS_URI ?? `${controlPlaneAudience}/.well-known/jwks.json`;
   return makeControlPlaneAuthResolver({
@@ -170,18 +151,10 @@ function requestAuthResolver(
   });
 }
 
-function requiredMcpDelegationSecret(secret: string | undefined): string {
-  if (!secret) {
-    throw new Error("evaluation-api: MCP_EVALUATION_DELEGATION_SECRET is required");
-  }
-  return secret;
-}
-
-function requiredMcpReplayBinding(
-  binding: EvaluationApiEnv["MCP_DELEGATION_REPLAY"],
-): NonNullable<EvaluationApiEnv["MCP_DELEGATION_REPLAY"]> {
-  if (!binding) throw new Error("evaluation-api: MCP_DELEGATION_REPLAY is required");
-  return binding;
-}
-
+/**
+ * The replay-guard Durable Object class stays exported while its namespace stays
+ * bound: MCP now reaches this Worker only through the Control Plane, so nothing
+ * claims a replay id here, but dropping a Durable Object class needs its own
+ * `deleted_classes` migration.
+ */
 export { AssignmentStoreDurableObject, McpDelegationReplayDurableObject };

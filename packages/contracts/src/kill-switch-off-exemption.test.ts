@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { walkRepoFiles } from "../../../scripts/lib/repo-file-sweep.mjs";
 import { KILL_SWITCH_OFF_EXEMPTION } from "./kill-switch-off-exemption";
 
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
@@ -33,47 +34,9 @@ function findLiteralHits(extensions: readonly string[]): string[] {
   // Match the sentence under any quote style (double, single, or template).
   const needle = KILL_SWITCH_OFF_EXEMPTION;
   const hits: string[] = [];
-  walk(REPO_ROOT, (absolutePath) => {
-    if (!extensions.some((ext) => absolutePath.endsWith(ext))) return;
-    const relativePath = relative(REPO_ROOT, absolutePath);
-    if (shouldSkip(relativePath)) return;
-    const contents = readFileSync(absolutePath, "utf8");
-    if (contents.includes(needle)) hits.push(relativePath);
+  walkRepoFiles(REPO_ROOT, (relativePath, absolutePath) => {
+    if (!extensions.some((ext) => relativePath.endsWith(ext))) return;
+    if (readFileSync(absolutePath, "utf8").includes(needle)) hits.push(relativePath);
   });
   return hits.sort();
-}
-
-function shouldSkip(relativePath: string): boolean {
-  return (
-    relativePath.startsWith("node_modules/") ||
-    relativePath.includes("/node_modules/") ||
-    relativePath.startsWith("dist/") ||
-    relativePath.includes("/dist/") ||
-    relativePath.startsWith(".git/") ||
-    relativePath.includes("/coverage/") ||
-    relativePath.includes("/.turbo/") ||
-    relativePath.includes("/.wrangler/") ||
-    relativePath.includes("/.output/") ||
-    relativePath.endsWith(".snap")
-  );
-}
-
-function walk(dir: string, visit: (absolutePath: string) => void): void {
-  for (const entry of readdirSync(dir)) {
-    const absolutePath = join(dir, entry);
-    const stats = statSync(absolutePath);
-    if (stats.isDirectory()) {
-      if (
-        entry === "node_modules" ||
-        entry === ".git" ||
-        entry === "dist" ||
-        entry === "coverage"
-      ) {
-        continue;
-      }
-      walk(absolutePath, visit);
-      continue;
-    }
-    visit(absolutePath);
-  }
 }
