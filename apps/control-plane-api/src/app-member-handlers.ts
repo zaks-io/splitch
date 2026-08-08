@@ -4,6 +4,7 @@ import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { requireAppAdmin, requireAppDelete, requireAppMember } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
 import { objectBody, pathParam } from "./handler-input";
+import { membershipConflict } from "./membership-conflict";
 import type { MemberProfileResolver } from "./org-handlers";
 
 /**
@@ -71,7 +72,7 @@ export function makeAppMemberHandlers(deps: AppMemberHandlerDeps) {
       const scope = appScope(appId);
       const existing = await deps.repo.identity.getAppMembership(scope, userId);
       if (existing)
-        return Response.json(await appMemberResponse(deps, existing, app.organizationId, request));
+        return membershipConflict(UserRoleSchema.parse(existing.role), "app", requestId);
 
       const row = await deps.repo.identity.createAppMembership(scope, {
         userId,

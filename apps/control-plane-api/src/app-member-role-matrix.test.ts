@@ -103,6 +103,20 @@ describe("granting App access", () => {
     expect(await roleOf(ALPHA.appId, USER_CANDIDATE)).toBeNull();
   });
 
+  it("refuses an existing member instead of reporting the old role as a successful grant", async () => {
+    const response = await handlers.addAppMember(
+      args(USER_OWNER, ALPHA.appId, { body: { userId: USER_MEMBER, role: "owner" } }),
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      code: "MEMBERSHIP_CONFLICT",
+      message: "user is already an App member",
+      details: { existingRole: "member" },
+    });
+    expect(await roleOf(ALPHA.appId, USER_MEMBER)).toBe("member");
+  });
+
   it("lets an admin grant a member, scoped to this App only", async () => {
     const response = await handlers.addAppMember(
       args(USER_ADMIN, ALPHA.appId, { body: { userId: USER_CANDIDATE, role: "member" } }),

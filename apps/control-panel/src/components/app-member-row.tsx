@@ -84,7 +84,6 @@ export function AppMemberRow({
         {capabilities.canManageAccess ? (
           <Select
             disabled={isBusy}
-            items={APP_ROLE_LABELS}
             onValueChange={(value) =>
               run(() =>
                 updateControlPanelAppMember({

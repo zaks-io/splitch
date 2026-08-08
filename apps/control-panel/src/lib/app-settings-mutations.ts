@@ -36,7 +36,7 @@ export async function renameApp(input: {
   } catch {
     return {
       kind: "refused",
-      message: "The App was not renamed. Control Plane state is unchanged.",
+      message: "The Control Plane did not answer. This App may or may not have been renamed.",
     };
   }
   if (!result.ok) return { kind: "refused", message: result.error.message };

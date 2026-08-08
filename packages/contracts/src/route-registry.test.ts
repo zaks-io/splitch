@@ -213,6 +213,18 @@ describe("route registry: lookup", () => {
     expect(route?.path).toBe("/apps/:appId/flags");
   });
 
+  it("declares conflicts and availability failures on the App membership surface", () => {
+    for (const operationId of [
+      "app_members_list",
+      "app_members_add",
+      "app_members_update",
+      "app_members_remove",
+    ]) {
+      expect(getRoute(operationId)?.errors).toContain("SERVICE_UNAVAILABLE");
+    }
+    expect(getRoute("app_members_add")?.errors).toContain("MEMBERSHIP_CONFLICT");
+  });
+
   it("getRoute returns undefined for an unknown operationId", () => {
     expect(getRoute("not_a_real_tool")).toBeUndefined();
   });

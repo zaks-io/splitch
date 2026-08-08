@@ -7,6 +7,6 @@ import { z } from "zod";
  * caller receive the refusal without learning WHICH resource would be orphaned.
  */
 export const LastOwnerRequiredDetailsSchema = z.union([
-  z.object({ orgId: z.string() }),
-  z.object({ appId: z.string() }),
+  z.object({ orgId: z.string() }).strict(),
+  z.object({ appId: z.string() }).strict(),
 ]);

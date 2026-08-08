@@ -14,6 +14,7 @@ vi.mock("#lib/control-plane-app-settings-functions", () => ({
 }));
 
 const { AppSettings } = await import("./app-settings");
+const { labelAppAccessCandidates } = await import("./app-member-grant-form");
 
 function render(viewerRole: UserRole, overrides: Partial<PanelAppSettings> = {}) {
   return renderToStaticMarkup(
@@ -80,6 +81,19 @@ describe("AppSettings", () => {
     });
 
     expect(html).toContain("200");
+  });
+
+  it("gives same-role candidates without email distinct labels without exposing user ids", () => {
+    const labeled = labelAppAccessCandidates([
+      { userId: "user_unresolved_a", email: null, orgRole: "member" },
+      { userId: "user_unresolved_b", email: null, orgRole: "member" },
+    ]);
+
+    expect(labeled.map(({ label }) => label)).toEqual([
+      "Email not available yet (Organization Member 1 of 2)",
+      "Email not available yet (Organization Member 2 of 2)",
+    ]);
+    expect(labeled.map(({ label }) => label).join(" ")).not.toContain("user_unresolved");
   });
 });
 

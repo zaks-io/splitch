@@ -16,6 +16,7 @@ import {
   grantableRoles,
 } from "#lib/app-settings-capabilities";
 import { addControlPanelAppMember } from "#lib/control-plane-app-settings-functions";
+import { organizationRoleLabel } from "#lib/org-members";
 
 /**
  * Grants App access to someone who is already in the owning Organization.
@@ -42,12 +43,7 @@ export function AppMemberGrantForm({
   const [role, setRole] = useState<UserRole>("member");
   const [isGranting, setIsGranting] = useState(false);
   const roles = grantableRoles(capabilities);
-  // Base UI renders the raw selected value in the trigger unless the Root is
-  // handed the value-to-label map (Select.Root `items`), and the raw value here
-  // is an internal user id no operator asked to read.
-  const candidateLabels = Object.fromEntries(
-    candidates.map((candidate) => [candidate.userId, candidateLabel(candidate)]),
-  );
+  const labeledCandidates = labelAppAccessCandidates(candidates);
 
   async function grant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -85,19 +81,15 @@ export function AppMemberGrantForm({
         <label className="font-medium text-sm" htmlFor="app-grant-person">
           Grant access to
         </label>
-        <Select
-          items={candidateLabels}
-          onValueChange={(value) => setUserId(value ?? "")}
-          value={userId}
-        >
+        <Select onValueChange={(value) => setUserId(value ?? "")} value={userId}>
           <SelectTrigger className="w-full" id="app-grant-person">
             <SelectValue placeholder="Choose someone in this Organization" />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              {candidates.map((candidate) => (
+              {labeledCandidates.map(({ candidate, label }) => (
                 <SelectItem key={candidate.userId} value={candidate.userId}>
-                  {candidateLabel(candidate)}
+                  {label}
                 </SelectItem>
               ))}
             </SelectGroup>
@@ -108,11 +100,7 @@ export function AppMemberGrantForm({
         <label className="font-medium text-sm" htmlFor="app-grant-role">
           Role
         </label>
-        <Select
-          items={APP_ROLE_LABELS}
-          onValueChange={(value) => setRole(value as UserRole)}
-          value={role}
-        >
+        <Select onValueChange={(value) => setRole(value as UserRole)} value={role}>
           <SelectTrigger className="w-36" id="app-grant-role">
             <SelectValue />
           </SelectTrigger>
@@ -134,6 +122,25 @@ export function AppMemberGrantForm({
   );
 }
 
-function candidateLabel(candidate: PanelAppAccessCandidate): string {
-  return candidate.email ?? "Email not available yet";
+export function labelAppAccessCandidates(candidates: readonly PanelAppAccessCandidate[]) {
+  const missingByRole = new Map<UserRole, number>();
+  for (const candidate of candidates) {
+    if (candidate.email === null) {
+      missingByRole.set(candidate.orgRole, (missingByRole.get(candidate.orgRole) ?? 0) + 1);
+    }
+  }
+
+  const seenByRole = new Map<UserRole, number>();
+  return candidates.map((candidate) => {
+    if (candidate.email !== null) return { candidate, label: candidate.email };
+
+    const seen = (seenByRole.get(candidate.orgRole) ?? 0) + 1;
+    seenByRole.set(candidate.orgRole, seen);
+    const total = missingByRole.get(candidate.orgRole) ?? 0;
+    const ordinal = total > 1 ? ` ${seen} of ${total}` : "";
+    return {
+      candidate,
+      label: `Email not available yet (Organization ${organizationRoleLabel(candidate.orgRole)}${ordinal})`,
+    };
+  });
 }

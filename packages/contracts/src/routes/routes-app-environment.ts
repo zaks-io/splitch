@@ -198,7 +198,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN"],
+    errors: ["APP_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
     operationId: "app_members_add",
@@ -211,7 +211,14 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "USER_NOT_FOUND", "VALIDATION_ERROR"],
+    errors: [
+      "APP_NOT_FOUND",
+      "FORBIDDEN",
+      "USER_NOT_FOUND",
+      "MEMBERSHIP_CONFLICT",
+      "SERVICE_UNAVAILABLE",
+      "VALIDATION_ERROR",
+    ],
   }),
   defineApiRoute({
     operationId: "app_members_update",
@@ -229,6 +236,7 @@ export const appEnvironmentRoutes = [
       "USER_NOT_FOUND",
       "FORBIDDEN",
       "LAST_OWNER_REQUIRED",
+      "SERVICE_UNAVAILABLE",
       "VALIDATION_ERROR",
     ],
   }),
@@ -243,6 +251,12 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["APP_NOT_FOUND", "USER_NOT_FOUND", "FORBIDDEN", "LAST_OWNER_REQUIRED"],
+    errors: [
+      "APP_NOT_FOUND",
+      "USER_NOT_FOUND",
+      "FORBIDDEN",
+      "LAST_OWNER_REQUIRED",
+      "SERVICE_UNAVAILABLE",
+    ],
   }),
 ] as const satisfies readonly ApiRouteContract[];

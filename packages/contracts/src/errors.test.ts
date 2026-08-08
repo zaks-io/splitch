@@ -108,6 +108,16 @@ describe("ErrorResponse contract", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects a last-owner refusal that names both ownership tiers", () => {
+    const result = ErrorResponseSchema.safeParse({
+      code: "LAST_OWNER_REQUIRED",
+      message: "one owner must remain",
+      details: { orgId: "org_1", appId: "app_1" },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("rejects an unknown code", () => {
     const result = ErrorResponseSchema.safeParse({
       code: "NOT_A_REAL_CODE",
