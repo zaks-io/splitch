@@ -70,6 +70,42 @@ export function statsFixture(overrides: Partial<StatsOutput> = {}): StatsOutput 
   };
 }
 
+/** Both Control names are present, so a mistaken baseline substitution destroys a real result. */
+export function controlDisagreementStats(): StatsOutput {
+  const base = statsFixture();
+  const [frozenControlResult] = base.arm_results;
+  if (!frozenControlResult) throw new Error("statsFixture must produce one arm result");
+  return {
+    ...base,
+    arm_results: [
+      {
+        ...frozenControlResult,
+        variant: "legacy_checkout",
+        sample_size_n: 12_530,
+        relative_lift_pct: null,
+        ci_lower: null,
+        ci_upper: null,
+        p_value: 1,
+        is_significant: false,
+        in_bh_family: false,
+        exploratory: true,
+        decision_valid: false,
+      },
+      { ...frozenControlResult, variant: "control" },
+    ],
+    srm: {
+      ...base.srm,
+      observed_counts: { legacy_checkout: 12_530, control: 12_480 },
+      expected_counts: { legacy_checkout: 12_505, control: 12_505 },
+    },
+    health: {
+      ...base.health,
+      exposure_counts: { legacy_checkout: 12_560, control: 12_510 },
+      deduped_counts: { legacy_checkout: 12_530, control: 12_480 },
+    },
+  };
+}
+
 export function srmFiringStats(): StatsOutput {
   const base = statsFixture();
   return {

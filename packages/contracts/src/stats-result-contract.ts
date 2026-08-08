@@ -178,12 +178,13 @@ const AnalysisResultsMissingInputSchema = z.enum(["exposures", "metric_events"])
  * `run_id` is provenance and is checked: a read whose answer names a different
  * Run than the one asked for is refused rather than relabelled (ADR-0006).
  *
- * `control_variant` is not. It reaches this Worker from the `analysis_run_inputs`
- * pipe, which resolves it at read time, so it describes current configuration.
- * A caller that needs the Run's actual baseline resolves it from the immutable
- * `runs.control_variant_id` inside that Run's own frozen Variant set instead
- * (`resolveFrozenControlIdentity`, ADR-0002, ADR-0003), which is what the
- * Control Panel Results read does.
+ * `control_variant` reaches this Worker from the `analysis_run_inputs` pipe,
+ * which reads the Run Snapshot written at Start. It is frozen Analysis input,
+ * not current Experiment configuration. The Control Panel Results read resolves
+ * the displayed Control identity from immutable `runs.control_variant_id`
+ * inside that Run's own frozen Variant set, then blocks the decision when that
+ * D1 identity and the Analysis Run Snapshot disagree
+ * (`resolveAnalysisControlIntegrity`, ADR-0002, ADR-0003, ADR-0047).
  */
 export const AnalysisResultsEnvelopeSchema = z.discriminatedUnion("state", [
   z
