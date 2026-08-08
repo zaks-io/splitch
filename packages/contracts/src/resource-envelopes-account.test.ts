@@ -20,7 +20,7 @@ describe("CreateMetricRequestSchema", () => {
       name: "Signup",
       key: "signup",
       kind: "binomial",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
     });
     expect(req.kind).toBe("binomial");
   });
@@ -31,8 +31,8 @@ describe("CreateMetricRequestSchema", () => {
       name: "Revenue",
       key: "rev",
       kind: "revenue",
-      eventName: "purchase",
-      eventValueField: "amount",
+      eventDefinitionId: "purchase",
+      eventFieldName: "amount",
       idempotency_key: "idem-1",
     });
     expect(req.idempotency_key).toBe("idem-1");
@@ -45,7 +45,7 @@ describe("CreateMetricRequestSchema", () => {
         name: "X",
         key: "x",
         kind: "gauge",
-        eventName: "e",
+        eventDefinitionId: "e",
       }).success,
     ).toBe(false);
   });
@@ -70,7 +70,7 @@ describe("MetricResponseSchema", () => {
       key: "ctr",
       name: "CTR",
       kind: "ratio",
-      eventName: "click",
+      eventDefinitionId: "click",
       denominator: { metricId: "m_0" },
       createdAt: "2026-06-28T00:00:00.000Z",
     });
@@ -85,7 +85,7 @@ describe("MetricResponseSchema", () => {
         key: "ctr",
         name: "CTR",
         kind: "ratio",
-        eventName: "click",
+        eventDefinitionId: "click",
         createdAt: "2026-06-28T00:00:00.000Z",
       }).success,
     ).toBe(false);

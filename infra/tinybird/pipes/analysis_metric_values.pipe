@@ -1,17 +1,6 @@
-DESCRIPTION Returns per-Entity Metric value rows for one Run, shaped as the Stats Engine's PerEntityMetricRow.
+DESCRIPTION Returns deduplicated per-Entity values for one Binomial Metric in one Run.
 
-# SPLITCH_EMPTY_STUB_UNTIL=metric_events
-# Metric Event ingest (`metric_events` / `serve_deduped_metric_events`) is not
-# deployed yet (PR #284 deferred these pipes on that dependency). Until it is,
-# this endpoint is an empty, scoped stub: a Run with Exposures and no Metric
-# rows is a valid early-Run state (docs/spec/stats/data-contracts.md), and the
-# Stats Engine evaluates locked Metrics over the Exposure denominator as zeros.
-# Returning HTTP 404 for a missing pipe was being mapped to SERVICE_UNAVAILABLE
-# (SPL-290), which conflated "no Metric data yet" with an upstream outage.
-# scripts/lib/tinybird-metric-stub-tripwire.mjs fails tinybird:local the moment
-# metric_events.datasource exists while this marker remains.
-
-NODE empty_metric_values
+NODE scoped_exposures
 SQL >
     %
     {% if not defined(app_id) %}
@@ -26,19 +15,106 @@ SQL >
     {% if not defined(run_id) %}
     {{error('run_id is required')}}
     {% end %}
+    {% if not defined(metric_id) %}
+    {{error('metric_id is required')}}
+    {% end %}
+    {% if not defined(event_definition_id) %}
+    {{error('event_definition_id is required')}}
+    {% end %}
+    {% if not defined(window_duration_ms) %}
+    {{error('window_duration_ms is required')}}
+    {% end %}
+    {% if not defined(from_ts) %}
+    {{error('from_ts is required')}}
+    {% end %}
+    {% if not defined(to_ts) %}
+    {{error('to_ts is required')}}
+    {% end %}
     SELECT
-        cast('' AS String) AS targeting_key_hash,
-        cast('' AS String) AS run_id,
-        cast('' AS String) AS metric_id,
-        cast('' AS String) AS metric_type,
-        cast(0 AS Float64) AS value,
-        cast(NULL AS Nullable(Float64)) AS num_value,
-        cast(NULL AS Nullable(Float64)) AS denom_value,
-        cast(0 AS UInt8) AS in_window
-    WHERE 0
-        AND {{String(app_id)}} = {{String(app_id)}}
-        AND {{String(environment_id)}} = {{String(environment_id)}}
-        AND {{String(experiment_id)}} = {{String(experiment_id)}}
-        AND {{String(run_id)}} = {{String(run_id)}}
+        app_id,
+        environment_id,
+        run_id,
+        id_type,
+        targeting_key_hash,
+        first_exposure_ts AS window_anchor
+    FROM serve_deduped_exposures
+    WHERE app_id = {{String(app_id)}}
+        AND environment_id = {{String(environment_id)}}
+        AND experiment_id = {{String(experiment_id)}}
+        AND run_id = {{String(run_id)}}
+
+NODE scoped_metric_events
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(event_definition_id) %}
+    {{error('event_definition_id is required')}}
+    {% end %}
+    {% if not defined(from_ts) %}
+    {{error('from_ts is required')}}
+    {% end %}
+    {% if not defined(to_ts) %}
+    {{error('to_ts is required')}}
+    {% end %}
+    SELECT
+        app_id,
+        environment_id,
+        event_definition_id,
+        id_type,
+        targeting_key_hash,
+        accepted_at
+    FROM serve_deduped_metric_events
+    WHERE app_id = {{String(app_id)}}
+        AND environment_id = {{String(environment_id)}}
+        AND event_definition_id = {{String(event_definition_id)}}
+        AND accepted_at >= {{DateTime64(from_ts)}}
+        AND accepted_at < {{DateTime64(to_ts)}}
+
+NODE binomial_entity_values
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(metric_id) %}
+    {{error('metric_id is required')}}
+    {% end %}
+    {% if not defined(window_duration_ms) %}
+    {{error('window_duration_ms is required')}}
+    {% end %}
+    SELECT
+        exposures.targeting_key_hash AS targeting_key_hash,
+        exposures.run_id AS run_id,
+        {{String(metric_id)}} AS metric_id,
+        'binomial' AS metric_type,
+        toFloat64(1) AS value,
+        toUInt8(1) AS in_window
+    FROM scoped_exposures AS exposures
+    INNER JOIN scoped_metric_events AS events
+        ON events.app_id = exposures.app_id
+        AND events.environment_id = exposures.environment_id
+        AND events.id_type = exposures.id_type
+        AND events.targeting_key_hash = exposures.targeting_key_hash
+    WHERE exposures.app_id = {{String(app_id)}}
+        AND exposures.environment_id = {{String(environment_id)}}
+        AND events.app_id = {{String(app_id)}}
+        AND events.environment_id = {{String(environment_id)}}
+        AND events.accepted_at >= exposures.window_anchor
+        AND events.accepted_at < addMilliseconds(
+            exposures.window_anchor,
+            {{UInt64(window_duration_ms)}}
+        )
+    GROUP BY
+        exposures.targeting_key_hash,
+        exposures.run_id
+    ORDER BY targeting_key_hash
 
 TYPE ENDPOINT

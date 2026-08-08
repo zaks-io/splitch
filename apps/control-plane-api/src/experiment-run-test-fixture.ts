@@ -117,7 +117,7 @@ export async function experimentFixture(ctx: ExperimentRunHarness, environmentKe
     key: `signup-${environmentKey}`,
     name: "Signup",
     kind: "binomial",
-    eventName: "signed_up",
+    eventDefinitionId: "event_definition_signed_up",
     createdAt: NOW_ISO,
   });
   const segment = await ctx.repo.flags.segments.insert(appScope(appId), {

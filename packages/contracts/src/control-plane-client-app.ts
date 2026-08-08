@@ -4,6 +4,7 @@ import { accountRoutes } from "./routes/routes-account";
 import { approvalRoutes } from "./routes/routes-approvals";
 import { attentionRoutes } from "./routes/routes-attention";
 import { credentialRoutes } from "./routes/routes-credentials";
+import { eventDefinitionRoutes } from "./routes/routes-event-definitions";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagRoutes } from "./routes/routes-flags";
 
@@ -93,6 +94,7 @@ const credentialsSdkRoutes = [
 ] as const;
 
 const approvalsSdkRoutes = [approvalRoutes[0], approvalRoutes[1], approvalRoutes[2]] as const;
+const eventDefinitionsSdkRoutes = eventDefinitionRoutes;
 
 const flagsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: flagsSdkRoutes[0].openapi, handler: emitOnlyHandler(flagsSdkRoutes[0]) },
@@ -158,6 +160,37 @@ const approvalsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: approvalsSdkRoutes[2].openapi, handler: emitOnlyHandler(approvalsSdkRoutes[2]) },
 ] as const);
 
+const eventDefinitionsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
+  {
+    route: eventDefinitionsSdkRoutes[0].openapi,
+    handler: emitOnlyHandler(eventDefinitionsSdkRoutes[0]),
+  },
+  {
+    route: eventDefinitionsSdkRoutes[1].openapi,
+    handler: emitOnlyHandler(eventDefinitionsSdkRoutes[1]),
+  },
+  {
+    route: eventDefinitionsSdkRoutes[2].openapi,
+    handler: emitOnlyHandler(eventDefinitionsSdkRoutes[2]),
+  },
+  {
+    route: eventDefinitionsSdkRoutes[3].openapi,
+    handler: emitOnlyHandler(eventDefinitionsSdkRoutes[3]),
+  },
+  {
+    route: eventDefinitionsSdkRoutes[4].openapi,
+    handler: emitOnlyHandler(eventDefinitionsSdkRoutes[4]),
+  },
+  {
+    route: eventDefinitionsSdkRoutes[5].openapi,
+    handler: emitOnlyHandler(eventDefinitionsSdkRoutes[5]),
+  },
+  {
+    route: eventDefinitionsSdkRoutes[6].openapi,
+    handler: emitOnlyHandler(eventDefinitionsSdkRoutes[6]),
+  },
+] as const);
+
 /** `hc<FlagsControlPlaneClientApp>()` — flag route group client type. */
 export type FlagsControlPlaneClientApp = typeof flagsControlPlaneClientApp;
 
@@ -176,6 +209,7 @@ export type EnvironmentsControlPlaneClientApp = typeof environmentsControlPlaneC
 /** `hc<CredentialsControlPlaneClientApp>()` — SDK credential route group client type. */
 export type CredentialsControlPlaneClientApp = typeof credentialsControlPlaneClientApp;
 export type ApprovalsControlPlaneClientApp = typeof approvalsControlPlaneClientApp;
+export type EventDefinitionsControlPlaneClientApp = typeof eventDefinitionsControlPlaneClientApp;
 
 /** Union of SDK emit-only apps; prefer domain-specific types for `hc`. */
 export type ControlPlaneClientApp =
@@ -185,7 +219,8 @@ export type ControlPlaneClientApp =
   | AppsControlPlaneClientApp
   | EnvironmentsControlPlaneClientApp
   | CredentialsControlPlaneClientApp
-  | ApprovalsControlPlaneClientApp;
+  | ApprovalsControlPlaneClientApp
+  | EventDefinitionsControlPlaneClientApp;
 
 export function createFlagsControlPlaneClientApp(): FlagsControlPlaneClientApp {
   return flagsControlPlaneClientApp;
@@ -209,6 +244,10 @@ export function createCredentialsControlPlaneClientApp(): CredentialsControlPlan
 
 export function createApprovalsControlPlaneClientApp(): ApprovalsControlPlaneClientApp {
   return approvalsControlPlaneClientApp;
+}
+
+export function createEventDefinitionsControlPlaneClientApp(): EventDefinitionsControlPlaneClientApp {
+  return eventDefinitionsControlPlaneClientApp;
 }
 
 /** @deprecated Use {@link createFlagsControlPlaneClientApp} or {@link createExperimentsControlPlaneClientApp}. */

@@ -246,11 +246,17 @@ once and cannot be updated.
 | `family`                       | text        | not null; immutable `metric \| web`                                                   |
 | `display_name`                 | text        | not null                                                                              |
 | `description`                  | text        | nullable                                                                              |
+| `state`                        | text        | not null; `draft \| incomplete \| published`                                          |
 | `current_published_version_id` | text        | nullable, FK → event_definition_versions; must belong to this definition and `app_id` |
 | `created_at`                   | timestamptz | not null                                                                              |
 | `updated_at`                   | timestamptz | not null                                                                              |
 | `created_by`                   | text        | WorkOS user ID or deleted-user tombstone                                              |
 | `updated_by`                   | text        | WorkOS user ID or deleted-user tombstone                                              |
+
+`published` requires a non-null `current_published_version_id`; `draft` and `incomplete` require
+null. Migration 0019 uses `incomplete` for a legacy Metric Event binding because the source row has
+neither an Entity type nor a numeric domain. It creates no Event Definition Version. The operator's
+first complete publish creates Version 1.
 
 ### `event_definition_versions` (immutable after creation)
 

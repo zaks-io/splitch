@@ -31,7 +31,7 @@ import { SlugSchema } from "./slug";
 // ---------------------------------------------------------------------------
 // Metric endpoints
 //
-// `eventValueField` (count/revenue) and `denominator` (ratio) are conditionally
+// `eventFieldName` (count/revenue) and `denominator` (ratio) are conditionally
 // required — the Worker validates the kind→field correspondence and that the
 // ratio denominator belongs to the same App. The envelope keeps them optional so
 // the conditional lives in one place (the Worker), matching the spec table.
@@ -54,8 +54,8 @@ export const CreateMetricRequestSchema = z.object({
   name: z.string(),
   key: z.string(),
   kind: MetricSchema.shape.kind,
-  eventName: z.string(),
-  eventValueField: z.string().optional(),
+  eventDefinitionId: z.string(),
+  eventFieldName: z.string().optional(),
   denominator: MetricRefSchema.optional(),
   description: z.string().optional(),
   ...MetricAnalysisFields,
@@ -71,8 +71,8 @@ export const PatchMetricRequestSchema = z
     name: z.string().optional(),
     key: z.string().optional(),
     kind: MetricSchema.shape.kind.optional(),
-    eventName: z.string().optional(),
-    eventValueField: z.string().optional(),
+    eventDefinitionId: z.string().optional(),
+    eventFieldName: z.string().optional(),
     denominator: MetricRefSchema.optional(),
     description: z.string().optional(),
     ...MetricAnalysisFields,

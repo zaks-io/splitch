@@ -16,9 +16,16 @@
  * not a gap: see `organizations-client.ts`.
  */
 
+import { parseEventDefinitionOperation } from "./control-panel-event-definition-operation";
 import { parseFlags } from "./control-panel-operation-flags";
 import { parseAppScoped } from "./panel-app-settings-parse.js";
 import { parseMetrics } from "./panel-metrics-parse.js";
+import {
+  parseOrganizationUsage,
+  parseOrganizationsCreate,
+  parseOrgMembers,
+} from "./panel-organizations-parse.js";
+import { decodeSegment, decodedSegments } from "./panel-path-segments.js";
 import { parseSegments } from "./panel-segments-parse.js";
 
 export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
@@ -124,6 +131,28 @@ export type ControlPanelOperation =
       environmentId: string;
     }
   | {
+      id: "event_definitions_list" | "event_definitions_create";
+      appId: string;
+      environmentId: string;
+    }
+  | {
+      id:
+        | "event_definitions_get"
+        | "event_definitions_update"
+        | "event_definition_versions_create"
+        | "event_definition_versions_list";
+      appId: string;
+      environmentId: string;
+      eventDefinitionId: string;
+    }
+  | {
+      id: "event_definition_versions_get";
+      appId: string;
+      environmentId: string;
+      eventDefinitionId: string;
+      versionId: string;
+    }
+  | {
       id: "metrics_get" | "metrics_update" | "metrics_delete";
       appId: string;
       environmentId: string;
@@ -143,7 +172,6 @@ export type ControlPanelOperation =
     };
 
 const APPS_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
-const ORG_USAGE_PATH = /^\/orgs\/([^/]+)\/usage\/?$/;
 const APP_ATTENTION_PATH = /^\/apps\/([^/]+)\/attention-rollup\/?$/;
 const EXPERIMENT_DETAIL_PATH = "/control-panel/experiments/detail";
 const EXPERIMENT_RESULTS_PATH = "/control-panel/experiments/results";
@@ -151,17 +179,6 @@ const EXPERIMENTS_PATH = "/control-panel/experiments/list";
 const EXPERIMENT_MUTATION_PATH =
   /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/([^/]+)(\/start)?\/?$/;
 const EXPERIMENTS_COLLECTION_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/?$/;
-const ORGANIZATIONS_PATH = /^\/orgs\/?$/;
-const ORG_MEMBERS_PATH = /^\/orgs\/([^/]+)\/members\/?$/;
-const ORG_MEMBER_PATH = /^\/orgs\/([^/]+)\/members\/([^/]+)\/?$/;
-const ORG_MEMBER_COLLECTION_METHODS = {
-  GET: "organization_members_list",
-  POST: "organization_members_add",
-} as const;
-const ORG_MEMBER_RESOURCE_METHODS = {
-  PATCH: "organization_members_update",
-  DELETE: "organization_members_remove",
-} as const;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
 const TARGETING_RULES_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/targeting-rules\/?$/;
 const FLAG_PROMOTE_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/promote\/?$/;
@@ -195,7 +212,8 @@ export function parseControlPanelOperation(
     parseApproval(method, pathname) ??
     parseEnvironmentSettings(method, pathname) ??
     parseMetrics(method, pathname, panelEnvironmentId) ??
-    parseSegments(method, pathname, panelEnvironmentId)
+    parseSegments(method, pathname, panelEnvironmentId) ??
+    parseEventDefinitionOperation(method, pathname, panelEnvironmentId)
   );
 }
 
@@ -203,54 +221,6 @@ function asSearchParams(search?: URLSearchParams | string): URLSearchParams | un
   if (search === undefined) return undefined;
   if (typeof search !== "string") return search;
   return new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
-}
-
-/**
- * `POST /orgs`. Ordered AFTER `parseAppsCreate` so the two `/orgs…` shapes can
- * never be confused: `APPS_PATH` requires a trailing `/apps` segment and this
- * one requires the collection root, so the patterns are disjoint by construction
- * rather than by ordering luck.
- */
-function parseOrganizationsCreate(method: string, pathname: string): ControlPanelOperation | null {
-  return method === "POST" && ORGANIZATIONS_PATH.test(pathname)
-    ? { id: "organizations_create" }
-    : null;
-}
-
-/**
- * The four Org membership operations. The collection and resource patterns are
- * disjoint by construction: the resource one requires a member segment, so a
- * list delegation can never satisfy a per-member mutation.
- */
-function parseOrgMembers(method: string, pathname: string): ControlPanelOperation | null {
-  return parseOrgMemberCollection(method, pathname) ?? parseOrgMemberResource(method, pathname);
-}
-
-function parseOrgMemberCollection(method: string, pathname: string): ControlPanelOperation | null {
-  const id = ORG_MEMBER_COLLECTION_METHODS[method as keyof typeof ORG_MEMBER_COLLECTION_METHODS];
-  const match = pathname.match(ORG_MEMBERS_PATH);
-  const orgId = match?.[1] ? decodeSegment(match[1]) : null;
-  return id && orgId ? { id, orgId } : null;
-}
-
-function parseOrgMemberResource(method: string, pathname: string): ControlPanelOperation | null {
-  const id = ORG_MEMBER_RESOURCE_METHODS[method as keyof typeof ORG_MEMBER_RESOURCE_METHODS];
-  const match = pathname.match(ORG_MEMBER_PATH);
-  if (!match?.[1] || !match[2]) return null;
-  const [orgId, userId] = decodedSegments(match.slice(1, 3));
-  return id && orgId && userId ? { id, orgId, userId } : null;
-}
-
-/**
- * `GET /orgs/:orgId/usage`. Names the Organization it reads, so the resolver
- * binds the delegation to live Org membership rather than trusting the claim:
- * usage is Organization-wide (ADR-0033), which makes the Org the tenant boundary
- * this read must not cross.
- */
-function parseOrganizationUsage(method: string, pathname: string): ControlPanelOperation | null {
-  const match = pathname.match(ORG_USAGE_PATH);
-  const orgId = match?.[1] ? decodeSegment(match[1]) : null;
-  return method === "GET" && orgId ? { id: "organization_usage_get", orgId } : null;
 }
 
 function parseAppAttention(method: string, pathname: string): ControlPanelOperation | null {
@@ -377,16 +347,4 @@ function parseScopedSettingsOperation(
     return appId && environmentId ? { id, appId, environmentId } : null;
   }
   return null;
-}
-
-function decodedSegments(values: string[]): Array<string | null> {
-  return values.map(decodeSegment);
-}
-
-function decodeSegment(value: string): string | null {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return null;
-  }
 }

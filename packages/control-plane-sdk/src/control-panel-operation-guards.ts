@@ -23,6 +23,8 @@ const SCOPED_OPERATION_IDS = [
   "environment_update",
   "client_key_update",
   "api_keys_create",
+  "event_definitions_list",
+  "event_definitions_create",
 ] as const;
 
 /** Operations that name no resource, so their claims carry only the id. */
@@ -56,6 +58,12 @@ const APP_SCOPED_OPERATION_IDS = [
 const APP_MEMBER_RESOURCE_OPERATION_IDS = ["app_members_update", "app_members_remove"] as const;
 
 const METRIC_RESOURCE_OPERATION_IDS = ["metrics_get", "metrics_update", "metrics_delete"] as const;
+const EVENT_DEFINITION_RESOURCE_OPERATION_IDS = [
+  "event_definitions_get",
+  "event_definitions_update",
+  "event_definition_versions_create",
+  "event_definition_versions_list",
+] as const;
 
 const ORG_MEMBER_COLLECTION_OPERATION_IDS = [
   "organization_members_list",
@@ -97,6 +105,8 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ...family(APPROVAL_OPERATION_IDS, isApprovalOperation),
   ...family(SCOPED_OPERATION_IDS, isAppCollectionOperation),
   ...family(METRIC_RESOURCE_OPERATION_IDS, isMetricResourceOperation),
+  ...family(EVENT_DEFINITION_RESOURCE_OPERATION_IDS, isEventDefinitionResourceOperation),
+  ["event_definition_versions_get", isEventDefinitionVersionOperation],
   ...family(ORG_MEMBER_COLLECTION_OPERATION_IDS, (value) => isResourceOperation(value, "orgId")),
   ...family(ORG_MEMBER_RESOURCE_OPERATION_IDS, isOrgMemberResourceOperation),
   ...family(SEGMENT_RESOURCE_OPERATION_IDS, isSegmentResourceOperation),
@@ -183,6 +193,23 @@ function isMetricResourceOperation(value: Record<string, unknown>): boolean {
     hasKeys(value, ["id", "appId", "environmentId", "metricId"]) &&
     hasAppEnvironment(value) &&
     isNonEmptyString(value.metricId)
+  );
+}
+
+function isEventDefinitionResourceOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "eventDefinitionId"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.eventDefinitionId)
+  );
+}
+
+function isEventDefinitionVersionOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "eventDefinitionId", "versionId"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.eventDefinitionId) &&
+    isNonEmptyString(value.versionId)
   );
 }
 

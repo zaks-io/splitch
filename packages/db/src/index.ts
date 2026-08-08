@@ -47,6 +47,8 @@ export {
   deviceRefreshSessions,
   entityDeletions,
   environments,
+  eventDefinitions,
+  eventDefinitionVersions,
   experiments,
   flagConfigs,
   flags,
