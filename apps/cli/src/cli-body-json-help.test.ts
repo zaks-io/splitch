@@ -164,6 +164,7 @@ describe("CLI --body-json schema help details (SPL-309)", () => {
     );
     const bodySection = formatBodyJsonHelp(commandBodySchemaHelp(command)).join("\n");
     expect(bodySection).toContain("targetingRules");
+    expect(bodySection).toContain("segmentId");
     expect(bodySection).toContain('"eq"');
     expect(bodySection).toContain('"not_matches"');
     expect(bodySection).toContain("percentage");

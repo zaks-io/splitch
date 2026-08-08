@@ -2,6 +2,49 @@ import { describe, expect, it, vi } from "vitest";
 import { createPanelSegmentsClient } from "./panel-segments";
 
 describe("panel Segments binding transport", () => {
+  it("reads Segment choices and their affected Environments from the canonical route", async () => {
+    let request: Request | undefined;
+    const client = createPanelSegmentsClient({
+      fetch: async (input) => {
+        request = input instanceof Request ? input : new Request(input);
+        return Response.json({
+          items: [
+            {
+              id: "segment_paid",
+              appId: "app_1",
+              name: "Paid plan",
+              conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
+              createdAt: "2026-08-07T00:00:00.000Z",
+              updatedAt: "2026-08-07T00:00:00.000Z",
+            },
+          ],
+          affectedEnvironmentIds: { segment_paid: ["env_dev", "env_prod"] },
+        });
+      },
+    });
+
+    const result = await client.list({ appId: "app_1" });
+
+    expect(request?.url).toBe("https://control-plane.internal/apps/app_1/segments");
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        items: [{ id: "segment_paid", name: "Paid plan" }],
+        affectedEnvironmentIds: { segment_paid: ["env_dev", "env_prod"] },
+      },
+    });
+  });
+
+  it("fails loud when the dependency projection is absent", async () => {
+    const client = createPanelSegmentsClient({
+      fetch: async () => Response.json({ items: [] }),
+    });
+
+    await expect(client.list({ appId: "app_1" })).rejects.toThrow(
+      "panel_segments_list returned an invalid response body",
+    );
+  });
+
   it("round-trips list, create, get, update, and delete with typed bodies", async () => {
     const requests: Array<{ method: string; url: string; body: string }> = [];
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -13,7 +56,10 @@ describe("panel Segments binding transport", () => {
       });
       if (request.method === "DELETE") return Response.json({ deleted: true });
       if (request.method === "GET" && request.url.endsWith("/segments")) {
-        return Response.json({ items: [segment()] });
+        return Response.json({
+          items: [segment()],
+          affectedEnvironmentIds: { segment_1: ["env_prod"] },
+        });
       }
       const body = request.method === "GET" ? {} : ((await request.json()) as object);
       return Response.json({ ...segment(), ...body });
@@ -86,6 +132,11 @@ describe("panel Segments binding transport", () => {
               updatedAt: "2026-07-29T00:00:00.000Z",
             },
           ],
+          affectedEnvironmentIds: {
+            segment_1: ["env_prod"],
+            segment_poison: [],
+            "42": [],
+          },
         }),
       ),
     });

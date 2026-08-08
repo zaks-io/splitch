@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { DraftAllocationSchema } from "./draft-allocation";
 import { ExperimentSchema, MetricRefSchema, RunSchema } from "./leaf-schemas-experiment";
-import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
+import {
+  ResolvedTargetingRuleSchema,
+  TargetingRuleSchema,
+  VariantSchema,
+} from "./leaf-schemas-flag";
 import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
@@ -130,7 +134,7 @@ export type ExperimentResponse = z.infer<typeof ExperimentResponseSchema>;
 export const LiveRunUnaffectedSchema = z
   .object({
     runId: z.string(),
-    frozenTargetingRules: z.array(TargetingRuleSchema),
+    frozenTargetingRules: z.array(ResolvedTargetingRuleSchema),
   })
   .strict();
 export type LiveRunUnaffected = z.infer<typeof LiveRunUnaffectedSchema>;
@@ -187,7 +191,7 @@ export const StartRunResponseSchema = z
     // on it. Same set as `run.targetingRules` / RunConfigKV evaluation uses.
     // Empty means all Entities are eligible via allocation; Flag Configuration
     // Targeting Rules do not apply while this Run is live (SPL-307).
-    frozenTargetingRules: z.array(TargetingRuleSchema),
+    frozenTargetingRules: z.array(ResolvedTargetingRuleSchema),
   })
   .strict();
 export type StartRunResponse = z.infer<typeof StartRunResponseSchema>;

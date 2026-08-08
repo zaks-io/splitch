@@ -31,6 +31,7 @@ export function failureInsert(db: Db, scope: TenantScope, failure: ApprovalFailu
         resultingResourceId: sql<string | null>`NULL`.as("resulting_resource_id"),
         errorCode: sql<string>`${failure.errorCode}`.as("error_code"),
         errorDetails: sql<string>`${failure.errorDetails}`.as("error_details"),
+        targetState: sql<string>`${failure.targetState}`.as("target_state"),
       })
       .from(approvalRequests)
       .where(
@@ -81,6 +82,7 @@ export function dispositionQueries(db: Db, scope: TenantScope, disposition: Appr
           errorDetails: sql<string | null>`${disposition.cause?.errorDetails ?? null}`.as(
             "error_details",
           ),
+          targetState: sql<string | null>`NULL`.as("target_state"),
         })
         .from(approvalRequests)
         .where(

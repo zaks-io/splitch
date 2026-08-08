@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { claimVerifications, runs } from "./schema";
+import { claimVerifications, runs, targetingRules } from "./schema";
 
 /**
  * Asserts the GENERATED migration SQL — the exact DDL `wrangler d1 migrations
@@ -120,6 +120,16 @@ describe("runs storage-only decision columns", () => {
   it("enforces run_number + salt uniqueness per Experiment", () => {
     expect(migrationSql).toContain("`runs_experiment_run_number_unique`");
     expect(migrationSql).toContain("`runs_experiment_salt_unique`");
+  });
+});
+
+describe("Targeting Rule Segment reference", () => {
+  it("keeps segment_id in the Drizzle schema and the applied migration DDL", () => {
+    expect(getTableColumns(targetingRules).segmentId?.name).toBe("segment_id");
+    expect(migrationSql).toContain("`segment_id` text");
+    expect(migrationSql).toContain(
+      "FOREIGN KEY (`app_id`,`segment_id`) REFERENCES `segments`(`app_id`,`id`) ON UPDATE no action ON DELETE restrict",
+    );
   });
 });
 

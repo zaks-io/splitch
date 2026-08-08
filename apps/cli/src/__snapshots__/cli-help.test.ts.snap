@@ -520,7 +520,7 @@ Request body (--body-json):
   dimensions          optional; default []  string[]
   allocation          optional  Record<Variant name, number>
   salt                optional  string
-  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null; segmentId?: string }[]
   segmentIds          optional  string[]
   idempotency_key     optional  string
   Example:
@@ -623,7 +623,7 @@ Request body (--body-json):
   allocation          optional  Record<Variant name, number>
   salt                optional  string
   variantSet          optional  { id: string; name: string; value: boolean | string | number | Record<string, unknown>; description?: string }[]
-  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null; segmentId?: string }[]
   segmentIds          optional  string[]
   metrics             optional  { metricId: string }[]
   guardrailMetrics    optional  { metricId: string }[]
@@ -696,7 +696,7 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  targetingRules   required  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
+  targetingRules   required  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null; segmentId?: string }[]
   review           optional  { action: "approve_and_apply" }
   idempotency_key  required  string
   Example:
@@ -1261,7 +1261,7 @@ Request body (--body-json):
 
 Example:
   splitch segments create --body-json '{"name":"name","conditions":[{"attribute":"attribute","operator":"eq","value":true}]}' --json",
-    "segments delete": "Delete a Segment (blocked if referenced by a running Experiment).
+    "segments delete": "Delete a Segment when no mutable Flag Configuration or Experiment draft uses it.
 
 Usage:
   splitch segments delete <segment-id> [flags]
@@ -1303,16 +1303,19 @@ Usage:
   splitch segments update <segment-id> [flags]
 
 Flags:
-  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --name <name>       [type: string; default: none] Resource name.
-  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
-  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help          [type: boolean; default: false] Show help and exit.
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>            [type: string; default: none] Resource name.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  name         optional  string
-  description  optional  string
-  conditions   optional  { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]
+  name             optional  string
+  description      optional  string
+  conditions       optional  { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]
+  review           optional  { action: "approve_and_apply" }
+  idempotency_key  optional  string
   Example:
     {"name":"name"}
 
@@ -1699,7 +1702,7 @@ Commands:
   create          Create a Segment.
   get             Get a Segment.
   update          Update a Segment.
-  delete          Delete a Segment (blocked if referenced by a running Experiment).
+  delete          Delete a Segment when no mutable Flag Configuration or Experiment draft uses it.
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.

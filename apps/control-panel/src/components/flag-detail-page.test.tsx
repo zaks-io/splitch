@@ -131,6 +131,37 @@ describe("Flag detail page", () => {
 
     expect(html).not.toContain("salt");
   });
+
+  it("does not read as 'No Segment AND ...' before a Segment is picked", () => {
+    const html = render(view());
+    const composer = html.slice(html.indexOf("Add a rule"));
+    const attributeInput = composer.indexOf('data-targeting-attribute="true"');
+    expect(attributeInput).toBeGreaterThan(-1);
+
+    expect(composer).toContain("No Segment");
+    expect(composer.slice(0, attributeInput)).not.toContain("AND");
+  });
+
+  it("nests Segment Conditions under the Segment name in editable and Experiment-owned rules", () => {
+    const firstRule = view().targetingRules[0];
+    if (!firstRule) throw new Error("Flag detail fixture has no Targeting Rule");
+    const targetingRules = [
+      {
+        ...firstRule,
+        segmentId: "segment_paid",
+        segmentName: "Paid plan",
+        conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
+        segmentConditions: [{ attribute: "tier", operator: "eq", value: "paid" }],
+      },
+    ];
+
+    for (const controllingExperiment of [null, { id: "exp_1", name: "Checkout Copy Dev" }]) {
+      const html = render(view({ targetingRules, controllingExperiment }));
+      expect(html).toContain("Segment Paid plan (tier equals paid) AND plan equals paid");
+      // The Segment's definition must never read as a third constraint on the rule.
+      expect(html).not.toContain("Segment Paid plan AND");
+    }
+  });
 });
 
 function render(next: FlagDetailView): string {
@@ -179,9 +210,13 @@ function view(overrides: Partial<FlagDetailView> = {}): FlagDetailView {
         priority: 0,
         variantName: "treatment",
         conditions: [{ attribute: "plan", operator: "eq", value: '"pro"' }],
+        segmentConditions: [],
         rolloutPercentage: 25,
+        segmentId: null,
+        segmentName: null,
       },
     ],
+    segments: [],
     baselineRolloutPercentage: null,
     controllingExperiment: null,
     ...overrides,

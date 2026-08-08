@@ -48,14 +48,20 @@ per-Environment (ADR-0027) and lives in separate Flag Configuration schemas.
 
 First-match over priority-ascending order.
 
-| Field               | Type                        | Required | Meaning                                                |
-| ------------------- | --------------------------- | -------- | ------------------------------------------------------ |
-| `id`                | `string`                    | yes      | Stable UUID                                            |
-| `flagId`            | `string`                    | yes      | Owning Flag                                            |
-| `priority`          | `number`                    | yes      | Integer ≥ 0; lower = evaluated first                   |
-| `conditions`        | `Condition[]`               | yes      | Min 1; combined with AND within the rule               |
-| `variantId`         | `string`                    | yes      | Served when all conditions match                       |
-| `percentageRollout` | `PercentageRollout \| null` | no       | If set, only the declared percentage gets this Variant |
+| Field               | Type                        | Required | Meaning                                                          |
+| ------------------- | --------------------------- | -------- | ---------------------------------------------------------------- |
+| `id`                | `string`                    | yes      | Stable UUID                                                      |
+| `flagId`            | `string`                    | yes      | Owning Flag                                                      |
+| `priority`          | `number`                    | yes      | Integer ≥ 0; lower = evaluated first                             |
+| `conditions`        | `Condition[]`               | yes      | Direct Conditions; combined with AND within the rule             |
+| `segmentId`         | `string`                    | no       | App-level Segment whose Conditions are AND-merged at publication |
+| `variantId`         | `string`                    | yes      | Served when all conditions match                                 |
+| `percentageRollout` | `PercentageRollout \| null` | no       | If set, only the declared percentage gets this Variant           |
+
+A rule must carry at least one direct Condition or `segmentId`. The Segment must belong to the
+same App. `TargetingRule` is the authoring shape retained in D1. Publication resolves the referenced
+Segment and emits `ResolvedTargetingRule`, which has the same fields except `segmentId` and contains
+the concrete AND-merged Conditions. KV and Run snapshots accept only the resolved shape.
 
 ---
 
