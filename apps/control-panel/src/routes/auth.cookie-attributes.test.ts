@@ -65,8 +65,8 @@ describe("auth routes set protective cookies on the response", () => {
 
     expect(response.status).toBe(302);
     const setCookie = response.headers.get("set-cookie");
-    expect(setCookie).toContain("__session_state=");
     assertProtectiveSetCookie(setCookie, "__session_state");
+    expect(setCookie).toContain("__session_state=");
   });
 
   it("auth/callback clears __session_state with protective attributes on failure", async () => {
@@ -76,7 +76,7 @@ describe("auth routes set protective cookies on the response", () => {
 
     expect(response.status).toBe(401);
     const setCookie = response.headers.get("set-cookie");
-    expect(setCookie).toContain("__session_state=");
     assertProtectiveSetCookie(setCookie, "__session_state");
+    expect(setCookie).toContain("__session_state=");
   });
 });

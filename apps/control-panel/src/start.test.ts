@@ -1,35 +1,30 @@
-import { csrfSymbol } from "@tanstack/react-start";
 import { describe, expect, it } from "vitest";
 import { panelServerFnCsrfMiddleware, startInstance } from "./start";
 
 type CsrfMiddleware = typeof panelServerFnCsrfMiddleware;
+
+const FORGED_CROSS_SITE = new Request("https://app.splitch.dev/_server/fn", {
+  method: "POST",
+  headers: {
+    origin: "https://evil.example",
+    "sec-fetch-site": "cross-site",
+  },
+});
 
 /**
  * Server-fn CSRF must be pinned by behaviour, not by the accidental absence of
  * `src/start.ts`. Adding start.ts without createCsrfMiddleware in
  * requestMiddleware silently drops Origin checks on every panel write.
  *
- * The cross-site 403 below is driven through whatever middleware is actually
- * installed on `startInstance` — displacing CSRF from requestMiddleware makes
- * this red, not only a file-existence check.
+ * Locate the middleware by behaviour (refuses a forged cross-site POST), not by
+ * `csrfSymbol` — that marker is only attached when `NODE_ENV !== "production"`.
+ * Displacing CSRF from requestMiddleware makes the cross-site 403 red.
  */
-async function installedCsrfMiddleware(): Promise<CsrfMiddleware> {
-  const options = await startInstance.getOptions();
-  const middlewares = options.requestMiddleware ?? [];
-  const installed = middlewares.find((middleware) => csrfSymbol in middleware) as
-    | CsrfMiddleware
-    | undefined;
-  expect(installed, "CSRF middleware missing from startInstance.requestMiddleware").toBeTruthy();
-  if (!installed) throw new Error("CSRF middleware missing from startInstance.requestMiddleware");
-  return installed;
-}
-
-/** Framework middleware ctx is wider than we need for a CSRF probe. */
-async function runServerFnCsrf(
+async function invokeMiddlewareServer(
+  middleware: CsrfMiddleware,
   request: Request,
 ): Promise<{ result: unknown; nextCalled: boolean }> {
-  const installed = await installedCsrfMiddleware();
-  const server = installed.options.server;
+  const server = middleware.options.server;
   if (!server) throw new Error("expected CSRF middleware server handler");
 
   let nextCalled = false;
@@ -46,25 +41,42 @@ async function runServerFnCsrf(
   return { result, nextCalled };
 }
 
+async function installedCsrfMiddleware(): Promise<CsrfMiddleware> {
+  const options = await startInstance.getOptions();
+  const middlewares = options.requestMiddleware ?? [];
+
+  for (const middleware of middlewares) {
+    const candidate = middleware as CsrfMiddleware;
+    if (!candidate.options?.server) continue;
+    const { result, nextCalled } = await invokeMiddlewareServer(candidate, FORGED_CROSS_SITE);
+    if (result instanceof Response && result.status === 403 && !nextCalled) {
+      return candidate;
+    }
+  }
+
+  throw new Error(
+    "No requestMiddleware entry refuses a forged cross-site serverFn POST with 403 (CSRF missing or displaced)",
+  );
+}
+
+async function runServerFnCsrf(
+  request: Request,
+): Promise<{ result: unknown; nextCalled: boolean }> {
+  return invokeMiddlewareServer(await installedCsrfMiddleware(), request);
+}
+
 describe("panel server-fn CSRF middleware", () => {
-  it("installs the CSRF middleware on the start instance requestMiddleware", async () => {
+  it("installs CSRF middleware that refuses forged cross-site serverFn POSTs", async () => {
     const options = await startInstance.getOptions();
     const middlewares = options.requestMiddleware ?? [];
 
     expect(middlewares).toContain(panelServerFnCsrfMiddleware);
-    expect(middlewares.some((middleware) => csrfSymbol in middleware)).toBe(true);
+    const installed = await installedCsrfMiddleware();
+    expect(installed).toBe(panelServerFnCsrfMiddleware);
   });
 
   it("rejects a cross-site serverFn POST with 403 via the installed middleware", async () => {
-    const { result, nextCalled } = await runServerFnCsrf(
-      new Request("https://app.splitch.dev/_server/fn", {
-        method: "POST",
-        headers: {
-          origin: "https://evil.example",
-          "sec-fetch-site": "cross-site",
-        },
-      }),
-    );
+    const { result, nextCalled } = await runServerFnCsrf(FORGED_CROSS_SITE);
 
     expect(result).toBeInstanceOf(Response);
     expect((result as Response).status).toBe(403);
@@ -80,6 +92,17 @@ describe("panel server-fn CSRF middleware", () => {
           "sec-fetch-site": "same-site",
         },
       }),
+    );
+
+    expect(result).toBeInstanceOf(Response);
+    expect((result as Response).status).toBe(403);
+    expect(nextCalled).toBe(false);
+  });
+
+  it("rejects a serverFn POST with no Sec-Fetch-Site, Origin, or Referer (403)", async () => {
+    // Pins allowRequestsWithoutOriginCheck unset/false — that option would allow this.
+    const { result, nextCalled } = await runServerFnCsrf(
+      new Request("https://app.splitch.dev/_server/fn", { method: "POST" }),
     );
 
     expect(result).toBeInstanceOf(Response);
