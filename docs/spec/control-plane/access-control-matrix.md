@@ -108,7 +108,7 @@ only (seeded at deploy; not user-facing).
 - Flag **definition** CRUD (App-level), Flag **Configuration** + Promotion across Environments (per-Env, ADR-0028)
 - Environment Policy edits (per-change-type confirm gates, ADR-0029)
 - Variant, Targeting Rule CRUD
-- Experiment, Run CRUD and lifecycle operations (Start/end; per-Environment)
+- Experiment, Run CRUD and lifecycle operations (Start, End, Conclude; per-Environment)
 - Segment, Metric CRUD
 - SDK credential (Client Key, API Key) management (per-Environment)
 - Privacy request intake, export jobs, deletion jobs, and Entity tombstones
