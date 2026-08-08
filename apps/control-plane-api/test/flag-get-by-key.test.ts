@@ -209,4 +209,49 @@ describe("flags_get by key past the catalog list ceiling", () => {
       name: "Keyed as the other's id",
     });
   });
+
+  it("does not let a trailing by=key override an earlier by=id on the same request", async () => {
+    // id and key are distinct strings so a coincidental match cannot pass.
+    // queryToRecord last-wins; the claim parser first-wins. Resolution must
+    // follow URLSearchParams (first) so ?by=id&by=key cannot become a key read.
+    const createdApp = await createDefaultApp(h);
+    const appId = createdApp.app.id;
+    const decoyId = "flag_decoy_duplicate_by";
+    const decoyKey = "decoy-key-duplicate-by";
+    const scope = appScope(appId);
+    const repo = createRepository(h.bindings.d1);
+    await repo.flags.flags.insert(scope, {
+      id: decoyId,
+      appId,
+      key: decoyKey,
+      name: "Decoy",
+      schema: JSON.stringify({ type: "boolean" }),
+      defaultVariantId: "var_decoy",
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+    });
+    await repo.flags.addVariant(scope, decoyId, {
+      id: "var_decoy",
+      name: "control",
+      value: JSON.stringify(false),
+      createdAt: NOW_ISO,
+    });
+    const jwt = await appToken(h, appId);
+
+    const asId = await request(h, "GET", `/apps/${appId}/flags/${decoyKey}?by=id`, jwt);
+    expect(asId.status).toBe(404);
+
+    const duplicated = await request(
+      h,
+      "GET",
+      `/apps/${appId}/flags/${decoyKey}?by=id&by=key`,
+      jwt,
+    );
+    expect(duplicated.status).toBe(404);
+    expect((await errorBody(duplicated)).code).toBe("FLAG_NOT_FOUND");
+
+    const asKey = await request(h, "GET", `/apps/${appId}/flags/${decoyKey}?by=key`, jwt);
+    expect(asKey.status).toBe(200);
+    expect(await asKey.json()).toMatchObject({ id: decoyId, key: decoyKey });
+  });
 });

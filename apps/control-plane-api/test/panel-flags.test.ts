@@ -16,6 +16,7 @@ import {
 const ids = panelFlagsIds("e2e");
 const { appId: APP_ID, otherAppId: OTHER_APP_ID, envId: ENV_ID } = ids;
 const { otherEnvId: OTHER_ENV_ID, flagId: FLAG_ID, userId: USER_ID } = ids;
+const { otherFlagKey: OTHER_FLAG_KEY } = ids;
 
 let testEnv: ControlPlaneApiEnv;
 let entrypoint: SignedControlPanelEntrypoint;
@@ -35,12 +36,13 @@ describe("SignedControlPanelEntrypoint Flags operations", () => {
     const listed = (await list.json()) as {
       items: Array<{ id: string; key: string; variants: Array<{ name: string }> }>;
     };
-    expect(listed.items).toHaveLength(1);
-    expect(listed.items[0]).toMatchObject({ id: FLAG_ID, key: "checkout-refresh" });
-    expect(listed.items[0]?.variants.map((variant) => variant.name)).toEqual([
-      "disabled",
-      "enabled",
-    ]);
+    expect(listed.items).toHaveLength(2);
+    expect(listed.items.map((item) => item.key).sort()).toEqual(
+      ["checkout-refresh", ids.otherFlagKey].sort(),
+    );
+    const checkout = listed.items.find((item) => item.key === "checkout-refresh");
+    expect(checkout).toMatchObject({ id: FLAG_ID, key: "checkout-refresh" });
+    expect(checkout?.variants.map((variant) => variant.name)).toEqual(["disabled", "enabled"]);
 
     const config = await panelRequest(
       "GET",
@@ -207,6 +209,8 @@ describe("SignedControlPanelEntrypoint Flag resource binding", () => {
   });
 
   it("rejects a flag_get delegation minted for a different Flag or selector mode", async () => {
+    // Replay against a real second Flag (seeded), not a phantom string: the
+    // 401 must hold even when D1 would have a row for the forged claim.
     const wrongFlag = await request(
       "GET",
       `/apps/${APP_ID}/flags/checkout-refresh?by=key`,
@@ -215,7 +219,7 @@ describe("SignedControlPanelEntrypoint Flag resource binding", () => {
         id: "flag_get",
         appId: APP_ID,
         environmentId: ENV_ID,
-        flagId: "other-key",
+        flagId: OTHER_FLAG_KEY,
         by: "key",
       },
     );

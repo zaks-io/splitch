@@ -29,6 +29,9 @@ export type PanelFlagsIds = {
   envId: string;
   otherEnvId: string;
   flagId: string;
+  /** A second Flag in the same App — distinct id and key for cross-delegation. */
+  otherFlagId: string;
+  otherFlagKey: string;
   userId: string;
 };
 
@@ -41,6 +44,8 @@ export function panelFlagsIds(suffix: string): PanelFlagsIds {
     envId: `env_panel_flags_${suffix}`,
     otherEnvId: `env_panel_flags_other_${suffix}`,
     flagId: `flag_panel_flags_${suffix}`,
+    otherFlagId: `flag_panel_flags_other_${suffix}`,
+    otherFlagKey: `other-checkout-${suffix}`,
     userId: `user_panel_flags_${suffix}`,
   };
 }
@@ -165,6 +170,21 @@ export async function seedPanelFlags(ids: PanelFlagsIds): Promise<void> {
     env.DB.prepare(
       "INSERT INTO variants (id, flag_id, name, value, created_at) VALUES (?,?,?,?,?)",
     ).bind(`var_enabled_${ids.suffix}`, ids.flagId, "enabled", "true", NOW),
+    env.DB.prepare(
+      "INSERT INTO flags (id, app_id, key, name, schema, default_variant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+    ).bind(
+      ids.otherFlagId,
+      ids.appId,
+      ids.otherFlagKey,
+      "Other Checkout",
+      '{"type":"boolean"}',
+      `var_other_disabled_${ids.suffix}`,
+      NOW,
+      NOW,
+    ),
+    env.DB.prepare(
+      "INSERT INTO variants (id, flag_id, name, value, created_at) VALUES (?,?,?,?,?)",
+    ).bind(`var_other_disabled_${ids.suffix}`, ids.otherFlagId, "disabled", "false", NOW),
     env.DB.prepare(
       "INSERT INTO flag_configs (id, app_id, environment_id, flag_id, enabled, available_variant_names, default_variant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
     ).bind(

@@ -4,6 +4,7 @@ import type {
   FlagConfigGetOutput,
   FlagsClient,
 } from "@splitch/control-plane-sdk";
+import { FlagSelectorUnaddressableError } from "@splitch/control-plane-sdk/flag-selector-unaddressable-error";
 
 /**
  * The Flag detail screen's two grains, read from the Worker and paired HERE, in
@@ -36,6 +37,31 @@ export type FlagDetailData = {
  */
 export type FlagDetailNotFound = { code: "FLAG_NOT_FOUND" };
 
+async function getFlagByKey(
+  flags: Pick<FlagsClient, "get">,
+  appId: string,
+  flagKey: string,
+): Promise<ControlPlaneOperationResult<Flag>> {
+  try {
+    return await flags.get({ appId, flagId: flagKey, by: "key" });
+  } catch (error) {
+    if (error instanceof FlagSelectorUnaddressableError) {
+      return {
+        ok: false,
+        status: 400,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: error.message,
+          details: {
+            issues: [{ path: ["flagKey"], message: "cannot be addressed as a path segment" }],
+          },
+        },
+      };
+    }
+    throw error;
+  }
+}
+
 /**
  * Resolve a Flag by its URL `key` and read its Configuration for one Environment.
  *
@@ -53,7 +79,7 @@ export async function readFlagDetail(
   scope: { appId: string; environmentId: string },
   flagKey: string,
 ): Promise<ControlPlaneOperationResult<FlagDetailData | FlagDetailNotFound>> {
-  const fetched = await flags.get({ appId: scope.appId, flagId: flagKey, by: "key" });
+  const fetched = await getFlagByKey(flags, scope.appId, flagKey);
   if (!fetched.ok) {
     if (fetched.error.code === "FLAG_NOT_FOUND") {
       return { ok: true, status: 200, data: { code: "FLAG_NOT_FOUND" } };

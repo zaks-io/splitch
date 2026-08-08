@@ -150,6 +150,31 @@ describe("Flag detail route data", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
     expect(getConfig).not.toHaveBeenCalled();
   });
+
+  it("turns an unaddressable Flag key into a VALIDATION_ERROR result", async () => {
+    const { FlagSelectorUnaddressableError } = await import(
+      "@splitch/control-plane-sdk/flag-selector-unaddressable-error"
+    );
+    const getConfig = vi.fn<FlagsClient["getConfig"]>();
+
+    const result = await readFlagDetail(
+      flagsClient(
+        vi.fn(async () => {
+          throw new FlagSelectorUnaddressableError(".");
+        }),
+        getConfig,
+      ),
+      scope,
+      ".",
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: { code: "VALIDATION_ERROR" },
+    });
+    expect(getConfig).not.toHaveBeenCalled();
+  });
 });
 
 function config(environmentId: string): FlagConfigGetOutput {
