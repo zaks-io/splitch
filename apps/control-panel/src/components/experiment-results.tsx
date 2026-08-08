@@ -33,7 +33,7 @@ export function ExperimentResults({ results }: { results: PanelExperimentResults
         </p>
       </header>
 
-      <ExperimentResultsControlIntegrity control={results.control} />
+      <ExperimentResultsControlIntegrity control={results.control} resultsRendered={true} />
 
       <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
         <h3 className="font-semibold text-base text-foreground">Lift by arm</h3>
@@ -129,7 +129,7 @@ export function ExperimentResultsWaiting({
         </h2>
         <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">{detail}</p>
       </header>
-      <ExperimentResultsControlIntegrity control={control} />
+      <ExperimentResultsControlIntegrity control={control} resultsRendered={false} />
     </section>
   );
 }

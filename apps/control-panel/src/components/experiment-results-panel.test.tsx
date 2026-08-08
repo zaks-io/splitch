@@ -96,7 +96,47 @@ describe("Experiment Results route no_data waiting state", () => {
     );
 
     expect(html).toContain("Analysis Control disagrees with the Run");
-    expect(html).toContain("legacy_checkout");
+    expect(html).toContain(
+      'This Run froze <code class="font-mono text-foreground text-xs">control</code> as its Control, but the Run Snapshot written to the analytics store at Start recorded <code class="font-mono text-foreground text-xs">legacy_checkout</code>. Both are written at Start and should match. Because they do not, every lift here is measured against <code class="font-mono text-foreground text-xs">legacy_checkout</code> and not against the Run&#x27;s own Control.',
+    );
+    expect(html).toContain(
+      "The Run Snapshot cannot be rewritten, so this Run cannot be corrected. Start a new Run to get a Control that agrees across both stores.",
+    );
+    expect(html).not.toContain("The numbers below remain visible for diagnosis.");
+    expect(html).toContain('role="alert"');
+  });
+
+  it("surfaces an unresolvable Control without promising numbers or exposing plumbing", () => {
+    resultsData.current = resultsNoDataFixture({
+      control: {
+        state: "unresolvable",
+        variantId: "variant_from_a_later_edit",
+        reason: "absent_from_frozen_variant_set",
+        frozenVariantNames: ["control", "treatment"],
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      <ExperimentResultsPanel
+        appId="app_1"
+        environmentId="env_1"
+        experimentId="exp_1"
+        run={runningRun()}
+      />,
+    );
+
+    expect(html).toContain("Control arm cannot be identified");
+    expect(html).toContain(
+      "This Run&#x27;s frozen Control cannot be identified because it is absent from the Variant set this Run froze. Runs created before the Control was frozen on the Run were backfilled from the Experiment&#x27;s default Variant, which the Run itself may never have carried.",
+    );
+    expect(html).toContain("The Run froze");
+    expect(html).toContain("control, treatment");
+    expect(html).toContain(
+      "No arm is marked as the baseline and the ship decision is blocked. Start a new Run to get a Control that is frozen and validated.",
+    );
+    expect(html).not.toContain("The numbers below are still shown");
+    expect(html).not.toContain("variant_from_a_later_edit");
+    expect(html).not.toContain("absent_from_frozen_variant_set");
     expect(html).toContain('role="alert"');
   });
 

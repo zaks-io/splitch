@@ -86,8 +86,9 @@ describe("control_identity gate check", () => {
     expect(gate.shipAllowed).toBe(false);
     expect(gate.blockedBy).toContain("control_identity");
     const identity = check(gate, "control_identity");
-    expect(identity.detail).toContain("variant_from_a_later_edit");
-    expect(identity.detail).toContain("absent_from_frozen_variant_set");
+    expect(identity.detail).toContain("it is absent from the Variant set this Run froze");
+    expect(identity.detail).not.toContain("variant_from_a_later_edit");
+    expect(identity.detail).not.toContain("absent_from_frozen_variant_set");
   });
 
   it("blocks the ship decision when Analysis reports a different Control", () => {
