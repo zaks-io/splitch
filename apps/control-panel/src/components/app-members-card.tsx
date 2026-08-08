@@ -32,7 +32,7 @@ export function AppMembersCard({
   members,
 }: {
   appId: string;
-  candidates: PanelAppAccessCandidate[];
+  candidates?: PanelAppAccessCandidate[];
   capabilities: AppSettingsCapabilities;
   members: AppMember[];
 }) {

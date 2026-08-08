@@ -1,5 +1,8 @@
 import { UserRoleSchema } from "@splitch/contracts";
-import type { PanelAppSettings } from "@splitch/control-plane-sdk/panel-app-settings";
+import {
+  canGrantAppAccess,
+  type PanelAppSettings,
+} from "@splitch/control-plane-sdk/panel-app-settings";
 import { appScope, type Repository } from "@splitch/db";
 import { appResponse } from "./app-environment-model";
 import type { MemberProfileResolver } from "./org-handlers";
@@ -49,8 +52,10 @@ export async function panelAppSettingsRead(
     scope,
     rows.map((row) => row.id),
   );
+  const viewerRole = UserRoleSchema.parse(access.role);
 
   const people = await appAccessPeople(deps, {
+    canGrantAccess: canGrantAppAccess(viewerRole),
     orgId: access.app.organizationId,
     memberships,
     request,
@@ -58,9 +63,9 @@ export async function panelAppSettingsRead(
 
   const response: PanelAppSettings = {
     app: appResponse(access.app),
-    viewerRole: UserRoleSchema.parse(access.role),
+    viewerRole,
     members: people.members,
-    candidates: people.candidates,
+    ...(people.candidates !== undefined ? { candidates: people.candidates } : {}),
     flags: {
       items: rows.map((row) => catalogFlag(row, catalogs.get(row.id) ?? [])),
       readTruncated,

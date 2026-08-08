@@ -21,11 +21,13 @@ interface PeopleDeps {
  */
 export async function appAccessPeople(
   deps: PeopleDeps,
-  input: { orgId: string; memberships: readonly AppMembershipRow[]; request: Request },
-): Promise<{ members: AppMember[]; candidates: PanelAppAccessCandidate[] }> {
-  const orgMemberships = await deps.repo.identity.listOrgMemberships(input.orgId);
-  const hasAppAccess = new Set(input.memberships.map((membership) => membership.userId));
-
+  input: {
+    canGrantAccess: boolean;
+    orgId: string;
+    memberships: readonly AppMembershipRow[];
+    request: Request;
+  },
+): Promise<{ members: AppMember[]; candidates: PanelAppAccessCandidate[] | undefined }> {
   const members: AppMember[] = [];
   for (const membership of input.memberships) {
     members.push({
@@ -36,6 +38,11 @@ export async function appAccessPeople(
       createdAt: membership.createdAt,
     });
   }
+
+  if (!input.canGrantAccess) return { members, candidates: undefined };
+
+  const orgMemberships = await deps.repo.identity.listOrgMemberships(input.orgId);
+  const hasAppAccess = new Set(input.memberships.map((membership) => membership.userId));
 
   const candidates: PanelAppAccessCandidate[] = [];
   for (const orgMembership of orgMemberships) {

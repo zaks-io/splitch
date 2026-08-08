@@ -19,6 +19,13 @@ export default defineConfig({
         ).pathname,
       },
       {
+        find: "@splitch/control-plane-sdk/panel-app-settings",
+        replacement: new URL(
+          "../../packages/control-plane-sdk/src/panel-app-settings.ts",
+          import.meta.url,
+        ).pathname,
+      },
+      {
         find: "@splitch/contracts",
         replacement: new URL("../../packages/contracts/src/index.ts", import.meta.url).pathname,
       },

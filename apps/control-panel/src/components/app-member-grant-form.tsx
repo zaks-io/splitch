@@ -34,11 +34,15 @@ export function AppMemberGrantForm({
   onGranted,
 }: {
   appId: string;
-  candidates: PanelAppAccessCandidate[];
+  candidates?: PanelAppAccessCandidate[];
   capabilities: AppSettingsCapabilities;
   onError: (message: string | undefined) => void;
   onGranted: () => Promise<void>;
 }) {
+  if (candidates === undefined) {
+    throw new Error("App Settings omitted access candidates for a viewer who may grant access");
+  }
+
   const [userId, setUserId] = useState("");
   const [role, setRole] = useState<UserRole>("member");
   const [isGranting, setIsGranting] = useState(false);

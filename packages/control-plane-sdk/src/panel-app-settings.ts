@@ -71,8 +71,17 @@ export interface PanelAppSettings {
   app: App;
   viewerRole: UserRole;
   members: AppMember[];
-  candidates: PanelAppAccessCandidate[];
+  /**
+   * Present only when the viewer may grant App access. An empty array means the
+   * viewer may grant access, but every Organization member already has it.
+   */
+  candidates?: PanelAppAccessCandidate[];
   flags: PanelAppFlagCatalog;
+}
+
+/** The App role-matrix predicate shared by the Worker and Control Panel. */
+export function canGrantAppAccess(viewerRole: UserRole): boolean {
+  return viewerRole === "owner" || viewerRole === "admin";
 }
 
 export const PanelAppSettingsSchema = z
@@ -80,15 +89,17 @@ export const PanelAppSettingsSchema = z
     app: AppSchema,
     viewerRole: UserRoleSchema,
     members: z.array(AppMemberSchema),
-    candidates: z.array(
-      z
-        .object({
-          userId: z.string(),
-          email: z.string().nullable(),
-          orgRole: UserRoleSchema,
-        })
-        .strict(),
-    ),
+    candidates: z
+      .array(
+        z
+          .object({
+            userId: z.string(),
+            email: z.string().nullable(),
+            orgRole: UserRoleSchema,
+          })
+          .strict(),
+      )
+      .optional(),
     flags: z.object({
       items: z.array(
         z

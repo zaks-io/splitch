@@ -1,4 +1,5 @@
 import type { UserRole } from "@splitch/contracts";
+import { canGrantAppAccess } from "@splitch/control-plane-sdk/panel-app-settings";
 
 /**
  * The App role matrix, mirrored from
@@ -30,7 +31,7 @@ export function appSettingsCapabilities(viewerRole: UserRole): AppSettingsCapabi
   const isAdmin = viewerRole === "admin";
   return {
     canRename: isOwner || isAdmin,
-    canGrantAccess: isOwner || isAdmin,
+    canGrantAccess: canGrantAppAccess(viewerRole),
     canGrantOwner: isOwner,
     canManageAccess: isOwner,
     canDelete: isOwner,

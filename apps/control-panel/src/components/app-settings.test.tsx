@@ -3,6 +3,7 @@ import type { PanelAppSettings } from "@splitch/control-plane-sdk/panel-app-sett
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { appSettingsCapabilities } from "#lib/app-settings-capabilities";
 
 vi.mock("#lib/control-plane-app-settings-functions", () => ({
   addControlPanelAppMember: vi.fn(),
@@ -14,7 +15,7 @@ vi.mock("#lib/control-plane-app-settings-functions", () => ({
 }));
 
 const { AppSettings } = await import("./app-settings");
-const { labelAppAccessCandidates } = await import("./app-member-grant-form");
+const { AppMemberGrantForm, labelAppAccessCandidates } = await import("./app-member-grant-form");
 
 function render(viewerRole: UserRole, overrides: Partial<PanelAppSettings> = {}) {
   return renderToStaticMarkup(
@@ -38,8 +39,11 @@ describe("AppSettings", () => {
     expect(html).toContain("Delete this App…");
   });
 
-  it("gives a member the same facts as plain text, and no danger zone", () => {
-    const html = render("member");
+  it("renders a member payload without candidates and no grant form", () => {
+    const renderMember = () => render("member", { candidates: undefined });
+
+    expect(renderMember).not.toThrow();
+    const html = renderMember();
 
     expect(html).toContain('data-testid="app-identity-read-only"');
     expect(html).not.toContain('id="app-settings-key"');
@@ -47,6 +51,19 @@ describe("AppSettings", () => {
     // Not a disabled form: a member sees what is true, not a control that looks broken.
     expect(html).not.toContain("disabled");
     expect(html).toContain('data-testid="app-grant-not-permitted"');
+  });
+
+  it("throws when a grant-capable viewer's payload omits candidates", () => {
+    expect(() =>
+      renderToStaticMarkup(
+        <AppMemberGrantForm
+          appId="app_checkout"
+          capabilities={appSettingsCapabilities("admin")}
+          onError={() => {}}
+          onGranted={async () => {}}
+        />,
+      ),
+    ).toThrow("App Settings omitted access candidates for a viewer who may grant access");
   });
 
   it("withholds the danger zone from an admin, who may still rename", () => {

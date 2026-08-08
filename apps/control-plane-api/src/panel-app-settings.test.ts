@@ -1,6 +1,6 @@
 import type { PanelAppSettings } from "@splitch/control-plane-sdk/panel-app-settings";
 import { createRepository, type Repository } from "@splitch/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   ALPHA,
   BETA,
@@ -119,6 +119,55 @@ describe("App Settings read", () => {
   it("offers only Organization members who do not already have access", async () => {
     const payload = await settings(USER_OWNER, ALPHA.appId);
 
+    expect(payload.candidates).toEqual([
+      { userId: USER_CANDIDATE, email: "candidate@alpha.test", orgRole: "member" },
+    ]);
+  });
+
+  it("withholds the Organization roster from a member without fetching it", async () => {
+    let responseBody: unknown;
+    const responseJson = Response.json;
+    const responseSpy = vi.spyOn(Response, "json").mockImplementation((data, init) => {
+      responseBody = data;
+      return responseJson(data, init);
+    });
+    const listOrgMemberships = vi.spyOn(repo.identity, "listOrgMemberships");
+    const resolvedUserIds: string[] = [];
+
+    try {
+      const response = await panelAppSettingsRead(
+        {
+          repo,
+          memberProfileResolver: async ({ userId }) => {
+            resolvedUserIds.push(userId);
+            const email = EMAILS[userId];
+            return email ? { email } : null;
+          },
+        },
+        { appId: ALPHA.appId, actorId: USER_MEMBER },
+        request(),
+      );
+      const payload = (await response.json()) as PanelAppSettings;
+      const serialized = JSON.stringify(payload);
+
+      expect(response.status).toBe(200);
+      expect(payload.viewerRole).toBe("member");
+      expect(payload).not.toHaveProperty("candidates");
+      expect(responseBody).not.toHaveProperty("candidates");
+      expect(serialized).not.toContain(USER_CANDIDATE);
+      expect(serialized).not.toContain(EMAILS[USER_CANDIDATE]);
+      expect(listOrgMemberships).not.toHaveBeenCalled();
+      expect(resolvedUserIds).not.toContain(USER_CANDIDATE);
+    } finally {
+      listOrgMemberships.mockRestore();
+      responseSpy.mockRestore();
+    }
+  });
+
+  it("offers the candidate roster to an admin", async () => {
+    const payload = await settings(USER_ADMIN, ALPHA.appId);
+
+    expect(payload.viewerRole).toBe("admin");
     expect(payload.candidates).toEqual([
       { userId: USER_CANDIDATE, email: "candidate@alpha.test", orgRole: "member" },
     ]);
