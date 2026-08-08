@@ -75,7 +75,7 @@ describe("ExperimentResults with an unidentifiable Control", () => {
       "The Run Snapshot written to the analytics store at Start recorded control as the Analysis Control. Every lift below is measured against that Variant.",
     );
     expect(text).toContain(
-      "The Run Snapshot names the Analysis Control, but it cannot establish the Run's own frozen Control. The ship decision is blocked.",
+      "What the Snapshot cannot establish is the Run's own frozen Control, so the ship decision is blocked.",
     );
   });
 
@@ -83,6 +83,13 @@ describe("ExperimentResults with an unidentifiable Control", () => {
     const html = unresolvableHtml();
     const text = visibleText(html);
     const analysisControlRow = metricRow(html, "control");
+    const controlClaims = {
+      neverRecorded: text.includes("baseline this Run never recorded"),
+      baselineBadge: analysisControlRow.includes(">Baseline</"),
+      measuredAgainst: text.includes(
+        "The Run Snapshot written to the analytics store at Start recorded control as the Analysis Control. Every lift below is measured against that Variant.",
+      ),
+    };
 
     expect(text).toContain(
       "Relative lift against control, with an always-valid confidence sequence.",
@@ -91,6 +98,11 @@ describe("ExperimentResults with an unidentifiable Control", () => {
     expect(text).toContain("relative lift vs control (%)");
     expect(html).toContain('aria-label="Relative lift with confidence intervals against control"');
     expect(text).not.toContain("unidentified");
+    expect(controlClaims).toEqual({
+      neverRecorded: false,
+      baselineBadge: true,
+      measuredAgainst: true,
+    });
     expect(html).toContain(
       "control · checkout_conversion: baseline, 0% lift by definition, n=12530",
     );

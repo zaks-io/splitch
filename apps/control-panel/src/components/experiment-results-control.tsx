@@ -86,7 +86,7 @@ export function ExperimentResultsControlIntegrity({
       </p>
       <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
         {resultsRendered
-          ? "The Run Snapshot names the Analysis Control, but it cannot establish the Run's own frozen Control. The ship decision is blocked. Start a new Run to get a Control that is frozen and validated."
+          ? "What the Snapshot cannot establish is the Run's own frozen Control, so the ship decision is blocked. Start a new Run to get a Control that is frozen and validated."
           : "This Run cannot produce a ship decision. Start a new Run to get a Control that is frozen and validated."}
       </p>
     </div>

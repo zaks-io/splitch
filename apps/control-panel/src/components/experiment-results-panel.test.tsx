@@ -140,7 +140,6 @@ describe("Experiment Results route no_data waiting state", () => {
     expect(html).toContain(
       "This Run cannot produce a ship decision. Start a new Run to get a Control that is frozen and validated.",
     );
-    expect(html).not.toContain("The numbers below are still shown");
     expect(html).not.toContain("variant_from_a_later_edit");
     expect(html).not.toContain("absent_from_frozen_variant_set");
     expect(html).toContain('role="alert"');

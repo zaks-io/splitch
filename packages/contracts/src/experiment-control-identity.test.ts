@@ -104,7 +104,7 @@ describe("control_identity gate check", () => {
     expect(gate.blockedBy).toContain("control_identity");
     const identity = check(gate, "control_identity");
     expect(identity.detail).toBe(
-      'This Run\'s frozen Control cannot be identified because it is absent from the Variant set this Run froze. The Run froze "control", "treatment". The Experiment\'s default Variant was backfilled onto this Run as "variant_from_a_later_edit", which the Run itself never froze. Nothing can be promoted against a baseline this Run never recorded, and guessing one would invent provenance. Start a new Run to get a Control that is frozen and validated.',
+      'This Run\'s frozen Control cannot be identified because it is absent from the Variant set this Run froze. The Run froze "control", "treatment". The Experiment\'s default Variant was backfilled onto this Run as "variant_from_a_later_edit", which the Run itself never froze. The Run Snapshot\'s Control anchors the lift, but nothing can be promoted against a Control this Run never froze. Start a new Run to get a Control that is frozen and validated.',
     );
     expect(identity.detail).not.toContain("absent_from_frozen_variant_set");
   });
