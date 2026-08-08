@@ -1,5 +1,6 @@
-import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store";
 import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
+import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store";
+import type { ExposureRedemptionClaimNamespace } from "./exposure-redemption-claim";
 
 interface ExposureIngestFetcher {
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
@@ -16,6 +17,8 @@ export interface EvaluationApiEnv {
   AUTH_JWKS_URI?: string;
   CONTROL_PLANE_ORIGIN?: string;
   MCP_DELEGATION_REPLAY?: McpDelegationReplayDurableObjectNamespace;
+  /** Strongly consistent Exposure Ticket claim DO namespace (SPL-345). */
+  EXPOSURE_REDEMPTION_CLAIMS?: ExposureRedemptionClaimNamespace;
   EVALUATION_PRIVACY_SALT?: string;
   /** HMAC key for Exposure Ticket minting (ADR-0048). */
   EXPOSURE_TICKET_KEY?: string;

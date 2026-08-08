@@ -62,6 +62,10 @@
       {
         "name": "MCP_DELEGATION_REPLAY",
         "class_name": "McpDelegationReplayDurableObject"
+      },
+      {
+        "name": "EXPOSURE_REDEMPTION_CLAIMS",
+        "class_name": "ExposureRedemptionClaimDurableObject"
       }
     ]
   },
@@ -73,6 +77,10 @@
     {
       "tag": "v2_mcp_delegation_replay",
       "new_sqlite_classes": ["McpDelegationReplayDurableObject"]
+    },
+    {
+      "tag": "v3_exposure_redemption_claims",
+      "new_sqlite_classes": ["ExposureRedemptionClaimDurableObject"]
     }
   ],
   "env": {
@@ -122,6 +130,10 @@
           {
             "name": "MCP_DELEGATION_REPLAY",
             "class_name": "McpDelegationReplayDurableObject"
+          },
+          {
+            "name": "EXPOSURE_REDEMPTION_CLAIMS",
+            "class_name": "ExposureRedemptionClaimDurableObject"
           }
         ]
       },
@@ -133,6 +145,10 @@
         {
           "tag": "v2_mcp_delegation_replay",
           "new_sqlite_classes": ["McpDelegationReplayDurableObject"]
+        },
+        {
+          "tag": "v3_exposure_redemption_claims",
+          "new_sqlite_classes": ["ExposureRedemptionClaimDurableObject"]
         }
       ],
       "services": [
@@ -188,6 +204,10 @@
           {
             "name": "MCP_DELEGATION_REPLAY",
             "class_name": "McpDelegationReplayDurableObject"
+          },
+          {
+            "name": "EXPOSURE_REDEMPTION_CLAIMS",
+            "class_name": "ExposureRedemptionClaimDurableObject"
           }
         ]
       },
@@ -199,6 +219,10 @@
         {
           "tag": "v2_mcp_delegation_replay",
           "new_sqlite_classes": ["McpDelegationReplayDurableObject"]
+        },
+        {
+          "tag": "v3_exposure_redemption_claims",
+          "new_sqlite_classes": ["ExposureRedemptionClaimDurableObject"]
         }
       ],
       "services": [
