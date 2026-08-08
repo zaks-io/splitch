@@ -57,6 +57,10 @@ export function classifyBodyReadError(error: unknown): BrowserTransportFailure {
   return isAbortError(error) ? timeoutFailure(error) : parseFailure(error);
 }
 
+/**
+ * SPL-323: an abort while reading an error-status body is this client's own
+ * timer (still armed inside {@link withTimeout}), not the server's error code.
+ */
 export async function readFailure(response: Response): Promise<BrowserTransportFailure> {
   try {
     const body = (await response.json()) as { code?: unknown; message?: unknown };
@@ -73,12 +77,19 @@ export async function readFailure(response: Response): Promise<BrowserTransportF
   }
 }
 
+/**
+ * The body read must stay inside this scope: a server that returns headers
+ * quickly but stalls the body would otherwise hang past `timeoutMs` once the
+ * abort timer is cleared.
+ */
 export async function withTimeout<Result>(
   timeoutMs: number,
   call: (signal: AbortSignal) => Promise<Result>,
 ): Promise<Result> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
   try {
     return await call(controller.signal);
   } finally {

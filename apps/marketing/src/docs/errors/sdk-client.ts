@@ -41,7 +41,13 @@ export const sdkErrorDocs = {
     cause:
       "A synchronous Flag read on `@splitch/sdk/browser` happened before `init()` resolved, and the client was not constructed with a valid `bootstrap` payload.",
     fix: "Await `init()` before the first `evaluate` / `evaluateDetails`, or pass a matching server-produced `bootstrap` so reads are available immediately. Reading nothing is a wiring bug, not a Default Variant.",
-    related: ["SDK_CREDENTIAL_CONFIGURATION_INVALID", "FLAG_NOT_FOUND"],
+    related: ["SDK_CREDENTIAL_CONFIGURATION_INVALID", "SDK_CONTEXT_INVALID", "FLAG_NOT_FOUND"],
+  },
+  SDK_CONTEXT_INVALID: {
+    cause:
+      "`createSplitchBrowserClient` was given an Evaluation Context without a non-empty `targetingKey`.",
+    fix: "Pass `context: { targetingKey: … }` at construction. The browser client is static-context: that key is fixed for the client's lifetime and is not a credential.",
+    related: ["SDK_CREDENTIAL_CONFIGURATION_INVALID", "SDK_NOT_INITIALIZED"],
   },
   SDK_TRANSPORT_NETWORK: {
     cause:

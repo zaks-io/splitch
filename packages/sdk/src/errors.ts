@@ -10,6 +10,8 @@ export const sdkClientErrorCodes = [
   "SDK_IDEMPOTENCY_KEY_UNAVAILABLE",
   /** Browser client read before `init()` resolved (and no bootstrap). */
   "SDK_NOT_INITIALIZED",
+  /** Browser client constructed with an invalid Evaluation Context. */
+  "SDK_CONTEXT_INVALID",
   /** Local throw before/during fetch (network down, illegal invocation, etc.). */
   "SDK_TRANSPORT_NETWORK",
   /** Per-call timeout / AbortSignal abort — the request did not complete in time. */

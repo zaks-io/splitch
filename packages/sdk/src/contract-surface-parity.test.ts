@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { errorCodes as contractErrorCodes } from "../../contracts/src/error-code";
 import { EvaluateAllReasonSchema as ZodEvaluateAllReasonSchema } from "../../contracts/src/leaves/evaluate-all-wire";
+import {
+  EXPOSURE_BATCH_MAX_BODY_BYTES as contractExposureBatchMaxBodyBytes,
+  EXPOSURE_BATCH_MAX_ITEMS as contractExposureBatchMaxItems,
+} from "../../contracts/src/leaves/exposures-wire";
 import { resolutionReasons as contractResolutionReasons } from "../../contracts/src/leaves/resolution-reason";
 import {
   DataPlaneEvaluateResponseSchema as ZodDataPlaneEvaluateResponseSchema,
@@ -12,6 +16,8 @@ import {
 } from "../../contracts/src/sdk-data-plane-surface";
 import {
   evaluateAllReasons as compiledEvaluateAllReasons,
+  EXPOSURE_BATCH_MAX_BODY_BYTES as compiledExposureBatchMaxBodyBytes,
+  EXPOSURE_BATCH_MAX_ITEMS as compiledExposureBatchMaxItems,
   resolutionReasons as compiledResolutionReasons,
 } from "../scripts/contract-surface-enums";
 import {
@@ -64,6 +70,11 @@ describe("contract-surface zod-free parity", () => {
 
   it("evaluateAllReasons matches contracts exactly", () => {
     expect([...compiledEvaluateAllReasons]).toEqual([...ZodEvaluateAllReasonSchema.options]);
+  });
+
+  it("exposure batch caps match contracts exactly", () => {
+    expect(compiledExposureBatchMaxItems).toBe(contractExposureBatchMaxItems);
+    expect(compiledExposureBatchMaxBodyBytes).toBe(contractExposureBatchMaxBodyBytes);
   });
 
   it("resolution reason set matches contracts", () => {

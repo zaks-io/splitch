@@ -119,7 +119,8 @@ describe("createSplitchBrowserClient: exposure queue", () => {
       transport,
     });
     await client.init();
-    await client.flush();
+    const results = await client.flush();
+    expect(results).toEqual([]);
     expect(transport.redeemCalls).toHaveLength(0);
   });
 });

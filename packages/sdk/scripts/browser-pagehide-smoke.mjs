@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Browser pagehide smoke: load `@splitch/sdk/browser` in real Chromium, enqueue
- * an Exposure on first read, dispatch `pagehide`, and assert the exposures
- * route was hit with `fetch(..., { keepalive: true })`.
+ * Browser pagehide smoke for `@splitch/sdk/browser`.
  *
- * jsdom cannot prove Window.fetch keepalive + pagehide wiring (SPL-321 lesson).
- * Manual: `pnpm -F @splitch/sdk test:browser-pagehide` after build. Out of
- * `verify:ci` for the same Chromium-download reason as browser-smoke.
+ * Phase 1 runs with no fetch patch (catches unbound Window.fetch / SPL-321).
+ * Phase 2 uses a this-checking fetch wrapper so keepalive is observable without
+ * masking Illegal invocation. Authorization is asserted via page.route + stub.
+ *
+ * Manual: `pnpm -F @splitch/sdk test:browser-pagehide` after build.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -44,18 +44,13 @@ const PAGE_HTML = `<!doctype html>
     <meta charset="utf-8" />
     <title>splitch sdk browser pagehide smoke</title>
     <script type="importmap">
-      {
-        "imports": {
-          "@splitch/sdk/browser": "/sdk/browser/index.js"
-        }
-      }
+      {"imports":{"@splitch/sdk/browser":"/sdk/browser/index.js"}}
     </script>
   </head>
   <body>
     <pre id="out">pending</pre>
     <script type="module">
       import { createSplitchBrowserClient } from "@splitch/sdk/browser";
-
       const out = document.getElementById("out");
       window.__SPLITCH_PAGEHIDE_SMOKE__ = { phase: "boot" };
       try {
@@ -78,13 +73,6 @@ const PAGE_HTML = `<!doctype html>
 </html>
 `;
 
-function contentType(pathname) {
-  if (pathname.endsWith(".js") || pathname.endsWith(".mjs")) {
-    return "text/javascript; charset=utf-8";
-  }
-  return "application/octet-stream";
-}
-
 function safeJoin(root, requestPath) {
   const resolved = resolve(root, requestPath);
   if (resolved !== root && !resolved.startsWith(`${root}/`)) {
@@ -98,40 +86,27 @@ function resolvePlaywright() {
   const fromPlaywrightTest = createRequire(playwrightTestEntry);
   const playwrightEntry = fromPlaywrightTest.resolve("playwright");
   const playwright = fromPlaywrightTest("playwright");
-  return {
-    chromium: playwright.chromium,
-    cliPath: join(dirname(playwrightEntry), "cli.js"),
-  };
+  return { chromium: playwright.chromium, cliPath: join(dirname(playwrightEntry), "cli.js") };
 }
 
 function startStubServer(state) {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: stub edge router for Playwright smoke
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
-
     if (url.pathname === "/api/sdk/evaluate-all" && req.method === "POST") {
       state.evaluateAll += 1;
-      res.writeHead(200, {
-        "content-type": "application/json",
-        etag: '"pagehide-etag"',
-      });
+      res.writeHead(200, { "content-type": "application/json", etag: '"pagehide-etag"' });
       res.end(EVALUATE_ALL_BODY);
       return;
     }
-
     if (url.pathname === "/api/sdk/exposures" && req.method === "POST") {
       const chunks = [];
       req.on("data", (chunk) => chunks.push(chunk));
       req.on("end", () => {
         const body = Buffer.concat(chunks).toString("utf8");
-        state.exposures.push({
-          body,
-          authorization: req.headers.authorization ?? null,
-          // Chromium does not expose keepalive on the Node server; the page
-          // records it via a fetch monkey-patch below when available. Here we
-          // still prove the authenticated POST fired after pagehide.
-        });
-        res.writeHead(202, { "content-type": "application/json" });
+        state.exposures.push({ body, authorization: req.headers.authorization ?? null });
         const parsed = JSON.parse(body);
+        res.writeHead(202, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
             results: (parsed.exposures ?? []).map((item) => ({
@@ -144,28 +119,23 @@ function startStubServer(state) {
       });
       return;
     }
-
     if (url.pathname === "/" || url.pathname === "/index.html") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(PAGE_HTML);
       return;
     }
-
     if (url.pathname.startsWith("/sdk/")) {
-      const relative = url.pathname.slice("/sdk/".length);
-      const filePath = safeJoin(join(packageRoot, "dist"), relative);
+      const filePath = safeJoin(join(packageRoot, "dist"), url.pathname.slice("/sdk/".length));
       if (filePath === null || !existsSync(filePath)) {
         res.writeHead(404).end("not found");
         return;
       }
-      res.writeHead(200, { "content-type": contentType(filePath) });
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
       res.end(readFileSync(filePath));
       return;
     }
-
     res.writeHead(404).end("not found");
   });
-
   return new Promise((resolveListen) => {
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
@@ -179,8 +149,7 @@ function startStubServer(state) {
 
 function ensureChromium(cliPath, chromium) {
   try {
-    const executablePath = chromium.executablePath();
-    if (existsSync(executablePath)) {
+    if (existsSync(chromium.executablePath())) {
       return;
     }
   } catch {
@@ -193,89 +162,133 @@ function ensureChromium(cliPath, chromium) {
   });
 }
 
+/** Throws Illegal invocation when called unbound — does not mask SPL-321. */
+async function installThisCheckingFetchProbe(page) {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.__SPLITCH_FETCH_LOG__ = [];
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: must mirror Window.fetch this-checks
+    window.fetch = function fetch(input, init) {
+      if (this !== window) {
+        throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+      }
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const headers = init?.headers && typeof init.headers === "object" ? init.headers : null;
+      window.__SPLITCH_FETCH_LOG__.push({
+        url,
+        keepalive: Boolean(init?.keepalive),
+        authorization: headers ? (headers.authorization ?? headers.Authorization ?? null) : null,
+      });
+      return originalFetch(input, init);
+    };
+  });
+}
+
+async function runArmedPagehide(page, baseUrl) {
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await page.waitForFunction(() => window.__SPLITCH_PAGEHIDE_SMOKE__?.phase === "armed", null, {
+    timeout: 15_000,
+  });
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("pagehide"));
+  });
+}
+
+async function waitForExposureCount(page, state, prior, label) {
+  const deadline = Date.now() + 10_000;
+  while (state.exposures.length <= prior && Date.now() < deadline) {
+    await page.waitForTimeout(50);
+  }
+  if (state.exposures.length <= prior) {
+    const smoke = await page.evaluate(() => window.__SPLITCH_PAGEHIDE_SMOKE__);
+    throw new Error(`${label}: exposures route never hit (${JSON.stringify(smoke)})`);
+  }
+  const last = state.exposures[state.exposures.length - 1];
+  if (typeof last?.authorization !== "string" || !last.authorization.startsWith("Bearer ")) {
+    throw new Error(`${label}: missing Authorization (${JSON.stringify(last)})`);
+  }
+}
+
 async function main() {
   const { chromium, cliPath } = resolvePlaywright();
   ensureChromium(cliPath, chromium);
-
   const state = { evaluateAll: 0, exposures: [] };
   const { server, port } = await startStubServer(state);
   const baseUrl = `http://127.0.0.1:${port}/`;
-
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
 
-    // Capture keepalive from the page's own fetch calls — the only browser-real
-    // way to observe it (Node never sees the Request.keepalive bit).
-    await page.addInitScript(() => {
-      const originalFetch = window.fetch.bind(window);
-      window.__SPLITCH_FETCH_LOG__ = [];
-      window.fetch = (input, init) => {
-        const url =
-          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-        window.__SPLITCH_FETCH_LOG__.push({
-          url,
-          keepalive: Boolean(init && init.keepalive),
-          authorization:
-            init && init.headers && typeof init.headers === "object"
-              ? (init.headers.authorization ?? init.headers.Authorization ?? null)
-              : null,
-        });
-        return originalFetch(input, init);
-      };
-    });
-
-    await page.goto(baseUrl, { waitUntil: "networkidle" });
-    await page.waitForFunction(() => window.__SPLITCH_PAGEHIDE_SMOKE__?.phase === "armed", null, {
-      timeout: 15_000,
-    });
-
-    await page.evaluate(() => {
-      window.dispatchEvent(new Event("pagehide"));
-    });
-
-    await page.waitForFunction(
-      () =>
-        (window.__SPLITCH_FETCH_LOG__ ?? []).some(
-          (row) => typeof row.url === "string" && row.url.includes("/api/sdk/exposures"),
-        ),
-      null,
-      { timeout: 10_000 },
-    );
-
-    const fetchLog = await page.evaluate(() => window.__SPLITCH_FETCH_LOG__);
-    const exposureFetch = fetchLog.find(
-      (row) => typeof row.url === "string" && row.url.includes("/api/sdk/exposures"),
-    );
-    if (exposureFetch === undefined) {
-      throw new Error(`pagehide smoke missing exposures fetch: ${JSON.stringify(fetchLog)}`);
+    // Phase 1: no fetch patch — unbound Window.fetch fails if the bind is gone.
+    {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      const routed = [];
+      await page.route("**/api/sdk/exposures", async (route) => {
+        routed.push({ authorization: route.request().headers().authorization ?? null });
+        await route.continue();
+      });
+      const before = state.exposures.length;
+      await runArmedPagehide(page, baseUrl);
+      await waitForExposureCount(page, state, before, "unpatched pagehide phase");
+      if (
+        routed.length > 0 &&
+        (typeof routed[0]?.authorization !== "string" ||
+          !routed[0].authorization.startsWith("Bearer "))
+      ) {
+        throw new Error(`page.route Authorization missing: ${JSON.stringify(routed)}`);
+      }
+      await context.close();
     }
-    if (exposureFetch.keepalive !== true) {
-      throw new Error(
-        `pagehide smoke expected keepalive:true, got ${JSON.stringify(exposureFetch)}`,
+
+    // Phase 2: this-checking probe for keepalive + Authorization on the call site.
+    {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await installThisCheckingFetchProbe(page);
+      const before = state.exposures.length;
+      await runArmedPagehide(page, baseUrl);
+      await page.waitForFunction(
+        () =>
+          (window.__SPLITCH_FETCH_LOG__ ?? []).some(
+            (row) => typeof row.url === "string" && row.url.includes("/api/sdk/exposures"),
+          ),
+        null,
+        { timeout: 10_000 },
+      );
+      const fetchLog = await page.evaluate(() => window.__SPLITCH_FETCH_LOG__);
+      const exposureFetch = fetchLog.find(
+        (row) => typeof row.url === "string" && row.url.includes("/api/sdk/exposures"),
+      );
+      if (exposureFetch === undefined) {
+        throw new Error(`keepalive phase missing exposures fetch: ${JSON.stringify(fetchLog)}`);
+      }
+      if (exposureFetch.keepalive !== true) {
+        throw new Error(
+          `keepalive phase expected keepalive:true, got ${JSON.stringify(exposureFetch)}`,
+        );
+      }
+      if (
+        typeof exposureFetch.authorization !== "string" ||
+        !exposureFetch.authorization.startsWith("Bearer ")
+      ) {
+        throw new Error(
+          `keepalive phase expected Authorization bearer, got ${JSON.stringify(exposureFetch)}`,
+        );
+      }
+      if (state.exposures.length <= before) {
+        throw new Error("keepalive phase: exposures route never received a body");
+      }
+      await context.close();
+      console.log(
+        "browser pagehide smoke passed:",
+        JSON.stringify({
+          evaluateAll: state.evaluateAll,
+          exposures: state.exposures.length,
+          keepalive: exposureFetch.keepalive,
+        }),
       );
     }
-    if (
-      typeof exposureFetch.authorization !== "string" ||
-      !exposureFetch.authorization.startsWith("Bearer ")
-    ) {
-      throw new Error(
-        `pagehide smoke expected Authorization bearer, got ${JSON.stringify(exposureFetch)}`,
-      );
-    }
-    if (state.exposures.length < 1) {
-      throw new Error("pagehide smoke: exposures route never received a body");
-    }
-
-    console.log(
-      "browser pagehide smoke passed:",
-      JSON.stringify({
-        evaluateAll: state.evaluateAll,
-        exposures: state.exposures.length,
-        keepalive: exposureFetch.keepalive,
-      }),
-    );
   } finally {
     if (browser !== undefined) {
       await browser.close();

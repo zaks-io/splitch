@@ -1,19 +1,30 @@
-import { formatSdkErrorMessage, SplitchSdkError } from "../errors";
-import {
-  DEFAULT_ID_TYPE,
-  type EvaluateContext,
-  type Logger,
-  sdkErrorForFailure,
-} from "../evaluate";
-import type { EvaluateAllEntry, VariantValue } from "../generated/contract-surface.js";
+import { SplitchSdkError } from "../errors";
+import type { EvaluateContext, Logger } from "../evaluate";
+import { sdkErrorForFailure } from "../evaluate";
+import type {
+  EvaluateAllEntry,
+  ExposureBatchResult,
+  VariantValue,
+} from "../generated/contract-surface.js";
 import type { SdkResolutionDetails } from "../resolution";
-import type { AttributeValue } from "../transport";
+import {
+  heldErrorDetails,
+  loudly,
+  mintIdempotencyKey,
+  missingFlagDetails,
+  nullVariantDetails,
+  resolveBrowserClientKey,
+  resolveContext,
+} from "./client-helpers";
 import { ExposureQueue } from "./exposure-queue";
+import { type FlagChangeListener, registerFlagListener } from "./subscribe";
 import { type BrowserTransport, createBrowserFetchTransport } from "./transport";
 
 const DEFAULT_ENDPOINT = "https://edge.splitch.dev";
 const DEFAULT_TIMEOUT_MS = 5000;
 const FALLBACK_DEFAULT_VALUE: VariantValue = false;
+
+export type { FlagChangeListener } from "./subscribe";
 
 /**
  * Options for {@link createSplitchBrowserClient}. Client Key only; one Evaluation
@@ -38,8 +49,6 @@ export interface SplitchBrowserClientOptions {
   readonly window?: Window | null;
 }
 
-export type FlagChangeListener = (details: SdkResolutionDetails) => void;
-
 export interface SplitchBrowserClient {
   /** Fetch Precomputed Evaluations once. Idempotent after success. */
   init(): Promise<void>;
@@ -52,10 +61,10 @@ export interface SplitchBrowserClient {
    * and fires no Exposure. Accepts keys absent from the held evaluations.
    */
   subscribe(flagKey: string, listener: FlagChangeListener): () => void;
-  /** Acknowledged Exposure queue flush; empty queue resolves without network I/O. */
-  flush(): Promise<void>;
+  /** Acknowledged Exposure queue flush; resolves with per-item results. */
+  flush(): Promise<readonly ExposureBatchResult[]>;
   /** Final flush; stops timers and page-lifecycle listeners. */
-  close(): Promise<void>;
+  close(): Promise<readonly ExposureBatchResult[]>;
 }
 
 interface HeldPayload {
@@ -88,6 +97,7 @@ export function createSplitchBrowserClient(
   let held: HeldPayload | null = null;
   let initPromise: Promise<void> | null = null;
   const listeners = new Map<string, Set<FlagChangeListener>>();
+  const loggedMissing = new Set<string>();
   const queue = new ExposureQueue({
     transport,
     logger,
@@ -112,17 +122,20 @@ export function createSplitchBrowserClient(
     const payload = requireHeld();
     const entry = payload.evaluations[flagKey];
     if (entry === undefined) {
-      return missingFlagDetails(flagKey, defaultValue, context.targetingKey, logger);
+      return missingFlagDetails(flagKey, defaultValue, context.targetingKey, logger, loggedMissing);
     }
     if (entry.reason === "ERROR") {
       return heldErrorDetails(flagKey, entry, defaultValue, context.targetingKey, logger);
+    }
+    if (entry.variant === null) {
+      return nullVariantDetails(flagKey, defaultValue, context.targetingKey, logger);
     }
     if (entry.exposureTicket !== null) {
       queue.enqueue(flagKey, entry.exposureTicket);
     }
     // Return held Variant values by reference — never clone (React bindings rely on identity).
     return {
-      value: entry.variant === null ? defaultValue : entry.variant,
+      value: entry.variant,
       variantName: entry.variantName,
       reason: entry.reason,
     };
@@ -171,151 +184,17 @@ export function createSplitchBrowserClient(
     },
 
     subscribe(flagKey, listener) {
-      let set = listeners.get(flagKey);
-      if (set === undefined) {
-        set = new Set();
-        listeners.set(flagKey, set);
-      }
-      set.add(listener);
-      return () => {
-        set.delete(listener);
-        if (set.size === 0) {
-          listeners.delete(flagKey);
-        }
-      };
+      return registerFlagListener(listeners, flagKey, listener);
     },
 
     async flush() {
-      await queue.flush();
+      return queue.flush();
     },
 
     async close() {
-      await queue.close();
+      const results = await queue.close();
       listeners.clear();
+      return results;
     },
   };
-}
-
-function resolveBrowserClientKey(clientKey: string): string {
-  if (typeof clientKey !== "string" || clientKey.length === 0) {
-    throw new SplitchSdkError({
-      code: "SDK_CREDENTIAL_CONFIGURATION_INVALID",
-      causeSummary: "The browser client requires a non-empty clientKey",
-      remediation: "Pass the pk_… key material from `splitch client-key get`",
-    });
-  }
-  // Secrets must never reach a browser bundle. Prefix check is the construction gate.
-  if (clientKey.startsWith("sk_") || clientKey.startsWith("ak_")) {
-    throw new SplitchSdkError({
-      code: "SDK_CREDENTIAL_CONFIGURATION_INVALID",
-      causeSummary: "A secret API Key was passed to the browser client",
-      remediation: "Pass a public Client Key (pk_…); keep sk_/ak_ secrets on the server",
-    });
-  }
-  return clientKey;
-}
-
-function resolveContext(context: EvaluateContext): {
-  targetingKey: string;
-  idType: string;
-  attributes: Readonly<Record<string, AttributeValue>>;
-} {
-  if (typeof context.targetingKey !== "string" || context.targetingKey.length === 0) {
-    throw new SplitchSdkError({
-      code: "SDK_CREDENTIAL_CONFIGURATION_INVALID",
-      causeSummary: "The browser client requires a non-empty targetingKey on context",
-      remediation: "Pass context: { targetingKey: … } at construction",
-    });
-  }
-  return {
-    targetingKey: context.targetingKey,
-    idType: context.idType ?? DEFAULT_ID_TYPE,
-    attributes: Object.fromEntries(
-      Object.entries(context.attributes ?? {}).map(([key, value]) => [
-        key,
-        Array.isArray(value) ? [...value] : value,
-      ]),
-    ),
-  };
-}
-
-function mintIdempotencyKey(logger: Logger, targetingKey: string): string {
-  if (typeof globalThis.crypto?.randomUUID !== "function") {
-    throw loudly(
-      logger,
-      targetingKey,
-      new SplitchSdkError({
-        code: "SDK_IDEMPOTENCY_KEY_UNAVAILABLE",
-        causeSummary:
-          "crypto.randomUUID is unavailable, so init() could not mint the batch's replay identity",
-        remediation:
-          "Serve the page from a secure context (https:// or localhost) where crypto.randomUUID exists",
-      }),
-    );
-  }
-  return globalThis.crypto.randomUUID();
-}
-
-function loudly(
-  logger: Logger,
-  targetingKey: string,
-  error: SplitchSdkError,
-  cause?: unknown,
-): SplitchSdkError {
-  logger.error(error.message, {
-    targetingKey,
-    status: error.status,
-    errorCode: error.code,
-    cause,
-  });
-  return error;
-}
-
-function missingFlagDetails(
-  flagKey: string,
-  defaultValue: VariantValue,
-  targetingKey: string,
-  logger: Logger,
-): SdkResolutionDetails {
-  const details: SdkResolutionDetails = {
-    value: defaultValue,
-    variantName: null,
-    reason: "ERROR",
-    errorCode: "FLAG_NOT_FOUND",
-    errorMessage: `Flag key ${JSON.stringify(flagKey)} is absent from the held Precomputed Evaluations`,
-  };
-  logger.error(
-    formatSdkErrorMessage({
-      code: "FLAG_NOT_FOUND",
-      causeSummary: details.errorMessage ?? "Flag not found in held evaluations",
-      remediation: "Confirm the Flag Key exists in this App/Environment, then re-init",
-    }),
-    { flagKey, targetingKey, errorCode: "FLAG_NOT_FOUND" },
-  );
-  return details;
-}
-
-function heldErrorDetails(
-  flagKey: string,
-  entry: EvaluateAllEntry,
-  defaultValue: VariantValue,
-  targetingKey: string,
-  logger: Logger,
-): SdkResolutionDetails {
-  const details: SdkResolutionDetails = {
-    value: defaultValue,
-    variantName: null,
-    reason: "ERROR",
-    errorCode: entry.errorCode ?? "INTERNAL_SERVER_ERROR",
-    errorMessage: `Held evaluation for ${JSON.stringify(flagKey)} carries reason ERROR`,
-  };
-  logger.error(
-    formatSdkErrorMessage({
-      code: details.errorCode ?? "INTERNAL_SERVER_ERROR",
-      causeSummary: details.errorMessage ?? "Held evaluation is ERROR",
-      remediation: "Inspect the held errorCode, then re-init after the underlying fault clears",
-    }),
-    { flagKey, targetingKey, errorCode: details.errorCode },
-  );
-  return details;
 }
