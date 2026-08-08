@@ -36,6 +36,7 @@ export const NEW_MEMBER = "user_new_529e";
 export const PROFILELESS_MEMBER = "user_profileless_71c2";
 export const SOLO_OWNER = "user_solo_owner_0f8a";
 export const SOLO_ADMIN = "user_solo_admin_662e";
+export const UNKNOWN_USER = "user_never_seeded_a71f";
 
 const PROFILE_EMAILS = new Map([
   [OWNER, "owner@example.test"],

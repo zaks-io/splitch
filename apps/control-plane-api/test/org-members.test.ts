@@ -20,6 +20,7 @@ import {
   setup,
   teardown,
   token,
+  UNKNOWN_USER,
 } from "./org-members-harness";
 
 beforeAll(seedOrgs);
@@ -211,6 +212,17 @@ describe("control-plane org/member endpoints", () => {
       organizationId: SOLO.orgId,
       role: "member",
     });
+  });
+
+  it("404s USER_NOT_FOUND adding a userId with no profile and no membership anywhere", async () => {
+    const ownerJwt = await token(OWNER, PRIMARY.orgId, "owner");
+    const res = await memberRoute(client(ownerJwt)).$post({
+      param: { orgId: PRIMARY.orgId },
+      json: { userId: UNKNOWN_USER, role: "member" },
+    });
+
+    expect(res.status).toBe(404);
+    expect((await bodyOf(res)).code).toBe("USER_NOT_FOUND");
   });
 
   it("403s an Organization A actor with a forged Organization B scope on every member route", async () => {
