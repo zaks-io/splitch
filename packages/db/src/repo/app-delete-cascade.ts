@@ -62,7 +62,6 @@ export function makeDeleteAppCascade(d1: D1Database) {
       // Reviews FK → requests; requests FK → apps. Order matters inside the batch.
       d1.prepare(`DELETE FROM approval_reviews WHERE app_id = ?`).bind(appId),
       d1.prepare(`DELETE FROM approval_requests WHERE app_id = ?`).bind(appId),
-      d1.prepare(`DELETE FROM approval_request_archive_checkpoints WHERE app_id = ?`).bind(appId),
       d1.prepare(`DELETE FROM api_keys WHERE app_id = ? AND revoked_at IS NOT NULL`).bind(appId),
       d1.prepare(`DELETE FROM client_keys WHERE app_id = ? AND revoked_at IS NOT NULL`).bind(appId),
       d1.prepare(`DELETE FROM environments WHERE app_id = ?`).bind(appId),

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runApprovalRequestArchival } from "../src/approval-archive";
+import { approvalTargetVersion } from "../src/approval-target";
 import { type Harness, ids, makeAuthedApp, token } from "../src/config-store-harness-core";
 import { seedApprovalArchiveFixture } from "./approval-archive-fixture";
 import { MemoryApprovalArchiveStore } from "./approval-archive-test-store";
@@ -76,6 +77,80 @@ describe("Approval Request archived reads", () => {
     );
   });
 
+  it("continues a status-filtered page across projected stale rows", async () => {
+    const contexts = [
+      {
+        environmentId: ids.environmentId,
+        changeTypes: ["targeting_rollout_value" as const],
+        level: "confirm" as const,
+      },
+    ];
+    const currentVersion = await approvalTargetVersion(
+      h.repo,
+      ids.appId,
+      { type: "flag_configuration", id: ids.configId },
+      contexts,
+    );
+    const rows = [
+      { id: "apr_01J00000000000000000000210", pending: false },
+      { id: "apr_01J00000000000000000000209", pending: false },
+      { id: "apr_01J00000000000000000000208", pending: true },
+      { id: "apr_01J00000000000000000000207", pending: false },
+      { id: "apr_01J00000000000000000000206", pending: true },
+    ];
+    for (const [index, row] of rows.entries()) {
+      await seedApprovalArchiveFixture(h.d1, {
+        id: row.id,
+        status: "pending",
+        proposedAt: new Date(Date.parse("2026-07-01T12:00:00.000Z") - index * 1_000).toISOString(),
+        targetVersion: row.pending ? currentVersion : `sha256:${"c".repeat(64)}`,
+      });
+    }
+    const store = new MemoryApprovalArchiveStore();
+    h.app = makeAuthedApp(h, undefined, store);
+
+    const first = await listRequests(h, "?status=pending&limit=2");
+    expect(first.items).toEqual([]);
+    expect(first.cursor).toBe(rows[1]?.id);
+    const second = await listRequests(h, `?status=pending&limit=2&cursor=${first.cursor}`);
+    expect(second.items.map((item) => item.id)).toEqual([rows[2]?.id]);
+    expect(second.cursor).toBe(rows[3]?.id);
+    const third = await listRequests(h, `?status=pending&limit=2&cursor=${second.cursor}`);
+    expect(third.items.map((item) => item.id)).toEqual([rows[4]?.id]);
+    expect(third.cursor).toBeNull();
+    expect(store.listCalls).toBe(0);
+  });
+
+  it("serves the pending queue without consulting an unavailable archive", async () => {
+    const requestId = "apr_01J00000000000000000000211";
+    const contexts = [
+      {
+        environmentId: ids.environmentId,
+        changeTypes: ["targeting_rollout_value" as const],
+        level: "confirm" as const,
+      },
+    ];
+    const currentVersion = await approvalTargetVersion(
+      h.repo,
+      ids.appId,
+      { type: "flag_configuration", id: ids.configId },
+      contexts,
+    );
+    await seedApprovalArchiveFixture(h.d1, {
+      id: requestId,
+      status: "pending",
+      targetVersion: currentVersion,
+    });
+    const store = new MemoryApprovalArchiveStore();
+    store.listError = new Error("Tinybird unavailable");
+    h.app = makeAuthedApp(h, undefined, store);
+
+    const page = await listRequests(h, "?status=pending&limit=10");
+
+    expect(page.items.map((item) => item.id)).toEqual([requestId]);
+    expect(store.listCalls).toBe(0);
+  });
+
   it("rejects a cross-App read before consulting the archive store", async () => {
     const requestId = "apr_01J00000000000000000000205";
     const store = new MemoryApprovalArchiveStore();
@@ -106,7 +181,7 @@ async function listRequests(
   harness: Harness,
   query: string,
 ): Promise<{
-  items: Array<{ id: string }>;
+  items: Array<{ id: string; status: string }>;
   cursor: string | null;
 }> {
   const jwt = await token(harness.signer);

@@ -3,6 +3,7 @@ import type {
   ApprovalArchiveQuery,
   ApprovalArchiveStore,
 } from "./approval-archive";
+import { APPROVAL_ARCHIVE_VERSION } from "./approval-archive";
 import type { ControlPlaneApiEnv } from "./env";
 
 const PIPE_NAME = "approval_request_archives";
@@ -22,7 +23,7 @@ export function approvalArchiveStoreFromEnv(
         },
         body: JSON.stringify(event),
       });
-      if (!response.ok) {
+      if (response.status !== 200) {
         throw new Error(
           `Tinybird Approval Request archive append failed with HTTP ${response.status}`,
         );
@@ -31,7 +32,10 @@ export function approvalArchiveStoreFromEnv(
         successful_rows?: number;
         quarantined_rows?: number;
       } | null;
-      if (body && (body.successful_rows !== 1 || (body.quarantined_rows ?? 0) !== 0)) {
+      if (!body) {
+        throw new Error("Tinybird Approval Request archive append acknowledgment is malformed");
+      }
+      if (body.successful_rows !== 1 || body.quarantined_rows !== 0) {
         throw new Error(
           `Tinybird Approval Request archive append mismatch (successful=${body.successful_rows}, quarantined=${body.quarantined_rows})`,
         );
@@ -124,7 +128,7 @@ function parseArchiveEvent(value: unknown): ApprovalArchiveEvent {
   if (
     event.action !== "approval_request.archive" ||
     event.resource_type !== "approval_request" ||
-    event.archive_version !== 1 ||
+    event.archive_version !== APPROVAL_ARCHIVE_VERSION ||
     (event.request_status !== "applied" &&
       event.request_status !== "declined" &&
       event.request_status !== "stale")
@@ -137,6 +141,7 @@ function parseArchiveEvent(value: unknown): ApprovalArchiveEvent {
 function eventsUrl(apiUrl: string): URL {
   const url = new URL("/v0/events", apiUrl);
   url.searchParams.set("name", DATASOURCE_NAME);
+  url.searchParams.set("wait", "true");
   return url;
 }
 

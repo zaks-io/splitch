@@ -5,6 +5,12 @@ const HASH = `sha256:${"a".repeat(64)}`;
 export interface ArchiveSeedOptions {
   id: string;
   appId?: string;
+  environmentId?: string;
+  targetId?: string;
+  targetVersion?: string;
+  proposedBy?: string;
+  proposedVia?: string;
+  reviewedBy?: string;
   status?: "pending" | "applied" | "declined" | "stale";
   proposedAt?: string;
   resolvedAt?: string | null;
@@ -15,11 +21,18 @@ export async function seedApprovalArchiveFixture(
   d1: D1Database,
   options: ArchiveSeedOptions,
 ): Promise<void> {
-  const appId = options.appId ?? ids.appId;
-  const status = options.status ?? "declined";
-  const proposedAt = options.proposedAt ?? "2026-04-01T00:00:00.000Z";
+  const status = defaultValue(options.status, "declined");
+  const appId = defaultValue(options.appId, ids.appId);
+  const environmentId = defaultValue(options.environmentId, ids.environmentId);
+  const targetId = defaultValue(options.targetId, ids.configId);
+  const targetVersion = defaultValue(options.targetVersion, HASH);
+  const proposedBy = defaultValue(options.proposedBy, "user_archived");
+  const proposedVia = defaultValue(options.proposedVia, "id_jag");
+  const reviewedBy = defaultValue(options.reviewedBy, "deleted-user:user_archived");
+  const proposedAt = defaultValue(options.proposedAt, "2026-04-01T00:00:00.000Z");
   const resolvedAt = fixtureResolvedAt(options.resolvedAt, status);
-  const largeText = options.largeText ?? "complete-value";
+  const largeText = defaultValue(options.largeText, "complete-value");
+  const result = applicationResult(status, targetId, targetVersion);
   const diff = JSON.stringify({
     current: { description: largeText },
     proposed: { description: `${largeText}-changed` },
@@ -46,32 +59,57 @@ export async function seedApprovalArchiveFixture(
       appId,
       "flag_config_update",
       "flag_configuration",
-      ids.configId,
-      HASH,
+      targetId,
+      targetVersion,
       JSON.stringify([
         {
-          environmentId: ids.environmentId,
+          environmentId,
           changeTypes: ["targeting_rollout_value"],
           level: "confirm",
         },
       ]),
       diff,
       status,
-      "user_archived",
-      "id_jag",
+      proposedBy,
+      proposedVia,
       proposedAt,
       resolvedAt,
-      status === "applied" ? HASH : null,
-      status === "applied" ? "flag_configuration" : null,
-      status === "applied" ? ids.configId : null,
+      result.targetVersion,
+      result.resourceType,
+      result.resourceId,
       `idem_${options.id}`,
       HASH,
     )
     .run();
   if (status !== "pending") {
     if (!resolvedAt) throw new Error("terminal archive fixture requires resolvedAt");
-    await seedReviews(d1, appId, options.id, resolvedAt, largeText, status);
+    await seedReviews(
+      d1,
+      appId,
+      options.id,
+      resolvedAt,
+      largeText,
+      status,
+      reviewedBy,
+      targetId,
+      targetVersion,
+    );
   }
+}
+
+function defaultValue<T>(value: T | undefined, fallback: T): T {
+  return value === undefined ? fallback : value;
+}
+
+function applicationResult(
+  status: "pending" | "applied" | "declined" | "stale",
+  targetId: string,
+  targetVersion: string,
+) {
+  if (status !== "applied") {
+    return { targetVersion: null, resourceType: null, resourceId: null };
+  }
+  return { targetVersion, resourceType: "flag_configuration", resourceId: targetId };
 }
 
 function fixtureResolvedAt(
@@ -89,6 +127,9 @@ async function seedReviews(
   resolvedAt: string,
   largeText: string,
   status: "applied" | "declined" | "stale",
+  reviewedBy: string,
+  targetId: string,
+  targetVersion: string,
 ): Promise<void> {
   const failedAt = new Date(Date.parse(resolvedAt) - 1_000).toISOString();
   const reviewStem = `${requestId.slice(4, -2)}${requestId.at(-1)}`;
@@ -107,7 +148,7 @@ async function seedReviews(
         requestId,
         "approve_and_apply",
         "failed",
-        "deleted-user:user_archived",
+        reviewedBy,
         "id_jag",
         failedAt,
         largeText,
@@ -130,37 +171,36 @@ async function seedReviews(
         requestId,
         status === "declined" ? "decline" : "approve_and_apply",
         status,
-        "deleted-user:user_archived",
+        reviewedBy,
         "device_flow",
         resolvedAt,
         largeText,
         `idem_${requestId}_b`,
         HASH,
-        status === "applied" ? HASH : null,
+        status === "applied" ? targetVersion : null,
         status === "applied" ? "flag_configuration" : null,
-        status === "applied" ? ids.configId : null,
+        status === "applied" ? targetId : null,
       ),
   ]);
 }
 
 export async function approvalRowCounts(
   d1: D1Database,
+  appId: string,
   requestId: string,
-): Promise<{ requests: number; reviews: number; checkpoints: number }> {
-  const [requests, reviews, checkpoints] = await d1.batch([
-    d1.prepare("SELECT COUNT(*) AS n FROM approval_requests WHERE id = ?").bind(requestId),
+): Promise<{ requests: number; reviews: number }> {
+  const [requests, reviews] = await d1.batch([
     d1
-      .prepare("SELECT COUNT(*) AS n FROM approval_reviews WHERE approval_request_id = ?")
-      .bind(requestId),
+      .prepare("SELECT COUNT(*) AS n FROM approval_requests WHERE app_id = ? AND id = ?")
+      .bind(appId, requestId),
     d1
       .prepare(
-        "SELECT COUNT(*) AS n FROM approval_request_archive_checkpoints WHERE approval_request_id = ?",
+        "SELECT COUNT(*) AS n FROM approval_reviews WHERE app_id = ? AND approval_request_id = ?",
       )
-      .bind(requestId),
+      .bind(appId, requestId),
   ]);
   return {
     requests: Number((requests.results[0] as { n: number } | undefined)?.n ?? 0),
     reviews: Number((reviews.results[0] as { n: number } | undefined)?.n ?? 0),
-    checkpoints: Number((checkpoints.results[0] as { n: number } | undefined)?.n ?? 0),
   };
 }

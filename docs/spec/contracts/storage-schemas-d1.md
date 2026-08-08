@@ -219,25 +219,6 @@ verifies its archive version, row count, and SHA-256 content checksum, and only 
 removes the Review rows followed by the Request. A failed append or verification changes no D1
 Request or Review row.
 
-### `approval_request_archive_checkpoints`
-
-One durable checkpoint remains after verified terminal archival. It is not an Approval Request read
-source; archived reads use the verified Tinybird payload.
-
-| Column                | Type        | Constraints                                            |
-| --------------------- | ----------- | ------------------------------------------------------ |
-| `approval_request_id` | text        | stable archived Request ID                             |
-| `app_id`              | text        | FK → apps, not null                                    |
-| `archive_version`     | integer     | not null; with Request ID forms the deduplication key  |
-| `content_checksum`    | text        | not null; SHA-256 of the canonical untruncated payload |
-| `row_count`           | integer     | not null; one Request plus every archived Review       |
-| `proposed_at`         | timestamptz | not null; stable merged-read ordering evidence         |
-| `resolved_at`         | timestamptz | not null; terminal-retention cutoff evidence           |
-| `archived_at`         | timestamptz | not null; successful verification and D1 removal time  |
-
-PRIMARY KEY: `(approval_request_id, archive_version)`. App deletion removes these checkpoints
-inside the same atomic App cascade as the remaining Approval Request history.
-
 ### `flags` (DEFINITION — App-level)
 
 Flag DEFINITION is App-level: `key`, value schema, and the Variant catalog. Per-Environment

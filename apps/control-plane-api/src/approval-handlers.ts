@@ -83,7 +83,9 @@ async function listApprovalRequests(
 ): Promise<Response> {
   const limit = query.limit ?? 50;
   const scope = appScope(appId);
-  const after = query.cursor ? await resolveCursor(deps, appId, query.cursor) : undefined;
+  const after = query.cursor
+    ? await resolveCursor(deps, appId, query.cursor, archiveCanMatch(query.status))
+    : undefined;
   if (query.cursor && !after) {
     return renderError(
       {
@@ -104,14 +106,13 @@ async function listApprovalRequests(
     environmentId: query.environmentId,
   };
   const cursor = after ? { proposedAt: after.proposedAt, id: after.id } : undefined;
-  const merged = await mergedRequestPage(deps, appId, query, filters, cursor, limit + 1);
-  const items = merged.slice(0, limit);
+  const page = await mergedRequestPage(deps, appId, query, filters, cursor, limit);
   return Response.json({
-    items,
-    cursor: merged.length > limit ? (items.at(-1)?.id ?? null) : null,
+    items: page.items,
+    cursor: page.cursor,
     limit,
-    // A `pending`/`stale` filter is resolved after projection, so no SQL count
-    // can state it honestly. `null` is the contract's "not computed".
+    // Production lists merge D1 and Tinybird, so an exact count is not computed.
+    // Pending/stale filters additionally resolve effective status after projection.
     total:
       effectiveOnly || deps.archiveStore
         ? null
@@ -126,20 +127,25 @@ async function mergedRequestPage(
   filters: { storedStatus?: readonly string[]; targetType?: string; environmentId?: string },
   cursor: { proposedAt: string; id: string } | undefined,
   limit: number,
-): Promise<ApprovalRequest[]> {
-  const onlineQuery = { ...filters, limit, ...(cursor ? { after: cursor } : {}) };
+): Promise<{ items: ApprovalRequest[]; cursor: string | null }> {
+  const scanLimit = limit + 1;
+  const onlineQuery = { ...filters, limit: scanLimit, ...(cursor ? { after: cursor } : {}) };
   const [rows, archiveEvents] = await Promise.all([
     deps.repo.approvals.listRequestPage(appScope(appId), onlineQuery),
-    archiveRequestPage(deps.archiveStore, appId, query, cursor, limit),
+    archiveRequestPage(deps.archiveStore, appId, query, cursor, scanLimit),
   ]);
   const [online, archived] = await Promise.all([
     Promise.all(rows.map((row) => approvalRequestProjection(deps.repo, row))),
     Promise.all(archiveEvents.map(archivedApprovalRequest)),
   ]);
-  return [...online, ...archived]
-    .filter((request) => !query.status || request.status === query.status)
+  const scanned = [...online, ...archived]
     .sort(compareRequests)
     .filter((request, index, all) => all.findIndex((item) => item.id === request.id) === index);
+  const window = scanned.slice(0, limit);
+  return {
+    items: window.filter((request) => !query.status || request.status === query.status),
+    cursor: scanned.length > limit ? (window.at(-1)?.id ?? null) : null,
+  };
 }
 
 function archiveRequestPage(
@@ -149,7 +155,7 @@ function archiveRequestPage(
   cursor: { proposedAt: string; id: string } | undefined,
   limit: number,
 ) {
-  if (!store) return Promise.resolve([]);
+  if (!store || !archiveCanMatch(query.status)) return Promise.resolve([]);
   return store.list({
     appId,
     limit,
@@ -164,13 +170,21 @@ async function resolveCursor(
   deps: ApprovalHandlerDeps,
   appId: string,
   requestId: string,
+  includeArchive: boolean,
 ): Promise<{ id: string; proposedAt: string } | null> {
   const online = await deps.repo.approvals.getRequest(appScope(appId), requestId);
   if (online) return { id: online.id, proposedAt: online.proposedAt };
+  if (!includeArchive) return null;
   const event = await deps.archiveStore?.get(appId, requestId, APPROVAL_ARCHIVE_VERSION);
   if (!event) return null;
   const archived = await archivedApprovalRequest(event);
   return { id: archived.id, proposedAt: archived.proposedAt };
+}
+
+function archiveCanMatch(status: string | undefined): boolean {
+  return (
+    status === undefined || status === "applied" || status === "declined" || status === "stale"
+  );
 }
 
 function compareRequests(left: ApprovalRequest, right: ApprovalRequest): number {

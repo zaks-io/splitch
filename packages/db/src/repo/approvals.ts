@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { approvalRequests, approvalReviews } from "../schema/index";
-import { type ApprovalArchiveCheckpoint, finalizeApprovalArchive } from "./approval-archive";
 import { dispositionQueries, failureInsert } from "./approval-dispositions";
+import { type ApprovalArchiveFinalization, finalizeApprovalArchive } from "./approval-finalization";
 import type { ApprovalDisposition, ApprovalFailure } from "./approval-types";
 import type { Db } from "./client";
 import type { TenantScope } from "./scope";
@@ -78,10 +78,10 @@ function approvalArchiveQueries(db: Db, d1: D1Database) {
 
     finalizeArchive(
       scope: TenantScope,
-      checkpoint: ApprovalArchiveCheckpoint,
+      input: ApprovalArchiveFinalization,
       expectedStatus: "applied" | "declined" | "stale",
     ) {
-      return finalizeApprovalArchive(d1, scope, checkpoint, expectedStatus);
+      return finalizeApprovalArchive(d1, scope, input, expectedStatus);
     },
   };
 }

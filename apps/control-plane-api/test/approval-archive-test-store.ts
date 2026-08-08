@@ -6,20 +6,30 @@ import type {
 
 export class MemoryApprovalArchiveStore implements ApprovalArchiveStore {
   readonly events = new Map<string, ApprovalArchiveEvent>();
+  readonly pendingEvents = new Map<string, ApprovalArchiveEvent>();
   appendCalls = 0;
   getCalls = 0;
   listCalls = 0;
   appendError: Error | null = null;
+  listError: Error | null = null;
+  acknowledgeAppend: (event: ApprovalArchiveEvent) => Promise<void> = () => Promise.resolve();
   mutateRead: ((event: ApprovalArchiveEvent) => ApprovalArchiveEvent) | null = null;
 
   async append(event: ApprovalArchiveEvent): Promise<void> {
     this.appendCalls += 1;
     if (this.appendError) throw this.appendError;
-    const prior = this.events.get(event.dedup_key);
+    const prior = this.events.get(event.dedup_key) ?? this.pendingEvents.get(event.dedup_key);
     if (prior && prior.archive_checksum !== event.archive_checksum) {
       throw new Error(`archive dedup conflict for ${event.dedup_key}`);
     }
-    this.events.set(event.dedup_key, structuredClone(event));
+    const pending = structuredClone(event);
+    this.pendingEvents.set(event.dedup_key, pending);
+    try {
+      await this.acknowledgeAppend(structuredClone(event));
+      this.events.set(event.dedup_key, pending);
+    } finally {
+      this.pendingEvents.delete(event.dedup_key);
+    }
   }
 
   async get(
@@ -36,6 +46,7 @@ export class MemoryApprovalArchiveStore implements ApprovalArchiveStore {
 
   async list(query: ApprovalArchiveQuery): Promise<ApprovalArchiveEvent[]> {
     this.listCalls += 1;
+    if (this.listError) throw this.listError;
     return [...this.events.values()]
       .filter((event) => matches(event, query))
       .sort((left, right) => {

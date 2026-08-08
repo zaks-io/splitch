@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 
 export const RESET_TABLES = [
   "approval_reviews",
-  "approval_request_archive_checkpoints",
   "approval_requests",
   "claim_idempotency",
   "claim_consent_attempts",

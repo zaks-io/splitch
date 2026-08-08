@@ -68,11 +68,40 @@ export async function runApprovalRequestArchival(input: {
     input.limit ?? 100,
   );
   let archived = 0;
+  const failures: Array<{ requestId: string; error: unknown }> = [];
   for (const request of candidates) {
-    await archiveCandidate(input.repo, input.store, request, now.toISOString());
-    archived += 1;
+    try {
+      await archiveCandidate(input.repo, input.store, request, now.toISOString());
+      archived += 1;
+    } catch (error) {
+      failures.push({ requestId: request.id, error });
+    }
+  }
+  if (failures.length > 0) {
+    const details = failures
+      .map(({ requestId, error }) => `${requestId}: ${fullError(error)}`)
+      .join("\n");
+    throw new AggregateError(
+      failures.map(({ error }) => error),
+      `Approval Request archival failed for ${failures.length} candidate(s):\n${details}`,
+    );
   }
   return archived;
+}
+
+function fullError(error: unknown): string {
+  if (error instanceof Error) {
+    const rendered = error.stack ?? `${error.name}: ${error.message}`;
+    return error.cause === undefined
+      ? rendered
+      : `${rendered}\nCaused by: ${fullError(error.cause)}`;
+  }
+  if (typeof error === "string") return error;
+  try {
+    return canonicalJson(error);
+  } catch {
+    return String(error);
+  }
 }
 
 async function archiveCandidate(
@@ -99,12 +128,8 @@ async function archiveCandidate(
     appScope(request.appId),
     {
       requestId: request.id,
-      archiveVersion: event.archive_version,
-      contentChecksum: event.archive_checksum,
-      rowCount: event.archive_row_count,
-      proposedAt: request.proposedAt,
       resolvedAt: request.resolvedAt,
-      archivedAt,
+      reviewCount: reviews.length,
     },
     status,
   );

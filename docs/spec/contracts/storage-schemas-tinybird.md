@@ -177,8 +177,9 @@ RFC 8785-canonical payload `{ archiveVersion, request, reviews }`; `reviews` is 
 `reviewed_at`, then Review ID. No field, diff, reason, error detail, or Review is truncated. The
 stable deduplication identity is Approval Request ID plus archive version. The worker reads the
 stored archive back and verifies version, `1 + reviews.length`, and the SHA-256 checksum of the
-canonical payload before removing D1 rows. Replays with the same identity and checksum are
-idempotent; a conflicting payload fails loud.
+canonical payload before removing D1 rows. The append uses `wait=true` and succeeds only on a `200`
+acknowledgment for exactly one successful row and zero quarantined rows. Replays with the same
+identity and checksum are idempotent; a conflicting payload fails loud.
 
 `audit_log` has no TTL. Approval Request archives remain readable for at least 24 months or the
 contracted audit period, whichever is longer. Archived read pipes preserve the Request wire
