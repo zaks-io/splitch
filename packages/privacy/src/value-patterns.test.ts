@@ -36,11 +36,21 @@ describe("redactValuePatterns", () => {
   });
 
   it("still redacts a phone preceded by a hyphen in prose", () => {
-    expect(redactValuePatterns("call me at -555 123 4567")).toBe(`call me at -555 ${REDACTED}`);
+    expect(redactValuePatterns("call me at -555 123 4567")).toBe(`call me at ${REDACTED}`);
   });
 
-  // SPL-360: phone matches must not start after a word character. Removing the
-  // lookbehind turns each of these red (mid-token digit runs get eaten).
+  it.each([
+    ["US prose", "call me at -555-123-4567", `call me at ${REDACTED}`],
+    ["international prose", "call me at -44-20-7946-0958", `call me at ${REDACTED}`],
+    ["a bare value", "-555-123-4567", REDACTED],
+    ["a CSV field", "acme,-555-123-4567,us", `acme,${REDACTED},us`],
+    ["a key-value field", "phone=-555-123-4567", `phone=${REDACTED}`],
+  ])("fully redacts a hyphen-prefixed dashed phone in %s", (_shape, input, expected) => {
+    expect(redactValuePatterns(input)).toBe(expected);
+  });
+
+  // SPL-360: the first boundary keeps phone matches from starting after an
+  // identifier character. Removing it eats these mid-token digit runs.
   it("preserves opaque tokens whose bodies look phone-like (leak probes)", () => {
     for (const message of [
       "lookup failed for user_15551234567",
