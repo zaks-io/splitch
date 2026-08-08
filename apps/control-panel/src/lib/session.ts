@@ -5,6 +5,7 @@ import {
   nowSeconds,
   parseCookie,
   serializeHttpOnlyCookie,
+  type SerializedHttpOnlyCookie,
   tokenHash as hashOpaqueToken,
 } from "./session-cookie";
 import { parseStoredSession } from "./session-schema";
@@ -88,7 +89,12 @@ export async function createSession(
   kv: KVNamespace,
   session: Omit<StoredSession, "expiresAt"> & { expiresAt?: number },
   now = Date.now(),
-): Promise<{ token: string; tokenHash: string; cookie: string; session: StoredSession }> {
+): Promise<{
+  token: string;
+  tokenHash: string;
+  cookie: SerializedHttpOnlyCookie;
+  session: StoredSession;
+}> {
   const maxExpiresAt = nowSeconds(now) + MAX_SESSION_TTL_SECONDS;
   const expiresAt = Math.min(session.expiresAt ?? maxExpiresAt, maxExpiresAt);
   const ttl = ttlSeconds(expiresAt, now);
@@ -151,7 +157,7 @@ export async function destroySession(
   kv: KVNamespace,
   request: Request,
   now = Date.now(),
-): Promise<{ session: StoredSession | null; cookie: string }> {
+): Promise<{ session: StoredSession | null; cookie: SerializedHttpOnlyCookie }> {
   const loaded = await loadSessionFromRequest(kv, request, now);
   if (loaded.ok) {
     await kv.delete(sessionKey(loaded.tokenHash));
@@ -179,7 +185,7 @@ export function sessionKey(tokenHash: string): string {
   return `${SESSION_KEY_PREFIX}${tokenHash}`;
 }
 
-function sessionCookie(token: string, maxAgeSeconds: number): string {
+function sessionCookie(token: string, maxAgeSeconds: number): SerializedHttpOnlyCookie {
   return serializeHttpOnlyCookie(SESSION_COOKIE_NAME, token, {
     maxAge: Math.max(0, Math.floor(maxAgeSeconds)),
   });

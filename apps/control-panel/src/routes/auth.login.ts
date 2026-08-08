@@ -4,6 +4,7 @@ import { callbackRedirectUri, createAuthKitClient } from "#lib/authkit";
 import { controlPanelBindings } from "#lib/bindings";
 import { createOAuthState } from "#lib/oauth-state";
 import { safeReturnPath } from "#lib/return-path";
+import { appendHttpOnlyCookie, type SerializedHttpOnlyCookie } from "#lib/session-cookie";
 
 export const Route = createFileRoute("/auth/login")({
   server: {
@@ -28,13 +29,13 @@ export const Route = createFileRoute("/auth/login")({
   },
 });
 
-function redirectResponse(location: string, cookies: Array<string>): Response {
+function redirectResponse(location: string, cookies: Array<SerializedHttpOnlyCookie>): Response {
   const headers = new Headers({
     "cache-control": "no-store",
     location,
   });
   for (const cookie of cookies) {
-    headers.append("set-cookie", cookie);
+    appendHttpOnlyCookie(headers, cookie);
   }
   return new Response(null, { headers, status: 302 });
 }
