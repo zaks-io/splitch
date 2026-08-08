@@ -31,7 +31,25 @@ export type ApplicationOutcome =
    * reviewer learns WHAT refused it, not just that something did.
    */
   | { ok: false; unapplicable: UnapplicableProposal }
-  | { ok: false; error: { code: ErrorCode; details: Record<string, unknown> } };
+  | {
+      ok: false;
+      targetState: ApplicationTargetState;
+      error: { code: ErrorCode; details: Record<string, unknown> };
+    };
+
+/**
+ * What a failed application left behind in the target state. It travels with
+ * the failure because the message the operator reads is a claim about their
+ * data: "rolled back" is how they learn there is nothing to clean up, and
+ * saying it after a durable write is a lie. `applied` is the Segment
+ * republication shape — the mutation landed, a later step did not — and it is
+ * the same fact `SegmentRepublishFailure.segmentApplied` already records.
+ *
+ * There is no default and no inference. A call site that cannot observe which
+ * of the two happened says `unknown` out loud and sends the operator back to
+ * the stored Approval Request (ADR-0036).
+ */
+export type ApplicationTargetState = "rolled_back" | "applied" | "unknown";
 
 export interface UnapplicableProposal {
   code: ErrorCode;

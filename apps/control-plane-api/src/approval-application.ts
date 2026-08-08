@@ -34,8 +34,10 @@ export function makeOtherApprovalApplication(deps: ApprovalApplicationDeps) {
     if (request.operation === "experiments_start") {
       return applyExperimentStart(deps, request, commit);
     }
+    // No branch claimed this operation, so nothing ran against a target.
     return {
       ok: false,
+      targetState: "rolled_back",
       error: { code: "INTERNAL_SERVER_ERROR", details: {} },
     };
   };
@@ -63,6 +65,7 @@ async function applySegmentUpdate(
   if (!segment) {
     return {
       ok: false,
+      targetState: "rolled_back",
       error: {
         code: "SEGMENT_NOT_FOUND",
         details: { missingSegmentIds: [request.target.id] },
@@ -80,13 +83,19 @@ async function applySegmentUpdate(
   if ("notApplied" in result) return { ok: false, notApplied: true };
   if ("republishFailure" in result) {
     const failure = republishApplicationError(result.republishFailure);
+    // `segmentApplied` is the same fact the Review message needs: the Segment
+    // mutation is written before republication runs, so a fan-out failure past
+    // that point leaves the Conditions durable in D1 and must not be reported
+    // as a rollback.
     return {
       ok: false,
+      targetState: result.republishFailure.segmentApplied ? "applied" : "rolled_back",
       error: { code: failure.code, details: failure.details },
     };
   }
   return {
     ok: false,
+    targetState: "rolled_back",
     error: {
       code: "VALIDATION_ERROR",
       details: { field: "diff.proposed", reason: "MALFORMED_APPROVAL_PROPOSAL" },
@@ -104,6 +113,7 @@ async function applyVariant(
   if (!variant || typeof proposed.flagId !== "string" || proposed.flagId !== variant.flagId) {
     return {
       ok: false as const,
+      targetState: "rolled_back" as const,
       error: { code: "VARIANT_NOT_FOUND" as const, details: {} },
     };
   }
@@ -229,7 +239,11 @@ async function applyVariantDelete(
 ) {
   const variant = await deps.repo.flags.getVariantById(appScope(request.appId), request.target.id);
   if (!variant) {
-    return { ok: false as const, error: { code: "VARIANT_NOT_FOUND" as const, details: {} } };
+    return {
+      ok: false as const,
+      targetState: "rolled_back" as const,
+      error: { code: "VARIANT_NOT_FOUND" as const, details: {} },
+    };
   }
   const removed = await deps.repo.flags.removeVariant(
     appScope(request.appId),
@@ -256,7 +270,11 @@ async function applyFlagDelete(
   const flagId = request.target.id;
   const flag = await deps.repo.flags.getFlag(appScope(request.appId), flagId);
   if (!flag) {
-    return { ok: false as const, error: { code: "FLAG_NOT_FOUND" as const, details: {} } };
+    return {
+      ok: false as const,
+      targetState: "rolled_back" as const,
+      error: { code: "FLAG_NOT_FOUND" as const, details: {} },
+    };
   }
   const environments = await deps.repo.identity.listEnvironments(appScope(request.appId));
   const deleted = await deps.repo.flags.deleteFlagCascade(
@@ -289,6 +307,7 @@ function notApplied() {
 function malformedProposal(field: string) {
   return {
     ok: false as const,
+    targetState: "rolled_back" as const,
     error: {
       code: "VALIDATION_ERROR" as const,
       details: { field, reason: "MALFORMED_APPROVAL_PROPOSAL" },

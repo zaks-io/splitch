@@ -23,6 +23,7 @@ import {
 import { rowTargetVersion } from "./approval-row-target";
 import type {
   ApplicationOutcome,
+  ApplicationTargetState,
   ApprovalRequestRow,
   ApprovalResult,
   ApprovalServiceDeps,
@@ -101,12 +102,13 @@ async function attemptApplication(
   commit: ApprovalCommit,
   input: ReviewApprovalInput,
 ): Promise<ApprovalResult | null> {
-  const internalFailure = () =>
+  const internalFailure = (targetState: ApplicationTargetState) =>
     recordApplicationFailure(
       deps,
       row,
       commit,
       { code: "INTERNAL_SERVER_ERROR" as const, details: {} },
+      targetState,
       input.requestId,
     );
   let application: ApplicationOutcome | undefined;
@@ -118,9 +120,13 @@ async function attemptApplication(
   } catch (cause) {
     const current = await deps.repo.approvals.getRequest(appScope(row.appId), row.id);
     if (current?.status === "applied") throw cause;
-    return internalFailure();
+    // An exception can land on either side of the target write, and nothing
+    // here observed which. Guessing "rolled back" would tell an operator there
+    // is nothing to clean up when there may be.
+    return internalFailure("unknown");
   }
-  if (!application) return internalFailure();
+  // No applier is bound for this operation, so nothing ran against the target.
+  if (!application) return internalFailure("rolled_back");
   if (application.ok) return null;
   if ("unapplicable" in application) {
     return resolveUnapplicable(deps, row, commit, input.requestId, application.unapplicable);
@@ -128,7 +134,14 @@ async function attemptApplication(
   // A `notApplied` outcome falls through to the caller's reconciliation, which
   // reads the stored status and answers applied / resolved / stale.
   if ("notApplied" in application) return null;
-  return recordApplicationFailure(deps, row, commit, application.error, input.requestId);
+  return recordApplicationFailure(
+    deps,
+    row,
+    commit,
+    application.error,
+    application.targetState,
+    input.requestId,
+  );
 }
 
 async function staleAfterLostApply(
@@ -162,6 +175,9 @@ async function staleAfterLostApply(
       row,
       commit,
       { code: "INTERNAL_SERVER_ERROR", details: {} },
+      // Not an inference: the target version was just re-read and still equals
+      // the version the proposal was minted against, so the target did not move.
+      "rolled_back",
       input.requestId,
     );
   }
@@ -186,6 +202,7 @@ async function applyFlagConfiguration(
   if (!deps.configStore) {
     return {
       ok: false as const,
+      targetState: "rolled_back" as const,
       error: { code: "SERVICE_UNAVAILABLE" as const, details: { retryAfterMs: 1000 } },
     };
   }
@@ -194,6 +211,7 @@ async function applyFlagConfiguration(
   if (!environmentId) {
     return {
       ok: false as const,
+      targetState: "rolled_back" as const,
       error: { code: "INTERNAL_SERVER_ERROR" as const, details: {} },
     };
   }
@@ -255,9 +273,12 @@ export function mapApprovedFlagConfigFailure(
       },
     };
   }
+  // Refused by `validateProposal` before the D1 mutation, so the operator has
+  // nothing to clean up and the message may say so.
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return {
       ok: false as const,
+      targetState: "rolled_back" as const,
       error: {
         code: "VARIANT_NOT_AVAILABLE" as const,
         details: {
@@ -269,8 +290,20 @@ export function mapApprovedFlagConfigFailure(
       },
     };
   }
+  // The one reason the approved write reports from BOTH sides of its D1
+  // mutation: the pre-write snapshot read and the post-commit re-read
+  // (`config-store-approved-write.ts`). Nothing here separates them, so it does
+  // not get to claim a rollback.
+  if (result.reason === "FLAG_NOT_FOUND") {
+    return {
+      ok: false as const,
+      targetState: "unknown" as const,
+      error: { code: "INTERNAL_SERVER_ERROR" as const, details: {} },
+    };
+  }
   return {
     ok: false as const,
+    targetState: "rolled_back" as const,
     error: { code: "INTERNAL_SERVER_ERROR" as const, details: {} },
   };
 }

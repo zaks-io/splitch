@@ -22,6 +22,9 @@ describe("Segment Approval application errors", () => {
 
     expect(result).toEqual({
       ok: false,
+      // The Segment was never found, so there was nothing to write and nothing
+      // for the operator to clean up.
+      targetState: "rolled_back",
       error: {
         code: "SEGMENT_NOT_FOUND",
         details: { missingSegmentIds: ["segment_missing"] },

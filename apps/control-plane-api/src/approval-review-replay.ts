@@ -1,8 +1,9 @@
 import { ApprovalPolicyContextSchema, ErrorCodeSchema } from "@splitch/contracts";
 import { renderError } from "@splitch/worker-runtime";
-import { projectedResult } from "./approval-review-outcomes";
+import { applicationFailureMessage, projectedResult } from "./approval-review-outcomes";
 import { rowTargetVersion } from "./approval-row-target";
 import type {
+  ApplicationTargetState,
   ApprovalRequestRow,
   ApprovalResult,
   ApprovalReviewRow,
@@ -21,7 +22,12 @@ export async function replayResult(
   requestId: string,
 ): Promise<ApprovalResult> {
   if (review.outcome === "failed") {
-    return failedReplay(row, review, requestId);
+    // The Review row records the cause, never what the attempt left behind in
+    // the target, so the replay cannot repeat the original claim. Asserting
+    // either "rolled back" or "applied" from a row that does not say would be
+    // the plausible wrong value ADR-0036 forbids, so the replay says `unknown`
+    // and sends the operator to the Approval Request that does know.
+    return failedReplay(row, review, "unknown", requestId);
   }
   if (review.outcome === "stale") {
     // A `stale` Review means one of two different things. Only the version race
@@ -56,6 +62,7 @@ function recordedRefusalReplay(review: ApprovalReviewRow, requestId: string): Ap
 function failedReplay(
   row: ApprovalRequestRow,
   review: ApprovalReviewRow,
+  targetState: ApplicationTargetState,
   requestId: string,
 ): ApprovalResult {
   return {
@@ -63,7 +70,7 @@ function failedReplay(
     response: renderError(
       {
         code: "APPROVAL_APPLICATION_FAILED",
-        message: "Approval Request application failed",
+        message: applicationFailureMessage(targetState),
         details: {
           approvalRequestId: row.id,
           reviewId: review.id,
