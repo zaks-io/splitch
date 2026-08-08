@@ -195,6 +195,46 @@ describe("SignedControlPanelEntrypoint Flag resource binding", () => {
 
     expect((await entrypoint.fetch(wrongFlag)).status).toBe(401);
   });
+
+  it("gets a Flag definition by key through the binding", async () => {
+    const response = await panelRequest("GET", `/apps/${APP_ID}/flags/checkout-refresh?by=key`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      id: FLAG_ID,
+      key: "checkout-refresh",
+      name: "Checkout Refresh",
+    });
+  });
+
+  it("rejects a flag_get delegation minted for a different Flag or selector mode", async () => {
+    const wrongFlag = await request(
+      "GET",
+      `/apps/${APP_ID}/flags/checkout-refresh?by=key`,
+      undefined,
+      {
+        id: "flag_get",
+        appId: APP_ID,
+        environmentId: ENV_ID,
+        flagId: "other-key",
+        by: "key",
+      },
+    );
+    expect((await entrypoint.fetch(wrongFlag)).status).toBe(401);
+
+    const wrongMode = await request(
+      "GET",
+      `/apps/${APP_ID}/flags/checkout-refresh?by=key`,
+      undefined,
+      {
+        id: "flag_get",
+        appId: APP_ID,
+        environmentId: ENV_ID,
+        flagId: "checkout-refresh",
+        by: "id",
+      },
+    );
+    expect((await entrypoint.fetch(wrongMode)).status).toBe(401);
+  });
 });
 
 async function panelRequest(method: string, path: string, body?: unknown): Promise<Response> {

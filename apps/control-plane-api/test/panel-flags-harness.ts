@@ -77,10 +77,16 @@ export async function signedPanelRequest(
     // supplies one per action, so the harness does the same.
     ...(method === "GET" ? {} : { "idempotency-key": `idem-panel-${crypto.randomUUID()}` }),
   });
-  const expectedOperation = parseControlPanelOperation(method, path, ids.envId);
+  const url = new URL(`${ORIGIN}${path}`);
+  const expectedOperation = parseControlPanelOperation(
+    method,
+    url.pathname,
+    ids.envId,
+    url.searchParams,
+  );
   if (expectedOperation) {
     const nowSeconds = Math.floor(Date.now() / 1000);
-    const signedRequest = new Request(`${ORIGIN}${path}`, {
+    const signedRequest = new Request(url, {
       method,
       headers,
       body: delegatedBody ? JSON.stringify(delegatedBody) : undefined,
@@ -99,7 +105,7 @@ export async function signedPanelRequest(
       ),
     );
   }
-  return new Request(`${ORIGIN}${path}`, {
+  return new Request(url, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,

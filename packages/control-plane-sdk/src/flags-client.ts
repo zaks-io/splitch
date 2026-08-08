@@ -253,6 +253,11 @@ function flagsGet(
   // Flag keys are unconstrained z.string() and may contain `/`, `?`, `#`, etc.
   // `hc` does not percent-encode path params (MCP's buildPath does); encode here
   // so ?by=key addresses the Flag the Panel named.
+  //
+  // Dot-segment keys (`.`, `..`, and percent-encoded spellings) survive
+  // encodeURIComponent and are collapsed by the WHATWG URL parser onto a
+  // different route — reject them before building the path.
+  assertAddressableFlagSelector(input.flagId);
   const param = { appId: input.appId, flagId: encodeURIComponent(input.flagId) };
   return invokeHcRoute<FlagsGetOutput>("flags_get", () =>
     hcClient.apps[":appId"].flags[":flagId"].$get(
@@ -262,4 +267,52 @@ function flagsGet(
       hcRequestOptions(withAuthorization(hcOptions, callOptions)),
     ),
   );
+}
+
+/**
+ * A Flag key that cannot be placed in a URL path segment without the WHATWG
+ * parser rewriting the request onto a different resource (collection root, App
+ * root, or an empty segment). Percent-encoding is not a fix: `%2e` / `%2e%2e`
+ * collapse the same way. Fail loud here rather than silently mis-address.
+ */
+class FlagSelectorUnaddressableError extends Error {
+  constructor(selector: string) {
+    super(
+      `control-plane-sdk: Flag selector ${JSON.stringify(selector)} cannot be addressed as a path segment`,
+    );
+    this.name = "FlagSelectorUnaddressableError";
+  }
+}
+
+function assertAddressableFlagSelector(selector: string): void {
+  if (isUnaddressableFlagSelector(selector)) {
+    throw new FlagSelectorUnaddressableError(selector);
+  }
+}
+
+/**
+ * Rejects `""`, `"."`, and `".."`, including any percent-encoded spelling
+ * (case-insensitive hex) and multi-segment forms that contain one of those.
+ */
+function isUnaddressableFlagSelector(selector: string): boolean {
+  return selector.split("/").some(isUnaddressablePathSegment);
+}
+
+function isUnaddressablePathSegment(segment: string): boolean {
+  const normalized = fullyDecodePathSegment(segment);
+  return normalized === "" || normalized === "." || normalized === "..";
+}
+
+function fullyDecodePathSegment(segment: string): string {
+  let current = segment;
+  for (;;) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(current);
+    } catch {
+      return current;
+    }
+    if (decoded === current) return current;
+    current = decoded;
+  }
 }

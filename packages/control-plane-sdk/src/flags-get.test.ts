@@ -63,4 +63,31 @@ describe("control plane sdk flags.get wire shape", () => {
 
     expect(requests[0]?.url).toBe("https://control-plane.test/apps/app_a/flags/flag_checkout");
   });
+
+  it.each([
+    "",
+    ".",
+    "..",
+  ] as const)("refuses Flag selector %j before building a path the WHATWG parser would rewrite", async (selector) => {
+    const { sdk, requests } = flagsSdk();
+
+    await expect(sdk.flags.get({ appId: "app_a", flagId: selector, by: "key" })).rejects.toThrow(
+      /cannot be addressed as a path segment/,
+    );
+    expect(requests).toHaveLength(0);
+  });
+
+  it.each([
+    "%2e",
+    "%2E",
+    "%2e%2e",
+    "%2e%2E",
+  ] as const)("refuses percent-encoded dot-segment spelling %j", async (selector) => {
+    const { sdk, requests } = flagsSdk();
+
+    await expect(sdk.flags.get({ appId: "app_a", flagId: selector, by: "key" })).rejects.toThrow(
+      /cannot be addressed as a path segment/,
+    );
+    expect(requests).toHaveLength(0);
+  });
 });
