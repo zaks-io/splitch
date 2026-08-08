@@ -14,6 +14,7 @@ export const errorStatusByCode: Record<ErrorCode, number> = {
   INVALID_PAGINATION: 400,
   INVALID_SORT: 400,
   EXPOSURE_TICKET_INVALID: 400,
+  UNSUPPORTED_OBJECT_KEY: 400,
 
   UNAUTHORIZED: 401,
 

@@ -115,6 +115,15 @@ const errorMembers = [
   member("INVALID_SORT", z.object({ field: z.string(), allowedFields: z.array(z.string()) })),
   member("EXPOSURE_TICKET_INVALID", z.object({ exposureId: z.string() })),
   member("EXPOSURE_TICKET_EXPIRED", z.object({ exposureId: z.string(), issuedAt: z.string() })),
+  member(
+    "UNSUPPORTED_OBJECT_KEY",
+    z
+      .object({
+        key: z.string(),
+        path: z.array(z.string()),
+      })
+      .strict(),
+  ),
 
   member(
     "RUN_FROZEN",
