@@ -118,24 +118,30 @@ classification guarantees the required Approval Request even when the ordinary f
 
 ## Result identity and decision gate
 
-A conclusion-capable ready `AnalysisResultsEnvelope` returns the all-or-nothing `data_watermark` and
-`result_token` pair. `result_token` is SHA-256 over UTF-8 RFC 8785 JSON Canonicalization Scheme bytes
-of
+The conclusion-capable Results read adds the all-or-nothing `data_watermark` and `result_token` pair
+to a ready `AnalysisResultsEnvelope`. A ready envelope without the pair remains a valid ordinary
+Results response, but it cannot be concluded; Conclude returns `DECISION_RESULT_UNAVAILABLE` with
+`envelopeState: "ready"`. `result_token` is SHA-256 over UTF-8 RFC 8785 JSON Canonicalization Scheme
+bytes of
 `{ appId, environmentId, experimentId, runId, runConfigHash, stats }`. The watermark is excluded from
 the token, so advancing an ingest boundary without changing the computed result does not create
 false staleness.
 
-Conclude recomputes the selected Run through the half-open `ingest_ts < dataWatermark` boundary the
-caller observed. It compares that recomputation with `expectedResultToken`; a mismatch returns
+Conclude recomputes the selected Run through the inclusive `ingest_ts <= dataWatermark` boundary the
+caller observed. `dataWatermark` comes from `deduped_exposures.watermark_ts`, the inclusive Copy Pipe
+watermark, so a row exactly equal to it was part of the observed Results and must remain part of the
+recomputation. Conclude compares that recomputation with `expectedResultToken`; a mismatch returns
 `DECISION_RESULT_STALE`. The server does not advance or quantize the submitted watermark. New
 Exposures after that boundary do not create a retry race. The client cannot submit Stats output, and
 the server treats the submitted watermark only as the evidence boundary. The token match proves the
 Stats output at that boundary. The immutable evidence records the recomputed server result and that
 exact watermark.
 
-If the recomputation produces an `AnalysisResultsEnvelope` with `state: "no_data"` or
-`state: "no_run"`, Conclude returns `DECISION_RESULT_UNAVAILABLE`. There is no current result token to
-compare in either state, so this case never returns `DECISION_RESULT_STALE`.
+If the selected ready envelope lacks the evidence pair, or recomputation produces an
+`AnalysisResultsEnvelope` with `state: "no_data"` or `state: "no_run"`, Conclude returns
+`DECISION_RESULT_UNAVAILABLE`. The error's `envelopeState` names `ready`, `no_data`, or `no_run`.
+There is no current result token to compare in any of these cases, so they never return
+`DECISION_RESULT_STALE`.
 
 The server evaluates every applicable check and returns all failures in one `DECISION_BLOCKED`
 response. It never stops at the first failure.

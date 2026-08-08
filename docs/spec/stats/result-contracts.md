@@ -86,7 +86,9 @@ all-or-nothing pair. A Results read that supports Conclude returns both; the res
 slice owns populating them. Their absence keeps the current read compatible but provides no evidence
 inputs for Conclude.
 
-`data_watermark` is the server-selected exclusive `ingest_ts` boundary used by the complete read.
+`data_watermark` is the server-selected inclusive `ingest_ts` boundary used by the complete read. It
+comes from the inclusive `deduped_exposures.watermark_ts` Copy Pipe boundary, so rows whose
+`ingest_ts` exactly equals the watermark are part of the result.
 `result_token` is `sha256:` plus 64 lowercase hexadecimal digits, computed as SHA-256 over RFC 8785
 canonical bytes of
 `{ appId, environmentId, experimentId, runId, runConfigHash, stats }`. It is evidence identity for

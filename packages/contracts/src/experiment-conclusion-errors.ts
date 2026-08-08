@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
+import type { ErrorCode } from "./error-code";
 import { UnresolvableControlReasonSchema } from "./experiment-control-identity";
 import type { DecisionGateCheckId } from "./experiment-decision-gate";
 import { StatsResultStatusSchema } from "./stats-result-contract";
@@ -65,7 +66,10 @@ export const DecisionFailureSchema = z.discriminatedUnion("code", [
       code: z.literal("DECISION_ACTIVATION_IMBALANCE"),
       checkIds: z.tuple([z.literal("activation_balance")]),
       details: z
-        .object({ pValue: z.number().nullable(), rates: z.record(z.string(), z.number()) })
+        .object({
+          pValue: z.number().nullable(),
+          rates: z.record(z.string(), z.number()).nullable(),
+        })
         .strict(),
     })
     .strict(),
@@ -102,7 +106,7 @@ export const DecisionResultStaleDetailsSchema = z
 export const DecisionResultUnavailableDetailsSchema = z
   .object({
     runId: z.string(),
-    envelopeState: z.enum(["no_data", "no_run"]),
+    envelopeState: z.enum(["ready", "no_data", "no_run"]),
   })
   .strict();
 
@@ -115,3 +119,24 @@ export const TargetConfigurationStaleDetailsSchema = z
     recommendedAction: z.literal("REFRESH_AND_REPROPOSE"),
   })
   .strict();
+
+export const experimentConclusionErrorMembers = {
+  decisionBlocked: member("DECISION_BLOCKED", DecisionBlockedDetailsSchema),
+  decisionResultStale: member("DECISION_RESULT_STALE", DecisionResultStaleDetailsSchema),
+  decisionResultUnavailable: member(
+    "DECISION_RESULT_UNAVAILABLE",
+    DecisionResultUnavailableDetailsSchema,
+  ),
+  targetConfigurationStale: member(
+    "TARGET_CONFIGURATION_STALE",
+    TargetConfigurationStaleDetailsSchema,
+  ),
+} as const;
+
+function member<C extends ErrorCode, D extends z.ZodTypeAny>(code: C, details: D) {
+  return z.object({
+    code: z.literal(code),
+    message: z.string(),
+    details,
+  });
+}

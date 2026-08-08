@@ -48,23 +48,25 @@ type DecisionDiagnosticsResponse = {
 
 type SrmTrendPoint = {
   bucketEnd: string;
-  exposure: SrmDiagnostic;
-  activated: SrmDiagnostic | null;
+  exposure: SrmSignal;
+  activated: SrmSignal | null;
   activationBalance: {
-    pValue: number;
-    isMismatch: boolean;
-    rates: Record<string, number>;
+    tier: "clean" | "possible_imbalance" | "confirmed";
+    pValue: number | null;
   } | null;
   multipleRate: number;
   multipleCount: number;
 };
 
-type SrmDiagnostic = {
+type SrmSignal = {
   tier: "clean" | "possible_imbalance" | "confirmed";
   pValue: number | null;
-  isMismatch: boolean | null;
-  observedCounts: Record<string, number>;
-  expectedCounts: Record<string, number>;
+  deviations: Array<{
+    variant: string;
+    observed: number;
+    expected: number;
+    delta: number;
+  }>;
 };
 
 type SrmDimensionCut = {
@@ -83,9 +85,15 @@ type SrmDimensionCut = {
 
 Each trend point is cumulative from `from` through its exclusive `bucketEnd`; this shows whether a
 mismatch persisted instead of turning disjoint low-volume buckets into false reassurance. The last
-point ends exactly at `to`. Full-exposed and activated SRM use the canonical chi-square rules and the
-Stats engine's `p < 0.001` mismatch verdict. Activation members are null only when the Run has no
-Activation Metric.
+point ends exactly at `to`. Full-exposed and activated SRM use the canonical chi-square rules. The
+Stats engine's mismatch boolean is authoritative; `p < 0.001` is only the shipped gate's fallback
+when that boolean is absent, so this read never reimplements the threshold. Activation members are
+null only when the Run has no Activation Metric.
+
+`SrmSignal` is the shipped signal shape; it has no `observedCounts` or `expectedCounts` members. The
+activated signal carries `deviations: []` because `SrmResultSchema` does not surface the Stats
+engine's activated counts today. Per-Variant activated observed and expected counts are a named
+result-contract gap; this read does not invent them.
 
 Auto-cuts cover the complete `[from, to)` range. For each requested Dimension value, observed counts
 are first-touch unique Entities by Variant, excluding `__multiple__`; expected counts come from the
@@ -109,8 +117,9 @@ path. It looks up the Run by the full composite scope and injects `app_id`, `env
 identifier uses the existing non-revealing `RUN_NOT_FOUND`; no diagnostic rows from another App or
 Environment are returned.
 
-All reads use the request's half-open `ingest_ts < dataWatermark` boundary and the same deduped
-Exposure source as Results. Raw Targeting Keys are never returned. Dimension values are the declared,
+All reads use the request's inclusive `ingest_ts <= dataWatermark` boundary and the same deduped
+Exposure source as Results. The watermark is the inclusive Copy Pipe boundary, so exact-equality rows
+remain in the evidence set. Raw Targeting Keys are never returned. Dimension values are the declared,
 allowlisted values captured by the Run, not free-form Entity data.
 
 ## Sources

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getRoute } from "./route-registry";
+import { ApprovalOperationSchema, approvalOperations } from "./routes/route-shapes-approvals";
 
 describe("Approval Request route contracts", () => {
   it("registers conventional list and single reads", () => {
@@ -51,6 +52,11 @@ describe("Approval Request route contracts", () => {
         "IDEMPOTENCY_KEY_CONFLICT",
       ]),
     );
+  });
+
+  it("registers winner Promotion as an Approval operation", () => {
+    expect(approvalOperations).toContain("experiment_winner_promote");
+    expect(ApprovalOperationSchema.safeParse("experiment_winner_promote").success).toBe(true);
   });
 
   it.each([
