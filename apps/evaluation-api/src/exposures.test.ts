@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AssembledExposure } from "./evaluate/exposure-assembly";
 import { type ExposureIngestSink, ExposureIngestSinkError } from "./exposure-redemption";
 import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
+import { ExposureRedemptionClaimTransportError } from "./exposure-redemption-claim-errors";
 import type {
   ExposureRedemptionAcknowledgeOutcome,
   ExposureRedemptionClaimInput,
@@ -236,10 +237,12 @@ describe("POST /api/sdk/exposures: claim failure and concurrency", () => {
     expect(gated.writes).toHaveLength(1);
   });
 
-  it("rejects with SERVICE_UNAVAILABLE when the claim store throws (never fabricates acquired)", async () => {
+  it("rejects with SERVICE_UNAVAILABLE when the claim store throws a transport fault", async () => {
     const claims: ExposureRedemptionClaimStore = {
       claim: async () => {
-        throw new Error("claim Durable Object transport failed");
+        throw new ExposureRedemptionClaimTransportError(
+          new Error("claim Durable Object transport failed"),
+        );
       },
       release: async () => undefined,
       markSealed: async () => undefined,
