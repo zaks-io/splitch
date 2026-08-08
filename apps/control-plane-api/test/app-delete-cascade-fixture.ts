@@ -148,8 +148,8 @@ async function seedCascadeChildren(
     key: `cascade-metric-${suffix}`,
     name: "Cascade metric",
     kind: "binomial",
-    eventName: "purchase",
-    eventValueField: null,
+    eventDefinitionId: "purchase",
+    eventFieldName: null,
     denominatorMetricId: null,
     createdAt: NOW_ISO,
   });

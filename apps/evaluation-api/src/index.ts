@@ -88,6 +88,11 @@ async function handleRequest(
       ),
     );
   }
+  if (url.pathname === "/api/sdk/events") {
+    const target = new URL(url.pathname, env.EVENT_INGEST_URL ?? "https://event-ingest.local");
+    const forwarded = new Request(target, request);
+    return env.EVENT_INGEST ? env.EVENT_INGEST.fetch(forwarded) : fetch(forwarded);
+  }
 
   const saltStore = makeEnvSaltStore(env);
   const app = createApp({

@@ -7,6 +7,7 @@ import {
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { SignedControlPanelEntrypoint } from "../src/index.js";
+import { ensureMetricEventDefinition } from "./metric-event-definition-fixture";
 
 export const ORIGIN = "https://cp.splitch.test";
 export const NOW = "2026-07-19T00:00:00.000Z";
@@ -116,6 +117,14 @@ export async function seedAppMembership(ids: PanelFlagsIds): Promise<void> {
   )
     .bind(ids.appId, ids.userId, "owner", NOW)
     .run();
+}
+
+export async function seedMetricEventDefinition(
+  ids: PanelFlagsIds,
+  name: string,
+  eventFieldName?: string,
+): Promise<string> {
+  return ensureMetricEventDefinition(env.DB, ids.appId, name, NOW, eventFieldName);
 }
 
 export async function seedPanelFlags(ids: PanelFlagsIds): Promise<void> {

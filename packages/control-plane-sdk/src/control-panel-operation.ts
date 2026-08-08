@@ -16,6 +16,8 @@
  * not a gap: see `organizations-client.ts`.
  */
 
+import { parseEventDefinitionOperation } from "./control-panel-event-definition-operation";
+
 export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 
 export type ControlPanelOperation =
@@ -75,6 +77,28 @@ export type ControlPanelOperation =
         | "api_keys_create";
       appId: string;
       environmentId: string;
+    }
+  | {
+      id: "event_definitions_list" | "event_definitions_create";
+      appId: string;
+      environmentId: string;
+    }
+  | {
+      id:
+        | "event_definitions_get"
+        | "event_definitions_update"
+        | "event_definition_versions_create"
+        | "event_definition_versions_list";
+      appId: string;
+      environmentId: string;
+      eventDefinitionId: string;
+    }
+  | {
+      id: "event_definition_versions_get";
+      appId: string;
+      environmentId: string;
+      eventDefinitionId: string;
+      versionId: string;
     }
   | {
       id: "metrics_get" | "metrics_update" | "metrics_delete";
@@ -137,7 +161,8 @@ export function parseControlPanelOperation(
     parseConfig(method, pathname) ??
     parseApproval(method, pathname) ??
     parseEnvironmentSettings(method, pathname) ??
-    parseMetrics(method, pathname, panelEnvironmentId)
+    parseMetrics(method, pathname, panelEnvironmentId) ??
+    parseEventDefinitionOperation(method, pathname, panelEnvironmentId)
   );
 }
 

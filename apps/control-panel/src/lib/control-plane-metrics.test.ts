@@ -35,8 +35,8 @@ describe("Control Panel Metrics transport", () => {
       name: "Orders",
       key: "orders",
       kind: "count",
-      eventName: "order_completed",
-      eventValueField: "quantity",
+      eventDefinitionId: "order_completed",
+      eventFieldName: "quantity",
     });
     await client.get({ appId: "app_1", metricId: "metric_1" });
     await client.update({ appId: "app_1", metricId: "metric_1", name: "Completed orders" });
@@ -76,8 +76,8 @@ function metric() {
     key: "orders",
     name: "Orders",
     kind: "count",
-    eventName: "order_completed",
-    eventValueField: "quantity",
+    eventDefinitionId: "order_completed",
+    eventFieldName: "quantity",
     createdAt: "2026-07-29T00:00:00.000Z",
   };
 }

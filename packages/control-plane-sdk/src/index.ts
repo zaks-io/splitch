@@ -4,6 +4,10 @@ import { type ApprovalsClient, createApprovalsClient } from "./approvals-client"
 import { type AppsClient, createAppsClient } from "./apps-client";
 import { type CredentialsClient, createCredentialsClient } from "./credentials-client";
 import { createEnvironmentsClient, type EnvironmentsClient } from "./environments-client";
+import {
+  createEventDefinitionsClient,
+  type EventDefinitionsClient,
+} from "./event-definitions-client";
 import { createExperimentsClient, type ExperimentsClient } from "./experiments-client";
 import { createFlagsClient, type FlagsClient } from "./flags-client";
 import {
@@ -12,6 +16,7 @@ import {
   createAppsHcClient,
   createCredentialsHcClient,
   createEnvironmentsHcClient,
+  createEventDefinitionsHcClient,
   createExperimentsHcClient,
   createFlagsHcClient,
   createOrganizationsHcClient,
@@ -38,6 +43,7 @@ export interface ControlPlaneSdk {
   readonly credentials: CredentialsClient;
   readonly flags: FlagsClient;
   readonly experiments: ExperimentsClient;
+  readonly eventDefinitions: EventDefinitionsClient;
   readonly approvals: ApprovalsClient;
 }
 
@@ -50,6 +56,7 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
   };
   const flagsHcClient = createFlagsHcClient(hcOptions);
   const experimentsHcClient = createExperimentsHcClient(hcOptions);
+  const eventDefinitionsHcClient = createEventDefinitionsHcClient(hcOptions);
   const appsHcClient = createAppsHcClient(hcOptions);
   const environmentsHcClient = createEnvironmentsHcClient(hcOptions);
   const credentialsHcClient = createCredentialsHcClient(hcOptions);
@@ -72,6 +79,7 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
     credentials: createCredentialsClient(hcOptions, credentialsHcClient),
     flags: createFlagsClient(hcOptions, flagsHcClient),
     experiments: createExperimentsClient(hcOptions, experimentsHcClient),
+    eventDefinitions: createEventDefinitionsClient(hcOptions, eventDefinitionsHcClient),
     approvals: createApprovalsClient(hcOptions, approvalsHcClient),
   };
 }
@@ -95,6 +103,7 @@ export type { ApprovalsClient } from "./approvals-client";
 export type { AppsClient } from "./apps-client";
 export type { CredentialsClient } from "./credentials-client";
 export type { EnvironmentsClient } from "./environments-client";
+export type { EventDefinitionsClient } from "./event-definitions-client";
 export type { ExperimentsClient } from "./experiments-client";
 export type { FlagsClient } from "./flags-client";
 export type {

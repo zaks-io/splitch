@@ -8,12 +8,17 @@ import { handleEvaluationCommit } from "./evaluation-commit";
 import { EvaluationCommitOutboxDurableObject } from "./evaluation-commit-outbox";
 import { EvaluationUsageReplayWindowDurableObject } from "./evaluation-usage-replay-window";
 import { handleEvaluationIngest, handleIngest } from "./ingest";
+import { handleMetricEvent } from "./metric-event-ingest";
+import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
+import { MetricEventRateLimitDurableObject } from "./metric-event-rate-limit";
+import { appendRawEvent, tinybirdDelivery } from "./tinybird";
 import type { Env } from "./types";
 
 const service = "splitch-event-ingest-api";
 const ingestPath = "/api/internal/exposures";
 const evaluationIngestPath = "/api/internal/evaluations";
 const evaluationCommitPath = "/api/internal/evaluation-commits";
+const metricEventPath = "/api/sdk/events";
 
 const internalRoutes: Readonly<
   Record<
@@ -53,6 +58,9 @@ const handler = {
       );
     }
 
+    if (request.method === "POST" && url.pathname === metricEventPath) {
+      return handleMetricEvent(request, env);
+    }
     const route = request.method === "POST" ? internalRoutes[url.pathname] : undefined;
     if (route === undefined) return new Response("not found", { status: 404 });
 
@@ -63,9 +71,22 @@ const handler = {
     });
     return route.handle(request, env);
   },
+  async queue(batch, env): Promise<void> {
+    const delivery = tinybirdDelivery(env, "metric_events");
+    if (!delivery.ok) throw new Error(delivery.error.message);
+    await Promise.all(
+      batch.messages.map((message) =>
+        appendRawEvent(message.body as Record<string, unknown>, delivery.value),
+      ),
+    );
+  },
 } satisfies ExportedHandler<Env>;
 
 export default wrapWorkerHandler(handler, { surface: "event-ingest-api" });
 
-export { EvaluationUsageReplayWindowDurableObject };
-export { EvaluationCommitOutboxDurableObject };
+export {
+  EvaluationCommitOutboxDurableObject,
+  EvaluationUsageReplayWindowDurableObject,
+  MetricEventOutboxDurableObject,
+  MetricEventRateLimitDurableObject,
+};

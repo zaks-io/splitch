@@ -1,6 +1,7 @@
 import { type ErrorCode, errorCodes, httpStatusForError } from "@splitch/contracts";
 import { approvalErrorDocs } from "./api-approval";
 import { authErrorDocs } from "./api-auth";
+import { eventErrorDocs } from "./api-events";
 import { lookupErrorDocs } from "./api-lookup";
 import { runErrorDocs } from "./api-run";
 import { systemErrorDocs } from "./api-system";
@@ -37,6 +38,7 @@ export const surfaceLabels: Record<ErrorSurface, string> = {
  */
 const catalog = {
   ...validationErrorDocs,
+  ...eventErrorDocs,
   ...runErrorDocs,
   ...lookupErrorDocs,
   ...authErrorDocs,

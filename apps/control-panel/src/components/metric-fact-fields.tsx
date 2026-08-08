@@ -34,10 +34,10 @@ export function MetricFactFields({
         draft={draft}
         label={draft.kind === "ratio" ? "Numerator event name" : "Event name"}
         onEdit={edit}
-        path="eventName"
+        path="eventDefinitionId"
         placeholder="checkout_completed"
         shown={shown}
-        workerError={workerMetricFieldError(mutationError, "eventName")}
+        workerError={workerMetricFieldError(mutationError, "eventDefinitionId")}
       />
       {draft.kind === "count" || draft.kind === "revenue" ? (
         <MetricTextField
@@ -49,10 +49,10 @@ export function MetricFactFields({
           draft={draft}
           label="Event value field"
           onEdit={edit}
-          path="eventValueField"
+          path="eventFieldName"
           placeholder={draft.kind === "revenue" ? "amount" : "quantity"}
           shown={shown}
-          workerError={workerMetricFieldError(mutationError, "eventValueField")}
+          workerError={workerMetricFieldError(mutationError, "eventFieldName")}
         />
       ) : null}
       {draft.kind === "ratio" ? (

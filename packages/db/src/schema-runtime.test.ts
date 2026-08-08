@@ -16,7 +16,7 @@ describe("applied D1 schema", () => {
     }
   });
 
-  it("contains the 24 named live D1 tables", async () => {
+  it("contains the 26 named live D1 tables", async () => {
     const local = await createLocalD1();
     try {
       const tables = await local.d1
@@ -38,6 +38,8 @@ describe("applied D1 schema", () => {
         "device_refresh_sessions",
         "entity_deletions",
         "environments",
+        "event_definition_versions",
+        "event_definitions",
         "experiments",
         "flag_configs",
         "flags",

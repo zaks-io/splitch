@@ -30,8 +30,8 @@ describe("panel Metrics binding transport", () => {
         key: "orders",
         name: "Orders",
         kind: "count",
-        eventName: "order_completed",
-        eventValueField: "quantity",
+        eventDefinitionId: "order_completed",
+        eventFieldName: "quantity",
       }),
     ).resolves.toMatchObject({ ok: true, data: { key: "orders" } });
     await expect(client.get({ appId: "app_1", metricId: "metric_1" })).resolves.toMatchObject({
@@ -60,7 +60,7 @@ describe("panel Metrics binding transport", () => {
     expect(JSON.parse(requests[1]?.body ?? "{}")).toMatchObject({
       appId: "app_1",
       kind: "count",
-      eventValueField: "quantity",
+      eventFieldName: "quantity",
     });
     expect(JSON.parse(requests[3]?.body ?? "{}")).toEqual({
       name: "Completed orders",
@@ -85,8 +85,8 @@ function metric() {
     key: "orders",
     name: "Orders",
     kind: "count",
-    eventName: "order_completed",
-    eventValueField: "quantity",
+    eventDefinitionId: "order_completed",
+    eventFieldName: "quantity",
     createdAt: "2026-07-29T00:00:00.000Z",
   };
 }

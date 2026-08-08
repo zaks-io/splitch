@@ -148,6 +148,72 @@ const OPERATION_ROUTES: OperationCoverage = {
     route: { method: "DELETE", pathname: `/apps/${APP}/metrics/metric_1`, environmentId: ENV },
     operation: { id: "metrics_delete", appId: APP, environmentId: ENV, metricId: "metric_1" },
   },
+  event_definitions_list: {
+    route: { method: "GET", pathname: `/apps/${APP}/event-definitions`, environmentId: ENV },
+    operation: { id: "event_definitions_list", appId: APP, environmentId: ENV },
+  },
+  event_definitions_create: {
+    route: { method: "POST", pathname: `/apps/${APP}/event-definitions`, environmentId: ENV },
+    operation: { id: "event_definitions_create", appId: APP, environmentId: ENV },
+  },
+  event_definitions_get: {
+    route: { method: "GET", pathname: `/apps/${APP}/event-definitions/ed_1`, environmentId: ENV },
+    operation: {
+      id: "event_definitions_get",
+      appId: APP,
+      environmentId: ENV,
+      eventDefinitionId: "ed_1",
+    },
+  },
+  event_definitions_update: {
+    route: { method: "PATCH", pathname: `/apps/${APP}/event-definitions/ed_1`, environmentId: ENV },
+    operation: {
+      id: "event_definitions_update",
+      appId: APP,
+      environmentId: ENV,
+      eventDefinitionId: "ed_1",
+    },
+  },
+  event_definition_versions_create: {
+    route: {
+      method: "POST",
+      pathname: `/apps/${APP}/event-definitions/ed_1/versions`,
+      environmentId: ENV,
+    },
+    operation: {
+      id: "event_definition_versions_create",
+      appId: APP,
+      environmentId: ENV,
+      eventDefinitionId: "ed_1",
+    },
+  },
+  event_definition_versions_list: {
+    route: {
+      method: "GET",
+      pathname: `/apps/${APP}/event-definitions/ed_1/versions`,
+      environmentId: ENV,
+    },
+    operation: {
+      id: "event_definition_versions_list",
+      appId: APP,
+      environmentId: ENV,
+      eventDefinitionId: "ed_1",
+    },
+  },
+  event_definition_versions_get: {
+    route: {
+      method: "GET",
+      pathname: `/apps/${APP}/event-definitions/ed_1/versions/edv_1`,
+      environmentId: ENV,
+    },
+    operation: {
+      id: "event_definition_versions_get",
+      appId: APP,
+      environmentId: ENV,
+      eventDefinitionId: "ed_1",
+      versionId: "edv_1",
+    },
+  },
   overview_get: {
     route: { method: "GET", pathname: `/control-panel/apps/${APP}/envs/${ENV}/overview` },
     operation: { id: "overview_get", appId: APP, environmentId: ENV },

@@ -22,11 +22,11 @@ describe("Metric editor model", () => {
         ...emptyMetricDraft(),
         name: "Orders",
         key: "orders",
-        eventName: "order_completed",
+        eventDefinitionId: "order_completed",
         kind: "count",
       }),
     ).toContainEqual({
-      path: "eventValueField",
+      path: "eventFieldName",
       message: "Enter the event value field for this count Metric.",
     });
     expect(
@@ -34,7 +34,7 @@ describe("Metric editor model", () => {
         ...emptyMetricDraft(),
         name: "Rate",
         key: "rate",
-        eventName: "signed_up",
+        eventDefinitionId: "signed_up",
         kind: "ratio",
       }),
     ).toContainEqual({
@@ -62,7 +62,7 @@ describe("Metric editor model", () => {
       name: " Signup rate ",
       key: " signup-rate ",
       kind: "ratio",
-      eventName: " signed_up ",
+      eventDefinitionId: " signed_up ",
       denominatorMetricId: "metric_visitors",
     });
 
@@ -71,7 +71,7 @@ describe("Metric editor model", () => {
       name: "Signup rate",
       key: "signup-rate",
       kind: "ratio",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
       denominator: { metricId: "metric_visitors" },
     });
     expect(JSON.stringify(ratio)).not.toMatch(/role|guardrail|activation/u);
@@ -84,8 +84,8 @@ describe("Metric editor model", () => {
       name: "Revenue",
       key: "revenue",
       kind: "revenue",
-      eventName: "purchase_completed",
-      eventValueField: "amount",
+      eventDefinitionId: "purchase_completed",
+      eventFieldName: "amount",
       createdAt: "2026-07-29T00:00:00.000Z",
     });
 
@@ -93,8 +93,8 @@ describe("Metric editor model", () => {
       name: "Revenue",
       key: "revenue",
       description: "",
-      eventName: "purchase_completed",
-      eventValueField: "amount",
+      eventDefinitionId: "purchase_completed",
+      eventFieldName: "amount",
     });
     expect(metricUpdateInput(draft)).not.toHaveProperty("kind");
   });

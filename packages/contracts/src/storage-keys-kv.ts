@@ -37,6 +37,11 @@ export function experimentConfigKey(
   return `app:${appId}:${environmentId}:experiment:${experimentId}`;
 }
 
+/** App-level published Event Definition resolved by name during Metric Event ingest. */
+export function eventDefinitionConfigKey(appId: string, eventName: string): string {
+  return `app:${appId}:event-definition:${eventName}`;
+}
+
 /** `live_run:{appId}:{environmentId}:{experimentId}` — explicit live Experiment Run pointer. */
 export function liveRunKey(appId: string, environmentId: string, experimentId: string): string {
   return `live_run:${appId}:${environmentId}:${experimentId}`;

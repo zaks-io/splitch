@@ -32,6 +32,8 @@ export {
   RecommendedActionSchema,
   recommendedActions,
 } from "./errors";
+// biome-ignore lint/performance/noReExportAll: Event Definition and Metric Event exports are grouped by domain
+export * from "./events";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped rigor API
 export * from "./experiment-rigor";
 export type { HealthResponse, PlatformTarget } from "./health-response";
@@ -251,6 +253,7 @@ export {
   apiKeyCacheKey,
   assignmentKey,
   clientKeyCacheKey,
+  eventDefinitionConfigKey,
   experimentConfigKey,
   flagConfigKey,
   liveRunKey,

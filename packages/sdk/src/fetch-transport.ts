@@ -1,4 +1,5 @@
 import { SplitchSdkError } from "./errors";
+import { postMetricEvent, trackFailure } from "./fetch-track";
 import {
   DataPlaneEvaluateResponseSchema,
   ErrorCodeSchema,
@@ -106,6 +107,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
     verify: new URL("/api/sdk/verify", config.endpoint),
     evaluateAll: new URL("/api/sdk/evaluate-all", config.endpoint),
     telemetry: new URL("/api/sdk/evaluation-telemetry", config.endpoint),
+    track: new URL("/api/sdk/events", config.endpoint),
   };
 
   async function post(
@@ -206,6 +208,15 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
         );
       } catch (error) {
         return { ...classifyCaughtError(error), evaluations: null, etag: null };
+      }
+    },
+    async track(request) {
+      try {
+        return await withTimeout((signal) =>
+          postMetricEvent(config, urls.track, request, signal, readFailure),
+        );
+      } catch (error) {
+        return trackFailure(classifyCaughtError(error));
       }
     },
     async recordCachedEvaluation(event) {

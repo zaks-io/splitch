@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
+import { eventErrorMembers } from "./event-errors";
 import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
 import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
 
@@ -91,6 +92,7 @@ const ValidationIssue = z.object({
  */
 const errorMembers = [
   member("VALIDATION_ERROR", z.object({ issues: z.array(ValidationIssue) })),
+  ...eventErrorMembers,
   member(
     "ALLOCATION_INVALID",
     z.object({

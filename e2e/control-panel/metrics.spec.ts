@@ -45,27 +45,27 @@ test.describe("App-level Metrics", () => {
     await createMetric(page, {
       name: `Signups ${suffix}`,
       key: signupsKey,
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
       kind: "Binomial",
     });
     await createMetric(page, {
       name: `Order items ${suffix}`,
       key: countKey,
-      eventName: "order_completed",
+      eventDefinitionId: "order_completed",
       kind: "Count",
       valueField: "quantity",
     });
     await createMetric(page, {
       name: `Revenue ${suffix}`,
       key: revenueKey,
-      eventName: "purchase_completed",
+      eventDefinitionId: "purchase_completed",
       kind: "Revenue",
       valueField: "amount",
     });
     await createMetric(page, {
       name: `Signup rate ${suffix}`,
       key: ratioKey,
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
       kind: "Ratio",
       denominator: `Signups ${suffix}`,
     });
@@ -118,7 +118,7 @@ test.describe("App-level Metrics", () => {
 type MetricFormInput = {
   name: string;
   key: string;
-  eventName: string;
+  eventDefinitionId: string;
   kind: "Binomial" | "Count" | "Revenue" | "Ratio";
   valueField?: string;
   denominator?: string;
@@ -135,7 +135,7 @@ async function createMetric(page: import("@playwright/test").Page, input: Metric
   }
   await dialog
     .getByLabel(input.kind === "Ratio" ? "Numerator event name" : "Event name")
-    .fill(input.eventName);
+    .fill(input.eventDefinitionId);
   if (input.valueField) await dialog.getByLabel("Event value field").fill(input.valueField);
   if (input.denominator) {
     await dialog.getByLabel("Denominator Metric").click();

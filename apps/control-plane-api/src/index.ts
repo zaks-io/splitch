@@ -41,9 +41,9 @@ import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
 import { handleSignedPanelExperiments } from "./panel-experiments-route";
 import { panelOverviewRead } from "./panel-overview";
-import { runSnapshotDeliveryFromEnv } from "./run-snapshot";
 import { panelSettingsRead } from "./panel-settings";
 import { rateLimiterForTarget } from "./rate-limit";
+import { runSnapshotDeliveryFromEnv } from "./run-snapshot";
 import { makeSessionStore } from "./session-store";
 import { unauthorized } from "./unauthorized";
 
@@ -163,6 +163,7 @@ async function handleRequest(
     credentialStore: env.CREDENTIAL_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
     configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
+    eventDefinitionStore: env.CONFIG_STORE,
     runSnapshotDelivery: {
       ...runSnapshotDeliveryFromEnv(env),
       onFault: (detail) => reportRunSnapshotFault(env, ctx, detail),

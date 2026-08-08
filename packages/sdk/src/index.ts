@@ -22,3 +22,4 @@ export type {
   VariantValue,
 } from "./generated/contract-surface.js";
 export type { SdkResolutionDetails as ResolutionDetails } from "./resolution";
+export type { TrackRequest } from "./transport";
