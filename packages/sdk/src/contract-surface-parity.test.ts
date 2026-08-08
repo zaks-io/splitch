@@ -293,13 +293,33 @@ describe("contract-surface known __proto__ divergences", () => {
   });
 
   it("compiled strips a JSON own __proto__ sibling key; zod 4.4.3 also strips it", () => {
+    // Sibling __proto__ is not a flag key. Both sides strip it on responses.
+    // Pin all three strict response schemas — this is the SPL-353 surface.
     const evaluateInput = JSON.parse('{"variant":true,"__proto__":{"x":1}}') as unknown;
-    const compiled = DataPlaneEvaluateResponseSchema.safeParse(evaluateInput);
-    const zod = ZodDataPlaneEvaluateResponseSchema.safeParse(evaluateInput);
-    expect(compiled.success).toBe(true);
-    expect(zod.success).toBe(true);
-    if (compiled.success) {
-      expect(compiled.data).toEqual({ variant: true });
+    const evaluateCompiled = DataPlaneEvaluateResponseSchema.safeParse(evaluateInput);
+    const evaluateZod = ZodDataPlaneEvaluateResponseSchema.safeParse(evaluateInput);
+    expect(evaluateCompiled.success).toBe(true);
+    expect(evaluateZod.success).toBe(true);
+    if (evaluateCompiled.success) {
+      expect(evaluateCompiled.data).toEqual({ variant: true });
+    }
+
+    const peekInput = JSON.parse('{"variant":true,"__proto__":{"x":1}}') as unknown;
+    const peekCompiled = PeekEvaluateResponseSchema.safeParse(peekInput);
+    const peekZod = ZodPeekEvaluateResponseSchema.safeParse(peekInput);
+    expect(peekCompiled.success).toBe(true);
+    expect(peekZod.success).toBe(true);
+    if (peekCompiled.success) {
+      expect(peekCompiled.data).toEqual({ variant: true });
+    }
+
+    const evaluateAllInput = JSON.parse('{"evaluations":{},"__proto__":{"x":1}}') as unknown;
+    const evaluateAllCompiled = EvaluateAllResponseSchema.safeParse(evaluateAllInput);
+    const evaluateAllZod = ZodEvaluateAllResponseSchema.safeParse(evaluateAllInput);
+    expect(evaluateAllCompiled.success).toBe(true);
+    expect(evaluateAllZod.success).toBe(true);
+    if (evaluateAllCompiled.success) {
+      expect(evaluateAllCompiled.data).toEqual({ evaluations: {} });
     }
   });
 });

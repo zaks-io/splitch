@@ -10,7 +10,7 @@ const repoRoot = join(packageRoot, "../..");
 
 test("ENTRY_MAX_BYTES is anchored near the measured ~18 KiB consumer bundle", () => {
   assert.equal(ENTRY_MAX_BYTES, 22 * 1024);
-  assert.ok(ENTRY_MAX_BYTES > 17_959);
+  assert.ok(ENTRY_MAX_BYTES > 18_024);
   assert.ok(ENTRY_MAX_BYTES < 50 * 1024);
 });
 

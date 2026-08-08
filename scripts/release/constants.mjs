@@ -6,9 +6,9 @@ export const RELEASE_TARGETS = Object.freeze({
     tagPrefix: "sdk-v",
     githubLatest: false,
     // Build inputs covered by the dist build stamp, relative to packageDir.
-    // The SDK compiles @splitch/contracts into zod-free validators at build
-    // time (SPL-325); contracts remain a stamp input so a contract change
-    // invalidates the stamped dist until rebuild + parity tests pass.
+    // The SDK ships hand-maintained zod-free mirrors of @splitch/contracts
+    // (SPL-325); every mirror source that lands in dist, plus contracts itself,
+    // must be stamped so an edit invalidates the digest until rebuild.
     stampInputs: Object.freeze([
       "src",
       "package.json",
@@ -18,6 +18,7 @@ export const RELEASE_TARGETS = Object.freeze({
       "tsup.contract-surface.config.ts",
       "scripts/contract-surface-entry.ts",
       "scripts/contract-surface-enums.ts",
+      "scripts/contract-surface-keys.ts",
       "scripts/contract-surface-validators.ts",
       "../../packages/contracts/src",
     ]),

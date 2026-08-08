@@ -432,10 +432,6 @@
       "dependsOn": ["build"],
       "cache": false
     },
-    "@splitch/sdk#size:check": {
-      "dependsOn": ["build"],
-      "cache": false
-    },
     "@splitch/sdk#test:consumer-smoke": {
       "dependsOn": ["build"],
       "cache": false

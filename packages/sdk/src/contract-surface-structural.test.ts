@@ -56,17 +56,22 @@ describe("contract-surface structural descriptors", () => {
     expect(Object.keys(mirrorResponse.properties).sort()).toEqual(
       Object.keys(contractResponse.properties).sort(),
     );
-    const evaluations = contractResponse.properties.evaluations as {
-      additionalProperties?: unknown;
-    };
     const entry = objectDescriptorFromZod(ZodEvaluateAllEntrySchema as ZodSchema);
-    expect(normalizeTypeNode(evaluations.additionalProperties)).toEqual(
-      normalizeTypeNode({
+    const expectedEvaluations = {
+      type: "object",
+      propertyNames: { type: "string" },
+      additionalProperties: {
         type: "object",
         properties: entry.properties,
         required: entry.required,
         additionalProperties: false,
-      }),
+      },
+    };
+    expect(normalizeTypeNode(mirrorResponse.properties.evaluations)).toEqual(
+      normalizeTypeNode(expectedEvaluations),
+    );
+    expect(normalizeTypeNode(contractResponse.properties.evaluations)).toEqual(
+      normalizeTypeNode(expectedEvaluations),
     );
   });
 });

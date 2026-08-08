@@ -27,9 +27,10 @@ const repoRoot = resolve(packageRoot, "../..");
 
 /**
  * Minified consumer+SDK budget per published entry.
- * Measured ~17_959 bytes for `.` at SPL-325; ceiling is 22 KiB (~23% headroom)
- * for intentional SDK growth (new accessors / wire fields) short of re-vendoring
- * zod (~300 KiB), which this budget alone is meant to reject.
+ * Measured 18_024 bytes for `.` at SPL-325; ceiling is 22 KiB (~25% headroom
+ * over that figure) for intentional SDK growth (new accessors / wire fields)
+ * short of re-vendoring zod (~300 KiB), which this budget alone is meant to
+ * reject.
  */
 export const ENTRY_MAX_BYTES = 22 * 1024;
 

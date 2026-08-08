@@ -1,7 +1,7 @@
 /**
  * Hand-maintained structural descriptors for the SDK contract-surface mirrors.
  * Compared against `z.toJSONSchema()` (+ unknown-key policy) of the contracts
- * Zod schemas in `contract-surface-parity.test.ts`. Nothing generates these.
+ * Zod schemas in `contract-surface-structural.test.ts`. Nothing generates these.
  *
  * `unknownKeys` must match the contracts object policy (`strict` = ZodNever
  * catchall, `strip` = default object, `passthrough` = ZodUnknown catchall).
@@ -15,6 +15,7 @@ import {
   evaluateAllEntryKeys,
   evaluateAllResponseKeys,
   peekEvaluateKeys,
+  resolutionDetailsKeys,
 } from "./contract-surface-keys";
 
 export type UnknownKeysPolicy = "strict" | "strip" | "passthrough";
@@ -103,7 +104,7 @@ export const contractSurfaceDescriptors: ContractSurfaceDescriptors = {
       ruleId: { type: "string" },
       errorCode: errorCodeEnum,
       errorMessage: { type: "string" },
-    },
+    } satisfies Record<(typeof resolutionDetailsKeys)[number], JsonTypeNode>,
     required: ["value", "variantName", "reason"],
     unknownKeys: "strip",
   },
@@ -123,7 +124,18 @@ export const contractSurfaceDescriptors: ContractSurfaceDescriptors = {
       evaluations: {
         type: "object",
         propertyNames: { type: "string" },
-        additionalProperties: true,
+        additionalProperties: {
+          type: "object",
+          properties: {
+            variant: nullableVariantValue,
+            variantName: nullableString,
+            reason: evaluateAllReasonEnum,
+            errorCode: { anyOf: [errorCodeEnum, { type: "null" }] },
+            exposureTicket: nullableString,
+          },
+          required: [...evaluateAllEntryKeys],
+          additionalProperties: false,
+        },
       },
     },
     required: [...evaluateAllResponseKeys],
