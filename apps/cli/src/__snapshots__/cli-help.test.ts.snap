@@ -455,6 +455,119 @@ Request body (--body-json):
 
 Example:
   splitch envs update --body-json '{"name":"name"}' --json",
+    "event-definition-versions create": "Publish the next immutable Event Definition Version.
+
+Usage:
+  splitch event-definition-versions create <event-definition-id> [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  entityType       required  string | null
+  fields           required  { name: string; type: "boolean"; required: boolean; allowedValues?: boolean[] } | { name: string; type: "string"; required: boolean; allowedValues: string[] } | { name: string; type: "number"; required: boolean; numberKind: string ("measurement" | "count" | "amount" | "duration" | "ratio" | "score" | "delta"); allowedValues?: number[]; minimum?: number; maximum?: number } | { name: string; type: "json"; required: boolean; jsonSchema: closed JSON Schema }[]
+  dimensions       required  { name: string; type: "boolean"; required: boolean; allowedValues?: boolean[] } | { name: string; type: "string"; required: boolean; allowedValues: string[] } | { name: string; type: "number"; required: boolean; numberKind: string ("measurement" | "count" | "amount" | "duration" | "ratio" | "score" | "delta"); allowedValues?: number[]; minimum?: number; maximum?: number }[]
+  idempotency_key  optional  string
+  Example:
+    {"entityType":"entityType","fields":[],"dimensions":[]}
+
+Example:
+  splitch event-definition-versions create <event-definition-id> --body-json '{"entityType":"entityType","fields":[],"dimensions":[]}' --json",
+    "event-definition-versions get": "Get one immutable Event Definition Version.
+
+Usage:
+  splitch event-definition-versions get <event-definition-id> <version-id> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch event-definition-versions get <event-definition-id> <version-id> --json",
+    "event-definition-versions list": "List immutable Event Definition Versions.
+
+Usage:
+  splitch event-definition-versions list <event-definition-id> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch event-definition-versions list <event-definition-id> --json",
+    "event-definitions create": "Create an App-level Event Definition.
+
+Usage:
+  splitch event-definitions create [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>            [type: string; default: none] Resource name.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  name             required  string
+  family           required  string ("metric" | "web")
+  displayName      required  string
+  description      optional  string
+  idempotency_key  optional  string
+  Example:
+    {"name":"name","family":"metric","displayName":"displayName"}
+
+Example:
+  splitch event-definitions create --body-json '{"name":"name","family":"metric","displayName":"displayName"}' --json",
+    "event-definitions get": "Get an Event Definition and its immutable published Versions.
+
+Usage:
+  splitch event-definitions get <event-definition-id> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch event-definitions get <event-definition-id> --json",
+    "event-definitions list": "List Event Definitions in an App.
+
+Usage:
+  splitch event-definitions list [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch event-definitions list --json",
+    "event-definitions update": "Update Event Definition display metadata.
+
+Usage:
+  splitch event-definitions update <event-definition-id> [flags]
+
+Flags:
+  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
+  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help          [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  displayName  optional  string
+  description  optional  string
+  Example:
+    {"displayName":"displayName"}
+
+Example:
+  splitch event-definitions update <event-definition-id> --body-json '{"displayName":"displayName"}' --json",
     "experiment-results get": "Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.
 
 Usage:
@@ -941,8 +1054,8 @@ Request body (--body-json):
   name                       required  string
   key                        required  string
   kind                       required  string ("binomial" | "count" | "revenue" | "ratio")
-  eventName                  required  string
-  eventValueField            optional  string
+  eventDefinitionId          required  string
+  eventFieldName             optional  string
   denominator                optional  { metricId: string }
   description                optional  string
   downsideThresholdPct       optional  number | null
@@ -952,10 +1065,10 @@ Request body (--body-json):
   cupedCoverageThresholdPct  optional  number | null
   idempotency_key            optional  string
   Example:
-    {"appId":"app_1","name":"name","key":"key","kind":"binomial","eventName":"eventName"}
+    {"appId":"app_1","name":"name","key":"key","kind":"binomial","eventDefinitionId":"eventDefinition_1"}
 
 Example:
-  splitch metrics create --body-json '{"appId":"app_1","name":"name","key":"key","kind":"binomial","eventName":"eventName"}' --json",
+  splitch metrics create --body-json '{"appId":"app_1","name":"name","key":"key","kind":"binomial","eventDefinitionId":"eventDefinition_1"}' --json",
     "metrics delete": "Delete a Metric (blocked if referenced by a running Experiment).
 
 Usage:
@@ -1009,8 +1122,8 @@ Request body (--body-json):
   name                       optional  string
   key                        optional  string
   kind                       optional  string ("binomial" | "count" | "revenue" | "ratio")
-  eventName                  optional  string
-  eventValueField            optional  string
+  eventDefinitionId          optional  string
+  eventFieldName             optional  string
   denominator                optional  { metricId: string }
   description                optional  string
   downsideThresholdPct       optional  number | null
@@ -1491,6 +1604,37 @@ Flags:
 
 Example:
   splitch envs list --help",
+    "event-definition-versions": "Manage event-definition-versions resources.
+
+Usage:
+  splitch event-definition-versions <action> [arguments] [flags]
+
+Commands:
+  create          Publish the next immutable Event Definition Version.
+  list            List immutable Event Definition Versions.
+  get             Get one immutable Event Definition Version.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch event-definition-versions create --help",
+    "event-definitions": "Manage event-definitions resources.
+
+Usage:
+  splitch event-definitions <action> [arguments] [flags]
+
+Commands:
+  list            List Event Definitions in an App.
+  create          Create an App-level Event Definition.
+  get             Get an Event Definition and its immutable published Versions.
+  update          Update Event Definition display metadata.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch event-definitions list --help",
     "experiment-results": "Manage experiment-results resources.
 
 Usage:
@@ -1796,6 +1940,8 @@ Resource groups:
   entity-privacy
   env-policy
   envs
+  event-definition-versions
+  event-definitions
   experiment-results
   experiments
   flag-config

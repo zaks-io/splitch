@@ -10,8 +10,8 @@ import { EvaluationUsageReplayWindowDurableObject } from "./evaluation-usage-rep
 import { handleEvaluationIngest, handleIngest } from "./ingest";
 import { handleMetricEvent } from "./metric-event-ingest";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
+import { handleMetricEventQueue } from "./metric-event-queue";
 import { MetricEventRateLimitDurableObject } from "./metric-event-rate-limit";
-import { appendRawEvent, tinybirdDelivery } from "./tinybird";
 import type { Env } from "./types";
 
 const service = "splitch-event-ingest-api";
@@ -71,18 +71,15 @@ const handler = {
     });
     return route.handle(request, env);
   },
-  async queue(batch, env): Promise<void> {
-    const delivery = tinybirdDelivery(env, "metric_events");
-    if (!delivery.ok) throw new Error(delivery.error.message);
-    await Promise.all(
-      batch.messages.map((message) =>
-        appendRawEvent(message.body as Record<string, unknown>, delivery.value),
-      ),
-    );
-  },
-} satisfies ExportedHandler<Env>;
+  queue: handleMetricEventQueue,
+} satisfies ExportedHandler<Env, Record<string, unknown>>;
 
-export default wrapWorkerHandler(handler, { surface: "event-ingest-api" });
+const wrappedHandler = wrapWorkerHandler({ fetch: handler.fetch }, { surface: "event-ingest-api" });
+
+export default {
+  fetch: wrappedHandler.fetch,
+  queue: handler.queue,
+} satisfies ExportedHandler<Env, Record<string, unknown>>;
 
 export {
   EvaluationCommitOutboxDurableObject,

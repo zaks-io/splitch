@@ -48,6 +48,13 @@ const SEED = [
      VALUES ('app_fk_probe', 'org_fk_probe', 'FK Probe', 'fk-probe', '${NOW}', '${NOW}')`,
   `INSERT INTO environments (id, app_id, key, name, created_at, updated_at)
      VALUES ('env_fk_probe', 'app_fk_probe', 'dev', 'Dev', '${NOW}', '${NOW}')`,
+  `INSERT INTO metrics (
+     id, app_id, key, name, kind, event_name, event_value_field, created_at, created_by
+   )
+   VALUES (
+     'metric_fk_probe', 'app_fk_probe', 'purchase-revenue', 'Purchase revenue', 'revenue',
+     'purchase_completed', 'amount', '${NOW}', 'user_fk_probe'
+   )`,
   `INSERT INTO flags (id, app_id, key, name, schema, default_variant_id, created_at, updated_at)
      VALUES (
        'flag_fk_probe', 'app_fk_probe', 'probe-flag', 'Probe Flag', '{"type":"boolean"}',
@@ -198,8 +205,39 @@ try {
     fail(`the frozen Control backfill did not preserve the existing Run:\n${controlVariant}`);
   }
 
+  const migratedMetric = execSql(
+    `SELECT m.event_field_name, d.name, d.display_name, d.family,
+            d.current_published_version_id
+     FROM metrics AS m
+     JOIN event_definitions AS d
+       ON d.app_id = m.app_id AND d.id = m.event_definition_id
+     WHERE m.id = 'metric_fk_probe'`,
+    "verifying the Metric Event Definition backfill",
+  );
+  for (const expected of [
+    "amount",
+    "purchase_completed",
+    "metric",
+    "event_definition_version_migrated_",
+  ]) {
+    if (!migratedMetric.includes(expected)) {
+      fail(`the Metric lost its Event binding during migration:\n${migratedMetric}`);
+    }
+  }
+
+  const migratedVersion = execSql(
+    `SELECT json_extract(v.fields, '$[0].name') AS field_name
+     FROM event_definition_versions AS v
+     JOIN metrics AS m ON m.event_definition_id = v.event_definition_id
+     WHERE m.id = 'metric_fk_probe'`,
+    "verifying the published Event Definition Version backfill",
+  );
+  if (!migratedVersion.includes('"field_name": "amount"')) {
+    fail(`the published Event Definition Version lost the Metric field:\n${migratedVersion}`);
+  }
+
   console.log(
-    "✔ d1:migrate:populated: full migration set applied cleanly to a POPULATED local D1.",
+    "✔ d1:migrate:populated: full migration set preserved a populated Metric Event binding.",
   );
 } finally {
   rmSync(sandbox, { recursive: true, force: true });

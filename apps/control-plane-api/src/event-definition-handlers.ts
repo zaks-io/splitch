@@ -8,7 +8,7 @@ import { appScope, type Repository } from "@splitch/db";
 import type { HandlerArgs, Registrar } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
-import { nowIso } from "./app-environment-model";
+import { appNotFound, nowIso } from "./app-environment-model";
 import { canonicalHash } from "./approval-canonical";
 import { randomHex } from "./credential-cache";
 import { validationError } from "./flag-definition-errors";
@@ -51,6 +51,7 @@ function makeEventDefinitionHandlers(deps: EventDefinitionDeps) {
 
 async function list(deps: EventDefinitionDeps, args: HandlerArgs<unknown>): Promise<Response> {
   const appId = pathParam(args.input, "appId");
+  if (!(await deps.repo.identity.getApp(appId))) return appNotFound(args.requestId);
   const rows = await deps.repo.eventDefinitions.definitions.findMany(appScope(appId));
   return Response.json({ items: rows.map(definitionResponse) });
 }
