@@ -42,15 +42,22 @@ export function logZeroProgress(
   return error;
 }
 
+export const EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION =
+  "Retry flush(); the pending batch is retained for the 5s retry";
+
+export const EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION =
+  "The pending batch was not sent and will not be retried; call flush() before close() or page teardown if redemption must complete";
+
 export function logBatchFailure(
   logger: Logger,
   result: BrowserExposuresResult,
   count: number,
+  remediation: string,
 ): SplitchSdkError {
   const error = new SplitchSdkError({
     code: result.errorCode ?? "SERVICE_UNAVAILABLE",
     causeSummary: result.errorMessage ?? "Exposure batch flush failed",
-    remediation: "Retry flush(); the pending batch is retained for the 5s retry",
+    remediation,
     status: result.status,
     originalError: result.cause,
   });

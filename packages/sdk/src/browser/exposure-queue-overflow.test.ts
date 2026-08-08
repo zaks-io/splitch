@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EXPOSURE_BATCH_MAX_ITEMS } from "../generated/contract-surface.js";
 import { FakeLogger } from "../test-fixtures";
+import { EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION } from "./exposure-drain";
 import { ExposureQueue } from "./exposure-queue";
 import type { BrowserExposuresResult } from "./transport";
 
@@ -150,9 +151,7 @@ describe("ExposureQueue: retain-on-failure (R4)", () => {
     expect(redeemSizes[0]).toBe(EXPOSURE_BATCH_MAX_ITEMS);
     expect(logger.errors.some((row) => row.message.includes("RATE_LIMITED"))).toBe(false);
     expect(
-      logger.errors.some((row) =>
-        row.message.includes("the pending batch is retained for the 5s retry"),
-      ),
+      logger.errors.some((row) => row.message.includes(EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION)),
     ).toBe(true);
 
     await vi.advanceTimersByTimeAsync(5_000);
