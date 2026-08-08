@@ -10,7 +10,6 @@ import { evaluateAllFlag } from "./evaluate/accessor-paths";
 import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
 import type { MintExposureTicketDeps } from "./evaluate/exposure-ticket";
 import { entryFor } from "./evaluate-all-entry";
-import { setOwnEvaluation } from "./evaluate-all-map";
 import { sdkRuntime } from "./evaluate-response";
 import { errorResponse } from "./evaluation-error-response";
 import type { EvaluationUsageScope } from "./evaluation-usage";
@@ -124,11 +123,7 @@ async function resolveAll(
       },
     };
     const output = await evaluateAllFlag(routeInput, pathDeps);
-    setOwnEvaluation(
-      evaluations,
-      flag.flagKey,
-      await entryFor(output.result, flag, deps.exposureTicket),
-    );
+    evaluations[flag.flagKey] = await entryFor(output.result, flag, deps.exposureTicket);
   }
 
   return { ok: true, evaluations };
