@@ -8,6 +8,19 @@
  */
 
 export type {
+  ExposureBatchItem,
+  ExposureBatchRequest,
+  ExposureBatchResponse,
+  ExposureBatchResult,
+  ExposureBatchResultStatus,
+} from "./contract-surface-exposures";
+export {
+  EXPOSURE_BATCH_MAX_BODY_BYTES,
+  EXPOSURE_BATCH_MAX_ITEMS,
+  ExposureBatchRequestSchema,
+  ExposureBatchResponseSchema,
+} from "./contract-surface-exposures";
+export type {
   DataPlaneEvaluateResponse,
   ErrorCode,
   EvaluateAllEntry,

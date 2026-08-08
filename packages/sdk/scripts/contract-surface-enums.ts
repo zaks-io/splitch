@@ -107,3 +107,31 @@ export interface PeekEvaluateResponse {
 export interface EvaluateAllResponse {
   evaluations: Record<string, EvaluateAllEntry>;
 }
+
+/** Max items per Exposure batch (Web Event parity; contracts exposures-wire). */
+export const EXPOSURE_BATCH_MAX_ITEMS = 25;
+/** Max UTF-8 JSON body bytes for an Exposure batch. */
+export const EXPOSURE_BATCH_MAX_BODY_BYTES = 32 * 1024;
+
+export const exposureBatchResultStatuses = ["accepted", "deduplicated", "rejected"] as const;
+export type ExposureBatchResultStatus = (typeof exposureBatchResultStatuses)[number];
+
+export interface ExposureBatchItem {
+  exposureId: string;
+  exposureTicket: string;
+  clientTimestamp: string;
+}
+
+export interface ExposureBatchRequest {
+  exposures: ExposureBatchItem[];
+}
+
+export interface ExposureBatchResult {
+  exposureId: string;
+  status: ExposureBatchResultStatus;
+  code: ErrorCode | null;
+}
+
+export interface ExposureBatchResponse {
+  results: ExposureBatchResult[];
+}

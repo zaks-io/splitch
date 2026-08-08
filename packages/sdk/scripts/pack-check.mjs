@@ -10,6 +10,7 @@ import {
 } from "../../../scripts/release/build-stamp.mjs";
 import { assertPublishKeepsManifest } from "../../../scripts/release/publish-manifest-probe.mjs";
 import {
+  assertReleaseBundleJs,
   assertReleaseTarballContents,
   createPackStagingDir,
   getPackageRoot,
@@ -38,6 +39,16 @@ try {
     declarationText: readTarballFile(tarballPath, "package/dist/index.d.ts"),
     bundleJs: readTarballFile(tarballPath, "package/dist/index.js"),
   });
+  // Browser subpath must ship beside the root entry (SPL-332).
+  const browserJs = readTarballFile(tarballPath, "package/dist/browser/index.js");
+  const browserDts = readTarballFile(tarballPath, "package/dist/browser/index.d.ts");
+  if (!browserJs.includes("createSplitchBrowserClient")) {
+    throw new Error("release browser bundle missing createSplitchBrowserClient");
+  }
+  if (!browserDts.includes("createSplitchBrowserClient")) {
+    throw new Error("release browser declarations missing createSplitchBrowserClient");
+  }
+  assertReleaseBundleJs(browserJs);
 } finally {
   rmSync(staging, { recursive: true, force: true });
 }

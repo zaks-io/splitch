@@ -160,6 +160,30 @@ the type level instead of resolving `undefined` into an `await`. If you pass you
 own object literal there, add the method; the type will tell you. Nothing else is
 affected, and the built-in adapter needs no change.
 
+## Browser client (`@splitch/sdk/browser`)
+
+Static-context client for browsers: one Evaluation Context, one Precomputed
+Evaluations fetch, then synchronous Flag reads with zero per-read network.
+Exposures fire on the first local read by redeeming Exposure Tickets.
+
+```ts
+import { createSplitchBrowserClient } from "@splitch/sdk/browser";
+
+const splitch = createSplitchBrowserClient({
+  clientKey: "pk_...", // secrets (sk_/ak_) throw at construction
+  context: { targetingKey: user.id },
+});
+await splitch.init();
+
+const on = splitch.evaluate("new-checkout", false); // sync
+const details = splitch.evaluateDetails("new-checkout", false);
+await splitch.flush();
+```
+
+Reading before `init()` throws `SDK_NOT_INITIALIZED`. An unknown Flag Key returns
+your default with `reason: "ERROR"` / `FLAG_NOT_FOUND` and a loud log — never a
+silent invented default.
+
 ## Links
 
 - SDK guide: <https://splitch.dev/docs/sdk/install>

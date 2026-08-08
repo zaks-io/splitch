@@ -5,6 +5,8 @@ import { resolutionReasons as contractResolutionReasons } from "../../contracts/
 import {
   DataPlaneEvaluateResponseSchema as ZodDataPlaneEvaluateResponseSchema,
   EvaluateAllResponseSchema as ZodEvaluateAllResponseSchema,
+  ExposureBatchRequestSchema as ZodExposureBatchRequestSchema,
+  ExposureBatchResponseSchema as ZodExposureBatchResponseSchema,
   PeekEvaluateResponseSchema as ZodPeekEvaluateResponseSchema,
   ResolutionDetailsSchema as ZodResolutionDetailsSchema,
 } from "../../contracts/src/sdk-data-plane-surface";
@@ -16,6 +18,8 @@ import {
   DataPlaneEvaluateResponseSchema,
   ErrorCodeSchema,
   EvaluateAllResponseSchema,
+  ExposureBatchRequestSchema,
+  ExposureBatchResponseSchema,
   PeekEvaluateResponseSchema,
   ResolutionDetailsSchema,
 } from "./generated/contract-surface.js";
@@ -227,5 +231,64 @@ describe("contract-surface zod-free parity", () => {
     expect(Object.keys(compiled.data.evaluations)).toEqual(["__proto__"]);
     expect(Object.keys(zod.data.evaluations)).toEqual([]);
     expect(compiled.data).not.toEqual(zod.data);
+  });
+});
+
+describe("contract-surface exposure batch parity", () => {
+  it("ExposureBatchRequestSchema matches Zod", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const rows: { input: unknown; ok: boolean }[] = [
+      {
+        input: {
+          exposures: [
+            {
+              exposureId: id,
+              exposureTicket: "ticket",
+              clientTimestamp: "2026-08-08T00:00:00.000Z",
+            },
+          ],
+        },
+        ok: true,
+      },
+      {
+        input: {
+          exposures: [
+            {
+              exposureId: "not-a-uuid",
+              exposureTicket: "ticket",
+              clientTimestamp: "2026-08-08T00:00:00.000Z",
+            },
+          ],
+        },
+        ok: false,
+      },
+      { input: { exposures: [] }, ok: false },
+    ];
+    for (const row of rows) {
+      expectParity(ExposureBatchRequestSchema, ZodExposureBatchRequestSchema, row.input, row.ok);
+    }
+  });
+
+  it("ExposureBatchResponseSchema matches Zod", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const rows: { input: unknown; ok: boolean }[] = [
+      {
+        input: { results: [{ exposureId: id, status: "accepted", code: null }] },
+        ok: true,
+      },
+      {
+        input: {
+          results: [{ exposureId: id, status: "rejected", code: "EXPOSURE_TICKET_INVALID" }],
+        },
+        ok: true,
+      },
+      {
+        input: { results: [{ exposureId: id, status: "accepted", code: "VALIDATION_ERROR" }] },
+        ok: false,
+      },
+    ];
+    for (const row of rows) {
+      expectParity(ExposureBatchResponseSchema, ZodExposureBatchResponseSchema, row.input, row.ok);
+    }
   });
 });

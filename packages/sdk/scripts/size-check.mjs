@@ -98,15 +98,21 @@ async function measureEntry(esbuild, entry) {
   const staging = mkdtempSync(join(tmpdir(), "splitch-sdk-size-"));
   try {
     const appPath = join(staging, "app.js");
-    // Minimal page shape from SPL-325: createSplitchClient + evaluateDetails + verify.
-    writeFileSync(
-      appPath,
-      `import { createSplitchClient } from ${JSON.stringify(entry.importSpecifier)};
+    const consumerSource =
+      entry.exportPath === "./browser"
+        ? `import { createSplitchBrowserClient } from ${JSON.stringify(entry.importSpecifier)};
+const client = createSplitchBrowserClient({ clientKey: "pk_size", context: { targetingKey: "u" } });
+await client.init();
+client.evaluate("flag", false);
+client.evaluateDetails("flag", false);
+await client.flush();
+`
+        : `import { createSplitchClient } from ${JSON.stringify(entry.importSpecifier)};
 const client = createSplitchClient({ clientKey: "ck_size" });
 await client.evaluateDetails("flag", { targetingKey: "u", idempotencyKey: "k", defaultValue: false });
 await client.verify("flag", { targetingKey: "u", defaultValue: false });
-`,
-    );
+`;
+    writeFileSync(appPath, consumerSource);
 
     const outfile = join(staging, "out.js");
     const result = await esbuild.build({

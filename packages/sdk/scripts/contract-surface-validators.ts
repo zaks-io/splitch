@@ -9,13 +9,13 @@ import {
   type EvaluateAllEntry,
   type EvaluateAllReason,
   type EvaluateAllResponse,
+  errorCodes,
+  evaluateAllReasons,
   type PeekEvaluateResponse,
   type ResolutionDetails,
   type ResolutionReason,
-  type VariantValue,
-  errorCodes,
-  evaluateAllReasons,
   resolutionReasons,
+  type VariantValue,
 } from "./contract-surface-enums";
 
 export type {
