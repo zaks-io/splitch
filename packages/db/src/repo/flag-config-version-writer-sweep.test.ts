@@ -34,7 +34,10 @@ import {
  * `dark-launch-experiment.ts`, `dark-launch-http.ts`), where the runtime
  * TypeError is what covers them. This sweep catches raw-`db` writers inside
  * `packages/db/src`. Raw `D1Database.prepare` UPDATEs of `flag_configs` are
- * outside both and are not guarded.
+ * outside both and are not guarded — including the live
+ * `UPDATE flag_configs SET …` in
+ * `apps/control-plane-api/src/config-store-fixture-data.ts` (test-fixture helper
+ * imported only by `.test.ts` files, not a production writer).
  *
  * Including those harnesses in a tsconfig would typecheck them and their
  * transitive helpers under CI, lengthening typecheck and likely surfacing latent
@@ -272,6 +275,8 @@ describe("every flag_configs UPDATE bumps version", () => {
       "const tbl = flagConfigsTable;",
       "const hop = tbl;",
       "const { update } = hop;",
+      "const writeConfig = flagConfigsTable.update;",
+      "async function apply(table: typeof flagConfigsTable) { await table.update(s, {}); }",
       "const raw = schema.flagConfigs;",
       "const raw2 = raw;",
     ].join("\n");
@@ -279,7 +284,9 @@ describe("every flag_configs UPDATE bumps version", () => {
     expect(bindings.facades.has("flagConfigsTable")).toBe(true);
     expect(bindings.facades.has("tbl")).toBe(true);
     expect(bindings.facades.has("hop")).toBe(true);
+    expect(bindings.facades.has("table")).toBe(true);
     expect(bindings.directUpdates.has("update")).toBe(true);
+    expect(bindings.directUpdates.has("writeConfig")).toBe(true);
     expect(bindings.tables.has("raw")).toBe(true);
     expect(bindings.tables.has("raw2")).toBe(true);
   });

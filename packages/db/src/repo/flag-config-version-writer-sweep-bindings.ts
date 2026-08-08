@@ -7,7 +7,10 @@ export type FlagConfigBindings = {
   tables: Set<string>;
   /** Identifiers that refer to a ScopedTable over flagConfigs. */
   facades: Set<string>;
-  /** Identifiers bound by destructuring `.update` off a facade (`const { update } = …`). */
+  /**
+   * Identifiers bound to a facade's `.update` — destructuring
+   * (`const { update } = …`) or method reference (`const write = facade.update`).
+   */
   directUpdates: Set<string>;
 };
 
@@ -82,15 +85,45 @@ function seedScopedFacades(source: string, tables: Set<string>, facades: Set<str
         facades,
       ) || changed;
   }
+  // `table: typeof flagConfigsTable` — extract-a-helper params typed from a local facade.
+  for (const facade of [...facades]) {
+    changed =
+      addAll(source, new RegExp(`(\\w+)\\s*:\\s*typeof\\s+${facade}\\b`, "g"), facades) || changed;
+  }
   return changed;
 }
 
-function seedSimpleAssignments(source: string, tables: Set<string>, facades: Set<string>): boolean {
+function methodRefUpdate(rhs: string, facades: Set<string>): string | null {
+  const match = stripCast(rhs).match(/^(\w+)\.update$/);
+  if (!match?.[1] || !facades.has(match[1])) return null;
+  return match[1];
+}
+
+function bindAssignment(
+  name: string | undefined,
+  rhs: string,
+  tables: Set<string>,
+  facades: Set<string>,
+  directUpdates: Set<string>,
+): boolean {
+  let changed = false;
+  const kind = rhsKind(rhs, tables, facades);
+  if (kind === "table" && addBinding(tables, name)) changed = true;
+  if (kind === "facade" && addBinding(facades, name)) changed = true;
+  // `const writeConfig = flagConfigsTable.update` — same extraction shape as the narrowed export.
+  if (methodRefUpdate(rhs, facades) && addBinding(directUpdates, name)) changed = true;
+  return changed;
+}
+
+function seedSimpleAssignments(
+  source: string,
+  tables: Set<string>,
+  facades: Set<string>,
+  directUpdates: Set<string>,
+): boolean {
   let changed = false;
   for (const match of source.matchAll(/(?:const|let)\s+(\w+)\s*=\s*([^;\n]+)/g)) {
-    const kind = rhsKind(match[2] ?? "", tables, facades);
-    if (kind === "table" && addBinding(tables, match[1])) changed = true;
-    if (kind === "facade" && addBinding(facades, match[1])) changed = true;
+    if (bindAssignment(match[1], match[2] ?? "", tables, facades, directUpdates)) changed = true;
   }
   return changed;
 }
@@ -136,7 +169,7 @@ function seedOnce(
 ): boolean {
   return (
     seedScopedFacades(source, tables, facades) ||
-    seedSimpleAssignments(source, tables, facades) ||
+    seedSimpleAssignments(source, tables, facades, directUpdates) ||
     seedDestructuring(source, tables, facades, directUpdates)
   );
 }
