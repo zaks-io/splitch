@@ -58,9 +58,8 @@ export class DurableExposureRedemptionClaimStore implements ExposureRedemptionCl
   ): Promise<T> {
     const name = exposureRedemptionClaimScopeName(input.appId, input.environmentId);
     const stub = this.namespace.get(this.namespace.idFromName(name));
-    let response: Response;
     try {
-      response = await stub.fetch(`https://exposure-redemption-claim.local${path}`, {
+      const response = await stub.fetch(`https://exposure-redemption-claim.local${path}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -69,13 +68,21 @@ export class DurableExposureRedemptionClaimStore implements ExposureRedemptionCl
           nowMs: input.nowMs,
         }),
       });
+      if (!response.ok) {
+        throw new ExposureRedemptionClaimHttpError(response.status);
+      }
+      // Body read stays inside the transport try: a workerd "Network connection
+      // lost" after a 200 header is transient, not a permanent TypeError.
+      return parse(await response.json());
     } catch (cause) {
+      if (
+        cause instanceof ExposureRedemptionClaimHttpError ||
+        cause instanceof ExposureRedemptionClaimProtocolError
+      ) {
+        throw cause;
+      }
       throw new ExposureRedemptionClaimTransportError(cause);
     }
-    if (!response.ok) {
-      throw new ExposureRedemptionClaimHttpError(response.status);
-    }
-    return parse(await response.json());
   }
 }
 

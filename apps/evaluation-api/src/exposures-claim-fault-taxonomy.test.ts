@@ -10,6 +10,7 @@ import type {
   ExposureRedemptionClaimOutcome,
   ExposureRedemptionClaimStore,
 } from "./exposure-redemption-claim-core";
+import { ExposureRedemptionClaimProtocolError } from "./exposure-redemption-claim-errors";
 import {
   EXPOSURE_ID_A,
   EXPOSURE_ID_B,
@@ -22,12 +23,37 @@ import { APP_ID, CLIENT_KEY, ENVIRONMENT_ID, makeSdkRouteHarness } from "./sdk-r
 
 const REQUEST_ID = "req_spl_366_claim_taxonomy";
 const INNER_CAUSE = "Network connection lost: durable object 7f3a stub reset";
+const BODY_READ_LOST = "Network connection lost";
 
 function fakeNamespace(fetchImpl: () => Promise<Response>): ExposureRedemptionClaimNamespace {
   return {
     idFromName: (name) => ({ toString: () => name }) as DurableObjectId,
     get: () => ({ fetch: async () => fetchImpl() }),
   };
+}
+
+/** Path-aware DO stub — claim / markSealed / acknowledge can diverge. */
+function fakeNamespaceByPath(
+  handlers: Readonly<Record<string, () => Promise<Response>>>,
+): ExposureRedemptionClaimNamespace {
+  return {
+    idFromName: (name) => ({ toString: () => name }) as DurableObjectId,
+    get: () => ({
+      fetch: async (input: RequestInfo | URL) => {
+        const path = new URL(String(input)).pathname;
+        const handler = handlers[path];
+        if (!handler) throw new Error(`unexpected DO path ${path}`);
+        return handler();
+      },
+    }),
+  };
+}
+
+function jsonOk(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 async function redeemWithStore(store: ExposureRedemptionClaimStore): Promise<{
@@ -53,15 +79,8 @@ async function redeemWithStore(store: ExposureRedemptionClaimStore): Promise<{
 
 describe("POST /api/sdk/exposures: real-store claim faults (SPL-366)", () => {
   it("maps parseClaimOutcome protocol violation through DurableExposureRedemptionClaimStore", async () => {
-    // Real rpc path: HTTP 200 + unrecognized body → parseClaimOutcome throw site.
     const store = new DurableExposureRedemptionClaimStore(
-      fakeNamespace(
-        async () =>
-          new Response(JSON.stringify({ status: "nope" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }),
-      ),
+      fakeNamespace(async () => jsonOk({ status: "nope" })),
     );
     const { body, exposureSink, logger } = await redeemWithStore(store);
 
@@ -87,6 +106,18 @@ describe("POST /api/sdk/exposures: real-store claim faults (SPL-366)", () => {
     expect(logger.errors[0]?.detail).toMatchObject({
       causeChain: ["exposure redemption claim Durable Object returned HTTP 400"],
     });
+  });
+
+  it("maps Durable Object HTTP 404 on claim to INTERNAL_SERVER_ERROR", async () => {
+    const store = new DurableExposureRedemptionClaimStore(
+      fakeNamespace(
+        async () => new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
+      ),
+    );
+    const { body } = await redeemWithStore(store);
+    expect(body.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "INTERNAL_SERVER_ERROR" },
+    ]);
   });
 
   it("maps Durable Object transport throw through DurableExposureRedemptionClaimStore", async () => {
@@ -115,17 +146,126 @@ describe("POST /api/sdk/exposures: real-store claim faults (SPL-366)", () => {
     ]);
   });
 
+  it("maps body-read failure after HTTP 200 to retryable SERVICE_UNAVAILABLE", async () => {
+    const store = new DurableExposureRedemptionClaimStore(
+      fakeNamespace(async () => {
+        const response = jsonOk({ status: "acquired" });
+        response.json = async () => {
+          throw new TypeError(BODY_READ_LOST);
+        };
+        return response;
+      }),
+    );
+    const { body, exposureSink, logger } = await redeemWithStore(store);
+
+    expect(body.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "SERVICE_UNAVAILABLE" },
+    ]);
+    expect(exposureSink.writes).toHaveLength(0);
+    expect(logger.errors[0]?.detail).toMatchObject({
+      causeChain: ["exposure redemption claim Durable Object transport failed", BODY_READ_LOST],
+    });
+  });
+
   it("maps Durable Object HTTP 500 to retryable SERVICE_UNAVAILABLE", async () => {
     const store = new DurableExposureRedemptionClaimStore(
-      fakeNamespace(
-        async () => new Response(JSON.stringify({ status: "acquired" }), { status: 500 }),
-      ),
+      fakeNamespace(async () => jsonOk({ status: "acquired" }, 500)),
     );
     const { body } = await redeemWithStore(store);
 
     expect(body.results).toEqual([
       { exposureId: EXPOSURE_ID_A, status: "rejected", code: "SERVICE_UNAVAILABLE" },
     ]);
+  });
+});
+
+describe("POST /api/sdk/exposures: confirm/ack claim-store seam (SPL-366)", () => {
+  it("maps acknowledge protocol violation to INTERNAL_SERVER_ERROR (not retryable)", async () => {
+    const store = new DurableExposureRedemptionClaimStore(
+      fakeNamespaceByPath({
+        "/claim": async () => jsonOk({ status: "acquired" }),
+        "/markSealed": async () => jsonOk({ ok: true }),
+        "/acknowledge": async () => jsonOk({ status: "nope" }),
+      }),
+    );
+    const { body, exposureSink } = await redeemWithStore(store);
+
+    expect(body.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "INTERNAL_SERVER_ERROR" },
+    ]);
+    // Ingest already committed — taxonomy must still drop so the SDK does not loop.
+    expect(exposureSink.writes).toHaveLength(1);
+  });
+
+  it("maps acknowledge HTTP 409 to INTERNAL_SERVER_ERROR", async () => {
+    const store = new DurableExposureRedemptionClaimStore(
+      fakeNamespaceByPath({
+        "/claim": async () => jsonOk({ status: "acquired" }),
+        "/markSealed": async () => jsonOk({ ok: true }),
+        "/acknowledge": async () =>
+          new Response(JSON.stringify({ error: "mismatch" }), { status: 409 }),
+      }),
+    );
+    const { body, exposureSink } = await redeemWithStore(store);
+
+    expect(body.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "INTERNAL_SERVER_ERROR" },
+    ]);
+    expect(exposureSink.writes).toHaveLength(1);
+  });
+
+  it("maps markSealed HTTP 409 to INTERNAL_SERVER_ERROR", async () => {
+    const store = new DurableExposureRedemptionClaimStore(
+      fakeNamespaceByPath({
+        "/claim": async () => jsonOk({ status: "acquired" }),
+        "/markSealed": async () =>
+          new Response(JSON.stringify({ error: "mismatch" }), { status: 409 }),
+        "/acknowledge": async () => jsonOk({ status: "accepted" }),
+      }),
+    );
+    const { body, exposureSink } = await redeemWithStore(store);
+
+    expect(body.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "INTERNAL_SERVER_ERROR" },
+    ]);
+    expect(exposureSink.writes).toHaveLength(1);
+  });
+
+  it("drains after five retries when acknowledge keeps returning a protocol violation", async () => {
+    // Real Memory claim state + typed protocol throw on every acknowledge — the
+    // pre-fix path returned SERVICE_UNAVAILABLE five times with sinkWrites=1.
+    const memory = new MemoryExposureRedemptionClaimStore();
+    const store: ExposureRedemptionClaimStore = {
+      claim: (input) => memory.claim(input),
+      release: (input) => memory.release(input),
+      markSealed: (input) => memory.markSealed(input),
+      acknowledge: async () => {
+        throw new ExposureRedemptionClaimProtocolError(
+          "exposure redemption acknowledge returned an invalid outcome",
+        );
+      },
+    };
+    const { app, exposureSink } = await makeSdkRouteHarness({
+      liveRun: true,
+      exposureRedemptionClaims: store,
+    });
+    const ticket = await mintTicket();
+    const init = exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]);
+
+    const codes: Array<string | null | undefined> = [];
+    for (let i = 0; i < 5; i++) {
+      const body = (await (await app.request(PATH, init)).json()) as ExposureBatchResponse;
+      codes.push(body.results[0]?.code);
+    }
+
+    expect(codes).toEqual([
+      "INTERNAL_SERVER_ERROR",
+      "INTERNAL_SERVER_ERROR",
+      "INTERNAL_SERVER_ERROR",
+      "INTERNAL_SERVER_ERROR",
+      "INTERNAL_SERVER_ERROR",
+    ]);
+    expect(exposureSink.writes).toHaveLength(1);
   });
 });
 

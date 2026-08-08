@@ -1,4 +1,5 @@
 import type { ErrorCode } from "./generated/contract-surface.js";
+import { ErrorCodeSchema } from "./generated/contract-surface.js";
 
 /**
  * Per-item Exposure batch rejection codes the SDK may retry with the same
@@ -7,25 +8,45 @@ import type { ErrorCode } from "./generated/contract-surface.js";
  * Must stay aligned with docs/spec/sdk/exposures-endpoint.md (Redemption
  * semantics). SERVICE_UNAVAILABLE is the sole transient per-item code;
  * RATE_LIMITED is a batch-level gate, not an item outcome.
+ *
+ * Staged landing: this module is not yet wired into a shipping flush/queue
+ * (not exported from index.ts). Spec + tests pin the contract ahead of the
+ * consumer.
  */
 export function isRetryableExposureRejection(code: ErrorCode): boolean {
   return code === "SERVICE_UNAVAILABLE";
 }
 
+const EXPOSURE_RESULT_STATUSES = new Set(["accepted", "deduplicated", "rejected"]);
+
 type ExposureResultRow = {
   readonly exposureId: string;
-  readonly status: "accepted" | "deduplicated" | "rejected";
-  readonly code: ErrorCode | null;
+  readonly status: string;
+  readonly code: string | null;
 };
 
-/** Fail loud on rejected+null; return whether the item stays in the queue. */
+function assertKnownResultStatus(row: ExposureResultRow): void {
+  if (!EXPOSURE_RESULT_STATUSES.has(row.status)) {
+    throw new Error(
+      `Unrecognized Exposure batch result status for ${row.exposureId}: ${JSON.stringify(row.status)}`,
+    );
+  }
+}
+
+/** Fail loud on rejected+null / unknown code; return whether the item stays queued. */
 function shouldRetainRejected(row: ExposureResultRow): boolean {
   if (row.code === null) {
     throw new Error(
       `Exposure rejection for ${row.exposureId} is missing a code (fail loud; never silently drop)`,
     );
   }
-  return isRetryableExposureRejection(row.code);
+  const parsed = ErrorCodeSchema.safeParse(row.code);
+  if (!parsed.success) {
+    throw new Error(
+      `Unrecognized Exposure rejection code for ${row.exposureId}: ${JSON.stringify(row.code)}`,
+    );
+  }
+  return isRetryableExposureRejection(parsed.data);
 }
 
 /**
@@ -33,7 +54,7 @@ function shouldRetainRejected(row: ExposureResultRow): boolean {
  * and non-retryable rejections leave the queue; retryable rejections and missing
  * rows are retained with the same exposureId.
  *
- * A `rejected` row with `code === null` is a silent substitution — refuse it.
+ * Unrecognized status or rejection code throws (ADR-0036) — never silently drop.
  */
 export function retainRetryableExposures<T extends { readonly exposureId: string }>(
   pending: readonly T[],
@@ -47,6 +68,7 @@ export function retainRetryableExposures<T extends { readonly exposureId: string
       retained.push(item);
       continue;
     }
+    assertKnownResultStatus(row);
     if (row.status === "rejected" && shouldRetainRejected(row)) {
       retained.push(item);
     }

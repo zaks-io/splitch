@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { exposureClaimFaultCode } from "./exposure-claim-fault";
+import { exposureClaimFaultCode, rejectClaimStoreFault } from "./exposure-claim-fault";
 import {
   ExposureRedemptionClaimHttpError,
   ExposureRedemptionClaimProtocolError,
@@ -16,7 +16,7 @@ const SPEC_PATH = join(
 );
 
 describe("exposureClaimFaultCode classification (mutation-proven)", () => {
-  it("classifies the four fault classes", () => {
+  it("classifies transport, protocol, 4xx, and 5xx", () => {
     expect(exposureClaimFaultCode(new TypeError("undefined is not a function"))).toBe(
       "INTERNAL_SERVER_ERROR",
     );
@@ -28,6 +28,12 @@ describe("exposureClaimFaultCode classification (mutation-proven)", () => {
       ),
     ).toBe("INTERNAL_SERVER_ERROR");
     expect(exposureClaimFaultCode(new ExposureRedemptionClaimHttpError(400))).toBe(
+      "INTERNAL_SERVER_ERROR",
+    );
+    expect(exposureClaimFaultCode(new ExposureRedemptionClaimHttpError(404))).toBe(
+      "INTERNAL_SERVER_ERROR",
+    );
+    expect(exposureClaimFaultCode(new ExposureRedemptionClaimHttpError(409))).toBe(
       "INTERNAL_SERVER_ERROR",
     );
     expect(exposureClaimFaultCode(new ExposureRedemptionClaimHttpError(500))).toBe(
@@ -42,6 +48,20 @@ describe("exposureClaimFaultCode classification (mutation-proven)", () => {
     expect(exposureClaimFaultCode(new Error("something unexpected"))).toBe("INTERNAL_SERVER_ERROR");
     expect(exposureClaimFaultCode("plain string")).toBe("INTERNAL_SERVER_ERROR");
   });
+
+  it("rejectClaimStoreFault is the only rejection shape from the seam", () => {
+    expect(rejectClaimStoreFault("e1", new ExposureRedemptionClaimHttpError(409))).toEqual({
+      exposureId: "e1",
+      status: "rejected",
+      code: "INTERNAL_SERVER_ERROR",
+    });
+    expect(
+      rejectClaimStoreFault(
+        "e1",
+        new ExposureRedemptionClaimTransportError(new Error(INNER_CAUSE)),
+      ),
+    ).toEqual({ exposureId: "e1", status: "rejected", code: "SERVICE_UNAVAILABLE" });
+  });
 });
 
 describe("exposures-endpoint.md taxonomy pin", () => {
@@ -52,8 +72,10 @@ describe("exposures-endpoint.md taxonomy pin", () => {
     expect(spec).toMatch(/Transient[\s\S]*SERVICE_UNAVAILABLE[\s\S]*Retain the item and retry/);
     expect(spec).toMatch(/Deterministic[\s\S]*INTERNAL_SERVER_ERROR[\s\S]*drop — never re-queue/);
     expect(spec).toContain("Durable Object transport failure");
-    expect(spec).toContain("non-400 HTTP status");
+    expect(spec).toContain("5xx HTTP");
+    expect(spec).toContain("4xx HTTP");
     expect(spec).toContain("parseClaimOutcome");
-    expect(spec).toContain("Durable Object HTTP 400");
+    expect(spec).toContain("parseAcknowledgeOutcome");
+    expect(spec).toContain("400 / 404 / 409");
   });
 });

@@ -116,12 +116,15 @@ Mapping:
 - Transient or platform-side **ingest** faults (internal-token drift / 401, config propagation
   lag / 404, rate limits / 429, and other non-400 ingest statuses) → `SERVICE_UNAVAILABLE`.
 - Unambiguous caller-payload fault from ingest (HTTP 400) → non-retryable `VALIDATION_ERROR`.
-- Transient **claim-store** fault (Durable Object transport failure on `claim`, or a
-  Durable Object non-400 HTTP status such as 500) → `SERVICE_UNAVAILABLE`.
+- Transient **claim-store** fault (Durable Object transport failure — including a
+  body-read failure after a 200 header — or a Durable Object 5xx HTTP status) →
+  `SERVICE_UNAVAILABLE`.
 - Deterministic **claim-store** fault (programming error in the redemption path, a
-  `parseClaimOutcome` protocol violation, or a Durable Object HTTP 400) → non-retryable
-  `INTERNAL_SERVER_ERROR`. An unclassified claim throw is also `INTERNAL_SERVER_ERROR` (fail
-  loud; never quietly bucketed as retryable).
+  `parseClaimOutcome` / `parseAcknowledgeOutcome` / `parseOk` protocol violation, or a
+  Durable Object 4xx HTTP status such as 400 / 404 / 409) → non-retryable
+  `INTERNAL_SERVER_ERROR`. An unclassified claim-store throw is also `INTERNAL_SERVER_ERROR`
+  (fail loud; never quietly bucketed as retryable). Every claim-store catch classifies
+  through the same seam — acknowledge / confirm / claim cannot hardcode a retryable code.
 
 Holdover replays and non-live-Run resolutions never had tickets, so no redemption path exists
 for them — the no-new-Exposure invariants of

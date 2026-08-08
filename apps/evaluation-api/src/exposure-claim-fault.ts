@@ -1,4 +1,4 @@
-import type { ErrorCode } from "@splitch/contracts";
+import type { ErrorCode, ExposureBatchResult } from "@splitch/contracts";
 import {
   ExposureRedemptionClaimHttpError,
   ExposureRedemptionClaimProtocolError,
@@ -9,24 +9,27 @@ import {
  * Map a thrown claim-store fault to the per-item Exposure rejection code.
  *
  * Transient (SDK retries):
- * - Durable Object transport failure (stub fetch threw)
- * - Durable Object non-400 HTTP (e.g. 500 — reachable; see exposure-redemption-do.test.ts)
+ * - Durable Object transport failure (stub fetch threw, or body read failed)
+ * - Durable Object 5xx HTTP (not in the DO handler vocabulary; platform/proxy
+ *   injection only — still retryable if observed)
  *
  * Deterministic (SDK drops):
- * - Durable Object HTTP 400
- * - parseClaimOutcome protocol violation
+ * - Durable Object 4xx HTTP (handler emits 400 / 404 / 409)
+ * - parseClaimOutcome / parseAcknowledgeOutcome / parseOk protocol violation
  * - TypeError / any unclassified throw (fail loud; never quietly retryable)
  *
  * docs/spec/sdk/exposures-endpoint.md
  */
-const DETERMINISTIC_CLAIM_HTTP_STATUSES = new Set([400]);
+function isDeterministicClaimHttpStatus(status: number): boolean {
+  return status >= 400 && status < 500;
+}
 
 export function exposureClaimFaultCode(cause: unknown): ErrorCode {
   if (cause instanceof ExposureRedemptionClaimTransportError) {
     return "SERVICE_UNAVAILABLE";
   }
   if (cause instanceof ExposureRedemptionClaimHttpError) {
-    if (DETERMINISTIC_CLAIM_HTTP_STATUSES.has(cause.status)) {
+    if (isDeterministicClaimHttpStatus(cause.status)) {
       return "INTERNAL_SERVER_ERROR";
     }
     return "SERVICE_UNAVAILABLE";
@@ -35,4 +38,12 @@ export function exposureClaimFaultCode(cause: unknown): ErrorCode {
     return "INTERNAL_SERVER_ERROR";
   }
   return "INTERNAL_SERVER_ERROR";
+}
+
+/**
+ * Seam for every claim-store catch: classify once here so call sites cannot
+ * hardcode SERVICE_UNAVAILABLE and re-open the SPL-366 retry loop.
+ */
+export function rejectClaimStoreFault(exposureId: string, cause: unknown): ExposureBatchResult {
+  return { exposureId, status: "rejected", code: exposureClaimFaultCode(cause) };
 }

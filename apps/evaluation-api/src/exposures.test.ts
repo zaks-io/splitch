@@ -43,7 +43,11 @@ class FailOnceAcknowledgeStore implements ExposureRedemptionClaimStore {
   ): Promise<ExposureRedemptionAcknowledgeOutcome> {
     this.acknowledgeAttempts += 1;
     if (this.acknowledgeAttempts === 1) {
-      throw new Error("acknowledge Durable Object put failed");
+      // Transient DO fault — must be typed so the claim-store seam classifies
+      // SERVICE_UNAVAILABLE (bare Error would fail-loud as INTERNAL_SERVER_ERROR).
+      throw new ExposureRedemptionClaimTransportError(
+        new Error("acknowledge Durable Object put failed"),
+      );
     }
     return this.inner.acknowledge(input);
   }

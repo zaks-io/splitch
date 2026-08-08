@@ -8,7 +8,6 @@ import type { AssignmentStore } from "./assignment/assignment-store";
 import { errorCauseChain } from "./error-cause-chain";
 import { assembleExposureFromTicket } from "./evaluate/exposure-assembly";
 import type { ExposureTicketPayload, MintExposureTicketDeps } from "./evaluate/exposure-ticket";
-import { exposureClaimFaultCode } from "./exposure-claim-fault";
 import {
   type ExposureIngestSink,
   ExposureIngestSinkError,
@@ -17,6 +16,7 @@ import {
 import type { ExposureRedemptionClaimStore } from "./exposure-redemption-claim-core";
 import {
   ingestFailureCode,
+  logAndRejectClaimStoreFault,
   type RedemptionClaimContext,
   rejected,
   releaseClaimQuietly,
@@ -88,14 +88,13 @@ async function redeemOne(
   try {
     claim = await deps.exposureRedemptionClaims.claim(claimInput);
   } catch (cause) {
-    deps.logger?.error("exposure_redemption_claim_failed", {
-      requestId: claimInput.requestId,
-      appId: scope.appId,
-      environmentId: scope.environmentId,
-      exposureId: item.exposureId,
-      causeChain: errorCauseChain(cause),
-    });
-    return rejected(item.exposureId, exposureClaimFaultCode(cause));
+    return logAndRejectClaimStoreFault(
+      "exposure_redemption_claim_failed",
+      item.exposureId,
+      claimInput,
+      cause,
+      deps,
+    );
   }
 
   if (claim.status === "conflict") {
@@ -130,15 +129,14 @@ async function completeAcknowledgeOnly(
       code: null,
     };
   } catch (cause) {
-    deps.logger?.error("exposure_redemption_acknowledge_failed", {
-      requestId: claimInput.requestId,
-      appId: claimInput.appId,
-      environmentId: claimInput.environmentId,
-      exposureId,
-      causeChain: errorCauseChain(cause),
-    });
     scheduleHoldoverWrite(ticket, scope, deps);
-    return rejected(exposureId, "SERVICE_UNAVAILABLE");
+    return logAndRejectClaimStoreFault(
+      "exposure_redemption_acknowledge_failed",
+      exposureId,
+      claimInput,
+      cause,
+      deps,
+    );
   }
 }
 
@@ -165,6 +163,7 @@ async function sealIngestAndConfirm(
     await releaseClaimQuietly(claimInput, deps);
     if (cause instanceof ExposureIngestSinkError) {
       deps.logger?.error("exposure_ingest_sink_failed", {
+        requestId: claimInput.requestId,
         status: cause.status,
         appId: claimInput.appId,
         environmentId: claimInput.environmentId,
@@ -180,6 +179,9 @@ async function sealIngestAndConfirm(
       exposureId: item.exposureId,
       causeChain: errorCauseChain(cause),
     });
+    // Deliberate: unclassified ingest throws are platform-side and retryable.
+    // Claim-store faults must not use this branch — they go through
+    // logAndRejectClaimStoreFault so taxonomy cannot regress per call site.
     return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
   }
 
@@ -193,18 +195,18 @@ async function sealIngestAndConfirm(
       code: null,
     };
   } catch (cause) {
-    deps.logger?.error("exposure_redemption_confirm_failed", {
-      requestId: claimInput.requestId,
-      appId: claimInput.appId,
-      environmentId: claimInput.environmentId,
-      exposureId: item.exposureId,
-      causeChain: errorCauseChain(cause),
-    });
     // Ingest committed. If markSealed succeeded, exact-ID retry uses resume_ack
     // (no second append). If markSealed failed, the claim stays pending until
     // EXPOSURE_REDEMPTION_PENDING_LEASE_MS — then a retry may re-acquire and
     // append again (accepted ambiguous-window risk; see that constant).
+    // Classification is via the claim-store seam (not a hardcoded code).
     scheduleHoldoverWrite(ticket, scope, deps);
-    return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
+    return logAndRejectClaimStoreFault(
+      "exposure_redemption_confirm_failed",
+      item.exposureId,
+      claimInput,
+      cause,
+      deps,
+    );
   }
 }

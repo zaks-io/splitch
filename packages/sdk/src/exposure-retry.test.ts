@@ -73,4 +73,22 @@ describe("retainRetryableExposures: real retry cycle", () => {
       ),
     ).toThrow(/missing a code/);
   });
+
+  it("fails loud on an unrecognised rejection code", () => {
+    expect(() =>
+      retainRetryableExposures(
+        [{ exposureId: EXPOSURE_ID }],
+        [{ exposureId: EXPOSURE_ID, status: "rejected", code: "SOME_FUTURE_CODE" }],
+      ),
+    ).toThrow(/Unrecognized Exposure rejection code/);
+  });
+
+  it("fails loud on an unrecognised result status", () => {
+    expect(() =>
+      retainRetryableExposures(
+        [{ exposureId: EXPOSURE_ID }],
+        [{ exposureId: EXPOSURE_ID, status: "weird", code: null }],
+      ),
+    ).toThrow(/Unrecognized Exposure batch result status/);
+  });
 });

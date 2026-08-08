@@ -6,6 +6,7 @@ import {
   type MintExposureTicketDeps,
   verifyExposureTicket,
 } from "./evaluate/exposure-ticket";
+import { rejectClaimStoreFault } from "./exposure-claim-fault";
 import type { ExposureRedemptionClaimInput } from "./exposure-redemption-claim-core";
 import type { CredentialScope } from "./exposures-request";
 
@@ -13,6 +14,24 @@ export type RedemptionClaimContext = ExposureRedemptionClaimInput & { readonly r
 
 export function rejected(exposureId: string, code: ErrorCode): ExposureBatchResult {
   return { exposureId, status: "rejected", code };
+}
+
+/** Log + classify claim-store throws — the only path that maps cause → rejection code. */
+export function logAndRejectClaimStoreFault(
+  message: string,
+  exposureId: string,
+  claimInput: RedemptionClaimContext,
+  cause: unknown,
+  deps: { readonly logger?: { error(message: string, detail: unknown): void } },
+): ExposureBatchResult {
+  deps.logger?.error(message, {
+    requestId: claimInput.requestId,
+    appId: claimInput.appId,
+    environmentId: claimInput.environmentId,
+    exposureId,
+    causeChain: errorCauseChain(cause),
+  });
+  return rejectClaimStoreFault(exposureId, cause);
 }
 
 const CALLER_FAULT_INGEST_STATUSES = new Set([400]);
@@ -101,7 +120,9 @@ export function scheduleHoldoverWrite(
     .then(
       () => undefined,
       (cause) => {
-        deps.logger?.error("assignment_store_put_failed", { cause });
+        deps.logger?.error("assignment_store_put_failed", {
+          causeChain: errorCauseChain(cause),
+        });
       },
     );
   deps.waitUntil?.(write);
