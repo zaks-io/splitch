@@ -111,7 +111,7 @@ try {
     ),
   );
 
-  run("npm", ["install", tarballPath, "typescript@6.0.3", "zod@4.4.3"]);
+  run("npm", ["install", tarballPath, "typescript@6.0.3"]);
 
   writeFileSync(
     join(consumerRoot, "runtime.mjs"),
@@ -144,7 +144,7 @@ console.log("runtime import ok");
         2,
       ),
     );
-    run("npm", ["install", tarballPath, "typescript@6.0.3", "zod@4.4.3"], { cwd: staleRoot });
+    run("npm", ["install", tarballPath, "typescript@6.0.3"], { cwd: staleRoot });
     writeFileSync(
       join(staleRoot, "stale-quickstart-snippet.ts"),
       wrapQuickstartSnippetForTypecheck(stripIdempotencyKeyFromSnippet(quickstartSnippet)),

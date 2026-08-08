@@ -16,8 +16,5 @@
   "files": ["dist", "src"],
   "publishConfig": {
     "access": "public"
-  },
-  "dependencies": {
-    "zod": "^4.4.3"
   }
 }

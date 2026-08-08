@@ -4,5 +4,5 @@
     "noEmit": true,
     "ignoreDeprecations": "6.0"
   },
-  "include": ["scripts/contract-surface-entry.ts", "../contracts/src/**/*.ts"]
+  "include": ["scripts/contract-surface-entry.ts"]
 }
