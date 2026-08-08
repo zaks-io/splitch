@@ -273,7 +273,11 @@ List and single reads span D1 and verified Tinybird archives. Both stores use th
 `(proposed_at DESC, Approval Request ID DESC)` order and the existing opaque cursor value, so a page
 may cross the 90-day boundary without duplicating or skipping a Request. App scope is enforced
 before either archive lookup. The archived projection is schema-checked against the same
-`ApprovalRequest` wire contract as the D1 projection, including deleted-user tombstones.
+`ApprovalRequest` wire contract as the D1 projection, including deleted-user tombstones. Only
+`status=pending` skips the archive lookup, because the archive never holds a pending row; every
+other list, including the default unfiltered view and `status=stale`, queries Tinybird alongside D1,
+so a Tinybird outage fails that request even though the pending Requests it would have returned live
+only in D1 (ADR-0036: fail loud rather than silently drop the archive).
 
 ### `POST /apps/{app_id}/approval-requests/{id}/reviews`
 

@@ -5,7 +5,13 @@ import { runControlPlaneScheduled } from "../src/scheduled";
 import { seedApprovalArchiveFixture } from "./approval-archive-fixture";
 import { makePoolHarness } from "./config-store-pool-harness";
 
-const REQUEST_IDS = ["apr_archive_schedule_poison_a", "apr_archive_schedule_poison_b"];
+// Production-shaped `apr_<ULID>` ids (approval-canonical.ts:8): a real ULID
+// can land an 8+ digit run with no letters between, which the default
+// phone-like scrub pattern in packages/privacy redacts. These two were chosen
+// to avoid that run so the assertion below proves the fault row carries the
+// full id an operator would actually see, not a placeholder shape that
+// happens to dodge the scrubber.
+const REQUEST_IDS = ["apr_01JYXRMM3TX1AWBFZJF9NRM1V2", "apr_01JYQYRWAG7SZZCJR63PRGKX0F"];
 let h: Harness;
 
 beforeEach(async () => {

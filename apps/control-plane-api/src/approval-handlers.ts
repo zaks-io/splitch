@@ -113,6 +113,11 @@ async function listApprovalRequests(
     limit,
     // Production lists merge D1 and Tinybird, so an exact count is not computed.
     // Pending/stale filters additionally resolve effective status after projection.
+    // `index.ts` always passes an `archiveStore` (approvalArchiveStoreFromEnv
+    // never returns undefined), so in production `deps.archiveStore` is always
+    // truthy and this expression always takes the `null` branch. The
+    // `countRequests` call below only runs in tests whose harness omits the
+    // store — it is not reachable in production.
     total:
       effectiveOnly || deps.archiveStore
         ? null

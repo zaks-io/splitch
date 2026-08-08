@@ -68,6 +68,49 @@ describe("Approval Request archive finalization App scope", () => {
       reviews: 1,
     });
   });
+
+  // These two cover the TOCTOU guard on the `approval_requests` delete itself
+  // (approval-finalization.ts:43): a Request whose status or resolved_at moved
+  // between the archive snapshot and finalization must not be deleted. Reviews
+  // are stripped first so the request row's own predicate is the only thing
+  // standing between "survives" and "deleted" — with reviews still present,
+  // the `NOT EXISTS` review guard masks a broken predicate here as
+  // defense-in-depth from the mirrored check in the reviews delete (:24).
+  it("keeps the Request intact when finalization receives a mismatched expectedStatus", async () => {
+    const requestId = "apr_01J00000000000000000000117";
+    await seedApprovalArchiveFixture(h.d1, { id: requestId, resolvedAt: OLD });
+    await stripReviews(requestId);
+
+    await expect(
+      h.repo.approvals.finalizeArchive(
+        appScope(ids.appId),
+        { requestId, resolvedAt: OLD, reviewCount: 0 },
+        "applied",
+      ),
+    ).rejects.toThrow("archive finalization failed");
+    expect(await approvalRowCounts(h.d1, ids.appId, requestId)).toEqual({
+      requests: 1,
+      reviews: 0,
+    });
+  });
+
+  it("keeps the Request intact when finalization receives a mismatched resolvedAt", async () => {
+    const requestId = "apr_01J00000000000000000000118";
+    await seedApprovalArchiveFixture(h.d1, { id: requestId, resolvedAt: OLD });
+    await stripReviews(requestId);
+
+    await expect(
+      h.repo.approvals.finalizeArchive(
+        appScope(ids.appId),
+        { requestId, resolvedAt: "2026-06-01T00:00:00.000Z", reviewCount: 0 },
+        "declined",
+      ),
+    ).rejects.toThrow("archive finalization failed");
+    expect(await approvalRowCounts(h.d1, ids.appId, requestId)).toEqual({
+      requests: 1,
+      reviews: 0,
+    });
+  });
 });
 
 function finalize(appId: string, requestId: string, reviewCount: number): Promise<void> {
@@ -76,6 +119,13 @@ function finalize(appId: string, requestId: string, reviewCount: number): Promis
     { requestId, resolvedAt: OLD, reviewCount },
     "declined",
   );
+}
+
+async function stripReviews(requestId: string): Promise<void> {
+  await h.d1
+    .prepare("DELETE FROM approval_reviews WHERE app_id = ? AND approval_request_id = ?")
+    .bind(ids.appId, requestId)
+    .run();
 }
 
 async function seedCollidingReview(requestId: string): Promise<void> {
