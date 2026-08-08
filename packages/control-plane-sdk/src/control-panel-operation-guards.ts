@@ -16,6 +16,8 @@ const SCOPED_OPERATION_IDS = [
   "experiments_create",
   "metrics_list",
   "metrics_create",
+  "segments_list",
+  "segments_create",
   "overview_get",
   "settings_get",
   "environment_update",
@@ -44,6 +46,12 @@ const APPROVAL_OPERATION_IDS = ["approval_request_get", "approval_request_review
 
 const METRIC_RESOURCE_OPERATION_IDS = ["metrics_get", "metrics_update", "metrics_delete"] as const;
 
+const SEGMENT_RESOURCE_OPERATION_IDS = [
+  "segments_get",
+  "segments_update",
+  "segments_delete",
+] as const;
+
 type ClaimGuard = (value: Record<string, unknown>) => boolean;
 
 /**
@@ -65,6 +73,7 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ...family(APPROVAL_OPERATION_IDS, isApprovalOperation),
   ...family(SCOPED_OPERATION_IDS, isAppCollectionOperation),
   ...family(METRIC_RESOURCE_OPERATION_IDS, isMetricResourceOperation),
+  ...family(SEGMENT_RESOURCE_OPERATION_IDS, isSegmentResourceOperation),
 ]);
 
 function family(ids: readonly string[], guard: ClaimGuard): [string, ClaimGuard][] {
@@ -120,6 +129,14 @@ function isMetricResourceOperation(value: Record<string, unknown>): boolean {
     hasKeys(value, ["id", "appId", "environmentId", "metricId"]) &&
     hasAppEnvironment(value) &&
     isNonEmptyString(value.metricId)
+  );
+}
+
+function isSegmentResourceOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "segmentId"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.segmentId)
   );
 }
 

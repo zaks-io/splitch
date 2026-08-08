@@ -29,6 +29,11 @@
       "types": "./src/panel-metrics.ts",
       "default": "./src/panel-metrics.ts"
     },
+    "./panel-segments": {
+      "types": "./src/panel-segments.ts",
+      "default": "./src/panel-segments.ts"
+    },
+
     "./panel-overview": {
       "types": "./src/panel-overview.ts",
       "default": "./src/panel-overview.ts"

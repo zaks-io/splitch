@@ -77,15 +77,15 @@ describe("Visible navigation destinations", () => {
     }
   });
 
-  it("hides Segments until SPL-112 delivers the screen", () => {
+  it("ships Segments as an App-level destination", () => {
     const segments = appSectionRegistry.find((section) => section.label === "Segments");
-    expect(segments?.status).toBe("deferred");
-    expect(visibleAppSections.map((section) => section.label)).not.toContain("Segments");
+    expect(segments).toMatchObject({ scope: "App-level", status: "shipped" });
+    expect(visibleAppSections.map((section) => section.label)).toContain("Segments");
   });
 
   it("surfaces every shipped destination the App shell promises", () => {
     expect(new Set(visibleAppSections.map((section) => section.label))).toStrictEqual(
-      new Set(["Overview", "Flags", "Experiments", "Metrics", "Settings"]),
+      new Set(["Overview", "Flags", "Experiments", "Segments", "Metrics", "Settings"]),
     );
   });
 
@@ -94,6 +94,25 @@ describe("Visible navigation destinations", () => {
     expect(existsSync(`${routesDirectory}kitchen-sink.tsx`)).toBe(true);
     expect(readFileSync(`${routesDirectory}__root.tsx`, "utf8")).not.toContain("kitchen-sink");
   });
+});
+
+describe("Deferred destination deep links", () => {
+  /**
+   * The live registry may have zero deferred entries. Matcher coverage below
+   * uses a fixture destination so the class stays proven when every real
+   * destination is shipped. The live-registry invariant still requires every
+   * non-shipped entry to declare why it is hidden.
+   */
+  const deferredFixture: NavigationDestination = {
+    label: "Deferred fixture",
+    to: "/$orgSlug/$appSlug/$env/deferred-fixture",
+    status: "deferred",
+    hiddenBecause: "Fixture destination for deferredDestinationAt coverage.",
+  };
+  const fixtureRegistry: readonly NavigationDestination[] = [
+    { label: "Overview", to: "/$orgSlug/$appSlug/$env", status: "shipped" },
+    deferredFixture,
+  ];
 
   it("explains why each hidden destination is hidden", () => {
     const registered: readonly NavigationDestination[] = appSectionRegistry;
@@ -102,32 +121,16 @@ describe("Visible navigation destinations", () => {
       expect(destination.hiddenBecause, `${destination.label} hidden reason`).toBeTruthy();
     }
   });
-});
 
-describe("Deferred destination deep links", () => {
-  /**
-   * Driven off `appSectionRegistry` rather than hardcoding "Segments", so
-   * this proves the whole `deferred` class: registering a second entry
-   * `deferred` covers it here automatically, with no test change required.
-   */
-  const deferredDestinations = appSectionRegistry.filter(
-    (destination) => destination.status === "deferred",
-  );
-
-  it("has at least one deferred destination to prove the class against", () => {
-    expect(deferredDestinations.length).toBeGreaterThan(0);
+  it("requires at least one deferred fixture destination", () => {
+    expect(
+      fixtureRegistry.filter((destination) => destination.status === "deferred").length,
+    ).toBeGreaterThan(0);
   });
 
-  it("matches a direct request for every deferred destination's href", () => {
-    for (const destination of deferredDestinations) {
-      const href = scopedHref(
-        scope,
-        destination.to.replace(/^\/\$orgSlug\/\$appSlug\/\$env\/?/, ""),
-      );
-      expect(deferredDestinationAt(href, scope), `${destination.label} (${href})`).toBe(
-        destination,
-      );
-    }
+  it("matches a direct request for a deferred destination's href", () => {
+    const href = scopedHref(scope, "deferred-fixture");
+    expect(deferredDestinationAt(href, scope, fixtureRegistry)).toBe(deferredFixture);
   });
 
   it("never matches a shipped destination's href", () => {
@@ -137,6 +140,10 @@ describe("Deferred destination deep links", () => {
         destination.to.replace(/^\/\$orgSlug\/\$appSlug\/\$env\/?/, ""),
       );
       expect(deferredDestinationAt(href, scope), `${destination.label} (${href})`).toBeUndefined();
+      expect(
+        deferredDestinationAt(href, scope, fixtureRegistry),
+        `${destination.label} fixture registry`,
+      ).toBeUndefined();
     }
   });
 
@@ -146,34 +153,15 @@ describe("Deferred destination deep links", () => {
     ).toBeUndefined();
   });
 
-  /**
-   * A deferred destination can still have child route files left behind
-   * (e.g. a deferred `Experiments` would keep `experiments.$experimentId.*`).
-   * A deep link to a descendant must still be caught: an exact-match-only
-   * guard would let it fall through to the child route's own loader and
-   * render the deferred screen after all.
-   */
-  it("matches a descendant path of every deferred destination's href", () => {
-    for (const destination of deferredDestinations) {
-      const href = scopedHref(
-        scope,
-        destination.to.replace(/^\/\$orgSlug\/\$appSlug\/\$env\/?/, ""),
-      );
-      const descendant = `${href}/child-resource/nested`;
-      expect(deferredDestinationAt(descendant, scope), `${destination.label} (${descendant})`).toBe(
-        destination,
-      );
-    }
+  it("matches a descendant path of a deferred destination's href", () => {
+    const href = scopedHref(scope, "deferred-fixture");
+    const descendant = `${href}/child-resource/nested`;
+    expect(deferredDestinationAt(descendant, scope, fixtureRegistry)).toBe(deferredFixture);
   });
 
   it("does not match a sibling path that only shares a prefix, not a path segment boundary", () => {
-    for (const destination of deferredDestinations) {
-      const href = scopedHref(
-        scope,
-        destination.to.replace(/^\/\$orgSlug\/\$appSlug\/\$env\/?/, ""),
-      );
-      expect(deferredDestinationAt(`${href}-extra`, scope)).toBeUndefined();
-    }
+    const href = scopedHref(scope, "deferred-fixture");
+    expect(deferredDestinationAt(`${href}-extra`, scope, fixtureRegistry)).toBeUndefined();
   });
 });
 
