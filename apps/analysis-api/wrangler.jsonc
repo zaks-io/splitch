@@ -27,7 +27,6 @@
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
-    "MCP_ANALYSIS_DELEGATION_SECRET": "local-mcp-analysis-delegation-secret",
     "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
   },
   "durable_objects": {
@@ -63,7 +62,7 @@
         "crons": []
       },
       "secrets": {
-        "required": ["SENTRY_DSN", "TINYBIRD_READ_TOKEN", "MCP_ANALYSIS_DELEGATION_SECRET"]
+        "required": ["SENTRY_DSN", "TINYBIRD_READ_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
@@ -102,12 +101,7 @@
         "crons": ["0 * * * *"]
       },
       "secrets": {
-        "required": [
-          "SENTRY_DSN",
-          "TINYBIRD_READ_TOKEN",
-          "TINYBIRD_COPY_TOKEN",
-          "MCP_ANALYSIS_DELEGATION_SECRET"
-        ]
+        "required": ["SENTRY_DSN", "TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",

@@ -38,8 +38,8 @@ export const approvalErrorDocs = {
   IDEMPOTENCY_KEY_CONFLICT: {
     cause:
       "The same idempotency key was reused with a different canonical payload. Honoring it would let one key stand for two different changes.",
-    fix: "Use a fresh key for the new payload, or resend the original payload unchanged to get the original result. `details.scope` says whether the key was scoped to an `approval_request` or a `review`.",
-    details: '{ scope: "approval_request" | "review", idempotencyKey: string }',
+    fix: "Use a fresh key for the new payload, or resend the original payload unchanged to get the original result. `details.scope` says whether the key was scoped to an `approval_request`, a `review`, or a `conclusion`.",
+    details: '{ scope: "approval_request" | "review" | "conclusion", idempotencyKey: string }',
     related: ["APPROVAL_APPLICATION_FAILED", "APPROVAL_REVIEW_REQUIRED"],
   },
 } satisfies Record<string, ErrorDoc>;

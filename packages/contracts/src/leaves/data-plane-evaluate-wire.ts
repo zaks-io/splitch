@@ -2,11 +2,12 @@ import { z } from "zod";
 import { VariantValueSchema } from "./variant-value";
 
 /**
- * This body is frozen. Published SDKs parse it with their own inlined copy of
- * this schema, and that copy is `.strict()`, so an added key makes the client
+ * This body is frozen for already-published clients. SDK 0.2.2 (and earlier)
+ * inlines a `.strict()` copy of this schema, so an added key makes that client
  * throw, swallow the throw, and serve the caller's default -- after the Worker
  * already committed the Exposure. That is silent Experiment corruption, not a
- * degraded response.
+ * degraded response. Current SDK mirrors strip unrecognized keys (SPL-325), but
+ * the freeze still holds while any supported published client parses strictly.
  *
  * New evaluation metadata therefore rides a response header (see `x-run-id` and
  * `x-variant-name` in apps/evaluation-api), which old clients ignore. A field

@@ -19,7 +19,6 @@ import { readFileSync, existsSync } from "node:fs";
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const distEntry = join(packageRoot, "dist", "index.js");
 const repoRoot = resolve(packageRoot, "../..");
-const requireFromPackage = createRequire(join(packageRoot, "package.json"));
 const requireFromRepo = createRequire(join(repoRoot, "package.json"));
 
 if (!existsSync(distEntry)) {
@@ -40,7 +39,6 @@ const PAGE_HTML = `<!doctype html>
     <script type="importmap">
       {
         "imports": {
-          "zod": "/vendor/zod/index.js",
           "@splitch/sdk": "/sdk/index.js"
         }
       }
@@ -108,8 +106,7 @@ function resolvePlaywright() {
 }
 
 function startStubServer() {
-  const zodRoot = dirname(requireFromPackage.resolve("zod/package.json"));
-
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: stub routes for real Chromium smoke
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
 
@@ -138,18 +135,6 @@ function startStubServer() {
     if (url.pathname.startsWith("/sdk/")) {
       const relative = url.pathname.slice("/sdk/".length);
       const filePath = safeJoin(join(packageRoot, "dist"), relative);
-      if (filePath === null || !existsSync(filePath)) {
-        res.writeHead(404).end("not found");
-        return;
-      }
-      res.writeHead(200, { "content-type": contentType(filePath) });
-      res.end(readFileSync(filePath));
-      return;
-    }
-
-    if (url.pathname.startsWith("/vendor/zod/")) {
-      const relative = url.pathname.slice("/vendor/zod/".length);
-      const filePath = safeJoin(zodRoot, relative);
       if (filePath === null || !existsSync(filePath)) {
         res.writeHead(404).end("not found");
         return;

@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { ShellMenu, ShellMenuLink, ShellMenuSignOut } from "#components/shell-menu";
 import type { OrgMembership } from "#lib/session";
@@ -7,6 +8,15 @@ export interface OrgShellOrg {
   readonly orgId: string;
   readonly orgSlug: string;
 }
+
+/**
+ * The Org-level screens, which sit above any App and so name no Environment.
+ * Members lands with SPL-105.
+ */
+const ORG_SECTIONS = [
+  { label: "Apps", to: "/$orgSlug" },
+  { label: "Billing & Usage", to: "/$orgSlug/billing" },
+] as const;
 
 /**
  * The Org shell frame — `/{orgSlug}/...`. Its top bar carries the org switcher
@@ -67,6 +77,27 @@ export function OrgShell({
           </ShellMenu>
         </div>
       </header>
+
+      <nav
+        aria-label="Organization sections"
+        className="flex flex-wrap gap-1 border-border border-b bg-muted/20 px-4 py-2 lg:px-6"
+      >
+        {ORG_SECTIONS.map((section) => (
+          <Link
+            activeOptions={{ exact: section.to === "/$orgSlug" }}
+            activeProps={{
+              className:
+                "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground",
+            }}
+            className="rounded-md px-3 py-1.5 font-medium text-muted-foreground text-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+            key={section.label}
+            params={{ orgSlug }}
+            to={section.to}
+          >
+            {section.label}
+          </Link>
+        ))}
+      </nav>
 
       <main className="min-w-0 bg-background p-5 sm:p-7">{children}</main>
     </div>

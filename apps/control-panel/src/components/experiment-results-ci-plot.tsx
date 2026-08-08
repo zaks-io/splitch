@@ -14,7 +14,7 @@ import {
   VALUE_WIDTH,
 } from "./experiment-results-ci-plot-geometry";
 import { ArmRow, BaselineRow } from "./experiment-results-ci-plot-rows";
-import { baselineLabel, baselineVariant } from "./experiment-results-control";
+import { baselineVariant } from "./experiment-results-control";
 
 /**
  * Per-arm lift with its Confidence Interval, rendered for every Run state.
@@ -35,7 +35,7 @@ export function ExperimentResultsCiPlot({
   significance: ExperimentSignificanceDisplays;
 }) {
   const baseline = baselineVariant(control);
-  const label = baselineLabel(control);
+  const measurementAnchor = baseline ?? "an unidentified Control";
   if (results.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
@@ -61,11 +61,11 @@ export function ExperimentResultsCiPlot({
   return (
     <figure className="m-0">
       <figcaption className="sr-only">
-        Relative lift and confidence interval per arm, against the {label} baseline.
+        Relative lift and confidence interval per arm, against {measurementAnchor}.
       </figcaption>
       <div className="overflow-x-auto">
         <svg
-          aria-label={`Relative lift with confidence intervals against the ${label} baseline`}
+          aria-label={`Relative lift with confidence intervals against ${measurementAnchor}`}
           className="h-auto w-full min-w-[44rem]"
           role="img"
           viewBox={`0 0 ${totalWidth} ${height}`}
@@ -103,7 +103,7 @@ export function ExperimentResultsCiPlot({
             x={LABEL_WIDTH + PLOT_WIDTH / 2}
             y={height - 5}
           >
-            relative lift vs {label} (%)
+            relative lift vs {measurementAnchor} (%)
           </text>
         </svg>
       </div>
@@ -149,12 +149,12 @@ function Legend({
   control: FrozenControlIdentity;
   baselineDrawn: boolean;
 }) {
-  const baselineLegend =
-    control.state !== "frozen"
-      ? "Baseline unidentified, so no arm is drawn at zero lift"
-      : baselineDrawn
-        ? `Baseline (${control.variant}) at zero lift by definition`
-        : `Baseline (${control.variant}) arm is missing from these results`;
+  const baseline = baselineVariant(control);
+  const baselineLegend = !baseline
+    ? "Baseline unidentified, so no arm is drawn at zero lift"
+    : baselineDrawn
+      ? `Baseline (${baseline}) at zero lift by definition`
+      : `Baseline (${baseline}) arm is missing from these results`;
 
   return (
     <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-muted-foreground text-xs">
