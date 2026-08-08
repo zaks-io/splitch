@@ -20,7 +20,7 @@ export const errorCodes = [
   "VARIANT_NOT_AVAILABLE",
   "RESOURCE_NOT_EMPTY",
 
-  // Uniqueness / selector collision
+  // Uniqueness conflicts
   "SLUG_CONFLICT",
   "EXPERIMENT_KEY_CONFLICT",
   "EVENT_ID_CONFLICT",

@@ -2,9 +2,9 @@ import { z } from "zod";
 import type { ErrorCode } from "./error-code";
 
 /**
- * Uniqueness / selector-collision ErrorResponse members. Kept beside the main
- * catalog so `errors.ts` stays under the file-size ratchet when a new conflict
- * code lands.
+ * Uniqueness-conflict ErrorResponse members. Split from `errors.ts` so that
+ * file stays under the file-size ratchet (300 code lines); the members here are
+ * ordinary conflict details, not a separate error domain.
  */
 export const conflictErrorMembers = [
   // The slug is a GLOBAL handle, so a conflict can name a resource the caller

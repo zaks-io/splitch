@@ -76,7 +76,7 @@ export const flagRoutes = [
     owner: OWNER,
     method: "GET",
     path: "/apps/:appId/flags/:flagId",
-    summary: "Get a Flag definition by canonical id (default) or by key via ?by=key.",
+    summary: "Get a Flag definition by canonical id.",
     request: { params: FlagParams, query: FlagGetQuerySchema },
     response: FlagResponseSchema,
     auth: AUTH,

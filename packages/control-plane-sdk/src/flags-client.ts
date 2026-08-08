@@ -154,7 +154,15 @@ export function createFlagsClient(
       const { appId, flagId, variantName, ...body } = input;
       return invokeHcRoute<FlagVariantsUpdateOutput>("flag_variants_update", () =>
         hcClient.apps[":appId"].flags[":flagId"].variants[":variantName"].$patch(
-          { param: { appId, flagId, variantName }, json: body } as never,
+          {
+            param: {
+              appId,
+              flagId,
+              // Variant names are unconstrained z.string(); hc does not encode.
+              variantName: encodeURIComponent(variantName),
+            },
+            json: body,
+          } as never,
           withIdempotencyHeader(
             "flag_variants_update",
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
@@ -170,7 +178,8 @@ export function createFlagsClient(
             param: {
               appId: input.appId,
               flagId: input.flagId,
-              variantName: input.variantName,
+              // Variant names are unconstrained z.string(); hc does not encode.
+              variantName: encodeURIComponent(input.variantName),
             },
           },
           withIdempotencyHeader(
@@ -241,12 +250,15 @@ function flagsGet(
   input: FlagsGetInput,
   callOptions?: ControlPlaneOperationOptions,
 ): Promise<ControlPlaneOperationResult<FlagsGetOutput>> {
+  // Flag keys are unconstrained z.string() and may contain `/`, `?`, `#`, etc.
+  // `hc` does not percent-encode path params (MCP's buildPath does); encode here
+  // so ?by=key addresses the Flag the Panel named.
+  const param = { appId: input.appId, flagId: encodeURIComponent(input.flagId) };
   return invokeHcRoute<FlagsGetOutput>("flags_get", () =>
     hcClient.apps[":appId"].flags[":flagId"].$get(
-      {
-        param: { appId: input.appId, flagId: input.flagId },
-        query: input.by === undefined ? {} : { by: input.by },
-      } as never,
+      // Omit `query` when `by` is absent so the id path stays byte-identical to
+      // main (no trailing bare `?`). `as never` is the house hc pattern.
+      (input.by === undefined ? { param } : { param, query: { by: input.by } }) as never,
       hcRequestOptions(withAuthorization(hcOptions, callOptions)),
     ),
   );

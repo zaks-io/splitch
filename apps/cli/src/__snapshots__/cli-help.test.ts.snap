@@ -813,7 +813,7 @@ Flags:
 
 Example:
   splitch flags delete <flag-id-or-key> --json",
-    "flags get": "Get a Flag definition by canonical id (default) or by key via ?by=key.
+    "flags get": "Get a Flag definition by canonical id.
 
 Usage:
   splitch flags get <flag-id-or-key> [flags]
@@ -1573,7 +1573,7 @@ Usage:
 Commands:
   list            List Flag definitions in an App (bounded; reports its own truncation).
   create          Create a Flag definition (key, schema, Variant catalog).
-  get             Get a Flag definition by canonical id (default) or by key via ?by=key.
+  get             Get a Flag definition by canonical id.
   update          Update a Flag definition's name/description/schema.
   delete          Delete a Flag (blocked if referenced by a running Experiment).
   promote         Promote selected Flag Configuration field-groups between Environments.
