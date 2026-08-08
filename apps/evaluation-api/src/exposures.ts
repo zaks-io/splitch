@@ -2,6 +2,7 @@ import {
   type ExposureBatchRequest,
   ExposureBatchResponseSchema,
   type ExposureBatchResult,
+  RETRYABLE_EXPOSURE_REJECTION_CODE,
 } from "@splitch/contracts";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import type { AssignmentStore } from "./assignment/assignment-store";
@@ -101,7 +102,7 @@ async function redeemOne(
     return rejected(item.exposureId, "EVENT_ID_CONFLICT");
   }
   if (claim.status === "busy") {
-    return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
+    return rejected(item.exposureId, RETRYABLE_EXPOSURE_REJECTION_CODE);
   }
   if (claim.status === "deduplicated") {
     scheduleHoldoverWrite(verified.payload, scope, deps);
@@ -182,7 +183,7 @@ async function sealIngestAndConfirm(
     // Deliberate: unclassified ingest throws are platform-side and retryable.
     // Claim-store faults must not use this branch — they go through
     // logAndRejectClaimStoreFault so taxonomy cannot regress per call site.
-    return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
+    return rejected(item.exposureId, RETRYABLE_EXPOSURE_REJECTION_CODE);
   }
 
   try {
@@ -195,11 +196,15 @@ async function sealIngestAndConfirm(
       code: null,
     };
   } catch (cause) {
-    // Ingest committed. If markSealed succeeded, exact-ID retry uses resume_ack
-    // (no second append). If markSealed failed, the claim stays pending until
-    // EXPOSURE_REDEMPTION_PENDING_LEASE_MS — then a retry may re-acquire and
-    // append again (accepted ambiguous-window risk; see that constant).
-    // Classification is via the claim-store seam (not a hardcoded code).
+    // Ingest already committed. Holdover Assignment Store write still runs.
+    // Classification is via the claim-store seam:
+    // - Transient (SERVICE_UNAVAILABLE): SDK retries. If markSealed succeeded,
+    //   exact-ID retry uses resume_ack (no second append). If markSealed failed,
+    //   the claim stays pending until EXPOSURE_REDEMPTION_PENDING_LEASE_MS —
+    //   then a retry may re-acquire and append again (accepted ambiguous-window
+    //   risk; see that constant).
+    // - Deterministic (INTERNAL_SERVER_ERROR): SDK drops; no retry, so the
+    //   pending-lease re-acquire path does not run for 409 / protocol faults.
     scheduleHoldoverWrite(ticket, scope, deps);
     return logAndRejectClaimStoreFault(
       "exposure_redemption_confirm_failed",

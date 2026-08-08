@@ -50,3 +50,7 @@ export {
   TestEvaluationRequestSchema,
   TestEvaluationResponseSchema,
 } from "../wire-envelopes-core";
+export {
+  RETRYABLE_EXPOSURE_REJECTION_CODE,
+  RETRYABLE_EXPOSURE_REJECTION_CODES,
+} from "../exposure-retry-codes";

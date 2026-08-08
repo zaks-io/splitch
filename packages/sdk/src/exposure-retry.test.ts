@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
+import {
+  isRetryableExposureRejection,
+  retainRetryableExposures,
+  RETRYABLE_EXPOSURE_REJECTION_CODES,
+} from "./exposure-retry";
 import type { ErrorCode } from "./generated/contract-surface.js";
-import { isRetryableExposureRejection, retainRetryableExposures } from "./exposure-retry";
+import { RETRYABLE_EXPOSURE_REJECTION_CODES as contractRetryableCodes } from "../../contracts/src/exposure-retry-codes";
 
 const EXPOSURE_ID = "550e8400-e29b-41d4-a716-446655440001";
 const ID_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -8,7 +13,8 @@ const ID_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 describe("isRetryableExposureRejection", () => {
-  it("retries only SERVICE_UNAVAILABLE", () => {
+  it("derives from the named contract constant, not a free literal", () => {
+    expect([...RETRYABLE_EXPOSURE_REJECTION_CODES]).toEqual([...contractRetryableCodes]);
     expect(isRetryableExposureRejection("SERVICE_UNAVAILABLE")).toBe(true);
     expect(isRetryableExposureRejection("INTERNAL_SERVER_ERROR")).toBe(false);
     expect(isRetryableExposureRejection("VALIDATION_ERROR")).toBe(false);

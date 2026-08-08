@@ -16,7 +16,7 @@ const SPEC_PATH = join(
 );
 
 describe("exposureClaimFaultCode classification (mutation-proven)", () => {
-  it("classifies transport, protocol, 4xx, and 5xx", () => {
+  it("classifies transport, protocol, handler vocabulary, and platform injection", () => {
     expect(exposureClaimFaultCode(new TypeError("undefined is not a function"))).toBe(
       "INTERNAL_SERVER_ERROR",
     );
@@ -35,6 +35,12 @@ describe("exposureClaimFaultCode classification (mutation-proven)", () => {
     );
     expect(exposureClaimFaultCode(new ExposureRedemptionClaimHttpError(409))).toBe(
       "INTERNAL_SERVER_ERROR",
+    );
+    expect(exposureClaimFaultCode(new ExposureRedemptionClaimHttpError(429))).toBe(
+      "SERVICE_UNAVAILABLE",
+    );
+    expect(exposureClaimFaultCode(new ExposureRedemptionClaimHttpError(408))).toBe(
+      "SERVICE_UNAVAILABLE",
     );
     expect(exposureClaimFaultCode(new ExposureRedemptionClaimHttpError(500))).toBe(
       "SERVICE_UNAVAILABLE",
@@ -72,10 +78,11 @@ describe("exposures-endpoint.md taxonomy pin", () => {
     expect(spec).toMatch(/Transient[\s\S]*SERVICE_UNAVAILABLE[\s\S]*Retain the item and retry/);
     expect(spec).toMatch(/Deterministic[\s\S]*INTERNAL_SERVER_ERROR[\s\S]*drop — never re-queue/);
     expect(spec).toContain("Durable Object transport failure");
-    expect(spec).toContain("5xx HTTP");
-    expect(spec).toContain("4xx HTTP");
+    expect(spec).toContain("408 / 425 / 429");
     expect(spec).toContain("parseClaimOutcome");
     expect(spec).toContain("parseAcknowledgeOutcome");
-    expect(spec).toContain("400 / 404 / 409");
+    expect(spec).toContain("HTTP 400 / 404 / 409");
+    expect(spec).toContain("Ingest-write failure");
+    expect(spec).not.toMatch(/Seal failure rejects the item loud and performs no Assignment Store/);
   });
 });

@@ -103,8 +103,10 @@ For each accepted item, in order:
    (the commit evaluate performs after its inline seal, deferred to redemption — ADR-0048)
 ```
 
-Seal failure rejects the item loud and performs no Assignment Store write. Per-item rejection
-codes fall into two classes the SDK must distinguish:
+Ingest-write failure rejects the item loud and performs no Assignment Store write.
+Confirm/acknowledge claim-store faults still schedule the holdover Assignment Store
+write before returning `rejected` (the Exposure row already committed). Per-item
+rejection codes fall into two classes the SDK must distinguish:
 
 | Class         | Codes                                                                                                                                                      | SDK behavior                                           |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
@@ -117,11 +119,12 @@ Mapping:
   lag / 404, rate limits / 429, and other non-400 ingest statuses) → `SERVICE_UNAVAILABLE`.
 - Unambiguous caller-payload fault from ingest (HTTP 400) → non-retryable `VALIDATION_ERROR`.
 - Transient **claim-store** fault (Durable Object transport failure — including a
-  body-read failure after a 200 header — or a Durable Object 5xx HTTP status) →
+  body-read network failure after a 200 header — or an HTTP status outside the
+  Durable Object handler vocabulary, e.g. platform-injected 408 / 425 / 429 / 5xx) →
   `SERVICE_UNAVAILABLE`.
 - Deterministic **claim-store** fault (programming error in the redemption path, a
-  `parseClaimOutcome` / `parseAcknowledgeOutcome` / `parseOk` protocol violation, or a
-  Durable Object 4xx HTTP status such as 400 / 404 / 409) → non-retryable
+  `parseClaimOutcome` / `parseAcknowledgeOutcome` / `parseOk` protocol violation,
+  invalid JSON on a 200 body, or a Durable Object HTTP 400 / 404 / 409) → non-retryable
   `INTERNAL_SERVER_ERROR`. An unclassified claim-store throw is also `INTERNAL_SERVER_ERROR`
   (fail loud; never quietly bucketed as retryable). Every claim-store catch classifies
   through the same seam — acknowledge / confirm / claim cannot hardcode a retryable code.

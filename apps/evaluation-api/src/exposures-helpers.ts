@@ -1,4 +1,5 @@
 import type { ErrorCode, ExposureBatchResult } from "@splitch/contracts";
+import { RETRYABLE_EXPOSURE_REJECTION_CODE } from "@splitch/contracts";
 import type { AssignmentStore } from "./assignment/assignment-store";
 import { errorCauseChain } from "./error-cause-chain";
 import {
@@ -40,7 +41,7 @@ export function ingestFailureCode(status: number | null): ErrorCode {
   if (status !== null && CALLER_FAULT_INGEST_STATUSES.has(status)) {
     return "VALIDATION_ERROR";
   }
-  return "SERVICE_UNAVAILABLE";
+  return RETRYABLE_EXPOSURE_REJECTION_CODE;
 }
 
 export async function verifyTicketForScope(

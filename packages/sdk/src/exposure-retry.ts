@@ -2,19 +2,20 @@ import type { ErrorCode } from "./generated/contract-surface.js";
 import { ErrorCodeSchema } from "./generated/contract-surface.js";
 
 /**
- * Per-item Exposure batch rejection codes the SDK may retry with the same
- * `exposureId`. Everything else is deterministic: acknowledge failed and drop.
- *
- * Must stay aligned with docs/spec/sdk/exposures-endpoint.md (Redemption
- * semantics). SERVICE_UNAVAILABLE is the sole transient per-item code;
- * RATE_LIMITED is a batch-level gate, not an item outcome.
+ * Sole transient per-item Exposure rejection code(s). Derived from the server
+ * contract (`@splitch/contracts` `RETRYABLE_EXPOSURE_REJECTION_CODES` /
+ * docs/spec/sdk/exposures-endpoint.md) — not a free-floating literal.
  *
  * Staged landing: this module is not yet wired into a shipping flush/queue
  * (not exported from index.ts). Spec + tests pin the contract ahead of the
  * consumer.
  */
+export const RETRYABLE_EXPOSURE_REJECTION_CODES = [
+  "SERVICE_UNAVAILABLE",
+] as const satisfies readonly ErrorCode[];
+
 export function isRetryableExposureRejection(code: ErrorCode): boolean {
-  return code === "SERVICE_UNAVAILABLE";
+  return (RETRYABLE_EXPOSURE_REJECTION_CODES as readonly ErrorCode[]).includes(code);
 }
 
 const EXPOSURE_RESULT_STATUSES = new Set(["accepted", "deduplicated", "rejected"]);

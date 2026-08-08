@@ -81,6 +81,13 @@ export class DurableExposureRedemptionClaimStore implements ExposureRedemptionCl
       ) {
         throw cause;
       }
+      // Non-JSON 200 body is a protocol violation (infinite-retry if treated as transport).
+      if (cause instanceof SyntaxError) {
+        throw new ExposureRedemptionClaimProtocolError(
+          "exposure redemption claim returned an invalid outcome",
+          cause,
+        );
+      }
       throw new ExposureRedemptionClaimTransportError(cause);
     }
   }
