@@ -77,8 +77,12 @@ Metrics for a population of Entities. See
 **Assignment**: the pure deterministic result of `assign(Experiment Run, Targeting Key)`. It records
 nothing on its own.
 
-**Experiment Run**: the immutable, time-boxed unit of experiment analysis. Start and End are its
-lifecycle verbs. Do not use "publish" for Runs.
+**Experiment Run**: the immutable, time-boxed unit of experiment analysis. Start, End, and Conclude
+are its lifecycle verbs. Do not use "publish" for Runs.
+
+**Conclusion**: the immutable decision evidence recorded when Conclude Ends a Run and selects its
+winning Variant. It is a durable D1 domain object, appears as the `conclusion` response member, and
+uses the `con_` id prefix. A standalone End creates no Conclusion.
 
 **Run Snapshot**: the frozen Experiment Run configuration (allocation, Control Variant, decision
 family, guardrails, dimensions) written to the analytics store at Start as the analysis engine's
@@ -120,8 +124,9 @@ separate from Experiment measurement.
 **Metric**: a fact plus an aggregation. Experiments move or guard Metrics. See
 [`apps/analysis-api/CONTEXT.md`](./apps/analysis-api/CONTEXT.md).
 
-**Promotion**: moving Flag Configuration, or a Variant's availability, from one Environment to
-another. Promote is the deployment verb. Start is the measurement verb.
+**Promotion**: applying a Flag Configuration, or a Variant's availability, to a target Environment.
+The target may be the Run's own Environment or another Environment. Promote is the deployment verb.
+Start is the measurement verb.
 
 **Client Key**: the public, non-secret key used by untrusted client-side SDKs. Safe to embed in
 client code. See [`packages/sdk/CONTEXT.md`](./packages/sdk/CONTEXT.md).
@@ -166,8 +171,8 @@ value after creation.
 - Use **Variant**, not Variation, arm, bucket, group, or treatment for the Flag value itself.
 - Use **Targeting Key**, not userId, unitId, subjectId, or sessionId as the domain term.
 - Use **Experiment Run**, not phase, version, configVersion, or analysis window.
-- Use **Promote** for deployment across Environments.
-- Use **Start** and **End** for Experiment Run lifecycle.
+- Use **Promote** for applying Flag Configuration to a target Environment.
+- Use **Start**, **End**, and **Conclude** for Experiment Run lifecycle.
 - Do not use **publish** for either Promotion or Experiment Run lifecycle.
 - Use **publish** only for immutable Event Definition Versions.
 - Use **Client Key** for public client-side credentials and **API Key** for secret server-side

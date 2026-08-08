@@ -63,6 +63,13 @@ export function apiKeyCacheKey(keyHash: string): string {
   return `ak:${keyHash}`;
 }
 
+export const TERMINAL_CREDENTIAL_REVOCATION_MARKER = "1";
+
+/** Terminal marker that takes precedence over a mutable credential cache entry. */
+export function credentialRevocationCacheKey(credentialCacheKey: string): string {
+  return `revoked:${credentialCacheKey}`;
+}
+
 /**
  * `member-profile:{userId}` — SESSION_STORE identity cache for Org member email.
  * Written at login (auth-api / Control Panel); read by control-plane member

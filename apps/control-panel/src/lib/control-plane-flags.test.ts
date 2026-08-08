@@ -136,6 +136,54 @@ describe("Control Panel Flags transport", () => {
   });
 });
 
+describe("Control Panel flag_get transport", () => {
+  it('mints a flag_get claim for flags.get({ by: "key" }) through the binding', async () => {
+    let capturedRequest: Request | undefined;
+    const fetcher = vi.fn(async (request: Request) => {
+      capturedRequest = request;
+      return Response.json(createdFlag());
+    });
+    const flags = createControlPanelFlagsClient(
+      { fetch: fetcher } as unknown as Fetcher,
+      { actorId: "user_checkout", sessionExpiresAt: 1_800_003_600 },
+      "env_dev",
+      DELEGATION_SECRET,
+      { nowSeconds: () => 1_800_000_000, nonce: () => "nonce_flag_get_1234567890" },
+    );
+
+    await expect(
+      flags.get({ appId: "app_checkout", flagId: "new-checkout", by: "key" }),
+    ).resolves.toMatchObject({ ok: true, data: { key: "new-checkout" } });
+
+    expect(capturedRequest?.url).toBe(
+      "https://control-plane.internal/apps/app_checkout/flags/new-checkout?by=key",
+    );
+    await expect(
+      verifyControlPanelDelegation(
+        capturedRequest?.headers.get(CONTROL_PANEL_DELEGATION_HEADER) ?? null,
+        capturedRequest as Request,
+        {
+          id: "flag_get",
+          appId: "app_checkout",
+          environmentId: "env_dev",
+          flagId: "new-checkout",
+          by: "key",
+        },
+        DELEGATION_SECRET,
+        1_800_000_000,
+      ),
+    ).resolves.toMatchObject({
+      operation: {
+        id: "flag_get",
+        appId: "app_checkout",
+        environmentId: "env_dev",
+        flagId: "new-checkout",
+        by: "key",
+      },
+    });
+  });
+});
+
 function createdFlag() {
   return {
     id: "flag_checkout",

@@ -1,8 +1,9 @@
 import {
   apiKeyCacheKey,
+  clientKeyCacheKey,
+  credentialRevocationCacheKey,
   CredentialCacheKVSchema,
   CredentialCacheKVSchemaV1,
-  clientKeyCacheKey,
   type ErrorResponse,
   kvEnvelope,
 } from "@splitch/contracts";
@@ -26,6 +27,9 @@ export function makeDataPlaneAuthResolver(credentialStore: CredentialReader): Au
     const cached = await readCredentialByMaterial(credentialStore, credential, hash);
     if (cached === null) {
       return { ok: false, reason: "UNAUTHORIZED" };
+    }
+    if (cached === "revoked") {
+      return { ok: false, reason: "CREDENTIAL_REVOKED" };
     }
 
     const failure = credentialFailure(request, cached);
@@ -87,17 +91,29 @@ async function readCredentialByMaterial(
   credentialStore: CredentialReader,
   credential: string,
   hash: string,
-): Promise<CredentialCache | null> {
+): Promise<CredentialCache | "revoked" | null> {
   if (credential.startsWith("sk_") || credential.startsWith("ak_")) {
-    return readCredential(credentialStore, apiKeyCacheKey(hash));
+    return readCredentialCache(credentialStore, apiKeyCacheKey(hash));
   }
   if (credential.startsWith("pk_") || credential.startsWith("ck_")) {
-    return readCredential(credentialStore, clientKeyCacheKey(hash));
+    return readCredentialCache(credentialStore, clientKeyCacheKey(hash));
   }
   return (
-    (await readCredential(credentialStore, clientKeyCacheKey(hash))) ??
-    (await readCredential(credentialStore, apiKeyCacheKey(hash)))
+    (await readCredentialCache(credentialStore, clientKeyCacheKey(hash))) ??
+    (await readCredentialCache(credentialStore, apiKeyCacheKey(hash)))
   );
+}
+
+async function readCredentialCache(
+  credentialStore: CredentialReader,
+  key: string,
+): Promise<CredentialCache | "revoked" | null> {
+  const [revocation, raw] = await Promise.all([
+    credentialStore.get(credentialRevocationCacheKey(key)),
+    credentialStore.get(key),
+  ]);
+  if (revocation !== null) return "revoked";
+  return parseCredential(raw);
 }
 
 export async function sha256Hex(value: string): Promise<string> {
@@ -164,11 +180,7 @@ function originNotAllowed(origin: string): ErrorResponse {
   };
 }
 
-async function readCredential(
-  credentialStore: CredentialReader,
-  key: string,
-): Promise<CredentialCache | null> {
-  const raw = await credentialStore.get(key);
+function parseCredential(raw: string | null): CredentialCache | null {
   if (raw === null) return null;
 
   let json: unknown;

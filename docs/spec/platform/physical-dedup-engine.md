@@ -20,9 +20,10 @@ raw Exposure log (.datasource, append-only)
 
 Serving queries: `snapshot UNION ALL fresh_tail_since_last_ingest_watermark`.
 
-The snapshot covers the bulk; the real-time tail covers rows ingested after the snapshot watermark.
-No row is missed; no row is double-counted (the snapshot already deduplicated its window, the tail
-is deduped inline).
+The snapshot covers the bulk; the real-time tail covers rows ingested at or after the snapshot
+watermark. The inclusive boundary puts the exact watermark instant in both inputs so the final UNION
+can re-dedup it instead of risking a missed row. No row is missed or double-counted in the served
+result.
 
 ## First-touch definition (identical in both layers)
 
@@ -39,11 +40,13 @@ QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, experiment_id, r
 ```
 
 Both use `ROW_NUMBER()` equivalent to `MIN(server_received_at)` for first-touch. The snapshot reads
-`ingest_ts < watermark`, while the tail reads `ingest_ts >= watermark`; these disjoint half-open
-ranges assign equality to the tail. The final UNION re-dedups later physical rows for an Entity already
-in the snapshot. The tail boundary uses `ingest_ts`, not `server_received_at`, because late-arriving
-rows can have an event timestamp older than the snapshot. Both are generated from one shared
-definition, never hand-copied (ADR-0005 "one dedup, centralized" at the physical layer).
+`ingest_ts <= watermark`, while the tail reads `ingest_ts >= watermark`; these ranges deliberately
+overlap at the exact watermark instant so a concurrent insertion cannot fall between the layers, and
+the final UNION re-dedups that boundary overlap. The final UNION also re-dedups later physical rows
+for an Entity already in the snapshot. The tail boundary uses `ingest_ts`, not `server_received_at`,
+because late-arriving rows can have an event timestamp older than the snapshot. Both are generated
+from one shared definition, never hand-copied (ADR-0005 "one dedup, centralized" at the physical
+layer).
 When the latest snapshot contains no rows, its row-carried watermark is null. The tail uses the Unix
 epoch fallback above and scans all retained raw rows until the first nonempty snapshot, preserving
 correctness.
@@ -60,9 +63,12 @@ ExposureSnapshot {
   id_type:          string    // required
   variant:          string    // required — '__multiple__' if conflict
   first_exposure_ts: datetime  // required — MIN(server_received_at) from raw log
-  watermark_ts:     datetime  // required — exclusive ingest boundary captured at snapshot start
+  watermark_ts:     datetime  // required — inclusive ingest boundary captured at snapshot start
 }
 ```
+
+The inclusive boundary puts rows at `watermark_ts` in both layers so final UNION dedup can collapse
+the overlap instead of risking a missed boundary row.
 
 `ENGINE_SORTING_KEY`:
 `(app_id, environment_id, experiment_id, run_id, variant, targeting_key_hash)`. `app_id` is first for

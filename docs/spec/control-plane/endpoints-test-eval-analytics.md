@@ -100,6 +100,19 @@ naming `missing` (SPL-302). MCP tools for this operation dispatch straight at
 the Analysis Worker over a service binding and do not yet run that D1 gate; that
 topology gap is tracked separately and is not closed by SPL-305.
 
+The conclusion-capable Results read adds the server `data_watermark` and deterministic `result_token`
+defined in [result-contracts.md](../stats/result-contracts.md#analysis-results-envelope) to a
+`state: "ready"` response. The current ordinary read may omit both; such a response cannot be
+concluded and yields `DECISION_RESULT_UNAVAILABLE`. Reading Results never Ends the Run or writes a
+Flag Configuration. Conclude must recompute at the observed watermark and match the token; it never
+accepts caller-supplied Stats output.
+
+### `POST /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/runs/{run_id}/decision-diagnostics`
+
+Returns the read-only SRM trend and paginated Dimension auto-cuts for one result token. The strict
+request, response, ranking, watermark, and tenant-isolation rules are canonical in
+[decision-diagnostics.md](../stats/decision-diagnostics.md).
+
 ### `GET /orgs/{org_id}/usage`
 
 Returns the Organization's current UTC-month Evaluation usage through the Analysis Worker. The

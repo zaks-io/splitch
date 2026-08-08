@@ -189,6 +189,11 @@ Body: `{ reason?: string }` (optional human-readable note)
 Returns: ended Run object.
 Auth: App `owner` or `admin`.
 
+This is standalone End for an inconclusive or abandoned Run. It selects no Variant, creates no
+Approval Request, and never Promotes a winner. The separate Conclude and winner Promotion route,
+wire contract, gate ordering, and recovery behavior live in
+[conclusion-and-winner-promotion.md](conclusion-and-winner-promotion.md).
+
 **Note:** PATCH on a Run is intentionally not provided. Run fields are either frozen (assignment
 config — immutable by construction) or owned on the Experiment (measurement config). The Run is
 a record, not a mutable entity.

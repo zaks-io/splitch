@@ -17,10 +17,8 @@ import {
   RecordingEvaluationUsageSink,
   RecordingExposureSink,
 } from "./sdk-route-test-fixtures";
-import {
-  MemoryExposureRedemptionClaimStore,
-  RecordingExposureIngestSink,
-} from "./exposure-redemption";
+import { RecordingExposureIngestSink } from "./exposure-redemption";
+import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 
 const APP_ID = "app-A";
 const ENVIRONMENT_ID = "env-1";

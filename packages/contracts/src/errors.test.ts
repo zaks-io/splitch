@@ -1,6 +1,59 @@
 import { describe, expect, it } from "vitest";
+import { ErrorCodeSchema, errorCodes } from "./error-code";
 import { errorStatusByCode, httpStatusForError } from "./error-status";
-import { ErrorCodeSchema, ErrorResponseSchema, errorCodes } from "./errors";
+import { ErrorResponseSchema } from "./errors";
+import {
+  DecisionFailureSchema,
+  DecisionResultUnavailableDetailsSchema,
+} from "./experiment-conclusion-errors";
+
+const conclusionErrorResponses = [
+  {
+    code: "DECISION_BLOCKED",
+    message: "conclusion is blocked",
+    details: {
+      runId: "run_01",
+      resultToken: `sha256:${"a".repeat(64)}`,
+      dataWatermark: "2026-07-22T12:00:00.000Z",
+      failures: [
+        {
+          code: "DECISION_CONTROL_IDENTITY_INVALID",
+          checkIds: ["control_identity"],
+          details: {
+            controlVariantId: "var_control",
+            frozenVariantNames: ["control", "winner"],
+            reason: "absent_from_frozen_variant_set",
+          },
+        },
+      ],
+    },
+  },
+  {
+    code: "DECISION_RESULT_STALE",
+    message: "the result changed",
+    details: {
+      runId: "run_01",
+      expectedResultToken: `sha256:${"a".repeat(64)}`,
+      currentResultToken: `sha256:${"b".repeat(64)}`,
+    },
+  },
+  {
+    code: "DECISION_RESULT_UNAVAILABLE",
+    message: "the result has no decision evidence",
+    details: { runId: "run_01", envelopeState: "ready" },
+  },
+  {
+    code: "TARGET_CONFIGURATION_STALE",
+    message: "the target Flag Configuration changed",
+    details: {
+      flagId: "flag_01",
+      environmentId: "env_prod",
+      expectedConfigVersion: 4,
+      currentConfigVersion: 5,
+      recommendedAction: "REFRESH_AND_REPROPOSE",
+    },
+  },
+] as const;
 
 describe("ErrorResponse contract", () => {
   it("parses a structured-detail error and narrows details by code", () => {
@@ -63,6 +116,64 @@ describe("ErrorResponse contract", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("keeps decision failures on the shipped gate check ids", () => {
+    const parsed = DecisionFailureSchema.parse({
+      code: "DECISION_CONTROL_IDENTITY_INVALID",
+      checkIds: ["control_identity"],
+      details: {
+        controlVariantId: "var_control",
+        frozenVariantNames: ["control", "winner"],
+        reason: "absent_from_frozen_variant_set",
+      },
+    });
+
+    expect(parsed.checkIds).toEqual(["control_identity"]);
+    expect(
+      DecisionFailureSchema.safeParse({
+        code: "DECISION_GUARDRAIL_BREACHED",
+        checkIds: ["guardrail"],
+        details: {},
+      }).success,
+    ).toBe(false);
+  });
+
+  it("keeps activation rates nullable with their nullable source evidence", () => {
+    expect(
+      DecisionFailureSchema.parse({
+        code: "DECISION_ACTIVATION_IMBALANCE",
+        checkIds: ["activation_balance"],
+        details: { pValue: null, rates: null },
+      }).details,
+    ).toEqual({ pValue: null, rates: null });
+  });
+
+  it("represents unavailable evidence without inventing a current result token", () => {
+    expect(
+      DecisionResultUnavailableDetailsSchema.parse({
+        runId: "run_01",
+        envelopeState: "no_data",
+      }),
+    ).toEqual({ runId: "run_01", envelopeState: "no_data" });
+  });
+
+  it("accepts conclusion idempotency scope", () => {
+    expect(
+      ErrorResponseSchema.safeParse({
+        code: "IDEMPOTENCY_KEY_CONFLICT",
+        message: "the key belongs to a different conclusion payload",
+        details: { scope: "conclusion", idempotencyKey: "conclude-01" },
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each(
+    conclusionErrorResponses,
+  )("registers $code in the enum, status map, and response union", (response) => {
+    expect(ErrorCodeSchema.safeParse(response.code).success).toBe(true);
+    expect((errorStatusByCode as Record<string, number | undefined>)[response.code]).toBe(409);
+    expect(ErrorResponseSchema.safeParse(response).success).toBe(true);
+  });
 });
 
 describe("HTTP status map", () => {
@@ -89,13 +200,18 @@ describe("HTTP status map", () => {
     expect(httpStatusForError("RUN_FROZEN")).toBe(409);
     expect(httpStatusForError("APPROVAL_REVIEW_REQUIRED")).toBe(409);
     expect(httpStatusForError("APPROVAL_REQUEST_STALE")).toBe(409);
+    expect(httpStatusForError("DECISION_RESULT_STALE")).toBe(409);
+    expect(httpStatusForError("TARGET_CONFIGURATION_STALE")).toBe(409);
     expect(httpStatusForError("APPROVAL_REQUEST_RESOLVED")).toBe(409);
     expect(httpStatusForError("APPROVAL_APPLICATION_FAILED")).toBe(409);
     expect(httpStatusForError("IDEMPOTENCY_KEY_CONFLICT")).toBe(409);
+    expect(httpStatusForError("DECISION_BLOCKED")).toBe(409);
+    expect(httpStatusForError("DECISION_RESULT_UNAVAILABLE")).toBe(409);
     expect(httpStatusForError("EVENT_ID_CONFLICT")).toBe(409);
     expect(httpStatusForError("EVENT_DEFINITION_UNPUBLISHED")).toBe(409);
     expect(httpStatusForError("EVENT_DEFINITION_IMMUTABLE")).toBe(409);
     expect(httpStatusForError("EXPOSURE_TICKET_INVALID")).toBe(400);
+    expect(httpStatusForError("UNSUPPORTED_OBJECT_KEY")).toBe(400);
     expect(httpStatusForError("EXPOSURE_TICKET_EXPIRED")).toBe(410);
     expect(httpStatusForError("RATE_LIMITED")).toBe(429);
     expect(httpStatusForError("INTERNAL_SERVER_ERROR")).toBe(500);

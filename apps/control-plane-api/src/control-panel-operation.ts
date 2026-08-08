@@ -8,16 +8,19 @@ export function parseControlPanelOperation(
   method: string,
   pathname: string,
   panelEnvironmentId?: string,
+  search?: URLSearchParams | string,
 ): ControlPanelOperation | null {
-  return parseSdkControlPanelOperation(method, pathname, panelEnvironmentId);
+  return parseSdkControlPanelOperation(method, pathname, panelEnvironmentId, search);
 }
 
 /** Refuse bearer forwarding before dispatching any binding-only operation. */
 export function parseControlPanelBindingOperation(request: Request): ControlPanelOperation | null {
   if (request.headers.has("authorization")) return null;
+  const url = new URL(request.url);
   return parseControlPanelOperation(
     request.method,
-    new URL(request.url).pathname,
+    url.pathname,
     request.headers.get(CONTROL_PANEL_ENVIRONMENT_HEADER) ?? undefined,
+    url.searchParams,
   );
 }

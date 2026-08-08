@@ -59,6 +59,7 @@ function ExperimentResultsForRun({
   if (data.state === "no_data") {
     return (
       <ExperimentResultsWaiting
+        control={data.control}
         missing={data.missing}
         runNumber={data.runNumber}
         runStatus={data.runStatus}

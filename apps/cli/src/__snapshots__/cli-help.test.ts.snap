@@ -633,7 +633,7 @@ Request body (--body-json):
   dimensions          optional; default []  string[]
   allocation          optional  Record<Variant name, number>
   salt                optional  string
-  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
   segmentIds          optional  string[]
   idempotency_key     optional  string
   Example:
@@ -736,7 +736,7 @@ Request body (--body-json):
   allocation          optional  Record<Variant name, number>
   salt                optional  string
   variantSet          optional  { id: string; name: string; value: boolean | string | number | Record<string, unknown>; description?: string }[]
-  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
   segmentIds          optional  string[]
   metrics             optional  { metricId: string }[]
   guardrailMetrics    optional  { metricId: string }[]
@@ -809,7 +809,7 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  targetingRules   required  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
+  targetingRules   required  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
   review           optional  { action: "approve_and_apply" }
   idempotency_key  required  string
   Example:
@@ -926,7 +926,7 @@ Flags:
 
 Example:
   splitch flags delete <flag-id-or-key> --json",
-    "flags get": "Get a Flag definition.
+    "flags get": "Get a Flag definition by canonical id.
 
 Usage:
   splitch flags get <flag-id-or-key> [flags]
@@ -1367,7 +1367,7 @@ Flags:
 Request body (--body-json):
   name             required  string
   description      optional  string
-  conditions       required  { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]
+  conditions       required  { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]
   idempotency_key  optional  string
   Example:
     {"name":"name","conditions":[{"attribute":"attribute","operator":"eq","value":true}]}
@@ -1425,7 +1425,7 @@ Flags:
 Request body (--body-json):
   name         optional  string
   description  optional  string
-  conditions   optional  { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]
+  conditions   optional  { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]
   Example:
     {"name":"name"}
 
@@ -1717,7 +1717,7 @@ Usage:
 Commands:
   list            List Flag definitions in an App (bounded; reports its own truncation).
   create          Create a Flag definition (key, schema, Variant catalog).
-  get             Get a Flag definition.
+  get             Get a Flag definition by canonical id.
   update          Update a Flag definition's name/description/schema.
   delete          Delete a Flag (blocked if referenced by a running Experiment).
   promote         Promote selected Flag Configuration field-groups between Environments.

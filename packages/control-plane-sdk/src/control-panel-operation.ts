@@ -17,11 +17,15 @@
  */
 
 import { parseEventDefinitionOperation } from "./control-panel-event-definition-operation";
+import { parseFlags } from "./control-panel-operation-flags";
+import { parseMetrics } from "./panel-metrics-parse.js";
+import { parseSegments } from "./panel-segments-parse.js";
 
 export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 
 export type ControlPanelOperation =
   | { id: "apps_create"; orgId: string }
+  | { id: "organization_usage_get"; orgId: string }
   | { id: "app_attention_rollup_get"; appId: string }
   | { id: "experiments_detail" }
   | { id: "experiments_list" }
@@ -37,6 +41,19 @@ export type ControlPanelOperation =
       id: "flags_list" | "flags_create" | "experiments_create";
       appId: string;
       environmentId: string;
+    }
+  /**
+   * `flagId` is a dual selector: the same path segment names a different Flag
+   * under `by=key` than under `by=id`. The mode is part of the signed claim so a
+   * delegation minted for one cannot resolve against the other on replay. The
+   * parser never defaults a missing or unknown `by` — both are refused.
+   */
+  | {
+      id: "flag_get";
+      appId: string;
+      environmentId: string;
+      flagId: string;
+      by: "id" | "key";
     }
   | {
       id:
@@ -70,6 +87,8 @@ export type ControlPanelOperation =
       id:
         | "metrics_list"
         | "metrics_create"
+        | "segments_list"
+        | "segments_create"
         | "overview_get"
         | "settings_get"
         | "environment_update"
@@ -107,6 +126,12 @@ export type ControlPanelOperation =
       metricId: string;
     }
   | {
+      id: "segments_get" | "segments_update" | "segments_delete";
+      appId: string;
+      environmentId: string;
+      segmentId: string;
+    }
+  | {
       id: "api_key_revoke";
       appId: string;
       environmentId: string;
@@ -114,6 +139,7 @@ export type ControlPanelOperation =
     };
 
 const APPS_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
+const ORG_USAGE_PATH = /^\/orgs\/([^/]+)\/usage\/?$/;
 const APP_ATTENTION_PATH = /^\/apps\/([^/]+)\/attention-rollup\/?$/;
 const EXPERIMENT_DETAIL_PATH = "/control-panel/experiments/detail";
 const EXPERIMENT_RESULTS_PATH = "/control-panel/experiments/results";
@@ -122,23 +148,11 @@ const EXPERIMENT_MUTATION_PATH =
   /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/([^/]+)(\/start)?\/?$/;
 const EXPERIMENTS_COLLECTION_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/?$/;
 const ORGANIZATIONS_PATH = /^\/orgs\/?$/;
-const FLAGS_PATH = /^\/apps\/([^/]+)\/flags\/?$/;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
 const TARGETING_RULES_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/targeting-rules\/?$/;
 const FLAG_PROMOTE_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/promote\/?$/;
 const APPROVAL_REQUEST_PATH = /^\/apps\/([^/]+)\/approval-requests\/([^/]+)\/?$/;
 const APPROVAL_REVIEWS_PATH = /^\/apps\/([^/]+)\/approval-requests\/([^/]+)\/reviews\/?$/;
-const METRICS_PATH = /^\/apps\/([^/]+)\/metrics\/?$/;
-const METRIC_PATH = /^\/apps\/([^/]+)\/metrics\/([^/]+)\/?$/;
-const METRIC_COLLECTION_METHODS = {
-  GET: "metrics_list",
-  POST: "metrics_create",
-} as const;
-const METRIC_RESOURCE_METHODS = {
-  GET: "metrics_get",
-  PATCH: "metrics_update",
-  DELETE: "metrics_delete",
-} as const;
 const OVERVIEW_PATH = /^\/control-panel\/apps\/([^/]+)\/envs\/([^/]+)\/overview\/?$/;
 const SETTINGS_PATH = /^\/control-panel\/apps\/([^/]+)\/envs\/([^/]+)\/settings\/?$/;
 const ENVIRONMENT_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/?$/;
@@ -149,21 +163,31 @@ export function parseControlPanelOperation(
   method: string,
   pathname: string,
   panelEnvironmentId?: string,
+  search?: URLSearchParams | string,
 ): ControlPanelOperation | null {
+  const searchParams = asSearchParams(search);
   return (
     parseAppsCreate(method, pathname) ??
+    parseOrganizationUsage(method, pathname) ??
     parseAppAttention(method, pathname) ??
     parseOrganizationsCreate(method, pathname) ??
     parseExperimentsList(method, pathname) ??
     parseExperimentMutation(method, pathname) ??
     parseExperimentCreate(method, pathname) ??
-    parseFlags(method, pathname, panelEnvironmentId) ??
+    parseFlags(method, pathname, panelEnvironmentId, searchParams) ??
     parseConfig(method, pathname) ??
     parseApproval(method, pathname) ??
     parseEnvironmentSettings(method, pathname) ??
     parseMetrics(method, pathname, panelEnvironmentId) ??
+    parseSegments(method, pathname, panelEnvironmentId) ??
     parseEventDefinitionOperation(method, pathname, panelEnvironmentId)
   );
+}
+
+function asSearchParams(search?: URLSearchParams | string): URLSearchParams | undefined {
+  if (search === undefined) return undefined;
+  if (typeof search !== "string") return search;
+  return new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
 }
 
 /**
@@ -176,6 +200,18 @@ function parseOrganizationsCreate(method: string, pathname: string): ControlPane
   return method === "POST" && ORGANIZATIONS_PATH.test(pathname)
     ? { id: "organizations_create" }
     : null;
+}
+
+/**
+ * `GET /orgs/:orgId/usage`. Names the Organization it reads, so the resolver
+ * binds the delegation to live Org membership rather than trusting the claim:
+ * usage is Organization-wide (ADR-0033), which makes the Org the tenant boundary
+ * this read must not cross.
+ */
+function parseOrganizationUsage(method: string, pathname: string): ControlPanelOperation | null {
+  const match = pathname.match(ORG_USAGE_PATH);
+  const orgId = match?.[1] ? decodeSegment(match[1]) : null;
+  return method === "GET" && orgId ? { id: "organization_usage_get", orgId } : null;
 }
 
 function parseAppAttention(method: string, pathname: string): ControlPanelOperation | null {
@@ -233,19 +269,6 @@ function parseAppsCreate(method: string, pathname: string): ControlPanelOperatio
   return method === "POST" && orgId ? { id: "apps_create", orgId } : null;
 }
 
-function parseFlags(
-  method: string,
-  pathname: string,
-  environmentValue?: string,
-): ControlPanelOperation | null {
-  const match = pathname.match(FLAGS_PATH);
-  if ((method !== "GET" && method !== "POST") || !match?.[1] || !environmentValue) return null;
-  const appId = decodeSegment(match[1]);
-  const environmentId = decodeSegment(environmentValue);
-  if (!appId || !environmentId) return null;
-  return { id: method === "GET" ? "flags_list" : "flags_create", appId, environmentId };
-}
-
 /**
  * The three per-Environment Flag Configuration operations the panel may reach.
  * The write pair is named separately from the read so a delegation minted for a
@@ -282,45 +305,6 @@ function parseApproval(method: string, pathname: string): ControlPanelOperation 
     return appId && approvalRequestId ? { id, appId, approvalRequestId } : null;
   }
   return null;
-}
-
-function parseMetrics(
-  method: string,
-  pathname: string,
-  environmentValue?: string,
-): ControlPanelOperation | null {
-  const environmentId = environmentValue ? decodeSegment(environmentValue) : null;
-  if (!environmentId) return null;
-  return (
-    parseMetricCollection(method, pathname, environmentId) ??
-    parseMetricResource(method, pathname, environmentId)
-  );
-}
-
-function parseMetricCollection(
-  method: string,
-  pathname: string,
-  environmentId: string,
-): ControlPanelOperation | null {
-  const id = METRIC_COLLECTION_METHODS[method as keyof typeof METRIC_COLLECTION_METHODS];
-  const appId = decodeMatch(pathname.match(METRICS_PATH), 1);
-  return id && appId ? { id, appId, environmentId } : null;
-}
-
-function parseMetricResource(
-  method: string,
-  pathname: string,
-  environmentId: string,
-): ControlPanelOperation | null {
-  const id = METRIC_RESOURCE_METHODS[method as keyof typeof METRIC_RESOURCE_METHODS];
-  const resource = pathname.match(METRIC_PATH);
-  const appId = decodeMatch(resource, 1);
-  const metricId = decodeMatch(resource, 2);
-  return id && appId && metricId ? { id, appId, environmentId, metricId } : null;
-}
-
-function decodeMatch(match: RegExpMatchArray | null, index: number): string | null {
-  return match?.[index] ? decodeSegment(match[index]) : null;
 }
 
 function parseEnvironmentSettings(method: string, pathname: string): ControlPanelOperation | null {

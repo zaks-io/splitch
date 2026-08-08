@@ -1,4 +1,9 @@
-import type { ExperimentDecisionGate, GuardrailResult } from "@splitch/contracts";
+import type {
+  DecisionGateCheck,
+  ExperimentDecisionGate,
+  FrozenControlIdentity,
+  GuardrailResult,
+} from "@splitch/contracts";
 import { Button } from "@splitch/ui/components/button";
 
 /**
@@ -12,10 +17,12 @@ import { Button } from "@splitch/ui/components/button";
  */
 
 export function ExperimentResultsDecision({
+  control,
   gate,
   guardrails,
   runStatus,
 }: {
+  control: FrozenControlIdentity;
   gate: ExperimentDecisionGate;
   guardrails: readonly GuardrailResult[];
   runStatus: "running" | "ended";
@@ -63,7 +70,10 @@ export function ExperimentResultsDecision({
             <CheckMark status={check.status} />
             <span>
               <span className="font-medium text-foreground">{check.title}</span>
-              <span className="text-muted-foreground"> — {check.detail}</span>
+              <span className="text-muted-foreground">
+                {" — "}
+                <CheckDetail check={check} control={control} />
+              </span>
             </span>
           </li>
         ))}
@@ -77,6 +87,30 @@ export function ExperimentResultsDecision({
           : ""}
       </p>
     </section>
+  );
+}
+
+function CheckDetail({
+  check,
+  control,
+}: {
+  check: DecisionGateCheck;
+  control: FrozenControlIdentity;
+}) {
+  if (check.id !== "control_identity" || control.state !== "unresolvable") {
+    return check.detail;
+  }
+  const recordedValue = `"${control.variantId}"`;
+  const recordedValueIndex = check.detail.indexOf(recordedValue);
+  if (recordedValueIndex === -1) {
+    throw new Error("Unresolvable Control detail omitted its recorded value");
+  }
+  return (
+    <>
+      {check.detail.slice(0, recordedValueIndex)}&quot;
+      <code className="font-mono text-foreground text-xs">{control.variantId}</code>&quot;
+      {check.detail.slice(recordedValueIndex + recordedValue.length)}
+    </>
   );
 }
 

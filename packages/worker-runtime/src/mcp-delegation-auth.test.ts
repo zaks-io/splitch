@@ -42,10 +42,10 @@ describe("MCP delegation auth resolver", () => {
     });
   });
 
-  it("rejects public omission, replay, and the wrong Worker owner", async () => {
+  it("rejects public omission, replay, and the wrong public surface", async () => {
     const replayGuard = memoryReplayGuard();
     const request = await delegatedRequest("https://worker.internal/apps/app_one/flags");
-    await expect(resolver("analysis-api")(request)).resolves.toEqual({
+    await expect(resolver("evaluation-api")(request)).resolves.toEqual({
       ok: false,
       reason: "UNAUTHORIZED",
     });
@@ -58,7 +58,7 @@ describe("MCP delegation auth resolver", () => {
     });
 
     const exactResolver = makeMcpDelegationAuthResolver({
-      owner: "control-plane-api",
+      surface: "control-plane-api",
       secret: SECRET,
       replayGuard,
     });
@@ -88,8 +88,12 @@ async function delegatedRequest(
   return request;
 }
 
-function resolver(owner: "control-plane-api" | "analysis-api") {
-  return makeMcpDelegationAuthResolver({ owner, secret: SECRET, replayGuard: memoryReplayGuard() });
+function resolver(surface: "control-plane-api" | "evaluation-api") {
+  return makeMcpDelegationAuthResolver({
+    surface,
+    secret: SECRET,
+    replayGuard: memoryReplayGuard(),
+  });
 }
 
 function memoryReplayGuard(): McpDelegationReplayGuard {

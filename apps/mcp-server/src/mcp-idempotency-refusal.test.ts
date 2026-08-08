@@ -1,5 +1,5 @@
 import type { ErrorResponse } from "@splitch/contracts";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
 import { allowMcpRevocations, TEST_MCP_DELEGATION_SECRET } from "./mcp-test-verifier";
 
@@ -13,6 +13,10 @@ import { allowMcpRevocations, TEST_MCP_DELEGATION_SECRET } from "./mcp-test-veri
  */
 
 const service = "splitch-mcp-server";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("mcp missing-idempotency-key refusal", () => {
   it("returns a typed VALIDATION_ERROR tool result and issues no upstream request", async () => {
@@ -32,6 +36,10 @@ describe("mcp missing-idempotency-key refusal", () => {
   });
 
   it("still returns JSON-RPC Internal error for a genuinely unexpected throw", async () => {
+    const logged: unknown[][] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args);
+    });
     const body = await callTool(
       "flags_delete",
       { appId: "app_local", flagId: "flag_local", idempotency_key: "idem_1" },
@@ -42,17 +50,17 @@ describe("mcp missing-idempotency-key refusal", () => {
     );
 
     expect(body.result).toBeUndefined();
-    expect(body.error).toMatchObject({
-      code: -32603,
-      message: "Internal error",
-      data: { message: "upstream exploded" },
-    });
+    expect(body.error).toMatchObject({ code: -32603, message: "Internal error" });
+    // The cause is the operator's, in full, and the caller only gets its handle.
+    expect(String(logged[0]?.[1])).toContain("upstream exploded");
+    expect(body.error?.data?.message).not.toContain("upstream exploded");
+    expect(body.error?.data?.reference).toMatch(/^[0-9a-f-]{36}$/);
   });
 });
 
 interface ToolCallBody {
   result?: { isError?: boolean; structuredContent?: ErrorResponse };
-  error?: { code: number; message: string; data?: { message?: string } };
+  error?: { code: number; message: string; data?: { message?: string; reference?: string } };
 }
 
 async function callTool(

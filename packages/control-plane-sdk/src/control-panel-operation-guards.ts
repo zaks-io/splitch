@@ -16,6 +16,8 @@ const SCOPED_OPERATION_IDS = [
   "experiments_create",
   "metrics_list",
   "metrics_create",
+  "segments_list",
+  "segments_create",
   "overview_get",
   "settings_get",
   "environment_update",
@@ -52,6 +54,12 @@ const EVENT_DEFINITION_RESOURCE_OPERATION_IDS = [
   "event_definition_versions_list",
 ] as const;
 
+const SEGMENT_RESOURCE_OPERATION_IDS = [
+  "segments_get",
+  "segments_update",
+  "segments_delete",
+] as const;
+
 type ClaimGuard = (value: Record<string, unknown>) => boolean;
 
 /**
@@ -64,8 +72,10 @@ type ClaimGuard = (value: Record<string, unknown>) => boolean;
  */
 const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard>([
   ["apps_create", (value) => isResourceOperation(value, "orgId")],
+  ["organization_usage_get", (value) => isResourceOperation(value, "orgId")],
   ["app_attention_rollup_get", (value) => isResourceOperation(value, "appId")],
   ["api_key_revoke", isApiKeyRevokeOperation],
+  ["flag_get", isFlagGetOperation],
   ...family(UNBOUND_OPERATION_IDS, (value) => hasKeys(value, ["id"])),
   ...family(EXPERIMENT_MUTATION_OPERATION_IDS, isExperimentMutationOperation),
   ...family(FLAG_CONFIG_OPERATION_IDS, isFlagConfigOperation),
@@ -74,6 +84,7 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ...family(METRIC_RESOURCE_OPERATION_IDS, isMetricResourceOperation),
   ...family(EVENT_DEFINITION_RESOURCE_OPERATION_IDS, isEventDefinitionResourceOperation),
   ["event_definition_versions_get", isEventDefinitionVersionOperation],
+  ...family(SEGMENT_RESOURCE_OPERATION_IDS, isSegmentResourceOperation),
 ]);
 
 function family(ids: readonly string[], guard: ClaimGuard): [string, ClaimGuard][] {
@@ -85,7 +96,7 @@ export function isControlPanelOperation(value: unknown): value is ControlPanelOp
   return CLAIM_GUARDS.get(value.id)?.(value) ?? false;
 }
 
-/** Operations named by exactly one resource id: apps_create (Org) and the App rollup. */
+/** Operations named by exactly one resource id: the two Org-named ones and the App rollup. */
 function isResourceOperation(value: Record<string, unknown>, key: string): boolean {
   return hasKeys(value, ["id", key]) && isNonEmptyString(value[key]);
 }
@@ -103,6 +114,20 @@ function isFlagConfigOperation(value: Record<string, unknown>): boolean {
     hasKeys(value, ["id", "appId", "environmentId", "flagId"]) &&
     hasAppEnvironment(value) &&
     isNonEmptyString(value.flagId)
+  );
+}
+
+/**
+ * `flag_get` carries the dual-selector mode as a fourth claim field. Exact-length
+ * `hasKeys` keeps a forged claim from dropping `by` or smuggling a fifth field;
+ * only `"id"` and `"key"` are claimable modes.
+ */
+function isFlagGetOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "flagId", "by"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.flagId) &&
+    (value.by === "id" || value.by === "key")
   );
 }
 
@@ -146,6 +171,14 @@ function isEventDefinitionVersionOperation(value: Record<string, unknown>): bool
     hasAppEnvironment(value) &&
     isNonEmptyString(value.eventDefinitionId) &&
     isNonEmptyString(value.versionId)
+  );
+}
+
+function isSegmentResourceOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "segmentId"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.segmentId)
   );
 }
 
