@@ -45,7 +45,14 @@ export function makeFlagRepo(db: Db) {
 
   return {
     flags: flagsTable,
-    flagConfigs: flagConfigsTable,
+    // Read/insert only: UPDATEs of flag_configs go through makeFlagConfigOps so
+    // every writer bumps `version` (SPL-350). Exposing ScopedTable.update here
+    // would let any Repository holder skip the bump and defeat the CAS.
+    flagConfigs: {
+      findMany: flagConfigsTable.findMany,
+      findOne: flagConfigsTable.findOne,
+      insert: flagConfigsTable.insert,
+    },
     targetingRules: targetingRulesTable,
     segments: segmentsTable,
 
