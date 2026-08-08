@@ -1,7 +1,8 @@
 import { defineConfig } from "tsup";
 
+/** Second entry for `@splitch/sdk/browser`. Runs after the root build (no clean). */
 export default defineConfig({
-  entry: { index: "src/index.ts" },
+  entry: { "browser/index": "src/browser/index.ts" },
   outDir: "dist",
   format: ["esm"],
   target: "es2022",
@@ -9,8 +10,7 @@ export default defineConfig({
   dts: true,
   bundle: true,
   splitting: false,
-  clean: true,
+  clean: false,
   sourcemap: false,
-  // Published package has zero runtime dependencies (SPL-325).
   external: [],
 });

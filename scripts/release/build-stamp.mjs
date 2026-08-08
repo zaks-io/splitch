@@ -1,6 +1,7 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { relative, resolve, sep } from "node:path";
 import { getReleaseTarget } from "./constants.mjs";
 
 const STAMP_FILENAME = "build-stamp.json";
@@ -30,26 +31,81 @@ function collectFiles(root, entryPath, files) {
 }
 
 /**
- * Deterministic digest over the target's declared build inputs: sorted
- * relative paths plus file contents. Two trees with identical inputs always
- * produce identical digests, so stamps (and staged tarballs) are reproducible.
+ * Turbo folds `globalEnv` (CI, NODE_ENV) into the task hash. Vitest sets
+ * NODE_ENV=test and CI runners set CI=true, which would make a stamp written
+ * during `pnpm build` look stale under `vitest`/`pack:check` with no source
+ * change. Strip those for stamp digests only — file inputs and dependency
+ * task hashes still move the digest.
  */
-export function computeSourceDigest(targetKey, repoRoot) {
+function turboStampEnv() {
+  const env = { ...process.env };
+  delete env.CI;
+  delete env.NODE_ENV;
+  return env;
+}
+
+function readTurboBuildDryRun(packageName, repoRoot) {
+  const turboBin = containedPath(repoRoot, "node_modules", ".bin", "turbo");
+  if (!existsSync(turboBin)) {
+    throw new Error(
+      `turbo binary missing at ${turboBin}; install workspace deps before stamping ${packageName}`,
+    );
+  }
+  let out;
+  try {
+    // Pipe stderr so turbo's startup banner does not leak into every stamp
+    // caller's logs (build, pack:check, vitest).
+    out = execFileSync(turboBin, ["run", "build", `--filter=${packageName}`, "--dry=json"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      env: turboStampEnv(),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`turbo dry-run failed for ${packageName}: ${detail}`);
+  }
+  const start = out.indexOf("{");
+  if (start === -1) {
+    throw new Error(`turbo dry-run produced no JSON for ${packageName}`);
+  }
+  return JSON.parse(out.slice(start));
+}
+
+/**
+ * Extract the build task hash from a turbo `--dry=json` payload. Exported so
+ * the shape guard (missing/empty hash → throw) is unit-testable without a
+ * live turbo binary; production always goes through computeSourceDigest.
+ */
+export function buildTaskHashFromDryRun(dry, packageName) {
+  const task = (dry.tasks ?? []).find(
+    (entry) => entry.package === packageName && entry.task === "build",
+  );
+  if (task === undefined || typeof task.hash !== "string" || task.hash.length === 0) {
+    throw new Error(`turbo dry-run missing build task hash for ${packageName}`);
+  }
+  return task.hash;
+}
+
+/**
+ * Hermetic fixture digest: hash package sources under packageDir, excluding
+ * dist. Used only when repoRoot has no turbo.json (scratch fixtures /
+ * prepare-artifacts contract). Production checkouts always have turbo.json
+ * and take the Turbo path — there is no env-var override.
+ */
+function computeLocalPackageDigest(targetKey, repoRoot) {
   const target = getReleaseTarget(targetKey);
   const packageRoot = containedPath(repoRoot, target.packageDir);
   const hash = createHash("sha256");
   const files = [];
-  for (const input of target.stampInputs) {
-    const inputPath = containedPath(repoRoot, target.packageDir, input);
-    if (!existsSync(inputPath)) {
-      continue;
-    }
-    collectFiles(packageRoot, inputPath, files);
+  if (existsSync(packageRoot)) {
+    collectFiles(packageRoot, packageRoot, files);
   }
   files.sort();
   for (const filePath of files) {
     const relativePath = relative(packageRoot, filePath).split(sep).join("/");
-    if (relativePath === `dist/${STAMP_FILENAME}`) {
+    if (relativePath === "dist" || relativePath.startsWith("dist/")) {
       continue;
     }
     hash.update(relativePath);
@@ -58,6 +114,21 @@ export function computeSourceDigest(targetKey, repoRoot) {
     hash.update("\0");
   }
   return hash.digest("hex");
+}
+
+/**
+ * Source digest = Turbo's build task hash for the release target when the
+ * checkout is a real workspace (turbo.json present). Scratch fixtures without
+ * turbo.json hash their own package sources instead — hermetic, no env hatch.
+ */
+export function computeSourceDigest(targetKey, repoRoot) {
+  const turboJson = containedPath(repoRoot, "turbo.json");
+  if (!existsSync(turboJson)) {
+    return computeLocalPackageDigest(targetKey, repoRoot);
+  }
+  const target = getReleaseTarget(targetKey);
+  const dry = readTurboBuildDryRun(target.packageName, repoRoot);
+  return buildTaskHashFromDryRun(dry, target.packageName);
 }
 
 /** Digest of an arbitrary directory tree; used to prove a tree was not mutated. */
@@ -105,14 +176,18 @@ function computeDistDigest(targetKey, repoRoot) {
   return hash.digest("hex");
 }
 
-/** Called by each package's build as its final step; the only stamp writer. */
-export function writeBuildStamp(targetKey, repoRoot) {
+/**
+ * Called by each package's build as its final step; the only stamp writer.
+ * `options.sourceDigest` is for hermetic tests that need to plant a known
+ * (or deliberately stale) digest; production writers never pass it.
+ */
+export function writeBuildStamp(targetKey, repoRoot, options = {}) {
   const target = getReleaseTarget(targetKey);
   const manifest = JSON.parse(readFileSync(containedPath(repoRoot, target.packagePath), "utf8"));
   const stamp = {
     packageName: target.packageName,
     version: manifest.version,
-    sourceDigest: computeSourceDigest(targetKey, repoRoot),
+    sourceDigest: options.sourceDigest ?? computeSourceDigest(targetKey, repoRoot),
     distDigest: computeDistDigest(targetKey, repoRoot),
   };
   writeFileSync(stampPath(targetKey, repoRoot), `${JSON.stringify(stamp, null, 2)}\n`);
@@ -134,6 +209,11 @@ export function verifyBuildStamp(targetKey, repoRoot) {
     );
   }
   const stamp = JSON.parse(readFileSync(path, "utf8"));
+  if (typeof stamp.sourceDigest !== "string" || stamp.sourceDigest.length === 0) {
+    throw new Error(
+      `${target.packageDir}/dist/${STAMP_FILENAME} is degraded: sourceDigest must be a non-empty string. Remediation: ${remediation}`,
+    );
+  }
   const manifest = JSON.parse(readFileSync(containedPath(repoRoot, target.packagePath), "utf8"));
   if (stamp.packageName !== target.packageName || stamp.version !== manifest.version) {
     throw new Error(

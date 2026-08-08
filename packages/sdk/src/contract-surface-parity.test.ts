@@ -272,9 +272,10 @@ describe("contract-surface known __proto__ divergences", () => {
     expect(String(evaluations)).toBe("[object Object]");
   });
 
-  it("compiled keeps a __proto__ flag key; zod 4.4.3 drops it (SPL-353)", () => {
-    // Known wire divergence. Do not "fix" by dropping the key — Worker-side
-    // silent drop is SPL-353.
+  it("compiled keeps a __proto__ flag key; zod refuses it (SPL-353)", () => {
+    // Contracts fail loud on JSON own "__proto__" Flag Keys (SPL-353). The
+    // compiled SDK surface still keeps the key as an own property so a Worker
+    // response that somehow carries it is not silently dropped here.
     const input = JSON.parse(
       '{"evaluations":{"__proto__":{"variant":false,"variantName":null,"reason":"DEFAULT","errorCode":null,"exposureTicket":null}}}',
     ) as unknown;
@@ -282,14 +283,12 @@ describe("contract-surface known __proto__ divergences", () => {
     const compiled = EvaluateAllResponseSchema.safeParse(input);
     const zod = ZodEvaluateAllResponseSchema.safeParse(input);
     expect(compiled.success).toBe(true);
-    expect(zod.success).toBe(true);
-    if (!compiled.success || !zod.success) {
+    expect(zod.success).toBe(false);
+    if (!compiled.success) {
       return;
     }
 
     expect(Object.keys(compiled.data.evaluations)).toEqual(["__proto__"]);
-    expect(Object.keys(zod.data.evaluations)).toEqual([]);
-    expect(compiled.data).not.toEqual(zod.data);
   });
 
   it("compiled strips a JSON own __proto__ sibling key; zod 4.4.3 also strips it", () => {

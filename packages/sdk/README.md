@@ -161,6 +161,36 @@ the type level instead of resolving `undefined` into an `await`. If you pass you
 own object literal there, add the method; the type will tell you. Nothing else is
 affected, and the built-in adapter needs no change.
 
+## Browser client (`@splitch/sdk/browser`)
+
+Static-context client for browsers: one Evaluation Context, one Precomputed
+Evaluations fetch, then synchronous Flag reads with zero per-read network.
+Exposures fire on the first local read by redeeming Exposure Tickets.
+
+```ts
+import { createSplitchBrowserClient } from "@splitch/sdk/browser";
+
+const splitch = createSplitchBrowserClient({
+  clientKey: "pk_...", // secrets (sk_/ak_) throw at construction
+  context: { targetingKey: user.id },
+});
+await splitch.init();
+
+const on = splitch.evaluate("new-checkout", false); // sync
+const details = splitch.evaluateDetails("new-checkout", false);
+await splitch.flush();
+```
+
+Reading before `init()` throws `SDK_NOT_INITIALIZED`. An unknown Flag Key returns
+your default with `reason: "ERROR"` / `FLAG_NOT_FOUND` and a loud log — never a
+silent invented default.
+
+`flush()` drains the Exposure queue. If the queue hits the batch caps (25 items /
+32 KiB) and a forced flush fails, the entire pending queue is dropped loudly
+(`RATE_LIMITED`) — including items enqueued after the overflow was detected. One
+transient blip at 25 pending loses those 25 Exposures; call `flush()` sooner or
+reduce concurrent first-reads.
+
 ## Convex
 
 Convex's default runtime is a custom V8 isolate (no Node built-ins). `fetch` is

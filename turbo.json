@@ -425,6 +425,10 @@
       "dependsOn": ["build"],
       "cache": false
     },
+    "@splitch/sdk#size:check": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
     "@splitch/sdk#test:consumer-smoke": {
       "dependsOn": ["build"],
       "cache": false,
@@ -433,6 +437,10 @@
         "$TURBO_ROOT$/docs/spec/quickstart.md",
         "$TURBO_ROOT$/fixtures/convex-sdk-consumer/**"
       ]
+    },
+    "@splitch/sdk#test:browser-pagehide": {
+      "dependsOn": ["build"],
+      "cache": false
     },
     "@splitch/cli#build": {
       "dependsOn": ["^build"],

@@ -10,6 +10,7 @@ import {
 } from "../../../scripts/release/build-stamp.mjs";
 import { assertPublishKeepsManifest } from "../../../scripts/release/publish-manifest-probe.mjs";
 import {
+  assertReleaseBundleJs,
   assertReleaseTarballContents,
   createPackStagingDir,
   getPackageRoot,
@@ -22,6 +23,9 @@ import {
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const packageRoot = getPackageRoot();
 
+// Live freshness: dist must match the current turbo build hash. This is the
+// sole place that asserts against packages/sdk/dist — repo-lint stays hermetic
+// over scratch fixtures and must not depend on this package's build output.
 verifyBuildStamp("sdk", repoRoot);
 const digestBefore = computeSourceDigest("sdk", repoRoot);
 const distDigestBefore = computeTreeDigest(join(packageRoot, "dist"));
@@ -38,6 +42,16 @@ try {
     declarationText: readTarballFile(tarballPath, "package/dist/index.d.ts"),
     bundleJs: readTarballFile(tarballPath, "package/dist/index.js"),
   });
+  // Browser subpath must ship beside the root entry (SPL-332).
+  const browserJs = readTarballFile(tarballPath, "package/dist/browser/index.js");
+  const browserDts = readTarballFile(tarballPath, "package/dist/browser/index.d.ts");
+  if (!browserJs.includes("createSplitchBrowserClient")) {
+    throw new Error("release browser bundle missing createSplitchBrowserClient");
+  }
+  if (!browserDts.includes("createSplitchBrowserClient")) {
+    throw new Error("release browser declarations missing createSplitchBrowserClient");
+  }
+  assertReleaseBundleJs(browserJs);
 } finally {
   rmSync(staging, { recursive: true, force: true });
 }
