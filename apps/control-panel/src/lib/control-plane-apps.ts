@@ -141,10 +141,12 @@ export function panelDelegationFetch(
     const headers = new Headers(request.headers);
     refuseCallerCredentials(headers);
     if (environmentId) headers.set(CONTROL_PANEL_ENVIRONMENT_HEADER, environmentId);
+    const url = new URL(request.url);
     const operation = parseControlPanelOperation(
       request.method,
-      new URL(request.url).pathname,
+      url.pathname,
       environmentId,
+      url.searchParams,
     );
     if (!operation) throw new Error("control-panel attempted an unsupported binding operation");
     const nowSeconds = options.nowSeconds?.() ?? Math.floor(Date.now() / 1000);

@@ -44,6 +44,7 @@ import type {
   ExperimentParams,
   FlagConfigMutationResponseSchema,
   FlagConfigResponseSchema,
+  FlagGetQuerySchema,
   FlagParams,
   FlagVariantParams,
   OrgAppsParams,
@@ -76,7 +77,7 @@ export type FlagsListInput = z.infer<typeof AppParams>;
 export type FlagsListOutput = z.infer<typeof FlagListResponseSchema>;
 export type FlagsCreateInput = z.infer<typeof AppParams> & z.infer<typeof CreateFlagRequestSchema>;
 export type FlagsCreateOutput = z.infer<typeof FlagResponseSchema>;
-export type FlagsGetInput = z.infer<typeof FlagParams>;
+export type FlagsGetInput = z.infer<typeof FlagParams> & z.infer<typeof FlagGetQuerySchema>;
 export type FlagsGetOutput = z.infer<typeof FlagResponseSchema>;
 export type FlagsUpdateInput = z.infer<typeof FlagParams> & z.infer<typeof PatchFlagRequestSchema>;
 export type FlagsUpdateOutput = z.infer<typeof FlagResponseSchema>;

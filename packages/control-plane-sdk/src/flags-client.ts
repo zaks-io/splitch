@@ -24,6 +24,7 @@ import type {
   FlagVariantsUpdateInput,
   FlagVariantsUpdateOutput,
 } from "@splitch/contracts/route-types";
+import { FlagSelectorUnaddressableError } from "./flag-selector-unaddressable-error";
 import {
   type ControlPlaneHcOptions,
   createFlagsHcClient,
@@ -115,13 +116,7 @@ export function createFlagsClient(
           ),
         ),
       ),
-    get: (input, callOptions) =>
-      invokeHcRoute<FlagsGetOutput>("flags_get", () =>
-        hcClient.apps[":appId"].flags[":flagId"].$get(
-          { param: { appId: input.appId, flagId: input.flagId } },
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
-        ),
-      ),
+    get: (input, callOptions) => flagsGet(hcClient, hcOptions, input, callOptions),
     update: (input, callOptions) => {
       const { appId, flagId, ...body } = input;
       return invokeHcRoute<FlagsUpdateOutput>("flags_update", () =>
@@ -160,7 +155,15 @@ export function createFlagsClient(
       const { appId, flagId, variantName, ...body } = input;
       return invokeHcRoute<FlagVariantsUpdateOutput>("flag_variants_update", () =>
         hcClient.apps[":appId"].flags[":flagId"].variants[":variantName"].$patch(
-          { param: { appId, flagId, variantName }, json: body } as never,
+          {
+            param: {
+              appId,
+              flagId,
+              // Variant names are unconstrained z.string(); hc does not encode.
+              variantName: encodeURIComponent(variantName),
+            },
+            json: body,
+          } as never,
           withIdempotencyHeader(
             "flag_variants_update",
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
@@ -176,7 +179,8 @@ export function createFlagsClient(
             param: {
               appId: input.appId,
               flagId: input.flagId,
-              variantName: input.variantName,
+              // Variant names are unconstrained z.string(); hc does not encode.
+              variantName: encodeURIComponent(input.variantName),
             },
           },
           withIdempotencyHeader(
@@ -239,4 +243,54 @@ export function createFlagsClient(
       );
     },
   };
+}
+
+function flagsGet(
+  hcClient: FlagsHcClient,
+  hcOptions: ControlPlaneHcOptions,
+  input: FlagsGetInput,
+  callOptions?: ControlPlaneOperationOptions,
+): Promise<ControlPlaneOperationResult<FlagsGetOutput>> {
+  // Flag keys are unconstrained z.string() and may contain `/`, `?`, `#`, etc.
+  // `hc` does not percent-encode path params (MCP's buildPath does); encode here
+  // so ?by=key addresses the Flag the Panel named.
+  //
+  // Dot-segment keys (`.`, `..`, and percent-encoded spellings) survive
+  // encodeURIComponent and are collapsed by the WHATWG URL parser onto a
+  // different route — reject them before building the path.
+  if (isUnaddressableFlagSelector(input.flagId)) {
+    return Promise.reject(new FlagSelectorUnaddressableError(input.flagId));
+  }
+  const param = { appId: input.appId, flagId: encodeURIComponent(input.flagId) };
+  return invokeHcRoute<FlagsGetOutput>("flags_get", () =>
+    hcClient.apps[":appId"].flags[":flagId"].$get(
+      // Omit `query` when `by` is absent so the id path stays byte-identical to
+      // main (no trailing bare `?`). `as never` is the house hc pattern.
+      (input.by === undefined ? { param } : { param, query: { by: input.by } }) as never,
+      hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+    ),
+  );
+}
+
+function isUnaddressableFlagSelector(selector: string): boolean {
+  return selector.split("/").some(isUnaddressablePathSegment);
+}
+
+function isUnaddressablePathSegment(segment: string): boolean {
+  const normalized = fullyDecodePathSegment(segment);
+  return normalized === "" || normalized === "." || normalized === "..";
+}
+
+function fullyDecodePathSegment(segment: string): string {
+  let current = segment;
+  for (;;) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(current);
+    } catch {
+      return current;
+    }
+    if (decoded === current) return current;
+    current = decoded;
+  }
 }
