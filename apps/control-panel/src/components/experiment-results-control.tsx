@@ -3,9 +3,9 @@ import { type FrozenControlIdentity, unresolvableControlReasonMessages } from "@
 /**
  * How the Results tab talks about the Run's Control arm.
  *
- * When the frozen Control cannot be resolved there is no baseline arm: every
- * caller gets `null` rather than a plausible-looking name, so no row can be
- * coloured or labelled as the baseline on a guess.
+ * When the frozen Control cannot be resolved there is no trustworthy frozen
+ * baseline arm: every caller gets `null` rather than a plausible-looking name,
+ * so no row can be coloured or labelled as the baseline on a guess.
  */
 
 export function baselineVariant(control: FrozenControlIdentity): string | null {
@@ -79,8 +79,10 @@ export function ExperimentResultsControlIntegrity({
       ) : null}
       {resultsRendered ? (
         <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
-          The numbers below are still shown, because they are what this Run measured. What cannot be
-          shown is which arm they are measured against.
+          The numbers below are still shown, because they are what this Run measured. Every lift
+          below is measured against{" "}
+          <code className="font-mono text-foreground text-xs">{control.analysisVariant}</code>, the
+          Analysis Control.
         </p>
       ) : null}
       <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">

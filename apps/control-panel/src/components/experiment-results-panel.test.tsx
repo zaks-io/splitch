@@ -114,6 +114,7 @@ describe("Experiment Results route no_data waiting state", () => {
         variantId: "variant_from_a_later_edit",
         reason: "absent_from_frozen_variant_set",
         frozenVariantNames: ["control", "treatment"],
+        analysisVariant: "control",
       },
     });
 
