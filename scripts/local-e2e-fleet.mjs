@@ -6,9 +6,11 @@ import { createServer } from "node:http";
 import { resolve } from "node:path";
 import {
   LOCAL_E2E_D1_SEED,
+  LOCAL_E2E_MEMBER_PROFILES,
   LOCAL_E2E_MEMBER_SESSION_KEY,
   LOCAL_E2E_NEWCOMER_SESSION_KEY,
   LOCAL_E2E_SESSION_KEY,
+  localE2eMemberProfileKey,
   localE2eMemberSession,
   localE2eNewcomerSession,
   localE2eSession,
@@ -180,6 +182,22 @@ function seedLocalResources() {
     "--persist-to",
     persistPath,
   ]);
+  for (const [userId, email] of Object.entries(LOCAL_E2E_MEMBER_PROFILES)) {
+    runWrangler([
+      "kv",
+      "key",
+      "put",
+      localE2eMemberProfileKey(userId),
+      JSON.stringify({ email }),
+      "--binding",
+      "SESSION_STORE",
+      "--local",
+      "--config",
+      "apps/control-panel/wrangler.jsonc",
+      "--persist-to",
+      persistPath,
+    ]);
+  }
   runWrangler([
     "kv",
     "key",

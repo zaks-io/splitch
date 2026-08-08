@@ -96,6 +96,7 @@ export {
 export type {
   APIKey,
   App,
+  AppMember,
   ApprovalPolicyLevel,
   ClientKey,
   Environment,
@@ -115,6 +116,7 @@ export type {
 export {
   APIKeySchema,
   ApprovalPolicyLevelSchema,
+  AppMemberSchema,
   AppSchema,
   approvalPolicyLevels,
   ClientKeySchema,

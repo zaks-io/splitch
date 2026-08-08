@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import {
+  LOCAL_E2E_APP_SETTINGS_SEED,
+  LOCAL_E2E_SETTINGS_APPS,
+} from "./local-e2e-app-settings-fixture.mjs";
 import { LOCAL_E2E_FLAG_EDITING_SEED } from "./local-e2e-flag-editing-fixture.mjs";
 import { LOCAL_E2E_PROMOTION_SEED } from "./local-e2e-promotion-fixture.mjs";
 import { d1RunDecisions, LOCAL_E2E_RUN_CONFIG as run } from "./local-e2e-run-config.mjs";
@@ -21,6 +25,26 @@ export const LOCAL_E2E_NEWCOMER_SESSION_TOKEN = `spl_${"205e2e".padEnd(64, "0")}
 export const LOCAL_E2E_NEWCOMER_SESSION_KEY = `session:${createHash("sha256")
   .update(LOCAL_E2E_NEWCOMER_SESSION_TOKEN)
   .digest("hex")}`;
+
+/**
+ * The identity cache the Control Plane resolves member email from
+ * (`member-profile:{userId}`). Email is never a D1 column, so without these the
+ * people-shaped screens can only render "Email not available yet" and two
+ * different people are indistinguishable on screen.
+ */
+export const LOCAL_E2E_MEMBER_PROFILES = Object.freeze({
+  user_local_e2e: "owner@acme-labs.test",
+  user_local_member_e2e: "member@acme-labs.test",
+});
+
+/**
+ * `member-profile:{userId}`, mirrored here the same way the session key is: this
+ * harness is plain Node and cannot import the TypeScript key helper in
+ * `@splitch/contracts` (`memberProfileCacheKey`) without a build step.
+ */
+export function localE2eMemberProfileKey(userId) {
+  return `member-profile:${userId}`;
+}
 
 export const LOCAL_E2E_FIXTURE_CONTRACT = Object.freeze({
   organization: {
@@ -113,6 +137,11 @@ export function localE2eSession(expiresAt = Math.floor(Date.now() / 1000) + 3_60
           { appId: "app_editing_e2e", appSlug: "flag-editing", role: "admin" },
           { appId: "app_promotion_e2e", appSlug: "promotion", role: "admin" },
           ...onboardingApps.map((app) => ({ appId: app.appId, appSlug: app.slug, role: "admin" })),
+          ...LOCAL_E2E_SETTINGS_APPS.map((app) => ({
+            appId: app.appId,
+            appSlug: app.slug,
+            role: "owner",
+          })),
         ],
       },
       {
@@ -276,5 +305,7 @@ INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES
 ${onboardingApps
   .map((app) => `  ('${app.appId}', 'user_local_e2e', 'admin', '${createdAt}')`)
   .join(",\n")};
+
+${LOCAL_E2E_APP_SETTINGS_SEED}
 ${LOCAL_E2E_FLAG_EDITING_SEED}
 ${LOCAL_E2E_PROMOTION_SEED}`;

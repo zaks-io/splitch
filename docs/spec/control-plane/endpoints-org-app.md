@@ -139,6 +139,38 @@ actor/App/Environment/Experiment/Run service identity.
 Body: `{ name?: string, slug?: string }`
 Auth: App `owner` or `admin`.
 
+`slug` is the App's URL segment. It is unique within the Organization; a collision returns
+`409 SLUG_CONFLICT` with `details: { resourceType: "app", conflictingSlug, recommendedAction:
+"CHOOSE_DIFFERENT_SLUG" }`. It is never silently deduplicated, and changing it moves every URL for
+the App, so the surface that offers it says so.
+
+### `GET /apps/{app_id}/members`
+
+Returns: `{ items: [{ app_id, user_id, email, role, created_at }] }`
+Auth: App member (any role) — the App role matrix grants "view config" to every role.
+`email` is resolved from the session identity cache, exactly as the Org member list resolves it. A
+member who has been granted access but has not signed in yet has no cached profile, so `email` is
+`null` rather than a placeholder (ADR-0036).
+
+### `POST /apps/{app_id}/members`
+
+Body: `{ user_id: string, role: "owner" | "admin" | "member" }`
+Returns: the App member envelope.
+Auth: App `owner` or `admin`. Only an `owner` may grant `owner`.
+The user must already be a member of the App's Organization; otherwise `USER_NOT_FOUND`. App
+membership is a grant WITHIN an Organization, never a way into one.
+
+### `PATCH /apps/{app_id}/members/{user_id}`
+
+Body: `{ role: "owner" | "admin" | "member" }`
+Auth: App `owner`. Demoting the last `owner` returns `LAST_OWNER_REQUIRED` with
+`details: { appId }`.
+
+### `DELETE /apps/{app_id}/members/{user_id}`
+
+Auth: App `owner`. Removing the last `owner` returns `LAST_OWNER_REQUIRED` with
+`details: { appId }`.
+
 ### `DELETE /apps/{app_id}`
 
 Blocked if any Experiment has `status = running` in any Environment. Returns `EXPERIMENT_RUNNING`.

@@ -1,3 +1,4 @@
+import { appScope } from "@splitch/db";
 import { describe, expect, it } from "vitest";
 import { approveClaimConsent, initiateClaim, verifyClaim } from "./claim";
 import { EMAIL, setupClaimHarness } from "./claim-harness";
@@ -82,8 +83,7 @@ describe("SPL-137 security review regressions", () => {
       updatedAt: new Date(1_780_000_000_000).toISOString(),
       createdBy: provisional.userId,
     });
-    await d.repo.identity.createAppMembership({
-      appId: secondAppId,
+    await d.repo.identity.createAppMembership(appScope(secondAppId), {
       userId: provisional.userId,
       role: "owner",
       createdAt: new Date(1_780_000_000_000).toISOString(),

@@ -26,6 +26,9 @@ function variantList(appId: string, environmentId: string, flagId: string) {
 export const queryKeys = {
   app: {
     root,
+    // App Settings is App-scoped, so its key is NOT under an Environment: the
+    // same data must not be cached once per Environment the operator visits.
+    settings: (appId: string) => ["app", appId, "settings"] as const,
   },
   environment: {
     settings: (appId: string, environmentId: string) =>

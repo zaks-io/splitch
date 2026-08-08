@@ -38,6 +38,7 @@ import {
 } from "./internal-routes";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
+import { panelAppSettingsRead } from "./panel-app-settings";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
 import { handleSignedPanelExperiments } from "./panel-experiments-route";
 import { panelOverviewRead } from "./panel-overview";
@@ -195,7 +196,27 @@ async function handleSignedControlPanelRequest(
   return (
     (await handleSignedPanelExperiments(request, env, protocol, authResolver)) ??
     (await handleSignedPanelOverview(request, env, protocol, authResolver, repo)) ??
+    (await handleSignedPanelAppSettings(request, env, protocol, authResolver, repo)) ??
     handleSignedPanelSettings(request, env, protocol, authResolver, repo)
+  );
+}
+
+async function handleSignedPanelAppSettings(
+  request: Request,
+  env: ControlPlaneApiEnv,
+  protocol: PanelProtocol,
+  authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
+  repo: ReturnType<typeof createRepository>,
+): Promise<Response | null> {
+  if (protocol !== "signed") return null;
+  const operation = parseControlPanelBindingOperation(request);
+  if (operation?.id !== "app_settings_get") return null;
+  const auth = await authResolver(request);
+  if (!auth.ok) return unauthorized();
+  return panelAppSettingsRead(
+    { repo, memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE) },
+    { appId: operation.appId, actorId: auth.principal.id },
+    request,
   );
 }
 

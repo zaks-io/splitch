@@ -234,7 +234,16 @@ const errorMembers = [
   member("FORBIDDEN", EmptyDetails),
   member("ORIGIN_NOT_ALLOWED", z.object({ origin: z.string(), hint: z.string() })),
   member("APP_MISMATCH", EmptyDetails),
-  member("LAST_OWNER_REQUIRED", z.object({ orgId: z.string() })),
+  /**
+   * Ownership is a per-tier grant, so the refusal names the tier it came from:
+   * `orgId` for the last owner of an Organization, `appId` for the last owner of
+   * an App (`app_memberships`). A single optional-both object would let a caller
+   * receive the refusal without learning WHICH resource would be orphaned.
+   */
+  member(
+    "LAST_OWNER_REQUIRED",
+    z.union([z.object({ orgId: z.string() }), z.object({ appId: z.string() })]),
+  ),
   member("LAST_ENVIRONMENT_REQUIRED", z.object({ appId: z.string() })),
   member(
     "PRIVACY_CONFIRMATION_REQUIRED",

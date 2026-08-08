@@ -17,6 +17,7 @@
  */
 
 import { parseFlags } from "./control-panel-operation-flags";
+import { parseAppScoped } from "./panel-app-settings-parse.js";
 import { parseMetrics } from "./panel-metrics-parse.js";
 import { parseSegments } from "./panel-segments-parse.js";
 
@@ -26,6 +27,21 @@ export type ControlPanelOperation =
   | { id: "apps_create"; orgId: string }
   | { id: "organization_usage_get"; orgId: string }
   | { id: "app_attention_rollup_get"; appId: string }
+  /**
+   * App Settings. Every member here names an App and nothing else: the App is
+   * the resource being read, renamed, re-permissioned, or destroyed, and there
+   * is no Environment involved to bind against.
+   */
+  | {
+      id:
+        | "app_settings_get"
+        | "apps_update"
+        | "apps_delete"
+        | "app_members_list"
+        | "app_members_add";
+      appId: string;
+    }
+  | { id: "app_members_update" | "app_members_remove"; appId: string; userId: string }
   | { id: "experiments_detail" }
   | { id: "experiments_list" }
   | { id: "experiments_results" }
@@ -147,6 +163,7 @@ export function parseControlPanelOperation(
     parseAppsCreate(method, pathname) ??
     parseOrganizationUsage(method, pathname) ??
     parseAppAttention(method, pathname) ??
+    parseAppScoped(method, pathname) ??
     parseOrganizationsCreate(method, pathname) ??
     parseExperimentsList(method, pathname) ??
     parseExperimentMutation(method, pathname) ??

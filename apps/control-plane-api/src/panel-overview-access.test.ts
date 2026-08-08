@@ -1,4 +1,4 @@
-import { envScope } from "@splitch/db";
+import { appScope, envScope } from "@splitch/db";
 import { describe, expect, it } from "vitest";
 import type { AnalysisResultsReader } from "./attention-analysis-reader";
 import {
@@ -113,8 +113,7 @@ describe("panelOverviewRead refusals", () => {
     async () => {
       // A member of the other App, so the read reaches the Environment-under-App
       // check instead of stopping at App membership.
-      await repository().identity.createAppMembership({
-        appId: ids.otherAppId,
+      await repository().identity.createAppMembership(appScope(ids.otherAppId), {
         userId: USER_ID,
         role: "member",
         createdAt: NOW,

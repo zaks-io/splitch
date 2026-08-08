@@ -62,6 +62,34 @@ const OPERATION_ROUTES: OperationCoverage = {
     route: { method: "GET", pathname: `/apps/${APP}/attention-rollup` },
     operation: { id: "app_attention_rollup_get", appId: APP },
   },
+  app_settings_get: {
+    route: { method: "GET", pathname: `/control-panel/apps/${APP}/settings` },
+    operation: { id: "app_settings_get", appId: APP },
+  },
+  apps_update: {
+    route: { method: "PATCH", pathname: `/apps/${APP}` },
+    operation: { id: "apps_update", appId: APP },
+  },
+  apps_delete: {
+    route: { method: "DELETE", pathname: `/apps/${APP}` },
+    operation: { id: "apps_delete", appId: APP },
+  },
+  app_members_list: {
+    route: { method: "GET", pathname: `/apps/${APP}/members` },
+    operation: { id: "app_members_list", appId: APP },
+  },
+  app_members_add: {
+    route: { method: "POST", pathname: `/apps/${APP}/members` },
+    operation: { id: "app_members_add", appId: APP },
+  },
+  app_members_update: {
+    route: { method: "PATCH", pathname: `/apps/${APP}/members/user_1` },
+    operation: { id: "app_members_update", appId: APP, userId: "user_1" },
+  },
+  app_members_remove: {
+    route: { method: "DELETE", pathname: `/apps/${APP}/members/user_1` },
+    operation: { id: "app_members_remove", appId: APP, userId: "user_1" },
+  },
   experiments_list: {
     route: { method: "POST", pathname: "/control-panel/experiments/list" },
     operation: { id: "experiments_list" },

@@ -44,6 +44,17 @@ const FLAG_CONFIG_OPERATION_IDS = [
 
 const APPROVAL_OPERATION_IDS = ["approval_request_get", "approval_request_review"] as const;
 
+/** App Settings operations whose claim names the App and nothing else. */
+const APP_SCOPED_OPERATION_IDS = [
+  "app_settings_get",
+  "apps_update",
+  "apps_delete",
+  "app_members_list",
+  "app_members_add",
+] as const;
+
+const APP_MEMBER_RESOURCE_OPERATION_IDS = ["app_members_update", "app_members_remove"] as const;
+
 const METRIC_RESOURCE_OPERATION_IDS = ["metrics_get", "metrics_update", "metrics_delete"] as const;
 
 const SEGMENT_RESOURCE_OPERATION_IDS = [
@@ -66,6 +77,8 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ["apps_create", (value) => isResourceOperation(value, "orgId")],
   ["organization_usage_get", (value) => isResourceOperation(value, "orgId")],
   ["app_attention_rollup_get", (value) => isResourceOperation(value, "appId")],
+  ...family(APP_SCOPED_OPERATION_IDS, (value) => isResourceOperation(value, "appId")),
+  ...family(APP_MEMBER_RESOURCE_OPERATION_IDS, isAppMemberResourceOperation),
   ["api_key_revoke", isApiKeyRevokeOperation],
   ["flag_get", isFlagGetOperation],
   ...family(UNBOUND_OPERATION_IDS, (value) => hasKeys(value, ["id"])),
@@ -132,6 +145,20 @@ function isApprovalOperation(value: Record<string, unknown>): boolean {
     hasKeys(value, ["id", "appId", "approvalRequestId"]) &&
     isNonEmptyString(value.appId) &&
     isNonEmptyString(value.approvalRequestId)
+  );
+}
+
+/**
+ * An App-membership mutation names the App and the member being changed. The
+ * exact-length check is what keeps a claim minted for one member from being
+ * replayed against another, or from smuggling an `environmentId` that would
+ * assert a narrower scope than the App-scoped route actually carries.
+ */
+function isAppMemberResourceOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "userId"]) &&
+    isNonEmptyString(value.appId) &&
+    isNonEmptyString(value.userId)
   );
 }
 

@@ -12,6 +12,34 @@ export type PanelScopeAccess =
   | { ok: true; app: AppRow; environment: EnvironmentRow }
   | { ok: false; response: Response };
 
+type AppRole = "owner" | "admin" | "member";
+
+export type PanelAppScopeAccess =
+  | { ok: true; app: AppRow; role: AppRole }
+  | { ok: false; response: Response };
+
+/**
+ * The App-scoped half of the same recheck, for Panel operations that name no
+ * Environment (App Settings). Live Organization AND App membership, read fresh
+ * for this exact call, never from the delegation claim. The App role it just
+ * read is handed back so the caller renders the viewer's real capabilities
+ * instead of a stale session claim.
+ */
+export async function panelAppScopeAccess(
+  repo: Repository,
+  scope: { actorId: string; appId: string },
+  requestId: string,
+): Promise<PanelAppScopeAccess> {
+  const app = await repo.identity.getApp(scope.appId);
+  if (!app) return { ok: false, response: notFound("App not found", requestId) };
+  const [orgMembership, appMembership] = await Promise.all([
+    repo.identity.getOrgMembership(app.organizationId, scope.actorId),
+    repo.identity.getAppMembership(appScope(scope.appId), scope.actorId),
+  ]);
+  if (!orgMembership || !appMembership) return { ok: false, response: forbidden(requestId) };
+  return { ok: true, app, role: appMembership.role as AppRole };
+}
+
 /**
  * Rechecks live Organization AND App membership plus Environment-belongs-to-App
  * for this exact call. D1 has no RLS (ADR-0018), so this is the authorization

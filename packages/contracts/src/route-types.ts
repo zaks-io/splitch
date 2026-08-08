@@ -1,5 +1,10 @@
 import { z } from "@hono/zod-openapi";
-import { AppSchema, type ClientKeySchema, EnvironmentSchema } from "./leaf-schemas-runtime";
+import {
+  type AppMemberSchema,
+  AppSchema,
+  type ClientKeySchema,
+  EnvironmentSchema,
+} from "./leaf-schemas-runtime";
 import type {
   ResourceDeleteModeQuerySchema,
   ResourceDeleteResponseSchema,
@@ -32,8 +37,10 @@ import type {
   PatchVariantRequestSchema,
 } from "./resource-envelopes-flag";
 import type {
+  AddAppMemberRequestSchema,
   ApiKeyParams,
   ApiKeyRevokeResponseSchema,
+  AppMemberParams,
   AppParams,
   ApprovalRequestParams,
   ClientKeyRotateResponseSchema,
@@ -55,6 +62,7 @@ import type {
   PromoteRequestSchema,
   PromoteResponseSchema,
   ReplaceTargetingRulesRequestSchema,
+  UpdateAppMemberRequestSchema,
 } from "./routes/route-shapes";
 import {
   type ApprovalRequestListQuerySchema,
@@ -150,6 +158,16 @@ export type AppsUpdateOutput = z.infer<typeof AppSchema>;
 export type AppsDeleteInput = z.infer<typeof AppParams> &
   z.infer<typeof ResourceDeleteModeQuerySchema>;
 export type AppsDeleteOutput = z.infer<typeof ResourceDeleteResponseSchema>;
+export type AppMembersListInput = z.infer<typeof AppParams>;
+export type AppMembersListOutput = { items: z.infer<typeof AppMemberSchema>[] };
+export type AppMembersAddInput = z.infer<typeof AppParams> &
+  z.infer<typeof AddAppMemberRequestSchema>;
+export type AppMembersAddOutput = z.infer<typeof AppMemberSchema>;
+export type AppMembersUpdateInput = z.infer<typeof AppMemberParams> &
+  z.infer<typeof UpdateAppMemberRequestSchema>;
+export type AppMembersUpdateOutput = z.infer<typeof AppMemberSchema>;
+export type AppMembersRemoveInput = z.infer<typeof AppMemberParams>;
+export type AppMembersRemoveOutput = { deleted: true };
 
 export type AppAttentionRollupGetInput = z.infer<typeof AppParams>;
 export type AppAttentionRollupGetOutput = z.infer<typeof AppAttentionRollupResponseSchema>;
@@ -202,6 +220,10 @@ export interface RouteTypeMap {
   apps_get: { input: AppsGetInput; output: AppsGetOutput };
   apps_update: { input: AppsUpdateInput; output: AppsUpdateOutput };
   apps_delete: { input: AppsDeleteInput; output: AppsDeleteOutput };
+  app_members_list: { input: AppMembersListInput; output: AppMembersListOutput };
+  app_members_add: { input: AppMembersAddInput; output: AppMembersAddOutput };
+  app_members_update: { input: AppMembersUpdateInput; output: AppMembersUpdateOutput };
+  app_members_remove: { input: AppMembersRemoveInput; output: AppMembersRemoveOutput };
   app_attention_rollup_get: {
     input: AppAttentionRollupGetInput;
     output: AppAttentionRollupGetOutput;

@@ -27,6 +27,7 @@ const FORM_POST_COOKIE_AUTHENTICATED_WRITES = [
 const CREATE_SERVER_FN_POST_WRITES = [
   "lib/claim-ceremony-functions.ts",
   "lib/control-plane-app-functions.ts",
+  "lib/control-plane-app-settings-functions.ts",
   "lib/control-plane-experiment-functions.ts",
   "lib/control-plane-flag-functions.ts",
   "lib/control-plane-flag-mutations.ts",

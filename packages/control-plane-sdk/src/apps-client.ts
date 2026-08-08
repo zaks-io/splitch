@@ -1,6 +1,14 @@
 import type {
   AppAttentionRollupGetInput,
   AppAttentionRollupGetOutput,
+  AppMembersAddInput,
+  AppMembersAddOutput,
+  AppMembersListInput,
+  AppMembersListOutput,
+  AppMembersRemoveInput,
+  AppMembersRemoveOutput,
+  AppMembersUpdateInput,
+  AppMembersUpdateOutput,
   AppsCreateInput,
   AppsCreateOutput,
   AppsDeleteInput,
@@ -47,6 +55,30 @@ export interface AppsClient {
     input: AppAttentionRollupGetInput,
     options?: ControlPlaneOperationOptions,
   ): Promise<ControlPlaneOperationResult<AppAttentionRollupGetOutput>>;
+  /**
+   * The App's own access list, distinct from Organization membership: being in
+   * the Org does not grant access to an App.
+   */
+  readonly members: AppMembersClient;
+}
+
+interface AppMembersClient {
+  list(
+    input: AppMembersListInput,
+    options?: ControlPlaneOperationOptions,
+  ): Promise<ControlPlaneOperationResult<AppMembersListOutput>>;
+  add(
+    input: AppMembersAddInput,
+    options?: ControlPlaneOperationOptions,
+  ): Promise<ControlPlaneOperationResult<AppMembersAddOutput>>;
+  update(
+    input: AppMembersUpdateInput,
+    options?: ControlPlaneOperationOptions,
+  ): Promise<ControlPlaneOperationResult<AppMembersUpdateOutput>>;
+  remove(
+    input: AppMembersRemoveInput,
+    options?: ControlPlaneOperationOptions,
+  ): Promise<ControlPlaneOperationResult<AppMembersRemoveOutput>>;
 }
 
 export function createAppsClient(
@@ -106,6 +138,47 @@ export function createAppsClient(
       invokeHcRoute<AppAttentionRollupGetOutput>("app_attention_rollup_get", () =>
         hcClient.apps[":appId"]["attention-rollup"].$get(
           { param: { appId: input.appId } },
+          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+        ),
+      ),
+    members: createAppMembersClient(hcOptions, hcClient),
+  };
+}
+
+function createAppMembersClient(
+  hcOptions: ControlPlaneHcOptions,
+  hcClient: AppsHcClient,
+): AppMembersClient {
+  return {
+    list: (input, callOptions) =>
+      invokeHcRoute<AppMembersListOutput>("app_members_list", () =>
+        hcClient.apps[":appId"].members.$get(
+          { param: { appId: input.appId } },
+          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+        ),
+      ),
+    add: (input, callOptions) => {
+      const { appId, ...body } = input;
+      return invokeHcRoute<AppMembersAddOutput>("app_members_add", () =>
+        hcClient.apps[":appId"].members.$post(
+          { param: { appId }, json: body } as never,
+          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+        ),
+      );
+    },
+    update: (input, callOptions) => {
+      const { appId, userId, ...body } = input;
+      return invokeHcRoute<AppMembersUpdateOutput>("app_members_update", () =>
+        hcClient.apps[":appId"].members[":userId"].$patch(
+          { param: { appId, userId }, json: body } as never,
+          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+        ),
+      );
+    },
+    remove: (input, callOptions) =>
+      invokeHcRoute<AppMembersRemoveOutput>("app_members_remove", () =>
+        hcClient.apps[":appId"].members[":userId"].$delete(
+          { param: { appId: input.appId, userId: input.userId } },
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),
       ),

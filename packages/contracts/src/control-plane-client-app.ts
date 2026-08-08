@@ -69,6 +69,10 @@ const appsSdkRoutes = [
   accountRoutes[12],
   accountRoutes[13],
   attentionRoutes[0],
+  accountRoutes[19],
+  accountRoutes[20],
+  accountRoutes[21],
+  accountRoutes[22],
 ] as const;
 
 const environmentsSdkRoutes = [
@@ -125,6 +129,10 @@ const appsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: appsSdkRoutes[3].openapi, handler: emitOnlyHandler(appsSdkRoutes[3]) },
   { route: appsSdkRoutes[4].openapi, handler: emitOnlyHandler(appsSdkRoutes[4]) },
   { route: appsSdkRoutes[5].openapi, handler: emitOnlyHandler(appsSdkRoutes[5]) },
+  { route: appsSdkRoutes[6].openapi, handler: emitOnlyHandler(appsSdkRoutes[6]) },
+  { route: appsSdkRoutes[7].openapi, handler: emitOnlyHandler(appsSdkRoutes[7]) },
+  { route: appsSdkRoutes[8].openapi, handler: emitOnlyHandler(appsSdkRoutes[8]) },
+  { route: appsSdkRoutes[9].openapi, handler: emitOnlyHandler(appsSdkRoutes[9]) },
 ] as const);
 
 const environmentsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
