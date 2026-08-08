@@ -24,7 +24,8 @@ import { scrubSentryEvent, type SentryEventLike } from "./sentry-scrubber";
 const CANARY_EMAIL = "canary-leak@example.com";
 const CANARY_TARGETING_KEY = "tk-canary-targeting-key";
 const CANARY_PHONE = "555-867-5309";
-/** Undashed phone-shaped body. The dashed canary above cannot expose a mid-token
+const CANARY_HYPHEN_PREFIXED_PHONE = "-555-867-5309";
+/** Undashed phone-shaped body. Dashed phone canaries cannot expose a mid-token
  * phone match that starts after `_`; this one can. */
 const CANARY_UNDASHED_PHONE = "15551234567";
 const CANARY_USER_PREFIXED_UNDASHED = `user_${CANARY_UNDASHED_PHONE}`;
@@ -49,7 +50,7 @@ function plantedEvent(): SentryEventLike {
     },
     transaction: "POST /evaluate",
     // Top-level message with embedded stringified JSON PII.
-    message: `boom ${JSON.stringify({ email: CANARY_EMAIL })}`,
+    message: `boom ${JSON.stringify({ email: CANARY_EMAIL })} callback ${CANARY_HYPHEN_PREFIXED_PHONE}`,
     extra: {
       context: { email: CANARY_EMAIL, phone: CANARY_PHONE, plan: "pro" },
       targetingKey: CANARY_TARGETING_KEY,
@@ -94,6 +95,7 @@ describe("golden-leak canary", () => {
     expect(serialized.includes(CANARY_EMAIL)).toBe(false);
     expect(serialized.includes(CANARY_TARGETING_KEY)).toBe(false);
     expect(serialized.includes(CANARY_PHONE)).toBe(false);
+    expect(serialized.includes(CANARY_HYPHEN_PREFIXED_PHONE)).toBe(false);
   });
 
   it("preserves operational context so the error stays reportable", () => {
@@ -171,9 +173,9 @@ describe("golden-leak canary", () => {
     expect(serialized.includes(cohort)).toBe(false);
   });
 
-  // Dashed phones hide mid-token matches (separators break the word). An
-  // undashed `user_<digits>` token must stay byte-identical — phone matching
-  // must not start after `_` — while a bare undashed phone still redacts.
+  // Phone matching must not start after an identifier character or an
+  // identifier-owned hyphen. An undashed `user_<digits>` token must stay
+  // byte-identical while a bare undashed phone still redacts.
   it("keeps an undashed user_-prefixed token intact and still redacts a bare undashed phone", () => {
     const event: SentryEventLike = {
       message: `lookup failed for ${CANARY_USER_PREFIXED_UNDASHED}`,

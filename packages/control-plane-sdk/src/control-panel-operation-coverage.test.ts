@@ -19,6 +19,7 @@ interface Route {
   method: string;
   pathname: string;
   environmentId?: string;
+  search?: string;
 }
 
 /**
@@ -56,6 +57,22 @@ const OPERATION_ROUTES: OperationCoverage = {
   organizations_create: {
     route: { method: "POST", pathname: "/orgs" },
     operation: { id: "organizations_create" },
+  },
+  organization_members_list: {
+    route: { method: "GET", pathname: "/orgs/org_1/members" },
+    operation: { id: "organization_members_list", orgId: "org_1" },
+  },
+  organization_members_add: {
+    route: { method: "POST", pathname: "/orgs/org_1/members" },
+    operation: { id: "organization_members_add", orgId: "org_1" },
+  },
+  organization_members_update: {
+    route: { method: "PATCH", pathname: "/orgs/org_1/members/user_1" },
+    operation: { id: "organization_members_update", orgId: "org_1", userId: "user_1" },
+  },
+  organization_members_remove: {
+    route: { method: "DELETE", pathname: "/orgs/org_1/members/user_1" },
+    operation: { id: "organization_members_remove", orgId: "org_1", userId: "user_1" },
   },
   app_attention_rollup_get: {
     route: { method: "GET", pathname: `/apps/${APP}/attention-rollup` },
@@ -102,6 +119,15 @@ const OPERATION_ROUTES: OperationCoverage = {
   flags_create: {
     route: { method: "POST", pathname: `/apps/${APP}/flags`, environmentId: ENV },
     operation: { id: "flags_create", appId: APP, environmentId: ENV },
+  },
+  flag_get: {
+    route: {
+      method: "GET",
+      pathname: `/apps/${APP}/flags/flag_1`,
+      environmentId: ENV,
+      search: "by=key",
+    },
+    operation: { id: "flag_get", appId: APP, environmentId: ENV, flagId: "flag_1", by: "key" },
   },
   flag_config_get: {
     route: { method: "GET", pathname: `/apps/${APP}/envs/${ENV}/flags/flag_1/config` },
@@ -211,9 +237,9 @@ describe("control-panel operation wiring", () => {
     route,
     operation,
   }) => {
-    expect(parseControlPanelOperation(route.method, route.pathname, route.environmentId)).toEqual(
-      operation,
-    );
+    expect(
+      parseControlPanelOperation(route.method, route.pathname, route.environmentId, route.search),
+    ).toEqual(operation);
   });
 
   it.each(COVERAGE)("%s has a predicate that accepts its claim", (_id, { operation }) => {

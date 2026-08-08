@@ -16,6 +16,7 @@
  * not a gap: see `organizations-client.ts`.
  */
 
+import { parseFlags } from "./control-panel-operation-flags";
 import { parseMetrics } from "./panel-metrics-parse.js";
 import { parseSegments } from "./panel-segments-parse.js";
 
@@ -24,6 +25,17 @@ export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 export type ControlPanelOperation =
   | { id: "apps_create"; orgId: string }
   | { id: "organization_usage_get"; orgId: string }
+  /**
+   * Org membership. The collection pair names only the Organization; the
+   * resource pair also names the member acted on, so a delegation minted to
+   * change one member's role can never be replayed against another member.
+   */
+  | { id: "organization_members_list" | "organization_members_add"; orgId: string }
+  | {
+      id: "organization_members_update" | "organization_members_remove";
+      orgId: string;
+      userId: string;
+    }
   | { id: "app_attention_rollup_get"; appId: string }
   | { id: "experiments_detail" }
   | { id: "experiments_list" }
@@ -39,6 +51,19 @@ export type ControlPanelOperation =
       id: "flags_list" | "flags_create" | "experiments_create";
       appId: string;
       environmentId: string;
+    }
+  /**
+   * `flagId` is a dual selector: the same path segment names a different Flag
+   * under `by=key` than under `by=id`. The mode is part of the signed claim so a
+   * delegation minted for one cannot resolve against the other on replay. The
+   * parser never defaults a missing or unknown `by` — both are refused.
+   */
+  | {
+      id: "flag_get";
+      appId: string;
+      environmentId: string;
+      flagId: string;
+      by: "id" | "key";
     }
   | {
       id:
@@ -111,7 +136,16 @@ const EXPERIMENT_MUTATION_PATH =
   /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/([^/]+)(\/start)?\/?$/;
 const EXPERIMENTS_COLLECTION_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/?$/;
 const ORGANIZATIONS_PATH = /^\/orgs\/?$/;
-const FLAGS_PATH = /^\/apps\/([^/]+)\/flags\/?$/;
+const ORG_MEMBERS_PATH = /^\/orgs\/([^/]+)\/members\/?$/;
+const ORG_MEMBER_PATH = /^\/orgs\/([^/]+)\/members\/([^/]+)\/?$/;
+const ORG_MEMBER_COLLECTION_METHODS = {
+  GET: "organization_members_list",
+  POST: "organization_members_add",
+} as const;
+const ORG_MEMBER_RESOURCE_METHODS = {
+  PATCH: "organization_members_update",
+  DELETE: "organization_members_remove",
+} as const;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
 const TARGETING_RULES_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/targeting-rules\/?$/;
 const FLAG_PROMOTE_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/promote\/?$/;
@@ -127,22 +161,31 @@ export function parseControlPanelOperation(
   method: string,
   pathname: string,
   panelEnvironmentId?: string,
+  search?: URLSearchParams | string,
 ): ControlPanelOperation | null {
+  const searchParams = asSearchParams(search);
   return (
     parseAppsCreate(method, pathname) ??
     parseOrganizationUsage(method, pathname) ??
     parseAppAttention(method, pathname) ??
     parseOrganizationsCreate(method, pathname) ??
+    parseOrgMembers(method, pathname) ??
     parseExperimentsList(method, pathname) ??
     parseExperimentMutation(method, pathname) ??
     parseExperimentCreate(method, pathname) ??
-    parseFlags(method, pathname, panelEnvironmentId) ??
+    parseFlags(method, pathname, panelEnvironmentId, searchParams) ??
     parseConfig(method, pathname) ??
     parseApproval(method, pathname) ??
     parseEnvironmentSettings(method, pathname) ??
     parseMetrics(method, pathname, panelEnvironmentId) ??
     parseSegments(method, pathname, panelEnvironmentId)
   );
+}
+
+function asSearchParams(search?: URLSearchParams | string): URLSearchParams | undefined {
+  if (search === undefined) return undefined;
+  if (typeof search !== "string") return search;
+  return new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
 }
 
 /**
@@ -155,6 +198,30 @@ function parseOrganizationsCreate(method: string, pathname: string): ControlPane
   return method === "POST" && ORGANIZATIONS_PATH.test(pathname)
     ? { id: "organizations_create" }
     : null;
+}
+
+/**
+ * The four Org membership operations. The collection and resource patterns are
+ * disjoint by construction: the resource one requires a member segment, so a
+ * list delegation can never satisfy a per-member mutation.
+ */
+function parseOrgMembers(method: string, pathname: string): ControlPanelOperation | null {
+  return parseOrgMemberCollection(method, pathname) ?? parseOrgMemberResource(method, pathname);
+}
+
+function parseOrgMemberCollection(method: string, pathname: string): ControlPanelOperation | null {
+  const id = ORG_MEMBER_COLLECTION_METHODS[method as keyof typeof ORG_MEMBER_COLLECTION_METHODS];
+  const match = pathname.match(ORG_MEMBERS_PATH);
+  const orgId = match?.[1] ? decodeSegment(match[1]) : null;
+  return id && orgId ? { id, orgId } : null;
+}
+
+function parseOrgMemberResource(method: string, pathname: string): ControlPanelOperation | null {
+  const id = ORG_MEMBER_RESOURCE_METHODS[method as keyof typeof ORG_MEMBER_RESOURCE_METHODS];
+  const match = pathname.match(ORG_MEMBER_PATH);
+  if (!match?.[1] || !match[2]) return null;
+  const [orgId, userId] = decodedSegments(match.slice(1, 3));
+  return id && orgId && userId ? { id, orgId, userId } : null;
 }
 
 /**
@@ -222,19 +289,6 @@ function parseAppsCreate(method: string, pathname: string): ControlPanelOperatio
   const match = pathname.match(APPS_PATH);
   const orgId = match?.[1] ? decodeSegment(match[1]) : null;
   return method === "POST" && orgId ? { id: "apps_create", orgId } : null;
-}
-
-function parseFlags(
-  method: string,
-  pathname: string,
-  environmentValue?: string,
-): ControlPanelOperation | null {
-  const match = pathname.match(FLAGS_PATH);
-  if ((method !== "GET" && method !== "POST") || !match?.[1] || !environmentValue) return null;
-  const appId = decodeSegment(match[1]);
-  const environmentId = decodeSegment(environmentValue);
-  if (!appId || !environmentId) return null;
-  return { id: method === "GET" ? "flags_list" : "flags_create", appId, environmentId };
 }
 
 /**

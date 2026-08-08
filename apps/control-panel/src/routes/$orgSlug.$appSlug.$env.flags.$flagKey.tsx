@@ -20,8 +20,8 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey")({
     if (scoped.kind === "forbidden") throw new AccessDeniedError();
     if (scoped.kind === "notFound") throw notFound();
 
-    // The Flag key is resolved against the tenant-scoped session's App, so a key
-    // from another tenant is simply absent here rather than readable.
+    // flags_get resolves the key inside this App's scope, so a key from another
+    // App is simply absent here rather than readable.
     const result = await loadControlPanelFlagDetail({
       data: {
         appId: scoped.context.scope.appId,
@@ -54,15 +54,9 @@ function FlagDetailRoute() {
   const { detail, scope, promotionSourceEnv } = Route.useLoaderData();
 
   if (isFlagDetailNotFound(detail)) {
-    // The key is resolved against a bounded catalog read. When that read was
-    // truncated, "not in the page" is not "does not exist", and the screen must
-    // not state the stronger claim it cannot back (ADR-0036).
-    return detail.catalogTruncated ? (
-      <NotFoundPage
-        description="This App has more Flags than the catalog read returns at once, and this key was not in the page that came back. It may still exist."
-        title="Flag not found in this page of the catalog"
-      />
-    ) : (
+    // Keyed flags_get is exact within the App, so a miss is absence — not an
+    // artifact of the bounded catalog list page.
+    return (
       <NotFoundPage
         description="No Flag with this key exists in this App."
         title="Flag not found"

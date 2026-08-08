@@ -46,6 +46,16 @@ const APPROVAL_OPERATION_IDS = ["approval_request_get", "approval_request_review
 
 const METRIC_RESOURCE_OPERATION_IDS = ["metrics_get", "metrics_update", "metrics_delete"] as const;
 
+const ORG_MEMBER_COLLECTION_OPERATION_IDS = [
+  "organization_members_list",
+  "organization_members_add",
+] as const;
+
+const ORG_MEMBER_RESOURCE_OPERATION_IDS = [
+  "organization_members_update",
+  "organization_members_remove",
+] as const;
+
 const SEGMENT_RESOURCE_OPERATION_IDS = [
   "segments_get",
   "segments_update",
@@ -67,12 +77,15 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ["organization_usage_get", (value) => isResourceOperation(value, "orgId")],
   ["app_attention_rollup_get", (value) => isResourceOperation(value, "appId")],
   ["api_key_revoke", isApiKeyRevokeOperation],
+  ["flag_get", isFlagGetOperation],
   ...family(UNBOUND_OPERATION_IDS, (value) => hasKeys(value, ["id"])),
   ...family(EXPERIMENT_MUTATION_OPERATION_IDS, isExperimentMutationOperation),
   ...family(FLAG_CONFIG_OPERATION_IDS, isFlagConfigOperation),
   ...family(APPROVAL_OPERATION_IDS, isApprovalOperation),
   ...family(SCOPED_OPERATION_IDS, isAppCollectionOperation),
   ...family(METRIC_RESOURCE_OPERATION_IDS, isMetricResourceOperation),
+  ...family(ORG_MEMBER_COLLECTION_OPERATION_IDS, (value) => isResourceOperation(value, "orgId")),
+  ...family(ORG_MEMBER_RESOURCE_OPERATION_IDS, isOrgMemberResourceOperation),
   ...family(SEGMENT_RESOURCE_OPERATION_IDS, isSegmentResourceOperation),
 ]);
 
@@ -85,7 +98,7 @@ export function isControlPanelOperation(value: unknown): value is ControlPanelOp
   return CLAIM_GUARDS.get(value.id)?.(value) ?? false;
 }
 
-/** Operations named by exactly one resource id: the two Org-named ones and the App rollup. */
+/** Operations named by exactly one resource id: the Org-scoped ones and the App rollup. */
 function isResourceOperation(value: Record<string, unknown>, key: string): boolean {
   return hasKeys(value, ["id", key]) && isNonEmptyString(value[key]);
 }
@@ -103,6 +116,20 @@ function isFlagConfigOperation(value: Record<string, unknown>): boolean {
     hasKeys(value, ["id", "appId", "environmentId", "flagId"]) &&
     hasAppEnvironment(value) &&
     isNonEmptyString(value.flagId)
+  );
+}
+
+/**
+ * `flag_get` carries the dual-selector mode as a fourth claim field. Exact-length
+ * `hasKeys` keeps a forged claim from dropping `by` or smuggling a fifth field;
+ * only `"id"` and `"key"` are claimable modes.
+ */
+function isFlagGetOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "flagId", "by"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.flagId) &&
+    (value.by === "id" || value.by === "key")
   );
 }
 
@@ -129,6 +156,14 @@ function isMetricResourceOperation(value: Record<string, unknown>): boolean {
     hasKeys(value, ["id", "appId", "environmentId", "metricId"]) &&
     hasAppEnvironment(value) &&
     isNonEmptyString(value.metricId)
+  );
+}
+
+function isOrgMemberResourceOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "orgId", "userId"]) &&
+    isNonEmptyString(value.orgId) &&
+    isNonEmptyString(value.userId)
   );
 }
 

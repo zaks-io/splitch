@@ -79,7 +79,10 @@ function recoverySteps(
   if (isApprovalRecoveryAction(action)) {
     return approvalRecoverySteps(action, details);
   }
-  if (action === "CHOOSE_DIFFERENT_SLUG" || action === "CHOOSE_DIFFERENT_KEY") {
+  if (action === "CHOOSE_DIFFERENT_SLUG") {
+    return chooseDifferentSteps(action, details);
+  }
+  if (action === "CHOOSE_DIFFERENT_KEY") {
     return chooseDifferentSteps(action, details);
   }
 
