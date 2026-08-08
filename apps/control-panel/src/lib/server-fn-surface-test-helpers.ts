@@ -1,7 +1,6 @@
 import {
   type CallExpression,
   canHaveModifiers,
-  type Expression,
   getModifiers,
   isBinaryExpression,
   isCallExpression,
@@ -9,98 +8,105 @@ import {
   isExportDeclaration,
   isExpressionStatement,
   isIdentifier,
-  isImportDeclaration,
   isNamedExports,
-  isNamedImports,
-  isNamespaceImport,
   isObjectLiteralExpression,
-  isPropertyAccessExpression,
   isPropertyAssignment,
   isSpreadAssignment,
   isStringLiteral,
   isVariableStatement,
   type Node,
+  type Program,
   type SourceFile,
   SyntaxKind,
 } from "typescript";
-import { parseSourceFile, visitNodes } from "./source-file-test-helpers";
+import { createServerFnResolver } from "./server-fn-symbol-test-helpers";
+import { visitNodes } from "./source-file-test-helpers";
 
-const TANSTACK_START = "@tanstack/react-start";
-
-interface CreateServerFnBindings {
-  direct: ReadonlySet<string>;
-  namespaces: ReadonlySet<string>;
+export interface ServerFnSurfaceDiscovery {
+  postServerFns(filePath: string, displayName: string): string[];
 }
 
-export function exportedPostServerFns(source: string, fileName: string): Array<string> {
-  const sourceFile = parseSourceFile(source, fileName);
-  const createServerFnBindings = importedCreateServerFnBindings(sourceFile);
-  const localPostServerFns = localPostServerFnBindings(
-    sourceFile,
-    fileName,
-    createServerFnBindings,
-  );
-  return [
-    ...new Set(
-      sourceFile.statements.flatMap((statement) => [
-        ...directExportNames(statement, localPostServerFns),
-        ...namedExportNames(statement, localPostServerFns),
-        ...defaultExportNames(
-          statement,
-          sourceFile,
-          fileName,
-          localPostServerFns,
-          createServerFnBindings,
-        ),
-      ]),
-    ),
-  ];
+export function createServerFnSurfaceDiscovery(program: Program): ServerFnSurfaceDiscovery {
+  const resolver = createServerFnResolver(program);
+  return {
+    postServerFns(filePath, displayName) {
+      const sourceFile = program.getSourceFile(filePath);
+      if (!sourceFile)
+        throw new Error(`${displayName}: source file is absent from TypeScript program`);
+      return postServerFns(sourceFile, displayName, resolver.isCreateServerFnCall);
+    },
+  };
 }
 
-function directExportNames(statement: Node, localPostServerFns: ReadonlySet<string>): string[] {
-  if (!isVariableStatement(statement) || !isExported(statement)) return [];
-  return statement.declarationList.declarations.flatMap((declaration) =>
-    isIdentifier(declaration.name) && localPostServerFns.has(declaration.name.text)
-      ? [declaration.name.text]
-      : [],
-  );
-}
-
-function namedExportNames(statement: Node, localPostServerFns: ReadonlySet<string>): string[] {
-  if (
-    !isExportDeclaration(statement) ||
-    statement.moduleSpecifier ||
-    !statement.exportClause ||
-    !isNamedExports(statement.exportClause)
-  ) {
-    return [];
-  }
-  return statement.exportClause.elements.flatMap((element) => {
-    const localName = element.propertyName?.text ?? element.name.text;
-    return localPostServerFns.has(localName) ? [element.name.text] : [];
-  });
-}
-
-function defaultExportNames(
-  statement: Node,
+function postServerFns(
   sourceFile: SourceFile,
   fileName: string,
-  localPostServerFns: ReadonlySet<string>,
-  createServerFnBindings: CreateServerFnBindings,
+  isCreateServerFnCall: (call: CallExpression, fileName: string) => boolean,
 ): string[] {
-  if (!isExportAssignment(statement) || statement.isExportEquals) return [];
-  if (isIdentifier(statement.expression) && localPostServerFns.has(statement.expression.text)) {
-    return ["default"];
+  const localPostServerFns = localPostServerFnBindings(sourceFile, fileName, isCreateServerFnCall);
+  const exportsByLocal = exportedNamesByLocalBinding(sourceFile, localPostServerFns);
+  const names = [...localPostServerFns].flatMap((localName) => {
+    const exportedNames = exportsByLocal.get(localName);
+    return exportedNames && exportedNames.length > 0 ? exportedNames : [localName];
+  });
+
+  for (const statement of sourceFile.statements) {
+    if (
+      isExportAssignment(statement) &&
+      !statement.isExportEquals &&
+      !isIdentifier(statement.expression) &&
+      containsPostServerFn(statement.expression, sourceFile, fileName, isCreateServerFnCall)
+    ) {
+      names.push("default");
+    }
   }
-  return containsPostServerFn(statement.expression, sourceFile, fileName, createServerFnBindings)
-    ? ["default"]
+  return [...new Set(names)];
+}
+
+function exportedNamesByLocalBinding(
+  sourceFile: SourceFile,
+  localPostServerFns: ReadonlySet<string>,
+): Map<string, string[]> {
+  const exportsByLocal = new Map<string, string[]>();
+  for (const [localName, exportedName] of sourceFile.statements.flatMap(exportedBindings)) {
+    if (!localPostServerFns.has(localName)) continue;
+    const names = exportsByLocal.get(localName) ?? [];
+    names.push(exportedName);
+    exportsByLocal.set(localName, names);
+  }
+  return exportsByLocal;
+}
+
+function exportedBindings(statement: Node): Array<readonly [string, string]> {
+  if (isVariableStatement(statement) && isExported(statement)) {
+    return statement.declarationList.declarations.flatMap((declaration) =>
+      isIdentifier(declaration.name)
+        ? [[declaration.name.text, declaration.name.text] as const]
+        : [],
+    );
+  }
+  if (
+    isExportDeclaration(statement) &&
+    !statement.moduleSpecifier &&
+    statement.exportClause &&
+    isNamedExports(statement.exportClause)
+  ) {
+    return statement.exportClause.elements.map((element) => [
+      element.propertyName?.text ?? element.name.text,
+      element.name.text,
+    ]);
+  }
+  return isExportAssignment(statement) &&
+    !statement.isExportEquals &&
+    isIdentifier(statement.expression)
+    ? [[statement.expression.text, "default"]]
     : [];
 }
 
 function localPostServerFnBindings(
   sourceFile: SourceFile,
   fileName: string,
-  createServerFnBindings: CreateServerFnBindings,
+  isCreateServerFnCall: (call: CallExpression, fileName: string) => boolean,
 ): Set<string> {
   const bindings = new Set<string>();
   for (const statement of sourceFile.statements) {
@@ -108,7 +114,7 @@ function localPostServerFnBindings(
       statement,
       sourceFile,
       fileName,
-      createServerFnBindings,
+      isCreateServerFnCall,
     )) {
       bindings.add(binding);
     }
@@ -120,13 +126,13 @@ function postServerFnBindingsFromStatement(
   statement: Node,
   sourceFile: SourceFile,
   fileName: string,
-  createServerFnBindings: CreateServerFnBindings,
+  isCreateServerFnCall: (call: CallExpression, fileName: string) => boolean,
 ): string[] {
   if (isVariableStatement(statement)) {
     return statement.declarationList.declarations.flatMap((declaration) =>
       isIdentifier(declaration.name) &&
       declaration.initializer &&
-      containsPostServerFn(declaration.initializer, sourceFile, fileName, createServerFnBindings)
+      containsPostServerFn(declaration.initializer, sourceFile, fileName, isCreateServerFnCall)
         ? [declaration.name.text]
         : [],
     );
@@ -143,87 +149,57 @@ function postServerFnBindingsFromStatement(
     statement.expression.right,
     sourceFile,
     fileName,
-    createServerFnBindings,
+    isCreateServerFnCall,
   )
     ? [statement.expression.left.text]
     : [];
-}
-
-function importedCreateServerFnBindings(sourceFile: SourceFile): CreateServerFnBindings {
-  const imports = sourceFile.statements.map(createServerFnBindingsFromStatement);
-  return {
-    direct: new Set(imports.flatMap((bindings) => bindings.direct)),
-    namespaces: new Set(imports.flatMap((bindings) => bindings.namespaces)),
-  };
-}
-
-function createServerFnBindingsFromStatement(statement: Node): {
-  direct: string[];
-  namespaces: string[];
-} {
-  if (
-    !isImportDeclaration(statement) ||
-    !isStringLiteral(statement.moduleSpecifier) ||
-    statement.moduleSpecifier.text !== TANSTACK_START
-  ) {
-    return { direct: [], namespaces: [] };
-  }
-  const bindings = statement.importClause?.namedBindings;
-  if (!bindings) return { direct: [], namespaces: [] };
-  if (isNamespaceImport(bindings)) return { direct: [], namespaces: [bindings.name.text] };
-  if (!isNamedImports(bindings)) return { direct: [], namespaces: [] };
-  return {
-    direct: bindings.elements.flatMap((element) => {
-      const importedName = element.propertyName?.text ?? element.name.text;
-      return importedName === "createServerFn" ? [element.name.text] : [];
-    }),
-    namespaces: [],
-  };
 }
 
 function containsPostServerFn(
   node: Node,
   sourceFile: SourceFile,
   fileName: string,
-  bindings: CreateServerFnBindings,
+  isCreateServerFnCall: (call: CallExpression, fileName: string) => boolean,
 ): boolean {
   let found = false;
   visitNodes(node, (candidate) => {
-    if (!isCallExpression(candidate) || !isCreateServerFnCall(candidate.expression, bindings))
-      return;
+    if (!isCallExpression(candidate) || !isCreateServerFnCall(candidate, fileName)) return;
     if (hasPostMethod(candidate, sourceFile, fileName)) found = true;
   });
   return found;
 }
 
-function isCreateServerFnCall(expression: Expression, bindings: CreateServerFnBindings): boolean {
-  if (isIdentifier(expression)) return bindings.direct.has(expression.text);
-  return (
-    isPropertyAccessExpression(expression) &&
-    expression.name.text === "createServerFn" &&
-    isIdentifier(expression.expression) &&
-    bindings.namespaces.has(expression.expression.text)
-  );
-}
-
 function hasPostMethod(call: CallExpression, sourceFile: SourceFile, fileName: string): boolean {
   const options = call.arguments[0];
-  if (
-    !options ||
-    !isObjectLiteralExpression(options) ||
-    options.properties.some(isSpreadAssignment)
-  ) {
+  if (!options) return false;
+  if (!isObjectLiteralExpression(options) || options.properties.some(isSpreadAssignment)) {
     throwUnresolvableMethod(call, sourceFile, fileName);
   }
-  const methods = options.properties
-    .filter(isPropertyAssignment)
-    .filter((property) => propertyName(property.name) === "method");
-  if (methods.length !== 1) throwUnresolvableMethod(call, sourceFile, fileName);
+
+  const methods = options.properties.filter(
+    (property) => resolvedPropertyName(property, call, sourceFile, fileName) === "method",
+  );
+  if (methods.length === 0) return false;
   const [method] = methods;
-  if (!method || !isStringLiteral(method.initializer)) {
+  if (methods.length !== 1 || !method || !isPropertyAssignment(method)) {
     throwUnresolvableMethod(call, sourceFile, fileName);
   }
+  if (!isStringLiteral(method.initializer)) throwUnresolvableMethod(call, sourceFile, fileName);
   return method.initializer.text === "POST";
+}
+
+function resolvedPropertyName(
+  property: Node & { name?: Node },
+  call: CallExpression,
+  sourceFile: SourceFile,
+  fileName: string,
+): string {
+  if (isSpreadAssignment(property) || !property.name) {
+    throwUnresolvableMethod(call, sourceFile, fileName);
+  }
+  const name = propertyName(property.name);
+  if (name === null) throwUnresolvableMethod(call, sourceFile, fileName);
+  return name;
 }
 
 function throwUnresolvableMethod(

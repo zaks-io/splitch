@@ -8,7 +8,7 @@ import {
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { setCookieHeaderWrites } from "./cookie-header-write-test-helpers";
 import { createOAuthState, OAUTH_STATE_COOKIE_NAME } from "./oauth-state";
-import { exportedPostServerFns } from "./server-fn-surface-test-helpers";
+import { createServerFnSurfaceDiscovery } from "./server-fn-surface-test-helpers";
 import { createSession, SESSION_COOKIE_NAME } from "./session";
 import {
   PANEL_COOKIE_ATTRIBUTES,
@@ -16,8 +16,12 @@ import {
   serializeHttpOnlyCookie,
 } from "./session-cookie";
 import { MemoryKv, NOW, sessionPrincipal } from "./session-test-harness";
+import { projectProgram } from "./typescript-program-test-helpers";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
+const SERVER_FN_SURFACE = createServerFnSurfaceDiscovery(
+  projectProgram(join(SRC, "..", "tsconfig.json")),
+);
 const HEADER_NAME_MODULES = [
   {
     moduleSpecifier: "@splitch/control-plane-sdk/control-panel-identity",
@@ -36,8 +40,8 @@ const HEADER_NAME_MODULES = [
  * POSTs require TanStack CSRF middleware from `src/start.ts`.
  *
  * Both inventories are reviewed surfaces. Discovery walks every source file and
- * identifies each exported createServerFn POST by file and export name, so a new
- * write in an existing file moves the discovered side of the equality.
+ * identifies each createServerFn POST by file and exported or local binding, so
+ * a new write in an existing file moves the discovered side of the equality.
  */
 const FORM_POST_COOKIE_AUTHENTICATED_WRITES = [
   "routes/auth.logout.ts",
@@ -208,7 +212,7 @@ function formPostWrites(path: string): Array<string> {
 
 function serverFnWrites(path: string): Array<string> {
   const relativePath = relative(path);
-  return exportedPostServerFns(readFileSync(path, "utf8"), relativePath).map(
+  return SERVER_FN_SURFACE.postServerFns(path, relativePath).map(
     (serverFn) => `${relativePath}#${serverFn}`,
   );
 }
