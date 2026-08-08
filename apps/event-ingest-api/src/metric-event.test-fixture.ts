@@ -1,4 +1,5 @@
 import {
+  apiKeyCacheKey,
   CURRENT_KV_SCHEMA_VERSION,
   clientKeyCacheKey,
   eventDefinitionConfigKey,
@@ -26,12 +27,17 @@ export interface MetricEventFixture {
   readonly config: Map<string, string>;
   readonly claims: Map<string, Claim>;
   readonly hash: string;
+  readonly credentialKind: "api_key" | "client_key";
 }
 
-/** The Client Key, Event Definition config and outbox the live ingest path reads. */
-export async function makeMetricEventFixture(base: Partial<Env> = {}): Promise<MetricEventFixture> {
+/** The credential, Event Definition config and outbox the live ingest path reads. */
+export async function makeMetricEventFixture(
+  base: Partial<Env> = {},
+  credentialKind: "api_key" | "client_key" = "client_key",
+): Promise<MetricEventFixture> {
   const hash = await sha256Hex(METRIC_CLIENT_KEY);
-  const credential = new Map<string, string>([[clientKeyCacheKey(hash), clientKeyRecord()]]);
+  const key = credentialKind === "client_key" ? clientKeyCacheKey(hash) : apiKeyCacheKey(hash);
+  const credential = new Map<string, string>([[key, credentialRecord(credentialKind)]]);
   const config = new Map([
     [eventDefinitionConfigKey(METRIC_APP_ID, METRIC_EVENT_NAME), hotConfig("edv_1", 1)],
   ]);
@@ -43,12 +49,12 @@ export async function makeMetricEventFixture(base: Partial<Env> = {}): Promise<M
     CONFIG_STORE: mergedConfigStore(base.CONFIG_STORE, config),
     METRIC_EVENT_OUTBOX: outboxStub(claims),
   } as unknown as Env;
-  return { env, config, claims, hash };
+  return { env, config, claims, hash, credentialKind };
 }
 
 /** The live path: what the Evaluation Worker hands over the EVENT_INGEST binding. */
 export async function sendMetricEvent(
-  fixture: Pick<MetricEventFixture, "env" | "hash">,
+  fixture: Pick<MetricEventFixture, "credentialKind" | "env" | "hash">,
   body: unknown,
 ): Promise<Response> {
   return new EvaluationEntrypoint(new TestExecutionContext(), fixture.env).fetch(
@@ -56,7 +62,7 @@ export async function sendMetricEvent(
       metricEventRoute(),
       {
         operation: "sdk_track",
-        actorId: `client_key:${fixture.hash}`,
+        actorId: `${fixture.credentialKind}:${fixture.hash}`,
         orgId: METRIC_ORGANIZATION_ID,
         appId: METRIC_APP_ID,
         environmentId: METRIC_ENVIRONMENT_ID,
@@ -94,6 +100,7 @@ export function hotConfig(versionId: string, version: number): string {
         name: METRIC_EVENT_NAME,
         family: "metric",
         displayName: "Signed up",
+        state: "published",
         currentPublishedVersionId: versionId,
         createdAt: "2026-08-07T00:00:00.000Z",
         updatedAt: "2026-08-07T00:00:00.000Z",
@@ -119,18 +126,17 @@ async function sha256Hex(value: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function clientKeyRecord(): string {
+function credentialRecord(kind: "api_key" | "client_key"): string {
   return JSON.stringify({
     schemaVersion: CURRENT_KV_SCHEMA_VERSION,
     data: {
       credentialSchemaVersion: 2,
       organizationId: METRIC_ORGANIZATION_ID,
-      kind: "client_key",
+      kind,
       appId: METRIC_APP_ID,
       environmentId: METRIC_ENVIRONMENT_ID,
       scopes: ["data-plane:evaluate", "data-plane:write"],
-      originAllowlist: null,
-      rateLimitRps: null,
+      ...(kind === "client_key" ? { originAllowlist: null, rateLimitRps: null } : {}),
       revoked: false,
       cachedAt: "2026-08-07T00:00:00.000Z",
     },

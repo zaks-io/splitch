@@ -111,6 +111,15 @@ describe("Evaluation binding entrypoint", () => {
     expect(fixture.claims.size).toBe(1);
   });
 
+  it("reaches the Metric Event handler with an API Key", async () => {
+    const fixture = await makeMetricEventFixture({}, "api_key");
+
+    const response = await sendMetricEvent(fixture, metricEventBody());
+
+    expect(response.status).toBe(202);
+    expect(fixture.claims.size).toBe(1);
+  });
+
   /**
    * The four cases above name their operations by hand; this one sweeps the whole
    * delegated set and grows with the route registry. It asks only whether the

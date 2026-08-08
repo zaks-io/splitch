@@ -1,4 +1,5 @@
 import {
+  apiKeyCacheKey,
   CredentialCacheKVSchema,
   clientKeyCacheKey,
   type ErrorResponse,
@@ -6,7 +7,7 @@ import {
 } from "@splitch/contracts";
 import type { Env, Outcome } from "./types";
 
-export interface ClientKeyScope {
+export interface MetricEventCredentialScope {
   readonly credentialHash: string;
   readonly appId: string;
   readonly environmentId: string;
@@ -23,34 +24,35 @@ const credentialEnvelope = kvEnvelope(CredentialCacheKVSchema);
 // header at the public edge, and the browser header does not survive the
 // binding, so re-checking it here could only ever compare against nothing.
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each branch is a distinct fail-loud credential contract
-export async function authenticateDelegatedClientKey(
+export async function authenticateDelegatedDataPlaneCredential(
   identity: { actorId: string; appId: string | null; environmentId: string | null },
   env: Env,
-): Promise<Outcome<ClientKeyScope>> {
+): Promise<Outcome<MetricEventCredentialScope>> {
   if (!env.CREDENTIAL_STORE) {
-    return failure("SERVICE_UNAVAILABLE", "Client Key service is unavailable");
+    return failure("SERVICE_UNAVAILABLE", "Credential service is unavailable");
   }
-  const credentialHash = delegatedClientKeyHash(identity.actorId);
-  if (credentialHash === null) return failure("UNAUTHORIZED", "Client Key required");
-  const raw = await env.CREDENTIAL_STORE.get(clientKeyCacheKey(credentialHash), "text");
-  if (raw === null) return failure("UNAUTHORIZED", "Client Key is unknown");
+  const delegated = delegatedCredential(identity.actorId);
+  if (delegated === null) return failure("UNAUTHORIZED", "Client Key or API Key required");
+  const raw = await env.CREDENTIAL_STORE.get(cacheKey(delegated), "text");
+  if (raw === null) return failure("UNAUTHORIZED", `${credentialLabel(delegated.kind)} is unknown`);
 
   let parsed: ReturnType<typeof credentialEnvelope.safeParse>;
   try {
     parsed = credentialEnvelope.safeParse(JSON.parse(raw));
   } catch {
-    return failure("INTERNAL_SERVER_ERROR", "Client Key data is malformed");
+    return failure("INTERNAL_SERVER_ERROR", "Credential data is malformed");
   }
-  if (!parsed.success) return failure("INTERNAL_SERVER_ERROR", "Client Key data is invalid");
+  if (!parsed.success) return failure("INTERNAL_SERVER_ERROR", "Credential data is invalid");
   const credential = parsed.data.data;
-  if (credential.kind !== "client_key") return failure("UNAUTHORIZED", "Client Key required");
-  if (credential.revoked) return failure("CREDENTIAL_REVOKED", "Client Key is revoked");
+  const label = credentialLabel(delegated.kind);
+  if (credential.kind !== delegated.kind) return failure("UNAUTHORIZED", `${label} is unknown`);
+  if (credential.revoked) return failure("CREDENTIAL_REVOKED", `${label} is revoked`);
   if (!credential.scopes.includes("data-plane:write")) {
     return {
       ok: false,
       error: {
         code: "INSUFFICIENT_SCOPES",
-        message: "Client Key cannot write Metric Events",
+        message: `${label} cannot write Metric Events`,
         details: { requiredScopes: ["data-plane:write"], heldScopes: credential.scopes },
       },
     };
@@ -58,13 +60,13 @@ export async function authenticateDelegatedClientKey(
   if (credential.appId !== identity.appId || credential.environmentId !== identity.environmentId) {
     return failure(
       "INTERNAL_SERVER_ERROR",
-      "Client Key scope does not match the authorized App and Environment",
+      `${label} scope does not match the authorized App and Environment`,
     );
   }
   return {
     ok: true,
     value: {
-      credentialHash,
+      credentialHash: delegated.hash,
       appId: credential.appId,
       environmentId: credential.environmentId,
       rateLimitRps: credential.rateLimitRps ?? null,
@@ -80,7 +82,23 @@ function failure(
   return { ok: false, error: { code, message, details } as ErrorResponse };
 }
 
-function delegatedClientKeyHash(actorId: string): string | null {
-  const match = /^client_key:([a-f0-9]{64})$/.exec(actorId);
-  return match?.[1] ?? null;
+interface DelegatedCredential {
+  readonly kind: "api_key" | "client_key";
+  readonly hash: string;
+}
+
+function delegatedCredential(actorId: string): DelegatedCredential | null {
+  const match = /^(api_key|client_key):([a-f0-9]{64})$/.exec(actorId);
+  if (!match?.[1] || !match[2]) return null;
+  return { kind: match[1] as DelegatedCredential["kind"], hash: match[2] };
+}
+
+function cacheKey(credential: DelegatedCredential): string {
+  return credential.kind === "client_key"
+    ? clientKeyCacheKey(credential.hash)
+    : apiKeyCacheKey(credential.hash);
+}
+
+function credentialLabel(kind: DelegatedCredential["kind"]): "API Key" | "Client Key" {
+  return kind === "client_key" ? "Client Key" : "API Key";
 }

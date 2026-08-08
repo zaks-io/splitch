@@ -273,7 +273,7 @@ try {
   }
 
   const migratedMetric = populated.execSql(
-    `SELECT m.event_field_name, d.name, d.display_name, d.family,
+    `SELECT m.event_field_name, d.name, d.display_name, d.family, d.state,
             d.current_published_version_id
      FROM metrics AS m
      JOIN event_definitions AS d
@@ -281,26 +281,25 @@ try {
      WHERE m.id = 'metric_fk_probe'`,
     "verifying the Metric Event Definition backfill",
   );
-  for (const expected of [
-    "amount",
-    "purchase_completed",
-    "metric",
-    "event_definition_version_migrated_6170705f666b5f70726f6265_",
-  ]) {
+  for (const expected of ["amount", "purchase_completed", "metric", "incomplete"]) {
     if (!migratedMetric.includes(expected)) {
       fail(`the Metric lost its Event binding during migration:\n${migratedMetric}`);
     }
   }
 
-  const migratedVersion = populated.execSql(
-    `SELECT json_extract(v.fields, '$[0].name') AS field_name
+  if (!migratedMetric.includes('"current_published_version_id": null')) {
+    fail(`the incomplete Event Definition falsely reports a published Version:\n${migratedMetric}`);
+  }
+
+  const migratedVersions = populated.execSql(
+    `SELECT count(*) AS version_count
      FROM event_definition_versions AS v
      JOIN metrics AS m ON m.event_definition_id = v.event_definition_id
      WHERE m.id = 'metric_fk_probe'`,
-    "verifying the published Event Definition Version backfill",
+    "verifying the incomplete Event Definition backfill",
   );
-  if (!migratedVersion.includes('"field_name": "amount"')) {
-    fail(`the published Event Definition Version lost the Metric field:\n${migratedVersion}`);
+  if (!migratedVersions.includes('"version_count": 0')) {
+    fail(`the incomplete Event Definition created a published Version:\n${migratedVersions}`);
   }
 
   const tenantBindings = populated.execSql(

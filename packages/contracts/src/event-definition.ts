@@ -3,6 +3,8 @@ import { validateNumericDomain, validatePropertyNames } from "./event-definition
 
 export const eventDefinitionFamilies = ["metric", "web"] as const;
 export const EventDefinitionFamilySchema = z.enum(eventDefinitionFamilies);
+export const eventDefinitionStates = ["draft", "incomplete", "published"] as const;
+export const EventDefinitionStateSchema = z.enum(eventDefinitionStates);
 export const numberKinds = [
   "measurement",
   "count",
@@ -180,6 +182,7 @@ export const EventDefinitionSchema = z
     family: EventDefinitionFamilySchema,
     displayName: z.string().min(1),
     description: z.string().optional(),
+    state: EventDefinitionStateSchema,
     currentPublishedVersionId: z.string().nullable(),
     createdAt: z.string(),
     updatedAt: z.string(),

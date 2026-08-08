@@ -1,5 +1,4 @@
-import { EventDefinitionVersionSchema } from "@splitch/contracts";
-import { createRepository } from "@splitch/db";
+import { appScope, createRepository } from "@splitch/db";
 import { applySchema, migrationStatements } from "@splitch/db/test-d1";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
 import { Miniflare } from "miniflare";
@@ -11,58 +10,26 @@ const NOW = "2026-01-01T00:00:00.000Z";
 
 let mf: Miniflare;
 let d1: D1Database;
+let eventDefinitionStore: KVNamespace;
 
 beforeEach(async () => {
   mf = new Miniflare({
     modules: true,
     script: "export default {};",
     d1Databases: { DB: ":memory:" },
+    kvNamespaces: { CONFIG_STORE: "event-definitions" },
   });
   d1 = (await mf.getD1Database("DB")) as unknown as D1Database;
+  eventDefinitionStore = (await mf.getKVNamespace("CONFIG_STORE")) as unknown as KVNamespace;
 });
 
 afterEach(async () => mf.dispose());
 
 const EVENT_DEFINITION_ID =
   "event_definition_migrated_6170705f6578697374696e675f6d6574726963_70757263686173655f636f6d706c65746564";
-const EVENT_DEFINITION_VERSION_ID =
-  "event_definition_version_migrated_6170705f6578697374696e675f6d6574726963_70757263686173655f636f6d706c65746564";
-
 describe("the Event Definition migration", () => {
   it("keeps a pre-existing Metric readable through GET /apps/:appId/metrics", async () => {
     await migrateExistingMetric();
-    const version = await d1
-      .prepare(
-        `SELECT id, event_definition_id, version, schema_hash, entity_type,
-                fields, dimensions, published_at
-         FROM event_definition_versions`,
-      )
-      .first<{
-        id: string;
-        event_definition_id: string;
-        version: number;
-        schema_hash: string;
-        entity_type: string | null;
-        fields: string;
-        dimensions: string;
-        published_at: string;
-      }>();
-    expect(version).not.toBeNull();
-    const migratedFields = JSON.parse(version?.fields ?? "null") as Array<Record<string, unknown>>;
-    expect(migratedFields[0]).not.toHaveProperty("minimum");
-    expect(migratedFields[0]).not.toHaveProperty("maximum");
-    expect(() =>
-      EventDefinitionVersionSchema.parse({
-        id: version?.id,
-        eventDefinitionId: version?.event_definition_id,
-        version: version?.version,
-        schemaHash: version?.schema_hash,
-        entityType: version?.entity_type,
-        fields: migratedFields,
-        dimensions: JSON.parse(version?.dimensions ?? "null"),
-        publishedAt: version?.published_at,
-      }),
-    ).not.toThrow();
 
     const app = migratedApp();
     const definitionResponse = await app.request(
@@ -72,20 +39,9 @@ describe("the Event Definition migration", () => {
     expect(definitionResponse.status).toBe(200);
     expect(await definitionResponse.json()).toMatchObject({
       id: EVENT_DEFINITION_ID,
-      currentPublishedVersionId: EVENT_DEFINITION_VERSION_ID,
-      versions: [
-        {
-          entityType: null,
-          fields: [
-            {
-              name: "amount",
-              type: "number",
-              required: false,
-              numberKind: "amount",
-            },
-          ],
-        },
-      ],
+      state: "incomplete",
+      currentPublishedVersionId: null,
+      versions: [],
     });
     const response = await app.request(`/apps/${APP_ID}/metrics`, {
       headers: { authorization: "Bearer migration-proof" },
@@ -103,10 +59,6 @@ describe("the Event Definition migration", () => {
     });
   });
 
-  /**
-   * Metric writes require a published Event Definition, so a backfilled draft
-   * Version would leave every migrated Metric permanently un-editable.
-   */
   it("leaves a pre-existing Metric editable through PATCH /apps/:appId/metrics/:metricId", async () => {
     await migrateExistingMetric();
 
@@ -128,6 +80,68 @@ describe("the Event Definition migration", () => {
       name: "Purchase revenue (renamed)",
       eventDefinitionId: EVENT_DEFINITION_ID,
       eventFieldName: "amount",
+    });
+  });
+
+  it("refuses to change the binding while its Event Definition is incomplete", async () => {
+    await migrateExistingMetric();
+
+    const response = await migratedApp().request(
+      `/apps/${APP_ID}/metrics/metric_existing_revenue`,
+      {
+        method: "PATCH",
+        headers: {
+          authorization: "Bearer migration-proof",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ eventFieldName: "total" }),
+      },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { issues: [{ path: ["body", "eventDefinitionId"] }] },
+    });
+  });
+
+  it("publishes Version 1 after the operator supplies the missing complete schema", async () => {
+    await migrateExistingMetric();
+
+    const response = await migratedApp().request(
+      `/apps/${APP_ID}/event-definitions/${EVENT_DEFINITION_ID}/versions`,
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer migration-proof",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          entityType: "user",
+          fields: [
+            {
+              name: "amount",
+              type: "number",
+              required: false,
+              numberKind: "amount",
+              minimum: 0,
+              maximum: 1_000_000,
+            },
+          ],
+          dimensions: [],
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ version: 1, entityType: "user" });
+    const definition = await createRepository(d1).eventDefinitions.get(
+      appScope(APP_ID),
+      EVENT_DEFINITION_ID,
+    );
+    expect(definition).toMatchObject({
+      state: "published",
+      currentPublishedVersionId: expect.any(String),
     });
   });
 });
@@ -183,7 +197,12 @@ async function migrateExistingMetric(): Promise<void> {
 }
 
 function migratedApp() {
-  return createApp({ authResolver, rateLimiter, repo: createRepository(d1) });
+  return createApp({
+    authResolver,
+    rateLimiter,
+    repo: createRepository(d1),
+    eventDefinitionStore,
+  });
 }
 
 const authResolver: AuthResolver = () => ({

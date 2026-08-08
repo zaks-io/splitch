@@ -14,6 +14,7 @@ export const eventDefinitions = sqliteTable(
     family: text("family").notNull(),
     displayName: text("display_name").notNull(),
     description: text("description"),
+    state: text("state").notNull().default("draft"),
     currentPublishedVersionId: text("current_published_version_id"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -31,6 +32,11 @@ export const eventDefinitions = sqliteTable(
       sql`length(${table.name}) BETWEEN 1 AND 64
     AND ${table.name} GLOB '[A-Za-z0-9]*'
     AND ${table.name} NOT GLOB '*[^A-Za-z0-9_.:-]*'`,
+    ),
+    check(
+      "event_definitions_state_is_valid",
+      sql`${table.state} IN ('draft', 'incomplete', 'published')
+        AND ((${table.state} = 'published') = (${table.currentPublishedVersionId} IS NOT NULL))`,
     ),
   ],
 );

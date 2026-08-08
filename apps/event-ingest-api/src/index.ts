@@ -10,7 +10,7 @@ import {
   notDelegatedResponse,
   type Observability,
 } from "@splitch/worker-runtime";
-import { authenticateDelegatedClientKey } from "./client-key-auth";
+import { authenticateDelegatedDataPlaneCredential } from "./client-key-auth";
 import { renderError } from "./errors";
 import { handleEvaluationCommit } from "./evaluation-commit";
 import { EvaluationCommitOutboxDurableObject } from "./evaluation-commit-outbox";
@@ -91,7 +91,7 @@ const delegatedHandler = {
     const identity = delegatedIdentityFor(request, metricEventRoutes);
     if (!identity) return notDelegatedResponse(request);
     recordRequest(observability, request, url, "metric-event-request");
-    const credential = await authenticateDelegatedClientKey(identity, env);
+    const credential = await authenticateDelegatedDataPlaneCredential(identity, env);
     if (!credential.ok) return renderError(credential.error);
     return handleAuthorizedMetricEvent(request, env, credential.value);
   },

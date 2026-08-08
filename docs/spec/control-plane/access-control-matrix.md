@@ -132,16 +132,18 @@ deploying, and missing secrets or replay bindings fail closed.
 **Evaluation Worker** owns resolution:
 
 - Public SDK evaluate and peek endpoints (Client Key or API Key for evaluate; peek is API Key only,
-  ADR-0034). Metric Event and Web Event ingress are owned by the Event Ingest Worker; Evaluation
-  does not authenticate, validate, or persist `POST /api/sdk/events` or
-  `POST /api/sdk/web-events`.
+  ADR-0034). For delegated `POST /api/sdk/events`, Evaluation authenticates the data-plane
+  credential and enforces the Client Key origin allow-list at the public edge, then forwards caller
+  identity to Event Ingest over the service binding.
 - Control-plane dry-run test-evaluation using the control-plane bearer token
 - Provider and Assignment Store read orchestration
 - No config writes, no analytics reads, and no direct result calculation
 
 **Event Ingest Worker** owns append-only intake:
 
-- Public SDK Metric Event `track` (`POST /api/sdk/events`) under Client Key or API Key
+- Delegated public SDK Metric Event `track` (`POST /api/sdk/events`): Event Ingest owns schema,
+  rate, identity, and storage validation and persistence after Evaluation forwards the authenticated
+  caller identity over the service binding
 - Public SDK Web Event `web.track` (`POST /api/sdk/web-events`) under Client Key or API Key
 - Evaluation usage, Exposure, Activation, Metric Event, and Web Event validation
 - Per-scope Admission Gate Durable Objects, durable claim/outbox shards, datasource queues, write-ahead

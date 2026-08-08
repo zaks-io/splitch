@@ -76,6 +76,7 @@ async function create(deps: EventDefinitionDeps, args: HandlerArgs<unknown>): Pr
     family: body.family as string,
     displayName: body.displayName as string,
     ...(body.description === undefined ? {} : { description: body.description as string }),
+    state: "draft",
     currentPublishedVersionId: null,
     createdAt: now,
     updatedAt: now,
@@ -158,6 +159,7 @@ async function publish(deps: EventDefinitionDeps, args: HandlerArgs<unknown>): P
   };
   const current = {
     ...definitionResponse(definition),
+    state: "published" as const,
     currentPublishedVersionId: input.id,
     updatedAt: now,
   };
@@ -231,6 +233,7 @@ function definitionResponse(row: DefinitionRow): EventDefinition {
     family: row.family as EventDefinition["family"],
     displayName: row.displayName,
     ...(row.description === null ? {} : { description: row.description }),
+    state: row.state as EventDefinition["state"],
     currentPublishedVersionId: row.currentPublishedVersionId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

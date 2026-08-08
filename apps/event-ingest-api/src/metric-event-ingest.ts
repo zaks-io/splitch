@@ -4,7 +4,7 @@ import {
   kvEnvelope,
   MetricEventTrackRequestSchema,
 } from "@splitch/contracts";
-import type { ClientKeyScope } from "./client-key-auth";
+import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
 import { claimMetricEvent } from "./metric-event-outbox";
 import { checkMetricEventRateLimit } from "./metric-event-rate-limit";
@@ -18,7 +18,7 @@ const hotConfigEnvelope = kvEnvelope(EventDefinitionHotConfigSchema);
 export async function handleAuthorizedMetricEvent(
   request: Request,
   env: Env,
-  credential: ClientKeyScope,
+  credential: MetricEventCredentialScope,
 ): Promise<Response> {
   const text = await request.text();
   if (new TextEncoder().encode(text).byteLength > MAX_BODY_BYTES) {

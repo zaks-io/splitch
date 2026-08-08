@@ -5,6 +5,7 @@ CREATE TABLE `event_definitions` (
   `family` text NOT NULL,
   `display_name` text NOT NULL,
   `description` text,
+  `state` text DEFAULT 'draft' NOT NULL,
   `current_published_version_id` text,
   `created_at` text NOT NULL,
   `updated_at` text NOT NULL,
@@ -20,6 +21,10 @@ CREATE TABLE `event_definitions` (
     length(`name`) BETWEEN 1 AND 64
     AND `name` GLOB '[A-Za-z0-9]*'
     AND `name` NOT GLOB '*[^A-Za-z0-9_.:-]*'
+  ),
+  CONSTRAINT `event_definitions_state_is_valid` CHECK (
+    `state` IN ('draft', 'incomplete', 'published')
+    AND ((`state` = 'published') = (`current_published_version_id` IS NOT NULL))
   )
 );
 CREATE UNIQUE INDEX `event_definitions_app_name_unique` ON `event_definitions` (`app_id`,`name`);
@@ -42,11 +47,13 @@ CREATE UNIQUE INDEX `event_definition_versions_number_unique` ON `event_definiti
 -- rebuilding the table: dropping it would leave the new read path no authority
 -- from which to recover an Event Definition.
 --
--- The backfilled Version is published, not draft. A Metric whose Event Definition
--- has no published Version fails write validation, so leaving it NULL would make
--- every migrated Metric permanently un-editable.
+-- A legacy Metric carries neither an Entity type nor a numeric domain. Preserve
+-- its Event binding as explicitly incomplete without creating a Version that
+-- falsely claims to be publishable. The Metric write path permits edits that
+-- keep this legacy binding unchanged; accepting new facts still requires the
+-- operator to publish a complete Version through the Control Plane.
 INSERT INTO `event_definitions` (
-  `id`, `app_id`, `name`, `family`, `display_name`,
+  `id`, `app_id`, `name`, `family`, `display_name`, `state`,
   `current_published_version_id`, `created_at`, `updated_at`
 )
 SELECT
@@ -55,50 +62,13 @@ SELECT
   `event_name`,
   'metric',
   `event_name`,
-  'event_definition_version_migrated_' || lower(hex(CAST(`app_id` AS blob))) || '_' || lower(hex(CAST(`event_name` AS blob))),
+  'incomplete',
+  NULL,
   min(`created_at`),
   min(`created_at`)
 FROM `metrics`
 WHERE `event_name` IS NOT NULL
 GROUP BY `app_id`, `event_name`;
-
-INSERT INTO `event_definition_versions` (
-  `id`, `app_id`, `event_definition_id`, `version`, `schema_hash`,
-  `entity_type`, `fields`, `dimensions`, `published_at`
-)
-SELECT
-  'event_definition_version_migrated_' || lower(hex(CAST(`legacy`.`app_id` AS blob))) || '_' || lower(hex(CAST(`legacy`.`event_name` AS blob))),
-  `legacy`.`app_id`,
-  'event_definition_migrated_' || lower(hex(CAST(`legacy`.`app_id` AS blob))) || '_' || lower(hex(CAST(`legacy`.`event_name` AS blob))),
-  1,
-  'migration:0019:' || lower(hex(CAST(`legacy`.`app_id` AS blob))) || ':' || lower(hex(CAST(`legacy`.`event_name` AS blob))),
-  NULL,
-  coalesce((
-    SELECT json_group_array(json(`field`.`definition`))
-    FROM (
-      SELECT json_object(
-        'name', `field_metric`.`event_value_field`,
-        'type', 'number',
-        'required', json('false'),
-        'numberKind', CASE
-          WHEN max(`field_metric`.`kind` = 'revenue') = 1 THEN 'amount'
-          WHEN max(`field_metric`.`kind` = 'count') = 1 THEN 'count'
-          ELSE 'measurement'
-        END
-      ) AS `definition`
-      FROM `metrics` AS `field_metric`
-      WHERE `field_metric`.`app_id` = `legacy`.`app_id`
-        AND `field_metric`.`event_name` = `legacy`.`event_name`
-        AND `field_metric`.`event_value_field` IS NOT NULL
-      GROUP BY `field_metric`.`event_value_field`
-      ORDER BY `field_metric`.`event_value_field`
-    ) AS `field`
-  ), '[]'),
-  '[]',
-  min(`legacy`.`created_at`)
-FROM `metrics` AS `legacy`
-WHERE `legacy`.`event_name` IS NOT NULL
-GROUP BY `legacy`.`app_id`, `legacy`.`event_name`;
 
 CREATE TABLE `metrics_v2` (
   `id` text PRIMARY KEY NOT NULL,

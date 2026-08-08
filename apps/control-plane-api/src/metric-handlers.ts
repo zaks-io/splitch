@@ -163,7 +163,7 @@ async function prepareMetricWrite(
     denominatorMetricId: metricDenominator(body, current),
     analysis: metricAnalysisConfig(body, current),
   };
-  return (await validateMetricShape(deps, scope, current?.id, prepared, requestId)) ?? ok(prepared);
+  return (await validateMetricShape(deps, scope, current, prepared, requestId)) ?? ok(prepared);
 }
 
 function metricField(body: Record<string, unknown>, current: MetricRow | null): string | null {
@@ -185,11 +185,11 @@ function metricDenominator(
 async function validateMetricShape(
   deps: MetricSegmentDeps,
   scope: TenantScope,
-  metricId: string | undefined,
+  current: MetricRow | null,
   prepared: PreparedMetricWrite,
   requestId: string,
 ): Promise<Result<never> | null> {
-  const shapeIssue = metricShapeIssue(prepared, metricId, requestId);
+  const shapeIssue = metricShapeIssue(prepared, current?.id, requestId);
   if (shapeIssue) return fail(shapeIssue);
   const definition = await deps.repo.eventDefinitions.get(scope, prepared.eventDefinitionId);
   if (definition?.family !== "metric") {
@@ -202,6 +202,13 @@ async function validateMetricShape(
     );
   }
   if (!definition.currentPublishedVersionId) {
+    if (
+      definition.state === "incomplete" &&
+      current?.eventDefinitionId === prepared.eventDefinitionId &&
+      current.eventFieldName === prepared.eventFieldName
+    ) {
+      return validateDenominator(deps, scope, prepared, requestId);
+    }
     return fail(
       metricIssue(requestId, "eventDefinitionId", "Metric requires a published Event Definition"),
     );
@@ -222,6 +229,15 @@ async function validateMetricShape(
       ),
     );
   }
+  return validateDenominator(deps, scope, prepared, requestId);
+}
+
+async function validateDenominator(
+  deps: MetricSegmentDeps,
+  scope: TenantScope,
+  prepared: PreparedMetricWrite,
+  requestId: string,
+): Promise<Result<never> | null> {
   if (!prepared.denominatorMetricId) return null;
   if (!(await deps.repo.experiments.getMetric(scope, prepared.denominatorMetricId))) {
     return fail(

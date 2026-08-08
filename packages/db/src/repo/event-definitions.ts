@@ -91,7 +91,7 @@ export function makeEventDefinitionRepo(db: Db, d1: D1Database) {
         d1
           .prepare(
             `UPDATE event_definitions
-           SET current_published_version_id = ?, updated_at = ?, updated_by = ?
+           SET current_published_version_id = ?, updated_at = ?, updated_by = ?, state = 'published'
            WHERE app_id = ? AND id = ?`,
           )
           .bind(input.id, updatedAt, updatedBy, scope.appId, input.eventDefinitionId),

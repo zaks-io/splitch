@@ -15,8 +15,8 @@ describe("Event Definition publication contracts", () => {
     expect(parsed.entityType).toBeNull();
   });
 
-  it("represents an unbounded numeric field without invented limits", () => {
-    const parsed = EventDefinitionVersionSchema.parse({
+  it("rejects a numeric field without an allowlist or finite bounds", () => {
+    const parsed = EventDefinitionVersionSchema.safeParse({
       id: "event_definition_version_migrated",
       eventDefinitionId: "event_definition_migrated",
       version: 1,
@@ -34,8 +34,7 @@ describe("Event Definition publication contracts", () => {
       publishedAt: "2026-01-01T00:00:00.000Z",
     });
 
-    expect(parsed.fields[0]).not.toHaveProperty("minimum");
-    expect(parsed.fields[0]).not.toHaveProperty("maximum");
+    expect(parsed.success).toBe(false);
   });
 
   it("still rejects a one-sided numeric range", () => {
