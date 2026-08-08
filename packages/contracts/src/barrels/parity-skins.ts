@@ -10,6 +10,7 @@ export {
   cliCommandString,
   cliPresentationAliasString,
 } from "../cli-command-path";
+export { KILL_SWITCH_OFF_EXEMPTION } from "../kill-switch-off-exemption";
 export type { McpProtocolToolDefinition, McpToolDefinition } from "../mcp-tools";
 export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute } from "../mcp-tools";
 export type { RequestBodyFieldHelp, RequestBodyHelp } from "../request-body-help";
