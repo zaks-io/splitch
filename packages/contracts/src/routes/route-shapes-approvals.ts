@@ -25,6 +25,7 @@ export const approvalTargetTypes = [
   "flag",
   "flag_configuration",
   "flag_variant",
+  "segment",
   "experiment_draft",
 ] as const;
 export const ApprovalTargetTypeSchema = z.enum(approvalTargetTypes);
@@ -33,6 +34,7 @@ export const approvalAppliedResourceTypes = [
   "flag",
   "flag_configuration",
   "flag_variant",
+  "segment",
   "experiment_run",
 ] as const;
 export const ApprovalAppliedResourceTypeSchema = z.enum(approvalAppliedResourceTypes);
@@ -45,6 +47,7 @@ export const approvalOperations = [
   "flag_variants_update",
   "flag_variants_delete",
   "flags_delete",
+  "segments_update",
   "experiments_start",
   "experiment_winner_promote",
 ] as const;

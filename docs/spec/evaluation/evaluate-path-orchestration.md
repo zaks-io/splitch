@@ -125,9 +125,9 @@ Assignment Store.
 matchesConditions(conditions: Condition[], context: EvaluationContext) -> boolean
 ```
 
-All Conditions must match (AND semantics). For `segment_in` / `segment_not_in` operators,
-membership = Entity matches the Segment's own Conditions (recursively evaluated;
-Segments are Conditions, not a separate authorization layer).
+All Conditions must match (AND semantics). Segment Conditions were already merged into the resolved
+rule at publication or Run Start. The evaluate path performs no Segment lookup or recursive
+evaluation.
 
 ### Absent or null Condition attribute
 

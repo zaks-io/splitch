@@ -1,6 +1,6 @@
 import type { TargetingRule } from "@splitch/contracts";
 import { envScope, type Repository } from "@splitch/db";
-import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
+import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
 import { canonicalHash } from "./approval-canonical";
 import { createApproval, replayApprovalIfExists } from "./approval-service";
@@ -13,6 +13,7 @@ import {
   flagConfigPatchInput,
   flagConfigProposalInput,
   type PromotionSelect,
+  renderFlagConfigReadFailure,
   renderFlagConfigWriteResult,
   renderPromotionResult,
 } from "./flag-config-handler-render";
@@ -62,10 +63,7 @@ export function makeHandlers(deps: HandlerDeps) {
         .readFlagConfig({ appId, environmentId, flagId });
 
       if (!result.ok) {
-        return renderError(
-          { code: "FLAG_NOT_FOUND", message: "flag configuration not found", details: {} },
-          { requestId },
-        );
+        return renderFlagConfigReadFailure(result, requestId);
       }
       return Response.json(result.config);
     },
@@ -111,7 +109,7 @@ export function makeHandlers(deps: HandlerDeps) {
               config: applied.config,
               approvalRequest: replay.approvalRequest,
             })
-          : flagConfigNotFound(requestId);
+          : renderFlagConfigReadFailure(applied, requestId);
       }
       // Ahead of the Policy gate on purpose: a write a live Run forbids must never
       // become a pending Approval Request. Gating it first would manufacture a
@@ -143,7 +141,7 @@ export function makeHandlers(deps: HandlerDeps) {
         const preview = await deps.configStore
           .writerFor(appId, environmentId)
           .previewFlagConfig(mutationInput);
-        if (!current.ok) return flagConfigNotFound(requestId);
+        if (!current.ok) return renderFlagConfigReadFailure(current, requestId);
         if (!preview.ok) {
           return renderFlagConfigWriteResult(preview, flagId, environmentId, requestId, null);
         }
@@ -167,7 +165,7 @@ export function makeHandlers(deps: HandlerDeps) {
         const applied = await deps.configStore
           .writerFor(appId, environmentId)
           .readFlagConfig({ appId, environmentId, flagId });
-        if (!applied.ok) return flagConfigNotFound(requestId);
+        if (!applied.ok) return renderFlagConfigReadFailure(applied, requestId);
         return Response.json({
           config: applied.config,
           approvalRequest: approval.approvalRequest,
@@ -221,7 +219,7 @@ export function makeHandlers(deps: HandlerDeps) {
               config: applied.config,
               approvalRequest: replay.approvalRequest,
             })
-          : flagConfigNotFound(requestId);
+          : renderFlagConfigReadFailure(applied, requestId);
       }
       // Same ordering as the Configuration PATCH, and for the same reason: the Run
       // refusal outranks the Policy gate.
@@ -250,7 +248,7 @@ export function makeHandlers(deps: HandlerDeps) {
           writer.readFlagConfig({ appId, environmentId, flagId }),
           writer.previewTargetingRules(mutationInput),
         ]);
-        if (!current.ok) return flagConfigNotFound(requestId);
+        if (!current.ok) return renderFlagConfigReadFailure(current, requestId);
         if (!preview.ok) {
           return renderFlagConfigWriteResult(preview, flagId, environmentId, requestId, null);
         }
@@ -272,7 +270,7 @@ export function makeHandlers(deps: HandlerDeps) {
         );
         if (!approval.ok) return approval.response;
         const applied = await writer.readFlagConfig({ appId, environmentId, flagId });
-        if (!applied.ok) return flagConfigNotFound(requestId);
+        if (!applied.ok) return renderFlagConfigReadFailure(applied, requestId);
         return Response.json({
           config: applied.config,
           approvalRequest: approval.approvalRequest,
@@ -328,7 +326,7 @@ export function makeHandlers(deps: HandlerDeps) {
         const applied = await deps.configStore
           .writerFor(appId, targetEnvironmentId)
           .readFlagConfig({ appId, environmentId: targetEnvironmentId, flagId });
-        if (!applied.ok) return flagConfigNotFound(requestId);
+        if (!applied.ok) return renderFlagConfigReadFailure(applied, requestId);
         return Response.json({
           config: applied.config,
           diff: {
@@ -378,7 +376,7 @@ export function makeHandlers(deps: HandlerDeps) {
           }),
           writer.previewPromotion(mutationInput),
         ]);
-        if (!current.ok) return flagConfigNotFound(requestId);
+        if (!current.ok) return renderFlagConfigReadFailure(current, requestId);
         if (!preview.ok) {
           return renderPromotionResult(preview, flagId, targetEnvironmentId, requestId, null);
         }
@@ -404,7 +402,7 @@ export function makeHandlers(deps: HandlerDeps) {
           environmentId: targetEnvironmentId,
           flagId,
         });
-        if (!applied.ok) return flagConfigNotFound(requestId);
+        if (!applied.ok) return renderFlagConfigReadFailure(applied, requestId);
         const approvalDiff = approval.approvalRequest.diff;
         return Response.json({
           config: applied.config,

@@ -4,6 +4,7 @@ import {
   type ApprovalPolicyContext,
   ApprovalPolicyContextSchema,
   type ApprovalTarget,
+  ErrorDetailsSchema,
 } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
@@ -16,6 +17,7 @@ import {
   canonicalJson,
 } from "./approval-canonical";
 import { approvalRequestProjection } from "./approval-model";
+import { resultingVersionFor } from "./approval-resulting-version";
 import { prepareAndApplyApproval } from "./approval-review-application";
 import {
   approvalNotFound,
@@ -245,11 +247,44 @@ export async function reviewApproval(
   if (policyError) return policyError;
 
   const currentVersion = await rowTargetVersion(deps.repo, row, contexts, row.diff);
-  if (currentVersion !== row.targetVersion) {
+  const retryingSegmentRepublish = await canRetrySegmentRepublish(
+    deps,
+    row,
+    contexts,
+    currentVersion,
+  );
+  if (currentVersion !== row.targetVersion && !retryingSegmentRepublish) {
     return materializeStale(deps, row, input, requestHash, currentVersion);
   }
 
   return prepareAndApplyApproval(deps, row, input, requestHash, now, contexts);
+}
+
+async function canRetrySegmentRepublish(
+  deps: ApprovalServiceDeps,
+  row: ApprovalRequestRow,
+  contexts: ApprovalPolicyContext[],
+  currentVersion: string,
+): Promise<boolean> {
+  // D1-first Segment application intentionally moves the target before a
+  // failed fan-out is recorded. That exact proposed version is retryable; an
+  // unrelated version race remains stale.
+  if (row.operation !== "segments_update") return false;
+  const review = await deps.repo.approvals.latestReview(appScope(row.appId), row.id);
+  if (review?.outcome !== "failed") return false;
+  if (!review.errorDetails) {
+    throw new Error("failed Segment Review is missing error details");
+  }
+  const details = ErrorDetailsSchema.parse(JSON.parse(review.errorDetails));
+  if (!Array.isArray(details.notRepublishedFlagConfigurations)) return false;
+  const proposedVersion = await resultingVersionFor(
+    deps.repo,
+    row,
+    "segments_update",
+    contexts,
+    row.targetId,
+  );
+  return proposedVersion !== null && currentVersion === proposedVersion;
 }
 
 async function validateReviewPolicy(

@@ -25,6 +25,7 @@ export type {
   ApprovalCommit,
   ApprovalDisposition,
   ApprovalFailure,
+  ApprovalTargetState,
   Repository,
 } from "./repo/index";
 // The tenant-isolation seam: the only public way to reach D1. The scope
