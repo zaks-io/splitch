@@ -139,6 +139,9 @@ export async function recordApplicationFailure(
     requestHash: commit.requestHash,
     errorCode: code,
     errorDetails: JSON.stringify(errorDetails),
+    // Recorded, not derived: an exact-key replay has to repeat this same claim,
+    // and no other column on the row can answer it.
+    targetState,
   });
   if (!recorded) return resolvedWinner(deps, row.appId, row.id, requestId);
   return {

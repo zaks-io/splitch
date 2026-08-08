@@ -166,8 +166,8 @@ export function FlagTargetingRulesEditor({
           </Button>
         </div>
         <p className="text-muted-foreground text-xs leading-5">
-          Choose a Segment, a direct Condition, or both. Both use AND semantics. Percentage rollout
-          on a rule is not editable here yet.
+          Choose a Segment, a direct Condition, or both; when you use both, a visitor has to match
+          the Segment and the Condition. Percentage rollout on a rule is not editable here yet.
         </p>
       </div>
     </div>

@@ -164,3 +164,79 @@ function forgedApprovalCommit(): ApprovalCommit {
     policyContexts: [],
   };
 }
+
+describe("the Segment approval write is App-scoped", () => {
+  it("refuses another App's Segment id under a pending Approval Request", async () => {
+    const commit = crossTenantCommit();
+    await seedPendingCrossTenantRequest(commit);
+
+    const result = await repo.flags.updateSegment(
+      appScope(TA.appId),
+      TB.segmentId,
+      {
+        name: "PWNED",
+        conditions: JSON.stringify([{ attribute: "plan", operator: "eq", value: "free" }]),
+      },
+      commit,
+    );
+
+    expect(result).toBeNull();
+    // `approvalPendingCondition` is an EXISTS over `approval_requests` that is
+    // uncorrelated to the row being updated: it proves the Approval Request
+    // belongs to the scope, never that the Segment does. The `app_id` predicate
+    // on the UPDATE itself is the only thing bounding the target row.
+    expect(await repo.flags.getSegment(appScope(TB.appId), TB.segmentId)).toMatchObject({
+      name: TB.segmentId,
+      conditions: JSON.stringify([{ attribute: "plan", operator: "eq", value: "paid" }]),
+    });
+  });
+});
+
+/**
+ * A pending `segments_update` Approval Request in App A naming App B's Segment,
+ * reviewed by a principal who holds owner in both Apps. Every predicate the
+ * approval branch checks besides the target row's `app_id` passes.
+ */
+async function seedPendingCrossTenantRequest(commit: ApprovalCommit): Promise<void> {
+  for (const appId of [TA.appId, TB.appId]) {
+    await local.d1
+      .prepare("INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)")
+      .bind(appId, commit.reviewedBy, "owner", NOW)
+      .run();
+  }
+  await local.d1
+    .prepare(
+      `INSERT INTO approval_requests (id, app_id, operation, target_type, target_id, target_version,
+        policy_contexts, diff, status, proposed_by, proposed_via, proposed_at, idempotency_key, request_hash)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    )
+    .bind(
+      commit.requestId,
+      TA.appId,
+      "segments_update",
+      "segment",
+      TB.segmentId,
+      "1",
+      "[]",
+      "{}",
+      "pending",
+      commit.reviewedBy,
+      "api",
+      NOW,
+      commit.idempotencyKey,
+      commit.requestHash,
+    )
+    .run();
+}
+
+function crossTenantCommit(): ApprovalCommit {
+  return {
+    ...forgedApprovalCommit(),
+    requestId: "approval_cross_tenant",
+    reviewId: "review_cross_tenant",
+    reviewedBy: "user_cross_tenant",
+    idempotencyKey: "idem_cross_tenant",
+    requestHash: "hash_cross_tenant",
+    resultingResourceId: TB.segmentId,
+  };
+}

@@ -20,4 +20,5 @@ CREATE TABLE `__new_targeting_rules` (
 INSERT INTO `__new_targeting_rules`("id", "app_id", "environment_id", "flag_id", "priority", "conditions", "segment_id", "variant_id", "percentage_rollout", "created_at", "updated_at") SELECT "id", "app_id", "environment_id", "flag_id", "priority", "conditions", NULL, "variant_id", "percentage_rollout", "created_at", "updated_at" FROM `targeting_rules`;--> statement-breakpoint
 DROP TABLE `targeting_rules`;--> statement-breakpoint
 ALTER TABLE `__new_targeting_rules` RENAME TO `targeting_rules`;--> statement-breakpoint
-PRAGMA defer_foreign_keys=OFF;
+PRAGMA defer_foreign_keys=OFF;--> statement-breakpoint
+ALTER TABLE `approval_reviews` ADD `target_state` text;

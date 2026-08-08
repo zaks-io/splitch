@@ -22,12 +22,7 @@ export async function replayResult(
   requestId: string,
 ): Promise<ApprovalResult> {
   if (review.outcome === "failed") {
-    // The Review row records the cause, never what the attempt left behind in
-    // the target, so the replay cannot repeat the original claim. Asserting
-    // either "rolled back" or "applied" from a row that does not say would be
-    // the plausible wrong value ADR-0036 forbids, so the replay says `unknown`
-    // and sends the operator to the Approval Request that does know.
-    return failedReplay(row, review, "unknown", requestId);
+    return failedReplay(row, review, requestId);
   }
   if (review.outcome === "stale") {
     // A `stale` Review means one of two different things. Only the version race
@@ -62,7 +57,6 @@ function recordedRefusalReplay(review: ApprovalReviewRow, requestId: string): Ap
 function failedReplay(
   row: ApprovalRequestRow,
   review: ApprovalReviewRow,
-  targetState: ApplicationTargetState,
   requestId: string,
 ): ApprovalResult {
   return {
@@ -70,7 +64,7 @@ function failedReplay(
     response: renderError(
       {
         code: "APPROVAL_APPLICATION_FAILED",
-        message: applicationFailureMessage(targetState),
+        message: applicationFailureMessage(recordedTargetState(review.targetState)),
         details: {
           approvalRequestId: row.id,
           reviewId: review.id,
@@ -84,6 +78,21 @@ function failedReplay(
       { requestId },
     ),
   };
+}
+
+/**
+ * The target state the first attempt reported, off the Review row.
+ *
+ * Only `failed` rows reach here, so NULL is a fact about the row rather than a
+ * fallback: it was written before the column existed, no record of what the
+ * attempt left behind was kept, and `unknown` is the true answer for it.
+ * Anything else in the column is corrupt data and says so rather than picking a
+ * plausible state (ADR-0036).
+ */
+function recordedTargetState(stored: string | null): ApplicationTargetState {
+  if (stored === null) return "unknown";
+  if (stored === "rolled_back" || stored === "applied" || stored === "unknown") return stored;
+  throw new Error(`Approval Review target_state is not a known state: ${stored}`);
 }
 
 export async function staleReplay(

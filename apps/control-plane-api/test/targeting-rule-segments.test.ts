@@ -245,4 +245,33 @@ describe("Targeting Rule Segment lifecycle", () => {
 
     expect((await segmentRequest("DELETE", "segment_paid")).status).toBe(200);
   });
+
+  it("refuses deletion when an Experiment draft is the only dependent", async () => {
+    await seedSegment("segment_paid", "paid");
+    // No Targeting Rule anywhere: the draft's own Segment list is the sole
+    // reference, so the Experiment-draft term of the guard is what has to answer.
+    await h.repo.experiments.updateExperiment(
+      envScope(ids.appId, ids.environmentId),
+      ids.experimentId,
+      { draftSegmentIds: JSON.stringify(["segment_paid"]), updatedAt: NOW },
+      ids.liveRunId,
+    );
+
+    const blocked = await segmentRequest("DELETE", "segment_paid");
+
+    expect(blocked.status).toBe(409);
+    expect(await blocked.json()).toMatchObject({
+      code: "RESOURCE_NOT_EMPTY",
+      details: {
+        childType: "experiment-draft",
+        childCount: 1,
+        childCounts: { "flag-config": 0, "experiment-draft": 1 },
+        segmentDependencies: {
+          flagConfigurations: [],
+          experimentDrafts: [expect.objectContaining({ experimentId: ids.experimentId })],
+        },
+      },
+    });
+    expect(await h.repo.flags.getSegment(appScope(ids.appId), "segment_paid")).not.toBeNull();
+  });
 });

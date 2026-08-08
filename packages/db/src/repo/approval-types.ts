@@ -69,4 +69,6 @@ export interface ApprovalFailure {
   requestHash: string;
   errorCode: string;
   errorDetails: string;
+  /** What the attempt left behind in the target; see `approvalReviews.targetState`. */
+  targetState: string;
 }

@@ -84,6 +84,61 @@ describe("Approval application failure names what happened to the target", () =>
   });
 });
 
+describe("An exact-key replay repeats the recorded target state", () => {
+  it("replays an applied failure as applied", async () => {
+    const { approvalRequestId, first } = await republicationFailure();
+
+    const replay = await review(h.app, approvalRequestId, REPUBLISH_KEY);
+
+    expect(replay.status).toBe(409);
+    const body = (await replay.json()) as FailureBody;
+    expect(body.message).toBe(
+      "Approval Request application changed the target, but a later step failed",
+    );
+    expect(body.details.applicationError).toEqual(first.details.applicationError);
+  });
+
+  it("replays a row written before the column as unknown", async () => {
+    const { approvalRequestId, first } = await republicationFailure();
+    // Exactly what a Review recorded before `target_state` existed looks like.
+    await h.d1
+      .prepare("UPDATE approval_reviews SET target_state = NULL WHERE app_id = ? AND id = ?")
+      .bind(ids.appId, first.details.reviewId)
+      .run();
+
+    const replay = await review(h.app, approvalRequestId, REPUBLISH_KEY);
+
+    expect(replay.status).toBe(409);
+    const body = (await replay.json()) as FailureBody;
+    expect(body.message).toBe(
+      "Approval Request application failed and the target state is unknown; re-read the Approval Request",
+    );
+    expect(body.details.applicationError).toEqual(first.details.applicationError);
+  });
+});
+
+type FailureBody = {
+  message: string;
+  details: { reviewId: string; applicationError: { code: string; details: unknown } };
+};
+
+const REPUBLISH_KEY = "idem_review_republish";
+
+/** A `failed` Review whose recorded target state is `applied`. */
+async function republicationFailure(): Promise<{
+  approvalRequestId: string;
+  first: FailureBody;
+}> {
+  const approvalRequestId = await proposeSegmentConditions();
+  const failed = await review(
+    makeAuthedApp(h, refusingResyncWriter()),
+    approvalRequestId,
+    REPUBLISH_KEY,
+  );
+  expect(failed.status).toBe(409);
+  return { approvalRequestId, first: (await failed.json()) as FailureBody };
+}
+
 /**
  * A gated Segment Conditions change whose dependent Flag Configuration lives in
  * the `confirm` Environment, left pending Review.
