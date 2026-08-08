@@ -73,8 +73,11 @@ SCHEMA:
   variant         String               -- may be '__multiple__'
   first_exposure_ts  DateTime64(3)
   snapshot_ts     DateTime64(3)        -- when this snapshot was written; metadata only
-  watermark_ts    DateTime64(3)        -- exclusive ingest boundary captured at snapshot start
+  watermark_ts    DateTime64(3)        -- inclusive ingest boundary captured at snapshot start
 ```
+
+The inclusive boundary puts rows at `watermark_ts` in both the snapshot and tail so final serving
+dedup can collapse the overlap instead of risking a missed boundary row.
 
 This is the replace-mode Copy Pipe target. **Only deduped first-touch rows live here** — one row per
 `(app_id, environment_id, experiment_id, run_id, targeting_key_hash)` (`environment_id`,
