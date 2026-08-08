@@ -120,12 +120,19 @@ function formPostMissingOriginCheck(source: string): boolean {
 }
 
 /**
- * Cookie-value construction outside the shared serializer.
+ * Static text sweep for cookie construction outside `serializeHttpOnlyCookie`.
  *
- * Anchored name=value patterns catch inline cookie strings. They miss cookies
- * assembled from an attribute array or an interpolated name — restore the bare
- * attribute-literal sweep so `SameSite=None` / `HttpOnly` / `Max-Age=` anywhere
- * in a non-serializer module still goes red (SPL-263).
+ * What it catches: a protective attribute appearing as a contiguous literal in
+ * source (`SameSite=…`, `Max-Age=…`, `"HttpOnly"`, inline `name=value; …`
+ * strings, inline Set-Cookie header values) in any module other than the
+ * serializer. A green result means no such literal was found.
+ *
+ * What it does not catch: attributes composed at runtime from separate tokens
+ * (e.g. `attr("SameSite", "None")` → `k + "=" + v`) so no `SameSite=` substring
+ * exists in source. Writing that result through `headers.append("set-cookie", …)`
+ * bypasses the serializer and this sweep alike. A green sweep is not proof that
+ * no unprotected cookie write can exist — review any new `set-cookie` path
+ * against `serializeHttpOnlyCookie` (SPL-263).
  */
 function cookieValueConstruction(source: string): string | null {
   const inlineHeader = /(?:set-cookie|Set-Cookie)\s*["']\s*,\s*[`"'][^`"']*=/;
@@ -140,7 +147,7 @@ function cookieValueConstruction(source: string): string | null {
   const barePath = /[`"'](?:__)?[A-Za-z][\w-]*=[^`'";\n]*;\s*Path\s*=/i;
   if (barePath.test(source)) return "cookie value with Path=";
 
-  // Bare attribute literals (array-joined cookies, interpolated names, …).
+  // Contiguous attribute literals in source (not runtime-composed tokens).
   const attributeLiteral = /(?:SameSite\s*=|Max-Age\s*=|; HttpOnly\b|"HttpOnly"|'HttpOnly')/;
   if (attributeLiteral.test(source)) return "protective cookie attribute literal";
 
