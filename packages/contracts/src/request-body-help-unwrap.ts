@@ -75,10 +75,24 @@ function unwrapOne(
     return { nullable: true, inner: (schema as z.ZodNullable).unwrap() as z.ZodTypeAny };
   }
   if (type === "pipe") {
-    const pipeIn = zodDef(schema).in;
-    return pipeIn ? { inner: pipeIn as z.ZodTypeAny } : undefined;
+    return unwrapPipe(schema);
   }
   return undefined;
+}
+
+/**
+ * Zod preprocess is `transform → pipe → out`; validate-then-transform pipelines
+ * are `in → pipe → transform`. Prefer the side that still carries a describable
+ * shape (record/object/…), not the transform bag.
+ */
+function unwrapPipe(schema: z.ZodTypeAny): { inner: z.ZodTypeAny } | undefined {
+  const def = zodDef(schema);
+  const pipeIn = def.in as z.ZodTypeAny | undefined;
+  const pipeOut = def.out as z.ZodTypeAny | undefined;
+  if (pipeIn && zodDefType(pipeIn) === "transform" && pipeOut) {
+    return { inner: pipeOut };
+  }
+  return pipeIn ? { inner: pipeIn } : undefined;
 }
 
 export function zodDefType(schema: z.ZodTypeAny): string | undefined {

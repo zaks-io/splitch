@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { DraftAllocationSchema } from "./draft-allocation";
 import { EnvironmentPolicySchema } from "./leaf-schemas-runtime";
+import { EvaluateAllRequestSchema } from "./leaves/evaluate-all-wire";
 import { describeRequestBody, requestBodySchemaForOperation } from "./request-body-help";
 import {
   CreateExperimentRequestSchema,
@@ -170,6 +171,19 @@ describe("describeRequestBody", () => {
   it("fails loud for unsupported Zod field types instead of printing raw def names", () => {
     const schema = z.object({ weird: z.custom<() => void>(() => true) });
     expect(() => describeRequestBody(schema)).toThrow(/unsupported Zod type/);
+  });
+
+  it("unwraps preprocess→record attributes (proto-safe) to a Record label", () => {
+    const help = describeRequestBody(EvaluateAllRequestSchema);
+    const attributes = help.fields.find((field) => field.name === "attributes");
+    expect(attributes).toEqual(
+      expect.objectContaining({
+        name: "attributes",
+        required: false,
+        typeLabel: "Record<string, boolean | string | number | unknown[]>",
+        defaultValue: {},
+      }),
+    );
   });
 
   it("fails loud when object type expansion exceeds depth", () => {
