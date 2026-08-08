@@ -114,30 +114,28 @@ export function assertCliMcpParity({
 }
 
 /**
- * Equal operation IDs are not equal surfaces: an agent that passes a tool-schema
- * check and is then rejected by the Worker is the failure ADR-0023 exists to
- * prevent. Both skins must publish the JSON Schema derived from the one route
- * contract, so a hand-written tool definition or a skin-local schema override
- * fails here.
+ * MCP must publish the JSON Schema derived from the route contracts. Comparing
+ * the canonical derivation with the registered tools catches a hand-written MCP
+ * definition or wrapper override; CLI validation is not exercised here.
  */
-export function assertCliMcpSchemaParity({ cliSchemas, mcpSchemas }) {
-  const cliOperations = [...cliSchemas.keys()].sort();
-  const mcpOperations = [...mcpSchemas.keys()].sort();
-  if (cliOperations.join(",") !== mcpOperations.join(",")) {
+export function assertDerivedMcpSchemaParity({ derivedSchemas, publishedSchemas }) {
+  const derivedOperations = [...derivedSchemas.keys()].sort();
+  const publishedOperations = [...publishedSchemas.keys()].sort();
+  if (derivedOperations.join(",") !== publishedOperations.join(",")) {
     throw new Error(
-      `cli-mcp-parity: schema coverage differs. CLI: ${cliOperations.join(", ")}; MCP: ${mcpOperations.join(", ")}`,
+      `cli-mcp-parity: schema coverage differs. Derived: ${derivedOperations.join(", ")}; published MCP: ${publishedOperations.join(", ")}`,
     );
   }
-  for (const operationId of cliOperations) {
+  for (const operationId of derivedOperations) {
     for (const kind of ["input", "output"]) {
-      const cli = JSON.stringify(cliSchemas.get(operationId)[kind]);
-      const mcp = JSON.stringify(mcpSchemas.get(operationId)[kind]);
-      if (cli !== mcp) {
+      const derived = JSON.stringify(derivedSchemas.get(operationId)[kind]);
+      const published = JSON.stringify(publishedSchemas.get(operationId)[kind]);
+      if (derived !== published) {
         throw new Error(
-          `cli-mcp-parity: ${operationId} ${kind} schema differs between surfaces\n  CLI: ${cli}\n  MCP: ${mcp}`,
+          `cli-mcp-parity: ${operationId} ${kind} schema differs from the published MCP tool\n  Derived: ${derived}\n  Published MCP: ${published}`,
         );
       }
     }
   }
-  return cliOperations.length;
+  return derivedOperations.length;
 }

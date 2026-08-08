@@ -72,7 +72,7 @@ const scenarios: readonly Scenario[] = [
     expected: { status: 404, code: "EXPERIMENT_NOT_FOUND" },
   },
   {
-    name: "out-of-scope Environment is refused at the Control Plane pre-hop gate",
+    name: "a canned out-of-scope Environment refusal is wired identically through both skins",
     experimentId: "exp_draft",
     environmentId: "env_other_app",
     reply: {
@@ -111,8 +111,8 @@ export async function assertSharedOperationParity(): Promise<number> {
 
 /**
  * One Control Plane for both skins. Only the results call is recorded: the CLI
- * resolves its App and Environment selectors first, and that client-side lookup
- * is not an authorization check — the pre-hop gate this compares lives here.
+ * resolves its App and Environment selectors first. This fake proves both skins
+ * publish the same canned Control Plane response; it is not an isolation test.
  */
 function controlPlaneFetch(scenario: Scenario, seen: OperationCall[]): typeof fetch {
   const path = `/apps/${APP_ID}/envs/${scenario.environmentId}/experiments/${scenario.experimentId}/results`;

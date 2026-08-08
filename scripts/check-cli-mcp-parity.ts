@@ -17,7 +17,7 @@ import {
 } from "../packages/contracts/src/index.js";
 import {
   assertCliMcpParity,
-  assertCliMcpSchemaParity,
+  assertDerivedMcpSchemaParity,
   assertPublicAgentSurface,
 } from "./lib/cli-mcp-parity.mjs";
 import { assertSharedOperationParity } from "./lib/cli-mcp-shared-operation.js";
@@ -161,18 +161,18 @@ assertPublicAgentSurface({
 // JSON Schema of those same schemas in tools/list. Comparing the canonical
 // derivation against what the tool registry actually ships catches an MCP-side
 // override or wrapper that would let the two skins accept different input.
-const cliSchemas = new Map(
+const derivedSchemas = new Map(
   deriveMcpProtocolTools()
     .filter((tool) => mcpOperationIds.includes(tool.name))
     .map((tool) => [tool.name, { input: tool.inputSchema, output: tool.outputSchema }]),
 );
-const mcpSchemas = new Map(
+const publishedSchemas = new Map(
   MCP_TOOL_DEFINITIONS.filter((tool) => mcpOperationIds.includes(tool.name)).map((tool) => [
     tool.name,
     { input: tool.inputSchema, output: tool.outputSchema },
   ]),
 );
-const sharedSchemas = assertCliMcpSchemaParity({ cliSchemas, mcpSchemas });
+const sharedSchemas = assertDerivedMcpSchemaParity({ derivedSchemas, publishedSchemas });
 
 const sharedOperations = await assertSharedOperationParity();
 

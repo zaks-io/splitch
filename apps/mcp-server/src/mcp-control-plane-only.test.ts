@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getRoute } from "@splitch/contracts";
+import { parseConfigFileTextToJson } from "typescript";
 import { describe, expect, it } from "vitest";
 import { controlPlaneSdkForRoute, handleMcpServerRequest } from "./mcp-handler";
 import type { OperationSdk } from "./mcp-operation-sdks";
@@ -19,6 +23,7 @@ import {
 
 const SOURCE_ROOT = new URL("./", import.meta.url);
 const WRANGLER_CONFIG = new URL("../wrangler.jsonc", import.meta.url);
+const wranglerConfig = readWranglerConfig();
 
 const organizationUsage = {
   organizationId: "org_local",
@@ -79,16 +84,29 @@ describe("MCP has only the Control Plane downstream", () => {
     expect(controlPlaneSdkForRoute(() => sdk, controlPlaneAddressed)).toBe(sdk);
   });
 
-  it("declares no Analysis or Evaluation service binding in any environment", async () => {
-    const config = await readFile(WRANGLER_CONFIG, "utf8");
-    const bindings = [...config.matchAll(/"binding": "(\w+)",\s*"service": "([\w-]+)"/g)].map(
-      (match) => ({ binding: match[1], service: match[2] }),
-    );
+  it("declares exactly one Control Plane entrypoint binding in every environment", () => {
+    expect(Object.keys(wranglerConfig.env ?? {}).sort()).toEqual(["production", "shared-preview"]);
 
-    expect(bindings.length).toBeGreaterThan(0);
-    for (const { binding, service } of bindings) {
-      expect(binding).toBe("CONTROL_PLANE_API");
-      expect(service).toMatch(/^splitch-control-plane-api(-[\w-]+)?$/);
+    const targets = [
+      ["local", wranglerConfig, "splitch-control-plane-api"],
+      [
+        "shared-preview",
+        wranglerConfig.env?.["shared-preview"],
+        "splitch-control-plane-api-shared-preview",
+      ],
+      ["production", wranglerConfig.env?.production, "splitch-control-plane-api"],
+    ] as const;
+    expect(targets).toHaveLength(3);
+
+    for (const [name, target, service] of targets) {
+      expect(target, `${name} environment is missing`).toBeDefined();
+      expect(target?.services, `${name} service binding set`).toEqual([
+        {
+          binding: "CONTROL_PLANE_API",
+          service,
+          entrypoint: "McpEntrypoint",
+        },
+      ]);
     }
   });
 
@@ -112,14 +130,43 @@ describe("MCP has only the Control Plane downstream", () => {
 
 /** Every non-test module under the MCP source root: apps/mcp-server/src. */
 async function readSources(): Promise<Map<string, string>> {
-  const names = (await readdir(SOURCE_ROOT)).filter(
-    (name) => name.endsWith(".ts") && !name.endsWith(".test.ts"),
-  );
+  const root = fileURLToPath(SOURCE_ROOT);
   const sources = new Map<string, string>();
-  for (const name of names) {
-    sources.set(name, await readFile(new URL(name, SOURCE_ROOT), "utf8"));
+
+  async function visit(directory: string): Promise<void> {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(path);
+      } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+        sources.set(relative(root, path), await readFile(path, "utf8"));
+      }
+    }
   }
+
+  await visit(root);
   return sources;
+}
+
+interface WranglerConfig extends WranglerTarget {
+  env?: Record<string, WranglerTarget | undefined>;
+}
+
+interface WranglerTarget {
+  services?: ServiceBinding[];
+}
+
+interface ServiceBinding {
+  binding: string;
+  service: string;
+  entrypoint: string;
+}
+
+function readWranglerConfig(): WranglerConfig {
+  const path = fileURLToPath(WRANGLER_CONFIG);
+  const parsed = parseConfigFileTextToJson(path, readFileSync(path, "utf8"));
+  if (parsed.error) throw new Error(String(parsed.error.messageText));
+  return parsed.config as WranglerConfig;
 }
 
 /** A comment can explain the removed owner dispatch; only code may not do it. */

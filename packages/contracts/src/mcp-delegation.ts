@@ -28,6 +28,12 @@ export interface McpDelegationReplayGuard {
   claim(jti: string, expiresAt: number, nowSeconds: number): Promise<boolean>;
 }
 
+export type McpDelegationFreshnessFailure =
+  | "issued_at_too_new"
+  | "issued_at_too_old"
+  | "expired"
+  | "ttl_too_long";
+
 interface McpDelegationCredential {
   version: typeof VERSION;
   issuer: "splitch-mcp-server";
@@ -116,24 +122,30 @@ export async function parseMcpDelegation(options: {
     credential.method !== options.request.method ||
     credential.target !== requestTarget(options.request) ||
     credential.bodySha256 !== (await requestBodySha256(options.request)) ||
-    credential.issuedAt > nowSeconds + MAX_CLOCK_SKEW_SECONDS ||
-    credential.expiresAt <= nowSeconds ||
-    credential.expiresAt > credential.issuedAt + MAX_TTL_SECONDS ||
-    credential.issuedAt < nowSeconds - MAX_TTL_SECONDS
+    mcpDelegationFreshnessFailure(credential.issuedAt, credential.expiresAt, nowSeconds) !== null
   ) {
     return null;
   }
   if (!(await options.replayGuard.claim(credential.jti, credential.expiresAt, nowSeconds))) {
     return null;
   }
-  // Fail CLOSED on an unrecognized door: an old or tampered credential reads as
-  // provisional (least privilege), never as identified.
-  const authDoor = AuthDoorSchema.safeParse(credential.authDoor);
   return {
     subject: credential.subject,
     scopes: credential.scopes,
-    authDoor: authDoor.success ? authDoor.data : "anonymous",
+    authDoor: credential.authDoor,
   };
+}
+
+export function mcpDelegationFreshnessFailure(
+  issuedAt: number,
+  expiresAt: number,
+  nowSeconds: number,
+): McpDelegationFreshnessFailure | null {
+  if (issuedAt > nowSeconds + MAX_CLOCK_SKEW_SECONDS) return "issued_at_too_new";
+  if (issuedAt < nowSeconds - MAX_TTL_SECONDS) return "issued_at_too_old";
+  if (expiresAt <= nowSeconds) return "expired";
+  if (expiresAt > issuedAt + MAX_TTL_SECONDS) return "ttl_too_long";
+  return null;
 }
 
 /**
@@ -195,6 +207,7 @@ function decodeCredential(encoded: string): McpDelegationCredential | null {
       !value.scopes.every(
         (scope) => typeof scope === "string" && scope.length > 0 && scope.length <= 512,
       ) ||
+      !AuthDoorSchema.safeParse(value.authDoor).success ||
       typeof value.method !== "string" ||
       typeof value.target !== "string" ||
       typeof value.bodySha256 !== "string" ||
