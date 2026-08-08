@@ -57,7 +57,7 @@ describe("resolveAnalysisControlIntegrity", () => {
     });
   });
 
-  it("preserves an unresolvable frozen Control instead of inventing an identity to compare", () => {
+  it("adds the Analysis Control to an unresolvable frozen Control", () => {
     const unresolvable = {
       state: "unresolvable" as const,
       variantId: "variant_missing",
@@ -65,7 +65,23 @@ describe("resolveAnalysisControlIntegrity", () => {
       frozenVariantNames: ["control", "treatment"],
     };
 
-    expect(resolveAnalysisControlIntegrity(unresolvable, "control")).toEqual(unresolvable);
+    expect(resolveAnalysisControlIntegrity(unresolvable, "control")).toEqual({
+      ...unresolvable,
+      analysisVariant: "control",
+    });
+  });
+
+  it("fails loudly when the Analysis Control name is missing", () => {
+    const unresolvable = {
+      state: "unresolvable" as const,
+      variantId: "variant_missing",
+      reason: "absent_from_frozen_variant_set" as const,
+      frozenVariantNames: ["control", "treatment"],
+    };
+
+    expect(() => resolveAnalysisControlIntegrity(unresolvable, "")).toThrow(
+      "Analysis Control name is missing from resolveAnalysisControlIntegrity input",
+    );
   });
 });
 
@@ -82,6 +98,7 @@ describe("control_identity gate check", () => {
       variantId: "variant_from_a_later_edit",
       reason: "absent_from_frozen_variant_set",
       frozenVariantNames: ["control", "treatment"],
+      analysisVariant: "control",
     });
     expect(gate.shipAllowed).toBe(false);
     expect(gate.blockedBy).toContain("control_identity");
@@ -115,6 +132,7 @@ describe("control_identity gate check", () => {
       variantId: "variant_gone",
       reason: "unreadable_frozen_variant_set",
       frozenVariantNames: [],
+      analysisVariant: "control",
     });
     expect(gate.checks.map((entry) => entry.id)).toEqual([
       "control_identity",

@@ -21,6 +21,7 @@ const unresolvable: FrozenControlIdentity = {
   variantId: "variant_from_a_later_edit",
   reason: "absent_from_frozen_variant_set",
   frozenVariantNames: ["control", "treatment"],
+  analysisVariant: "control",
 };
 
 const disagreement: FrozenControlIdentity = {
@@ -58,6 +59,10 @@ describe("ExperimentResults with an unidentifiable Control", () => {
     expect(html).toContain("<svg");
     expect(html).toContain('data-testid="ship-blocked"');
     expect(html).toContain("The numbers below are still shown");
+    expect(html).toContain(
+      'Every lift below is measured against <code class="font-mono text-foreground text-xs">control</code>, the Analysis Control.',
+    );
+    expect(html).not.toContain("What cannot be shown is which arm they are measured against.");
     expect(html).toContain(
       "No arm below is marked as the baseline, and the ship decision is blocked. Start a new Run to get a Control that is frozen and validated.",
     );
