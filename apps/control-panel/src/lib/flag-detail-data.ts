@@ -28,24 +28,20 @@ export type FlagDetailData = {
 };
 
 /**
- * No Flag with this key was reachable.
+ * No Flag with this key exists in this App.
  *
- * `catalogTruncated` is the difference between "no such Flag" and "we did not
- * look at every Flag". The key is resolved against a BOUNDED catalog read, so
- * when that read hit its ceiling an absent key does not prove absence — and a
- * screen that says "Flag not found" on that evidence is asserting something it
- * did not establish (ADR-0036).
+ * Absence is proven by the Control Plane's keyed `flags_get` (id or key), not by
+ * scanning a bounded catalog page — so a miss is a true miss, including when the
+ * App's catalog is larger than `FLAG_LIST_READ_LIMIT`.
  */
-export type FlagDetailNotFound = { code: "FLAG_NOT_FOUND"; catalogTruncated: boolean };
+export type FlagDetailNotFound = { code: "FLAG_NOT_FOUND" };
 
 /**
  * Resolve a Flag by its URL `key` and read its Configuration for one Environment.
  *
- * The key is the addressable identity (immutable after create), so the list read
- * that resolves key -> id is also the read that supplies the App-level definition
- * — no extra round trip to have both. That list read is BOUNDED, so a key it did
- * not contain is only proof of absence when the read was not truncated; the
- * not-found outcome carries which of the two it is.
+ * The key is the addressable identity (immutable after create). `flags_get`
+ * accepts that key directly, so the definition read does not depend on whether
+ * the Flag still fits inside the bounded catalog list page.
  *
  * A missing Configuration is a real state, not an error: a Flag created through
  * the guided flow has a definition in every Environment before anyone narrows its
@@ -53,22 +49,19 @@ export type FlagDetailNotFound = { code: "FLAG_NOT_FOUND"; catalogTruncated: boo
  * that and is reported as `configuration: null`; any other failure propagates.
  */
 export async function readFlagDetail(
-  flags: Pick<FlagsClient, "list" | "getConfig">,
+  flags: Pick<FlagsClient, "get" | "getConfig">,
   scope: { appId: string; environmentId: string },
   flagKey: string,
 ): Promise<ControlPlaneOperationResult<FlagDetailData | FlagDetailNotFound>> {
-  const listed = await flags.list({ appId: scope.appId });
-  if (!listed.ok) return listed;
-
-  const definition = listed.data.items.find((flag) => flag.key === flagKey);
-  if (!definition) {
-    return {
-      ok: true,
-      status: 200,
-      data: { code: "FLAG_NOT_FOUND", catalogTruncated: listed.data.readTruncated },
-    };
+  const fetched = await flags.get({ appId: scope.appId, flagId: flagKey });
+  if (!fetched.ok) {
+    if (fetched.error.code === "FLAG_NOT_FOUND") {
+      return { ok: true, status: 200, data: { code: "FLAG_NOT_FOUND" } };
+    }
+    return fetched;
   }
 
+  const definition = fetched.data;
   const configuration = await flags.getConfig({ ...scope, flagId: definition.id });
   if (!configuration.ok && configuration.error.code !== "FLAG_NOT_FOUND") {
     return configuration;

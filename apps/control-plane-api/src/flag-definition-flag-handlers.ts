@@ -106,10 +106,31 @@ export async function getFlag(
   { input, requestId }: HandlerArgs<unknown>,
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
-  const flagId = pathParam(input, "flagId");
-  const flag = await deps.repo.flags.getFlag(appScope(appId), flagId);
+  // Path param is named flagId, but the Panel addresses Flags by immutable key
+  // and the catalog list is bounded — so this read accepts either the canonical
+  // id or the key. Id wins when both match distinct rows (param name).
+  const flag = await resolveFlagSelector(deps, appId, pathParam(input, "flagId"));
   if (!flag) return flagNotFound(requestId);
   return Response.json(await flagResponse(deps.repo, appId, flag));
+}
+
+/**
+ * Resolve a Flag inside one App by canonical id or by key.
+ *
+ * Keyed on `(app_id, id)` / `(app_id, key)`, so a selector that only exists in
+ * another App is absent here — the App scope is the isolation boundary
+ * (ADR-0018), not a post-filter.
+ */
+async function resolveFlagSelector(
+  deps: FlagDefinitionDeps,
+  appId: string,
+  selector: string,
+): Promise<LoadedFlag["flag"] | null> {
+  const scope = appScope(appId);
+  return (
+    (await deps.repo.flags.getFlag(scope, selector)) ??
+    (await deps.repo.flags.getFlagByKey(scope, selector))
+  );
 }
 
 export async function updateFlag(

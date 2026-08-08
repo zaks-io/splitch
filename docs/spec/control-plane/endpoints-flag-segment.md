@@ -49,6 +49,11 @@ Invariant: exactly one Variant is the Default Variant; every Variant `value` sat
 
 Returns: full Flag definition (catalog Variants + schema). No per-Environment config.
 
+`{flag_id}` accepts the Flag's canonical id **or** its immutable key within the
+App. The catalog list is bounded; key lookup is the exact path that keeps a Flag
+reachable when it is past that ceiling. A key that only exists in another App is
+`FLAG_NOT_FOUND` under this App (the App scope is the isolation boundary).
+
 ### `PATCH /apps/{app_id}/flags/{flag_id}`
 
 Body: `{ name?, description?, schema? }`. Does NOT accept `variants` or `enabled`.
