@@ -53,10 +53,9 @@ export type EvaluateAllEntry = z.infer<typeof EvaluateAllEntrySchema>;
 
 /**
  * Proto-safe evaluations map. Zod's `z.record` would otherwise silently drop a
- * JSON own `"__proto__"` Flag Key; the SDK contract-surface pack currently uses
- * this same schema and therefore rejects that key too. Built as `record` +
- * refine so the served OpenAPI document keeps the real additionalProperties
- * shape (not `{}`).
+ * JSON own `"__proto__"` Flag Key. Both this contract and the SDK's compiled,
+ * zod-free response parser refuse that key. Built as `record` + refine so the
+ * served OpenAPI document keeps the real additionalProperties shape (not `{}`).
  */
 export const EvaluateAllEvaluationsSchema = protoSafeRecord(
   EvaluateAllEntrySchema,
