@@ -14,6 +14,8 @@ export type ResolvedUpdateSite = {
 export type FacadeAnchor = {
   checker: ts.TypeChecker;
   facadeType: ts.Type;
+  /** Apparent type of the canonical facade's `update` member. */
+  updateMethodType: ts.Type;
   flagConfigs: ts.Symbol;
   relFile: (source: ts.SourceFile) => string;
 };
@@ -44,8 +46,13 @@ function typesMatch(checker: ts.TypeChecker, a: ts.Type, b: ts.Type): boolean {
   return checker.isTypeAssignableTo(a, b) && checker.isTypeAssignableTo(b, a);
 }
 
+/**
+ * True when `type` is (or extends) the flag_configs scoped facade.
+ * One-directional: a wrapper `ScopedTable<typeof flagConfigs> & { … }` must
+ * still count as a flag_configs writer.
+ */
 function isFlagConfigsFacadeType(anchor: FacadeAnchor, type: ts.Type): boolean {
-  return typesMatch(anchor.checker, unwrapType(anchor.checker, type), anchor.facadeType);
+  return anchor.checker.isTypeAssignableTo(unwrapType(anchor.checker, type), anchor.facadeType);
 }
 
 function objectLiteralText(node: ts.Expression, source: ts.SourceFile, where: string): string {
@@ -80,10 +87,11 @@ function isUpdateName(
   );
 }
 
-function receiverOfUpdateAccess(
-  expr: ts.Expression,
-): { receiver: ts.Expression; viaCallApply: boolean } | undefined {
-  if (isUpdateName(expr)) return { receiver: expr.expression, viaCallApply: false };
+/**
+ * `.update.call` / `.update.apply` only — normal `.update(...)` and detached
+ * method refs are selected by callee-type identity against `updateMethodType`.
+ */
+function callApplyUpdateReceiver(expr: ts.Expression): { receiver: ts.Expression } | undefined {
   if (
     !(ts.isPropertyAccessExpression(expr) || ts.isPropertyAccessChain(expr)) ||
     (expr.name.text !== "call" && expr.name.text !== "apply")
@@ -91,7 +99,7 @@ function receiverOfUpdateAccess(
     return undefined;
   }
   if (!isUpdateName(expr.expression)) return undefined;
-  return { receiver: expr.expression.expression, viaCallApply: true };
+  return { receiver: expr.expression.expression };
 }
 
 function scopedFromValues(
@@ -109,38 +117,12 @@ function scopedFromValues(
   };
 }
 
-function tryMethodRefSite(
-  anchor: FacadeAnchor,
-  call: ts.CallExpression,
-  source: ts.SourceFile,
-): ResolvedUpdateSite | undefined {
-  const sym = anchor.checker.getSymbolAtLocation(call.expression);
-  if (!sym) return undefined;
-  const resolved = resolveAlias(anchor.checker, sym);
-  for (const decl of resolved.getDeclarations() ?? []) {
-    const receiver = methodRefReceiver(decl);
-    if (!receiver) continue;
-    const recvType = anchor.checker.getTypeAtLocation(receiver);
-    if (!isFlagConfigsFacadeType(anchor, recvType)) continue;
-    const where = `${anchor.relFile(source)}:${lineOf(source, call)}`;
-    const site = scopedFromValues(source, call.arguments[1], where);
-    site.file = anchor.relFile(source);
-    return site;
-  }
-  return undefined;
-}
-
-function methodRefReceiver(decl: ts.Declaration): ts.Expression | undefined {
-  if (ts.isVariableDeclaration(decl) && decl.initializer) {
-    return receiverOfUpdateAccess(decl.initializer)?.receiver;
-  }
-  if (!ts.isBindingElement(decl)) return undefined;
-  const name = decl.propertyName ?? decl.name;
-  const key = ts.isIdentifier(name) ? name.text : undefined;
-  if (key !== "update") return undefined;
-  const variable = decl.parent?.parent;
-  if (!variable || !ts.isVariableDeclaration(variable) || !variable.initializer) return undefined;
-  return variable.initializer;
+function calleeIsFacadeUpdate(anchor: FacadeAnchor, call: ts.CallExpression): boolean {
+  const calleeType = unwrapType(
+    anchor.checker,
+    anchor.checker.getApparentType(anchor.checker.getTypeAtLocation(call.expression)),
+  );
+  return typesMatch(anchor.checker, calleeType, anchor.updateMethodType);
 }
 
 export function tryScopedSite(
@@ -148,17 +130,24 @@ export function tryScopedSite(
   call: ts.CallExpression,
   source: ts.SourceFile,
 ): ResolvedUpdateSite | undefined {
-  const access = receiverOfUpdateAccess(call.expression);
-  if (access) {
-    const recvType = anchor.checker.getTypeAtLocation(access.receiver);
+  const callApply = callApplyUpdateReceiver(call.expression);
+  if (callApply) {
+    const recvType = anchor.checker.getTypeAtLocation(callApply.receiver);
     if (!isFlagConfigsFacadeType(anchor, recvType)) return undefined;
     const where = `${anchor.relFile(source)}:${lineOf(source, call)}`;
-    const values = call.arguments[access.viaCallApply ? 2 : 1];
-    const site = scopedFromValues(source, values, where);
+    const site = scopedFromValues(source, call.arguments[2], where);
     site.file = anchor.relFile(source);
     return site;
   }
-  return tryMethodRefSite(anchor, call, source);
+
+  // Type-driven detached-method rule: any CallExpression whose callee's
+  // apparent type matches the canonical facade's `update` member — parameter
+  // destructure, multi-hop alias, callback parameter, direct `.update(...)`.
+  if (!calleeIsFacadeUpdate(anchor, call)) return undefined;
+  const where = `${anchor.relFile(source)}:${lineOf(source, call)}`;
+  const site = scopedFromValues(source, call.arguments[1], where);
+  site.file = anchor.relFile(source);
+  return site;
 }
 
 function tableArgSymbol(anchor: FacadeAnchor, tableArg: ts.Expression): ts.Symbol | undefined {

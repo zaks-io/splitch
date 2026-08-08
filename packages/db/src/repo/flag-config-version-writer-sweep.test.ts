@@ -3,7 +3,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { bumpWins, isBumpExpr } from "./flag-config-version-writer-sweep-lib";
 import {
-  resolveFlagConfigUpdateSites,
+  FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT,
+  resolveFlagConfigUpdates,
   type ResolvedUpdateSite,
 } from "./flag-config-version-writer-sweep-resolve";
 
@@ -16,11 +17,13 @@ import {
  * passes review, and silently disables the CAS for every path that races it.
  *
  * Writer set is derived by the TypeScript type checker from
- * `packages/db/tsconfig.json` (asserted below): every `CallExpression` whose
- * receiver/argument resolves — by symbol identity — to the `flag_configs`
- * scoped-table facade or table. Aliases, parameters, type aliases, generics,
- * optional chaining, `.call`/`.apply`, and cross-module type-only imports are
- * the same type to the checker, so they do not need per-spelling regexes.
+ * `packages/db/tsconfig.json` (scan root asserted against the resolver below):
+ * every `CallExpression` whose receiver/argument resolves — by symbol/type
+ * identity — to the `flag_configs` scoped-table facade or table, including
+ * detached `update` callees whose apparent type matches the facade's `update`
+ * member (parameter destructure, multi-hop alias, callback). `.call`/`.apply`
+ * still go through the receiver path. Direct `.update(...)` on a typed facade
+ * receiver is the same rule as a detached ref — one callee-type match.
  *
  * The narrowed `repo.flags.flagConfigs` export (findMany/findOne/insert only)
  * makes a facade bypass a compile error in typechecked source and a TypeError
@@ -41,8 +44,7 @@ import {
 /** Repo-relative path of the production sources the checker program covers. */
 const SCAN_ROOT = "packages/db/src";
 
-const SRC = fileURLToPath(new URL("../", import.meta.url));
-const REPO_ROOT = resolve(SRC, "../../..");
+const REPO_ROOT = resolve(fileURLToPath(new URL("../../../..", import.meta.url)));
 
 /**
  * Exact writer set the checker must resolve. Empty, shrunken, or grown-but-
@@ -57,25 +59,40 @@ const KNOWN_WRITER_SITES = [
   "repo/flag-variant-approval.ts:56",
 ] as const;
 
+const KNOWN_WRITER_FILES = ["repo/flag-config-ops.ts", "repo/flag-variant-approval.ts"] as const;
+
 function siteKey(site: ResolvedUpdateSite): string {
   return `${site.file}:${site.line}`;
 }
 
 describe("every flag_configs UPDATE bumps version", () => {
   it("states a scan root that the production tsconfig actually covers", () => {
-    expect(SCAN_ROOT).toBe("packages/db/src");
-    expect(relative(REPO_ROOT, SRC).replaceAll("\\", "/")).toBe(SCAN_ROOT);
+    const { scanRoot, scannedFiles } = resolveFlagConfigUpdates();
+    expect(scanRoot).toBe(SCAN_ROOT);
+    expect(relative(REPO_ROOT, FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT).replaceAll("\\", "/")).toBe(
+      SCAN_ROOT,
+    );
+    // Anti-narrowing: both known writer modules must be among the files the
+    // resolver walked. Shrinking the loop to a single ops file leaves this red
+    // even when site-set equality would also fail.
+    for (const file of KNOWN_WRITER_FILES) {
+      expect(scannedFiles, `resolver must walk ${file}`).toContain(file);
+    }
+    expect(scannedFiles.length).toBeGreaterThan(KNOWN_WRITER_FILES.length);
   });
 
   it("resolves exactly the known writer sites and each bump wins", () => {
-    const sites = resolveFlagConfigUpdateSites();
-    expect(sites.map(siteKey).sort()).toEqual([...KNOWN_WRITER_SITES].sort());
+    const { sites } = resolveFlagConfigUpdates();
 
+    // Violators first: a dropped bump that only shifts the site line must not
+    // be reportable as a KNOWN_WRITER_SITES edit that greens the suite.
     const violators = sites.filter((site) => !bumpWins(site));
     expect(
       violators.map((s) => `${SCAN_ROOT}/${siteKey(s)} (${s.kind})`),
       "flag_configs UPDATE without a winning version bump",
     ).toEqual([]);
+
+    expect(sites.map(siteKey).sort()).toEqual([...KNOWN_WRITER_SITES].sort());
   });
 
   it("accepts any identifier.version + 1 and rejects spread-source / pinnable RHS", () => {
