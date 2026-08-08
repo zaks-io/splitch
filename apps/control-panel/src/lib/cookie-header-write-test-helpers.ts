@@ -7,9 +7,12 @@ import {
   isIdentifier,
   isImportDeclaration,
   isNamedImports,
+  isNewExpression,
   isNoSubstitutionTemplateLiteral,
+  isObjectLiteralExpression,
   isPropertyAccessExpression,
   isPropertyAssignment,
+  isSpreadElement,
   isStringLiteral,
   isTypeAssertionExpression,
   type Node,
@@ -77,10 +80,10 @@ export function createCookieHeaderWriteDiscovery(
         );
         if (callWrite) writes.push(callWrite);
 
-        const propertyWrite = propertyHeaderWrite(node, sourceFile);
+        const propertyWrite = propertyHeaderWrite(node, sourceFile, displayName);
         if (propertyWrite) writes.push(propertyWrite);
 
-        const entryWrite = entryHeaderWrite(node, sourceFile);
+        const entryWrite = entryHeaderWrite(node, sourceFile, displayName);
         if (entryWrite) writes.push(entryWrite);
       });
       return writes;
@@ -166,7 +169,14 @@ function isHeadersReceiver(
       `${fileName}: ${method}() receiver type is not statically resolvable: ${receiver.getText(sourceFile)}`,
     );
   }
-  return checker.isTypeAssignableTo(receiverType, headersType);
+  return receiverType.isUnion()
+    ? receiverType.types.some((member) => isHeadersType(member, checker, headersType))
+    : isHeadersType(receiverType, checker, headersType);
+}
+
+function isHeadersType(type: Type, checker: TypeChecker, headersType: Type): boolean {
+  if (type.flags & (TypeFlags.Undefined | TypeFlags.Null)) return false;
+  return checker.isTypeAssignableTo(type, headersType);
 }
 
 function globalHeadersType(checker: TypeChecker): Type {
@@ -175,19 +185,78 @@ function globalHeadersType(checker: TypeChecker): Type {
   return checker.getDeclaredTypeOfSymbol(symbol);
 }
 
-function propertyHeaderWrite(node: Node, sourceFile: SourceFile): SetCookieHeaderWrite | null {
+function propertyHeaderWrite(
+  node: Node,
+  sourceFile: SourceFile,
+  fileName: string,
+): SetCookieHeaderWrite | null {
   if (!isPropertyAssignment(node)) return null;
   const name = staticPropertyName(node.name);
-  if (name?.toLowerCase() !== "set-cookie") return null;
+  if (name === null) {
+    if (!isHeaderRecord(node.parent)) return null;
+    throw new Error(
+      `${fileName}: header property name is not statically resolvable: ${node.getText(sourceFile)}`,
+    );
+  }
+  if (name.toLowerCase() !== "set-cookie") return null;
   return { argument: node.initializer.getText(sourceFile), method: "property" };
 }
 
-function entryHeaderWrite(node: Node, sourceFile: SourceFile): SetCookieHeaderWrite | null {
+function entryHeaderWrite(
+  node: Node,
+  sourceFile: SourceFile,
+  fileName: string,
+): SetCookieHeaderWrite | null {
   if (!isArrayLiteralExpression(node)) return null;
+  if (isHeaderEntryContainer(node)) {
+    const unresolved = node.elements.find(
+      (element) => isSpreadElement(element) || !isArrayLiteralExpression(element),
+    );
+    if (unresolved) {
+      throw new Error(
+        `${fileName}: header entry source is not statically resolvable: ${unresolved.getText(sourceFile)}`,
+      );
+    }
+    return null;
+  }
+  if (!isArrayLiteralExpression(node.parent) || !isHeaderEntryContainer(node.parent)) return null;
   const [headerName, value] = node.elements;
   const name = headerName ? staticString(headerName) : null;
-  if (name?.toLowerCase() !== "set-cookie") return null;
+  if (name === null) {
+    throw new Error(
+      `${fileName}: header entry name is not statically resolvable: ${node.getText(sourceFile)}`,
+    );
+  }
+  if (name.toLowerCase() !== "set-cookie") return null;
   return { argument: value?.getText(sourceFile) ?? "<missing>", method: "entry" };
+}
+
+function isHeaderRecord(node: Node): boolean {
+  if (!isObjectLiteralExpression(node)) return false;
+  const parent = node.parent;
+  if (isPropertyAssignment(parent) && parent.initializer === node) {
+    return staticPropertyName(parent.name)?.toLowerCase() === "headers";
+  }
+  return isHeadersConstructorArgument(node);
+}
+
+function isHeaderEntryContainer(node: Node): boolean {
+  if (!isArrayLiteralExpression(node)) return false;
+  const parent = node.parent;
+  if (isPropertyAssignment(parent) && parent.initializer === node) {
+    return staticPropertyName(parent.name)?.toLowerCase() === "headers";
+  }
+  return isHeadersConstructorArgument(node);
+}
+
+function isHeadersConstructorArgument(node: Node): boolean {
+  const parent = node.parent;
+  return (
+    isNewExpression(parent) &&
+    parent.arguments?.[0] === node &&
+    isIdentifier(parent.expression) &&
+    parent.expression.text === "Headers"
+  );
 }
 
 function assertCookieBrandProvenance(

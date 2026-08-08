@@ -49,6 +49,59 @@ export function writeCookie(jar: Headers, raw: string): void {
     expect(discover(source)).toEqual([{ argument: "raw", method: "append" }]);
   });
 
+  it.each(["jar", "headers"])("finds an optional Headers receiver named %s", (receiverName) => {
+    const source = `
+export function writeCookie(${receiverName}: Headers | undefined, raw: string): void {
+  ${receiverName}?.append("set-cookie", raw);
+}
+`;
+
+    expect(discover(source)).toEqual([{ argument: "raw", method: "append" }]);
+  });
+
+  it("ignores an optional Headers receiver that does not write Set-Cookie", () => {
+    const source = `
+export function writeCacheHeader(jar: Headers | undefined): void {
+  jar?.append("cache-control", "no-store");
+}
+`;
+
+    expect(discover(source)).toEqual([]);
+  });
+
+  it("refuses a computed header-record property name", () => {
+    const source = `
+const SET_COOKIE = "set-cookie";
+new Response(null, { headers: { [SET_COOKIE]: raw(token) } });
+`;
+
+    expect(() => discover(source)).toThrowError(
+      "routes/probe.ts: header property name is not statically resolvable: [SET_COOKIE]: raw(token)",
+    );
+  });
+
+  it("refuses a computed header-entry name", () => {
+    const source = `
+const SET_COOKIE = "set-cookie";
+new Response(null, { headers: [[SET_COOKIE, raw(token)]] });
+`;
+
+    expect(() => discover(source)).toThrowError(
+      "routes/probe.ts: header entry name is not statically resolvable: [SET_COOKIE, raw(token)]",
+    );
+  });
+
+  it("refuses a spread header-entry source", () => {
+    const source = `
+const pairs = new Map<string, string>([["set-cookie", raw(token)]]);
+new Response(null, { headers: [...pairs] });
+`;
+
+    expect(() => discover(source)).toThrowError(
+      "routes/probe.ts: header entry source is not statically resolvable: ...pairs",
+    );
+  });
+
   it("refuses a non-literal header name", () => {
     const source = `
 const h = new Headers();
