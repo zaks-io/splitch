@@ -34,6 +34,8 @@ export {
   RecommendedActionSchema,
   recommendedActions,
 } from "./errors";
+// biome-ignore lint/performance/noReExportAll: Event Definition and Metric Event exports are grouped by domain
+export * from "./events";
 export type { DecisionFailure } from "./experiment-conclusion-errors";
 export {
   DecisionBlockedDetailsSchema,
@@ -273,6 +275,7 @@ export {
   assignmentKey,
   clientKeyCacheKey,
   credentialRevocationCacheKey,
+  eventDefinitionConfigKey,
   experimentConfigKey,
   flagConfigKey,
   liveRunKey,

@@ -1,15 +1,22 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import type {
-  EvaluationUsageReplayWindow,
-  EvaluationUsageReplayWindowNamespace,
-} from "./evaluation-usage-replay-window";
-import type {
   EvaluationCommitOutbox,
   EvaluationCommitOutboxNamespace,
 } from "./evaluation-commit-outbox";
+import type {
+  EvaluationUsageReplayWindow,
+  EvaluationUsageReplayWindowNamespace,
+} from "./evaluation-usage-replay-window";
+import type { MetricEventOutboxNamespace } from "./metric-event-outbox";
+import type { MetricEventRateLimitNamespace } from "./metric-event-rate-limit";
 
 export type Env = {
   CONFIG_STORE?: KVNamespace;
+  CREDENTIAL_STORE?: KVNamespace;
+  EVALUATION_PRIVACY_SALT?: string;
+  METRIC_EVENT_OUTBOX?: MetricEventOutboxNamespace;
+  METRIC_EVENT_RATE_LIMIT?: MetricEventRateLimitNamespace;
+  METRIC_EVENTS_QUEUE?: Queue<Record<string, unknown>>;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_EVENT_INGEST_TOKEN?: string;
   SPLITCH_PLATFORM_TARGET?: string;

@@ -28,7 +28,8 @@
   "services": [
     {
       "binding": "EVENT_INGEST",
-      "service": "splitch-event-ingest-api"
+      "service": "splitch-event-ingest-api",
+      "entrypoint": "EvaluationEntrypoint"
     }
   ],
   "kv_namespaces": [
@@ -154,7 +155,8 @@
       "services": [
         {
           "binding": "EVENT_INGEST",
-          "service": "splitch-event-ingest-api-shared-preview"
+          "service": "splitch-event-ingest-api-shared-preview",
+          "entrypoint": "EvaluationEntrypoint"
         }
       ]
     },
@@ -228,7 +230,8 @@
       "services": [
         {
           "binding": "EVENT_INGEST",
-          "service": "splitch-event-ingest-api"
+          "service": "splitch-event-ingest-api",
+          "entrypoint": "EvaluationEntrypoint"
         }
       ]
     }

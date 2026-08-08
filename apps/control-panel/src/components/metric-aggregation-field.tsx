@@ -54,7 +54,7 @@ export function MetricAggregationField({
 function kindPatch(kind: MetricKind): Partial<MetricDraft> {
   return {
     kind,
-    eventValueField: "",
+    eventFieldName: "",
     denominatorMetricId: "",
   };
 }

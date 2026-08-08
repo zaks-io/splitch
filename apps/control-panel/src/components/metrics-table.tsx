@@ -51,7 +51,7 @@ export function MetricsTable({
                 <Badge variant="outline">{kindLabel(metric.kind)}</Badge>
               </TableCell>
               <TableCell>
-                <code className="font-mono text-sm">{metric.eventName}</code>
+                <code className="font-mono text-sm">{metric.eventDefinitionId}</code>
               </TableCell>
               <TableCell className="text-muted-foreground text-sm">
                 {aggregationField(metric, names)}
@@ -79,7 +79,7 @@ function aggregationField(metric: Metric, names: Map<string, string>): string {
   if (metric.kind === "ratio") {
     return names.get(metric.denominator?.metricId ?? "") ?? "Missing denominator";
   }
-  return metric.eventValueField ?? "Missing value field";
+  return metric.eventFieldName ?? "Missing value field";
 }
 
 function kindLabel(kind: MetricKind): string {

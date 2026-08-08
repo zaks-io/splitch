@@ -7,6 +7,7 @@ import { approvalRoutes } from "./routes/routes-approvals";
 import { attentionRoutes } from "./routes/routes-attention";
 import { credentialRoutes } from "./routes/routes-credentials";
 import { dataPlaneRoutes } from "./routes/routes-data-plane";
+import { eventDefinitionRoutes } from "./routes/routes-event-definitions";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagRoutes } from "./routes/routes-flags";
 import { privacyRoutes } from "./routes/routes-privacy";
@@ -75,6 +76,7 @@ export const routeRegistry = assertRegistry([
   ...attentionRoutes,
   ...flagRoutes,
   ...segmentRoutes,
+  ...eventDefinitionRoutes,
   ...experimentRoutes,
   ...credentialRoutes,
   ...analysisRoutes,
