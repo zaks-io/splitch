@@ -30,6 +30,7 @@ export type JsonRpcResponse = JsonRpcErrorResponse | JsonRpcSuccessResponse;
 export const JSON_RPC_PARSE_ERROR = -32700;
 export const JSON_RPC_INVALID_REQUEST = -32600;
 export const JSON_RPC_METHOD_NOT_FOUND = -32601;
+export const JSON_RPC_INVALID_PARAMS = -32602;
 export const JSON_RPC_INTERNAL_ERROR = -32603;
 
 export function isJsonRpcRequest(value: unknown): value is JsonRpcRequest {

@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { userRoles } from "./leaf-schemas-runtime";
 import {
   getRouteMembershipGate,
   membershipGatePatterns,
+  membershipRoles,
   scopeSatisfiesMembershipGate,
 } from "./mcp-tool-membership-gates";
 
 describe("mcp tool membership gates", () => {
+  it("uses the canonical User role vocabulary", () => {
+    expect(membershipRoles).toBe(userRoles);
+  });
+
   it("requires org owner for organizations_update, not org admin", () => {
     const gate = membershipGatePatterns(getRouteMembershipGate("organizations_update"));
     expect(gate).toEqual(["org:owner"]);

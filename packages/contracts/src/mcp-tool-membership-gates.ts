@@ -1,3 +1,4 @@
+import { type UserRole, userRoles } from "./leaf-schemas-runtime";
 import { isMcpToolRoute } from "./mcp-tools";
 import type { ApiRouteContract } from "./openapi-route";
 import { routeRegistry } from "./route-registry";
@@ -11,8 +12,8 @@ import { routeRegistry } from "./route-registry";
 export const membershipAxes = ["token", "org", "app"] as const;
 export type MembershipAxis = (typeof membershipAxes)[number];
 
-export const membershipRoles = ["member", "admin", "owner"] as const;
-export type MembershipRole = (typeof membershipRoles)[number];
+export const membershipRoles = userRoles;
+export type MembershipRole = UserRole;
 
 export interface RouteMembershipGate {
   readonly axis: MembershipAxis;

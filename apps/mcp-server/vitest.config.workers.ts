@@ -7,7 +7,7 @@ export default defineConfig({
       wrangler: { configPath: "./wrangler.jsonc" },
       miniflare: {
         serviceBindings: {
-          CONTROL_PLANE_API: unavailableService,
+          CONTROL_PLANE_API: controlPlaneService,
         },
       },
     }),
@@ -29,6 +29,33 @@ export default defineConfig({
   },
 });
 
-function unavailableService(): Response {
+function controlPlaneService(request: Request): Response {
+  const path = new URL(request.url).pathname;
+  if (path === "/apps/app_session") {
+    return Response.json({
+      id: "app_session",
+      organizationId: "org_session",
+      name: "Session App",
+      key: "session-app",
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    });
+  }
+  if (path === "/apps/app_session/envs/env_session") {
+    return Response.json({
+      id: "env_session",
+      appId: "app_session",
+      key: "session",
+      name: "Session",
+      policy: {
+        variantAvailability: "allow",
+        targetingRolloutValue: "allow",
+        enabledState: "allow",
+        startExperimentRun: "allow",
+      },
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    });
+  }
   return new Response("Service binding unavailable in this test pool", { status: 503 });
 }

@@ -5,8 +5,10 @@ import {
   publicSurfaceFor,
 } from "@splitch/contracts";
 import { IdempotencyKeyRequiredError } from "@splitch/control-plane-sdk/idempotency-header";
+import { McpOperationInvalidParamsError } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 import {
   JSON_RPC_INTERNAL_ERROR,
+  JSON_RPC_INVALID_PARAMS,
   JSON_RPC_METHOD_NOT_FOUND,
   type JsonRpcId,
   type JsonRpcRequest,
@@ -28,12 +30,14 @@ import { getMcpPromptRpc, listMcpPrompts } from "./mcp-prompts";
 import { readJsonRpcRequest } from "./mcp-request";
 import { listMcpResources, readMcpResourceRpc } from "./mcp-resources";
 import {
+  type McpSessionContextValidator,
   type McpSessionStore,
   type McpSessionTransport,
   parseToolCall,
   resolveScope,
   setSessionContext,
 } from "./mcp-session-context";
+import { controlPlaneContextValidator } from "./mcp-session-context-validator";
 import { corsHeaders, jsonResponse, routeTransportRequest } from "./mcp-transport";
 import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
 
@@ -54,6 +58,7 @@ export interface McpServerRequestOptions {
   readonly controlPlaneFetch?: typeof fetch;
   readonly controlPlaneDelegationSecret?: string;
   readonly sessionStore?: McpSessionStore;
+  readonly sessionContextValidator?: McpSessionContextValidator;
   readonly tokenVerifier?: McpAccessTokenVerifier;
   readonly revocations?: McpRevocationReader;
   readonly fetchAuthMarkdown?: (authBaseUrl: string) => Promise<string>;
@@ -149,7 +154,15 @@ async function dispatch(
     return jsonRpcResult(id, { tools: MCP_TOOL_DEFINITIONS });
   }
   if (request.method === "tools/call") {
-    return callTool(id, request.params, controlPlane, actor, sessionId, sessionStore);
+    return callTool(
+      id,
+      request.params,
+      controlPlane,
+      actor,
+      sessionId,
+      sessionStore,
+      options.sessionContextValidator,
+    );
   }
   return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
 }
@@ -161,13 +174,24 @@ async function callTool(
   actor: McpAccessTokenActor,
   sessionId: string | null,
   sessionStore: McpSessionStore,
+  sessionContextValidator: McpSessionContextValidator | undefined,
 ): Promise<JsonRpcResponse> {
   const call = parseToolCall(params);
   if (!call || !toolNames.has(call.name)) {
     return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
   }
   if (call.name === "context_use") {
-    return contextUse(id, call.arguments, sessionId, sessionStore);
+    try {
+      return await contextUse(
+        id,
+        call.arguments,
+        sessionId,
+        sessionStore,
+        sessionContextValidator ?? controlPlaneContextValidator(controlPlane(), actor),
+      );
+    } catch (error) {
+      return toolCallFailure(id, error);
+    }
   }
   const route = getRoute(call.name);
   if (!route) {
@@ -205,6 +229,12 @@ function toolCallFailure(id: JsonRpcId, error: unknown): JsonRpcResponse {
   if (error instanceof IdempotencyKeyRequiredError) {
     return jsonRpcResult(id, toolResult(error.errorResponse, { isError: true }));
   }
+  if (error instanceof McpOperationInvalidParamsError) {
+    return jsonRpcError(id, JSON_RPC_INVALID_PARAMS, "Invalid params", {
+      argument: error.argument,
+      message: error.message,
+    });
+  }
   return jsonRpcError(id, JSON_RPC_INTERNAL_ERROR, "Internal error", {
     message: error instanceof Error ? error.message : String(error),
   });
@@ -229,8 +259,9 @@ async function contextUse(
   arguments_: unknown,
   sessionId: string | null,
   sessionStore: McpSessionStore,
+  validate: McpSessionContextValidator,
 ): Promise<JsonRpcResponse> {
-  const result = await setSessionContext(arguments_, sessionId, sessionStore);
+  const result = await setSessionContext(arguments_, sessionId, sessionStore, validate);
   return jsonRpcResult(
     id,
     result.ok

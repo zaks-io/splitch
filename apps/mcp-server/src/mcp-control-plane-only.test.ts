@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -22,8 +23,9 @@ import {
  */
 
 const SOURCE_ROOT = new URL("./", import.meta.url);
-const WRANGLER_CONFIG = new URL("../wrangler.jsonc", import.meta.url);
-const wranglerConfig = readWranglerConfig();
+const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+const MCP_WRANGLER_CONFIG = "apps/mcp-server/wrangler.jsonc";
+const wranglerConfig = readWranglerConfig(MCP_WRANGLER_CONFIG);
 
 const organizationUsage = {
   organizationId: "org_local",
@@ -110,6 +112,48 @@ describe("MCP has only the Control Plane downstream", () => {
     }
   });
 
+  it("binds McpEntrypoint only from MCP to the Control Plane API", () => {
+    const configs = readWranglerConfigs();
+    expect(configs).toHaveLength(9);
+
+    const entrypointBindings = configs
+      .flatMap(({ path, config }) =>
+        [["local", config] as const, ...Object.entries(config.env ?? {})].flatMap(
+          ([environment, target]) =>
+            (target?.services ?? [])
+              .filter((binding) => binding.entrypoint === "McpEntrypoint")
+              .map((binding) => ({ path, environment, ...binding })),
+        ),
+      )
+      .sort((left, right) =>
+        `${left.path}:${left.environment}`.localeCompare(`${right.path}:${right.environment}`),
+      );
+
+    expect(entrypointBindings).toEqual([
+      {
+        path: MCP_WRANGLER_CONFIG,
+        environment: "local",
+        binding: "CONTROL_PLANE_API",
+        service: "splitch-control-plane-api",
+        entrypoint: "McpEntrypoint",
+      },
+      {
+        path: MCP_WRANGLER_CONFIG,
+        environment: "production",
+        binding: "CONTROL_PLANE_API",
+        service: "splitch-control-plane-api",
+        entrypoint: "McpEntrypoint",
+      },
+      {
+        path: MCP_WRANGLER_CONFIG,
+        environment: "shared-preview",
+        binding: "CONTROL_PLANE_API",
+        service: "splitch-control-plane-api-shared-preview",
+        entrypoint: "McpEntrypoint",
+      },
+    ]);
+  });
+
   it("never reads a route owner in the source it dispatches from", async () => {
     const sources = await readSources();
 
@@ -159,11 +203,21 @@ interface WranglerTarget {
 interface ServiceBinding {
   binding: string;
   service: string;
-  entrypoint: string;
+  entrypoint?: string;
 }
 
-function readWranglerConfig(): WranglerConfig {
-  const path = fileURLToPath(WRANGLER_CONFIG);
+function readWranglerConfigs(): Array<{ path: string; config: WranglerConfig }> {
+  const paths = execFileSync("git", ["ls-files", "-z", "--", ":(glob)**/wrangler.jsonc"], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+  })
+    .split("\0")
+    .filter(Boolean);
+  return paths.map((path) => ({ path, config: readWranglerConfig(path) }));
+}
+
+function readWranglerConfig(relativePath: string): WranglerConfig {
+  const path = join(REPO_ROOT, relativePath);
   const parsed = parseConfigFileTextToJson(path, readFileSync(path, "utf8"));
   if (parsed.error) throw new Error(String(parsed.error.messageText));
   return parsed.config as WranglerConfig;

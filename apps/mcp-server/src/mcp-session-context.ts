@@ -16,6 +16,12 @@ export interface McpSessionStore {
   end(id: string): Promise<void>;
 }
 
+type McpSessionContextValidation = { ok: true } | { ok: false; message: string };
+
+export type McpSessionContextValidator = (
+  context: McpSessionContext,
+) => Promise<McpSessionContextValidation>;
+
 export const contextUseTool = {
   name: "context_use",
   description: "Set the active App and Environment for this MCP transport session.",
@@ -45,6 +51,7 @@ export async function setSessionContext(
   arguments_: unknown,
   sessionId: string | null,
   sessionStore: McpSessionStore,
+  validate: McpSessionContextValidator,
 ): Promise<{ ok: true; value: McpSessionContext } | { ok: false; message: string }> {
   if (!sessionId) {
     return { ok: false, message: "MCP session is required before calling context_use." };
@@ -54,6 +61,8 @@ export async function setSessionContext(
     return { ok: false, message: "context_use requires non-empty appId and environmentId." };
   }
   try {
+    const validation = await validate(context);
+    if (!validation.ok) return validation;
     await sessionStore.set(sessionId, context);
     return { ok: true, value: context };
   } catch (error) {

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +8,7 @@ import { KILL_SWITCH_OFF_EXEMPTION } from "./kill-switch-off-exemption";
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const DEFINITION_RELATIVE = "packages/contracts/src/kill-switch-off-exemption.ts";
 const SPEC_RELATIVE = "docs/spec/control-plane/endpoints-flag-segment.md";
+const GIT_IGNORED_DIRECTORIES = gitIgnoredDirectories();
 
 describe("KILL_SWITCH_OFF_EXEMPTION", () => {
   it("is user-facing: no Policy field plumbing vocabulary", () => {
@@ -63,11 +65,13 @@ function walk(dir: string, visit: (absolutePath: string) => void): void {
     const absolutePath = join(dir, entry);
     const stats = statSync(absolutePath);
     if (stats.isDirectory()) {
+      const relativePath = relative(REPO_ROOT, absolutePath);
       if (
         entry === "node_modules" ||
         entry === ".git" ||
         entry === "dist" ||
-        entry === "coverage"
+        entry === "coverage" ||
+        isGitIgnoredDirectory(relativePath)
       ) {
         continue;
       }
@@ -76,4 +80,21 @@ function walk(dir: string, visit: (absolutePath: string) => void): void {
     }
     visit(absolutePath);
   }
+}
+
+function gitIgnoredDirectories(): readonly string[] {
+  return execFileSync(
+    "git",
+    ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"],
+    { cwd: REPO_ROOT, encoding: "utf8" },
+  )
+    .split("\0")
+    .filter((path) => path.endsWith("/"))
+    .map((path) => path.slice(0, -1));
+}
+
+function isGitIgnoredDirectory(relativePath: string): boolean {
+  return GIT_IGNORED_DIRECTORIES.some(
+    (ignored) => relativePath === ignored || relativePath.startsWith(`${ignored}/`),
+  );
 }
