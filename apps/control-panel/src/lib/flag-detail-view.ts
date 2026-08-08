@@ -1,6 +1,7 @@
-import type { Segment, Variant } from "@splitch/contracts";
+import type { Condition, Segment, Variant } from "@splitch/contracts";
 import type { PanelSegmentsListOutput } from "@splitch/control-plane-sdk";
 import type { FlagDetailData } from "./flag-detail-data";
+import { formatConditionSummary } from "./segment-form-model";
 
 /**
  * The read-only view model for the Flag detail screen.
@@ -33,8 +34,8 @@ type TargetingRuleView = {
   priority: number;
   /** Catalog name of the served Variant, or the raw id if it left the catalog. */
   variantName: string;
-  conditions: Array<{ attribute: string; operator: string; value: string }>;
-  segmentConditions: Array<{ attribute: string; operator: string; value: string }>;
+  conditions: Array<{ attribute: string; operator: string; value: Condition["value"] }>;
+  segmentConditions: Array<{ attribute: string; operator: string; value: Condition["value"] }>;
   rolloutPercentage: number | null;
   segmentId: string | null;
   segmentName: string | null;
@@ -152,7 +153,7 @@ function displayConditions(conditions: Segment["conditions"]) {
   return conditions.map((condition) => ({
     attribute: condition.attribute,
     operator: condition.operator,
-    value: JSON.stringify(condition.value),
+    value: condition.value,
   }));
 }
 
@@ -169,17 +170,13 @@ function displayConditions(conditions: Segment["conditions"]) {
 export function targetingRuleConditionsText(
   rule: FlagDetailView["targetingRules"][number],
 ): string {
-  const own = rule.conditions.map(conditionText);
+  const own = rule.conditions.map(formatConditionSummary);
   if (!rule.segmentName) return own.join(" AND ");
-  const definition = rule.segmentConditions.map(conditionText).join(" AND ");
+  const definition = rule.segmentConditions.map(formatConditionSummary).join(" AND ");
   const segment = definition
     ? `Segment ${rule.segmentName} (${definition})`
     : `Segment ${rule.segmentName}`;
   return [segment, ...own].join(" AND ");
-}
-
-function conditionText(condition: { attribute: string; operator: string; value: string }): string {
-  return `${condition.attribute} ${condition.operator} ${condition.value}`;
 }
 
 /**

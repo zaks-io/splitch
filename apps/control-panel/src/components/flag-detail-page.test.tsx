@@ -150,15 +150,14 @@ describe("Flag detail page", () => {
         ...firstRule,
         segmentId: "segment_paid",
         segmentName: "Paid plan",
-        segmentConditions: [{ attribute: "tier", operator: "eq", value: '"paid"' }],
+        conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
+        segmentConditions: [{ attribute: "tier", operator: "eq", value: "paid" }],
       },
     ];
 
     for (const controllingExperiment of [null, { id: "exp_1", name: "Checkout Copy Dev" }]) {
       const html = render(view({ targetingRules, controllingExperiment }));
-      expect(html).toContain(
-        "Segment Paid plan (tier eq &quot;paid&quot;) AND plan eq &quot;pro&quot;",
-      );
+      expect(html).toContain("Segment Paid plan (tier equals paid) AND plan equals paid");
       // The Segment's definition must never read as a third constraint on the rule.
       expect(html).not.toContain("Segment Paid plan AND");
     }

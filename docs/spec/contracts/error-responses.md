@@ -83,7 +83,7 @@ ErrorCode =
   | 'DECISION_RESULT_STALE'       // selected Run result changed at the observed evidence boundary
   | 'TARGET_CONFIGURATION_STALE'  // target Flag Configuration changed before proposal creation
   | 'APPROVAL_REQUEST_RESOLVED'   // a different Review already resolved the request
-  | 'APPROVAL_APPLICATION_FAILED' // application rolled back; request remains pending
+  | 'APPROVAL_APPLICATION_FAILED' // application did not complete; request remains pending
   | 'IDEMPOTENCY_KEY_CONFLICT'    // same key was reused with a different canonical payload
 
   // Analysis-state signals
@@ -438,12 +438,15 @@ Approval Request `pending -> applied` transition, and bounded audit metadata in 
 the target's owning persistence boundary. KV and Tinybird writes are post-commit projections and do
 not redefine the canonical result.
 
-If canonical application fails, the transaction rolls back with no target mutation. A separate
-transaction records the failed Review with `applicationError.code` only if the Approval Request is
-still `pending`; it never overwrites a concurrent terminal Review. The Approval Request remains
-`pending`, and the caller receives `APPROVAL_APPLICATION_FAILED`. Replaying the same Review
-idempotency key returns the same failed attempt. A new authorized attempt uses a new key and can
-apply at most once.
+Application failure is not synonymous with rollback. A refused or transactionally rolled-back target
+mutation records `target_state = 'rolled_back'`; a failure after a durable target mutation records
+`target_state = 'applied'`; and an exception whose target state cannot be proven records
+`target_state = 'unknown'`. A separate transaction records the failed Review with
+`applicationError.code` only if the Approval Request is still `pending`; it never overwrites a
+concurrent terminal Review. The Approval Request remains `pending`, and the caller receives
+`APPROVAL_APPLICATION_FAILED` with a message naming the recorded target state. Replaying the same
+Review idempotency key returns the same failed attempt. A new authorized attempt uses a new key and
+can apply at most once.
 
 Approval Request creation and Review each bind the idempotency key to a canonical request hash.
 Exact retries return the stored result. Reusing a key for a different payload returns

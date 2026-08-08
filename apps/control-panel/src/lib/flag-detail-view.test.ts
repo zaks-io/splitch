@@ -93,8 +93,8 @@ describe("Flag detail view model", () => {
 
     expect(view.targetingRules[0]).toMatchObject({
       segmentName: "Paid plan",
-      segmentConditions: [{ attribute: "tier", operator: "eq", value: '"paid"' }],
-      conditions: [{ attribute: "plan", operator: "eq", value: '"pro"' }],
+      segmentConditions: [{ attribute: "tier", operator: "eq", value: "paid" }],
+      conditions: [{ attribute: "plan", operator: "eq", value: "pro" }],
     });
   });
 
