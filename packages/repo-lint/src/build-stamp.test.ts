@@ -2,38 +2,18 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-interface BuildStamp {
-  packageName: string;
-  version: string;
-  sourceDigest: string;
-  distDigest: string;
-}
-const {
-  computeTreeDigest,
+import {
+  buildTaskHashFromDryRun,
   computeSourceDigest,
+  computeTreeDigest,
   verifyBuildStamp,
   writeBuildStamp,
-  buildTaskHashFromDryRun,
-} = (await import(pathToFileURL(path.join(repoRoot, "scripts/release/build-stamp.mjs")).href)) as {
-  computeTreeDigest: (dir: string) => string;
-  computeSourceDigest: (targetKey: string, repoRoot: string) => string;
-  verifyBuildStamp: (targetKey: string, repoRoot: string) => BuildStamp;
-  writeBuildStamp: (
-    targetKey: string,
-    repoRoot: string,
-    options?: { sourceDigest?: string },
-  ) => BuildStamp;
-  buildTaskHashFromDryRun: (dry: unknown, packageName: string) => string;
-};
-const { RELEASE_TARGETS } = (await import(
-  pathToFileURL(path.join(repoRoot, "scripts/release/constants.mjs")).href
-)) as {
-  RELEASE_TARGETS: Record<string, Record<string, unknown>>;
-};
+} from "../../../scripts/release/build-stamp.mjs";
+import { RELEASE_TARGETS } from "../../../scripts/release/constants.mjs";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 /** Same CI/NODE_ENV strip the stamp writer uses so hashes match under vitest. */
 function readTurboBuildDryRun(packageName: string) {
