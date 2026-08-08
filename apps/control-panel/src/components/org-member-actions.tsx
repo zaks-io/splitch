@@ -26,7 +26,7 @@ import type { OrgRole } from "#lib/session";
  * Per-member role change and removal. Both are owner-only in the Control Plane,
  * so an admin sees the reason in place of controls they cannot use.
  *
- * The sole owner's controls are locked for the same reason the Worker refuses
+ * The sole owner's controls are omitted for the same reason the Worker refuses
  * them (`LAST_OWNER_REQUIRED`): an Organization must keep an owner. Stating it
  * here turns the refusal into an explanation; the Worker still decides.
  */
@@ -59,6 +59,17 @@ export function OrgMemberActions({
     );
   }
 
+  if (isSoleOwner) {
+    return (
+      <p
+        className="max-w-64 text-muted-foreground text-xs"
+        data-testid={`member-actions-sole-owner-${member.userId}`}
+      >
+        The only owner. Promote another member to owner first.
+      </p>
+    );
+  }
+
   async function run(mutate: () => Promise<{ ok: boolean; error?: { message: string } }>) {
     setError(null);
     setIsBusy(true);
@@ -79,7 +90,7 @@ export function OrgMemberActions({
     <div className="grid justify-items-end gap-2">
       <div className="flex items-center justify-end gap-2">
         <Select
-          disabled={isBusy || isSoleOwner || !canChange}
+          disabled={isBusy}
           onValueChange={(role) =>
             run(() =>
               updateControlPanelOrgMemberRole({
@@ -108,7 +119,7 @@ export function OrgMemberActions({
         </Select>
         <Button
           data-testid={`member-remove-${member.userId}`}
-          disabled={isBusy || isSoleOwner || !canRemove}
+          disabled={isBusy}
           onClick={() =>
             run(() => removeControlPanelOrgMember({ data: { orgId, userId: member.userId } }))
           }
@@ -118,11 +129,6 @@ export function OrgMemberActions({
           Remove
         </Button>
       </div>
-      {isSoleOwner ? (
-        <p className="text-muted-foreground text-xs">
-          The only owner. Promote another member to owner first.
-        </p>
-      ) : null}
       {error ? (
         <p
           className="text-destructive text-xs"

@@ -27,6 +27,7 @@ const RATE = "control-plane-actor" as const;
 const OrgListResponse = z.object({ items: z.array(OrganizationResponseSchema) });
 const MemberListResponse = z.object({ items: z.array(OrganizationMemberSchema) });
 const MemberResponse = UserSchema;
+const MemberUpdateResponse = OrganizationMemberSchema;
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 
 const organizationRoutes = [
@@ -147,7 +148,7 @@ const organizationRoutes = [
     path: "/orgs/:orgId/members/:userId",
     summary: "Change a member's role.",
     request: { params: OrgMemberParams, body: UpdateMemberRequestSchema },
-    response: MemberResponse,
+    response: MemberUpdateResponse,
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
@@ -156,6 +157,7 @@ const organizationRoutes = [
       "USER_NOT_FOUND",
       "FORBIDDEN",
       "LAST_OWNER_REQUIRED",
+      "SERVICE_UNAVAILABLE",
       "VALIDATION_ERROR",
     ],
   }),

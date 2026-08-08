@@ -116,7 +116,7 @@ describe("Add member errors", () => {
 });
 
 describe("last-owner guard", () => {
-  it("locks the sole owner's own controls and says why", () => {
+  it("omits the sole owner's own controls and says why", () => {
     const html = page("owner", {
       kind: "ready",
       items: [
@@ -126,11 +126,10 @@ describe("last-owner guard", () => {
     });
 
     expect(html).toContain("The only owner. Promote another member to owner first.");
-    // Anchored on the attribute, not on the class list: every Button ships a
-    // `disabled:` utility class, so a loose match is green either way.
-    expect(html).toMatch(/disabled=""[^>]*data-testid="member-remove-u_owner"/);
-    expect(html).not.toMatch(/disabled=""[^>]*data-testid="member-remove-u_admin"/);
-    expect(html).toMatch(/disabled=""[^>]*data-testid="member-role-u_owner"/);
+    expect(html).toContain('data-testid="member-actions-sole-owner-u_owner"');
+    expect(html).not.toContain('data-testid="member-remove-u_owner"');
+    expect(html).not.toContain('data-testid="member-role-u_owner"');
+    expect(html).toContain('data-testid="member-remove-u_admin"');
   });
 
   it("releases the guard once a second owner exists", () => {
@@ -156,13 +155,13 @@ describe("SSO and SCIM affordances", () => {
   it("locks trusted identity providers for an admin", () => {
     const html = page("admin");
 
-    expect(html).toContain("Requires an Organization owner. Your role is admin.");
+    expect(html).toContain("Requires an Organization owner. Your role is Admin.");
   });
 
   it("locks both rows for a member", () => {
     const html = page("member", { kind: "locked", message: "locked" });
 
-    expect(html).toContain("Requires an Organization owner or admin. Your role is member.");
-    expect(html).toContain("Requires an Organization owner. Your role is member.");
+    expect(html).toContain("Requires an Organization owner or admin. Your role is Member.");
+    expect(html).toContain("Requires an Organization owner. Your role is Member.");
   });
 });

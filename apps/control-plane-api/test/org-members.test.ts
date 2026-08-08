@@ -180,6 +180,45 @@ describe("control-plane org/member endpoints", () => {
     });
   });
 
+  it("changes the role of a member without a cached profile", async () => {
+    const ownerJwt = await token(OWNER, PRIMARY.orgId, "owner");
+    const res = await memberResourceRoute(client(ownerJwt)).$patch({
+      param: { orgId: PRIMARY.orgId, userId: PROFILELESS_MEMBER },
+      json: { role: "admin" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      id: PROFILELESS_MEMBER,
+      email: null,
+      organizationId: PRIMARY.orgId,
+      role: "admin",
+    });
+  });
+
+  it("403s an Organization A actor with a forged Organization B scope on every member route", async () => {
+    const forgedOrgBJwt = await token(OWNER, SOLO.orgId, "owner");
+    const api = client(forgedOrgBJwt);
+
+    const listed = await memberRoute(api).$get({ param: { orgId: SOLO.orgId } });
+    const added = await memberRoute(api).$post({
+      param: { orgId: SOLO.orgId },
+      json: { userId: NEW_MEMBER, role: "member" },
+    });
+    const updated = await memberResourceRoute(api).$patch({
+      param: { orgId: SOLO.orgId, userId: NEW_MEMBER },
+      json: { role: "admin" },
+    });
+    const removed = await memberResourceRoute(api).$delete({
+      param: { orgId: SOLO.orgId, userId: NEW_MEMBER },
+    });
+
+    for (const response of [listed, added, updated, removed]) {
+      expect.soft(response.status).toBe(403);
+      expect.soft((await bodyOf(response)).code).toBe("FORBIDDEN");
+    }
+  });
+
   it("fails loud and names the member when a profile lookup faults", async () => {
     const ownerJwt = await token(OWNER, PRIMARY.orgId, "owner");
     const api = client(ownerJwt, { "x-test-profile-failure-user": PROFILELESS_MEMBER });

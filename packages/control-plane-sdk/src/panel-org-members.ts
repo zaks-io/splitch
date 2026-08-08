@@ -43,7 +43,9 @@ export interface PanelOrgMembersClient {
     input: PanelOrgMembersListInput,
   ): Promise<ControlPlaneOperationResult<PanelOrgMembersListOutput>>;
   add(input: PanelOrgMemberAddInput): Promise<ControlPlaneOperationResult<User>>;
-  update(input: PanelOrgMemberUpdateInput): Promise<ControlPlaneOperationResult<User>>;
+  update(
+    input: PanelOrgMemberUpdateInput,
+  ): Promise<ControlPlaneOperationResult<OrganizationMember>>;
   remove(
     input: PanelOrgMemberRemoveInput,
   ): Promise<ControlPlaneOperationResult<PanelOrgMemberRemoveOutput>>;
@@ -81,7 +83,11 @@ export function createPanelOrgMembersClient(options: {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ role: input.role }),
       });
-      return parseControlPlaneResponse(response, "organization_members_update", UserSchema);
+      return parseControlPlaneResponse(
+        response,
+        "organization_members_update",
+        OrganizationMemberSchema,
+      );
     },
     async remove(input) {
       const response = await options.fetch(memberUrl(input.orgId, input.userId), {

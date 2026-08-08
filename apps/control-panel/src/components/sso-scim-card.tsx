@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@splitch/ui/components/card";
-import { canConfigureSso, canManageTrustedIdps } from "#lib/org-members";
+import { canConfigureSso, canManageTrustedIdps, organizationRoleLabel } from "#lib/org-members";
 import type { OrgRole } from "#lib/session";
 
 /**
@@ -76,7 +76,7 @@ function SsoScimRow({
         <span className="text-muted-foreground text-xs">{detail}</span>
         {allowed ? null : (
           <span className="text-muted-foreground text-xs">
-            Requires {requiredRole}. Your role is {orgRole}.
+            Requires {requiredRole}. Your role is {organizationRoleLabel(orgRole)}.
           </span>
         )}
       </div>

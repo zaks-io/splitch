@@ -1,5 +1,5 @@
 import { env as workerEnv } from "cloudflare:workers";
-import { type User, UserRoleSchema } from "@splitch/contracts";
+import { type OrganizationMember, type User, UserRoleSchema } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "@splitch/control-plane-sdk";
 import type { PanelOrgMemberRemoveOutput } from "@splitch/control-plane-sdk/panel-org-members";
 import { createServerFn } from "@tanstack/react-start";
@@ -28,7 +28,7 @@ export const addControlPanelOrgMember = createServerFn({ method: "POST" })
 
 export const updateControlPanelOrgMemberRole = createServerFn({ method: "POST" })
   .validator((data: unknown) => UpdateMemberSchema.safeParse(data))
-  .handler(async ({ data: parsed }): Promise<ControlPlaneOperationResult<User>> => {
+  .handler(async ({ data: parsed }): Promise<ControlPlaneOperationResult<OrganizationMember>> => {
     if (!parsed.success) return malformed("The role change is malformed");
     const authorized = await authorizedOrgMembersClient(parsed.data.orgId);
     if (!authorized.ok) return authorized.result;

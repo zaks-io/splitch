@@ -41,8 +41,8 @@ test.describe("Organization Members", () => {
 
     // The Worker refuses LAST_OWNER_REQUIRED; the screen says so before the click
     // rather than letting the refusal be the first the owner hears of it.
-    await expect(page.getByTestId(`member-role-${owner}`)).toBeDisabled();
-    await expect(page.getByTestId(`member-remove-${owner}`)).toBeDisabled();
+    await expect(page.getByTestId(`member-role-${owner}`)).toHaveCount(0);
+    await expect(page.getByTestId(`member-remove-${owner}`)).toHaveCount(0);
     await expect(ownerRow).toContainText("The only owner. Promote another member to owner first.");
     await expect(page.getByTestId(`member-remove-${member}`)).toBeEnabled();
 

@@ -125,12 +125,11 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       const lastOwner = await rejectLastOwnerRemoval(deps, orgId, current, role, requestId);
       if (lastOwner) return lastOwner;
 
-      const profile = await resolveProfile(deps, orgId, userId, request, requestId);
-      if (profile instanceof Response) return profile;
-
       const updated = await deps.repo.identity.updateOrgMembershipRole(orgId, userId, role);
       if (!updated) return failedMemberUpdate(current, role, orgId, requestId);
-      return Response.json(userFromMembership(updated, profile));
+      const member = await listMemberResponse(deps, updated, request, requestId);
+      if (member instanceof Response) return member;
+      return Response.json(member);
     },
 
     async removeMember({ input, principal, requestId }: HandlerArgs<unknown>) {
