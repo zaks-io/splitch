@@ -31,6 +31,15 @@ export const lookupErrorDocs = {
     recommendedAction: "CHOOSE_DIFFERENT_KEY",
     related: ["EXPERIMENT_NOT_FOUND", "SLUG_CONFLICT"],
   },
+  FLAG_SELECTOR_AMBIGUOUS: {
+    cause:
+      "The Flag selector matched one Flag by canonical id and a different Flag by key. Flag keys are unconstrained strings and may equal another Flag's id shape.",
+    fix: "Pass the canonical Flag id of the Flag you intend to address. `details.idMatchFlagId` and `details.keyMatchFlagId` name both candidates.",
+    details:
+      '{ selector: string, idMatchFlagId: string, keyMatchFlagId: string, recommendedAction: "PASS_CANONICAL_FLAG_ID" }',
+    recommendedAction: "PASS_CANONICAL_FLAG_ID",
+    related: ["FLAG_NOT_FOUND", "CLI_SCOPE_UNRESOLVED"],
+  },
 
   EXPERIMENT_NOT_FOUND: notFound(
     "Experiment",

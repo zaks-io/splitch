@@ -52,7 +52,10 @@ Returns: full Flag definition (catalog Variants + schema). No per-Environment co
 `{flag_id}` accepts the Flag's canonical id **or** its immutable key within the
 App. The catalog list is bounded; key lookup is the exact path that keeps a Flag
 reachable when it is past that ceiling. A key that only exists in another App is
-`FLAG_NOT_FOUND` under this App (the App scope is the isolation boundary).
+`FLAG_NOT_FOUND` under this App (the App scope is the isolation boundary). When
+the selector matches one Flag by id and a different Flag by key (Flag keys are
+unconstrained and may equal another Flag's id shape), the response is
+`409 FLAG_SELECTOR_AMBIGUOUS` with both canonical ids — never a silent pick.
 
 ### `PATCH /apps/{app_id}/flags/{flag_id}`
 

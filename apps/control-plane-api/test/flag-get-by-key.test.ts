@@ -125,4 +125,85 @@ describe("flags_get by key past the catalog list ceiling", () => {
     expect(res.status).toBe(404);
     expect((await errorBody(res)).code).toBe("FLAG_NOT_FOUND");
   });
+
+  it("refuses a selector that matches one Flag by id and a different Flag by key", async () => {
+    // Flag keys are unconstrained z.string() and may equal another Flag's
+    // canonical id (SPL-288). Silent id-first OR key-first would return the
+    // wrong Flag; refuse instead, naming both canonical ids.
+    const createdApp = await createDefaultApp(h);
+    const appId = createdApp.app.id;
+    const scope = appScope(appId);
+    const repo = createRepository(h.bindings.d1);
+    const collidingId = "flag_aaaa0000bbbb1111cccc2222";
+
+    await repo.flags.flags.insert(scope, {
+      id: collidingId,
+      appId,
+      key: "shadow-key",
+      name: "Shadow (id collides)",
+      schema: JSON.stringify({ type: "boolean" }),
+      defaultVariantId: "var_shadow",
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+    });
+    await repo.flags.addVariant(scope, collidingId, {
+      id: "var_shadow",
+      name: "control",
+      value: JSON.stringify(false),
+      createdAt: NOW_ISO,
+    });
+    await repo.flags.flags.insert(scope, {
+      id: "flag_keyed_elsewhere_0001",
+      appId,
+      key: collidingId,
+      name: "Keyed as the other's id",
+      schema: JSON.stringify({ type: "boolean" }),
+      defaultVariantId: "var_keyed",
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+    });
+    await repo.flags.addVariant(scope, "flag_keyed_elsewhere_0001", {
+      id: "var_keyed",
+      name: "control",
+      value: JSON.stringify(false),
+      createdAt: NOW_ISO,
+    });
+
+    const res = await request(
+      h,
+      "GET",
+      `/apps/${appId}/flags/${collidingId}`,
+      await appToken(h, appId),
+    );
+    expect(res.status).toBe(409);
+    const body = await errorBody(res);
+    expect(body).toEqual({
+      code: "FLAG_SELECTOR_AMBIGUOUS",
+      message: `Flag selector "${collidingId}" matches more than one Flag in this App: id ${collidingId} and key of flag_keyed_elsewhere_0001`,
+      details: {
+        selector: collidingId,
+        idMatchFlagId: collidingId,
+        keyMatchFlagId: "flag_keyed_elsewhere_0001",
+        recommendedAction: "PASS_CANONICAL_FLAG_ID",
+      },
+    });
+  });
+
+  it("pins both-probe resolution: a single match still returns by id or by key", async () => {
+    // After ambiguity refusal, id-first vs key-first only matters when exactly
+    // one probe hits. Both must still work; swapping the probes must not
+    // quietly drop either path.
+    const createdApp = await createDefaultApp(h);
+    const appId = createdApp.app.id;
+    await seedFlags(appId, 1);
+    const jwt = await appToken(h, appId);
+
+    const byId = await request(h, "GET", `/apps/${appId}/flags/${OLDEST_SEEDED_ID}`, jwt);
+    expect(byId.status).toBe(200);
+    expect(await byId.json()).toMatchObject({ id: OLDEST_SEEDED_ID, key: OLDEST_SEEDED_KEY });
+
+    const byKey = await request(h, "GET", `/apps/${appId}/flags/${OLDEST_SEEDED_KEY}`, jwt);
+    expect(byKey.status).toBe(200);
+    expect(await byKey.json()).toMatchObject({ id: OLDEST_SEEDED_ID, key: OLDEST_SEEDED_KEY });
+  });
 });

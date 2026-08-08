@@ -81,7 +81,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["FLAG_NOT_FOUND", "FORBIDDEN"],
+    errors: ["FLAG_NOT_FOUND", "FLAG_SELECTOR_AMBIGUOUS", "FORBIDDEN"],
   }),
   defineApiRoute({
     operationId: "flags_update",

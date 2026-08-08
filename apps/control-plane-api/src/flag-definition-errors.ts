@@ -128,6 +128,29 @@ export function flagNotFound(requestId: string): Response {
   );
 }
 
+/**
+ * A flags_get selector matched one Flag by id and a different Flag by key.
+ * Prefer the canonical id; never silently pick one (SPL-288 / CLI_SCOPE_UNRESOLVED).
+ */
+export function flagSelectorAmbiguous(
+  requestId: string,
+  details: { selector: string; idMatchFlagId: string; keyMatchFlagId: string },
+): Response {
+  return renderError(
+    {
+      code: "FLAG_SELECTOR_AMBIGUOUS",
+      message: `Flag selector "${details.selector}" matches more than one Flag in this App: id ${details.idMatchFlagId} and key of ${details.keyMatchFlagId}`,
+      details: {
+        selector: details.selector,
+        idMatchFlagId: details.idMatchFlagId,
+        keyMatchFlagId: details.keyMatchFlagId,
+        recommendedAction: "PASS_CANONICAL_FLAG_ID",
+      },
+    },
+    { requestId },
+  );
+}
+
 export function variantNotFound(requestId: string): Response {
   return renderError(
     { code: "VARIANT_NOT_FOUND", message: "variant not found", details: {} },

@@ -79,8 +79,12 @@ function recoverySteps(
   if (isApprovalRecoveryAction(action)) {
     return approvalRecoverySteps(action, details);
   }
-  if (action === "CHOOSE_DIFFERENT_SLUG" || action === "CHOOSE_DIFFERENT_KEY") {
-    return chooseDifferentSteps(action, details);
+  if (
+    action === "CHOOSE_DIFFERENT_SLUG" ||
+    action === "CHOOSE_DIFFERENT_KEY" ||
+    action === "PASS_CANONICAL_FLAG_ID"
+  ) {
+    return noToolRecoverySteps(action, details);
   }
 
   switch (action) {
@@ -161,6 +165,16 @@ function recoverySteps(
   }
 }
 
+function noToolRecoverySteps(
+  action: "CHOOSE_DIFFERENT_SLUG" | "CHOOSE_DIFFERENT_KEY" | "PASS_CANONICAL_FLAG_ID",
+  details: Record<string, unknown>,
+): readonly McpPromptMessage[] {
+  if (action === "PASS_CANONICAL_FLAG_ID") {
+    return passCanonicalFlagIdSteps(details);
+  }
+  return chooseDifferentSteps(action, details);
+}
+
 function chooseDifferentSteps(
   action: "CHOOSE_DIFFERENT_SLUG" | "CHOOSE_DIFFERENT_KEY",
   details: Record<string, unknown>,
@@ -195,6 +209,20 @@ function chooseDifferentSteps(
     message(
       "assistant",
       `Key ${key} is already held by a ${status} Experiment. Resend experiments_create with a different "key".`,
+    ),
+  ];
+}
+
+function passCanonicalFlagIdSteps(details: Record<string, unknown>): readonly McpPromptMessage[] {
+  const selector = typeof details.selector === "string" ? `"${details.selector}"` : "<selector>";
+  const idMatch =
+    typeof details.idMatchFlagId === "string" ? details.idMatchFlagId : "<idMatchFlagId>";
+  const keyMatch =
+    typeof details.keyMatchFlagId === "string" ? details.keyMatchFlagId : "<keyMatchFlagId>";
+  return [
+    message(
+      "assistant",
+      `Selector ${selector} matches Flag ${idMatch} by id and Flag ${keyMatch} by key. Retry the same call with the canonical Flag id of the Flag you intend. No different tool is required.`,
     ),
   ];
 }
