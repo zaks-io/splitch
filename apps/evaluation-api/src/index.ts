@@ -27,7 +27,10 @@ import { makeDataPlaneAuthResolver } from "./data-plane-auth";
 import type { EvaluationApiEnv } from "./env";
 import { makeHttpEvaluationCommitSink } from "./evaluation-commit-sink";
 import { makeHttpEvaluationUsageSink } from "./evaluation-usage-sink";
-import { KvExposureRedemptionClaimStore, makeHttpExposureIngestSink } from "./exposure-redemption";
+import { makeHttpExposureIngestSink } from "./exposure-redemption";
+import { DurableExposureRedemptionClaimStore } from "./exposure-redemption-claim";
+import { requiredExposureRedemptionClaimsBinding } from "./exposure-redemption-claims-binding";
+import { ExposureRedemptionClaimDurableObject } from "./exposure-redemption-do";
 import { makeEnvSaltStore } from "./local-salt-store";
 import { exposureTicketKeyFromEnv } from "./local-ticket-key";
 import { KvProvider } from "./provider/kv-provider";
@@ -43,6 +46,9 @@ const handler = {
     return handleRequest(request, env, ctx);
   },
 } satisfies ExportedHandler<EvaluationApiEnv>;
+
+/** Unwrapped fetch handler — tests drive this so startup binding checks stay load-bearing. */
+export const evaluationApiHandler = handler;
 
 export default wrapWorkerHandler(handler, { surface: "evaluation-api" });
 
@@ -105,7 +111,9 @@ async function handleRequest(
       fetcher: env.EVENT_INGEST,
       token: env.SPLITCH_EVENT_INGEST_TOKEN,
     }),
-    exposureRedemptionClaims: new KvExposureRedemptionClaimStore(env.CREDENTIAL_STORE),
+    exposureRedemptionClaims: new DurableExposureRedemptionClaimStore(
+      requiredExposureRedemptionClaimsBinding(env.EXPOSURE_REDEMPTION_CLAIMS),
+    ),
     evaluationCommitSink: makeHttpEvaluationCommitSink({
       endpoint: env.EVENT_INGEST_URL,
       fetcher: env.EVENT_INGEST,
@@ -157,4 +165,8 @@ function requestAuthResolver(
  * claims a replay id here, but dropping a Durable Object class needs its own
  * `deleted_classes` migration.
  */
-export { AssignmentStoreDurableObject, McpDelegationReplayDurableObject };
+export {
+  AssignmentStoreDurableObject,
+  ExposureRedemptionClaimDurableObject,
+  McpDelegationReplayDurableObject,
+};

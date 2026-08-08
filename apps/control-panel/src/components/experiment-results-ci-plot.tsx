@@ -43,6 +43,10 @@ export function ExperimentResultsCiPlot({
       </p>
     );
   }
+  // Legend (and only the legend) claims a zero-lift baseline when a matching
+  // arm is actually drawn. A frozen Control name with no ArmResult is missing
+  // data, not a cosmetic gap.
+  const baselineDrawn = baseline !== null && results.some((result) => result.variant === baseline);
   const domain = ciPlotDomain(
     results.map((result) => ({
       estimate: result.relative_lift_pct,
@@ -103,7 +107,7 @@ export function ExperimentResultsCiPlot({
           </text>
         </svg>
       </div>
-      <Legend control={control} />
+      <Legend baselineDrawn={baselineDrawn} control={control} />
     </figure>
   );
 }
@@ -138,8 +142,20 @@ function Ticks({ domain, height }: { domain: CiPlotDomain; height: number }) {
   );
 }
 
-function Legend({ control }: { control: FrozenControlIdentity }) {
+function Legend({
+  control,
+  baselineDrawn,
+}: {
+  control: FrozenControlIdentity;
+  baselineDrawn: boolean;
+}) {
   const baseline = baselineVariant(control);
+  const baselineLegend = !baseline
+    ? "Baseline unidentified, so no arm is drawn at zero lift"
+    : baselineDrawn
+      ? `Baseline (${baseline}) at zero lift by definition`
+      : `Baseline (${baseline}) arm is missing from these results`;
+
   return (
     <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-muted-foreground text-xs">
       <li className="flex items-center gap-2">
@@ -147,9 +163,7 @@ function Legend({ control }: { control: FrozenControlIdentity }) {
           aria-hidden="true"
           className="inline-block size-2.5 rounded-full bg-[color:var(--arm-control)]"
         />
-        {baseline
-          ? `Baseline (${baseline}) at zero lift by definition`
-          : "Baseline unidentified, so no arm is drawn at zero lift"}
+        {baselineLegend}
       </li>
       <li className="flex items-center gap-2">
         <span

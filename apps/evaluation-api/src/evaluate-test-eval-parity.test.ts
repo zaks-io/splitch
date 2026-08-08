@@ -40,10 +40,8 @@ import {
   makeSdkRouteHarness,
   sdkRouteInit,
 } from "./sdk-route-test-fixtures";
-import {
-  MemoryExposureRedemptionClaimStore,
-  RecordingExposureIngestSink,
-} from "./exposure-redemption";
+import { RecordingExposureIngestSink } from "./exposure-redemption";
+import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 
 const TEST_EVAL_PATH = `/apps/${APP_ID}/envs/${ENVIRONMENT_ID}/flags/${FLAG_KEY}/test-eval`;
 const EVALUATE_PATH = "/api/sdk/evaluate";
