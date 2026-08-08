@@ -3,7 +3,8 @@
  * Imported only by the writer-sweep test — excluded from the package build.
  */
 
-import { relative, resolve } from "node:path";
+import { readdirSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import {
@@ -24,6 +25,18 @@ const SRC_ROOT = FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT;
 const SCHEMA_FLAGS = resolve(SRC_ROOT, "schema/flags.ts");
 const FLAGS_REPO = resolve(SRC_ROOT, "repo/flags.ts");
 const SCOPED_TABLE = resolve(SRC_ROOT, "repo/scoped-table.ts");
+
+/**
+ * Paths under `src/` excluded from the production tsconfig (and therefore from
+ * the sweep program). Kept in sync with `packages/db/tsconfig.json` `exclude`
+ * entries that are not already covered by the `.test.ts` / `.spec.ts` filter.
+ */
+const PRODUCTION_TSCONFIG_EXCLUDED_RELS = new Set([
+  "repo/test-d1.ts",
+  "repo/test-d1-pool.ts",
+  "repo/test-d1-pool-setup.ts",
+  "repo/test-seed.ts",
+]);
 
 function fail(message: string): never {
   throw new Error(`flag_configs version sweep: ${message}`);
@@ -148,14 +161,79 @@ function facadeUpdateMethodType(checker: ts.TypeChecker, facadeType: ts.Type): t
   return unwrapType(checker, checker.getApparentType(checker.getTypeOfSymbol(update)));
 }
 
-function isProductionSource(source: ts.SourceFile): boolean {
-  if (source.isDeclarationFile) return false;
-  if (!source.fileName.startsWith(SRC_ROOT)) return false;
-  if (/\.test\.ts$|\.spec\.ts$/.test(source.fileName)) return false;
+/**
+ * Path-based twin of the SourceFile filter used when walking the program.
+ * Sweep helpers (`flag-config-version-writer-sweep*`) are build-excluded and
+ * are not production writers.
+ */
+function isSweepProductionRelPath(rel: string): boolean {
+  const normalized = rel.replaceAll("\\", "/");
+  if (!normalized.endsWith(".ts") || normalized.endsWith(".d.ts")) return false;
+  if (/\.test\.ts$|\.spec\.ts$/.test(normalized)) return false;
+  if (PRODUCTION_TSCONFIG_EXCLUDED_RELS.has(normalized)) return false;
+  if (/(^|\/)flag-config-version-writer-sweep[^/]*\.ts$/.test(normalized)) return false;
   return true;
 }
 
+function isProductionSource(source: ts.SourceFile): boolean {
+  if (source.isDeclarationFile) return false;
+  if (!source.fileName.startsWith(SRC_ROOT)) return false;
+  return isSweepProductionRelPath(relFile(source));
+}
+
+/**
+ * Every production `.ts` under the scan root the filesystem can see, filtered
+ * by the same rules as the resolver walk. Independent of which SourceFiles the
+ * program loop actually visited — so a narrowed walk fails `toEqual`.
+ */
+export function listExpectedScannedFiles(): string[] {
+  const out: string[] = [];
+  const walk = (absDir: string): void => {
+    for (const name of readdirSync(absDir)) {
+      const abs = join(absDir, name);
+      const st = statSync(abs);
+      if (st.isDirectory()) {
+        walk(abs);
+        continue;
+      }
+      const rel = relative(SRC_ROOT, abs).replaceAll("\\", "/");
+      if (isSweepProductionRelPath(rel)) out.push(rel);
+    }
+  };
+  walk(SRC_ROOT);
+  return out.sort((a, b) => a.localeCompare(b));
+}
+
+function lineOf(source: ts.SourceFile, node: ts.Node): number {
+  return source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+}
+
+/**
+ * Raw `sql\`UPDATE … flag_configs\`` (or `${flagConfigs}`) inside the scan root
+ * is invisible to the type-driven drizzle/scopedTable selectors. Fail loud —
+ * same posture as non-literal `.set(values)` — rather than silently green.
+ */
+function assertNoRawFlagConfigsSqlUpdate(source: ts.SourceFile): void {
+  const visit = (node: ts.Node): void => {
+    if (ts.isTaggedTemplateExpression(node)) {
+      const text = node.getText(source);
+      const touchesFlagConfigs = /\bflag_configs\b/.test(text) || /\bflagConfigs\b/.test(text);
+      if (/\bUPDATE\b/i.test(text) && touchesFlagConfigs) {
+        const where = `${relFile(source)}:${lineOf(source, node)}`;
+        fail(
+          `${where}: raw sql UPDATE of flag_configs cannot be scored by the ` +
+            `type-driven sweep — use db.update(flagConfigs) or scopedTable.update ` +
+            `so the version bump is enforced`,
+        );
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+}
+
 function collectSites(anchor: FacadeAnchor, source: ts.SourceFile): ResolvedUpdateSite[] {
+  assertNoRawFlagConfigsSqlUpdate(source);
   const sites: ResolvedUpdateSite[] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {

@@ -6,7 +6,7 @@
 export type UpdateSite = {
   file: string;
   line: number;
-  kind: "drizzle.update" | "scopedTable.update" | "sql.UPDATE" | "drizzle.upsert";
+  kind: "drizzle.update" | "scopedTable.update";
   setSource: string;
 };
 
@@ -16,6 +16,11 @@ export type UpdateSite = {
  * (whitespace-insensitive). Rejects a RHS that names a spread-source identifier
  * (`patch.version + 1` after `...patch`) and any non-exact form such as
  * `patch.version ?? current.version + 1`.
+ *
+ * Tripwire: a plain number like `seenVersion + 1` (helper param `version: number`)
+ * is rejected on purpose — fail closed. The allowlist requires the RHS to name
+ * the row's `.version` column (or the sql`version + 1` form), not a detached
+ * numeric binding a caller could pin.
  */
 export function isBumpExpr(expr: string, spreadSources: ReadonlySet<string> = new Set()): boolean {
   const t = expr.trim().replace(/\s+/g, " ");
@@ -117,20 +122,6 @@ function applySetSegment(
   return isBumpExpr(version[1], spreadSources) ? "bump" : "other";
 }
 
-/** SET-clause text inside a SQL UPDATE template (stops at WHERE). */
-function sqlSetClause(template: string): string | null {
-  const setAt = template.search(/\bSET\b/i);
-  if (setAt < 0) return null;
-  const afterSet = template.slice(setAt + 3);
-  const whereAt = afterSet.search(/\bWHERE\b/i);
-  return whereAt >= 0 ? afterSet.slice(0, whereAt) : afterSet;
-}
-
-function sqlVersionRhs(setClause: string): string | null {
-  const match = setClause.match(/\bversion\s*=\s*([^,]+)/i);
-  return match?.[1]?.trim() ?? null;
-}
-
 /**
  * The bump must be the assignment that WINS, and its RHS must be an allowlisted
  * derivation of the row's own counter. `{ version: patch.version ?? current.version + 1 }`
@@ -138,13 +129,6 @@ function sqlVersionRhs(setClause: string): string | null {
  * sweep exists to prevent.
  */
 export function bumpWins(site: UpdateSite): boolean {
-  if (site.kind === "sql.UPDATE") {
-    const clause = sqlSetClause(site.setSource);
-    if (!clause) return false;
-    const rhs = sqlVersionRhs(clause);
-    if (!rhs) return false;
-    return /^(?:(?:[\w"]+\.)?version) \+ 1$/i.test(rhs.replace(/\s+/g, " ").trim());
-  }
   if (!site.setSource.startsWith("{") || !site.setSource.endsWith("}")) return false;
   const spreadSources = spreadSourcesIn(site.setSource);
   let effective: EffectiveVersion = null;

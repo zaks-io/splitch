@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { bumpWins, isBumpExpr } from "./flag-config-version-writer-sweep-lib";
 import {
   FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT,
+  listExpectedScannedFiles,
   resolveFlagConfigUpdates,
   type FlagConfigUpdateResolution,
   type ResolvedUpdateSite,
@@ -26,10 +27,10 @@ import {
  * still go through the receiver path. Direct `.update(...)` on a typed facade
  * receiver is the same rule as a detached ref — one callee-type match.
  *
- * Assertions are the property (every discovered site bumps) plus anti-vacuity
- * (non-trivial site count spanning the known writer modules). There is no
- * hand-maintained `file:line` inventory — line numbers move under unrelated
- * edits and are not the invariant.
+ * Assertions are the property (every discovered site bumps) plus derived
+ * anti-vacuity: the walk list must equal a filesystem listing of the scan root
+ * (same production-source filter as the resolver), and discovered sites must
+ * span at least two modules. No hand-maintained file or `file:line` inventory.
  *
  * The TypeChecker program is built once in `beforeAll` (paid once for both
  * assertions below). Individual `it`s keep vitest's 5s default; only the hook
@@ -41,8 +42,11 @@ import {
  * `@splitch/db` importers in `apps/cli` that sit outside every tsconfig
  * (`quickstart-local-harness.ts`, `dark-launch-experiment.ts`,
  * `dark-launch-http.ts`), where the runtime TypeError is what covers them.
- * Raw `D1Database.prepare` UPDATEs of `flag_configs` are outside both and are
- * not guarded — including the live `UPDATE flag_configs SET …` at
+ *
+ * Raw SQL UPDATEs of `flag_configs` **inside** `packages/db/src` fail loud
+ * (they cannot be scored by the type-driven selectors). Raw
+ * `D1Database.prepare` UPDATEs outside this package remain unguarded —
+ * including the live `UPDATE flag_configs SET …` at
  * `apps/control-plane-api/src/config-store-fixture-data.ts:169` (test-fixture
  * helper imported only by `.test.ts` files, not a production writer).
  *
@@ -55,16 +59,6 @@ import {
 const SCAN_ROOT = "packages/db/src";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../../../..", import.meta.url)));
-
-/**
- * Floor on how many UPDATE sites the resolver must find. Today's production
- * tree has five; a silently empty or ops-only-narrowed resolver falls below
- * this. Not an inventory of identities — just anti-vacuity.
- */
-const MIN_WRITER_SITES = 5;
-
-/** Modules that currently host writers; site set must span both. */
-const KNOWN_WRITER_FILES = ["repo/flag-config-ops.ts", "repo/flag-variant-approval.ts"] as const;
 
 /** Repo-standard budget for hooks that build a TypeScript program (not per-`it`). */
 const PROGRAM_HOOK_TIMEOUT_MS = 15_000;
@@ -88,28 +82,20 @@ describe("every flag_configs UPDATE bumps version", () => {
     expect(relative(REPO_ROOT, FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT).replaceAll("\\", "/")).toBe(
       SCAN_ROOT,
     );
-    // Anti-narrowing on the walk list: both known writer modules must be among
-    // the files the resolver visited.
-    for (const file of KNOWN_WRITER_FILES) {
-      expect(scannedFiles, `resolver must walk ${file}`).toContain(file);
-    }
-    expect(scannedFiles.length).toBeGreaterThan(KNOWN_WRITER_FILES.length);
+    // Walk anti-narrowing: filesystem listing (same production filter) must
+    // equal what the resolver actually visited — no pinned writer filenames.
+    expect(scannedFiles).toEqual(listExpectedScannedFiles());
   });
 
   it("discovers a non-trivial writer set and every site bumps version", () => {
     const { sites } = resolution;
 
+    // Site-set anti-narrowing: collecting from a single module while still
+    // walking everything fails without naming any writer path.
     expect(
-      sites.length,
-      "resolver returned too few writers — vacuous or narrowed",
-    ).toBeGreaterThanOrEqual(MIN_WRITER_SITES);
-
-    // Anti-narrowing on the site set itself (independent of scannedFiles): a
-    // loop that still walks every file but only collects from one module fails.
-    const siteFiles = new Set(sites.map((s) => s.file));
-    for (const file of KNOWN_WRITER_FILES) {
-      expect(siteFiles, `discovered sites must include ${file}`).toContain(file);
-    }
+      new Set(sites.map((s) => s.file)).size,
+      "discovered sites must span at least two modules",
+    ).toBeGreaterThanOrEqual(2);
 
     const violators = sites.filter((site) => !bumpWins(site));
     expect(

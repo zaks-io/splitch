@@ -105,12 +105,13 @@ function callApplyUpdateReceiver(expr: ts.Expression): { receiver: ts.Expression
 function scopedFromValues(
   source: ts.SourceFile,
   values: ts.Expression | undefined,
+  file: string,
   where: string,
 ): ResolvedUpdateSite {
   if (!values) fail(`${where}: scoped update missing values argument`);
   const setSource = objectLiteralText(values, source, where);
   return {
-    file: where.split(":")[0] ?? "",
+    file,
     line: versionSiteLine(values as ts.ObjectLiteralExpression, source),
     kind: "scopedTable.update",
     setSource,
@@ -130,24 +131,21 @@ export function tryScopedSite(
   call: ts.CallExpression,
   source: ts.SourceFile,
 ): ResolvedUpdateSite | undefined {
+  const file = anchor.relFile(source);
   const callApply = callApplyUpdateReceiver(call.expression);
   if (callApply) {
     const recvType = anchor.checker.getTypeAtLocation(callApply.receiver);
     if (!isFlagConfigsFacadeType(anchor, recvType)) return undefined;
-    const where = `${anchor.relFile(source)}:${lineOf(source, call)}`;
-    const site = scopedFromValues(source, call.arguments[2], where);
-    site.file = anchor.relFile(source);
-    return site;
+    const where = `${file}:${lineOf(source, call)}`;
+    return scopedFromValues(source, call.arguments[2], file, where);
   }
 
   // Type-driven detached-method rule: any CallExpression whose callee's
   // apparent type matches the canonical facade's `update` member — parameter
   // destructure, multi-hop alias, callback parameter, direct `.update(...)`.
   if (!calleeIsFacadeUpdate(anchor, call)) return undefined;
-  const where = `${anchor.relFile(source)}:${lineOf(source, call)}`;
-  const site = scopedFromValues(source, call.arguments[1], where);
-  site.file = anchor.relFile(source);
-  return site;
+  const where = `${file}:${lineOf(source, call)}`;
+  return scopedFromValues(source, call.arguments[1], file, where);
 }
 
 function tableArgSymbol(anchor: FacadeAnchor, tableArg: ts.Expression): ts.Symbol | undefined {
