@@ -169,7 +169,7 @@ function unparseableSegment(input: unknown): UnparseablePanelSegment {
     return { reason: "Segment entry is not an object" };
   }
   return {
-    ...(typeof input.id === "string" ? { id: input.id } : {}),
+    ...(input.id !== undefined && input.id !== null ? { id: String(input.id) } : {}),
     ...(typeof input.name === "string" ? { name: input.name } : {}),
     reason: describeSegmentParseFailure(input),
   };

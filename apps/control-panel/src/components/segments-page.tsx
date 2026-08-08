@@ -150,12 +150,54 @@ function UnparseableSegments({
                 segmentId={row.id}
                 segmentName={row.name ?? row.id}
               />
-            ) : null}
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                This row has no Segment id and cannot be removed from the Panel.
+              </p>
+            )}
           </li>
         ))}
       </ul>
     </div>
   );
+}
+
+/**
+ * Confirm-and-delete path for an unparseable Segment row. Exported so the
+ * component suite can pin the App id / Segment id handed to the mutation
+ * without a DOM harness — the button below is the only caller in product UI.
+ */
+export async function deleteUnparseableSegment(args: {
+  appId: string;
+  environmentId: string;
+  segmentId: string;
+  segmentName: string;
+  confirm?: (message: string) => boolean;
+}): Promise<"deleted" | "cancelled" | { error: MutationErrorSurface }> {
+  const confirm = args.confirm ?? ((message) => window.confirm(message));
+  if (!confirm(`Delete ${args.segmentName}? This cannot be undone.`)) {
+    return "cancelled";
+  }
+  try {
+    const result = await deleteControlPanelSegment({
+      data: {
+        appId: args.appId,
+        environmentId: args.environmentId,
+        segmentId: args.segmentId,
+      },
+    });
+    if (result.ok) return "deleted";
+    return { error: mutationErrorSurface(result) };
+  } catch {
+    return {
+      error: {
+        kind: "form",
+        code: "TRANSPORT_FAILURE",
+        message: "The Control Plane could not delete this Segment. Try again.",
+        fields: [],
+      },
+    };
+  }
 }
 
 function UnparseableSegmentDelete({
@@ -175,22 +217,17 @@ function UnparseableSegmentDelete({
   const [error, setError] = useState<MutationErrorSurface | null>(null);
 
   async function remove() {
-    if (!window.confirm(`Delete ${segmentName}? This cannot be undone.`)) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await deleteControlPanelSegment({
-        data: { appId, environmentId, segmentId },
+      const result = await deleteUnparseableSegment({
+        appId,
+        environmentId,
+        segmentId,
+        segmentName,
       });
-      if (result.ok) await onDeleted();
-      else setError(mutationErrorSurface(result));
-    } catch {
-      setError({
-        kind: "form",
-        code: "TRANSPORT_FAILURE",
-        message: "The Control Plane could not delete this Segment. Try again.",
-        fields: [],
-      });
+      if (result === "deleted") await onDeleted();
+      else if (result !== "cancelled") setError(result.error);
     } finally {
       setBusy(false);
     }

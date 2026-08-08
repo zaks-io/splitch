@@ -42,6 +42,7 @@ test.describe("App-level Segments", () => {
     await createDialog.getByRole("button", { name: "Create Segment" }).click();
     await expect(createDialog.getByText("Enter a Segment name.")).toBeVisible();
     await expect(createDialog.getByText("Enter an attribute.")).toBeVisible();
+    await expect(createDialog.getByText("Enter a value.")).toBeVisible();
 
     await createDialog.getByLabel("Segment name").fill(name);
     await createDialog.getByLabel("Attribute").fill("plan");

@@ -98,9 +98,10 @@ describe("Visible navigation destinations", () => {
 
 describe("Deferred destination deep links", () => {
   /**
-   * The live registry may have zero deferred entries. The matchers below are
-   * proven against a fixture destination so the class stays covered when every
-   * real destination is shipped.
+   * The live registry may have zero deferred entries. Matcher coverage below
+   * uses a fixture destination so the class stays proven when every real
+   * destination is shipped. The live-registry invariant still requires every
+   * non-shipped entry to declare why it is hidden.
    */
   const deferredFixture: NavigationDestination = {
     label: "Deferred fixture",
@@ -114,14 +115,11 @@ describe("Deferred destination deep links", () => {
   ];
 
   it("explains why each hidden destination is hidden", () => {
-    for (const destination of fixtureRegistry) {
-      if (destination.status !== "deferred") continue;
+    const registered: readonly NavigationDestination[] = appSectionRegistry;
+    for (const destination of registered) {
+      if (destination.status === "shipped") continue;
       expect(destination.hiddenBecause, `${destination.label} hidden reason`).toBeTruthy();
     }
-    expect(
-      appSectionRegistry.every((destination) => destination.status === "shipped"),
-      "live deferred entries must declare hiddenBecause when reintroduced",
-    ).toBe(true);
   });
 
   it("requires at least one deferred fixture destination", () => {

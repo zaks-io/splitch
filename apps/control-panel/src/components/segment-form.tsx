@@ -51,8 +51,7 @@ export function SegmentForm({
       <DialogHeader>
         <DialogTitle>{segment ? `Edit ${segment.name}` : "Create Segment"}</DialogTitle>
         <DialogDescription>
-          Defined once for this App. Available in every Environment — there is no per-Environment
-          copy.
+          Defined once for this App. Available in every Environment.
         </DialogDescription>
       </DialogHeader>
 

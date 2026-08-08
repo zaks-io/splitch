@@ -54,6 +54,13 @@ describe("panel Segments binding transport", () => {
       ["PATCH", "https://control-plane.internal/apps/app_1/segments/segment_1"],
       ["DELETE", "https://control-plane.internal/apps/app_1/segments/segment_1"],
     ]);
+    expect(JSON.parse(requests[1]?.body ?? "{}")).toEqual({
+      name: "Paid plan",
+      conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
+    });
+    expect(JSON.parse(requests[3]?.body ?? "{}")).toEqual({
+      name: "Enterprise plan",
+    });
   });
 
   it("keeps parseable Segments and names the unparseable ones without failing the list", async () => {
@@ -70,6 +77,14 @@ describe("panel Segments binding transport", () => {
               createdAt: "2026-07-29T00:00:00.000Z",
               updatedAt: "2026-07-29T00:00:00.000Z",
             },
+            {
+              id: 42,
+              appId: "app_1",
+              name: "Numeric id",
+              conditions: [{ attribute: "plan", operator: "in", value: [null] }],
+              createdAt: "2026-07-29T00:00:00.000Z",
+              updatedAt: "2026-07-29T00:00:00.000Z",
+            },
           ],
         }),
       ),
@@ -83,6 +98,11 @@ describe("panel Segments binding transport", () => {
           {
             id: "segment_poison",
             name: "Poison",
+            reason: expect.stringMatching(/conditions|Invalid|null/i),
+          },
+          {
+            id: "42",
+            name: "Numeric id",
             reason: expect.stringMatching(/conditions|Invalid|null/i),
           },
         ],

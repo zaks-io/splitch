@@ -22,6 +22,8 @@ const OPERATOR_LABELS: Record<ConditionOperator, string> = {
   not_matches: "does not match",
 };
 
+export type ConditionValueType = "string" | "number" | "boolean";
+
 export function conditionOperatorOptions(): ReadonlyArray<{
   operator: ConditionOperator;
   label: string;
@@ -34,6 +36,24 @@ export function conditionOperatorOptions(): ReadonlyArray<{
 
 export function isListOperator(operator: ConditionOperator): boolean {
   return operator === "in" || operator === "not_in";
+}
+
+/**
+ * Operators whose value type is fixed by the operator itself. Polymorphic
+ * operators (`eq` / `neq` / `in` / `not_in`) leave the type to the author.
+ */
+export function forcedValueType(operator: ConditionOperator): ConditionValueType | null {
+  if (operator === "gt" || operator === "gte" || operator === "lt" || operator === "lte") {
+    return "number";
+  }
+  if (operator === "matches" || operator === "not_matches") {
+    return "string";
+  }
+  return null;
+}
+
+export function isPolymorphicValueOperator(operator: ConditionOperator): boolean {
+  return forcedValueType(operator) === null;
 }
 
 const ConditionValueEntrySchema = z
@@ -70,8 +90,12 @@ export type SegmentDraftIssue = {
   message: string;
 };
 
-export function emptyValueEntry(type: ConditionValueEntry["type"] = "string"): ConditionValueEntry {
-  return { key: newConditionKey(), text: "", type };
+export function emptyValueEntry(type: ConditionValueType): ConditionValueEntry {
+  return {
+    key: newConditionKey(),
+    text: type === "boolean" ? "true" : "",
+    type,
+  };
 }
 
 export function emptyConditionDraft(): ConditionDraft {
@@ -79,7 +103,7 @@ export function emptyConditionDraft(): ConditionDraft {
     key: newConditionKey(),
     attribute: "",
     operator: "eq",
-    values: [emptyValueEntry()],
+    values: [emptyValueEntry("string")],
   };
 }
 
@@ -105,14 +129,37 @@ export function segmentDraftIssues(draft: SegmentDraft): SegmentDraftIssue[] {
     issues.push({ path: "name", message: "Enter a Segment name." });
   }
   draft.conditions.forEach((condition, index) => {
-    if (!condition.attribute.trim()) {
-      issues.push({
-        path: `conditions.${index}.attribute`,
-        message: "Enter an attribute.",
-      });
-    }
+    issues.push(...conditionDraftIssues(condition, index));
   });
   return issues;
+}
+
+function conditionDraftIssues(condition: ConditionDraft, index: number): SegmentDraftIssue[] {
+  const issues: SegmentDraftIssue[] = [];
+  if (!condition.attribute.trim()) {
+    issues.push({
+      path: `conditions.${index}.attribute`,
+      message: "Enter an attribute.",
+    });
+  }
+  const valueIssue = conditionValueIssue(condition);
+  if (valueIssue) {
+    issues.push({ path: `conditions.${index}.value`, message: valueIssue });
+  }
+  return issues;
+}
+
+function conditionValueIssue(condition: ConditionDraft): string | undefined {
+  if (isListOperator(condition.operator)) {
+    for (const entry of condition.values) {
+      const entryIssue = valueEntryIssue(entry);
+      if (entryIssue) return entryIssue;
+    }
+    return undefined;
+  }
+  const only =
+    condition.values[0] ?? emptyValueEntry(forcedValueType(condition.operator) ?? "string");
+  return valueEntryIssue(only);
 }
 
 export function segmentCreateInput(draft: SegmentDraft): CreateSegmentRequest {
@@ -159,31 +206,35 @@ export function conditionWithOperator(
 ): ConditionDraft {
   const wasList = isListOperator(condition.operator);
   const willList = isListOperator(operator);
-  if (wasList === willList) return { ...condition, operator };
-  if (willList) {
-    return {
-      ...condition,
-      operator,
-      values: condition.values.length > 0 ? condition.values : [emptyValueEntry()],
-    };
+  const defaultType = forcedValueType(operator) ?? "string";
+  let values: ConditionValueEntry[];
+  if (wasList === willList) {
+    values = condition.values;
+  } else if (willList) {
+    values = condition.values.length > 0 ? condition.values : [emptyValueEntry(defaultType)];
+  } else {
+    values =
+      condition.values.slice(0, 1).length > 0
+        ? condition.values.slice(0, 1)
+        : [emptyValueEntry(defaultType)];
   }
-  return {
-    ...condition,
-    operator,
-    values:
-      condition.values.slice(0, 1).length > 0 ? condition.values.slice(0, 1) : [emptyValueEntry()],
-  };
+  const forced = forcedValueType(operator);
+  if (forced) {
+    values = values.map((entry) => coerceEntryType(entry, forced));
+  }
+  return { ...condition, operator, values };
 }
 
 function conditionToDraft(condition: Condition): ConditionDraft {
   const values = Array.isArray(condition.value)
     ? condition.value.map(valueEntryFromStored)
     : [valueEntryFromStored(condition.value)];
+  const forced = forcedValueType(condition.operator);
   return {
     key: newConditionKey(),
     attribute: condition.attribute,
     operator: condition.operator,
-    values,
+    values: forced ? values.map((entry) => coerceEntryType(entry, forced)) : values,
   };
 }
 
@@ -220,14 +271,35 @@ function emitStoredValue(entry: ConditionValueEntry): string | number | boolean 
     if (entry.text === "false") return false;
     return entry.text;
   }
-  if (
-    entry.text !== "" &&
-    Number.isFinite(Number(entry.text)) &&
-    /^-?\d+(\.\d+)?$/.test(entry.text)
-  ) {
-    return Number(entry.text);
+  return Number(entry.text);
+}
+
+function valueEntryIssue(entry: ConditionValueEntry): string | undefined {
+  if (entry.type === "number") {
+    if (entry.text.trim() === "" || !Number.isFinite(Number(entry.text))) {
+      return "Enter a number.";
+    }
+    return undefined;
   }
-  return entry.text;
+  if (entry.text === "") {
+    return "Enter a value.";
+  }
+  return undefined;
+}
+
+function coerceEntryType(
+  entry: ConditionValueEntry,
+  type: ConditionValueType,
+): ConditionValueEntry {
+  if (entry.type === type) return entry;
+  if (type === "boolean") {
+    return {
+      ...entry,
+      type,
+      text: entry.text === "false" ? "false" : "true",
+    };
+  }
+  return { ...entry, type };
 }
 
 function formatStoredValue(value: string | number | boolean): string {

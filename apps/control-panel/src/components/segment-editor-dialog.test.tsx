@@ -34,5 +34,7 @@ describe("Segment editor dialog", () => {
     expect(html).toContain('id="segment-name"');
     expect(html).toContain("Segment name");
     expect(html).toContain("Defined once for this App");
+    expect(html).toContain("Available in every Environment.");
+    expect(html).not.toContain("—");
   });
 });
