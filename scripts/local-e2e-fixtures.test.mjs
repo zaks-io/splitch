@@ -4,10 +4,14 @@ import { LOCAL_E2E_ANALYSIS_INPUTS } from "./local-e2e-analysis-inputs.mjs";
 import {
   LOCAL_E2E_D1_SEED,
   LOCAL_E2E_FIXTURE_CONTRACT,
+  LOCAL_E2E_MEMBER_PROFILES,
   LOCAL_E2E_MEMBER_SESSION_KEY,
+  LOCAL_E2E_PROFILELESS_USER_ID,
+  LOCAL_E2E_RECRUIT_USER_ID,
   LOCAL_E2E_SESSION_KEY,
   localE2eMemberSession,
   localE2eSession,
+  memberProfileKey,
 } from "./local-e2e-fixtures.mjs";
 
 const expiresAt = 2_000_000_000;
@@ -58,6 +62,26 @@ test("seeded Organization slugs match the contract the Panel routes on", () => {
       assert.equal(seeded.find(({ id }) => id === org.orgId)?.slug, org.orgSlug);
     }
   }
+});
+
+/**
+ * A seeded membership without a profile proves the normal pre-login state. The
+ * roster must keep that row without fabricating an email.
+ */
+test("the roster fixture includes exactly one member without a cached profile", () => {
+  const membershipsInsert = LOCAL_E2E_D1_SEED.match(/INSERT INTO org_memberships[^;]*;/)?.[0];
+  assert.ok(membershipsInsert, "the seed must insert Org memberships");
+  const seededUserIds = [...membershipsInsert.matchAll(/\('org_\w+', '(user_\w+)'/g)].map(
+    ([, userId]) => userId,
+  );
+  assert.ok(seededUserIds.length >= 3);
+
+  const withoutProfiles = seededUserIds.filter((userId) => !LOCAL_E2E_MEMBER_PROFILES[userId]);
+  assert.deepEqual(withoutProfiles, [LOCAL_E2E_PROFILELESS_USER_ID]);
+  // The person the Members screen adds must start outside every Organization.
+  assert.equal(seededUserIds.includes(LOCAL_E2E_RECRUIT_USER_ID), false);
+  assert.ok(LOCAL_E2E_MEMBER_PROFILES[LOCAL_E2E_RECRUIT_USER_ID]);
+  assert.equal(memberProfileKey("user_x"), "member-profile:user_x");
 });
 
 test("fixture App has explicit Environments and Run-scoped Experiment health states", () => {

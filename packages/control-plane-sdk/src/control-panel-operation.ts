@@ -25,6 +25,17 @@ export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 export type ControlPanelOperation =
   | { id: "apps_create"; orgId: string }
   | { id: "organization_usage_get"; orgId: string }
+  /**
+   * Org membership. The collection pair names only the Organization; the
+   * resource pair also names the member acted on, so a delegation minted to
+   * change one member's role can never be replayed against another member.
+   */
+  | { id: "organization_members_list" | "organization_members_add"; orgId: string }
+  | {
+      id: "organization_members_update" | "organization_members_remove";
+      orgId: string;
+      userId: string;
+    }
   | { id: "app_attention_rollup_get"; appId: string }
   | { id: "experiments_detail" }
   | { id: "experiments_list" }
@@ -125,6 +136,16 @@ const EXPERIMENT_MUTATION_PATH =
   /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/([^/]+)(\/start)?\/?$/;
 const EXPERIMENTS_COLLECTION_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/?$/;
 const ORGANIZATIONS_PATH = /^\/orgs\/?$/;
+const ORG_MEMBERS_PATH = /^\/orgs\/([^/]+)\/members\/?$/;
+const ORG_MEMBER_PATH = /^\/orgs\/([^/]+)\/members\/([^/]+)\/?$/;
+const ORG_MEMBER_COLLECTION_METHODS = {
+  GET: "organization_members_list",
+  POST: "organization_members_add",
+} as const;
+const ORG_MEMBER_RESOURCE_METHODS = {
+  PATCH: "organization_members_update",
+  DELETE: "organization_members_remove",
+} as const;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
 const TARGETING_RULES_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/targeting-rules\/?$/;
 const FLAG_PROMOTE_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/promote\/?$/;
@@ -148,6 +169,7 @@ export function parseControlPanelOperation(
     parseOrganizationUsage(method, pathname) ??
     parseAppAttention(method, pathname) ??
     parseOrganizationsCreate(method, pathname) ??
+    parseOrgMembers(method, pathname) ??
     parseExperimentsList(method, pathname) ??
     parseExperimentMutation(method, pathname) ??
     parseExperimentCreate(method, pathname) ??
@@ -176,6 +198,30 @@ function parseOrganizationsCreate(method: string, pathname: string): ControlPane
   return method === "POST" && ORGANIZATIONS_PATH.test(pathname)
     ? { id: "organizations_create" }
     : null;
+}
+
+/**
+ * The four Org membership operations. The collection and resource patterns are
+ * disjoint by construction: the resource one requires a member segment, so a
+ * list delegation can never satisfy a per-member mutation.
+ */
+function parseOrgMembers(method: string, pathname: string): ControlPanelOperation | null {
+  return parseOrgMemberCollection(method, pathname) ?? parseOrgMemberResource(method, pathname);
+}
+
+function parseOrgMemberCollection(method: string, pathname: string): ControlPanelOperation | null {
+  const id = ORG_MEMBER_COLLECTION_METHODS[method as keyof typeof ORG_MEMBER_COLLECTION_METHODS];
+  const match = pathname.match(ORG_MEMBERS_PATH);
+  const orgId = match?.[1] ? decodeSegment(match[1]) : null;
+  return id && orgId ? { id, orgId } : null;
+}
+
+function parseOrgMemberResource(method: string, pathname: string): ControlPanelOperation | null {
+  const id = ORG_MEMBER_RESOURCE_METHODS[method as keyof typeof ORG_MEMBER_RESOURCE_METHODS];
+  const match = pathname.match(ORG_MEMBER_PATH);
+  if (!match?.[1] || !match[2]) return null;
+  const [orgId, userId] = decodedSegments(match.slice(1, 3));
+  return id && orgId && userId ? { id, orgId, userId } : null;
 }
 
 /**

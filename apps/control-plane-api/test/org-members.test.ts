@@ -12,12 +12,15 @@ import {
   OWNER,
   orgRoute,
   PRIMARY,
+  PROFILELESS_MEMBER,
   SOLO,
+  SOLO_ADMIN,
   SOLO_OWNER,
   seedOrgs,
   setup,
   teardown,
   token,
+  UNKNOWN_USER,
 } from "./org-members-harness";
 
 beforeAll(seedOrgs);
@@ -102,6 +105,35 @@ describe("control-plane org/member endpoints", () => {
     expect((await bodyOf(addMember)).code).toBe("FORBIDDEN");
   });
 
+  it("403s a member-role token listing Organization members", async () => {
+    const memberJwt = await token(MEMBER, PRIMARY.orgId, "member");
+    const res = await memberRoute(client(memberJwt)).$get({ param: { orgId: PRIMARY.orgId } });
+
+    expect(res.status).toBe(403);
+    expect((await bodyOf(res)).code).toBe("FORBIDDEN");
+  });
+
+  it("403s an admin-role token changing a member role", async () => {
+    const adminJwt = await token(ADMIN, PRIMARY.orgId, "admin");
+    const res = await memberResourceRoute(client(adminJwt)).$patch({
+      param: { orgId: PRIMARY.orgId, userId: MEMBER },
+      json: { role: "admin" },
+    });
+
+    expect(res.status).toBe(403);
+    expect((await bodyOf(res)).code).toBe("FORBIDDEN");
+  });
+
+  it("403s an admin-role token removing a member", async () => {
+    const adminJwt = await token(ADMIN, PRIMARY.orgId, "admin");
+    const res = await memberResourceRoute(client(adminJwt)).$delete({
+      param: { orgId: PRIMARY.orgId, userId: MEMBER },
+    });
+
+    expect(res.status).toBe(403);
+    expect((await bodyOf(res)).code).toBe("FORBIDDEN");
+  });
+
   it("403s an admin-role token granting the owner role (owner grants are owner-only)", async () => {
     const adminJwt = await token(ADMIN, PRIMARY.orgId, "admin");
     const res = await memberRoute(client(adminJwt)).$post({
@@ -124,15 +156,96 @@ describe("control-plane org/member endpoints", () => {
     expect(await res.json()).toMatchObject({ id: NEW_MEMBER, role: "owner" });
   });
 
-  it("does not let member add change an existing member role", async () => {
+  it("409s when add names an existing member and reports their current role", async () => {
     const adminJwt = await token(ADMIN, PRIMARY.orgId, "admin");
     const res = await memberRoute(client(adminJwt)).$post({
       param: { orgId: PRIMARY.orgId },
       json: { userId: OWNER, role: "member" },
     });
 
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      code: "MEMBERSHIP_CONFLICT",
+      details: { existingRole: "owner" },
+    });
+  });
+
+  it("keeps a member without a cached profile in the roster", async () => {
+    const ownerJwt = await token(OWNER, PRIMARY.orgId, "owner");
+    const res = await memberRoute(client(ownerJwt)).$get({ param: { orgId: PRIMARY.orgId } });
+
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ id: OWNER, role: "owner" });
+    expect(await res.json()).toMatchObject({
+      items: expect.arrayContaining([
+        expect.objectContaining({ id: PROFILELESS_MEMBER, email: null, role: "member" }),
+      ]),
+    });
+  });
+
+  it("changes the role of a member without a cached profile", async () => {
+    const ownerJwt = await token(OWNER, PRIMARY.orgId, "owner");
+    const res = await memberResourceRoute(client(ownerJwt)).$patch({
+      param: { orgId: PRIMARY.orgId, userId: PROFILELESS_MEMBER },
+      json: { role: "admin" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      id: PROFILELESS_MEMBER,
+      email: null,
+      organizationId: PRIMARY.orgId,
+      role: "admin",
+    });
+  });
+
+  it("adds a real user whose profile is not cached", async () => {
+    const ownerJwt = await token(SOLO_OWNER, SOLO.orgId, "owner");
+    const res = await memberRoute(client(ownerJwt)).$post({
+      param: { orgId: SOLO.orgId },
+      json: { userId: PROFILELESS_MEMBER, role: "member" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      id: PROFILELESS_MEMBER,
+      email: null,
+      organizationId: SOLO.orgId,
+      role: "member",
+    });
+  });
+
+  it("404s USER_NOT_FOUND adding a userId with no profile and no membership anywhere", async () => {
+    const ownerJwt = await token(OWNER, PRIMARY.orgId, "owner");
+    const res = await memberRoute(client(ownerJwt)).$post({
+      param: { orgId: PRIMARY.orgId },
+      json: { userId: UNKNOWN_USER, role: "member" },
+    });
+
+    expect(res.status).toBe(404);
+    expect((await bodyOf(res)).code).toBe("USER_NOT_FOUND");
+  });
+
+  it("403s an Organization A actor with a forged Organization B scope on every member route", async () => {
+    const forgedOrgBJwt = await token(OWNER, SOLO.orgId, "owner");
+    const api = client(forgedOrgBJwt);
+
+    const listed = await memberRoute(api).$get({ param: { orgId: SOLO.orgId } });
+    const added = await memberRoute(api).$post({
+      param: { orgId: SOLO.orgId },
+      json: { userId: NEW_MEMBER, role: "member" },
+    });
+    const updated = await memberResourceRoute(api).$patch({
+      param: { orgId: SOLO.orgId, userId: SOLO_ADMIN },
+      json: { role: "member" },
+    });
+    const removed = await memberResourceRoute(api).$delete({
+      param: { orgId: SOLO.orgId, userId: SOLO_ADMIN },
+    });
+
+    for (const response of [listed, added, updated, removed]) {
+      expect.soft(response.status).toBe(403);
+      expect.soft((await bodyOf(response)).code).toBe("FORBIDDEN");
+    }
   });
 
   it("409s LAST_OWNER_REQUIRED when removing or demoting the last owner", async () => {
