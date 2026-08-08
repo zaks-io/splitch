@@ -47,7 +47,7 @@ test.describe("Org shell and App list", () => {
       .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href") ?? ""));
     // An Org section (`/{orgSlug}/billing`) has the same shape as a bare-App
     // href without being one, so it is named rather than loosening the pattern.
-    const orgSections = new Set(["/acme-labs/billing"]);
+    const orgSections = new Set(["/acme-labs/billing", "/acme-labs/members"]);
     expect(
       hrefs.filter((href) => /^\/acme-labs\/[^/?#]+$/.test(href) && !orgSections.has(href)),
     ).toEqual([]);
