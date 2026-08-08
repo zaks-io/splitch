@@ -8,22 +8,31 @@ import {
 /**
  * Map a thrown claim-store fault to the per-item Exposure rejection code.
  *
- * Transient (SDK retries): Durable Object transport failure → SERVICE_UNAVAILABLE.
- * Deterministic (SDK drops): protocol violation, DO HTTP 400, TypeError, and any
- * unclassified throw → INTERNAL_SERVER_ERROR (fail loud; never quietly retryable).
+ * Transient (SDK retries):
+ * - Durable Object transport failure (stub fetch threw)
+ * - Durable Object non-400 HTTP (e.g. 500 — reachable; see exposure-redemption-do.test.ts)
+ *
+ * Deterministic (SDK drops):
+ * - Durable Object HTTP 400
+ * - parseClaimOutcome protocol violation
+ * - TypeError / any unclassified throw (fail loud; never quietly retryable)
  *
  * docs/spec/sdk/exposures-endpoint.md
  */
+const DETERMINISTIC_CLAIM_HTTP_STATUSES = new Set([400]);
+
 export function exposureClaimFaultCode(cause: unknown): ErrorCode {
   if (cause instanceof ExposureRedemptionClaimTransportError) {
     return "SERVICE_UNAVAILABLE";
   }
-  if (
-    cause instanceof ExposureRedemptionClaimHttpError ||
-    cause instanceof ExposureRedemptionClaimProtocolError
-  ) {
+  if (cause instanceof ExposureRedemptionClaimHttpError) {
+    if (DETERMINISTIC_CLAIM_HTTP_STATUSES.has(cause.status)) {
+      return "INTERNAL_SERVER_ERROR";
+    }
+    return "SERVICE_UNAVAILABLE";
+  }
+  if (cause instanceof ExposureRedemptionClaimProtocolError) {
     return "INTERNAL_SERVER_ERROR";
   }
-  // TypeError and every unclassified throw: fail loud as non-retryable.
   return "INTERNAL_SERVER_ERROR";
 }

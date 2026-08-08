@@ -5,6 +5,7 @@ import {
 } from "@splitch/contracts";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import type { AssignmentStore } from "./assignment/assignment-store";
+import { errorCauseChain } from "./error-cause-chain";
 import { assembleExposureFromTicket } from "./evaluate/exposure-assembly";
 import type { ExposureTicketPayload, MintExposureTicketDeps } from "./evaluate/exposure-ticket";
 import { exposureClaimFaultCode } from "./exposure-claim-fault";
@@ -13,14 +14,12 @@ import {
   ExposureIngestSinkError,
   ticketFingerprint,
 } from "./exposure-redemption";
-import type {
-  ExposureRedemptionClaimInput,
-  ExposureRedemptionClaimStore,
-} from "./exposure-redemption-claim-core";
-import { logExposureRedemptionFault } from "./exposure-redemption-log";
+import type { ExposureRedemptionClaimStore } from "./exposure-redemption-claim-core";
 import {
   ingestFailureCode,
+  type RedemptionClaimContext,
   rejected,
+  releaseClaimQuietly,
   scheduleHoldoverWrite,
   verifyTicketForScope,
 } from "./exposures-helpers";
@@ -41,8 +40,6 @@ interface ExposuresRouteDeps {
   readonly logger?: { error(message: string, detail: unknown): void };
   readonly now?: () => Date;
 }
-
-type RedemptionClaimContext = ExposureRedemptionClaimInput & { readonly requestId: string };
 
 export function makeExposuresHandler(deps: ExposuresRouteDeps) {
   return async ({
@@ -91,7 +88,13 @@ async function redeemOne(
   try {
     claim = await deps.exposureRedemptionClaims.claim(claimInput);
   } catch (cause) {
-    logExposureRedemptionFault(deps.logger, "exposure_redemption_claim_failed", claimInput, cause);
+    deps.logger?.error("exposure_redemption_claim_failed", {
+      requestId: claimInput.requestId,
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      exposureId: item.exposureId,
+      causeChain: errorCauseChain(cause),
+    });
     return rejected(item.exposureId, exposureClaimFaultCode(cause));
   }
 
@@ -127,12 +130,13 @@ async function completeAcknowledgeOnly(
       code: null,
     };
   } catch (cause) {
-    logExposureRedemptionFault(
-      deps.logger,
-      "exposure_redemption_acknowledge_failed",
-      { ...claimInput, exposureId },
-      cause,
-    );
+    deps.logger?.error("exposure_redemption_acknowledge_failed", {
+      requestId: claimInput.requestId,
+      appId: claimInput.appId,
+      environmentId: claimInput.environmentId,
+      exposureId,
+      causeChain: errorCauseChain(cause),
+    });
     scheduleHoldoverWrite(ticket, scope, deps);
     return rejected(exposureId, "SERVICE_UNAVAILABLE");
   }
@@ -165,21 +169,17 @@ async function sealIngestAndConfirm(
         appId: claimInput.appId,
         environmentId: claimInput.environmentId,
         exposureId: item.exposureId,
-        causeChain: [cause.message],
+        causeChain: errorCauseChain(cause),
       });
       return rejected(item.exposureId, ingestFailureCode(cause.status));
     }
-    logExposureRedemptionFault(
-      deps.logger,
-      "exposure_ingest_sink_failed",
-      {
-        requestId: claimInput.requestId,
-        appId: claimInput.appId,
-        environmentId: claimInput.environmentId,
-        exposureId: item.exposureId,
-      },
-      cause,
-    );
+    deps.logger?.error("exposure_ingest_sink_failed", {
+      requestId: claimInput.requestId,
+      appId: claimInput.appId,
+      environmentId: claimInput.environmentId,
+      exposureId: item.exposureId,
+      causeChain: errorCauseChain(cause),
+    });
     return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
   }
 
@@ -193,38 +193,18 @@ async function sealIngestAndConfirm(
       code: null,
     };
   } catch (cause) {
-    logExposureRedemptionFault(
-      deps.logger,
-      "exposure_redemption_confirm_failed",
-      {
-        requestId: claimInput.requestId,
-        appId: claimInput.appId,
-        environmentId: claimInput.environmentId,
-        exposureId: item.exposureId,
-      },
-      cause,
-    );
+    deps.logger?.error("exposure_redemption_confirm_failed", {
+      requestId: claimInput.requestId,
+      appId: claimInput.appId,
+      environmentId: claimInput.environmentId,
+      exposureId: item.exposureId,
+      causeChain: errorCauseChain(cause),
+    });
     // Ingest committed. If markSealed succeeded, exact-ID retry uses resume_ack
     // (no second append). If markSealed failed, the claim stays pending until
     // EXPOSURE_REDEMPTION_PENDING_LEASE_MS — then a retry may re-acquire and
     // append again (accepted ambiguous-window risk; see that constant).
     scheduleHoldoverWrite(ticket, scope, deps);
     return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
-  }
-}
-
-async function releaseClaimQuietly(
-  claimInput: RedemptionClaimContext,
-  deps: ExposuresRouteDeps,
-): Promise<void> {
-  try {
-    await deps.exposureRedemptionClaims.release(claimInput);
-  } catch (cause) {
-    logExposureRedemptionFault(
-      deps.logger,
-      "exposure_redemption_release_failed",
-      claimInput,
-      cause,
-    );
   }
 }

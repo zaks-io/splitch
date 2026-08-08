@@ -12,18 +12,32 @@ export function isRetryableExposureRejection(code: ErrorCode): boolean {
   return code === "SERVICE_UNAVAILABLE";
 }
 
+type ExposureResultRow = {
+  readonly exposureId: string;
+  readonly status: "accepted" | "deduplicated" | "rejected";
+  readonly code: ErrorCode | null;
+};
+
+/** Fail loud on rejected+null; return whether the item stays in the queue. */
+function shouldRetainRejected(row: ExposureResultRow): boolean {
+  if (row.code === null) {
+    throw new Error(
+      `Exposure rejection for ${row.exposureId} is missing a code (fail loud; never silently drop)`,
+    );
+  }
+  return isRetryableExposureRejection(row.code);
+}
+
 /**
  * Apply one flush's per-item results to a pending queue: accepted, deduplicated,
  * and non-retryable rejections leave the queue; retryable rejections and missing
  * rows are retained with the same exposureId.
+ *
+ * A `rejected` row with `code === null` is a silent substitution — refuse it.
  */
 export function retainRetryableExposures<T extends { readonly exposureId: string }>(
   pending: readonly T[],
-  results: readonly {
-    readonly exposureId: string;
-    readonly status: "accepted" | "deduplicated" | "rejected";
-    readonly code: ErrorCode | null;
-  }[],
+  results: readonly ExposureResultRow[],
 ): T[] {
   const byId = new Map(results.map((row) => [row.exposureId, row]));
   const retained: T[] = [];
@@ -33,10 +47,7 @@ export function retainRetryableExposures<T extends { readonly exposureId: string
       retained.push(item);
       continue;
     }
-    if (
-      row.status === "rejected" &&
-      (row.code === null || isRetryableExposureRejection(row.code))
-    ) {
+    if (row.status === "rejected" && shouldRetainRejected(row)) {
       retained.push(item);
     }
   }

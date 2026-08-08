@@ -116,8 +116,8 @@ Mapping:
 - Transient or platform-side **ingest** faults (internal-token drift / 401, config propagation
   lag / 404, rate limits / 429, and other non-400 ingest statuses) → `SERVICE_UNAVAILABLE`.
 - Unambiguous caller-payload fault from ingest (HTTP 400) → non-retryable `VALIDATION_ERROR`.
-- Transient **claim-store** fault (Durable Object transport failure on `claim`) →
-  `SERVICE_UNAVAILABLE`.
+- Transient **claim-store** fault (Durable Object transport failure on `claim`, or a
+  Durable Object non-400 HTTP status such as 500) → `SERVICE_UNAVAILABLE`.
 - Deterministic **claim-store** fault (programming error in the redemption path, a
   `parseClaimOutcome` protocol violation, or a Durable Object HTTP 400) → non-retryable
   `INTERNAL_SERVER_ERROR`. An unclassified claim throw is also `INTERNAL_SERVER_ERROR` (fail

@@ -1,11 +1,15 @@
 import type { ErrorCode, ExposureBatchResult } from "@splitch/contracts";
 import type { AssignmentStore } from "./assignment/assignment-store";
+import { errorCauseChain } from "./error-cause-chain";
 import {
   type ExposureTicketPayload,
   type MintExposureTicketDeps,
   verifyExposureTicket,
 } from "./evaluate/exposure-ticket";
+import type { ExposureRedemptionClaimInput } from "./exposure-redemption-claim-core";
 import type { CredentialScope } from "./exposures-request";
+
+export type RedemptionClaimContext = ExposureRedemptionClaimInput & { readonly requestId: string };
 
 export function rejected(exposureId: string, code: ErrorCode): ExposureBatchResult {
   return { exposureId, status: "rejected", code };
@@ -46,6 +50,28 @@ export async function verifyTicketForScope(
     return { ok: false, code: "EXPOSURE_TICKET_INVALID" };
   }
   return { ok: true, payload: verified.payload };
+}
+
+export async function releaseClaimQuietly(
+  claimInput: RedemptionClaimContext,
+  deps: {
+    readonly exposureRedemptionClaims: {
+      release(input: ExposureRedemptionClaimInput): Promise<void>;
+    };
+    readonly logger?: { error(message: string, detail: unknown): void };
+  },
+): Promise<void> {
+  try {
+    await deps.exposureRedemptionClaims.release(claimInput);
+  } catch (cause) {
+    deps.logger?.error("exposure_redemption_release_failed", {
+      requestId: claimInput.requestId,
+      appId: claimInput.appId,
+      environmentId: claimInput.environmentId,
+      exposureId: claimInput.exposureId,
+      causeChain: errorCauseChain(cause),
+    });
+  }
 }
 
 export function scheduleHoldoverWrite(

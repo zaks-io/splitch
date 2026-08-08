@@ -64,4 +64,13 @@ describe("retainRetryableExposures: real retry cycle", () => {
     ]);
     expect(retained).toEqual([{ exposureId: ID_C }]);
   });
+
+  it("fails loud when a rejected row carries a null code", () => {
+    expect(() =>
+      retainRetryableExposures(
+        [{ exposureId: EXPOSURE_ID }],
+        [{ exposureId: EXPOSURE_ID, status: "rejected", code: null }],
+      ),
+    ).toThrow(/missing a code/);
+  });
 });

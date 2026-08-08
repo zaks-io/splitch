@@ -1,14 +1,14 @@
 import type { ExposureBatchResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 import {
-  ExposureRedemptionClaimHttpError,
-  ExposureRedemptionClaimProtocolError,
-  ExposureRedemptionClaimTransportError,
-} from "./exposure-redemption-claim-errors";
+  DurableExposureRedemptionClaimStore,
+  MemoryExposureRedemptionClaimStore,
+  type ExposureRedemptionClaimNamespace,
+} from "./exposure-redemption-claim";
 import type {
   ExposureRedemptionClaimInput,
   ExposureRedemptionClaimOutcome,
+  ExposureRedemptionClaimStore,
 } from "./exposure-redemption-claim-core";
 import {
   EXPOSURE_ID_A,
@@ -23,49 +23,125 @@ import { APP_ID, CLIENT_KEY, ENVIRONMENT_ID, makeSdkRouteHarness } from "./sdk-r
 const REQUEST_ID = "req_spl_366_claim_taxonomy";
 const INNER_CAUSE = "Network connection lost: durable object 7f3a stub reset";
 
-class ThrowingClaimStore extends MemoryExposureRedemptionClaimStore {
-  constructor(private readonly fault: (input: ExposureRedemptionClaimInput) => never) {
-    super();
-  }
-
-  override claim(input: ExposureRedemptionClaimInput): Promise<ExposureRedemptionClaimOutcome> {
-    this.fault(input);
-  }
+function fakeNamespace(fetchImpl: () => Promise<Response>): ExposureRedemptionClaimNamespace {
+  return {
+    idFromName: (name) => ({ toString: () => name }) as DurableObjectId,
+    get: () => ({ fetch: async () => fetchImpl() }),
+  };
 }
 
-async function redeemOne(
-  claims: MemoryExposureRedemptionClaimStore,
-  exposureId: string = EXPOSURE_ID_A,
-): Promise<{
-  response: Response;
+async function redeemWithStore(store: ExposureRedemptionClaimStore): Promise<{
+  status: number;
   body: ExposureBatchResponse;
-  logger: { errors: Array<{ message: string; detail: unknown }> };
-  exposureSink: { writes: unknown[] };
+  exposureSink: Awaited<ReturnType<typeof makeSdkRouteHarness>>["exposureSink"];
+  logger: Awaited<ReturnType<typeof makeSdkRouteHarness>>["logger"];
 }> {
   const { app, exposureSink, logger } = await makeSdkRouteHarness({
     liveRun: true,
-    exposureRedemptionClaims: claims,
+    exposureRedemptionClaims: store,
   });
   const ticket = await mintTicket();
   const response = await app.request(
     PATH,
-    exposuresInit(CLIENT_KEY, [{ exposureId, exposureTicket: ticket }], {
+    exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }], {
       "x-request-id": REQUEST_ID,
     }),
   );
   const body = (await response.json()) as ExposureBatchResponse;
-  return { response, body, logger, exposureSink };
+  return { status: response.status, body, exposureSink, logger };
 }
 
-describe("POST /api/sdk/exposures: claim fault taxonomy (SPL-366)", () => {
-  it("maps TypeError from claim() to non-retryable INTERNAL_SERVER_ERROR", async () => {
-    const { response, body, exposureSink, logger } = await redeemOne(
-      new ThrowingClaimStore(() => {
-        throw new TypeError("undefined is not a function");
+describe("POST /api/sdk/exposures: real-store claim faults (SPL-366)", () => {
+  it("maps parseClaimOutcome protocol violation through DurableExposureRedemptionClaimStore", async () => {
+    // Real rpc path: HTTP 200 + unrecognized body → parseClaimOutcome throw site.
+    const store = new DurableExposureRedemptionClaimStore(
+      fakeNamespace(
+        async () =>
+          new Response(JSON.stringify({ status: "nope" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    const { body, exposureSink, logger } = await redeemWithStore(store);
+
+    expect(body.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "INTERNAL_SERVER_ERROR" },
+    ]);
+    expect(exposureSink.writes).toHaveLength(0);
+    expect(logger.errors[0]?.detail).toMatchObject({
+      causeChain: ["exposure redemption claim returned an invalid outcome"],
+    });
+  });
+
+  it("maps Durable Object HTTP 400 through DurableExposureRedemptionClaimStore", async () => {
+    const store = new DurableExposureRedemptionClaimStore(
+      fakeNamespace(async () => new Response("bad request", { status: 400 })),
+    );
+    const { body, exposureSink, logger } = await redeemWithStore(store);
+
+    expect(body.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "INTERNAL_SERVER_ERROR" },
+    ]);
+    expect(exposureSink.writes).toHaveLength(0);
+    expect(logger.errors[0]?.detail).toMatchObject({
+      causeChain: ["exposure redemption claim Durable Object returned HTTP 400"],
+    });
+  });
+
+  it("maps Durable Object transport throw through DurableExposureRedemptionClaimStore", async () => {
+    const store = new DurableExposureRedemptionClaimStore(
+      fakeNamespace(async () => {
+        throw new Error(INNER_CAUSE);
       }),
     );
+    const { body, exposureSink, logger } = await redeemWithStore(store);
 
-    expect(response.status).toBe(202);
+    expect(body.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "SERVICE_UNAVAILABLE" },
+    ]);
+    expect(exposureSink.writes).toHaveLength(0);
+    expect(logger.errors).toEqual([
+      {
+        message: "exposure_redemption_claim_failed",
+        detail: {
+          requestId: REQUEST_ID,
+          appId: APP_ID,
+          environmentId: ENVIRONMENT_ID,
+          exposureId: EXPOSURE_ID_A,
+          causeChain: ["exposure redemption claim Durable Object transport failed", INNER_CAUSE],
+        },
+      },
+    ]);
+  });
+
+  it("maps Durable Object HTTP 500 to retryable SERVICE_UNAVAILABLE", async () => {
+    const store = new DurableExposureRedemptionClaimStore(
+      fakeNamespace(
+        async () => new Response(JSON.stringify({ status: "acquired" }), { status: 500 }),
+      ),
+    );
+    const { body } = await redeemWithStore(store);
+
+    expect(body.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "SERVICE_UNAVAILABLE" },
+    ]);
+  });
+});
+
+describe("POST /api/sdk/exposures: programming + sibling claim faults (SPL-366)", () => {
+  it("maps TypeError from claim() to non-retryable INTERNAL_SERVER_ERROR", async () => {
+    const claims: ExposureRedemptionClaimStore = {
+      claim: async () => {
+        throw new TypeError("undefined is not a function");
+      },
+      release: async () => undefined,
+      markSealed: async () => undefined,
+      acknowledge: async () => ({ status: "accepted" }),
+    };
+    const { status, body, exposureSink, logger } = await redeemWithStore(claims);
+
+    expect(status).toBe(202);
     expect(body.results).toEqual([
       { exposureId: EXPOSURE_ID_A, status: "rejected", code: "INTERNAL_SERVER_ERROR" },
     ]);
@@ -84,74 +160,19 @@ describe("POST /api/sdk/exposures: claim fault taxonomy (SPL-366)", () => {
     ]);
   });
 
-  it("maps parseClaimOutcome protocol violation to INTERNAL_SERVER_ERROR", async () => {
-    const { response, body, logger } = await redeemOne(
-      new ThrowingClaimStore(() => {
-        throw new ExposureRedemptionClaimProtocolError(
-          "exposure redemption claim returned an invalid outcome",
-        );
-      }),
-    );
-
-    expect(response.status).toBe(202);
-    expect(body.results).toEqual([
-      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "INTERNAL_SERVER_ERROR" },
-    ]);
-    expect(logger.errors[0]?.detail).toMatchObject({
-      causeChain: ["exposure redemption claim returned an invalid outcome"],
-    });
-  });
-
-  it("maps Durable Object HTTP 400 to INTERNAL_SERVER_ERROR", async () => {
-    const { response, body, logger } = await redeemOne(
-      new ThrowingClaimStore(() => {
-        throw new ExposureRedemptionClaimHttpError(400);
-      }),
-    );
-
-    expect(response.status).toBe(202);
-    expect(body.results).toEqual([
-      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "INTERNAL_SERVER_ERROR" },
-    ]);
-    expect(logger.errors[0]?.detail).toMatchObject({
-      causeChain: ["exposure redemption claim Durable Object returned HTTP 400"],
-    });
-  });
-
-  it("maps Durable Object transport failure to retryable SERVICE_UNAVAILABLE", async () => {
-    const { response, body, logger } = await redeemOne(
-      new ThrowingClaimStore(() => {
-        throw new ExposureRedemptionClaimTransportError(new Error(INNER_CAUSE));
-      }),
-    );
-
-    expect(response.status).toBe(202);
-    expect(body.results).toEqual([
-      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "SERVICE_UNAVAILABLE" },
-    ]);
-    expect(logger.errors).toEqual([
-      {
-        message: "exposure_redemption_claim_failed",
-        detail: {
-          requestId: REQUEST_ID,
-          appId: APP_ID,
-          environmentId: ENVIRONMENT_ID,
-          exposureId: EXPOSURE_ID_A,
-          causeChain: ["exposure redemption claim Durable Object transport failed", INNER_CAUSE],
-        },
-      },
-    ]);
-  });
-
   it("leaves siblings ordered and accepted around a deterministic middle fault", async () => {
-    const claims = new (class extends MemoryExposureRedemptionClaimStore {
-      override claim(input: ExposureRedemptionClaimInput): Promise<ExposureRedemptionClaimOutcome> {
+    const memory = new MemoryExposureRedemptionClaimStore();
+    const claims: ExposureRedemptionClaimStore = {
+      async claim(input: ExposureRedemptionClaimInput): Promise<ExposureRedemptionClaimOutcome> {
         if (input.exposureId === EXPOSURE_ID_B) {
-          return Promise.reject(new TypeError("undefined is not a function"));
+          throw new TypeError("undefined is not a function");
         }
-        return super.claim(input);
-      }
-    })();
+        return memory.claim(input);
+      },
+      release: (input) => memory.release(input),
+      markSealed: (input) => memory.markSealed(input),
+      acknowledge: (input) => memory.acknowledge(input),
+    };
     const { app, exposureSink, assignmentStore } = await makeSdkRouteHarness({
       liveRun: true,
       exposureRedemptionClaims: claims,

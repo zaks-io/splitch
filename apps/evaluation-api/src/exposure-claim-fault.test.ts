@@ -30,6 +30,9 @@ describe("exposureClaimFaultCode classification (mutation-proven)", () => {
     expect(exposureClaimFaultCode(new ExposureRedemptionClaimHttpError(400))).toBe(
       "INTERNAL_SERVER_ERROR",
     );
+    expect(exposureClaimFaultCode(new ExposureRedemptionClaimHttpError(500))).toBe(
+      "SERVICE_UNAVAILABLE",
+    );
     expect(
       exposureClaimFaultCode(new ExposureRedemptionClaimTransportError(new Error(INNER_CAUSE))),
     ).toBe("SERVICE_UNAVAILABLE");
@@ -49,6 +52,7 @@ describe("exposures-endpoint.md taxonomy pin", () => {
     expect(spec).toMatch(/Transient[\s\S]*SERVICE_UNAVAILABLE[\s\S]*Retain the item and retry/);
     expect(spec).toMatch(/Deterministic[\s\S]*INTERNAL_SERVER_ERROR[\s\S]*drop — never re-queue/);
     expect(spec).toContain("Durable Object transport failure");
+    expect(spec).toContain("non-400 HTTP status");
     expect(spec).toContain("parseClaimOutcome");
     expect(spec).toContain("Durable Object HTTP 400");
   });
