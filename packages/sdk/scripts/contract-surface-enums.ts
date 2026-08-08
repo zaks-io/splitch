@@ -1,6 +1,8 @@
 /**
- * Enums and wire types for the SDK contract-surface compile step.
- * Keep in lockstep with the contracts package authoring schemas.
+ * Hand-maintained enum/type mirrors of the contracts package authoring schemas.
+ * Nothing generates this file from Zod — the arrays below are literal retypes
+ * of the contracts sources. `contract-surface-parity.test.ts` is the only
+ * guard keeping them honest; tsup only bundles them into the public surface.
  */
 
 /** Mirrors contracts `error-code.ts` `errorCodes`. */

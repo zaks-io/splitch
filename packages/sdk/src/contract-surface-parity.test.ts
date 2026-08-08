@@ -44,7 +44,17 @@ function wellFormedEvaluateAllEntry(reason: string) {
   };
 }
 
-describe("contract-surface zod-free parity", () => {
+function resolutionDetailsForReason(reason: (typeof contractResolutionReasons)[number]) {
+  return {
+    value: true as const,
+    variantName: "on",
+    reason,
+    ...(reason === "ERROR" ? { errorCode: "INTERNAL_SERVER_ERROR" as const } : {}),
+    ...(reason === "TARGETING_MATCH" ? { ruleId: "rule-1" } : {}),
+  };
+}
+
+describe("contract-surface enum lockstep", () => {
   it("ErrorCodeSchema.options matches contracts errorCodes", () => {
     expect([...ErrorCodeSchema.options]).toEqual([...contractErrorCodes]);
   });
@@ -64,14 +74,12 @@ describe("contract-surface zod-free parity", () => {
 
   it("resolution reason set matches contracts", () => {
     for (const reason of contractResolutionReasons) {
-      const base = {
-        value: true as const,
-        variantName: "on",
-        reason,
-        ...(reason === "ERROR" ? { errorCode: "INTERNAL_SERVER_ERROR" as const } : {}),
-        ...(reason === "TARGETING_MATCH" ? { ruleId: "rule-1" } : {}),
-      };
-      expectParity(ResolutionDetailsSchema, ZodResolutionDetailsSchema, base, true);
+      expectParity(
+        ResolutionDetailsSchema,
+        ZodResolutionDetailsSchema,
+        resolutionDetailsForReason(reason),
+        true,
+      );
     }
   });
 
@@ -85,7 +93,9 @@ describe("contract-surface zod-free parity", () => {
       expectParity(EvaluateAllResponseSchema, ZodEvaluateAllResponseSchema, input, true);
     }
   });
+});
 
+describe("contract-surface schema fixtures", () => {
   it("DataPlaneEvaluateResponseSchema matches Zod", () => {
     const rows: { input: unknown; ok: boolean }[] = [
       { input: { variant: true }, ok: true },
@@ -177,6 +187,85 @@ describe("contract-surface zod-free parity", () => {
     }
   });
 
+  it("scalar empty-string and boundary cases match Zod", () => {
+    // Catch contracts tightening a string with `.min(1)` (or similar) without
+    // a matching mirror change — enum/required-field drift alone is not enough.
+    const resolutionRows: { input: unknown; ok: boolean }[] = [
+      { input: { value: true, variantName: "", reason: "SPLIT" }, ok: true },
+      { input: { value: "", variantName: "on", reason: "SPLIT" }, ok: true },
+      { input: { value: 0, variantName: "on", reason: "SPLIT" }, ok: true },
+      { input: { value: -0, variantName: "a", reason: "SPLIT" }, ok: true },
+      {
+        input: { value: true, variantName: "", reason: "TARGETING_MATCH", ruleId: "" },
+        ok: true,
+      },
+      {
+        input: {
+          value: false,
+          variantName: "",
+          reason: "ERROR",
+          errorCode: "FLAG_NOT_FOUND",
+          errorMessage: "",
+        },
+        ok: true,
+      },
+    ];
+    for (const row of resolutionRows) {
+      expectParity(ResolutionDetailsSchema, ZodResolutionDetailsSchema, row.input, row.ok);
+    }
+
+    const evaluateAllRows: { input: unknown; ok: boolean }[] = [
+      {
+        input: {
+          evaluations: {
+            "new-checkout": {
+              variant: "",
+              variantName: "",
+              reason: "SPLIT",
+              errorCode: null,
+              exposureTicket: "",
+            },
+          },
+        },
+        ok: true,
+      },
+      {
+        input: {
+          evaluations: {
+            "new-checkout": {
+              variant: 0,
+              variantName: null,
+              reason: "DEFAULT",
+              errorCode: null,
+              exposureTicket: null,
+            },
+          },
+        },
+        ok: true,
+      },
+    ];
+    for (const row of evaluateAllRows) {
+      expectParity(EvaluateAllResponseSchema, ZodEvaluateAllResponseSchema, row.input, row.ok);
+    }
+
+    expectParity(
+      DataPlaneEvaluateResponseSchema,
+      ZodDataPlaneEvaluateResponseSchema,
+      { variant: "" },
+      true,
+    );
+    expectParity(
+      DataPlaneEvaluateResponseSchema,
+      ZodDataPlaneEvaluateResponseSchema,
+      { variant: 0 },
+      true,
+    );
+    expectParity(PeekEvaluateResponseSchema, ZodPeekEvaluateResponseSchema, { variant: "" }, true);
+    expectParity(PeekEvaluateResponseSchema, ZodPeekEvaluateResponseSchema, { variant: 0 }, true);
+  });
+});
+
+describe("contract-surface known __proto__ divergences", () => {
   it("EvaluateAllResponseSchema keeps a __proto__ flag key as an own property", () => {
     // JSON.parse creates __proto__ as an own property; Object.entries yields it.
     // A plain `evaluations[flagKey] = …` assignment would hit the prototype setter.
@@ -227,5 +316,23 @@ describe("contract-surface zod-free parity", () => {
     expect(Object.keys(compiled.data.evaluations)).toEqual(["__proto__"]);
     expect(Object.keys(zod.data.evaluations)).toEqual([]);
     expect(compiled.data).not.toEqual(zod.data);
+  });
+
+  it("compiled rejects a JSON own __proto__ key on strict objects; zod 4.4.3 strips and accepts", () => {
+    // assertExactKeys uses Object.keys, which sees a JSON-parsed own
+    // "__proto__". Zod's object parse strips it. Fail-loud on our side — pin
+    // so the known-divergence list stays complete. (ResolutionDetails is not
+    // strict on either side, so it is not part of this divergence.)
+    const evaluateInput = JSON.parse('{"variant":true,"__proto__":{"x":1}}') as unknown;
+    expect(DataPlaneEvaluateResponseSchema.safeParse(evaluateInput).success).toBe(false);
+    expect(ZodDataPlaneEvaluateResponseSchema.safeParse(evaluateInput).success).toBe(true);
+
+    const peekInput = JSON.parse('{"variant":true,"__proto__":{"x":1}}') as unknown;
+    expect(PeekEvaluateResponseSchema.safeParse(peekInput).success).toBe(false);
+    expect(ZodPeekEvaluateResponseSchema.safeParse(peekInput).success).toBe(true);
+
+    const evaluateAllInput = JSON.parse('{"evaluations":{},"__proto__":{"x":1}}') as unknown;
+    expect(EvaluateAllResponseSchema.safeParse(evaluateAllInput).success).toBe(false);
+    expect(ZodEvaluateAllResponseSchema.safeParse(evaluateAllInput).success).toBe(true);
   });
 });

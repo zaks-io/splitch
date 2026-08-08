@@ -1,6 +1,14 @@
 /**
- * Zod-free validators compiled into the public SDK contract surface.
- * Keep `contract-surface-parity.test.ts` green when either side changes.
+ * Hand-maintained zod-free mirrors of the contracts package authoring schemas.
+ * Nothing generates this file (or `contract-surface-enums.ts`) from Zod —
+ * tsup only bundles them. `contract-surface-parity.test.ts` is the only guard
+ * keeping these mirrors honest.
+ *
+ * Accepted domain is JSON-only by construction today: every `parse()` call
+ * takes `await response.json()`, and these schemas are not exported on a
+ * public `./browser` subpath. `isVariantValue` is wider than `z.number()` /
+ * `z.record()` (it accepts NaN, Infinity, Date, Map, class instances); that
+ * gap is unreachable until a non-JSON caller appears.
  */
 
 import {
