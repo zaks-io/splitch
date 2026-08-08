@@ -12,18 +12,17 @@ export type UpdateSite = {
 
 /**
  * Allowlisted version RHS shapes that advance the row's own counter.
- * Exactly `current.version + 1`, `` sql`${<alias>.version} + 1` ``, or
- * `` sql`version + 1` `` (whitespace-insensitive). A substring `+ 1` is not
- * enough: `patch.version ?? current.version + 1` still contains `+ 1` while a
- * caller can pin the CAS forever. `+ 10` / `+ 100` are also rejected.
+ * `<id>.version + 1`, `` sql`${<alias>.version} + 1` ``, or `` sql`version + 1` ``
+ * (whitespace-insensitive). Rejects a RHS that names a spread-source identifier
+ * (`patch.version + 1` after `...patch`) and any non-exact form such as
+ * `patch.version ?? current.version + 1`.
  */
-function isBumpExpr(expr: string): boolean {
+export function isBumpExpr(expr: string, spreadSources: ReadonlySet<string> = new Set()): boolean {
   const t = expr.trim().replace(/\s+/g, " ");
-  return (
-    /^current\.version \+ 1$/.test(t) ||
-    /^sql`\$\{\w+\.version\} \+ 1`$/.test(t) ||
-    /^sql`version \+ 1`$/.test(t)
-  );
+  if (/^sql`\$\{\w+\.version\} \+ 1`$/.test(t) || /^sql`version \+ 1`$/.test(t)) return true;
+  const local = t.match(/^(\w+)\.version \+ 1$/);
+  if (!local?.[1]) return false;
+  return !spreadSources.has(local[1]);
 }
 
 export function lineAt(source: string, index: number): number {
@@ -128,24 +127,83 @@ function collectFacadeNames(source: string, alias: string, facades: Set<string>)
   }
 }
 
+/** Advance `i` past one trivia unit: whitespace, line comment, or block comment. */
+function skipOneTrivia(source: string, i: number): number | null {
+  if (/\s/.test(source[i] ?? "")) return i + 1;
+  if (source.startsWith("//", i)) {
+    const nl = source.indexOf("\n", i);
+    return nl < 0 ? source.length : nl + 1;
+  }
+  if (source.startsWith("/*", i)) {
+    const end = source.indexOf("*/", i + 2);
+    return end < 0 ? source.length : end + 2;
+  }
+  return null;
+}
+
+/** Advance `i` past whitespace and line/block comments. */
+function skipTrivia(source: string, from: number): number {
+  let i = from;
+  for (;;) {
+    const next = skipOneTrivia(source, i);
+    if (next === null) return i;
+    i = next;
+  }
+}
+
 /**
- * `.set(` must be the next method on the same chain as `.update(…)`. Searching
- * forward to end-of-file would bind a later unrelated `.set({…})` to a dangling
- * update and score that later object's bump.
+ * `.set(` must be the next method on the same chain as `.update(…)`, allowing
+ * whitespace and comments between them. Searching forward to end-of-file would
+ * bind a later unrelated `.set({…})` to a dangling update.
  */
 export function chainedSetAt(source: string, afterUpdate: number): number {
-  let i = afterUpdate;
-  while (i < source.length && /\s/.test(source[i] ?? "")) i += 1;
+  const i = skipTrivia(source, afterUpdate);
   if (source.startsWith(".set(", i)) return i;
   return -1;
 }
 
-/** Walk back to the start of the current statement (after `;` or file start). */
-export function statementStart(source: string, at: number): number {
-  for (let i = at; i >= 0; i--) {
-    if (source[i] === ";") return i + 1;
+function callArgText(source: string, openParen: number): string | null {
+  let end = -1;
+  let inner = 0;
+  for (let j = openParen; j < source.length; j++) {
+    inner += nestingDelta(source[j] ?? "");
+    if (inner === 0 && (source[j] ?? "") === ")") {
+      end = j;
+      break;
+    }
   }
-  return 0;
+  if (end < 0) return null;
+  const comma = topLevelComma(source, openParen, 1);
+  return source.slice(openParen + 1, comma >= 0 ? comma : end).trim();
+}
+
+function isInsertCallOpen(source: string, openParen: number): boolean {
+  return /\.insert\s*$/.test(source.slice(Math.max(0, openParen - 16), openParen));
+}
+
+/**
+ * Table argument of the insert call that an onConflictDoUpdate is chained to,
+ * or `null` when no insert is on the same chain (split-statement form).
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: backwards walk over sibling call parens on a drizzle chain
+export function insertArgOnUpsertChain(source: string, upsertAt: number): string | null {
+  let depth = 0;
+  for (let i = upsertAt - 1; i >= 0; i--) {
+    const ch = source[i] ?? "";
+    if (ch === ")") {
+      depth += 1;
+      continue;
+    }
+    if (ch === "(") {
+      if (depth > 0) depth -= 1;
+      // Sibling call parens on a chain (`.insert().values()`) are not nested;
+      // finishing the backwards walk through `.values(…)` lands here at depth 0.
+      if (depth === 0 && isInsertCallOpen(source, i)) return callArgText(source, i);
+      continue;
+    }
+    if (ch === ";" && depth === 0) return null;
+  }
+  return null;
 }
 
 /**
@@ -228,7 +286,21 @@ function spreadCanSetVersion(expr: string): boolean {
 
 type EffectiveVersion = "bump" | "other" | "unknown" | null;
 
-function applySetSegment(effective: EffectiveVersion, segment: string): EffectiveVersion {
+function spreadSourcesIn(objectSource: string): Set<string> {
+  const sources = new Set<string>();
+  if (!objectSource.startsWith("{") || !objectSource.endsWith("}")) return sources;
+  for (const segment of topLevelSegments(objectSource.slice(1, -1))) {
+    const match = segment.trim().match(/^\.\.\.(\w+)\s*$/);
+    if (match?.[1]) sources.add(match[1]);
+  }
+  return sources;
+}
+
+function applySetSegment(
+  effective: EffectiveVersion,
+  segment: string,
+  spreadSources: ReadonlySet<string>,
+): EffectiveVersion {
   const trimmed = segment.trim();
   if (!trimmed) return effective;
   if (trimmed.startsWith("...")) {
@@ -236,7 +308,7 @@ function applySetSegment(effective: EffectiveVersion, segment: string): Effectiv
   }
   const version = trimmed.match(/^version\s*:\s*([\s\S]+)$/);
   if (version?.[1] === undefined) return effective;
-  return isBumpExpr(version[1]) ? "bump" : "other";
+  return isBumpExpr(version[1], spreadSources) ? "bump" : "other";
 }
 
 /** SET-clause text inside a SQL UPDATE template (stops at WHERE). */
@@ -268,9 +340,24 @@ export function bumpWins(site: UpdateSite): boolean {
     return /^(?:(?:[\w"]+\.)?version) \+ 1$/i.test(rhs.replace(/\s+/g, " ").trim());
   }
   if (!site.setSource.startsWith("{") || !site.setSource.endsWith("}")) return false;
+  const spreadSources = spreadSourcesIn(site.setSource);
   let effective: EffectiveVersion = null;
   for (const segment of topLevelSegments(site.setSource.slice(1, -1))) {
-    effective = applySetSegment(effective, segment);
+    effective = applySetSegment(effective, segment, spreadSources);
   }
   return effective === "bump";
+}
+
+/** Match db.update of a flagConfigs alias, optionally namespace-qualified or cast. */
+export function drizzleUpdatePattern(alias: string): RegExp {
+  return new RegExp(`\\.update\\(\\s*(?:\\w+\\.)*${alias}\\b(?:\\s+as\\s+[^,)]+)?\\s*\\)`, "g");
+}
+
+/** Whether an insert-arg expression names one of the flagConfigs aliases. */
+export function insertArgIsFlagConfigs(arg: string, aliases: Set<string>): boolean {
+  const trimmed = arg.trim();
+  for (const alias of aliases) {
+    if (new RegExp(`^(?:\\w+\\.)*${alias}\\b(?:\\s+as\\s+.+)?$`).test(trimmed)) return true;
+  }
+  return false;
 }
