@@ -1,12 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import { CredentialCacheKVSchema, kvEnvelope } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
-import { putCredentialCacheEntry } from "./credential-cache";
 import type {
   CredentialCacheWrite,
   CredentialCacheWriter,
   CredentialCacheWriterAccess,
 } from "./credential-cache";
+import { putCredentialCacheEntry } from "./credential-cache";
 import type { ControlPlaneApiEnv } from "./env";
 
 export interface CredentialCacheWriterDurableObjectNamespace {
@@ -27,7 +27,7 @@ export class CredentialCacheWriterDurableObject
   async put(write: CredentialCacheWrite): Promise<void> {
     const candidate = credentialEnvelope.parse(JSON.parse(write.value)).data;
     await assertCurrentCredential(this.env, write.credential, candidate);
-    await putCredentialCacheEntry(this.env.CREDENTIAL_STORE, write, candidate.revoked);
+    await putCredentialCacheEntry(this.env.CREDENTIAL_STORE, write);
   }
 }
 

@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import { backfillCredentialCaches } from "./credential-cache";
 import { durableCredentialCacheWriterAccess } from "./credential-cache-writer-do";
@@ -6,7 +7,7 @@ import type { ControlPlaneApiEnv } from "./env";
 
 const BATCH_SIZE = 25;
 const NEXT_BATCH_DELAY_MS = 1_000;
-const CHECKPOINT_VERSION = 2;
+const CHECKPOINT_VERSION = CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION;
 const CHECKPOINT_KEY = `credential-cache-backfill-checkpoint-v${CHECKPOINT_VERSION}`;
 
 interface Checkpoint {

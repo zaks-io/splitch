@@ -1,7 +1,8 @@
 import {
+  CredentialCacheKVSchemaV1,
+  CURRENT_KV_SCHEMA_VERSION,
   clientKeyCacheKey,
   credentialRevocationCacheKey,
-  CredentialCacheKVSchemaV1,
   kvEnvelope,
   TERMINAL_CREDENTIAL_REVOCATION_MARKER,
 } from "@splitch/contracts";
@@ -24,7 +25,7 @@ describe("data-plane credential cache compatibility", () => {
     const hash = await sha256Hex(CLIENT_KEY);
     const cacheKey = clientKeyCacheKey(hash);
     const active = JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: CURRENT_KV_SCHEMA_VERSION,
       data: {
         appId: "app_revoked",
         environmentId: "env_revoked",

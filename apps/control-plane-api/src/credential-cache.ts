@@ -1,13 +1,16 @@
 import {
   apiKeyCacheKey,
   type CredentialCacheKV,
+  CredentialCacheKVSchema,
   CURRENT_KV_SCHEMA_VERSION,
   clientKeyCacheKey,
   credentialRevocationCacheKey,
+  kvEnvelope,
   TERMINAL_CREDENTIAL_REVOCATION_MARKER,
 } from "@splitch/contracts";
 
 const REVOKED_TOMBSTONE_TTL_SECONDS = 5 * 60;
+const credentialEnvelope = kvEnvelope(CredentialCacheKVSchema);
 
 export interface CredentialCacheDeps {
   credentialStore?: KVNamespace;
@@ -150,7 +153,7 @@ async function writeCredentialCache(
       return;
     }
     if (!deps.credentialStore) throw new Error("credential cache store is not configured");
-    await putCredentialCacheEntry(deps.credentialStore, write, value.revoked);
+    await putCredentialCacheEntry(deps.credentialStore, write);
   } catch (cause) {
     if (failLoud) throw cause;
   }
@@ -159,9 +162,9 @@ async function writeCredentialCache(
 export async function putCredentialCacheEntry(
   store: Pick<KVNamespace, "put">,
   write: CredentialCacheWrite,
-  revoked: boolean,
 ): Promise<void> {
-  if (revoked) {
+  const candidate = credentialEnvelope.parse(JSON.parse(write.value)).data;
+  if (candidate.revoked) {
     await store.put(credentialRevocationCacheKey(write.key), TERMINAL_CREDENTIAL_REVOCATION_MARKER);
   }
   await store.put(write.key, write.value, write.options);

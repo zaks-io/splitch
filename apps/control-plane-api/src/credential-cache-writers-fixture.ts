@@ -7,8 +7,8 @@ import {
 import type { CredentialCacheWriter } from "./credential-cache";
 
 /**
- * Test doubles for the credential cache write path: a serializing writer and the
- * two authority-checking variants that mirror CredentialCacheWriterDurableObject.
+ * Credential-cache concurrency doubles: one raw KV ordering store plus the
+ * serializing writer and authority-checking writer variants.
  */
 
 const cacheEnvelope = kvEnvelope(CredentialCacheKVSchema);

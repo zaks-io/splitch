@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION } from "../packages/contracts/src/credential-cache-backfill.ts";
 import { completeCredentialCacheBackfill } from "./complete-credential-cache-backfill.mjs";
 
 test("drives the protected credential cache backfill to a verified done checkpoint", async () => {
   const checkpoints = [
-    { version: 2, kind: "client" },
-    { version: 2, kind: "api" },
-    { version: 2, kind: "done" },
+    { version: CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION, kind: "client" },
+    { version: CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION, kind: "api" },
+    { version: CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION, kind: "done" },
   ];
   const calls = [];
 
@@ -42,13 +43,40 @@ test("drives the protected credential cache backfill to a verified done checkpoi
   ]);
 });
 
-test("rejects a completed legacy checkpoint before the marker backfill runs", async () => {
+test("waits for the compatible Control Plane checkpoint before running the backfill", async () => {
+  const checkpoints = [
+    { kind: "done" },
+    { version: CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION, kind: "done" },
+  ];
+  const sleeps = [];
+
+  await completeCredentialCacheBackfill({
+    origin: "https://api.example.test",
+    token: "gate-token",
+    fetchImpl: async () => Response.json(checkpoints.shift()),
+    sleepImpl: async (milliseconds) => sleeps.push(milliseconds),
+  });
+
+  assert.deepEqual(sleeps, [1_000]);
+});
+
+test("fails loud when the compatible Control Plane checkpoint does not appear", async () => {
+  let now = 0;
+  let requests = 0;
   await assert.rejects(
     completeCredentialCacheBackfill({
       origin: "https://api.example.test",
       token: "gate-token",
-      fetchImpl: async () => Response.json({ kind: "done" }),
+      fetchImpl: async () => {
+        requests += 1;
+        return Response.json({ kind: "done" });
+      },
+      sleepImpl: async (milliseconds) => {
+        now += milliseconds;
+      },
+      nowMs: () => now,
     }),
-    /invalid checkpoint/u,
+    /timed out after 30000ms waiting for credential cache backfill checkpoint version 2/u,
   );
+  assert.equal(requests, 31);
 });

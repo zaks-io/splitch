@@ -1,7 +1,16 @@
-const maxBatches = 10_000;
-const requiredCheckpointVersion = 2;
+import { CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION } from "../packages/contracts/src/credential-cache-backfill.ts";
 
-export async function completeCredentialCacheBackfill({ origin, token, fetchImpl = fetch }) {
+const maxBatches = 10_000;
+const checkpointReadyTimeoutMs = 30_000;
+const checkpointReadyPollMs = 1_000;
+
+export async function completeCredentialCacheBackfill({
+  origin,
+  token,
+  fetchImpl = fetch,
+  sleepImpl = sleep,
+  nowMs = Date.now,
+}) {
   if (!origin)
     throw new Error("usage: complete-credential-cache-backfill.mjs <control-plane-origin>");
   if (!token) throw new Error("SPLITCH_DEPLOY_GATE_TOKEN is required");
@@ -37,12 +46,10 @@ export async function completeCredentialCacheBackfill({ origin, token, fetchImpl
         `credential cache backfill gate returned HTTP ${response.status}${bootstrap}`,
       );
     }
-    const body = await response.json();
-    assertCurrentCheckpoint(body);
-    return body;
+    return response.json();
   }
 
-  let checkpoint = await request("/status");
+  let checkpoint = await waitForCurrentCheckpoint({ request, sleepImpl, nowMs });
   for (let batch = 0; checkpoint.kind !== "done" && batch < maxBatches; batch += 1) {
     checkpoint = await request("/run", { method: "POST" });
   }
@@ -51,13 +58,34 @@ export async function completeCredentialCacheBackfill({ origin, token, fetchImpl
   }
 }
 
+async function waitForCurrentCheckpoint({ request, sleepImpl, nowMs }) {
+  const deadline = nowMs() + checkpointReadyTimeoutMs;
+  while (true) {
+    const checkpoint = await request("/status");
+    if (checkpoint?.version === CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION) {
+      assertCurrentCheckpoint(checkpoint);
+      return checkpoint;
+    }
+    if (nowMs() >= deadline) {
+      throw new Error(
+        `timed out after ${checkpointReadyTimeoutMs}ms waiting for credential cache backfill checkpoint version ${CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION} from the compatible Control Plane`,
+      );
+    }
+    await sleepImpl(checkpointReadyPollMs);
+  }
+}
+
 function assertCurrentCheckpoint(value) {
   const valid =
     value !== null &&
     typeof value === "object" &&
-    value.version === requiredCheckpointVersion &&
+    value.version === CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION &&
     ["client", "api", "done"].includes(value.kind);
   if (!valid) throw new Error("credential cache backfill gate returned an invalid checkpoint");
+}
+
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 if (process.argv[1] === new URL(import.meta.url).pathname) {

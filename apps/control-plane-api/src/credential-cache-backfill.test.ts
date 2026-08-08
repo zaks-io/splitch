@@ -90,7 +90,7 @@ describe("credential cache schema-v1 backfill", () => {
     });
   });
 
-  it("keeps a Client Key revoked when its stale active backfill lands last", async () => {
+  it("keeps the terminal marker when a stale active raw KV put lands last", async () => {
     const writes = new Map<string, string>();
     const cacheKey = clientKeyCacheKey(await sha256Hex("pk_race"));
     const store = new StaleBackfillWinsStore(writes, cacheKey);
