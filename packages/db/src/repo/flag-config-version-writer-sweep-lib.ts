@@ -3,8 +3,6 @@
  * Kept out of the `.test.ts` so both stay under the repo file-size limit.
  */
 
-import { namesKnown } from "./flag-config-version-writer-sweep-bindings";
-
 export type UpdateSite = {
   file: string;
   line: number;
@@ -27,161 +25,10 @@ export function isBumpExpr(expr: string, spreadSources: ReadonlySet<string> = ne
   return !spreadSources.has(local[1]);
 }
 
-export function lineAt(source: string, index: number): number {
-  return source.slice(0, index).split("\n").length;
-}
-
-/** Balanced `{ … }` starting at `open`, which must point at `{`. */
-export function balancedBraces(source: string, open: number): string {
-  if (source[open] !== "{") throw new Error(`expected '{' at ${open}`);
-  let depth = 0;
-  for (let i = open; i < source.length; i++) {
-    const ch = source[i] ?? "";
-    if (ch === "{") depth += 1;
-    else if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) return source.slice(open, i + 1);
-    }
-  }
-  throw new Error("unbalanced braces");
-}
-
-/** First `{` at or after `from`, skipping whitespace. */
-export function nextObjectStart(source: string, from: number): number {
-  for (let i = from; i < source.length; i++) {
-    const ch = source[i] ?? "";
-    if (ch === "{") return i;
-    if (!/\s/.test(ch)) {
-      throw new Error(`expected object at ${from}, found ${JSON.stringify(ch)}`);
-    }
-  }
-  throw new Error("expected object, found end of file");
-}
-
 function nestingDelta(ch: string): number {
   if (ch === "(" || ch === "{" || ch === "[") return 1;
   if (ch === ")" || ch === "}" || ch === "]") return -1;
   return 0;
-}
-
-/**
- * Index of the Nth top-level comma inside a `(…)` call (N=1 → first comma), or
- * -1 if the call ends first.
- */
-function topLevelComma(source: string, callOpenParen: number, nth: number): number {
-  let depth = 0;
-  let seen = 0;
-  for (let i = callOpenParen; i < source.length; i++) {
-    depth += nestingDelta(source[i] ?? "");
-    if ((source[i] ?? "") === "," && depth === 1 && ++seen === nth) return i;
-    if (depth === 0 && (source[i] ?? "") === ")") return -1;
-  }
-  return -1;
-}
-
-/** Second argument object of `name.update(scope, values, …)`. */
-export function secondArgObject(source: string, callOpenParen: number): string {
-  const comma = topLevelComma(source, callOpenParen, 1);
-  if (comma < 0) throw new Error("update call ended before second arg");
-  return balancedBraces(source, nextObjectStart(source, comma + 1));
-}
-
-/** Advance `i` past one trivia unit: whitespace, line comment, or block comment. */
-function skipOneTrivia(source: string, i: number): number | null {
-  if (/\s/.test(source[i] ?? "")) return i + 1;
-  if (source.startsWith("//", i)) {
-    const nl = source.indexOf("\n", i);
-    return nl < 0 ? source.length : nl + 1;
-  }
-  if (source.startsWith("/*", i)) {
-    const end = source.indexOf("*/", i + 2);
-    return end < 0 ? source.length : end + 2;
-  }
-  return null;
-}
-
-/** Advance `i` past whitespace and line/block comments. */
-function skipTrivia(source: string, from: number): number {
-  let i = from;
-  for (;;) {
-    const next = skipOneTrivia(source, i);
-    if (next === null) return i;
-    i = next;
-  }
-}
-
-/**
- * `.set(` must be the next method on the same chain as `.update(…)`, allowing
- * whitespace and comments between them. Searching forward to end-of-file would
- * bind a later unrelated `.set({…})` to a dangling update.
- */
-export function chainedSetAt(source: string, afterUpdate: number): number {
-  const i = skipTrivia(source, afterUpdate);
-  if (source.startsWith(".set(", i)) return i;
-  return -1;
-}
-
-function callArgText(source: string, openParen: number): string | null {
-  let end = -1;
-  let inner = 0;
-  for (let j = openParen; j < source.length; j++) {
-    inner += nestingDelta(source[j] ?? "");
-    if (inner === 0 && (source[j] ?? "") === ")") {
-      end = j;
-      break;
-    }
-  }
-  if (end < 0) return null;
-  const comma = topLevelComma(source, openParen, 1);
-  return source.slice(openParen + 1, comma >= 0 ? comma : end).trim();
-}
-
-function isInsertCallOpen(source: string, openParen: number): boolean {
-  return /\.insert\s*$/.test(source.slice(Math.max(0, openParen - 16), openParen));
-}
-
-/**
- * Table argument of the insert call that an onConflictDoUpdate is chained to,
- * or `null` when no insert is on the same chain (split-statement form).
- */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: backwards walk over sibling call parens on a drizzle chain
-export function insertArgOnUpsertChain(source: string, upsertAt: number): string | null {
-  let depth = 0;
-  for (let i = upsertAt - 1; i >= 0; i--) {
-    const ch = source[i] ?? "";
-    if (ch === ")") {
-      depth += 1;
-      continue;
-    }
-    if (ch === "(") {
-      if (depth > 0) depth -= 1;
-      // Sibling call parens on a chain (`.insert().values()`) are not nested;
-      // finishing the backwards walk through `.values(…)` lands here at depth 0.
-      if (depth === 0 && isInsertCallOpen(source, i)) return callArgText(source, i);
-      continue;
-    }
-    if (ch === ";" && depth === 0) return null;
-  }
-  return null;
-}
-
-/**
- * The template literal that contains `at`, so a later `UPDATE … version = … + 1`
- * in the same file cannot satisfy this site's bump check.
- */
-export function enclosingTemplateLiteral(source: string, at: number): string | null {
-  let open = -1;
-  for (let i = at; i >= 0; i--) {
-    if (source[i] === "`") {
-      open = i;
-      break;
-    }
-  }
-  if (open < 0) return null;
-  for (let i = at + 1; i < source.length; i++) {
-    if (source[i] === "`") return source.slice(open, i + 1);
-  }
-  return null;
 }
 
 /**
@@ -305,14 +152,4 @@ export function bumpWins(site: UpdateSite): boolean {
     effective = applySetSegment(effective, segment, spreadSources);
   }
   return effective === "bump";
-}
-
-/** Match db.update of a flagConfigs alias, optionally namespace-qualified or cast. */
-export function drizzleUpdatePattern(alias: string): RegExp {
-  return new RegExp(`\\.update\\(\\s*(?:\\w+\\.)*${alias}\\b(?:\\s+as\\s+[^,)]+)?\\s*\\)`, "g");
-}
-
-/** Whether an insert-arg expression names one of the flagConfigs aliases. */
-export function insertArgIsFlagConfigs(arg: string, aliases: Set<string>): boolean {
-  return namesKnown(arg, aliases);
 }
