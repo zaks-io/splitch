@@ -96,7 +96,10 @@ describe("Evaluation binding entrypoint", () => {
     });
 
     expect(response.status).toBe(202);
-    expect(fetch).toHaveBeenCalled();
+    // The sealed pair, in order: only this handler appends the Exposure beside
+    // the usage row, so the second call is what tells it apart from its sibling.
+    expect(fetch.mock.calls[0]?.[0]).toBe("https://tinybird.test/v0/events?name=raw_evaluations");
+    expect(fetch.mock.calls[1]?.[0]).toBe("https://tinybird.test/v0/events?name=raw_events");
   });
 
   it("reaches the Metric Event handler", async () => {
