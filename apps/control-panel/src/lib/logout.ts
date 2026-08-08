@@ -7,13 +7,12 @@ export const LOGOUT_PATH = "/auth/logout";
 /**
  * Signing out destroys the session, so it hangs off an unsafe method only.
  *
- * The CSRF protection is the one every other cookie-authenticated write in the
- * panel already relies on (`claim/consent` is the other one): the session
- * cookie is `SameSite=Lax` (`session-cookie.ts`), which a browser withholds
- * from a cross-site POST, so a forged submit arrives with no session to
- * destroy. `SameSite=Lax` deliberately DOES travel on a top-level GET, which is
- * exactly how a router prefetch, a prerender, a scanner, or a chat client
- * unfurling a pasted link could sign the operator out (SPL-227).
+ * CSRF for this form POST is `SameSite=Lax` on the session cookie — the panel
+ * has no CSRF token layer. The mechanism, the attributes that pin it, and the
+ * other cookie-authenticated writes that share it are stated once in
+ * `session-cookie.ts` (SPL-263). `SameSite=Lax` deliberately DOES travel on a
+ * top-level GET, which is how a router prefetch, prerender, scanner, or chat
+ * client unfurling a pasted link could sign the operator out (SPL-227).
  */
 export async function destroyPanelSession(
   bindings: ControlPanelBindings,

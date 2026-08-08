@@ -8,6 +8,13 @@ hot path. D1 is the system of record; KV is the edge replica written through on 
 
 Cookie: `Set-Cookie: __session=<opaque_token>; HttpOnly; Secure; SameSite=Lax; Path=/`
 
+Those attributes are the panel's CSRF mechanism for cookie-authenticated
+writes: there is no CSRF token layer. `SameSite=Lax` withholds the cookie from
+cross-site POSTs. The attribute pin and the write-surface enumeration live in
+`apps/control-panel/src/lib/session-cookie.ts` and
+`session-cookie.test.ts` (SPL-263). The OAuth state cookie
+(`__session_state`) uses the same serializer and the same attributes.
+
 KV schema for cached session:
 
 ```
