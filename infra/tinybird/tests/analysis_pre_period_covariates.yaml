@@ -1,10 +1,11 @@
-- name: scoped_run_with_no_covariate_source_returns_empty
-  description: Until Metric Event history exists for CUPED, a correctly scoped read returns zero rows (HTTP 200).
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1"
+- name: binomial_pre_period_uses_real_metric_events
+  description: A logical Metric Event inside the declared lookback and before first Exposure becomes one pre-period covariate.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 200
-  expected_result: ""
-- name: missing_run_id_is_rejected
-  description: A required scope parameter is never defaulted; the request fails loudly rather than widening to every Run.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1"
+  expected_result: |
+    {"targeting_key_hash":"tk_control_snapshot","metric_id":"metric_signup","pre_period_value":1,"covariate_source":"pre_period"}
+- name: missing_metric_id_is_rejected
+  description: A missing Metric mapping fails loudly rather than assigning Metric Events to an inferred Metric.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
-  expected_result: "run_id is required"
+  expected_result: "Template Syntax Error: Required parameter is not defined. Check the parameters metric_id, app_id, environment_id and lookback_ms. Please provide a value or set a default value in the pipe code."

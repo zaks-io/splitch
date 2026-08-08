@@ -10,7 +10,7 @@ SCHEMA >
     `server_received_at` DateTime64(3) `json:$.server_received_at`,
     `targeting_key_hash` String `json:$.targeting_key_hash`,
     `dedup_key` String `json:$.dedup_key`,
-    `canonical_state` AggregateFunction(argMin, Tuple(String, String, String, String, String, DateTime64(3), DateTime64(6)), DateTime64(6))
+    `canonical_state` AggregateFunction(argMin, Tuple(String, String, String, String, String, DateTime64(3), DateTime64(6)), DateTime64(6)) `json:$.canonical_state`
 
 ENGINE "AggregatingMergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(event_date)"

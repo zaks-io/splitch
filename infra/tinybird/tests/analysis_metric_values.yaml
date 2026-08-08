@@ -1,10 +1,24 @@
-- name: scoped_run_with_no_metric_ingest_returns_empty
-  description: Until metric_events ingest exists, a correctly scoped read returns zero rows (HTTP 200), never a missing-pipe failure.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1"
+- name: binomial_values_use_one_logical_event_per_entity
+  description: Physical retries collapse before a Binomial Metric becomes one per-Entity value, and events outside the Conversion Window or from another Event Definition do not count.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 200
-  expected_result: ""
-- name: missing_run_id_is_rejected
-  description: A required scope parameter is never defaulted; the request fails loudly rather than widening to every Run.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1"
+  expected_result: |
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"in_window":1}
+    {"targeting_key_hash":"tk_treatment_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"in_window":1}
+- name: another_tenant_sees_only_its_own_metric_events
+  description: Distinguishable App and Metric Event identities prove that identical Experiment, Run, Environment, and Event Definition values cannot cross the App boundary.
+  parameters: "app_id=app_2&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup_app_2&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_other_app","run_id":"run_1","metric_id":"metric_signup_app_2","metric_type":"binomial","value":1,"in_window":1}
+- name: another_environment_sees_only_its_own_metric_events
+  description: Distinguishable Environment and Metric Event identities prove that identical App, Experiment, Run, and Event Definition values cannot cross the Environment boundary.
+  parameters: "app_id=app_1&environment_id=env_dev&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup_dev&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_other_environment","run_id":"run_1","metric_id":"metric_signup_dev","metric_type":"binomial","value":1,"in_window":1}
+- name: missing_event_definition_id_is_rejected
+  description: A missing Metric-to-Event Definition mapping fails loudly rather than reading every Metric Event in the App.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
-  expected_result: "run_id is required"
+  expected_result: "Template Syntax Error: Required parameter is not defined. Check the parameters app_id, environment_id, event_definition_id, from_ts and to_ts. Please provide a value or set a default value in the pipe code."
