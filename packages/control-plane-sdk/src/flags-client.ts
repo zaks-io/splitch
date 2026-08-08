@@ -115,13 +115,7 @@ export function createFlagsClient(
           ),
         ),
       ),
-    get: (input, callOptions) =>
-      invokeHcRoute<FlagsGetOutput>("flags_get", () =>
-        hcClient.apps[":appId"].flags[":flagId"].$get(
-          { param: { appId: input.appId, flagId: input.flagId } },
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
-        ),
-      ),
+    get: (input, callOptions) => flagsGet(hcClient, hcOptions, input, callOptions),
     update: (input, callOptions) => {
       const { appId, flagId, ...body } = input;
       return invokeHcRoute<FlagsUpdateOutput>("flags_update", () =>
@@ -239,4 +233,21 @@ export function createFlagsClient(
       );
     },
   };
+}
+
+function flagsGet(
+  hcClient: FlagsHcClient,
+  hcOptions: ControlPlaneHcOptions,
+  input: FlagsGetInput,
+  callOptions?: ControlPlaneOperationOptions,
+): Promise<ControlPlaneOperationResult<FlagsGetOutput>> {
+  return invokeHcRoute<FlagsGetOutput>("flags_get", () =>
+    hcClient.apps[":appId"].flags[":flagId"].$get(
+      {
+        param: { appId: input.appId, flagId: input.flagId },
+        query: input.by === undefined ? {} : { by: input.by },
+      } as never,
+      hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+    ),
+  );
 }

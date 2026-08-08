@@ -8,12 +8,7 @@ import {
   initializeFlagConfigsForFlag,
   purgeFlagConfigsKvForFlag,
 } from "./flag-config-lifecycle";
-import {
-  flagNotFound,
-  flagSelectorAmbiguous,
-  validationError,
-  validationErrors,
-} from "./flag-definition-errors";
+import { flagNotFound, validationError, validationErrors } from "./flag-definition-errors";
 import {
   type FlagDefinitionDeps,
   fail,
@@ -111,47 +106,21 @@ export async function getFlag(
   { input, requestId }: HandlerArgs<unknown>,
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
-  // Path param is named flagId, but the Panel addresses Flags by immutable key
-  // and the catalog list is bounded — so this read accepts either the canonical
-  // id or the key. When both hit distinct rows, refuse (SPL-288); never pick.
-  const resolved = await resolveFlagSelector(deps, appId, pathParam(input, "flagId"));
-  if (resolved.kind === "ambiguous") {
-    return flagSelectorAmbiguous(requestId, {
-      selector: resolved.selector,
-      idMatchFlagId: resolved.byId.id,
-      keyMatchFlagId: resolved.byKey.id,
-    });
-  }
-  if (resolved.kind === "absent") return flagNotFound(requestId);
-  return Response.json(await flagResponse(deps.repo, appId, resolved.flag));
+  const selector = pathParam(input, "flagId");
+  // Path is id-only by default. Key lookup is an explicit ?by=key so a Flag key
+  // that equals another Flag's canonical id can never collide on one segment
+  // (SPL-236). Write routes stay id-only via loadWritableFlag.
+  const flag =
+    flagLookupBy(input) === "key"
+      ? await deps.repo.flags.getFlagByKey(appScope(appId), selector)
+      : await deps.repo.flags.getFlag(appScope(appId), selector);
+  if (!flag) return flagNotFound(requestId);
+  return Response.json(await flagResponse(deps.repo, appId, flag));
 }
 
-/**
- * Resolve a Flag inside one App by canonical id or by key.
- *
- * Both probes always run. Flag keys are unconstrained strings and may equal
- * another Flag's canonical id (SPL-288); matching both on distinct rows is
- * refused rather than silently preferring one. Keyed on `(app_id, id)` /
- * `(app_id, key)`, so a selector that only exists in another App is absent
- * here — the App scope is the isolation boundary (ADR-0018), not a post-filter.
- */
-async function resolveFlagSelector(
-  deps: FlagDefinitionDeps,
-  appId: string,
-  selector: string,
-): Promise<
-  | { kind: "found"; flag: LoadedFlag["flag"] }
-  | { kind: "absent" }
-  | { kind: "ambiguous"; selector: string; byId: LoadedFlag["flag"]; byKey: LoadedFlag["flag"] }
-> {
-  const scope = appScope(appId);
-  const byId = await deps.repo.flags.getFlag(scope, selector);
-  const byKey = await deps.repo.flags.getFlagByKey(scope, selector);
-  if (byId && byKey && byId.id !== byKey.id) {
-    return { kind: "ambiguous", selector, byId, byKey };
-  }
-  const flag = byId ?? byKey;
-  return flag ? { kind: "found", flag } : { kind: "absent" };
+function flagLookupBy(input: unknown): "id" | "key" {
+  const query = (input as { query?: Record<string, unknown> } | null)?.query ?? {};
+  return query.by === "key" ? "key" : "id";
 }
 
 export async function updateFlag(

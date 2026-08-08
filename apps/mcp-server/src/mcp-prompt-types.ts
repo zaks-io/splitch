@@ -125,8 +125,6 @@ export const RECOVERY_OPERATION_IDS: Readonly<Record<RecommendedAction, readonly
   CHOOSE_DIFFERENT_SLUG: [],
   // An archived Experiment still holds the key; pick a different key on create.
   CHOOSE_DIFFERENT_KEY: [],
-  // A flags_get selector hit two Flags; retry with the intended canonical id.
-  PASS_CANONICAL_FLAG_ID: [],
   // The App-wide read is over budget and no retry fixes that, so the caller drops
   // to a per-Environment enumeration (experiments_list carries Experiment
   // records, not health) followed by a per-running-Experiment results fetch,

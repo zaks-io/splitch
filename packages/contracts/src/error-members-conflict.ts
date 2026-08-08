@@ -32,16 +32,6 @@ export const conflictErrorMembers = [
       recommendedAction: z.literal("CHOOSE_DIFFERENT_KEY"),
     }),
   ),
-  // flags_get id-and-key collision (SPL-288): name both ids; never pick silently.
-  member(
-    "FLAG_SELECTOR_AMBIGUOUS",
-    z.object({
-      selector: z.string(),
-      idMatchFlagId: z.string(),
-      keyMatchFlagId: z.string(),
-      recommendedAction: z.literal("PASS_CANONICAL_FLAG_ID"),
-    }),
-  ),
 ] as const;
 
 function member<C extends ErrorCode, D extends z.ZodTypeAny>(code: C, details: D) {

@@ -33,7 +33,6 @@ export const recommendedActions = [
   "RETRY_REVIEW",
   "CHOOSE_DIFFERENT_SLUG",
   "CHOOSE_DIFFERENT_KEY",
-  "PASS_CANONICAL_FLAG_ID",
   "READ_PER_ENVIRONMENT",
 ] as const;
 

@@ -152,9 +152,9 @@ export async function resolveEnvironmentSelector(
  *
  * `flags_list` is hard-bounded with no pagination. When the page is truncated
  * and the selector is absent, fall through and pass the selector verbatim so a
- * later wire call can still try. Only `flags_get` accepts a key on the server;
- * other `:flagId` routes still require a canonical id past the ceiling. An
- * untruncated miss still fails with CLI_SCOPE_UNRESOLVED.
+ * later wire call can still try. Only `flags_get` with `?by=key` accepts a key
+ * on the server; other `:flagId` routes still require a canonical id past the
+ * ceiling. An untruncated miss still fails with CLI_SCOPE_UNRESOLVED.
  */
 export async function resolveFlagSelector(
   deps: CliDeps,
@@ -175,8 +175,8 @@ export async function resolveFlagSelector(
   if (match) return match;
   if (listed.readTruncated) {
     // Catalog is incomplete — cannot prove absence locally. Pass the selector
-    // through. Only flags_get accepts a key server-side; other :flagId routes
-    // still need a canonical id past the ceiling.
+    // through. Only flags_get with ?by=key accepts a key server-side; other
+    // :flagId routes still need a canonical id past the ceiling.
     return { id: selector };
   }
   throw new SplitchCliError({

@@ -24,10 +24,6 @@ export const errorCodes = [
   "SLUG_CONFLICT",
   "EXPERIMENT_KEY_CONFLICT",
   "EVENT_ID_CONFLICT",
-  // Flag keys are unconstrained strings and may equal another Flag's canonical
-  // id (SPL-288). flags_get accepts id or key; when both hit distinct rows the
-  // selector is refused rather than silently preferring one.
-  "FLAG_SELECTOR_AMBIGUOUS",
 
   // Not found
   "EXPERIMENT_NOT_FOUND",

@@ -30,18 +30,18 @@ export type FlagDetailData = {
 /**
  * No Flag with this key exists in this App.
  *
- * Absence is proven by the Control Plane's keyed `flags_get` (id or key), not by
- * scanning a bounded catalog page — so a miss is a true miss, including when the
- * App's catalog is larger than `FLAG_LIST_READ_LIMIT`.
+ * Absence is proven by `flags_get?by=key`, not by scanning a bounded catalog
+ * page — so a miss is a true miss, including when the App's catalog is larger
+ * than `FLAG_LIST_READ_LIMIT`.
  */
 export type FlagDetailNotFound = { code: "FLAG_NOT_FOUND" };
 
 /**
  * Resolve a Flag by its URL `key` and read its Configuration for one Environment.
  *
- * The key is the addressable identity (immutable after create). `flags_get`
- * accepts that key directly, so the definition read does not depend on whether
- * the Flag still fits inside the bounded catalog list page.
+ * The key is the addressable identity (immutable after create). The Panel holds
+ * a key in the URL, so the definition read asks `flags_get` with `?by=key` —
+ * never overloading the path segment that write routes still treat as id-only.
  *
  * A missing Configuration is a real state, not an error: a Flag created through
  * the guided flow has a definition in every Environment before anyone narrows its
@@ -53,7 +53,7 @@ export async function readFlagDetail(
   scope: { appId: string; environmentId: string },
   flagKey: string,
 ): Promise<ControlPlaneOperationResult<FlagDetailData | FlagDetailNotFound>> {
-  const fetched = await flags.get({ appId: scope.appId, flagId: flagKey });
+  const fetched = await flags.get({ appId: scope.appId, flagId: flagKey, by: "key" });
   if (!fetched.ok) {
     if (fetched.error.code === "FLAG_NOT_FOUND") {
       return { ok: true, status: 200, data: { code: "FLAG_NOT_FOUND" } };

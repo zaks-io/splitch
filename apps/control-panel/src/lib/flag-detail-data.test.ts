@@ -20,7 +20,7 @@ const definition = {
 };
 
 describe("Flag detail route data", () => {
-  it("resolves the URL key via flags_get and pairs it with this Environment's config", async () => {
+  it("resolves the URL key via flags_get?by=key and pairs it with this Environment's config", async () => {
     const get = vi.fn<FlagsClient["get"]>(async () => ({
       ok: true,
       status: 200,
@@ -44,7 +44,11 @@ describe("Flag detail route data", () => {
     // Key -> definition is one keyed get, not a catalog scan that can miss past
     // FLAG_LIST_READ_LIMIT.
     expect(get).toHaveBeenCalledTimes(1);
-    expect(get).toHaveBeenCalledWith({ appId: "app_checkout", flagId: "new-checkout" });
+    expect(get).toHaveBeenCalledWith({
+      appId: "app_checkout",
+      flagId: "new-checkout",
+      by: "key",
+    });
     expect(getConfig).toHaveBeenCalledTimes(1);
     expect(getConfig).toHaveBeenCalledWith({
       appId: "app_checkout",
@@ -144,49 +148,6 @@ describe("Flag detail route data", () => {
     );
 
     expect(result).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
-    expect(getConfig).not.toHaveBeenCalled();
-  });
-});
-
-describe("Flag detail selector ambiguity", () => {
-  it("propagates FLAG_SELECTOR_AMBIGUOUS instead of rendering another Flag", async () => {
-    const getConfig = vi.fn<FlagsClient["getConfig"]>();
-    const collidingId = "flag_aaaa0000bbbb1111cccc2222";
-
-    const result = await readFlagDetail(
-      flagsClient(
-        vi.fn(async () => ({
-          ok: false as const,
-          status: 409,
-          error: {
-            code: "FLAG_SELECTOR_AMBIGUOUS" as const,
-            message: `Flag selector "${collidingId}" matches more than one Flag in this App: id ${collidingId} and key of flag_keyed_elsewhere_0001`,
-            details: {
-              selector: collidingId,
-              idMatchFlagId: collidingId,
-              keyMatchFlagId: "flag_keyed_elsewhere_0001",
-              recommendedAction: "PASS_CANONICAL_FLAG_ID" as const,
-            },
-          },
-        })),
-        getConfig,
-      ),
-      scope,
-      collidingId,
-    );
-
-    expect(result).toMatchObject({
-      ok: false,
-      status: 409,
-      error: {
-        code: "FLAG_SELECTOR_AMBIGUOUS",
-        details: {
-          idMatchFlagId: collidingId,
-          keyMatchFlagId: "flag_keyed_elsewhere_0001",
-          recommendedAction: "PASS_CANONICAL_FLAG_ID",
-        },
-      },
-    });
     expect(getConfig).not.toHaveBeenCalled();
   });
 });
