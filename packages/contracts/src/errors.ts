@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
-import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
+import { ApprovalPolicyLevelSchema, UserRoleSchema } from "./leaf-schemas-runtime";
 import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
 
 /**
@@ -210,6 +210,12 @@ const errorMembers = [
       // A slug collision has exactly one remedy. The open enum would let an
       // unrelated action typecheck here and send a caller somewhere useless.
       recommendedAction: z.literal("CHOOSE_DIFFERENT_SLUG"),
+    }),
+  ),
+  member(
+    "MEMBERSHIP_CONFLICT",
+    z.object({
+      existingRole: UserRoleSchema,
     }),
   ),
   // An Experiment (live or archived) still holds `(app, env, key)`. Naming an

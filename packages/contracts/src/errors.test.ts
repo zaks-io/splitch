@@ -87,6 +87,7 @@ describe("HTTP status map", () => {
     expect(httpStatusForError("FLAG_NOT_FOUND")).toBe(404);
     expect(httpStatusForError("APPROVAL_REQUEST_NOT_FOUND")).toBe(404);
     expect(httpStatusForError("RUN_FROZEN")).toBe(409);
+    expect(httpStatusForError("MEMBERSHIP_CONFLICT")).toBe(409);
     expect(httpStatusForError("APPROVAL_REVIEW_REQUIRED")).toBe(409);
     expect(httpStatusForError("APPROVAL_REQUEST_STALE")).toBe(409);
     expect(httpStatusForError("APPROVAL_REQUEST_RESOLVED")).toBe(409);

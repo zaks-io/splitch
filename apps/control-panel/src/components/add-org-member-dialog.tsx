@@ -1,15 +1,14 @@
 import { Button } from "@splitch/ui/components/button";
 import { Dialog, DialogContent, DialogTrigger } from "@splitch/ui/components/dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@splitch/ui/components/tooltip";
 import { useState } from "react";
 import { AddOrgMemberForm } from "#components/add-org-member-form";
 import { canAddOrgMember } from "#lib/org-members";
 import type { OrgRole } from "#lib/session";
 
 /**
- * The one Add member path. A role that may not add sees the affordance locked
- * with the reason rather than hidden, and the Control Plane Worker refuses the
- * operation regardless of what the panel renders (ADR-0023).
+ * The one Add member path. A role that may not add sees the reason in place of
+ * the control, and the Control Plane Worker refuses the operation regardless of
+ * what the panel renders (ADR-0023).
  */
 export function AddOrgMemberDialog({
   actorRole,
@@ -24,18 +23,9 @@ export function AddOrgMemberDialog({
 
   if (!canAddOrgMember(actorRole)) {
     return (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button data-testid="add-member-locked" disabled type="button" variant="outline" />
-          }
-        >
-          Add member (locked)
-        </TooltipTrigger>
-        <TooltipContent>
-          Adding a member is an Organization owner or admin action. Your role is {actorRole}.
-        </TooltipContent>
-      </Tooltip>
+      <p className="max-w-64 text-muted-foreground text-xs" data-testid="add-member-locked">
+        Adding a member requires the Owner or Admin role.
+      </p>
     );
   }
 

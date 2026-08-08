@@ -3,8 +3,8 @@ import type { OrgRole } from "./session";
 
 export interface OrgMember {
   readonly userId: string;
-  /** Resolved from WorkOS by the Control Plane; splitch stores no user profile. */
-  readonly email: string;
+  /** Null until the User signs in and populates the shared profile cache. */
+  readonly email: string | null;
   readonly role: UserRole;
 }
 
@@ -84,6 +84,17 @@ export function isLastOwner(members: readonly OrgMember[], userId: string): bool
 
 export function assignableRoles(actorRole: OrgRole): readonly UserRole[] {
   return actorRole === "owner" ? ["owner", "admin", "member"] : ["admin", "member"];
+}
+
+export function organizationRoleLabel(role: UserRole): "Owner" | "Admin" | "Member" {
+  switch (role) {
+    case "owner":
+      return "Owner";
+    case "admin":
+      return "Admin";
+    case "member":
+      return "Member";
+  }
 }
 
 export const ORG_MEMBERS_LOCKED_MESSAGE =

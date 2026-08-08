@@ -8,7 +8,7 @@ import {
   TableRow,
 } from "@splitch/ui/components/table";
 import { OrgMemberActions } from "#components/org-member-actions";
-import { isLastOwner, type OrgMember } from "#lib/org-members";
+import { isLastOwner, type OrgMember, organizationRoleLabel } from "#lib/org-members";
 import type { OrgRole } from "#lib/session";
 
 export function OrgMembersTable({
@@ -41,13 +41,17 @@ export function OrgMembersTable({
             <TableRow data-member-id={member.userId} key={member.userId}>
               <TableCell>
                 <div className="flex flex-col gap-1">
-                  <span className="font-medium">{member.email}</span>
+                  {member.email ? (
+                    <span className="font-medium">{member.email}</span>
+                  ) : (
+                    <span className="font-medium text-muted-foreground">Has not signed in yet</span>
+                  )}
                   <code className="font-mono text-muted-foreground text-xs">{member.userId}</code>
                 </div>
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline">{member.role}</Badge>
+                  <Badge variant="outline">{organizationRoleLabel(member.role)}</Badge>
                   {member.userId === actorUserId ? <Badge>You</Badge> : null}
                 </div>
               </TableCell>

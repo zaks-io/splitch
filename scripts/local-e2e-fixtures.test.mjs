@@ -6,6 +6,7 @@ import {
   LOCAL_E2E_FIXTURE_CONTRACT,
   LOCAL_E2E_MEMBER_PROFILES,
   LOCAL_E2E_MEMBER_SESSION_KEY,
+  LOCAL_E2E_PROFILELESS_USER_ID,
   LOCAL_E2E_RECRUIT_USER_ID,
   LOCAL_E2E_SESSION_KEY,
   localE2eMemberSession,
@@ -64,11 +65,10 @@ test("seeded Organization slugs match the contract the Panel routes on", () => {
 });
 
 /**
- * Org member responses resolve email from `member-profile:{userId}`, so one
- * seeded membership without a profile takes the whole member list down with
- * USER_NOT_FOUND rather than dropping a single row.
+ * A seeded membership without a profile proves the normal pre-login state. The
+ * roster must keep that row without fabricating an email.
  */
-test("every seeded Org membership has a member profile to resolve email from", () => {
+test("the roster fixture includes exactly one member without a cached profile", () => {
   const membershipsInsert = LOCAL_E2E_D1_SEED.match(/INSERT INTO org_memberships[^;]*;/)?.[0];
   assert.ok(membershipsInsert, "the seed must insert Org memberships");
   const seededUserIds = [...membershipsInsert.matchAll(/\('org_\w+', '(user_\w+)'/g)].map(
@@ -76,9 +76,8 @@ test("every seeded Org membership has a member profile to resolve email from", (
   );
   assert.ok(seededUserIds.length >= 3);
 
-  for (const userId of seededUserIds) {
-    assert.ok(LOCAL_E2E_MEMBER_PROFILES[userId], `${userId} has no member profile`);
-  }
+  const withoutProfiles = seededUserIds.filter((userId) => !LOCAL_E2E_MEMBER_PROFILES[userId]);
+  assert.deepEqual(withoutProfiles, [LOCAL_E2E_PROFILELESS_USER_ID]);
   // The person the Members screen adds must start outside every Organization.
   assert.equal(seededUserIds.includes(LOCAL_E2E_RECRUIT_USER_ID), false);
   assert.ok(LOCAL_E2E_MEMBER_PROFILES[LOCAL_E2E_RECRUIT_USER_ID]);

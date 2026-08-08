@@ -1,4 +1,4 @@
-import type { UserRole } from "@splitch/contracts";
+import type { ErrorResponse, UserRole } from "@splitch/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { Button } from "@splitch/ui/components/button";
 import {
@@ -18,8 +18,11 @@ import {
 } from "@splitch/ui/components/select";
 import { type FormEvent, useState } from "react";
 import { addControlPanelOrgMember } from "#lib/control-plane-org-member-functions";
-import { assignableRoles } from "#lib/org-members";
+import { assignableRoles, organizationRoleLabel } from "#lib/org-members";
 import type { OrgRole } from "#lib/session";
+
+export const ADD_MEMBER_USER_ID_HELP =
+  "Shown on the Control Panel home screen after “Signed in as”.";
 
 /**
  * Adding a member, not inviting one: the Control Plane's endpoint takes a
@@ -52,7 +55,7 @@ export function AddOrgMemberForm({
     try {
       const result = await addControlPanelOrgMember({ data: { orgId, userId: trimmed, role } });
       if (result.ok) await onAdded();
-      else setError(result.error.message);
+      else setError(addMemberErrorMessage(result.error));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The Control Plane could not be reached.");
     } finally {
@@ -85,7 +88,7 @@ export function AddOrgMemberForm({
           value={userId}
         />
         <p className="text-muted-foreground text-xs" id="member-user-id-help">
-          Shown in the user menu of the person&apos;s own splitch session.
+          {ADD_MEMBER_USER_ID_HELP}
         </p>
       </div>
 
@@ -103,7 +106,7 @@ export function AddOrgMemberForm({
                   the Worker would refuse is not offered at all. */}
               {assignableRoles(actorRole).map((candidate) => (
                 <SelectItem key={candidate} value={candidate}>
-                  {candidate}
+                  {organizationRoleLabel(candidate)}
                 </SelectItem>
               ))}
             </SelectGroup>
@@ -125,4 +128,10 @@ export function AddOrgMemberForm({
       </DialogFooter>
     </form>
   );
+}
+
+export function addMemberErrorMessage(error: ErrorResponse): string {
+  if (error.code !== "MEMBERSHIP_CONFLICT") return error.message;
+  const role = organizationRoleLabel(error.details.existingRole);
+  return `This person is already a member with the ${role} role. Change their role from the member row.`;
 }

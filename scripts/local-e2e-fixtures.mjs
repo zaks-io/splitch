@@ -28,12 +28,13 @@ export const LOCAL_E2E_NEWCOMER_SESSION_KEY = `session:${createHash("sha256")
  * on purpose, so the add leg starts from a real absence every run.
  */
 export const LOCAL_E2E_RECRUIT_USER_ID = "user_local_recruit_e2e";
+export const LOCAL_E2E_PROFILELESS_USER_ID = "user_local_profileless_e2e";
 
 /**
  * `member-profile:{userId}` in SESSION_STORE, mirroring
  * `memberProfileCacheKey` in @splitch/contracts. Org member responses resolve
- * email from here (never a D1 column), so a membership row without a profile
- * makes the whole member list refuse with USER_NOT_FOUND.
+ * email from here (never a D1 column); the profileless fixture below proves the
+ * roster keeps a membership row until that User signs in.
  */
 export const LOCAL_E2E_MEMBER_PROFILES = Object.freeze({
   user_local_e2e: "owner@acme-labs.e2e",
@@ -201,7 +202,8 @@ INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at,
 INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES
   ('org_acme_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
   ('org_orbit_e2e', 'user_local_e2e', 'admin', '${createdAt}'),
-  ('org_acme_e2e', 'user_local_member_e2e', 'member', '${createdAt}');
+  ('org_acme_e2e', 'user_local_member_e2e', 'member', '${createdAt}'),
+  ('org_acme_e2e', '${LOCAL_E2E_PROFILELESS_USER_ID}', 'member', '${createdAt}');
 INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES
   ('app_checkout_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
   ('app_billing_e2e', 'user_local_e2e', 'admin', '${createdAt}'),

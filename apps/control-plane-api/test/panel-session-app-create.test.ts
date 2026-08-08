@@ -74,6 +74,7 @@ beforeEach(async () => {
     rateLimiter: allowLimiter,
     repo: createRepository(bindings.d1),
     credentialStore: bindings.credentialKv,
+    memberProfileResolver: () => null,
     nowIso: () => new Date(NOW_MS).toISOString(),
   };
   app = createApp({
@@ -152,6 +153,32 @@ describe("Control Panel delegation for apps_create", () => {
 
     expect(response.status).toBe(401);
     expect((await response.json()) satisfies ErrorResponse).toMatchObject({ code: "UNAUTHORIZED" });
+  });
+});
+
+describe("Control Panel delegation for Organization membership", () => {
+  it("resolves an organization_members_list operation to an Org-bound principal", async () => {
+    const request = new Request(`${AUDIENCE}/orgs/${PRIMARY.orgId}/members`);
+    const delegation = await issueControlPanelDelegation(
+      request,
+      { id: "organization_members_list", orgId: PRIMARY.orgId },
+      OWNER,
+      DELEGATION_SECRET,
+      {
+        nowSeconds: NOW_SECONDS,
+        sessionExpiresAt: NOW_SECONDS + 30,
+        nonce: "nonce_members_list_1",
+      },
+    );
+
+    const response = await app.request(`/orgs/${PRIMARY.orgId}/members`, {
+      headers: { [CONTROL_PANEL_DELEGATION_HEADER]: delegation },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      items: expect.arrayContaining([expect.objectContaining({ id: OWNER, role: "owner" })]),
+    });
   });
 });
 

@@ -1,9 +1,11 @@
 import { expect, type Page, type Request, test } from "@playwright/test";
 import {
   LOCAL_E2E_MEMBER_SESSION_TOKEN,
+  LOCAL_E2E_PROFILELESS_USER_ID,
   LOCAL_E2E_RECRUIT_USER_ID,
   LOCAL_E2E_SESSION_TOKEN,
 } from "../../scripts/local-e2e-fixtures.mjs";
+import { requireForbiddenResponse } from "./forbidden-response";
 import { waitForHydration } from "./hydration";
 import { captureThemeScreenshots } from "./screenshot";
 
@@ -33,6 +35,9 @@ test.describe("Organization Members", () => {
     await expect(page.locator(`[data-member-id='${member}']`)).toContainText(
       "member@acme-labs.e2e",
     );
+    await expect(page.locator(`[data-member-id='${LOCAL_E2E_PROFILELESS_USER_ID}']`)).toContainText(
+      "Has not signed in yet",
+    );
 
     // The Worker refuses LAST_OWNER_REQUIRED; the screen says so before the click
     // rather than letting the refusal be the first the owner hears of it.
@@ -55,18 +60,32 @@ test.describe("Organization Members", () => {
     await addMember(page, LOCAL_E2E_RECRUIT_USER_ID);
     const row = page.locator(`[data-member-id='${LOCAL_E2E_RECRUIT_USER_ID}']`);
     await expect(row).toContainText("recruit@acme-labs.e2e");
-    await expect(row).toContainText("member");
+    await expect(row).toContainText("Member");
 
     await page.getByTestId(`member-role-${LOCAL_E2E_RECRUIT_USER_ID}`).click();
-    await page.getByRole("option", { name: "admin" }).click();
+    await page.getByRole("option", { name: "Admin" }).click();
     // Re-read, never patch: the role cell below is reloaded route data, not the
     // mutation's own response spliced into the table.
-    await expect(row.locator("td").nth(1)).toContainText("admin");
+    await expect(row.locator("td").nth(1)).toContainText("Admin");
 
     await page.getByTestId(`member-remove-${LOCAL_E2E_RECRUIT_USER_ID}`).click();
     await expect(row).toHaveCount(0);
     await page.reload();
     await expect(row).toHaveCount(0);
+  });
+
+  test("adding an existing member reports the conflict and keeps the dialog open", async ({
+    page,
+  }) => {
+    await page.goto("/acme-labs/members");
+    await waitForHydration(page);
+
+    await addMember(page, member);
+
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByTestId("add-member-error")).toContainText(
+      "This person is already a member with the Member role.",
+    );
   });
 
   test("a member sees membership locked, and the Worker refuses a forced add", async ({
@@ -85,7 +104,10 @@ test.describe("Organization Members", () => {
       "Only owners and admins can view Organization membership.",
     );
     await expect(memberPage.locator("table")).toHaveCount(0);
-    await expect(memberPage.getByTestId("add-member-locked")).toBeDisabled();
+    await expect(memberPage.getByTestId("add-member-locked")).toContainText(
+      "Adding a member requires the Owner or Admin role.",
+    );
+    await expect(memberPage.getByRole("button", { name: /add member/i })).toHaveCount(0);
     await expect(memberPage.getByTestId("sso-configure")).toContainText("Locked");
     await expect(memberPage.getByTestId("sso-trusted-idps")).toContainText("Locked");
 
@@ -94,7 +116,7 @@ test.describe("Organization Members", () => {
       headers: captured.headers(),
       data: captured.postData() ?? "",
     });
-    expect(await forced.text()).toMatch(/forbidden|not allowed|permission|role/i);
+    await requireForbiddenResponse(forced);
 
     await memberPage.context().close();
   });
@@ -110,7 +132,9 @@ test.describe("Organization Members", () => {
 
     await expect(page.locator(`[data-member-id='${owner}']`)).toContainText("owner@acme-labs.e2e");
     await expect(page.getByTestId("add-member")).toBeVisible();
-    await expect(page.getByTestId(`member-actions-locked-${owner}`)).toBeDisabled();
+    await expect(page.getByTestId(`member-actions-locked-${owner}`)).toContainText(
+      "Changing roles and removing members requires the Owner role.",
+    );
     await expect(page.getByTestId(`member-role-${owner}`)).toHaveCount(0);
     await expect(page.getByTestId(`member-remove-${owner}`)).toHaveCount(0);
     // Owner-only SSO configuration is locked for the same role.
@@ -124,11 +148,7 @@ test.describe("Organization Members", () => {
       headers: captured.headers(),
       data: asOwnerGrant,
     });
-    const body = await forced.text();
-    expect(body).toMatch(/forbidden|not allowed|permission|role/i);
-    // The refusal is the role gate, not the missing account: an admin minting an
-    // owner is stopped before the member is ever looked up.
-    expect(body).not.toMatch(/user not found/i);
+    await requireForbiddenResponse(forced);
   });
 });
 

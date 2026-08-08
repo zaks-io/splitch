@@ -65,6 +65,17 @@ describe("panel Org membership binding transport", () => {
     });
   });
 
+  it("preserves a membership whose profile email is not cached yet", async () => {
+    const client = createPanelOrgMembersClient({
+      fetch: vi.fn(async () => Response.json({ items: [{ ...member(), email: null }] })),
+    });
+
+    await expect(client.list({ orgId: "org_1" })).resolves.toMatchObject({
+      ok: true,
+      data: { items: [{ id: "user_1", email: null, role: "owner" }] },
+    });
+  });
+
   it("rejects invalid successful response bodies", async () => {
     const client = createPanelOrgMembersClient({
       fetch: vi.fn(async () => Response.json({ items: [{ id: "user_1", role: "superuser" }] })),
@@ -73,6 +84,17 @@ describe("panel Org membership binding transport", () => {
     await expect(client.list({ orgId: "org_1" })).rejects.toThrow(
       "organization_members_list returned an invalid response body",
     );
+  });
+
+  it("preserves an absent profile on roster reads", async () => {
+    const client = createPanelOrgMembersClient({
+      fetch: vi.fn(async () => Response.json({ items: [{ ...member(), email: null }] })),
+    });
+
+    await expect(client.list({ orgId: "org_1" })).resolves.toMatchObject({
+      ok: true,
+      data: { items: [{ id: "user_1", email: null, role: "owner" }] },
+    });
   });
 });
 

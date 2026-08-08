@@ -1,4 +1,9 @@
-import { type User, type UserRole, UserRoleSchema } from "@splitch/contracts";
+import {
+  type OrganizationMember,
+  type User,
+  type UserRole,
+  UserRoleSchema,
+} from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
@@ -69,9 +74,9 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       if (!org) return organizationNotFound(requestId);
 
       const rows = await deps.repo.identity.listOrgMemberships(orgId);
-      const items: User[] = [];
+      const items: OrganizationMember[] = [];
       for (const row of rows) {
-        const member = await memberResponse(deps, row, request, requestId);
+        const member = await listMemberResponse(deps, row, request, requestId);
         if (member instanceof Response) return member;
         items.push(member);
       }
@@ -92,11 +97,11 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       const grantGuard = await requireOwnerToGrantOwner(deps, orgId, principal, role, requestId);
       if (grantGuard) return grantGuard;
 
+      const existing = await deps.repo.identity.getOrgMembership(orgId, userId);
+      if (existing) return membershipConflict(UserRoleSchema.parse(existing.role), requestId);
+
       const profile = await resolveProfile(deps, orgId, userId, request, requestId);
       if (profile instanceof Response) return profile;
-
-      const existing = await deps.repo.identity.getOrgMembership(orgId, userId);
-      if (existing) return Response.json(userFromMembership(existing, profile));
 
       const row = await deps.repo.identity.createOrgMembership({
         orgId,
@@ -192,21 +197,23 @@ async function existingMember(
   return current;
 }
 
-async function memberResponse(
+async function listMemberResponse(
   deps: OrgHandlerDeps,
   membership: OrgMembership,
   request: Request,
   requestId: string,
-): Promise<User | Response> {
-  const profile = await resolveProfile(
-    deps,
-    membership.orgId,
-    membership.userId,
-    request,
-    requestId,
-  );
-  if (profile instanceof Response) return profile;
-  return userFromMembership(membership, profile);
+): Promise<OrganizationMember | Response> {
+  if (!deps.memberProfileResolver) return memberProfileUnavailable(requestId);
+  try {
+    const profile = await deps.memberProfileResolver({
+      orgId: membership.orgId,
+      userId: membership.userId,
+      request,
+    });
+    return memberFromMembership(membership, profile);
+  } catch {
+    return memberProfileReadFailed(membership.userId, requestId);
+  }
 }
 
 async function resolveProfile(
@@ -226,6 +233,19 @@ function userFromMembership(membership: OrgMembership, profile: MemberProfile): 
   return {
     id: membership.userId,
     email: profile.email,
+    organizationId: membership.orgId,
+    role: UserRoleSchema.parse(membership.role),
+    createdAt: membership.createdAt,
+  };
+}
+
+function memberFromMembership(
+  membership: OrgMembership,
+  profile: MemberProfile | null,
+): OrganizationMember {
+  return {
+    id: membership.userId,
+    email: profile?.email ?? null,
     organizationId: membership.orgId,
     role: UserRoleSchema.parse(membership.role),
     createdAt: membership.createdAt,
@@ -262,11 +282,33 @@ function userNotFound(requestId: string): Response {
   );
 }
 
+function membershipConflict(existingRole: UserRole, requestId: string): Response {
+  return renderError(
+    {
+      code: "MEMBERSHIP_CONFLICT",
+      message: "user is already an organization member",
+      details: { existingRole },
+    },
+    { requestId },
+  );
+}
+
 function memberProfileUnavailable(requestId: string): Response {
   return renderError(
     {
       code: "SERVICE_UNAVAILABLE",
       message: "member profile resolver is not configured",
+      details: { retryAfterMs: 1000 },
+    },
+    { requestId },
+  );
+}
+
+function memberProfileReadFailed(userId: string, requestId: string): Response {
+  return renderError(
+    {
+      code: "SERVICE_UNAVAILABLE",
+      message: `member profile lookup failed for ${userId}`,
       details: { retryAfterMs: 1000 },
     },
     { requestId },

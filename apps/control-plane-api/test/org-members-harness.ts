@@ -33,6 +33,7 @@ export const OWNER = "user_owner_d3a1";
 export const ADMIN = "user_admin_948f";
 export const MEMBER = "user_member_438c";
 export const NEW_MEMBER = "user_new_529e";
+export const PROFILELESS_MEMBER = "user_profileless_71c2";
 export const SOLO_OWNER = "user_solo_owner_0f8a";
 
 const PROFILE_EMAILS = new Map([
@@ -107,6 +108,11 @@ export async function setup(): Promise<void> {
   await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: OWNER, role: "owner" });
   await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: ADMIN, role: "admin" });
   await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: MEMBER, role: "member" });
+  await seedOrgMember(bindings.d1, {
+    orgId: PRIMARY.orgId,
+    userId: PROFILELESS_MEMBER,
+    role: "member",
+  });
   await seedOrgMember(bindings.d1, { orgId: SOLO.orgId, userId: SOLO_OWNER, role: "owner" });
 
   const signer = await makeFixtureSigner();
@@ -122,7 +128,10 @@ export async function setup(): Promise<void> {
     }),
     rateLimiter: allowLimiter,
     repo: createRepository(bindings.d1),
-    memberProfileResolver: ({ userId }) => {
+    memberProfileResolver: ({ userId, request }) => {
+      if (request.headers.get("x-test-profile-failure-user") === userId) {
+        throw new Error("profile store unavailable");
+      }
       const email = PROFILE_EMAILS.get(userId);
       return email ? { email } : null;
     },
@@ -155,11 +164,11 @@ export function token(
   });
 }
 
-export function client(jwt: string) {
+export function client(jwt: string, headers: Record<string, string> = {}) {
   const fetchImpl: typeof fetch = async (input, init) => h.app.fetch(new Request(input, init));
   return hc<typeof h.app>(AUDIENCE, {
     fetch: fetchImpl,
-    headers: { authorization: `Bearer ${jwt}` },
+    headers: { authorization: `Bearer ${jwt}`, ...headers },
   }) as unknown as OrgRouteClient;
 }
 

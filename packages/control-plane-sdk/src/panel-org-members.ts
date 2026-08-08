@@ -1,5 +1,5 @@
-import type { User, UserRole } from "@splitch/contracts";
-import { UserSchema } from "@splitch/contracts";
+import type { OrganizationMember, User, UserRole } from "@splitch/contracts";
+import { OrganizationMemberSchema, UserSchema } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
 
@@ -31,7 +31,7 @@ export interface PanelOrgMemberRemoveInput {
 }
 
 export interface PanelOrgMembersListOutput {
-  items: User[];
+  items: OrganizationMember[];
 }
 
 export interface PanelOrgMemberRemoveOutput {
@@ -98,9 +98,9 @@ function parseMemberList(
   input: unknown,
 ): { success: true; data: PanelOrgMembersListOutput } | { success: false } {
   if (!isObject(input) || !Array.isArray(input.items)) return { success: false };
-  const items: User[] = [];
+  const items: OrganizationMember[] = [];
   for (const item of input.items) {
-    const parsed = UserSchema.safeParse(item);
+    const parsed = OrganizationMemberSchema.safeParse(item);
     if (!parsed.success) return { success: false };
     items.push(parsed.data);
   }

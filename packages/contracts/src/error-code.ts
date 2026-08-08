@@ -22,6 +22,7 @@ export const errorCodes = [
 
   // Uniqueness
   "SLUG_CONFLICT",
+  "MEMBERSHIP_CONFLICT",
   "EXPERIMENT_KEY_CONFLICT",
   "EVENT_ID_CONFLICT",
 

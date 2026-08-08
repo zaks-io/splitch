@@ -1,5 +1,5 @@
 import { z } from "@hono/zod-openapi";
-import { UserSchema } from "../leaf-schemas-runtime";
+import { OrganizationMemberSchema, UserSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   CreateOrganizationRequestSchema,
@@ -25,7 +25,7 @@ const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
 const OrgListResponse = z.object({ items: z.array(OrganizationResponseSchema) });
-const MemberListResponse = z.object({ items: z.array(UserSchema) });
+const MemberListResponse = z.object({ items: z.array(OrganizationMemberSchema) });
 const MemberResponse = UserSchema;
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 
@@ -119,7 +119,7 @@ const organizationRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["ORGANIZATION_NOT_FOUND", "USER_NOT_FOUND", "FORBIDDEN"],
+    errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
     operationId: "organization_members_add",
@@ -132,7 +132,13 @@ const organizationRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN", "USER_NOT_FOUND", "VALIDATION_ERROR"],
+    errors: [
+      "ORGANIZATION_NOT_FOUND",
+      "FORBIDDEN",
+      "USER_NOT_FOUND",
+      "MEMBERSHIP_CONFLICT",
+      "VALIDATION_ERROR",
+    ],
   }),
   defineApiRoute({
     operationId: "organization_members_update",

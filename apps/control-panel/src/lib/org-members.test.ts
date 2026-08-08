@@ -9,6 +9,7 @@ import {
   canRemoveOrgMember,
   canViewOrgMembers,
   isLastOwner,
+  organizationRoleLabel,
   type OrgMember,
 } from "./org-members";
 
@@ -45,6 +46,10 @@ describe("Org membership gates mirror the Control Plane", () => {
     for (const role of assignableRoles("admin")) {
       expect(canGrantOrgRole("admin", role)).toBe(true);
     }
+  });
+
+  it("renders role names instead of raw enum values", () => {
+    expect(ROLES.map(organizationRoleLabel)).toEqual(["Owner", "Admin", "Member"]);
   });
 
   it("gates SSO/SCIM at owner+admin and trusted IdPs at owner", () => {

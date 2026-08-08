@@ -14,6 +14,7 @@ vi.mock("#lib/control-plane-org-member-functions", () => ({
 }));
 
 const { OrgMembersPage } = await import("./org-members-page");
+const { ADD_MEMBER_USER_ID_HELP, addMemberErrorMessage } = await import("./add-org-member-form");
 
 const members: OrgMemberList = {
   kind: "ready",
@@ -49,15 +50,17 @@ describe("Members screen role matrix", () => {
     const html = page("admin");
 
     expect(html).toContain('data-testid="add-member"');
-    expect(html).toContain('data-testid="member-actions-locked-u_admin"');
+    expect(html).toContain("Changing roles and removing members requires the Owner role.");
     expect(html).not.toContain('data-testid="member-remove-u_admin"');
   });
 
-  it("locks the add affordance for a member instead of hiding it", () => {
+  it("renders the add restriction as visible text instead of a disabled control", () => {
     const html = page("member", { kind: "locked", message: "Only owners and admins can view." });
 
     expect(html).toContain('data-testid="add-member-locked"');
+    expect(html).toContain("Adding a member requires the Owner or Admin role.");
     expect(html).not.toContain('data-testid="add-member"');
+    expect(html).not.toContain("Add member (locked)");
   });
 
   it("tells a member why the list is absent rather than showing an empty table", () => {
@@ -77,6 +80,38 @@ describe("Members screen role matrix", () => {
     expect(html).toContain('data-testid="members-unavailable"');
     expect(html).toContain("member profile is not configured");
     expect(html).not.toContain("<table");
+  });
+
+  it("renders a membership without profile data and says why the email is absent", () => {
+    const html = page("owner", {
+      kind: "ready",
+      items: [{ userId: "u_new", email: null, role: "member" }],
+    });
+
+    expect(html).toContain('data-member-id="u_new"');
+    expect(html).toContain("Has not signed in yet");
+    expect(html).not.toContain("unknown@");
+  });
+});
+
+describe("Add member errors", () => {
+  it("points to the screen that actually shows the signed-in User ID", () => {
+    expect(ADD_MEMBER_USER_ID_HELP).toBe(
+      "Shown on the Control Panel home screen after “Signed in as”.",
+    );
+    expect(ADD_MEMBER_USER_ID_HELP).not.toContain("user menu");
+  });
+
+  it("explains an existing membership without exposing the raw role value", () => {
+    expect(
+      addMemberErrorMessage({
+        code: "MEMBERSHIP_CONFLICT",
+        message: "user is already an organization member",
+        details: { existingRole: "admin" },
+      }),
+    ).toBe(
+      "This person is already a member with the Admin role. Change their role from the member row.",
+    );
   });
 });
 

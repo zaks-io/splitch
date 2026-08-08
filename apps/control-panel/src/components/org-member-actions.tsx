@@ -8,19 +8,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@splitch/ui/components/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@splitch/ui/components/tooltip";
 import { useState } from "react";
 import {
   removeControlPanelOrgMember,
   updateControlPanelOrgMemberRole,
 } from "#lib/control-plane-org-member-functions";
-import { assignableRoles, canChangeOrgMemberRole, canRemoveOrgMember } from "#lib/org-members";
+import {
+  assignableRoles,
+  canChangeOrgMemberRole,
+  canRemoveOrgMember,
+  organizationRoleLabel,
+} from "#lib/org-members";
 import type { OrgMember } from "#lib/org-members";
 import type { OrgRole } from "#lib/session";
 
 /**
  * Per-member role change and removal. Both are owner-only in the Control Plane,
- * so an admin sees them locked with the reason rather than absent.
+ * so an admin sees the reason in place of controls they cannot use.
  *
  * The sole owner's controls are locked for the same reason the Worker refuses
  * them (`LAST_OWNER_REQUIRED`): an Organization must keep an owner. Stating it
@@ -46,24 +50,12 @@ export function OrgMemberActions({
 
   if (!canChange && !canRemove) {
     return (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              data-testid={`member-actions-locked-${member.userId}`}
-              disabled
-              type="button"
-              variant="outline"
-            />
-          }
-        >
-          Manage (locked)
-        </TooltipTrigger>
-        <TooltipContent>
-          Changing a role or removing a member is an Organization owner action. Your role is{" "}
-          {actorRole}.
-        </TooltipContent>
-      </Tooltip>
+      <p
+        className="max-w-64 text-muted-foreground text-xs"
+        data-testid={`member-actions-locked-${member.userId}`}
+      >
+        Changing roles and removing members requires the Owner role.
+      </p>
     );
   }
 
@@ -98,7 +90,7 @@ export function OrgMemberActions({
           value={member.role}
         >
           <SelectTrigger
-            aria-label={`Role for ${member.email}`}
+            aria-label={`Role for ${member.email ?? member.userId}`}
             className="w-36"
             data-testid={`member-role-${member.userId}`}
           >
@@ -108,7 +100,7 @@ export function OrgMemberActions({
             <SelectGroup>
               {assignableRoles(actorRole).map((role) => (
                 <SelectItem key={role} value={role}>
-                  {role}
+                  {organizationRoleLabel(role)}
                 </SelectItem>
               ))}
             </SelectGroup>
