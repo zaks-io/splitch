@@ -17,7 +17,10 @@ import {
   ExposureIngestSinkError,
   ticketFingerprint,
 } from "./exposure-redemption";
-import type { ExposureRedemptionClaimStore } from "./exposure-redemption-claim-core";
+import type {
+  ExposureRedemptionClaimInput,
+  ExposureRedemptionClaimStore,
+} from "./exposure-redemption-claim-core";
 import {
   assertBodyWithinCap,
   type CredentialScope,
@@ -29,14 +32,14 @@ interface ExposuresRouteDeps {
   readonly assignmentStore: AssignmentStore;
   readonly exposureIngestSink: ExposureIngestSink;
   readonly exposureRedemptionClaims: ExposureRedemptionClaimStore;
-  readonly exposureTicket: MintExposureTicketDeps & {
-    readonly previousTicketKey?: string;
-  };
+  readonly exposureTicket: MintExposureTicketDeps & { readonly previousTicketKey?: string };
   readonly sourceId: string;
   readonly waitUntil?: (promise: Promise<unknown>) => void;
   readonly logger?: { error(message: string, detail: unknown): void };
   readonly now?: () => Date;
 }
+
+type RedemptionClaimContext = ExposureRedemptionClaimInput & { readonly requestId: string };
 
 export function makeExposuresHandler(deps: ExposuresRouteDeps) {
   return async ({
@@ -56,7 +59,7 @@ export function makeExposuresHandler(deps: ExposuresRouteDeps) {
 
     const results: ExposureBatchResult[] = [];
     for (const item of body.value.exposures) {
-      results.push(await redeemOne(item, scope.value, deps));
+      results.push(await redeemOne(item, scope.value, requestId, deps));
     }
 
     return Response.json(ExposureBatchResponseSchema.parse({ results }), { status: 202 });
@@ -66,6 +69,7 @@ export function makeExposuresHandler(deps: ExposuresRouteDeps) {
 async function redeemOne(
   item: ExposureBatchRequest["exposures"][number],
   scope: CredentialScope,
+  requestId: string,
   deps: ExposuresRouteDeps,
 ): Promise<ExposureBatchResult> {
   const verified = await verifyTicketForScope(item.exposureTicket, scope, deps);
@@ -73,6 +77,7 @@ async function redeemOne(
 
   const fingerprint = await ticketFingerprint(item.exposureTicket);
   const claimInput = {
+    requestId,
     appId: scope.appId,
     environmentId: scope.environmentId,
     exposureId: item.exposureId,
@@ -84,6 +89,7 @@ async function redeemOne(
     claim = await deps.exposureRedemptionClaims.claim(claimInput);
   } catch (cause) {
     deps.logger?.error("exposure_redemption_claim_failed", {
+      requestId: claimInput.requestId,
       appId: scope.appId,
       environmentId: scope.environmentId,
       exposureId: item.exposureId,
@@ -110,12 +116,7 @@ async function redeemOne(
 
 async function completeAcknowledgeOnly(
   exposureId: string,
-  claimInput: {
-    readonly appId: string;
-    readonly environmentId: string;
-    readonly exposureId: string;
-    readonly ticketFingerprint: string;
-  },
+  claimInput: RedemptionClaimContext,
   ticket: ExposureTicketPayload,
   scope: CredentialScope,
   deps: ExposuresRouteDeps,
@@ -130,6 +131,7 @@ async function completeAcknowledgeOnly(
     };
   } catch (cause) {
     deps.logger?.error("exposure_redemption_acknowledge_failed", {
+      requestId: claimInput.requestId,
       appId: claimInput.appId,
       environmentId: claimInput.environmentId,
       exposureId,
@@ -143,12 +145,7 @@ async function completeAcknowledgeOnly(
 async function sealIngestAndConfirm(
   item: ExposureBatchRequest["exposures"][number],
   ticket: ExposureTicketPayload,
-  claimInput: {
-    readonly appId: string;
-    readonly environmentId: string;
-    readonly exposureId: string;
-    readonly ticketFingerprint: string;
-  },
+  claimInput: RedemptionClaimContext,
   scope: CredentialScope,
   deps: ExposuresRouteDeps,
 ): Promise<ExposureBatchResult> {
@@ -196,6 +193,7 @@ async function sealIngestAndConfirm(
     };
   } catch (cause) {
     deps.logger?.error("exposure_redemption_confirm_failed", {
+      requestId: claimInput.requestId,
       appId: claimInput.appId,
       environmentId: claimInput.environmentId,
       exposureId: item.exposureId,
@@ -211,18 +209,14 @@ async function sealIngestAndConfirm(
 }
 
 async function releaseClaimQuietly(
-  claimInput: {
-    readonly appId: string;
-    readonly environmentId: string;
-    readonly exposureId: string;
-    readonly ticketFingerprint: string;
-  },
+  claimInput: RedemptionClaimContext,
   deps: ExposuresRouteDeps,
 ): Promise<void> {
   try {
     await deps.exposureRedemptionClaims.release(claimInput);
   } catch (cause) {
     deps.logger?.error("exposure_redemption_release_failed", {
+      requestId: claimInput.requestId,
       appId: claimInput.appId,
       environmentId: claimInput.environmentId,
       exposureId: claimInput.exposureId,
