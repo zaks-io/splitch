@@ -4,7 +4,7 @@ import {
   kvEnvelope,
   MetricEventTrackRequestSchema,
 } from "@splitch/contracts";
-import { authenticateClientKey } from "./client-key-auth";
+import { authenticateClientKey, type ClientKeyScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
 import { claimMetricEvent } from "./metric-event-outbox";
 import { checkMetricEventRateLimit } from "./metric-event-rate-limit";
@@ -14,11 +14,19 @@ import type { Env } from "./types";
 const MAX_BODY_BYTES = 32_768;
 const hotConfigEnvelope = kvEnvelope(EventDefinitionHotConfigSchema);
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the contract requires ordered side-effect-free guards before the claim boundary
 export async function handleMetricEvent(request: Request, env: Env): Promise<Response> {
   const credential = await authenticateClientKey(request, env);
   if (!credential.ok) return renderError(credential.error);
 
+  return handleAuthorizedMetricEvent(request, env, credential.value);
+}
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the contract requires ordered side-effect-free guards before the claim boundary
+export async function handleAuthorizedMetricEvent(
+  request: Request,
+  env: Env,
+  credential: ClientKeyScope,
+): Promise<Response> {
   const text = await request.text();
   if (new TextEncoder().encode(text).byteLength > MAX_BODY_BYTES) {
     return renderError(validation("Metric Event body exceeds 32768 bytes", []));
@@ -46,8 +54,8 @@ export async function handleMetricEvent(request: Request, env: Env): Promise<Res
   try {
     const rate = await checkMetricEventRateLimit(
       env.METRIC_EVENT_RATE_LIMIT,
-      credential.value.credentialHash,
-      credential.value.rateLimitRps,
+      credential.credentialHash,
+      credential.rateLimitRps,
     );
     if (rate.limited) {
       return renderError({
@@ -75,10 +83,10 @@ export async function handleMetricEvent(request: Request, env: Env): Promise<Res
     }),
   );
   const dedupKey = await sha256(
-    `metric:${credential.value.appId}:${credential.value.environmentId}:${parsed.data.eventId}`,
+    `metric:${credential.appId}:${credential.environmentId}:${parsed.data.eventId}`,
   );
 
-  const hot = await loadDefinition(env, credential.value.appId, parsed.data.eventName);
+  const hot = await loadDefinition(env, credential.appId, parsed.data.eventName);
   if (hot instanceof Response) return hot;
   const issues = validateMetricEvent(parsed.data, hot.version);
   if (issues.length > 0) {
@@ -108,8 +116,8 @@ export async function handleMetricEvent(request: Request, env: Env): Promise<Res
   const row = {
     dedup_key: dedupKey,
     event_id: parsed.data.eventId,
-    app_id: credential.value.appId,
-    environment_id: credential.value.environmentId,
+    app_id: credential.appId,
+    environment_id: credential.environmentId,
     event_definition_id: hot.eventDefinition.id,
     event_definition_version_id: hot.version.id,
     event_name: parsed.data.eventName,

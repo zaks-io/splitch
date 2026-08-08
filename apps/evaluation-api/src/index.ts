@@ -88,18 +88,13 @@ async function handleRequest(
       ),
     );
   }
-  if (url.pathname === "/api/sdk/events") {
-    const target = new URL(url.pathname, env.EVENT_INGEST_URL ?? "https://event-ingest.local");
-    const forwarded = new Request(target, request);
-    return env.EVENT_INGEST ? env.EVENT_INGEST.fetch(forwarded) : fetch(forwarded);
-  }
-
   const saltStore = makeEnvSaltStore(env);
   const app = createApp({
     door: authority ? "binding" : "public",
     authResolver: requestAuthResolver(env, url, authority),
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(env.CREDENTIAL_STORE),
     rateLimiter: allowLimiter,
+    delegationBindings: { "event-ingest-api": env.EVENT_INGEST },
     provider: new KvProvider(env.CONFIG_STORE),
     assignmentStore: new KvAssignmentStore(
       env.ASSIGNMENTS_KV,

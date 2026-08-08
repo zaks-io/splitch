@@ -201,6 +201,7 @@ async function seedDefinition(
       id: versionId,
       appId,
       eventDefinitionId: id,
+      version: 1,
       schemaHash: `sha256:${"a".repeat(64)}`,
       entityType: "user",
       fields: "[]",
@@ -213,12 +214,23 @@ async function seedDefinition(
 }
 
 async function foreignState(): Promise<unknown> {
-  const repo = createRepository(f.h.bindings.d1);
-  const definition = await repo.eventDefinitions.get(appScope(APP_B), DEFINITION_B);
-  const versions = await repo.eventDefinitions.listVersions(appScope(APP_B), DEFINITION_B);
+  const definition = await f.h.bindings.d1
+    .prepare(
+      `SELECT display_name, current_published_version_id
+       FROM event_definitions WHERE id = ?`,
+    )
+    .bind(DEFINITION_B)
+    .first<{ display_name: string; current_published_version_id: string | null }>();
+  const versions = await f.h.bindings.d1
+    .prepare(
+      `SELECT id, app_id FROM event_definition_versions
+       WHERE event_definition_id = ? ORDER BY version`,
+    )
+    .bind(DEFINITION_B)
+    .all<{ id: string; app_id: string }>();
   return {
-    displayName: definition?.displayName,
-    currentPublishedVersionId: definition?.currentPublishedVersionId,
-    versionIds: versions.map(({ id }) => id),
+    displayName: definition?.display_name,
+    currentPublishedVersionId: definition?.current_published_version_id,
+    versions: versions.results,
   };
 }

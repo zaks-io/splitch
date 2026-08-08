@@ -46,6 +46,9 @@ SQL >
 NODE scoped_metric_events
 SQL >
     %
+    {% if not defined(event_definition_id) %}
+    {{error('event_definition_id is required')}}
+    {% end %}
     SELECT
         app_id,
         environment_id,

@@ -2,9 +2,13 @@ import {
   CURRENT_KV_SCHEMA_VERSION,
   clientKeyCacheKey,
   eventDefinitionConfigKey,
+  getRoute,
 } from "@splitch/contracts";
+import { delegatedRequest } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
+import worker, { EvaluationEntrypoint } from "./index";
 import { handleMetricEvent } from "./metric-event-ingest";
+import { TestExecutionContext } from "./test-fixtures";
 import type { Env } from "./types";
 
 const appId = "app_shop";
@@ -12,6 +16,39 @@ const environmentId = "env_prod";
 const eventId = "123e4567-e89b-42d3-a456-426614174000";
 
 describe("Metric Event ingest", () => {
+  it("accepts the Evaluation-authorized caller only through the binding entrypoint", async () => {
+    const fixture = await makeFixture();
+    const ctx = new TestExecutionContext();
+    const request = delegatedRequest(
+      metricEventRoute(),
+      {
+        operation: "sdk_track",
+        actorId: `client_key:${fixture.hash}`,
+        orgId: "org_1",
+        appId,
+        environmentId,
+      },
+      { body: requestBody() },
+    );
+
+    const bound = await new EvaluationEntrypoint(ctx, fixture.env).fetch(request);
+    expect(bound.status).toBe(202);
+
+    const publicResponse = await worker.fetch(
+      new Request("https://ingest.test/api/sdk/events", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${fixture.material}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(requestBody({ eventId: "123e4567-e89b-42d3-a456-426614174001" })),
+      }) as Parameters<typeof worker.fetch>[0],
+      fixture.env,
+      ctx,
+    );
+    expect(publicResponse.status).toBe(404);
+  });
+
   it("accepts once, returns the original Version on retry, and rejects conflicting reuse", async () => {
     const fixture = await makeFixture();
     const first = await send(fixture.env, requestBody());
@@ -119,7 +156,13 @@ async function makeFixture(options: { originAllowlist?: string[] | null } = {}) 
       },
     },
   } as unknown as Env;
-  return { env, config, claims, configReads: () => reads, material };
+  return { env, config, claims, configReads: () => reads, hash, material };
+}
+
+function metricEventRoute() {
+  const route = getRoute("sdk_track");
+  if (!route) throw new Error("sdk_track route is missing");
+  return route;
 }
 
 function requestBody(patch: Record<string, unknown> = {}) {

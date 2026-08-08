@@ -29,6 +29,7 @@ export async function ensureMetricEventDefinition(
       id: versionId,
       appId,
       eventDefinitionId: id,
+      version: 1,
       schemaHash: `sha256:${"a".repeat(64)}`,
       entityType: "user",
       fields: JSON.stringify(

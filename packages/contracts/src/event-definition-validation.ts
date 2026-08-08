@@ -63,10 +63,10 @@ export function validateNumericDomain(
 ): void {
   const allowlist = value.allowedValues !== undefined;
   const range = value.minimum !== undefined || value.maximum !== undefined;
-  if (allowlist === range)
+  if (allowlist && range)
     context.addIssue({
       code: "custom",
-      message: "number requires exactly one allowlist or bounded range",
+      message: "number cannot combine an allowlist and bounded range",
     });
   if (range && (value.minimum === undefined || value.maximum === undefined)) {
     context.addIssue({ code: "custom", message: "minimum and maximum must be supplied together" });

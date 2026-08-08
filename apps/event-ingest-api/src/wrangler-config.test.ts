@@ -14,15 +14,25 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
     expect(target?.secrets?.required).toEqual(expect.arrayContaining(requiredSecrets));
     expect(target?.vars?.TINYBIRD_INGEST_TOKEN).toBeUndefined();
   });
+
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
+  ])("retries Metric Event delivery seven times for %s", (_target, target) => {
+    expect(target?.queues?.consumers).toEqual([expect.objectContaining({ max_retries: 7 })]);
+  });
 });
 
 interface WranglerConfig {
   env?: Record<string, WranglerTarget | undefined>;
+  queues?: { consumers?: Array<{ max_retries?: number }> };
   secrets?: { required?: string[] };
   vars?: Record<string, unknown>;
 }
 
 interface WranglerTarget {
+  queues?: { consumers?: Array<{ max_retries?: number }> };
   secrets?: { required?: string[] };
   vars?: Record<string, unknown>;
 }

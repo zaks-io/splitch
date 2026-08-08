@@ -21,4 +21,4 @@
   description: A missing Metric-to-Event Definition mapping fails loudly rather than reading every Metric Event in the App.
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
-  expected_result: "Template Syntax Error: Required parameter is not defined. Check the parameters app_id, environment_id, event_definition_id, from_ts and to_ts. Please provide a value or set a default value in the pipe code."
+  expected_result: "event_definition_id is required"

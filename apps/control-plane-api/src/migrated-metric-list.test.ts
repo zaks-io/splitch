@@ -83,6 +83,9 @@ describe("the Event Definition migration", () => {
         published_at: string;
       }>();
     expect(version).not.toBeNull();
+    const migratedFields = JSON.parse(version?.fields ?? "null") as Array<Record<string, unknown>>;
+    expect(migratedFields[0]).not.toHaveProperty("minimum");
+    expect(migratedFields[0]).not.toHaveProperty("maximum");
     expect(() =>
       EventDefinitionVersionSchema.parse({
         id: version?.id,
@@ -90,7 +93,7 @@ describe("the Event Definition migration", () => {
         version: version?.version,
         schemaHash: version?.schema_hash,
         entityType: version?.entity_type,
-        fields: JSON.parse(version?.fields ?? "null"),
+        fields: migratedFields,
         dimensions: JSON.parse(version?.dimensions ?? "null"),
         publishedAt: version?.published_at,
       }),
@@ -101,6 +104,30 @@ describe("the Event Definition migration", () => {
       rateLimiter,
       repo: createRepository(d1),
     });
+    const eventDefinitionId =
+      "event_definition_migrated_6170705f6578697374696e675f6d6574726963_70757263686173655f636f6d706c65746564";
+    const definitionResponse = await app.request(
+      `/apps/${APP_ID}/event-definitions/${eventDefinitionId}`,
+      { headers: { authorization: "Bearer migration-proof" } },
+    );
+    expect(definitionResponse.status).toBe(200);
+    expect(await definitionResponse.json()).toMatchObject({
+      id: eventDefinitionId,
+      currentPublishedVersionId: null,
+      versions: [
+        {
+          entityType: null,
+          fields: [
+            {
+              name: "amount",
+              type: "number",
+              required: false,
+              numberKind: "amount",
+            },
+          ],
+        },
+      ],
+    });
     const response = await app.request(`/apps/${APP_ID}/metrics`, {
       headers: { authorization: "Bearer migration-proof" },
     });
@@ -110,8 +137,7 @@ describe("the Event Definition migration", () => {
       items: [
         expect.objectContaining({
           id: "metric_existing_revenue",
-          eventDefinitionId:
-            "event_definition_migrated_6170705f6578697374696e675f6d6574726963_70757263686173655f636f6d706c65746564",
+          eventDefinitionId,
           eventFieldName: "amount",
         }),
       ],

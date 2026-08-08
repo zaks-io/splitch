@@ -40,7 +40,7 @@ SELECT
   `event_name`,
   'metric',
   `event_name`,
-  'event_definition_version_migrated_' || lower(hex(CAST(`app_id` AS blob))) || '_' || lower(hex(CAST(`event_name` AS blob))),
+  NULL,
   min(`created_at`),
   min(`created_at`)
 FROM `metrics`
@@ -69,9 +69,7 @@ SELECT
           WHEN max(`field_metric`.`kind` = 'revenue') = 1 THEN 'amount'
           WHEN max(`field_metric`.`kind` = 'count') = 1 THEN 'count'
           ELSE 'measurement'
-        END,
-        'minimum', -1e308,
-        'maximum', 1e308
+        END
       ) AS `definition`
       FROM `metrics` AS `field_metric`
       WHERE `field_metric`.`app_id` = `legacy`.`app_id`

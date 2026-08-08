@@ -44,18 +44,31 @@ export function makeEventDefinitionRepo(db: Db, d1: D1Database) {
         ),
       );
     },
+    async nextVersion(scope: TenantScope, eventDefinitionId: string) {
+      assertMintedScope(scope);
+      const definition = await definitions.findOne(
+        scope,
+        eq(eventDefinitions.id, eventDefinitionId),
+      );
+      if (!definition) return null;
+      const existing = await versions.findMany(
+        scope,
+        eq(eventDefinitionVersions.eventDefinitionId, eventDefinitionId),
+      );
+      return existing.reduce((max, item) => Math.max(max, item.version), 0) + 1;
+    },
     async publish(
       scope: TenantScope,
-      input: Omit<typeof eventDefinitionVersions.$inferInsert, "version">,
+      input: typeof eventDefinitionVersions.$inferInsert,
       updatedAt: string,
       updatedBy: string,
     ) {
       assertMintedScope(scope);
-      const existing = await versions.findMany(
+      const definition = await definitions.findOne(
         scope,
-        eq(eventDefinitionVersions.eventDefinitionId, input.eventDefinitionId),
+        eq(eventDefinitions.id, input.eventDefinitionId),
       );
-      const version = existing.reduce((max, item) => Math.max(max, item.version), 0) + 1;
+      if (!definition) return null;
       await d1.batch([
         d1
           .prepare(
@@ -67,7 +80,7 @@ export function makeEventDefinitionRepo(db: Db, d1: D1Database) {
             input.id,
             scope.appId,
             input.eventDefinitionId,
-            version,
+            input.version,
             input.schemaHash,
             input.entityType ?? null,
             input.fields,

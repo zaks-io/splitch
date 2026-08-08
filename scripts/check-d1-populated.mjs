@@ -46,6 +46,10 @@ const SEED = [
      VALUES ('org_fk_probe', 'user_fk_probe', 'owner', '${NOW}')`,
   `INSERT INTO apps (id, organization_id, name, key, created_at, updated_at)
      VALUES ('app_fk_probe', 'org_fk_probe', 'FK Probe', 'fk-probe', '${NOW}', '${NOW}')`,
+  `INSERT INTO apps (id, organization_id, name, key, created_at, updated_at)
+     VALUES (
+       'app_fk_probe_other', 'org_fk_probe', 'Other FK Probe', 'other-fk-probe', '${NOW}', '${NOW}'
+     )`,
   `INSERT INTO environments (id, app_id, key, name, created_at, updated_at)
      VALUES ('env_fk_probe', 'app_fk_probe', 'dev', 'Dev', '${NOW}', '${NOW}')`,
   `INSERT INTO metrics (
@@ -54,6 +58,13 @@ const SEED = [
    VALUES (
      'metric_fk_probe', 'app_fk_probe', 'purchase-revenue', 'Purchase revenue', 'revenue',
      'purchase_completed', 'amount', '${NOW}', 'user_fk_probe'
+   )`,
+  `INSERT INTO metrics (
+     id, app_id, key, name, kind, event_name, event_value_field, created_at, created_by
+   )
+   VALUES (
+     'metric_fk_probe_other', 'app_fk_probe_other', 'purchase-revenue', 'Purchase revenue',
+     'revenue', 'purchase_completed', 'total', '${NOW}', 'user_fk_probe'
    )`,
   `INSERT INTO flags (id, app_id, key, name, schema, default_variant_id, created_at, updated_at)
      VALUES (
@@ -218,7 +229,7 @@ try {
     "amount",
     "purchase_completed",
     "metric",
-    "event_definition_version_migrated_",
+    '"current_published_version_id": null',
   ]) {
     if (!migratedMetric.includes(expected)) {
       fail(`the Metric lost its Event binding during migration:\n${migratedMetric}`);
@@ -230,10 +241,31 @@ try {
      FROM event_definition_versions AS v
      JOIN metrics AS m ON m.event_definition_id = v.event_definition_id
      WHERE m.id = 'metric_fk_probe'`,
-    "verifying the published Event Definition Version backfill",
+    "verifying the unpublished Event Definition Version backfill",
   );
   if (!migratedVersion.includes('"field_name": "amount"')) {
-    fail(`the published Event Definition Version lost the Metric field:\n${migratedVersion}`);
+    fail(`the unpublished Event Definition Version lost the Metric field:\n${migratedVersion}`);
+  }
+
+  const tenantBindings = execSql(
+    `SELECT m.id AS metric_id, m.app_id AS metric_app_id,
+            d.id AS definition_id, d.app_id AS definition_app_id
+     FROM metrics AS m
+     JOIN event_definitions AS d
+       ON d.id = m.event_definition_id AND d.app_id = m.app_id
+     WHERE m.id IN ('metric_fk_probe', 'metric_fk_probe_other')
+     ORDER BY m.id`,
+    "verifying App-scoped Metric Event Definition backfills",
+  );
+  for (const expected of [
+    "metric_fk_probe_other",
+    "app_fk_probe_other",
+    "event_definition_migrated_6170705f666b5f70726f6265_",
+    "event_definition_migrated_6170705f666b5f70726f62655f6f74686572_",
+  ]) {
+    if (!tenantBindings.includes(expected)) {
+      fail(`Apps sharing an Event name lost distinct Event Definitions:\n${tenantBindings}`);
+    }
   }
 
   console.log(

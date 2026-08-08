@@ -13,6 +13,9 @@ export default defineConfig({
       "@splitch/worker-runtime": fileURLToPath(
         new URL("../../packages/worker-runtime/src/index.ts", import.meta.url),
       ),
+      "cloudflare:workers": fileURLToPath(
+        new URL("../event-ingest-api/src/cloudflare-workers.test-fixture.ts", import.meta.url),
+      ),
     },
   },
   test: {

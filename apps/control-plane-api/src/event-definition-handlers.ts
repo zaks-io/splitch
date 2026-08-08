@@ -11,6 +11,7 @@ import type { Hono } from "hono";
 import { appNotFound, nowIso } from "./app-environment-model";
 import { canonicalHash } from "./approval-canonical";
 import { randomHex } from "./credential-cache";
+import { commitEventDefinitionPublication } from "./event-definition-publication";
 import { validationError } from "./flag-definition-errors";
 import { objectBody, pathParam } from "./handler-input";
 import { requireWritableApp } from "./metric-segment-shared";
@@ -122,36 +123,60 @@ async function publish(deps: EventDefinitionDeps, args: HandlerArgs<unknown>): P
   if (!definition) return notFound(args.requestId);
   if (!deps.eventDefinitionStore) return unavailable(args.requestId);
   const body = objectBody(args.input);
+  if (definition.family === "metric" && body.entityType === null) {
+    return validationError(args.requestId, [
+      ["body", "entityType"],
+      "A Metric Event Definition Version needs an Entity type",
+    ]);
+  }
   const schema = { entityType: body.entityType, fields: body.fields, dimensions: body.dimensions };
   const now = nowIso(deps);
-  const row = await deps.repo.eventDefinitions.publish(
-    appScope(appId),
-    {
-      id: `event_definition_version_${randomHex(12)}`,
-      appId,
-      eventDefinitionId: definition.id,
-      schemaHash: await canonicalHash(schema),
-      entityType: body.entityType as string | null,
-      fields: JSON.stringify(body.fields),
-      dimensions: JSON.stringify(body.dimensions),
-      publishedAt: now,
-      publishedBy: args.principal.id,
-    },
-    now,
-    args.principal.id,
-  );
-  if (!row) throw new Error("Event Definition publish did not return its Version");
-  const version = versionResponse(row);
-  const current = await deps.repo.eventDefinitions.get(appScope(appId), definition.id);
-  if (!current) throw new Error("published Event Definition disappeared");
-  await deps.eventDefinitionStore.put(
-    eventDefinitionConfigKey(appId, definition.name),
-    JSON.stringify({
+  const scope = appScope(appId);
+  const versionNumber = await deps.repo.eventDefinitions.nextVersion(scope, definition.id);
+  if (versionNumber === null) return notFound(args.requestId);
+  const input = {
+    id: `event_definition_version_${randomHex(12)}`,
+    appId,
+    eventDefinitionId: definition.id,
+    version: versionNumber,
+    schemaHash: await canonicalHash(schema),
+    entityType: body.entityType as string | null,
+    fields: JSON.stringify(body.fields),
+    dimensions: JSON.stringify(body.dimensions),
+    publishedAt: now,
+    publishedBy: args.principal.id,
+  };
+  const version: EventDefinitionVersion = {
+    id: input.id,
+    eventDefinitionId: input.eventDefinitionId,
+    version: input.version,
+    schemaHash: input.schemaHash,
+    entityType: input.entityType,
+    fields: body.fields as EventDefinitionVersion["fields"],
+    dimensions: body.dimensions as EventDefinitionVersion["dimensions"],
+    publishedAt: input.publishedAt,
+  };
+  const current = {
+    ...definitionResponse(definition),
+    currentPublishedVersionId: input.id,
+    updatedAt: now,
+  };
+  const row = await commitEventDefinitionPublication({
+    store: deps.eventDefinitionStore,
+    configKey: eventDefinitionConfigKey(appId, definition.name),
+    config: JSON.stringify({
       schemaVersion: CURRENT_KV_SCHEMA_VERSION,
-      data: { eventDefinition: definitionResponse(current), version },
+      data: { eventDefinition: current, version },
     }),
-  );
-  return Response.json(version);
+    repo: deps.repo,
+    scope,
+    input,
+    updatedAt: now,
+    updatedBy: args.principal.id,
+    appId,
+    eventDefinitionId: definition.id,
+  });
+  return Response.json(versionResponse(row));
 }
 
 async function listVersions(

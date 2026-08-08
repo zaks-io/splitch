@@ -51,12 +51,43 @@ describe("Metric Event queue delivery", () => {
     expect(error).toHaveBeenCalledWith("event-ingest-api Metric Event delivery failed", {
       queueMessageId: "message-2",
       attempts: 2,
+      maxRetries: 7,
       appId: "app_shop",
       environmentId: "env_prod",
       eventId: "event-bad",
       eventDefinitionId: "event_definition_checkout",
       errorMessage: "Tinybird append failed with HTTP 500",
     });
+  });
+
+  it("logs the complete Metric Event identity when its final failed attempt is discarded", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const event = metricEvent("event-with-a-complete-identity-that-must-not-be-truncated");
+    event.app_id = "app-with-a-complete-identity-that-must-not-be-truncated";
+    event.environment_id = "environment-with-a-complete-identity-that-must-not-be-truncated";
+    event.event_definition_id =
+      "event-definition-with-a-complete-identity-that-must-not-be-truncated";
+    const failed = queueMessage("message-final-attempt", event, 8);
+
+    await worker.queue(messageBatch([failed]), deliveryEnv());
+
+    expect(failed.ack).not.toHaveBeenCalled();
+    expect(failed.retry).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalledWith(
+      "event-ingest-api Metric Event discarded after final delivery attempt",
+      {
+        queueMessageId: "message-final-attempt",
+        attempts: 8,
+        maxRetries: 7,
+        appId: "app-with-a-complete-identity-that-must-not-be-truncated",
+        environmentId: "environment-with-a-complete-identity-that-must-not-be-truncated",
+        eventId: "event-with-a-complete-identity-that-must-not-be-truncated",
+        eventDefinitionId: "event-definition-with-a-complete-identity-that-must-not-be-truncated",
+        errorMessage: "Tinybird append failed with HTTP 500",
+      },
+    );
   });
 
   it("retries each message and identifies it when delivery configuration is unavailable", async () => {
@@ -96,12 +127,12 @@ function metricEvent(eventId: string): Record<string, unknown> {
   };
 }
 
-function queueMessage(id: string, body: Record<string, unknown>) {
+function queueMessage(id: string, body: Record<string, unknown>, attempts = 2) {
   return {
     id,
     timestamp: new Date("2026-08-07T00:00:00.000Z"),
     body,
-    attempts: 2,
+    attempts,
     ack: vi.fn(),
     retry: vi.fn(),
   } satisfies Message<Record<string, unknown>>;

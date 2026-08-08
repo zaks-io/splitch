@@ -3,6 +3,8 @@ import type { Env } from "./types";
 
 type MetricEventRow = Record<string, unknown>;
 
+const METRIC_EVENT_MAX_RETRIES = 7;
+
 export async function handleMetricEventQueue(
   batch: MessageBatch<MetricEventRow>,
   env: Env,
@@ -15,12 +17,19 @@ export async function handleMetricEventQueue(
         await appendRawEvent(message.body, delivery.value);
         message.ack();
       } catch (error) {
-        console.error("event-ingest-api Metric Event delivery failed", {
-          queueMessageId: message.id,
-          attempts: message.attempts,
-          ...metricEventIdentity(message.body),
-          errorMessage: error instanceof Error ? error.message : "non-error rejection",
-        });
+        const finalAttempt = message.attempts > METRIC_EVENT_MAX_RETRIES;
+        console.error(
+          finalAttempt
+            ? "event-ingest-api Metric Event discarded after final delivery attempt"
+            : "event-ingest-api Metric Event delivery failed",
+          {
+            queueMessageId: message.id,
+            attempts: message.attempts,
+            maxRetries: METRIC_EVENT_MAX_RETRIES,
+            ...metricEventIdentity(message.body),
+            errorMessage: error instanceof Error ? error.message : "non-error rejection",
+          },
+        );
         message.retry();
       }
     }),

@@ -1,14 +1,18 @@
-import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
+import { WorkerEntrypoint } from "cloudflare:workers";
+import { createHealthResponse, parsePlatformTarget, routesDelegatedTo } from "@splitch/contracts";
 import {
   createWorkerObservability,
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
+import { delegatedIdentityFor, notDelegatedResponse } from "@splitch/worker-runtime";
+import { authenticateDelegatedClientKey } from "./client-key-auth";
+import { renderError } from "./errors";
 import { handleEvaluationCommit } from "./evaluation-commit";
 import { EvaluationCommitOutboxDurableObject } from "./evaluation-commit-outbox";
 import { EvaluationUsageReplayWindowDurableObject } from "./evaluation-usage-replay-window";
 import { handleEvaluationIngest, handleIngest } from "./ingest";
-import { handleMetricEvent } from "./metric-event-ingest";
+import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
 import { handleMetricEventQueue } from "./metric-event-queue";
 import { MetricEventRateLimitDurableObject } from "./metric-event-rate-limit";
@@ -19,6 +23,9 @@ const ingestPath = "/api/internal/exposures";
 const evaluationIngestPath = "/api/internal/evaluations";
 const evaluationCommitPath = "/api/internal/evaluation-commits";
 const metricEventPath = "/api/sdk/events";
+const metricEventRoutes = routesDelegatedTo("event-ingest-api").filter(
+  (route) => route.operationId === "sdk_track",
+);
 
 const internalRoutes: Readonly<
   Record<
@@ -58,9 +65,6 @@ const handler = {
       );
     }
 
-    if (request.method === "POST" && url.pathname === metricEventPath) {
-      return handleMetricEvent(request, env);
-    }
     const route = request.method === "POST" ? internalRoutes[url.pathname] : undefined;
     if (route === undefined) return new Response("not found", { status: 404 });
 
@@ -73,6 +77,19 @@ const handler = {
   },
   queue: handleMetricEventQueue,
 } satisfies ExportedHandler<Env, Record<string, unknown>>;
+
+/** The public fetch must stay closed while Evaluation delegates over this binding. */
+export class EvaluationEntrypoint extends WorkerEntrypoint<Env> {
+  override async fetch(request: Request): Promise<Response> {
+    const identity = delegatedIdentityFor(request, metricEventRoutes);
+    if (!identity || new URL(request.url).pathname !== metricEventPath) {
+      return notDelegatedResponse(request);
+    }
+    const credential = await authenticateDelegatedClientKey(identity, this.env);
+    if (!credential.ok) return renderError(credential.error);
+    return handleAuthorizedMetricEvent(request, this.env, credential.value);
+  }
+}
 
 const wrappedHandler = wrapWorkerHandler({ fetch: handler.fetch }, { surface: "event-ingest-api" });
 

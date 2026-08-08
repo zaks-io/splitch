@@ -3,6 +3,7 @@ import { createRegistrar } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import { makeCachedEvaluationTelemetryHandler } from "./cached-evaluation-telemetry";
 import { makeApiKeyOnlyAuthResolver, makeClientKeyOnlyAuthResolver } from "./data-plane-auth";
+import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
 import { makeEvaluateHandler } from "./evaluate";
 import type { EvaluatePathDeps } from "./evaluate/evaluate-path";
 import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
@@ -43,6 +44,7 @@ export interface AppDeps extends EvaluatePathDeps {
   evaluationCommitSink: EvaluationCommitSink;
   evaluationUsageSink: EvaluationUsageSink;
   rateLimiter: RateLimiter;
+  delegationBindings?: DelegationBindings;
   defaultHeaders?: Record<string, string>;
   observability?: RegistrarDeps["observability"];
   /** `ctx.waitUntil` seam for the fire-and-forget Assignment Store write. */
@@ -72,6 +74,8 @@ export function createApp(deps: AppDeps): Hono {
     defaultHeaders: deps.defaultHeaders,
     observability: deps.observability,
   });
+
+  mountDelegatedRoutes(app, registrar, deps.delegationBindings ?? {});
 
   registrar.mount(app, evaluationRoute("sdk_evaluate"), makeEvaluateHandler(deps));
   registrar.mount(
