@@ -1,5 +1,4 @@
 import {
-  type ErrorCode,
   type ExposureBatchRequest,
   ExposureBatchResponseSchema,
   type ExposureBatchResult,
@@ -8,20 +7,22 @@ import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import type { AssignmentStore } from "./assignment/assignment-store";
 import { errorCauseChain } from "./error-cause-chain";
 import { assembleExposureFromTicket } from "./evaluate/exposure-assembly";
-import {
-  type ExposureTicketPayload,
-  type MintExposureTicketDeps,
-  verifyExposureTicket,
-} from "./evaluate/exposure-ticket";
+import type { ExposureTicketPayload, MintExposureTicketDeps } from "./evaluate/exposure-ticket";
 import {
   type ExposureIngestSink,
   ExposureIngestSinkError,
   ticketFingerprint,
 } from "./exposure-redemption";
-import type {
-  ExposureRedemptionClaimInput,
-  ExposureRedemptionClaimStore,
-} from "./exposure-redemption-claim-core";
+import type { ExposureRedemptionClaimStore } from "./exposure-redemption-claim-core";
+import { claimFailureCode } from "./exposure-redemption-claim-fault";
+import {
+  ingestFailureCode,
+  type RedemptionClaimContext,
+  rejected,
+  releaseClaimQuietly,
+  scheduleHoldoverWrite,
+  verifyTicketForScope,
+} from "./exposures-helpers";
 import {
   assertBodyWithinCap,
   type CredentialScope,
@@ -39,8 +40,6 @@ interface ExposuresRouteDeps {
   readonly logger?: { error(message: string, detail: unknown): void };
   readonly now?: () => Date;
 }
-
-type RedemptionClaimContext = ExposureRedemptionClaimInput & { readonly requestId: string };
 
 export function makeExposuresHandler(deps: ExposuresRouteDeps) {
   return async ({
@@ -96,7 +95,7 @@ async function redeemOne(
       exposureId: item.exposureId,
       causeChain: errorCauseChain(cause),
     });
-    return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
+    return rejected(item.exposureId, claimFailureCode(cause));
   }
 
   if (claim.status === "conflict") {
@@ -136,7 +135,7 @@ async function completeAcknowledgeOnly(
       appId: claimInput.appId,
       environmentId: claimInput.environmentId,
       exposureId,
-      causeSummary: cause instanceof Error ? cause.message : String(cause),
+      causeChain: errorCauseChain(cause),
     });
     scheduleHoldoverWrite(ticket, scope, deps);
     return rejected(exposureId, "SERVICE_UNAVAILABLE");
@@ -170,7 +169,7 @@ async function sealIngestAndConfirm(
         appId: claimInput.appId,
         environmentId: claimInput.environmentId,
         exposureId: item.exposureId,
-        causeSummary: cause.message,
+        causeChain: errorCauseChain(cause),
       });
       return rejected(item.exposureId, ingestFailureCode(cause.status));
     }
@@ -178,7 +177,7 @@ async function sealIngestAndConfirm(
       appId: claimInput.appId,
       environmentId: claimInput.environmentId,
       exposureId: item.exposureId,
-      causeSummary: cause instanceof Error ? cause.message : String(cause),
+      causeChain: errorCauseChain(cause),
     });
     return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
   }
@@ -198,7 +197,7 @@ async function sealIngestAndConfirm(
       appId: claimInput.appId,
       environmentId: claimInput.environmentId,
       exposureId: item.exposureId,
-      causeSummary: cause instanceof Error ? cause.message : String(cause),
+      causeChain: errorCauseChain(cause),
     });
     // Ingest committed. If markSealed succeeded, exact-ID retry uses resume_ack
     // (no second append). If markSealed failed, the claim stays pending until
@@ -207,88 +206,4 @@ async function sealIngestAndConfirm(
     scheduleHoldoverWrite(ticket, scope, deps);
     return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
   }
-}
-
-async function releaseClaimQuietly(
-  claimInput: RedemptionClaimContext,
-  deps: ExposuresRouteDeps,
-): Promise<void> {
-  try {
-    await deps.exposureRedemptionClaims.release(claimInput);
-  } catch (cause) {
-    deps.logger?.error("exposure_redemption_release_failed", {
-      requestId: claimInput.requestId,
-      appId: claimInput.appId,
-      environmentId: claimInput.environmentId,
-      exposureId: claimInput.exposureId,
-      causeSummary: cause instanceof Error ? cause.message : String(cause),
-    });
-  }
-}
-
-async function verifyTicketForScope(
-  ticket: string,
-  scope: CredentialScope,
-  deps: ExposuresRouteDeps,
-): Promise<{ ok: true; payload: ExposureTicketPayload } | { ok: false; code: ErrorCode }> {
-  const verified = await verifyExposureTicket(ticket, {
-    ticketKey: deps.exposureTicket.ticketKey,
-    previousTicketKey: deps.exposureTicket.previousTicketKey,
-    now: deps.now ?? deps.exposureTicket.now,
-  });
-  if (!verified.ok) {
-    return {
-      ok: false,
-      code: verified.reason === "expired" ? "EXPOSURE_TICKET_EXPIRED" : "EXPOSURE_TICKET_INVALID",
-    };
-  }
-  if (
-    verified.payload.app_id !== scope.appId ||
-    verified.payload.environment_id !== scope.environmentId
-  ) {
-    return { ok: false, code: "EXPOSURE_TICKET_INVALID" };
-  }
-  return { ok: true, payload: verified.payload };
-}
-
-const CALLER_FAULT_INGEST_STATUSES = new Set([400]);
-
-function ingestFailureCode(status: number | null): ErrorCode {
-  if (status !== null && CALLER_FAULT_INGEST_STATUSES.has(status)) {
-    return "VALIDATION_ERROR";
-  }
-  return "SERVICE_UNAVAILABLE";
-}
-
-function scheduleHoldoverWrite(
-  ticket: {
-    readonly experiment_id: string;
-    readonly id_type: string;
-    readonly targeting_key_hash: string;
-    readonly run_id: string;
-    readonly variant: string;
-  },
-  scope: CredentialScope,
-  deps: ExposuresRouteDeps,
-): void {
-  const write = deps.assignmentStore
-    .putHashed({
-      appId: scope.appId,
-      experimentId: ticket.experiment_id,
-      idType: ticket.id_type,
-      targetingKeyHash: ticket.targeting_key_hash,
-      runId: ticket.run_id,
-      variant: ticket.variant,
-    })
-    .then(
-      () => undefined,
-      (cause) => {
-        deps.logger?.error("assignment_store_put_failed", { cause });
-      },
-    );
-  deps.waitUntil?.(write);
-}
-
-function rejected(exposureId: string, code: ErrorCode): ExposureBatchResult {
-  return { exposureId, status: "rejected", code };
 }

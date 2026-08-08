@@ -29,6 +29,8 @@ import {
   ExposureBatchResultSchema,
   type ExposureBatchResultStatus,
   ExposureBatchResultStatusSchema,
+  isRetryableExposureRejection,
+  RETRYABLE_EXPOSURE_REJECTION_CODES,
 } from "./leaves/exposures-wire";
 import { VariantValueSchema } from "./leaves/variant-value";
 
@@ -55,8 +57,10 @@ export {
   ExposureBatchResultSchema,
   type ExposureBatchResultStatus,
   ExposureBatchResultStatusSchema,
+  isRetryableExposureRejection,
   type PeekEvaluateResponse,
   PeekEvaluateResponseSchema,
+  RETRYABLE_EXPOSURE_REJECTION_CODES,
 };
 
 /**

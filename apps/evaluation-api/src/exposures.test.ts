@@ -236,10 +236,14 @@ describe("POST /api/sdk/exposures: claim failure and concurrency", () => {
     expect(gated.writes).toHaveLength(1);
   });
 
-  it("rejects with SERVICE_UNAVAILABLE when the claim store throws (never fabricates acquired)", async () => {
+  it("rejects with SERVICE_UNAVAILABLE when the claim store throws a transport fault", async () => {
+    const { ExposureRedemptionClaimFault } = await import("./exposure-redemption-claim-fault");
     const claims: ExposureRedemptionClaimStore = {
       claim: async () => {
-        throw new Error("claim Durable Object transport failed");
+        throw new ExposureRedemptionClaimFault(
+          "exposure redemption claim Durable Object transport failed",
+          { kind: "transport", cause: new Error("stub reset") },
+        );
       },
       release: async () => undefined,
       markSealed: async () => undefined,

@@ -11,6 +11,7 @@ import {
   type ExposureRedemptionClaimStore,
   type TicketBindingRecord,
 } from "./exposure-redemption-claim-core";
+import { ExposureRedemptionClaimFault } from "./exposure-redemption-claim-fault";
 
 export interface ExposureRedemptionClaimNamespace {
   idFromName(name: string): DurableObjectId;
@@ -65,10 +66,16 @@ export class DurableExposureRedemptionClaimStore implements ExposureRedemptionCl
         }),
       });
     } catch (cause) {
-      throw new Error("exposure redemption claim Durable Object transport failed", { cause });
+      throw new ExposureRedemptionClaimFault(
+        "exposure redemption claim Durable Object transport failed",
+        { kind: "transport", cause },
+      );
     }
     if (!response.ok) {
-      throw new Error(`exposure redemption claim Durable Object returned HTTP ${response.status}`);
+      throw new ExposureRedemptionClaimFault(
+        `exposure redemption claim Durable Object returned HTTP ${response.status}`,
+        { kind: "http", status: response.status },
+      );
     }
     return parse(await response.json());
   }
@@ -88,7 +95,9 @@ export function parseClaimOutcome(value: unknown): ExposureRedemptionClaimOutcom
   ) {
     return { status: value.status };
   }
-  throw new Error("exposure redemption claim returned an invalid outcome");
+  throw new ExposureRedemptionClaimFault("exposure redemption claim returned an invalid outcome", {
+    kind: "protocol",
+  });
 }
 
 export function parseAcknowledgeOutcome(value: unknown): ExposureRedemptionAcknowledgeOutcome {

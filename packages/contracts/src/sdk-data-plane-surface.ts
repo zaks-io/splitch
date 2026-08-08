@@ -35,6 +35,8 @@ export {
   ExposureBatchResultSchema,
   type ExposureBatchResultStatus,
   ExposureBatchResultStatusSchema,
+  isRetryableExposureRejection,
+  RETRYABLE_EXPOSURE_REJECTION_CODES,
 } from "./leaves/exposures-wire";
 export {
   type ResolutionDetails,

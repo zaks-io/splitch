@@ -11,6 +11,7 @@ import {
   EXPOSURE_REDEMPTION_CLAIM_TTL_MS,
   EXPOSURE_REDEMPTION_PENDING_LEASE_MS,
 } from "./exposure-redemption-claim-core";
+import { ExposureRedemptionClaimFault } from "./exposure-redemption-claim-fault";
 import { APP_B, ENV_B, EXPOSURE_ID_A, EXPOSURE_ID_B } from "./exposures-test-fixtures";
 import { APP_ID, ENVIRONMENT_ID } from "./sdk-route-test-fixtures";
 
@@ -229,6 +230,7 @@ describe("Durable claim response parsers (fail-loud)", () => {
   it("rejects invalid claim outcomes instead of defaulting to acquired", () => {
     expect(() => parseClaimOutcome({ status: "nope" })).toThrow(/invalid outcome/);
     expect(() => parseClaimOutcome({})).toThrow(/invalid outcome/);
+    expect(() => parseClaimOutcome({ status: "nope" })).toThrow(ExposureRedemptionClaimFault);
   });
 
   it("rejects invalid acknowledge outcomes instead of defaulting to accepted", () => {

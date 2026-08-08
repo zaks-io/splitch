@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ErrorCodeSchema } from "../error-code";
+import { type ErrorCode, ErrorCodeSchema } from "../error-code";
 
 /**
  * Batched Exposure Ticket redemption wire shapes for `POST /api/sdk/exposures`
@@ -16,6 +16,22 @@ import { ErrorCodeSchema } from "../error-code";
 export const EXPOSURE_BATCH_MAX_ITEMS = 25;
 /** Max UTF-8 JSON body bytes for an Exposure batch (Web Event parity). */
 export const EXPOSURE_BATCH_MAX_BODY_BYTES = 32 * 1024;
+
+/**
+ * Per-item rejection codes the SDK must re-queue and retry with the same
+ * `exposureId`. Everything else in the exposures taxonomy is terminal for that
+ * item (acknowledged failed and dropped). See exposures-endpoint.md.
+ */
+export const RETRYABLE_EXPOSURE_REJECTION_CODES = [
+  "SERVICE_UNAVAILABLE",
+] as const satisfies readonly ErrorCode[];
+
+const retryableExposureRejectionCodes = new Set<string>(RETRYABLE_EXPOSURE_REJECTION_CODES);
+
+/** True when a per-item `rejected` code should be retained for another flush. */
+export function isRetryableExposureRejection(code: ErrorCode | null): boolean {
+  return code !== null && retryableExposureRejectionCodes.has(code);
+}
 
 const UuidSchema = z.string().uuid();
 

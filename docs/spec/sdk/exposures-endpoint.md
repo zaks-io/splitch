@@ -107,8 +107,18 @@ Seal failure rejects the item loud and performs no Assignment Store write. Trans
 platform-side ingest faults (including internal-token drift / 401, config propagation lag /
 404, and rate limits / 429) surface as `SERVICE_UNAVAILABLE` so the SDK retries with the same
 `exposureId`. Only an unambiguous caller-payload fault from ingest (HTTP 400) maps to
-non-retryable `VALIDATION_ERROR`. Holdover replays and non-live-Run resolutions never had
-tickets, so no redemption path exists for them — the no-new-Exposure invariants of
+non-retryable `VALIDATION_ERROR`.
+
+Claim-store faults follow the same retry split. A Durable Object **transport** failure (the
+stub `fetch` threw) is `SERVICE_UNAVAILABLE` and the SDK retries. Deterministic claim-store
+faults — a programming error thrown from `claim()`, a `parseClaimOutcome` protocol violation
+(unrecognized DO response shape), or a Durable Object HTTP 400 — surface as
+`INTERNAL_SERVER_ERROR`. Those never get better on retry: the SDK acknowledges the item as
+failed and drops it (same `exposureId` is not re-queued). Fail-loud operator logs still carry
+the full `causeChain` (ADR-0036); the caller-facing code is more specific, not quieter.
+
+Holdover replays and non-live-Run resolutions never had tickets, so no redemption path exists
+for them — the no-new-Exposure invariants of
 [assignment-store-integration.md](./assignment-store-integration.md) hold structurally.
 
 ## Integrity properties (the attack-test contract)
@@ -144,7 +154,15 @@ Two additions to the canonical registry
 | `EXPOSURE_TICKET_EXPIRED` | `{ exposureId: string, issuedAt: timestamp }` | Ticket older than TTL; refetch Precomputed Evaluations |
 
 Batch-level errors reuse the existing codes (`UNAUTHORIZED`, `CREDENTIAL_REVOKED`,
-`ORIGIN_NOT_ALLOWED`, `VALIDATION_ERROR`, `RATE_LIMITED`, `SERVICE_UNAVAILABLE`).
+`ORIGIN_NOT_ALLOWED`, `VALIDATION_ERROR`, `RATE_LIMITED`, `SERVICE_UNAVAILABLE`,
+`INTERNAL_SERVER_ERROR`).
+
+Per-item `rejected.code` retry rule (SDK queue):
+
+| `code`                  | SDK action                                                     |
+| ----------------------- | -------------------------------------------------------------- |
+| `SERVICE_UNAVAILABLE`   | Retain and retry with the same `exposureId`                    |
+| any other non-null code | Acknowledge failed and drop (never re-queue that `exposureId`) |
 
 ## Seam contract
 
@@ -156,8 +174,10 @@ Batch-level errors reuse the existing codes (`UNAUTHORIZED`, `CREDENTIAL_REVOKED
   orchestration — this route lives beside `evaluate`, not in Event Ingest, which owns only the
   strictly-defined Metric/Web Event families, ADR-0039/ADR-0042)
 - **Failure contract:** batch gate failure → whole-request error envelope, zero rows; item
-  failure → per-item `rejected` + code, siblings unaffected; seal failure → item retryable with the
-  same `exposureId`; nothing is ever silently dropped (ADR-0036)
+  failure → per-item `rejected` + code, siblings unaffected; transient seal/claim-store faults
+  (`SERVICE_UNAVAILABLE`) → item retryable with the same `exposureId`; deterministic claim-store
+  faults (`INTERNAL_SERVER_ERROR`) and other non-retryable codes → item dropped after loud log;
+  nothing is ever silently dropped (ADR-0036)
 
 ## Sources
 

@@ -5,6 +5,7 @@ import type {
   ExposureRedemptionClaimInput,
   ExposureRedemptionClaimOutcome,
 } from "./exposure-redemption-claim-core";
+import { ExposureRedemptionClaimFault } from "./exposure-redemption-claim-fault";
 import {
   EXPOSURE_ID_A,
   EXPOSURE_ID_B,
@@ -25,9 +26,10 @@ class MiddleClaimFailureStore extends MemoryExposureRedemptionClaimStore {
     this.claimExposureIds.push(input.exposureId);
     if (input.exposureId === EXPOSURE_ID_B) {
       return Promise.reject(
-        new Error("exposure redemption claim Durable Object transport failed", {
-          cause: new Error(INNER_CAUSE),
-        }),
+        new ExposureRedemptionClaimFault(
+          "exposure redemption claim Durable Object transport failed",
+          { kind: "transport", cause: new Error(INNER_CAUSE) },
+        ),
       );
     }
     return super.claim(input);
