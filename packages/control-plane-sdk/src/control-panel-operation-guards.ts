@@ -16,6 +16,8 @@ const SCOPED_OPERATION_IDS = [
   "experiments_create",
   "metrics_list",
   "metrics_create",
+  "segments_list",
+  "segments_create",
   "overview_get",
   "settings_get",
   "environment_update",
@@ -44,6 +46,12 @@ const APPROVAL_OPERATION_IDS = ["approval_request_get", "approval_request_review
 
 const METRIC_RESOURCE_OPERATION_IDS = ["metrics_get", "metrics_update", "metrics_delete"] as const;
 
+const SEGMENT_RESOURCE_OPERATION_IDS = [
+  "segments_get",
+  "segments_update",
+  "segments_delete",
+] as const;
+
 type ClaimGuard = (value: Record<string, unknown>) => boolean;
 
 /**
@@ -56,6 +64,7 @@ type ClaimGuard = (value: Record<string, unknown>) => boolean;
  */
 const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard>([
   ["apps_create", (value) => isResourceOperation(value, "orgId")],
+  ["organization_usage_get", (value) => isResourceOperation(value, "orgId")],
   ["app_attention_rollup_get", (value) => isResourceOperation(value, "appId")],
   ["api_key_revoke", isApiKeyRevokeOperation],
   ...family(UNBOUND_OPERATION_IDS, (value) => hasKeys(value, ["id"])),
@@ -64,6 +73,7 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ...family(APPROVAL_OPERATION_IDS, isApprovalOperation),
   ...family(SCOPED_OPERATION_IDS, isAppCollectionOperation),
   ...family(METRIC_RESOURCE_OPERATION_IDS, isMetricResourceOperation),
+  ...family(SEGMENT_RESOURCE_OPERATION_IDS, isSegmentResourceOperation),
 ]);
 
 function family(ids: readonly string[], guard: ClaimGuard): [string, ClaimGuard][] {
@@ -75,7 +85,7 @@ export function isControlPanelOperation(value: unknown): value is ControlPanelOp
   return CLAIM_GUARDS.get(value.id)?.(value) ?? false;
 }
 
-/** Operations named by exactly one resource id: apps_create (Org) and the App rollup. */
+/** Operations named by exactly one resource id: the two Org-named ones and the App rollup. */
 function isResourceOperation(value: Record<string, unknown>, key: string): boolean {
   return hasKeys(value, ["id", key]) && isNonEmptyString(value[key]);
 }
@@ -119,6 +129,14 @@ function isMetricResourceOperation(value: Record<string, unknown>): boolean {
     hasKeys(value, ["id", "appId", "environmentId", "metricId"]) &&
     hasAppEnvironment(value) &&
     isNonEmptyString(value.metricId)
+  );
+}
+
+function isSegmentResourceOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "segmentId"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.segmentId)
   );
 }
 

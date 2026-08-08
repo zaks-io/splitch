@@ -6,8 +6,10 @@ ADR-0010 decided the Exposure pipeline _logically_ — ELT, raw append-only log 
 record, first-touch dedup as a re-runnable windowed query at analysis time. It deliberately left the
 _physical_ engine open. This ADR pins it: on Tinybird (ADR-0017), first-touch is served by a **lambda
 architecture** — a scheduled **Copy Pipe** snapshots the deduped first-touch table, and serving
-queries **`UNION ALL` the snapshot with raw rows ingested after the snapshot watermark**, deduping
-only that small tail at query time. The raw log stays the source of truth and the snapshot is always
+queries **`UNION ALL` the snapshot with raw rows ingested at or after the snapshot watermark**,
+deduping only that small tail at query time. The inclusive boundary deliberately puts the exact
+watermark instant in both inputs so the final UNION can re-dedup it instead of risking a missed row.
+The raw log stays the source of truth and the snapshot is always
 rebuildable from it, so ADR-0010's replayability is preserved; what changes is that the expensive
 windowed dedup runs on a schedule over the bulk, not on every analysis query over the full history.
 
@@ -20,11 +22,12 @@ at the physical layer).
 The physical boundary is deliberately **not** `server_received_at > last_snapshot_ts`.
 `server_received_at` is the analysis clock used for first-touch and Conversion Window anchoring;
 late-arriving rows can have an older `server_received_at` than the snapshot. The Copy Pipe records an
-ingest-time `watermark_ts`; the snapshot reads `ingest_ts < watermark_ts`, while the tail reads
-`ingest_ts >= coalesce(watermark_ts, unix_epoch)`. These disjoint half-open ranges assign equality to
-the tail. The final UNION still re-dedups an Entity whose snapshot first-touch has a later retry or
-Exposure in the tail. This prevents a concurrent insertion at the exact watermark timestamp from being
-missed. The null fallback matters when a snapshot contains no Exposure rows.
+ingest-time `watermark_ts`; the snapshot reads `ingest_ts <= watermark_ts`, while the tail reads
+`ingest_ts >= coalesce(watermark_ts, unix_epoch)`. These ranges deliberately overlap at the exact
+watermark instant so a concurrent insertion cannot fall between the snapshot and tail, and the final
+UNION re-dedups that boundary overlap. The final UNION also re-dedups an Entity whose snapshot
+first-touch has a later retry or Exposure in the tail. The null fallback matters when a snapshot
+contains no Exposure rows.
 
 ## Considered options
 
@@ -56,9 +59,11 @@ missed. The null fallback matters when a snapshot contains no Exposure rows.
   latency over unbounded data. Incremental append is not an allowed mode because it can retain
   duplicate snapshot keys or skip rows around a prior watermark.
 - **Snapshot cadence is a freshness/cost dial, not a correctness one.** The real-time tail always
-  covers rows after the snapshot ingest watermark, so a slower schedule never makes results wrong,
-  only the batch layer staler — and the tail absorbs late-arriving earlier-`server_received_at` events on the
-  next read, exactly as ADR-0010 requires.
+  covers rows at or after the snapshot ingest watermark. The inclusive boundary overlaps the snapshot
+  at the exact watermark instant so final UNION dedup, rather than timing, decides the boundary row;
+  therefore a slower schedule never makes results wrong, only the batch layer staler — and the tail
+  absorbs late-arriving earlier-`server_received_at` events on the next read, exactly as ADR-0010
+  requires.
 - **Rollups rebuild after the snapshot.** Scheduled `COPY_MODE replace` rollup Pipes run only after a
   successful deduped-snapshot replacement. A Tinybird MV is rejected for this source because repeated
   snapshot inserts append aggregate state and source replacement does not retract prior target rows.

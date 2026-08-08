@@ -12,10 +12,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const loadScopedSessionMock = vi.fn();
+const deferredDestinationAtMock = vi.fn();
 
 vi.mock("#lib/session-functions", () => ({
   loadScopedSession: (...args: unknown[]) => loadScopedSessionMock(...args),
 }));
+
+vi.mock("#lib/app-shell-navigation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("#lib/app-shell-navigation")>();
+  return {
+    ...actual,
+    deferredDestinationAt: (...args: unknown[]) => deferredDestinationAtMock(...args),
+  };
+});
 
 const { Route } = await import("./$orgSlug.$appSlug.$env");
 
@@ -46,16 +55,30 @@ async function runLoader(pathname: string): Promise<unknown> {
 describe("$orgSlug/$appSlug/$env loader — deferred deep link enforcement", () => {
   beforeEach(() => {
     loadScopedSessionMock.mockReset();
+    deferredDestinationAtMock.mockReset();
+    deferredDestinationAtMock.mockReturnValue(undefined);
   });
 
   it("404s a direct request for a deferred destination once membership resolves", async () => {
     loadScopedSessionMock.mockResolvedValue(okResult);
-    await expect(runLoader("/acme-labs/checkout-api/dev/segments")).rejects.toSatisfy(isNotFound);
+    deferredDestinationAtMock.mockReturnValue({
+      label: "Deferred",
+      to: "/$orgSlug/$appSlug/$env/deferred",
+      status: "deferred",
+      hiddenBecause: "test fixture",
+    });
+    await expect(runLoader("/acme-labs/checkout-api/dev/deferred")).rejects.toSatisfy(isNotFound);
   });
 
   it("404s a deep link to a descendant of a deferred destination", async () => {
     loadScopedSessionMock.mockResolvedValue(okResult);
-    await expect(runLoader("/acme-labs/checkout-api/dev/segments/seg-1/edit")).rejects.toSatisfy(
+    deferredDestinationAtMock.mockReturnValue({
+      label: "Deferred",
+      to: "/$orgSlug/$appSlug/$env/deferred",
+      status: "deferred",
+      hiddenBecause: "test fixture",
+    });
+    await expect(runLoader("/acme-labs/checkout-api/dev/deferred/child")).rejects.toSatisfy(
       isNotFound,
     );
   });
@@ -63,10 +86,12 @@ describe("$orgSlug/$appSlug/$env loader — deferred deep link enforcement", () 
   it("returns the session context for a shipped destination", async () => {
     loadScopedSessionMock.mockResolvedValue(okResult);
     await expect(runLoader("/acme-labs/checkout-api/dev/flags")).resolves.toBe(okResult.context);
+    await expect(runLoader("/acme-labs/checkout-api/dev/segments")).resolves.toBe(okResult.context);
   });
 
   it("still redirects an unauthenticated request instead of checking deferred status", async () => {
     loadScopedSessionMock.mockResolvedValue({ kind: "unauthenticated" });
     await expect(runLoader("/acme-labs/checkout-api/dev/segments")).rejects.toSatisfy(isRedirect);
+    expect(deferredDestinationAtMock).not.toHaveBeenCalled();
   });
 });

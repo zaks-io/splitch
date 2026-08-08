@@ -110,12 +110,77 @@ export function panelEntrypoint(testEnv: ControlPlaneApiEnv): SignedControlPanel
   return new SignedControlPanelEntrypoint(testCtx, testEnv);
 }
 
-export async function seedAppMembership(ids: PanelFlagsIds): Promise<void> {
+export async function seedAppMembership(
+  ids: PanelFlagsIds,
+  role: "owner" | "admin" | "member" = "owner",
+  userId = ids.userId,
+): Promise<void> {
   await env.DB.prepare(
     "INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)",
   )
-    .bind(ids.appId, ids.userId, "owner", NOW)
+    .bind(ids.appId, userId, role, NOW)
     .run();
+}
+
+/**
+ * A fully separate Organization/App/Environment/actor graph. Distinct salts and
+ * ids so cross-tenant leakage cannot look like a fixture coincidence.
+ */
+export type IsolatedPanelTenant = {
+  suffix: string;
+  tag: string;
+  orgId: string;
+  appId: string;
+  envId: string;
+  userId: string;
+};
+
+export function isolatedPanelTenant(suffix: string, tag: string): IsolatedPanelTenant {
+  return {
+    suffix,
+    tag,
+    orgId: `org_seg_${tag}_${suffix}`,
+    appId: `app_seg_${tag}_${suffix}`,
+    envId: `env_seg_${tag}_${suffix}`,
+    userId: `user_seg_${tag}_${suffix}`,
+  };
+}
+
+export function isolatedTenantAsPanelIds(tenant: IsolatedPanelTenant): PanelFlagsIds {
+  return {
+    suffix: `${tenant.tag}_${tenant.suffix}`,
+    orgId: tenant.orgId,
+    appId: tenant.appId,
+    otherAppId: `app_seg_unused_${tenant.tag}_${tenant.suffix}`,
+    envId: tenant.envId,
+    otherEnvId: `env_seg_unused_${tenant.tag}_${tenant.suffix}`,
+    flagId: `flag_seg_unused_${tenant.tag}_${tenant.suffix}`,
+    userId: tenant.userId,
+  };
+}
+
+export async function seedIsolatedPanelTenant(
+  tenant: IsolatedPanelTenant,
+  appRole: "owner" | "admin" | "member" = "owner",
+): Promise<void> {
+  const keySalt = `${tenant.tag}-${tenant.suffix}`;
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO organizations (id, name, slug, plan, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+    ).bind(tenant.orgId, `Seg Org ${tenant.tag}`, tenant.orgId, "free", NOW, NOW),
+    env.DB.prepare(
+      "INSERT INTO apps (id, organization_id, name, key, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+    ).bind(tenant.appId, tenant.orgId, `Seg App ${tenant.tag}`, `seg-app-${keySalt}`, NOW, NOW),
+    env.DB.prepare(
+      "INSERT INTO environments (id, app_id, key, name, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+    ).bind(tenant.envId, tenant.appId, "dev", "Development", NOW, NOW),
+    env.DB.prepare(
+      "INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES (?,?,?,?)",
+    ).bind(tenant.orgId, tenant.userId, "owner", NOW),
+    env.DB.prepare(
+      "INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)",
+    ).bind(tenant.appId, tenant.userId, appRole, NOW),
+  ]);
 }
 
 export async function seedPanelFlags(ids: PanelFlagsIds): Promise<void> {

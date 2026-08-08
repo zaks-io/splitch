@@ -109,6 +109,7 @@ describe("describeRequestBody", () => {
     expect(rules?.typeLabel).toContain('"eq"');
     expect(rules?.typeLabel).toContain('"not_matches"');
     expect(rules?.typeLabel).toContain("percentage");
+    expect(rules?.typeLabel).toContain("(boolean | string | number)[]");
     expect(rules?.typeLabel).not.toMatch(/conditions:\s*object\[\]/);
     expect(rules?.typeLabel).not.toMatch(/percentageRollout\?:?\s*object(\s|\||$)/);
   });

@@ -110,6 +110,33 @@ export function assertReleaseBundleJs(bundleJs) {
       throw new Error(`release bundle must not contain internal marker: ${marker}`);
     }
   }
+  assertNoZodInBundle(bundleJs);
+}
+
+function assertNoZodInBundle(bundleJs) {
+  // With `external: []` a reintroduced zod is inlined into dist, not imported.
+  // The load-bearing guard is assertZeroRuntimeDependencies on the packed
+  // manifest (zero runtime deps). Inlined zod source is caught by the
+  // size:check byte budget, not by a metafile or source scan — these regexes
+  // only catch accidental re-externalization of an import/require.
+  if (
+    /\bfrom\s*["']zod(?:\/[^"']*)?["']/.test(bundleJs) ||
+    /\brequire\s*\(\s*["']zod/.test(bundleJs)
+  ) {
+    throw new Error("release bundle must not import zod (SPL-325)");
+  }
+  if (bundleJs.includes("zod/v4/locales")) {
+    throw new Error("release bundle must not contain zod locale modules (SPL-325)");
+  }
+}
+
+function assertZeroRuntimeDependencies(manifest) {
+  const dependencyKeys = Object.keys(manifest.dependencies ?? {});
+  if (dependencyKeys.length !== 0) {
+    throw new Error(
+      `release manifest must ship zero runtime dependencies; got: ${dependencyKeys.join(", ")}`,
+    );
+  }
 }
 
 export function assertReleaseTarballContents({ listing, manifestText, declarationText, bundleJs }) {
@@ -129,12 +156,7 @@ export function assertReleaseTarballContents({ listing, manifestText, declaratio
   if (manifest.devDependencies?.["@splitch/contracts"]) {
     throw new Error("release manifest still lists @splitch/contracts in devDependencies");
   }
-  const dependencyKeys = Object.keys(manifest.dependencies ?? {});
-  if (dependencyKeys.length !== 1 || dependencyKeys[0] !== "zod") {
-    throw new Error(
-      `release manifest dependencies must be only zod; got: ${dependencyKeys.join(", ") || "(none)"}`,
-    );
-  }
+  assertZeroRuntimeDependencies(manifest);
 
   if (declarationText.includes("@splitch/contracts")) {
     throw new Error("release declarations still import @splitch/contracts");
@@ -151,6 +173,7 @@ export function assertReleaseTarballContents({ listing, manifestText, declaratio
   }
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: pack stdout parser with several failure modes
 export function assertDryRunListing(packOutput) {
   const lines = packOutput.split("\n").map((line) => line.trim());
   const tarballContentsIndex = lines.findIndex(
