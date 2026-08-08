@@ -16,6 +16,7 @@ import {
   stripIdempotencyKeyFromSnippet,
   wrapQuickstartSnippetForTypecheck,
 } from "./extract-quickstart-snippet.mjs";
+import { runConvexConsumerSmoke } from "./convex-consumer-smoke.mjs";
 import { assertReleaseBundleJs } from "./pack-staging.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -181,6 +182,10 @@ console.log("runtime import ok");
     "utf8",
   );
   assertReleaseBundleJs(bundleJs);
+
+  // Convex isolate fixture: packed-tarball install + convex-test (SPL-336).
+  // Transport is stubbed at the fixture seam (global fetch), not a live edge.
+  runConvexConsumerSmoke(tarballPath);
 
   console.log(`dogfood install: ${installCommand}`);
   console.log("consumer smoke passed");

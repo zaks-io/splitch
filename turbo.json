@@ -434,7 +434,12 @@
     },
     "@splitch/sdk#test:consumer-smoke": {
       "dependsOn": ["build"],
-      "cache": false
+      "cache": false,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/docs/spec/quickstart.md",
+        "$TURBO_ROOT$/fixtures/convex-sdk-consumer/**"
+      ]
     },
     "@splitch/cli#build": {
       "dependsOn": ["^build"],
