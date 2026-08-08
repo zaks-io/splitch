@@ -25,6 +25,11 @@ import {
  * still go through the receiver path. Direct `.update(...)` on a typed facade
  * receiver is the same rule as a detached ref — one callee-type match.
  *
+ * Assertions are the property (every discovered site bumps) plus anti-vacuity
+ * (non-trivial site count spanning the known writer modules). There is no
+ * hand-maintained `file:line` inventory — line numbers move under unrelated
+ * edits and are not the invariant.
+ *
  * The narrowed `repo.flags.flagConfigs` export (findMany/findOne/insert only)
  * makes a facade bypass a compile error in typechecked source and a TypeError
  * everywhere else — including `apps/control-plane-api/test/` and the three
@@ -47,18 +52,13 @@ const SCAN_ROOT = "packages/db/src";
 const REPO_ROOT = resolve(fileURLToPath(new URL("../../../..", import.meta.url)));
 
 /**
- * Exact writer set the checker must resolve. Empty, shrunken, or grown-but-
- * unbumped sets all fail this equality (anti-vacuity). Lines are the `version`
- * property when present, else the set/values object start.
+ * Floor on how many UPDATE sites the resolver must find. Today's production
+ * tree has five; a silently empty or ops-only-narrowed resolver falls below
+ * this. Not an inventory of identities — just anti-vacuity.
  */
-const KNOWN_WRITER_SITES = [
-  "repo/flag-config-ops.ts:115",
-  "repo/flag-config-ops.ts:137",
-  "repo/flag-config-ops.ts:195",
-  "repo/flag-config-ops.ts:230",
-  "repo/flag-variant-approval.ts:56",
-] as const;
+const MIN_WRITER_SITES = 5;
 
+/** Modules that currently host writers; site set must span both. */
 const KNOWN_WRITER_FILES = ["repo/flag-config-ops.ts", "repo/flag-variant-approval.ts"] as const;
 
 function siteKey(site: ResolvedUpdateSite): string {
@@ -72,27 +72,34 @@ describe("every flag_configs UPDATE bumps version", () => {
     expect(relative(REPO_ROOT, FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT).replaceAll("\\", "/")).toBe(
       SCAN_ROOT,
     );
-    // Anti-narrowing: both known writer modules must be among the files the
-    // resolver walked. Shrinking the loop to a single ops file leaves this red
-    // even when site-set equality would also fail.
+    // Anti-narrowing on the walk list: both known writer modules must be among
+    // the files the resolver visited.
     for (const file of KNOWN_WRITER_FILES) {
       expect(scannedFiles, `resolver must walk ${file}`).toContain(file);
     }
     expect(scannedFiles.length).toBeGreaterThan(KNOWN_WRITER_FILES.length);
   });
 
-  it("resolves exactly the known writer sites and each bump wins", () => {
+  it("discovers a non-trivial writer set and every site bumps version", () => {
     const { sites } = resolveFlagConfigUpdates();
 
-    // Violators first: a dropped bump that only shifts the site line must not
-    // be reportable as a KNOWN_WRITER_SITES edit that greens the suite.
+    expect(
+      sites.length,
+      "resolver returned too few writers — vacuous or narrowed",
+    ).toBeGreaterThanOrEqual(MIN_WRITER_SITES);
+
+    // Anti-narrowing on the site set itself (independent of scannedFiles): a
+    // loop that still walks every file but only collects from one module fails.
+    const siteFiles = new Set(sites.map((s) => s.file));
+    for (const file of KNOWN_WRITER_FILES) {
+      expect(siteFiles, `discovered sites must include ${file}`).toContain(file);
+    }
+
     const violators = sites.filter((site) => !bumpWins(site));
     expect(
       violators.map((s) => `${SCAN_ROOT}/${siteKey(s)} (${s.kind})`),
       "flag_configs UPDATE without a winning version bump",
     ).toEqual([]);
-
-    expect(sites.map(siteKey).sort()).toEqual([...KNOWN_WRITER_SITES].sort());
   });
 
   it("accepts any identifier.version + 1 and rejects spread-source / pinnable RHS", () => {
