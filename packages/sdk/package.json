@@ -42,7 +42,6 @@
     "test:consumer-smoke": "node scripts/consumer-smoke.mjs",
     "test:mutation": "stryker run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.contract-assignability.json --noEmit",
-    "size:check": "node scripts/size-check.mjs",
     "pack:check": "node scripts/pack-check.mjs",
     "pack:dry-run": "node scripts/pack-dry-run.mjs",
     "prepack": "node scripts/prepack-guard.mjs"

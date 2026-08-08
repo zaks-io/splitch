@@ -27,10 +27,12 @@ const repoRoot = resolve(packageRoot, "../..");
 
 /**
  * Minified consumer+SDK budget per published entry.
- * Measured 18_024 bytes for `.` at SPL-325; ceiling is 22 KiB (~25% headroom
- * over that figure) for intentional SDK growth (new accessors / wire fields)
- * short of re-vendoring zod (~300 KiB), which this budget alone is meant to
- * reject.
+ * Measured 18_024 bytes for `.` at SPL-325; that figure is toolchain-dependent
+ * (it moves with the bundle contents and the esbuild version).
+ * `size-check.test.mjs` documents the floor (`ENTRY_MAX_BYTES > 18_024`) rather
+ * than gating on the exact measurement. Ceiling is 22 KiB (~25% headroom over
+ * that figure) for intentional SDK growth (new accessors / wire fields) short
+ * of re-vendoring zod (~300 KiB), which this budget alone is meant to reject.
  */
 export const ENTRY_MAX_BYTES = 22 * 1024;
 
@@ -177,7 +179,7 @@ await client.verify("flag", { targetingKey: "u", defaultValue: false });
   }
 }
 
-export async function runSizeCheck({
+async function runSizeCheck({
   loadEsbuildFn = loadEsbuild,
   manifestPath = join(packageRoot, "package.json"),
 } = {}) {

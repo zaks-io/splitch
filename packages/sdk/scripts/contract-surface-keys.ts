@@ -1,7 +1,16 @@
 /**
- * Known response keys for the hand-maintained contract-surface parsers.
- * Kept separate from structural descriptors so the published bundle does not
- * pull the full descriptor graph.
+ * Known response keys for the hand-maintained contract-surface mirrors.
+ *
+ * `evaluateAllEntryKeys` is parser-facing: `contract-surface-validators.ts`
+ * imports it for `requireKeys` on evaluate-all entries, and that is the only
+ * key array that lands in the published bundle. Kept in this file (not inlined
+ * next to the descriptors) so the tsup entry graph does not pull the full
+ * descriptor graph into dist.
+ *
+ * `dataPlaneEvaluateKeys`, `peekEvaluateKeys`, `resolutionDetailsKeys`, and
+ * `evaluateAllResponseKeys` are descriptor-only: imported solely by
+ * `contract-surface-descriptors.ts` for structural parity, never by the
+ * validators / tsup entry.
  */
 
 export const evaluateAllEntryKeys = [
