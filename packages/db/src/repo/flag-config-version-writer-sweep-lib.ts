@@ -3,7 +3,7 @@
  * Kept out of the `.test.ts` so both stay under the repo file-size limit.
  */
 
-import { namesKnown, resolveFlagConfigBindings } from "./flag-config-version-writer-sweep-bindings";
+import { namesKnown } from "./flag-config-version-writer-sweep-bindings";
 
 export type UpdateSite = {
   file: string;
