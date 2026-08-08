@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ErrorCodeSchema } from "../error-code";
+import { OWN_PROTO_KEY, protoSafeRecord } from "../proto-safe-record";
 import { VariantValueSchema } from "./variant-value";
 
 /**
@@ -16,11 +17,16 @@ import { VariantValueSchema } from "./variant-value";
 const NonEmptyDataPlaneStringSchema = z.string().min(1);
 const AttributeValueSchema = z.union([z.boolean(), z.string(), z.number(), z.array(z.unknown())]);
 
+const PROTO_KEY_MESSAGE = `must not contain a "${OWN_PROTO_KEY}" key`;
+
+/** Proto-safe attributes map (`preprocess → record` so OpenAPI keeps the record shape). */
+export const EvaluateAllAttributesSchema = protoSafeRecord(AttributeValueSchema, PROTO_KEY_MESSAGE);
+
 export const EvaluateAllRequestSchema = z.object({
   appId: NonEmptyDataPlaneStringSchema.optional(),
   targetingKey: NonEmptyDataPlaneStringSchema,
   idType: NonEmptyDataPlaneStringSchema,
-  attributes: z.record(z.string(), AttributeValueSchema).default({}),
+  attributes: EvaluateAllAttributesSchema.default({}),
 });
 export type EvaluateAllRequest = z.infer<typeof EvaluateAllRequestSchema>;
 
@@ -46,29 +52,16 @@ export const EvaluateAllEntrySchema = EvaluateAllEntryBaseSchema.refine(
 export type EvaluateAllEntry = z.infer<typeof EvaluateAllEntrySchema>;
 
 /**
- * Zod's `z.record` silently skips a JSON own `"__proto__"` key (prototype-pollution
- * hardening in zod 4.4.3). For Precomputed Evaluations that is a silent substitution
- * of a missing Flag — forbidden by ADR-0036. Reject the key before the record parser
- * can drop it. The SDK's hand-maintained mirror (SPL-325) keeps the key via
- * `Object.defineProperty`; the Worker must not silently disagree by omitting it.
+ * Proto-safe evaluations map. Zod's `z.record` would otherwise silently drop a
+ * JSON own `"__proto__"` Flag Key; the SDK contract-surface pack currently uses
+ * this same schema and therefore rejects that key too. Built as
+ * `preprocess → record` so the served OpenAPI document keeps the real
+ * additionalProperties shape (not `{}`).
  */
-const EvaluateAllEvaluationsSchema = z
-  .unknown()
-  .superRefine((input, ctx) => {
-    if (typeof input !== "object" || input === null || Array.isArray(input)) {
-      ctx.addIssue({ code: "custom", message: "evaluations must be an object" });
-      return;
-    }
-    if (Object.hasOwn(input, "__proto__")) {
-      ctx.addIssue({
-        code: "custom",
-        message:
-          'evaluations must not contain a "__proto__" flag key: the Worker zod parser cannot preserve it without silently dropping the entry (ADR-0036)',
-        path: ["__proto__"],
-      });
-    }
-  })
-  .pipe(z.record(z.string(), EvaluateAllEntrySchema));
+export const EvaluateAllEvaluationsSchema = protoSafeRecord(
+  EvaluateAllEntrySchema,
+  PROTO_KEY_MESSAGE,
+);
 
 export const EvaluateAllResponseSchema = z
   .object({

@@ -24,6 +24,18 @@ describe("EvaluateAllRequestSchema", () => {
       EvaluateAllRequestSchema.safeParse({ targetingKey: "user-1", idType: "user" }).success,
     ).toBe(true);
   });
+
+  it("fails loud on a __proto__ attribute key instead of silently dropping it", () => {
+    const input = JSON.parse(
+      '{"targetingKey":"user-1","idType":"user","attributes":{"__proto__":"evil","plan":"pro"}}',
+    ) as unknown;
+    const parsed = EvaluateAllRequestSchema.safeParse(input);
+    expect(parsed.success).toBe(false);
+    if (parsed.success) {
+      return;
+    }
+    expect(parsed.error.issues.some((issue) => issue.path.includes("__proto__"))).toBe(true);
+  });
 });
 
 const PROTO_FLAG_ENTRY = {
@@ -89,7 +101,7 @@ describe("EvaluateAllResponseSchema", () => {
     ).toBe(false);
   });
 
-  it("fails loud on a __proto__ flag key instead of silently dropping it (Worker / zod)", () => {
+  it("fails loud on a __proto__ flag key instead of silently dropping it", () => {
     // JSON.parse creates __proto__ as an own property; Object.keys sees it.
     // zod 4.4.3's z.record would otherwise skip the key and return success.
     const input = JSON.parse(
@@ -108,32 +120,5 @@ describe("EvaluateAllResponseSchema", () => {
       return;
     }
     expect(parsed.error.issues.some((issue) => issue.path.includes("__proto__"))).toBe(true);
-  });
-
-  it("pins the SDK keep path: defineProperty preserves __proto__ as an own flag key", () => {
-    // Mirror of the hand-maintained SDK validator (SPL-325): keep the key as an
-    // own property on a normal Object.prototype map. Worker zod must fail loud
-    // (test above); the SDK must not silently drop. Pin both interpretations here
-    // so they cannot drift into the same silent-omit failure mode.
-    const input = JSON.parse(
-      `{"evaluations":{"__proto__":${JSON.stringify(PROTO_FLAG_ENTRY)}}}`,
-    ) as { evaluations: Record<string, unknown> };
-
-    const evaluations: Record<string, unknown> = {};
-    for (const [flagKey, entry] of Object.entries(input.evaluations)) {
-      Object.defineProperty(evaluations, flagKey, {
-        value: entry,
-        enumerable: true,
-        writable: true,
-        configurable: true,
-      });
-    }
-
-    expect(Object.getPrototypeOf(evaluations)).toBe(Object.prototype);
-    expect(Object.keys(evaluations)).toEqual(["__proto__"]);
-    expect(Object.getOwnPropertyDescriptor(evaluations, "__proto__")?.value).toEqual(
-      PROTO_FLAG_ENTRY,
-    );
-    expect(EvaluateAllResponseSchema.safeParse({ evaluations }).success).toBe(false);
   });
 });

@@ -104,6 +104,15 @@ async function resolveAll(
   const evaluations: Record<string, EvaluateAllEntry> = {};
 
   for (const flag of flags) {
+    if (flag.flagKey === "__proto__") {
+      return {
+        ok: false,
+        error: errorResponse(
+          "UNSUPPORTED_OBJECT_KEY",
+          'Flag Key "__proto__" cannot be included in Precomputed Evaluations',
+        ),
+      };
+    }
     const routeInput: EvaluatePathInput = {
       appId: scope.appId,
       environmentId: scope.environmentId,

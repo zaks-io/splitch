@@ -94,6 +94,7 @@ describe("HTTP status map", () => {
     expect(httpStatusForError("IDEMPOTENCY_KEY_CONFLICT")).toBe(409);
     expect(httpStatusForError("EVENT_ID_CONFLICT")).toBe(409);
     expect(httpStatusForError("EXPOSURE_TICKET_INVALID")).toBe(400);
+    expect(httpStatusForError("UNSUPPORTED_OBJECT_KEY")).toBe(400);
     expect(httpStatusForError("EXPOSURE_TICKET_EXPIRED")).toBe(410);
     expect(httpStatusForError("RATE_LIMITED")).toBe(429);
     expect(httpStatusForError("INTERNAL_SERVER_ERROR")).toBe(500);

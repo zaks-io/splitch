@@ -9,6 +9,7 @@ export const errorCodes = [
   "INVALID_SORT",
   "EXPOSURE_TICKET_INVALID",
   "EXPOSURE_TICKET_EXPIRED",
+  "UNSUPPORTED_OBJECT_KEY",
 
   // Run / Experiment invariants
   "RUN_FROZEN",
