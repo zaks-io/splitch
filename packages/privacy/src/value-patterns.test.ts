@@ -38,11 +38,10 @@ describe("redactValuePatterns", () => {
   });
 
   it("redacts a parenthesized phone after a flag id without eating the id", () => {
-    const id = "flag_0123456789";
-    const out = redactValuePatterns(`${id} (555) 867-5309`);
-    expect(out.startsWith(`${id} `)).toBe(true);
-    expect(out.includes("555")).toBe(false);
-    expect(out.includes(REDACTED)).toBe(true);
+    // Leading `(` precedes the digit run, so it survives — same as main.
+    expect(redactValuePatterns("flag_0123456789 (555) 867-5309")).toBe(
+      `flag_0123456789 (${REDACTED}`,
+    );
   });
 
   it("preserves a multi-segment opaque token with a long digit run", () => {
@@ -58,10 +57,12 @@ describe("redactValuePatterns", () => {
     expect(embedded.includes(REDACTED)).toBe(true);
   });
 
-  it("scrubs a 100KB single-word token with many digit runs under a fixed budget", () => {
-    // One opaque token: lookbehind must stay O(n). A per-match outward scan
-    // on this shape was multi-second; keep the budget tight enough that
-    // reintroducing that scan fails the suite.
+  it("scrubs a large opaque token under a fixed budget", () => {
+    // Large single opaque token: lookbehind yields zero phone matches, so the
+    // walk stays near-linear in input length. An outward per-match token scan
+    // only runs when there are matches; match-adjacent word-char tails are also
+    // email-local runs that dominate timing before that scan can, so this
+    // fixture does not claim to catch scan reintroduction.
     const hexChunk = "a1b2c3d4e5f67890";
     const body = hexChunk.repeat(Math.ceil(100_000 / hexChunk.length)).slice(0, 100_000);
     const input = `payload_${body}`;
@@ -79,6 +80,13 @@ describe("redactValuePatterns", () => {
       extraPatterns: [/tk-[a-z0-9]+/gi],
     });
     expect(out.includes("tk-abc123")).toBe(false);
+  });
+
+  it("redacts with a sticky extraPattern on every call (clone isolates lastIndex)", () => {
+    const sticky = /tk-[a-z0-9]+/y;
+    const opts = { extraPatterns: [sticky] };
+    expect(redactValuePatterns("tk-abc123", opts).includes("tk-abc123")).toBe(false);
+    expect(redactValuePatterns("tk-abc123", opts).includes("tk-abc123")).toBe(false);
   });
 
   it("does not mutate a string with no PII shapes", () => {

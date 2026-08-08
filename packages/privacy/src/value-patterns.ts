@@ -46,12 +46,14 @@ export interface ValuePatternOptions {
  */
 export function redactValuePatterns(text: string, options: ValuePatternOptions = {}): string {
   let result = text;
-  // `String.prototype[@@replace]` zeroes `lastIndex` for global regexes, so the
-  // same RegExp object is safe to reuse across calls without cloning.
   result = result.replace(EMAIL_PATTERN, REDACTED);
   result = result.replace(PHONE_LIKE_PATTERN, REDACTED);
   for (const pattern of options.extraPatterns ?? []) {
-    result = result.replace(pattern, REDACTED);
+    // Clone so each call is independent of any prior call's `lastIndex`. Caller-
+    // supplied patterns may carry any flags (including sticky `/y`); for those,
+    // a shared RegExp retains `lastIndex` across `.replace` and can skip matches
+    // on later calls. Defaults above are package-owned `/g` regexes.
+    result = result.replace(new RegExp(pattern.source, pattern.flags), REDACTED);
   }
   return result;
 }
