@@ -41,4 +41,5 @@ export type {
   ApprovalCommit,
   ApprovalDisposition,
   ApprovalFailure,
+  ApprovalTargetState,
 } from "./approval-types";

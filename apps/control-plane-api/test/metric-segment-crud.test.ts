@@ -147,12 +147,12 @@ describe("control-plane Metric and Segment invariants", () => {
     expect((await errorBody(crossAppRatio)).code).toBe("VALIDATION_ERROR");
   });
 
-  it("blocks decision-locked Metric patch and running Experiment deletes", async () => {
+  it("blocks decision-locked Metric changes but lets immutable Run snapshots release Segments", async () => {
     const createdApp = await createDefaultApp(h);
     const appId = createdApp.app.id;
     const jwt = await appToken(h, appId);
     const prod = createdApp.environments.find((env) => env.key === "prod");
-    expect(prod).toBeDefined();
+    if (!prod) throw new Error("App fixture lacks prod Environment");
     const metric = await createMetric(appId, jwt, {
       key: "signup",
       kind: "binomial",
@@ -162,7 +162,7 @@ describe("control-plane Metric and Segment invariants", () => {
     // A real Flag row: the Experiment's flag_id is a live foreign key, and the
     // old invented id only passed because the Node fixture schema had no FKs.
     const flag = await createFlag(h, appId, jwt);
-    await seedRunningExperiment(appId, prod?.id ?? "", metric.id, segment.id, flag.id);
+    await seedRunningExperiment(appId, prod.id, metric.id, flag.id);
 
     const patchMetric = await request(h, "PATCH", `/apps/${appId}/metrics/${metric.id}`, jwt, {
       name: "Renamed while running",
@@ -175,8 +175,7 @@ describe("control-plane Metric and Segment invariants", () => {
     expect((await errorBody(deleteMetric)).code).toBe("EXPERIMENT_RUNNING");
 
     const deleteSegment = await request(h, "DELETE", `/apps/${appId}/segments/${segment.id}`, jwt);
-    expect(deleteSegment.status).toBe(409);
-    expect((await errorBody(deleteSegment)).code).toBe("EXPERIMENT_RUNNING");
+    expect(deleteSegment.status).toBe(200);
   });
 });
 
@@ -249,7 +248,6 @@ async function seedRunningExperiment(
   appId: string,
   environmentId: string,
   metricId: string,
-  segmentId: string,
   flagId: string,
 ): Promise<void> {
   const repo = createRepository(h.bindings.d1);
@@ -267,7 +265,7 @@ async function seedRunningExperiment(
     metrics: JSON.stringify([{ metricId }]),
     guardrailMetrics: "[]",
     dimensions: "[]",
-    draftSegmentIds: JSON.stringify([segmentId]),
+    draftSegmentIds: "[]",
     liveRunId: "run_metric_segment_guard",
     createdAt: NOW_ISO,
     updatedAt: NOW_ISO,
@@ -290,7 +288,16 @@ async function seedRunningExperiment(
       },
     ]),
     controlVariantId: "variant_control_metric_segment_guard",
-    targetingRules: "[]",
+    targetingRules: JSON.stringify([
+      {
+        id: "rule_metric_segment_guard",
+        flagId,
+        priority: 0,
+        conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
+        variantId: "variant_control_metric_segment_guard",
+        percentageRollout: null,
+      },
+    ]),
     confidenceLevel: 0.95,
     decisionFamily: JSON.stringify([{ metricId }]),
     guardrailDecisions: "[]",

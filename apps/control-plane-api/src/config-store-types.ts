@@ -94,6 +94,7 @@ type FlagConfigWriteFailure =
    */
   | { ok: false; reason: "APPROVAL_NOT_APPLIED" }
   | { ok: false; reason: "VARIANT_NOT_AVAILABLE"; missingVariants: string[] }
+  | { ok: false; reason: "SEGMENT_NOT_FOUND"; missingSegmentIds: string[] }
   | { ok: false; reason: "ROLLOUT_AMBIGUOUS"; availableVariantNames: string[] }
   /**
    * The Approval Request's changed-field set could not be read. Fail closed: do
@@ -139,6 +140,8 @@ export interface ConfigStoreDeps {
 
 export interface Snapshot {
   flag: FlagConfigKV;
+  /** D1 authoring rules, including Segment references; never written to KV. */
+  authoringTargetingRules: TargetingRule[];
   experiment: ExperimentConfigKV | null;
   run: RunConfigKV | null;
   version: number;

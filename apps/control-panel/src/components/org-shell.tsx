@@ -11,10 +11,10 @@ export interface OrgShellOrg {
 
 /**
  * The Org-level screens, which sit above any App and so name no Environment.
- * Members lands with SPL-105.
  */
 const ORG_SECTIONS = [
   { label: "Apps", to: "/$orgSlug" },
+  { label: "Members", to: "/$orgSlug/members" },
   { label: "Billing & Usage", to: "/$orgSlug/billing" },
 ] as const;
 

@@ -341,10 +341,16 @@ malformed value is corrupt config, not "no rollout", so reads fail loud rather t
 | `flag_id`            | text        | FK → flags, not null                                            |
 | `priority`           | integer     | not null                                                        |
 | `conditions`         | text        | not null (JSON array of Condition)                              |
+| `segment_id`         | text        | nullable; same-App FK → segments, restrictive delete            |
 | `variant_id`         | text        | FK → variants                                                   |
 | `percentage_rollout` | text        | nullable (JSON PercentageRollout)                               |
 | `created_at`         | timestamptz | not null                                                        |
 | `updated_at`         | timestamptz | not null                                                        |
+
+`conditions` may be empty only when `segment_id` is present. Publication resolves the Segment and
+AND-merges its Conditions with this direct array; the authoring reference remains in D1 across
+Promotion. The composite `(app_id, segment_id)` foreign key prevents cross-App references and blocks
+deletion while a live Flag Configuration depends on the Segment.
 
 ### `segments`
 
@@ -357,6 +363,8 @@ malformed value is corrupt config, not "no rollout", so reads fail loud rather t
 | `description` | text        | nullable              |
 | `created_at`  | timestamptz | not null              |
 | `updated_at`  | timestamptz | not null              |
+
+UNIQUE constraint: `(app_id, id)`, the parent key for same-App Targeting Rule references.
 
 ## Sources
 

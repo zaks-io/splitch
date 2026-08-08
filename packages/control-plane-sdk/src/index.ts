@@ -112,3 +112,9 @@ export type {
   ControlPlaneOperationResult,
 } from "./operation-result";
 export type { OrganizationsClient } from "./organizations-client";
+// biome-ignore lint/performance/noBarrelFile: the package root is the only supported Panel import path for this client.
+export {
+  createPanelSegmentsClient,
+  type PanelSegmentsClient,
+  type PanelSegmentsListOutput,
+} from "./panel-segments";

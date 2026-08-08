@@ -54,6 +54,16 @@ const EVENT_DEFINITION_RESOURCE_OPERATION_IDS = [
   "event_definition_versions_list",
 ] as const;
 
+const ORG_MEMBER_COLLECTION_OPERATION_IDS = [
+  "organization_members_list",
+  "organization_members_add",
+] as const;
+
+const ORG_MEMBER_RESOURCE_OPERATION_IDS = [
+  "organization_members_update",
+  "organization_members_remove",
+] as const;
+
 const SEGMENT_RESOURCE_OPERATION_IDS = [
   "segments_get",
   "segments_update",
@@ -84,6 +94,8 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ...family(METRIC_RESOURCE_OPERATION_IDS, isMetricResourceOperation),
   ...family(EVENT_DEFINITION_RESOURCE_OPERATION_IDS, isEventDefinitionResourceOperation),
   ["event_definition_versions_get", isEventDefinitionVersionOperation],
+  ...family(ORG_MEMBER_COLLECTION_OPERATION_IDS, (value) => isResourceOperation(value, "orgId")),
+  ...family(ORG_MEMBER_RESOURCE_OPERATION_IDS, isOrgMemberResourceOperation),
   ...family(SEGMENT_RESOURCE_OPERATION_IDS, isSegmentResourceOperation),
 ]);
 
@@ -96,7 +108,7 @@ export function isControlPanelOperation(value: unknown): value is ControlPanelOp
   return CLAIM_GUARDS.get(value.id)?.(value) ?? false;
 }
 
-/** Operations named by exactly one resource id: the two Org-named ones and the App rollup. */
+/** Operations named by exactly one resource id: the Org-scoped ones and the App rollup. */
 function isResourceOperation(value: Record<string, unknown>, key: string): boolean {
   return hasKeys(value, ["id", key]) && isNonEmptyString(value[key]);
 }
@@ -171,6 +183,14 @@ function isEventDefinitionVersionOperation(value: Record<string, unknown>): bool
     hasAppEnvironment(value) &&
     isNonEmptyString(value.eventDefinitionId) &&
     isNonEmptyString(value.versionId)
+  );
+}
+
+function isOrgMemberResourceOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "orgId", "userId"]) &&
+    isNonEmptyString(value.orgId) &&
+    isNonEmptyString(value.userId)
   );
 }
 

@@ -66,6 +66,15 @@ describe("FlagConfigKVSchema", () => {
     const bad = { ...validFlagConfig, variants: [{ id: "var_1" }] };
     expect(FlagConfigKVSchema.safeParse(bad).success).toBe(false);
   });
+
+  it("rejects an authoring Segment reference in the resolved KV projection", () => {
+    expect(
+      FlagConfigKVSchema.safeParse({
+        ...validFlagConfig,
+        targetingRules: [{ ...validTargetingRule, segmentId: "segment_enterprise" }],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 const validRunConfig = {

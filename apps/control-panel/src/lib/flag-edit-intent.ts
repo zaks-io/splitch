@@ -30,9 +30,12 @@ type TargetingEdit =
   | {
       readonly kind: "add";
       readonly ruleId: string;
-      readonly attribute: string;
-      readonly operator: "eq";
-      readonly value: string;
+      readonly condition?: {
+        readonly attribute: string;
+        readonly operator: "eq";
+        readonly value: string;
+      };
+      readonly segmentId?: string;
       readonly variantId: string;
     };
 
@@ -95,7 +98,7 @@ export function removeTargetingRuleIntent(ruleId: string): FlagEditIntent {
  * An honest "all matches" rule beats a fabricated salt (SPL-245).
  */
 export function addTargetingRuleIntent(
-  draft: { attribute: string; value: string; variantId: string },
+  draft: { attribute?: string; value?: string; segmentId?: string; variantId: string },
   ruleId: string,
 ): FlagEditIntent {
   return {
@@ -104,9 +107,10 @@ export function addTargetingRuleIntent(
     edit: {
       kind: "add",
       ruleId,
-      attribute: draft.attribute,
-      operator: "eq",
-      value: draft.value,
+      ...(draft.attribute && draft.value
+        ? { condition: { attribute: draft.attribute, operator: "eq", value: draft.value } }
+        : {}),
+      ...(draft.segmentId ? { segmentId: draft.segmentId } : {}),
       variantId: draft.variantId,
     },
   };

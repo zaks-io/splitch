@@ -45,7 +45,7 @@ Per-Environment resolved Flag CONFIGURATION (ADR-0027): the App-level Variant ca
   defaultVariantId:      string
   variants:              Variant[]
   availableVariantNames: string[]
-  targetingRules:        TargetingRule[]
+  targetingRules:        ResolvedTargetingRule[]
   rollout:               PercentageRollout | null  // baseline rollout for traffic matching NO
                                           // Targeting Rule; null = none. NULLABLE-NOT-ABSENT, like
                                           // experimentId, so the writer must commit to a rollout or
@@ -66,6 +66,10 @@ of `FlagConfigKV`, so the flag and its controlling-Experiment pointer can never 
 null `experimentId` flows straight to the evaluate path's "no live Run" branch — no separate lookup, no
 new entity, just a nullable field on config the path already reads.
 
+`ResolvedTargetingRule` contains concrete Conditions and cannot contain `segmentId`. Publication
+resolves authoring Segment references before this blob is written; edge evaluation performs no
+Segment read or recursive evaluation.
+
 ### RunConfigKV
 
 ```
@@ -75,7 +79,7 @@ new entity, just a nullable field on config the path already reads.
   salt:                string
   allocation:          Record<string, number>  // variantName -> percentage
   variantSet:          Variant[]
-  targetingRules:      TargetingRule[]          // resolved snapshot frozen at Start; [] = all eligible
+  targetingRules:      ResolvedTargetingRule[]  // resolved snapshot frozen at Start; [] = all eligible
   configHash:          string
   startedAt:           string  // ISO 8601
 }

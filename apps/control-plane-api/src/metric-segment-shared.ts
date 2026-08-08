@@ -3,11 +3,13 @@ import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import { requireAppWrite as requireAppWriteAuthz } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
+import type { ConfigStoreAccess } from "./config-store-do";
 import type { RunningBlocker } from "./flag-definition-guards";
 import { pathParam } from "./handler-input";
 
 export interface MetricSegmentDeps {
   repo: Repository;
+  configStore?: ConfigStoreAccess;
   nowIso?: () => string;
 }
 
@@ -102,22 +104,6 @@ export async function runningMetricReference(
   );
 }
 
-export async function runningSegmentReference(
-  deps: MetricSegmentDeps,
-  appId: string,
-  segmentId: string,
-): Promise<RunningBlocker | null> {
-  // Segment references live ONLY on draft experiments (Start NULLs
-  // `draftSegmentIds`), so scanning running experiments alone never matches.
-  // listExperiments omits archived rows: archived Experiments do not block
-  // Segment delete (retention is storage-internal). Drafts and any Experiment
-  // that still surfaces on the list do block, so a draft's Segment cannot be
-  // deleted out from under it (which would silently widen the audience at Start).
-  return anyReference(deps, appId, (experiment) =>
-    jsonArray(experiment.draftSegmentIds).includes(segmentId),
-  );
-}
-
 async function anyRunningReference(
   deps: MetricSegmentDeps,
   appId: string,
@@ -131,25 +117,6 @@ async function anyRunningReference(
       const run = await resolveRunningRun(deps, scope, experiment);
       if (!run) continue;
       return { experimentId: experiment.id, runId: run.id };
-    }
-  }
-  return null;
-}
-
-async function anyReference(
-  deps: MetricSegmentDeps,
-  appId: string,
-  references: (experiment: ExperimentRow) => boolean,
-): Promise<RunningBlocker | null> {
-  const envs = await deps.repo.identity.listEnvironments(appScope(appId));
-  for (const env of envs) {
-    const scope = envScope(appId, env.id);
-    for (const experiment of await deps.repo.experiments.listExperiments(scope)) {
-      if (!references(experiment)) continue;
-      const run = experiment.liveRunId
-        ? await deps.repo.experiments.getRun(scope, experiment.liveRunId)
-        : await deps.repo.experiments.findRunningRunForExperiment(scope, experiment.id);
-      return { experimentId: experiment.id, runId: run?.id ?? experiment.liveRunId ?? "unknown" };
     }
   }
   return null;

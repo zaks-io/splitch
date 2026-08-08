@@ -1,7 +1,8 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { approvalRequests, approvalReviews } from "../schema/index";
+import { appliedReviewQueries, approvalPendingCondition } from "./approval-atomic";
 import { dispositionQueries, failureInsert } from "./approval-dispositions";
-import type { ApprovalDisposition, ApprovalFailure } from "./approval-types";
+import type { ApprovalCommit, ApprovalDisposition, ApprovalFailure } from "./approval-types";
 import type { Db } from "./client";
 import type { TenantScope } from "./scope";
 import { assertMintedScope } from "./scope";
@@ -170,6 +171,14 @@ export function makeApprovalRepo(db: Db) {
       assertMintedScope(scope);
       const results = await db.batch(dispositionQueries(db, scope, disposition));
       return results[1].length === 1;
+    },
+
+    async recordApplied(scope: TenantScope, commit: ApprovalCommit): Promise<boolean> {
+      assertMintedScope(scope);
+      const results = await db.batch(
+        appliedReviewQueries(db, scope, commit, approvalPendingCondition(db, scope, commit)),
+      );
+      return results[0].length === 1 && results[1].length === 1;
     },
 
     /**

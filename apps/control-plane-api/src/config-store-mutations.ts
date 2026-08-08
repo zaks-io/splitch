@@ -1,5 +1,6 @@
 import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
 import { type EnvScope, envScope } from "@splitch/db";
+import { promotionFreeze } from "./config-store-freeze";
 import {
   buildSnapshotFromD1,
   type ConfigStoreDeps,
@@ -10,15 +11,14 @@ import {
   missingRuleVariantNames,
   type PromoteFlagConfigInput,
   type PromoteFlagConfigResult,
-  type ReplaceTargetingRulesInput,
   responseFromSnapshot,
   type Snapshot,
   targetingRuleRows,
   writeSnapshotAndBroadcast,
 } from "./config-store-shared";
-import { promotionFreeze, targetingFreeze } from "./config-store-freeze";
 import { randomHex } from "./credential-cache";
 import { baselineIsUnresolvable, mintSalt } from "./flag-config-rollout";
+import { SegmentNotFoundError } from "./targeting-rule-resolution";
 
 interface PreparedPromotion {
   availableVariantNames: string[];
@@ -26,29 +26,6 @@ interface PreparedPromotion {
   targetingRules: TargetingRule[];
   /** `undefined` = the baseline was not selected, so leave the target's alone. */
   rollout: PercentageRollout | null | undefined;
-}
-
-export async function replaceTargetingRules(
-  deps: ConfigStoreDeps,
-  input: ReplaceTargetingRulesInput,
-): Promise<FlagConfigWriteResult> {
-  const frozen = await targetingFreeze(deps, input);
-  if (frozen) return frozen;
-
-  const scope = envScope(input.appId, input.environmentId);
-  const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
-  if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
-
-  const missingVariants = missingRuleVariantNames(
-    input.targetingRules,
-    snapshot.flag.variants,
-    snapshot.flag.availableVariantNames,
-  );
-  if (missingVariants.length > 0) {
-    return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants };
-  }
-
-  return commitTargetingRules(deps, scope, input.flagId, input.targetingRules, input.approval);
 }
 
 export async function promoteFlagConfig(
@@ -61,7 +38,19 @@ export async function promoteFlagConfig(
   const frozen = await promotionFreeze(deps, input);
   if (frozen) return frozen;
 
-  const loaded = await loadPromotionSnapshots(deps, input);
+  let loaded: Awaited<ReturnType<typeof loadPromotionSnapshots>>;
+  try {
+    loaded = await loadPromotionSnapshots(deps, input);
+  } catch (cause) {
+    if (cause instanceof SegmentNotFoundError) {
+      return {
+        ok: false,
+        reason: "SEGMENT_NOT_FOUND",
+        missingSegmentIds: cause.missingSegmentIds,
+      };
+    }
+    throw cause;
+  }
   if (!loaded.ok) return loaded;
 
   const prepared = preparePromotion(input, loaded.source, loaded.target);
@@ -102,28 +91,6 @@ function promotionPreview(
     diff: { before, after },
     nudge: { type: "config.changed", entity: "flag", id: input.flagId, version: after.version },
   };
-}
-
-async function commitTargetingRules(
-  deps: ConfigStoreDeps,
-  scope: EnvScope,
-  flagId: string,
-  targetingRules: TargetingRule[],
-  approval?: ReplaceTargetingRulesInput["approval"],
-): Promise<FlagConfigWriteResult> {
-  const now = approval ? new Date(approval.reviewedAt) : (deps.now?.() ?? new Date());
-  const replaced = await deps.repo.flags.replaceTargetingRules(
-    scope,
-    flagId,
-    targetingRuleRows(targetingRules, now),
-    { updatedAt: now.toISOString() },
-    approval,
-  );
-  if (!replaced) return { ok: false, reason: "FLAG_NOT_FOUND" };
-
-  const committed = await buildSnapshotFromD1(deps.repo, scope, flagId);
-  if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  return writeSnapshotAndBroadcast(deps, scope, flagId, committed);
 }
 
 async function loadPromotionSnapshots(deps: ConfigStoreDeps, input: PromoteFlagConfigInput) {
@@ -234,8 +201,8 @@ function promotedRules(
   target: Snapshot,
 ): TargetingRule[] {
   return input.select.targeting
-    ? promotedTargetingRules(source.flag.targetingRules)
-    : target.flag.targetingRules;
+    ? promotedTargetingRules(source.authoringTargetingRules)
+    : target.authoringTargetingRules;
 }
 
 /**
