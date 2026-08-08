@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { EvaluateAllEntry } from "../generated/contract-surface.js";
 import { FakeLogger } from "../test-fixtures";
 import { createSplitchBrowserClient } from "./client";
@@ -83,7 +83,7 @@ describe("createSplitchBrowserClient: construction", () => {
         endpoint: "https://edge.test",
       });
       await client.init();
-      expect(callThis === undefined || callThis === globalThis).toBe(true);
+      expect(callThis).toBe(globalThis);
     } finally {
       globalThis.fetch = original;
     }

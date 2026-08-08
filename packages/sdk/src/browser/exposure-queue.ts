@@ -125,27 +125,39 @@ export class ExposureQueue {
   }
 
   private async flushOverflow(): Promise<void> {
-    const before = this.pending.length;
+    let failed = false;
     try {
       await this.enqueueDrain({ keepalive: false });
     } catch {
-      // Logged below when items remain after a genuine forced-flush failure.
+      failed = true;
     }
-    if (this.pending.length > 0 && this.pending.length >= before) {
-      const lost = this.pending.splice(0, this.pending.length);
-      for (const item of lost) {
-        this.enqueuedFlags.delete(item.flagKey);
-      }
-      this.deps.logger.error(
-        formatSdkErrorMessage({
-          code: "RATE_LIMITED",
-          causeSummary: `Exposure queue overflow dropped ${lost.length} redemption(s) after a failed forced flush`,
-          remediation:
-            "Reduce concurrent first-reads or call flush() more often; retained exposureIds were discarded loudly",
-        }),
-        { droppedCount: lost.length, exposureIds: lost.map((item) => item.exposureId) },
-      );
+    if (!failed) {
+      return;
     }
+    // Bound memory on a genuine failure: keep the oldest one-batch for the 5s
+    // retry; drop only the excess tail. A queue that never exceeded one batch
+    // drops nothing — and must not emit a RATE_LIMITED "overflow" log for that.
+    const lost = this.pending.splice(EXPOSURE_BATCH_MAX_ITEMS);
+    for (const item of lost) {
+      this.enqueuedFlags.delete(item.flagKey);
+    }
+    if (lost.length === 0) {
+      return;
+    }
+    const retainedCount = this.pending.length;
+    this.deps.logger.error(
+      formatSdkErrorMessage({
+        code: "RATE_LIMITED",
+        causeSummary: `Exposure queue overflow dropped ${lost.length} redemption(s) after a failed forced flush; retained ${retainedCount} for retry`,
+        remediation:
+          "Reduce concurrent first-reads or call flush() more often; excess exposureIds were discarded loudly",
+      }),
+      {
+        droppedCount: lost.length,
+        retainedCount,
+        exposureIds: lost.map((item) => item.exposureId),
+      },
+    );
   }
 
   /**

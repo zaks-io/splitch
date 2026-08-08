@@ -50,7 +50,7 @@ export function logBatchFailure(
   const error = new SplitchSdkError({
     code: result.errorCode ?? "SERVICE_UNAVAILABLE",
     causeSummary: result.errorMessage ?? "Exposure batch flush failed",
-    remediation: "Retry flush(); pending exposureIds are retained unchanged",
+    remediation: "Retry flush(); the pending batch is retained for the 5s retry",
     status: result.status,
     originalError: result.cause,
   });

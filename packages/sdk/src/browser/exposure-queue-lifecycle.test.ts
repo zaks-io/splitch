@@ -122,7 +122,8 @@ describe("ExposureQueue: batch caps and overflow", () => {
 
     queue.enqueue("a", "ticket-a");
     const first = queue.flush();
-    for (let i = 0; i < EXPOSURE_BATCH_MAX_ITEMS; i++) {
+    // Exceed one batch so a failed forced flush drops only the excess tail.
+    for (let i = 0; i < EXPOSURE_BATCH_MAX_ITEMS + 5; i++) {
       queue.enqueue(`flag-${i}`, `ticket-${i}`);
     }
     await vi.waitFor(() => {
@@ -137,8 +138,12 @@ describe("ExposureQueue: batch caps and overflow", () => {
     expect(rateLimited).toBeDefined();
     expect(rateLimited?.detail).toMatchObject({
       droppedCount: expect.any(Number),
+      retainedCount: expect.any(Number),
     });
     expect((rateLimited?.detail as { droppedCount: number }).droppedCount).toBeGreaterThan(0);
+    expect((rateLimited?.detail as { retainedCount: number }).retainedCount).toBe(
+      EXPOSURE_BATCH_MAX_ITEMS,
+    );
   });
 });
 

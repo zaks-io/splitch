@@ -165,9 +165,10 @@ function ensureChromium(cliPath, chromium) {
 }
 
 /**
- * Logs fetch calls and rejects a foreign receiver (e.g. transport config).
- * A correct plain call from an ES module has `this === undefined`, which WebIDL
- * coerces to the global — that shape must succeed (same as `this === window`).
+ * Strict-mode fetch probe: rejects an unbound Window.fetch so deleting
+ * `.bind(globalThis)` at the client default path is observable in Chromium.
+ * Classic scripts are sloppy-mode; without "use strict" an undefined receiver
+ * is coerced to window before the check runs.
  */
 async function installThisCheckingFetchProbe(page) {
   await page.addInitScript(() => {
@@ -175,7 +176,8 @@ async function installThisCheckingFetchProbe(page) {
     window.__SPLITCH_FETCH_LOG__ = [];
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: must mirror Window.fetch this-checks
     window.fetch = function fetch(input, init) {
-      if (this !== undefined && this !== window) {
+      "use strict";
+      if (this !== window) {
         throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
       }
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;

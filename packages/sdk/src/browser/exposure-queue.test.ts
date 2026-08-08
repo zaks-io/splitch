@@ -37,11 +37,13 @@ describe("ExposureQueue: overlapping flush drain", () => {
   it("second flush starts only after the first drain resolves (probe A / M34)", async () => {
     const gate = deferred<BrowserExposuresResult>();
     const events: string[] = [];
+    const redeemCalls: { size: number }[] = [];
     let firstBatch: readonly { exposureId: string }[] = [];
     let call = 0;
     const transport = {
       async redeemExposures(exposures: readonly { exposureId: string }[]) {
         call += 1;
+        redeemCalls.push({ size: exposures.length });
         events.push(`call-${call}-start`);
         if (call === 1) {
           firstBatch = exposures;
@@ -74,6 +76,9 @@ describe("ExposureQueue: overlapping flush drain", () => {
     await second;
 
     expect(events).toEqual(["call-1-start", "call-1-end", "call-2-start", "call-2-end"]);
+    expect(redeemCalls.length).toBe(2);
+    expect(redeemCalls[0]?.size).toBe(1);
+    expect(redeemCalls[1]?.size).toBe(1);
     expect(logger.errors).toHaveLength(0);
   });
 
