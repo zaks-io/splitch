@@ -51,7 +51,7 @@ test.describe("App-level Segments", () => {
     const secondAttribute = createDialog.locator("#segment-condition-1-attribute");
     await secondAttribute.fill("country");
     await createDialog.locator("#segment-condition-1-operator").click();
-    await page.getByRole("option", { name: "in list" }).click();
+    await page.getByRole("option", { name: "in list", exact: true }).click();
     await createDialog.locator("#segment-condition-1-value").fill("US, CA");
     await createDialog.getByRole("button", { name: "Create Segment" }).click();
     await expect(createDialog).toBeHidden();

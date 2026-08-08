@@ -28,7 +28,7 @@ export function SegmentsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>PanelSegment</TableHead>
+            <TableHead>Segment</TableHead>
             <TableHead>Conditions</TableHead>
             <TableHead>
               <span className="sr-only">Actions</span>
