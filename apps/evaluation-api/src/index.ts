@@ -49,6 +49,9 @@ const handler = {
   },
 } satisfies ExportedHandler<EvaluationApiEnv>;
 
+/** Unwrapped fetch handler — tests drive this so startup binding checks stay load-bearing. */
+export const evaluationApiHandler = handler;
+
 export default wrapWorkerHandler(handler, { surface: "evaluation-api" });
 
 export class McpEntrypoint extends WorkerEntrypoint<EvaluationApiEnv> {

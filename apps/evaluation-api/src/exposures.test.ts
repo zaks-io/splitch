@@ -103,7 +103,16 @@ describe("POST /api/sdk/exposures: happy path and pipeline seam", () => {
       isHoldover: false,
       counterfactual: false,
     });
-    expect(assignmentStore.putHashedCalls).toHaveLength(1);
+    expect(assignmentStore.putHashedCalls).toEqual([
+      {
+        appId: APP_ID,
+        experimentId: EXPERIMENT_ID,
+        idType: "user",
+        targetingKeyHash: exposureSink.writes[0]?.targetingKeyHash,
+        runId: "run-42",
+        variant: "treatment",
+      },
+    ]);
   });
 
   it("returns deduplicated on an exact exposureId retry and does not append a second row", async () => {

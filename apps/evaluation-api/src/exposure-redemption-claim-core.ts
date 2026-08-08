@@ -201,7 +201,9 @@ async function acquirePendingClaim(
   // Do not arm the DO alarm for the pending lease. liveExposure/liveTicket
   // already expire pending rows on read; a 30s alarm would turn every claim
   // into a near-term full-keyspace GC sweep. Alarm stays claim-TTL GC only
-  // (armed from markSealed / acknowledge).
+  // (armed from markSealed / acknowledge). Abandoned pending rows (claim dies
+  // before seal) therefore have no GC owner until a later sweep reaches them;
+  // that leak is 2 keys with expiresAt at +30s and is accepted over re-arming.
   return { status: "acquired" };
 }
 

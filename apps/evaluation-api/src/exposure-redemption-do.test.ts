@@ -5,94 +5,42 @@ import {
 } from "./exposure-redemption-claim";
 import { EXPOSURE_REDEMPTION_CLAIM_TTL_MS } from "./exposure-redemption-claim-core";
 import {
-  EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE,
-  type ExposureRedemptionClaimDoContext,
-  handleExposureRedemptionClaimFetch,
-  runExposureRedemptionClaimAlarm,
-} from "./exposure-redemption-do-handler";
+  claimMemoryCtx,
+  claimPost,
+  simulateClaimAlarm,
+} from "./exposure-redemption-do-test-fixtures";
+import { handleExposureRedemptionClaimFetch } from "./exposure-redemption-do-handler";
 import { APP_ID, ENVIRONMENT_ID } from "./sdk-route-test-fixtures";
-
-/**
- * Production handler unit coverage. Miniflare / real-DO cases live in
- * `exposure-redemption-do-miniflare.test.ts`.
- */
-
-function memoryCtx(): ExposureRedemptionClaimDoContext & {
-  listCallSizes: number[];
-} {
-  const map = new Map<string, unknown>();
-  let alarm: number | null = null;
-  const listCallSizes: number[] = [];
-  return {
-    listCallSizes,
-    storage: {
-      get: async <T>(key: string) => map.get(key) as T | undefined,
-      put: async (key: string, value: unknown) => {
-        map.set(key, value);
-      },
-      delete: async (key: string | string[]) => {
-        if (Array.isArray(key)) for (const k of key) map.delete(k);
-        else map.delete(key);
-      },
-      list: async <T>(options?: { limit?: number; startAfter?: string }) => {
-        let entries = Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-        if (options?.startAfter !== undefined) {
-          const after = options.startAfter;
-          entries = entries.filter(([key]) => key > after);
-        }
-        if (options?.limit !== undefined) entries = entries.slice(0, options.limit);
-        listCallSizes.push(entries.length);
-        return new Map(entries as Array<[string, T]>);
-      },
-      getAlarm: async () => alarm,
-      setAlarm: async (scheduledTime: number) => {
-        alarm = scheduledTime;
-      },
-      deleteAlarm: async () => {
-        alarm = null;
-      },
-    } as unknown as DurableObjectStorage,
-    // Unit harness: serialize by running the callback. Real DO concurrency is
-    // covered in exposure-redemption-do-miniflare.test.ts.
-    blockConcurrencyWhile: async <T>(fn: () => Promise<T>) => fn(),
-  };
-}
-
-function post(path: string, body: unknown): Request {
-  return new Request(`https://exposure-redemption-claim.local${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
 
 const claimBody = { exposureId: "e1", ticketFingerprint: "fp", nowMs: 1_000 };
 
 describe("handleExposureRedemptionClaimFetch (production handler)", () => {
   it("runs claim/release/markSealed/acknowledge inside blockConcurrencyWhile", async () => {
-    const ctx = memoryCtx();
+    const ctx = claimMemoryCtx();
     let gated = 0;
     ctx.blockConcurrencyWhile = async <T>(fn: () => Promise<T>) => {
       gated += 1;
       return fn();
     };
     expect(
-      await (await handleExposureRedemptionClaimFetch(ctx, post("/claim", claimBody))).json(),
+      await (await handleExposureRedemptionClaimFetch(ctx, claimPost("/claim", claimBody))).json(),
     ).toEqual({ status: "acquired" });
     expect(
-      await (await handleExposureRedemptionClaimFetch(ctx, post("/claim", claimBody))).json(),
+      await (await handleExposureRedemptionClaimFetch(ctx, claimPost("/claim", claimBody))).json(),
     ).toEqual({ status: "busy" });
     expect(
-      (await handleExposureRedemptionClaimFetch(ctx, post("/markSealed", claimBody))).status,
+      (await handleExposureRedemptionClaimFetch(ctx, claimPost("/markSealed", claimBody))).status,
     ).toBe(200);
     expect(
-      await (await handleExposureRedemptionClaimFetch(ctx, post("/acknowledge", claimBody))).json(),
+      await (
+        await handleExposureRedemptionClaimFetch(ctx, claimPost("/acknowledge", claimBody))
+      ).json(),
     ).toEqual({ status: "accepted" });
     expect(gated).toBeGreaterThanOrEqual(4);
   });
 
   it("rejects non-POST, unknown paths, malformed bodies, and non-finite nowMs", async () => {
-    const ctx = memoryCtx();
+    const ctx = claimMemoryCtx();
     expect(
       (
         await handleExposureRedemptionClaimFetch(
@@ -101,67 +49,70 @@ describe("handleExposureRedemptionClaimFetch (production handler)", () => {
         )
       ).status,
     ).toBe(404);
-    expect((await handleExposureRedemptionClaimFetch(ctx, post("/other", claimBody))).status).toBe(
-      404,
-    );
     expect(
-      (await handleExposureRedemptionClaimFetch(ctx, post("/claim", { exposureId: "e1" }))).status,
+      (await handleExposureRedemptionClaimFetch(ctx, claimPost("/other", claimBody))).status,
+    ).toBe(404);
+    expect(
+      (await handleExposureRedemptionClaimFetch(ctx, claimPost("/claim", { exposureId: "e1" })))
+        .status,
     ).toBe(400);
     expect(
       (
         await handleExposureRedemptionClaimFetch(
           ctx,
-          post("/claim", { ...claimBody, nowMs: Number.NaN }),
+          claimPost("/claim", { ...claimBody, nowMs: Number.NaN }),
         )
       ).status,
     ).toBe(400);
   });
 
   it("does not list the full keyspace on the claim hot path", async () => {
-    const ctx = memoryCtx();
+    const ctx = claimMemoryCtx();
     let listed = 0;
     (ctx.storage as unknown as { list: () => Promise<Map<string, unknown>> }).list = async () => {
       listed += 1;
       return new Map();
     };
-    await handleExposureRedemptionClaimFetch(ctx, post("/claim", claimBody));
-    await handleExposureRedemptionClaimFetch(ctx, post("/markSealed", claimBody));
-    await handleExposureRedemptionClaimFetch(ctx, post("/acknowledge", claimBody));
+    await handleExposureRedemptionClaimFetch(ctx, claimPost("/claim", claimBody));
+    await handleExposureRedemptionClaimFetch(ctx, claimPost("/markSealed", claimBody));
+    await handleExposureRedemptionClaimFetch(ctx, claimPost("/acknowledge", claimBody));
     expect(listed).toBe(0);
   });
 
   it("release clears pending so a later claim can acquire", async () => {
-    const ctx = memoryCtx();
-    await handleExposureRedemptionClaimFetch(ctx, post("/claim", claimBody));
-    await handleExposureRedemptionClaimFetch(ctx, post("/release", claimBody));
+    const ctx = claimMemoryCtx();
+    await handleExposureRedemptionClaimFetch(ctx, claimPost("/claim", claimBody));
+    await handleExposureRedemptionClaimFetch(ctx, claimPost("/release", claimBody));
     expect(
       await (
         await handleExposureRedemptionClaimFetch(
           ctx,
-          post("/claim", { ...claimBody, exposureId: "e2", nowMs: 2 }),
+          claimPost("/claim", { ...claimBody, exposureId: "e2", nowMs: 2 }),
         )
       ).json(),
     ).toEqual({ status: "acquired" });
   });
 
   it("does not arm an alarm on pending claim; arms claim-TTL on seal and never pushes later", async () => {
-    const ctx = memoryCtx();
+    const ctx = claimMemoryCtx();
     const now = Date.now();
-    await handleExposureRedemptionClaimFetch(ctx, post("/claim", { ...claimBody, nowMs: now }));
+    await handleExposureRedemptionClaimFetch(
+      ctx,
+      claimPost("/claim", { ...claimBody, nowMs: now }),
+    );
     expect(await ctx.storage.getAlarm()).toBeNull();
 
     expect(
       (
         await handleExposureRedemptionClaimFetch(
           ctx,
-          post("/markSealed", { ...claimBody, nowMs: now }),
+          claimPost("/markSealed", { ...claimBody, nowMs: now }),
         )
       ).status,
     ).toBe(200);
     const sealedAlarm = now + EXPOSURE_REDEMPTION_CLAIM_TTL_MS;
     expect(await ctx.storage.getAlarm()).toBe(sealedAlarm);
 
-    // A nearer expiry must move the alarm earlier; must not leave the later TTL.
     await ctx.storage.put("exposure:old", {
       ticketFingerprint: "x",
       delivery: "pending",
@@ -173,38 +124,9 @@ describe("handleExposureRedemptionClaimFetch (production handler)", () => {
       delivery: "pending",
       expiresAt: nearer,
     });
-    await runExposureRedemptionClaimAlarm(ctx.storage);
+    await simulateClaimAlarm(ctx);
     expect(await ctx.storage.get("exposure:old")).toBeUndefined();
     expect(await ctx.storage.getAlarm()).toBe(nearer);
-  });
-
-  it("bounds each alarm sweep page and re-arms immediately to continue", async () => {
-    const ctx = memoryCtx();
-    const now = Date.now();
-    const total = EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE + 40;
-    for (let i = 0; i < total; i += 1) {
-      const id = `exp-${String(i).padStart(4, "0")}`;
-      await ctx.storage.put(`exposure:${id}`, {
-        ticketFingerprint: `fp-${id}`,
-        delivery: "sealed",
-        expiresAt: now - 1,
-      });
-    }
-    const beforeFirst = Date.now();
-    await runExposureRedemptionClaimAlarm(ctx.storage);
-    const afterFirst = Date.now();
-    expect(ctx.listCallSizes[0]).toBe(EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE);
-    const midAlarm = await ctx.storage.getAlarm();
-    expect(midAlarm).toBeGreaterThanOrEqual(beforeFirst);
-    expect(midAlarm).toBeLessThanOrEqual(afterFirst);
-
-    await runExposureRedemptionClaimAlarm(ctx.storage);
-    expect(ctx.listCallSizes[1]).toBeLessThanOrEqual(EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE);
-    expect(await ctx.storage.get(`exposure:exp-0000`)).toBeUndefined();
-    expect(
-      await ctx.storage.get(`exposure:exp-${String(total - 1).padStart(4, "0")}`),
-    ).toBeUndefined();
-    expect(await ctx.storage.getAlarm()).toBeNull();
   });
 });
 

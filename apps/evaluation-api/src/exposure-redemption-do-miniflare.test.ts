@@ -8,7 +8,6 @@ import {
   DurableExposureRedemptionClaimStore,
   type ExposureRedemptionClaimNamespace,
 } from "./exposure-redemption-claim";
-import { requiredExposureRedemptionClaimsBinding } from "./exposure-redemption-claims-binding";
 import { EXPOSURE_REDEMPTION_PENDING_LEASE_MS } from "./exposure-redemption-claim-core";
 import { APP_B, ENV_B } from "./exposures-test-fixtures";
 import { APP_ID, ENVIRONMENT_ID } from "./sdk-route-test-fixtures";
@@ -160,15 +159,7 @@ describe("ExposureRedemptionClaimDurableObject via Miniflare (real class)", () =
     );
     expect(await ticketAfter.json()).toEqual({ present: false });
   });
-
-  it("fails loud when EXPOSURE_REDEMPTION_CLAIMS is missing on the startup path", () => {
-    const env = { EXPOSURE_REDEMPTION_CLAIMS: undefined };
-    expect(() => requiredExposureRedemptionClaimsBinding(env.EXPOSURE_REDEMPTION_CLAIMS)).toThrow(
-      /evaluation-api: EXPOSURE_REDEMPTION_CLAIMS is required/,
-    );
-  });
 });
-
 async function miniflareWithRealDo(): Promise<Miniflare> {
   return new Miniflare({
     modules: true,

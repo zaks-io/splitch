@@ -10,13 +10,14 @@ import {
 
 const EXPOSURE_KEY_PREFIX = "exposure:";
 const TICKET_KEY_PREFIX = "ticket:";
-/** Cursor for multi-tick GC; sorts before claim keys and is skipped in expiry. */
+/** Cursor for multi-tick GC; sorts before claim keys (`__` < `exposure:`). */
 const SWEEP_CURSOR_KEY = "__sweep_after";
 
 /**
- * Max keys listed per alarm tick. DO alarms share isolate CPU with fetch;
- * 256 keeps a tick small (deserialize + delete) while large keyspaces drain
- * via immediate re-arm when a full page returns.
+ * Max keys listed per alarm tick. This is a tick-size bound, not a bound on
+ * total work: a full Environment keyspace is still scanned page-by-page at
+ * alarm-delivery rate (worst observed: 1024 key reads to collect 1 record
+ * behind a live page). Do not treat 256 as a cap on GC cost.
  */
 export const EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE = 256;
 
@@ -105,9 +106,10 @@ export async function runExposureRedemptionClaimAlarm(
   const nextExpiry = await storage.deleteExpired(Date.now());
   if (nextExpiry !== null) {
     await storage.setExpiryAlarm(nextExpiry);
-    return;
   }
-  await storageApi.deleteAlarm();
+  // Do not deleteAlarm() when nextExpiry is null. workerd already clears the
+  // alarm that invoked this handler; any alarm still set was armed during or
+  // after this tick (e.g. a concurrent markSealed between ticks) and must stay.
 }
 
 class DurableClaimStorage implements ExposureRedemptionClaimStorage {
@@ -192,7 +194,6 @@ function collectExpiredKeys(
   const expiredKeys: string[] = [];
   let pageNextExpiry: number | null = null;
   for (const [key, record] of entries) {
-    if (key === SWEEP_CURSOR_KEY) continue;
     const expiresAt = claimRecordExpiresAt(key, record);
     if (expiresAt === null) continue;
     if (expiresAt <= nowMs) expiredKeys.push(key);
