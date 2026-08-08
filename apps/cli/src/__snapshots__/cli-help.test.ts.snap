@@ -469,8 +469,8 @@ Flags:
 
 Request body (--body-json):
   entityType       required  string | null
-  fields           required  { name: string; type: "boolean"; required: boolean; allowedValues?: boolean[] } | { name: string; type: "string"; required: boolean; allowedValues: string[] } | { name: string; type: "number"; required: boolean; numberKind: string ("measurement" | "count" | "amount" | "duration" | "ratio" | "score" | "delta"); allowedValues?: number[]; minimum?: number; maximum?: number } | { name: string; type: "json"; required: boolean; jsonSchema: closed JSON Schema }[]
-  dimensions       required  { name: string; type: "boolean"; required: boolean; allowedValues?: boolean[] } | { name: string; type: "string"; required: boolean; allowedValues: string[] } | { name: string; type: "number"; required: boolean; numberKind: string ("measurement" | "count" | "amount" | "duration" | "ratio" | "score" | "delta"); allowedValues?: number[]; minimum?: number; maximum?: number }[]
+  fields           required  ({ name: string; type: "boolean"; required: boolean; allowedValues?: boolean[] } | { name: string; type: "string"; required: boolean; allowedValues: string[] } | { name: string; type: "number"; required: boolean; numberKind: string ("measurement" | "count" | "amount" | "duration" | "ratio" | "score" | "delta"); allowedValues?: number[]; minimum?: number; maximum?: number } | { name: string; type: "json"; required: boolean; jsonSchema: closed JSON Schema })[]
+  dimensions       required  ({ name: string; type: "boolean"; required: boolean; allowedValues?: boolean[] } | { name: string; type: "string"; required: boolean; allowedValues: string[] } | { name: string; type: "number"; required: boolean; numberKind: string ("measurement" | "count" | "amount" | "duration" | "ratio" | "score" | "delta"); allowedValues?: number[]; minimum?: number; maximum?: number })[]
   idempotency_key  optional  string
   Example:
     {"entityType":"entityType","fields":[],"dimensions":[]}
