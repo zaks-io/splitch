@@ -211,6 +211,9 @@ function stubFlagsResponse(request: Request): Response {
   if (pathname.includes("/variants")) {
     return variantResponse(request.method);
   }
+  if (request.method === "DELETE") {
+    return Response.json({ deleted: true });
+  }
   return Response.json(flagDefinition);
 }
 
