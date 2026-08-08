@@ -1,4 +1,7 @@
-import type { FrozenControlIdentity } from "./experiment-control-identity";
+import {
+  type FrozenControlIdentity,
+  unresolvableControlReasonMessages,
+} from "./experiment-control-identity";
 import { decisionValidMembers, lockedFamilyMembers, named } from "./experiment-decision-family";
 import type {
   DecisionGateCheck,
@@ -75,22 +78,19 @@ export function controlIdentityCheck(control: FrozenControlIdentity): DecisionGa
       id: "control_identity",
       status: "fail",
       title: "Analysis Control disagrees with the Run",
-      detail: `This Run's frozen Control is "${control.variant}", but the Run Snapshot measured lift against "${control.analysisVariant}". No ship decision can be made until they agree.`,
+      detail: `This Run's frozen Control is "${control.variant}", but the Run Snapshot measured lift against "${control.analysisVariant}". The Run Snapshot cannot be rewritten, so no ship decision can be made for this Run. Start a new Run to get a Control that agrees across both stores.`,
     };
   }
   const froze =
     control.frozenVariantNames.length > 0
       ? `The Run froze ${control.frozenVariantNames.map((name) => `"${name}"`).join(", ")}. `
       : "";
-  const reason =
-    control.reason === "absent_from_frozen_variant_set"
-      ? "it is absent from the Variant set this Run froze"
-      : "the frozen Variant set could not be read";
+  const reason = unresolvableControlReasonMessages[control.reason];
   return {
     id: "control_identity",
     status: "fail",
     title: "Control arm cannot be identified",
-    detail: `This Run's frozen Control cannot be identified because ${reason}. ${froze}Nothing can be promoted against a baseline this Run never recorded, and guessing one would invent provenance. Start a new Run to get a Control that is frozen and validated.`,
+    detail: `This Run's frozen Control cannot be identified because ${reason}. ${froze}The Experiment's default Variant was backfilled onto this Run as "${control.variantId}", which the Run itself never froze. Nothing can be promoted against a baseline this Run never recorded, and guessing one would invent provenance. Start a new Run to get a Control that is frozen and validated.`,
   };
 }
 

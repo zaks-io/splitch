@@ -55,6 +55,11 @@ export const FrozenControlIdentitySchema = z.discriminatedUnion("state", [
 export type UnresolvableControlReason = z.infer<typeof UnresolvableControlReasonSchema>;
 export type FrozenControlIdentity = z.infer<typeof FrozenControlIdentitySchema>;
 
+export const unresolvableControlReasonMessages: Record<UnresolvableControlReason, string> = {
+  absent_from_frozen_variant_set: "it is absent from the Variant set this Run froze",
+  unreadable_frozen_variant_set: "the frozen Variant set could not be read",
+};
+
 const FrozenVariantSetSchema = z.array(
   z.object({ id: z.string().min(1), name: z.string().min(1) }).loose(),
 );

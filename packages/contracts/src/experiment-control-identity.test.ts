@@ -86,8 +86,9 @@ describe("control_identity gate check", () => {
     expect(gate.shipAllowed).toBe(false);
     expect(gate.blockedBy).toContain("control_identity");
     const identity = check(gate, "control_identity");
-    expect(identity.detail).toContain("it is absent from the Variant set this Run froze");
-    expect(identity.detail).not.toContain("variant_from_a_later_edit");
+    expect(identity.detail).toBe(
+      'This Run\'s frozen Control cannot be identified because it is absent from the Variant set this Run froze. The Run froze "control", "treatment". The Experiment\'s default Variant was backfilled onto this Run as "variant_from_a_later_edit", which the Run itself never froze. Nothing can be promoted against a baseline this Run never recorded, and guessing one would invent provenance. Start a new Run to get a Control that is frozen and validated.',
+    );
     expect(identity.detail).not.toContain("absent_from_frozen_variant_set");
   });
 
@@ -103,8 +104,9 @@ describe("control_identity gate check", () => {
     expect(gate.blockedBy).toContain("control_identity");
     const identity = check(gate, "control_identity");
     expect(identity.title).toContain("disagrees");
-    expect(identity.detail).toContain('"control"');
-    expect(identity.detail).toContain('"legacy_checkout"');
+    expect(identity.detail).toBe(
+      'This Run\'s frozen Control is "control", but the Run Snapshot measured lift against "legacy_checkout". The Run Snapshot cannot be rewritten, so no ship decision can be made for this Run. Start a new Run to get a Control that agrees across both stores.',
+    );
   });
 
   it("keeps every other check reported so the refusal is not the only thing on the page", () => {

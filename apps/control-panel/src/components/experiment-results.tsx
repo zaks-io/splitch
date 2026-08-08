@@ -63,6 +63,7 @@ export function ExperimentResults({ results }: { results: PanelExperimentResults
       </div>
 
       <ExperimentResultsDecision
+        control={results.control}
         gate={results.gate}
         guardrails={results.stats.guardrail_results}
         runStatus={results.runStatus}

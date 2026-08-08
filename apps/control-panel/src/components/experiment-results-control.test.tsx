@@ -38,13 +38,15 @@ function unresolvableHtml() {
 }
 
 describe("ExperimentResults with an unidentifiable Control", () => {
-  it("explains the unresolved Control without exposing plumbing", () => {
+  it("explains the unresolved Control and styles the recorded diagnostic value", () => {
     const html = unresolvableHtml();
 
     expect(html).toContain("Control arm cannot be identified");
     expect(html).toContain("it is absent from the Variant set this Run froze");
     expect(html).toContain("control, treatment");
-    expect(html).not.toContain("variant_from_a_later_edit");
+    expect(html).toContain(
+      '<code class="font-mono text-foreground text-xs">variant_from_a_later_edit</code>',
+    );
     expect(html).not.toContain("absent_from_frozen_variant_set");
     expect(html).toContain('role="alert"');
   });
@@ -56,6 +58,9 @@ describe("ExperimentResults with an unidentifiable Control", () => {
     expect(html).toContain("<svg");
     expect(html).toContain('data-testid="ship-blocked"');
     expect(html).toContain("The numbers below are still shown");
+    expect(html).toContain(
+      "No arm below is marked as the baseline, and the ship decision is blocked. Start a new Run to get a Control that is frozen and validated.",
+    );
   });
 
   it("marks no arm as the baseline rather than guessing one", () => {
@@ -88,7 +93,7 @@ describe("ExperimentResults with an Analysis Control disagreement", () => {
 
     expect(html).toContain("Analysis Control disagrees with the Run");
     expect(html).toContain(
-      'This Run froze <code class="font-mono text-foreground text-xs">control</code> as its Control, but the Run Snapshot written to the analytics store at Start recorded <code class="font-mono text-foreground text-xs">legacy_checkout</code>. Both are written at Start and should match. Because they do not, every lift here is measured against <code class="font-mono text-foreground text-xs">legacy_checkout</code> and not against the Run&#x27;s own Control.',
+      'This Run froze <code class="font-mono text-foreground text-xs">control</code> as its Control, but the Run Snapshot written to the analytics store at Start recorded <code class="font-mono text-foreground text-xs">legacy_checkout</code>. Both are written at Start and should match. Because they do not, every lift below is measured against <code class="font-mono text-foreground text-xs">legacy_checkout</code> and not against the Run&#x27;s own Control.',
     );
     expect(html).toContain(
       "The Run Snapshot cannot be rewritten, so this Run cannot be corrected. Start a new Run to get a Control that agrees across both stores.",

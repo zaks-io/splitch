@@ -95,9 +95,10 @@ describe("Experiment Results route no_data waiting state", () => {
       />,
     );
 
+    expect(alertMarkup(html)).not.toMatch(/\b(?:below|here|numbers)\b/i);
     expect(html).toContain("Analysis Control disagrees with the Run");
     expect(html).toContain(
-      'This Run froze <code class="font-mono text-foreground text-xs">control</code> as its Control, but the Run Snapshot written to the analytics store at Start recorded <code class="font-mono text-foreground text-xs">legacy_checkout</code>. Both are written at Start and should match. Because they do not, every lift here is measured against <code class="font-mono text-foreground text-xs">legacy_checkout</code> and not against the Run&#x27;s own Control.',
+      'This Run froze <code class="font-mono text-foreground text-xs">control</code> as its Control, but the Run Snapshot written to the analytics store at Start recorded <code class="font-mono text-foreground text-xs">legacy_checkout</code>. Both are written at Start and should match. Because they do not, results for this Run will be measured against <code class="font-mono text-foreground text-xs">legacy_checkout</code> and not against the Run&#x27;s own Control when they arrive.',
     );
     expect(html).toContain(
       "The Run Snapshot cannot be rewritten, so this Run cannot be corrected. Start a new Run to get a Control that agrees across both stores.",
@@ -125,6 +126,7 @@ describe("Experiment Results route no_data waiting state", () => {
       />,
     );
 
+    expect(alertMarkup(html)).not.toMatch(/\b(?:below|here|numbers)\b/i);
     expect(html).toContain("Control arm cannot be identified");
     expect(html).toContain(
       "This Run&#x27;s frozen Control cannot be identified because it is absent from the Variant set this Run froze. Runs created before the Control was frozen on the Run were backfilled from the Experiment&#x27;s default Variant, which the Run itself may never have carried.",
@@ -132,7 +134,7 @@ describe("Experiment Results route no_data waiting state", () => {
     expect(html).toContain("The Run froze");
     expect(html).toContain("control, treatment");
     expect(html).toContain(
-      "No arm is marked as the baseline and the ship decision is blocked. Start a new Run to get a Control that is frozen and validated.",
+      "This Run cannot produce a ship decision. Start a new Run to get a Control that is frozen and validated.",
     );
     expect(html).not.toContain("The numbers below are still shown");
     expect(html).not.toContain("variant_from_a_later_edit");
@@ -205,4 +207,10 @@ function runningRun(): PanelExperimentRun {
     endReason: null,
     createdAt: "2026-07-19T00:00:00.000Z",
   };
+}
+
+function alertMarkup(html: string): string {
+  const alert = html.match(/<div[^>]*role="alert"[\s\S]*?<\/div>/)?.[0];
+  if (!alert) throw new Error("missing Control integrity alert");
+  return alert;
 }
