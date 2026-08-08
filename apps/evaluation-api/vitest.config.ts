@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 const sharedAlias = {
   "@splitch/contracts": fileURLToPath(
@@ -41,7 +41,7 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["src/**/*.{test,spec}.ts"],
-          exclude: ["src/index-request-binding.test.ts"],
+          exclude: [...configDefaults.exclude, "src/index-request-binding.test.ts"],
         },
       },
     ],

@@ -14,7 +14,10 @@ const TICKET_KEY_PREFIX = "ticket:";
 const SWEEP_CURSOR_KEY = "__sweep_after";
 /**
  * Expiry a seal/ack wanted to arm while a nearer continuation alarm was already
- * set. Drain completion merges this floor so below-cursor records are not orphaned.
+ * set. Drain completion merges this floor so sealed/acknowledged records written
+ * below the cursor mid-drain are not orphaned. Pending `/claim` rows are not
+ * covered: claim deliberately omits setExpiryAlarm, so no floor entry is owed
+ * until seal; the next seal's rescan (cursor already cleared) collects them.
  */
 const PENDING_EXPIRY_FLOOR_KEY = "__pending_expiry_floor";
 
