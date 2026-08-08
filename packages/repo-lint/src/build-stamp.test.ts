@@ -155,9 +155,8 @@ describe("build stamp guard (fixture digests)", () => {
   it("does not honor SPLITCH_BUILD_STAMP_SOURCE_DIGEST as a freshness hatch", () => {
     writeBuildStamp("sdk", scratch);
     const stampFile = path.join(packageRoot, "dist/build-stamp.json");
-    const stamped = (
-      JSON.parse(readFileSync(stampFile, "utf8")) as { sourceDigest: string }
-    ).sourceDigest;
+    const stamped = (JSON.parse(readFileSync(stampFile, "utf8")) as { sourceDigest: string })
+      .sourceDigest;
     writeFileSync(path.join(packageRoot, "src/index.ts"), "export const a = 2;\n");
     // If the env hatch still existed, setting it to the *stamped* digest would
     // make pack/publish accept a tree that no longer matches the stamp.

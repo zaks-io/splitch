@@ -23,7 +23,7 @@ import {
   evaluateAllReasons,
   evaluateAllResponseRequiredKeys,
   peekEvaluateRequiredKeys,
-  resolutionDetailsPropertyKeys,
+  type resolutionDetailsPropertyKeys,
   resolutionDetailsRequiredKeys,
   resolutionReasons,
 } from "./generated/contract-surface-members";
