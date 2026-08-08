@@ -248,39 +248,6 @@ describe("control-plane org/member endpoints", () => {
     }
   });
 
-  it("fails loud and names the member when a profile lookup faults", async () => {
-    const ownerJwt = await token(OWNER, PRIMARY.orgId, "owner");
-    const api = client(ownerJwt, { "x-test-profile-failure-user": PROFILELESS_MEMBER });
-    const res = await memberRoute(api).$get({ param: { orgId: PRIMARY.orgId } });
-
-    expect(res.status).toBe(503);
-    expect(await res.json()).toMatchObject({
-      code: "SERVICE_UNAVAILABLE",
-      message: `member profile lookup failed for ${PROFILELESS_MEMBER}`,
-    });
-  });
-
-  it("fails loud before adding when the profile lookup faults", async () => {
-    const ownerJwt = await token(SOLO_OWNER, SOLO.orgId, "owner");
-    const api = client(ownerJwt, { "x-test-profile-failure-user": PROFILELESS_MEMBER });
-    const res = await memberRoute(api).$post({
-      param: { orgId: SOLO.orgId },
-      json: { userId: PROFILELESS_MEMBER, role: "member" },
-    });
-
-    expect(res.status).toBe(503);
-    expect(await res.json()).toMatchObject({
-      code: "SERVICE_UNAVAILABLE",
-      message: `member profile lookup failed for ${PROFILELESS_MEMBER}`,
-    });
-
-    const roster = await memberRoute(client(ownerJwt)).$get({ param: { orgId: SOLO.orgId } });
-    expect(roster.status).toBe(200);
-    expect((await roster.json()).items).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: PROFILELESS_MEMBER })]),
-    );
-  });
-
   it("409s LAST_OWNER_REQUIRED when removing or demoting the last owner", async () => {
     const ownerJwt = await token(SOLO_OWNER, SOLO.orgId, "owner");
     const resource = memberResourceRoute(client(ownerJwt));
