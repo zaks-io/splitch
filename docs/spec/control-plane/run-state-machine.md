@@ -72,7 +72,9 @@ while a Run is live returns `liveRunUnaffected` naming that live Run and its fro
 so the operator can tell the draft write did not change evaluation. N staged edits = one sample
 reset, not N.
 
-### running → ended: `POST /apps/{app_id}/envs/{environment_id}/runs/{run_id}/end`
+### running → ended: standalone End or Conclude
+
+Standalone End uses `POST /apps/{app_id}/envs/{environment_id}/runs/{run_id}/end`.
 
 Triggered by: explicit user/agent End action.
 
@@ -85,6 +87,14 @@ What happens:
 5. Return the ended Run object
 
 Required role: App `owner` or `admin` (member cannot end a Run).
+
+Conclude uses
+`POST /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/runs/{run_id}/conclusions`.
+It reaches the same `ended` state but only after re-reading the server-owned result and passing the
+decision gate. The End, immutable conclusion evidence, and pending Approval Request commit together;
+winner Promotion is a later Approval Request application. See
+[conclusion-and-winner-promotion.md](conclusion-and-winner-promotion.md). Standalone End creates no
+conclusion evidence and selects no winner.
 
 ### What is never a valid transition
 

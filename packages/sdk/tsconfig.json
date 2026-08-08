@@ -6,5 +6,10 @@
     "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts", "src/test-fixtures.ts"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/test-fixtures.ts",
+    "src/contract-surface-assignability.ts",
+    "src/contract-surface-schema-describe.ts"
+  ]
 }

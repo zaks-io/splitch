@@ -76,6 +76,72 @@ describe("Experiment Results route no_data waiting state", () => {
     expect(html).toContain("Exposures have not arrived for this Run yet");
   });
 
+  it("surfaces a Control disagreement even while a Run is waiting for data", () => {
+    resultsData.current = resultsNoDataFixture({
+      control: {
+        state: "disagreement",
+        variantId: "variant_control",
+        variant: "control",
+        analysisVariant: "legacy_checkout",
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      <ExperimentResultsPanel
+        appId="app_1"
+        environmentId="env_1"
+        experimentId="exp_1"
+        run={runningRun()}
+      />,
+    );
+
+    expect(alertMarkup(html)).not.toMatch(/\b(?:below|here|numbers)\b/i);
+    expect(html).toContain("Analysis Control disagrees with the Run");
+    expect(html).toContain(
+      'This Run froze <code class="font-mono text-foreground text-xs">control</code> as its Control, but the Run Snapshot written to the analytics store at Start recorded <code class="font-mono text-foreground text-xs">legacy_checkout</code>. Both are written at Start and should match. Because they do not, results for this Run will be measured against <code class="font-mono text-foreground text-xs">legacy_checkout</code> and not against the Run&#x27;s own Control when they arrive.',
+    );
+    expect(html).toContain(
+      "The Run Snapshot cannot be rewritten, so this Run cannot be corrected. Start a new Run to get a Control that agrees across both stores.",
+    );
+    expect(html).not.toContain("The numbers below remain visible for diagnosis.");
+    expect(html).toContain('role="alert"');
+  });
+
+  it("surfaces an unresolvable Control without promising numbers or exposing plumbing", () => {
+    resultsData.current = resultsNoDataFixture({
+      control: {
+        state: "unresolvable",
+        variantId: "variant_from_a_later_edit",
+        reason: "absent_from_frozen_variant_set",
+        frozenVariantNames: ["control", "treatment"],
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      <ExperimentResultsPanel
+        appId="app_1"
+        environmentId="env_1"
+        experimentId="exp_1"
+        run={runningRun()}
+      />,
+    );
+
+    expect(alertMarkup(html)).not.toMatch(/\b(?:below|here|numbers)\b/i);
+    expect(html).toContain("Control arm cannot be identified");
+    expect(html).toContain(
+      "This Run&#x27;s frozen Control cannot be identified because it is absent from the Variant set this Run froze. Runs created before the Control was frozen on the Run were backfilled from the Experiment&#x27;s default Variant, which the Run itself may never have carried.",
+    );
+    expect(html).toContain("The Run froze");
+    expect(html).toContain("control, treatment");
+    expect(html).toContain(
+      "This Run cannot produce a ship decision. Start a new Run to get a Control that is frozen and validated.",
+    );
+    expect(html).not.toContain("The numbers below are still shown");
+    expect(html).not.toContain("variant_from_a_later_edit");
+    expect(html).not.toContain("absent_from_frozen_variant_set");
+    expect(html).toContain('role="alert"');
+  });
+
   it("does not tell an ended Run that data is still arriving", () => {
     resultsData.current = resultsNoDataFixture({ missing: "metric_events", runStatus: "ended" });
 
@@ -141,4 +207,10 @@ function runningRun(): PanelExperimentRun {
     endReason: null,
     createdAt: "2026-07-19T00:00:00.000Z",
   };
+}
+
+function alertMarkup(html: string): string {
+  const alert = html.match(/<div[^>]*role="alert"[\s\S]*?<\/div>/)?.[0];
+  if (!alert) throw new Error("missing Control integrity alert");
+  return alert;
 }

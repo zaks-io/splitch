@@ -1,5 +1,6 @@
 import {
   clientKeyCacheKey,
+  credentialRevocationCacheKey,
   experimentConfigKey,
   flagConfigKey,
   type ErrorResponse,
@@ -126,7 +127,9 @@ describe("POST /api/sdk/verify", () => {
       experimentConfigKey(APP_ID, ENVIRONMENT_ID, EXPERIMENT_ID),
     ]);
     expect(credentialKv.getCalls).toEqual([
+      credentialRevocationCacheKey(clientKeyCacheKey(await sha256Hex(CLIENT_KEY))),
       clientKeyCacheKey(await sha256Hex(CLIENT_KEY)),
+      credentialRevocationCacheKey(clientKeyCacheKey(await sha256Hex(CLIENT_KEY))),
       clientKeyCacheKey(await sha256Hex(CLIENT_KEY)),
     ]);
   });

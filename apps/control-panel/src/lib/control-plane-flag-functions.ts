@@ -53,6 +53,7 @@ export const loadControlPanelFlagDetail = createServerFn({ method: "GET" })
           status: detail.status,
           data: flagDetailView(detail.data, data.env, {
             items: [],
+            unparseable: [],
             affectedEnvironmentIds: {},
           }),
         };

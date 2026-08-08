@@ -101,10 +101,16 @@ describe("delegated control-plane routes", () => {
     expect(forwarded).toHaveLength(0);
   });
 
-  it("fails loud naming the owner when its binding is missing", async () => {
+  it("fails loud without naming the owner, and logs the owner for operators", async () => {
     // Default stub has a Run, so the hop is required and unbound Analysis stays
     // SERVICE_UNAVAILABLE. Draft / missing outcomes are covered below: they must
     // not hide behind this outage.
+    //
+    // This route is reachable through the MCP door (SPL-313): the caller-facing
+    // message must name the operation only, never the owner Worker -- an agent
+    // cannot act on a binding it cannot see. The owner name still reaches
+    // operators, but only through console.error.
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
     const response = await createApp(deps({})).request(RESULTS_PATH, {
       headers: { authorization: "Bearer stub" },
     });
@@ -112,7 +118,12 @@ describe("delegated control-plane routes", () => {
     expect(response.status).toBe(503);
     const body = (await response.json()) as { code: string; message: string };
     expect(body.code).toBe("SERVICE_UNAVAILABLE");
-    expect(body.message).toContain("analysis-api");
+    expect(body.message).toBe("experiment_results_get is temporarily unavailable");
+    expect(body.message).not.toContain("analysis-api");
+    expect(errorLog).toHaveBeenCalledWith(
+      expect.stringContaining("experiment_results_get is executed by analysis-api"),
+    );
+    errorLog.mockRestore();
   });
 });
 

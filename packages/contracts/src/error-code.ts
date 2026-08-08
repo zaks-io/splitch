@@ -9,6 +9,7 @@ export const errorCodes = [
   "INVALID_SORT",
   "EXPOSURE_TICKET_INVALID",
   "EXPOSURE_TICKET_EXPIRED",
+  "UNSUPPORTED_OBJECT_KEY",
 
   // Run / Experiment invariants
   "RUN_FROZEN",
@@ -20,7 +21,7 @@ export const errorCodes = [
   "VARIANT_NOT_AVAILABLE",
   "RESOURCE_NOT_EMPTY",
 
-  // Uniqueness
+  // Uniqueness conflicts
   "SLUG_CONFLICT",
   "EXPERIMENT_KEY_CONFLICT",
   "EVENT_ID_CONFLICT",
@@ -54,11 +55,15 @@ export const errorCodes = [
   // Approval Request / Review
   "APPROVAL_REVIEW_REQUIRED",
   "APPROVAL_REQUEST_STALE",
+  "DECISION_RESULT_STALE",
+  "TARGET_CONFIGURATION_STALE",
   "APPROVAL_REQUEST_RESOLVED",
   "APPROVAL_APPLICATION_FAILED",
   "IDEMPOTENCY_KEY_CONFLICT",
 
   // Analysis-state signals
+  "DECISION_BLOCKED",
+  "DECISION_RESULT_UNAVAILABLE",
   "MULTIPLE_VARIANT_CONFLICT",
   "ATTENTION_FANOUT_LIMIT_EXCEEDED",
 

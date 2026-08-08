@@ -31,6 +31,18 @@ describe("DataPlaneEvaluateRequestSchema", () => {
     expect(req.attributes).toEqual({});
   });
 
+  it("fails loud on a __proto__ attribute key instead of silently dropping it", () => {
+    const input = JSON.parse(
+      '{"flagKey":"feature-x","targetingKey":"user-1","idType":"user","attributes":{"__proto__":true,"plan":"pro"}}',
+    ) as unknown;
+    const parsed = DataPlaneEvaluateRequestSchema.safeParse(input);
+    expect(parsed.success).toBe(false);
+    if (parsed.success) {
+      return;
+    }
+    expect(parsed.error.issues.some((issue) => issue.path.includes("__proto__"))).toBe(true);
+  });
+
   it("rejects a missing flagKey", () => {
     expect(
       DataPlaneEvaluateRequestSchema.safeParse({ targetingKey: "u", idType: "user" }).success,

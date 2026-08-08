@@ -120,7 +120,7 @@ export function FlagTargetingRulesEditor({
             placeholder="attribute"
             value={attribute}
           />
-          <span className="font-mono text-muted-foreground text-xs">eq</span>
+          <span className="font-mono text-muted-foreground text-xs">equals</span>
           <Input
             aria-label="targeting value"
             className="w-40"

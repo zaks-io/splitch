@@ -95,6 +95,39 @@ describe("ExperimentResults", () => {
     expect(html).toContain("would ship a known regression");
   });
 
+  // The legend used to assert "at zero lift by definition" from the frozen
+  // Control name alone. When no ArmResult matches that name, nothing is drawn
+  // at zero, so claiming a baseline there is a lie about missing data.
+  it("does not claim a baseline at zero lift when no arm matches the Control name", () => {
+    const stats = statsFixture();
+    expect(stats.arm_results.some((arm) => arm.variant === "control")).toBe(false);
+
+    const html = renderToStaticMarkup(<ExperimentResults results={resultsFixture(stats)} />);
+
+    expect(html).toContain("Baseline (control) arm is missing from these results");
+    expect(html).not.toContain("at zero lift by definition");
+    expect(html).not.toContain("0% by definition");
+  });
+
+  // Same defect under a Control name D1 never emitted as an arm (the
+  // disagreement path's Analysis Control). The legend must fail loud either way.
+  it("fails loud when a frozen Control name matches no drawn arm", () => {
+    const html = renderToStaticMarkup(
+      <ExperimentResults
+        results={resultsFixture(statsFixture(), {
+          control: {
+            state: "frozen",
+            variantId: "variant_analysis_control",
+            variant: "analysis_control",
+          },
+        })}
+      />,
+    );
+
+    expect(html).toContain("Baseline (analysis_control) arm is missing from these results");
+    expect(html).not.toContain("at zero lift by definition");
+  });
+
   // The Worker reports no lift for the baseline arm. Drawn as an interval that
   // would render as an unbounded whisker spanning the plot, claiming total
   // uncertainty about the one quantity here that is exact.
@@ -126,6 +159,9 @@ describe("ExperimentResults", () => {
     expect(svg).toContain("0% by definition");
     expect(svg).toContain("baseline, 0% lift by definition");
     expect(svg).not.toContain("−∞");
+    // Legend matches what is drawn: the baseline row is present.
+    expect(html).toContain("Baseline (control) at zero lift by definition");
+    expect(html).not.toContain("arm is missing from these results");
     // The table agrees with the plot: the baseline is an anchor, not a result
     // with an infinitely wide interval and a p-value of 1.
     expect(html).toContain("baseline, by definition");

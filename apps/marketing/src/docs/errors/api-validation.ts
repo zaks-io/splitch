@@ -46,6 +46,13 @@ export const validationErrorDocs = {
     details: "{ exposureId: string, issuedAt: string }",
     related: ["EXPOSURE_TICKET_INVALID", "VALIDATION_ERROR"],
   },
+  UNSUPPORTED_OBJECT_KEY: {
+    cause:
+      'A JSON own `"__proto__"` key reached a Zod record that would otherwise silently drop it (Precomputed Evaluations Flag Keys, or a shape that must keep every own key).',
+    fix: 'Rename the key away from `"__proto__"`. `details.key` names the offending key and `details.path` is the wire path where it appeared. The platform refuses rather than returning a payload with that entry missing.',
+    details: "{ key: string, path: string[] }",
+    related: ["VALIDATION_ERROR"],
+  },
   EVENT_ID_CONFLICT: {
     cause:
       "The same `exposureId` (or other client-owned event id) was reused with a different payload than the one already accepted.",

@@ -23,8 +23,7 @@
     "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN"]
   },
   "vars": {
-    "SPLITCH_PLATFORM_TARGET": "local",
-    "MCP_EVALUATION_DELEGATION_SECRET": "local-mcp-evaluation-delegation-secret"
+    "SPLITCH_PLATFORM_TARGET": "local"
   },
   "services": [
     {
@@ -63,6 +62,10 @@
       {
         "name": "MCP_DELEGATION_REPLAY",
         "class_name": "McpDelegationReplayDurableObject"
+      },
+      {
+        "name": "EXPOSURE_REDEMPTION_CLAIMS",
+        "class_name": "ExposureRedemptionClaimDurableObject"
       }
     ]
   },
@@ -74,6 +77,10 @@
     {
       "tag": "v2_mcp_delegation_replay",
       "new_sqlite_classes": ["McpDelegationReplayDurableObject"]
+    },
+    {
+      "tag": "v3_exposure_redemption_claims",
+      "new_sqlite_classes": ["ExposureRedemptionClaimDurableObject"]
     }
   ],
   "env": {
@@ -100,8 +107,7 @@
           "SENTRY_DSN",
           "EVALUATION_PRIVACY_SALT",
           "EXPOSURE_TICKET_KEY",
-          "SPLITCH_EVENT_INGEST_TOKEN",
-          "MCP_EVALUATION_DELEGATION_SECRET"
+          "SPLITCH_EVENT_INGEST_TOKEN"
         ]
       },
       "vars": {
@@ -124,6 +130,10 @@
           {
             "name": "MCP_DELEGATION_REPLAY",
             "class_name": "McpDelegationReplayDurableObject"
+          },
+          {
+            "name": "EXPOSURE_REDEMPTION_CLAIMS",
+            "class_name": "ExposureRedemptionClaimDurableObject"
           }
         ]
       },
@@ -135,6 +145,10 @@
         {
           "tag": "v2_mcp_delegation_replay",
           "new_sqlite_classes": ["McpDelegationReplayDurableObject"]
+        },
+        {
+          "tag": "v3_exposure_redemption_claims",
+          "new_sqlite_classes": ["ExposureRedemptionClaimDurableObject"]
         }
       ],
       "services": [
@@ -167,8 +181,7 @@
           "SENTRY_DSN",
           "EVALUATION_PRIVACY_SALT",
           "EXPOSURE_TICKET_KEY",
-          "SPLITCH_EVENT_INGEST_TOKEN",
-          "MCP_EVALUATION_DELEGATION_SECRET"
+          "SPLITCH_EVENT_INGEST_TOKEN"
         ]
       },
       "vars": {
@@ -191,6 +204,10 @@
           {
             "name": "MCP_DELEGATION_REPLAY",
             "class_name": "McpDelegationReplayDurableObject"
+          },
+          {
+            "name": "EXPOSURE_REDEMPTION_CLAIMS",
+            "class_name": "ExposureRedemptionClaimDurableObject"
           }
         ]
       },
@@ -202,6 +219,10 @@
         {
           "tag": "v2_mcp_delegation_replay",
           "new_sqlite_classes": ["McpDelegationReplayDurableObject"]
+        },
+        {
+          "tag": "v3_exposure_redemption_claims",
+          "new_sqlite_classes": ["ExposureRedemptionClaimDurableObject"]
         }
       ],
       "services": [

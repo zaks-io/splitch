@@ -19,6 +19,7 @@ interface Route {
   method: string;
   pathname: string;
   environmentId?: string;
+  search?: string;
 }
 
 /**
@@ -48,6 +49,10 @@ const OPERATION_ROUTES: OperationCoverage = {
   apps_create: {
     route: { method: "POST", pathname: "/orgs/org_1/apps" },
     operation: { id: "apps_create", orgId: "org_1" },
+  },
+  organization_usage_get: {
+    route: { method: "GET", pathname: "/orgs/org_1/usage" },
+    operation: { id: "organization_usage_get", orgId: "org_1" },
   },
   organizations_create: {
     route: { method: "POST", pathname: "/orgs" },
@@ -99,9 +104,14 @@ const OPERATION_ROUTES: OperationCoverage = {
     route: { method: "POST", pathname: `/apps/${APP}/flags`, environmentId: ENV },
     operation: { id: "flags_create", appId: APP, environmentId: ENV },
   },
-  segments_list: {
-    route: { method: "GET", pathname: `/apps/${APP}/segments`, environmentId: ENV },
-    operation: { id: "segments_list", appId: APP, environmentId: ENV },
+  flag_get: {
+    route: {
+      method: "GET",
+      pathname: `/apps/${APP}/flags/flag_1`,
+      environmentId: ENV,
+      search: "by=key",
+    },
+    operation: { id: "flag_get", appId: APP, environmentId: ENV, flagId: "flag_1", by: "key" },
   },
   flag_config_get: {
     route: { method: "GET", pathname: `/apps/${APP}/envs/${ENV}/flags/flag_1/config` },
@@ -152,6 +162,26 @@ const OPERATION_ROUTES: OperationCoverage = {
     route: { method: "DELETE", pathname: `/apps/${APP}/metrics/metric_1`, environmentId: ENV },
     operation: { id: "metrics_delete", appId: APP, environmentId: ENV, metricId: "metric_1" },
   },
+  segments_list: {
+    route: { method: "GET", pathname: `/apps/${APP}/segments`, environmentId: ENV },
+    operation: { id: "segments_list", appId: APP, environmentId: ENV },
+  },
+  segments_create: {
+    route: { method: "POST", pathname: `/apps/${APP}/segments`, environmentId: ENV },
+    operation: { id: "segments_create", appId: APP, environmentId: ENV },
+  },
+  segments_get: {
+    route: { method: "GET", pathname: `/apps/${APP}/segments/segment_1`, environmentId: ENV },
+    operation: { id: "segments_get", appId: APP, environmentId: ENV, segmentId: "segment_1" },
+  },
+  segments_update: {
+    route: { method: "PATCH", pathname: `/apps/${APP}/segments/segment_1`, environmentId: ENV },
+    operation: { id: "segments_update", appId: APP, environmentId: ENV, segmentId: "segment_1" },
+  },
+  segments_delete: {
+    route: { method: "DELETE", pathname: `/apps/${APP}/segments/segment_1`, environmentId: ENV },
+    operation: { id: "segments_delete", appId: APP, environmentId: ENV, segmentId: "segment_1" },
+  },
   overview_get: {
     route: { method: "GET", pathname: `/control-panel/apps/${APP}/envs/${ENV}/overview` },
     operation: { id: "overview_get", appId: APP, environmentId: ENV },
@@ -191,9 +221,9 @@ describe("control-panel operation wiring", () => {
     route,
     operation,
   }) => {
-    expect(parseControlPanelOperation(route.method, route.pathname, route.environmentId)).toEqual(
-      operation,
-    );
+    expect(
+      parseControlPanelOperation(route.method, route.pathname, route.environmentId, route.search),
+    ).toEqual(operation);
   });
 
   it.each(COVERAGE)("%s has a predicate that accepts its claim", (_id, { operation }) => {

@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "ignoreDeprecations": "6.0",
+    "rootDir": ".."
+  },
+  "include": [
+    "src/contract-surface-assignability.ts",
+    "scripts/contract-surface-types.ts",
+    "scripts/generated/contract-surface-members.ts",
+    "scripts/contract-surface-descriptors.ts",
+    "../contracts/src/**/*.ts"
+  ]
+}

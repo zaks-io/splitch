@@ -34,6 +34,17 @@ export const AppParams = z.object({ appId: z.string() });
 export const OrgAppsParams = z.object({ orgId: z.string() });
 export const EnvParams = z.object({ appId: z.string(), environmentId: z.string() });
 export const FlagParams = z.object({ appId: z.string(), flagId: z.string() });
+/**
+ * `flags_get` path segment is always a selector string; `by` says how to resolve
+ * it. Default `id` keeps the canonical-id lookup exact. `key` is the explicit
+ * keyed read the Panel uses past the catalog list ceiling (SPL-236) — never
+ * overload one segment with both meanings.
+ */
+export const FlagGetQuerySchema = z
+  .object({
+    by: z.enum(["id", "key"]).optional(),
+  })
+  .strict();
 export const FlagVariantParams = z.object({
   appId: z.string(),
   flagId: z.string(),
@@ -210,6 +221,7 @@ export const CreateSegmentRequestSchema = z.object({
   conditions: z.array(ConditionSchema).min(1),
   idempotency_key: z.string().optional(),
 });
+export type CreateSegmentRequest = z.infer<typeof CreateSegmentRequestSchema>;
 
 export const PatchSegmentRequestSchema = z
   .object({
@@ -220,6 +232,7 @@ export const PatchSegmentRequestSchema = z
     idempotency_key: z.string().min(1).optional(),
   })
   .strict();
+export type PatchSegmentRequest = z.infer<typeof PatchSegmentRequestSchema>;
 
 // ---------------------------------------------------------------------------
 // SDK credentials — client-key patch + api-key create/revoke bodies.

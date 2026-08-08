@@ -33,6 +33,16 @@ export const FrozenControlIdentitySchema = z.discriminatedUnion("state", [
     .strict(),
   z
     .object({
+      state: z.literal("disagreement"),
+      variantId: z.string().min(1),
+      /** The frozen Run Control identity shown in the integrity warning. */
+      variant: z.string().min(1),
+      /** The Run Snapshot Control that anchors lift in `stats`. */
+      analysisVariant: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
       state: z.literal("unresolvable"),
       variantId: z.string().min(1),
       reason: UnresolvableControlReasonSchema,
@@ -44,6 +54,11 @@ export const FrozenControlIdentitySchema = z.discriminatedUnion("state", [
 
 export type UnresolvableControlReason = z.infer<typeof UnresolvableControlReasonSchema>;
 export type FrozenControlIdentity = z.infer<typeof FrozenControlIdentitySchema>;
+
+export const unresolvableControlReasonMessages: Record<UnresolvableControlReason, string> = {
+  absent_from_frozen_variant_set: "it is absent from the Variant set this Run froze",
+  unreadable_frozen_variant_set: "the frozen Variant set could not be read",
+};
 
 const FrozenVariantSetSchema = z.array(
   z.object({ id: z.string().min(1), name: z.string().min(1) }).loose(),
@@ -72,6 +87,19 @@ export function resolveFrozenControlIdentity(
     };
   }
   return { state: "frozen", variantId: controlVariantId, variant: control.name };
+}
+
+export function resolveAnalysisControlIntegrity(
+  control: FrozenControlIdentity,
+  analysisVariant: string,
+): FrozenControlIdentity {
+  if (control.state !== "frozen" || control.variant === analysisVariant) return control;
+  return {
+    state: "disagreement",
+    variantId: control.variantId,
+    variant: control.variant,
+    analysisVariant,
+  };
 }
 
 function readFrozenVariantSet(json: string): { id: string; name: string }[] | null {

@@ -1,4 +1,4 @@
-import { createPanelSegmentsClient } from "@splitch/control-plane-sdk";
+import { createPanelSegmentsClient } from "@splitch/control-plane-sdk/panel-segments";
 import {
   type ControlPanelActor,
   type DelegationOptions,

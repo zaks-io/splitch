@@ -100,6 +100,23 @@ describe("ConditionSchema", () => {
   it("rejects missing required fields", () => {
     expect(ConditionSchema.safeParse({ operator: "eq", value: 1 }).success).toBe(false);
   });
+
+  it("rejects null or object elements inside an array Condition value", () => {
+    expect(
+      ConditionSchema.safeParse({
+        attribute: "plan",
+        operator: "in",
+        value: [null, "paid"],
+      }).success,
+    ).toBe(false);
+    expect(
+      ConditionSchema.safeParse({
+        attribute: "plan",
+        operator: "in",
+        value: [{ nested: true }],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("PercentageRolloutSchema", () => {

@@ -129,6 +129,51 @@ describe("Control Panel delegation", () => {
   });
 });
 
+describe("Control Panel flag_get delegation binding", () => {
+  it("rejects a flag_get delegation for a different Flag or selector mode", async () => {
+    const request = new Request("https://control-plane.internal/apps/app_1/flags/checkout?by=key");
+    const url = new URL(request.url);
+    const operation = parseControlPanelOperation("GET", url.pathname, "env_1", url.searchParams);
+    const otherFlagOperation = parseControlPanelOperation(
+      "GET",
+      "/apps/app_1/flags/other-checkout",
+      "env_1",
+      "by=key",
+    );
+    const otherModeOperation = parseControlPanelOperation(
+      "GET",
+      "/apps/app_1/flags/checkout",
+      "env_1",
+      "by=id",
+    );
+    expect(operation).toEqual({
+      id: "flag_get",
+      appId: "app_1",
+      environmentId: "env_1",
+      flagId: "checkout",
+      by: "key",
+    });
+    expect(otherFlagOperation).not.toBeNull();
+    expect(otherModeOperation).not.toBeNull();
+    if (!operation || !otherFlagOperation || !otherModeOperation) {
+      throw new Error("expected flag_get operations");
+    }
+
+    const delegation = await issueControlPanelDelegation(request, operation, "user_1", SECRET, {
+      nowSeconds: NOW,
+      sessionExpiresAt: NOW + 30,
+      nonce: "nonce_flag_get_1234567890",
+    });
+
+    await expect(
+      verifyControlPanelDelegation(delegation, request, otherFlagOperation, SECRET, NOW),
+    ).resolves.toBeNull();
+    await expect(
+      verifyControlPanelDelegation(delegation, request, otherModeOperation, SECRET, NOW),
+    ).resolves.toBeNull();
+  });
+});
+
 describe("Control Panel operation allowlist", () => {
   it("parses the App, Experiment, and Flag operations", () => {
     expect(parseControlPanelOperation("POST", "/orgs/org_1/apps")).toEqual({
@@ -171,6 +216,19 @@ describe("Control Panel operation allowlist", () => {
       environmentId: "env_1",
     });
     expect(parseControlPanelOperation("PATCH", "/apps/app_1/flags", "env_1")).toBeNull();
+    expect(
+      parseControlPanelOperation("GET", "/apps/app_1/flags/checkout", "env_1", "by=key"),
+    ).toEqual({
+      id: "flag_get",
+      appId: "app_1",
+      environmentId: "env_1",
+      flagId: "checkout",
+      by: "key",
+    });
+    expect(parseControlPanelOperation("GET", "/apps/app_1/flags/checkout", "env_1")).toBeNull();
+    expect(
+      parseControlPanelOperation("GET", "/apps/app_1/flags/checkout", "env_1", "by=name"),
+    ).toBeNull();
     expect(parseControlPanelOperation("GET", "/apps/app_1/envs/env_1/flags/flag_1/config")).toEqual(
       {
         id: "flag_config_get",
@@ -212,6 +270,41 @@ describe("Control Panel operation allowlist", () => {
     });
     expect(parseControlPanelOperation("GET", "/apps/app_1/metrics")).toBeNull();
     expect(parseControlPanelOperation("PUT", "/apps/app_1/metrics/metric_1", "env_1")).toBeNull();
+  });
+
+  it("parses only the five scoped Segment operations", () => {
+    expect(parseControlPanelOperation("GET", "/apps/app_1/segments", "env_1")).toEqual({
+      id: "segments_list",
+      appId: "app_1",
+      environmentId: "env_1",
+    });
+    expect(parseControlPanelOperation("POST", "/apps/app_1/segments", "env_1")).toEqual({
+      id: "segments_create",
+      appId: "app_1",
+      environmentId: "env_1",
+    });
+    expect(parseControlPanelOperation("GET", "/apps/app_1/segments/segment_1", "env_1")).toEqual({
+      id: "segments_get",
+      appId: "app_1",
+      environmentId: "env_1",
+      segmentId: "segment_1",
+    });
+    expect(parseControlPanelOperation("PATCH", "/apps/app_1/segments/segment_1", "env_1")).toEqual({
+      id: "segments_update",
+      appId: "app_1",
+      environmentId: "env_1",
+      segmentId: "segment_1",
+    });
+    expect(parseControlPanelOperation("DELETE", "/apps/app_1/segments/segment_1", "env_1")).toEqual(
+      {
+        id: "segments_delete",
+        appId: "app_1",
+        environmentId: "env_1",
+        segmentId: "segment_1",
+      },
+    );
+    expect(parseControlPanelOperation("GET", "/apps/app_1/segments")).toBeNull();
+    expect(parseControlPanelOperation("PUT", "/apps/app_1/segments/segment_1", "env_1")).toBeNull();
   });
 });
 

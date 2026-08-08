@@ -49,6 +49,13 @@ Invariant: exactly one Variant is the Default Variant; every Variant `value` sat
 
 Returns: full Flag definition (catalog Variants + schema). No per-Environment config.
 
+`{flag_id}` is the Flag's **canonical id**. Key lookup is an explicit query on the
+same route: `GET /apps/{app_id}/flags/{selector}?by=key`. `by` accepts `id`
+(default) and `key`. The catalog list is bounded; `?by=key` is the exact path
+that keeps a Flag reachable in the Panel when it is past that ceiling. A key
+that only exists in another App is `FLAG_NOT_FOUND` under this App (the App
+scope is the isolation boundary). Write routes stay id-only.
+
 ### `PATCH /apps/{app_id}/flags/{flag_id}`
 
 Body: `{ name?, description?, schema? }`. Does NOT accept `variants` or `enabled`.

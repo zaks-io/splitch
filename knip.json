@@ -5,11 +5,12 @@
   "stryker": {
     "config": ["stryker.base.mjs", "packages/*/stryker.config.mjs"]
   },
-  "ignore": [".agents/**", ".claude/**"],
+  "ignore": [".agents/**", ".claude/**", "fixtures/convex-sdk-consumer/**"],
   "workspaces": {
     ".": {
       "entry": [
         "scripts/check-cli-mcp-parity.ts",
+        "scripts/lib/repo-file-sweep.d.mts",
         "scripts/release/check-published-version.mjs",
         "scripts/release/constants.mjs",
         "fixtures/external-dark-launch-product/resolve.mjs"
@@ -27,6 +28,9 @@
     },
     "packages/contracts": {
       "entry": ["src/sdk-data-plane-surface.ts", "src/leaves/**/*.ts"]
+    },
+    "packages/sdk": {
+      "entry": ["src/contract-surface-assignability.ts"]
     },
     "apps/cli": {
       "ignoreDependencies": ["@hono/zod-openapi", "@sentry/node", "tsx"]

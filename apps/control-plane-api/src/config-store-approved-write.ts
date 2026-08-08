@@ -40,13 +40,14 @@ export async function applyApprovedFlagConfig(
   const frozen = await approvedProposalFreeze(deps, input);
   if (frozen) return frozen;
 
-  // Write only fields the request's own entries move. Production writers bump
-  // `flag_configs.version`, so a post-mint direct PATCH makes the Request stale
-  // before apply (`approval-service` target hash). The gate still matters for the
-  // TOCTOU window between that staleness read and this function's independent
-  // re-read: `updateFlagConfig` CASes the version it just read, not the approved
-  // version, so a concurrent PATCH in that window is invisible to staleness and
-  // would otherwise overwrite live frozen fields from mint-time `proposed`.
+  // Write only fields the Request's own entries move. The Approval target hash
+  // treats `flagConfigVersion` as the whole Flag Configuration content signal,
+  // and every production writer bumps it, so a normal PATCH landing before the
+  // staleness read makes the Request stale. This is defense in depth for the
+  // TOCTOU window after that read but before this function's independent re-read:
+  // `updateFlagConfig` CASes the version it just read, not the approved version,
+  // so a concurrent PATCH still satisfies CAS and must not be overwritten from
+  // the mint-time `proposed` snapshot.
   const patch = approvedConfigPatch(input);
   const rulesChanged = diffEntriesTouch(input.diffEntries, "targetingRules");
   if (!rulesChanged && !approvedPatchMovesConfig(patch)) {

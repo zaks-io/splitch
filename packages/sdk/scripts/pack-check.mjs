@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFileSync } from "node:child_process";
 import { readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +41,13 @@ try {
 } finally {
   rmSync(staging, { recursive: true, force: true });
 }
+
+// Per-entry browser budget (SPL-325). Runs after the tarball assertions so a
+// zero-dep pack failure stays the louder signal when both fail.
+execFileSync(process.execPath, [join(packageRoot, "scripts/size-check.mjs")], {
+  cwd: packageRoot,
+  stdio: "inherit",
+});
 
 // The no-mutation contract: packing must leave the live tree untouched.
 if (computeSourceDigest("sdk", repoRoot) !== digestBefore) {

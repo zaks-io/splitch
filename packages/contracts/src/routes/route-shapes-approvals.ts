@@ -49,6 +49,7 @@ export const approvalOperations = [
   "flags_delete",
   "segments_update",
   "experiments_start",
+  "experiment_winner_promote",
 ] as const;
 export const ApprovalOperationSchema = z.enum(approvalOperations);
 

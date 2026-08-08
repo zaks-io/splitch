@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { FlagDetailData } from "./flag-detail-data";
 import { flagDetailView as buildFlagDetailView, isLocked } from "./flag-detail-view";
 
-const NO_SEGMENTS = { items: [], affectedEnvironmentIds: {} };
+const NO_SEGMENTS = { items: [], unparseable: [], affectedEnvironmentIds: {} };
 
 function flagDetailView(data: FlagDetailData, env: string) {
   return buildFlagDetailView(data, env, NO_SEGMENTS);
@@ -87,6 +87,7 @@ describe("Flag detail view model", () => {
           updatedAt: "2026-08-07T00:00:00.000Z",
         },
       ],
+      unparseable: [],
       affectedEnvironmentIds: { segment_paid: ["env_dev"] },
     });
 

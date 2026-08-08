@@ -146,7 +146,7 @@ export function promptDescription(name: McpPromptName): string {
 
 export class PromptNotFoundError extends Error {
   constructor(name: string) {
-    super(`mcp-prompts: unknown prompt "${name}"`);
+    super(`Unknown prompt "${name}".`);
     this.name = "PromptNotFoundError";
   }
 }
@@ -169,7 +169,7 @@ export function message(role: "user" | "assistant", text: string): McpPromptMess
 export function requireString(args: Record<string, unknown>, name: string): string {
   const value = args[name];
   if (typeof value !== "string" || value.length === 0) {
-    throw new PromptArgumentError(`mcp-prompts: argument "${name}" is required`);
+    throw new PromptArgumentError(`Prompt argument "${name}" is required.`);
   }
   return value;
 }
