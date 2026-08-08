@@ -1,7 +1,9 @@
 /**
  * Hand-maintained zod-free mirrors of the contracts package authoring schemas.
- * Nothing generates this file (or `contract-surface-enums.ts`) from Zod —
- * tsup only bundles them. `contract-surface-parity.test.ts` is the only guard
+ * Nothing generates this file (or `contract-surface-enums.ts` /
+ * `contract-surface-descriptors.ts`) from Zod — tsup only bundles them.
+ * `contract-surface-parity.test.ts` (structural descriptors + fixtures) and
+ * `contract-surface-assignability.ts` (compile-time types) are the guards
  * keeping these mirrors honest.
  *
  * Accepted domain is JSON-only by construction today: every `parse()` call
@@ -9,6 +11,11 @@
  * public `./browser` subpath. `isVariantValue` is wider than `z.number()` /
  * `z.record()` (it accepts NaN, Infinity, Date, Map, class instances); that
  * gap is unreachable until a non-JSON caller appears.
+ *
+ * Response parsers strip unrecognized keys rather than rejecting them: an
+ * unknown key means the server is ahead of this mirror, not a malformed
+ * payload. Rejecting it would surface as SDK_TRANSPORT_PARSE and collapse
+ * every flag to the caller's default.
  */
 
 import {
@@ -17,14 +24,21 @@ import {
   type EvaluateAllEntry,
   type EvaluateAllReason,
   type EvaluateAllResponse,
+  errorCodes,
+  evaluateAllReasons,
   type PeekEvaluateResponse,
   type ResolutionDetails,
   type ResolutionReason,
-  type VariantValue,
-  errorCodes,
-  evaluateAllReasons,
   resolutionReasons,
+  type VariantValue,
 } from "./contract-surface-enums";
+import {
+  dataPlaneEvaluateKeys,
+  evaluateAllEntryKeys,
+  evaluateAllResponseKeys,
+  peekEvaluateKeys,
+  resolutionDetailsKeys,
+} from "./contract-surface-keys";
 
 export type {
   DataPlaneEvaluateResponse,
@@ -85,10 +99,28 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function assertExactKeys(value: Record<string, unknown>, allowed: readonly string[]): void {
-  for (const key of Object.keys(value)) {
-    if (!allowed.includes(key)) {
-      fail(`unexpected key ${JSON.stringify(key)}`);
+/** Pick known keys; ignore the rest (server-ahead forward compatibility). */
+function pickKnownKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (Object.hasOwn(value, key)) {
+      out[key] = value[key];
+    }
+  }
+  return out;
+}
+
+function requireKeys(
+  value: Record<string, unknown>,
+  required: readonly string[],
+  path: string,
+): void {
+  for (const key of required) {
+    if (!Object.hasOwn(value, key)) {
+      fail(`${path}: missing required key ${JSON.stringify(key)}`);
     }
   }
 }
@@ -162,25 +194,27 @@ function parseResolutionDetails(input: unknown): ResolutionDetails {
   if (!isPlainObject(input)) {
     fail("ResolutionDetails must be an object");
   }
-  const value = parseVariantValue(input.value, "value");
-  if (!(typeof input.variantName === "string" || input.variantName === null)) {
+  const picked = pickKnownKeys(input, resolutionDetailsKeys);
+  requireKeys(picked, ["value", "variantName", "reason"], "ResolutionDetails");
+  const value = parseVariantValue(picked.value, "value");
+  if (!(typeof picked.variantName === "string" || picked.variantName === null)) {
     fail("variantName must be string | null");
   }
-  if (typeof input.reason !== "string" || !resolutionReasonSet.has(input.reason)) {
+  if (typeof picked.reason !== "string" || !resolutionReasonSet.has(picked.reason)) {
     fail("invalid reason");
   }
-  const ruleId = readOptionalString(input, "ruleId");
-  const errorMessage = readOptionalString(input, "errorMessage");
-  if (input.errorCode !== undefined) {
-    ErrorCodeSchema.parse(input.errorCode);
+  const ruleId = readOptionalString(picked, "ruleId");
+  const errorMessage = readOptionalString(picked, "errorMessage");
+  if (picked.errorCode !== undefined) {
+    ErrorCodeSchema.parse(picked.errorCode);
   }
 
   const details: ResolutionDetails = {
     value,
-    variantName: input.variantName,
-    reason: input.reason as ResolutionReason,
+    variantName: picked.variantName,
+    reason: picked.reason as ResolutionReason,
     ...(ruleId !== undefined ? { ruleId } : {}),
-    ...(input.errorCode !== undefined ? { errorCode: input.errorCode as ErrorCode } : {}),
+    ...(picked.errorCode !== undefined ? { errorCode: picked.errorCode as ErrorCode } : {}),
     ...(errorMessage !== undefined ? { errorMessage } : {}),
   };
 
@@ -195,14 +229,12 @@ function parseDataPlaneEvaluateResponse(input: unknown): DataPlaneEvaluateRespon
   if (!isPlainObject(input)) {
     fail("DataPlaneEvaluateResponse must be an object");
   }
-  assertExactKeys(input, ["variant"]);
-  if (!("variant" in input)) {
-    fail("variant is required");
-  }
-  if (input.variant !== null && !isVariantValue(input.variant)) {
+  const picked = pickKnownKeys(input, dataPlaneEvaluateKeys);
+  requireKeys(picked, ["variant"], "DataPlaneEvaluateResponse");
+  if (picked.variant !== null && !isVariantValue(picked.variant)) {
     fail("variant must be VariantValue | null");
   }
-  return { variant: input.variant };
+  return { variant: picked.variant as VariantValue | null };
 }
 
 export const DataPlaneEvaluateResponseSchema: Schema<DataPlaneEvaluateResponse> = asSchema(
@@ -213,11 +245,9 @@ function parsePeekEvaluateResponse(input: unknown): PeekEvaluateResponse {
   if (!isPlainObject(input)) {
     fail("PeekEvaluateResponse must be an object");
   }
-  assertExactKeys(input, ["variant"]);
-  if (!("variant" in input)) {
-    fail("variant is required");
-  }
-  return { variant: parseVariantValue(input.variant, "variant") };
+  const picked = pickKnownKeys(input, peekEvaluateKeys);
+  requireKeys(picked, ["variant"], "PeekEvaluateResponse");
+  return { variant: parseVariantValue(picked.variant, "variant") };
 }
 
 export const PeekEvaluateResponseSchema: Schema<PeekEvaluateResponse> =
@@ -236,29 +266,30 @@ function parseEvaluateAllEntry(input: unknown, path: string): EvaluateAllEntry {
   if (!isPlainObject(input)) {
     fail(`${path} must be an object`);
   }
-  assertExactKeys(input, ["variant", "variantName", "reason", "errorCode", "exposureTicket"]);
-  if (input.variant !== null && !isVariantValue(input.variant)) {
+  const picked = pickKnownKeys(input, evaluateAllEntryKeys);
+  requireKeys(picked, evaluateAllEntryKeys, path);
+  if (picked.variant !== null && !isVariantValue(picked.variant)) {
     fail(`${path}.variant must be VariantValue | null`);
   }
-  if (!(typeof input.variantName === "string" || input.variantName === null)) {
+  if (!(typeof picked.variantName === "string" || picked.variantName === null)) {
     fail(`${path}.variantName must be string | null`);
   }
-  if (typeof input.reason !== "string" || !evaluateAllReasonSet.has(input.reason)) {
+  if (typeof picked.reason !== "string" || !evaluateAllReasonSet.has(picked.reason)) {
     fail(`${path}.reason is invalid`);
   }
-  if (input.errorCode !== null) {
-    ErrorCodeSchema.parse(input.errorCode);
+  if (picked.errorCode !== null) {
+    ErrorCodeSchema.parse(picked.errorCode);
   }
-  if (!(typeof input.exposureTicket === "string" || input.exposureTicket === null)) {
+  if (!(typeof picked.exposureTicket === "string" || picked.exposureTicket === null)) {
     fail(`${path}.exposureTicket must be string | null`);
   }
 
   const entry: EvaluateAllEntry = {
-    variant: input.variant,
-    variantName: input.variantName,
-    reason: input.reason as EvaluateAllReason,
-    errorCode: input.errorCode as ErrorCode | null,
-    exposureTicket: input.exposureTicket,
+    variant: picked.variant as VariantValue | null,
+    variantName: picked.variantName as string | null,
+    reason: picked.reason as EvaluateAllReason,
+    errorCode: picked.errorCode as ErrorCode | null,
+    exposureTicket: picked.exposureTicket as string | null,
   };
   assertEvaluateAllEntryRefinements(entry, path);
   return entry;
@@ -268,17 +299,18 @@ function parseEvaluateAllResponse(input: unknown): EvaluateAllResponse {
   if (!isPlainObject(input)) {
     fail("EvaluateAllResponse must be an object");
   }
-  assertExactKeys(input, ["evaluations"]);
-  if (!isPlainObject(input.evaluations)) {
+  const picked = pickKnownKeys(input, evaluateAllResponseKeys);
+  requireKeys(picked, ["evaluations"], "EvaluateAllResponse");
+  if (!isPlainObject(picked.evaluations)) {
     fail("evaluations must be an object");
   }
   // Write with defineProperty so a flag key of "__proto__" becomes an own
   // property instead of hitting Object.prototype.__proto__. The map keeps a
   // normal Object.prototype so Record consumers can call hasOwnProperty /
   // toString. (zod 4.4.3 drops the "__proto__" entry entirely — see the
-  // parity suite's divergence pin.)
+  // parity suite's divergence pin; Worker-side silent drop is SPL-353.)
   const evaluations: Record<string, EvaluateAllEntry> = {};
-  for (const [flagKey, entry] of Object.entries(input.evaluations)) {
+  for (const [flagKey, entry] of Object.entries(picked.evaluations)) {
     Object.defineProperty(evaluations, flagKey, {
       value: parseEvaluateAllEntry(entry, `evaluations.${flagKey}`),
       enumerable: true,

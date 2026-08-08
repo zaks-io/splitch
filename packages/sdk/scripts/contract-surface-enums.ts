@@ -1,8 +1,9 @@
 /**
  * Hand-maintained enum/type mirrors of the contracts package authoring schemas.
  * Nothing generates this file from Zod — the arrays below are literal retypes
- * of the contracts sources. `contract-surface-parity.test.ts` is the only
- * guard keeping them honest; tsup only bundles them into the public surface.
+ * of the contracts sources. Structural parity (`contract-surface-parity.test.ts`)
+ * and assignability (`contract-surface-assignability.ts`) keep them honest;
+ * tsup only bundles them into the public surface.
  */
 
 /** Mirrors contracts `error-code.ts` `errorCodes`. */
