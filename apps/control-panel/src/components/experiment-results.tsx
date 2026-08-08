@@ -1,7 +1,10 @@
 import type { FrozenControlIdentity } from "@splitch/contracts";
 import type { PanelExperimentResultsReady } from "@splitch/control-plane-sdk/panel-experiments";
 import { ExperimentResultsCiPlot } from "./experiment-results-ci-plot";
-import { baselineVariant, ExperimentResultsControlIntegrity } from "./experiment-results-control";
+import {
+  analysisControlVariant,
+  ExperimentResultsControlIntegrity,
+} from "./experiment-results-control";
 import { ExperimentResultsDecision } from "./experiment-results-decision";
 import { ExperimentResultsGuardrails } from "./experiment-results-guardrails";
 import { ExperimentResultsMetricsTable } from "./experiment-results-metrics-table";
@@ -17,7 +20,7 @@ import { ExperimentResultsSrm } from "./experiment-results-srm";
  */
 
 export function ExperimentResults({ results }: { results: PanelExperimentResultsReady }) {
-  const measurementAnchor = baselineVariant(results.control) ?? "an unidentified Control";
+  const measurementAnchor = analysisControlVariant(results.control);
   return (
     <section aria-labelledby="results-heading" className="grid gap-6">
       <header className="grid gap-1">

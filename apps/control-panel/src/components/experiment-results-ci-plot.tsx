@@ -14,7 +14,7 @@ import {
   VALUE_WIDTH,
 } from "./experiment-results-ci-plot-geometry";
 import { ArmRow, BaselineRow } from "./experiment-results-ci-plot-rows";
-import { baselineVariant } from "./experiment-results-control";
+import { analysisControlVariant, baselineVariant } from "./experiment-results-control";
 
 /**
  * Per-arm lift with its Confidence Interval, rendered for every Run state.
@@ -35,7 +35,7 @@ export function ExperimentResultsCiPlot({
   significance: ExperimentSignificanceDisplays;
 }) {
   const baseline = baselineVariant(control);
-  const measurementAnchor = baseline ?? "an unidentified Control";
+  const measurementAnchor = analysisControlVariant(control);
   if (results.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
@@ -150,11 +150,12 @@ function Legend({
   baselineDrawn: boolean;
 }) {
   const baseline = baselineVariant(control);
-  const baselineLegend = !baseline
-    ? "Baseline unidentified, so no arm is drawn at zero lift"
-    : baselineDrawn
-      ? `Baseline (${baseline}) at zero lift by definition`
-      : `Baseline (${baseline}) arm is missing from these results`;
+  const baselineLegend =
+    baseline === null
+      ? "No arm is drawn at zero lift because the Run's frozen Control cannot be identified"
+      : baselineDrawn
+        ? `Baseline (${baseline}) at zero lift by definition`
+        : `Baseline (${baseline}) arm is missing from these results`;
 
   return (
     <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-muted-foreground text-xs">

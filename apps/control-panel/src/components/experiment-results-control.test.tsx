@@ -38,6 +38,18 @@ function unresolvableHtml() {
   );
 }
 
+function visibleText(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replaceAll("&#x27;", "'")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 describe("ExperimentResults with an unidentifiable Control", () => {
   it("explains the unresolved Control and styles the recorded diagnostic value", () => {
     const html = unresolvableHtml();
@@ -54,33 +66,35 @@ describe("ExperimentResults with an unidentifiable Control", () => {
 
   it("keeps the numbers on the page and blocks only the decision", () => {
     const html = unresolvableHtml();
+    const text = visibleText(html);
 
     expect(html).toContain("+6.4%");
     expect(html).toContain("<svg");
     expect(html).toContain('data-testid="ship-blocked"');
-    expect(html).toContain("The numbers below are still shown");
-    expect(html).toContain(
-      'Every lift below is measured against <code class="font-mono text-foreground text-xs">control</code>, the Analysis Control.',
+    expect(text).toContain(
+      "The Run Snapshot written to the analytics store at Start recorded control as the Analysis Control. Every lift below is measured against that Variant.",
     );
-    expect(html).not.toContain("What cannot be shown is which arm they are measured against.");
-    expect(html).toContain(
-      "No arm below is marked as the baseline, and the ship decision is blocked. Start a new Run to get a Control that is frozen and validated.",
+    expect(text).toContain(
+      "The Run Snapshot names the Analysis Control, but it cannot establish the Run's own frozen Control. No arm below is marked as the baseline on the Snapshot alone, and the ship decision is blocked.",
     );
   });
 
-  it("marks no arm as the baseline rather than guessing one", () => {
+  it("names the Analysis Control throughout without marking it as the Run's baseline", () => {
     const html = unresolvableHtml();
+    const text = visibleText(html);
 
-    expect(html).toContain("Baseline unidentified");
-    expect(html).not.toContain("baseline, by definition");
-    expect(html).not.toContain("0% lift by definition");
-  });
-
-  it("says the baseline is unidentified everywhere it would have named it", () => {
-    const html = unresolvableHtml();
-
-    expect(html).toContain("an unidentified Control");
-    expect(html).not.toContain("against control,");
+    expect(text).toContain(
+      "Relative lift against control, with an always-valid confidence sequence.",
+    );
+    expect(text).toContain("Relative lift and confidence interval per arm, against control.");
+    expect(text).toContain("relative lift vs control (%)");
+    expect(html).toContain('aria-label="Relative lift with confidence intervals against control"');
+    expect(text).not.toContain("unidentified");
+    expect(text).toContain(
+      "No arm is drawn at zero lift because the Run's frozen Control cannot be identified",
+    );
+    expect(text).not.toContain("baseline, by definition");
+    expect(text).not.toContain("0% lift by definition");
   });
 });
 
