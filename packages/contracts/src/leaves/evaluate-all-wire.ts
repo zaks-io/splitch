@@ -19,7 +19,7 @@ const AttributeValueSchema = z.union([z.boolean(), z.string(), z.number(), z.arr
 
 const PROTO_KEY_MESSAGE = `must not contain a "${OWN_PROTO_KEY}" key`;
 
-/** Proto-safe attributes map (`preprocess → record` so OpenAPI keeps the record shape). */
+/** Proto-safe attributes map (`record` + refine so OpenAPI/CLI help keep the record shape). */
 export const EvaluateAllAttributesSchema = protoSafeRecord(AttributeValueSchema, PROTO_KEY_MESSAGE);
 
 export const EvaluateAllRequestSchema = z.object({
@@ -54,9 +54,9 @@ export type EvaluateAllEntry = z.infer<typeof EvaluateAllEntrySchema>;
 /**
  * Proto-safe evaluations map. Zod's `z.record` would otherwise silently drop a
  * JSON own `"__proto__"` Flag Key; the SDK contract-surface pack currently uses
- * this same schema and therefore rejects that key too. Built as
- * `preprocess → record` so the served OpenAPI document keeps the real
- * additionalProperties shape (not `{}`).
+ * this same schema and therefore rejects that key too. Built as `record` +
+ * refine so the served OpenAPI document keeps the real additionalProperties
+ * shape (not `{}`).
  */
 export const EvaluateAllEvaluationsSchema = protoSafeRecord(
   EvaluateAllEntrySchema,

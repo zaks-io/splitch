@@ -173,7 +173,7 @@ describe("describeRequestBody", () => {
     expect(() => describeRequestBody(schema)).toThrow(/unsupported Zod type/);
   });
 
-  it("unwraps preprocess→record attributes (proto-safe) to a Record label", () => {
+  it("keeps proto-safe attributes as a Record label (refine, not transform)", () => {
     const help = describeRequestBody(EvaluateAllRequestSchema);
     const attributes = help.fields.find((field) => field.name === "attributes");
     expect(attributes).toEqual(

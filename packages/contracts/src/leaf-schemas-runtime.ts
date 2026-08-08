@@ -42,7 +42,7 @@ export {
 
 const AttributeValueSchema = z.union([z.boolean(), z.string(), z.number(), z.array(z.unknown())]);
 
-/** Proto-safe attributes map (`preprocess → record` so OpenAPI keeps the record shape). */
+/** Proto-safe attributes map (`record` + refine so OpenAPI/CLI help keep the record shape). */
 const EvaluationAttributesSchema = protoSafeRecord(
   AttributeValueSchema,
   `must not contain a "${OWN_PROTO_KEY}" key`,
