@@ -148,6 +148,26 @@ const OPERATION_ROUTES: OperationCoverage = {
     route: { method: "DELETE", pathname: `/apps/${APP}/metrics/metric_1`, environmentId: ENV },
     operation: { id: "metrics_delete", appId: APP, environmentId: ENV, metricId: "metric_1" },
   },
+  segments_list: {
+    route: { method: "GET", pathname: `/apps/${APP}/segments`, environmentId: ENV },
+    operation: { id: "segments_list", appId: APP, environmentId: ENV },
+  },
+  segments_create: {
+    route: { method: "POST", pathname: `/apps/${APP}/segments`, environmentId: ENV },
+    operation: { id: "segments_create", appId: APP, environmentId: ENV },
+  },
+  segments_get: {
+    route: { method: "GET", pathname: `/apps/${APP}/segments/segment_1`, environmentId: ENV },
+    operation: { id: "segments_get", appId: APP, environmentId: ENV, segmentId: "segment_1" },
+  },
+  segments_update: {
+    route: { method: "PATCH", pathname: `/apps/${APP}/segments/segment_1`, environmentId: ENV },
+    operation: { id: "segments_update", appId: APP, environmentId: ENV, segmentId: "segment_1" },
+  },
+  segments_delete: {
+    route: { method: "DELETE", pathname: `/apps/${APP}/segments/segment_1`, environmentId: ENV },
+    operation: { id: "segments_delete", appId: APP, environmentId: ENV, segmentId: "segment_1" },
+  },
   overview_get: {
     route: { method: "GET", pathname: `/control-panel/apps/${APP}/envs/${ENV}/overview` },
     operation: { id: "overview_get", appId: APP, environmentId: ENV },

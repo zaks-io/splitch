@@ -196,6 +196,12 @@ export * from "./resource-delete-tree";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped resource envelope API
 export * from "./resource-envelopes";
 export {
+  type CreateSegmentRequest,
+  CreateSegmentRequestSchema,
+  type PatchSegmentRequest,
+  PatchSegmentRequestSchema,
+} from "./routes/route-shapes";
+export {
   type ApprovalApplicationResult,
   ApprovalApplicationResultSchema,
   type ApprovalRequest,

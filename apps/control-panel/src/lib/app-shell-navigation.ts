@@ -23,8 +23,7 @@ export const appSectionRegistry = [
     label: "Segments",
     to: "/$orgSlug/$appSlug/$env/segments",
     scope: "App-level",
-    status: "deferred",
-    hiddenBecause: "SPL-112 has not delivered the Segments screen; the route is status copy only.",
+    status: "shipped",
   },
   {
     label: "Metrics",
@@ -89,7 +88,8 @@ export function deferredDestinationAt(
   pathname: string,
   scope: UrlScope,
 ): NavigationDestination | undefined {
-  return appSectionRegistry.find((destination) => {
+  const destinations: readonly NavigationDestination[] = appSectionRegistry;
+  return destinations.find((destination) => {
     if (destination.status !== "deferred") {
       return false;
     }

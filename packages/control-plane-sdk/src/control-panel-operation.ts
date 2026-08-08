@@ -16,6 +16,9 @@
  * not a gap: see `organizations-client.ts`.
  */
 
+import { parseMetrics } from "./panel-metrics-parse.js";
+import { parseSegments } from "./panel-segments-parse.js";
+
 export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 
 export type ControlPanelOperation =
@@ -68,6 +71,8 @@ export type ControlPanelOperation =
       id:
         | "metrics_list"
         | "metrics_create"
+        | "segments_list"
+        | "segments_create"
         | "overview_get"
         | "settings_get"
         | "environment_update"
@@ -81,6 +86,12 @@ export type ControlPanelOperation =
       appId: string;
       environmentId: string;
       metricId: string;
+    }
+  | {
+      id: "segments_get" | "segments_update" | "segments_delete";
+      appId: string;
+      environmentId: string;
+      segmentId: string;
     }
   | {
       id: "api_key_revoke";
@@ -104,17 +115,6 @@ const TARGETING_RULES_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/t
 const FLAG_PROMOTE_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/promote\/?$/;
 const APPROVAL_REQUEST_PATH = /^\/apps\/([^/]+)\/approval-requests\/([^/]+)\/?$/;
 const APPROVAL_REVIEWS_PATH = /^\/apps\/([^/]+)\/approval-requests\/([^/]+)\/reviews\/?$/;
-const METRICS_PATH = /^\/apps\/([^/]+)\/metrics\/?$/;
-const METRIC_PATH = /^\/apps\/([^/]+)\/metrics\/([^/]+)\/?$/;
-const METRIC_COLLECTION_METHODS = {
-  GET: "metrics_list",
-  POST: "metrics_create",
-} as const;
-const METRIC_RESOURCE_METHODS = {
-  GET: "metrics_get",
-  PATCH: "metrics_update",
-  DELETE: "metrics_delete",
-} as const;
 const OVERVIEW_PATH = /^\/control-panel\/apps\/([^/]+)\/envs\/([^/]+)\/overview\/?$/;
 const SETTINGS_PATH = /^\/control-panel\/apps\/([^/]+)\/envs\/([^/]+)\/settings\/?$/;
 const ENVIRONMENT_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/?$/;
@@ -137,7 +137,8 @@ export function parseControlPanelOperation(
     parseConfig(method, pathname) ??
     parseApproval(method, pathname) ??
     parseEnvironmentSettings(method, pathname) ??
-    parseMetrics(method, pathname, panelEnvironmentId)
+    parseMetrics(method, pathname, panelEnvironmentId) ??
+    parseSegments(method, pathname, panelEnvironmentId)
   );
 }
 
@@ -257,45 +258,6 @@ function parseApproval(method: string, pathname: string): ControlPanelOperation 
     return appId && approvalRequestId ? { id, appId, approvalRequestId } : null;
   }
   return null;
-}
-
-function parseMetrics(
-  method: string,
-  pathname: string,
-  environmentValue?: string,
-): ControlPanelOperation | null {
-  const environmentId = environmentValue ? decodeSegment(environmentValue) : null;
-  if (!environmentId) return null;
-  return (
-    parseMetricCollection(method, pathname, environmentId) ??
-    parseMetricResource(method, pathname, environmentId)
-  );
-}
-
-function parseMetricCollection(
-  method: string,
-  pathname: string,
-  environmentId: string,
-): ControlPanelOperation | null {
-  const id = METRIC_COLLECTION_METHODS[method as keyof typeof METRIC_COLLECTION_METHODS];
-  const appId = decodeMatch(pathname.match(METRICS_PATH), 1);
-  return id && appId ? { id, appId, environmentId } : null;
-}
-
-function parseMetricResource(
-  method: string,
-  pathname: string,
-  environmentId: string,
-): ControlPanelOperation | null {
-  const id = METRIC_RESOURCE_METHODS[method as keyof typeof METRIC_RESOURCE_METHODS];
-  const resource = pathname.match(METRIC_PATH);
-  const appId = decodeMatch(resource, 1);
-  const metricId = decodeMatch(resource, 2);
-  return id && appId && metricId ? { id, appId, environmentId, metricId } : null;
-}
-
-function decodeMatch(match: RegExpMatchArray | null, index: number): string | null {
-  return match?.[index] ? decodeSegment(match[index]) : null;
 }
 
 function parseEnvironmentSettings(method: string, pathname: string): ControlPanelOperation | null {
