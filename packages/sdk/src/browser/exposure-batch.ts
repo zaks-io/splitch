@@ -19,7 +19,7 @@ export function takeBatch(pending: QueuedExposure[]): QueuedExposure[] {
 }
 
 /** How many leading pending items fit under both batch caps. */
-export function batchEndIndex(pending: readonly QueuedExposure[]): number {
+function batchEndIndex(pending: readonly QueuedExposure[]): number {
   let end = 0;
   let bytes = bodyPrefixBytes();
   for (const next of pending) {
