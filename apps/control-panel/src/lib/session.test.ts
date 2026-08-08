@@ -155,6 +155,8 @@ describe("OAuth state cookie", () => {
     expect(state.cookie).toContain(`${OAUTH_STATE_COOKIE_NAME}=spl_`);
     expect(state.cookie).toContain("HttpOnly");
     expect(state.cookie).toContain("Secure");
+    expect(state.cookie).toContain("SameSite=Lax");
+    expect(state.cookie).toContain("Path=/");
     expect(state.cookie).not.toContain("checkout-api");
 
     const request = new Request(`https://app.splitch.dev/auth/callback?state=${state.state}`, {
