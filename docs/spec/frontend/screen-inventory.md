@@ -100,11 +100,15 @@ because that data exists from day one and is the customer's central question; th
 the visibly-deferred stub** (the `stripe_*` seam columns exist, integration deferred —
 organization-and-membership.md).
 
-- **Usage (real, v1):** current month's Evaluation consumption against the monthly allowance; the
-  **quota state** — **Active / Grace / Exhausted** (ADR-0033) — shown loudly, since Grace and
-  Exhausted are real runtime states where the data plane is about to or already does reject
-  Evaluations. The **usage breakdown** ADR-0033 mandates (by App, by Environment, batch-vs-single,
-  remote-vs-cached, Exposure-bearing-vs-not) as reporting dimensions — _not_ separate meters.
+- **Usage (real, v1):** current month's Evaluation consumption, with the **usage breakdown**
+  ADR-0033 mandates (by App, by Environment, by Flag, by SDK/runtime, batch-vs-single,
+  remote-vs-cached, Exposure-bearing-vs-not) as reporting dimensions — _not_ separate meters. Every
+  dimension is measured against the month's own total, never rebased to the largest row on screen.
+- **Quota (deferred, stated):** the allowance and its **Active / Grace / Exhausted** states
+  (ADR-0033) are real runtime states of an enforcement path that does not run yet, so the screen
+  says the limit is not enforced instead of naming a state it cannot observe. The month's number is
+  a total, not a balance. When enforcement lands, this screen shows the allowance and the state
+  loudly — claiming either before then would be the fake status ADR-0036 forbids.
 - **Payment (stubbed, loud):** plan, payment method, invoices render a "managed by your account team /
   coming soon" state backed by the present-but-unwired `stripe_*` seam. Stubbed visibly, never faked.
 - **Role gate:** "Manage billing/plan" is **owner only**; admin/member see usage read-only.

@@ -182,12 +182,21 @@ async function resolvePanelPrincipal(
   ) {
     return null;
   }
+  return resolveDelegatedPrincipal(operation, delegation.actorId, panelAccess);
+}
+
+/** Authority for a verified delegation, by what the operation names. */
+async function resolveDelegatedPrincipal(
+  operation: NonNullable<ReturnType<typeof parseControlPanelBindingOperation>>,
+  actorId: string,
+  panelAccess?: PanelSessionAccess,
+) {
   if (operation.id === "apps_create") {
     return {
       ok: true as const,
       principal: {
         kind: "control-plane-token" as const,
-        id: delegation.actorId,
+        id: actorId,
         // This ceiling scope binds the delegated path; the handler still rechecks
         // the actor's live owner/admin role in D1 before creating the App.
         scopes: [`org:${operation.orgId}:owner`],
@@ -197,6 +206,9 @@ async function resolvePanelPrincipal(
         authDoor: PANEL_AUTH_DOOR,
       },
     };
+  }
+  if (operation.id === "organization_usage_get") {
+    return resolvePanelOrgPrincipal(operation.orgId, actorId, panelAccess);
   }
   // Unbound operations name no resource, so there is nothing to derive authority
   // from and nothing to co-scope against. The principal carries the actor and an
@@ -213,7 +225,7 @@ async function resolvePanelPrincipal(
       ok: true as const,
       principal: {
         kind: "control-plane-token" as const,
-        id: delegation.actorId,
+        id: actorId,
         scopes: [],
         orgId: null,
         appId: null,
@@ -223,7 +235,7 @@ async function resolvePanelPrincipal(
     };
   }
 
-  return resolvePanelResourcePrincipal(operation, delegation.actorId, panelAccess);
+  return resolvePanelResourcePrincipal(operation, actorId, panelAccess);
 }
 
 async function resolveBoundedPanelSessionPrincipal(
@@ -253,6 +265,43 @@ async function resolveBoundedPanelSessionPrincipal(
   };
 }
 
+/**
+ * Authority for an Organization-scoped Panel read. Unlike `apps_create`, the
+ * claimed `orgId` is never taken as the binding on its own: the read leaves this
+ * Worker over a service binding, so the Org membership is checked in live D1
+ * here and a non-member is refused before any Analysis hop.
+ */
+async function resolvePanelOrgPrincipal(
+  orgId: string,
+  actorId: string,
+  panelAccess?: PanelSessionAccess,
+) {
+  const access = await panelAccess?.authorizeOrg(actorId, orgId);
+  if (!access) {
+    return {
+      ok: false as const,
+      reason: "UNAUTHORIZED" as const,
+      error: {
+        code: "FORBIDDEN" as const,
+        message: "live Organization membership is required",
+        details: {},
+      },
+    };
+  }
+  return {
+    ok: true as const,
+    principal: {
+      kind: "control-plane-token" as const,
+      id: actorId,
+      scopes: [`org:${access.orgId}:${access.orgRole}`],
+      orgId: access.orgId,
+      appId: null,
+      environmentId: null,
+      authDoor: PANEL_AUTH_DOOR,
+    },
+  };
+}
+
 async function resolvePanelResourcePrincipal(
   operation: Exclude<
     ReturnType<typeof parseControlPanelBindingOperation>,
@@ -262,6 +311,7 @@ async function resolvePanelResourcePrincipal(
         | "experiments_detail"
         | "experiments_list"
         | "experiments_results"
+        | "organization_usage_get"
         | "organizations_create";
     } | null
   >,

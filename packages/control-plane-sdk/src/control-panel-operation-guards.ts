@@ -56,6 +56,7 @@ type ClaimGuard = (value: Record<string, unknown>) => boolean;
  */
 const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard>([
   ["apps_create", (value) => isResourceOperation(value, "orgId")],
+  ["organization_usage_get", (value) => isResourceOperation(value, "orgId")],
   ["app_attention_rollup_get", (value) => isResourceOperation(value, "appId")],
   ["api_key_revoke", isApiKeyRevokeOperation],
   ...family(UNBOUND_OPERATION_IDS, (value) => hasKeys(value, ["id"])),
@@ -75,7 +76,7 @@ export function isControlPanelOperation(value: unknown): value is ControlPanelOp
   return CLAIM_GUARDS.get(value.id)?.(value) ?? false;
 }
 
-/** Operations named by exactly one resource id: apps_create (Org) and the App rollup. */
+/** Operations named by exactly one resource id: the two Org-named ones and the App rollup. */
 function isResourceOperation(value: Record<string, unknown>, key: string): boolean {
   return hasKeys(value, ["id", key]) && isNonEmptyString(value[key]);
 }
