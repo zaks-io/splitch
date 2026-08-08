@@ -204,7 +204,7 @@ function captureResponse(
   };
 }
 
-function baseExposure(): ExposurePayload {
+export function baseExposure(): ExposurePayload {
   return {
     dedupKey: "client_dedup_key_is_ignored",
     eventId: "evt_retry_1",

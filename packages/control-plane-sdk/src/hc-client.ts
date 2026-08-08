@@ -3,6 +3,7 @@ import type {
   AppsControlPlaneClientApp,
   CredentialsControlPlaneClientApp,
   EnvironmentsControlPlaneClientApp,
+  EventDefinitionsControlPlaneClientApp,
   ExperimentsControlPlaneClientApp,
   FlagsControlPlaneClientApp,
   OrganizationsControlPlaneClientApp,
@@ -34,6 +35,15 @@ export type EnvironmentsHcClient = ReturnType<typeof createEnvironmentsHcClient>
 /** Hono `hc` client over the SDK credential emit-only app type. */
 export type CredentialsHcClient = ReturnType<typeof createCredentialsHcClient>;
 export type ApprovalsHcClient = ReturnType<typeof createApprovalsHcClient>;
+export type EventDefinitionsHcClient = ReturnType<typeof createEventDefinitionsHcClient>;
+
+export function createEventDefinitionsHcClient(options: ControlPlaneHcOptions) {
+  const headers = options.authorization ? { authorization: options.authorization } : undefined;
+  return hc<EventDefinitionsControlPlaneClientApp>(options.baseUrl, {
+    fetch: options.fetch,
+    ...(headers ? { headers } : {}),
+  });
+}
 
 export function createEnvironmentsHcClient(options: ControlPlaneHcOptions) {
   const headers = options.authorization ? { authorization: options.authorization } : undefined;

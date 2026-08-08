@@ -84,13 +84,13 @@ async function handleRequest(
       ),
     );
   }
-
   const saltStore = makeEnvSaltStore(env);
   const app = createApp({
     door: authority ? "binding" : "public",
     authResolver: requestAuthResolver(env, url, authority),
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(env.CREDENTIAL_STORE),
     rateLimiter: allowLimiter,
+    delegationBindings: { "event-ingest-api": env.EVENT_INGEST },
     provider: new KvProvider(env.CONFIG_STORE),
     assignmentStore: new KvAssignmentStore(
       env.ASSIGNMENTS_KV,

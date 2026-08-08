@@ -59,7 +59,7 @@ export type MetricRef = z.infer<typeof MetricRefSchema>;
 // ---------------------------------------------------------------------------
 // Metric
 //
-// `eventValueField` is required for count/revenue (the field summed per Entity);
+// `eventFieldName` is required for count/revenue (the field summed per Entity);
 // `denominator` is required for ratio (numerator/denominator per Entity). Both
 // are otherwise null. Conditionals are enforced loudly at parse time.
 //
@@ -78,8 +78,8 @@ const BaseMetricSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   kind: MetricKindSchema,
-  eventName: z.string(),
-  eventValueField: z.string().nullable().optional(),
+  eventDefinitionId: z.string(),
+  eventFieldName: z.string().nullable().optional(),
   denominator: MetricRefSchema.nullable().optional(),
   downsideThresholdPct: z.number().nullable().optional(),
   winsorize: z.boolean().nullable().optional(),
@@ -92,11 +92,11 @@ const BaseMetricSchema = z.object({
 export const MetricSchema = BaseMetricSchema.refine(
   (m) => {
     if (m.kind === "count" || m.kind === "revenue") {
-      return typeof m.eventValueField === "string";
+      return typeof m.eventFieldName === "string";
     }
     return true;
   },
-  { message: "metric kind 'count' / 'revenue' requires eventValueField" },
+  { message: "metric kind 'count' / 'revenue' requires eventFieldName" },
 ).refine(
   (m) => {
     if (m.kind === "ratio") {

@@ -99,11 +99,29 @@ export interface CachedEvaluationTelemetry {
   readonly idempotencyKey: string;
 }
 
+export interface TrackRequest {
+  readonly eventName: string;
+  readonly targetingKey: string;
+  readonly idType: string;
+  readonly eventId: string;
+  readonly fields: Readonly<Record<string, unknown>>;
+  readonly dimensions: Readonly<Record<string, boolean | string | number>>;
+}
+
+export interface TrackResult extends TransportFailure {
+  readonly accepted: boolean;
+  readonly eventId: string | null;
+  readonly eventDefinitionId: string | null;
+  readonly eventDefinitionVersionId: string | null;
+  readonly duplicate: boolean;
+}
+
 export interface Transport {
   evaluate(request: TransportRequest): Promise<TransportResult>;
   peek(request: TransportRequest): Promise<TransportResult>;
   verify(request: TransportRequest): Promise<VerifyTransportResult>;
   evaluateAll(request: EvaluateAllTransportRequest): Promise<EvaluateAllTransportResult>;
+  track(request: TrackRequest): Promise<TrackResult>;
   /** Best-effort non-billable telemetry for a local cache result. */
   recordCachedEvaluation?(event: CachedEvaluationTelemetry): Promise<void>;
 }

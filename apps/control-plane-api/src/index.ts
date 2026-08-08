@@ -165,6 +165,7 @@ async function handleRequest(
     credentialStore: env.CREDENTIAL_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
     configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
+    eventDefinitionStore: env.CONFIG_STORE,
     runSnapshotDelivery: {
       ...runSnapshotDeliveryFromEnv(env),
       onFault: (detail) => reportRunSnapshotFault(env, ctx, detail),

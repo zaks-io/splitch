@@ -16,6 +16,7 @@
  * not a gap: see `organizations-client.ts`.
  */
 
+import { parseEventDefinitionOperation } from "./control-panel-event-definition-operation";
 import { parseFlags } from "./control-panel-operation-flags";
 import { parseMetrics } from "./panel-metrics-parse.js";
 import { parseSegments } from "./panel-segments-parse.js";
@@ -108,6 +109,28 @@ export type ControlPanelOperation =
       environmentId: string;
     }
   | {
+      id: "event_definitions_list" | "event_definitions_create";
+      appId: string;
+      environmentId: string;
+    }
+  | {
+      id:
+        | "event_definitions_get"
+        | "event_definitions_update"
+        | "event_definition_versions_create"
+        | "event_definition_versions_list";
+      appId: string;
+      environmentId: string;
+      eventDefinitionId: string;
+    }
+  | {
+      id: "event_definition_versions_get";
+      appId: string;
+      environmentId: string;
+      eventDefinitionId: string;
+      versionId: string;
+    }
+  | {
       id: "metrics_get" | "metrics_update" | "metrics_delete";
       appId: string;
       environmentId: string;
@@ -178,7 +201,8 @@ export function parseControlPanelOperation(
     parseApproval(method, pathname) ??
     parseEnvironmentSettings(method, pathname) ??
     parseMetrics(method, pathname, panelEnvironmentId) ??
-    parseSegments(method, pathname, panelEnvironmentId)
+    parseSegments(method, pathname, panelEnvironmentId) ??
+    parseEventDefinitionOperation(method, pathname, panelEnvironmentId)
   );
 }
 
