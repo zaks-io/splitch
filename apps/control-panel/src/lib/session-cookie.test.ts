@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createOAuthState, OAUTH_STATE_COOKIE_NAME } from "./oauth-state";
 import { createSession, SESSION_COOKIE_NAME } from "./session";
-import { PANEL_COOKIE_PROTECTIVE_ATTRIBUTES, serializeHttpOnlyCookie } from "./session-cookie";
+import { PANEL_COOKIE_ATTRIBUTES, serializeHttpOnlyCookie } from "./session-cookie";
 import { MemoryKv, NOW, sessionPrincipal } from "./session-test-harness";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
@@ -12,13 +12,11 @@ const SRC = fileURLToPath(new URL("..", import.meta.url));
 /**
  * Cookie-authenticated panel writes that ride the session cookie.
  *
- * Form POSTs have no CSRF token and no TanStack Origin check — they rest on
- * `SameSite=Lax` alone (see `session-cookie.ts`). `createServerFn` POSTs get
- * TanStack's Origin/Sec-Fetch-Site middleware in addition, but still depend on
- * the same cookie attributes if that layer is disabled or bypassed.
+ * Form POSTs require same-origin Origin (`panel-csrf.ts`) — SameSite=Lax alone
+ * is a site boundary and insufficient across *.splitch.dev. createServerFn
+ * POSTs require TanStack CSRF middleware from `src/start.ts`.
  *
- * Adding a new surface here is the review gate: update this list in the same
- * change that introduces the write, and re-read the CSRF comment in
+ * Adding a new surface: update this list in the same change and re-read
  * `session-cookie.ts`.
  */
 const FORM_POST_COOKIE_AUTHENTICATED_WRITES = [
@@ -38,11 +36,6 @@ const CREATE_SERVER_FN_POST_WRITES = [
   "lib/control-plane-verify-functions.ts",
 ] as const;
 
-/** Session is loaded in-file or via the shared authorized-* client helpers. */
-function usesSessionCookie(source: string): boolean {
-  return /loadSessionFromRequest|authorizedFlagsClient|authorizedApprovalsClient/.test(source);
-}
-
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
     const path = join(dir, entry);
@@ -60,29 +53,67 @@ function code(source: string): string {
   return source.replaceAll(/\/\*[\s\S]*?\*\//g, "").replaceAll(/^[ \t]*\/\/.*$/gm, "");
 }
 
-function assertProtectiveAttributes(cookie: string, label: string): void {
-  for (const attribute of PANEL_COOKIE_PROTECTIVE_ATTRIBUTES) {
-    expect(
-      cookie,
-      `${label}: weakening ${attribute} removes the panel CSRF/session protection`,
-    ).toContain(attribute);
-  }
-  expect(cookie, `${label}: SameSite=None would make every panel write forgeable`).not.toMatch(
+/** Hardcoded expected attributes — not the constant under test (B6). */
+function assertCookieAttributes(cookie: string, cookieName: string): void {
+  expect(cookie, `${cookieName}: must be HttpOnly`).toContain("HttpOnly");
+  expect(cookie, `${cookieName}: must be Secure`).toContain("Secure");
+  expect(cookie, `${cookieName}: must be SameSite=Lax (site CSRF boundary)`).toContain(
+    "SameSite=Lax",
+  );
+  expect(cookie, `${cookieName}: must include Path=/`).toContain("Path=/");
+  expect(cookie, `${cookieName}: must set Max-Age`).toMatch(/Max-Age=\d+/);
+  expect(cookie, `${cookieName}: must not set Domain (host-only)`).not.toMatch(/Domain=/i);
+  expect(cookie, `${cookieName}: SameSite=None would make panel writes forgeable`).not.toMatch(
     /SameSite=None/i,
+  );
+  expect(cookie, `${cookieName}: must not drift to SameSite=Strict`).not.toMatch(
+    /SameSite=Strict/i,
   );
 }
 
-describe("panel cookie protective attributes are the CSRF mechanism", () => {
-  it("pins SameSite=Lax HttpOnly Secure Path=/ on the shared serializer", () => {
+/** createServerFn({ method: "POST" ... }) including extra option keys. */
+function declaresPostServerFn(source: string): boolean {
+  return /createServerFn\(\s*\{[\s\S]*?\bmethod:\s*["']POST["']/.test(source);
+}
+
+/** Session loaded in-file or via the authorized-* helpers / their module. */
+function usesSessionCookie(source: string): boolean {
+  return (
+    /from\s+["']\.\/session["']/.test(source) ||
+    /from\s+["']\.\/panel-authorized-clients["']/.test(source) ||
+    /loadSessionFromRequest|authorizedFlagsClient|authorizedApprovalsClient/.test(source)
+  );
+}
+
+/**
+ * Cookie-value construction outside the shared serializer: a name=value pair
+ * with any cookie attribute, or an inline Set-Cookie header value literal.
+ * Attribute-less cookies are caught by the name=value; Path=/ shape; careful
+ * SameSite=None literals are also caught.
+ */
+function cookieValueConstruction(source: string): string | null {
+  const inlineHeader = /(?:set-cookie|Set-Cookie)\s*["']\s*,\s*[`"'][^`"']*=/;
+  if (inlineHeader.test(source)) return "inline Set-Cookie header value";
+
+  const constructed =
+    /[`"'](?:__)?[A-Za-z][\w-]*=(?:\$\{[^}]+\}|[^`'";\n]+)(?:;[^`"'\n]*)?(?:Path|Max-Age|SameSite|HttpOnly|Secure|Domain)\b/i;
+  if (constructed.test(source)) return "cookie value construction with attributes";
+
+  // Attribute-less host cookie: `__name=${...}; Path=/` already covered above.
+  // Also catch bare `__name=value; Path=/` without template.
+  const barePath = /[`"'](?:__)?[A-Za-z][\w-]*=[^`'";\n]*;\s*Path\s*=/i;
+  if (barePath.test(source)) return "cookie value with Path=";
+
+  return null;
+}
+
+describe("panel cookie attributes", () => {
+  it("pins the exact serializer output including host-only (no Domain)", () => {
     const cookie = serializeHttpOnlyCookie("__probe", "value", { maxAge: 60 });
 
-    assertProtectiveAttributes(cookie, "serializeHttpOnlyCookie");
-    expect(PANEL_COOKIE_PROTECTIVE_ATTRIBUTES).toEqual([
-      "HttpOnly",
-      "Secure",
-      "SameSite=Lax",
-      "Path=/",
-    ]);
+    expect(cookie).toBe("__probe=value; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=60");
+    assertCookieAttributes(cookie, "__probe");
+    expect(PANEL_COOKIE_ATTRIBUTES).toEqual(["HttpOnly", "Secure", "SameSite=Lax", "Path=/"]);
   });
 
   it("applies the same attributes to every cookie the panel sets", async () => {
@@ -90,29 +121,25 @@ describe("panel cookie protective attributes are the CSRF mechanism", () => {
     const session = await createSession(kv.namespace(), sessionPrincipal(), NOW);
     const oauth = await createOAuthState(kv.namespace(), "/", NOW);
 
-    assertProtectiveAttributes(session.cookie, SESSION_COOKIE_NAME);
-    assertProtectiveAttributes(oauth.cookie, OAUTH_STATE_COOKIE_NAME);
+    assertCookieAttributes(session.cookie, SESSION_COOKIE_NAME);
+    assertCookieAttributes(oauth.cookie, OAUTH_STATE_COOKIE_NAME);
   });
 
-  it("builds every Set-Cookie value through serializeHttpOnlyCookie", () => {
+  it("builds every cookie value through serializeHttpOnlyCookie", () => {
     const offenders: string[] = [];
-    // Attribute assignments only — function names like serializeHttpOnlyCookie
-    // contain the substring and are not attribute literals. Call sites that
-    // append a pre-serialized `cookie` string to the Set-Cookie header are fine.
-    const attributeLiteral = /(?:SameSite\s*=|Max-Age\s*=|; HttpOnly\b|"HttpOnly"|'HttpOnly')/;
 
     for (const path of sourceFiles(SRC)) {
       const relativePath = relative(path);
       if (relativePath === "lib/session-cookie.ts") continue;
 
       const source = code(readFileSync(path, "utf8"));
-      if (attributeLiteral.test(source)) {
-        offenders.push(`${relativePath}: cookie attribute literal outside serializeHttpOnlyCookie`);
+      const kind = cookieValueConstruction(source);
+      if (kind) {
+        offenders.push(`${relativePath}: ${kind}`);
       }
     }
 
     expect(offenders).toEqual([]);
-    // Session and OAuth state are the only cookies; both call the shared serializer.
     expect(code(readFileSync(join(SRC, "lib/session.ts"), "utf8"))).toContain(
       "serializeHttpOnlyCookie",
     );
@@ -137,10 +164,7 @@ describe("panel cookie protective attributes are the CSRF mechanism", () => {
         formPosts.push(relativePath);
       }
 
-      if (
-        /createServerFn\(\{\s*method:\s*"POST"\s*\}\)/.test(source) &&
-        usesSessionCookie(source)
-      ) {
+      if (declaresPostServerFn(source) && usesSessionCookie(source)) {
         serverFnPosts.push(relativePath);
       }
     }

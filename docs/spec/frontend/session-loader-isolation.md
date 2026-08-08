@@ -8,11 +8,15 @@ hot path. D1 is the system of record; KV is the edge replica written through on 
 
 Cookie: `Set-Cookie: __session=<opaque_token>; HttpOnly; Secure; SameSite=Lax; Path=/`
 
-Those attributes are the panel's CSRF mechanism for cookie-authenticated
-writes: there is no CSRF token layer. `SameSite=Lax` withholds the cookie from
-cross-site POSTs. The attribute pin and the write-surface enumeration live in
-`apps/control-panel/src/lib/session-cookie.ts` and
-`session-cookie.test.ts` (SPL-263). The OAuth state cookie
+Those attributes are host-only (no `Domain`). `SameSite=Lax` is a _site_
+boundary: it withholds the cookie from a cross-_site_ POST, but
+`app.splitch.dev` shares a site with `auth.`, `api.`, `edge.`, `ingest.`,
+`mcp.`, and apex `splitch.dev`. Cookie-authenticated form POSTs
+(`/auth/logout`, `/claim/consent/$attemptId`) therefore also require
+same-origin `Origin` (`panel-csrf.ts`). `createServerFn` POSTs get TanStack's
+Origin / Sec-Fetch-Site middleware from `src/start.ts`. The attribute pin and
+write-surface enumeration live in `apps/control-panel/src/lib/session-cookie.ts`
+and `session-cookie.test.ts` (SPL-263). The OAuth state cookie
 (`__session_state`) uses the same serializer and the same attributes.
 
 KV schema for cached session:

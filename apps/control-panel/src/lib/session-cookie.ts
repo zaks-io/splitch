@@ -3,32 +3,31 @@ const TOKEN_HEX_LENGTH = 64;
 const SESSION_TOKEN_PATTERN = /^spl_[0-9a-f]{64}$/;
 
 /**
- * The Control Panel has no CSRF token layer.
+ * Exact attribute set every Control Panel cookie must carry.
  *
- * Cookie-authenticated writes — the classic form POSTs at `/auth/logout` and
- * `/claim/consent/$attemptId`, plus every `createServerFn({ method: "POST" })`
- * that reads the session cookie — are protected by these cookie attributes.
- * `SameSite=Lax` is the CSRF mechanism: browsers withhold the cookie from a
- * cross-site POST, so a forged submit arrives with no session. Loosen it to
- * `None` (a plausible reach when debugging cross-origin or embedded-preview
- * problems) and every panel write becomes forgeable; no silent fallback is
- * allowed (ADR-0036 / SPL-263).
+ * The panel has no CSRF token layer. Cookie-authenticated writes are protected
+ * as follows:
  *
- * `HttpOnly` keeps the token off `document.cookie`. `Secure` keeps it off
- * cleartext. `Path=/` scopes it to the panel origin. There is intentionally
- * no knobs API for these flags — change them here and
- * `session-cookie.test.ts` goes red naming the security consequence.
+ * - `SameSite=Lax` is a *site* boundary: browsers withhold the cookie from a
+ *   cross-*site* POST, but `app.splitch.dev` shares a site with `auth.`,
+ *   `api.`, `edge.`, `ingest.`, `mcp.`, and apex `splitch.dev`. Lax still
+ *   sends `__session` on a POST from those siblings. Form POSTs therefore also
+ *   require same-origin `Origin` via `rejectCrossOriginWrite` (`panel-csrf.ts`).
+ *   `createServerFn` POSTs get TanStack's Origin / Sec-Fetch-Site middleware
+ *   from `src/start.ts` (`panelServerFnCsrfMiddleware`). That check is
+ *   contingent on the middleware remaining in `requestMiddleware` — displacing
+ *   it removes CSRF from every server-fn write.
+ * - `HttpOnly` keeps the token off `document.cookie`.
+ * - `Secure` keeps it off cleartext.
+ * - Host-only: `Domain` MUST be absent. A `Domain=.splitch.dev` would make the
+ *   cookie sent to and settable by every `splitch.dev` host.
+ * - `Path=/` is the widest path scope (not a security boundary). It is pinned
+ *   so silent drift is a red test. `Max-Age` is set per call.
  *
- * TanStack Start also Origin-checks `createServerFn` POSTs. That does not
- * cover the form POSTs above; those rest on `SameSite=Lax` alone. Do not
- * weaken these attributes without adding an explicit CSRF token layer.
+ * There is no knobs API for these flags. Change them here and the cookie
+ * invariant tests go red naming the attribute and the cookie (SPL-263).
  */
-export const PANEL_COOKIE_PROTECTIVE_ATTRIBUTES = [
-  "HttpOnly",
-  "Secure",
-  "SameSite=Lax",
-  "Path=/",
-] as const;
+export const PANEL_COOKIE_ATTRIBUTES = ["HttpOnly", "Secure", "SameSite=Lax", "Path=/"] as const;
 
 export function generateOpaqueToken(): string {
   return `${TOKEN_PREFIX}${crypto.randomUUID().replaceAll("-", "")}${crypto.randomUUID().replaceAll("-", "")}`;
@@ -50,7 +49,7 @@ export function serializeHttpOnlyCookie(
   value: string,
   options: { maxAge: number },
 ): string {
-  return `${name}=${encodeURIComponent(value)}; ${PANEL_COOKIE_PROTECTIVE_ATTRIBUTES.join("; ")}; Max-Age=${options.maxAge}`;
+  return `${name}=${encodeURIComponent(value)}; ${PANEL_COOKIE_ATTRIBUTES.join("; ")}; Max-Age=${options.maxAge}`;
 }
 
 export function clearHttpOnlyCookie(name: string): string {

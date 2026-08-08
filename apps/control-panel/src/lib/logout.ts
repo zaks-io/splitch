@@ -1,5 +1,6 @@
 import { createAuthKitClient } from "./authkit";
 import type { ControlPanelBindings } from "./bindings";
+import { rejectCrossOriginWrite } from "./panel-csrf";
 import { destroySession } from "./session";
 
 export const LOGOUT_PATH = "/auth/logout";
@@ -7,17 +8,20 @@ export const LOGOUT_PATH = "/auth/logout";
 /**
  * Signing out destroys the session, so it hangs off an unsafe method only.
  *
- * CSRF for this form POST is `SameSite=Lax` on the session cookie — the panel
- * has no CSRF token layer. The mechanism, the attributes that pin it, and the
- * other cookie-authenticated writes that share it are stated once in
- * `session-cookie.ts` (SPL-263). `SameSite=Lax` deliberately DOES travel on a
- * top-level GET, which is how a router prefetch, prerender, scanner, or chat
- * client unfurling a pasted link could sign the operator out (SPL-227).
+ * CSRF for this form POST is same-origin `Origin` (`rejectCrossOriginWrite`)
+ * plus `SameSite=Lax` on the session cookie. Lax alone is a *site* boundary and
+ * is not enough across `*.splitch.dev` — see `session-cookie.ts` (SPL-263).
+ * `SameSite=Lax` deliberately DOES travel on a top-level GET, which is how a
+ * router prefetch, prerender, scanner, or chat client unfurling a pasted link
+ * could sign the operator out (SPL-227).
  */
 export async function destroyPanelSession(
   bindings: ControlPanelBindings,
   request: Request,
 ): Promise<Response> {
+  const rejected = rejectCrossOriginWrite(request);
+  if (rejected) return rejected;
+
   const destroyed = await destroySession(bindings.SESSION_STORE, request);
   const returnTo = new URL("/", request.url).toString();
   const location = destroyed.session?.workosSessionId
