@@ -141,8 +141,8 @@ export function heldErrorDetails(
 }
 
 /**
- * Match the root client's null-variant treatment: DEFAULT, no arm label, no Exposure.
- * A Split with a null variant is a server-side arm mismatch, not a served treatment.
+ * Match the root client's null-variant treatment: DEFAULT, no Variant name, no Exposure.
+ * A Split with a null Variant is a server-side Variant mismatch, not a served treatment.
  */
 export function nullVariantDetails(
   flagKey: string,
@@ -155,7 +155,7 @@ export function nullVariantDetails(
       code: "VALIDATION_ERROR",
       causeSummary: `Held evaluation for ${JSON.stringify(flagKey)} has a null variant with a non-ERROR reason`,
       remediation:
-        "Re-init after the Flag's arms are consistent; the caller's default was returned without recording an Exposure",
+        "Re-init after the Flag's Variants are consistent; the caller's default was returned without recording an Exposure",
     }),
     { flagKey, targetingKey },
   );

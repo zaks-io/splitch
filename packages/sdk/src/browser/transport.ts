@@ -43,8 +43,9 @@ export interface BrowserExposuresResult extends BrowserTransportFailure {
 
 /**
  * Browser-only network adapter: Precomputed Evaluations fetch + Exposure batch
- * redemption. Deliberately omits evaluate/peek/verify so those schemas never
- * enter the `@splitch/sdk/browser` bundle.
+ * redemption. Deliberately omits evaluate/peek/verify *methods*; shared
+ * contract-surface validators may still appear in the bundle via the generated
+ * module, but those routes are not callable from this adapter.
  */
 export interface BrowserTransport {
   evaluateAll(request: BrowserEvaluateAllRequest): Promise<BrowserEvaluateAllResult>;
@@ -57,12 +58,15 @@ export interface BrowserTransport {
 export function createBrowserFetchTransport(config: BrowserFetchTransportConfig): BrowserTransport {
   const evaluateAllUrl = new URL("/api/sdk/evaluate-all", config.endpoint);
   const exposuresUrl = new URL("/api/sdk/exposures", config.endpoint);
+  // Hoist off the config object: a member call would set `this` to `config`,
+  // which breaks a consumer-supplied `window.fetch` (Illegal invocation).
+  const doFetch = config.fetchImpl;
 
   return {
     async evaluateAll(request) {
       try {
         return await withTimeout(config.timeoutMs, async (signal) => {
-          const response = await config.fetchImpl(evaluateAllUrl, {
+          const response = await doFetch(evaluateAllUrl, {
             method: "POST",
             headers: {
               authorization: `Bearer ${config.credential}`,
@@ -87,7 +91,7 @@ export function createBrowserFetchTransport(config: BrowserFetchTransportConfig)
     async redeemExposures(exposures, options) {
       try {
         return await withTimeout(config.timeoutMs, async (signal) => {
-          const response = await config.fetchImpl(exposuresUrl, {
+          const response = await doFetch(exposuresUrl, {
             method: "POST",
             headers: {
               authorization: `Bearer ${config.credential}`,

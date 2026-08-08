@@ -17,14 +17,11 @@ import {
   resolveContext,
 } from "./client-helpers";
 import { ExposureQueue } from "./exposure-queue";
-import { type FlagChangeListener, registerFlagListener } from "./subscribe";
 import { type BrowserTransport, createBrowserFetchTransport } from "./transport";
 
 const DEFAULT_ENDPOINT = "https://edge.splitch.dev";
 const DEFAULT_TIMEOUT_MS = 5000;
 const FALLBACK_DEFAULT_VALUE: VariantValue = false;
-
-export type { FlagChangeListener } from "./subscribe";
 
 /**
  * Options for {@link createSplitchBrowserClient}. Client Key only; one Evaluation
@@ -56,11 +53,6 @@ export interface SplitchBrowserClient {
   evaluate(flagKey: string, defaultValue?: VariantValue): VariantValue;
   /** Synchronous exposing read returning full ResolutionDetails. */
   evaluateDetails(flagKey: string, defaultValue?: VariantValue): SdkResolutionDetails;
-  /**
-   * Per-Flag listener for future revalidation swaps. Subscribing is not a read
-   * and fires no Exposure. Accepts keys absent from the held evaluations.
-   */
-  subscribe(flagKey: string, listener: FlagChangeListener): () => void;
   /** Acknowledged Exposure queue flush; resolves with per-item results. */
   flush(): Promise<readonly ExposureBatchResult[]>;
   /** Final flush; stops timers and page-lifecycle listeners. */
@@ -96,23 +88,21 @@ export function createSplitchBrowserClient(
 
   let held: HeldPayload | null = null;
   let initPromise: Promise<void> | null = null;
-  const listeners = new Map<string, Set<FlagChangeListener>>();
   const loggedMissing = new Set<string>();
   const queue = new ExposureQueue({
     transport,
     logger,
     now,
-    document: options.document,
-    window: options.window,
+    ...("document" in options ? { document: options.document } : {}),
+    ...("window" in options ? { window: options.window } : {}),
   });
 
   function requireHeld(): HeldPayload {
     if (held === null) {
       throw new SplitchSdkError({
         code: "SDK_NOT_INITIALIZED",
-        causeSummary:
-          "A Flag was read before init() resolved, and no bootstrap payload was supplied",
-        remediation: "Await init() before evaluate/evaluateDetails, or pass a matching bootstrap",
+        causeSummary: "A Flag was read before init() resolved",
+        remediation: "Await init() before evaluate/evaluateDetails",
       });
     }
     return held;
@@ -143,9 +133,8 @@ export function createSplitchBrowserClient(
 
   return {
     async init() {
-      if (held !== null) {
-        return;
-      }
+      // After success initPromise stays set, so concurrent/repeat callers await
+      // the same promise (or return immediately once settled). Cleared only on failure.
       if (initPromise !== null) {
         return initPromise;
       }
@@ -183,18 +172,12 @@ export function createSplitchBrowserClient(
       return readDetails(flagKey, defaultValue);
     },
 
-    subscribe(flagKey, listener) {
-      return registerFlagListener(listeners, flagKey, listener);
-    },
-
     async flush() {
       return queue.flush();
     },
 
     async close() {
-      const results = await queue.close();
-      listeners.clear();
-      return results;
+      return queue.close();
     },
   };
 }

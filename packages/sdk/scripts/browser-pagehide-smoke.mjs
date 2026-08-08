@@ -54,14 +54,16 @@ const PAGE_HTML = `<!doctype html>
       const out = document.getElementById("out");
       window.__SPLITCH_PAGEHIDE_SMOKE__ = { phase: "boot" };
       try {
+        const useWindowFetch = new URLSearchParams(location.search).get("fetch") === "window";
         const client = createSplitchBrowserClient({
           clientKey: "pk_pagehide_smoke",
           context: { targetingKey: "smoke-user" },
           endpoint: window.location.origin,
+          ...(useWindowFetch ? { fetch: window.fetch } : {}),
         });
         await client.init();
         client.evaluate("pagehide-flag", false);
-        window.__SPLITCH_PAGEHIDE_SMOKE__ = { phase: "armed" };
+        window.__SPLITCH_PAGEHIDE_SMOKE__ = { phase: "armed", fetchMode: useWindowFetch ? "window" : "default" };
         out.textContent = "armed";
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -280,12 +282,28 @@ async function main() {
         throw new Error("keepalive phase: exposures route never received a body");
       }
       await context.close();
+    }
+
+    // Phase 3: consumer-supplied `fetch: window.fetch` must not Illegal-invocation (B1).
+    {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      const before = state.exposures.length;
+      await runArmedPagehide(page, `${baseUrl}?fetch=window`);
+      await waitForExposureCount(page, state, before, "window.fetch option phase");
+      const smoke = await page.evaluate(() => window.__SPLITCH_PAGEHIDE_SMOKE__);
+      if (smoke?.fetchMode !== "window") {
+        throw new Error(
+          `window.fetch phase expected fetchMode=window, got ${JSON.stringify(smoke)}`,
+        );
+      }
+      await context.close();
       console.log(
         "browser pagehide smoke passed:",
         JSON.stringify({
           evaluateAll: state.evaluateAll,
           exposures: state.exposures.length,
-          keepalive: exposureFetch.keepalive,
+          windowFetchOption: true,
         }),
       );
     }

@@ -1,4 +1,4 @@
-import { formatSdkErrorMessage, SplitchSdkError } from "../errors";
+import { formatSdkErrorMessage } from "../errors";
 import type { Logger } from "../evaluate";
 import type { ExposureBatchItem, ExposureBatchResult } from "../generated/contract-surface.js";
 import {
@@ -6,9 +6,18 @@ import {
   EXPOSURE_BATCH_MAX_ITEMS,
 } from "../generated/contract-surface.js";
 import { mintExposureId, pendingBodyBytes, type QueuedExposure, takeBatch } from "./exposure-batch";
-import type { BrowserExposuresResult, BrowserTransport } from "./transport";
+import {
+  correlateBatchResults,
+  logBatchFailure,
+  logRejectedItem,
+  logZeroProgress,
+} from "./exposure-drain";
+import { resolveDocument, resolveWindow } from "./lifecycle-targets";
+import type { BrowserTransport } from "./transport";
 
 const FLUSH_DELAY_MS = 5_000;
+/** Defense-in-depth: never spin forever if a response makes zero progress. */
+const MAX_DRAIN_BATCHES = EXPOSURE_BATCH_MAX_ITEMS * 4;
 
 export type { QueuedExposure } from "./exposure-batch";
 
@@ -16,7 +25,7 @@ export interface ExposureQueueDeps {
   readonly transport: Pick<BrowserTransport, "redeemExposures">;
   readonly logger: Logger;
   readonly now: () => number;
-  /** Injectable page lifecycle targets for tests. */
+  /** Injectable page lifecycle targets for tests. Explicit null means absent. */
   readonly document?: Document | null;
   readonly window?: Window | null;
 }
@@ -38,8 +47,7 @@ export class ExposureQueue {
   private queuedDrains = 0;
 
   private readonly onVisibilityChange = (): void => {
-    const doc = this.deps.document ?? (typeof document !== "undefined" ? document : null);
-    if (doc?.visibilityState === "hidden") {
+    if (resolveDocument(this.deps)?.visibilityState === "hidden") {
       void this.flushBestEffort({ keepalive: true });
     }
   };
@@ -163,8 +171,27 @@ export class ExposureQueue {
 
   private async drainPending(keepalive: boolean): Promise<readonly ExposureBatchResult[]> {
     const completed: ExposureBatchResult[] = [];
+    let batches = 0;
     while (this.pending.length > 0) {
-      completed.push(...(await this.runOneBatch(keepalive)));
+      if (batches >= MAX_DRAIN_BATCHES) {
+        throw logZeroProgress(
+          this.deps.logger,
+          `Exposure drain exceeded ${MAX_DRAIN_BATCHES} batches without clearing the queue`,
+          this.pending.length,
+        );
+      }
+      const batchCompleted = await this.runOneBatch(keepalive);
+      // Progress is per-response: empty/unmatched results complete nothing.
+      // Do not compare pending.length — items may enqueue during the await.
+      if (batchCompleted.length === 0) {
+        throw logZeroProgress(
+          this.deps.logger,
+          "Exposure batch response made zero progress (empty or unmatched results)",
+          this.pending.length,
+        );
+      }
+      completed.push(...batchCompleted);
+      batches += 1;
       // Another flush/pagehide/close is waiting — let it continue with its options.
       if (this.queuedDrains > 1) {
         break;
@@ -193,64 +220,19 @@ export class ExposureQueue {
     const result = await this.deps.transport.redeemExposures(wireItems, { keepalive });
     if (result.results === null) {
       this.pending.unshift(...batch);
-      throw this.logBatchFailure(result, batch.length);
+      throw logBatchFailure(this.deps.logger, result, batch.length);
     }
 
-    const retained: QueuedExposure[] = [];
-    const completed: ExposureBatchResult[] = [];
-    for (let index = 0; index < batch.length; index++) {
-      const item = batch[index];
-      const row = result.results[index];
-      if (item === undefined) {
-        continue;
-      }
-      if (row === undefined) {
-        retained.push(item);
-        continue;
-      }
-      completed.push(row);
-      if (row.status === "rejected") {
-        this.logRejectedItem(item, row, result.status);
-      }
-    }
+    const { completed, retained } = correlateBatchResults(
+      batch,
+      result.results,
+      result.status,
+      (item, row, status) => logRejectedItem(this.deps.logger, item, row, status),
+    );
     if (retained.length > 0) {
       this.pending.unshift(...retained);
     }
     return completed;
-  }
-
-  private logBatchFailure(result: BrowserExposuresResult, count: number): SplitchSdkError {
-    const error = new SplitchSdkError({
-      code: result.errorCode ?? "SERVICE_UNAVAILABLE",
-      causeSummary: result.errorMessage ?? "Exposure batch flush failed",
-      remediation: "Retry flush(); pending exposureIds are retained unchanged",
-      status: result.status,
-      originalError: result.cause,
-    });
-    this.deps.logger.error(error.message, {
-      status: result.status,
-      errorCode: error.code,
-      count,
-      cause: result.cause,
-    });
-    return error;
-  }
-
-  private logRejectedItem(
-    item: QueuedExposure,
-    row: ExposureBatchResult,
-    status: number | null,
-  ): void {
-    this.deps.logger.error(
-      formatSdkErrorMessage({
-        code: row.code ?? "VALIDATION_ERROR",
-        causeSummary: `Exposure redemption rejected for ${item.exposureId}`,
-        remediation:
-          "Refetch Precomputed Evaluations if the ticket expired; otherwise inspect the error code",
-        status,
-      }),
-      { exposureId: item.exposureId, flagKey: item.flagKey, code: row.code },
-    );
   }
 
   private ensureTimer(): void {
@@ -274,8 +256,8 @@ export class ExposureQueue {
     if (this.lifecycleAttached || this.closed || this.pending.length === 0) {
       return;
     }
-    const doc = this.deps.document ?? (typeof document !== "undefined" ? document : null);
-    const win = this.deps.window ?? (typeof window !== "undefined" ? window : null);
+    const doc = resolveDocument(this.deps);
+    const win = resolveWindow(this.deps);
     if (doc !== null) {
       doc.addEventListener("visibilitychange", this.onVisibilityChange);
     }
@@ -291,10 +273,8 @@ export class ExposureQueue {
     if (!this.lifecycleAttached) {
       return;
     }
-    const doc = this.deps.document ?? (typeof document !== "undefined" ? document : null);
-    const win = this.deps.window ?? (typeof window !== "undefined" ? window : null);
-    doc?.removeEventListener("visibilitychange", this.onVisibilityChange);
-    win?.removeEventListener("pagehide", this.onPageHide);
+    resolveDocument(this.deps)?.removeEventListener("visibilitychange", this.onVisibilityChange);
+    resolveWindow(this.deps)?.removeEventListener("pagehide", this.onPageHide);
     this.lifecycleAttached = false;
   }
 }

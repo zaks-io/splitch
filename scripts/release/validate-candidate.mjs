@@ -40,6 +40,7 @@ const TASKS = [
   "pack:check",
   "size:check",
   "test:consumer-smoke",
+  "test:browser-pagehide",
 ];
 
 process.stdout.write(

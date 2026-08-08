@@ -33,8 +33,9 @@ function batchEndIndex(pending: readonly QueuedExposure[]): number {
     bytes += itemBytes;
     end += 1;
   }
-  // Single oversize item: still send it alone so the Worker rejects loudly.
-  return end === 0 ? 1 : end;
+  // First item is always included even when alone it exceeds the byte cap, so
+  // the Worker can reject an oversize Exposure loudly (end is never 0 here).
+  return end;
 }
 
 export function pendingBodyBytes(items: readonly QueuedExposure[]): number {

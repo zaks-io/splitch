@@ -74,7 +74,7 @@ describe("createSplitchBrowserClient: exposure queue", () => {
     randomUUID.mockRestore();
   });
 
-  it("pagehide flush uses authenticated fetch with keepalive", async () => {
+  it("pagehide listener triggers keepalive redeem (lifecycle smoke)", async () => {
     const listeners = new Map<string, Set<() => void>>();
     const fakeWindow = {
       addEventListener(type: string, handler: () => void) {
@@ -109,6 +109,50 @@ describe("createSplitchBrowserClient: exposure queue", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(transport.redeemCalls.length).toBeGreaterThan(0);
     expect(transport.redeemCalls[0]?.keepalive).toBe(true);
+  });
+
+  it("explicit document: null does not attach visibility listeners (B10)", async () => {
+    const listeners = new Map<string, Set<() => void>>();
+    const ambientDoc = {
+      addEventListener(type: string, handler: () => void) {
+        let set = listeners.get(type);
+        if (set === undefined) {
+          set = new Set();
+          listeners.set(type, set);
+        }
+        set.add(handler);
+      },
+      removeEventListener() {
+        /* noop */
+      },
+    };
+    const previous = globalThis.document;
+    Object.defineProperty(globalThis, "document", {
+      value: ambientDoc,
+      configurable: true,
+      writable: true,
+    });
+
+    try {
+      const transport = new FakeBrowserTransport([browserOkPayload()]);
+      const client = createSplitchBrowserClient({
+        clientKey: "pk_test",
+        context: { targetingKey: "u1" },
+        transport,
+        document: null,
+        window: null,
+      });
+      await client.init();
+      client.evaluate("new-checkout", false);
+      expect(listeners.size).toBe(0);
+      await client.flush();
+    } finally {
+      Object.defineProperty(globalThis, "document", {
+        value: previous,
+        configurable: true,
+        writable: true,
+      });
+    }
   });
 
   it("empty flush performs no network I/O", async () => {

@@ -184,6 +184,12 @@ Reading before `init()` throws `SDK_NOT_INITIALIZED`. An unknown Flag Key return
 your default with `reason: "ERROR"` / `FLAG_NOT_FOUND` and a loud log — never a
 silent invented default.
 
+`flush()` drains the Exposure queue. If the queue hits the batch caps (25 items /
+32 KiB) and a forced flush fails, the entire pending queue is dropped loudly
+(`RATE_LIMITED`) — including items enqueued after the overflow was detected. One
+transient blip at 25 pending loses those 25 Exposures; call `flush()` sooner or
+reduce concurrent first-reads.
+
 ## Links
 
 - SDK guide: <https://splitch.dev/docs/sdk/install>

@@ -13,7 +13,76 @@ function jsonResponse(status: number, body: unknown, headers?: Record<string, st
   });
 }
 
-describe("createBrowserFetchTransport", () => {
+const OK_EVAL = {
+  evaluations: {
+    flag: {
+      variant: true,
+      variantName: "on",
+      reason: "SPLIT",
+      errorCode: null,
+      exposureTicket: "t",
+    },
+  },
+};
+
+describe("createBrowserFetchTransport: receiver (B1)", () => {
+  it("calls a user-supplied fetchImpl as a plain call (receiver undefined)", async () => {
+    const fetchImpl = function fetchImpl(
+      this: unknown,
+      input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> {
+      if (this !== undefined) {
+        throw new TypeError(
+          "Failed to execute 'fetch' on 'Window': Illegal invocation (receiver must be undefined)",
+        );
+      }
+      const url = String(input);
+      if (url.includes("evaluate-all")) {
+        return Promise.resolve(jsonResponse(200, OK_EVAL, { etag: '"e1"' }));
+      }
+      return Promise.resolve(
+        jsonResponse(202, {
+          results: [
+            {
+              exposureId: "11111111-1111-4111-8111-111111111111",
+              status: "accepted",
+              code: null,
+            },
+          ],
+        }),
+      );
+    };
+
+    const transport = createBrowserFetchTransport({
+      credential: "pk_test",
+      endpoint: "https://edge.test",
+      timeoutMs: 1000,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    const evalResult = await transport.evaluateAll({
+      targetingKey: "u1",
+      idType: "user",
+      attributes: {},
+      idempotencyKey: "11111111-1111-4111-8111-111111111111",
+    });
+    expect(evalResult.status).toBe(200);
+    expect(evalResult.evaluations).not.toBeNull();
+    expect(evalResult.etag).toBe('"e1"');
+
+    const redeem = await transport.redeemExposures([
+      {
+        exposureId: "11111111-1111-4111-8111-111111111111",
+        exposureTicket: "t",
+        clientTimestamp: "2026-08-08T00:00:00.000Z",
+      },
+    ]);
+    expect(redeem.results).toHaveLength(1);
+  });
+});
+
+describe("createBrowserFetchTransport: auth and keepalive", () => {
   it("sends Authorization bearer on evaluate-all and exposures", async () => {
     const calls: { url: string; authorization: string | null; keepalive?: boolean }[] = [];
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -25,21 +94,7 @@ describe("createBrowserFetchTransport", () => {
         keepalive: init?.keepalive,
       });
       if (url.includes("evaluate-all")) {
-        return jsonResponse(
-          200,
-          {
-            evaluations: {
-              flag: {
-                variant: true,
-                variantName: "on",
-                reason: "SPLIT",
-                errorCode: null,
-                exposureTicket: "t",
-              },
-            },
-          },
-          { etag: '"e1"' },
-        );
+        return jsonResponse(200, OK_EVAL, { etag: '"e1"' });
       }
       return jsonResponse(202, {
         results: [
@@ -128,6 +183,64 @@ describe("createBrowserFetchTransport", () => {
       idempotencyKey: "11111111-1111-4111-8111-111111111111",
     });
     expect(result.errorCode).toBe("SDK_TRANSPORT_TIMEOUT");
+  });
+});
+
+describe("createBrowserFetchTransport: failure surface (B4)", () => {
+  it("maps !response.ok evaluate-all to a failure (M18)", async () => {
+    const transport = createBrowserFetchTransport({
+      credential: "pk_test",
+      endpoint: "https://edge.test",
+      timeoutMs: 1000,
+      fetchImpl: (async () =>
+        jsonResponse(500, { error: { code: "INTERNAL_SERVER_ERROR" } })) as typeof fetch,
+    });
+    const result = await transport.evaluateAll({
+      targetingKey: "u1",
+      idType: "user",
+      attributes: {},
+      idempotencyKey: "11111111-1111-4111-8111-111111111111",
+    });
+    expect(result.evaluations).toBeNull();
+    expect(result.etag).toBeNull();
+    expect(result.status).toBe(500);
+  });
+
+  it("rejects evaluate-all success bodies without an ETag (M19)", async () => {
+    const transport = createBrowserFetchTransport({
+      credential: "pk_test",
+      endpoint: "https://edge.test",
+      timeoutMs: 1000,
+      fetchImpl: (async () => jsonResponse(200, OK_EVAL)) as typeof fetch,
+    });
+    const result = await transport.evaluateAll({
+      targetingKey: "u1",
+      idType: "user",
+      attributes: {},
+      idempotencyKey: "11111111-1111-4111-8111-111111111111",
+    });
+    expect(result.evaluations).toBeNull();
+    expect(result.etag).toBeNull();
+    expect(result.errorCode).toBe("SDK_TRANSPORT_PARSE");
+  });
+
+  it("maps non-ok non-202 exposures responses to failure (M20)", async () => {
+    const transport = createBrowserFetchTransport({
+      credential: "pk_test",
+      endpoint: "https://edge.test",
+      timeoutMs: 1000,
+      fetchImpl: (async () =>
+        jsonResponse(400, { error: { code: "VALIDATION_ERROR" } })) as typeof fetch,
+    });
+    const result = await transport.redeemExposures([
+      {
+        exposureId: "11111111-1111-4111-8111-111111111111",
+        exposureTicket: "t",
+        clientTimestamp: "2026-08-08T00:00:00.000Z",
+      },
+    ]);
+    expect(result.results).toBeNull();
+    expect(result.status).toBe(400);
   });
 });
 

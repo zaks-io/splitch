@@ -38,9 +38,8 @@ export const sdkErrorDocs = {
     related: ["SDK_RETRIES_INVALID"],
   },
   SDK_NOT_INITIALIZED: {
-    cause:
-      "A synchronous Flag read on `@splitch/sdk/browser` happened before `init()` resolved, and the client was not constructed with a valid `bootstrap` payload.",
-    fix: "Await `init()` before the first `evaluate` / `evaluateDetails`, or pass a matching server-produced `bootstrap` so reads are available immediately. Reading nothing is a wiring bug, not a Default Variant.",
+    cause: "A synchronous Flag read on `@splitch/sdk/browser` happened before `init()` resolved.",
+    fix: "Await `init()` before the first `evaluate` / `evaluateDetails`. Reading nothing is a wiring bug, not a Default Variant.",
     related: ["SDK_CREDENTIAL_CONFIGURATION_INVALID", "SDK_CONTEXT_INVALID", "FLAG_NOT_FOUND"],
   },
   SDK_CONTEXT_INVALID: {

@@ -17,9 +17,5 @@ export type {
   VariantValue,
 } from "../generated/contract-surface.js";
 export type { SdkResolutionDetails as ResolutionDetails } from "../resolution";
-export type {
-  FlagChangeListener,
-  SplitchBrowserClient,
-  SplitchBrowserClientOptions,
-} from "./client";
+export type { SplitchBrowserClient, SplitchBrowserClientOptions } from "./client";
 export { createSplitchBrowserClient } from "./client";
