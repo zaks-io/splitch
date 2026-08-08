@@ -144,17 +144,17 @@ export async function resolveEnvironmentSelector(
 
 /**
  * Resolve a Flag positional that may be a canonical `flag_…` ID or a Flag key.
- * There is no by-key API route, so selectors resolve via `flags_list` within
- * the selected App. Match ID and key separately — Flag keys are unconstrained
- * `z.string()` values and may equal a `flag_…` ID shape, so a prefix fast path
- * would skip a real key (the SPL-288 collision class). When ID and key hit
- * different rows, refuse the ambiguity (same pattern as App key collisions).
+ * Selectors resolve via `flags_list` within the selected App first. Match ID and
+ * key separately — Flag keys are unconstrained `z.string()` values and may equal
+ * a `flag_…` ID shape, so a prefix fast path would skip a real key (the SPL-288
+ * collision class). When ID and key hit different rows, refuse the ambiguity
+ * (same pattern as App key collisions).
  *
  * `flags_list` is hard-bounded with no pagination. When the page is truncated
- * and the selector is absent, fall through and pass the selector verbatim:
- * the server's exact ID lookup remains authoritative (FLAG_NOT_FOUND), and the
- * CLI must not claim non-existence it cannot prove. An untruncated miss still
- * fails with CLI_SCOPE_UNRESOLVED.
+ * and the selector is absent, fall through and pass the selector verbatim so a
+ * later wire call can still try. Only `flags_get` with `?by=key` accepts a key
+ * on the server; other `:flagId` routes still require a canonical id past the
+ * ceiling. An untruncated miss still fails with CLI_SCOPE_UNRESOLVED.
  */
 export async function resolveFlagSelector(
   deps: CliDeps,
@@ -174,8 +174,9 @@ export async function resolveFlagSelector(
   const match = byId ?? byKey;
   if (match) return match;
   if (listed.readTruncated) {
-    // Catalog is incomplete — cannot prove absence. Pass the selector through
-    // so a canonical ID past the ceiling still reaches the server lookup.
+    // Catalog is incomplete — cannot prove absence locally. Pass the selector
+    // through. Only flags_get with ?by=key accepts a key server-side; other
+    // :flagId routes still need a canonical id past the ceiling.
     return { id: selector };
   }
   throw new SplitchCliError({
