@@ -1,49 +1,22 @@
-import { apiKeyCacheKey, CURRENT_KV_SCHEMA_VERSION, clientKeyCacheKey } from "@splitch/contracts";
-import { describe, expect, it } from "vitest";
+import { clientKeyCacheKey } from "@splitch/contracts";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { authenticateDelegatedDataPlaneCredential } from "./client-key-auth";
-import type { Env } from "./types";
+import {
+  credentialFixtures as fixtures,
+  credentialLabel,
+  credentialRecord,
+  type CredentialKind,
+  delegatedIdentity as identity,
+  envWithCredential,
+  envWithValues,
+} from "./client-key-auth.test-fixture";
+import { renderError } from "./errors";
 
-const hash = "a".repeat(64);
-const appId = "app_authorized";
-const environmentId = "env_authorized";
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
-type CredentialKind = "api_key" | "client_key";
-
-describe("delegated Metric Event credential", () => {
-  it.each([
-    "client_key",
-    "api_key",
-  ] satisfies CredentialKind[])("accepts an active %s with data-plane:write from its own cache", async (kind) => {
-    const readKeys: string[] = [];
-    const result = await authenticateDelegatedDataPlaneCredential(
-      identity(kind),
-      envWithCredential(kind, {}, readKeys),
-    );
-
-    expect(result).toEqual({
-      ok: true,
-      value: {
-        credentialHash: hash,
-        appId,
-        environmentId,
-        rateLimitRps: kind === "client_key" ? 12 : null,
-      },
-    });
-    expect(readKeys).toEqual([credentialKey(kind)]);
-  });
-
-  it.each([
-    "client_key",
-    "api_key",
-  ] satisfies CredentialKind[])("refuses a revoked %s", async (kind) => {
-    const result = await authenticateDelegatedDataPlaneCredential(
-      identity(kind),
-      envWithCredential(kind, { revoked: true }),
-    );
-
-    expect(result).toMatchObject({ ok: false, error: { code: "CREDENTIAL_REVOKED" } });
-  });
-
+describe("delegated Metric Event credential authorization", () => {
   it.each([
     "client_key",
     "api_key",
@@ -70,6 +43,7 @@ describe("delegated Metric Event credential", () => {
   ] satisfies Array<
     [CredentialKind, string, Partial<ReturnType<typeof identity>>]
   >)("refuses a %s delegated with a different %s", async (kind, _scope, patch) => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const result = await authenticateDelegatedDataPlaneCredential(
       { ...identity(kind), ...patch },
       envWithCredential(kind),
@@ -78,17 +52,102 @@ describe("delegated Metric Event credential", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "INTERNAL_SERVER_ERROR" } });
   });
 
+  it("logs complete scope mismatch evidence without returning it to the caller", async () => {
+    const kind = "client_key";
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const authorized = {
+      ...identity(kind),
+      appId: "app_delegated_attacker",
+      environmentId: "env_delegated_attacker",
+    };
+    const result = await authenticateDelegatedDataPlaneCredential(
+      authorized,
+      envWithCredential(kind),
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("scope mismatch was accepted");
+    const detail = {
+      credentialKind: kind,
+      credentialHash: fixtures[kind].hash,
+      credentialAppId: fixtures[kind].appId,
+      credentialEnvironmentId: fixtures[kind].environmentId,
+      authorizedAppId: authorized.appId,
+      authorizedEnvironmentId: authorized.environmentId,
+    };
+    expect(log).toHaveBeenCalledOnce();
+    expect(log).toHaveBeenCalledWith(
+      "event-ingest-api delegated credential scope mismatch",
+      detail,
+    );
+
+    const body = await renderError(result.error).text();
+    for (const value of Object.values(detail)) expect(body).not.toContain(value);
+  });
+});
+
+describe("delegated Metric Event credential identity", () => {
+  it.each([
+    ["client_key", "api_key"],
+    ["api_key", "client_key"],
+  ] satisfies Array<
+    [CredentialKind, CredentialKind]
+  >)("refuses delegated %s material backed by a %s record", async (delegatedKind, storedKind) => {
+    const result = await authenticateDelegatedDataPlaneCredential(
+      identity(delegatedKind),
+      envWithCredential(delegatedKind, { kind: storedKind }),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "UNAUTHORIZED",
+        message: `${credentialLabel(delegatedKind)} is unknown`,
+        details: {},
+      },
+    });
+  });
+
+  it("rejects malformed delegated hash material before reading credential storage", async () => {
+    const malformedHash = "c".repeat(63);
+    const readKeys: string[] = [];
+    const result = await authenticateDelegatedDataPlaneCredential(
+      {
+        actorId: `client_key:${malformedHash}`,
+        appId: "app_malformed_actor",
+        environmentId: "env_malformed_actor",
+      },
+      envWithValues(
+        new Map([
+          [
+            clientKeyCacheKey(malformedHash),
+            credentialRecord("client_key", {
+              appId: "app_malformed_actor",
+              environmentId: "env_malformed_actor",
+            }),
+          ],
+        ]),
+        readKeys,
+      ),
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: "UNAUTHORIZED" } });
+    expect(readKeys).toEqual([]);
+  });
+});
+
+describe("delegated Metric Event credential scope source", () => {
   it("returns App and Environment from the credential rather than rereading caller identity", async () => {
     const identityReads = { app: 0, environment: 0 };
     const delegated = {
-      actorId: `client_key:${hash}`,
+      actorId: `client_key:${fixtures.client_key.hash}`,
       get appId() {
         identityReads.app += 1;
-        return identityReads.app === 1 ? appId : "app_attacker";
+        return identityReads.app === 1 ? fixtures.client_key.appId : "app_attacker";
       },
       get environmentId() {
         identityReads.environment += 1;
-        return identityReads.environment === 1 ? environmentId : "env_attacker";
+        return identityReads.environment === 1 ? fixtures.client_key.environmentId : "env_attacker";
       },
     };
 
@@ -97,49 +156,13 @@ describe("delegated Metric Event credential", () => {
       envWithCredential("client_key"),
     );
 
-    expect(result).toMatchObject({ ok: true, value: { appId, environmentId } });
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        appId: fixtures.client_key.appId,
+        environmentId: fixtures.client_key.environmentId,
+      },
+    });
     expect(identityReads).toEqual({ app: 1, environment: 1 });
   });
 });
-
-function identity(kind: CredentialKind) {
-  return { actorId: `${kind}:${hash}`, appId, environmentId };
-}
-
-function credentialKey(kind: CredentialKind): string {
-  return kind === "client_key" ? clientKeyCacheKey(hash) : apiKeyCacheKey(hash);
-}
-
-function envWithCredential(
-  kind: CredentialKind,
-  patch: Partial<{
-    revoked: boolean;
-    scopes: string[];
-  }> = {},
-  readKeys: string[] = [],
-): Env {
-  const record = JSON.stringify({
-    schemaVersion: CURRENT_KV_SCHEMA_VERSION,
-    data: {
-      credentialSchemaVersion: 2,
-      organizationId: "org_authorized",
-      kind,
-      appId,
-      environmentId,
-      scopes: ["data-plane:evaluate", "data-plane:write"],
-      originAllowlist: kind === "client_key" ? null : undefined,
-      rateLimitRps: kind === "client_key" ? 12 : undefined,
-      revoked: false,
-      cachedAt: "2026-08-08T00:00:00.000Z",
-      ...patch,
-    },
-  });
-  return {
-    CREDENTIAL_STORE: {
-      async get(key: string) {
-        readKeys.push(key);
-        return key === credentialKey(kind) ? record : null;
-      },
-    } as KVNamespace,
-  };
-}

@@ -37,6 +37,35 @@ describe("Event Definition publication contracts", () => {
     expect(parsed.success).toBe(false);
   });
 
+  it.each([
+    ["an allowlist", { allowedValues: [1, 2] }, []],
+    ["a bounded range", { minimum: 0, maximum: 2 }, []],
+    ["neither domain", {}, ["number requires either an allowlist or bounded range"]],
+    [
+      "both domains",
+      { allowedValues: [1, 2], minimum: 0, maximum: 2 },
+      ["number cannot combine an allowlist and bounded range"],
+    ],
+  ])("reports the numeric domain for %s", (_case, domain, expectedMessages) => {
+    const parsed = PublishEventDefinitionVersionRequestSchema.safeParse({
+      entityType: "user",
+      fields: [
+        {
+          name: "amount",
+          type: "number",
+          required: false,
+          numberKind: "amount",
+          ...domain,
+        },
+      ],
+      dimensions: [],
+    });
+
+    expect(parsed.success ? [] : parsed.error.issues.map(({ message }) => message)).toEqual(
+      expectedMessages,
+    );
+  });
+
   it("still rejects a one-sided numeric range", () => {
     const parsed = EventDefinitionVersionSchema.safeParse({
       id: "event_definition_version_invalid",

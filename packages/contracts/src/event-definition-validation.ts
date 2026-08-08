@@ -66,7 +66,9 @@ export function validateNumericDomain(
   if (allowlist === range)
     context.addIssue({
       code: "custom",
-      message: "number requires either an allowlist or bounded range",
+      message: allowlist
+        ? "number cannot combine an allowlist and bounded range"
+        : "number requires either an allowlist or bounded range",
     });
   if (range && (value.minimum === undefined || value.maximum === undefined)) {
     context.addIssue({ code: "custom", message: "minimum and maximum must be supplied together" });

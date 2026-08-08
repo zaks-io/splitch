@@ -1,7 +1,9 @@
 import {
   apiKeyCacheKey,
   CredentialCacheKVSchema,
+  CredentialCacheKVSchemaV1,
   clientKeyCacheKey,
+  credentialRevocationCacheKey,
   type ErrorResponse,
   kvEnvelope,
 } from "@splitch/contracts";
@@ -15,6 +17,7 @@ export interface MetricEventCredentialScope {
 }
 
 const credentialEnvelope = kvEnvelope(CredentialCacheKVSchema);
+const legacyCredentialEnvelope = kvEnvelope(CredentialCacheKVSchemaV1);
 
 // The checks stay ordered so a stale or inconsistent delegated identity cannot
 // reach a later Metric Event guard with a plausible tenant scope.
@@ -33,18 +36,17 @@ export async function authenticateDelegatedDataPlaneCredential(
   }
   const delegated = delegatedCredential(identity.actorId);
   if (delegated === null) return failure("UNAUTHORIZED", "Client Key or API Key required");
-  const raw = await env.CREDENTIAL_STORE.get(cacheKey(delegated), "text");
-  if (raw === null) return failure("UNAUTHORIZED", `${credentialLabel(delegated.kind)} is unknown`);
-
-  let parsed: ReturnType<typeof credentialEnvelope.safeParse>;
-  try {
-    parsed = credentialEnvelope.safeParse(JSON.parse(raw));
-  } catch {
-    return failure("INTERNAL_SERVER_ERROR", "Credential data is malformed");
-  }
-  if (!parsed.success) return failure("INTERNAL_SERVER_ERROR", "Credential data is invalid");
-  const credential = parsed.data.data;
   const label = credentialLabel(delegated.kind);
+  const key = cacheKey(delegated);
+  const [revocation, raw] = await Promise.all([
+    env.CREDENTIAL_STORE.get(credentialRevocationCacheKey(key), "text"),
+    env.CREDENTIAL_STORE.get(key, "text"),
+  ]);
+  if (revocation !== null) return failure("CREDENTIAL_REVOKED", `${label} is revoked`);
+  if (raw === null) return failure("UNAUTHORIZED", `${label} is unknown`);
+  const parsed = parseCredential(raw);
+  if (!parsed.ok) return parsed;
+  const credential = parsed.value;
   if (credential.kind !== delegated.kind) return failure("UNAUTHORIZED", `${label} is unknown`);
   if (credential.revoked) return failure("CREDENTIAL_REVOKED", `${label} is revoked`);
   if (!credential.scopes.includes("data-plane:write")) {
@@ -58,6 +60,14 @@ export async function authenticateDelegatedDataPlaneCredential(
     };
   }
   if (credential.appId !== identity.appId || credential.environmentId !== identity.environmentId) {
+    console.error("event-ingest-api delegated credential scope mismatch", {
+      credentialKind: delegated.kind,
+      credentialHash: delegated.hash,
+      credentialAppId: credential.appId,
+      credentialEnvironmentId: credential.environmentId,
+      authorizedAppId: identity.appId,
+      authorizedEnvironmentId: identity.environmentId,
+    });
     return failure(
       "INTERNAL_SERVER_ERROR",
       `${label} scope does not match the authorized App and Environment`,
@@ -72,6 +82,25 @@ export async function authenticateDelegatedDataPlaneCredential(
       rateLimitRps: credential.rateLimitRps ?? null,
     },
   };
+}
+
+type CredentialCache =
+  | (typeof CredentialCacheKVSchema)["_output"]
+  | (typeof CredentialCacheKVSchemaV1)["_output"];
+
+function parseCredential(raw: string): Outcome<CredentialCache> {
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    return failure("INTERNAL_SERVER_ERROR", "Credential data is malformed");
+  }
+
+  const current = credentialEnvelope.safeParse(json);
+  if (current.success) return { ok: true, value: current.data.data };
+  const legacy = legacyCredentialEnvelope.safeParse(json);
+  if (legacy.success) return { ok: true, value: legacy.data.data };
+  return failure("INTERNAL_SERVER_ERROR", "Credential data is invalid");
 }
 
 function failure(
