@@ -16,6 +16,7 @@ import {
   stripIdempotencyKeyFromSnippet,
   wrapQuickstartSnippetForTypecheck,
 } from "./extract-quickstart-snippet.mjs";
+import { runConvexConsumerSmoke } from "./convex-consumer-smoke.mjs";
 import { assertReleaseBundleJs } from "./pack-staging.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -110,7 +111,7 @@ try {
     ),
   );
 
-  run("npm", ["install", tarballPath, "typescript@6.0.3", "zod@4.4.3"]);
+  run("npm", ["install", tarballPath, "typescript@6.0.3"]);
 
   writeFileSync(
     join(consumerRoot, "runtime.mjs"),
@@ -143,7 +144,7 @@ console.log("runtime import ok");
         2,
       ),
     );
-    run("npm", ["install", tarballPath, "typescript@6.0.3", "zod@4.4.3"], { cwd: staleRoot });
+    run("npm", ["install", tarballPath, "typescript@6.0.3"], { cwd: staleRoot });
     writeFileSync(
       join(staleRoot, "stale-quickstart-snippet.ts"),
       wrapQuickstartSnippetForTypecheck(stripIdempotencyKeyFromSnippet(quickstartSnippet)),
@@ -181,6 +182,10 @@ console.log("runtime import ok");
     "utf8",
   );
   assertReleaseBundleJs(bundleJs);
+
+  // Convex isolate fixture: packed-tarball install + convex-test (SPL-336).
+  // Transport is stubbed at the fixture seam (global fetch), not a live edge.
+  runConvexConsumerSmoke(tarballPath);
 
   console.log(`dogfood install: ${installCommand}`);
   console.log("consumer smoke passed");

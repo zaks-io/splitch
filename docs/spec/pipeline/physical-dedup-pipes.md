@@ -23,7 +23,7 @@ SOURCE QUERY (the canonical dedup definition):
     {copy_watermark_ts: DateTime64(3)}                    AS watermark_ts
   FROM raw_events
   WHERE type = 'exposure'
-    AND ingest_ts < {copy_watermark_ts: DateTime64(3)}
+    AND ingest_ts <= {copy_watermark_ts: DateTime64(3)}
   GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
 
 TARGET: deduped_exposures
@@ -33,9 +33,10 @@ The schedule is hourly by default. The real-time tail covers the window since th
 
 `copy_watermark_ts` is captured at the start of the Copy Pipe run. It is an ingest-time watermark,
 not an event-time watermark. `server_received_at` remains the analysis clock; `ingest_ts` only answers
-"did this raw row fall before the snapshot's exclusive insertion boundary?" Equality stays in the
-tail. This prevents a late-arriving row with an old `server_received_at` from falling between the
-snapshot and the tail.
+"did this raw row fall at or before the snapshot's inclusive insertion boundary?" Equality also stays
+in the tail, deliberately overlapping the boundary so final UNION dedup prevents a concurrent
+insertion at the exact watermark from being missed. This prevents a late-arriving row with an old
+`server_received_at` from falling between the snapshot and the tail.
 
 `COPY_MODE replace` is mandatory. Incremental append since `MAX(snapshot_ts)` is not equivalent to the
 ingest watermark, can retain duplicate snapshot keys, and is forbidden. If full rebuild cost exceeds
@@ -90,13 +91,13 @@ NODE union_and_final_dedup:
   GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
 ```
 
-The snapshot uses `ingest_ts < watermark`; the tail uses `ingest_ts >= watermark`. These disjoint
-half-open ranges assign equality to the tail, preventing a row inserted concurrently at the exact
-watermark timestamp from falling between two strict sides. The final union still re-dedups because a
-later physical retry or Exposure for an Entity already in the snapshot belongs to the tail. The
-boundary uses `ingest_ts`, not `server_received_at`, so events that arrive after the snapshot ran but
-carry an earlier `server_received_at` still appear in the tail. `MIN(server_received_at)` then chooses
-the first-touch row. This is the correct behavior per ADR-0010.
+The snapshot uses `ingest_ts <= watermark`; the tail uses `ingest_ts >= watermark`. These ranges
+deliberately overlap at the exact watermark instant so a concurrent insertion cannot fall between the
+snapshot and tail, and the final union re-dedups that boundary overlap. The final union also re-dedups
+because a later physical retry or Exposure for an Entity already in the snapshot belongs to the tail.
+The boundary uses `ingest_ts`, not `server_received_at`, so events that arrive after the snapshot ran
+but carry an earlier `server_received_at` still appear in the tail. `MIN(server_received_at)` then
+chooses the first-touch row. This is the correct behavior per ADR-0010.
 `raw_events` partitions by insertion month and sorts by App, Environment, then `ingest_ts`, so these
 predicates prune the tail before first-touch aggregation instead of scanning retained event-time
 history.

@@ -292,11 +292,11 @@ describe("mcp operation adapter body path stripping (SPL-296)", () => {
   });
 });
 
-async function delegatedActor(request: Request | undefined, owner: "control-plane-api") {
+async function delegatedActor(request: Request | undefined, surface: "control-plane-api") {
   expect(request).toBeDefined();
   return parseMcpDelegation({
     request: request as Request,
-    owner,
+    surface,
     secret: "d".repeat(32),
     replayGuard: memoryReplayGuard(),
   });
