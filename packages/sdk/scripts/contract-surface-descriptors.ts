@@ -1,22 +1,32 @@
 /**
- * Hand-maintained structural descriptors for the SDK contract-surface mirrors.
- * Compared against `z.toJSONSchema()` (+ unknown-key policy) of the contracts
- * Zod schemas in `contract-surface-structural.test.ts`. Nothing generates these.
+ * Hand-written structural descriptors for the SDK contract surface, compared
+ * against `z.toJSONSchema()` (+ unknown-key policy) of the contracts Zod
+ * schemas in `contract-surface-structural.test.ts`. This file is test-only: it
+ * is never imported by the validators or the tsup entry, so it never reaches
+ * dist.
+ *
+ * The member lists and key lists come from the generated projection of
+ * contracts, so adding an error code needs no edit here. The JSON type nodes
+ * are the hand-written half: a contracts field that changes type or
+ * optionality fails the structural test until this file is updated to match.
  *
  * `unknownKeys` must match the contracts object policy (`strict` = ZodNever
  * catchall, `strip` = default object, `passthrough` = ZodUnknown catchall).
  * Response *parsers* still strip unrecognized keys at runtime so a server that
- * is ahead of this mirror cannot collapse flags to defaults (SPL-325).
+ * is ahead of this surface cannot collapse flags to defaults (SPL-325).
  */
 
-import { errorCodes, evaluateAllReasons, resolutionReasons } from "./contract-surface-enums";
 import {
-  dataPlaneEvaluateKeys,
-  evaluateAllEntryKeys,
-  evaluateAllResponseKeys,
-  peekEvaluateKeys,
-  resolutionDetailsKeys,
-} from "./contract-surface-keys";
+  dataPlaneEvaluateRequiredKeys,
+  errorCodes,
+  evaluateAllEntryRequiredKeys,
+  evaluateAllReasons,
+  evaluateAllResponseRequiredKeys,
+  peekEvaluateRequiredKeys,
+  resolutionDetailsPropertyKeys,
+  resolutionDetailsRequiredKeys,
+  resolutionReasons,
+} from "./generated/contract-surface-members";
 
 export type UnknownKeysPolicy = "strict" | "strip" | "passthrough";
 
@@ -86,14 +96,14 @@ export const contractSurfaceDescriptors: ContractSurfaceDescriptors = {
     properties: {
       variant: nullableVariantValue,
     },
-    required: [...dataPlaneEvaluateKeys],
+    required: [...dataPlaneEvaluateRequiredKeys],
     unknownKeys: "strict",
   },
   peekEvaluateResponse: {
     properties: {
       variant: variantValueDescriptor,
     },
-    required: [...peekEvaluateKeys],
+    required: [...peekEvaluateRequiredKeys],
     unknownKeys: "strict",
   },
   resolutionDetails: {
@@ -104,8 +114,8 @@ export const contractSurfaceDescriptors: ContractSurfaceDescriptors = {
       ruleId: { type: "string" },
       errorCode: errorCodeEnum,
       errorMessage: { type: "string" },
-    } satisfies Record<(typeof resolutionDetailsKeys)[number], JsonTypeNode>,
-    required: ["value", "variantName", "reason"],
+    } satisfies Record<(typeof resolutionDetailsPropertyKeys)[number], JsonTypeNode>,
+    required: [...resolutionDetailsRequiredKeys],
     unknownKeys: "strip",
   },
   evaluateAllEntry: {
@@ -116,7 +126,7 @@ export const contractSurfaceDescriptors: ContractSurfaceDescriptors = {
       errorCode: { anyOf: [errorCodeEnum, { type: "null" }] },
       exposureTicket: nullableString,
     },
-    required: [...evaluateAllEntryKeys],
+    required: [...evaluateAllEntryRequiredKeys],
     unknownKeys: "strict",
   },
   evaluateAllResponse: {
@@ -133,12 +143,12 @@ export const contractSurfaceDescriptors: ContractSurfaceDescriptors = {
             errorCode: { anyOf: [errorCodeEnum, { type: "null" }] },
             exposureTicket: nullableString,
           },
-          required: [...evaluateAllEntryKeys],
+          required: [...evaluateAllEntryRequiredKeys],
           additionalProperties: false,
         },
       },
     },
-    required: [...evaluateAllResponseKeys],
+    required: [...evaluateAllResponseRequiredKeys],
     unknownKeys: "strict",
   },
 };

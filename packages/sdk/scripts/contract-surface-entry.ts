@@ -1,8 +1,9 @@
 /**
- * Build-only entry: hand-maintained zod-free mirrors for the public SDK
- * contract surface. tsup reads this file and emits
- * src/generated/contract-surface.{js,d.ts}; it does not generate the mirrors
- * from Zod. Authoring source of truth remains the contracts package. Lockstep
+ * Build-only entry: zod-free surface for the public SDK contract types. tsup
+ * reads this file and emits src/generated/contract-surface.{js,d.ts}. Its enum
+ * members and required-key lists are generated from the contracts package by
+ * `scripts/generate-contract-surface.mjs`, which runs first in the same
+ * `generate` script; contracts remains the authoring source of truth. Lockstep
  * guards: `contract-surface-structural.test.ts` (shape),
  * `contract-surface-parity.test.ts` (fixtures / divergences), and
  * `contract-surface-assignability.ts` (types). Do not import this module from
@@ -20,7 +21,7 @@ export type {
   ResolutionReason,
   VariantValue,
 } from "./contract-surface-validators";
-// biome-ignore lint/performance/noBarrelFile: build-only tsup entry aggregating the hand-maintained mirrors
+// biome-ignore lint/performance/noBarrelFile: build-only tsup entry aggregating the contract surface
 export {
   DataPlaneEvaluateResponseSchema,
   ErrorCodeSchema,

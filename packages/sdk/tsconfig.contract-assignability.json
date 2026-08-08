@@ -7,7 +7,8 @@
   },
   "include": [
     "src/contract-surface-assignability.ts",
-    "scripts/contract-surface-enums.ts",
+    "scripts/contract-surface-types.ts",
+    "scripts/generated/contract-surface-members.ts",
     "scripts/contract-surface-descriptors.ts",
     "../contracts/src/**/*.ts"
   ]
