@@ -5,7 +5,7 @@ import { ExperimentResults } from "./experiment-results";
 import {
   controlDisagreementStats,
   resultsFixture,
-  statsFixture,
+  statsWithAnalysisControl,
 } from "./experiment-results-test-fixtures";
 
 /**
@@ -32,7 +32,7 @@ const disagreement: FrozenControlIdentity = {
 };
 
 function unresolvableHtml() {
-  const stats = statsFixture();
+  const stats = statsWithAnalysisControl();
   return renderToStaticMarkup(
     <ExperimentResults results={resultsFixture(stats, { control: unresolvable })} />,
   );
@@ -75,13 +75,14 @@ describe("ExperimentResults with an unidentifiable Control", () => {
       "The Run Snapshot written to the analytics store at Start recorded control as the Analysis Control. Every lift below is measured against that Variant.",
     );
     expect(text).toContain(
-      "The Run Snapshot names the Analysis Control, but it cannot establish the Run's own frozen Control. No arm below is marked as the baseline on the Snapshot alone, and the ship decision is blocked.",
+      "The Run Snapshot names the Analysis Control, but it cannot establish the Run's own frozen Control. The ship decision is blocked.",
     );
   });
 
-  it("names the Analysis Control throughout without marking it as the Run's baseline", () => {
+  it("names and renders the Analysis Control as the baseline while blocking the decision", () => {
     const html = unresolvableHtml();
     const text = visibleText(html);
+    const analysisControlRow = metricRow(html, "control");
 
     expect(text).toContain(
       "Relative lift against control, with an always-valid confidence sequence.",
@@ -90,11 +91,20 @@ describe("ExperimentResults with an unidentifiable Control", () => {
     expect(text).toContain("relative lift vs control (%)");
     expect(html).toContain('aria-label="Relative lift with confidence intervals against control"');
     expect(text).not.toContain("unidentified");
-    expect(text).toContain(
-      "No arm is drawn at zero lift because the Run's frozen Control cannot be identified",
+    expect(html).toContain(
+      "control · checkout_conversion: baseline, 0% lift by definition, n=12530",
     );
-    expect(text).not.toContain("baseline, by definition");
-    expect(text).not.toContain("0% lift by definition");
+    expect(html).not.toContain(
+      "control · checkout_conversion: not estimable lift, [−∞, +∞], n=12530",
+    );
+    expect(html).toContain("Baseline (control) at zero lift by definition");
+    expect(analysisControlRow).toContain("0.0%");
+    expect(analysisControlRow).toContain("baseline, by definition");
+    expect(analysisControlRow).toContain(">Baseline</");
+    expect(analysisControlRow).not.toContain("not estimable");
+    expect(analysisControlRow).not.toContain("[−∞, +∞]");
+    expect(analysisControlRow).not.toContain("Not decision-valid");
+    expect(analysisControlRow).not.toContain(">1.0</td>");
   });
 });
 

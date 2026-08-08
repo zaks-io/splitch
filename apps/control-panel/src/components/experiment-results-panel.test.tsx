@@ -135,6 +135,9 @@ describe("Experiment Results route no_data waiting state", () => {
     expect(html).toContain("The Run froze");
     expect(html).toContain("control, treatment");
     expect(html).toContain(
+      'The Run Snapshot written to the analytics store at Start recorded <code class="font-mono text-foreground text-xs">control</code> as the Analysis Control. Results for this Run will be measured against that Variant when they arrive.',
+    );
+    expect(html).toContain(
       "This Run cannot produce a ship decision. Start a new Run to get a Control that is frozen and validated.",
     );
     expect(html).not.toContain("The numbers below are still shown");
