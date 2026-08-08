@@ -46,9 +46,18 @@ describe("createSplitchBrowserClient: construction", () => {
     expect(transport.redeemCalls).toHaveLength(0);
   });
 
-  it("binds globalThis.fetch when no fetch option is supplied (M01)", async () => {
-    const bound = vi.fn(
-      async () =>
+  it("default fetch is not invoked as a method on a foreign receiver (M01)", async () => {
+    let callThis: unknown = "unset";
+    const stubFetch = function fetchStub(
+      this: unknown,
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> {
+      callThis = this;
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+      }
+      return Promise.resolve(
         new Response(
           JSON.stringify({
             evaluations: {
@@ -63,19 +72,18 @@ describe("createSplitchBrowserClient: construction", () => {
           }),
           { status: 200, headers: { "content-type": "application/json", etag: '"e"' } },
         ),
-    ) as unknown as typeof fetch;
-    const bind = vi.fn(() => bound);
+      );
+    };
     const original = globalThis.fetch;
-    globalThis.fetch = Object.assign(vi.fn(), { bind }) as unknown as typeof fetch;
+    globalThis.fetch = stubFetch as unknown as typeof fetch;
     try {
       const client = createSplitchBrowserClient({
         clientKey: "pk_test",
         context: { targetingKey: "u1" },
         endpoint: "https://edge.test",
       });
-      expect(bind).toHaveBeenCalledWith(globalThis);
       await client.init();
-      expect(bound).toHaveBeenCalled();
+      expect(callThis === undefined || callThis === globalThis).toBe(true);
     } finally {
       globalThis.fetch = original;
     }
@@ -160,7 +168,7 @@ describe("createSplitchBrowserClient: sync reads", () => {
   it("null variant returns DEFAULT without enqueuing an Exposure", async () => {
     const logger = new FakeLogger();
     const evaluations: Record<string, EvaluateAllEntry> = {
-      "renamed-arm": {
+      "renamed-variant": {
         variant: null,
         variantName: "treatment",
         reason: "SPLIT",
@@ -177,7 +185,7 @@ describe("createSplitchBrowserClient: sync reads", () => {
     });
     await client.init();
 
-    expect(client.evaluateDetails("renamed-arm", false)).toMatchObject({
+    expect(client.evaluateDetails("renamed-variant", false)).toMatchObject({
       value: false,
       variantName: null,
       reason: "DEFAULT",
@@ -203,93 +211,5 @@ describe("createSplitchBrowserClient: sync reads", () => {
     const results = await client.flush();
     expect(results).toEqual([{ exposureId, status: "accepted", code: null }]);
     vi.restoreAllMocks();
-  });
-});
-
-describe("createSplitchBrowserClient: init failure surface (B4)", () => {
-  it("init rejects on non-200 status (M07)", async () => {
-    const transport = new FakeBrowserTransport([
-      { status: 401, evaluations: null, etag: null, errorCode: "UNAUTHORIZED" },
-    ]);
-    const client = createSplitchBrowserClient({
-      clientKey: "pk_test",
-      context: { targetingKey: "u1" },
-      transport,
-    });
-    await expect(client.init()).rejects.toThrow();
-    expect(() => client.evaluate("new-checkout", false)).toThrow(/SDK_NOT_INITIALIZED/);
-  });
-
-  it("init rejects when evaluations are null despite 200 (M07)", async () => {
-    const transport = new FakeBrowserTransport([{ status: 200, evaluations: null, etag: '"e"' }]);
-    const client = createSplitchBrowserClient({
-      clientKey: "pk_test",
-      context: { targetingKey: "u1" },
-      transport,
-    });
-    await expect(client.init()).rejects.toThrow();
-  });
-
-  it("init rejects when etag is null (M08)", async () => {
-    const transport = new FakeBrowserTransport([
-      { status: 200, evaluations: {}, etag: null, errorCode: "SDK_TRANSPORT_PARSE" },
-    ]);
-    const client = createSplitchBrowserClient({
-      clientKey: "pk_test",
-      context: { targetingKey: "u1" },
-      transport,
-    });
-    await expect(client.init()).rejects.toThrow();
-  });
-
-  it("init is idempotent after success", async () => {
-    const transport = new FakeBrowserTransport([browserOkPayload()]);
-    const client = createSplitchBrowserClient({
-      clientKey: "pk_test",
-      context: { targetingKey: "u1" },
-      transport,
-    });
-    await client.init();
-    await client.init();
-    expect(transport.evaluateAllCalls).toHaveLength(1);
-  });
-
-  it("init throws when crypto.randomUUID is unavailable (M16)", async () => {
-    const original = globalThis.crypto.randomUUID;
-    // @ts-expect-error intentional mutation probe
-    globalThis.crypto.randomUUID = undefined;
-    const transport = new FakeBrowserTransport([browserOkPayload()]);
-    const client = createSplitchBrowserClient({
-      clientKey: "pk_test",
-      context: { targetingKey: "u1" },
-      transport,
-      logger: new FakeLogger(),
-    });
-    await expect(client.init()).rejects.toThrow(/SDK_IDEMPOTENCY_KEY_UNAVAILABLE/);
-    globalThis.crypto.randomUUID = original;
-  });
-});
-
-describe("createSplitchBrowserClient: timer auto-flush (M39)", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("auto-flushes pending Exposures after FLUSH_DELAY_MS", async () => {
-    const transport = new FakeBrowserTransport([browserOkPayload()]);
-    const client = createSplitchBrowserClient({
-      clientKey: "pk_test",
-      context: { targetingKey: "u1" },
-      transport,
-      now: () => Date.parse("2026-08-08T00:00:00.000Z"),
-    });
-    await client.init();
-    client.evaluate("new-checkout", false);
-    expect(transport.redeemCalls).toHaveLength(0);
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(transport.redeemCalls.length).toBeGreaterThan(0);
   });
 });

@@ -89,6 +89,8 @@ export function createSplitchBrowserClient(
   let held: HeldPayload | null = null;
   let initPromise: Promise<void> | null = null;
   const loggedMissing = new Set<string>();
+  // Pass document/window only when the key is present: an absent key means
+  // "use the ambient global", while explicit undefined/null means "absent".
   const queue = new ExposureQueue({
     transport,
     logger,

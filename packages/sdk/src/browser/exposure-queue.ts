@@ -16,8 +16,13 @@ import { resolveDocument, resolveWindow } from "./lifecycle-targets";
 import type { BrowserTransport } from "./transport";
 
 const FLUSH_DELAY_MS = 5_000;
-/** Defense-in-depth: never spin forever if a response makes zero progress. */
-const MAX_DRAIN_BATCHES = EXPOSURE_BATCH_MAX_ITEMS * 4;
+/**
+ * Caps redeem round-trips inside one drainPending call. Stops a drain that never
+ * empties because new Exposures keep arriving during awaits. Zero-progress already
+ * stops no-op loops; this bounds successful-but-endless drains. Not derived from
+ * the per-request item cap.
+ */
+const MAX_BATCHES_PER_DRAIN = 10_000;
 
 export type { QueuedExposure } from "./exposure-batch";
 
@@ -28,6 +33,8 @@ export interface ExposureQueueDeps {
   /** Injectable page lifecycle targets for tests. Explicit null means absent. */
   readonly document?: Document | null;
   readonly window?: Window | null;
+  /** Test seam: override {@link MAX_BATCHES_PER_DRAIN}. */
+  readonly maxBatchesPerDrain?: number;
 }
 
 /**
@@ -152,7 +159,12 @@ export class ExposureQueue {
     return (async () => {
       try {
         while (this.activeDrain !== null) {
-          await this.activeDrain;
+          try {
+            await this.activeDrain;
+          } catch {
+            // Drain owner already logged; waiters must not adopt that failure —
+            // close()/flush() still get their own send attempt.
+          }
         }
         const work = this.drainPending(options.keepalive);
         this.activeDrain = work;
@@ -171,32 +183,49 @@ export class ExposureQueue {
 
   private async drainPending(keepalive: boolean): Promise<readonly ExposureBatchResult[]> {
     const completed: ExposureBatchResult[] = [];
+    const batchLimit = this.deps.maxBatchesPerDrain ?? MAX_BATCHES_PER_DRAIN;
     let batches = 0;
-    while (this.pending.length > 0) {
-      if (batches >= MAX_DRAIN_BATCHES) {
-        throw logZeroProgress(
-          this.deps.logger,
-          `Exposure drain exceeded ${MAX_DRAIN_BATCHES} batches without clearing the queue`,
-          this.pending.length,
-        );
+    try {
+      while (this.pending.length > 0) {
+        batches = await this.drainNextBatch(keepalive, batches, batchLimit, completed);
+        if (this.queuedDrains > 1) {
+          break;
+        }
       }
-      const batchCompleted = await this.runOneBatch(keepalive);
-      // Progress is per-response: empty/unmatched results complete nothing.
-      // Do not compare pending.length — items may enqueue during the await.
-      if (batchCompleted.length === 0) {
-        throw logZeroProgress(
-          this.deps.logger,
-          "Exposure batch response made zero progress (empty or unmatched results)",
-          this.pending.length,
-        );
-      }
-      completed.push(...batchCompleted);
-      batches += 1;
-      // Another flush/pagehide/close is waiting — let it continue with its options.
-      if (this.queuedDrains > 1) {
-        break;
-      }
+      return completed;
+    } finally {
+      this.afterDrain();
     }
+  }
+
+  private async drainNextBatch(
+    keepalive: boolean,
+    batches: number,
+    batchLimit: number,
+    completed: ExposureBatchResult[],
+  ): Promise<number> {
+    if (batches >= batchLimit) {
+      throw logZeroProgress(
+        this.deps.logger,
+        `Exposure drain exceeded ${batchLimit} batches without clearing the queue`,
+        this.pending.length,
+      );
+    }
+    const batchCompleted = await this.runOneBatch(keepalive);
+    if (batchCompleted.length === 0) {
+      throw logZeroProgress(
+        this.deps.logger,
+        "Exposure batch response made zero progress (empty or unmatched results)",
+        this.pending.length,
+      );
+    }
+    completed.push(...batchCompleted);
+    return batches + 1;
+  }
+
+  private afterDrain(): void {
+    // Always re-arm (or clear) after a drain, including when runOneBatch throws:
+    // a swallowed auto-flush failure must not permanently kill the 5s retry loop.
     if (this.pending.length === 0) {
       this.clearTimer();
       this.detachLifecycle();
@@ -204,7 +233,6 @@ export class ExposureQueue {
       this.ensureTimer();
       this.ensureLifecycle();
     }
-    return completed;
   }
 
   private async runOneBatch(keepalive: boolean): Promise<readonly ExposureBatchResult[]> {

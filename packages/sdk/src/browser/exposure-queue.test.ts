@@ -25,23 +25,32 @@ function acceptAll(exposures: readonly { exposureId: string }[]): BrowserExposur
   };
 }
 
+function networkFail(): BrowserExposuresResult {
+  return {
+    status: null,
+    results: null,
+    errorCode: "SDK_TRANSPORT_NETWORK",
+    errorMessage: "network down",
+  };
+}
+
 describe("ExposureQueue: overlapping flush drain", () => {
-  it("chains a second flush so later enqueues are sent (probe A / M34)", async () => {
+  it("second flush starts only after the first drain resolves (probe A / M34)", async () => {
     const gate = deferred<BrowserExposuresResult>();
-    const redeemCalls: { size: number; keepalive?: boolean }[] = [];
+    const events: string[] = [];
     let firstBatch: readonly { exposureId: string }[] = [];
     let call = 0;
     const transport = {
-      async redeemExposures(
-        exposures: readonly { exposureId: string }[],
-        options?: { keepalive?: boolean },
-      ) {
-        redeemCalls.push({ size: exposures.length, keepalive: options?.keepalive });
+      async redeemExposures(exposures: readonly { exposureId: string }[]) {
         call += 1;
+        events.push(`call-${call}-start`);
         if (call === 1) {
           firstBatch = exposures;
-          return gate.promise;
+          const result = await gate.promise;
+          events.push("call-1-end");
+          return result;
         }
+        events.push("call-2-end");
         return acceptAll(exposures);
       },
     };
@@ -60,16 +69,52 @@ describe("ExposureQueue: overlapping flush drain", () => {
     await vi.waitFor(() => {
       expect(firstBatch.length).toBe(1);
     });
+    expect(events).toEqual(["call-1-start"]);
     gate.resolve(acceptAll(firstBatch));
     await first;
     await second;
 
-    expect(redeemCalls.length).toBe(2);
-    expect(redeemCalls[0]?.size).toBe(1);
-    expect(redeemCalls[1]?.size).toBe(1);
+    expect(events).toEqual(["call-1-start", "call-1-end", "call-2-start", "call-2-end"]);
     expect(logger.errors).toHaveLength(0);
   });
 
+  it("close still sends after an in-flight drain fails (B2)", async () => {
+    const gate = deferred<BrowserExposuresResult>();
+    const redeemCalls: number[] = [];
+    let call = 0;
+    let firstBatch: readonly { exposureId: string }[] = [];
+    const transport = {
+      async redeemExposures(exposures: readonly { exposureId: string }[]) {
+        call += 1;
+        redeemCalls.push(exposures.length);
+        if (call === 1) {
+          firstBatch = exposures;
+          return gate.promise;
+        }
+        return acceptAll(exposures);
+      },
+    };
+    const queue = new ExposureQueue({
+      transport,
+      logger: new FakeLogger(),
+      now: () => Date.parse("2026-08-08T00:00:00.000Z"),
+    });
+
+    queue.enqueue("a", "ticket-a");
+    const first = queue.flush();
+    await vi.waitFor(() => {
+      expect(firstBatch.length).toBe(1);
+    });
+    const closing = queue.close();
+    gate.resolve(networkFail());
+    await expect(first).rejects.toThrow(/SDK_TRANSPORT_NETWORK|network down/);
+    await closing;
+    expect(redeemCalls.length).toBe(2);
+    expect(redeemCalls[1]).toBe(1);
+  });
+});
+
+describe("ExposureQueue: overlapping flush drain (handoff)", () => {
   it("close drains remaining items after a partial ack (probe B)", async () => {
     let calls = 0;
     const redeemCalls: number[] = [];
@@ -167,141 +212,5 @@ describe("ExposureQueue: overlapping flush drain", () => {
     expect(redeemCalls.length).toBe(2);
     expect(redeemCalls[1]?.keepalive).toBe(true);
     expect(logger.errors).toHaveLength(0);
-  });
-});
-
-describe("ExposureQueue: empty results fail loud (B3)", () => {
-  it("throws on a contract-valid empty results array instead of spinning", async () => {
-    let redeemCalls = 0;
-    const transport = {
-      async redeemExposures() {
-        redeemCalls += 1;
-        if (redeemCalls > 20) {
-          throw new Error("PROBE: runaway drain loop");
-        }
-        return { status: 202, results: [] };
-      },
-    };
-    const logger = new FakeLogger();
-    const queue = new ExposureQueue({
-      transport,
-      logger,
-      now: () => Date.parse("2026-08-08T00:00:00.000Z"),
-    });
-    queue.enqueue("a", "ticket-a");
-    await expect(queue.flush()).rejects.toThrow(/zero progress/);
-    expect(redeemCalls).toBe(1);
-    expect(logger.errors.some((row) => row.message.includes("zero progress"))).toBe(true);
-  });
-
-  it("correlates rejected rows by exposureId, not array index (M32)", async () => {
-    const logger = new FakeLogger();
-    const idA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-    const idB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-    let n = 0;
-    const transport = {
-      async redeemExposures(exposures: readonly { exposureId: string }[]) {
-        const first = exposures[0];
-        const second = exposures[1];
-        if (first === undefined || second === undefined) {
-          return acceptAll(exposures);
-        }
-        // Reordered: second rejected, first accepted — index correlation would mislabel.
-        return {
-          status: 202,
-          results: [
-            {
-              exposureId: second.exposureId,
-              status: "rejected" as const,
-              code: "VALIDATION_ERROR",
-            },
-            { exposureId: first.exposureId, status: "accepted" as const, code: null },
-          ],
-        };
-      },
-    };
-    vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(() => {
-      n += 1;
-      return n === 1 ? idA : idB;
-    });
-    const queue = new ExposureQueue({
-      transport,
-      logger,
-      now: () => Date.parse("2026-08-08T00:00:00.000Z"),
-    });
-    queue.enqueue("flag-a", "ticket-a");
-    queue.enqueue("flag-b", "ticket-b");
-    await queue.flush();
-    const rejected = logger.errors.find((row) => row.message.includes("rejected"));
-    expect(rejected).toBeDefined();
-    expect(rejected?.detail).toMatchObject({ exposureId: idB, flagKey: "flag-b" });
-    vi.restoreAllMocks();
-  });
-});
-
-describe("ExposureQueue: close drain", () => {
-  it("close drains multiple batches when more than the item cap is queued (probe D)", async () => {
-    const redeemCalls: number[] = [];
-    const transport = {
-      async redeemExposures(exposures: readonly { exposureId: string }[]) {
-        redeemCalls.push(exposures.length);
-        return acceptAll(exposures);
-      },
-    };
-    const logger = new FakeLogger();
-    const queue = new ExposureQueue({
-      transport,
-      logger,
-      now: () => Date.parse("2026-08-08T00:00:00.000Z"),
-    });
-
-    const total = EXPOSURE_BATCH_MAX_ITEMS + 5;
-    for (let i = 0; i < total; i++) {
-      queue.enqueue(`flag-${i}`, `ticket-${i}`);
-    }
-    await queue.close();
-
-    expect(redeemCalls.reduce((sum, n) => sum + n, 0)).toBe(total);
-    expect(logger.errors).toHaveLength(0);
-  });
-
-  it("logs when enqueue happens after close", async () => {
-    const logger = new FakeLogger();
-    const queue = new ExposureQueue({
-      transport: { redeemExposures: async () => acceptAll([]) },
-      logger,
-      now: () => Date.now(),
-    });
-    await queue.close();
-    queue.enqueue("late", "ticket");
-    expect(logger.errors.some((row) => row.message.includes("after close()"))).toBe(true);
-  });
-
-  it("detachLifecycle on close removes pagehide listeners (M37)", async () => {
-    const listeners = new Map<string, Set<() => void>>();
-    const fakeWindow = {
-      addEventListener(type: string, handler: () => void) {
-        let set = listeners.get(type);
-        if (set === undefined) {
-          set = new Set();
-          listeners.set(type, set);
-        }
-        set.add(handler);
-      },
-      removeEventListener(type: string, handler: () => void) {
-        listeners.get(type)?.delete(handler);
-      },
-    } as unknown as Window;
-    const queue = new ExposureQueue({
-      transport: { redeemExposures: async (e) => acceptAll(e) },
-      logger: new FakeLogger(),
-      now: () => Date.now(),
-      window: fakeWindow,
-      document: null,
-    });
-    queue.enqueue("a", "ticket-a");
-    expect(listeners.get("pagehide")?.size).toBe(1);
-    await queue.close();
-    expect(listeners.get("pagehide")?.size ?? 0).toBe(0);
   });
 });

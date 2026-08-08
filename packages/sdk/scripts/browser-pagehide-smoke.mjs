@@ -164,14 +164,18 @@ function ensureChromium(cliPath, chromium) {
   });
 }
 
-/** Throws Illegal invocation when called unbound — does not mask SPL-321. */
+/**
+ * Logs fetch calls and rejects a foreign receiver (e.g. transport config).
+ * A correct plain call from an ES module has `this === undefined`, which WebIDL
+ * coerces to the global — that shape must succeed (same as `this === window`).
+ */
 async function installThisCheckingFetchProbe(page) {
   await page.addInitScript(() => {
     const originalFetch = window.fetch.bind(window);
     window.__SPLITCH_FETCH_LOG__ = [];
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: must mirror Window.fetch this-checks
     window.fetch = function fetch(input, init) {
-      if (this !== window) {
+      if (this !== undefined && this !== window) {
         throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
       }
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;

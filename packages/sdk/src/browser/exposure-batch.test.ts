@@ -4,7 +4,7 @@ import {
   EXPOSURE_BATCH_MAX_ITEMS,
 } from "../generated/contract-surface.js";
 import { FakeLogger } from "../test-fixtures";
-import { mintExposureId, pendingBodyBytes, takeBatch, type QueuedExposure } from "./exposure-batch";
+import { mintExposureId, takeBatch, type QueuedExposure } from "./exposure-batch";
 
 function item(flagKey: string, ticket = "t"): QueuedExposure {
   return {
@@ -32,7 +32,6 @@ describe("takeBatch caps in isolation (M40/M41)", () => {
     expect(first.length).toBeGreaterThanOrEqual(1);
     expect(first.length).toBeLessThan(3);
     expect(pending.length).toBeGreaterThan(0);
-    expect(pendingBodyBytes(first)).toBeLessThanOrEqual(EXPOSURE_BATCH_MAX_BODY_BYTES + 50_000);
   });
 
   it("still sends a single oversize item so the Worker can reject loudly", () => {

@@ -220,4 +220,33 @@ describe("ExposureQueue: visibility + timer (M38/M39)", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(redeemCalls).toEqual([1]);
   });
+
+  it("re-arms the 5s timer after a failed auto-flush (B1)", async () => {
+    let call = 0;
+    const redeemCalls: number[] = [];
+    const queue = new ExposureQueue({
+      transport: {
+        async redeemExposures(exposures) {
+          call += 1;
+          redeemCalls.push(exposures.length);
+          if (call === 1) {
+            return {
+              status: null,
+              results: null,
+              errorCode: "SDK_TRANSPORT_NETWORK" as const,
+              errorMessage: "blip",
+            };
+          }
+          return acceptAll(exposures);
+        },
+      },
+      logger: new FakeLogger(),
+      now: () => Date.parse("2026-08-08T00:00:00.000Z"),
+    });
+    queue.enqueue("a", "ticket-a");
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(redeemCalls).toEqual([1]);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(redeemCalls).toEqual([1, 1]);
+  });
 });
