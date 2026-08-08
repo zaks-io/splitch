@@ -21,17 +21,28 @@ export default serverFn({ method: "POST" }).handler(async () => true);
     expect(discover(source).sort()).toEqual(["default", "direct", "hidden", "renamed"]);
   });
 
-  it("finds namespace imports and separately assigned exports", () => {
+  it("finds namespace imports", () => {
     const source = `
 import * as start from "@tanstack/react-start";
 
 export const namespaced = start.createServerFn({ method: "POST" }).handler(async () => true);
-let assigned;
-assigned = start.createServerFn({ method: "POST" }).handler(async () => true);
-export { assigned as renamedAssignment };
 `;
 
-    expect(discover(source).sort()).toEqual(["namespaced", "renamedAssignment"]);
+    expect(discover(source)).toEqual(["namespaced"]);
+  });
+
+  it("refuses a server function assigned without a variable declarator", () => {
+    const source = `
+import * as start from "@tanstack/react-start";
+
+let assigned;
+assigned = start.createServerFn({ method: "POST" }).handler(async () => true);
+export { assigned };
+`;
+
+    expect(() => discover(source)).toThrowError(
+      'lib/probe.ts: createServerFn POST is not assigned to a statically reviewable binding: "start.createServerFn({ method: \\"POST\\" })"',
+    );
   });
 
   it("finds a function-scoped binding", () => {

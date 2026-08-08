@@ -6,7 +6,7 @@ import {
   CONTROL_PANEL_ENVIRONMENT_HEADER,
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { setCookieHeaderWrites } from "./cookie-header-write-test-helpers";
+import { createCookieHeaderWriteDiscovery } from "./cookie-header-write-test-helpers";
 import { createOAuthState, OAUTH_STATE_COOKIE_NAME } from "./oauth-state";
 import { createServerFnSurfaceDiscovery } from "./server-fn-surface-test-helpers";
 import { createSession, SESSION_COOKIE_NAME } from "./session";
@@ -19,9 +19,6 @@ import { MemoryKv, NOW, sessionPrincipal } from "./session-test-harness";
 import { projectProgram } from "./typescript-program-test-helpers";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
-const SERVER_FN_SURFACE = createServerFnSurfaceDiscovery(
-  projectProgram(join(SRC, "..", "tsconfig.json")),
-);
 const HEADER_NAME_MODULES = [
   {
     moduleSpecifier: "@splitch/control-plane-sdk/control-panel-identity",
@@ -31,6 +28,11 @@ const HEADER_NAME_MODULES = [
     },
   },
 ] as const;
+const SOURCE_PROGRAM = projectProgram(join(SRC, "..", "tsconfig.json"));
+const SERVER_FN_SURFACE = createServerFnSurfaceDiscovery(SOURCE_PROGRAM);
+const COOKIE_HEADER_WRITES = createCookieHeaderWriteDiscovery(SOURCE_PROGRAM, {
+  headerNameModules: HEADER_NAME_MODULES,
+});
 
 /**
  * Cookie-authenticated panel writes that ride the session cookie.
@@ -93,7 +95,7 @@ function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
     const path = join(dir, entry);
     if (statSync(path).isDirectory()) return sourceFiles(path);
-    if (!/\.tsx?$/.test(entry) || entry.includes(".test.")) return [];
+    if (!/\.tsx?$/.test(entry) || /\.test\.tsx?$/.test(entry)) return [];
     return [path];
   });
 }
@@ -194,9 +196,8 @@ function cookieConstructionOffenders(path: string): Array<string> {
 
 function cookieHeaderWrites(path: string): Array<string> {
   const relativePath = relative(path);
-  return setCookieHeaderWrites(readFileSync(path, "utf8"), relativePath, {
+  return COOKIE_HEADER_WRITES.setCookieHeaderWrites(path, relativePath, {
     allowSerializedCookieAssertion: relativePath === "lib/session-cookie.ts",
-    headerNameModules: HEADER_NAME_MODULES,
   }).map((write) => `${relativePath}: ${write.method}(${write.argument})`);
 }
 

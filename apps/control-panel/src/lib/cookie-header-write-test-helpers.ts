@@ -7,67 +7,90 @@ import {
   isIdentifier,
   isImportDeclaration,
   isNamedImports,
-  isNewExpression,
   isNoSubstitutionTemplateLiteral,
   isPropertyAccessExpression,
   isPropertyAssignment,
   isStringLiteral,
   isTypeAssertionExpression,
-  isVariableDeclaration,
   type Node,
+  type Program,
   type SourceFile,
+  SymbolFlags,
+  type Type,
+  TypeFlags,
+  type TypeChecker,
 } from "typescript";
-import { parseSourceFile, visitNodes } from "./source-file-test-helpers";
+import { visitNodes } from "./source-file-test-helpers";
 
-export interface SetCookieHeaderWrite {
+interface SetCookieHeaderWrite {
   argument: string;
   method: "append" | "entry" | "property" | "set";
 }
 
-interface SetCookieHeaderWriteOptions {
-  allowSerializedCookieAssertion?: boolean;
+interface CookieHeaderWriteDiscoveryOptions {
   headerNameModules?: ReadonlyArray<{
     exports: Readonly<Record<string, string>>;
     moduleSpecifier: string;
   }>;
 }
 
-export function setCookieHeaderWrites(
-  source: string,
-  fileName: string,
-  options: SetCookieHeaderWriteOptions = {},
-): Array<SetCookieHeaderWrite> {
-  const sourceFile = parseSourceFile(source, fileName);
-  assertCookieBrandProvenance(sourceFile, fileName, options);
-  const headerNameBindings = importedHeaderNameBindings(
-    sourceFile,
-    options.headerNameModules ?? [],
-  );
-  const headerReceiverBindings = localHeaderReceiverBindings(sourceFile);
+interface SetCookieHeaderWriteOptions {
+  allowSerializedCookieAssertion?: boolean;
+}
 
-  const writes: Array<SetCookieHeaderWrite> = [];
-  visitNodes(sourceFile, (node) => {
-    const callWrite = callHeaderWrite(
-      node,
-      sourceFile,
-      fileName,
-      headerNameBindings,
-      headerReceiverBindings,
-    );
-    if (callWrite) writes.push(callWrite);
+export interface CookieHeaderWriteDiscovery {
+  setCookieHeaderWrites(
+    filePath: string,
+    displayName: string,
+    options?: SetCookieHeaderWriteOptions,
+  ): SetCookieHeaderWrite[];
+}
 
-    const propertyWrite = propertyHeaderWrite(node, sourceFile);
-    if (propertyWrite) writes.push(propertyWrite);
+export function createCookieHeaderWriteDiscovery(
+  program: Program,
+  discoveryOptions: CookieHeaderWriteDiscoveryOptions = {},
+): CookieHeaderWriteDiscovery {
+  const checker = program.getTypeChecker();
+  const headersType = globalHeadersType(checker);
 
-    const entryWrite = entryHeaderWrite(node, sourceFile);
-    if (entryWrite) writes.push(entryWrite);
-  });
-  return writes;
+  return {
+    setCookieHeaderWrites(filePath, displayName, options = {}) {
+      const sourceFile = program.getSourceFile(filePath);
+      if (!sourceFile) {
+        throw new Error(`${displayName}: source file is absent from TypeScript program`);
+      }
+      assertCookieBrandProvenance(sourceFile, displayName, options);
+      const headerNameBindings = importedHeaderNameBindings(
+        sourceFile,
+        discoveryOptions.headerNameModules ?? [],
+      );
+
+      const writes: SetCookieHeaderWrite[] = [];
+      visitNodes(sourceFile, (node) => {
+        const callWrite = callHeaderWrite(
+          node,
+          sourceFile,
+          displayName,
+          headerNameBindings,
+          checker,
+          headersType,
+        );
+        if (callWrite) writes.push(callWrite);
+
+        const propertyWrite = propertyHeaderWrite(node, sourceFile);
+        if (propertyWrite) writes.push(propertyWrite);
+
+        const entryWrite = entryHeaderWrite(node, sourceFile);
+        if (entryWrite) writes.push(entryWrite);
+      });
+      return writes;
+    },
+  };
 }
 
 function importedHeaderNameBindings(
   sourceFile: SourceFile,
-  modules: NonNullable<SetCookieHeaderWriteOptions["headerNameModules"]>,
+  modules: NonNullable<CookieHeaderWriteDiscoveryOptions["headerNameModules"]>,
 ): Record<string, string> {
   const configured = new Map(modules.map((module) => [module.moduleSpecifier, module.exports]));
   return Object.fromEntries(
@@ -97,12 +120,24 @@ function callHeaderWrite(
   sourceFile: SourceFile,
   fileName: string,
   headerNameBindings: Readonly<Record<string, string>>,
-  headerReceiverBindings: ReadonlySet<string>,
+  checker: TypeChecker,
+  headersType: Type,
 ): SetCookieHeaderWrite | null {
   if (!isCallExpression(node) || !isPropertyAccessExpression(node.expression)) return null;
   const method = node.expression.name.text;
   if (method !== "append" && method !== "set") return null;
-  if (!isHeaderReceiver(node.expression.expression, headerReceiverBindings)) return null;
+  if (
+    !isHeadersReceiver(
+      node.expression.expression,
+      method,
+      sourceFile,
+      fileName,
+      checker,
+      headersType,
+    )
+  ) {
+    return null;
+  }
 
   const [headerName, value] = node.arguments;
   const staticName = headerName ? staticString(headerName, headerNameBindings) : null;
@@ -115,6 +150,29 @@ function callHeaderWrite(
     argument: value?.getText(sourceFile) ?? "<missing>",
     method,
   };
+}
+
+function isHeadersReceiver(
+  receiver: Expression,
+  method: "append" | "set",
+  sourceFile: SourceFile,
+  fileName: string,
+  checker: TypeChecker,
+  headersType: Type,
+): boolean {
+  const receiverType = checker.getTypeAtLocation(receiver);
+  if (receiverType.flags & (TypeFlags.Any | TypeFlags.Unknown)) {
+    throw new Error(
+      `${fileName}: ${method}() receiver type is not statically resolvable: ${receiver.getText(sourceFile)}`,
+    );
+  }
+  return checker.isTypeAssignableTo(receiverType, headersType);
+}
+
+function globalHeadersType(checker: TypeChecker): Type {
+  const symbol = checker.resolveName("Headers", undefined, SymbolFlags.Type, false);
+  if (!symbol) throw new Error("Cannot resolve the global Headers type");
+  return checker.getDeclaredTypeOfSymbol(symbol);
 }
 
 function propertyHeaderWrite(node: Node, sourceFile: SourceFile): SetCookieHeaderWrite | null {
@@ -145,26 +203,6 @@ function assertCookieBrandProvenance(
       `${fileName}: SerializedHttpOnlyCookie assertion bypasses serializer provenance: ${node.getText(sourceFile)}`,
     );
   });
-}
-
-function localHeaderReceiverBindings(sourceFile: SourceFile): Set<string> {
-  const bindings = new Set<string>();
-  visitNodes(sourceFile, (node) => {
-    if (!isVariableDeclaration(node) || !isIdentifier(node.name) || !node.initializer) return;
-    if (isHeaderReceiver(node.initializer, bindings)) bindings.add(node.name.text);
-  });
-  return bindings;
-}
-
-function isHeaderReceiver(receiver: Expression, bindings: ReadonlySet<string>): boolean {
-  if (isIdentifier(receiver))
-    return /headers?$/i.test(receiver.text) || bindings.has(receiver.text);
-  if (isPropertyAccessExpression(receiver)) return receiver.name.text.toLowerCase() === "headers";
-  return (
-    isNewExpression(receiver) &&
-    isIdentifier(receiver.expression) &&
-    receiver.expression.text === "Headers"
-  );
 }
 
 function staticPropertyName(name: Node): string | null {

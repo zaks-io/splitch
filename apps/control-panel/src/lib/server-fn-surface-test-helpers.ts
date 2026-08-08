@@ -2,7 +2,6 @@ import {
   type CallExpression,
   canHaveModifiers,
   getModifiers,
-  isBinaryExpression,
   isCallExpression,
   isExportAssignment,
   isExportDeclaration,
@@ -115,13 +114,6 @@ function enclosingServerFnBinding(call: CallExpression): string | null {
 
 function bindingName(node: Node): string | null {
   if (isVariableDeclaration(node) && isIdentifier(node.name)) return node.name.text;
-  if (
-    isBinaryExpression(node) &&
-    node.operatorToken.kind === SyntaxKind.EqualsToken &&
-    isIdentifier(node.left)
-  ) {
-    return node.left.text;
-  }
   return isExportAssignment(node) && !node.isExportEquals ? "default" : null;
 }
 
