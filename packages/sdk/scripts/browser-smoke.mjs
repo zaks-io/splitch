@@ -106,6 +106,7 @@ function resolvePlaywright() {
 }
 
 function startStubServer() {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: stub routes for real Chromium smoke
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
 

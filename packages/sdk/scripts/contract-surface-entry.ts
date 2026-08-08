@@ -1,10 +1,13 @@
 /**
- * Build-only entry: zod-free validators for the public SDK contract surface.
- * tsup reads this file and emits src/generated/contract-surface.{js,d.ts}.
- *
- * Authoring source of truth remains Zod in the contracts package. This entry
- * re-exports the compiled validators so the published package ships zero
- * runtime zod. Do not import this module from runtime code outside the build.
+ * Build-only entry: zod-free surface for the public SDK contract types. tsup
+ * reads this file and emits src/generated/contract-surface.{js,d.ts}. Its enum
+ * members and required-key lists are generated from the contracts package by
+ * `scripts/generate-contract-surface.mjs`, which runs first in the same
+ * `generate` script; contracts remains the authoring source of truth. Lockstep
+ * guards: `contract-surface-structural.test.ts` (shape),
+ * `contract-surface-parity.test.ts` (fixtures / divergences), and
+ * `contract-surface-assignability.ts` (types). Do not import this module from
+ * runtime code outside the build.
  */
 
 export type {
@@ -13,12 +16,6 @@ export type {
   ExposureBatchResponse,
   ExposureBatchResult,
   ExposureBatchResultStatus,
-} from "./contract-surface-exposures";
-export {
-  EXPOSURE_BATCH_MAX_BODY_BYTES,
-  EXPOSURE_BATCH_MAX_ITEMS,
-  ExposureBatchRequestSchema,
-  ExposureBatchResponseSchema,
 } from "./contract-surface-exposures";
 export type {
   DataPlaneEvaluateResponse,
@@ -31,10 +28,29 @@ export type {
   ResolutionReason,
   VariantValue,
 } from "./contract-surface-validators";
-export {
+
+import {
+  EXPOSURE_BATCH_MAX_BODY_BYTES,
+  EXPOSURE_BATCH_MAX_ITEMS,
+  ExposureBatchRequestSchema,
+  ExposureBatchResponseSchema,
+} from "./contract-surface-exposures";
+import {
   DataPlaneEvaluateResponseSchema,
   ErrorCodeSchema,
   EvaluateAllResponseSchema,
   PeekEvaluateResponseSchema,
   ResolutionDetailsSchema,
 } from "./contract-surface-validators";
+
+export {
+  DataPlaneEvaluateResponseSchema,
+  ErrorCodeSchema,
+  EvaluateAllResponseSchema,
+  EXPOSURE_BATCH_MAX_BODY_BYTES,
+  EXPOSURE_BATCH_MAX_ITEMS,
+  ExposureBatchRequestSchema,
+  ExposureBatchResponseSchema,
+  PeekEvaluateResponseSchema,
+  ResolutionDetailsSchema,
+};

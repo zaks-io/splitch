@@ -1,22 +1,45 @@
 /**
- * Zod-free validators compiled into the public SDK contract surface.
- * Keep `contract-surface-parity.test.ts` green when either side changes.
+ * Zod-free parsers mirroring the contracts package authoring schemas.
+ * Every enum member and required-key list they check against is generated from
+ * contracts by `scripts/generate-contract-surface.mjs`; the parsing logic and
+ * the object shapes in `contract-surface-types.ts` are hand-written and held in
+ * lockstep by `contract-surface-structural.test.ts` (shape),
+ * `contract-surface-parity.test.ts` (fixtures / divergences), and
+ * `contract-surface-assignability.ts` (types).
+ *
+ * Accepted domain is JSON-only by construction today: every `parse()` call
+ * takes `await response.json()`, and these schemas are not exported on a
+ * public `./browser` subpath. `isVariantValue` is wider than `z.number()` /
+ * `z.record()` (it accepts NaN, Infinity, Date, Map, class instances); that
+ * gap is unreachable until a non-JSON caller appears.
+ *
+ * Response parsers build results field-by-field from known keys: an unknown
+ * key means the server is ahead of this mirror, not a malformed payload.
+ * Rejecting it would surface as SDK_TRANSPORT_PARSE and collapse every flag
+ * to the caller's default.
  */
 
+import type {
+  DataPlaneEvaluateResponse,
+  ErrorCode,
+  EvaluateAllEntry,
+  EvaluateAllReason,
+  EvaluateAllResponse,
+  PeekEvaluateResponse,
+  ResolutionDetails,
+  ResolutionReason,
+  VariantValue,
+} from "./contract-surface-types";
 import {
-  type DataPlaneEvaluateResponse,
-  type ErrorCode,
-  type EvaluateAllEntry,
-  type EvaluateAllReason,
-  type EvaluateAllResponse,
+  dataPlaneEvaluateRequiredKeys,
   errorCodes,
+  evaluateAllEntryRequiredKeys,
   evaluateAllReasons,
-  type PeekEvaluateResponse,
-  type ResolutionDetails,
-  type ResolutionReason,
+  evaluateAllResponseRequiredKeys,
+  peekEvaluateRequiredKeys,
+  resolutionDetailsRequiredKeys,
   resolutionReasons,
-  type VariantValue,
-} from "./contract-surface-enums";
+} from "./generated/contract-surface-members";
 
 export type {
   DataPlaneEvaluateResponse,
@@ -28,7 +51,7 @@ export type {
   ResolutionDetails,
   ResolutionReason,
   VariantValue,
-} from "./contract-surface-enums";
+} from "./contract-surface-types";
 
 interface ParseSuccess<T> {
   success: true;
@@ -77,10 +100,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function assertExactKeys(value: Record<string, unknown>, allowed: readonly string[]): void {
-  for (const key of Object.keys(value)) {
-    if (!allowed.includes(key)) {
-      fail(`unexpected key ${JSON.stringify(key)}`);
+function requireKeys(
+  value: Record<string, unknown>,
+  required: readonly string[],
+  path: string,
+): void {
+  for (const key of required) {
+    if (!Object.hasOwn(value, key)) {
+      fail(`${path}: missing required key ${JSON.stringify(key)}`);
     }
   }
 }
@@ -154,6 +181,7 @@ function parseResolutionDetails(input: unknown): ResolutionDetails {
   if (!isPlainObject(input)) {
     fail("ResolutionDetails must be an object");
   }
+  requireKeys(input, resolutionDetailsRequiredKeys, "ResolutionDetails");
   const value = parseVariantValue(input.value, "value");
   if (!(typeof input.variantName === "string" || input.variantName === null)) {
     fail("variantName must be string | null");
@@ -187,14 +215,11 @@ function parseDataPlaneEvaluateResponse(input: unknown): DataPlaneEvaluateRespon
   if (!isPlainObject(input)) {
     fail("DataPlaneEvaluateResponse must be an object");
   }
-  assertExactKeys(input, ["variant"]);
-  if (!("variant" in input)) {
-    fail("variant is required");
-  }
+  requireKeys(input, dataPlaneEvaluateRequiredKeys, "DataPlaneEvaluateResponse");
   if (input.variant !== null && !isVariantValue(input.variant)) {
     fail("variant must be VariantValue | null");
   }
-  return { variant: input.variant };
+  return { variant: input.variant as VariantValue | null };
 }
 
 export const DataPlaneEvaluateResponseSchema: Schema<DataPlaneEvaluateResponse> = asSchema(
@@ -205,10 +230,7 @@ function parsePeekEvaluateResponse(input: unknown): PeekEvaluateResponse {
   if (!isPlainObject(input)) {
     fail("PeekEvaluateResponse must be an object");
   }
-  assertExactKeys(input, ["variant"]);
-  if (!("variant" in input)) {
-    fail("variant is required");
-  }
+  requireKeys(input, peekEvaluateRequiredKeys, "PeekEvaluateResponse");
   return { variant: parseVariantValue(input.variant, "variant") };
 }
 
@@ -228,7 +250,7 @@ function parseEvaluateAllEntry(input: unknown, path: string): EvaluateAllEntry {
   if (!isPlainObject(input)) {
     fail(`${path} must be an object`);
   }
-  assertExactKeys(input, ["variant", "variantName", "reason", "errorCode", "exposureTicket"]);
+  requireKeys(input, evaluateAllEntryRequiredKeys, path);
   if (input.variant !== null && !isVariantValue(input.variant)) {
     fail(`${path}.variant must be VariantValue | null`);
   }
@@ -246,11 +268,11 @@ function parseEvaluateAllEntry(input: unknown, path: string): EvaluateAllEntry {
   }
 
   const entry: EvaluateAllEntry = {
-    variant: input.variant,
-    variantName: input.variantName,
+    variant: input.variant as VariantValue | null,
+    variantName: input.variantName as string | null,
     reason: input.reason as EvaluateAllReason,
     errorCode: input.errorCode as ErrorCode | null,
-    exposureTicket: input.exposureTicket,
+    exposureTicket: input.exposureTicket as string | null,
   };
   assertEvaluateAllEntryRefinements(entry, path);
   return entry;
@@ -260,7 +282,7 @@ function parseEvaluateAllResponse(input: unknown): EvaluateAllResponse {
   if (!isPlainObject(input)) {
     fail("EvaluateAllResponse must be an object");
   }
-  assertExactKeys(input, ["evaluations"]);
+  requireKeys(input, evaluateAllResponseRequiredKeys, "EvaluateAllResponse");
   if (!isPlainObject(input.evaluations)) {
     fail("evaluations must be an object");
   }
@@ -268,7 +290,7 @@ function parseEvaluateAllResponse(input: unknown): EvaluateAllResponse {
   // property instead of hitting Object.prototype.__proto__. The map keeps a
   // normal Object.prototype so Record consumers can call hasOwnProperty /
   // toString. (zod 4.4.3 drops the "__proto__" entry entirely — see the
-  // parity suite's divergence pin.)
+  // parity suite's divergence pin; Worker-side silent drop is SPL-353.)
   const evaluations: Record<string, EvaluateAllEntry> = {};
   for (const [flagKey, entry] of Object.entries(input.evaluations)) {
     Object.defineProperty(evaluations, flagKey, {

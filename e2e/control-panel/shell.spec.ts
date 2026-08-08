@@ -202,7 +202,10 @@ test.describe("Control Panel local full-stack harness", () => {
     await expect(shell).toHaveAttribute("data-environment-id", "env_checkout_dev_e2e");
     const nav = page.getByRole("navigation", { name: "App sections" });
     await expect(nav).toBeVisible();
-    await expect(nav.getByRole("link", { name: /Segments/ })).toHaveCount(0);
+    await expect(nav.getByRole("link", { name: "Segments App-level" })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Segments App-level" }).getByText("App-level"),
+    ).toBeVisible();
     await expect(page.getByRole("link", { name: "Metrics App-level" })).toBeVisible();
     await expect(
       page.getByRole("link", { name: "Metrics App-level" }).getByText("App-level"),

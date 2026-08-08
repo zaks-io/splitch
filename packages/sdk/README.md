@@ -17,7 +17,8 @@ npm install @splitch/sdk
 ```
 
 ESM only. Node >= 20, browsers, and edge runtimes. Zero runtime dependencies —
-response validation is compiled into the package at build time.
+response validation is a hand-maintained zod-free mirror bundled at build time
+(parity-tested against contracts Zod; not codegen).
 
 ## Hello world
 
@@ -189,6 +190,87 @@ silent invented default.
 (`RATE_LIMITED`) — including items enqueued after the overflow was detected. One
 transient blip at 25 pending loses those 25 Exposures; call `flush()` sooner or
 reduce concurrent first-reads.
+
+## Convex
+
+Convex's default runtime is a custom V8 isolate (no Node built-ins). `fetch` is
+available in **actions** and **HTTP actions** only — not in queries or
+mutations
+([Runtimes](https://docs.convex.dev/functions/runtimes),
+[Actions](https://docs.convex.dev/functions/actions),
+[Query functions](https://docs.convex.dev/functions/query-functions)).
+
+Call `@splitch/sdk` from an action (or HTTP action), then hand the result to
+queries/mutations as ordinary data:
+
+```ts
+// convex/flags.ts — action (has fetch)
+import { createSplitchClient } from "@splitch/sdk";
+import { action } from "./_generated/server";
+import { v } from "convex/values";
+
+export const evaluateFlag = action({
+  args: {
+    flagKey: v.string(),
+    targetingKey: v.string(),
+    idempotencyKey: v.string(),
+  },
+  handler: async (_ctx, args) => {
+    const splitch = createSplitchClient({
+      // Client Key for Exposure-bearing evaluate; from Convex env vars.
+      clientKey: process.env.SPLITCH_CLIENT_KEY!,
+      endpoint: process.env.SPLITCH_ENDPOINT,
+    });
+    return await splitch.evaluate(args.flagKey, {
+      targetingKey: args.targetingKey,
+      idempotencyKey: args.idempotencyKey,
+      defaultValue: false,
+    });
+  },
+});
+```
+
+### Bootstrap for the browser client
+
+An [HTTP action](https://docs.convex.dev/functions/http-actions) is the natural
+place to mint Precomputed Evaluations for SSR / hydration. Use an **API Key**
+from [Convex environment variables](https://docs.convex.dev/production/environment-variables)
+— never ship an API Key into Convex client-side code:
+
+```ts
+// convex/http.ts
+import { httpRouter } from "convex/server";
+import { httpAction } from "./_generated/server";
+import { createSplitchClient } from "@splitch/sdk";
+
+const http = httpRouter();
+
+http.route({
+  path: "/splitch/bootstrap",
+  method: "POST",
+  handler: httpAction(async (_ctx, request) => {
+    const { targetingKey } = await request.json();
+    const splitch = createSplitchClient({
+      apiKey: process.env.SPLITCH_API_KEY!,
+    });
+    // { context, evaluations, etag } — browser client's bootstrap input
+    const precomputed = await splitch.evaluateAll({ targetingKey });
+    return new Response(JSON.stringify(precomputed), {
+      headers: { "content-type": "application/json" },
+    });
+  }),
+});
+
+export default http;
+```
+
+Fail-loud is unchanged in the isolate: missing credentials throw at
+construction; transport failures surface as `reason: "ERROR"` on
+`evaluate` / `evaluateDetails`, or as a thrown `SplitchSdkError` on
+`evaluateAll`.
+
+A `convex-test` fixture under `fixtures/convex-sdk-consumer/` is exercised by
+`pnpm --filter @splitch/sdk test:consumer-smoke`.
 
 ## Links
 

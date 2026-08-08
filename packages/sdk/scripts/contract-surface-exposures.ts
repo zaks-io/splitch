@@ -2,26 +2,36 @@
  * Zod-free Exposure batch validators for the public SDK contract surface.
  */
 
-import {
-  type ErrorCode,
-  EXPOSURE_BATCH_MAX_ITEMS,
-  type ExposureBatchItem,
-  type ExposureBatchRequest,
-  type ExposureBatchResponse,
-  type ExposureBatchResult,
-  type ExposureBatchResultStatus,
-  exposureBatchResultStatuses,
-} from "./contract-surface-enums";
+import type { ErrorCode } from "./generated/contract-surface-members";
 import { ErrorCodeSchema } from "./contract-surface-validators";
 
-export type {
-  ExposureBatchItem,
-  ExposureBatchRequest,
-  ExposureBatchResponse,
-  ExposureBatchResult,
-  ExposureBatchResultStatus,
-} from "./contract-surface-enums";
-export { EXPOSURE_BATCH_MAX_BODY_BYTES, EXPOSURE_BATCH_MAX_ITEMS } from "./contract-surface-enums";
+/** Max items per Exposure batch (Web Event parity; contracts exposures-wire). */
+export const EXPOSURE_BATCH_MAX_ITEMS = 25;
+/** Max UTF-8 JSON body bytes for an Exposure batch. */
+export const EXPOSURE_BATCH_MAX_BODY_BYTES = 32 * 1024;
+
+const exposureBatchResultStatuses = ["accepted", "deduplicated", "rejected"] as const;
+export type ExposureBatchResultStatus = (typeof exposureBatchResultStatuses)[number];
+
+export interface ExposureBatchItem {
+  exposureId: string;
+  exposureTicket: string;
+  clientTimestamp: string;
+}
+
+export interface ExposureBatchRequest {
+  exposures: ExposureBatchItem[];
+}
+
+export interface ExposureBatchResult {
+  exposureId: string;
+  status: ExposureBatchResultStatus;
+  code: ErrorCode | null;
+}
+
+export interface ExposureBatchResponse {
+  results: ExposureBatchResult[];
+}
 
 interface ParseSuccess<T> {
   success: true;

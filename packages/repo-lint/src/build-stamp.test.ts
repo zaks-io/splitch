@@ -10,12 +10,20 @@ interface BuildStamp {
   version: string;
   sourceDigest: string;
 }
-const { computeTreeDigest, verifyBuildStamp, writeBuildStamp } = (await import(
+const { computeTreeDigest, computeSourceDigest, verifyBuildStamp, writeBuildStamp } = (await import(
   pathToFileURL(path.join(repoRoot, "scripts/release/build-stamp.mjs")).href
 )) as {
   computeTreeDigest: (dir: string) => string;
+  computeSourceDigest: (targetKey: string, repoRoot: string) => string;
   verifyBuildStamp: (targetKey: string, repoRoot: string) => BuildStamp;
   writeBuildStamp: (targetKey: string, repoRoot: string) => BuildStamp;
+};
+const { RELEASE_TARGETS } = (await import(
+  pathToFileURL(path.join(repoRoot, "scripts/release/constants.mjs")).href
+)) as {
+  RELEASE_TARGETS: {
+    sdk: { stampInputs: readonly string[] };
+  };
 };
 
 let scratch: string;
@@ -87,5 +95,34 @@ describe("build stamp guard", () => {
     const before = computeTreeDigest(path.join(packageRoot, "dist"));
     writeFileSync(path.join(packageRoot, "dist/index.js"), "export const a = 3;\n");
     expect(computeTreeDigest(path.join(packageRoot, "dist"))).not.toBe(before);
+  });
+
+  it("sdk stampInputs cover browser tsup and exposure surface sources (SPL-332)", () => {
+    expect(RELEASE_TARGETS.sdk.stampInputs).toEqual(
+      expect.arrayContaining(["scripts/contract-surface-exposures.ts", "tsup.browser.config.ts"]),
+    );
+  });
+
+  it("sdk source digest changes when exposure surface or browser tsup inputs change", () => {
+    const exposures = path.join(repoRoot, "packages/sdk/scripts/contract-surface-exposures.ts");
+    const browserTsup = path.join(repoRoot, "packages/sdk/tsup.browser.config.ts");
+    const baseline = computeSourceDigest("sdk", repoRoot);
+    const marker = `\n// t332r9-stamp-probe ${Date.now()}\n`;
+    const exposuresBefore = readFileSync(exposures, "utf8");
+    const browserBefore = readFileSync(browserTsup, "utf8");
+
+    try {
+      writeFileSync(exposures, `${exposuresBefore}${marker}`);
+      expect(computeSourceDigest("sdk", repoRoot)).not.toBe(baseline);
+      writeFileSync(exposures, exposuresBefore);
+      expect(computeSourceDigest("sdk", repoRoot)).toBe(baseline);
+
+      writeFileSync(browserTsup, `${browserBefore}${marker}`);
+      expect(computeSourceDigest("sdk", repoRoot)).not.toBe(baseline);
+    } finally {
+      writeFileSync(exposures, exposuresBefore);
+      writeFileSync(browserTsup, browserBefore);
+    }
+    expect(computeSourceDigest("sdk", repoRoot)).toBe(baseline);
   });
 });

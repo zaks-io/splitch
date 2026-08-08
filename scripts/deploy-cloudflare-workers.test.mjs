@@ -23,21 +23,18 @@ test("deploys one independent Worker without traversing the fleet", () => {
 test("preserves the bounded Control Panel cutover when either side changes", () => {
   for (const changedPackage of ["@splitch/control-panel", "@splitch/control-plane-api"]) {
     assert.deepEqual(deploymentCommands("production", [changedPackage], workspacePackages), [
-      ["run", "credential-cache:backfill:production"],
       ["run", "deploy:cloudflare:control-plane-compat:production"],
+      ["run", "credential-cache:backfill:production"],
       ["run", "deploy:cloudflare:control-panel:production"],
       ["run", "deploy:cloudflare:control-plane:production"],
     ]);
   }
 });
 
-test("backfills before deploying an affected Evaluation Worker", () => {
+test("deploys an affected Evaluation Worker without requiring a Control Plane checkpoint", () => {
   assert.deepEqual(
     deploymentCommands("production", ["@splitch/evaluation-api"], workspacePackages),
-    [
-      ["run", "credential-cache:backfill:production"],
-      ["run", "deploy:cloudflare:evaluation:production"],
-    ],
+    [["run", "deploy:cloudflare:evaluation:production"]],
   );
 });
 
@@ -51,9 +48,9 @@ test("deploys an affected Evaluation Worker before its Control Plane caller", ()
       workspacePackages,
     ),
     [
-      ["run", "credential-cache:backfill:production"],
       ["run", "deploy:cloudflare:evaluation:production"],
       ["run", "deploy:cloudflare:control-plane-compat:production"],
+      ["run", "credential-cache:backfill:production"],
       ["run", "deploy:cloudflare:control-panel:production"],
       ["run", "deploy:cloudflare:control-plane:production"],
     ],

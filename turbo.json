@@ -70,6 +70,7 @@
         "$TURBO_ROOT$/packages/sdk/LICENSE.md",
         "$TURBO_ROOT$/packages/sdk/package.json",
         "$TURBO_ROOT$/packages/sdk/scripts/**",
+        "!$TURBO_ROOT$/packages/sdk/scripts/generated/**",
         "$TURBO_ROOT$/packages/sdk/src/**",
         "!$TURBO_ROOT$/packages/sdk/src/generated/**",
         "$TURBO_ROOT$/packages/sdk/tsconfig*.json",
@@ -215,8 +216,6 @@
         "SPLITCH_DEPLOY_GATE_TOKEN",
         "SPLITCH_EVENT_INGEST_TOKEN",
         "MCP_CONTROL_PLANE_DELEGATION_SECRET",
-        "MCP_EVALUATION_DELEGATION_SECRET",
-        "MCP_ANALYSIS_DELEGATION_SECRET",
         "TINYBIRD_COPY_TOKEN",
         "TINYBIRD_INGEST_TOKEN",
         "TINYBIRD_RUN_SNAPSHOT_TOKEN",
@@ -254,8 +253,6 @@
         "SPLITCH_DEPLOY_GATE_TOKEN",
         "SPLITCH_EVENT_INGEST_TOKEN",
         "MCP_CONTROL_PLANE_DELEGATION_SECRET",
-        "MCP_EVALUATION_DELEGATION_SECRET",
-        "MCP_ANALYSIS_DELEGATION_SECRET",
         "TINYBIRD_COPY_TOKEN",
         "TINYBIRD_INGEST_TOKEN",
         "TINYBIRD_RUN_SNAPSHOT_TOKEN",
@@ -293,8 +290,6 @@
         "SPLITCH_DEPLOY_GATE_TOKEN",
         "SPLITCH_EVENT_INGEST_TOKEN",
         "MCP_CONTROL_PLANE_DELEGATION_SECRET",
-        "MCP_EVALUATION_DELEGATION_SECRET",
-        "MCP_ANALYSIS_DELEGATION_SECRET",
         "TINYBIRD_COPY_TOKEN",
         "TINYBIRD_INGEST_TOKEN",
         "TINYBIRD_RUN_SNAPSHOT_TOKEN",
@@ -332,8 +327,6 @@
         "SPLITCH_DEPLOY_GATE_TOKEN",
         "SPLITCH_EVENT_INGEST_TOKEN",
         "MCP_CONTROL_PLANE_DELEGATION_SECRET",
-        "MCP_EVALUATION_DELEGATION_SECRET",
-        "MCP_ANALYSIS_DELEGATION_SECRET",
         "TINYBIRD_COPY_TOKEN",
         "TINYBIRD_INGEST_TOKEN",
         "TINYBIRD_RUN_SNAPSHOT_TOKEN",
@@ -412,7 +405,7 @@
         "$TURBO_ROOT$/packages/contracts/src/**",
         "$TURBO_ROOT$/scripts/release/**"
       ],
-      "outputs": ["dist/**", "src/generated/**"]
+      "outputs": ["dist/**", "src/generated/**", "scripts/generated/contract-surface-members.ts"]
     },
     "@splitch/sdk#typecheck": {
       "dependsOn": ["build"],
@@ -438,7 +431,12 @@
     },
     "@splitch/sdk#test:consumer-smoke": {
       "dependsOn": ["build"],
-      "cache": false
+      "cache": false,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/docs/spec/quickstart.md",
+        "$TURBO_ROOT$/fixtures/convex-sdk-consumer/**"
+      ]
     },
     "@splitch/sdk#test:browser-pagehide": {
       "dependsOn": ["build"],

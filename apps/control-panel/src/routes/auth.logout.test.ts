@@ -28,6 +28,7 @@ vi.mock("cloudflare:workers", () => ({
 const { Route } = await import("./auth.logout");
 
 const LOGOUT_URL = "https://panel.splitch.test/auth/logout";
+const SAME_ORIGIN = "https://panel.splitch.test";
 
 // TanStack's server handler map is typed for framework invocation only; these
 // tests call the handlers directly with the request they receive at runtime.
@@ -46,6 +47,12 @@ async function authenticatedRequestSucceeds(cookie: string): Promise<boolean> {
     new Request("https://panel.splitch.test/acme", { headers: { cookie } }),
   );
   return loaded.ok;
+}
+
+function postLogout(headers: Record<string, string> = {}): Promise<Response> {
+  return handlers.POST({
+    request: new Request(LOGOUT_URL, { headers, method: "POST" }),
+  });
 }
 
 describe("/auth/logout requires an unsafe method", () => {
@@ -69,12 +76,10 @@ describe("/auth/logout requires an unsafe method", () => {
     await expect(authenticatedRequestSucceeds(cookie)).resolves.toBe(true);
   });
 
-  it("destroys the session on a POST and redirects as before", async () => {
+  it("destroys the session on a same-origin POST and redirects as before", async () => {
     const cookie = await signIn();
 
-    const response = await handlers.POST({
-      request: new Request(LOGOUT_URL, { headers: { cookie }, method: "POST" }),
-    });
+    const response = await postLogout({ cookie, origin: SAME_ORIGIN });
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toContain("workos_session_1");
@@ -86,10 +91,34 @@ describe("/auth/logout requires an unsafe method", () => {
   });
 
   it("still redirects home when the session was already gone", async () => {
-    const response = await handlers.POST({ request: new Request(LOGOUT_URL, { method: "POST" }) });
+    const response = await postLogout({ origin: SAME_ORIGIN });
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://panel.splitch.test/");
+  });
+});
+
+describe("/auth/logout rejects cross-origin form POSTs before destroy", () => {
+  beforeEach(() => {
+    kv.store.clear();
+  });
+
+  it.each([
+    ["cross-site evil Origin", { origin: "https://evil.example", "sec-fetch-site": "cross-site" }],
+    [
+      "same-site sibling Origin",
+      { origin: "https://auth.splitch.dev", "sec-fetch-site": "same-site" },
+    ],
+    ["missing Origin", {}],
+  ])("returns 403 for %s without touching the session", async (_name, headers) => {
+    const cookie = await signIn();
+
+    const response = await postLogout({ cookie, ...headers });
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(kv.store.size).toBe(1);
+    await expect(authenticatedRequestSucceeds(cookie)).resolves.toBe(true);
   });
 });
 

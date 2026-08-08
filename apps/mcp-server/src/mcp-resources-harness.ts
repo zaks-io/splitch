@@ -55,7 +55,7 @@ export interface JsonRpcError {
   error: {
     code: number;
     message: string;
-    data?: { message?: string };
+    data?: { message?: string; reference?: string };
   };
 }
 
@@ -88,6 +88,7 @@ export async function mcp(
     revocations: allowMcpRevocations(),
     controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
     controlPlaneFetch: async () => Response.json({ items: [] }),
+    sessionContextValidator: async () => ({ ok: true }),
     sessionStore: options.sessionStore ?? trackingSessionStore(),
     fetchAuthMarkdown: async () => authFixture,
   });

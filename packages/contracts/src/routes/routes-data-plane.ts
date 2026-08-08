@@ -151,6 +151,7 @@ export const dataPlaneRoutes = [
       "APP_MISMATCH",
       "ORIGIN_NOT_ALLOWED",
       "VALIDATION_ERROR",
+      "UNSUPPORTED_OBJECT_KEY",
       "RATE_LIMITED",
       "SERVICE_UNAVAILABLE",
     ],

@@ -4,13 +4,18 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
  * Per-entry browser bundle size gate (SPL-325).
  *
  * Bundles a minimal consumer page against each published export entry with
- * esbuild `--bundle --format=esm --minify`, then asserts:
- *   - total bytes under ENTRY_MAX_BYTES (50 KiB)
- *   - no zod / zod locale modules in the metafile
+ * esbuild `--bundle --format=esm --minify`, then asserts total bytes under
+ * ENTRY_MAX_BYTES.
  *
  * Budgets are per entry (`.`, and later `./browser`) so a future browser
  * subpath starts life inside the gate rather than inheriting a package-wide
  * allowance.
+ *
+ * A reintroduced zod that is inlined into dist (via `external: []`) will not
+ * appear as a metafile `node_modules/zod` path — the packed-manifest zero-dep
+ * check is the load-bearing zod guard; this budget is what catches inlined
+ * source by size. The metafile scan below is only a secondary signal for
+ * accidental re-externalization.
  */
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -20,34 +25,56 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(packageRoot, "../..");
 
-/** Minified consumer+SDK budget per published entry (issue verification: under 50 kB). */
-const ENTRY_MAX_BYTES = 50 * 1024;
+/**
+ * Minified consumer+SDK budget per published entry.
+ * Measured 18_024 bytes for `.` at SPL-325; that figure is toolchain-dependent
+ * (it moves with the bundle contents and the esbuild version).
+ * `size-check.test.mjs` documents the floor (`ENTRY_MAX_BYTES > 18_024`) rather
+ * than gating on the exact measurement. Ceiling is 22 KiB (~25% headroom over
+ * that figure) for intentional SDK growth (new accessors / wire fields) short
+ * of re-vendoring zod (~300 KiB), which this budget alone is meant to reject.
+ */
+export const ENTRY_MAX_BYTES = 22 * 1024;
 
 /**
  * Resolve esbuild from the workspace (tsup nests it). Prefer a direct
  * `esbuild` install when present; otherwise walk tsup's nested dependency.
+ *
+ * @param {{ rootRequire?: NodeRequire, tsupRequireFrom?: (tsupPkg: string) => NodeRequire, importPath?: (href: string) => Promise<unknown> }} [deps]
  */
-async function loadEsbuild() {
-  const rootRequire = createRequire(join(repoRoot, "package.json"));
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: three explicit resolution fallbacks for pnpm layout
+export async function loadEsbuild(deps = {}) {
+  const rootRequire = deps.rootRequire ?? createRequire(join(repoRoot, "package.json"));
   try {
     return rootRequire("esbuild");
   } catch {
-    // fall through
+    // fall through to tsup
   }
 
-  const tsupPkg = rootRequire.resolve("tsup/package.json");
-  const tsupRequire = createRequire(tsupPkg);
+  let tsupPkg;
+  try {
+    tsupPkg = rootRequire.resolve("tsup/package.json");
+  } catch (error) {
+    throw new Error(
+      `size:check could not resolve tsup (needed to locate nested esbuild): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+
+  const tsupRequire = (deps.tsupRequireFrom ?? createRequire)(tsupPkg);
   try {
     return tsupRequire("esbuild");
   } catch {
-    // fall through
+    // fall through to absolute path
   }
 
   // pnpm may nest esbuild under tsup's node_modules without making it
   // require()-able from tsup's package root; load by absolute path.
   const nested = join(dirname(tsupPkg), "node_modules", "esbuild", "lib", "main.js");
+  const importPath = deps.importPath ?? ((href) => import(href));
   try {
-    return await import(pathToFileURL(nested).href);
+    return await importPath(pathToFileURL(nested).href);
   } catch (error) {
     throw new Error(
       `size:check could not load esbuild (install it at the workspace root or ensure tsup's nested esbuild is present): ${
@@ -82,6 +109,9 @@ function publishedEntries(manifest) {
 }
 
 function assertNoZodInMetafile(metafile, exportPath) {
+  // Secondary only: with external:[] zod is inlined into dist before this
+  // consumer bundle runs, so node_modules/zod paths never appear. Real guard
+  // is assertZeroRuntimeDependencies + ENTRY_MAX_BYTES.
   const inputs = Object.keys(metafile.inputs ?? {});
   const zodInputs = inputs.filter(
     (path) =>
@@ -94,25 +124,28 @@ function assertNoZodInMetafile(metafile, exportPath) {
   }
 }
 
-async function measureEntry(esbuild, entry) {
-  const staging = mkdtempSync(join(tmpdir(), "splitch-sdk-size-"));
-  try {
-    const appPath = join(staging, "app.js");
-    const consumerSource =
-      entry.exportPath === "./browser"
-        ? `import { createSplitchBrowserClient } from ${JSON.stringify(entry.importSpecifier)};
+function consumerSource(entry) {
+  if (entry.exportPath === "./browser") {
+    return `import { createSplitchBrowserClient } from ${JSON.stringify(entry.importSpecifier)};
 const client = createSplitchBrowserClient({ clientKey: "pk_size", context: { targetingKey: "u" } });
 await client.init();
 client.evaluate("flag", false);
 client.evaluateDetails("flag", false);
 await client.flush();
-`
-        : `import { createSplitchClient } from ${JSON.stringify(entry.importSpecifier)};
+`;
+  }
+  return `import { createSplitchClient } from ${JSON.stringify(entry.importSpecifier)};
 const client = createSplitchClient({ clientKey: "ck_size" });
 await client.evaluateDetails("flag", { targetingKey: "u", idempotencyKey: "k", defaultValue: false });
 await client.verify("flag", { targetingKey: "u", defaultValue: false });
 `;
-    writeFileSync(appPath, consumerSource);
+}
+
+async function measureEntry(esbuild, entry) {
+  const staging = mkdtempSync(join(tmpdir(), "splitch-sdk-size-"));
+  try {
+    const appPath = join(staging, "app.js");
+    writeFileSync(appPath, consumerSource(entry));
 
     const outfile = join(staging, "out.js");
     const result = await esbuild.build({
@@ -155,24 +188,34 @@ await client.verify("flag", { targetingKey: "u", defaultValue: false });
   }
 }
 
-const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
-if (manifest.dependencies && Object.keys(manifest.dependencies).length > 0) {
-  throw new Error(
-    `size:check: package.json must have zero dependencies; got ${Object.keys(manifest.dependencies).join(", ")}`,
-  );
-}
-
-const esbuild = await loadEsbuild();
-const entries = publishedEntries(manifest);
-
-for (const entry of entries) {
-  try {
-    readFileSync(entry.distFile);
-  } catch {
-    throw new Error(`size:check missing built entry ${entry.distFile}; run build first`);
+async function runSizeCheck({
+  loadEsbuildFn = loadEsbuild,
+  manifestPath = join(packageRoot, "package.json"),
+} = {}) {
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  if (manifest.dependencies && Object.keys(manifest.dependencies).length > 0) {
+    throw new Error(
+      `size:check: package.json must have zero dependencies; got ${Object.keys(manifest.dependencies).join(", ")}`,
+    );
   }
-  const bytes = await measureEntry(esbuild, entry);
-  console.log(`size:check ${entry.exportPath}: ${bytes} bytes (max ${ENTRY_MAX_BYTES})`);
+
+  const esbuild = await loadEsbuildFn();
+  const entries = publishedEntries(manifest);
+
+  for (const entry of entries) {
+    try {
+      readFileSync(entry.distFile);
+    } catch {
+      throw new Error(`size:check missing built entry ${entry.distFile}; run build first`);
+    }
+    const bytes = await measureEntry(esbuild, entry);
+    console.log(`size:check ${entry.exportPath}: ${bytes} bytes (max ${ENTRY_MAX_BYTES})`);
+  }
+
+  console.log("size:check passed");
 }
 
-console.log("size:check passed");
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+if (isMain) {
+  await runSizeCheck();
+}

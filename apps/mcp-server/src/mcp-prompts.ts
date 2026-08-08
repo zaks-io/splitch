@@ -1,6 +1,6 @@
 import { recommendedActions } from "@splitch/contracts";
 import {
-  JSON_RPC_INTERNAL_ERROR,
+  JSON_RPC_INVALID_PARAMS,
   JSON_RPC_METHOD_NOT_FOUND,
   type JsonRpcId,
   type JsonRpcResponse,
@@ -128,7 +128,7 @@ export function getMcpPromptRpc(id: JsonRpcId, params: unknown): JsonRpcResponse
       });
     }
     if (error instanceof PromptArgumentError) {
-      return jsonRpcError(id, JSON_RPC_INTERNAL_ERROR, "Invalid params", {
+      return jsonRpcError(id, JSON_RPC_INVALID_PARAMS, "Invalid params", {
         message: error.message,
       });
     }

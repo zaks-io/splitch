@@ -41,9 +41,9 @@ import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
 import { handleSignedPanelExperiments } from "./panel-experiments-route";
 import { panelOverviewRead } from "./panel-overview";
-import { runSnapshotDeliveryFromEnv } from "./run-snapshot";
 import { panelSettingsRead } from "./panel-settings";
 import { rateLimiterForTarget } from "./rate-limit";
+import { runSnapshotDeliveryFromEnv } from "./run-snapshot";
 import { makeSessionStore } from "./session-store";
 import { unauthorized } from "./unauthorized";
 
@@ -138,7 +138,7 @@ async function handleRequest(
   const authResolver =
     authMode === "mcp"
       ? makeMcpDelegationAuthResolver({
-          owner: "control-plane-api",
+          surface: "control-plane-api",
           secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
           replayGuard: makeDurableMcpDelegationReplayGuard(
             requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
@@ -153,6 +153,8 @@ async function handleRequest(
     repo,
   );
   if (panelResponse) return panelResponse;
+  // When authMode === "mcp", this same app mounts every Control Plane route under the MCP
+  // resolver; operationId, method, target, and bodySha256 credential pins confine each call.
   const app = createApp({
     authResolver,
     rateLimiter: rateLimiterForTarget(

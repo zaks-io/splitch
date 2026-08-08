@@ -114,9 +114,11 @@ export function assertReleaseBundleJs(bundleJs) {
 }
 
 function assertNoZodInBundle(bundleJs) {
-  // With `external: []` a reintroduced zod is inlined, not imported; the
-  // load-bearing guards are assertZeroRuntimeDependencies and size-check's
-  // metafile scan. These regexes only catch accidental re-externalization.
+  // With `external: []` a reintroduced zod is inlined into dist, not imported.
+  // The load-bearing guard is assertZeroRuntimeDependencies on the packed
+  // manifest (zero runtime deps). Inlined zod source is caught by the
+  // size:check byte budget, not by a metafile or source scan — these regexes
+  // only catch accidental re-externalization of an import/require.
   if (
     /\bfrom\s*["']zod(?:\/[^"']*)?["']/.test(bundleJs) ||
     /\brequire\s*\(\s*["']zod/.test(bundleJs)
@@ -171,6 +173,7 @@ export function assertReleaseTarballContents({ listing, manifestText, declaratio
   }
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: pack stdout parser with several failure modes
 export function assertDryRunListing(packOutput) {
   const lines = packOutput.split("\n").map((line) => line.trim());
   const tarballContentsIndex = lines.findIndex(

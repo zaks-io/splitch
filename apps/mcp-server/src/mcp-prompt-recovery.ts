@@ -23,7 +23,7 @@ export function recoverFromErrorPlan(errorCode: string, detailsRaw: unknown): Mc
   const recommendedAction = details.recommendedAction;
   if (typeof recommendedAction !== "string" || !RECOMMENDED_ACTION_SET.has(recommendedAction)) {
     throw new PromptArgumentError(
-      `mcp-prompts: recover_from_error requires details.recommendedAction to be one of ${recommendedActions.join(", ")}`,
+      `recover_from_error requires details.recommendedAction to be one of ${recommendedActions.join(", ")}.`,
     );
   }
   const action = recommendedAction as RecommendedAction;
@@ -238,7 +238,7 @@ function approvalRecoverySteps(
 
 function parseDetails(detailsRaw: unknown): Record<string, unknown> {
   if (detailsRaw === undefined || detailsRaw === null) {
-    throw new PromptArgumentError('mcp-prompts: argument "details" is required');
+    throw new PromptArgumentError('Prompt argument "details" is required.');
   }
   if (typeof detailsRaw === "string") {
     return parseDetailsJson(detailsRaw);
@@ -246,7 +246,7 @@ function parseDetails(detailsRaw: unknown): Record<string, unknown> {
   if (typeof detailsRaw === "object" && !Array.isArray(detailsRaw)) {
     return detailsRaw as Record<string, unknown>;
   }
-  throw new PromptArgumentError("mcp-prompts: details must be an object or JSON string");
+  throw new PromptArgumentError('Prompt argument "details" must be an object or a JSON string.');
 }
 
 function parseDetailsJson(detailsRaw: string): Record<string, unknown> {
@@ -254,10 +254,10 @@ function parseDetailsJson(detailsRaw: string): Record<string, unknown> {
   try {
     parsed = JSON.parse(detailsRaw);
   } catch {
-    throw new PromptArgumentError("mcp-prompts: details must be valid JSON");
+    throw new PromptArgumentError('Prompt argument "details" must be valid JSON.');
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new PromptArgumentError("mcp-prompts: details must be a JSON object");
+    throw new PromptArgumentError('Prompt argument "details" must be a JSON object.');
   }
   return parsed as Record<string, unknown>;
 }

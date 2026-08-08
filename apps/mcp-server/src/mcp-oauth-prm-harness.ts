@@ -72,8 +72,6 @@ export async function request(
     request: raw,
     service,
     controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
-    evaluationDelegationSecret: TEST_MCP_DELEGATION_SECRET,
-    analysisDelegationSecret: TEST_MCP_DELEGATION_SECRET,
     revocations: allowMcpRevocations(),
     controlPlaneFetch: options.controlPlaneBaseUrl ? fetch : undefined,
     ...options,
@@ -176,7 +174,7 @@ export async function bootControlPlaneApi(seen: SeenDownstream[]): Promise<strin
     });
     const delegation = await parseMcpDelegation({
       request: delegatedRequest,
-      owner: "control-plane-api",
+      surface: "control-plane-api",
       secret: TEST_MCP_DELEGATION_SECRET,
       replayGuard,
     });

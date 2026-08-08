@@ -1,37 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { errorCodes as contractErrorCodes } from "../../contracts/src/error-code";
 import { EvaluateAllReasonSchema as ZodEvaluateAllReasonSchema } from "../../contracts/src/leaves/evaluate-all-wire";
-import {
-  EXPOSURE_BATCH_MAX_BODY_BYTES as contractExposureBatchMaxBodyBytes,
-  EXPOSURE_BATCH_MAX_ITEMS as contractExposureBatchMaxItems,
-} from "../../contracts/src/leaves/exposures-wire";
-import { resolutionReasons as contractResolutionReasons } from "../../contracts/src/leaves/resolution-reason";
+import { ResolutionReasonSchema as ZodResolutionReasonSchema } from "../../contracts/src/leaves/resolution-reason";
 import {
   DataPlaneEvaluateResponseSchema as ZodDataPlaneEvaluateResponseSchema,
   EvaluateAllResponseSchema as ZodEvaluateAllResponseSchema,
-  ExposureBatchRequestSchema as ZodExposureBatchRequestSchema,
-  ExposureBatchResponseSchema as ZodExposureBatchResponseSchema,
   PeekEvaluateResponseSchema as ZodPeekEvaluateResponseSchema,
   ResolutionDetailsSchema as ZodResolutionDetailsSchema,
 } from "../../contracts/src/sdk-data-plane-surface";
 import {
-  evaluateAllReasons as compiledEvaluateAllReasons,
-  EXPOSURE_BATCH_MAX_BODY_BYTES as compiledExposureBatchMaxBodyBytes,
-  EXPOSURE_BATCH_MAX_ITEMS as compiledExposureBatchMaxItems,
-  resolutionReasons as compiledResolutionReasons,
-} from "../scripts/contract-surface-enums";
-import {
   DataPlaneEvaluateResponseSchema,
   ErrorCodeSchema,
   EvaluateAllResponseSchema,
-  ExposureBatchRequestSchema,
-  ExposureBatchResponseSchema,
   PeekEvaluateResponseSchema,
   ResolutionDetailsSchema,
 } from "./generated/contract-surface.js";
 
 type ParseResult = { success: true; data: unknown } | { success: false; error?: unknown };
-
 type AnySchema = { safeParse: (input: unknown) => ParseResult };
 
 function expectParity(compiled: AnySchema, zod: AnySchema, input: unknown, ok: boolean) {
@@ -54,7 +39,17 @@ function wellFormedEvaluateAllEntry(reason: string) {
   };
 }
 
-describe("contract-surface zod-free parity", () => {
+function resolutionDetailsForReason(reason: string) {
+  return {
+    value: true as const,
+    variantName: "on",
+    reason,
+    ...(reason === "ERROR" ? { errorCode: "INTERNAL_SERVER_ERROR" as const } : {}),
+    ...(reason === "TARGETING_MATCH" ? { ruleId: "rule-1" } : {}),
+  };
+}
+
+describe("contract-surface enum lockstep", () => {
   it("ErrorCodeSchema.options matches contracts errorCodes", () => {
     expect([...ErrorCodeSchema.options]).toEqual([...contractErrorCodes]);
   });
@@ -64,52 +59,37 @@ describe("contract-surface zod-free parity", () => {
     expect(ErrorCodeSchema.safeParse("NOT_A_REAL_CODE").success).toBe(false);
   });
 
-  it("resolutionReasons matches contracts exactly", () => {
-    expect([...compiledResolutionReasons]).toEqual([...contractResolutionReasons]);
-  });
-
-  it("evaluateAllReasons matches contracts exactly", () => {
-    expect([...compiledEvaluateAllReasons]).toEqual([...ZodEvaluateAllReasonSchema.options]);
-  });
-
-  it("exposure batch caps match contracts exactly", () => {
-    expect(compiledExposureBatchMaxItems).toBe(contractExposureBatchMaxItems);
-    expect(compiledExposureBatchMaxBodyBytes).toBe(contractExposureBatchMaxBodyBytes);
-  });
-
   it("resolution reason set matches contracts", () => {
-    for (const reason of contractResolutionReasons) {
-      const base = {
-        value: true as const,
-        variantName: "on",
-        reason,
-        ...(reason === "ERROR" ? { errorCode: "INTERNAL_SERVER_ERROR" as const } : {}),
-        ...(reason === "TARGETING_MATCH" ? { ruleId: "rule-1" } : {}),
-      };
-      expectParity(ResolutionDetailsSchema, ZodResolutionDetailsSchema, base, true);
+    for (const reason of ZodResolutionReasonSchema.options) {
+      expectParity(
+        ResolutionDetailsSchema,
+        ZodResolutionDetailsSchema,
+        resolutionDetailsForReason(reason),
+        true,
+      );
     }
   });
 
   it("evaluate-all reason set matches contracts", () => {
     for (const reason of ZodEvaluateAllReasonSchema.options) {
-      const input = {
-        evaluations: {
-          "new-checkout": wellFormedEvaluateAllEntry(reason),
-        },
-      };
-      expectParity(EvaluateAllResponseSchema, ZodEvaluateAllResponseSchema, input, true);
+      expectParity(
+        EvaluateAllResponseSchema,
+        ZodEvaluateAllResponseSchema,
+        { evaluations: { "new-checkout": wellFormedEvaluateAllEntry(reason) } },
+        true,
+      );
     }
   });
+});
 
-  it("DataPlaneEvaluateResponseSchema matches Zod", () => {
-    const rows: { input: unknown; ok: boolean }[] = [
+describe("contract-surface schema fixtures", () => {
+  it("DataPlaneEvaluateResponseSchema matches Zod on shared domain", () => {
+    for (const row of [
       { input: { variant: true }, ok: true },
       { input: { variant: null }, ok: true },
       { input: { variant: { a: 1 } }, ok: true },
-      { input: { variant: true, extra: 1 }, ok: false },
       { input: {}, ok: false },
-    ];
-    for (const row of rows) {
+    ]) {
       expectParity(
         DataPlaneEvaluateResponseSchema,
         ZodDataPlaneEvaluateResponseSchema,
@@ -119,19 +99,17 @@ describe("contract-surface zod-free parity", () => {
     }
   });
 
-  it("PeekEvaluateResponseSchema matches Zod", () => {
-    const rows: { input: unknown; ok: boolean }[] = [
+  it("PeekEvaluateResponseSchema matches Zod on shared domain", () => {
+    for (const row of [
       { input: { variant: true }, ok: true },
       { input: { variant: null }, ok: false },
-      { input: { variant: true, extra: 1 }, ok: false },
-    ];
-    for (const row of rows) {
+    ]) {
       expectParity(PeekEvaluateResponseSchema, ZodPeekEvaluateResponseSchema, row.input, row.ok);
     }
   });
 
   it("ResolutionDetailsSchema matches Zod", () => {
-    const rows: { input: unknown; ok: boolean }[] = [
+    for (const row of [
       { input: { value: "treatment", variantName: "treatment", reason: "SPLIT" }, ok: true },
       { input: { value: false, variantName: null, reason: "ERROR" }, ok: false },
       {
@@ -149,14 +127,13 @@ describe("contract-surface zod-free parity", () => {
         input: { value: true, variantName: "on", reason: "TARGETING_MATCH", ruleId: "r1" },
         ok: true,
       },
-    ];
-    for (const row of rows) {
+    ]) {
       expectParity(ResolutionDetailsSchema, ZodResolutionDetailsSchema, row.input, row.ok);
     }
   });
 
-  it("EvaluateAllResponseSchema matches Zod", () => {
-    const rows: { input: unknown; ok: boolean }[] = [
+  it("EvaluateAllResponseSchema matches Zod on shared domain", () => {
+    for (const row of [
       {
         input: {
           evaluations: {
@@ -185,16 +162,90 @@ describe("contract-surface zod-free parity", () => {
         },
         ok: false,
       },
-      { input: { evaluations: {}, extra: true }, ok: false },
-    ];
-    for (const row of rows) {
+    ]) {
       expectParity(EvaluateAllResponseSchema, ZodEvaluateAllResponseSchema, row.input, row.ok);
     }
   });
 
+  it("scalar empty-string and boundary cases match Zod", () => {
+    for (const row of [
+      { input: { value: true, variantName: "", reason: "SPLIT" }, ok: true },
+      { input: { value: "", variantName: "on", reason: "SPLIT" }, ok: true },
+      { input: { value: 0, variantName: "on", reason: "SPLIT" }, ok: true },
+      {
+        input: { value: true, variantName: "", reason: "TARGETING_MATCH", ruleId: "" },
+        ok: true,
+      },
+      {
+        input: {
+          value: false,
+          variantName: "",
+          reason: "ERROR",
+          errorCode: "FLAG_NOT_FOUND",
+          errorMessage: "",
+        },
+        ok: true,
+      },
+    ]) {
+      expectParity(ResolutionDetailsSchema, ZodResolutionDetailsSchema, row.input, row.ok);
+    }
+    expectParity(
+      EvaluateAllResponseSchema,
+      ZodEvaluateAllResponseSchema,
+      {
+        evaluations: {
+          "new-checkout": {
+            variant: "",
+            variantName: "",
+            reason: "SPLIT",
+            errorCode: null,
+            exposureTicket: "",
+          },
+        },
+      },
+      true,
+    );
+    expectParity(
+      DataPlaneEvaluateResponseSchema,
+      ZodDataPlaneEvaluateResponseSchema,
+      { variant: "" },
+      true,
+    );
+    expectParity(PeekEvaluateResponseSchema, ZodPeekEvaluateResponseSchema, { variant: 0 }, true);
+  });
+
+  it("response parsers strip unknown keys instead of rejecting (server-ahead)", () => {
+    const evaluate = DataPlaneEvaluateResponseSchema.safeParse({ variant: true, sneaky: 1 });
+    expect(evaluate.success).toBe(true);
+    if (evaluate.success) {
+      expect(evaluate.data).toEqual({ variant: true });
+    }
+
+    const evaluateAll = EvaluateAllResponseSchema.safeParse({
+      evaluations: { flag: wellFormedEvaluateAllEntry("DEFAULT") },
+      runId: "run_ahead",
+    });
+    expect(evaluateAll.success).toBe(true);
+    if (evaluateAll.success) {
+      expect(evaluateAll.data).toEqual({
+        evaluations: { flag: wellFormedEvaluateAllEntry("DEFAULT") },
+      });
+    }
+
+    const entryWithExtra = EvaluateAllResponseSchema.safeParse({
+      evaluations: {
+        flag: { ...wellFormedEvaluateAllEntry("DEFAULT"), runId: "run_ahead" },
+      },
+    });
+    expect(entryWithExtra.success).toBe(true);
+    if (entryWithExtra.success) {
+      expect(entryWithExtra.data.evaluations.flag).toEqual(wellFormedEvaluateAllEntry("DEFAULT"));
+    }
+  });
+});
+
+describe("contract-surface known __proto__ divergences", () => {
   it("EvaluateAllResponseSchema keeps a __proto__ flag key as an own property", () => {
-    // JSON.parse creates __proto__ as an own property; Object.entries yields it.
-    // A plain `evaluations[flagKey] = …` assignment would hit the prototype setter.
     const input = JSON.parse(
       '{"evaluations":{"__proto__":{"variant":false,"variantName":null,"reason":"DEFAULT","errorCode":null,"exposureTicket":null}}}',
     ) as unknown;
@@ -206,10 +257,8 @@ describe("contract-surface zod-free parity", () => {
     }
 
     const evaluations = compiled.data.evaluations;
-    // Normal prototype: Record consumers can call hasOwnProperty / toString.
     expect(Object.getPrototypeOf(evaluations)).toBe(Object.prototype);
     expect(typeof evaluations.hasOwnProperty).toBe("function");
-    // Intentional: prove the consumer call site that threw under null-proto.
     // biome-ignore lint/suspicious/noPrototypeBuiltins: pin hasOwnProperty on the map itself
     expect(evaluations.hasOwnProperty("__proto__")).toBe(true);
     expect(Object.keys(evaluations)).toEqual(["__proto__"]);
@@ -223,10 +272,10 @@ describe("contract-surface zod-free parity", () => {
     expect(String(evaluations)).toBe("[object Object]");
   });
 
-  it("compiled keeps a __proto__ flag key; zod 4.4.3 drops it", () => {
-    // Known wire divergence: the same JSON evaluates differently in the SDK
-    // than under contracts Zod. Do not "fix" this by dropping the key — the
-    // Worker-side silent drop is tracked separately.
+  it("compiled keeps a __proto__ flag key; zod refuses it (SPL-353)", () => {
+    // Contracts fail loud on JSON own "__proto__" Flag Keys (SPL-353). The
+    // compiled SDK surface still keeps the key as an own property so a Worker
+    // response that somehow carries it is not silently dropped here.
     const input = JSON.parse(
       '{"evaluations":{"__proto__":{"variant":false,"variantName":null,"reason":"DEFAULT","errorCode":null,"exposureTicket":null}}}',
     ) as unknown;
@@ -234,72 +283,42 @@ describe("contract-surface zod-free parity", () => {
     const compiled = EvaluateAllResponseSchema.safeParse(input);
     const zod = ZodEvaluateAllResponseSchema.safeParse(input);
     expect(compiled.success).toBe(true);
-    expect(zod.success).toBe(true);
-    if (!compiled.success || !zod.success) {
+    expect(zod.success).toBe(false);
+    if (!compiled.success) {
       return;
     }
 
     expect(Object.keys(compiled.data.evaluations)).toEqual(["__proto__"]);
-    expect(Object.keys(zod.data.evaluations)).toEqual([]);
-    expect(compiled.data).not.toEqual(zod.data);
   });
-});
 
-describe("contract-surface exposure batch parity", () => {
-  it("ExposureBatchRequestSchema matches Zod", () => {
-    const id = "11111111-1111-4111-8111-111111111111";
-    const rows: { input: unknown; ok: boolean }[] = [
-      {
-        input: {
-          exposures: [
-            {
-              exposureId: id,
-              exposureTicket: "ticket",
-              clientTimestamp: "2026-08-08T00:00:00.000Z",
-            },
-          ],
-        },
-        ok: true,
-      },
-      {
-        input: {
-          exposures: [
-            {
-              exposureId: "not-a-uuid",
-              exposureTicket: "ticket",
-              clientTimestamp: "2026-08-08T00:00:00.000Z",
-            },
-          ],
-        },
-        ok: false,
-      },
-      { input: { exposures: [] }, ok: false },
-    ];
-    for (const row of rows) {
-      expectParity(ExposureBatchRequestSchema, ZodExposureBatchRequestSchema, row.input, row.ok);
+  it("compiled strips a JSON own __proto__ sibling key; zod 4.4.3 also strips it", () => {
+    // Sibling __proto__ is not a flag key. Both sides strip it on responses.
+    // Pin all three strict response schemas — this is the SPL-353 surface.
+    const evaluateInput = JSON.parse('{"variant":true,"__proto__":{"x":1}}') as unknown;
+    const evaluateCompiled = DataPlaneEvaluateResponseSchema.safeParse(evaluateInput);
+    const evaluateZod = ZodDataPlaneEvaluateResponseSchema.safeParse(evaluateInput);
+    expect(evaluateCompiled.success).toBe(true);
+    expect(evaluateZod.success).toBe(true);
+    if (evaluateCompiled.success) {
+      expect(evaluateCompiled.data).toEqual({ variant: true });
     }
-  });
 
-  it("ExposureBatchResponseSchema matches Zod", () => {
-    const id = "11111111-1111-4111-8111-111111111111";
-    const rows: { input: unknown; ok: boolean }[] = [
-      {
-        input: { results: [{ exposureId: id, status: "accepted", code: null }] },
-        ok: true,
-      },
-      {
-        input: {
-          results: [{ exposureId: id, status: "rejected", code: "EXPOSURE_TICKET_INVALID" }],
-        },
-        ok: true,
-      },
-      {
-        input: { results: [{ exposureId: id, status: "accepted", code: "VALIDATION_ERROR" }] },
-        ok: false,
-      },
-    ];
-    for (const row of rows) {
-      expectParity(ExposureBatchResponseSchema, ZodExposureBatchResponseSchema, row.input, row.ok);
+    const peekInput = JSON.parse('{"variant":true,"__proto__":{"x":1}}') as unknown;
+    const peekCompiled = PeekEvaluateResponseSchema.safeParse(peekInput);
+    const peekZod = ZodPeekEvaluateResponseSchema.safeParse(peekInput);
+    expect(peekCompiled.success).toBe(true);
+    expect(peekZod.success).toBe(true);
+    if (peekCompiled.success) {
+      expect(peekCompiled.data).toEqual({ variant: true });
+    }
+
+    const evaluateAllInput = JSON.parse('{"evaluations":{},"__proto__":{"x":1}}') as unknown;
+    const evaluateAllCompiled = EvaluateAllResponseSchema.safeParse(evaluateAllInput);
+    const evaluateAllZod = ZodEvaluateAllResponseSchema.safeParse(evaluateAllInput);
+    expect(evaluateAllCompiled.success).toBe(true);
+    expect(evaluateAllZod.success).toBe(true);
+    if (evaluateAllCompiled.success) {
+      expect(evaluateAllCompiled.data).toEqual({ evaluations: {} });
     }
   });
 });

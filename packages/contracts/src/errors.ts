@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
+import { experimentConclusionErrorMembers } from "./experiment-conclusion-errors";
 import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
 import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
 
@@ -114,6 +115,15 @@ const errorMembers = [
   member("INVALID_SORT", z.object({ field: z.string(), allowedFields: z.array(z.string()) })),
   member("EXPOSURE_TICKET_INVALID", z.object({ exposureId: z.string() })),
   member("EXPOSURE_TICKET_EXPIRED", z.object({ exposureId: z.string(), issuedAt: z.string() })),
+  member(
+    "UNSUPPORTED_OBJECT_KEY",
+    z
+      .object({
+        key: z.string(),
+        path: z.array(z.string()),
+      })
+      .strict(),
+  ),
 
   member(
     "RUN_FROZEN",
@@ -302,12 +312,16 @@ const errorMembers = [
   member(
     "IDEMPOTENCY_KEY_CONFLICT",
     z.object({
-      scope: z.enum(["approval_request", "review"]),
+      scope: z.enum(["approval_request", "review", "conclusion"]),
       idempotencyKey: z.string().min(1),
     }),
   ),
+  experimentConclusionErrorMembers.decisionResultStale,
+  experimentConclusionErrorMembers.targetConfigurationStale,
   member("EVENT_ID_CONFLICT", z.object({ eventId: z.string() })),
 
+  experimentConclusionErrorMembers.decisionBlocked,
+  experimentConclusionErrorMembers.decisionResultUnavailable,
   member(
     "MULTIPLE_VARIANT_CONFLICT",
     z.object({
