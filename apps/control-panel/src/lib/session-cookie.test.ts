@@ -1,13 +1,32 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import {
+  CONTROL_PANEL_DELEGATION_HEADER,
+  CONTROL_PANEL_ENVIRONMENT_HEADER,
+} from "@splitch/control-plane-sdk/control-panel-identity";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { setCookieHeaderWrites } from "./cookie-header-write-test-helpers";
 import { createOAuthState, OAUTH_STATE_COOKIE_NAME } from "./oauth-state";
+import { exportedPostServerFns } from "./server-fn-surface-test-helpers";
 import { createSession, SESSION_COOKIE_NAME } from "./session";
-import { PANEL_COOKIE_ATTRIBUTES, serializeHttpOnlyCookie } from "./session-cookie";
+import {
+  PANEL_COOKIE_ATTRIBUTES,
+  type SerializedHttpOnlyCookie,
+  serializeHttpOnlyCookie,
+} from "./session-cookie";
 import { MemoryKv, NOW, sessionPrincipal } from "./session-test-harness";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
+const HEADER_NAME_MODULES = [
+  {
+    moduleSpecifier: "@splitch/control-plane-sdk/control-panel-identity",
+    exports: {
+      CONTROL_PANEL_DELEGATION_HEADER,
+      CONTROL_PANEL_ENVIRONMENT_HEADER,
+    },
+  },
+] as const;
 
 /**
  * Cookie-authenticated panel writes that ride the session cookie.
@@ -16,8 +35,9 @@ const SRC = fileURLToPath(new URL("..", import.meta.url));
  * is a site boundary and insufficient across *.splitch.dev. createServerFn
  * POSTs require TanStack CSRF middleware from `src/start.ts`.
  *
- * Adding a new surface: update this list in the same change and re-read
- * `session-cookie.ts`.
+ * Both inventories are reviewed surfaces. Discovery walks every source file and
+ * identifies each exported createServerFn POST by file and export name, so a new
+ * write in an existing file moves the discovered side of the equality.
  */
 const FORM_POST_COOKIE_AUTHENTICATED_WRITES = [
   "routes/auth.logout.ts",
@@ -25,23 +45,35 @@ const FORM_POST_COOKIE_AUTHENTICATED_WRITES = [
 ] as const;
 
 const CREATE_SERVER_FN_POST_WRITES = [
-  "lib/claim-ceremony-functions.ts",
-  "lib/control-plane-app-functions.ts",
-  "lib/control-plane-experiment-functions.ts",
-  "lib/control-plane-flag-functions.ts",
-  "lib/control-plane-flag-mutations.ts",
-  "lib/control-plane-metric-functions.ts",
-  "lib/control-plane-org-member-functions.ts",
-  "lib/control-plane-organization-functions.ts",
-  "lib/control-plane-segment-functions.ts",
-  "lib/control-plane-settings-functions.ts",
-  "lib/control-plane-verify-functions.ts",
+  "lib/claim-ceremony-functions.ts#submitClaimCeremony",
+  "lib/control-plane-app-functions.ts#createControlPanelApp",
+  "lib/control-plane-experiment-functions.ts#createControlPanelExperiment",
+  "lib/control-plane-experiment-functions.ts#stageAndStartControlPanelExperimentRun",
+  "lib/control-plane-experiment-functions.ts#updateControlPanelExperiment",
+  "lib/control-plane-flag-functions.ts#createControlPanelFlag",
+  "lib/control-plane-flag-mutations.ts#editControlPanelTargetingRules",
+  "lib/control-plane-flag-mutations.ts#loadControlPanelApprovalRequest",
+  "lib/control-plane-flag-mutations.ts#promoteControlPanelFlagConfig",
+  "lib/control-plane-flag-mutations.ts#reviewControlPanelApprovalRequest",
+  "lib/control-plane-flag-mutations.ts#updateControlPanelFlagConfig",
+  "lib/control-plane-metric-functions.ts#deleteControlPanelMetric",
+  "lib/control-plane-metric-functions.ts#saveControlPanelMetric",
+  "lib/control-plane-org-member-functions.ts#addControlPanelOrgMember",
+  "lib/control-plane-org-member-functions.ts#removeControlPanelOrgMember",
+  "lib/control-plane-org-member-functions.ts#updateControlPanelOrgMemberRole",
+  "lib/control-plane-organization-functions.ts#createControlPanelOrganization",
+  "lib/control-plane-segment-functions.ts#deleteControlPanelSegment",
+  "lib/control-plane-segment-functions.ts#saveControlPanelSegment",
+  "lib/control-plane-settings-functions.ts#lockControlPanelClientKey",
+  "lib/control-plane-settings-functions.ts#provisionControlPanelApiKey",
+  "lib/control-plane-settings-functions.ts#revokeControlPanelApiKey",
+  "lib/control-plane-settings-functions.ts#updateControlPanelEnvironmentPolicy",
+  "lib/control-plane-verify-functions.ts#verifyControlPanelFlag",
 ] as const;
 
 /**
- * Modules that reach the session cookie (directly or via authorized-client /
- * form-POST wrappers). One set for both createServerFn and form-POST
- * enumeration — do not maintain a second accessor-name list (SPL-263).
+ * Modules that make a form POST cookie-authenticated, directly or through the
+ * existing wrappers. Keep one accessor list for form enumeration (SPL-263).
  */
 const SESSION_REACHING_MODULES = [
   "session",
@@ -88,11 +120,6 @@ function assertCookieAttributes(cookie: string, cookieName: string): void {
   );
 }
 
-/** createServerFn({ method: "POST" ... }) including extra option keys. */
-function declaresPostServerFn(source: string): boolean {
-  return /createServerFn\(\s*\{[\s\S]*?\bmethod:\s*["']POST["']/.test(source);
-}
-
 /** Import of a session-reaching module (`./x` or `#lib/x`). */
 function importsSessionReachingModule(source: string): boolean {
   const modules = SESSION_REACHING_MODULES.join("|");
@@ -122,19 +149,17 @@ function formPostMissingOriginCheck(source: string): boolean {
 }
 
 /**
- * Static text sweep for cookie construction outside `serializeHttpOnlyCookie`.
+ * Cookie construction outside `serializeHttpOnlyCookie` has two independent
+ * source guards, pinned by executable probes in
+ * `cookie-header-write-test-helpers.test.ts`.
  *
- * What it catches: a protective attribute appearing as a contiguous literal in
- * source (`SameSite=…`, `Max-Age=…`, `"HttpOnly"`, inline `name=value; …`
- * strings, inline Set-Cookie header values) in any module other than the
- * serializer. A green result means no such literal was found.
- *
- * What it does not catch: attributes composed at runtime from separate tokens
- * (e.g. `attr("SameSite", "None")` → `k + "=" + v`) so no `SameSite=` substring
- * exists in source. Writing that result through `headers.append("set-cookie", …)`
- * bypasses the serializer and this sweep alike. A green sweep is not proof that
- * no unprotected cookie write can exist — review any new `set-cookie` path
- * against `serializeHttpOnlyCookie` (SPL-263).
+ * The literal sweep finds contiguous cookie attributes outside the serializer.
+ * The AST sweep finds Set-Cookie append/set calls, Headers records and pairs,
+ * Response header records, and plain header properties even when the value is
+ * runtime-composed. It resolves the two imported control-plane header names and
+ * refuses every other non-literal name on a header-shaped receiver, plus cookie
+ * brand assertions outside the serializer. Opaque helper calls and
+ * runtime-computed object keys remain outside the sweep.
  */
 function cookieValueConstruction(source: string): string | null {
   const inlineHeader = /(?:set-cookie|Set-Cookie)\s*["']\s*,\s*[`"'][^`"']*=/;
@@ -156,6 +181,38 @@ function cookieValueConstruction(source: string): string | null {
   return null;
 }
 
+function cookieConstructionOffenders(path: string): Array<string> {
+  const relativePath = relative(path);
+  if (relativePath === "lib/session-cookie.ts") return [];
+  const kind = cookieValueConstruction(code(readFileSync(path, "utf8")));
+  return kind ? [`${relativePath}: ${kind}`] : [];
+}
+
+function cookieHeaderWrites(path: string): Array<string> {
+  const relativePath = relative(path);
+  return setCookieHeaderWrites(readFileSync(path, "utf8"), relativePath, {
+    allowSerializedCookieAssertion: relativePath === "lib/session-cookie.ts",
+    headerNameModules: HEADER_NAME_MODULES,
+  }).map((write) => `${relativePath}: ${write.method}(${write.argument})`);
+}
+
+function formPostWrites(path: string): Array<string> {
+  const relativePath = relative(path);
+  const source = code(readFileSync(path, "utf8"));
+  return relativePath.startsWith("routes/") &&
+    declaresRoutePostHandler(source) &&
+    usesSessionCookie(source)
+    ? [relativePath]
+    : [];
+}
+
+function serverFnWrites(path: string): Array<string> {
+  const relativePath = relative(path);
+  return exportedPostServerFns(readFileSync(path, "utf8"), relativePath).map(
+    (serverFn) => `${relativePath}#${serverFn}`,
+  );
+}
+
 describe("panel cookie attributes", () => {
   it("pins the exact serializer output including host-only (no Domain)", () => {
     const cookie = serializeHttpOnlyCookie("__probe", "value", { maxAge: 60 });
@@ -175,20 +232,14 @@ describe("panel cookie attributes", () => {
   });
 
   it("builds every cookie value through serializeHttpOnlyCookie", () => {
-    const offenders: string[] = [];
-
-    for (const path of sourceFiles(SRC)) {
-      const relativePath = relative(path);
-      if (relativePath === "lib/session-cookie.ts") continue;
-
-      const source = code(readFileSync(path, "utf8"));
-      const kind = cookieValueConstruction(source);
-      if (kind) {
-        offenders.push(`${relativePath}: ${kind}`);
-      }
-    }
+    const files = sourceFiles(SRC);
+    const offenders = files.flatMap(cookieConstructionOffenders);
+    const headerWrites = files.flatMap(cookieHeaderWrites);
 
     expect(offenders).toEqual([]);
+    expect(headerWrites).toEqual(["lib/session-cookie.ts: append(cookie)"]);
+    expectTypeOf<string>().not.toExtend<SerializedHttpOnlyCookie>();
+    expectTypeOf(serializeHttpOnlyCookie).returns.toEqualTypeOf<SerializedHttpOnlyCookie>();
     expect(code(readFileSync(join(SRC, "lib/session.ts"), "utf8"))).toContain(
       "serializeHttpOnlyCookie",
     );
@@ -198,25 +249,9 @@ describe("panel cookie attributes", () => {
   });
 
   it("enumerates every cookie-authenticated panel write surface", () => {
-    const formPosts: string[] = [];
-    const serverFnPosts: string[] = [];
-
-    for (const path of sourceFiles(SRC)) {
-      const relativePath = relative(path);
-      const source = code(readFileSync(path, "utf8"));
-
-      if (
-        relativePath.startsWith("routes/") &&
-        declaresRoutePostHandler(source) &&
-        usesSessionCookie(source)
-      ) {
-        formPosts.push(relativePath);
-      }
-
-      if (declaresPostServerFn(source) && usesSessionCookie(source)) {
-        serverFnPosts.push(relativePath);
-      }
-    }
+    const files = sourceFiles(SRC);
+    const formPosts = files.flatMap(formPostWrites);
+    const serverFnPosts = files.flatMap(serverFnWrites);
 
     expect(formPosts.sort()).toEqual([...FORM_POST_COOKIE_AUTHENTICATED_WRITES].sort());
     expect(serverFnPosts.sort()).toEqual([...CREATE_SERVER_FN_POST_WRITES].sort());

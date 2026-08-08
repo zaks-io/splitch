@@ -4,6 +4,7 @@ import { WorkOS } from "@workos-inc/node/worker";
 import type { ControlPanelBindings } from "./bindings";
 import { buildSessionPrincipal } from "./membership";
 import { createSession } from "./session";
+import type { SerializedHttpOnlyCookie } from "./session-cookie";
 
 /**
  * Fail-loud when AuthKit returns an account without a verified email. The
@@ -85,7 +86,7 @@ export function createControlPanelRepository(bindings: ControlPanelBindings): Re
 }
 
 export async function completeAuthKitCallback(input: CompleteAuthKitCallbackInput): Promise<{
-  cookie: string;
+  cookie: SerializedHttpOnlyCookie;
 }> {
   const authentication = await input.authKit.authenticateWithCode({
     clientId: input.clientId,
