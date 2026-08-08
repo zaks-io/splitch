@@ -77,6 +77,7 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ["organization_usage_get", (value) => isResourceOperation(value, "orgId")],
   ["app_attention_rollup_get", (value) => isResourceOperation(value, "appId")],
   ["api_key_revoke", isApiKeyRevokeOperation],
+  ["flag_get", isFlagGetOperation],
   ...family(UNBOUND_OPERATION_IDS, (value) => hasKeys(value, ["id"])),
   ...family(EXPERIMENT_MUTATION_OPERATION_IDS, isExperimentMutationOperation),
   ...family(FLAG_CONFIG_OPERATION_IDS, isFlagConfigOperation),
@@ -115,6 +116,20 @@ function isFlagConfigOperation(value: Record<string, unknown>): boolean {
     hasKeys(value, ["id", "appId", "environmentId", "flagId"]) &&
     hasAppEnvironment(value) &&
     isNonEmptyString(value.flagId)
+  );
+}
+
+/**
+ * `flag_get` carries the dual-selector mode as a fourth claim field. Exact-length
+ * `hasKeys` keeps a forged claim from dropping `by` or smuggling a fifth field;
+ * only `"id"` and `"key"` are claimable modes.
+ */
+function isFlagGetOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "flagId", "by"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.flagId) &&
+    (value.by === "id" || value.by === "key")
   );
 }
 

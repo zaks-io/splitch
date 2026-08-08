@@ -137,7 +137,8 @@ async function panelRequest(method: string, path: string): Promise<Request> {
     method,
     headers: { "x-splitch-panel-environment": "env_1" },
   });
-  const operation = parseControlPanelOperation(method, path, "env_1");
+  const url = new URL(request.url);
+  const operation = parseControlPanelOperation(method, url.pathname, "env_1", url.searchParams);
   if (!operation) throw new Error(`expected a Control Panel operation for ${method} ${path}`);
   request.headers.set(
     CONTROL_PANEL_DELEGATION_HEADER,
