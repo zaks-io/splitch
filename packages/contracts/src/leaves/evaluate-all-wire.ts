@@ -45,9 +45,34 @@ export const EvaluateAllEntrySchema = EvaluateAllEntryBaseSchema.refine(
 });
 export type EvaluateAllEntry = z.infer<typeof EvaluateAllEntrySchema>;
 
+/**
+ * Zod's `z.record` silently skips a JSON own `"__proto__"` key (prototype-pollution
+ * hardening in zod 4.4.3). For Precomputed Evaluations that is a silent substitution
+ * of a missing Flag — forbidden by ADR-0036. Reject the key before the record parser
+ * can drop it. The SDK's hand-maintained mirror (SPL-325) keeps the key via
+ * `Object.defineProperty`; the Worker must not silently disagree by omitting it.
+ */
+const EvaluateAllEvaluationsSchema = z
+  .unknown()
+  .superRefine((input, ctx) => {
+    if (typeof input !== "object" || input === null || Array.isArray(input)) {
+      ctx.addIssue({ code: "custom", message: "evaluations must be an object" });
+      return;
+    }
+    if (Object.hasOwn(input, "__proto__")) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          'evaluations must not contain a "__proto__" flag key: the Worker zod parser cannot preserve it without silently dropping the entry (ADR-0036)',
+        path: ["__proto__"],
+      });
+    }
+  })
+  .pipe(z.record(z.string(), EvaluateAllEntrySchema));
+
 export const EvaluateAllResponseSchema = z
   .object({
-    evaluations: z.record(z.string(), EvaluateAllEntrySchema),
+    evaluations: EvaluateAllEvaluationsSchema,
   })
   .strict();
 export type EvaluateAllResponse = z.infer<typeof EvaluateAllResponseSchema>;
