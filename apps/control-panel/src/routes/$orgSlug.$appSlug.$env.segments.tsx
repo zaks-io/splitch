@@ -18,7 +18,11 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/segments")({
 
     const result = await loadControlPanelSegments({ data: scoped.context.scope });
     if (!result.ok) throw new Error(result.error.message);
-    return { segments: result.data.items, scope: scoped.context.scope };
+    return {
+      segments: result.data.items,
+      unparseable: result.data.unparseable,
+      scope: scoped.context.scope,
+    };
   },
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/segments");
@@ -29,8 +33,13 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/segments")({
 });
 
 function SegmentsSectionRoute() {
-  const { segments, scope } = Route.useLoaderData();
+  const { segments, unparseable, scope } = Route.useLoaderData();
   return (
-    <SegmentsPage appId={scope.appId} environmentId={scope.environmentId} segments={segments} />
+    <SegmentsPage
+      appId={scope.appId}
+      environmentId={scope.environmentId}
+      segments={segments}
+      unparseable={unparseable}
+    />
   );
 }

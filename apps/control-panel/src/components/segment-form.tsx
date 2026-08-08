@@ -51,7 +51,8 @@ export function SegmentForm({
       <DialogHeader>
         <DialogTitle>{segment ? `Edit ${segment.name}` : "Create Segment"}</DialogTitle>
         <DialogDescription>
-          Edits apply across every Environment in this App. Define the reusable Condition set once.
+          Defined once for this App. Available in every Environment — there is no per-Environment
+          copy.
         </DialogDescription>
       </DialogHeader>
 

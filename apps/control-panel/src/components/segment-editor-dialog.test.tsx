@@ -12,7 +12,7 @@ vi.mock("#lib/control-plane-segment-functions", () => ({
 describe("Segment editor dialog", () => {
   it("does not expose an inert Create Segment button in server-rendered HTML", () => {
     const html = renderToStaticMarkup(
-      <SegmentsPage appId="app_billing" environmentId="env_prod" segments={[]} />,
+      <SegmentsPage appId="app_billing" environmentId="env_prod" segments={[]} unparseable={[]} />,
     );
     const trigger = html.match(/<button[^>]*>Create Segment<\/button>/)?.[0];
 
@@ -33,6 +33,6 @@ describe("Segment editor dialog", () => {
 
     expect(html).toContain('id="segment-name"');
     expect(html).toContain("Segment name");
-    expect(html).toContain("Edits apply across every Environment in this App");
+    expect(html).toContain("Defined once for this App");
   });
 });

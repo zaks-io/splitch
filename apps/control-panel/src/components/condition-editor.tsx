@@ -1,6 +1,6 @@
 import type { ConditionOperator } from "@splitch/contracts";
 import { Button } from "@splitch/ui/components/button";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@splitch/ui/components/field";
+import { Field, FieldError, FieldLabel } from "@splitch/ui/components/field";
 import { Input } from "@splitch/ui/components/input";
 import {
   Select,
@@ -13,7 +13,10 @@ import {
 import type { MutationErrorSurface } from "#lib/api";
 import {
   type ConditionDraft,
+  type ConditionValueEntry,
   conditionOperatorOptions,
+  conditionWithOperator,
+  emptyValueEntry,
   isListOperator,
   type SegmentDraftIssue,
   segmentIssueFor,
@@ -55,7 +58,7 @@ export function ConditionEditor({
           mutationError={mutationError}
           onEdit={onEdit}
           onRemove={onRemove}
-          removable={conditions.length > 1}
+          removable
           shown={shown}
         />
       ))}
@@ -90,13 +93,12 @@ function ConditionRow({
     segmentIssueFor(shown, `conditions.${index}.attribute`) ??
     workerSegmentFieldError(mutationError, `conditions.${index}.attribute`);
   const valueError =
-    segmentIssueFor(shown, `conditions.${index}.valueText`) ??
     workerSegmentFieldError(mutationError, `conditions.${index}.value`) ??
     workerSegmentFieldError(mutationError, `conditions.${index}`);
   const list = isListOperator(condition.operator);
 
   return (
-    <div className="grid gap-3 border border-border p-3" data-condition-index={index}>
+    <div className="grid gap-3 rounded-md border border-border p-3" data-condition-index={index}>
       <Field data-invalid={Boolean(attributeError)}>
         <FieldLabel htmlFor={`segment-condition-${index}-attribute`}>Attribute</FieldLabel>
         <Input
@@ -114,7 +116,7 @@ function ConditionRow({
         <FieldLabel htmlFor={`segment-condition-${index}-operator`}>Operator</FieldLabel>
         <Select
           onValueChange={(value) =>
-            onEdit(index, { operator: value as ConditionOperator, valueText: "" })
+            onEdit(index, conditionWithOperator(condition, value as ConditionOperator))
           }
           value={condition.operator}
         >
@@ -133,23 +135,13 @@ function ConditionRow({
         </Select>
       </Field>
 
-      <Field data-invalid={Boolean(valueError)}>
-        <FieldLabel htmlFor={`segment-condition-${index}-value`}>
-          {list ? "Values" : "Value"}
-        </FieldLabel>
-        <Input
-          aria-invalid={Boolean(valueError)}
-          autoComplete="off"
-          id={`segment-condition-${index}-value`}
-          onChange={(event) => onEdit(index, { valueText: event.target.value })}
-          placeholder={list ? "US, CA" : "paid"}
-          value={condition.valueText}
-        />
-        {valueError ? <FieldError>{valueError}</FieldError> : null}
-        {!valueError && list ? (
-          <FieldDescription>Comma-separated list for in / not in.</FieldDescription>
-        ) : null}
-      </Field>
+      <ConditionValues
+        condition={condition}
+        index={index}
+        list={list}
+        onEdit={onEdit}
+        valueError={valueError}
+      />
 
       {removable ? (
         <div>
@@ -157,6 +149,129 @@ function ConditionRow({
             Remove Condition
           </Button>
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ConditionValues({
+  condition,
+  index,
+  list,
+  onEdit,
+  valueError,
+}: {
+  condition: ConditionDraft;
+  index: number;
+  list: boolean;
+  onEdit: (index: number, patch: Partial<ConditionDraft>) => void;
+  valueError: string | undefined;
+}) {
+  function editValue(valueIndex: number, patch: Partial<ConditionValueEntry>) {
+    const current =
+      condition.values.length > 0 ? condition.values : list ? [] : [emptyValueEntry()];
+    const ensured = current[valueIndex] !== undefined ? current : [...current, emptyValueEntry()];
+    onEdit(index, {
+      values: ensured.map((entry, entryIndex) =>
+        entryIndex === valueIndex ? { ...entry, ...patch } : entry,
+      ),
+    });
+  }
+
+  function addValue() {
+    onEdit(index, { values: [...condition.values, emptyValueEntry()] });
+  }
+
+  function removeValue(valueIndex: number) {
+    onEdit(index, {
+      values: condition.values.filter((_, entryIndex) => entryIndex !== valueIndex),
+    });
+  }
+
+  const values = list
+    ? condition.values
+    : condition.values.slice(0, 1).length > 0
+      ? condition.values.slice(0, 1)
+      : [emptyValueEntry()];
+
+  return (
+    <div className="grid gap-2">
+      <p className="font-medium text-sm">{list ? "Values" : "Value"}</p>
+      {valueError ? <FieldError>{valueError}</FieldError> : null}
+      {values.map((entry, valueIndex) => (
+        <ValueRow
+          entry={entry}
+          index={index}
+          key={entry.key}
+          list={list}
+          onEdit={(patch) => editValue(valueIndex, patch)}
+          onRemove={list ? () => removeValue(valueIndex) : undefined}
+          removable={list && values.length > 1}
+          valueIndex={valueIndex}
+        />
+      ))}
+      {list ? (
+        <div>
+          <Button onClick={addValue} type="button" variant="outline">
+            Add value
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ValueRow({
+  entry,
+  index,
+  list,
+  onEdit,
+  onRemove,
+  removable,
+  valueIndex,
+}: {
+  entry: ConditionValueEntry;
+  index: number;
+  list: boolean;
+  onEdit: (patch: Partial<ConditionValueEntry>) => void;
+  onRemove?: () => void;
+  removable: boolean;
+  valueIndex: number;
+}) {
+  const inputId = `segment-condition-${index}-value-${valueIndex}`;
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <Field className="min-w-40 flex-1">
+        <FieldLabel htmlFor={inputId}>{list ? `Value ${valueIndex + 1}` : "Value"}</FieldLabel>
+        {entry.type === "boolean" ? (
+          <Select
+            onValueChange={(value) => {
+              if (value !== null) onEdit({ text: value });
+            }}
+            value={entry.text === "false" ? "false" : "true"}
+          >
+            <SelectTrigger className="w-full" id={inputId}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="true">true</SelectItem>
+              <SelectItem value="false">false</SelectItem>
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            autoComplete="off"
+            id={inputId}
+            onChange={(event) => onEdit({ text: event.target.value })}
+            placeholder={list ? "US" : "paid"}
+            value={entry.text}
+          />
+        )}
+      </Field>
+      {removable && onRemove ? (
+        <Button onClick={onRemove} type="button" variant="ghost">
+          Remove value
+        </Button>
       ) : null}
     </div>
   );

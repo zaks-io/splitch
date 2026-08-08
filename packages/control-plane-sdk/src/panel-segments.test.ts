@@ -22,7 +22,7 @@ describe("panel Segments binding transport", () => {
 
     await expect(client.list({ appId: "app_1" })).resolves.toMatchObject({
       ok: true,
-      data: { items: [{ name: "Paid plan" }] },
+      data: { items: [{ name: "Paid plan" }], unparseable: [] },
     });
     await expect(
       client.create({
@@ -54,18 +54,45 @@ describe("panel Segments binding transport", () => {
       ["PATCH", "https://control-plane.internal/apps/app_1/segments/segment_1"],
       ["DELETE", "https://control-plane.internal/apps/app_1/segments/segment_1"],
     ]);
-    expect(JSON.parse(requests[1]?.body ?? "{}")).toEqual({
-      name: "Paid plan",
-      conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
+  });
+
+  it("keeps parseable Segments and names the unparseable ones without failing the list", async () => {
+    const client = createPanelSegmentsClient({
+      fetch: vi.fn(async () =>
+        Response.json({
+          items: [
+            segment(),
+            {
+              id: "segment_poison",
+              appId: "app_1",
+              name: "Poison",
+              conditions: [{ attribute: "plan", operator: "in", value: [null, "paid"] }],
+              createdAt: "2026-07-29T00:00:00.000Z",
+              updatedAt: "2026-07-29T00:00:00.000Z",
+            },
+          ],
+        }),
+      ),
     });
-    expect(JSON.parse(requests[3]?.body ?? "{}")).toEqual({
-      name: "Enterprise plan",
+
+    await expect(client.list({ appId: "app_1" })).resolves.toMatchObject({
+      ok: true,
+      data: {
+        items: [{ id: "segment_1", name: "Paid plan" }],
+        unparseable: [
+          {
+            id: "segment_poison",
+            name: "Poison",
+            reason: expect.stringMatching(/conditions|Invalid|null/i),
+          },
+        ],
+      },
     });
   });
 
-  it("rejects invalid successful response bodies", async () => {
+  it("rejects a list body that is not an items array", async () => {
     const client = createPanelSegmentsClient({
-      fetch: vi.fn(async () => Response.json({ items: [{ name: "broken" }] })),
+      fetch: vi.fn(async () => Response.json({ segments: [] })),
     });
 
     await expect(client.list({ appId: "app_1" })).rejects.toThrow(

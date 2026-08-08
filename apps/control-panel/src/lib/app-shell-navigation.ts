@@ -87,8 +87,8 @@ function destinationSection(to: string): string {
 export function deferredDestinationAt(
   pathname: string,
   scope: UrlScope,
+  destinations: readonly NavigationDestination[] = appSectionRegistry,
 ): NavigationDestination | undefined {
-  const destinations: readonly NavigationDestination[] = appSectionRegistry;
   return destinations.find((destination) => {
     if (destination.status !== "deferred") {
       return false;

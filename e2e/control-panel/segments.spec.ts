@@ -17,7 +17,7 @@ test.describe("App-level Segments", () => {
 
     await expect(page.getByRole("heading", { name: "Segments (App-level)" })).toBeVisible();
     await expect(page.getByText("Defined once, available in every Environment")).toBeVisible();
-    await expect(page.getByText(/Define reusable Condition sets for this App/)).toBeVisible();
+    await expect(page.getByText(/A Segment is a reusable set of Conditions/)).toBeVisible();
     await expect(page.locator("[data-segment-name='Paid plan']")).toBeVisible();
     await expect(page.locator("[data-segment-name='Enterprise markets']")).toBeVisible();
     await expect(page.locator("[data-segment-name='Paid plan']")).toContainText("plan equals paid");
@@ -38,21 +38,22 @@ test.describe("App-level Segments", () => {
 
     await page.getByRole("button", { name: "Create Segment" }).click();
     const createDialog = page.getByRole("dialog");
-    await expect(createDialog.getByText(/Edits apply across every Environment/)).toBeVisible();
+    await expect(createDialog.getByText(/Defined once for this App/)).toBeVisible();
     await createDialog.getByRole("button", { name: "Create Segment" }).click();
     await expect(createDialog.getByText("Enter a Segment name.")).toBeVisible();
     await expect(createDialog.getByText("Enter an attribute.")).toBeVisible();
-    await expect(createDialog.getByText("Enter a value.")).toBeVisible();
 
     await createDialog.getByLabel("Segment name").fill(name);
     await createDialog.getByLabel("Attribute").fill("plan");
-    await createDialog.getByLabel("Value").fill("beta");
+    await createDialog.getByLabel("Value", { exact: true }).fill("beta");
     await createDialog.getByRole("button", { name: "Add Condition" }).click();
     const secondAttribute = createDialog.locator("#segment-condition-1-attribute");
     await secondAttribute.fill("country");
     await createDialog.locator("#segment-condition-1-operator").click();
     await page.getByRole("option", { name: "in list", exact: true }).click();
-    await createDialog.locator("#segment-condition-1-value").fill("US, CA");
+    await createDialog.locator("#segment-condition-1-value-0").fill("US");
+    await createDialog.getByRole("button", { name: "Add value" }).click();
+    await createDialog.locator("#segment-condition-1-value-1").fill("CA");
     await createDialog.getByRole("button", { name: "Create Segment" }).click();
     await expect(createDialog).toBeHidden();
     await expect(page.locator(`[data-segment-name='${name}']`)).toBeVisible();

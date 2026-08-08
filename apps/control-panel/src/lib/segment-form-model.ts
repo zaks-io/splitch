@@ -36,12 +36,20 @@ export function isListOperator(operator: ConditionOperator): boolean {
   return operator === "in" || operator === "not_in";
 }
 
+const ConditionValueEntrySchema = z
+  .object({
+    key: z.string(),
+    text: z.string(),
+    type: z.union([z.literal("string"), z.literal("number"), z.literal("boolean")]),
+  })
+  .strict();
+
 const ConditionDraftSchema = z
   .object({
     key: z.string(),
     attribute: z.string(),
     operator: ConditionOperatorSchema,
-    valueText: z.string(),
+    values: z.array(ConditionValueEntrySchema),
   })
   .strict();
 
@@ -53,6 +61,7 @@ export const SegmentDraftSchema = z
   })
   .strict();
 
+export type ConditionValueEntry = z.infer<typeof ConditionValueEntrySchema>;
 export type ConditionDraft = z.infer<typeof ConditionDraftSchema>;
 export type SegmentDraft = z.infer<typeof SegmentDraftSchema>;
 
@@ -61,8 +70,17 @@ export type SegmentDraftIssue = {
   message: string;
 };
 
+export function emptyValueEntry(type: ConditionValueEntry["type"] = "string"): ConditionValueEntry {
+  return { key: newConditionKey(), text: "", type };
+}
+
 export function emptyConditionDraft(): ConditionDraft {
-  return { key: newConditionKey(), attribute: "", operator: "eq", valueText: "" };
+  return {
+    key: newConditionKey(),
+    attribute: "",
+    operator: "eq",
+    values: [emptyValueEntry()],
+  };
 }
 
 export function emptySegmentDraft(): SegmentDraft {
@@ -77,10 +95,7 @@ export function segmentDraft(segment: Segment): SegmentDraft {
   return {
     name: segment.name,
     description: segment.description ?? "",
-    conditions:
-      segment.conditions.length > 0
-        ? segment.conditions.map(conditionToDraft)
-        : [emptyConditionDraft()],
+    conditions: segment.conditions.map(conditionToDraft),
   };
 }
 
@@ -89,27 +104,11 @@ export function segmentDraftIssues(draft: SegmentDraft): SegmentDraftIssue[] {
   if (!draft.name.trim()) {
     issues.push({ path: "name", message: "Enter a Segment name." });
   }
-  if (draft.conditions.length === 0) {
-    issues.push({ path: "conditions", message: "Add at least one Condition." });
-  }
   draft.conditions.forEach((condition, index) => {
     if (!condition.attribute.trim()) {
       issues.push({
         path: `conditions.${index}.attribute`,
         message: "Enter an attribute.",
-      });
-    }
-    if (isListOperator(condition.operator)) {
-      if (listValues(condition.valueText).length === 0) {
-        issues.push({
-          path: `conditions.${index}.valueText`,
-          message: "Enter at least one list value.",
-        });
-      }
-    } else if (!condition.valueText.trim()) {
-      issues.push({
-        path: `conditions.${index}.valueText`,
-        message: "Enter a value.",
       });
     }
   });
@@ -139,53 +138,100 @@ export function segmentIssueFor(
   return issues.find((issue) => issue.path === path)?.message;
 }
 
-export function formatConditionSummary(condition: Condition): string {
+export function formatConditionSummary(condition: {
+  attribute: string;
+  operator: string;
+  value: Condition["value"] | string;
+}): string {
   const value = Array.isArray(condition.value)
-    ? condition.value.map(String).join(", ")
-    : String(condition.value);
-  return `${condition.attribute} ${OPERATOR_LABELS[condition.operator]} ${value}`;
+    ? condition.value.map(formatStoredValue).join(", ")
+    : formatStoredValue(condition.value);
+  const label =
+    condition.operator in OPERATOR_LABELS
+      ? OPERATOR_LABELS[condition.operator as ConditionOperator]
+      : condition.operator;
+  return `${condition.attribute} ${label} ${value}`;
+}
+
+export function conditionWithOperator(
+  condition: ConditionDraft,
+  operator: ConditionOperator,
+): ConditionDraft {
+  const wasList = isListOperator(condition.operator);
+  const willList = isListOperator(operator);
+  if (wasList === willList) return { ...condition, operator };
+  if (willList) {
+    return {
+      ...condition,
+      operator,
+      values: condition.values.length > 0 ? condition.values : [emptyValueEntry()],
+    };
+  }
+  return {
+    ...condition,
+    operator,
+    values:
+      condition.values.slice(0, 1).length > 0 ? condition.values.slice(0, 1) : [emptyValueEntry()],
+  };
 }
 
 function conditionToDraft(condition: Condition): ConditionDraft {
+  const values = Array.isArray(condition.value)
+    ? condition.value.map(valueEntryFromStored)
+    : [valueEntryFromStored(condition.value)];
   return {
     key: newConditionKey(),
     attribute: condition.attribute,
     operator: condition.operator,
-    valueText: Array.isArray(condition.value)
-      ? condition.value.map(String).join(", ")
-      : String(condition.value),
+    values,
   };
 }
 
 function conditionFromDraft(draft: ConditionDraft): Condition {
-  if (isListOperator(draft.operator)) {
+  if (isListOperator(draft.operator) || draft.values.length !== 1) {
     return {
       attribute: draft.attribute.trim(),
       operator: draft.operator,
-      value: listValues(draft.valueText).map(parseScalar),
+      value: draft.values.map(emitStoredValue),
     };
   }
+  const only = draft.values[0];
   return {
     attribute: draft.attribute.trim(),
     operator: draft.operator,
-    value: parseScalar(draft.valueText.trim()),
+    value: only ? emitStoredValue(only) : "",
   };
 }
 
-function listValues(valueText: string): string[] {
-  return valueText
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
+function valueEntryFromStored(value: string | number | boolean): ConditionValueEntry {
+  if (typeof value === "boolean") {
+    return { key: newConditionKey(), text: value ? "true" : "false", type: "boolean" };
+  }
+  if (typeof value === "number") {
+    return { key: newConditionKey(), text: String(value), type: "number" };
+  }
+  return { key: newConditionKey(), text: value, type: "string" };
 }
 
-function parseScalar(raw: string): boolean | number | string {
-  if (raw === "true") return true;
-  if (raw === "false") return false;
-  if (raw !== "" && Number.isFinite(Number(raw)) && /^-?\d+(\.\d+)?$/.test(raw)) {
-    return Number(raw);
+function emitStoredValue(entry: ConditionValueEntry): string | number | boolean {
+  if (entry.type === "string") return entry.text;
+  if (entry.type === "boolean") {
+    if (entry.text === "true") return true;
+    if (entry.text === "false") return false;
+    return entry.text;
   }
-  return raw;
+  if (
+    entry.text !== "" &&
+    Number.isFinite(Number(entry.text)) &&
+    /^-?\d+(\.\d+)?$/.test(entry.text)
+  ) {
+    return Number(entry.text);
+  }
+  return entry.text;
+}
+
+function formatStoredValue(value: string | number | boolean): string {
+  return String(value);
 }
 
 function newConditionKey(): string {

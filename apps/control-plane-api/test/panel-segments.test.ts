@@ -91,12 +91,12 @@ describe("SignedControlPanelEntrypoint Segment operations", () => {
       .bind(ids.orgId, USER_ID, "owner", "2026-07-19T00:00:00.000Z")
       .run();
 
-    const crossAppIds = { ...ids, envId: OTHER_ENV_ID };
-    const crossApp = await entrypoint.fetch(
-      await signedPanelRequest(crossAppIds, "GET", `/apps/${APP_ID}/segments`),
+    const crossEnvIds = { ...ids, envId: OTHER_ENV_ID };
+    const crossEnv = await entrypoint.fetch(
+      await signedPanelRequest(crossEnvIds, "GET", `/apps/${APP_ID}/segments`),
     );
-    expect(crossApp.status).toBe(403);
-    expect(await crossApp.json()).toMatchObject({ code: "FORBIDDEN" });
+    expect(crossEnv.status).toBe(403);
+    expect(await crossEnv.json()).toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("keeps Segment delegations off public HTTP and binds them to the exact resource", async () => {

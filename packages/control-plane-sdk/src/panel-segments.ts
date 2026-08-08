@@ -20,6 +20,12 @@ export type PanelSegment = Omit<Segment, "conditions"> & {
   conditions: PanelCondition[];
 };
 
+export type UnparseablePanelSegment = {
+  id?: string;
+  name?: string;
+  reason: string;
+};
+
 export interface PanelSegmentsListInput {
   appId: string;
 }
@@ -36,6 +42,7 @@ export type PanelSegmentDeleteInput = PanelSegmentGetInput;
 
 export interface PanelSegmentsListOutput {
   items: PanelSegment[];
+  unparseable: UnparseablePanelSegment[];
 }
 
 export interface PanelSegmentDeleteOutput {
@@ -119,12 +126,16 @@ function parseSegmentList(
 ): { success: true; data: PanelSegmentsListOutput } | { success: false } {
   if (!isObject(input) || !Array.isArray(input.items)) return { success: false as const };
   const items: PanelSegment[] = [];
+  const unparseable: UnparseablePanelSegment[] = [];
   for (const item of input.items) {
     const parsed = panelSegment(item);
-    if (!parsed) return { success: false };
-    items.push(parsed);
+    if (parsed) {
+      items.push(parsed);
+      continue;
+    }
+    unparseable.push(unparseableSegment(item));
   }
-  return { success: true, data: { items } };
+  return { success: true, data: { items, unparseable } };
 }
 
 function parseSegment(input: unknown): { success: true; data: PanelSegment } | { success: false } {
@@ -151,6 +162,30 @@ function panelSegment(input: unknown): PanelSegment | null {
   } catch {
     return null;
   }
+}
+
+function unparseableSegment(input: unknown): UnparseablePanelSegment {
+  if (!isObject(input)) {
+    return { reason: "Segment entry is not an object" };
+  }
+  return {
+    ...(typeof input.id === "string" ? { id: input.id } : {}),
+    ...(typeof input.name === "string" ? { name: input.name } : {}),
+    reason: describeSegmentParseFailure(input),
+  };
+}
+
+function describeSegmentParseFailure(input: Record<string, unknown>): string {
+  const parsed = SegmentSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    if (issue) {
+      const path = issue.path.length > 0 ? issue.path.join(".") : "segment";
+      return `${path}: ${issue.message}`;
+    }
+    return "Segment failed schema validation";
+  }
+  return "Segment Condition values are not Panel-renderable scalars";
 }
 
 function panelCondition(condition: Condition): PanelCondition {
