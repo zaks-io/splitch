@@ -1,5 +1,9 @@
 import { createRepository } from "@splitch/db";
-import { workerEmitter, workerObservabilityWithWaitUntil } from "@splitch/observability/worker";
+import {
+  createWorkerFaultReporter,
+  workerEmitter,
+  workerObservabilityWithWaitUntil,
+} from "@splitch/observability/worker";
 import { runApprovalRequestArchival } from "./approval-archive";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
 import type { ControlPlaneApiEnv } from "./env";
@@ -45,14 +49,27 @@ async function runApprovalArchive(
   event: ScheduledController,
   ctx: Pick<ExecutionContext, "waitUntil">,
 ): Promise<void> {
-  const archived = await runApprovalRequestArchival({
-    repo: createRepository(env.DB),
-    store: approvalArchiveStoreFromEnv(env),
-    now: new Date(event.scheduledTime),
-  });
-  workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
-    "info",
-    "approval-request-archive",
-    { service, job: "approval-request-archive", cron: event.cron, archived },
-  );
+  try {
+    const archived = await runApprovalRequestArchival({
+      repo: createRepository(env.DB),
+      store: approvalArchiveStoreFromEnv(env),
+      now: new Date(event.scheduledTime),
+    });
+    workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
+      "info",
+      "approval-request-archive",
+      { service, job: "approval-request-archive", cron: event.cron, archived },
+    );
+  } catch (error) {
+    createWorkerFaultReporter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx))(
+      "approval_request_archive_failed",
+      {
+        service,
+        job: "approval-request-archive",
+        cron: event.cron,
+        fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+      },
+    );
+    throw error;
+  }
 }

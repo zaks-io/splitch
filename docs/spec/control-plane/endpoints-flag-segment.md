@@ -254,6 +254,9 @@ Lists full Approval Request wire projections in the App. `status` optionally fil
 keeps only Requests whose Policy context targets that Environment (narrows within the App).
 The response uses the standard cursor page:
 `{ items: ApprovalRequest[], cursor: string | null, limit: number, total: number | null }`.
+Production always merges D1 with Tinybird archives, so `total` is always `null`. An exact total
+would require a second Tinybird round-trip on every list request; `null` is the honest result rather
+than a partial D1 count.
 
 ### `GET /apps/{app_id}/approval-requests/{id}`
 

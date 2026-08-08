@@ -42,7 +42,14 @@ describe("Tinybird Approval Request archive append", () => {
     expect(fetchFn).toHaveBeenCalledOnce();
     const [url, init] = fetchFn.mock.calls[0] ?? [];
     expect(String(url)).toBe("https://api.tinybird.test/v0/events?name=audit_log&wait=true");
-    expect(init).toMatchObject({ method: "POST", body: JSON.stringify(EVENT) });
+    expect(init).toMatchObject({
+      method: "POST",
+      headers: {
+        authorization: "Bearer write-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(EVENT),
+    });
   });
 
   it.each([
@@ -70,5 +77,55 @@ describe("Tinybird Approval Request archive append", () => {
     const store = approvalArchiveStoreFromEnv(ENV, () => Promise.resolve(response()));
 
     await expect(store.append(EVENT)).rejects.toThrow(message);
+  });
+});
+
+describe("Tinybird Approval Request archive reads", () => {
+  it("uses the scoped read token", async () => {
+    const fetchFn = vi.fn<typeof fetch>(() => Promise.resolve(Response.json({ data: [] })));
+    const store = approvalArchiveStoreFromEnv(ENV, fetchFn);
+
+    await expect(store.list({ appId: "app_archive_1", limit: 10 })).resolves.toEqual([]);
+
+    expect(fetchFn).toHaveBeenCalledOnce();
+    const [url, init] = fetchFn.mock.calls[0] ?? [];
+    expect(String(url)).toBe(
+      "https://api.tinybird.test/v0/pipes/approval_request_archives.json?app_id=app_archive_1&limit=10",
+    );
+    expect(init).toMatchObject({
+      headers: { authorization: "Bearer read-token" },
+    });
+  });
+
+  it("fails loud on a 403 instead of returning an empty page", async () => {
+    const store = approvalArchiveStoreFromEnv(ENV, () =>
+      Promise.resolve(Response.json({ data: [] }, { status: 403 })),
+    );
+
+    await expect(store.list({ appId: "app_archive_1", limit: 10 })).rejects.toThrow("HTTP 403");
+  });
+});
+
+describe("Tinybird Approval Request archive token requirements", () => {
+  it.each([
+    {
+      name: "write token",
+      env: { ...ENV, TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN: undefined },
+      invoke: (store: ReturnType<typeof approvalArchiveStoreFromEnv>) => store.append(EVENT),
+      message: "write token is unavailable",
+    },
+    {
+      name: "read token",
+      env: { ...ENV, TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN: undefined },
+      invoke: (store: ReturnType<typeof approvalArchiveStoreFromEnv>) =>
+        store.list({ appId: "app_archive_1", limit: 10 }),
+      message: "read token is unavailable",
+    },
+  ])("rejects an absent $name before fetch", async ({ env, invoke, message }) => {
+    const fetchFn = vi.fn<typeof fetch>();
+    const store = approvalArchiveStoreFromEnv(env, fetchFn);
+
+    await expect(invoke(store)).rejects.toThrow(message);
+    expect(fetchFn).not.toHaveBeenCalled();
   });
 });

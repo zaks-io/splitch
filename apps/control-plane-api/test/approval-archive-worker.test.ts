@@ -147,48 +147,6 @@ describe("Approval Request archival sweep isolation", () => {
     expect(store.events.size).toBe(healthy.length);
   });
 
-  it("keeps a second App intact when finalization receives the wrong scope", async () => {
-    const archivedId = "apr_01J00000000000000000000112";
-    const otherId = "apr_01J00000000000000000000113";
-    await seedApprovalArchiveFixture(h.d1, { id: archivedId, resolvedAt: OLD });
-    await seedApprovalArchiveFixture(h.d1, {
-      id: otherId,
-      appId: ids.otherAppId,
-      environmentId: "env_archive_other",
-      targetId: "flag_config_archive_other",
-      targetVersion: `sha256:${"b".repeat(64)}`,
-      proposedBy: "user_archive_other",
-      proposedVia: "device_flow",
-      reviewedBy: "deleted-user:user_archive_other",
-      resolvedAt: OLD,
-    });
-    const store = new MemoryApprovalArchiveStore();
-
-    await expect(
-      runApprovalRequestArchival({ repo: h.repo, store, now: NOW, limit: 1 }),
-    ).resolves.toBe(1);
-    expect(await approvalRowCounts(h.d1, ids.appId, archivedId)).toEqual({
-      requests: 0,
-      reviews: 0,
-    });
-    expect(await approvalRowCounts(h.d1, ids.otherAppId, otherId)).toEqual({
-      requests: 1,
-      reviews: 2,
-    });
-
-    await expect(
-      h.repo.approvals.finalizeArchive(
-        appScope(ids.appId),
-        { requestId: otherId, resolvedAt: OLD, reviewCount: 2 },
-        "declined",
-      ),
-    ).rejects.toThrow("archive finalization failed");
-    expect(await approvalRowCounts(h.d1, ids.otherAppId, otherId)).toEqual({
-      requests: 1,
-      reviews: 2,
-    });
-  });
-
   it("keeps every D1 row when a Review appears before finalization", async () => {
     const requestId = "apr_01J00000000000000000000114";
     await seedApprovalArchiveFixture(h.d1, { id: requestId, resolvedAt: OLD });
@@ -237,6 +195,13 @@ describe("Approval Request archive verification failures", () => {
         store.appendError = new Error("write failed");
       },
       message: "write failed",
+    },
+    {
+      name: "archive event App-scope mismatch",
+      configure(store: MemoryApprovalArchiveStore) {
+        store.mutateRead = (event) => ({ ...event, app_id: ids.otherAppId });
+      },
+      message: "Approval Request archive crossed its App scope",
     },
     {
       name: "archive-version mismatch",
