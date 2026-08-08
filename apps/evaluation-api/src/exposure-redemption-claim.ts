@@ -11,6 +11,11 @@ import {
   type ExposureRedemptionClaimStore,
   type TicketBindingRecord,
 } from "./exposure-redemption-claim-core";
+import {
+  ExposureRedemptionClaimHttpError,
+  ExposureRedemptionClaimProtocolError,
+  ExposureRedemptionClaimTransportError,
+} from "./exposure-redemption-claim-errors";
 
 export interface ExposureRedemptionClaimNamespace {
   idFromName(name: string): DurableObjectId;
@@ -65,10 +70,10 @@ export class DurableExposureRedemptionClaimStore implements ExposureRedemptionCl
         }),
       });
     } catch (cause) {
-      throw new Error("exposure redemption claim Durable Object transport failed", { cause });
+      throw new ExposureRedemptionClaimTransportError(cause);
     }
     if (!response.ok) {
-      throw new Error(`exposure redemption claim Durable Object returned HTTP ${response.status}`);
+      throw new ExposureRedemptionClaimHttpError(response.status);
     }
     return parse(await response.json());
   }
@@ -88,7 +93,9 @@ export function parseClaimOutcome(value: unknown): ExposureRedemptionClaimOutcom
   ) {
     return { status: value.status };
   }
-  throw new Error("exposure redemption claim returned an invalid outcome");
+  throw new ExposureRedemptionClaimProtocolError(
+    "exposure redemption claim returned an invalid outcome",
+  );
 }
 
 export function parseAcknowledgeOutcome(value: unknown): ExposureRedemptionAcknowledgeOutcome {
@@ -100,14 +107,18 @@ export function parseAcknowledgeOutcome(value: unknown): ExposureRedemptionAckno
   ) {
     return { status: value.status };
   }
-  throw new Error("exposure redemption acknowledge returned an invalid outcome");
+  throw new ExposureRedemptionClaimProtocolError(
+    "exposure redemption acknowledge returned an invalid outcome",
+  );
 }
 
 export function parseOk(value: unknown): void {
   if (typeof value === "object" && value !== null && "ok" in value && value.ok === true) {
     return;
   }
-  throw new Error("exposure redemption claim returned an invalid ok response");
+  throw new ExposureRedemptionClaimProtocolError(
+    "exposure redemption claim returned an invalid ok response",
+  );
 }
 
 /** In-memory claim store for unit harnesses (single-isolate). */

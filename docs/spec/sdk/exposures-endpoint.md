@@ -103,12 +103,28 @@ For each accepted item, in order:
    (the commit evaluate performs after its inline seal, deferred to redemption — ADR-0048)
 ```
 
-Seal failure rejects the item loud and performs no Assignment Store write. Transient or
-platform-side ingest faults (including internal-token drift / 401, config propagation lag /
-404, and rate limits / 429) surface as `SERVICE_UNAVAILABLE` so the SDK retries with the same
-`exposureId`. Only an unambiguous caller-payload fault from ingest (HTTP 400) maps to
-non-retryable `VALIDATION_ERROR`. Holdover replays and non-live-Run resolutions never had
-tickets, so no redemption path exists for them — the no-new-Exposure invariants of
+Seal failure rejects the item loud and performs no Assignment Store write. Per-item rejection
+codes fall into two classes the SDK must distinguish:
+
+| Class         | Codes                                                                                                                                                      | SDK behavior                                           |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Transient     | `SERVICE_UNAVAILABLE`                                                                                                                                      | Retain the item and retry with the same `exposureId`   |
+| Deterministic | `VALIDATION_ERROR`, `INTERNAL_SERVER_ERROR`, `EXPOSURE_TICKET_INVALID`, `EXPOSURE_TICKET_EXPIRED`, `EVENT_ID_CONFLICT`, and every other non-transient code | Acknowledge as failed, log loud, drop — never re-queue |
+
+Mapping:
+
+- Transient or platform-side **ingest** faults (internal-token drift / 401, config propagation
+  lag / 404, rate limits / 429, and other non-400 ingest statuses) → `SERVICE_UNAVAILABLE`.
+- Unambiguous caller-payload fault from ingest (HTTP 400) → non-retryable `VALIDATION_ERROR`.
+- Transient **claim-store** fault (Durable Object transport failure on `claim`) →
+  `SERVICE_UNAVAILABLE`.
+- Deterministic **claim-store** fault (programming error in the redemption path, a
+  `parseClaimOutcome` protocol violation, or a Durable Object HTTP 400) → non-retryable
+  `INTERNAL_SERVER_ERROR`. An unclassified claim throw is also `INTERNAL_SERVER_ERROR` (fail
+  loud; never quietly bucketed as retryable).
+
+Holdover replays and non-live-Run resolutions never had tickets, so no redemption path exists
+for them — the no-new-Exposure invariants of
 [assignment-store-integration.md](./assignment-store-integration.md) hold structurally.
 
 ## Integrity properties (the attack-test contract)
@@ -145,6 +161,8 @@ Two additions to the canonical registry
 
 Batch-level errors reuse the existing codes (`UNAUTHORIZED`, `CREDENTIAL_REVOKED`,
 `ORIGIN_NOT_ALLOWED`, `VALIDATION_ERROR`, `RATE_LIMITED`, `SERVICE_UNAVAILABLE`).
+Per-item claim-store deterministic faults reuse `INTERNAL_SERVER_ERROR` (already in the
+canonical registry) — do not invent a parallel code.
 
 ## Seam contract
 
@@ -156,8 +174,9 @@ Batch-level errors reuse the existing codes (`UNAUTHORIZED`, `CREDENTIAL_REVOKED
   orchestration — this route lives beside `evaluate`, not in Event Ingest, which owns only the
   strictly-defined Metric/Web Event families, ADR-0039/ADR-0042)
 - **Failure contract:** batch gate failure → whole-request error envelope, zero rows; item
-  failure → per-item `rejected` + code, siblings unaffected; seal failure → item retryable with the
-  same `exposureId`; nothing is ever silently dropped (ADR-0036)
+  failure → per-item `rejected` + code, siblings unaffected; transient item rejection
+  (`SERVICE_UNAVAILABLE`) → SDK retries with the same `exposureId`; deterministic item
+  rejection → SDK drops after a loud log; nothing is ever silently dropped (ADR-0036)
 
 ## Sources
 
