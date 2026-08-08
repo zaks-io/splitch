@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { foreignKey, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { createdAt, updatedAt, userRef } from "./columns";
 import { apps, environments } from "./identity";
 
@@ -82,37 +82,52 @@ export const flagConfigs = sqliteTable(
   (t) => [uniqueIndex("flag_configs_flag_env_unique").on(t.flagId, t.environmentId)],
 );
 
-export const targetingRules = sqliteTable("targeting_rules", {
-  id: text("id").primaryKey(),
-  appId: text("app_id")
-    .notNull()
-    .references(() => apps.id),
-  // Co-scoped with app_id (ADR-0027).
-  environmentId: text("environment_id")
-    .notNull()
-    .references(() => environments.id),
-  flagId: text("flag_id")
-    .notNull()
-    .references(() => flags.id),
-  priority: integer("priority").notNull(),
-  // JSON array of Condition.
-  conditions: text("conditions").notNull(),
-  variantId: text("variant_id"),
-  // JSON PercentageRollout (nullable).
-  percentageRollout: text("percentage_rollout"),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const segments = sqliteTable(
+  "segments",
+  {
+    id: text("id").primaryKey(),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id),
+    name: text("name").notNull(),
+    // JSON array of Condition.
+    conditions: text("conditions").notNull(),
+    description: text("description"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("segments_app_id_id_unique").on(t.appId, t.id)],
+);
 
-export const segments = sqliteTable("segments", {
-  id: text("id").primaryKey(),
-  appId: text("app_id")
-    .notNull()
-    .references(() => apps.id),
-  name: text("name").notNull(),
-  // JSON array of Condition.
-  conditions: text("conditions").notNull(),
-  description: text("description"),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const targetingRules = sqliteTable(
+  "targeting_rules",
+  {
+    id: text("id").primaryKey(),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id),
+    // Co-scoped with app_id (ADR-0027).
+    environmentId: text("environment_id")
+      .notNull()
+      .references(() => environments.id),
+    flagId: text("flag_id")
+      .notNull()
+      .references(() => flags.id),
+    priority: integer("priority").notNull(),
+    // JSON array of Condition.
+    conditions: text("conditions").notNull(),
+    segmentId: text("segment_id"),
+    variantId: text("variant_id"),
+    // JSON PercentageRollout (nullable).
+    percentageRollout: text("percentage_rollout"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.appId, t.segmentId],
+      foreignColumns: [segments.appId, segments.id],
+      name: "targeting_rules_app_segment_fk",
+    }).onDelete("restrict"),
+  ],
+);

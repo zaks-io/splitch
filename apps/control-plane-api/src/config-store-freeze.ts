@@ -42,7 +42,7 @@ export function configPatchFreeze(
 
 export function targetingFreeze(
   deps: ConfigStoreDeps,
-  input: ReplaceTargetingRulesInput,
+  input: Pick<ReplaceTargetingRulesInput, "appId" | "environmentId" | "flagId">,
 ): Promise<RunFrozenFailure | null> {
   return frozenWriteFailure(
     deps.repo,

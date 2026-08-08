@@ -2,6 +2,7 @@ import { makeApprovalRepo } from "./approvals";
 import { makeClaimStateRepo } from "./claim-state";
 import { createDb } from "./client";
 import { makeCredentialRepo } from "./credentials";
+import { makeEventDefinitionRepo } from "./event-definitions";
 import { makeExperimentRepo } from "./experiments";
 import { makeFlagRepo } from "./flags";
 import { makeIdentityRepo } from "./identity";
@@ -26,6 +27,7 @@ export function createRepository(d1: D1Database) {
   return {
     flags: makeFlagRepo(db),
     experiments: makeExperimentRepo(db, d1),
+    eventDefinitions: makeEventDefinitionRepo(db, d1),
     credentials: makeCredentialRepo(db),
     claim: makeClaimStateRepo(d1),
     identity: makeIdentityRepo(db, d1),
@@ -39,4 +41,5 @@ export type {
   ApprovalCommit,
   ApprovalDisposition,
   ApprovalFailure,
+  ApprovalTargetState,
 } from "./approval-types";

@@ -1,0 +1,116 @@
+import { describe, expect, it, vi } from "vitest";
+import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
+import type { Env } from "./types";
+
+const STATE_KEY = "metric-event-claim";
+const DEDUP_URL = "https://metric-event-outbox.local/claim";
+
+/**
+ * The Durable Object is the only place the accept/duplicate/conflict decision is
+ * actually made. Ingest tests assert against a collaborator double, so nothing
+ * else in this app can see this class regress.
+ */
+describe("Metric Event outbox Durable Object", () => {
+  it("accepts a first claim and enqueues it once", async () => {
+    const outbox = makeOutbox();
+
+    const claim = await outbox.claim(row("entity-7"));
+
+    expect(claim).toEqual({
+      outcome: "accepted",
+      eventDefinitionId: "ed_signed_up",
+      eventDefinitionVersionId: "edv_1",
+    });
+    expect(outbox.send).toHaveBeenCalledTimes(1);
+    expect(outbox.send.mock.calls[0]?.[0]).toEqual(row("entity-7").row);
+    expect(outbox.stored()?.queued).toBe(true);
+  });
+
+  it("re-enqueues a replay whose first queue send never landed", async () => {
+    const outbox = makeOutbox();
+    outbox.seed({ ...row("entity-7"), queued: false });
+
+    const claim = await outbox.claim(row("entity-7"));
+
+    expect(claim.outcome).toBe("duplicate");
+    expect(outbox.send).toHaveBeenCalledTimes(1);
+    expect(outbox.stored()?.queued).toBe(true);
+  });
+
+  it("does not enqueue a replay of an event already on the queue", async () => {
+    const outbox = makeOutbox();
+    outbox.seed({ ...row("entity-7"), queued: true });
+
+    const claim = await outbox.claim(row("entity-7"));
+
+    expect(claim.outcome).toBe("duplicate");
+    expect(outbox.send).not.toHaveBeenCalled();
+  });
+
+  it("rejects a different event reusing the same dedup key", async () => {
+    const outbox = makeOutbox();
+    const first = { ...row("entity-7"), queued: true };
+    outbox.seed(first);
+
+    const claim = await outbox.claim(row("entity-9"));
+
+    expect(claim.outcome).toBe("conflict");
+    expect(outbox.send).not.toHaveBeenCalled();
+    expect(outbox.stored()).toEqual(first);
+  });
+});
+
+interface ClaimInput {
+  readonly fingerprint: string;
+  readonly eventDefinitionId: string;
+  readonly eventDefinitionVersionId: string;
+  readonly row: Record<string, unknown>;
+}
+
+function row(targetingKey: string): ClaimInput {
+  return {
+    fingerprint: `fp_${targetingKey}`,
+    eventDefinitionId: "ed_signed_up",
+    eventDefinitionVersionId: "edv_1",
+    row: { event_name: "signed_up", targeting_key_hash: targetingKey },
+  };
+}
+
+/** Durable Object storage round-trips through structured clone, so this does too. */
+function makeOutbox() {
+  const storage = new Map<string, unknown>();
+  const send = vi.fn(async (_row: Record<string, unknown>) => {});
+  const ctx = {
+    storage: {
+      async get<T>(key: string) {
+        return storage.has(key) ? (structuredClone(storage.get(key)) as T) : undefined;
+      },
+      async put(key: string, value: unknown) {
+        storage.set(key, structuredClone(value));
+      },
+    },
+  } as unknown as DurableObjectState;
+  const env = { METRIC_EVENTS_QUEUE: { send } } as unknown as Env;
+  const object = new MetricEventOutboxDurableObject(ctx, env);
+
+  return {
+    send,
+    seed(state: ClaimInput & { queued: boolean }) {
+      storage.set(STATE_KEY, structuredClone(state));
+    },
+    stored() {
+      return storage.get(STATE_KEY) as (ClaimInput & { queued: boolean }) | undefined;
+    },
+    async claim(input: ClaimInput) {
+      const response = await object.fetch(
+        new Request(DEDUP_URL, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...input, queued: false }),
+        }),
+      );
+      expect(response.status).toBe(200);
+      return (await response.json()) as { outcome: string };
+    },
+  };
+}

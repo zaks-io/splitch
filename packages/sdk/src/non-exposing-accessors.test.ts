@@ -155,7 +155,7 @@ describe("peekVariant: fail-loud errors without Default Variant fallback", () =>
 });
 
 describe("public SDK surface guard", () => {
-  it("exports the client, actionable error contract, and five client accessors", async () => {
+  it("exports the client, actionable error contract, and Metric Event accessor", async () => {
     const publicSdk = await import("./index");
     const fake = new FakeTransport([]);
     const client = createSplitchClient({
@@ -177,13 +177,14 @@ describe("public SDK surface guard", () => {
         "resolveErrorDocsUrl",
         "sdkClientErrorCodes",
         "sdkErrorCodes",
+        "track",
         "verify",
       ].sort(),
     );
     expect(assertClientSurface).toBe(true);
     expect(assertModuleSurface).toBe(true);
 
-    for (const deferred of ["track", "setProvider", "hooks"]) {
+    for (const deferred of ["setProvider", "hooks"]) {
       expect(deferred in publicSdk).toBe(false);
       expect(deferred in client).toBe(false);
     }

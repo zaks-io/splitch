@@ -1,13 +1,13 @@
 import type { ApprovalRequest, ErrorResponse, TargetingRule } from "@splitch/contracts";
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
+import type { z } from "zod";
 import { type ApprovalGateRecord, approvalGateRecord } from "./approval-gate-record";
 import {
   ApprovalRequestInputSchema,
   PromoteInputSchema,
   ReviewInputSchema,
-  type TargetingEditSchema,
   TargetingEditInputSchema,
+  type TargetingEditSchema,
   UpdateConfigInputSchema,
 } from "./flag-mutation-input";
 import { authorizedApprovalsClient, authorizedFlagsClient } from "./panel-authorized-clients";
@@ -197,7 +197,8 @@ function applyTargetingEdit(
       id: edit.ruleId,
       flagId,
       priority,
-      conditions: [{ attribute: edit.attribute, operator: edit.operator, value: edit.value }],
+      conditions: edit.condition ? [edit.condition] : [],
+      ...(edit.segmentId ? { segmentId: edit.segmentId } : {}),
       variantId: edit.variantId,
       percentageRollout: null,
     },

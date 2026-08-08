@@ -16,7 +16,7 @@ AppFlagConfig {
   enabled:       boolean         // required — false → Default Variant for all Entities
   variants:      Variant[]       // required — full set; one is the default
   defaultVariantId: string       // required — Variant ID to return when no rule matches or disabled (canonical: contracts/storage-schemas-kv.md FlagConfigKV)
-  targetingRules: TargetingRule[] // ordered priority list; first match wins
+  targetingRules: ResolvedTargetingRule[] // concrete Conditions only; first match wins
   liveRunId:     string | null   // null if no started Experiment Run is controlling this Flag
   salt:          string          // required — stable hash salt for Fractional Evaluation
   schemaVersion: number          // required — KV envelope version; see [contracts-and-validation.md](./contracts-and-validation.md)

@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 
 export const RESET_TABLES = [
+  "event_definition_versions",
+  "event_definitions",
   "approval_reviews",
   "approval_requests",
   "claim_idempotency",

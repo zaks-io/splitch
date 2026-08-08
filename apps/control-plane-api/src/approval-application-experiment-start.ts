@@ -18,6 +18,7 @@ export async function applyExperimentStart(
   if (!deps.configStore) {
     return {
       ok: false as const,
+      targetState: "rolled_back" as const,
       error: { code: "SERVICE_UNAVAILABLE" as const, details: { retryAfterMs: 1000 } },
     };
   }
@@ -28,6 +29,7 @@ export async function applyExperimentStart(
   if (!experiment) {
     return {
       ok: false as const,
+      targetState: "rolled_back" as const,
       error: { code: "EXPERIMENT_NOT_FOUND" as const, details: {} },
     };
   }
@@ -83,9 +85,14 @@ export async function applyExperimentStart(
   return { ok: true as const };
 }
 
+/** `prepareStart` validates and reads only; it refuses before `startRun` writes. */
 async function responseError(response: Response) {
   const body = (await response.json()) as { code: ErrorCode; details: Record<string, unknown> };
-  return { ok: false as const, error: { code: body.code, details: body.details } };
+  return {
+    ok: false as const,
+    targetState: "rolled_back" as const,
+    error: { code: body.code, details: body.details },
+  };
 }
 
 function startRunFailure(
@@ -93,10 +100,15 @@ function startRunFailure(
   experiment: { id: string; liveRunId: string | null },
 ) {
   if (reason === "experiment_not_found") {
-    return { ok: false as const, error: { code: "EXPERIMENT_NOT_FOUND" as const, details: {} } };
+    return {
+      ok: false as const,
+      targetState: "rolled_back" as const,
+      error: { code: "EXPERIMENT_NOT_FOUND" as const, details: {} },
+    };
   }
   return {
     ok: false as const,
+    targetState: "rolled_back" as const,
     error: {
       code: "EXPERIMENT_NO_DRAFT" as const,
       details: {
@@ -111,6 +123,7 @@ function startRunFailure(
 function malformedProposal(field: string) {
   return {
     ok: false as const,
+    targetState: "rolled_back" as const,
     error: {
       code: "VALIDATION_ERROR" as const,
       details: { field, reason: "MALFORMED_APPROVAL_PROPOSAL" },

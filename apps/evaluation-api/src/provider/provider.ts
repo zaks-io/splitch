@@ -2,7 +2,7 @@ import type {
   ErrorCode,
   ExperimentStatus,
   PercentageRollout,
-  TargetingRule,
+  ResolvedTargetingRule,
   Variant,
 } from "@splitch/contracts";
 import type { RunConfig } from "../assignment/run-config";
@@ -67,7 +67,7 @@ export interface FlagConfig {
    * rolls traffic INTO, so it is part of the resolved view, not just storage.
    */
   availableVariantNames: string[];
-  targetingRules: TargetingRule[];
+  targetingRules: ResolvedTargetingRule[];
   /** Baseline rollout for traffic matching no Targeting Rule; null = none. */
   rollout: PercentageRollout | null;
 }

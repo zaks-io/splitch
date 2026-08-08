@@ -1,0 +1,18 @@
+DESCRIPTION >
+    Aggregate retry state yielding one canonical Metric Event per dedup key.
+
+SCHEMA >
+    `app_id` String `json:$.app_id`,
+    `environment_id` String `json:$.environment_id`,
+    `event_date` Date `json:$.event_date`,
+    `event_definition_id` String `json:$.event_definition_id`,
+    `id_type` LowCardinality(String) `json:$.id_type`,
+    `server_received_at` DateTime64(3) `json:$.server_received_at`,
+    `targeting_key_hash` String `json:$.targeting_key_hash`,
+    `dedup_key` String `json:$.dedup_key`,
+    `canonical_state` AggregateFunction(argMin, Tuple(String, String, String, String, String, DateTime64(3), DateTime64(6)), DateTime64(6)) `json:$.canonical_state`
+
+ENGINE "AggregatingMergeTree"
+ENGINE_PARTITION_KEY "toYYYYMM(event_date)"
+ENGINE_SORTING_KEY "app_id, environment_id, event_date, id_type, event_definition_id, server_received_at, targeting_key_hash, dedup_key"
+ENGINE_TTL "toDateTime(server_received_at) + toIntervalDay(90)"

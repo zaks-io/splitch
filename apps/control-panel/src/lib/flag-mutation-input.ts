@@ -54,12 +54,21 @@ export const TargetingEditSchema = z.discriminatedUnion("kind", [
     .object({
       kind: z.literal("add"),
       ruleId: z.string().min(1),
-      attribute: z.string().min(1),
-      operator: z.literal("eq"),
-      value: z.string().min(1),
+      condition: z
+        .object({
+          attribute: z.string().min(1),
+          operator: z.literal("eq"),
+          value: z.string().min(1),
+        })
+        .strict()
+        .optional(),
+      segmentId: z.string().min(1).optional(),
       variantId: z.string().min(1),
     })
-    .strict(),
+    .strict()
+    .refine((edit) => edit.condition !== undefined || edit.segmentId !== undefined, {
+      message: "A Targeting Rule needs a direct Condition or Segment",
+    }),
 ]);
 
 export const TargetingEditInputSchema = FlagScopeSchema.extend({
