@@ -33,9 +33,9 @@
     "!dist/**/*.map"
   ],
   "scripts": {
-    "generate": "npx tsup --config tsup.contract-surface.config.ts",
+    "generate": "node scripts/generate-contract-surface.mjs && npx tsup --config tsup.contract-surface.config.ts",
     "build": "pnpm run generate && npx tsup --config tsup.config.ts && node scripts/write-build-stamp.mjs",
-    "clean": "rm -rf dist coverage src/generated/contract-surface.js src/generated/contract-surface.d.ts",
+    "clean": "rm -rf dist coverage src/generated/contract-surface.js src/generated/contract-surface.d.ts scripts/generated/contract-surface-members.ts",
     "lint": "biome lint src scripts",
     "test": "vitest run --passWithNoTests && node --test scripts/size-check.test.mjs",
     "test:browser-smoke": "node scripts/browser-smoke.mjs",

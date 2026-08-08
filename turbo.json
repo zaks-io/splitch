@@ -70,6 +70,7 @@
         "$TURBO_ROOT$/packages/sdk/LICENSE.md",
         "$TURBO_ROOT$/packages/sdk/package.json",
         "$TURBO_ROOT$/packages/sdk/scripts/**",
+        "!$TURBO_ROOT$/packages/sdk/scripts/generated/**",
         "$TURBO_ROOT$/packages/sdk/src/**",
         "!$TURBO_ROOT$/packages/sdk/src/generated/**",
         "$TURBO_ROOT$/packages/sdk/tsconfig*.json",
@@ -404,7 +405,7 @@
         "$TURBO_ROOT$/packages/contracts/src/**",
         "$TURBO_ROOT$/scripts/release/**"
       ],
-      "outputs": ["dist/**", "src/generated/**"]
+      "outputs": ["dist/**", "src/generated/**", "scripts/generated/contract-surface-members.ts"]
     },
     "@splitch/sdk#typecheck": {
       "dependsOn": ["build"],

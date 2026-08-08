@@ -1,9 +1,9 @@
 /**
- * Hand-maintained zod-free mirrors of the contracts package authoring schemas.
- * Nothing generates this file (or `contract-surface-enums.ts` /
- * `contract-surface-keys.ts` / `contract-surface-descriptors.ts`) from Zod —
- * tsup only bundles them. Lockstep guards:
- * `contract-surface-structural.test.ts` (shape),
+ * Zod-free parsers mirroring the contracts package authoring schemas.
+ * Every enum member and required-key list they check against is generated from
+ * contracts by `scripts/generate-contract-surface.mjs`; the parsing logic and
+ * the object shapes in `contract-surface-types.ts` are hand-written and held in
+ * lockstep by `contract-surface-structural.test.ts` (shape),
  * `contract-surface-parity.test.ts` (fixtures / divergences), and
  * `contract-surface-assignability.ts` (types).
  *
@@ -19,21 +19,27 @@
  * to the caller's default.
  */
 
+import type {
+  DataPlaneEvaluateResponse,
+  ErrorCode,
+  EvaluateAllEntry,
+  EvaluateAllReason,
+  EvaluateAllResponse,
+  PeekEvaluateResponse,
+  ResolutionDetails,
+  ResolutionReason,
+  VariantValue,
+} from "./contract-surface-types";
 import {
-  type DataPlaneEvaluateResponse,
-  type ErrorCode,
-  type EvaluateAllEntry,
-  type EvaluateAllReason,
-  type EvaluateAllResponse,
+  dataPlaneEvaluateRequiredKeys,
   errorCodes,
+  evaluateAllEntryRequiredKeys,
   evaluateAllReasons,
-  type PeekEvaluateResponse,
-  type ResolutionDetails,
-  type ResolutionReason,
+  evaluateAllResponseRequiredKeys,
+  peekEvaluateRequiredKeys,
+  resolutionDetailsRequiredKeys,
   resolutionReasons,
-  type VariantValue,
-} from "./contract-surface-enums";
-import { evaluateAllEntryKeys } from "./contract-surface-keys";
+} from "./generated/contract-surface-members";
 
 export type {
   DataPlaneEvaluateResponse,
@@ -45,7 +51,7 @@ export type {
   ResolutionDetails,
   ResolutionReason,
   VariantValue,
-} from "./contract-surface-enums";
+} from "./contract-surface-types";
 
 interface ParseSuccess<T> {
   success: true;
@@ -175,7 +181,7 @@ function parseResolutionDetails(input: unknown): ResolutionDetails {
   if (!isPlainObject(input)) {
     fail("ResolutionDetails must be an object");
   }
-  requireKeys(input, ["value", "variantName", "reason"], "ResolutionDetails");
+  requireKeys(input, resolutionDetailsRequiredKeys, "ResolutionDetails");
   const value = parseVariantValue(input.value, "value");
   if (!(typeof input.variantName === "string" || input.variantName === null)) {
     fail("variantName must be string | null");
@@ -209,7 +215,7 @@ function parseDataPlaneEvaluateResponse(input: unknown): DataPlaneEvaluateRespon
   if (!isPlainObject(input)) {
     fail("DataPlaneEvaluateResponse must be an object");
   }
-  requireKeys(input, ["variant"], "DataPlaneEvaluateResponse");
+  requireKeys(input, dataPlaneEvaluateRequiredKeys, "DataPlaneEvaluateResponse");
   if (input.variant !== null && !isVariantValue(input.variant)) {
     fail("variant must be VariantValue | null");
   }
@@ -224,7 +230,7 @@ function parsePeekEvaluateResponse(input: unknown): PeekEvaluateResponse {
   if (!isPlainObject(input)) {
     fail("PeekEvaluateResponse must be an object");
   }
-  requireKeys(input, ["variant"], "PeekEvaluateResponse");
+  requireKeys(input, peekEvaluateRequiredKeys, "PeekEvaluateResponse");
   return { variant: parseVariantValue(input.variant, "variant") };
 }
 
@@ -244,7 +250,7 @@ function parseEvaluateAllEntry(input: unknown, path: string): EvaluateAllEntry {
   if (!isPlainObject(input)) {
     fail(`${path} must be an object`);
   }
-  requireKeys(input, evaluateAllEntryKeys, path);
+  requireKeys(input, evaluateAllEntryRequiredKeys, path);
   if (input.variant !== null && !isVariantValue(input.variant)) {
     fail(`${path}.variant must be VariantValue | null`);
   }
@@ -276,7 +282,7 @@ function parseEvaluateAllResponse(input: unknown): EvaluateAllResponse {
   if (!isPlainObject(input)) {
     fail("EvaluateAllResponse must be an object");
   }
-  requireKeys(input, ["evaluations"], "EvaluateAllResponse");
+  requireKeys(input, evaluateAllResponseRequiredKeys, "EvaluateAllResponse");
   if (!isPlainObject(input.evaluations)) {
     fail("evaluations must be an object");
   }

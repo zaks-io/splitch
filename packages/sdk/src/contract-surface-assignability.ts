@@ -1,5 +1,5 @@
 /**
- * Compile-time assignability between hand-maintained mirror types and the
+ * Compile-time assignability between the SDK's zod-free surface types and the
  * contracts Zod-inferred originals. Read by `tsc -p tsconfig.contract-assignability.json`
  * (wired into the package `typecheck` script). Both directions must hold so
  * published `.d.ts` cannot silently drift from contracts.
@@ -30,7 +30,7 @@ import type {
   ResolutionDetails,
   ResolutionReason,
   VariantValue,
-} from "../scripts/contract-surface-enums";
+} from "../scripts/contract-surface-types";
 
 type Extends<A, B> = A extends B ? true : false;
 type Equal<A, B> = Extends<A, B> extends true ? (Extends<B, A> extends true ? true : false) : false;
