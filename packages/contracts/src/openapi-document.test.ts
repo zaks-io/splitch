@@ -1,5 +1,8 @@
+import { z } from "@hono/zod-openapi";
 import { describe, expect, it } from "vitest";
+import { EvaluateAllEntrySchema } from "./leaves/evaluate-all-wire";
 import { buildOpenApiDocument } from "./openapi-document";
+import { renderOpenApiSchema } from "./openapi-proto-safe-record";
 import { operationIds, routeRegistry } from "./route-registry";
 
 /**
@@ -25,6 +28,19 @@ function documentOperations(): { operationId: string; path: string; method: stri
   return ops;
 }
 
+function evaluateAllResponseSchema(): Record<string, unknown> {
+  const operation = doc.paths?.["/api/sdk/evaluate-all"]?.post as {
+    responses?: {
+      "200"?: { content?: { "application/json"?: { schema?: Record<string, unknown> } } };
+    };
+  };
+  const schema = operation.responses?.["200"]?.content?.["application/json"]?.schema;
+  if (schema === undefined) {
+    throw new Error("evaluate-all 200 response schema missing from OpenAPI document");
+  }
+  return schema;
+}
+
 describe("openapi document: validity", () => {
   it("declares OpenAPI 3.1 with required info", () => {
     expect(doc.openapi).toBe("3.1.0");
@@ -41,6 +57,34 @@ describe("openapi document: validity", () => {
     const custom = buildOpenApiDocument({ title: "custom-title", version: "9.9.9" });
     expect(custom.info.title).toBe("custom-title");
     expect(custom.info.version).toBe("9.9.9");
+  });
+});
+
+describe("openapi document: evaluate-all evaluations shape", () => {
+  it("keeps the real evaluations additionalProperties shape (not blank {})", () => {
+    const responseSchema = evaluateAllResponseSchema();
+    const evaluations = (responseSchema.properties as Record<string, unknown> | undefined)
+      ?.evaluations as Record<string, unknown> | undefined;
+
+    const expected = renderOpenApiSchema(
+      z.object({
+        evaluations: z.record(z.string(), EvaluateAllEntrySchema),
+      }),
+    ) as {
+      properties?: { evaluations?: Record<string, unknown> };
+    };
+
+    expect(evaluations).toEqual(expected.properties?.evaluations);
+    expect(evaluations).toMatchObject({
+      type: "object",
+      additionalProperties: expect.objectContaining({
+        type: "object",
+        properties: expect.objectContaining({
+          reason: expect.objectContaining({ enum: expect.any(Array) }),
+          exposureTicket: expect.anything(),
+        }),
+      }),
+    });
   });
 });
 

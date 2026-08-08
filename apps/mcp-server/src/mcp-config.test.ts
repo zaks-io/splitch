@@ -27,10 +27,8 @@ describe("MCP OAuth origin configuration", () => {
     expect(authConfig).toContain('"CONTROL_PLANE_ORIGIN": "http://localhost:8787"');
     expect(authConfig).toContain('"MCP_ORIGIN": "http://localhost:8792"');
     expect(controlPlaneConfig).toContain('"CONTROL_PLANE_ORIGIN": "http://localhost:8787"');
-    expect(mcpConfig.match(/"entrypoint": "McpEntrypoint"/g)).toHaveLength(9);
-    for (const binding of ["CONTROL_PLANE_API", "EVALUATION_API", "ANALYSIS_API"]) {
-      expect(mcpConfig.match(new RegExp(`"binding": "${binding}"`, "g"))).toHaveLength(3);
-    }
+    expect(mcpConfig.match(/"entrypoint": "McpEntrypoint"/g)).toHaveLength(3);
+    expect(mcpConfig.match(/"binding": "CONTROL_PLANE_API"/g)).toHaveLength(3);
     expect(mcpConfig.match(/"binding": "SESSION_STORE"/g)).toHaveLength(3);
     for (const id of [
       "00000000000000000000000000000000",

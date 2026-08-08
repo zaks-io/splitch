@@ -47,25 +47,15 @@ export function deploymentCommands(environment, requestedPackages, workspacePack
     throw new Error("at least one deployable Worker package is required");
   }
 
-  const commands = [];
   const requiresControlPanelCutover = selected.has(CONTROL_PANEL) || selected.has(CONTROL_PLANE);
+  const commands = selectedPrerequisiteCommands(environment, selected, ORDERED_PREREQUISITES);
 
-  // The backfill drains through the Control Plane already serving traffic, so it
-  // runs before the Evaluation Worker that reads what it wrote, which in turn
-  // has to precede the Control Plane that binds its entrypoint.
-  if (requiresControlPanelCutover || selected.has(EVALUATION)) {
-    commands.push(["run", `credential-cache:backfill:${environment}`]);
-  }
-
-  for (const [packageName, scriptName] of ORDERED_PREREQUISITES) {
-    if (selected.has(packageName)) {
-      commands.push(["run", `deploy:cloudflare:${scriptName}:${environment}`]);
-    }
-  }
+  // Evaluation reads both legacy entries and terminal markers, so deploy it before
+  // the compatible writer runs a backfill that can race a live revocation.
+  commands.push(...controlPlaneMigrationCommands(environment, requiresControlPanelCutover));
 
   if (requiresControlPanelCutover) {
     commands.push(
-      ["run", `deploy:cloudflare:control-plane-compat:${environment}`],
       ["run", `deploy:cloudflare:control-panel:${environment}`],
       ["run", `deploy:cloudflare:control-plane:${environment}`],
     );
@@ -86,6 +76,21 @@ export function deploymentCommands(environment, requestedPackages, workspacePack
   }
 
   return commands;
+}
+
+function controlPlaneMigrationCommands(environment, required) {
+  return required
+    ? [
+        ["run", `deploy:cloudflare:control-plane-compat:${environment}`],
+        ["run", `credential-cache:backfill:${environment}`],
+      ]
+    : [];
+}
+
+function selectedPrerequisiteCommands(environment, selected, prerequisites) {
+  return prerequisites
+    .filter(([packageName]) => selected.has(packageName))
+    .map(([, scriptName]) => ["run", `deploy:cloudflare:${scriptName}:${environment}`]);
 }
 
 function main() {

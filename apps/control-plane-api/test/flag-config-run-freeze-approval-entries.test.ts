@@ -70,11 +70,9 @@ describe("approve_and_apply freeze uses the request's changed-field set", () => 
     expect(proposed.status).toBe(409);
     const requestId = proposed.approvalRequestId as string;
 
-    // Production writers bump `flag_configs.version`, so a post-mint direct
-    // PATCH makes the Request stale before apply. This raw UPDATE skips the
-    // bump to pin the entries-gated patch against the TOCTOU window between the
-    // staleness read and apply's independent re-read — a concurrent PATCH in
-    // that window would satisfy CAS without the gate.
+    // This deliberately skips the production writers' version bump, so it is
+    // not a production-reachable state or a reproduction of the TOCTOU window.
+    // It directly pins the entries-gated patch against corrupt stored state.
     const liveRollout = JSON.stringify({ percentage: 40, salt: "post-mint" });
     await h.d1
       .prepare("UPDATE flag_configs SET rollout = ? WHERE app_id = ? AND environment_id = ?")
@@ -87,6 +85,40 @@ describe("approve_and_apply freeze uses the request's changed-field set", () => 
     const after = await readProdConfig();
     expect(after.enabled).toBe(true);
     expect(after.rollout).toEqual({ percentage: 40, salt: "post-mint" });
+  });
+
+  it("preserves a versioned PATCH that lands after the staleness read", async () => {
+    await setProdPolicy(h, { ...confirmPolicy, targetingRolloutValue: "allow" });
+    expect((await patchConfig(h, "idem_disable_before_race", { enabled: false })).status).toBe(200);
+    const proposed = await patchConfig(h, "idem_propose_enable_before_race", { enabled: true });
+    expect(proposed.status).toBe(409);
+    const requestId = proposed.approvalRequestId as string;
+    const before = await readProdConfig();
+
+    const entered = deferred<void>();
+    const resume = deferred<void>();
+    const readConfig = h.repo.flags.getFlagConfig;
+    h.repo.flags.getFlagConfig = async (scope, flagId) => {
+      h.repo.flags.getFlagConfig = readConfig;
+      entered.resolve();
+      await resume.promise;
+      return readConfig(scope, flagId);
+    };
+
+    const review = reviewRequest(h, requestId, "idem_review_after_concurrent_patch");
+    await entered.promise;
+    const concurrent = await patchConfig(h, "idem_concurrent_rollout", {
+      rollout: { percentage: 40 },
+    });
+    expect(concurrent.status).toBe(200);
+    const patched = await readProdConfig();
+    expect(patched.version).toBe(before.version + 1);
+    resume.resolve();
+
+    expect((await review).status).toBe(200);
+    const after = await readProdConfig();
+    expect(after.enabled).toBe(true);
+    expect(after.rollout).toEqual(patched.rollout);
   });
 
   it("refuses a genuine frozen-field proposal naming only that field", async () => {
@@ -195,12 +227,14 @@ describe("approve_and_apply freeze uses the request's changed-field set", () => 
 });
 
 async function readProdConfig(): Promise<{
+  version: number;
   enabled: boolean;
   rollout: { percentage: number; salt: string } | null;
 }> {
   const row = await h.repo.flags.getFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId);
   if (!row) throw new Error("readProdConfig: no Flag Configuration");
   return {
+    version: row.version,
     enabled: row.enabled,
     rollout: row.rollout ? (JSON.parse(row.rollout) as { percentage: number; salt: string }) : null,
   };
@@ -226,4 +260,14 @@ async function insertProdTargetingRule(): Promise<void> {
     createdAt: "2026-07-01T18:00:00.000Z",
     updatedAt: "2026-07-01T18:00:00.000Z",
   });
+}
+
+function deferred<T>() {
+  let resolve: (value: T) => void = () => {
+    throw new Error("deferred promise was not initialized");
+  };
+  const promise = new Promise<T>((resolved) => {
+    resolve = resolved;
+  });
+  return { promise, resolve };
 }

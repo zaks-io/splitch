@@ -1,10 +1,10 @@
 import type { McpAccessTokenActor } from "./mcp-access-token";
 import {
-  JSON_RPC_INTERNAL_ERROR,
   JSON_RPC_METHOD_NOT_FOUND,
   type JsonRpcId,
   type JsonRpcResponse,
   jsonRpcError,
+  jsonRpcInternalError,
   jsonRpcResult,
 } from "./json-rpc";
 import { buildCapabilitiesResource } from "./mcp-capabilities";
@@ -106,9 +106,7 @@ export async function readMcpResourceRpc(
     }
     return jsonRpcResult(id, { contents: [content] });
   } catch (error) {
-    return jsonRpcError(id, JSON_RPC_INTERNAL_ERROR, "Internal error", {
-      message: error instanceof Error ? error.message : String(error),
-    });
+    return jsonRpcInternalError(id, error);
   }
 }
 

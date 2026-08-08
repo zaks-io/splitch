@@ -134,16 +134,27 @@ describe("panel Experiment Results read", () => {
     expect(response.status).toBe(404);
     expect(analysis).not.toHaveBeenCalled();
   });
+});
 
-  // The Analysis envelope's own label is read-time configuration, so it must not
-  // be able to move the Run's baseline. The frozen column is the only source.
-  it("ignores the Analysis Worker's Control label in favour of the Run's frozen one", async () => {
+describe("panel Experiment Results Control integrity", () => {
+  it("names an Analysis Control disagreement without relabelling or hiding the numbers", async () => {
     const analysis = analysisReturning(statsOutput(), { control_variant: "legacy_checkout" });
     const response = await results(analysis, { runId: PREVIOUS_RUN_ID });
+    const body = (await response.json()) as PanelExperimentResultsOutput;
 
-    expect(await response.json()).toMatchObject({
-      control: { state: "frozen", variantId: "variant_control", variant: "control" },
+    expect(body.state).toBe("ready");
+    if (body.state !== "ready") throw new Error("expected ready");
+    expect(body.control).toEqual({
+      state: "disagreement",
+      variantId: "variant_control",
+      variant: "control",
+      analysisVariant: "legacy_checkout",
     });
+    expect(body.gate.blockedBy).toContain("control_identity");
+    expect(body.gate.checks.find((check) => check.id === "control_identity")?.title).toContain(
+      "disagrees",
+    );
+    expect(body.stats.arm_results).toHaveLength(1);
   });
 
   it("names an unresolvable frozen Control and blocks the decision on it", async () => {
@@ -171,7 +182,9 @@ describe("panel Experiment Results read", () => {
     // The numbers are still served: rigor is enforced on the decision.
     expect(body.stats.arm_results).toHaveLength(1);
   });
+});
 
+describe("panel Experiment Results payload and decision gate", () => {
   it("emits a payload the Panel contract accepts", async () => {
     const response = await results(analysisReturning(statsOutput()));
     expect(parsePanelExperimentResultsOutput(await response.json()).success).toBe(true);

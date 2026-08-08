@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as KitchenSinkRouteImport } from './routes/kitchen-sink'
 import { Route as OrgSlugIndexRouteImport } from './routes/$orgSlug.index'
+import { Route as OrgSlugBillingRouteImport } from './routes/$orgSlug.billing'
 import { Route as OrgSlugClaimRouteImport } from './routes/$orgSlug.claim'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
@@ -22,6 +23,7 @@ import { Route as ClaimConsentAttemptIdRouteImport } from './routes/claim.consen
 import { Route as OrgSlugAppSlugEnvIndexRouteImport } from './routes/$orgSlug.$appSlug.$env.index'
 import { Route as OrgSlugAppSlugEnvExperimentsRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments'
 import { Route as OrgSlugAppSlugEnvMetricsRouteImport } from './routes/$orgSlug.$appSlug.$env.metrics'
+import { Route as OrgSlugAppSlugEnvSegmentsRouteImport } from './routes/$orgSlug.$appSlug.$env.segments'
 import { Route as OrgSlugAppSlugEnvSettingsRouteImport } from './routes/$orgSlug.$appSlug.$env.settings'
 import { Route as OrgSlugAppSlugEnvExperimentsIndexRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.index'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId'
@@ -56,6 +58,11 @@ const KitchenSinkRoute = KitchenSinkRouteImport.update({
 const OrgSlugIndexRoute = OrgSlugIndexRouteImport.update({
   id: '/$orgSlug/',
   path: '/$orgSlug/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrgSlugBillingRoute = OrgSlugBillingRouteImport.update({
+  id: '/$orgSlug/billing',
+  path: '/$orgSlug/billing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrgSlugClaimRoute = OrgSlugClaimRouteImport.update({
@@ -103,6 +110,12 @@ const OrgSlugAppSlugEnvMetricsRoute =
   OrgSlugAppSlugEnvMetricsRouteImport.update({
     id: '/metrics',
     path: '/metrics',
+    getParentRoute: () => OrgSlugAppSlugEnvRoute,
+  } as any)
+const OrgSlugAppSlugEnvSegmentsRoute =
+  OrgSlugAppSlugEnvSegmentsRouteImport.update({
+    id: '/segments',
+    path: '/segments',
     getParentRoute: () => OrgSlugAppSlugEnvRoute,
   } as any)
 const OrgSlugAppSlugEnvSettingsRoute =
@@ -203,6 +216,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
+  '/$orgSlug/billing': typeof OrgSlugBillingRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
@@ -212,6 +226,7 @@ export interface FileRoutesByFullPath {
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRouteWithChildren
   '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
+  '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
   '/$orgSlug/$appSlug/$env/': typeof OrgSlugAppSlugEnvIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId': typeof OrgSlugAppSlugEnvExperimentsExperimentIdRouteWithChildren
@@ -233,6 +248,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
+  '/$orgSlug/billing': typeof OrgSlugBillingRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
@@ -240,6 +256,7 @@ export interface FileRoutesByTo {
   '/$orgSlug': typeof OrgSlugIndexRoute
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
+  '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/new': typeof OrgSlugAppSlugEnvExperimentsNewRoute
@@ -260,6 +277,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
+  '/$orgSlug/billing': typeof OrgSlugBillingRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
@@ -269,6 +287,7 @@ export interface FileRoutesById {
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRouteWithChildren
   '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
+  '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
   '/$orgSlug/$appSlug/$env/': typeof OrgSlugAppSlugEnvIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId': typeof OrgSlugAppSlugEnvExperimentsExperimentIdRouteWithChildren
@@ -292,6 +311,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/kitchen-sink'
+    | '/$orgSlug/billing'
     | '/$orgSlug/claim'
     | '/auth/callback'
     | '/auth/login'
@@ -301,6 +321,7 @@ export interface FileRouteTypes {
     | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/metrics'
+    | '/$orgSlug/$appSlug/$env/segments'
     | '/$orgSlug/$appSlug/$env/settings'
     | '/$orgSlug/$appSlug/$env/'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId'
@@ -322,6 +343,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/kitchen-sink'
+    | '/$orgSlug/billing'
     | '/$orgSlug/claim'
     | '/auth/callback'
     | '/auth/login'
@@ -329,6 +351,7 @@ export interface FileRouteTypes {
     | '/$orgSlug'
     | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/metrics'
+    | '/$orgSlug/$appSlug/$env/segments'
     | '/$orgSlug/$appSlug/$env/settings'
     | '/$orgSlug/$appSlug/$env'
     | '/$orgSlug/$appSlug/$env/experiments/new'
@@ -348,6 +371,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/kitchen-sink'
+    | '/$orgSlug/billing'
     | '/$orgSlug/claim'
     | '/auth/callback'
     | '/auth/login'
@@ -357,6 +381,7 @@ export interface FileRouteTypes {
     | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/metrics'
+    | '/$orgSlug/$appSlug/$env/segments'
     | '/$orgSlug/$appSlug/$env/settings'
     | '/$orgSlug/$appSlug/$env/'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId'
@@ -379,6 +404,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HealthRoute: typeof HealthRoute
   KitchenSinkRoute: typeof KitchenSinkRoute
+  OrgSlugBillingRoute: typeof OrgSlugBillingRoute
   OrgSlugClaimRoute: typeof OrgSlugClaimRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthLoginRoute: typeof AuthLoginRoute
@@ -416,6 +442,13 @@ declare module '@tanstack/react-router' {
       path: '/$orgSlug'
       fullPath: '/$orgSlug/'
       preLoaderRoute: typeof OrgSlugIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$orgSlug/billing': {
+      id: '/$orgSlug/billing'
+      path: '/$orgSlug/billing'
+      fullPath: '/$orgSlug/billing'
+      preLoaderRoute: typeof OrgSlugBillingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$orgSlug/claim': {
@@ -479,6 +512,13 @@ declare module '@tanstack/react-router' {
       path: '/metrics'
       fullPath: '/$orgSlug/$appSlug/$env/metrics'
       preLoaderRoute: typeof OrgSlugAppSlugEnvMetricsRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvRoute
+    }
+    '/$orgSlug/$appSlug/$env/segments': {
+      id: '/$orgSlug/$appSlug/$env/segments'
+      path: '/segments'
+      fullPath: '/$orgSlug/$appSlug/$env/segments'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvSegmentsRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvRoute
     }
     '/$orgSlug/$appSlug/$env/settings': {
@@ -657,6 +697,7 @@ const OrgSlugAppSlugEnvExperimentsRouteWithChildren =
 interface OrgSlugAppSlugEnvRouteChildren {
   OrgSlugAppSlugEnvExperimentsRoute: typeof OrgSlugAppSlugEnvExperimentsRouteWithChildren
   OrgSlugAppSlugEnvMetricsRoute: typeof OrgSlugAppSlugEnvMetricsRoute
+  OrgSlugAppSlugEnvSegmentsRoute: typeof OrgSlugAppSlugEnvSegmentsRoute
   OrgSlugAppSlugEnvSettingsRoute: typeof OrgSlugAppSlugEnvSettingsRoute
   OrgSlugAppSlugEnvIndexRoute: typeof OrgSlugAppSlugEnvIndexRoute
   OrgSlugAppSlugEnvFlagsFlagKeyRoute: typeof OrgSlugAppSlugEnvFlagsFlagKeyRoute
@@ -669,6 +710,7 @@ const OrgSlugAppSlugEnvRouteChildren: OrgSlugAppSlugEnvRouteChildren = {
   OrgSlugAppSlugEnvExperimentsRoute:
     OrgSlugAppSlugEnvExperimentsRouteWithChildren,
   OrgSlugAppSlugEnvMetricsRoute: OrgSlugAppSlugEnvMetricsRoute,
+  OrgSlugAppSlugEnvSegmentsRoute: OrgSlugAppSlugEnvSegmentsRoute,
   OrgSlugAppSlugEnvSettingsRoute: OrgSlugAppSlugEnvSettingsRoute,
   OrgSlugAppSlugEnvIndexRoute: OrgSlugAppSlugEnvIndexRoute,
   OrgSlugAppSlugEnvFlagsFlagKeyRoute: OrgSlugAppSlugEnvFlagsFlagKeyRoute,
@@ -686,6 +728,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HealthRoute: HealthRoute,
   KitchenSinkRoute: KitchenSinkRoute,
+  OrgSlugBillingRoute: OrgSlugBillingRoute,
   OrgSlugClaimRoute: OrgSlugClaimRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   AuthLoginRoute: AuthLoginRoute,
@@ -699,10 +742,11 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

@@ -24,7 +24,27 @@ describe("EvaluateAllRequestSchema", () => {
       EvaluateAllRequestSchema.safeParse({ targetingKey: "user-1", idType: "user" }).success,
     ).toBe(true);
   });
+
+  it("fails loud on a __proto__ attribute key instead of silently dropping it", () => {
+    const input = JSON.parse(
+      '{"targetingKey":"user-1","idType":"user","attributes":{"__proto__":"evil","plan":"pro"}}',
+    ) as unknown;
+    const parsed = EvaluateAllRequestSchema.safeParse(input);
+    expect(parsed.success).toBe(false);
+    if (parsed.success) {
+      return;
+    }
+    expect(parsed.error.issues.some((issue) => issue.path.includes("__proto__"))).toBe(true);
+  });
 });
+
+const PROTO_FLAG_ENTRY = {
+  variant: false,
+  variantName: null,
+  reason: "DEFAULT",
+  errorCode: null,
+  exposureTicket: null,
+} as const;
 
 describe("EvaluateAllResponseSchema", () => {
   it("requires present-with-null optional fields and rejects rule metadata", () => {
@@ -79,5 +99,26 @@ describe("EvaluateAllResponseSchema", () => {
         exposureTicket: null,
       }).success,
     ).toBe(false);
+  });
+
+  it("fails loud on a __proto__ flag key instead of silently dropping it", () => {
+    // JSON.parse creates __proto__ as an own property; Object.keys sees it.
+    // zod 4.4.3's z.record would otherwise skip the key and return success.
+    const input = JSON.parse(
+      `{"evaluations":{"__proto__":${JSON.stringify(PROTO_FLAG_ENTRY)},"checkout":${JSON.stringify({
+        variant: true,
+        variantName: "treatment",
+        reason: "SPLIT",
+        errorCode: null,
+        exposureTicket: "ticket.payload",
+      })}}}`,
+    ) as unknown;
+
+    const parsed = EvaluateAllResponseSchema.safeParse(input);
+    expect(parsed.success).toBe(false);
+    if (parsed.success) {
+      return;
+    }
+    expect(parsed.error.issues.some((issue) => issue.path.includes("__proto__"))).toBe(true);
   });
 });

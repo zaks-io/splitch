@@ -271,6 +271,41 @@ describe("Control Panel operation allowlist", () => {
     expect(parseControlPanelOperation("GET", "/apps/app_1/metrics")).toBeNull();
     expect(parseControlPanelOperation("PUT", "/apps/app_1/metrics/metric_1", "env_1")).toBeNull();
   });
+
+  it("parses only the five scoped Segment operations", () => {
+    expect(parseControlPanelOperation("GET", "/apps/app_1/segments", "env_1")).toEqual({
+      id: "segments_list",
+      appId: "app_1",
+      environmentId: "env_1",
+    });
+    expect(parseControlPanelOperation("POST", "/apps/app_1/segments", "env_1")).toEqual({
+      id: "segments_create",
+      appId: "app_1",
+      environmentId: "env_1",
+    });
+    expect(parseControlPanelOperation("GET", "/apps/app_1/segments/segment_1", "env_1")).toEqual({
+      id: "segments_get",
+      appId: "app_1",
+      environmentId: "env_1",
+      segmentId: "segment_1",
+    });
+    expect(parseControlPanelOperation("PATCH", "/apps/app_1/segments/segment_1", "env_1")).toEqual({
+      id: "segments_update",
+      appId: "app_1",
+      environmentId: "env_1",
+      segmentId: "segment_1",
+    });
+    expect(parseControlPanelOperation("DELETE", "/apps/app_1/segments/segment_1", "env_1")).toEqual(
+      {
+        id: "segments_delete",
+        appId: "app_1",
+        environmentId: "env_1",
+        segmentId: "segment_1",
+      },
+    );
+    expect(parseControlPanelOperation("GET", "/apps/app_1/segments")).toBeNull();
+    expect(parseControlPanelOperation("PUT", "/apps/app_1/segments/segment_1", "env_1")).toBeNull();
+  });
 });
 
 function jsonRequest(body: unknown): Request {

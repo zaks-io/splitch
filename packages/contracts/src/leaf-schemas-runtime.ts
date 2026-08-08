@@ -11,6 +11,7 @@ import {
 } from "./leaves/resolution-reason";
 import { VariantValueSchema } from "./leaves/variant-value";
 import { OrganizationSlugSchema } from "./organization-slug";
+import { OWN_PROTO_KEY, protoSafeRecord } from "./proto-safe-record";
 
 export {
   type ResolutionDetails,
@@ -41,10 +42,16 @@ export {
 
 const AttributeValueSchema = z.union([z.boolean(), z.string(), z.number(), z.array(z.unknown())]);
 
+/** Proto-safe attributes map (`record` + refine so OpenAPI/CLI help keep the record shape). */
+const EvaluationAttributesSchema = protoSafeRecord(
+  AttributeValueSchema,
+  `must not contain a "${OWN_PROTO_KEY}" key`,
+);
+
 export const EvaluationContextSchema = z.object({
   targetingKey: z.string(),
   idType: z.string(),
-  attributes: z.record(z.string(), AttributeValueSchema),
+  attributes: EvaluationAttributesSchema,
 });
 export type EvaluationContext = z.infer<typeof EvaluationContextSchema>;
 

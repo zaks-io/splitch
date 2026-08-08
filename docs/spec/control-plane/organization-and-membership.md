@@ -130,7 +130,7 @@ App membership controls who can read/write Flag, Experiment, and Run config for 
 
 | operation                       | owner | admin | member |
 | ------------------------------- | ----- | ----- | ------ |
-| Start/end Experiment Runs       | yes   | yes   | no     |
+| Start, End, or Conclude Runs    | yes   | yes   | no     |
 | Edit Flags/Experiments (draft)  | yes   | yes   | yes    |
 | Promote Flag Config across Envs | yes   | yes   | no     |
 | Edit Environment Policy         | yes   | yes   | no     |

@@ -221,6 +221,7 @@ export const CreateSegmentRequestSchema = z.object({
   conditions: z.array(ConditionSchema),
   idempotency_key: z.string().optional(),
 });
+export type CreateSegmentRequest = z.infer<typeof CreateSegmentRequestSchema>;
 
 export const PatchSegmentRequestSchema = z
   .object({
@@ -229,6 +230,7 @@ export const PatchSegmentRequestSchema = z
     conditions: z.array(ConditionSchema).optional(),
   })
   .strict();
+export type PatchSegmentRequest = z.infer<typeof PatchSegmentRequestSchema>;
 
 // ---------------------------------------------------------------------------
 // SDK credentials — client-key patch + api-key create/revoke bodies.
