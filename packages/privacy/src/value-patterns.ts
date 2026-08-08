@@ -12,11 +12,12 @@
  * so the same scrubber covers app-specific identifiers without this package
  * guessing them. The defaults are the universally-safe ones.
  *
- * Phone-like matching refuses to start immediately after a word character
- * (`[A-Za-z0-9_]`). That keeps digit runs inside opaque tokens (`apr_…`,
+ * Phone-like matching refuses to start after an identifier-continuation character
+ * (`[A-Za-z0-9_-]`). That keeps digit runs inside opaque tokens (`apr_…`,
  * `user_…`, `flag_…`) intact without a prefix allowlist, while bare phones
- * after whitespace or punctuation still redact. A ULID/hex body can contain 8+
- * consecutive digits; eating those leaves a fault row unable to name what failed.
+ * after whitespace or other punctuation still redact. A ULID/hex body can
+ * contain 8+ consecutive digits; eating those leaves a fault row unable to name
+ * what failed.
  */
 
 import { REDACTED } from "./redaction-rules";
@@ -32,7 +33,7 @@ const EMAIL_PATTERN = /[A-Z0-9._%+-]{1,64}@[A-Z0-9.-]{1,255}\.[A-Z]{2,24}/gi;
  * Negative lookbehind keeps the match from starting inside an opaque token
  * (`user_1555…`, `apr_01J…`); supported on Node 24 and workerd.
  */
-const PHONE_LIKE_PATTERN = /(?<![A-Za-z0-9_])\+?\d[\d\s().-]{6,}\d/g;
+const PHONE_LIKE_PATTERN = /(?<![A-Za-z0-9_-])\+?\d[\d\s().-]{6,}\d/g;
 
 export interface ValuePatternOptions {
   /** App-specific value shapes (e.g. a Targeting Key prefix) to also redact. */

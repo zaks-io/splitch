@@ -20,6 +20,25 @@ describe("redactValuePatterns", () => {
     expect(out).toBe("req-123 attempt 2 of 5");
   });
 
+  it("preserves a UUID Targeting Key", () => {
+    const id = "550e8400-e29b-41d4-a716-446655440000";
+    expect(redactValuePatterns(id)).toBe(id);
+  });
+
+  it("preserves a hyphenated minted id with a phone-like numeric suffix", () => {
+    const id = "apr_01J00000000000000000000000-1234567890";
+    expect(redactValuePatterns(id)).toBe(id);
+  });
+
+  it("preserves a req-shaped id with a phone-like numeric suffix", () => {
+    const id = "req-1234567890";
+    expect(redactValuePatterns(id)).toBe(id);
+  });
+
+  it("still redacts a phone preceded by a hyphen in prose", () => {
+    expect(redactValuePatterns("call me at -555 123 4567")).toBe(`call me at -555 ${REDACTED}`);
+  });
+
   // SPL-360: phone matches must not start after a word character. Removing the
   // lookbehind turns each of these red (mid-token digit runs get eaten).
   it("preserves opaque tokens whose bodies look phone-like (leak probes)", () => {
