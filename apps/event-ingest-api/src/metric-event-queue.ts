@@ -36,15 +36,42 @@ export async function handleMetricEventQueue(
   );
 }
 
+/**
+ * Every identifier on a Metric Event, log key to row column.
+ *
+ * After the final attempt Cloudflare deletes the message and the outbox has
+ * already claimed the dedup key, so this log line is the only surviving record
+ * of the event. `dedup_key` and `targeting_key_hash` are what scope the damage
+ * and find the source; the payload columns (`fields`, `dimensions`) are the only
+ * thing deliberately left out.
+ */
+const IDENTITY_COLUMNS = {
+  appId: "app_id",
+  environmentId: "environment_id",
+  eventId: "event_id",
+  dedupKey: "dedup_key",
+  eventDefinitionId: "event_definition_id",
+  eventDefinitionVersionId: "event_definition_version_id",
+  eventName: "event_name",
+  idType: "id_type",
+  targetingKeyHash: "targeting_key_hash",
+  serverReceivedAt: "server_received_at",
+  ingestTs: "ingest_ts",
+} as const;
+
 function metricEventIdentity(row: MetricEventRow): Record<string, string> {
-  const identity: Record<string, string> = {};
-  addString(identity, "appId", row.app_id);
-  addString(identity, "environmentId", row.environment_id);
-  addString(identity, "eventId", row.event_id);
-  addString(identity, "eventDefinitionId", row.event_definition_id);
-  return identity;
+  return Object.fromEntries(
+    Object.entries(IDENTITY_COLUMNS).map(([key, column]) => [key, identityValue(row[column])]),
+  );
 }
 
-function addString(identity: Record<string, string>, key: string, value: unknown): void {
-  if (typeof value === "string") identity[key] = value;
+/**
+ * A malformed row still has to identify itself, so nothing is ever omitted: a
+ * value that is not a string is rendered, and one that is absent says so. An
+ * omitted key would read as an event that never carried that identifier.
+ */
+function identityValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === undefined) return "<absent>";
+  return JSON.stringify(value) ?? String(value);
 }

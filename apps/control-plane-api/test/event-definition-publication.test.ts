@@ -72,34 +72,7 @@ describe("Event Definition publication", () => {
     expect(config).not.toBeNull();
   });
 
-  it("leaves D1 unpublished when the edge write fails, then retries Version 1", async () => {
-    const configFailure = new Error("config unavailable");
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    h.app = makeAppForRepo(
-      h,
-      repo,
-      undefined,
-      h.bindings.credentialKv,
-      undefined,
-      failingStore(store, configFailure),
-    );
-
-    const failed = await publish(validVersion());
-    expect(failed.status).toBe(500);
-    expect(error).toHaveBeenCalledWith("EventDefinitionConfigWriteError", {
-      appId,
-      eventDefinitionId: DEFINITION_ID,
-      cause: configFailure,
-    });
-    await expectUnpublished();
-
-    h.app = makeAppForRepo(h, repo, undefined, h.bindings.credentialKv, undefined, store);
-    const retried = await publish(validVersion());
-    expect(retried.status).toBe(200);
-    expect(await retried.json()).toMatchObject({ version: 1, entityType: "user" });
-  });
-
-  it("writes the edge first when D1 fails, then a retry converges", async () => {
+  it("writes no edge config when the D1 write fails, then retries Version 1", async () => {
     const stateFailure = new Error("D1 unavailable");
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     h.app = makeAppForRepo(
@@ -118,16 +91,45 @@ describe("Event Definition publication", () => {
       eventDefinitionId: DEFINITION_ID,
       cause: stateFailure,
     });
-    const ahead = await readHotConfig();
-    expect(ahead.data.version).toMatchObject({ version: 1, entityType: "user" });
-    expect(ahead.data.eventDefinition.currentPublishedVersionId).toBe(ahead.data.version.id);
+    expect(await store.get(eventDefinitionConfigKey(appId, EVENT_NAME))).toBeNull();
     await expectUnpublished();
 
     h.app = makeAppForRepo(h, repo, undefined, h.bindings.credentialKv, undefined, store);
     const retried = await publish(validVersion());
     expect(retried.status).toBe(200);
+    expect(await retried.json()).toMatchObject({ version: 1, entityType: "user" });
+    expect((await readHotConfig()).data.version.version).toBe(1);
+  });
+
+  it("keeps the published Version in D1 when the edge write fails, then converges", async () => {
+    const configFailure = new Error("config unavailable");
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    h.app = makeAppForRepo(
+      h,
+      repo,
+      undefined,
+      h.bindings.credentialKv,
+      undefined,
+      failingStore(store, configFailure),
+    );
+
+    const failed = await publish(validVersion());
+    expect(failed.status).toBe(500);
+    expect(error).toHaveBeenCalledWith("EventDefinitionConfigWriteError", {
+      appId,
+      eventDefinitionId: DEFINITION_ID,
+      cause: configFailure,
+    });
+    expect(await store.get(eventDefinitionConfigKey(appId, EVENT_NAME))).toBeNull();
+    const published = await readDefinition();
+    expect(published.current_published_version_id).not.toBeNull();
+    expect(await rawVersions(DEFINITION_ID)).toHaveLength(1);
+
+    h.app = makeAppForRepo(h, repo, undefined, h.bindings.credentialKv, undefined, store);
+    const retried = await publish(validVersion());
+    expect(retried.status).toBe(200);
     const version = (await retried.json()) as { id: string; version: number };
-    expect(version.version).toBe(1);
+    expect(version.version).toBe(2);
     expect((await readDefinition()).current_published_version_id).toBe(version.id);
     expect((await readHotConfig()).data.version.id).toBe(version.id);
   });

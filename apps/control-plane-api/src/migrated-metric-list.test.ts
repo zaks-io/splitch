@@ -23,49 +23,14 @@ beforeEach(async () => {
 
 afterEach(async () => mf.dispose());
 
+const EVENT_DEFINITION_ID =
+  "event_definition_migrated_6170705f6578697374696e675f6d6574726963_70757263686173655f636f6d706c65746564";
+const EVENT_DEFINITION_VERSION_ID =
+  "event_definition_version_migrated_6170705f6578697374696e675f6d6574726963_70757263686173655f636f6d706c65746564";
+
 describe("the Event Definition migration", () => {
   it("keeps a pre-existing Metric readable through GET /apps/:appId/metrics", async () => {
-    const statements = migrationStatements();
-    const eventMigration = statements.findIndex((statement) =>
-      statement.startsWith("CREATE TABLE `event_definitions`"),
-    );
-    expect(eventMigration).toBeGreaterThan(0);
-
-    await applySchema(d1, statements.slice(0, eventMigration));
-    await d1.batch([
-      d1
-        .prepare(
-          `INSERT INTO organizations
-             (id, name, slug, plan, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .bind("org_existing_metric", "Existing Metric Co", "existing-metric", "free", NOW, NOW),
-      d1
-        .prepare(
-          `INSERT INTO apps
-             (id, organization_id, name, key, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(APP_ID, "org_existing_metric", "Existing Metric App", "existing-metric", NOW, NOW),
-      d1
-        .prepare(
-          `INSERT INTO metrics
-             (id, app_id, key, name, kind, event_name, event_value_field, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          "metric_existing_revenue",
-          APP_ID,
-          "purchase-revenue",
-          "Purchase revenue",
-          "revenue",
-          "purchase_completed",
-          "amount",
-          NOW,
-        ),
-    ]);
-    await applySchema(d1, statements.slice(eventMigration));
-
+    await migrateExistingMetric();
     const version = await d1
       .prepare(
         `SELECT id, event_definition_id, version, schema_hash, entity_type,
@@ -99,21 +64,15 @@ describe("the Event Definition migration", () => {
       }),
     ).not.toThrow();
 
-    const app = createApp({
-      authResolver,
-      rateLimiter,
-      repo: createRepository(d1),
-    });
-    const eventDefinitionId =
-      "event_definition_migrated_6170705f6578697374696e675f6d6574726963_70757263686173655f636f6d706c65746564";
+    const app = migratedApp();
     const definitionResponse = await app.request(
-      `/apps/${APP_ID}/event-definitions/${eventDefinitionId}`,
+      `/apps/${APP_ID}/event-definitions/${EVENT_DEFINITION_ID}`,
       { headers: { authorization: "Bearer migration-proof" } },
     );
     expect(definitionResponse.status).toBe(200);
     expect(await definitionResponse.json()).toMatchObject({
-      id: eventDefinitionId,
-      currentPublishedVersionId: null,
+      id: EVENT_DEFINITION_ID,
+      currentPublishedVersionId: EVENT_DEFINITION_VERSION_ID,
       versions: [
         {
           entityType: null,
@@ -137,20 +96,102 @@ describe("the Event Definition migration", () => {
       items: [
         expect.objectContaining({
           id: "metric_existing_revenue",
-          eventDefinitionId,
+          eventDefinitionId: EVENT_DEFINITION_ID,
           eventFieldName: "amount",
         }),
       ],
     });
   });
+
+  /**
+   * Metric writes require a published Event Definition, so a backfilled draft
+   * Version would leave every migrated Metric permanently un-editable.
+   */
+  it("leaves a pre-existing Metric editable through PATCH /apps/:appId/metrics/:metricId", async () => {
+    await migrateExistingMetric();
+
+    const response = await migratedApp().request(
+      `/apps/${APP_ID}/metrics/metric_existing_revenue`,
+      {
+        method: "PATCH",
+        headers: {
+          authorization: "Bearer migration-proof",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ name: "Purchase revenue (renamed)" }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      id: "metric_existing_revenue",
+      name: "Purchase revenue (renamed)",
+      eventDefinitionId: EVENT_DEFINITION_ID,
+      eventFieldName: "amount",
+    });
+  });
 });
+
+/** Seeds the pre-migration Metric, then applies the Event Definition migration over it. */
+async function migrateExistingMetric(): Promise<void> {
+  const statements = migrationStatements();
+  const eventMigration = statements.findIndex((statement) =>
+    statement.startsWith("CREATE TABLE `event_definitions`"),
+  );
+  expect(eventMigration).toBeGreaterThan(0);
+
+  await applySchema(d1, statements.slice(0, eventMigration));
+  await d1.batch([
+    d1
+      .prepare(
+        `INSERT INTO organizations
+             (id, name, slug, plan, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .bind("org_existing_metric", "Existing Metric Co", "existing-metric", "free", NOW, NOW),
+    d1
+      .prepare(
+        `INSERT INTO apps
+             (id, organization_id, name, key, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(APP_ID, "org_existing_metric", "Existing Metric App", "existing-metric", NOW, NOW),
+    d1
+      .prepare(
+        `INSERT INTO app_memberships (app_id, user_id, role, created_at)
+           VALUES (?, ?, ?, ?)`,
+      )
+      .bind(APP_ID, "migration-proof", "owner", NOW),
+    d1
+      .prepare(
+        `INSERT INTO metrics
+             (id, app_id, key, name, kind, event_name, event_value_field, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        "metric_existing_revenue",
+        APP_ID,
+        "purchase-revenue",
+        "Purchase revenue",
+        "revenue",
+        "purchase_completed",
+        "amount",
+        NOW,
+      ),
+  ]);
+  await applySchema(d1, statements.slice(eventMigration));
+}
+
+function migratedApp() {
+  return createApp({ authResolver, rateLimiter, repo: createRepository(d1) });
+}
 
 const authResolver: AuthResolver = () => ({
   ok: true,
   principal: {
     kind: "control-plane-token",
     id: "migration-proof",
-    scopes: [],
+    scopes: [`app:${APP_ID}:owner`],
     orgId: null,
     appId: APP_ID,
     environmentId: null,

@@ -46,8 +46,20 @@ SQL >
 NODE scoped_metric_events
 SQL >
     %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
     {% if not defined(event_definition_id) %}
     {{error('event_definition_id is required')}}
+    {% end %}
+    {% if not defined(from_ts) %}
+    {{error('from_ts is required')}}
+    {% end %}
+    {% if not defined(to_ts) %}
+    {{error('to_ts is required')}}
     {% end %}
     SELECT
         app_id,
@@ -66,6 +78,18 @@ SQL >
 NODE binomial_entity_values
 SQL >
     %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(metric_id) %}
+    {{error('metric_id is required')}}
+    {% end %}
+    {% if not defined(window_duration_ms) %}
+    {{error('window_duration_ms is required')}}
+    {% end %}
     SELECT
         exposures.targeting_key_hash AS targeting_key_hash,
         exposures.run_id AS run_id,

@@ -1,9 +1,11 @@
 import { DELEGATED_IDENTITY_HEADER } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
+import type { ErrorResponse } from "@splitch/contracts";
 import {
   APP_ID,
   CLIENT_KEY,
   ENVIRONMENT_ID,
+  LOCKED_CLIENT_KEY,
   makeSdkRouteHarness,
   sha256Hex,
 } from "./sdk-route-test-fixtures";
@@ -41,6 +43,33 @@ describe("Metric Event delegation", () => {
       appId: APP_ID,
       environmentId: ENVIRONMENT_ID,
     });
+  });
+
+  // The Client Key origin allow-list is enforced here, at the public edge, and
+  // nowhere downstream: the browser Origin header does not cross the service
+  // binding, so Event Ingest has nothing left to check.
+  it("rejects a disallowed origin before anything reaches Event Ingest", async () => {
+    const forwarded: Request[] = [];
+    const eventIngest = {
+      async fetch(input: RequestInfo | URL) {
+        forwarded.push(input as Request);
+        return Response.json({ accepted: true }, { status: 202 });
+      },
+    };
+    const { app } = await makeSdkRouteHarness({ eventIngest });
+
+    const response = await app.request("/api/sdk/events", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${LOCKED_CLIENT_KEY}`,
+        "content-type": "application/json",
+        origin: "https://denied.example",
+      },
+      body: JSON.stringify(metricEvent()),
+    });
+
+    expect(((await response.json()) as ErrorResponse).code).toBe("ORIGIN_NOT_ALLOWED");
+    expect(forwarded).toHaveLength(0);
   });
 });
 

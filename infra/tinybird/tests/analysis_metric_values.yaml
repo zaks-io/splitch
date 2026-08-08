@@ -17,8 +17,48 @@
   expected_http_status: 200
   expected_result: |
     {"targeting_key_hash":"tk_other_environment","run_id":"run_1","metric_id":"metric_signup_dev","metric_type":"binomial","value":1,"in_window":1}
+- name: missing_app_id_is_rejected
+  description: A missing app_id fails loudly rather than reading another tenant's Metric Events.
+  parameters: "environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 400
+  expected_result: "app_id is required"
+- name: missing_environment_id_is_rejected
+  description: A missing environment_id fails loudly rather than mixing Environments into one analysis.
+  parameters: "app_id=app_1&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 400
+  expected_result: "environment_id is required"
+- name: missing_experiment_id_is_rejected
+  description: A missing experiment_id fails loudly rather than reading Exposures from another Experiment.
+  parameters: "app_id=app_1&environment_id=env_prod&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 400
+  expected_result: "experiment_id is required"
+- name: missing_run_id_is_rejected
+  description: A missing run_id fails loudly rather than mixing Runs of the same Experiment into one analysis.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 400
+  expected_result: "run_id is required"
+- name: missing_metric_id_is_rejected
+  description: A missing metric_id fails loudly rather than assigning Metric Events to an inferred Metric.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 400
+  expected_result: "metric_id is required"
 - name: missing_event_definition_id_is_rejected
-  description: A missing Metric-to-Event Definition mapping fails loudly rather than reading every Metric Event in the App.
+  description: A missing event_definition_id fails loudly rather than reading every Metric Event in the App.
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "event_definition_id is required"
+- name: missing_window_duration_ms_is_rejected
+  description: A missing window_duration_ms fails loudly rather than assuming a Conversion Window the Run never declared.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 400
+  expected_result: "window_duration_ms is required"
+- name: missing_from_ts_is_rejected
+  description: A missing from_ts fails loudly rather than scanning an unbounded history.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 400
+  expected_result: "from_ts is required"
+- name: missing_to_ts_is_rejected
+  description: A missing to_ts fails loudly rather than scanning past the requested boundary.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000"
+  expected_http_status: 400
+  expected_result: "to_ts is required"

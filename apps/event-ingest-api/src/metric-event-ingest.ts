@@ -4,7 +4,7 @@ import {
   kvEnvelope,
   MetricEventTrackRequestSchema,
 } from "@splitch/contracts";
-import { authenticateClientKey, type ClientKeyScope } from "./client-key-auth";
+import type { ClientKeyScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
 import { claimMetricEvent } from "./metric-event-outbox";
 import { checkMetricEventRateLimit } from "./metric-event-rate-limit";
@@ -13,13 +13,6 @@ import type { Env } from "./types";
 
 const MAX_BODY_BYTES = 32_768;
 const hotConfigEnvelope = kvEnvelope(EventDefinitionHotConfigSchema);
-
-export async function handleMetricEvent(request: Request, env: Env): Promise<Response> {
-  const credential = await authenticateClientKey(request, env);
-  if (!credential.ok) return renderError(credential.error);
-
-  return handleAuthorizedMetricEvent(request, env, credential.value);
-}
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the contract requires ordered side-effect-free guards before the claim boundary
 export async function handleAuthorizedMetricEvent(

@@ -45,6 +45,21 @@ SQL >
 NODE scoped_pre_period_events
 SQL >
     %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(event_definition_id) %}
+    {{error('event_definition_id is required')}}
+    {% end %}
+    {% if not defined(from_ts) %}
+    {{error('from_ts is required')}}
+    {% end %}
+    {% if not defined(to_ts) %}
+    {{error('to_ts is required')}}
+    {% end %}
     SELECT
         app_id,
         environment_id,
@@ -62,6 +77,18 @@ SQL >
 NODE binomial_pre_period_values
 SQL >
     %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(metric_id) %}
+    {{error('metric_id is required')}}
+    {% end %}
+    {% if not defined(lookback_ms) %}
+    {{error('lookback_ms is required')}}
+    {% end %}
     SELECT
         exposures.targeting_key_hash AS targeting_key_hash,
         {{String(metric_id)}} AS metric_id,

@@ -9,7 +9,18 @@ CREATE TABLE `event_definitions` (
   `created_at` text NOT NULL,
   `updated_at` text NOT NULL,
   `created_by` text,
-  `updated_by` text
+  `updated_by` text,
+  -- An Event Definition name is a Telemetry Token everywhere it is read: the
+  -- hot-config KV key, the ingest contract and the analysis pipes. A legacy
+  -- `event_name` outside that shape has no representation downstream, so the
+  -- backfill below must abort on it rather than admit a row the read path will
+  -- reject later for the whole App. Remediation is renaming the Metric's Event
+  -- before deploying this migration.
+  CONSTRAINT `event_definitions_name_is_telemetry_token` CHECK (
+    length(`name`) BETWEEN 1 AND 64
+    AND `name` GLOB '[A-Za-z0-9]*'
+    AND `name` NOT GLOB '*[^A-Za-z0-9_.:-]*'
+  )
 );
 CREATE UNIQUE INDEX `event_definitions_app_name_unique` ON `event_definitions` (`app_id`,`name`);
 
@@ -30,6 +41,10 @@ CREATE UNIQUE INDEX `event_definition_versions_number_unique` ON `event_definiti
 -- Legacy Metrics identified their Event by name. Preserve that binding before
 -- rebuilding the table: dropping it would leave the new read path no authority
 -- from which to recover an Event Definition.
+--
+-- The backfilled Version is published, not draft. A Metric whose Event Definition
+-- has no published Version fails write validation, so leaving it NULL would make
+-- every migrated Metric permanently un-editable.
 INSERT INTO `event_definitions` (
   `id`, `app_id`, `name`, `family`, `display_name`,
   `current_published_version_id`, `created_at`, `updated_at`
@@ -40,7 +55,7 @@ SELECT
   `event_name`,
   'metric',
   `event_name`,
-  NULL,
+  'event_definition_version_migrated_' || lower(hex(CAST(`app_id` AS blob))) || '_' || lower(hex(CAST(`event_name` AS blob))),
   min(`created_at`),
   min(`created_at`)
 FROM `metrics`

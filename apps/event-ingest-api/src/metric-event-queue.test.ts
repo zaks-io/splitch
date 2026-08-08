@@ -52,10 +52,7 @@ describe("Metric Event queue delivery", () => {
       queueMessageId: "message-2",
       attempts: 2,
       maxRetries: 7,
-      appId: "app_shop",
-      environmentId: "env_prod",
-      eventId: "event-bad",
-      eventDefinitionId: "event_definition_checkout",
+      ...identityOf("event-bad"),
       errorMessage: "Tinybird append failed with HTTP 500",
     });
   });
@@ -63,12 +60,7 @@ describe("Metric Event queue delivery", () => {
   it("logs the complete Metric Event identity when its final failed attempt is discarded", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const event = metricEvent("event-with-a-complete-identity-that-must-not-be-truncated");
-    event.app_id = "app-with-a-complete-identity-that-must-not-be-truncated";
-    event.environment_id = "environment-with-a-complete-identity-that-must-not-be-truncated";
-    event.event_definition_id =
-      "event-definition-with-a-complete-identity-that-must-not-be-truncated";
-    const failed = queueMessage("message-final-attempt", event, 8);
+    const failed = queueMessage("message-final-attempt", metricEvent("event-discarded"), 8);
 
     await worker.queue(messageBatch([failed]), deliveryEnv());
 
@@ -81,10 +73,33 @@ describe("Metric Event queue delivery", () => {
         queueMessageId: "message-final-attempt",
         attempts: 8,
         maxRetries: 7,
-        appId: "app-with-a-complete-identity-that-must-not-be-truncated",
-        environmentId: "environment-with-a-complete-identity-that-must-not-be-truncated",
-        eventId: "event-with-a-complete-identity-that-must-not-be-truncated",
-        eventDefinitionId: "event-definition-with-a-complete-identity-that-must-not-be-truncated",
+        ...identityOf("event-discarded"),
+        errorMessage: "Tinybird append failed with HTTP 500",
+      },
+    );
+  });
+
+  it("keeps a malformed row's identity intact instead of dropping the odd field", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const malformed = metricEvent("event-malformed");
+    malformed.event_definition_version_id = 42;
+    malformed.targeting_key_hash = { unexpected: "shape" };
+    delete malformed.dedup_key;
+    const failed = queueMessage("message-malformed", malformed, 8);
+
+    await worker.queue(messageBatch([failed]), deliveryEnv());
+
+    expect(error).toHaveBeenCalledWith(
+      "event-ingest-api Metric Event discarded after final delivery attempt",
+      {
+        queueMessageId: "message-malformed",
+        attempts: 8,
+        maxRetries: 7,
+        ...identityOf("event-malformed"),
+        dedupKey: "<absent>",
+        eventDefinitionVersionId: "42",
+        targetingKeyHash: '{"unexpected":"shape"}',
         errorMessage: "Tinybird append failed with HTTP 500",
       },
     );
@@ -119,11 +134,36 @@ describe("Metric Event queue delivery", () => {
 
 function metricEvent(eventId: string): Record<string, unknown> {
   return {
+    dedup_key: `sha256:${eventId}`,
     event_id: eventId,
     app_id: "app_shop",
     environment_id: "env_prod",
     event_definition_id: "event_definition_checkout",
+    event_definition_version_id: "event_definition_version_checkout_3",
+    event_name: "checkout_completed",
+    id_type: "user",
+    targeting_key_hash: `v1:${eventId}-targeting-key`,
     fields: JSON.stringify({ converted: true, email: "private@example.com" }),
+    dimensions: JSON.stringify({ plan: "pro" }),
+    server_received_at: "2026-08-07T00:00:00.000Z",
+  };
+}
+
+/** What the discard log must carry for the row `metricEvent` builds. */
+function identityOf(eventId: string): Record<string, string> {
+  return {
+    appId: "app_shop",
+    environmentId: "env_prod",
+    eventId,
+    dedupKey: `sha256:${eventId}`,
+    eventDefinitionId: "event_definition_checkout",
+    eventDefinitionVersionId: "event_definition_version_checkout_3",
+    eventName: "checkout_completed",
+    idType: "user",
+    targetingKeyHash: `v1:${eventId}-targeting-key`,
+    serverReceivedAt: "2026-08-07T00:00:00.000Z",
+    // Tinybird stamps `ingest_ts` at append time, so the queue message never carries one.
+    ingestTs: "<absent>",
   };
 }
 
