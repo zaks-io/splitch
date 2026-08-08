@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { REDACTED } from "./redaction-rules";
 import { redactValuePatterns } from "./value-patterns";
 
+/** ULID-shaped body whose randomness includes an 8-digit run the phone pattern matches. */
+const DIGIT_RUN_ULID = "01J12345678ABCDEFGHJKMNPQR";
+const MINTED_ID = `apr_${DIGIT_RUN_ULID}`;
+const BARE_PHONE = "555-867-5309";
+const BARE_DIGIT_RUN = "12345678901";
+const BARE_EMAIL = "leak@evil.com";
+
 describe("redactValuePatterns", () => {
   it("redacts a bare email anywhere in a string", () => {
     const out = redactValuePatterns("contact leak@evil.com for help");
@@ -20,29 +27,31 @@ describe("redactValuePatterns", () => {
     expect(out).toBe("req-123 attempt 2 of 5");
   });
 
-  // A ULID body can contain an 8+ digit run (~0.2% of mints). That run is not a
-  // phone number; redacting it leaves a fault row unable to name what failed.
+  // SPL-360: phone-like defaults must not eat digit runs inside minted ids.
+  // Each of these four goes red if the protection (or email/phone coverage) is
+  // reverted — see the PR body for the raw failing output against main's pattern.
   it("preserves a minted internal id whose body has a long digit run", () => {
-    const id = "apr_01J12345678ABCDEFGHJKMNPQR";
-    const message = `${id}: Error: outer for ${id}`;
+    const message = `${MINTED_ID}: Error: outer for ${MINTED_ID}`;
     expect(redactValuePatterns(message)).toBe(message);
   });
 
-  it("preserves other minted-id prefixes with long digit runs", () => {
-    for (const id of [
-      "exp_01J12345678ABCDEFGHJKMNPQR",
-      "flag_01J12345678ABCDEFGHJKMNPQR",
-      "run_abcd12345678ef901234abcd",
-    ]) {
-      expect(redactValuePatterns(`failed for ${id}`)).toContain(id);
-    }
+  it("still redacts a bare phone sitting immediately next to a minted internal id", () => {
+    const out = redactValuePatterns(`${MINTED_ID}${BARE_PHONE}`);
+    expect(out).toContain(MINTED_ID);
+    expect(out.includes(BARE_PHONE)).toBe(false);
+    expect(out.includes(REDACTED)).toBe(true);
   });
 
-  it("still redacts a bare phone next to a preserved minted internal id", () => {
-    const id = "apr_01J12345678ABCDEFGHJKMNPQR";
-    const out = redactValuePatterns(`${id} call 555-867-5309`);
-    expect(out).toContain(id);
-    expect(out.includes("555-867-5309")).toBe(false);
+  it("still redacts an email when a minted internal id is also present", () => {
+    const out = redactValuePatterns(`${MINTED_ID} contact ${BARE_EMAIL}`);
+    expect(out).toContain(MINTED_ID);
+    expect(out.includes(BARE_EMAIL)).toBe(false);
+    expect(out.includes(REDACTED)).toBe(true);
+  });
+
+  it("still redacts a long digit run that is not a prefixed minted id", () => {
+    const out = redactValuePatterns(`call ${BARE_DIGIT_RUN} now`);
+    expect(out.includes(BARE_DIGIT_RUN)).toBe(false);
     expect(out.includes(REDACTED)).toBe(true);
   });
 

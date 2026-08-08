@@ -18,6 +18,7 @@
  * what failed.
  */
 
+import { MINTED_ID_PREFIXES } from "./minted-id-prefixes";
 import { REDACTED } from "./redaction-rules";
 
 /** Email: local@domain.tld. Every quantifier is BOUNDED ({1,64}/{1,255}/{2,24}),
@@ -28,33 +29,6 @@ const EMAIL_PATTERN = /[A-Z0-9._%+-]{1,64}@[A-Z0-9.-]{1,255}\.[A-Z]{2,24}/gi;
 
 /** Phone-like: 7+ digits with optional separators/+ (avoids tiny numbers). */
 const PHONE_LIKE_PATTERN = /\+?\d[\d\s().-]{6,}\d/g;
-
-/**
- * Server-minted resource-id prefixes. Credential material (`sk_`, `pk_`, `spl_`)
- * is intentionally absent — those stay redacted by observability `extraPatterns`.
- */
-const MINTED_ID_PREFIXES = [
-  "apr",
-  "rev",
-  "org",
-  "app",
-  "env",
-  "flag",
-  "var",
-  "exp",
-  "run",
-  "metric",
-  "segment",
-  "rule",
-  "salt",
-  "ak",
-  "ck",
-  "idp",
-  "user",
-  "prv",
-  "cver",
-  "ccons",
-] as const;
 
 const MINTED_ID_TOKEN = new RegExp(`^(?:${MINTED_ID_PREFIXES.join("|")})_[0-9A-Za-z]+$`, "i");
 
