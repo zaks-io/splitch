@@ -44,9 +44,8 @@ export function OrgMembersTable({
                   {member.email ? (
                     <span className="font-medium">{member.email}</span>
                   ) : (
-                    <span className="font-medium text-muted-foreground">Has not signed in yet</span>
+                    <span className="font-medium text-muted-foreground">Email unavailable</span>
                   )}
-                  <code className="font-mono text-muted-foreground text-xs">{member.userId}</code>
                 </div>
               </TableCell>
               <TableCell>

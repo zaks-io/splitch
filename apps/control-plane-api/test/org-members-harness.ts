@@ -35,6 +35,7 @@ export const MEMBER = "user_member_438c";
 export const NEW_MEMBER = "user_new_529e";
 export const PROFILELESS_MEMBER = "user_profileless_71c2";
 export const SOLO_OWNER = "user_solo_owner_0f8a";
+export const SOLO_ADMIN = "user_solo_admin_662e";
 
 const PROFILE_EMAILS = new Map([
   [OWNER, "owner@example.test"],
@@ -42,6 +43,7 @@ const PROFILE_EMAILS = new Map([
   [MEMBER, "member@example.test"],
   [NEW_MEMBER, "new@example.test"],
   [SOLO_OWNER, "solo@example.test"],
+  [SOLO_ADMIN, "solo-admin@example.test"],
 ]);
 
 interface Harness {
@@ -114,6 +116,7 @@ export async function setup(): Promise<void> {
     role: "member",
   });
   await seedOrgMember(bindings.d1, { orgId: SOLO.orgId, userId: SOLO_OWNER, role: "owner" });
+  await seedOrgMember(bindings.d1, { orgId: SOLO.orgId, userId: SOLO_ADMIN, role: "admin" });
 
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({

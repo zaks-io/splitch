@@ -1,4 +1,8 @@
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
+import {
+  ORGANIZATIONS_TRUNCATED_DESCRIPTION,
+  organizationsTruncatedTitle,
+} from "#lib/organizations-truncated";
 import { parityHint } from "#lib/parity-hints";
 import { ParityNote } from "./parity-note";
 
@@ -22,11 +26,9 @@ import { ParityNote } from "./parity-note";
 export function OrganizationsTruncatedNotice({ limit }: { limit: number }) {
   return (
     <Alert data-testid="organizations-truncated">
-      <AlertTitle>Showing the first {limit} of your Organizations</AlertTitle>
+      <AlertTitle>{organizationsTruncatedTitle(limit)}</AlertTitle>
       <AlertDescription>
-        You belong to more Organizations than one sign-in session can carry, so this list is cut
-        short. The rest still exist and nothing was deleted, but the Control Panel cannot reach them
-        while they are outside this list. To see all of them:{" "}
+        {ORGANIZATIONS_TRUNCATED_DESCRIPTION} To see all of them:{" "}
         <ParityNote hint={parityHint("organizations_list")} />
       </AlertDescription>
     </Alert>

@@ -14,6 +14,7 @@ import {
   PRIMARY,
   PROFILELESS_MEMBER,
   SOLO,
+  SOLO_ADMIN,
   SOLO_OWNER,
   seedOrgs,
   setup,
@@ -196,6 +197,22 @@ describe("control-plane org/member endpoints", () => {
     });
   });
 
+  it("adds a real user whose profile is not cached", async () => {
+    const ownerJwt = await token(SOLO_OWNER, SOLO.orgId, "owner");
+    const res = await memberRoute(client(ownerJwt)).$post({
+      param: { orgId: SOLO.orgId },
+      json: { userId: PROFILELESS_MEMBER, role: "member" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      id: PROFILELESS_MEMBER,
+      email: null,
+      organizationId: SOLO.orgId,
+      role: "member",
+    });
+  });
+
   it("403s an Organization A actor with a forged Organization B scope on every member route", async () => {
     const forgedOrgBJwt = await token(OWNER, SOLO.orgId, "owner");
     const api = client(forgedOrgBJwt);
@@ -206,11 +223,11 @@ describe("control-plane org/member endpoints", () => {
       json: { userId: NEW_MEMBER, role: "member" },
     });
     const updated = await memberResourceRoute(api).$patch({
-      param: { orgId: SOLO.orgId, userId: NEW_MEMBER },
-      json: { role: "admin" },
+      param: { orgId: SOLO.orgId, userId: SOLO_ADMIN },
+      json: { role: "member" },
     });
     const removed = await memberResourceRoute(api).$delete({
-      param: { orgId: SOLO.orgId, userId: NEW_MEMBER },
+      param: { orgId: SOLO.orgId, userId: SOLO_ADMIN },
     });
 
     for (const response of [listed, added, updated, removed]) {
@@ -229,6 +246,27 @@ describe("control-plane org/member endpoints", () => {
       code: "SERVICE_UNAVAILABLE",
       message: `member profile lookup failed for ${PROFILELESS_MEMBER}`,
     });
+  });
+
+  it("fails loud before adding when the profile lookup faults", async () => {
+    const ownerJwt = await token(SOLO_OWNER, SOLO.orgId, "owner");
+    const api = client(ownerJwt, { "x-test-profile-failure-user": PROFILELESS_MEMBER });
+    const res = await memberRoute(api).$post({
+      param: { orgId: SOLO.orgId },
+      json: { userId: PROFILELESS_MEMBER, role: "member" },
+    });
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({
+      code: "SERVICE_UNAVAILABLE",
+      message: `member profile lookup failed for ${PROFILELESS_MEMBER}`,
+    });
+
+    const roster = await memberRoute(client(ownerJwt)).$get({ param: { orgId: SOLO.orgId } });
+    expect(roster.status).toBe(200);
+    expect((await roster.json()).items).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: PROFILELESS_MEMBER })]),
+    );
   });
 
   it("409s LAST_OWNER_REQUIRED when removing or demoting the last owner", async () => {

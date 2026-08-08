@@ -109,6 +109,19 @@ describe("panel Org membership binding transport", () => {
       data: { id: "user_1", email: null, role: "admin" },
     });
   });
+
+  it("preserves an absent profile when adding a member", async () => {
+    const client = createPanelOrgMembersClient({
+      fetch: vi.fn(async () => Response.json({ ...member(), email: null, role: "member" })),
+    });
+
+    await expect(
+      client.add({ orgId: "org_1", userId: "user_1", role: "member" }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { id: "user_1", email: null, role: "member" },
+    });
+  });
 });
 
 function member() {

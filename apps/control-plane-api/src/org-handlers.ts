@@ -1,9 +1,4 @@
-import {
-  type OrganizationMember,
-  type User,
-  type UserRole,
-  UserRoleSchema,
-} from "@splitch/contracts";
+import { type OrganizationMember, type UserRole, UserRoleSchema } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
@@ -100,7 +95,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       const existing = await deps.repo.identity.getOrgMembership(orgId, userId);
       if (existing) return membershipConflict(UserRoleSchema.parse(existing.role), requestId);
 
-      const profile = await resolveProfile(deps, orgId, userId, request, requestId);
+      const profile = await resolveNewMemberProfile(deps, orgId, userId, request, requestId);
       if (profile instanceof Response) return profile;
 
       const row = await deps.repo.identity.createOrgMembership({
@@ -109,7 +104,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
         role,
         createdAt: now(),
       });
-      return Response.json(userFromMembership(row, profile));
+      return Response.json(memberFromMembership(row, profile));
     },
 
     async updateMember({ input, request, principal, requestId }: HandlerArgs<unknown>) {
@@ -221,21 +216,30 @@ async function resolveProfile(
   userId: string,
   request: Request,
   requestId: string,
-): Promise<MemberProfile | Response> {
+): Promise<MemberProfile | null | Response> {
   if (!deps.memberProfileResolver) return memberProfileUnavailable(requestId);
-  const profile = await deps.memberProfileResolver({ orgId, userId, request });
-  if (!profile) return userNotFound(requestId);
-  return profile;
+  try {
+    return await deps.memberProfileResolver({ orgId, userId, request });
+  } catch {
+    return memberProfileReadFailed(userId, requestId);
+  }
 }
 
-function userFromMembership(membership: OrgMembership, profile: MemberProfile): User {
-  return {
-    id: membership.userId,
-    email: profile.email,
-    organizationId: membership.orgId,
-    role: UserRoleSchema.parse(membership.role),
-    createdAt: membership.createdAt,
-  };
+// Resolves the profile for a to-be-added member. A missing profile is only
+// tolerated when the user is already known to identity (has memberships
+// elsewhere) — otherwise userId is unrecognized and the add must fail loud.
+async function resolveNewMemberProfile(
+  deps: OrgHandlerDeps,
+  orgId: string,
+  userId: string,
+  request: Request,
+  requestId: string,
+): Promise<MemberProfile | null | Response> {
+  const profile = await resolveProfile(deps, orgId, userId, request, requestId);
+  if (profile instanceof Response || profile) return profile;
+
+  const knownMemberships = await deps.repo.identity.listOrgMembershipsForUser(userId);
+  return knownMemberships.length === 0 ? userNotFound(requestId) : null;
 }
 
 function memberFromMembership(

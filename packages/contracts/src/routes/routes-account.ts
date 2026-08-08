@@ -1,5 +1,5 @@
 import { z } from "@hono/zod-openapi";
-import { OrganizationMemberSchema, UserSchema } from "../leaf-schemas-runtime";
+import { OrganizationMemberSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   CreateOrganizationRequestSchema,
@@ -26,7 +26,7 @@ const RATE = "control-plane-actor" as const;
 
 const OrgListResponse = z.object({ items: z.array(OrganizationResponseSchema) });
 const MemberListResponse = z.object({ items: z.array(OrganizationMemberSchema) });
-const MemberResponse = UserSchema;
+const MemberResponse = OrganizationMemberSchema;
 const MemberUpdateResponse = OrganizationMemberSchema;
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 
@@ -138,6 +138,7 @@ const organizationRoutes = [
       "FORBIDDEN",
       "USER_NOT_FOUND",
       "MEMBERSHIP_CONFLICT",
+      "SERVICE_UNAVAILABLE",
       "VALIDATION_ERROR",
     ],
   }),

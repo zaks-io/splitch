@@ -16,6 +16,7 @@ import { loadSessionFromRequest } from "./session";
 export type OrgMembersResult =
   | { kind: "ok"; view: OrgMembersView }
   | { kind: "unauthenticated" }
+  | { kind: "truncated"; limit: number }
   | { kind: "forbidden" };
 
 /**
@@ -39,7 +40,11 @@ export async function loadOrgMembersForRequest(
     loaded.session,
   );
   const organization = session.orgs.find((org) => org.orgSlug === orgSlug);
-  if (!organization) return { kind: "forbidden" };
+  if (!organization) {
+    return session.orgsTruncated
+      ? { kind: "truncated", limit: session.orgs.length }
+      : { kind: "forbidden" };
+  }
 
   return {
     kind: "ok",

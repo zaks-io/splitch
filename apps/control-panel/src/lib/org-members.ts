@@ -3,7 +3,7 @@ import type { OrgRole } from "./session";
 
 export interface OrgMember {
   readonly userId: string;
-  /** Null until the User signs in and populates the shared profile cache. */
+  /** Null when the shared identity cache cannot supply an email address. */
   readonly email: string | null;
   readonly role: UserRole;
 }

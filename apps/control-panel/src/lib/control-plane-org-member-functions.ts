@@ -1,12 +1,15 @@
 import { env as workerEnv } from "cloudflare:workers";
-import { type OrganizationMember, type User, UserRoleSchema } from "@splitch/contracts";
+import { type OrganizationMember, UserRoleSchema } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "@splitch/control-plane-sdk";
 import type { PanelOrgMemberRemoveOutput } from "@splitch/control-plane-sdk/panel-org-members";
+import { createRepository } from "@splitch/db";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { type ControlPanelMutationBindings, controlPanelMutationBindings } from "./bindings";
 import { createControlPanelOrgMembersClient } from "./control-plane-org-members";
+import { rehydrateLegacySession } from "./membership";
+import { ORGANIZATIONS_TRUNCATED_DESCRIPTION } from "./organizations-truncated";
 import { loadSessionFromRequest } from "./session";
 
 const OrgScopeSchema = z.object({ orgId: z.string().min(1) });
@@ -19,7 +22,7 @@ const UpdateMemberSchema = MemberScopeSchema.extend({ role: UserRoleSchema });
 
 export const addControlPanelOrgMember = createServerFn({ method: "POST" })
   .validator((data: unknown) => AddMemberSchema.safeParse(data))
-  .handler(async ({ data: parsed }): Promise<ControlPlaneOperationResult<User>> => {
+  .handler(async ({ data: parsed }): Promise<ControlPlaneOperationResult<OrganizationMember>> => {
     if (!parsed.success) return malformed("The member request is malformed");
     const authorized = await authorizedOrgMembersClient(parsed.data.orgId);
     if (!authorized.ok) return authorized.result;
@@ -67,13 +70,25 @@ export async function authorizeOrgMembersMutationForRequest(
       },
     };
   }
-  if (!loaded.session.orgs.some((organization) => organization.orgId === orgId)) {
+  const session = await rehydrateLegacySession(
+    createRepository(bindings.DB),
+    bindings.SESSION_STORE,
+    loaded.tokenHash,
+    loaded.session,
+  );
+  if (!session.orgs.some((organization) => organization.orgId === orgId)) {
     return {
       ok: false as const,
       result: {
         ok: false as const,
         status: 403,
-        error: { code: "FORBIDDEN" as const, message: "organization access denied", details: {} },
+        error: {
+          code: "FORBIDDEN" as const,
+          message: session.orgsTruncated
+            ? ORGANIZATIONS_TRUNCATED_DESCRIPTION
+            : "organization access denied",
+          details: {},
+        },
       },
     };
   }
@@ -81,7 +96,7 @@ export async function authorizeOrgMembersMutationForRequest(
     ok: true as const,
     members: createControlPanelOrgMembersClient(
       bindings.CONTROL_PLANE_API,
-      { actorId: loaded.session.userId, sessionExpiresAt: loaded.session.expiresAt },
+      { actorId: session.userId, sessionExpiresAt: session.expiresAt },
       bindings.CONTROL_PANEL_DELEGATION_SECRET,
     ),
   };

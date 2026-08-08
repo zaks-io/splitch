@@ -26,18 +26,20 @@ describe("requireForbiddenResponse", () => {
   ])("rejects a false-green oracle when $name", async ({ body }) => {
     await expect(
       requireForbiddenResponse({
-        json: async () => ({ k: ["ok", "data", "status"], v: [true, body, 200] }),
+        json: async () => envelope({ ok: true, data: body, status: 200 }),
       }),
-    ).rejects.toThrow(/expected result status 403, received 200/);
+    ).rejects.toThrow(/expected a refused TanStack server-function result/);
   });
 
   it("accepts a typed forbidden result inside the HTTP 200 TanStack envelope", async () => {
     await expect(
       requireForbiddenResponse({
-        json: async () => ({
-          k: ["ok", "error", "status"],
-          v: [false, { code: "FORBIDDEN", message: "forbidden", details: {} }, 403],
-        }),
+        json: async () =>
+          envelope({
+            ok: false,
+            error: { code: "FORBIDDEN", message: "forbidden", details: {} },
+            status: 403,
+          }),
       }),
     ).resolves.toBeUndefined();
   });
@@ -45,11 +47,46 @@ describe("requireForbiddenResponse", () => {
   it("rejects a different error code at result status 403", async () => {
     await expect(
       requireForbiddenResponse({
-        json: async () => ({
-          k: ["ok", "error", "status"],
-          v: [false, { code: "UNAUTHORIZED", message: "unauthorized", details: {} }, 403],
-        }),
+        json: async () =>
+          envelope({
+            ok: false,
+            error: { code: "UNAUTHORIZED", message: "unauthorized", details: {} },
+            status: 403,
+          }),
       }),
     ).rejects.toThrow(/expected result error code "FORBIDDEN"/);
   });
 });
+
+type SerializedNode =
+  | { t: 0; s: number }
+  | { t: 1; s: string }
+  | { t: 2; s: 0 | 2 | 3 }
+  | { t: 10; i: number; p: { k: string[]; v: SerializedNode[] } };
+
+let nextNodeId = 0;
+
+function envelope(result: Record<string, unknown>): SerializedNode {
+  nextNodeId = 0;
+  return serializeNode({ result, error: null, context: null });
+}
+
+function serializeNode(value: unknown): SerializedNode {
+  if (value === null) return { t: 2, s: 0 };
+  if (value === true) return { t: 2, s: 2 };
+  if (value === false) return { t: 2, s: 3 };
+  if (typeof value === "number") return { t: 0, s: value };
+  if (typeof value === "string") return { t: 1, s: value };
+  if (typeof value === "object" && !Array.isArray(value)) {
+    const entries = Object.entries(value);
+    return {
+      t: 10,
+      i: nextNodeId++,
+      p: {
+        k: entries.map(([key]) => key),
+        v: entries.map(([, entry]) => serializeNode(entry)),
+      },
+    };
+  }
+  throw new Error("test envelope contains an unsupported value");
+}

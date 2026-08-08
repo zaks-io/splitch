@@ -30,13 +30,13 @@ test.describe("Organization Members", () => {
 
     const ownerRow = page.locator(`[data-member-id='${owner}']`);
     await expect(ownerRow).toContainText("owner@acme-labs.e2e");
-    await expect(ownerRow).toContainText(owner);
+    await expect(ownerRow).not.toContainText(owner);
     await expect(ownerRow.getByText("You", { exact: true })).toBeVisible();
     await expect(page.locator(`[data-member-id='${member}']`)).toContainText(
       "member@acme-labs.e2e",
     );
     await expect(page.locator(`[data-member-id='${LOCAL_E2E_PROFILELESS_USER_ID}']`)).toContainText(
-      "Has not signed in yet",
+      "Email unavailable",
     );
 
     // The Worker refuses LAST_OWNER_REQUIRED; the screen says so before the click
@@ -61,6 +61,7 @@ test.describe("Organization Members", () => {
     const row = page.locator(`[data-member-id='${LOCAL_E2E_RECRUIT_USER_ID}']`);
     await expect(row).toContainText("recruit@acme-labs.e2e");
     await expect(row).toContainText("Member");
+    await expect(page.getByTestId(`member-role-${LOCAL_E2E_RECRUIT_USER_ID}`)).toHaveText("Member");
 
     await page.getByTestId(`member-role-${LOCAL_E2E_RECRUIT_USER_ID}`).click();
     await page.getByRole("option", { name: "Admin" }).click();
@@ -83,6 +84,7 @@ test.describe("Organization Members", () => {
     await addMember(page, member);
 
     await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByTestId("add-member-role")).toHaveText("Member");
     await expect(page.getByTestId("add-member-error")).toContainText(
       "This person is already a member with the Member role.",
     );

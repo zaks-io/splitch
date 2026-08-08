@@ -2,6 +2,7 @@ import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/aler
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { OrgMembersPage } from "#components/org-members-page";
 import { OrgShell } from "#components/org-shell";
+import { OrganizationsTruncatedNotice } from "#components/organizations-truncated-notice";
 import { loadOrgMembers } from "#lib/org-members-functions";
 import { loadCurrentSession } from "#lib/session-functions";
 
@@ -16,6 +17,7 @@ export const Route = createFileRoute("/$orgSlug/members")({
     }
     return {
       view: members.kind === "ok" ? members.view : null,
+      truncatedLimit: members.kind === "truncated" ? members.limit : null,
       orgs: session.session.orgs.map((org) => ({ orgId: org.orgId, orgSlug: org.orgSlug })),
       userId: session.session.userId,
     };
@@ -24,7 +26,11 @@ export const Route = createFileRoute("/$orgSlug/members")({
 });
 
 function OrganizationMembersRoute() {
-  const { orgs, userId, view } = Route.useLoaderData();
+  const { orgs, truncatedLimit, userId, view } = Route.useLoaderData();
+
+  if (truncatedLimit !== null) {
+    return <OrganizationsTruncatedNotice limit={truncatedLimit} />;
+  }
 
   if (!view) {
     return (

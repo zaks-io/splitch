@@ -106,6 +106,15 @@ describe("loadOrgMembersForRequest", () => {
     expect(result.kind).toBe("forbidden");
     expect(controlPlaneCalls).toEqual([]);
   }, 20_000);
+
+  it("reports a truncated snapshot instead of claiming the Organization is forbidden", async () => {
+    await seedSession("owner", true);
+
+    const result = await loadOrgMembersForRequest(bindings, requestWithSessionCookie(), "org-999");
+
+    expect(result).toEqual({ kind: "truncated", limit: 1 });
+    expect(controlPlaneCalls).toEqual([]);
+  }, 20_000);
 });
 
 function requestWithSessionCookie(): Request {
@@ -114,7 +123,10 @@ function requestWithSessionCookie(): Request {
   });
 }
 
-async function seedSession(orgRole: "owner" | "admin" | "member"): Promise<void> {
+async function seedSession(
+  orgRole: "owner" | "admin" | "member",
+  orgsTruncated = false,
+): Promise<void> {
   const session: StoredSession = {
     version: 2,
     userId: "user_cap",
@@ -130,6 +142,7 @@ async function seedSession(orgRole: "owner" | "admin" | "member"): Promise<void>
         apps: [],
       },
     ],
+    orgsTruncated,
   };
   await refreshSession(bindings.SESSION_STORE, tokenHash, session);
 }

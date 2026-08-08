@@ -1,5 +1,5 @@
-import type { OrganizationMember, User, UserRole } from "@splitch/contracts";
-import { OrganizationMemberSchema, UserSchema } from "@splitch/contracts";
+import type { OrganizationMember, UserRole } from "@splitch/contracts";
+import { OrganizationMemberSchema } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
 
@@ -42,7 +42,7 @@ export interface PanelOrgMembersClient {
   list(
     input: PanelOrgMembersListInput,
   ): Promise<ControlPlaneOperationResult<PanelOrgMembersListOutput>>;
-  add(input: PanelOrgMemberAddInput): Promise<ControlPlaneOperationResult<User>>;
+  add(input: PanelOrgMemberAddInput): Promise<ControlPlaneOperationResult<OrganizationMember>>;
   update(
     input: PanelOrgMemberUpdateInput,
   ): Promise<ControlPlaneOperationResult<OrganizationMember>>;
@@ -75,7 +75,11 @@ export function createPanelOrgMembersClient(options: {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ userId: input.userId, role: input.role }),
       });
-      return parseControlPlaneResponse(response, "organization_members_add", UserSchema);
+      return parseControlPlaneResponse(
+        response,
+        "organization_members_add",
+        OrganizationMemberSchema,
+      );
     },
     async update(input) {
       const response = await options.fetch(memberUrl(input.orgId, input.userId), {

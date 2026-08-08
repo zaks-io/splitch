@@ -44,6 +44,7 @@ describe("Members screen role matrix", () => {
     expect(html).not.toContain('data-testid="add-member-locked"');
     expect(html).toContain('data-testid="member-role-u_admin"');
     expect(html).toContain('data-testid="member-remove-u_admin"');
+    expect(html).toMatch(/data-slot="select-value"[^>]*>Admin<\/span>/u);
   });
 
   it("gives an admin the add affordance but locks role changes and removal", () => {
@@ -89,7 +90,8 @@ describe("Members screen role matrix", () => {
     });
 
     expect(html).toContain('data-member-id="u_new"');
-    expect(html).toContain("Has not signed in yet");
+    expect(html).toContain("Email unavailable");
+    expect(html).not.toContain("u_new</code>");
     expect(html).not.toContain("unknown@");
   });
 });
@@ -149,6 +151,7 @@ describe("SSO and SCIM affordances", () => {
   it("offers configuration to owner and admin", () => {
     for (const role of ["owner", "admin"] as const) {
       expect(page(role)).toContain("Contact your account team");
+      expect(page(role)).toContain("Available");
     }
   });
 

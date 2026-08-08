@@ -79,8 +79,11 @@ function SsoScimRow({
             Requires {requiredRole}. Your role is {organizationRoleLabel(orgRole)}.
           </span>
         )}
+        {allowed ? (
+          <span className="text-muted-foreground text-xs">Contact your account team.</span>
+        ) : null}
       </div>
-      <Badge variant="outline">{allowed ? "Contact your account team" : "Locked"}</Badge>
+      <Badge variant="outline">{allowed ? "Available" : "Locked"}</Badge>
     </div>
   );
 }
