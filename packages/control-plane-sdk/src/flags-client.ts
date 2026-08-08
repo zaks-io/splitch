@@ -257,7 +257,9 @@ function flagsGet(
   // Dot-segment keys (`.`, `..`, and percent-encoded spellings) survive
   // encodeURIComponent and are collapsed by the WHATWG URL parser onto a
   // different route — reject them before building the path.
-  assertAddressableFlagSelector(input.flagId);
+  if (isUnaddressableFlagSelector(input.flagId)) {
+    return Promise.reject(new FlagSelectorUnaddressableError(input.flagId));
+  }
   const param = { appId: input.appId, flagId: encodeURIComponent(input.flagId) };
   return invokeHcRoute<FlagsGetOutput>("flags_get", () =>
     hcClient.apps[":appId"].flags[":flagId"].$get(
@@ -284,16 +286,6 @@ class FlagSelectorUnaddressableError extends Error {
   }
 }
 
-function assertAddressableFlagSelector(selector: string): void {
-  if (isUnaddressableFlagSelector(selector)) {
-    throw new FlagSelectorUnaddressableError(selector);
-  }
-}
-
-/**
- * Rejects `""`, `"."`, and `".."`, including any percent-encoded spelling
- * (case-insensitive hex) and multi-segment forms that contain one of those.
- */
 function isUnaddressableFlagSelector(selector: string): boolean {
   return selector.split("/").some(isUnaddressablePathSegment);
 }
