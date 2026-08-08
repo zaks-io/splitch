@@ -93,7 +93,7 @@ describe("handleExposureRedemptionClaimFetch (production handler)", () => {
     ).toEqual({ status: "acquired" });
   });
 
-  it("does not arm an alarm on pending claim; arms claim-TTL on seal and never pushes later", async () => {
+  it("does not arm an alarm on pending claim; arms claim-TTL on seal", async () => {
     const ctx = claimMemoryCtx();
     const now = Date.now();
     await handleExposureRedemptionClaimFetch(
@@ -127,6 +127,30 @@ describe("handleExposureRedemptionClaimFetch (production handler)", () => {
     await simulateClaimAlarm(ctx);
     expect(await ctx.storage.get("exposure:old")).toBeUndefined();
     expect(await ctx.storage.getAlarm()).toBe(nearer);
+  });
+
+  it("setExpiryAlarm never pushes an existing earlier alarm later", async () => {
+    const ctx = claimMemoryCtx();
+    const now = Date.now();
+    const early = now + 5_000;
+    await ctx.storage.setAlarm(early);
+
+    await handleExposureRedemptionClaimFetch(
+      ctx,
+      claimPost("/claim", { ...claimBody, nowMs: now }),
+    );
+    expect(
+      (
+        await handleExposureRedemptionClaimFetch(
+          ctx,
+          claimPost("/markSealed", { ...claimBody, nowMs: now }),
+        )
+      ).status,
+    ).toBe(200);
+
+    // markSealed wants now+24h; monotonic guard must keep the nearer alarm.
+    expect(await ctx.storage.getAlarm()).toBe(early);
+    expect(early).toBeLessThan(now + EXPOSURE_REDEMPTION_CLAIM_TTL_MS);
   });
 });
 

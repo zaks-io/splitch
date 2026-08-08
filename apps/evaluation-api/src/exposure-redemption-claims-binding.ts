@@ -1,8 +1,10 @@
 import type { EvaluationApiEnv } from "./env";
 
 /**
- * Startup fail-loud for the SPL-345 claim DO binding. Called from the Worker
- * request path when constructing DurableExposureRedemptionClaimStore.
+ * Per-request fail-loud for the SPL-345 claim DO binding. Called from the
+ * Worker request path (every non-health request) when constructing
+ * DurableExposureRedemptionClaimStore — not at module load / Worker startup.
+ * `/health` does not exercise this check.
  */
 export function requiredExposureRedemptionClaimsBinding(
   binding: EvaluationApiEnv["EXPOSURE_REDEMPTION_CLAIMS"],

@@ -3,7 +3,6 @@ import { EXPOSURE_REDEMPTION_CLAIM_TTL_MS } from "./exposure-redemption-claim-co
 import {
   EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE,
   handleExposureRedemptionClaimFetch,
-  runExposureRedemptionClaimAlarm,
 } from "./exposure-redemption-do-handler";
 import {
   claimMemoryCtx,
@@ -65,61 +64,6 @@ describe("ExposureRedemptionClaim alarm sweep paging", () => {
     expect(await ctx.storage.getAlarm()).toBe(liveExpiry);
   });
 
-  it("does not wipe a seal-armed alarm when a later sweep page finds no nextExpiry", async () => {
-    const ctx = claimMemoryCtx();
-    const now = Date.now();
-    // Fill past one page with expired exposure+ticket pairs so the cursor lands
-    // among ticket: keys. A seal whose keys sort before that cursor is invisible
-    // to later pages — nextExpiry stays null and must not deleteAlarm().
-    for (let i = 0; i < 180; i += 1) {
-      const id = `exp-${String(i).padStart(4, "0")}`;
-      await ctx.storage.put(`exposure:${id}`, {
-        ticketFingerprint: `m-${String(i).padStart(4, "0")}`,
-        delivery: "sealed",
-        expiresAt: now - 1,
-      });
-      await ctx.storage.put(`ticket:m-${String(i).padStart(4, "0")}`, {
-        ownerExposureId: id,
-        delivery: "sealed",
-        expiresAt: now - 1,
-      });
-    }
-    await simulateClaimAlarm(ctx);
-    expect(ctx.listCalls[0]?.size).toBe(EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE);
-    expect(ctx.listCalls[0]?.keys.at(-1)?.startsWith("ticket:")).toBe(true);
-
-    await ctx.storage.deleteAlarm();
-    const sealNow = Date.now();
-    await handleExposureRedemptionClaimFetch(
-      ctx,
-      claimPost("/claim", {
-        exposureId: "aaa-seal",
-        ticketFingerprint: "a-seal",
-        nowMs: sealNow,
-      }),
-    );
-    expect(
-      (
-        await handleExposureRedemptionClaimFetch(
-          ctx,
-          claimPost("/markSealed", {
-            exposureId: "aaa-seal",
-            ticketFingerprint: "a-seal",
-            nowMs: sealNow,
-          }),
-        )
-      ).status,
-    ).toBe(200);
-    const sealedAlarm = sealNow + EXPOSURE_REDEMPTION_CLAIM_TTL_MS;
-    expect(await ctx.storage.getAlarm()).toBe(sealedAlarm);
-    expect(`exposure:aaa-seal` < (ctx.listCalls[0]?.keys.at(-1) ?? "")).toBe(true);
-    expect(`ticket:a-seal` < (ctx.listCalls[0]?.keys.at(-1) ?? "")).toBe(true);
-
-    await runExposureRedemptionClaimAlarm(ctx.storage);
-    expect(await ctx.storage.getAlarm()).toBe(sealedAlarm);
-    expect(await ctx.storage.get("exposure:aaa-seal")).toBeDefined();
-  });
-
   it("drains mixed-case and punctuation exposureIds under byte-order paging", async () => {
     const ctx = claimMemoryCtx();
     const now = Date.now();
@@ -151,5 +95,81 @@ describe("ExposureRedemptionClaim alarm sweep paging", () => {
     for (const id of ids) {
       expect(await ctx.storage.get(`exposure:${id}`)).toBeUndefined();
     }
+  });
+});
+
+describe("ExposureRedemptionClaim pendingExpiryFloor", () => {
+  it("arms a below-cursor seal expiry when the paged drain completes", async () => {
+    const ctx = claimMemoryCtx();
+    const now = Date.now();
+    // 180 exposure+ticket pairs (360 keys): tick 1 fills a page and leaves a
+    // continuation alarm; seal keys sort before the cursor so tick 2 never sees them.
+    for (let i = 0; i < 180; i += 1) {
+      const id = `exp-${String(i).padStart(4, "0")}`;
+      await ctx.storage.put(`exposure:${id}`, {
+        ticketFingerprint: `m-${String(i).padStart(4, "0")}`,
+        delivery: "sealed",
+        expiresAt: now - 1,
+      });
+      await ctx.storage.put(`ticket:m-${String(i).padStart(4, "0")}`, {
+        ownerExposureId: id,
+        delivery: "sealed",
+        expiresAt: now - 1,
+      });
+    }
+    await simulateClaimAlarm(ctx);
+    expect(ctx.listCalls[0]?.size).toBe(EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE);
+    const cursorKey = ctx.listCalls[0]?.keys.at(-1);
+    expect(cursorKey?.startsWith("ticket:")).toBe(true);
+    const continueAlarm = await ctx.storage.getAlarm();
+    expect(continueAlarm).not.toBeNull();
+
+    // Real interleaving: continuation alarm stays armed. markSealed must not
+    // push it later; the declined expiry is remembered for drain completion.
+    const sealNow = Date.now();
+    await handleExposureRedemptionClaimFetch(
+      ctx,
+      claimPost("/claim", {
+        exposureId: "aaa-seal",
+        ticketFingerprint: "a-seal",
+        nowMs: sealNow,
+      }),
+    );
+    expect(
+      (
+        await handleExposureRedemptionClaimFetch(
+          ctx,
+          claimPost("/markSealed", {
+            exposureId: "aaa-seal",
+            ticketFingerprint: "a-seal",
+            nowMs: sealNow,
+          }),
+        )
+      ).status,
+    ).toBe(200);
+    const sealedExpiry = sealNow + EXPOSURE_REDEMPTION_CLAIM_TTL_MS;
+    expect(await ctx.storage.getAlarm()).toBe(continueAlarm);
+    expect(`exposure:aaa-seal` < (cursorKey ?? "")).toBe(true);
+    expect(`ticket:a-seal` < (cursorKey ?? "")).toBe(true);
+
+    await simulateClaimAlarm(ctx);
+    // Drain finished: pending floor arms the seal expiry so the record is not orphaned.
+    expect(await ctx.storage.getAlarm()).toBe(sealedExpiry);
+    expect(await ctx.storage.get("exposure:aaa-seal")).toBeDefined();
+
+    // When that alarm fires after expiry, the sealed pair is collected.
+    await ctx.storage.put("exposure:aaa-seal", {
+      ticketFingerprint: "a-seal",
+      delivery: "sealed",
+      expiresAt: Date.now() - 1,
+    });
+    await ctx.storage.put("ticket:a-seal", {
+      ownerExposureId: "aaa-seal",
+      delivery: "sealed",
+      expiresAt: Date.now() - 1,
+    });
+    await simulateClaimAlarm(ctx);
+    expect(await ctx.storage.get("exposure:aaa-seal")).toBeUndefined();
+    expect(await ctx.storage.get("ticket:a-seal")).toBeUndefined();
   });
 });

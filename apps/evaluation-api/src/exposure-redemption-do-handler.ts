@@ -12,6 +12,11 @@ const EXPOSURE_KEY_PREFIX = "exposure:";
 const TICKET_KEY_PREFIX = "ticket:";
 /** Cursor for multi-tick GC; sorts before claim keys (`__` < `exposure:`). */
 const SWEEP_CURSOR_KEY = "__sweep_after";
+/**
+ * Expiry a seal/ack wanted to arm while a nearer continuation alarm was already
+ * set. Drain completion merges this floor so below-cursor records are not orphaned.
+ */
+const PENDING_EXPIRY_FLOOR_KEY = "__pending_expiry_floor";
 
 /**
  * Max keys listed per alarm tick. This is a tick-size bound, not a bound on
@@ -109,7 +114,8 @@ export async function runExposureRedemptionClaimAlarm(
   }
   // Do not deleteAlarm() when nextExpiry is null. workerd already clears the
   // alarm that invoked this handler; any alarm still set was armed during or
-  // after this tick (e.g. a concurrent markSealed between ticks) and must stay.
+  // after this tick and must stay. Declined later expiries are remembered in
+  // pendingExpiryFloor and merged when the paged drain completes.
 }
 
 class DurableClaimStorage implements ExposureRedemptionClaimStorage {
@@ -156,7 +162,7 @@ class DurableClaimStorage implements ExposureRedemptionClaimStorage {
     }
 
     if (cursor !== undefined) await this.storage.delete(SWEEP_CURSOR_KEY);
-    return nextExpiry;
+    return this.takeExpiryWithPendingFloor(nextExpiry);
   }
 
   private async persistSweepCursor(
@@ -171,13 +177,32 @@ class DurableClaimStorage implements ExposureRedemptionClaimStorage {
     } satisfies SweepCursor);
   }
 
+  /**
+   * Drain finished this tick. Merge any seal/ack expiry that could not move the
+   * continuation alarm later, then clear the floor.
+   */
+  private async takeExpiryWithPendingFloor(nextExpiry: number | null): Promise<number | null> {
+    const floor = await this.storage.get<number>(PENDING_EXPIRY_FLOOR_KEY);
+    if (floor !== undefined) await this.storage.delete(PENDING_EXPIRY_FLOOR_KEY);
+    return minExpiry(nextExpiry, floor ?? null);
+  }
+
   async setExpiryAlarm(expiresAt: number): Promise<void> {
     const existing = await this.storage.getAlarm();
     // Only move the alarm earlier (or arm when unset). Overwriting with a later
-    // time would let nearer-expiring records outlive their TTL.
+    // time would let nearer-expiring records outlive their TTL — and would push
+    // a paged-drain continuation out by a full claim TTL.
     if (existing === null || existing > expiresAt) {
       await this.storage.setAlarm(expiresAt);
+      return;
     }
+    await this.rememberPendingExpiryFloor(expiresAt);
+  }
+
+  private async rememberPendingExpiryFloor(expiresAt: number): Promise<void> {
+    const floor = await this.storage.get<number>(PENDING_EXPIRY_FLOOR_KEY);
+    const next = floor === undefined ? expiresAt : Math.min(floor, expiresAt);
+    await this.storage.put(PENDING_EXPIRY_FLOOR_KEY, next);
   }
 }
 

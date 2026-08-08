@@ -7,7 +7,7 @@ const emptyCtx = {
   passThroughOnException() {},
 } as unknown as ExecutionContext;
 
-describe("evaluationApiHandler startup binding", () => {
+describe("evaluationApiHandler per-request claims binding", () => {
   it("throws when EXPOSURE_REDEMPTION_CLAIMS is missing on a non-health request", async () => {
     const env = {
       SPLITCH_PLATFORM_TARGET: "local",
