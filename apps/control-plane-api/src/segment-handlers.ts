@@ -1,8 +1,8 @@
 import { appScope } from "@splitch/db";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
+import { makeOtherApprovalApplication } from "./approval-application";
 import { randomHex } from "./credential-cache";
-import { configStoreUnavailable } from "./experiment-errors";
 import { objectBody, pathParam } from "./handler-input";
 import {
   type MetricSegmentDeps,
@@ -12,6 +12,7 @@ import {
   segmentResponse,
 } from "./metric-segment-shared";
 import { type SegmentDependencies, segmentDependencies } from "./segment-dependencies";
+import { updateSegmentMutation } from "./segment-update";
 
 export function makeSegmentHandlers(deps: MetricSegmentDeps) {
   return {
@@ -29,20 +30,21 @@ async function listSegments(
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
   if (!(await deps.repo.identity.getApp(appId))) return appNotFound(requestId);
-  const [rows, rules] = await Promise.all([
+  const [rows, references] = await Promise.all([
     deps.repo.flags.segments.findMany(appScope(appId)),
-    deps.repo.flags.listTargetingRulesForApp(appScope(appId)),
+    deps.repo.flags.listTargetingRuleEnvironmentReferences(appScope(appId)),
   ]);
   const affectedEnvironmentIds: Record<string, string[]> = Object.fromEntries(
-    rows.map((row) => [
-      row.id,
-      [
-        ...new Set(
-          rules.filter((rule) => rule.segmentId === row.id).map((rule) => rule.environmentId),
-        ),
-      ],
-    ]),
+    rows.map((row) => [row.id, []]),
   );
+  for (const reference of references) {
+    if (!reference.segmentId) throw new Error("Segment reference query returned a null Segment");
+    const environmentIds = affectedEnvironmentIds[reference.segmentId];
+    if (!environmentIds) {
+      throw new Error(`Targeting Rule references missing Segment ${reference.segmentId}`);
+    }
+    environmentIds.push(reference.environmentId);
+  }
   return Response.json({ items: rows.map(segmentResponse), affectedEnvironmentIds });
 }
 
@@ -88,20 +90,14 @@ async function updateSegment(
   const writeError = await requireWritableApp(deps, appId, args.principal, args.requestId);
   if (writeError) return writeError;
 
-  const body = objectBody(args.input);
-  const dependencies = await segmentDependencies(deps.repo, appId, segment.id);
-  if (dependencies.flagConfigurations.length > 0 && !deps.configStore) {
-    return configStoreUnavailable(args.requestId);
-  }
-  const updated = await deps.repo.flags.updateSegment(appScope(appId), segment.id, {
-    ...(body.name !== undefined ? { name: body.name as string } : {}),
-    ...(body.description !== undefined ? { description: body.description as string } : {}),
-    ...(body.conditions !== undefined ? { conditions: JSON.stringify(body.conditions) } : {}),
-    updatedAt: nowIso(deps),
+  return updateSegmentMutation(deps, {
+    appId,
+    segment,
+    body: objectBody(args.input),
+    principal: args.principal,
+    requestId: args.requestId,
+    applyOther: makeOtherApprovalApplication(deps),
   });
-  if (!updated) return segmentNotFound(args.requestId);
-  await republishFlagConfigurations(deps, appId, dependencies);
-  return Response.json(segmentResponse(updated));
 }
 
 async function deleteSegment(
@@ -122,26 +118,6 @@ async function deleteSegment(
 
   await deps.repo.flags.removeSegment(appScope(appId), segment.id);
   return Response.json({ deleted: true });
-}
-
-async function republishFlagConfigurations(
-  deps: MetricSegmentDeps,
-  appId: string,
-  dependencies: SegmentDependencies,
-): Promise<void> {
-  if (dependencies.flagConfigurations.length === 0) return;
-  const configStore = deps.configStore;
-  if (!configStore) throw new Error("Segment republish requires Config Store access");
-  await Promise.all(
-    dependencies.flagConfigurations.map(async (dependency) => {
-      const result = await configStore.writerFor(appId, dependency.environmentId).resyncFlagConfig({
-        appId,
-        environmentId: dependency.environmentId,
-        flagId: dependency.flagId,
-      });
-      if (!result.ok) throw new Error("Segment dependent Flag Configuration no longer exists");
-    }),
-  );
 }
 
 function segmentNotEmpty(

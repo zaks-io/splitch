@@ -40,7 +40,11 @@ export function FlagTargetingSummary({ view }: { view: FlagDetailView }) {
           <TableRow data-targeting-rule={rule.id} key={rule.id}>
             <TableCell className="font-mono">{rule.priority}</TableCell>
             <TableCell className="text-muted-foreground text-xs leading-5">
-              {rule.conditions.map((c) => `${c.attribute} ${c.operator} ${c.value}`).join(" AND ")}
+              {[
+                ...(rule.segmentName ? [`Segment ${rule.segmentName}`] : []),
+                ...rule.segmentConditions.map((c) => `${c.attribute} ${c.operator} ${c.value}`),
+                ...rule.conditions.map((c) => `${c.attribute} ${c.operator} ${c.value}`),
+              ].join(" AND ")}
             </TableCell>
             <TableCell className="font-mono">{rule.variantName}</TableCell>
             <TableCell className="text-right text-muted-foreground">

@@ -188,6 +188,7 @@ export async function approvalTargetVersion(
      */
     absentVariant?: { flagId: string; name: string };
     experiment?: Record<string, unknown>;
+    segment?: Record<string, unknown>;
   },
 ): Promise<`sha256:${string}`> {
   if (target.type === "flag_configuration") {
@@ -226,6 +227,21 @@ export async function approvalTargetVersion(
         contexts,
         override?.renamedFrom,
       ),
+    });
+  }
+
+  if (target.type === "segment") {
+    const segment = await repo.flags.getSegment(appScope(appId), target.id);
+    if (!segment) return absentTargetVersion(target);
+    return canonicalHash({
+      segment: override?.segment ?? {
+        id: segment.id,
+        appId: segment.appId,
+        name: segment.name,
+        description: segment.description,
+        conditions: JSON.parse(segment.conditions) as unknown,
+      },
+      policy: await currentPolicyProjection(repo, appId, contexts),
     });
   }
 

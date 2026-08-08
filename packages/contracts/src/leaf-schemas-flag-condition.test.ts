@@ -147,9 +147,8 @@ describe("SegmentSchema", () => {
     expect(s.conditions).toHaveLength(1);
   });
 
-  it("accepts empty conditions (Segments may have zero conditions)", () => {
-    const s = SegmentSchema.parse({ ...validSegment, conditions: [] });
-    expect(s.conditions).toHaveLength(0);
+  it("rejects empty conditions", () => {
+    expect(SegmentSchema.safeParse({ ...validSegment, conditions: [] }).success).toBe(false);
   });
 
   it("accepts optional description", () => {

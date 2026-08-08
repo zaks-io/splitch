@@ -23,7 +23,7 @@ import type {
   Snapshot,
 } from "./config-store-types";
 import { parseStoredRollout } from "./flag-config-rollout";
-import { resolveTargetingRules } from "./targeting-rule-resolution";
+import { requireResolvedTargetingRules, resolveTargetingRules } from "./targeting-rule-resolution";
 
 export type {
   ApplyApprovedFlagConfigInput,
@@ -86,26 +86,16 @@ async function buildSnapshot(
   flagId: string,
   experiment: Awaited<ReturnType<Repository["experiments"]["getExperiment"]>>,
 ): Promise<Snapshot | null> {
-  const flag = await repo.flags.getFlag(appScope(scope.appId), flagId);
-  const config = await repo.flags.getFlagConfig(scope, flagId);
-  if (!flag || !config) return null;
-
-  const variants = (await repo.flags.listVariants(appScope(scope.appId), flagId)).map((v) => ({
-    id: v.id,
-    name: v.name,
-    value: JSON.parse(v.value) as Variant["value"],
-    ...(v.description ? { description: v.description } : {}),
-  }));
+  const inputs = await loadFlagConfigWriteContext(repo, scope, flagId);
+  if (!inputs) return null;
+  const { flag, config, variants } = inputs;
 
   const authoringTargetingRules = (await repo.flags.listTargetingRules(scope, flagId)).map(
     toTargetingRule,
   );
-  const resolved = await resolveTargetingRules(repo, scope.appId, authoringTargetingRules);
-  if (!resolved.ok) {
-    throw new Error(
-      `config-store: Targeting Rule references missing Segment(s): ${resolved.missingSegmentIds.join(", ")}`,
-    );
-  }
+  const resolved = requireResolvedTargetingRules(
+    await resolveTargetingRules(repo, scope.appId, authoringTargetingRules),
+  );
   const run = experiment?.liveRunId
     ? await repo.experiments.getRun(scope, experiment.liveRunId)
     : null;
@@ -123,7 +113,7 @@ async function buildSnapshot(
       defaultVariantId: requiredString(config.defaultVariantId, "defaultVariantId"),
       variants,
       availableVariantNames: JSON.parse(config.availableVariantNames) as string[],
-      targetingRules: resolved.rules,
+      targetingRules: resolved,
       rollout: parseStoredRollout(config.rollout),
       updatedAt: config.updatedAt,
     }),
@@ -134,6 +124,25 @@ async function buildSnapshot(
     run: runConfig(run),
     version: config.version,
   };
+}
+
+export async function loadFlagConfigWriteContext(
+  repo: Repository,
+  scope: EnvScope,
+  flagId: string,
+) {
+  const [flag, config] = await Promise.all([
+    repo.flags.getFlag(appScope(scope.appId), flagId),
+    repo.flags.getFlagConfig(scope, flagId),
+  ]);
+  if (!flag || !config) return null;
+  const variants = (await repo.flags.listVariants(appScope(scope.appId), flagId)).map((v) => ({
+    id: v.id,
+    name: v.name,
+    value: JSON.parse(v.value) as Variant["value"],
+    ...(v.description ? { description: v.description } : {}),
+  }));
+  return { flag, config, variants };
 }
 
 export async function writeSnapshotAndBroadcast(

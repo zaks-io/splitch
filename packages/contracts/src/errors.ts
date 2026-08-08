@@ -3,6 +3,7 @@ import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-iden
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
 import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
+import { InternalServerErrorDetailsSchema } from "./internal-error-details";
 import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
 import { SegmentDependenciesSchema, SegmentNotFoundDetailsSchema } from "./segment-error-details";
 
@@ -340,7 +341,7 @@ const errorMembers = [
   // Optional `fault` lets a 5xx name the broken seam without inventing a
   // recommendedAction token. `{}` remains valid for call sites that only have a
   // message (see flag-definition-errors).
-  member("INTERNAL_SERVER_ERROR", z.object({ fault: z.string().optional() }).strict()),
+  member("INTERNAL_SERVER_ERROR", InternalServerErrorDetailsSchema),
 ] as const;
 
 export const ErrorResponseSchema = z.discriminatedUnion("code", errorMembers);

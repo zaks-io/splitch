@@ -42,20 +42,29 @@ export const loadControlPanelFlagDetail = createServerFn({ method: "GET" })
     async ({ data }): Promise<ControlPlaneOperationResult<FlagDetailView | FlagDetailNotFound>> => {
       const authorized = await authorizedFlagsClient(data.environmentId);
       if (!authorized.ok) return authorized.result;
+      const detail = await readFlagDetail(authorized.client, data, data.flagKey);
+      if (!detail.ok) return detail;
+      if (isFlagDetailNotFound(detail.data)) {
+        return { ok: true, status: detail.status, data: detail.data };
+      }
+      if (detail.data.configuration === null) {
+        return {
+          ok: true,
+          status: detail.status,
+          data: flagDetailView(detail.data, data.env, {
+            items: [],
+            affectedEnvironmentIds: {},
+          }),
+        };
+      }
       const segments = await authorizedSegmentsClient(data.environmentId);
       if (!segments.ok) return segments.result;
-      const [detail, segmentList] = await Promise.all([
-        readFlagDetail(authorized.client, data, data.flagKey),
-        segments.client.list({ appId: data.appId }),
-      ]);
-      if (!detail.ok) return detail;
+      const segmentList = await segments.client.list({ appId: data.appId });
       if (!segmentList.ok) return segmentList;
       return {
         ok: true,
         status: detail.status,
-        data: isFlagDetailNotFound(detail.data)
-          ? detail.data
-          : flagDetailView(detail.data, data.env, segmentList.data),
+        data: flagDetailView(detail.data, data.env, segmentList.data),
       };
     },
   );

@@ -78,6 +78,7 @@ export function FlagTargetingRulesEditor({
                 <TableCell className="text-muted-foreground text-xs leading-5">
                   {[
                     ...(rule.segmentName ? [`Segment ${rule.segmentName}`] : []),
+                    ...rule.segmentConditions.map((c) => `${c.attribute} ${c.operator} ${c.value}`),
                     ...rule.conditions.map((c) => `${c.attribute} ${c.operator} ${c.value}`),
                   ].join(" AND ")}
                 </TableCell>

@@ -134,7 +134,7 @@ describe("TargetingRuleSchema", () => {
     );
   });
 
-  it("keeps Segment references out of resolved rules", () => {
+  it("keeps Segment references and empty Conditions out of resolved rules", () => {
     expect(
       ResolvedTargetingRuleSchema.safeParse({
         ...validTargetingRule,
@@ -143,7 +143,7 @@ describe("TargetingRuleSchema", () => {
     ).toBe(false);
     expect(
       ResolvedTargetingRuleSchema.safeParse({ ...validTargetingRule, conditions: [] }).success,
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 

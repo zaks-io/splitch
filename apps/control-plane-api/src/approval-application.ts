@@ -11,6 +11,7 @@ import {
 } from "./flag-definition-errors";
 import { resyncFlagSnapshots } from "./flag-definition-handler-utils";
 import type { RunSnapshotDelivery } from "./run-snapshot";
+import { applyApprovedSegmentUpdate } from "./segment-update";
 
 export interface ApprovalApplicationDeps {
   repo: Repository;
@@ -21,17 +22,13 @@ export interface ApprovalApplicationDeps {
 
 export function makeOtherApprovalApplication(deps: ApprovalApplicationDeps) {
   return async (request: ApprovalRequest, commit: ApprovalCommit): Promise<ApplicationOutcome> => {
-    if (request.operation === "flag_variants_update") {
-      return applyVariant(deps, request, commit);
-    }
-    if (request.operation === "flag_variants_create") {
-      return applyVariantCreate(deps, request, commit);
-    }
-    if (request.operation === "flag_variants_delete") {
-      return applyVariantDelete(deps, request, commit);
-    }
+    const variant = await applyVariantOperation(deps, request, commit);
+    if (variant) return variant;
     if (request.operation === "flags_delete") {
       return applyFlagDelete(deps, request, commit);
+    }
+    if (request.operation === "segments_update") {
+      return applySegmentUpdate(deps, request, commit);
     }
     if (request.operation === "experiments_start") {
       return applyExperimentStart(deps, request, commit);
@@ -40,6 +37,55 @@ export function makeOtherApprovalApplication(deps: ApprovalApplicationDeps) {
       ok: false,
       error: { code: "INTERNAL_SERVER_ERROR", details: {} },
     };
+  };
+}
+
+async function applyVariantOperation(
+  deps: ApprovalApplicationDeps,
+  request: ApprovalRequest,
+  commit: ApprovalCommit,
+): Promise<ApplicationOutcome | null> {
+  if (request.operation === "flag_variants_update") return applyVariant(deps, request, commit);
+  if (request.operation === "flag_variants_create")
+    return applyVariantCreate(deps, request, commit);
+  if (request.operation === "flag_variants_delete")
+    return applyVariantDelete(deps, request, commit);
+  return null;
+}
+
+async function applySegmentUpdate(
+  deps: ApprovalApplicationDeps,
+  request: ApprovalRequest,
+  commit: ApprovalCommit,
+): Promise<ApplicationOutcome> {
+  const segment = await deps.repo.flags.getSegment(appScope(request.appId), request.target.id);
+  if (!segment) {
+    return { ok: false, error: { code: "SEGMENT_NOT_FOUND", details: {} } };
+  }
+  const result = await applyApprovedSegmentUpdate(
+    deps,
+    request.appId,
+    segment,
+    request.diff.proposed,
+    commit,
+  );
+  if (result.ok) return { ok: true };
+  if ("notApplied" in result) return { ok: false, notApplied: true };
+  if ("republishFailure" in result) {
+    return {
+      ok: false,
+      error: {
+        code: "INTERNAL_SERVER_ERROR",
+        details: { ...result.republishFailure },
+      },
+    };
+  }
+  return {
+    ok: false,
+    error: {
+      code: "VALIDATION_ERROR",
+      details: { field: "diff.proposed", reason: "MALFORMED_APPROVAL_PROPOSAL" },
+    },
   };
 }
 

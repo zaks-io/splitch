@@ -125,9 +125,7 @@ describe("Targeting Rule edit input", () => {
         edit: {
           kind: "add",
           ruleId: "rule_1",
-          attribute: "plan",
-          operator: "eq",
-          value: "pro",
+          condition: { attribute: "plan", operator: "eq", value: "pro" },
           variantId: "var_treatment",
         },
         idempotencyKey: "key_1",
@@ -147,9 +145,7 @@ describe("Targeting Rule edit input", () => {
         edit: {
           kind: "add",
           ruleId: "rule_1",
-          attribute: "plan",
-          operator: "eq",
-          value: "pro",
+          condition: { attribute: "plan", operator: "eq", value: "pro" },
           variantId: "var_treatment",
           percentageRollout: { percentage: 50, salt: "attacker-chosen" },
         },

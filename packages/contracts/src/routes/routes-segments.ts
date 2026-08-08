@@ -73,8 +73,15 @@ export const segmentRoutes = [
     response: SegmentSchema,
     auth: AUTH,
     rateLimit: RATE,
-    idempotency: "none",
-    errors: ["SEGMENT_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
+    idempotency: "optional",
+    errors: [
+      "SEGMENT_NOT_FOUND",
+      "FORBIDDEN",
+      "VALIDATION_ERROR",
+      "APPROVAL_REVIEW_REQUIRED",
+      "APPROVAL_REVIEW_FORBIDDEN",
+      "IDEMPOTENCY_KEY_CONFLICT",
+    ],
   }),
   defineApiRoute({
     operationId: "segments_delete",

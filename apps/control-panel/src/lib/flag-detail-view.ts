@@ -34,6 +34,7 @@ type TargetingRuleView = {
   /** Catalog name of the served Variant, or the raw id if it left the catalog. */
   variantName: string;
   conditions: Array<{ attribute: string; operator: string; value: string }>;
+  segmentConditions: Array<{ attribute: string; operator: string; value: string }>;
   rolloutPercentage: number | null;
   segmentId: string | null;
   segmentName: string | null;
@@ -106,19 +107,21 @@ export function flagDetailView(
     targetingRules: (config?.targetingRules ?? [])
       .slice()
       .sort((a, b) => a.priority - b.priority)
-      .map((rule) => ({
-        id: rule.id,
-        priority: rule.priority,
-        variantName: variantName(catalog, rule.variantId),
-        conditions: rule.conditions.map((condition) => ({
-          attribute: condition.attribute,
-          operator: condition.operator,
-          value: JSON.stringify(condition.value),
-        })),
-        rolloutPercentage: rule.percentageRollout?.percentage ?? null,
-        segmentId: rule.segmentId ?? null,
-        segmentName: rule.segmentId ? segmentName(segmentList.items, rule.segmentId) : null,
-      })),
+      .map((rule) => {
+        const segment = rule.segmentId
+          ? referencedSegment(segmentList.items, rule.segmentId)
+          : null;
+        return {
+          id: rule.id,
+          priority: rule.priority,
+          variantName: variantName(catalog, rule.variantId),
+          conditions: displayConditions(rule.conditions),
+          segmentConditions: displayConditions(segment?.conditions ?? []),
+          rolloutPercentage: rule.percentageRollout?.percentage ?? null,
+          segmentId: rule.segmentId ?? null,
+          segmentName: segment?.name ?? null,
+        };
+      }),
     segments: segmentList.items.map((segment) => ({
       id: segment.id,
       name: segment.name,
@@ -131,14 +134,26 @@ export function flagDetailView(
 
 function affectedEnvironments(list: PanelSegmentsListOutput, segmentId: string): string[] {
   const environmentIds = list.affectedEnvironmentIds[segmentId];
-  if (!environmentIds) throw new Error("Segment dependency projection is incomplete");
+  if (!environmentIds) {
+    throw new Error(`Segment dependency projection is incomplete: ${segmentId}`);
+  }
   return environmentIds;
 }
 
-function segmentName(segments: Segment[], segmentId: string): string {
+function referencedSegment(segments: Segment[], segmentId: string): Segment {
   const segment = segments.find((candidate) => candidate.id === segmentId);
-  if (!segment) throw new Error("Flag Configuration references an unavailable Segment");
-  return segment.name;
+  if (!segment) {
+    throw new Error(`Flag Configuration references an unavailable Segment: ${segmentId}`);
+  }
+  return segment;
+}
+
+function displayConditions(conditions: Segment["conditions"]) {
+  return conditions.map((condition) => ({
+    attribute: condition.attribute,
+    operator: condition.operator,
+    value: JSON.stringify(condition.value),
+  }));
 }
 
 /**

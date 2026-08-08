@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   experiments,
   flagConfigs,
@@ -9,8 +9,10 @@ import {
   variants,
 } from "../schema/index";
 import {
+  appliedReviewQueries,
   appliedRequestUpdate,
   appliedReviewInsert,
+  approvalReviewLanded,
   approvalPendingCondition,
 } from "./approval-atomic";
 import type { ApprovalCommit } from "./approval-types";
@@ -179,17 +181,45 @@ export function makeFlagRepo(db: Db) {
         .where(and(eq(targetingRules.appId, scope.appId), eq(targetingRules.segmentId, segmentId)));
     },
 
-    listTargetingRulesForApp(scope: TenantScope) {
-      return db.select().from(targetingRules).where(eq(targetingRules.appId, scope.appId));
+    listTargetingRuleEnvironmentReferences(scope: TenantScope) {
+      return db
+        .select({
+          segmentId: targetingRules.segmentId,
+          environmentId: targetingRules.environmentId,
+        })
+        .from(targetingRules)
+        .where(and(eq(targetingRules.appId, scope.appId), isNotNull(targetingRules.segmentId)))
+        .groupBy(targetingRules.segmentId, targetingRules.environmentId)
+        .orderBy(asc(targetingRules.segmentId), asc(targetingRules.environmentId));
     },
 
-    updateSegment(
+    async updateSegment(
       scope: TenantScope,
       segmentId: string,
       patch: Partial<
         Pick<typeof segments.$inferInsert, "name" | "description" | "conditions" | "updatedAt">
       >,
+      approval?: ApprovalCommit,
     ): Promise<typeof segments.$inferSelect | null> {
+      if (approval) {
+        const mutation = db
+          .update(segments)
+          .set(patch)
+          .where(
+            and(
+              eq(segments.appId, scope.appId),
+              eq(segments.id, segmentId),
+              approvalPendingCondition(db, scope, approval),
+            ),
+          )
+          .returning({ id: segments.id });
+        await db.batch([
+          mutation,
+          ...appliedReviewQueries(db, scope, approval),
+        ] as unknown as Parameters<Db["batch"]>[0]);
+        if (!(await approvalReviewLanded(db, scope, approval))) return null;
+        return segmentsTable.findOne(scope, eq(segments.id, segmentId));
+      }
       return segmentsTable
         .update(scope, patch, eq(segments.id, segmentId))
         .then((rows) => rows[0] ?? null);

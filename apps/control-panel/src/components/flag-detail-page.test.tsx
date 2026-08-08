@@ -131,6 +131,26 @@ describe("Flag detail page", () => {
 
     expect(html).not.toContain("salt");
   });
+
+  it("shows Segment Conditions inline in editable and Experiment-owned rules", () => {
+    const firstRule = view().targetingRules[0];
+    if (!firstRule) throw new Error("Flag detail fixture has no Targeting Rule");
+    const targetingRules = [
+      {
+        ...firstRule,
+        segmentId: "segment_paid",
+        segmentName: "Paid plan",
+        segmentConditions: [{ attribute: "tier", operator: "eq", value: '"paid"' }],
+      },
+    ];
+
+    for (const controllingExperiment of [null, { id: "exp_1", name: "Checkout Copy Dev" }]) {
+      const html = render(view({ targetingRules, controllingExperiment }));
+      expect(html).toContain(
+        "Segment Paid plan AND tier eq &quot;paid&quot; AND plan eq &quot;pro&quot;",
+      );
+    }
+  });
 });
 
 function render(next: FlagDetailView): string {
@@ -185,6 +205,7 @@ function view(overrides: Partial<FlagDetailView> = {}): FlagDetailView {
         priority: 0,
         variantName: "treatment",
         conditions: [{ attribute: "plan", operator: "eq", value: '"pro"' }],
+        segmentConditions: [],
         rolloutPercentage: 25,
         segmentId: null,
         segmentName: null,

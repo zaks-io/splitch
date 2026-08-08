@@ -11,6 +11,23 @@ export type TargetingRuleResolution =
   | { ok: true; rules: ResolvedTargetingRule[] }
   | { ok: false; missingSegmentIds: string[] };
 
+export class SegmentNotFoundError extends Error {
+  readonly missingSegmentIds: string[];
+
+  constructor(missingSegmentIds: string[]) {
+    super(`Targeting Rule references missing Segment(s): ${missingSegmentIds.join(", ")}`);
+    this.name = "SegmentNotFoundError";
+    this.missingSegmentIds = missingSegmentIds;
+  }
+}
+
+export function requireResolvedTargetingRules(
+  resolution: TargetingRuleResolution,
+): ResolvedTargetingRule[] {
+  if (!resolution.ok) throw new SegmentNotFoundError(resolution.missingSegmentIds);
+  return resolution.rules;
+}
+
 /** Resolve authoring Segment references once, before any rule reaches KV or a Run. */
 export async function resolveTargetingRules(
   repo: Repository,

@@ -29,6 +29,9 @@ export function matchesConditions(
   context: EvaluationContext,
   options: ConditionMatchOptions = {},
 ) {
+  if (conditions.length === 0) {
+    throw new ConditionMatchError("resolved Targeting Rule has no Conditions");
+  }
   return conditions.every((condition) => matchesCondition(condition, context, options));
 }
 

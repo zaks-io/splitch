@@ -17,6 +17,15 @@ type FlagConfigWriteResult = Awaited<ReturnType<ConfigStoreWriter["writeFlagConf
 type PromotionResult = Awaited<ReturnType<ConfigStoreWriter["promoteFlagConfig"]>>;
 export type PromotionSelect = Parameters<ConfigStoreWriter["promoteFlagConfig"]>[0]["select"];
 
+export function renderFlagConfigReadFailure(
+  result: Extract<Awaited<ReturnType<ConfigStoreWriter["readFlagConfig"]>>, { ok: false }>,
+  requestId: string,
+): Response {
+  return result.reason === "SEGMENT_NOT_FOUND"
+    ? flagSegmentNotFound(result.missingSegmentIds, requestId)
+    : flagConfigNotFound(requestId);
+}
+
 export function flagConfigPatchInput(
   appId: string,
   environmentId: string,

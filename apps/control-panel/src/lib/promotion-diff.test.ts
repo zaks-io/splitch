@@ -24,6 +24,7 @@ describe("Promotion diff", () => {
           priority: 1,
           variantName: "holdout",
           conditions: [{ attribute: "country", operator: "eq", value: '"US"' }],
+          segmentConditions: [],
           rolloutPercentage: null,
           segmentId: null,
           segmentName: null,

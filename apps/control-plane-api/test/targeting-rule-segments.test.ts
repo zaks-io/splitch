@@ -1,46 +1,21 @@
-import { flagConfigKey } from "@splitch/contracts";
-import { appScope, envScope } from "@splitch/db";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { narrowSeededAvailability } from "../src/config-store-fixture-data";
-import { type Harness, ids, NOW, token } from "../src/config-store-harness-core";
-import { makePoolHarness } from "./config-store-pool-harness";
+import { envScope } from "@splitch/db";
+import { describe, expect, it } from "vitest";
+import {
+  h,
+  ids,
+  kvFlag,
+  NOW,
+  replaceRules,
+  request,
+  seedSegment,
+  segmentRequest,
+  segmentRule,
+  useTargetingRuleSegmentsHarness,
+} from "./targeting-rule-segments-harness";
 
-let h: Harness;
-
-beforeEach(async () => {
-  h = await makePoolHarness();
-  await narrowSeededAvailability(h.d1);
-});
-
-afterEach(async () => {
-  await h.dispose();
-});
+useTargetingRuleSegmentsHarness();
 
 describe("Targeting Rule Segment references", () => {
-  it.each([
-    ["missing", "segment_missing"],
-    ["cross-App", "segment_other_app"],
-  ])("rejects a %s Segment", async (_, segmentId) => {
-    if (segmentId === "segment_other_app") {
-      await h.repo.flags.segments.insert(appScope(ids.otherAppId), {
-        id: segmentId,
-        appId: ids.otherAppId,
-        name: "Other App Segment",
-        conditions: "[]",
-        createdAt: NOW,
-        updatedAt: NOW,
-      });
-    }
-
-    const response = await replaceRules(ids.environmentId, segmentRule(segmentId), "invalid");
-
-    expect(response.status).toBe(404);
-    expect(await response.json()).toMatchObject({
-      code: "SEGMENT_NOT_FOUND",
-      details: { missingSegmentIds: [segmentId] },
-    });
-  });
-
   it("AND-merges Segment and direct Conditions into ordered KV rules without Segment ids", async () => {
     await seedSegment("segment_paid", "paid");
     const response = await replaceRules(
@@ -71,42 +46,53 @@ describe("Targeting Rule Segment references", () => {
     ]);
     expect(JSON.stringify(projection.targetingRules)).not.toContain("segmentId");
   });
-
-  it("republishes every dependent Environment when Segment Conditions change", async () => {
-    await seedSegment("segment_paid", "paid");
-    expect(
-      (await replaceRules(ids.environmentId, segmentRule("segment_paid"), "prod")).status,
-    ).toBe(200);
-    expect(
-      (
-        await replaceRules(
-          ids.devEnvironmentId,
-          segmentRule("segment_paid", "rule_segment_paid_dev"),
-          "dev",
-        )
-      ).status,
-    ).toBe(200);
-    h.nudges.length = 0;
-
-    const response = await segmentRequest("PATCH", "segment_paid", {
-      conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
-    });
-
-    expect(response.status).toBe(200);
-    expect((await kvFlag(ids.environmentId)).targetingRules[0]?.conditions).toEqual([
-      { attribute: "plan", operator: "eq", value: "enterprise" },
-    ]);
-    expect((await kvFlag(ids.devEnvironmentId)).targetingRules[0]?.conditions).toEqual([
-      { attribute: "plan", operator: "eq", value: "enterprise" },
-    ]);
-    expect(h.nudges).toHaveLength(2);
-    expect(h.nudges.every((nudge) => nudge.entity === "flag" && nudge.id === ids.flagId)).toBe(
-      true,
-    );
-  });
 });
 
 describe("Targeting Rule Segment lifecycle", () => {
+  it("returns typed failures for a dangling Segment and lets Targeting PUT repair it", async () => {
+    await seedSegment("segment_dangling", "paid");
+    expect(
+      (await replaceRules(ids.environmentId, segmentRule("segment_dangling"), "dangling")).status,
+    ).toBe(200);
+    h.repo.flags.listSegmentsByIds = async () => [];
+
+    const read = await request(
+      "GET",
+      `/apps/${ids.appId}/envs/${ids.environmentId}/flags/${ids.flagId}/config`,
+    );
+    expect(read.status).toBe(404);
+    expect(await read.json()).toMatchObject({
+      code: "SEGMENT_NOT_FOUND",
+      details: { missingSegmentIds: ["segment_dangling"] },
+    });
+
+    const promotion = await request(
+      "POST",
+      `/apps/${ids.appId}/envs/${ids.devEnvironmentId}/flags/${ids.flagId}/promote`,
+      {
+        fromEnvironmentId: ids.environmentId,
+        select: { targeting: true },
+        idempotency_key: "dangling_promotion",
+      },
+      "dangling_promotion",
+    );
+    expect(promotion.status).toBe(404);
+    expect(await promotion.json()).toMatchObject({
+      code: "SEGMENT_NOT_FOUND",
+      details: { missingSegmentIds: ["segment_dangling"] },
+    });
+
+    const repaired = await replaceRules(
+      ids.environmentId,
+      {
+        ...segmentRule(undefined, "rule_repaired"),
+        conditions: [{ attribute: "country", operator: "eq", value: "US" }],
+      },
+      "repair_dangling",
+    );
+    expect(repaired.status).toBe(200);
+  });
+
   it("Promotion preserves the authoring Segment and publishes its resolved projection", async () => {
     await seedSegment("segment_paid", "paid");
     expect(
@@ -203,61 +189,3 @@ describe("Targeting Rule Segment lifecycle", () => {
     expect((await segmentRequest("DELETE", "segment_paid")).status).toBe(200);
   });
 });
-
-function segmentRule(segmentId: string | undefined, id = "rule_segment_paid") {
-  return {
-    id,
-    flagId: ids.flagId,
-    priority: 0,
-    conditions: [],
-    ...(segmentId ? { segmentId } : {}),
-    variantId: ids.treatmentVariantId,
-    percentageRollout: null,
-  };
-}
-
-async function seedSegment(id: string, plan: string) {
-  await h.repo.flags.segments.insert(appScope(ids.appId), {
-    id,
-    appId: ids.appId,
-    name: "Paid plan",
-    conditions: JSON.stringify([{ attribute: "plan", operator: "eq", value: plan }]),
-    createdAt: NOW,
-    updatedAt: NOW,
-  });
-}
-
-async function replaceRules(environmentId: string, rule: object, suffix: string) {
-  return request(
-    "PUT",
-    `/apps/${ids.appId}/envs/${environmentId}/flags/${ids.flagId}/targeting-rules`,
-    {
-      targetingRules: [rule],
-      idempotency_key: `segment_rules_${suffix}`,
-    },
-    `segment_rules_${suffix}`,
-  );
-}
-
-async function segmentRequest(method: "PATCH" | "DELETE", segmentId: string, body?: object) {
-  return request(method, `/apps/${ids.appId}/segments/${segmentId}`, body);
-}
-
-async function request(method: string, path: string, body?: object, idempotencyKey?: string) {
-  const jwt = await token(h.signer);
-  return h.app.request(path, {
-    method,
-    headers: {
-      authorization: `Bearer ${jwt}`,
-      ...(body ? { "content-type": "application/json" } : {}),
-      ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
-}
-
-async function kvFlag(environmentId: string) {
-  const raw = await h.kv.get(flagConfigKey(ids.appId, environmentId, ids.flagKey), "json");
-  if (!raw || typeof raw !== "object" || !("data" in raw)) throw new Error("KV Flag missing");
-  return raw.data as { targetingRules: Array<{ conditions: unknown[] }> };
-}

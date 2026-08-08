@@ -65,6 +65,7 @@ export function stagingView(overrides: Partial<FlagDetailView> = {}): FlagDetail
         priority: 0,
         variantName: "beta",
         conditions: [{ attribute: "plan", operator: "eq", value: '"pro"' }],
+        segmentConditions: [],
         rolloutPercentage: 25,
         segmentId: null,
         segmentName: null,

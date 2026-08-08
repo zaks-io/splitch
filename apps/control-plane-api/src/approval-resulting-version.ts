@@ -33,6 +33,11 @@ export async function resultingVersionFor(
   if (operation === "flags_delete") {
     return absentTargetVersion({ type: "flag", id: row.targetId });
   }
+  if (operation === "segments_update") {
+    return approvalTargetVersion(repo, row.appId, { type: "segment", id: row.targetId }, contexts, {
+      segment: ApprovalDiffSchema.parse(JSON.parse(row.diff)).proposed,
+    });
+  }
   // An empty context list is a malformed row, not a missing Experiment. An
   // `envScope(appId, "")` would match nothing and report the two as one.
   const environmentId = contexts[0]?.environmentId;

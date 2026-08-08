@@ -112,7 +112,7 @@ export type TargetingRule = z.infer<typeof TargetingRuleSchema>;
 export const ResolvedTargetingRuleSchema = z
   .object({
     ...TargetingRuleFields,
-    conditions: z.array(ConditionSchema),
+    conditions: z.array(ConditionSchema).min(1),
   })
   .strict();
 export type ResolvedTargetingRule = z.infer<typeof ResolvedTargetingRuleSchema>;
@@ -151,7 +151,7 @@ export const SegmentSchema = z.object({
   appId: z.string(),
   name: z.string(),
   // AND-combined; Entity "in Segment" iff all conditions match
-  conditions: z.array(ConditionSchema),
+  conditions: z.array(ConditionSchema).min(1),
   description: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),

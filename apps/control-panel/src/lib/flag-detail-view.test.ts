@@ -71,6 +71,41 @@ describe("Flag detail view model", () => {
     ]);
   });
 
+  it("shows referenced Segment Conditions beside direct Conditions", () => {
+    const data = detail({
+      ...devConfig(),
+      targetingRules: [{ ...rule("rule_segment", 0, "var_enabled"), segmentId: "segment_paid" }],
+    });
+    const view = buildFlagDetailView(data, "dev", {
+      items: [
+        {
+          id: "segment_paid",
+          appId: "app_checkout",
+          name: "Paid plan",
+          conditions: [{ attribute: "tier", operator: "eq", value: "paid" }],
+          createdAt: "2026-08-07T00:00:00.000Z",
+          updatedAt: "2026-08-07T00:00:00.000Z",
+        },
+      ],
+      affectedEnvironmentIds: { segment_paid: ["env_dev"] },
+    });
+
+    expect(view.targetingRules[0]).toMatchObject({
+      segmentName: "Paid plan",
+      segmentConditions: [{ attribute: "tier", operator: "eq", value: '"paid"' }],
+      conditions: [{ attribute: "plan", operator: "eq", value: '"pro"' }],
+    });
+  });
+
+  it("names the offending Segment id when Segment detail data is inconsistent", () => {
+    const data = detail({
+      ...devConfig(),
+      targetingRules: [{ ...rule("rule_segment", 0, "var_enabled"), segmentId: "segment_missing" }],
+    });
+
+    expect(() => buildFlagDetailView(data, "dev", NO_SEGMENTS)).toThrow("segment_missing");
+  });
+
   it("reports the controlling Experiment exactly as the Worker did, never inferring one", () => {
     const controlled = flagDetailView(
       detail({ ...devConfig(), experiment: { id: "exp_1", name: "Checkout Copy Dev" } }),
