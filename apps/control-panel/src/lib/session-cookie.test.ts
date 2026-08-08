@@ -1,21 +1,32 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  CONTROL_PANEL_DELEGATION_HEADER,
+  CONTROL_PANEL_ENVIRONMENT_HEADER,
+} from "@splitch/control-plane-sdk/control-panel-identity";
 import { describe, expect, expectTypeOf, it } from "vitest";
+import { setCookieHeaderWrites } from "./cookie-header-write-test-helpers";
 import { createOAuthState, OAUTH_STATE_COOKIE_NAME } from "./oauth-state";
+import { exportedPostServerFns } from "./server-fn-surface-test-helpers";
 import { createSession, SESSION_COOKIE_NAME } from "./session";
 import {
   PANEL_COOKIE_ATTRIBUTES,
-  serializeHttpOnlyCookie,
   type SerializedHttpOnlyCookie,
+  serializeHttpOnlyCookie,
 } from "./session-cookie";
-import {
-  exportedPostServerFns,
-  setCookieHeaderWrites,
-} from "./session-cookie-source-guards.test-helper";
 import { MemoryKv, NOW, sessionPrincipal } from "./session-test-harness";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
+const HEADER_NAME_MODULES = [
+  {
+    moduleSpecifier: "@splitch/control-plane-sdk/control-panel-identity",
+    exports: {
+      CONTROL_PANEL_DELEGATION_HEADER,
+      CONTROL_PANEL_ENVIRONMENT_HEADER,
+    },
+  },
+] as const;
 
 /**
  * Cookie-authenticated panel writes that ride the session cookie.
@@ -24,19 +35,42 @@ const SRC = fileURLToPath(new URL("..", import.meta.url));
  * is a site boundary and insufficient across *.splitch.dev. createServerFn
  * POSTs require TanStack CSRF middleware from `src/start.ts`.
  *
- * Form POSTs remain an explicit route inventory. Exported createServerFn POSTs
- * are derived per declaration below so adding one to an existing module cannot
- * hide behind a filename that was already reviewed.
+ * Both inventories are reviewed surfaces. Discovery walks every source file and
+ * identifies each exported createServerFn POST by file and export name, so a new
+ * write in an existing file moves the discovered side of the equality.
  */
 const FORM_POST_COOKIE_AUTHENTICATED_WRITES = [
   "routes/auth.logout.ts",
   "routes/claim.consent.$attemptId.tsx",
 ] as const;
 
+const CREATE_SERVER_FN_POST_WRITES = [
+  "lib/claim-ceremony-functions.ts#submitClaimCeremony",
+  "lib/control-plane-app-functions.ts#createControlPanelApp",
+  "lib/control-plane-experiment-functions.ts#createControlPanelExperiment",
+  "lib/control-plane-experiment-functions.ts#stageAndStartControlPanelExperimentRun",
+  "lib/control-plane-experiment-functions.ts#updateControlPanelExperiment",
+  "lib/control-plane-flag-functions.ts#createControlPanelFlag",
+  "lib/control-plane-flag-mutations.ts#editControlPanelTargetingRules",
+  "lib/control-plane-flag-mutations.ts#loadControlPanelApprovalRequest",
+  "lib/control-plane-flag-mutations.ts#promoteControlPanelFlagConfig",
+  "lib/control-plane-flag-mutations.ts#reviewControlPanelApprovalRequest",
+  "lib/control-plane-flag-mutations.ts#updateControlPanelFlagConfig",
+  "lib/control-plane-metric-functions.ts#deleteControlPanelMetric",
+  "lib/control-plane-metric-functions.ts#saveControlPanelMetric",
+  "lib/control-plane-organization-functions.ts#createControlPanelOrganization",
+  "lib/control-plane-segment-functions.ts#deleteControlPanelSegment",
+  "lib/control-plane-segment-functions.ts#saveControlPanelSegment",
+  "lib/control-plane-settings-functions.ts#lockControlPanelClientKey",
+  "lib/control-plane-settings-functions.ts#provisionControlPanelApiKey",
+  "lib/control-plane-settings-functions.ts#revokeControlPanelApiKey",
+  "lib/control-plane-settings-functions.ts#updateControlPanelEnvironmentPolicy",
+  "lib/control-plane-verify-functions.ts#verifyControlPanelFlag",
+] as const;
+
 /**
- * Modules that reach the session cookie (directly or via authorized-client /
- * form-POST wrappers). One set for both createServerFn and form-POST
- * enumeration — do not maintain a second accessor-name list (SPL-263).
+ * Modules that make a form POST cookie-authenticated, directly or through the
+ * existing wrappers. Keep one accessor list for form enumeration (SPL-263).
  */
 const SESSION_REACHING_MODULES = [
   "session",
@@ -44,10 +78,6 @@ const SESSION_REACHING_MODULES = [
   "logout",
   "claim-consent",
 ] as const;
-
-const SESSION_REACHING_IMPORTS = new Set(
-  SESSION_REACHING_MODULES.flatMap((module) => [`./${module}`, `#lib/${module}`]),
-);
 
 /** Form-POST helpers that already call `rejectCrossOriginWrite` before session work. */
 const FORM_POST_ORIGIN_GUARDS = /rejectCrossOriginWrite|destroyPanelSession|forwardClaimConsent/;
@@ -116,13 +146,17 @@ function formPostMissingOriginCheck(source: string): boolean {
 }
 
 /**
- * Cookie construction outside `serializeHttpOnlyCookie` is blocked twice.
+ * Cookie construction outside `serializeHttpOnlyCookie` has two independent
+ * source guards, pinned by executable probes in
+ * `cookie-header-write-test-helpers.test.ts`.
  *
- * The serializer returns a branded value required by the sole header helper,
- * so a plain string fails typecheck. This literal sweep remains defense in depth
- * for constructed cookie values, while the AST header sweep below inspects the
- * argument expression of every direct Set-Cookie append or set. Runtime-composed
- * attributes therefore cannot bypass the guard by avoiding a contiguous token.
+ * The literal sweep finds contiguous cookie attributes outside the serializer.
+ * The AST sweep finds Set-Cookie append/set calls, Headers records and pairs,
+ * Response header records, and plain header properties even when the value is
+ * runtime-composed. It resolves the two imported control-plane header names and
+ * refuses every other non-literal name on a header-shaped receiver, plus cookie
+ * brand assertions outside the serializer. Opaque helper calls and
+ * runtime-computed object keys remain outside the sweep.
  */
 function cookieValueConstruction(source: string): string | null {
   const inlineHeader = /(?:set-cookie|Set-Cookie)\s*["']\s*,\s*[`"'][^`"']*=/;
@@ -153,9 +187,10 @@ function cookieConstructionOffenders(path: string): Array<string> {
 
 function cookieHeaderWrites(path: string): Array<string> {
   const relativePath = relative(path);
-  return setCookieHeaderWrites(readFileSync(path, "utf8"), relativePath).map(
-    (write) => `${relativePath}: ${write.method}(${write.argument})`,
-  );
+  return setCookieHeaderWrites(readFileSync(path, "utf8"), relativePath, {
+    allowSerializedCookieAssertion: relativePath === "lib/session-cookie.ts",
+    headerNameModules: HEADER_NAME_MODULES,
+  }).map((write) => `${relativePath}: ${write.method}(${write.argument})`);
 }
 
 function formPostWrites(path: string): Array<string> {
@@ -168,23 +203,11 @@ function formPostWrites(path: string): Array<string> {
     : [];
 }
 
-function serverFnWriteCoverage(path: string): {
-  all: Array<string>;
-  sessionReaching: Array<string>;
-} {
+function serverFnWrites(path: string): Array<string> {
   const relativePath = relative(path);
-  if (!relativePath.startsWith("lib/")) return { all: [], sessionReaching: [] };
-  const serverFns = exportedPostServerFns(
-    readFileSync(path, "utf8"),
-    relativePath,
-    SESSION_REACHING_IMPORTS,
+  return exportedPostServerFns(readFileSync(path, "utf8"), relativePath).map(
+    (serverFn) => `${relativePath}#${serverFn}`,
   );
-  return {
-    all: serverFns.map((serverFn) => `${relativePath}#${serverFn.name}`),
-    sessionReaching: serverFns.flatMap((serverFn) =>
-      serverFn.reachesSession ? [`${relativePath}#${serverFn.name}`] : [],
-    ),
-  };
 }
 
 describe("panel cookie attributes", () => {
@@ -225,15 +248,10 @@ describe("panel cookie attributes", () => {
   it("enumerates every cookie-authenticated panel write surface", () => {
     const files = sourceFiles(SRC);
     const formPosts = files.flatMap(formPostWrites);
-    const serverFnCoverage = files.map(serverFnWriteCoverage);
-    const serverFnPosts = serverFnCoverage.flatMap((coverage) => coverage.all);
-    const sessionReachingServerFnPosts = serverFnCoverage.flatMap(
-      (coverage) => coverage.sessionReaching,
-    );
+    const serverFnPosts = files.flatMap(serverFnWrites);
 
     expect(formPosts.sort()).toEqual([...FORM_POST_COOKIE_AUTHENTICATED_WRITES].sort());
-    expect(serverFnPosts.length).toBeGreaterThan(0);
-    expect(sessionReachingServerFnPosts.sort()).toEqual(serverFnPosts.sort());
+    expect(serverFnPosts.sort()).toEqual([...CREATE_SERVER_FN_POST_WRITES].sort());
   });
 
   it("flags a form POST that reaches session via authorized-client without Origin check", () => {
