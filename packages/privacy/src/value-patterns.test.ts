@@ -20,6 +20,32 @@ describe("redactValuePatterns", () => {
     expect(out).toBe("req-123 attempt 2 of 5");
   });
 
+  // A ULID body can contain an 8+ digit run (~0.2% of mints). That run is not a
+  // phone number; redacting it leaves a fault row unable to name what failed.
+  it("preserves a minted internal id whose body has a long digit run", () => {
+    const id = "apr_01J12345678ABCDEFGHJKMNPQR";
+    const message = `${id}: Error: outer for ${id}`;
+    expect(redactValuePatterns(message)).toBe(message);
+  });
+
+  it("preserves other minted-id prefixes with long digit runs", () => {
+    for (const id of [
+      "exp_01J12345678ABCDEFGHJKMNPQR",
+      "flag_01J12345678ABCDEFGHJKMNPQR",
+      "run_abcd12345678ef901234abcd",
+    ]) {
+      expect(redactValuePatterns(`failed for ${id}`)).toContain(id);
+    }
+  });
+
+  it("still redacts a bare phone next to a preserved minted internal id", () => {
+    const id = "apr_01J12345678ABCDEFGHJKMNPQR";
+    const out = redactValuePatterns(`${id} call 555-867-5309`);
+    expect(out).toContain(id);
+    expect(out.includes("555-867-5309")).toBe(false);
+    expect(out.includes(REDACTED)).toBe(true);
+  });
+
   it("redacts app-specific shapes via extraPatterns (the Targeting Key)", () => {
     const out = redactValuePatterns("assign() failed for targetingKey tk-abc123", {
       extraPatterns: [/tk-[a-z0-9]+/gi],
