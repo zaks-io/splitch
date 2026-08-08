@@ -17,7 +17,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 8793",
     "test": "vitest run --config vitest.config.ts",
     "test:e2e": "playwright test --config playwright.config.ts",
-    "test:connect-snippet": "node scripts/connect-snippet-compile.mjs",
+    "test:connect-snippet": "node --experimental-strip-types scripts/connect-snippet-compile.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "wrangler:types": "wrangler types src/worker-configuration.d.ts"
   },

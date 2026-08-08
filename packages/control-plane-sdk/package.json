@@ -33,6 +33,10 @@
       "types": "./src/panel-org-members.ts",
       "default": "./src/panel-org-members.ts"
     },
+    "./panel-segments": {
+      "types": "./src/panel-segments.ts",
+      "default": "./src/panel-segments.ts"
+    },
     "./panel-overview": {
       "types": "./src/panel-overview.ts",
       "default": "./src/panel-overview.ts"
@@ -40,6 +44,10 @@
     "./panel-settings": {
       "types": "./src/panel-settings.ts",
       "default": "./src/panel-settings.ts"
+    },
+    "./panel-usage": {
+      "types": "./src/panel-usage.ts",
+      "default": "./src/panel-usage.ts"
     }
   },
   "files": [

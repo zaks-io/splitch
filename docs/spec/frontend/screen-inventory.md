@@ -100,11 +100,15 @@ because that data exists from day one and is the customer's central question; th
 the visibly-deferred stub** (the `stripe_*` seam columns exist, integration deferred —
 organization-and-membership.md).
 
-- **Usage (real, v1):** current month's Evaluation consumption against the monthly allowance; the
-  **quota state** — **Active / Grace / Exhausted** (ADR-0033) — shown loudly, since Grace and
-  Exhausted are real runtime states where the data plane is about to or already does reject
-  Evaluations. The **usage breakdown** ADR-0033 mandates (by App, by Environment, batch-vs-single,
-  remote-vs-cached, Exposure-bearing-vs-not) as reporting dimensions — _not_ separate meters.
+- **Usage (real, v1):** current month's Evaluation consumption, with the **usage breakdown**
+  ADR-0033 mandates (by App, by Environment, by Flag, by SDK/runtime, batch-vs-single,
+  remote-vs-cached, Exposure-bearing-vs-not) as reporting dimensions — _not_ separate meters. Every
+  dimension is measured against the month's own total, never rebased to the largest row on screen.
+- **Quota (deferred, stated):** the allowance and its **Active / Grace / Exhausted** states
+  (ADR-0033) are real runtime states of an enforcement path that does not run yet, so the screen
+  says the limit is not enforced instead of naming a state it cannot observe. The month's number is
+  a total, not a balance. When enforcement lands, this screen shows the allowance and the state
+  loudly — claiming either before then would be the fake status ADR-0036 forbids.
 - **Payment (stubbed, loud):** plan, payment method, invoices render a "managed by your account team /
   coming soon" state backed by the present-but-unwired `stripe_*` seam. Stubbed visibly, never faked.
 - **Role gate:** "Manage billing/plan" is **owner only**; admin/member see usage read-only.
@@ -320,8 +324,8 @@ trustworthy-experiments literature) and then adds splitch's enforcement seam.
   anyway" escape hatch** — an escape hatch is the thing that quietly turns an enforced contract back
   into an advisory one. This honors "rigor is enforced" exactly where a mistake is irreversible (the
   ship), without the false-positive cost of masking data the operator legitimately needs to debug.
-- **Guardrails sit alongside a valid result** (they do not mask the goal-metric number — a Guardrail
-  breach is a separate harm signal, not an invalidation), warning on CI-bound breach.
+- **Guardrails sit alongside a valid result** and never mask the goal-Metric number. They remain an
+  advisory surface and are not part of the shipped decision gate.
 - **Activation-gated Experiments** additionally surface the two activation guardrails (activated-
   population SRM and per-arm activation rate, ADR-0012) with the same loud-warning + decision-gate
   treatment.
@@ -330,10 +334,17 @@ trustworthy-experiments literature) and then adds splitch's enforcement seam.
 - Significance is **FDR-controlled** across the goal-metric × Variant family (ADR-0014); the view
   labels which Metrics are in the corrected family vs exploratory.
 
-**CLI/MCP parity (ADR-0023).** The ship-decision gate is a Worker invariant: `splitch experiment
-conclude` / `promote-winner` fails with the same cited check when SRM is firing or the result is
-underpowered, on every skin. Reading results (numbers, diagnostics) is available on all three skins;
-only the rendering differs.
+**CLI/MCP parity (ADR-0023).** The decision gate is a Worker invariant: `splitch experiment
+conclude` fails with the same cited `control_identity`, `engine_status`, `decision_valid_result`,
+`underpowered`, `exposure_srm`, `activated_srm`, or `activation_balance` check on every skin. Reading
+Results and diagnostics remains available on all three skins; only the rendering differs. Under
+`confirm`, "Conclude and promote winner" is one interaction over the two durable commits specified in
+[conclusion-and-winner-promotion.md](../control-plane/conclusion-and-winner-promotion.md).
+
+That interaction requires the operator to choose the target Environment and author the complete
+target Flag Configuration: enabled state, available Variant names, ordered Targeting Rules, and
+rollout. The selected winner is shown beside those inputs. Submission stays unavailable until the
+complete Configuration validates; the Control Panel never derives missing fields from the winner.
 
 ## Experiment creation — a draft, Started into Run 1
 

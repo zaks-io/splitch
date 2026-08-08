@@ -6,7 +6,12 @@
  * where the tool name is an `operationId` string resolved at runtime.
  */
 import type { ApiRouteContract, ErrorResponse, McpDelegationActor } from "@splitch/contracts";
-import { createMcpDelegationHeader, getRoute, MCP_DELEGATION_HEADER } from "@splitch/contracts";
+import {
+  createMcpDelegationHeader,
+  getRoute,
+  MCP_DELEGATION_HEADER,
+  userRoles,
+} from "@splitch/contracts";
 import { type ControlPlaneHcOptions, resolveControlPlaneUrl, withAuthorization } from "./hc-client";
 import { withIdempotencyHeader } from "./idempotency-header";
 import {
@@ -29,6 +34,16 @@ export interface McpOperationAdapter {
 
 export interface McpOperationCallOptions extends ControlPlaneOperationOptions {
   delegation?: McpDelegationActor;
+}
+
+export class McpOperationInvalidParamsError extends Error {
+  readonly argument: string;
+
+  constructor(argument: string) {
+    super(`Missing required argument "${argument}".`);
+    this.name = "McpOperationInvalidParamsError";
+    this.argument = argument;
+  }
 }
 
 export function createMcpOperationAdapter(
@@ -80,8 +95,8 @@ function scopedDelegationActor(
   ].filter((target): target is string => target !== null);
   return {
     subject: actor.subject,
-    // Narrowed to the route's target, but the door is NOT narrowable: it says
-    // who the caller is, not what they may reach.
+    // Narrowed to the union of the route's Org and App targets. The door is not
+    // narrowable: it says who the caller is, not what they may reach.
     authDoor: actor.authDoor,
     scopes:
       targets.length === 0
@@ -98,8 +113,10 @@ function scopeTarget(kind: "org" | "app", id: unknown): string | null {
 
 function scopeMatchesTarget(scope: string, target: string): boolean {
   const role = scope.slice(target.length);
-  return scope.startsWith(target) && (role === "owner" || role === "admin" || role === "member");
+  return scope.startsWith(target) && USER_ROLES.has(role);
 }
+
+const USER_ROLES = new Set<string>(userRoles);
 
 function requiredDelegationSecret(secret: string | undefined): string {
   if (!secret) throw new Error("control-plane-sdk: MCP delegation secret is required");
@@ -154,7 +171,7 @@ function buildPath(route: ApiRouteContract, input: unknown): string {
   return route.path.replace(/:([A-Za-z0-9_]+)/g, (_match, key: string) => {
     const value = record[key];
     if (typeof value !== "string") {
-      throw new Error(`control-plane-sdk: ${route.operationId} missing path param "${key}"`);
+      throw new McpOperationInvalidParamsError(key);
     }
     return encodeURIComponent(value);
   });

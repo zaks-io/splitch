@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { ShellMenu, ShellMenuLink, ShellMenuSignOut } from "#components/shell-menu";
-import { orgSectionRegistry } from "#lib/org-shell-navigation";
 import type { OrgMembership } from "#lib/session";
 import { useHydrated } from "#lib/use-hydrated";
 
@@ -9,6 +8,15 @@ export interface OrgShellOrg {
   readonly orgId: string;
   readonly orgSlug: string;
 }
+
+/**
+ * The Org-level screens, which sit above any App and so name no Environment.
+ */
+const ORG_SECTIONS = [
+  { label: "Apps", to: "/$orgSlug" },
+  { label: "Members", to: "/$orgSlug/members" },
+  { label: "Billing & Usage", to: "/$orgSlug/billing" },
+] as const;
 
 /**
  * The Org shell frame — `/{orgSlug}/...`. Its top bar carries the org switcher
@@ -74,14 +82,14 @@ export function OrgShell({
         aria-label="Organization sections"
         className="flex flex-wrap gap-1 border-border border-b bg-muted/20 px-4 py-2 lg:px-6"
       >
-        {orgSectionRegistry.map((section) => (
+        {ORG_SECTIONS.map((section) => (
           <Link
-            activeOptions={{ exact: section.exact }}
+            activeOptions={{ exact: section.to === "/$orgSlug" }}
             activeProps={{
               className:
                 "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground",
             }}
-            className="flex min-h-9 items-center rounded-md px-3 py-1.5 font-medium text-muted-foreground text-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+            className="rounded-md px-3 py-1.5 font-medium text-muted-foreground text-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
             key={section.label}
             params={{ orgSlug }}
             to={section.to}

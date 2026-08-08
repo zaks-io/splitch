@@ -1,3 +1,4 @@
+import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/contracts";
 import type { CliCommandDefinition } from "./command-registry.js";
 
 /**
@@ -9,6 +10,9 @@ import type { CliCommandDefinition } from "./command-registry.js";
  * or MCP tool descriptions.
  */
 export function operationBehaviorNotes(command: CliCommandDefinition): string[] {
+  if (command.kind === "env_policy_get" || command.kind === "env_policy_set") {
+    return [KILL_SWITCH_OFF_EXEMPTION];
+  }
   if (command.operationId === "experiments_start") {
     return [
       "Start freezes the Experiment draft Targeting Rules into the new Run; the response field frozenTargetingRules is that snapshot (same as run.targetingRules).",

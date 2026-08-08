@@ -77,6 +77,24 @@ contract and `StatsEngine` signature live in [data-contracts.md](data-contracts.
 Dimension result shapes (`DimensionResult`) are defined in
 [dimension-slicing.md](dimension-slicing.md).
 
+## Analysis Results envelope
+
+The control-plane Results read uses the shipped `AnalysisResultsEnvelopeSchema` from
+`@splitch/contracts`; there is no parallel Results type. Its strict `state: "ready"` member contains
+`run_id`, `control_variant`, and `stats`. It admits `data_watermark` and `result_token` only as an
+all-or-nothing pair. A Results read that supports Conclude returns both; the result-delivery runtime
+slice owns populating them. Their absence keeps the current read compatible but provides no evidence
+inputs for Conclude.
+
+`data_watermark` is the server-selected inclusive `ingest_ts` boundary used by the complete read. It
+comes from the inclusive `deduped_exposures.watermark_ts` Copy Pipe boundary, so rows whose
+`ingest_ts` exactly equals the watermark are part of the result.
+`result_token` is `sha256:` plus 64 lowercase hexadecimal digits, computed as SHA-256 over RFC 8785
+canonical bytes of
+`{ appId, environmentId, experimentId, runId, runConfigHash, stats }`. It is evidence identity for
+Conclude, not caller authority. The `no_run` and `no_data` members have neither field because no
+decision-bearing result exists.
+
 ## Sources
 
 - [../../adr/0015-variance-delta-method-aggregate-to-randomization-unit.md](../../adr/0015-variance-delta-method-aggregate-to-randomization-unit.md)

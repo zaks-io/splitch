@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK, EXIT_SCOPE } from "./exit-codes.js";
@@ -134,5 +135,36 @@ describe("env-policy get --app/--env slug resolution", () => {
     expect(message).toContain("nosuch");
     expect(message).toContain("app_1");
     expect(message).not.toContain("APP_NOT_FOUND");
+  });
+
+  it("states the kill-switch-off exemption when enabledState is confirm (SPL-312)", async () => {
+    const confirmPolicy = {
+      variantAvailability: "confirm",
+      targetingRolloutValue: "confirm",
+      enabledState: "confirm",
+      startExperimentRun: "confirm",
+    };
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
+      {
+        match: (request) =>
+          request.method === "GET" && new URL(request.url).pathname === "/apps/app_1/envs/env_prod",
+        status: 200,
+        body: { ...environmentGetBody, policy: confirmPolicy },
+      },
+    ]);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const code = await runCli(["env-policy", "get", "--app", "app_1", "--env", "prod"], {
+      credentialPath,
+      fetch: transport.fetch,
+    });
+
+    expect(code).toBe(EXIT_OK);
+    const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(output).toContain("enabledState: confirm");
+    expect(output).toContain(KILL_SWITCH_OFF_EXEMPTION);
   });
 });

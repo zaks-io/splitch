@@ -1,10 +1,10 @@
 import type { McpAccessTokenActor } from "./mcp-access-token";
 import {
-  JSON_RPC_INTERNAL_ERROR,
   JSON_RPC_METHOD_NOT_FOUND,
   type JsonRpcId,
   type JsonRpcResponse,
   jsonRpcError,
+  jsonRpcInternalError,
   jsonRpcResult,
 } from "./json-rpc";
 import { buildCapabilitiesResource } from "./mcp-capabilities";
@@ -57,13 +57,13 @@ const RESOURCE_DEFINITIONS: readonly McpResourceDefinition[] = [
   {
     uri: "splitch://context",
     name: "context",
-    description: "splitch ubiquitous-language glossary (CONTEXT.md).",
+    description: "splitch ubiquitous-language glossary.",
     mimeType: "text/markdown",
   },
   {
     uri: "splitch://auth",
     name: "auth",
-    description: "Auth doors and scope widening (auth.md).",
+    description: "Auth doors and scope widening.",
     mimeType: "text/markdown",
   },
   {
@@ -81,7 +81,7 @@ const RESOURCE_DEFINITIONS: readonly McpResourceDefinition[] = [
   {
     uri: "splitch://quickstart",
     name: "quickstart",
-    description: "Agent-first onboarding quickstart (docs/spec/quickstart.md).",
+    description: "Agent-first onboarding quickstart.",
     mimeType: "text/markdown",
   },
 ];
@@ -106,9 +106,7 @@ export async function readMcpResourceRpc(
     }
     return jsonRpcResult(id, { contents: [content] });
   } catch (error) {
-    return jsonRpcError(id, JSON_RPC_INTERNAL_ERROR, "Internal error", {
-      message: error instanceof Error ? error.message : String(error),
-    });
+    return jsonRpcInternalError(id, error);
   }
 }
 

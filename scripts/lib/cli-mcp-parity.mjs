@@ -1,3 +1,5 @@
+import { findRepoInternalReference } from "../../apps/cli/scripts/published-agent-surface.mjs";
+
 function uniqueIds(ids, surface) {
   const unique = new Set(ids);
   if (unique.size !== ids.length) {
@@ -66,26 +68,32 @@ function assertSkinLocalCapabilities(capabilities) {
   }
 }
 
-const REPO_INTERNAL_REFERENCE =
-  /(?:^|[\s`(])(?:\.\.\/|\.\/|docs\/|apps\/|packages\/|\.github\/|AGENTS\.md|CONTEXT\.md)|(?:ADR|SPL)-\d+/m;
-
 function assertPublicEntries(entries, surface) {
   for (const entry of entries) {
-    const internalReference = entry.text.match(REPO_INTERNAL_REFERENCE);
+    const internalReference = findRepoInternalReference(entry.text);
     if (internalReference) {
       throw new Error(
-        `published-agent-surface: ${surface} "${entry.name}" contains repo-internal reference: ${internalReference[0].trim()}`,
+        `published-agent-surface: ${surface} "${entry.name}" contains repo-internal reference: ${internalReference}`,
       );
     }
   }
 }
 
-export function assertPublicAgentSurface({ cliHelp, mcpTools }) {
+export function assertPublicAgentSurface({
+  cliHelp,
+  mcpTools,
+  mcpPrompts = [],
+  mcpResources = [],
+  routeSummaries = [],
+}) {
   assertPublicEntries(cliHelp, "CLI help");
   assertPublicEntries(
     mcpTools.map((tool) => ({ name: tool.name, text: tool.description })),
     "MCP tool description",
   );
+  assertPublicEntries(mcpPrompts, "MCP prompt");
+  assertPublicEntries(mcpResources, "MCP resource");
+  assertPublicEntries(routeSummaries, "route summary");
 }
 
 export function assertCliMcpParity({
@@ -103,4 +111,31 @@ export function assertCliMcpParity({
   assertSurface("CLI operations", expectedOperations(contract, exceptions, "cli"), cli);
   assertSurface("MCP tools", expectedOperations(contract, exceptions, "mcp"), mcp);
   assertSkinLocalCapabilities(skinLocalCapabilities);
+}
+
+/**
+ * MCP must publish the JSON Schema derived from the route contracts. Comparing
+ * the canonical derivation with the registered tools catches a hand-written MCP
+ * definition or wrapper override; CLI validation is not exercised here.
+ */
+export function assertDerivedMcpSchemaParity({ derivedSchemas, publishedSchemas }) {
+  const derivedOperations = [...derivedSchemas.keys()].sort();
+  const publishedOperations = [...publishedSchemas.keys()].sort();
+  if (derivedOperations.join(",") !== publishedOperations.join(",")) {
+    throw new Error(
+      `cli-mcp-parity: schema coverage differs. Derived: ${derivedOperations.join(", ")}; published MCP: ${publishedOperations.join(", ")}`,
+    );
+  }
+  for (const operationId of derivedOperations) {
+    for (const kind of ["input", "output"]) {
+      const derived = JSON.stringify(derivedSchemas.get(operationId)[kind]);
+      const published = JSON.stringify(publishedSchemas.get(operationId)[kind]);
+      if (derived !== published) {
+        throw new Error(
+          `cli-mcp-parity: ${operationId} ${kind} schema differs from the published MCP tool\n  Derived: ${derived}\n  Published MCP: ${published}`,
+        );
+      }
+    }
+  }
+  return derivedOperations.length;
 }

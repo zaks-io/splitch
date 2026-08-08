@@ -206,8 +206,8 @@ async function listMemberResponse(
       request,
     });
     return memberFromMembership(membership, profile);
-  } catch {
-    return memberProfileReadFailed(membership.userId, requestId);
+  } catch (cause) {
+    return memberProfileReadFailed(membership.userId, requestId, cause);
   }
 }
 
@@ -221,8 +221,8 @@ async function resolveProfile(
   if (!deps.memberProfileResolver) return memberProfileUnavailable(requestId);
   try {
     return await deps.memberProfileResolver({ orgId, userId, request });
-  } catch {
-    return memberProfileReadFailed(userId, requestId);
+  } catch (cause) {
+    return memberProfileReadFailed(userId, requestId, cause);
   }
 }
 
@@ -308,11 +308,18 @@ function memberProfileUnavailable(requestId: string): Response {
   );
 }
 
-function memberProfileReadFailed(userId: string, requestId: string): Response {
+/**
+ * The message reaches the Members screen as rendered copy, so it names no one:
+ * a roster that deliberately shows emails must not leak another person's raw
+ * splitch User ID. The ID and the cause stay whole in the log, correlated by
+ * requestId, which is where a fault of this shape is actually diagnosed.
+ */
+function memberProfileReadFailed(userId: string, requestId: string, cause: unknown): Response {
+  console.error("control-plane: member profile lookup failed", { requestId, userId, cause });
   return renderError(
     {
       code: "SERVICE_UNAVAILABLE",
-      message: `member profile lookup failed for ${userId}`,
+      message: "member profile lookup failed",
       details: { retryAfterMs: 1000 },
     },
     { requestId },

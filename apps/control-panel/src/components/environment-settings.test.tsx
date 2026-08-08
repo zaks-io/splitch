@@ -1,3 +1,4 @@
+import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/contracts";
 import type { PanelEnvironmentSettings } from "@splitch/control-plane-sdk/panel-settings";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -35,6 +36,7 @@ describe("EnvironmentSettings", () => {
     expect(html).toContain("Start an Experiment Run");
     expect(html).toContain("Coming soon");
     expect(html).toContain("Never gated");
+    expect(html).toContain(KILL_SWITCH_OFF_EXEMPTION);
     expect(html).toContain('data-testid="kill-switch-policy"');
   });
 });

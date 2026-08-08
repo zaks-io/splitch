@@ -22,7 +22,8 @@ control-plane reader rebuilds from D1 instead (see [../platform/contracts-and-va
 | `app:{appId}:{environmentId}:run:{runId}`               | `RunConfigKV`        | none                         | Hot-path live Experiment Run config, read only from `ExperimentConfigKV.liveRunId`           |
 | `app:{appId}:{environmentId}:experiment:{experimentId}` | `ExperimentConfigKV` | none (invalidated on change) | Edge Experiment config read; carries nullable `liveRunId` for evaluation and ingest          |
 | `live_run:{appId}:{environmentId}:{experimentId}`       | `LiveRunKV`          | none                         | Explicit live Run pointer written on Start and cleared on End; never inferred from latest D1 |
-| `ck:{keyMaterialHash}` / `ak:{keyHash}`                 | `CredentialCacheKV`  | 60s                          | Credential validation cache; evicted on revoke; prefixes distinguish Client vs API Keys      |
+| `ck:{keyMaterialHash}` / `ak:{keyHash}`                 | `CredentialCacheKV`  | active: none; revoked: 5m    | Mutable credential entry; prefixes distinguish Client Keys from API Keys                     |
+| `revoked:{credentialCacheKey}`                          | presence marker      | none                         | Terminal revocation marker; checked before the mutable credential entry                      |
 | `member-profile:{userId}`                               | `{ email }`          | none                         | SESSION_STORE identity cache for Org member email; written at login, never in D1             |
 
 ### FlagConfigKV

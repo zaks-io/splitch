@@ -1,12 +1,10 @@
 import {
   type ErrorCode,
-  type ErrorResponse,
-  EXPOSURE_BATCH_MAX_BODY_BYTES,
   type ExposureBatchRequest,
   ExposureBatchResponseSchema,
   type ExposureBatchResult,
 } from "@splitch/contracts";
-import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
+import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import type { AssignmentStore } from "./assignment/assignment-store";
 import { assembleExposureFromTicket } from "./evaluate/exposure-assembly";
 import {
@@ -14,13 +12,18 @@ import {
   type MintExposureTicketDeps,
   verifyExposureTicket,
 } from "./evaluate/exposure-ticket";
-import { errorResponse } from "./evaluation-error-response";
 import {
   type ExposureIngestSink,
   ExposureIngestSinkError,
-  type ExposureRedemptionClaimStore,
   ticketFingerprint,
 } from "./exposure-redemption";
+import type { ExposureRedemptionClaimStore } from "./exposure-redemption-claim-core";
+import {
+  assertBodyWithinCap,
+  type CredentialScope,
+  credentialScope,
+  exposureBatchBody,
+} from "./exposures-request";
 
 interface ExposuresRouteDeps {
   readonly assignmentStore: AssignmentStore;
@@ -34,12 +37,6 @@ interface ExposuresRouteDeps {
   readonly logger?: { error(message: string, detail: unknown): void };
   readonly now?: () => Date;
 }
-
-type CredentialScope = {
-  readonly organizationId: string;
-  readonly appId: string;
-  readonly environmentId: string;
-};
 
 export function makeExposuresHandler(deps: ExposuresRouteDeps) {
   return async ({
@@ -75,27 +72,163 @@ async function redeemOne(
   if (!verified.ok) return rejected(item.exposureId, verified.code);
 
   const fingerprint = await ticketFingerprint(item.exposureTicket);
-  const claim = await claimLookup(item.exposureId, fingerprint, scope, deps);
-  if (claim !== null) {
-    // putIfAbsent is idempotent. Re-schedule on dedup so a prior attempt that
-    // sealed + partially claimed (then 503'd before holdover) still lands the
-    // Assignment Store write on retry.
-    if (claim.status === "deduplicated") {
-      scheduleHoldoverWrite(verified.payload, scope, deps);
-    }
-    return claim;
+  const claimInput = {
+    appId: scope.appId,
+    environmentId: scope.environmentId,
+    exposureId: item.exposureId,
+    ticketFingerprint: fingerprint,
+  };
+
+  let claim: Awaited<ReturnType<ExposureRedemptionClaimStore["claim"]>>;
+  try {
+    claim = await deps.exposureRedemptionClaims.claim(claimInput);
+  } catch (cause) {
+    deps.logger?.error("exposure_redemption_claim_failed", {
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      exposureId: item.exposureId,
+      causeSummary: cause instanceof Error ? cause.message : String(cause),
+    });
+    return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
   }
 
-  const sealed = await sealAndRecord(item, verified.payload, fingerprint, scope, deps);
-  if (!sealed.ok) {
-    if (sealed.ingestCommitted) {
-      scheduleHoldoverWrite(verified.payload, scope, deps);
+  if (claim.status === "conflict") {
+    return rejected(item.exposureId, "EVENT_ID_CONFLICT");
+  }
+  if (claim.status === "busy") {
+    return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
+  }
+  if (claim.status === "deduplicated") {
+    scheduleHoldoverWrite(verified.payload, scope, deps);
+    return { exposureId: item.exposureId, status: "deduplicated", code: null };
+  }
+  if (claim.status === "resume_ack") {
+    return completeAcknowledgeOnly(item.exposureId, claimInput, verified.payload, scope, deps);
+  }
+  return sealIngestAndConfirm(item, verified.payload, claimInput, scope, deps);
+}
+
+async function completeAcknowledgeOnly(
+  exposureId: string,
+  claimInput: {
+    readonly appId: string;
+    readonly environmentId: string;
+    readonly exposureId: string;
+    readonly ticketFingerprint: string;
+  },
+  ticket: ExposureTicketPayload,
+  scope: CredentialScope,
+  deps: ExposuresRouteDeps,
+): Promise<ExposureBatchResult> {
+  try {
+    const ack = await deps.exposureRedemptionClaims.acknowledge(claimInput);
+    scheduleHoldoverWrite(ticket, scope, deps);
+    return {
+      exposureId,
+      status: ack.status === "already_accepted" ? "deduplicated" : "accepted",
+      code: null,
+    };
+  } catch (cause) {
+    deps.logger?.error("exposure_redemption_acknowledge_failed", {
+      appId: claimInput.appId,
+      environmentId: claimInput.environmentId,
+      exposureId,
+      causeSummary: cause instanceof Error ? cause.message : String(cause),
+    });
+    scheduleHoldoverWrite(ticket, scope, deps);
+    return rejected(exposureId, "SERVICE_UNAVAILABLE");
+  }
+}
+
+async function sealIngestAndConfirm(
+  item: ExposureBatchRequest["exposures"][number],
+  ticket: ExposureTicketPayload,
+  claimInput: {
+    readonly appId: string;
+    readonly environmentId: string;
+    readonly exposureId: string;
+    readonly ticketFingerprint: string;
+  },
+  scope: CredentialScope,
+  deps: ExposuresRouteDeps,
+): Promise<ExposureBatchResult> {
+  const exposure = await assembleExposureFromTicket({
+    ticket,
+    appId: claimInput.appId,
+    environmentId: claimInput.environmentId,
+    exposureId: item.exposureId,
+    clientTimestamp: item.clientTimestamp,
+    sourceId: deps.sourceId,
+    now: deps.now ?? deps.exposureTicket.now,
+  });
+
+  try {
+    await deps.exposureIngestSink.write(exposure);
+  } catch (cause) {
+    await releaseClaimQuietly(claimInput, deps);
+    if (cause instanceof ExposureIngestSinkError) {
+      deps.logger?.error("exposure_ingest_sink_failed", {
+        status: cause.status,
+        appId: claimInput.appId,
+        environmentId: claimInput.environmentId,
+        exposureId: item.exposureId,
+        causeSummary: cause.message,
+      });
+      return rejected(item.exposureId, ingestFailureCode(cause.status));
     }
-    return rejected(item.exposureId, sealed.code);
+    deps.logger?.error("exposure_ingest_sink_failed", {
+      appId: claimInput.appId,
+      environmentId: claimInput.environmentId,
+      exposureId: item.exposureId,
+      causeSummary: cause instanceof Error ? cause.message : String(cause),
+    });
+    return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
   }
 
-  scheduleHoldoverWrite(verified.payload, scope, deps);
-  return { exposureId: item.exposureId, status: "accepted", code: null };
+  try {
+    await deps.exposureRedemptionClaims.markSealed(claimInput);
+    const ack = await deps.exposureRedemptionClaims.acknowledge(claimInput);
+    scheduleHoldoverWrite(ticket, scope, deps);
+    return {
+      exposureId: item.exposureId,
+      status: ack.status === "already_accepted" ? "deduplicated" : "accepted",
+      code: null,
+    };
+  } catch (cause) {
+    deps.logger?.error("exposure_redemption_confirm_failed", {
+      appId: claimInput.appId,
+      environmentId: claimInput.environmentId,
+      exposureId: item.exposureId,
+      causeSummary: cause instanceof Error ? cause.message : String(cause),
+    });
+    // Ingest committed. If markSealed succeeded, exact-ID retry uses resume_ack
+    // (no second append). If markSealed failed, the claim stays pending until
+    // EXPOSURE_REDEMPTION_PENDING_LEASE_MS — then a retry may re-acquire and
+    // append again (accepted ambiguous-window risk; see that constant).
+    scheduleHoldoverWrite(ticket, scope, deps);
+    return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
+  }
+}
+
+async function releaseClaimQuietly(
+  claimInput: {
+    readonly appId: string;
+    readonly environmentId: string;
+    readonly exposureId: string;
+    readonly ticketFingerprint: string;
+  },
+  deps: ExposuresRouteDeps,
+): Promise<void> {
+  try {
+    await deps.exposureRedemptionClaims.release(claimInput);
+  } catch (cause) {
+    deps.logger?.error("exposure_redemption_release_failed", {
+      appId: claimInput.appId,
+      environmentId: claimInput.environmentId,
+      exposureId: claimInput.exposureId,
+      causeSummary: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
 }
 
 async function verifyTicketForScope(
@@ -123,88 +256,6 @@ async function verifyTicketForScope(
   return { ok: true, payload: verified.payload };
 }
 
-async function claimLookup(
-  exposureId: string,
-  fingerprint: string,
-  scope: CredentialScope,
-  deps: ExposuresRouteDeps,
-): Promise<ExposureBatchResult | null> {
-  const existing = await deps.exposureRedemptionClaims.lookup({
-    appId: scope.appId,
-    environmentId: scope.environmentId,
-    exposureId,
-    ticketFingerprint: fingerprint,
-  });
-  if (existing.status === "conflict") {
-    return rejected(exposureId, "EVENT_ID_CONFLICT");
-  }
-  if (existing.status === "matched") {
-    return { exposureId, status: "deduplicated", code: null };
-  }
-  return null;
-}
-
-async function sealAndRecord(
-  item: ExposureBatchRequest["exposures"][number],
-  ticket: ExposureTicketPayload,
-  fingerprint: string,
-  scope: CredentialScope,
-  deps: ExposuresRouteDeps,
-): Promise<{ ok: true } | { ok: false; code: ErrorCode; ingestCommitted?: boolean }> {
-  const exposure = await assembleExposureFromTicket({
-    ticket,
-    appId: scope.appId,
-    environmentId: scope.environmentId,
-    exposureId: item.exposureId,
-    clientTimestamp: item.clientTimestamp,
-    sourceId: deps.sourceId,
-    now: deps.now ?? deps.exposureTicket.now,
-  });
-
-  try {
-    await deps.exposureIngestSink.write(exposure);
-  } catch (cause) {
-    if (cause instanceof ExposureIngestSinkError) {
-      deps.logger?.error("exposure_ingest_sink_failed", {
-        status: cause.status,
-        appId: scope.appId,
-        environmentId: scope.environmentId,
-        exposureId: item.exposureId,
-        causeSummary: cause.message,
-      });
-      return { ok: false, code: ingestFailureCode(cause.status) };
-    }
-    deps.logger?.error("exposure_ingest_sink_failed", {
-      appId: scope.appId,
-      environmentId: scope.environmentId,
-      exposureId: item.exposureId,
-      causeSummary: cause instanceof Error ? cause.message : String(cause),
-    });
-    return { ok: false, code: "SERVICE_UNAVAILABLE" };
-  }
-
-  try {
-    await deps.exposureRedemptionClaims.record({
-      appId: scope.appId,
-      environmentId: scope.environmentId,
-      exposureId: item.exposureId,
-      ticketFingerprint: fingerprint,
-    });
-  } catch (cause) {
-    deps.logger?.error("exposure_redemption_claim_failed", {
-      appId: scope.appId,
-      environmentId: scope.environmentId,
-      exposureId: item.exposureId,
-      causeSummary: cause instanceof Error ? cause.message : String(cause),
-    });
-    // Ingest already landed; reject retryable so the SDK re-flushes, and mark
-    // ingestCommitted so redeemOne still schedules the Assignment Store holdover.
-    return { ok: false, code: "SERVICE_UNAVAILABLE", ingestCommitted: true };
-  }
-  return { ok: true };
-}
-
-/** Only genuine caller-fault ingest statuses map to permanent VALIDATION_ERROR. */
 const CALLER_FAULT_INGEST_STATUSES = new Set([400]);
 
 function ingestFailureCode(status: number | null): ErrorCode {
@@ -243,88 +294,6 @@ function scheduleHoldoverWrite(
   deps.waitUntil?.(write);
 }
 
-async function assertBodyWithinCap(
-  request: Request,
-  input: unknown,
-): Promise<{ ok: true } | { ok: false; error: ErrorResponse }> {
-  const bytes = await utf8BodyByteLength(request, input);
-  if (bytes <= EXPOSURE_BATCH_MAX_BODY_BYTES) return { ok: true };
-  return {
-    ok: false,
-    error: {
-      code: "VALIDATION_ERROR",
-      message: `Exposure batch body exceeds ${EXPOSURE_BATCH_MAX_BODY_BYTES} UTF-8 bytes`,
-      details: {
-        issues: [
-          {
-            path: ["body"],
-            message: `body must be at most ${EXPOSURE_BATCH_MAX_BODY_BYTES} UTF-8 bytes`,
-          },
-        ],
-      },
-    },
-  };
-}
-
-async function utf8BodyByteLength(request: Request, input: unknown): Promise<number> {
-  try {
-    const buffer = await request.clone().arrayBuffer();
-    if (buffer.byteLength > 0) return buffer.byteLength;
-  } catch {
-    // Stream unavailable — fall through.
-  }
-  const root = asRecord(input);
-  const body = root?.body ?? input;
-  return new TextEncoder().encode(JSON.stringify(body)).length;
-}
-
-function exposureBatchBody(
-  input: unknown,
-): { ok: true; value: ExposureBatchRequest } | { ok: false; error: ErrorResponse } {
-  const root = asRecord(input);
-  const body = root?.body;
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    !("exposures" in body) ||
-    !Array.isArray((body as { exposures: unknown }).exposures)
-  ) {
-    return {
-      ok: false,
-      error: {
-        code: "VALIDATION_ERROR",
-        message: "Exposure batch body is required",
-        details: { issues: [{ path: ["body"], message: "exposures is required" }] },
-      },
-    };
-  }
-  return { ok: true, value: body as ExposureBatchRequest };
-}
-
-function credentialScope(
-  principal: Principal,
-): { ok: true; value: CredentialScope } | { ok: false; error: ErrorResponse } {
-  if (principal.orgId === null || principal.appId === null || principal.environmentId === null) {
-    return {
-      ok: false,
-      error: errorResponse("SERVICE_UNAVAILABLE", "credential cache migration is required"),
-    };
-  }
-  return {
-    ok: true,
-    value: {
-      organizationId: principal.orgId,
-      appId: principal.appId,
-      environmentId: principal.environmentId,
-    },
-  };
-}
-
 function rejected(exposureId: string, code: ErrorCode): ExposureBatchResult {
   return { exposureId, status: "rejected", code };
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
 }

@@ -9,12 +9,18 @@ interface PanelAppAccess {
   orgRole: MembershipRole;
 }
 
+interface PanelOrgAccess {
+  orgId: string;
+  orgRole: MembershipRole;
+}
+
 export interface PanelSessionAccess {
   authorizeApp(
     actorId: string,
     appId: string,
     environmentId?: string,
   ): Promise<PanelAppAccess | null>;
+  authorizeOrg(actorId: string, orgId: string): Promise<PanelOrgAccess | null>;
 }
 
 /** Resolve current panel authority from D1 instead of trusting cached session roles. */
@@ -39,6 +45,18 @@ export function makePanelSessionAccess(repo: Pick<Repository, "identity">): Pane
         orgId: app.organizationId,
         orgRole: orgMembership.role as MembershipRole,
       };
+    },
+
+    /**
+     * Org-scoped authority for the Organization-wide reads that name no App.
+     * Live membership is the only thing consulted: an actor with no membership
+     * row in this Organization gets no principal at all, so a delegation that
+     * names someone else's Org cannot become authority over it.
+     */
+    async authorizeOrg(actorId, orgId) {
+      const membership = await repo.identity.getOrgMembership(orgId, actorId);
+      if (!membership) return null;
+      return { orgId, orgRole: membership.role as MembershipRole };
     },
   };
 }

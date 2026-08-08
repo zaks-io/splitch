@@ -16,6 +16,8 @@ const SCOPED_OPERATION_IDS = [
   "experiments_create",
   "metrics_list",
   "metrics_create",
+  "segments_list",
+  "segments_create",
   "overview_get",
   "settings_get",
   "environment_update",
@@ -54,6 +56,12 @@ const ORG_MEMBER_RESOURCE_OPERATION_IDS = [
   "organization_members_remove",
 ] as const;
 
+const SEGMENT_RESOURCE_OPERATION_IDS = [
+  "segments_get",
+  "segments_update",
+  "segments_delete",
+] as const;
+
 type ClaimGuard = (value: Record<string, unknown>) => boolean;
 
 /**
@@ -66,6 +74,7 @@ type ClaimGuard = (value: Record<string, unknown>) => boolean;
  */
 const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard>([
   ["apps_create", (value) => isResourceOperation(value, "orgId")],
+  ["organization_usage_get", (value) => isResourceOperation(value, "orgId")],
   ["app_attention_rollup_get", (value) => isResourceOperation(value, "appId")],
   ["api_key_revoke", isApiKeyRevokeOperation],
   ...family(UNBOUND_OPERATION_IDS, (value) => hasKeys(value, ["id"])),
@@ -76,6 +85,7 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ...family(METRIC_RESOURCE_OPERATION_IDS, isMetricResourceOperation),
   ...family(ORG_MEMBER_COLLECTION_OPERATION_IDS, (value) => isResourceOperation(value, "orgId")),
   ...family(ORG_MEMBER_RESOURCE_OPERATION_IDS, isOrgMemberResourceOperation),
+  ...family(SEGMENT_RESOURCE_OPERATION_IDS, isSegmentResourceOperation),
 ]);
 
 function family(ids: readonly string[], guard: ClaimGuard): [string, ClaimGuard][] {
@@ -139,6 +149,14 @@ function isOrgMemberResourceOperation(value: Record<string, unknown>): boolean {
     hasKeys(value, ["id", "orgId", "userId"]) &&
     isNonEmptyString(value.orgId) &&
     isNonEmptyString(value.userId)
+  );
+}
+
+function isSegmentResourceOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "segmentId"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.segmentId)
   );
 }
 

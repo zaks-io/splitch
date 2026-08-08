@@ -182,14 +182,21 @@ async function resolvePanelPrincipal(
   ) {
     return null;
   }
-  // Org-scoped operations (App creation, Org membership) name an Organization and
-  // no App, so there is no App membership to derive authority from.
-  if ("orgId" in operation) {
+  return resolveDelegatedPrincipal(operation, delegation.actorId, panelAccess);
+}
+
+/** Authority for a verified delegation, by what the operation names. */
+async function resolveDelegatedPrincipal(
+  operation: NonNullable<ReturnType<typeof parseControlPanelBindingOperation>>,
+  actorId: string,
+  panelAccess?: PanelSessionAccess,
+) {
+  if (operation.id === "apps_create") {
     return {
       ok: true as const,
       principal: {
         kind: "control-plane-token" as const,
-        id: delegation.actorId,
+        id: actorId,
         // This ceiling scope binds the delegated path; the handler still rechecks
         // the actor's live Org role in D1 before it acts.
         scopes: [`org:${operation.orgId}:owner`],
@@ -199,6 +206,18 @@ async function resolvePanelPrincipal(
         authDoor: PANEL_AUTH_DOOR,
       },
     };
+  }
+  // Org membership reads and writes name an Organization and no App, and the
+  // usage read is Organization-wide: all of them derive authority from live Org
+  // membership rather than from the claimed orgId.
+  if (
+    operation.id === "organization_usage_get" ||
+    operation.id === "organization_members_list" ||
+    operation.id === "organization_members_add" ||
+    operation.id === "organization_members_update" ||
+    operation.id === "organization_members_remove"
+  ) {
+    return resolvePanelOrgPrincipal(operation.orgId, actorId, panelAccess);
   }
   // Unbound operations name no resource, so there is nothing to derive authority
   // from and nothing to co-scope against. The principal carries the actor and an
@@ -215,7 +234,7 @@ async function resolvePanelPrincipal(
       ok: true as const,
       principal: {
         kind: "control-plane-token" as const,
-        id: delegation.actorId,
+        id: actorId,
         scopes: [],
         orgId: null,
         appId: null,
@@ -225,7 +244,14 @@ async function resolvePanelPrincipal(
     };
   }
 
-  return resolvePanelResourcePrincipal(operation, delegation.actorId, panelAccess);
+  // Everything left must name an App, because that is the only authority left to
+  // derive. An operation added to the vocabulary without an authority branch
+  // reaches here naming no App: that is a fault, and it fails loud as a 500
+  // rather than being co-scoped against an `appId` it does not have.
+  if (!("appId" in operation)) {
+    throw new Error(`control-plane: no authority derivation for operation ${operation.id}`);
+  }
+  return resolvePanelResourcePrincipal(operation, actorId, panelAccess);
 }
 
 async function resolveBoundedPanelSessionPrincipal(
@@ -248,6 +274,43 @@ async function resolveBoundedPanelSessionPrincipal(
       // the path while the apps_create handler still requires the live D1 role.
       scopes: [`org:${operation.orgId}:owner`],
       orgId: operation.orgId,
+      appId: null,
+      environmentId: null,
+      authDoor: PANEL_AUTH_DOOR,
+    },
+  };
+}
+
+/**
+ * Authority for an Organization-scoped Panel read. Unlike `apps_create`, the
+ * claimed `orgId` is never taken as the binding on its own: the read leaves this
+ * Worker over a service binding, so the Org membership is checked in live D1
+ * here and a non-member is refused before any Analysis hop.
+ */
+async function resolvePanelOrgPrincipal(
+  orgId: string,
+  actorId: string,
+  panelAccess?: PanelSessionAccess,
+) {
+  const access = await panelAccess?.authorizeOrg(actorId, orgId);
+  if (!access) {
+    return {
+      ok: false as const,
+      reason: "UNAUTHORIZED" as const,
+      error: {
+        code: "FORBIDDEN" as const,
+        message: "live Organization membership is required",
+        details: {},
+      },
+    };
+  }
+  return {
+    ok: true as const,
+    principal: {
+      kind: "control-plane-token" as const,
+      id: actorId,
+      scopes: [`org:${access.orgId}:${access.orgRole}`],
+      orgId: access.orgId,
       appId: null,
       environmentId: null,
       authDoor: PANEL_AUTH_DOOR,

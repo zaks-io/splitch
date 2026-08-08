@@ -82,11 +82,12 @@ export function EnvironmentPolicyEditor({
             <span>Confirm</span>
             <span>Approve</span>
           </div>
-          {ENVIRONMENT_POLICY_LABELS.map(([key, label]) => (
+          {ENVIRONMENT_POLICY_LABELS.map(([key, label, note]) => (
             <PolicyRow
               key={key}
               label={label}
               name={key}
+              note={note}
               onChange={(level) => setDraft((current) => ({ ...current, [key]: level }))}
               value={draft[key]}
             />
@@ -124,18 +125,25 @@ export function EnvironmentPolicyEditor({
 function PolicyRow({
   label,
   name,
+  note,
   onChange,
   value,
 }: {
   label: string;
   name: string;
+  note?: string;
   onChange: (level: EnvironmentPolicyLevel) => void;
   value: EnvironmentPolicyLevel;
 }) {
   return (
     <fieldset className="grid min-w-160 grid-cols-[minmax(15rem,1fr)_repeat(3,8rem)] items-center border-t px-3 py-3">
       <legend className="sr-only">{label}</legend>
-      <span className="font-medium text-sm">{label}</span>
+      <span className="font-medium text-sm">
+        {label}
+        {note ? (
+          <span className="mt-1 block font-normal text-muted-foreground text-xs">{note}</span>
+        ) : null}
+      </span>
       {(["allow", "confirm"] as const).map((level) => (
         <label className="flex items-center gap-2 text-sm capitalize" key={level}>
           <input

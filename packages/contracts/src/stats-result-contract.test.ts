@@ -234,6 +234,8 @@ describe("declared /results response contract", () => {
     state: "ready" as const,
     run_id: "run_1",
     control_variant: "control",
+    data_watermark: "2026-07-22T12:00:00.000Z",
+    result_token: `sha256:${"a".repeat(64)}`,
     stats: statsOutput,
   };
 
@@ -261,6 +263,36 @@ describe("declared /results response contract", () => {
     const { [field]: _dropped, ...withoutField } = envelope;
 
     expect(declaredResponse("experiment_results_get").safeParse(withoutField).success).toBe(false);
+  });
+
+  it("accepts decision evidence only as a complete pair", () => {
+    const { data_watermark: _watermark, ...withoutWatermark } = envelope;
+    const { result_token: _token, ...withoutToken } = envelope;
+
+    expect(declaredResponse("experiment_results_get").safeParse(withoutWatermark).success).toBe(
+      false,
+    );
+    expect(declaredResponse("experiment_results_get").safeParse(withoutToken).success).toBe(false);
+    expect(
+      declaredResponse("experiment_results_get").safeParse({
+        state: "ready",
+        run_id: "run_1",
+        control_variant: "control",
+        stats: statsOutput,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects camel-case decision evidence fields", () => {
+    const { data_watermark: dataWatermark, result_token: resultToken, ...rest } = envelope;
+
+    expect(
+      declaredResponse("experiment_results_get").safeParse({
+        ...rest,
+        dataWatermark,
+        resultToken,
+      }).success,
+    ).toBe(false);
   });
 
   it("accepts a no_data envelope that names the missing input", () => {

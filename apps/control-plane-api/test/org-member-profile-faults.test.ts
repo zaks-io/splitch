@@ -19,16 +19,21 @@ beforeEach(setup);
 afterEach(teardown);
 
 describe("control-plane org/member profile-resolution faults", () => {
-  it("fails loud and names the member when a profile lookup faults", async () => {
+  it("fails loud when a profile lookup faults, without naming the member", async () => {
     const ownerJwt = await token(OWNER, PRIMARY.orgId, "owner");
     const api = client(ownerJwt, { "x-test-profile-failure-user": PROFILELESS_MEMBER });
     const res = await memberRoute(api).$get({ param: { orgId: PRIMARY.orgId } });
 
     expect(res.status).toBe(503);
-    expect(await res.json()).toMatchObject({
+    const body = await res.text();
+    expect(JSON.parse(body)).toMatchObject({
       code: "SERVICE_UNAVAILABLE",
-      message: `member profile lookup failed for ${PROFILELESS_MEMBER}`,
+      message: "member profile lookup failed",
     });
+    // The Panel renders this message verbatim, and the Members screen shows
+    // emails rather than splitch User IDs. The faulting member's ID belongs in
+    // the log, not in another person's browser.
+    expect(body).not.toContain(PROFILELESS_MEMBER);
   });
 
   it("fails loud before adding when the profile lookup faults", async () => {
@@ -42,7 +47,7 @@ describe("control-plane org/member profile-resolution faults", () => {
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({
       code: "SERVICE_UNAVAILABLE",
-      message: `member profile lookup failed for ${PROFILELESS_MEMBER}`,
+      message: "member profile lookup failed",
     });
 
     const roster = await memberRoute(client(ownerJwt)).$get({ param: { orgId: SOLO.orgId } });
@@ -63,7 +68,7 @@ describe("control-plane org/member profile-resolution faults", () => {
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({
       code: "SERVICE_UNAVAILABLE",
-      message: `member profile lookup failed for ${PROFILELESS_MEMBER}`,
+      message: "member profile lookup failed",
     });
 
     const roster = await memberRoute(client(ownerJwt)).$get({ param: { orgId: PRIMARY.orgId } });
