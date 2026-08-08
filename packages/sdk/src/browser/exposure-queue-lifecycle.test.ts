@@ -254,4 +254,28 @@ describe("ExposureQueue: visibility + timer (M38/M39)", () => {
     await vi.advanceTimersByTimeAsync(5_000);
     expect(redeemCalls).toEqual([1, 1]);
   });
+
+  it("close() clears the armed timer so a failed drain is not retried 5s later", async () => {
+    const redeemCalls: number[] = [];
+    const queue = new ExposureQueue({
+      transport: {
+        async redeemExposures(exposures) {
+          redeemCalls.push(exposures.length);
+          return {
+            status: 503,
+            results: null,
+            errorCode: "SERVICE_UNAVAILABLE" as const,
+            errorMessage: "blip",
+          };
+        },
+      },
+      logger: new FakeLogger(),
+      now: () => Date.parse("2026-08-08T00:00:00.000Z"),
+    });
+    queue.enqueue("a", "ticket-a");
+    await expect(queue.close()).rejects.toThrow(/SERVICE_UNAVAILABLE/);
+    expect(redeemCalls).toEqual([1]);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(redeemCalls).toEqual([1]);
+  });
 });

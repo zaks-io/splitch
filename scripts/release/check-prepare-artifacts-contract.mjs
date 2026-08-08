@@ -80,7 +80,8 @@ try {
   for (const [fileName, contents] of Object.entries(FAKE_DIST[targetKey])) {
     writeFileSync(join(packageRoot, "dist", fileName), contents);
   }
-  writeBuildStamp(targetKey, repoRoot);
+  const fixtureDigest = process.env.SPLITCH_BUILD_STAMP_SOURCE_DIGEST ?? "prepare-contract-fixture";
+  writeBuildStamp(targetKey, repoRoot, { sourceDigest: fixtureDigest });
 
   const outputDir = join(scratchRoot, "artifacts");
   const manifestJson = execFileSync(
@@ -92,7 +93,10 @@ try {
       outputDir,
       "prepare-contract-test",
     ],
-    { encoding: "utf8" },
+    {
+      encoding: "utf8",
+      env: { ...process.env, SPLITCH_BUILD_STAMP_SOURCE_DIGEST: fixtureDigest },
+    },
   );
   const manifest = JSON.parse(manifestJson.trim().split("\n").at(-1));
   for (const artifact of [manifest.tarballName, "checksums.sha256", "tarball-contents.txt"]) {
