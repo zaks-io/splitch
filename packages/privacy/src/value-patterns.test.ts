@@ -2,13 +2,6 @@ import { describe, expect, it } from "vitest";
 import { REDACTED } from "./redaction-rules";
 import { redactValuePatterns } from "./value-patterns";
 
-/** ULID-shaped body whose randomness includes an 8-digit run the phone pattern matches. */
-const DIGIT_RUN_ULID = "01J12345678ABCDEFGHJKMNPQR";
-const MINTED_ID = `apr_${DIGIT_RUN_ULID}`;
-const BARE_PHONE = "555-867-5309";
-const BARE_DIGIT_RUN = "12345678901";
-const BARE_EMAIL = "leak@evil.com";
-
 describe("redactValuePatterns", () => {
   it("redacts a bare email anywhere in a string", () => {
     const out = redactValuePatterns("contact leak@evil.com for help");
@@ -27,32 +20,58 @@ describe("redactValuePatterns", () => {
     expect(out).toBe("req-123 attempt 2 of 5");
   });
 
-  // SPL-360: phone-like defaults must not eat digit runs inside minted ids.
-  // Each of these four goes red if the protection (or email/phone coverage) is
-  // reverted — see the PR body for the raw failing output against main's pattern.
-  it("preserves a minted internal id whose body has a long digit run", () => {
-    const message = `${MINTED_ID}: Error: outer for ${MINTED_ID}`;
-    expect(redactValuePatterns(message)).toBe(message);
+  // SPL-360: phone matches must not start after a word character. Removing the
+  // lookbehind turns each of these red (mid-token digit runs get eaten).
+  it("preserves opaque tokens whose bodies look phone-like (leak probes)", () => {
+    for (const message of [
+      "lookup failed for user_15551234567",
+      "lookup failed for app_18005551212",
+      "lookup failed for org_5558675309",
+    ]) {
+      expect(redactValuePatterns(message)).toBe(message);
+    }
   });
 
-  it("still redacts a bare phone sitting immediately next to a minted internal id", () => {
-    const out = redactValuePatterns(`${MINTED_ID}${BARE_PHONE}`);
-    expect(out).toContain(MINTED_ID);
-    expect(out.includes(BARE_PHONE)).toBe(false);
+  it("redacts a bare phone after a ULID-shaped id without eating the id", () => {
+    const id = "apr_01J1234567";
+    expect(redactValuePatterns(`${id} 555-867-5309`)).toBe(`${id} ${REDACTED}`);
+  });
+
+  it("redacts a parenthesized phone after a flag id without eating the id", () => {
+    const id = "flag_0123456789";
+    const out = redactValuePatterns(`${id} (555) 867-5309`);
+    expect(out.startsWith(`${id} `)).toBe(true);
+    expect(out.includes("555")).toBe(false);
     expect(out.includes(REDACTED)).toBe(true);
   });
 
-  it("still redacts an email when a minted internal id is also present", () => {
-    const out = redactValuePatterns(`${MINTED_ID} contact ${BARE_EMAIL}`);
-    expect(out).toContain(MINTED_ID);
-    expect(out.includes(BARE_EMAIL)).toBe(false);
-    expect(out.includes(REDACTED)).toBe(true);
+  it("preserves a multi-segment opaque token with a long digit run", () => {
+    const id = "rule_segment_0123456789ab";
+    expect(redactValuePatterns(`failed for ${id}`)).toBe(`failed for ${id}`);
   });
 
-  it("still redacts a long digit run that is not a prefixed minted id", () => {
-    const out = redactValuePatterns(`call ${BARE_DIGIT_RUN} now`);
-    expect(out.includes(BARE_DIGIT_RUN)).toBe(false);
-    expect(out.includes(REDACTED)).toBe(true);
+  it("still redacts bare international phones and JSON-embedded phones", () => {
+    expect(redactValuePatterns("+15551234567").includes("+15551234567")).toBe(false);
+    expect(redactValuePatterns("+44 20 7946 0958").includes("+44 20 7946 0958")).toBe(false);
+    const embedded = redactValuePatterns('{"phone":"+15551234567"}');
+    expect(embedded.includes("+15551234567")).toBe(false);
+    expect(embedded.includes(REDACTED)).toBe(true);
+  });
+
+  it("scrubs a 100KB single-word token with many digit runs under a fixed budget", () => {
+    // One opaque token: lookbehind must stay O(n). A per-match outward scan
+    // on this shape was multi-second; keep the budget tight enough that
+    // reintroducing that scan fails the suite.
+    const hexChunk = "a1b2c3d4e5f67890";
+    const body = hexChunk.repeat(Math.ceil(100_000 / hexChunk.length)).slice(0, 100_000);
+    const input = `payload_${body}`;
+    expect(input.length).toBe(8 + 100_000);
+
+    const start = performance.now();
+    const out = redactValuePatterns(input);
+    const elapsedMs = performance.now() - start;
+    expect(out).toBe(input);
+    expect(elapsedMs).toBeLessThan(250);
   });
 
   it("redacts app-specific shapes via extraPatterns (the Targeting Key)", () => {

@@ -12,13 +12,13 @@
  * so the same scrubber covers app-specific identifiers without this package
  * guessing them. The defaults are the universally-safe ones.
  *
- * Phone-like matching skips digit runs that sit inside a minted resource id
- * (`apr_…`, `flag_…`, …). A ULID/hex body can contain 8+ consecutive digits; those
- * are not phone numbers, and redacting them leaves a fault row unable to name
- * what failed.
+ * Phone-like matching refuses to start immediately after a word character
+ * (`[A-Za-z0-9_]`). That keeps digit runs inside opaque tokens (`apr_…`,
+ * `user_…`, `flag_…`) intact without a prefix allowlist, while bare phones
+ * after whitespace or punctuation still redact. A ULID/hex body can contain 8+
+ * consecutive digits; eating those leaves a fault row unable to name what failed.
  */
 
-import { MINTED_ID_PREFIXES } from "./minted-id-prefixes";
 import { REDACTED } from "./redaction-rules";
 
 /** Email: local@domain.tld. Every quantifier is BOUNDED ({1,64}/{1,255}/{2,24}),
@@ -27,39 +27,16 @@ import { REDACTED } from "./redaction-rules";
  * an overlapping dot class and backtracked quadratically). */
 const EMAIL_PATTERN = /[A-Z0-9._%+-]{1,64}@[A-Z0-9.-]{1,255}\.[A-Z]{2,24}/gi;
 
-/** Phone-like: 7+ digits with optional separators/+ (avoids tiny numbers). */
-const PHONE_LIKE_PATTERN = /\+?\d[\d\s().-]{6,}\d/g;
-
-const MINTED_ID_TOKEN = new RegExp(`^(?:${MINTED_ID_PREFIXES.join("|")})_[0-9A-Za-z]+$`, "i");
-
-const WORD_CHAR = /[0-9A-Za-z_]/;
+/**
+ * Phone-like: 7+ digits with optional separators/+ (avoids tiny numbers).
+ * Negative lookbehind keeps the match from starting inside an opaque token
+ * (`user_1555…`, `apr_01J…`); supported on Node 24 and workerd.
+ */
+const PHONE_LIKE_PATTERN = /(?<![A-Za-z0-9_])\+?\d[\d\s().-]{6,}\d/g;
 
 export interface ValuePatternOptions {
   /** App-specific value shapes (e.g. a Targeting Key prefix) to also redact. */
   extraPatterns?: readonly RegExp[];
-}
-
-/**
- * Expand a match to the surrounding `[A-Za-z0-9_]+` token so a digit run inside
- * `apr_01J…` is judged as part of that id, not as a bare phone.
- */
-function enclosingToken(text: string, start: number, end: number): string {
-  let lo = start;
-  let hi = end;
-  while (lo > 0 && WORD_CHAR.test(text.charAt(lo - 1))) lo -= 1;
-  while (hi < text.length && WORD_CHAR.test(text.charAt(hi))) hi += 1;
-  return text.slice(lo, hi);
-}
-
-function isInsideMintedId(text: string, matchStart: number, matchLength: number): boolean {
-  return MINTED_ID_TOKEN.test(enclosingToken(text, matchStart, matchStart + matchLength));
-}
-
-function redactPhoneLike(text: string): string {
-  return text.replace(
-    new RegExp(PHONE_LIKE_PATTERN.source, PHONE_LIKE_PATTERN.flags),
-    (match, offset: number) => (isInsideMintedId(text, offset, match.length) ? match : REDACTED),
-  );
 }
 
 /**
@@ -69,11 +46,12 @@ function redactPhoneLike(text: string): string {
  */
 export function redactValuePatterns(text: string, options: ValuePatternOptions = {}): string {
   let result = text;
-  result = result.replace(new RegExp(EMAIL_PATTERN.source, EMAIL_PATTERN.flags), REDACTED);
-  result = redactPhoneLike(result);
+  // `String.prototype[@@replace]` zeroes `lastIndex` for global regexes, so the
+  // same RegExp object is safe to reuse across calls without cloning.
+  result = result.replace(EMAIL_PATTERN, REDACTED);
+  result = result.replace(PHONE_LIKE_PATTERN, REDACTED);
   for (const pattern of options.extraPatterns ?? []) {
-    // Clone with a fresh lastIndex so a global regex is reusable across calls.
-    result = result.replace(new RegExp(pattern.source, pattern.flags), REDACTED);
+    result = result.replace(pattern, REDACTED);
   }
   return result;
 }
