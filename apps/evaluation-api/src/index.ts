@@ -118,7 +118,7 @@ async function handleRequest(
       token: env.SPLITCH_EVENT_INGEST_TOKEN,
     }),
     exposureRedemptionClaims: new DurableExposureRedemptionClaimStore(
-      env.EXPOSURE_REDEMPTION_CLAIMS,
+      requiredExposureRedemptionClaimsBinding(env.EXPOSURE_REDEMPTION_CLAIMS),
     ),
     evaluationCommitSink: makeHttpEvaluationCommitSink({
       endpoint: env.EVENT_INGEST_URL,
@@ -185,6 +185,13 @@ function requiredMcpReplayBinding(
   binding: EvaluationApiEnv["MCP_DELEGATION_REPLAY"],
 ): NonNullable<EvaluationApiEnv["MCP_DELEGATION_REPLAY"]> {
   if (!binding) throw new Error("evaluation-api: MCP_DELEGATION_REPLAY is required");
+  return binding;
+}
+
+function requiredExposureRedemptionClaimsBinding(
+  binding: EvaluationApiEnv["EXPOSURE_REDEMPTION_CLAIMS"],
+): NonNullable<EvaluationApiEnv["EXPOSURE_REDEMPTION_CLAIMS"]> {
+  if (!binding) throw new Error("evaluation-api: EXPOSURE_REDEMPTION_CLAIMS is required");
   return binding;
 }
 

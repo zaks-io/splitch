@@ -6,7 +6,25 @@
  * accepted). A never-appended ticket must not be reported as success.
  */
 
+/**
+ * How long sealed/accepted ownership is remembered (ticket-window scale).
+ * Distinct from the pending lease below — do not collapse them.
+ */
 export const EXPOSURE_REDEMPTION_CLAIM_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How long a `pending` claim may block the ticket before a retry may re-acquire.
+ *
+ * Sized for the redeem operation (claim → ingest → seal), not the ticket TTL.
+ * A lost claim RPC / isolate kill between claim and ingest leaves a pending
+ * tombstone; after this lease a retry re-acquires. That may append a second raw
+ * row in the ambiguous window (ingest may already have landed); Tinybird
+ * `cp_deduped_exposures` collapses subject-identity duplicates, so analysis is
+ * unaffected. A 24h pending tombstone that reports busy forever with nothing
+ * appended is the silent-loss direction ADR-0036 forbids — prefer the duplicate
+ * raw row. Do not "fix" this back to the claim TTL.
+ */
+export const EXPOSURE_REDEMPTION_PENDING_LEASE_MS = 30_000;
 
 type ExposureRedemptionDelivery = "pending" | "sealed" | "accepted";
 
@@ -20,6 +38,10 @@ export type ExposureRedemptionClaimOutcome =
 export type ExposureRedemptionAcknowledgeOutcome =
   | { readonly status: "accepted" }
   | { readonly status: "already_accepted" };
+
+export type ExposureRedemptionMutationResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: string };
 
 export interface ExposureRedemptionClaimInput {
   readonly appId: string;
@@ -90,7 +112,8 @@ async function liveTicket(
 
 /**
  * Pure claim state machine. Callers must serialize concurrent mutations
- * (Durable Object `blockConcurrencyWhile` or equivalent).
+ * (Durable Object `blockConcurrencyWhile` or equivalent). Never throws —
+ * conflict outcomes are returned so workerd does not abort the DO.
  */
 export async function applyExposureRedemptionClaim(
   storage: ExposureRedemptionClaimStorage,
@@ -102,31 +125,69 @@ export async function applyExposureRedemptionClaim(
 ): Promise<ExposureRedemptionClaimOutcome> {
   const existingExposure = await liveExposure(storage, input.exposureId, input.nowMs);
   if (existingExposure !== undefined) {
-    if (existingExposure.ticketFingerprint !== input.ticketFingerprint) {
-      return { status: "conflict" };
-    }
-    if (existingExposure.delivery === "accepted") return { status: "deduplicated" };
-    if (existingExposure.delivery === "sealed") return { status: "resume_ack" };
-    // pending: another attempt is sealing — never a success ack.
-    return { status: "busy" };
+    return claimAgainstExistingExposure(storage, input, existingExposure);
   }
 
   const existingTicket = await liveTicket(storage, input.ticketFingerprint, input.nowMs);
   if (existingTicket !== undefined) {
-    if (existingTicket.delivery === "pending") {
-      // Ticket claimed but nothing appended yet — not deduplicated.
-      return { status: "busy" };
-    }
-    // sealed or accepted: append already committed; bind this exposureId.
-    await storage.putExposure(input.exposureId, {
-      ticketFingerprint: input.ticketFingerprint,
-      delivery: existingTicket.delivery,
-      expiresAt: existingTicket.expiresAt,
-    });
-    return { status: "deduplicated" };
+    return claimAgainstExistingTicket(storage, input, existingTicket);
   }
 
-  const expiresAt = input.nowMs + EXPOSURE_REDEMPTION_CLAIM_TTL_MS;
+  return acquirePendingClaim(storage, input);
+}
+
+async function claimAgainstExistingExposure(
+  storage: ExposureRedemptionClaimStorage,
+  input: {
+    readonly exposureId: string;
+    readonly ticketFingerprint: string;
+    readonly nowMs: number;
+  },
+  existingExposure: ExposureBindingRecord,
+): Promise<ExposureRedemptionClaimOutcome> {
+  if (existingExposure.ticketFingerprint !== input.ticketFingerprint) {
+    return { status: "conflict" };
+  }
+  if (existingExposure.delivery === "accepted") return { status: "deduplicated" };
+  if (existingExposure.delivery === "pending") return { status: "busy" };
+  // sealed: only the owner that sealed may resume_ack. A rebound exposureId
+  // that bound after another owner sealed must keep answering deduplicated.
+  const ticket = await liveTicket(storage, input.ticketFingerprint, input.nowMs);
+  if (ticket !== undefined && ticket.ownerExposureId === input.exposureId) {
+    return { status: "resume_ack" };
+  }
+  return { status: "deduplicated" };
+}
+
+async function claimAgainstExistingTicket(
+  storage: ExposureRedemptionClaimStorage,
+  input: {
+    readonly exposureId: string;
+    readonly ticketFingerprint: string;
+    readonly nowMs: number;
+  },
+  existingTicket: TicketBindingRecord,
+): Promise<ExposureRedemptionClaimOutcome> {
+  if (existingTicket.delivery === "pending") {
+    return { status: "busy" };
+  }
+  await storage.putExposure(input.exposureId, {
+    ticketFingerprint: input.ticketFingerprint,
+    delivery: existingTicket.delivery,
+    expiresAt: existingTicket.expiresAt,
+  });
+  return { status: "deduplicated" };
+}
+
+async function acquirePendingClaim(
+  storage: ExposureRedemptionClaimStorage,
+  input: {
+    readonly exposureId: string;
+    readonly ticketFingerprint: string;
+    readonly nowMs: number;
+  },
+): Promise<ExposureRedemptionClaimOutcome> {
+  const expiresAt = input.nowMs + EXPOSURE_REDEMPTION_PENDING_LEASE_MS;
   await storage.putExposure(input.exposureId, {
     ticketFingerprint: input.ticketFingerprint,
     delivery: "pending",
@@ -175,32 +236,48 @@ export async function applyExposureRedemptionMarkSealed(
     readonly ticketFingerprint: string;
     readonly nowMs: number;
   },
-): Promise<void> {
+): Promise<ExposureRedemptionMutationResult<null>> {
   const existingExposure = await liveExposure(storage, input.exposureId, input.nowMs);
   if (
     existingExposure === undefined ||
     existingExposure.expiresAt <= input.nowMs ||
     existingExposure.ticketFingerprint !== input.ticketFingerprint
   ) {
-    throw new Error("exposure redemption claim is missing or mismatched at markSealed");
+    return {
+      ok: false,
+      error: "exposure redemption claim is missing or mismatched at markSealed",
+    };
   }
   if (existingExposure.delivery === "accepted" || existingExposure.delivery === "sealed") {
-    return;
+    return { ok: true, value: null };
   }
   const existingTicket = await liveTicket(storage, input.ticketFingerprint, input.nowMs);
-  const expiresAt =
-    existingTicket !== undefined ? existingTicket.expiresAt : existingExposure.expiresAt;
+  if (existingTicket === undefined) {
+    return {
+      ok: false,
+      error:
+        "exposure redemption ticket binding missing while exposure claim is live at markSealed",
+    };
+  }
+  if (existingTicket.ownerExposureId !== input.exposureId) {
+    return {
+      ok: false,
+      error: "exposure redemption ticket owner mismatches exposure claim at markSealed",
+    };
+  }
+  const expiresAt = input.nowMs + EXPOSURE_REDEMPTION_CLAIM_TTL_MS;
   await storage.putExposure(input.exposureId, {
     ticketFingerprint: input.ticketFingerprint,
     delivery: "sealed",
     expiresAt,
   });
   await storage.putTicket(input.ticketFingerprint, {
-    ownerExposureId: existingTicket?.ownerExposureId ?? input.exposureId,
+    ownerExposureId: existingTicket.ownerExposureId,
     delivery: "sealed",
     expiresAt,
   });
   await storage.setExpiryAlarm(expiresAt);
+  return { ok: true, value: null };
 }
 
 export async function applyExposureRedemptionAcknowledge(
@@ -210,35 +287,56 @@ export async function applyExposureRedemptionAcknowledge(
     readonly ticketFingerprint: string;
     readonly nowMs: number;
   },
-): Promise<ExposureRedemptionAcknowledgeOutcome> {
+): Promise<ExposureRedemptionMutationResult<ExposureRedemptionAcknowledgeOutcome>> {
   const existingExposure = await liveExposure(storage, input.exposureId, input.nowMs);
   if (
     existingExposure === undefined ||
     existingExposure.expiresAt <= input.nowMs ||
     existingExposure.ticketFingerprint !== input.ticketFingerprint
   ) {
-    throw new Error("exposure redemption claim is missing or mismatched at acknowledge");
+    return {
+      ok: false,
+      error: "exposure redemption claim is missing or mismatched at acknowledge",
+    };
   }
   if (existingExposure.delivery === "accepted") {
-    return { status: "already_accepted" };
+    return { ok: true, value: { status: "already_accepted" } };
   }
   if (existingExposure.delivery !== "sealed") {
-    throw new Error("exposure redemption claim must be sealed before acknowledge");
+    return {
+      ok: false,
+      error: "exposure redemption claim must be sealed before acknowledge",
+    };
   }
 
   const existingTicket = await liveTicket(storage, input.ticketFingerprint, input.nowMs);
+  if (existingTicket === undefined) {
+    return {
+      ok: false,
+      error:
+        "exposure redemption ticket binding missing while exposure claim is live at acknowledge",
+    };
+  }
+  if (existingTicket.ownerExposureId !== input.exposureId) {
+    return {
+      ok: false,
+      error: "exposure redemption ticket owner mismatches exposure claim at acknowledge",
+    };
+  }
   const expiresAt =
-    existingTicket !== undefined ? existingTicket.expiresAt : existingExposure.expiresAt;
+    existingTicket.expiresAt > input.nowMs
+      ? existingTicket.expiresAt
+      : input.nowMs + EXPOSURE_REDEMPTION_CLAIM_TTL_MS;
   await storage.putExposure(input.exposureId, {
     ticketFingerprint: input.ticketFingerprint,
     delivery: "accepted",
     expiresAt,
   });
   await storage.putTicket(input.ticketFingerprint, {
-    ownerExposureId: existingTicket?.ownerExposureId ?? input.exposureId,
+    ownerExposureId: existingTicket.ownerExposureId,
     delivery: "accepted",
     expiresAt,
   });
   await storage.setExpiryAlarm(expiresAt);
-  return { status: "accepted" };
+  return { ok: true, value: { status: "accepted" } };
 }

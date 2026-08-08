@@ -19,7 +19,8 @@ export interface ExposureRedemptionClaimNamespace {
   };
 }
 
-function exposureRedemptionClaimScopeName(appId: string, environmentId: string): string {
+/** App + Environment — both axes required so Environments never share a DO. */
+export function exposureRedemptionClaimScopeName(appId: string, environmentId: string): string {
   return `${appId}\u001f${environmentId}`;
 }
 
@@ -73,7 +74,8 @@ export class DurableExposureRedemptionClaimStore implements ExposureRedemptionCl
   }
 }
 
-function parseClaimOutcome(value: unknown): ExposureRedemptionClaimOutcome {
+/** Exported for guard tests — invalid shapes must throw, never default to success. */
+export function parseClaimOutcome(value: unknown): ExposureRedemptionClaimOutcome {
   if (
     typeof value === "object" &&
     value !== null &&
@@ -89,7 +91,7 @@ function parseClaimOutcome(value: unknown): ExposureRedemptionClaimOutcome {
   throw new Error("exposure redemption claim returned an invalid outcome");
 }
 
-function parseAcknowledgeOutcome(value: unknown): ExposureRedemptionAcknowledgeOutcome {
+export function parseAcknowledgeOutcome(value: unknown): ExposureRedemptionAcknowledgeOutcome {
   if (
     typeof value === "object" &&
     value !== null &&
@@ -101,7 +103,7 @@ function parseAcknowledgeOutcome(value: unknown): ExposureRedemptionAcknowledgeO
   throw new Error("exposure redemption acknowledge returned an invalid outcome");
 }
 
-function parseOk(value: unknown): void {
+export function parseOk(value: unknown): void {
   if (typeof value === "object" && value !== null && "ok" in value && value.ok === true) {
     return;
   }
@@ -129,25 +131,28 @@ export class MemoryExposureRedemptionClaimStore implements ExposureRedemptionCla
   }
 
   async markSealed(input: ExposureRedemptionClaimInput): Promise<void> {
-    await applyExposureRedemptionMarkSealed(this.scopeFor(input), {
+    const result = await applyExposureRedemptionMarkSealed(this.scopeFor(input), {
       exposureId: input.exposureId,
       ticketFingerprint: input.ticketFingerprint,
       nowMs: input.nowMs ?? Date.now(),
     });
+    if (!result.ok) throw new Error(result.error);
   }
 
   async acknowledge(
     input: ExposureRedemptionClaimInput,
   ): Promise<ExposureRedemptionAcknowledgeOutcome> {
-    return applyExposureRedemptionAcknowledge(this.scopeFor(input), {
+    const result = await applyExposureRedemptionAcknowledge(this.scopeFor(input), {
       exposureId: input.exposureId,
       ticketFingerprint: input.ticketFingerprint,
       nowMs: input.nowMs ?? Date.now(),
     });
+    if (!result.ok) throw new Error(result.error);
+    return result.value;
   }
 
   private scopeFor(input: ExposureRedemptionClaimInput): MemoryClaimScope {
-    const key = `${input.appId}\u001f${input.environmentId}`;
+    const key = exposureRedemptionClaimScopeName(input.appId, input.environmentId);
     const existing = this.byScope.get(key);
     if (existing) return existing;
     const created = new MemoryClaimScope();

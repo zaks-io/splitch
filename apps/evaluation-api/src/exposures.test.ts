@@ -252,4 +252,47 @@ describe("POST /api/sdk/exposures: claim failure and concurrency", () => {
     ]);
     expect(exposureSink.writes).toHaveLength(0);
   });
+
+  it("keeps a rebound exposureId on deduplicated after owner sealed (never accepted)", async () => {
+    const claims = new FailOnceAcknowledgeStore();
+    const { app, exposureSink } = await makeSdkRouteHarness({
+      liveRun: true,
+      exposureRedemptionClaims: claims,
+    });
+    const ticket = await mintTicket();
+    const first = (await (
+      await app.request(
+        PATH,
+        exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]),
+      )
+    ).json()) as ExposureBatchResponse;
+    // markSealed succeeded; acknowledge failed once → sealed, one append for E1.
+    expect(first.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "SERVICE_UNAVAILABLE" },
+    ]);
+    expect(exposureSink.writes).toHaveLength(1);
+    expect(exposureSink.writes[0]?.eventId).toBe(EXPOSURE_ID_A);
+
+    const rebound1 = (await (
+      await app.request(
+        PATH,
+        exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_B, exposureTicket: ticket }]),
+      )
+    ).json()) as ExposureBatchResponse;
+    expect(rebound1.results).toEqual([
+      { exposureId: EXPOSURE_ID_B, status: "deduplicated", code: null },
+    ]);
+
+    const rebound2 = (await (
+      await app.request(
+        PATH,
+        exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_B, exposureTicket: ticket }]),
+      )
+    ).json()) as ExposureBatchResponse;
+    expect(rebound2.results).toEqual([
+      { exposureId: EXPOSURE_ID_B, status: "deduplicated", code: null },
+    ]);
+    expect(exposureSink.writes).toHaveLength(1);
+    expect(exposureSink.writes.map((w) => w.eventId)).toEqual([EXPOSURE_ID_A]);
+  });
 });

@@ -20,13 +20,14 @@ export interface ExposureRedemptionClaimDoContext {
 type ClaimBody = {
   exposureId: string;
   ticketFingerprint: string;
-  nowMs?: number;
+  nowMs: number;
 };
 
 /**
  * Request handler for ExposureRedemptionClaimDurableObject. Extracted so unit
- * tests exercise the real concurrency boundary and routes without importing
- * `cloudflare:workers`.
+ * and Miniflare tests exercise the real routes. Mutations never throw inside
+ * `blockConcurrencyWhile` — workerd aborts the DO on throw across that boundary,
+ * which would kill every concurrent claim for the App+Environment.
  */
 export async function handleExposureRedemptionClaimFetch(
   ctx: ExposureRedemptionClaimDoContext,
@@ -44,7 +45,7 @@ export async function handleExposureRedemptionClaimFetch(
   const args = {
     exposureId: body.exposureId,
     ticketFingerprint: body.ticketFingerprint,
-    nowMs: body.nowMs ?? Date.now(),
+    nowMs: body.nowMs,
   };
   return dispatchClaimRoute(ctx, storage, path, args);
 }
@@ -65,36 +66,22 @@ async function dispatchClaimRoute(
     return Response.json({ ok: true });
   }
   if (path === "/markSealed") {
-    return runOrConflict(
-      ctx,
-      () => applyExposureRedemptionMarkSealed(storage, args),
-      "markSealed failed",
+    const result = await ctx.blockConcurrencyWhile(() =>
+      applyExposureRedemptionMarkSealed(storage, args),
     );
+    return result.ok
+      ? Response.json({ ok: true })
+      : Response.json({ error: result.error }, { status: 409 });
   }
   if (path === "/acknowledge") {
-    return runOrConflict(
-      ctx,
-      async () => applyExposureRedemptionAcknowledge(storage, args),
-      "acknowledge failed",
+    const result = await ctx.blockConcurrencyWhile(() =>
+      applyExposureRedemptionAcknowledge(storage, args),
     );
+    return result.ok
+      ? Response.json(result.value)
+      : Response.json({ error: result.error }, { status: 409 });
   }
   return Response.json({ error: "not found" }, { status: 404 });
-}
-
-async function runOrConflict(
-  ctx: ExposureRedemptionClaimDoContext,
-  op: () => Promise<unknown>,
-  fallback: string,
-): Promise<Response> {
-  try {
-    const outcome = await ctx.blockConcurrencyWhile(op);
-    return Response.json(outcome === undefined ? { ok: true } : outcome);
-  } catch (cause) {
-    return Response.json(
-      { error: cause instanceof Error ? cause.message : fallback },
-      { status: 409 },
-    );
-  }
 }
 
 export async function runExposureRedemptionClaimAlarm(
@@ -150,6 +137,8 @@ class DurableClaimStorage implements ExposureRedemptionClaimStorage {
 
   async setExpiryAlarm(expiresAt: number): Promise<void> {
     const existing = await this.storage.getAlarm();
+    // Only move the alarm earlier (or arm when unset). Overwriting with a later
+    // time would let nearer-expiring records outlive their TTL.
     if (existing === null || existing > expiresAt) {
       await this.storage.setAlarm(expiresAt);
     }
@@ -177,10 +166,18 @@ async function parseClaimBody(request: Request): Promise<ClaimBody | null> {
     ) {
       return null;
     }
+    // Reject present-but-invalid nowMs the same way as a bad exposureId — never
+    // silently substitute Date.now().
+    if (
+      body.nowMs !== undefined &&
+      (typeof body.nowMs !== "number" || !Number.isFinite(body.nowMs))
+    ) {
+      return null;
+    }
     return {
       exposureId: body.exposureId,
       ticketFingerprint: body.ticketFingerprint,
-      nowMs: typeof body.nowMs === "number" && Number.isFinite(body.nowMs) ? body.nowMs : undefined,
+      nowMs: typeof body.nowMs === "number" ? body.nowMs : Date.now(),
     };
   } catch {
     return null;

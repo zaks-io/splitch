@@ -201,8 +201,10 @@ async function sealIngestAndConfirm(
       exposureId: item.exposureId,
       causeSummary: cause instanceof Error ? cause.message : String(cause),
     });
-    // Ingest committed; sealed (or pending if markSealed failed). Exact-ID retry
-    // uses resume_ack when sealed — no second append.
+    // Ingest committed. If markSealed succeeded, exact-ID retry uses resume_ack
+    // (no second append). If markSealed failed, the claim stays pending until
+    // EXPOSURE_REDEMPTION_PENDING_LEASE_MS — then a retry may re-acquire and
+    // append again (accepted ambiguous-window risk; see that constant).
     scheduleHoldoverWrite(ticket, scope, deps);
     return rejected(item.exposureId, "SERVICE_UNAVAILABLE");
   }
