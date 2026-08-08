@@ -31,6 +31,7 @@ import { makeHttpEvaluationCommitSink } from "./evaluation-commit-sink";
 import { makeHttpEvaluationUsageSink } from "./evaluation-usage-sink";
 import { makeHttpExposureIngestSink } from "./exposure-redemption";
 import { DurableExposureRedemptionClaimStore } from "./exposure-redemption-claim";
+import { requiredExposureRedemptionClaimsBinding } from "./exposure-redemption-claims-binding";
 import { ExposureRedemptionClaimDurableObject } from "./exposure-redemption-do";
 import { makeEnvSaltStore } from "./local-salt-store";
 import { exposureTicketKeyFromEnv } from "./local-ticket-key";
@@ -185,13 +186,6 @@ function requiredMcpReplayBinding(
   binding: EvaluationApiEnv["MCP_DELEGATION_REPLAY"],
 ): NonNullable<EvaluationApiEnv["MCP_DELEGATION_REPLAY"]> {
   if (!binding) throw new Error("evaluation-api: MCP_DELEGATION_REPLAY is required");
-  return binding;
-}
-
-function requiredExposureRedemptionClaimsBinding(
-  binding: EvaluationApiEnv["EXPOSURE_REDEMPTION_CLAIMS"],
-): NonNullable<EvaluationApiEnv["EXPOSURE_REDEMPTION_CLAIMS"]> {
-  if (!binding) throw new Error("evaluation-api: EXPOSURE_REDEMPTION_CLAIMS is required");
   return binding;
 }
 

@@ -10,6 +10,20 @@ import {
 
 const EXPOSURE_KEY_PREFIX = "exposure:";
 const TICKET_KEY_PREFIX = "ticket:";
+/** Cursor for multi-tick GC; sorts before claim keys and is skipped in expiry. */
+const SWEEP_CURSOR_KEY = "__sweep_after";
+
+/**
+ * Max keys listed per alarm tick. DO alarms share isolate CPU with fetch;
+ * 256 keeps a tick small (deserialize + delete) while large keyspaces drain
+ * via immediate re-arm when a full page returns.
+ */
+export const EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE = 256;
+
+type SweepCursor = {
+  readonly after: string;
+  readonly nextExpiry: number | null;
+};
 
 /** Minimal DO context the claim handler needs — keeps tests free of cloudflare:workers. */
 export interface ExposureRedemptionClaimDoContext {
@@ -91,7 +105,9 @@ export async function runExposureRedemptionClaimAlarm(
   const nextExpiry = await storage.deleteExpired(Date.now());
   if (nextExpiry !== null) {
     await storage.setExpiryAlarm(nextExpiry);
+    return;
   }
+  await storageApi.deleteAlarm();
 }
 
 class DurableClaimStorage implements ExposureRedemptionClaimStorage {
@@ -122,17 +138,35 @@ class DurableClaimStorage implements ExposureRedemptionClaimStorage {
   }
 
   async deleteExpired(nowMs: number): Promise<number | null> {
-    const entries = await this.storage.list<ExposureBindingRecord | TicketBindingRecord>();
-    const expiredKeys: string[] = [];
-    let nextExpiry: number | null = null;
-    for (const [key, record] of entries) {
-      const expiresAt = claimRecordExpiresAt(key, record);
-      if (expiresAt === null) continue;
-      if (expiresAt <= nowMs) expiredKeys.push(key);
-      else nextExpiry = nextExpiry === null ? expiresAt : Math.min(nextExpiry, expiresAt);
-    }
+    const cursor = await this.storage.get<SweepCursor>(SWEEP_CURSOR_KEY);
+    const entries = await this.storage.list<ExposureBindingRecord | TicketBindingRecord>({
+      limit: EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE,
+      ...(cursor !== undefined ? { startAfter: cursor.after } : {}),
+    });
+    const { expiredKeys, pageNextExpiry } = collectExpiredKeys(entries, nowMs);
     if (expiredKeys.length > 0) await this.storage.delete(expiredKeys);
+
+    const nextExpiry = minExpiry(cursor?.nextExpiry ?? null, pageNextExpiry);
+    if (entries.size >= EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE) {
+      await this.persistSweepCursor(entries, nextExpiry);
+      // Full page: more keys may remain — re-arm immediately to continue.
+      return nowMs;
+    }
+
+    if (cursor !== undefined) await this.storage.delete(SWEEP_CURSOR_KEY);
     return nextExpiry;
+  }
+
+  private async persistSweepCursor(
+    entries: Map<string, ExposureBindingRecord | TicketBindingRecord>,
+    nextExpiry: number | null,
+  ): Promise<void> {
+    const lastKey = [...entries.keys()].at(-1);
+    if (lastKey === undefined) return;
+    await this.storage.put(SWEEP_CURSOR_KEY, {
+      after: lastKey,
+      nextExpiry,
+    } satisfies SweepCursor);
   }
 
   async setExpiryAlarm(expiresAt: number): Promise<void> {
@@ -149,6 +183,28 @@ function claimRecordExpiresAt(key: string, record: unknown): number | null {
   if (!(key.startsWith(EXPOSURE_KEY_PREFIX) || key.startsWith(TICKET_KEY_PREFIX))) return null;
   if (typeof record !== "object" || record === null || !("expiresAt" in record)) return null;
   return typeof record.expiresAt === "number" ? record.expiresAt : null;
+}
+
+function collectExpiredKeys(
+  entries: Map<string, ExposureBindingRecord | TicketBindingRecord>,
+  nowMs: number,
+): { expiredKeys: string[]; pageNextExpiry: number | null } {
+  const expiredKeys: string[] = [];
+  let pageNextExpiry: number | null = null;
+  for (const [key, record] of entries) {
+    if (key === SWEEP_CURSOR_KEY) continue;
+    const expiresAt = claimRecordExpiresAt(key, record);
+    if (expiresAt === null) continue;
+    if (expiresAt <= nowMs) expiredKeys.push(key);
+    else pageNextExpiry = minExpiry(pageNextExpiry, expiresAt);
+  }
+  return { expiredKeys, pageNextExpiry };
+}
+
+function minExpiry(a: number | null, b: number | null): number | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return Math.min(a, b);
 }
 
 async function parseClaimBody(request: Request): Promise<ClaimBody | null> {

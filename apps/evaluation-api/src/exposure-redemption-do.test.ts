@@ -3,8 +3,9 @@ import {
   DurableExposureRedemptionClaimStore,
   type ExposureRedemptionClaimNamespace,
 } from "./exposure-redemption-claim";
-import { EXPOSURE_REDEMPTION_PENDING_LEASE_MS } from "./exposure-redemption-claim-core";
+import { EXPOSURE_REDEMPTION_CLAIM_TTL_MS } from "./exposure-redemption-claim-core";
 import {
+  EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE,
   type ExposureRedemptionClaimDoContext,
   handleExposureRedemptionClaimFetch,
   runExposureRedemptionClaimAlarm,
@@ -16,10 +17,14 @@ import { APP_ID, ENVIRONMENT_ID } from "./sdk-route-test-fixtures";
  * `exposure-redemption-do-miniflare.test.ts`.
  */
 
-function memoryCtx(): ExposureRedemptionClaimDoContext {
+function memoryCtx(): ExposureRedemptionClaimDoContext & {
+  listCallSizes: number[];
+} {
   const map = new Map<string, unknown>();
   let alarm: number | null = null;
+  const listCallSizes: number[] = [];
   return {
+    listCallSizes,
     storage: {
       get: async <T>(key: string) => map.get(key) as T | undefined,
       put: async (key: string, value: unknown) => {
@@ -29,12 +34,26 @@ function memoryCtx(): ExposureRedemptionClaimDoContext {
         if (Array.isArray(key)) for (const k of key) map.delete(k);
         else map.delete(key);
       },
-      list: async <T>() => new Map(Array.from(map.entries()) as Array<[string, T]>),
+      list: async <T>(options?: { limit?: number; startAfter?: string }) => {
+        let entries = Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+        if (options?.startAfter !== undefined) {
+          const after = options.startAfter;
+          entries = entries.filter(([key]) => key > after);
+        }
+        if (options?.limit !== undefined) entries = entries.slice(0, options.limit);
+        listCallSizes.push(entries.length);
+        return new Map(entries as Array<[string, T]>);
+      },
       getAlarm: async () => alarm,
       setAlarm: async (scheduledTime: number) => {
         alarm = scheduledTime;
       },
+      deleteAlarm: async () => {
+        alarm = null;
+      },
     } as unknown as DurableObjectStorage,
+    // Unit harness: serialize by running the callback. Real DO concurrency is
+    // covered in exposure-redemption-do-miniflare.test.ts.
     blockConcurrencyWhile: async <T>(fn: () => Promise<T>) => fn(),
   };
 }
@@ -125,12 +144,11 @@ describe("handleExposureRedemptionClaimFetch (production handler)", () => {
     ).toEqual({ status: "acquired" });
   });
 
-  it("arms a pending-lease alarm on claim and never pushes the alarm later on seal", async () => {
+  it("does not arm an alarm on pending claim; arms claim-TTL on seal and never pushes later", async () => {
     const ctx = memoryCtx();
     const now = Date.now();
     await handleExposureRedemptionClaimFetch(ctx, post("/claim", { ...claimBody, nowMs: now }));
-    const pendingAlarm = now + EXPOSURE_REDEMPTION_PENDING_LEASE_MS;
-    expect(await ctx.storage.getAlarm()).toBe(pendingAlarm);
+    expect(await ctx.storage.getAlarm()).toBeNull();
 
     expect(
       (
@@ -140,10 +158,10 @@ describe("handleExposureRedemptionClaimFetch (production handler)", () => {
         )
       ).status,
     ).toBe(200);
-    // Sealed records live for the claim TTL, but setExpiryAlarm must not push a
-    // nearer pending alarm later — otherwise short-lived records outlive their TTL.
-    expect(await ctx.storage.getAlarm()).toBe(pendingAlarm);
+    const sealedAlarm = now + EXPOSURE_REDEMPTION_CLAIM_TTL_MS;
+    expect(await ctx.storage.getAlarm()).toBe(sealedAlarm);
 
+    // A nearer expiry must move the alarm earlier; must not leave the later TTL.
     await ctx.storage.put("exposure:old", {
       ticketFingerprint: "x",
       delivery: "pending",
@@ -158,6 +176,35 @@ describe("handleExposureRedemptionClaimFetch (production handler)", () => {
     await runExposureRedemptionClaimAlarm(ctx.storage);
     expect(await ctx.storage.get("exposure:old")).toBeUndefined();
     expect(await ctx.storage.getAlarm()).toBe(nearer);
+  });
+
+  it("bounds each alarm sweep page and re-arms immediately to continue", async () => {
+    const ctx = memoryCtx();
+    const now = Date.now();
+    const total = EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE + 40;
+    for (let i = 0; i < total; i += 1) {
+      const id = `exp-${String(i).padStart(4, "0")}`;
+      await ctx.storage.put(`exposure:${id}`, {
+        ticketFingerprint: `fp-${id}`,
+        delivery: "sealed",
+        expiresAt: now - 1,
+      });
+    }
+    const beforeFirst = Date.now();
+    await runExposureRedemptionClaimAlarm(ctx.storage);
+    const afterFirst = Date.now();
+    expect(ctx.listCallSizes[0]).toBe(EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE);
+    const midAlarm = await ctx.storage.getAlarm();
+    expect(midAlarm).toBeGreaterThanOrEqual(beforeFirst);
+    expect(midAlarm).toBeLessThanOrEqual(afterFirst);
+
+    await runExposureRedemptionClaimAlarm(ctx.storage);
+    expect(ctx.listCallSizes[1]).toBeLessThanOrEqual(EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE);
+    expect(await ctx.storage.get(`exposure:exp-0000`)).toBeUndefined();
+    expect(
+      await ctx.storage.get(`exposure:exp-${String(total - 1).padStart(4, "0")}`),
+    ).toBeUndefined();
+    expect(await ctx.storage.getAlarm()).toBeNull();
   });
 });
 

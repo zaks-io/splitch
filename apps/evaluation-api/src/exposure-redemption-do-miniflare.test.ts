@@ -8,6 +8,7 @@ import {
   DurableExposureRedemptionClaimStore,
   type ExposureRedemptionClaimNamespace,
 } from "./exposure-redemption-claim";
+import { requiredExposureRedemptionClaimsBinding } from "./exposure-redemption-claims-binding";
 import { EXPOSURE_REDEMPTION_PENDING_LEASE_MS } from "./exposure-redemption-claim-core";
 import { APP_B, ENV_B } from "./exposures-test-fixtures";
 import { APP_ID, ENVIRONMENT_ID } from "./sdk-route-test-fixtures";
@@ -98,14 +99,7 @@ describe("ExposureRedemptionClaimDurableObject via Miniflare (real class)", () =
     });
   });
 
-  it("wires the real DO alarm() to the expiry sweep (and lazy-expires pending leases)", async () => {
-    const doSource = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "exposure-redemption-do.ts"),
-      "utf8",
-    );
-    expect(doSource).toMatch(/override async alarm[\s\S]*runExposureRedemptionClaimAlarm/);
-    expect(doSource).not.toMatch(/async alarm\(\)[^{]*\{\s*return;\s*\}/);
-
+  it("lazy-expires pending leases on read without needing alarm()", async () => {
     mf = await miniflareWithRealDo();
     const ns = await mf.getDurableObjectNamespace("CLAIMS");
     const stub = ns.get(ns.idFromName(`${APP_ID}\u001f${ENVIRONMENT_ID}`));
@@ -131,13 +125,47 @@ describe("ExposureRedemptionClaimDurableObject via Miniflare (real class)", () =
     expect(await reclaim.json()).toEqual({ status: "acquired" });
   });
 
-  it("wires EXPOSURE_REDEMPTION_CLAIMS through a required-binding startup check", () => {
-    const indexSource = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "index.ts"),
-      "utf8",
+  it("drives the real DO alarm() and sweeps an expired sealed record", async () => {
+    mf = await miniflareWithRealDo();
+    const ns = await mf.getDurableObjectNamespace("CLAIMS");
+    const stub = ns.get(ns.idFromName("alarm-sweep"));
+    const expiresAt = Date.now() - 5_000;
+    const seed = await stub.fetch("https://exposure-redemption-claim.local/__test/seed-expired", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        exposureId: "exp-expired",
+        ticketFingerprint: "fp-expired",
+        expiresAt,
+      }),
+    });
+    expect(seed.status).toBe(200);
+    const before = await stub.fetch(
+      "https://exposure-redemption-claim.local/__test/get?key=exposure:exp-expired",
     );
-    expect(indexSource).toMatch(/requiredExposureRedemptionClaimsBinding/);
-    expect(indexSource).toMatch(/evaluation-api: EXPOSURE_REDEMPTION_CLAIMS is required/);
+    expect(await before.json()).toEqual({ present: true });
+
+    const alarm = await stub.fetch("https://exposure-redemption-claim.local/__test/alarm", {
+      method: "POST",
+    });
+    expect(alarm.status).toBe(200);
+    expect(await alarm.json()).toEqual({ ok: true });
+
+    const after = await stub.fetch(
+      "https://exposure-redemption-claim.local/__test/get?key=exposure:exp-expired",
+    );
+    expect(await after.json()).toEqual({ present: false });
+    const ticketAfter = await stub.fetch(
+      "https://exposure-redemption-claim.local/__test/get?key=ticket:fp-expired",
+    );
+    expect(await ticketAfter.json()).toEqual({ present: false });
+  });
+
+  it("fails loud when EXPOSURE_REDEMPTION_CLAIMS is missing on the startup path", () => {
+    const env = { EXPOSURE_REDEMPTION_CLAIMS: undefined };
+    expect(() => requiredExposureRedemptionClaimsBinding(env.EXPOSURE_REDEMPTION_CLAIMS)).toThrow(
+      /evaluation-api: EXPOSURE_REDEMPTION_CLAIMS is required/,
+    );
   });
 });
 
@@ -153,22 +181,54 @@ async function miniflareWithRealDo(): Promise<Miniflare> {
 /** Transpile production core + handler + real DO class into one Miniflare worker. */
 function bundleRealDoWorker(): string {
   const root = dirname(fileURLToPath(import.meta.url));
-  const core = readFileSync(join(root, "exposure-redemption-claim-core.ts"), "utf8");
-  const handler = readFileSync(join(root, "exposure-redemption-do-handler.ts"), "utf8").replace(
+  const core = readSource(join(root, "exposure-redemption-claim-core.ts"));
+  const handler = readSource(join(root, "exposure-redemption-do-handler.ts")).replace(
     /^import[\s\S]*?from ["']\.\/exposure-redemption-claim-core["'];?\s*/m,
     "",
   );
-  const doClass = readFileSync(join(root, "exposure-redemption-do.ts"), "utf8")
+  const doClass = readSource(join(root, "exposure-redemption-do.ts"))
     .replace(/^import \{ DurableObject \} from "cloudflare:workers";\s*/m, "")
     .replace(/^import[\s\S]*?from ["']\.\/exposure-redemption-do-handler["'];?\s*/m, "");
   const stripExport = (source: string) =>
-    source.replace(/^export /gm, "").replace(/^export \{[\s\S]*?\};?\s*/gm, "");
+    source.replace(/^export \{[\s\S]*?\};?\s*/gm, "").replace(/^export /gm, "");
   return ts.transpileModule(
     `
 import { DurableObject } from "cloudflare:workers";
 ${stripExport(core)}
 ${stripExport(handler)}
 ${doClass}
+// Miniflare harness: drive the real DO alarm() / seed storage without cloudflare:test.
+const __prodFetch = ExposureRedemptionClaimDurableObject.prototype.fetch;
+ExposureRedemptionClaimDurableObject.prototype.fetch = async function (request) {
+  const url = new URL(request.url);
+  if (url.pathname === "/__test/alarm") {
+    await this.alarm();
+    return Response.json({ ok: true });
+  }
+  if (url.pathname === "/__test/seed-expired" && request.method === "POST") {
+    const body = await request.json();
+    const record = {
+      ticketFingerprint: body.ticketFingerprint,
+      delivery: "sealed",
+      expiresAt: body.expiresAt,
+    };
+    await this.ctx.storage.put("exposure:" + body.exposureId, record);
+    await this.ctx.storage.put("ticket:" + body.ticketFingerprint, {
+      ownerExposureId: body.exposureId,
+      delivery: "sealed",
+      expiresAt: body.expiresAt,
+    });
+    // Do not setAlarm(past): Miniflare may auto-fire it before the test drives
+    // alarm(). The harness calls this.alarm() explicitly below.
+    return Response.json({ ok: true });
+  }
+  if (url.pathname === "/__test/get") {
+    const key = url.searchParams.get("key");
+    const value = await this.ctx.storage.get(key);
+    return Response.json({ present: value !== undefined });
+  }
+  return __prodFetch.call(this, request);
+};
 export default {
   async fetch(request, env) {
     return env.CLAIMS.get(env.CLAIMS.idFromName("test")).fetch(request);
@@ -184,4 +244,8 @@ export default {
       fileName: "exposure-redemption-do.mf.ts",
     },
   ).outputText;
+}
+
+function readSource(path: string): string {
+  return readFileSync(path, "utf8");
 }

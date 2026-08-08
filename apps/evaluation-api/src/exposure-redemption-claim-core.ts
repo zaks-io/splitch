@@ -198,7 +198,10 @@ async function acquirePendingClaim(
     delivery: "pending",
     expiresAt,
   });
-  await storage.setExpiryAlarm(expiresAt);
+  // Do not arm the DO alarm for the pending lease. liveExposure/liveTicket
+  // already expire pending rows on read; a 30s alarm would turn every claim
+  // into a near-term full-keyspace GC sweep. Alarm stays claim-TTL GC only
+  // (armed from markSealed / acknowledge).
   return { status: "acquired" };
 }
 
@@ -240,7 +243,6 @@ export async function applyExposureRedemptionMarkSealed(
   const existingExposure = await liveExposure(storage, input.exposureId, input.nowMs);
   if (
     existingExposure === undefined ||
-    existingExposure.expiresAt <= input.nowMs ||
     existingExposure.ticketFingerprint !== input.ticketFingerprint
   ) {
     return {
@@ -291,7 +293,6 @@ export async function applyExposureRedemptionAcknowledge(
   const existingExposure = await liveExposure(storage, input.exposureId, input.nowMs);
   if (
     existingExposure === undefined ||
-    existingExposure.expiresAt <= input.nowMs ||
     existingExposure.ticketFingerprint !== input.ticketFingerprint
   ) {
     return {
@@ -323,10 +324,8 @@ export async function applyExposureRedemptionAcknowledge(
       error: "exposure redemption ticket owner mismatches exposure claim at acknowledge",
     };
   }
-  const expiresAt =
-    existingTicket.expiresAt > input.nowMs
-      ? existingTicket.expiresAt
-      : input.nowMs + EXPOSURE_REDEMPTION_CLAIM_TTL_MS;
+  // liveTicket already dropped expired rows, so expiresAt is strictly in the future.
+  const expiresAt = existingTicket.expiresAt;
   await storage.putExposure(input.exposureId, {
     ticketFingerprint: input.ticketFingerprint,
     delivery: "accepted",
