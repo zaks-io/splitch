@@ -17,6 +17,7 @@ import {
   type Expression,
   type Node,
   type Program,
+  type SourceFile,
   type Symbol as TsSymbol,
   type TypeChecker,
 } from "typescript";
@@ -24,7 +25,7 @@ import {
 const TANSTACK_START = "@tanstack/react-start";
 
 export interface CreateServerFnResolver {
-  isCreateServerFnCall(call: CallExpression, fileName: string): boolean;
+  isCreateServerFnCall(call: CallExpression, sourceFile: SourceFile, fileName: string): boolean;
 }
 
 export function createServerFnResolver(program: Program): CreateServerFnResolver {
@@ -40,12 +41,12 @@ export function createServerFnResolver(program: Program): CreateServerFnResolver
   );
 
   return {
-    isCreateServerFnCall(call, fileName) {
+    isCreateServerFnCall(call, sourceFile, fileName) {
       const resolved = resolveExpressionSymbol(call.expression, checker, new Set());
       if (resolved === createServerFn) return true;
       if (!couldCallCreateServerFn(call, checker, createServerFnSignatures)) return false;
       throw new Error(
-        `${fileName}: createServerFn callee is not statically resolvable: ${JSON.stringify(call.getText())}`,
+        `${fileName}: createServerFn callee is not statically resolvable: ${JSON.stringify(call.getText(sourceFile))}`,
       );
     },
   };

@@ -34,6 +34,19 @@ export { assigned as renamedAssignment };
     expect(discover(source).sort()).toEqual(["namespaced", "renamedAssignment"]);
   });
 
+  it("finds a function-scoped binding", () => {
+    const source = `
+import { createServerFn } from "@tanstack/react-start";
+
+export function makeNestedProbe() {
+  const nested = createServerFn({ method: "POST" }).handler(async () => true);
+  return nested;
+}
+`;
+
+    expect(discover(source)).toEqual(["nested"]);
+  });
+
   it("derives local and namespace-member aliases from symbol identity", () => {
     const source = `
 import { createServerFn } from "@tanstack/react-start";

@@ -6,13 +6,14 @@ import {
   isCallExpression,
   isExportAssignment,
   isExportDeclaration,
-  isExpressionStatement,
+  isFunctionLike,
   isIdentifier,
   isNamedExports,
   isObjectLiteralExpression,
   isPropertyAssignment,
   isSpreadAssignment,
   isStringLiteral,
+  isVariableDeclaration,
   isVariableStatement,
   type Node,
   type Program,
@@ -28,39 +29,37 @@ export interface ServerFnSurfaceDiscovery {
 
 export function createServerFnSurfaceDiscovery(program: Program): ServerFnSurfaceDiscovery {
   const resolver = createServerFnResolver(program);
+
+  function postServerFns(sourceFile: SourceFile, fileName: string): string[] {
+    const localPostServerFns: string[] = [];
+    visitNodes(sourceFile, (candidate) => {
+      if (
+        !isCallExpression(candidate) ||
+        !resolver.isCreateServerFnCall(candidate, sourceFile, fileName) ||
+        !hasPostMethod(candidate, sourceFile, fileName)
+      ) {
+        return;
+      }
+      const binding = enclosingServerFnBinding(candidate);
+      if (!binding) throwUnresolvableBinding(candidate, sourceFile, fileName);
+      localPostServerFns.push(binding);
+    });
+
+    const exportsByLocal = exportedNamesByLocalBinding(sourceFile, new Set(localPostServerFns));
+    return localPostServerFns.flatMap((localName) => {
+      const exportedNames = exportsByLocal.get(localName);
+      return exportedNames && exportedNames.length > 0 ? exportedNames : [localName];
+    });
+  }
+
   return {
     postServerFns(filePath, displayName) {
       const sourceFile = program.getSourceFile(filePath);
       if (!sourceFile)
         throw new Error(`${displayName}: source file is absent from TypeScript program`);
-      return postServerFns(sourceFile, displayName, resolver.isCreateServerFnCall);
+      return postServerFns(sourceFile, displayName);
     },
   };
-}
-
-function postServerFns(
-  sourceFile: SourceFile,
-  fileName: string,
-  isCreateServerFnCall: (call: CallExpression, fileName: string) => boolean,
-): string[] {
-  const localPostServerFns = localPostServerFnBindings(sourceFile, fileName, isCreateServerFnCall);
-  const exportsByLocal = exportedNamesByLocalBinding(sourceFile, localPostServerFns);
-  const names = [...localPostServerFns].flatMap((localName) => {
-    const exportedNames = exportsByLocal.get(localName);
-    return exportedNames && exportedNames.length > 0 ? exportedNames : [localName];
-  });
-
-  for (const statement of sourceFile.statements) {
-    if (
-      isExportAssignment(statement) &&
-      !statement.isExportEquals &&
-      !isIdentifier(statement.expression) &&
-      containsPostServerFn(statement.expression, sourceFile, fileName, isCreateServerFnCall)
-    ) {
-      names.push("default");
-    }
-  }
-  return [...new Set(names)];
 }
 
 function exportedNamesByLocalBinding(
@@ -103,70 +102,27 @@ function exportedBindings(statement: Node): Array<readonly [string, string]> {
     : [];
 }
 
-function localPostServerFnBindings(
-  sourceFile: SourceFile,
-  fileName: string,
-  isCreateServerFnCall: (call: CallExpression, fileName: string) => boolean,
-): Set<string> {
-  const bindings = new Set<string>();
-  for (const statement of sourceFile.statements) {
-    for (const binding of postServerFnBindingsFromStatement(
-      statement,
-      sourceFile,
-      fileName,
-      isCreateServerFnCall,
-    )) {
-      bindings.add(binding);
-    }
+function enclosingServerFnBinding(call: CallExpression): string | null {
+  let current: Node | undefined = call.parent;
+  while (current) {
+    const binding = bindingName(current);
+    if (binding) return binding;
+    if (isFunctionLike(current)) return null;
+    current = current.parent;
   }
-  return bindings;
+  return null;
 }
 
-function postServerFnBindingsFromStatement(
-  statement: Node,
-  sourceFile: SourceFile,
-  fileName: string,
-  isCreateServerFnCall: (call: CallExpression, fileName: string) => boolean,
-): string[] {
-  if (isVariableStatement(statement)) {
-    return statement.declarationList.declarations.flatMap((declaration) =>
-      isIdentifier(declaration.name) &&
-      declaration.initializer &&
-      containsPostServerFn(declaration.initializer, sourceFile, fileName, isCreateServerFnCall)
-        ? [declaration.name.text]
-        : [],
-    );
-  }
+function bindingName(node: Node): string | null {
+  if (isVariableDeclaration(node) && isIdentifier(node.name)) return node.name.text;
   if (
-    !isExpressionStatement(statement) ||
-    !isBinaryExpression(statement.expression) ||
-    statement.expression.operatorToken.kind !== SyntaxKind.EqualsToken ||
-    !isIdentifier(statement.expression.left)
+    isBinaryExpression(node) &&
+    node.operatorToken.kind === SyntaxKind.EqualsToken &&
+    isIdentifier(node.left)
   ) {
-    return [];
+    return node.left.text;
   }
-  return containsPostServerFn(
-    statement.expression.right,
-    sourceFile,
-    fileName,
-    isCreateServerFnCall,
-  )
-    ? [statement.expression.left.text]
-    : [];
-}
-
-function containsPostServerFn(
-  node: Node,
-  sourceFile: SourceFile,
-  fileName: string,
-  isCreateServerFnCall: (call: CallExpression, fileName: string) => boolean,
-): boolean {
-  let found = false;
-  visitNodes(node, (candidate) => {
-    if (!isCallExpression(candidate) || !isCreateServerFnCall(candidate, fileName)) return;
-    if (hasPostMethod(candidate, sourceFile, fileName)) found = true;
-  });
-  return found;
+  return isExportAssignment(node) && !node.isExportEquals ? "default" : null;
 }
 
 function hasPostMethod(call: CallExpression, sourceFile: SourceFile, fileName: string): boolean {
@@ -209,6 +165,16 @@ function throwUnresolvableMethod(
 ): never {
   throw new Error(
     `${fileName}: createServerFn() method is not statically resolvable: ${JSON.stringify(call.getText(sourceFile))}`,
+  );
+}
+
+function throwUnresolvableBinding(
+  call: CallExpression,
+  sourceFile: SourceFile,
+  fileName: string,
+): never {
+  throw new Error(
+    `${fileName}: createServerFn POST is not assigned to a statically reviewable binding: ${JSON.stringify(call.getText(sourceFile))}`,
   );
 }
 
