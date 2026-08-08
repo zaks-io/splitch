@@ -157,6 +157,32 @@ function displayConditions(conditions: Segment["conditions"]) {
 }
 
 /**
+ * One rule's Conditions as a single line, shared by the editable table and the
+ * Experiment-owned summary so the two can never drift.
+ *
+ * The Segment's own Conditions nest under its name rather than sitting beside it
+ * as peers: flattened, `Segment Beta AND tier eq gold AND country eq US` reads as
+ * three constraints someone put on this rule, when `tier eq gold` is simply what
+ * Beta IS. Nesting says which half the rule owns and which half moves when the
+ * Segment is edited.
+ */
+export function targetingRuleConditionsText(
+  rule: FlagDetailView["targetingRules"][number],
+): string {
+  const own = rule.conditions.map(conditionText);
+  if (!rule.segmentName) return own.join(" AND ");
+  const definition = rule.segmentConditions.map(conditionText).join(" AND ");
+  const segment = definition
+    ? `Segment ${rule.segmentName} (${definition})`
+    : `Segment ${rule.segmentName}`;
+  return [segment, ...own].join(" AND ");
+}
+
+function conditionText(condition: { attribute: string; operator: string; value: string }): string {
+  return `${condition.attribute} ${condition.operator} ${condition.value}`;
+}
+
+/**
  * What a running Experiment's Run owns here, and it owns it in the WORKER: the
  * Configuration PATCH and the Targeting replace both refuse these field groups
  * with `RUN_FROZEN` while the Run is live (flag-editing-ux.md, validation-policy.md).

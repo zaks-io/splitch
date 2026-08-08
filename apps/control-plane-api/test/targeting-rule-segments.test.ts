@@ -1,5 +1,6 @@
-import { envScope } from "@splitch/db";
+import { appScope, envScope } from "@splitch/db";
 import { describe, expect, it } from "vitest";
+import { patchFlagConfig, startSeededExperiment } from "../src/config-store-harness-core";
 import {
   h,
   ids,
@@ -123,6 +124,59 @@ describe("Targeting Rule Segment lifecycle", () => {
       { attribute: "plan", operator: "eq", value: "paid" },
     ]);
     expect(JSON.stringify(projection.targetingRules)).not.toContain("segmentId");
+  });
+
+  /**
+   * The refusal has to be DURABLE, not just a per-request answer. D1 is what
+   * every later republication reads, so Conditions committed ahead of a refused
+   * fan-out publish themselves the next time anything touches the same Flag —
+   * and `enabled` is deliberately never frozen, so that next touch is a write an
+   * operator is always allowed to make.
+   */
+  it("refuses frozen Segment Conditions before D1, so a later enabled PATCH cannot publish them", async () => {
+    await seedSegment("segment_paid", "paid");
+    expect(
+      (await replaceRules(ids.environmentId, segmentRule("segment_paid"), "freeze")).status,
+    ).toBe(200);
+    await startSeededExperiment(h.d1);
+
+    const refused = await segmentRequest("PATCH", "segment_paid", {
+      conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({
+      code: "RUN_FROZEN",
+      message: "Segment Conditions were not changed because a Run is active",
+      details: {
+        frozenFields: ["flagConfig.targetingRules"],
+        currentRunId: ids.liveRunId,
+        attemptedChange: `UPDATE_SEGMENT_CONDITIONS:${ids.flagId}`,
+        recommendedAction: "END_RUNNING_RUN_FIRST",
+        republishedFlagConfigurations: [],
+        notRepublishedFlagConfigurations: [
+          expect.objectContaining({
+            flagConfigurationId: ids.configId,
+            flagId: ids.flagId,
+            environmentId: ids.environmentId,
+            reason: "RUN_FROZEN",
+            currentRunId: ids.liveRunId,
+          }),
+        ],
+      },
+    });
+
+    const stored = await h.repo.flags.getSegment(appScope(ids.appId), "segment_paid");
+    expect(JSON.parse(stored?.conditions ?? "null")).toEqual([
+      { attribute: "plan", operator: "eq", value: "paid" },
+    ]);
+    expect((await kvFlag(ids.environmentId)).targetingRules[0]?.conditions).toEqual([
+      { attribute: "plan", operator: "eq", value: "paid" },
+    ]);
+
+    expect((await patchFlagConfig(h, { enabled: true })).status).toBe(200);
+    expect((await kvFlag(ids.environmentId)).targetingRules[0]?.conditions).toEqual([
+      { attribute: "plan", operator: "eq", value: "paid" },
+    ]);
   });
 
   it("names mutable dependents, then permits deletion when only a frozen Run remains", async () => {

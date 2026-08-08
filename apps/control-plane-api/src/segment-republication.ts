@@ -1,5 +1,6 @@
 import { renderError } from "@splitch/worker-runtime";
 import type { FlagConfigWriteResult } from "./config-store-types";
+import { frozenTargetingFields, frozenWriteFailure } from "./flag-config-run-freeze";
 import type { MetricSegmentDeps } from "./metric-segment-shared";
 import type { SegmentDependencies } from "./segment-dependencies";
 
@@ -16,6 +17,12 @@ type NotRepublishedFlagConfiguration = RepublishedFlagConfiguration &
   (WithoutOk<FlagConfigWriteFailure> | RepublishInfrastructureFailure);
 
 export interface SegmentRepublishFailure {
+  /**
+   * Whether the Segment row itself moved. False means the mutation was refused
+   * before it touched D1, so the reported Flag Configurations are the ones that
+   * blocked it rather than the ones that failed to catch up.
+   */
+  segmentApplied: boolean;
   republishedFlagConfigurations: RepublishedFlagConfiguration[];
   notRepublishedFlagConfigurations: NotRepublishedFlagConfiguration[];
 }
@@ -53,7 +60,52 @@ export async function republishFlagConfigurations(
     outcome.ok ? [] : [outcome.flagConfiguration],
   );
   return notRepublishedFlagConfigurations.length > 0
-    ? { republishedFlagConfigurations, notRepublishedFlagConfigurations }
+    ? { segmentApplied: true, republishedFlagConfigurations, notRepublishedFlagConfigurations }
+    : null;
+}
+
+/**
+ * The freeze check for the Segment mutation itself, run BEFORE the D1 write.
+ *
+ * A refusal that only guards the fan-out is not durable. D1 is the source of
+ * truth every later republication reads (`buildSnapshotFromD1` →
+ * `resolveTargetingRules`), so Conditions committed ahead of a refused fan-out
+ * publish themselves on the next unrelated Flag Configuration write — an
+ * `enabled`-only PATCH is not frozen and carried the refused Conditions into KV.
+ * Refusing ahead of the write means a retry after the Run ends re-enters from an
+ * unmutated D1.
+ *
+ * Sequential rather than fanned out: the first frozen dependent already decides
+ * the refusal, and every dependent is reported anyway.
+ */
+export async function frozenDependentsRefusal(
+  deps: MetricSegmentDeps,
+  appId: string,
+  dependencies: SegmentDependencies,
+): Promise<SegmentRepublishFailure | null> {
+  const frozen: NotRepublishedFlagConfiguration[] = [];
+  for (const dependency of dependencies.flagConfigurations) {
+    const failure = await frozenWriteFailure(
+      deps.repo,
+      { appId, environmentId: dependency.environmentId, flagId: dependency.flagId },
+      frozenTargetingFields(),
+      "UPDATE_SEGMENT_CONDITIONS",
+    );
+    if (!failure) continue;
+    frozen.push({
+      ...flagConfigurationIdentity(dependency),
+      reason: failure.reason,
+      frozenFields: failure.frozenFields,
+      currentRunId: failure.currentRunId,
+      attemptedChange: failure.attemptedChange,
+    });
+  }
+  return frozen.length > 0
+    ? {
+        segmentApplied: false,
+        republishedFlagConfigurations: [],
+        notRepublishedFlagConfigurations: frozen,
+      }
     : null;
 }
 
@@ -121,6 +173,7 @@ function errorReason(cause: unknown): string {
 }
 
 export function republishApplicationError(failure: SegmentRepublishFailure) {
+  const { segmentApplied: _, ...lists } = failure;
   const frozen = failure.notRepublishedFlagConfigurations.filter(
     (configuration) => configuration.reason === "RUN_FROZEN",
   );
@@ -139,18 +192,21 @@ export function republishApplicationError(failure: SegmentRepublishFailure) {
         currentRunId: first.currentRunId,
         attemptedChange: first.attemptedChange,
         recommendedAction: "END_RUNNING_RUN_FIRST" as const,
-        ...failure,
+        ...lists,
       },
     };
   }
   return {
     code: "INTERNAL_SERVER_ERROR" as const,
     message: republishMessage(failure),
-    details: { ...failure },
+    details: { ...lists },
   };
 }
 
 function republishMessage(failure: SegmentRepublishFailure, suffix = "") {
+  if (!failure.segmentApplied) {
+    return `Segment Conditions were not changed${suffix}`;
+  }
   return failure.republishedFlagConfigurations.length === 0
     ? `Segment changed, but dependent Flag Configurations were not republished${suffix}`
     : `Segment changed, but some dependent Flag Configurations were not republished${suffix}`;

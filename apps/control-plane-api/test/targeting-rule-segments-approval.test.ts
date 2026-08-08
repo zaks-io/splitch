@@ -168,6 +168,13 @@ describe("Targeting Rule Segment Approval", () => {
     expect((await kvFlag(ids.environmentId)).targetingRules[0]?.conditions).toEqual([
       { attribute: "plan", operator: "eq", value: "paid" },
     ]);
+    // A pending Request whose last Review failed must not have moved the Segment
+    // definition underneath the reviewer: the resource still reads the old
+    // Conditions, so "pending" and what a GET returns agree.
+    const duringFreeze = await request("GET", `/apps/${ids.appId}/segments/segment_paid`);
+    expect(await duringFreeze.json()).toMatchObject({
+      conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
+    });
 
     await h.repo.experiments.updateExperiment(
       envScope(ids.appId, ids.environmentId),

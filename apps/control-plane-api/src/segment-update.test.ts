@@ -26,6 +26,7 @@ describe("Segment dependent Flag Configuration publication", () => {
     } as unknown as MetricSegmentDeps;
 
     await expect(republishFlagConfigurations(deps, "app_a", dependencies)).resolves.toEqual({
+      segmentApplied: true,
       republishedFlagConfigurations: [
         expect.objectContaining({ environmentId: "env_a", flagId: "flag_a" }),
         expect.objectContaining({ environmentId: "env_b", flagId: "flag_c" }),
@@ -43,6 +44,7 @@ describe("Segment dependent Flag Configuration publication", () => {
 
   it("returns RUN_FROZEN with the blocking Run and complete Flag Configuration lists", async () => {
     const response = renderRepublishFailure("request_a", {
+      segmentApplied: true,
       republishedFlagConfigurations: [identity("env_a", "flag_a")],
       notRepublishedFlagConfigurations: [
         {
@@ -67,6 +69,29 @@ describe("Segment dependent Flag Configuration publication", () => {
         ],
       },
     });
+  });
+
+  it("says the Segment did not change when the refusal landed before the D1 write", async () => {
+    const response = renderRepublishFailure("request_a", {
+      segmentApplied: false,
+      republishedFlagConfigurations: [],
+      notRepublishedFlagConfigurations: [
+        {
+          ...identity("env_b", "flag_b"),
+          reason: "RUN_FROZEN",
+          frozenFields: ["flagConfig.targetingRules"],
+          currentRunId: "run_b",
+          attemptedChange: "UPDATE_SEGMENT_CONDITIONS:flag_b",
+        },
+      ],
+    });
+
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { message: string; details: Record<string, unknown> };
+    expect(body.message).toBe("Segment Conditions were not changed because a Run is active");
+    // The applied/not-applied discriminator drives the message; it is not part of
+    // the wire contract and must not surface as a details field.
+    expect(body.details).not.toHaveProperty("segmentApplied");
   });
 
   it("reports zero-success faults honestly and carries every reason", async () => {

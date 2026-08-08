@@ -19,7 +19,7 @@ import { makeFlagConfigOps, scopedFlagConfig, scopedTargetingRule } from "./flag
 import { type FlagInScope, makeVariantOps } from "./flag-variant-ops";
 import { idBatches } from "./id-batches";
 import type { TenantScope } from "./scope";
-import { envScope } from "./scope";
+import { assertMintedScope, envScope } from "./scope";
 import { scopedTable } from "./scoped-table";
 
 /**
@@ -173,6 +173,7 @@ export function makeFlagRepo(db: Db) {
     },
 
     listTargetingRulesBySegment(scope: TenantScope, segmentId: string) {
+      assertMintedScope(scope);
       return db
         .select()
         .from(targetingRules)
@@ -180,6 +181,7 @@ export function makeFlagRepo(db: Db) {
     },
 
     listTargetingRuleEnvironmentReferences(scope: TenantScope) {
+      assertMintedScope(scope);
       return db
         .select({
           segmentId: targetingRules.segmentId,
@@ -199,6 +201,7 @@ export function makeFlagRepo(db: Db) {
       >,
       approval?: ApprovalCommit,
     ): Promise<typeof segments.$inferSelect | null> {
+      assertMintedScope(scope);
       if (approval) {
         const rows = await db
           .update(segments)

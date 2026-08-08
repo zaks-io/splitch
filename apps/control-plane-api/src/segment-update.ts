@@ -13,6 +13,7 @@ import { readEnvironmentPolicy } from "./flag-config-policy";
 import { type MetricSegmentDeps, segmentResponse, type SegmentRow } from "./metric-segment-shared";
 import { type SegmentDependencies, segmentDependencies } from "./segment-dependencies";
 import {
+  frozenDependentsRefusal,
   renderRepublishFailure,
   republishFlagConfigurations,
   type SegmentRepublishFailure,
@@ -172,15 +173,14 @@ async function commitSegmentUpdate(
   dependencies: SegmentDependencies,
   approval?: ApprovalCommit,
 ): Promise<SegmentUpdateResult> {
+  if (body.conditions !== undefined) {
+    const frozen = await frozenDependentsRefusal(deps, appId, dependencies);
+    if (frozen) return { ok: false, republishFailure: frozen };
+  }
   const updated = await deps.repo.flags.updateSegment(
     appScope(appId),
     segment.id,
-    {
-      ...(body.name !== undefined ? { name: body.name } : {}),
-      ...(body.description !== undefined ? { description: body.description } : {}),
-      ...(body.conditions !== undefined ? { conditions: JSON.stringify(body.conditions) } : {}),
-      updatedAt: approval?.reviewedAt ?? deps.nowIso?.() ?? new Date().toISOString(),
-    },
+    segmentUpdatePatch(deps, body, approval),
     approval,
   );
   if (!updated) return { ok: false, notApplied: true };
@@ -188,12 +188,30 @@ async function commitSegmentUpdate(
     const republishFailure = await republishFlagConfigurations(deps, appId, dependencies);
     if (republishFailure) return { ok: false, republishFailure };
   }
-  // Segment Conditions land in D1 first, but the Review stays pending until KV
-  // catches up so a failed fan-out remains retryable and cannot claim `applied`.
+  // A frozen Run is refused above, before the row moves, because D1 is what every
+  // later republication reads: Conditions committed ahead of a refused fan-out
+  // would publish themselves on the next unrelated write to the same Flag.
+  // Past that gate the Segment lands first and the Review stays pending until KV
+  // catches up, so a fan-out that fails on infrastructure remains retryable
+  // against the Conditions already in D1 and cannot claim `applied`.
   if (approval && !(await deps.repo.approvals.recordApplied(appScope(appId), approval))) {
     return { ok: false, notApplied: true };
   }
   return { ok: true, segment: updated };
+}
+
+/** The stored shape of a partial Segment patch: Conditions are a JSON column. */
+function segmentUpdatePatch(
+  deps: MetricSegmentDeps,
+  body: SegmentUpdateInput,
+  approval?: ApprovalCommit,
+) {
+  return {
+    ...(body.name !== undefined ? { name: body.name } : {}),
+    ...(body.description !== undefined ? { description: body.description } : {}),
+    ...(body.conditions !== undefined ? { conditions: JSON.stringify(body.conditions) } : {}),
+    updatedAt: approval?.reviewedAt ?? deps.nowIso?.() ?? new Date().toISOString(),
+  };
 }
 
 async function segmentPolicyContexts(

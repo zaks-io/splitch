@@ -9,7 +9,7 @@ import {
   TableRow,
 } from "@splitch/ui/components/table";
 import { useState } from "react";
-import type { FlagDetailView } from "#lib/flag-detail-view";
+import { type FlagDetailView, targetingRuleConditionsText } from "#lib/flag-detail-view";
 import { addTargetingRuleIntent, removeTargetingRuleIntent } from "#lib/flag-edit-intent";
 import type { FlagEditing } from "#lib/use-flag-editing";
 
@@ -63,11 +63,7 @@ export function FlagTargetingRulesEditor({
               <TableRow data-targeting-rule={rule.id} key={rule.id}>
                 <TableCell className="font-mono">{rule.priority}</TableCell>
                 <TableCell className="text-muted-foreground text-xs leading-5">
-                  {[
-                    ...(rule.segmentName ? [`Segment ${rule.segmentName}`] : []),
-                    ...rule.segmentConditions.map((c) => `${c.attribute} ${c.operator} ${c.value}`),
-                    ...rule.conditions.map((c) => `${c.attribute} ${c.operator} ${c.value}`),
-                  ].join(" AND ")}
+                  {targetingRuleConditionsText(rule)}
                 </TableCell>
                 <TableCell className="font-mono">{rule.variantName}</TableCell>
                 <TableCell className="text-right text-muted-foreground">
@@ -112,7 +108,9 @@ export function FlagTargetingRulesEditor({
               </option>
             ))}
           </select>
-          <span className="font-mono text-muted-foreground text-xs">AND</span>
+          {segmentId === "" ? null : (
+            <span className="font-mono text-muted-foreground text-xs">AND</span>
+          )}
           <Input
             aria-label="targeting attribute"
             className="w-40"
