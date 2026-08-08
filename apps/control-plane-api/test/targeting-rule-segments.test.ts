@@ -143,6 +143,9 @@ describe("Targeting Rule Segment lifecycle", () => {
     expect(await blocked.json()).toMatchObject({
       code: "RESOURCE_NOT_EMPTY",
       details: {
+        childType: "flag-config",
+        childCount: 1,
+        childCounts: { "flag-config": 1, "experiment-draft": 1 },
         segmentDependencies: {
           flagConfigurations: [
             expect.objectContaining({

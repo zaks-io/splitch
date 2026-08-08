@@ -28,7 +28,7 @@ export const approvalErrorDocs = {
   },
   APPROVAL_APPLICATION_FAILED: {
     cause:
-      "The Review was authorized but applying the change failed and rolled back. Nothing was written, and the request is still pending.",
+      "The Review was authorized but applying the change did not complete. The request remains pending; inspect `details.applicationError` before retrying with a new Review idempotency key.",
     fix: "Read `details.applicationError` for the underlying failure, fix that, then retry the Review with a new idempotency key. The rollback is complete: no partial application survives.",
     details:
       '{ approvalRequestId: string, reviewId: string, applicationError: { code: ErrorCode, details: object }, recommendedAction: "RETRY_REVIEW" }',

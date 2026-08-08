@@ -272,15 +272,15 @@ splitch is fail-loud then guide (ADR-0036). Every operational `409` carries a ma
 ([contracts/error-responses.md](contracts/error-responses.md#recommendedaction-machine-stable-recovery-guidance)).
 The `recover_from_error` MCP prompt turns a token into a full remediation plan.
 
-| You hit…                      | It means…                                        | Do…                                              |
-| ----------------------------- | ------------------------------------------------ | ------------------------------------------------ |
-| `APPROVAL_REVIEW_REQUIRED`    | the durable request awaits an authorized Review  | review `details.approvalRequestId`               |
-| `APPROVAL_REQUEST_STALE`      | the target changed after proposal                | refresh current state and create a new request   |
-| `APPROVAL_APPLICATION_FAILED` | application rolled back; request remains pending | retry Review with a new idempotency key          |
-| `VARIANT_NOT_AVAILABLE`       | the Variant is not promoted to this Environment  | `flags_promote`, then retry                      |
-| `RUN_FROZEN`                  | the edit touches a running Run                   | clone into a new draft Run and apply it there    |
-| `APP_MISMATCH` on verify      | wrong key for this App / Environment             | fetch the credential for _this_ Env (step 5)     |
-| `401` / `403` on evaluate     | bad or revoked Client Key, or origin not allowed | check the key and its origin allow-list (step 5) |
+| You hit…                      | It means…                                             | Do…                                                                              |
+| ----------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `APPROVAL_REVIEW_REQUIRED`    | the durable request awaits an authorized Review       | review `details.approvalRequestId`                                               |
+| `APPROVAL_REQUEST_STALE`      | the target changed after proposal                     | refresh current state and create a new request                                   |
+| `APPROVAL_APPLICATION_FAILED` | application did not complete; request remains pending | inspect `details.applicationError`, then retry Review with a new idempotency key |
+| `VARIANT_NOT_AVAILABLE`       | the Variant is not promoted to this Environment       | `flags_promote`, then retry                                                      |
+| `RUN_FROZEN`                  | the edit touches a running Run                        | clone into a new draft Run and apply it there                                    |
+| `APP_MISMATCH` on verify      | wrong key for this App / Environment                  | fetch the credential for _this_ Env (step 5)                                     |
+| `401` / `403` on evaluate     | bad or revoked Client Key, or origin not allowed      | check the key and its origin allow-list (step 5)                                 |
 
 ## Sources
 

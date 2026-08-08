@@ -11,6 +11,7 @@ import {
 } from "./flag-definition-errors";
 import { resyncFlagSnapshots } from "./flag-definition-handler-utils";
 import type { RunSnapshotDelivery } from "./run-snapshot";
+import { republishApplicationError } from "./segment-republication";
 import { applyApprovedSegmentUpdate } from "./segment-update";
 
 export interface ApprovalApplicationDeps {
@@ -60,7 +61,13 @@ async function applySegmentUpdate(
 ): Promise<ApplicationOutcome> {
   const segment = await deps.repo.flags.getSegment(appScope(request.appId), request.target.id);
   if (!segment) {
-    return { ok: false, error: { code: "SEGMENT_NOT_FOUND", details: {} } };
+    return {
+      ok: false,
+      error: {
+        code: "SEGMENT_NOT_FOUND",
+        details: { missingSegmentIds: [request.target.id] },
+      },
+    };
   }
   const result = await applyApprovedSegmentUpdate(
     deps,
@@ -72,12 +79,10 @@ async function applySegmentUpdate(
   if (result.ok) return { ok: true };
   if ("notApplied" in result) return { ok: false, notApplied: true };
   if ("republishFailure" in result) {
+    const failure = republishApplicationError(result.republishFailure);
     return {
       ok: false,
-      error: {
-        code: "INTERNAL_SERVER_ERROR",
-        details: { ...result.republishFailure },
-      },
+      error: { code: failure.code, details: failure.details },
     };
   }
   return {

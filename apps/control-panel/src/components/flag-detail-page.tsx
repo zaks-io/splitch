@@ -22,7 +22,6 @@ export function FlagDetailPage({
   scopeHref,
   view,
   promotionSourceEnv,
-  environmentNames,
 }: {
   appId: string;
   environmentId: string;
@@ -30,7 +29,6 @@ export function FlagDetailPage({
   view: FlagDetailView;
   /** The Environment this one would pull from by default; absent when it is the only one. */
   promotionSourceEnv?: string;
-  environmentNames: Record<string, string>;
 }) {
   const env = view.env;
   const editing = useFlagEditing({
@@ -83,7 +81,7 @@ export function FlagDetailPage({
         ungatedCopy="Saved. This Environment's Policy does not gate this change, so no Approval Request was needed."
         write={editing}
       />
-      <FlagDetailEnvConfig editing={editing} environmentNames={environmentNames} view={view} />
+      <FlagDetailEnvConfig editing={editing} view={view} />
       <FlagDetailDefinition editing={editing} view={view} />
     </section>
   );

@@ -63,7 +63,7 @@ function failedReplay(
     response: renderError(
       {
         code: "APPROVAL_APPLICATION_FAILED",
-        message: "Approval Request application failed and was rolled back",
+        message: "Approval Request application failed",
         details: {
           approvalRequestId: row.id,
           reviewId: review.id,

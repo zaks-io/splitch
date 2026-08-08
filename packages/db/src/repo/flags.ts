@@ -9,10 +9,8 @@ import {
   variants,
 } from "../schema/index";
 import {
-  appliedReviewQueries,
   appliedRequestUpdate,
   appliedReviewInsert,
-  approvalReviewLanded,
   approvalPendingCondition,
 } from "./approval-atomic";
 import type { ApprovalCommit } from "./approval-types";
@@ -202,7 +200,7 @@ export function makeFlagRepo(db: Db) {
       approval?: ApprovalCommit,
     ): Promise<typeof segments.$inferSelect | null> {
       if (approval) {
-        const mutation = db
+        const rows = await db
           .update(segments)
           .set(patch)
           .where(
@@ -213,11 +211,7 @@ export function makeFlagRepo(db: Db) {
             ),
           )
           .returning({ id: segments.id });
-        await db.batch([
-          mutation,
-          ...appliedReviewQueries(db, scope, approval),
-        ] as unknown as Parameters<Db["batch"]>[0]);
-        if (!(await approvalReviewLanded(db, scope, approval))) return null;
+        if (rows.length !== 1) return null;
         return segmentsTable.findOne(scope, eq(segments.id, segmentId));
       }
       return segmentsTable

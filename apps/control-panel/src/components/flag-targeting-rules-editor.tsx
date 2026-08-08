@@ -27,11 +27,9 @@ import type { FlagEditing } from "#lib/use-flag-editing";
  */
 export function FlagTargetingRulesEditor({
   editing,
-  environmentNames,
   view,
 }: {
   editing: FlagEditing;
-  environmentNames: Record<string, string>;
   view: FlagDetailView;
 }) {
   const [attribute, setAttribute] = useState("");
@@ -42,17 +40,6 @@ export function FlagTargetingRulesEditor({
   const hasCondition = attribute.trim() !== "" && value.trim() !== "";
   const hasPartialCondition = (attribute.trim() === "") !== (value.trim() === "");
   const canAdd = !hasPartialCondition && (hasCondition || segmentId !== "") && variantId !== "";
-  const selectedSegment = view.segments.find((segment) => segment.id === segmentId);
-  const affectedEnvironments = selectedSegment
-    ? [
-        ...new Set([
-          view.env,
-          ...selectedSegment.affectedEnvironmentIds.map((id) =>
-            environmentName(environmentNames, id),
-          ),
-        ]),
-      ]
-    : [];
 
   return (
     <div className="grid gap-4" data-flag-targeting-editor="true">
@@ -184,18 +171,7 @@ export function FlagTargetingRulesEditor({
           Choose a Segment, a direct Condition, or both. Both use AND semantics. Percentage rollout
           on a rule is not editable here yet.
         </p>
-        {selectedSegment ? (
-          <p className="text-muted-foreground text-xs leading-5" data-segment-affected-environments>
-            Affected Environments after save: {affectedEnvironments.join(", ")}.
-          </p>
-        ) : null}
       </div>
     </div>
   );
-}
-
-function environmentName(names: Record<string, string>, environmentId: string): string {
-  const name = names[environmentId];
-  if (!name) throw new Error("Environment navigation is incomplete");
-  return name;
 }

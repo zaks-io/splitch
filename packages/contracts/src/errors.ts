@@ -3,7 +3,10 @@ import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-iden
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
 import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
-import { InternalServerErrorDetailsSchema } from "./internal-error-details";
+import {
+  InternalServerErrorDetailsSchema,
+  SegmentRepublishDetailsShape,
+} from "./internal-error-details";
 import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
 import { SegmentDependenciesSchema, SegmentNotFoundDetailsSchema } from "./segment-error-details";
 
@@ -124,6 +127,7 @@ const errorMembers = [
       currentRunId: z.string(),
       attemptedChange: z.string(),
       recommendedAction: RecommendedActionSchema,
+      ...SegmentRepublishDetailsShape,
     }),
   ),
   member(
@@ -184,12 +188,12 @@ const errorMembers = [
     z.object({
       resourceType: z.enum(["app", "environment", "flag", "variant", "organization", "segment"]),
       resourceId: z.string(),
-      /**
-       * First blocker group's CLI child type (back-compat summary). Prefer
-       * `blockers` for the full tree with child IDs and remove commands.
-       */
+      /** First blocker group's CLI child type (back-compat summary). */
       childType: z.string(),
+      /** Count for `childType`, never a total across unlike child types. */
       childCount: z.number(),
+      /** Complete counts by CLI child type when more than one type can block. */
+      childCounts: z.record(z.string(), z.number().int().nonnegative()).optional(),
       attemptedOp: z.string(),
       /**
        * Every current blocker group, each child named by ID and by the CLI

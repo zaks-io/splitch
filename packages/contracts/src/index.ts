@@ -21,6 +21,7 @@ export { CONTROL_PANEL_DELEGATION_HEADER, PANEL_API_KEY_SCOPES } from "./control
 export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
 export { DeltaNudgeEntitySchema, DeltaNudgeSchema, deltaNudgeEntities } from "./delta-nudge";
 export { errorStatusByCode, httpStatusForError } from "./error-status";
+export { SegmentListResponseSchema } from "./routes/routes-segments";
 export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
 export {
   ErrorCodeSchema,

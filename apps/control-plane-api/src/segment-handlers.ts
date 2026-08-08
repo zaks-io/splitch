@@ -125,7 +125,11 @@ function segmentNotEmpty(
   dependencies: SegmentDependencies,
   requestId: string,
 ): Response {
-  const childCount = dependencies.flagConfigurations.length + dependencies.experimentDrafts.length;
+  const childCounts = {
+    "flag-config": dependencies.flagConfigurations.length,
+    "experiment-draft": dependencies.experimentDrafts.length,
+  };
+  const childType = dependencies.flagConfigurations.length > 0 ? "flag-config" : "experiment-draft";
   return renderError(
     {
       code: "RESOURCE_NOT_EMPTY",
@@ -133,8 +137,9 @@ function segmentNotEmpty(
       details: {
         resourceType: "segment",
         resourceId: segmentId,
-        childType: dependencies.flagConfigurations.length > 0 ? "flag-config" : "experiment-draft",
-        childCount,
+        childType,
+        childCount: childCounts[childType],
+        childCounts,
         attemptedOp: "DELETE_SEGMENT",
         segmentDependencies: dependencies,
       },

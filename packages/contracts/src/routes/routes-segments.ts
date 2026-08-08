@@ -17,7 +17,7 @@ const OWNER = "control-plane-api" as const;
 const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
-const SegmentListResponse = z.object({
+export const SegmentListResponseSchema = z.object({
   items: z.array(SegmentSchema),
   affectedEnvironmentIds: z.record(z.string(), z.array(z.string())),
 });
@@ -31,7 +31,7 @@ export const segmentRoutes = [
     path: "/apps/:appId/segments",
     summary: "List Segments in an App.",
     request: { params: AppParams },
-    response: SegmentListResponse,
+    response: SegmentListResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
@@ -80,7 +80,10 @@ export const segmentRoutes = [
       "VALIDATION_ERROR",
       "APPROVAL_REVIEW_REQUIRED",
       "APPROVAL_REVIEW_FORBIDDEN",
+      "APPROVAL_APPLICATION_FAILED",
       "IDEMPOTENCY_KEY_CONFLICT",
+      "RUN_FROZEN",
+      "INTERNAL_SERVER_ERROR",
     ],
   }),
   defineApiRoute({

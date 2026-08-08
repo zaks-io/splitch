@@ -183,11 +183,17 @@ async function commitSegmentUpdate(
     },
     approval,
   );
-  if (!updated)
-    return approval ? { ok: false, notApplied: true } : { ok: false, response: new Response() };
-  if (body.conditions === undefined) return { ok: true, segment: updated };
-  const republishFailure = await republishFlagConfigurations(deps, appId, dependencies);
-  return republishFailure ? { ok: false, republishFailure } : { ok: true, segment: updated };
+  if (!updated) return { ok: false, notApplied: true };
+  if (body.conditions !== undefined) {
+    const republishFailure = await republishFlagConfigurations(deps, appId, dependencies);
+    if (republishFailure) return { ok: false, republishFailure };
+  }
+  // Segment Conditions land in D1 first, but the Review stays pending until KV
+  // catches up so a failed fan-out remains retryable and cannot claim `applied`.
+  if (approval && !(await deps.repo.approvals.recordApplied(appScope(appId), approval))) {
+    return { ok: false, notApplied: true };
+  }
+  return { ok: true, segment: updated };
 }
 
 async function segmentPolicyContexts(

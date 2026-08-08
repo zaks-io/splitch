@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { setProdPolicy } from "../src/config-store-harness-core";
+import { appScope, envScope } from "@splitch/db";
+import { setProdPolicy, startSeededExperiment } from "../src/config-store-harness-core";
+import { reviewRequest } from "./approval-harness";
 import {
   h,
   ids,
@@ -104,5 +106,125 @@ describe("Targeting Rule Segment Approval", () => {
       { attribute: "plan", operator: "eq", value: "enterprise" },
     ]);
     expect(h.nudges).toHaveLength(1);
+  });
+
+  it("records failed republication and applies the same Approval after the Run ends", async () => {
+    await seedSegment("segment_paid", "paid");
+    expect(
+      (await replaceRules(ids.environmentId, segmentRule("segment_paid"), "retry_setup")).status,
+    ).toBe(200);
+    await setProdPolicy(h, {
+      variantAvailability: "allow",
+      targetingRolloutValue: "confirm",
+      enabledState: "allow",
+      startExperimentRun: "allow",
+    });
+    await startSeededExperiment(h.d1);
+
+    const proposed = await segmentRequest("PATCH", "segment_paid", {
+      conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
+      idempotency_key: "segment_conditions_retry",
+    });
+    expect(proposed.status).toBe(409);
+    const proposal = (await proposed.json()) as { details: { approvalRequestId: string } };
+
+    const failed = await reviewRequest(
+      h,
+      proposal.details.approvalRequestId,
+      "segment_review_frozen",
+    );
+    expect(failed.status).toBe(409);
+    expect(await failed.json()).toMatchObject({
+      code: "APPROVAL_APPLICATION_FAILED",
+      details: {
+        applicationError: {
+          code: "RUN_FROZEN",
+          details: {
+            currentRunId: ids.liveRunId,
+            notRepublishedFlagConfigurations: [
+              expect.objectContaining({
+                flagConfigurationId: ids.configId,
+                flagId: ids.flagId,
+                environmentId: ids.environmentId,
+                reason: "RUN_FROZEN",
+                currentRunId: ids.liveRunId,
+              }),
+            ],
+          },
+        },
+      },
+    });
+    expect(
+      await h.repo.approvals.getRequest(appScope(ids.appId), proposal.details.approvalRequestId),
+    ).toMatchObject({ status: "pending", resolvedAt: null });
+    expect(
+      await h.d1
+        .prepare(
+          "SELECT outcome, error_code FROM approval_reviews WHERE app_id = ? AND approval_request_id = ?",
+        )
+        .bind(ids.appId, proposal.details.approvalRequestId)
+        .first(),
+    ).toMatchObject({ outcome: "failed", error_code: "RUN_FROZEN" });
+    expect((await kvFlag(ids.environmentId)).targetingRules[0]?.conditions).toEqual([
+      { attribute: "plan", operator: "eq", value: "paid" },
+    ]);
+
+    await h.repo.experiments.updateExperiment(
+      envScope(ids.appId, ids.environmentId),
+      ids.experimentId,
+      { status: "ended", liveRunId: null, updatedAt: "2026-07-01T21:00:00.000Z" },
+      ids.liveRunId,
+    );
+    const retried = await reviewRequest(
+      h,
+      proposal.details.approvalRequestId,
+      "segment_review_retry",
+    );
+    const retryBody = await retried.json();
+    expect({ status: retried.status, body: retryBody }).toMatchObject({
+      status: 200,
+      body: {
+        id: proposal.details.approvalRequestId,
+        status: "applied",
+        latestReview: { outcome: "applied" },
+      },
+    });
+    expect((await kvFlag(ids.environmentId)).targetingRules[0]?.conditions).toEqual([
+      { attribute: "plan", operator: "eq", value: "enterprise" },
+    ]);
+  });
+
+  it("does not treat an ordinary Segment version race as a republication retry", async () => {
+    await seedSegment("segment_paid", "paid");
+    expect(
+      (await replaceRules(ids.environmentId, segmentRule("segment_paid"), "stale_setup")).status,
+    ).toBe(200);
+    await setProdPolicy(h, {
+      variantAvailability: "allow",
+      targetingRolloutValue: "confirm",
+      enabledState: "allow",
+      startExperimentRun: "allow",
+    });
+    const proposed = await segmentRequest("PATCH", "segment_paid", {
+      conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
+      idempotency_key: "segment_conditions_stale",
+    });
+    const proposal = (await proposed.json()) as { details: { approvalRequestId: string } };
+    await h.repo.flags.updateSegment(appScope(ids.appId), "segment_paid", {
+      name: "Paid customers",
+      updatedAt: "2026-07-01T20:30:00.000Z",
+    });
+
+    const reviewed = await reviewRequest(
+      h,
+      proposal.details.approvalRequestId,
+      "segment_review_stale",
+    );
+
+    expect(reviewed.status).toBe(409);
+    expect(await reviewed.json()).toMatchObject({
+      code: "APPROVAL_REQUEST_STALE",
+      details: { approvalRequestId: proposal.details.approvalRequestId },
+    });
   });
 });
