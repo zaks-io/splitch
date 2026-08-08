@@ -1,5 +1,6 @@
 import { type RecommendedAction, recommendedActions } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
+import { JSON_RPC_INVALID_PARAMS } from "./json-rpc";
 import { handleMcpServerRequest } from "./mcp-handler";
 import { MCP_PROMPT_NAMES, RECOVERY_OPERATION_IDS } from "./mcp-prompt-types";
 import {
@@ -153,6 +154,18 @@ describe("MCP prompts workflows", () => {
     expect(RECOVERY_OPERATION_IDS.REFRESH_AND_REPROPOSE).toEqual(["approval_requests_get"]);
     expect(RECOVERY_OPERATION_IDS.RETRY_REVIEW).toEqual(["approval_request_reviews_create"]);
   });
+
+  it("reports a bad prompt argument as invalid params, not an internal fault", async () => {
+    // A missing required prompt argument (json-rpc.ts's -32603 contract: "the
+    // arguments are not the problem, so changing them will not help") is the
+    // opposite of what happened here, so PromptArgumentError must map to
+    // -32602 (invalid params) rather than -32603.
+    const response = await mcp("prompts/get", { name: "recover_from_error", arguments: {} });
+    const body = (await response.json()) as JsonRpcError;
+
+    expect(body.error.code).toBe(JSON_RPC_INVALID_PARAMS);
+    expect(body.error.message).toBe("Invalid params");
+  });
 });
 
 describe("MCP prompt plan shapes", () => {
@@ -287,4 +300,8 @@ function trackingSessionStore(): McpSessionStore & { writes: number } {
 
 interface JsonRpcSuccess<T> {
   result: T;
+}
+
+interface JsonRpcError {
+  error: { code: number; message: string };
 }

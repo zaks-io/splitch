@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleMcpServerRequest, type McpServerRequestOptions } from "./mcp-handler";
+import { missingAnalysisBindingCall } from "./mcp-control-plane-dispatch.test-fixture";
 import { failingSessionStore } from "./mcp-resources-harness";
 import type {
   McpSessionContext,
@@ -91,6 +92,7 @@ describe("MCP error vocabulary", () => {
       ),
       contextUseWithoutDelegationSecret(),
       failingSessionStoreRead(),
+      missingAnalysisBindingCall(),
       rpc(
         "resources/read",
         { uri: "splitch://auth" },
@@ -196,6 +198,7 @@ interface ProbeOptions {
   readonly sessionStore?: McpSessionStore;
   readonly withSecret?: boolean;
   readonly withFetch?: boolean;
+  readonly controlPlaneFetch?: McpServerRequestOptions["controlPlaneFetch"];
   readonly platformTarget?: string;
   readonly sessionContextValidator?: McpServerRequestOptions["sessionContextValidator"];
   readonly fetchAuthMarkdown?: McpServerRequestOptions["fetchAuthMarkdown"];
@@ -225,7 +228,11 @@ async function rpc(method: string, params: unknown, options: ProbeOptions = {}):
     ...(options.withSecret === false
       ? {}
       : { controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET }),
-    ...(options.withFetch ? { controlPlaneFetch: async () => Response.json({ items: [] }) } : {}),
+    ...(options.controlPlaneFetch
+      ? { controlPlaneFetch: options.controlPlaneFetch }
+      : options.withFetch
+        ? { controlPlaneFetch: async () => Response.json({ items: [] }) }
+        : {}),
     ...(options.sessionContextValidator
       ? { sessionContextValidator: options.sessionContextValidator }
       : {}),
