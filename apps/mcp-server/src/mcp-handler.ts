@@ -7,13 +7,13 @@ import {
 import { IdempotencyKeyRequiredError } from "@splitch/control-plane-sdk/idempotency-header";
 import { McpOperationInvalidParamsError } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 import {
-  JSON_RPC_INTERNAL_ERROR,
   JSON_RPC_INVALID_PARAMS,
   JSON_RPC_METHOD_NOT_FOUND,
   type JsonRpcId,
   type JsonRpcRequest,
   type JsonRpcResponse,
   jsonRpcError,
+  jsonRpcInternalError,
   jsonRpcResult,
 } from "./json-rpc";
 import {
@@ -187,7 +187,7 @@ async function callTool(
         call.arguments,
         sessionId,
         sessionStore,
-        sessionContextValidator ?? controlPlaneContextValidator(controlPlane(), actor),
+        sessionContextValidator ?? controlPlaneContextValidator(controlPlane, actor),
       );
     } catch (error) {
       return toolCallFailure(id, error);
@@ -235,9 +235,7 @@ function toolCallFailure(id: JsonRpcId, error: unknown): JsonRpcResponse {
       message: error.message,
     });
   }
-  return jsonRpcError(id, JSON_RPC_INTERNAL_ERROR, "Internal error", {
-    message: error instanceof Error ? error.message : String(error),
-  });
+  return jsonRpcInternalError(id, error);
 }
 
 function authIssuer(configured: string | undefined, platformTarget: string | undefined): string {

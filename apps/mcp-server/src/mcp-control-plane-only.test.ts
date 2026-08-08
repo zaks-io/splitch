@@ -1,11 +1,11 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getRoute } from "@splitch/contracts";
 import { parseConfigFileTextToJson } from "typescript";
 import { describe, expect, it } from "vitest";
+import { walkRepoFiles } from "../../../scripts/lib/repo-file-sweep.mjs";
 import { controlPlaneSdkForRoute, handleMcpServerRequest } from "./mcp-handler";
 import type { OperationSdk } from "./mcp-operation-sdks";
 import {
@@ -26,6 +26,23 @@ const SOURCE_ROOT = new URL("./", import.meta.url);
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const MCP_WRANGLER_CONFIG = "apps/mcp-server/wrangler.jsonc";
 const wranglerConfig = readWranglerConfig(MCP_WRANGLER_CONFIG);
+
+/**
+ * Every Worker config in the checkout. Named rather than counted: a tenth Worker
+ * has to be added here on purpose, and it fails saying which config is new
+ * instead of "expected length 10 to be 9".
+ */
+const WRANGLER_CONFIGS = [
+  "apps/analysis-api/wrangler.jsonc",
+  "apps/auth-api/wrangler.jsonc",
+  "apps/control-panel/wrangler.jsonc",
+  "apps/control-plane-api/wrangler.jsonc",
+  "apps/evaluation-api/wrangler.jsonc",
+  "apps/event-ingest-api/wrangler.jsonc",
+  "apps/marketing/wrangler.jsonc",
+  MCP_WRANGLER_CONFIG,
+  "packages/db/wrangler.jsonc",
+];
 
 const organizationUsage = {
   organizationId: "org_local",
@@ -114,7 +131,7 @@ describe("MCP has only the Control Plane downstream", () => {
 
   it("binds McpEntrypoint only from MCP to the Control Plane API", () => {
     const configs = readWranglerConfigs();
-    expect(configs).toHaveLength(9);
+    expect(configs.map(({ path }) => path)).toEqual(WRANGLER_CONFIGS);
 
     const entrypointBindings = configs
       .flatMap(({ path, config }) =>
@@ -206,14 +223,18 @@ interface ServiceBinding {
   entrypoint?: string;
 }
 
+/**
+ * Walks the checkout rather than asking Git for tracked paths: an untracked
+ * `wrangler.jsonc` binding `McpEntrypoint` is a real second caller of the
+ * Control Plane's MCP entrypoint, and `git ls-files` cannot see one until
+ * somebody stages it.
+ */
 function readWranglerConfigs(): Array<{ path: string; config: WranglerConfig }> {
-  const paths = execFileSync("git", ["ls-files", "-z", "--", ":(glob)**/wrangler.jsonc"], {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-  })
-    .split("\0")
-    .filter(Boolean);
-  return paths.map((path) => ({ path, config: readWranglerConfig(path) }));
+  const paths: string[] = [];
+  walkRepoFiles(REPO_ROOT, (relativePath) => {
+    if (basename(relativePath) === "wrangler.jsonc") paths.push(relativePath);
+  });
+  return paths.sort().map((path) => ({ path, config: readWranglerConfig(path) }));
 }
 
 function readWranglerConfig(relativePath: string): WranglerConfig {

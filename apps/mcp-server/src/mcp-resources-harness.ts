@@ -55,7 +55,7 @@ export interface JsonRpcError {
   error: {
     code: number;
     message: string;
-    data?: { message?: string };
+    data?: { message?: string; reference?: string };
   };
 }
 

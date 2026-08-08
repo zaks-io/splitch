@@ -6,6 +6,11 @@ import {
   TEST_MCP_DELEGATION_SECRET,
 } from "./mcp-test-verifier";
 
+/**
+ * The `-32602` mapping. What the error may *say* is pinned by the vocabulary
+ * sweep in `mcp-error-vocabulary.test.ts`, over the whole error surface rather
+ * than one literal on one response.
+ */
 describe("MCP invalid tool arguments", () => {
   it("returns JSON-RPC Invalid params for a missing required path argument", async () => {
     const seen: Request[] = [];
@@ -44,7 +49,6 @@ describe("MCP invalid tool arguments", () => {
         message: 'Missing required argument "orgId".',
       },
     });
-    expect(JSON.stringify(body)).not.toContain("control-plane-sdk");
     expect(seen).toEqual([]);
   });
 });

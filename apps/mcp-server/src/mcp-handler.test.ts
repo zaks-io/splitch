@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { deriveMcpProtocolTools, type ErrorResponse } from "@splitch/contracts";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { flagPage } from "./mcp-flag-fixtures";
 import { handleMcpServerRequest } from "./mcp-handler";
 import {
@@ -40,6 +40,7 @@ let cleanupServers: (() => Promise<void>)[] = [];
 afterEach(async () => {
   await Promise.all(cleanupServers.map((cleanup) => cleanup()));
   cleanupServers = [];
+  vi.restoreAllMocks();
 });
 
 describe("mcp server Streamable HTTP transport", () => {
@@ -155,18 +156,23 @@ describe("mcp server errors and config", () => {
   });
 
   it("fails closed without a local named service binding instead of using public HTTP", async () => {
+    const logged: unknown[][] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args);
+    });
     const response = await mcp("tools/call", {
       name: "flags_list",
       arguments: { appId: "app_local" },
     });
     const body = (await response.json()) as JsonRpcFailure & {
-      error: { code: number; message: string; data?: { message?: string } };
+      error: { code: number; message: string; data?: { message?: string; reference?: string } };
     };
 
-    expect(body.error).toMatchObject({
-      code: -32603,
-      data: { message: "mcp-server: CONTROL_PLANE_API service binding is required" },
-    });
+    expect(body.error).toMatchObject({ code: -32603 });
+    // Loud where an operator reads it, opaque where the agent does.
+    expect(String(logged[0]?.[1])).toContain("CONTROL_PLANE_API service binding is required");
+    expect(body.error.data?.message).not.toContain("CONTROL_PLANE_API");
+    expect(body.error.data?.reference).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it("returns MCP method-not-found for an unknown tool name", async () => {

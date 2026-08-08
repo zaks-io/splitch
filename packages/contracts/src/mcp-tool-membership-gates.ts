@@ -119,8 +119,15 @@ export function membershipGatePatterns(gate: RouteMembershipGate): readonly stri
   return [`${gate.axis}:${gate.minimumRole}`];
 }
 
-const APP_SCOPE = /^app:([^:]+):(owner|admin|member)$/;
-const ORG_SCOPE = /^org:([^:]+):(owner|admin|member)$/;
+/**
+ * Derived from the role vocabulary, not retyped. A hard-coded alternation fails
+ * silently when a role is added: the new role simply matches no gate. `ROLE_RANK`
+ * below stays an explicit table because rank is ordering, not membership, and its
+ * `Record` type turns the same addition into a compile error.
+ */
+const roleAlternation = membershipRoles.join("|");
+const APP_SCOPE = new RegExp(`^app:([^:]+):(${roleAlternation})$`);
+const ORG_SCOPE = new RegExp(`^org:([^:]+):(${roleAlternation})$`);
 
 const ROLE_RANK: Record<MembershipRole, number> = {
   member: 1,
