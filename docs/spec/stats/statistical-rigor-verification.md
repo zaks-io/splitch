@@ -83,9 +83,9 @@ activation_ts)` or its exact types fails contract tests.
 - For Exposure and Activation rows, Tinybird stamps `ingest_ts` at physical insertion with
   `DEFAULT now64(3)`. A delayed Queue delivery after a completed snapshot remains in the tail, and an
   empty snapshot falls back to the Unix epoch rather than hiding all tail rows.
-- The Exposure snapshot reads `ingest_ts < watermark` and its tenant-scoped tail reads
-  `ingest_ts >= watermark`; an insertion exactly equal to the watermark appears once after final UNION
-  dedup, never zero or twice.
+- The Exposure snapshot reads `ingest_ts <= watermark` and its tenant-scoped tail reads
+  `ingest_ts >= watermark`; an insertion exactly equal to the watermark deliberately appears in both
+  inputs so final UNION dedup returns it once, never zero or twice.
 - Every Exposure serving source requires injected `app_id` and `environment_id` predicates before
   snapshot read, watermark aggregation, raw-tail read, or final aggregation.
 - Exposure tail `EXPLAIN` fixtures require insertion-month partition pruning and the
@@ -136,7 +136,8 @@ These tests prove invariants that should hold across many shapes of input.
 
 - Reordering raw events does not change first-touch output.
 - Duplicating raw Exposure events does not change deduped counts or Metric results.
-- Adding raw events after the snapshot watermark appears through the tail exactly once.
+- Adding a raw event exactly at the snapshot watermark puts it in both snapshot and tail inputs so
+  final UNION dedup returns it exactly once.
 - Adding a Secondary Metric post-start cannot change any locked result's `is_significant`.
 - Adding a Secondary Dimension post-start cannot change BH family size `m`.
 - Scaling all additive Metric values by a positive constant scales point estimates and CIs but does

@@ -1,6 +1,7 @@
+import type { FrozenControlIdentity } from "@splitch/contracts";
 import type { PanelExperimentResultsReady } from "@splitch/control-plane-sdk/panel-experiments";
 import { ExperimentResultsCiPlot } from "./experiment-results-ci-plot";
-import { baselineLabel, ExperimentResultsControlIntegrity } from "./experiment-results-control";
+import { baselineVariant, ExperimentResultsControlIntegrity } from "./experiment-results-control";
 import { ExperimentResultsDecision } from "./experiment-results-decision";
 import { ExperimentResultsGuardrails } from "./experiment-results-guardrails";
 import { ExperimentResultsMetricsTable } from "./experiment-results-metrics-table";
@@ -16,6 +17,7 @@ import { ExperimentResultsSrm } from "./experiment-results-srm";
  */
 
 export function ExperimentResults({ results }: { results: PanelExperimentResultsReady }) {
+  const measurementAnchor = baselineVariant(results.control) ?? "an unidentified Control";
   return (
     <section aria-labelledby="results-heading" className="grid gap-6">
       <header className="grid gap-1">
@@ -31,13 +33,13 @@ export function ExperimentResults({ results }: { results: PanelExperimentResults
         </p>
       </header>
 
-      <ExperimentResultsControlIntegrity control={results.control} />
+      <ExperimentResultsControlIntegrity control={results.control} resultsRendered={true} />
 
       <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
         <h3 className="font-semibold text-base text-foreground">Lift by arm</h3>
         <p className="mt-1 mb-4 max-w-prose text-muted-foreground text-sm">
-          Relative lift against {baselineLabel(results.control)}, with an always-valid confidence
-          sequence. Checking mid-Run is safe: the interval already accounts for continuous peeking.
+          Relative lift against {measurementAnchor}, with an always-valid confidence sequence.
+          Checking mid-Run is safe: the interval already accounts for continuous peeking.
         </p>
         <ExperimentResultsCiPlot
           control={results.control}
@@ -61,6 +63,7 @@ export function ExperimentResults({ results }: { results: PanelExperimentResults
       </div>
 
       <ExperimentResultsDecision
+        control={results.control}
         gate={results.gate}
         guardrails={results.stats.guardrail_results}
         runStatus={results.runStatus}
@@ -93,10 +96,12 @@ export function ExperimentResultsEmpty() {
  * arrive for a missing input.
  */
 export function ExperimentResultsWaiting({
+  control,
   missing,
   runNumber,
   runStatus,
 }: {
+  control: FrozenControlIdentity;
   missing: "exposures" | "metric_events";
   runNumber: number;
   runStatus: "running" | "ended";
@@ -113,7 +118,7 @@ export function ExperimentResultsWaiting({
   return (
     <section
       aria-labelledby="results-heading"
-      className="rounded-lg border border-border bg-card p-6 shadow-sm"
+      className="grid gap-6 rounded-lg border border-border bg-card p-6 shadow-sm"
       data-testid="results-waiting"
     >
       <header className="grid gap-1">
@@ -125,6 +130,7 @@ export function ExperimentResultsWaiting({
         </h2>
         <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">{detail}</p>
       </header>
+      <ExperimentResultsControlIntegrity control={control} resultsRendered={false} />
     </section>
   );
 }

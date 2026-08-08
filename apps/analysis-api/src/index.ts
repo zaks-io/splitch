@@ -12,8 +12,6 @@ import {
   delegatedAuthResolver,
   delegatedIdentityFor,
   McpDelegationReplayDurableObject,
-  makeDurableMcpDelegationReplayGuard,
-  makeMcpDelegationAuthResolver,
   notDelegatedResponse,
   type RateLimiter,
 } from "@splitch/worker-runtime";
@@ -39,12 +37,6 @@ const handler = {
 
 export default wrapWorkerHandler(handler, { surface: "analysis-api" });
 
-export class McpEntrypoint extends WorkerEntrypoint<AnalysisApiEnv> {
-  override async fetch(request: Request): Promise<Response> {
-    return handleRequest(request, this.env, this.ctx, { kind: "mcp" });
-  }
-}
-
 /** Binding-only entrypoint for reads the Control Plane Worker already authorized. */
 export class ControlPlaneEntrypoint extends WorkerEntrypoint<AnalysisApiEnv> {
   override async fetch(request: Request): Promise<Response> {
@@ -54,9 +46,7 @@ export class ControlPlaneEntrypoint extends WorkerEntrypoint<AnalysisApiEnv> {
   }
 }
 
-type AnalysisRequestAuthority =
-  | { kind: "mcp" }
-  | { kind: "control-plane"; identity: DelegatedIdentity };
+type AnalysisRequestAuthority = { kind: "control-plane"; identity: DelegatedIdentity };
 
 async function handleRequest(
   request: Request,
@@ -77,7 +67,7 @@ async function handleRequest(
 
   const app = createApp({
     door: authority ? "binding" : "public",
-    authResolver: requestAuthResolver(env, authority),
+    authResolver: requestAuthResolver(authority),
     rateLimiter: allowLimiter,
     tinybird: createTinybirdReadTransport(env),
     platformTarget: env.SPLITCH_PLATFORM_TARGET,
@@ -89,16 +79,7 @@ async function handleRequest(
   return app.fetch(request, env);
 }
 
-function requestAuthResolver(env: AnalysisApiEnv, authority: AnalysisRequestAuthority | undefined) {
-  if (authority?.kind === "mcp") {
-    return makeMcpDelegationAuthResolver({
-      owner: "analysis-api",
-      secret: requiredMcpDelegationSecret(env.MCP_ANALYSIS_DELEGATION_SECRET),
-      replayGuard: makeDurableMcpDelegationReplayGuard(
-        requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
-      ),
-    });
-  }
+function requestAuthResolver(authority: AnalysisRequestAuthority | undefined) {
   if (authority?.kind === "control-plane") {
     return delegatedAuthResolver(authority.identity);
   }
@@ -111,20 +92,6 @@ function requestAuthResolver(env: AnalysisApiEnv, authority: AnalysisRequestAuth
 }
 
 const refuseUnauthorized: AuthResolver = () => ({ ok: false, reason: "UNAUTHORIZED" });
-
-function requiredMcpDelegationSecret(secret: string | undefined): string {
-  if (!secret) {
-    throw new Error("analysis-api: MCP_ANALYSIS_DELEGATION_SECRET is required");
-  }
-  return secret;
-}
-
-function requiredMcpReplayBinding(
-  binding: AnalysisApiEnv["MCP_DELEGATION_REPLAY"],
-): NonNullable<AnalysisApiEnv["MCP_DELEGATION_REPLAY"]> {
-  if (!binding) throw new Error("analysis-api: MCP_DELEGATION_REPLAY is required");
-  return binding;
-}
 
 function runScheduled(
   event: ScheduledController,
@@ -153,4 +120,10 @@ function runScheduled(
   );
 }
 
+/**
+ * The replay-guard Durable Object class stays exported while its namespace stays
+ * bound: MCP now reaches this Worker only through the Control Plane, so nothing
+ * claims a replay id here, but dropping a Durable Object class needs its own
+ * `deleted_classes` migration.
+ */
 export { McpDelegationReplayDurableObject };

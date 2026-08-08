@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { MetricRefSchema } from "./leaf-schemas-experiment";
 import type { StatsInput } from "./stats-input-contract";
 
@@ -178,12 +179,13 @@ const AnalysisResultsMissingInputSchema = z.enum(["exposures", "metric_events"])
  * `run_id` is provenance and is checked: a read whose answer names a different
  * Run than the one asked for is refused rather than relabelled (ADR-0006).
  *
- * `control_variant` is not. It reaches this Worker from the `analysis_run_inputs`
- * pipe, which resolves it at read time, so it describes current configuration.
- * A caller that needs the Run's actual baseline resolves it from the immutable
- * `runs.control_variant_id` inside that Run's own frozen Variant set instead
- * (`resolveFrozenControlIdentity`, ADR-0002, ADR-0003), which is what the
- * Control Panel Results read does.
+ * `control_variant` reaches this Worker from the `analysis_run_inputs` pipe,
+ * which reads the Run Snapshot written at Start. It is frozen Analysis input,
+ * not current Experiment configuration. The Control Panel Results read resolves
+ * the displayed Control identity from immutable `runs.control_variant_id`
+ * inside that Run's own frozen Variant set, then blocks the decision when that
+ * D1 identity and the Analysis Run Snapshot disagree
+ * (`resolveAnalysisControlIntegrity`, ADR-0002, ADR-0003, ADR-0047).
  */
 export const AnalysisResultsEnvelopeSchema = z.discriminatedUnion("state", [
   z
@@ -191,9 +193,18 @@ export const AnalysisResultsEnvelopeSchema = z.discriminatedUnion("state", [
       state: z.literal("ready"),
       run_id: z.string().min(1),
       control_variant: z.string().min(1),
+      data_watermark: z.string().datetime({ offset: true }).optional(),
+      result_token: CanonicalJsonSha256Schema.optional(),
       stats: StatsOutputSchema,
     })
-    .strict(),
+    .strict()
+    .superRefine((result, context) => {
+      if ((result.data_watermark === undefined) === (result.result_token === undefined)) return;
+      context.addIssue({
+        code: "custom",
+        message: "data_watermark and result_token must be present together",
+      });
+    }),
   z
     .object({
       state: z.literal("no_data"),

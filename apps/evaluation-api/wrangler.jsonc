@@ -23,8 +23,7 @@
     "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN"]
   },
   "vars": {
-    "SPLITCH_PLATFORM_TARGET": "local",
-    "MCP_EVALUATION_DELEGATION_SECRET": "local-mcp-evaluation-delegation-secret"
+    "SPLITCH_PLATFORM_TARGET": "local"
   },
   "services": [
     {
@@ -108,8 +107,7 @@
           "SENTRY_DSN",
           "EVALUATION_PRIVACY_SALT",
           "EXPOSURE_TICKET_KEY",
-          "SPLITCH_EVENT_INGEST_TOKEN",
-          "MCP_EVALUATION_DELEGATION_SECRET"
+          "SPLITCH_EVENT_INGEST_TOKEN"
         ]
       },
       "vars": {
@@ -183,8 +181,7 @@
           "SENTRY_DSN",
           "EVALUATION_PRIVACY_SALT",
           "EXPOSURE_TICKET_KEY",
-          "SPLITCH_EVENT_INGEST_TOKEN",
-          "MCP_EVALUATION_DELEGATION_SECRET"
+          "SPLITCH_EVENT_INGEST_TOKEN"
         ]
       },
       "vars": {

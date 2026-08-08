@@ -16,7 +16,6 @@ export interface EvaluationApiEnv {
   SESSION_STORE: KVNamespace;
   AUTH_JWKS_URI?: string;
   CONTROL_PLANE_ORIGIN?: string;
-  MCP_EVALUATION_DELEGATION_SECRET?: string;
   MCP_DELEGATION_REPLAY?: McpDelegationReplayDurableObjectNamespace;
   /** Strongly consistent Exposure Ticket claim DO namespace (SPL-345). */
   EXPOSURE_REDEMPTION_CLAIMS?: ExposureRedemptionClaimNamespace;

@@ -24,6 +24,10 @@ import { scrubSentryEvent, type SentryEventLike } from "./sentry-scrubber";
 const CANARY_EMAIL = "canary-leak@example.com";
 const CANARY_TARGETING_KEY = "tk-canary-targeting-key";
 const CANARY_PHONE = "555-867-5309";
+/** Undashed phone-shaped body. The dashed canary above cannot expose a mid-token
+ * phone match that starts after `_`; this one can. */
+const CANARY_UNDASHED_PHONE = "15551234567";
+const CANARY_USER_PREFIXED_UNDASHED = `user_${CANARY_UNDASHED_PHONE}`;
 const CANARY_CUSTOM_ATTRIBUTE = "enterprise-secret-plan";
 
 // A Worker registers its Targeting Key value shape so bare interpolation is caught.
@@ -165,5 +169,18 @@ describe("golden-leak canary", () => {
 
     expect(serialized.includes(CANARY_CUSTOM_ATTRIBUTE)).toBe(false);
     expect(serialized.includes(cohort)).toBe(false);
+  });
+
+  // Dashed phones hide mid-token matches (separators break the word). An
+  // undashed `user_<digits>` token must stay byte-identical — phone matching
+  // must not start after `_` — while a bare undashed phone still redacts.
+  it("keeps an undashed user_-prefixed token intact and still redacts a bare undashed phone", () => {
+    const event: SentryEventLike = {
+      message: `lookup failed for ${CANARY_USER_PREFIXED_UNDASHED}`,
+      extra: { note: `callback ${CANARY_UNDASHED_PHONE}` },
+    };
+    const scrubbed = scrubSentryEvent(event, OPTIONS);
+    expect(String(scrubbed.message)).toBe(`lookup failed for ${CANARY_USER_PREFIXED_UNDASHED}`);
+    expect(JSON.stringify(scrubbed.extra).includes(CANARY_UNDASHED_PHONE)).toBe(false);
   });
 });

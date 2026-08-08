@@ -13,6 +13,7 @@ export default defineConfig({
   splitting: false,
   clean: true,
   sourcemap: false,
-  external: ["zod"],
+  // Zod-free validators: do not externalize or bundle zod.
+  external: [],
   tsconfig: "tsconfig.contract-surface.json",
 });

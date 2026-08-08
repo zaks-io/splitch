@@ -120,4 +120,22 @@ describe("PanelExperimentResultsOutputSchema contract pins (SPL-305)", () => {
     const { runStatus: _dropped, ...withoutRunStatus } = base;
     expect(PanelExperimentResultsOutputSchema.safeParse(withoutRunStatus).success).toBe(false);
   });
+
+  it("accepts a named Analysis Control disagreement with both identities", () => {
+    const stats = statsOutput();
+    const control = {
+      state: "disagreement" as const,
+      variantId: "variant_control",
+      variant: "control",
+      analysisVariant: "legacy_checkout",
+    };
+
+    expect(
+      PanelExperimentResultsOutputSchema.safeParse({
+        ...readyEnvelope(),
+        control,
+        gate: evaluateExperimentDecisionGate(stats, control),
+      }).success,
+    ).toBe(true);
+  });
 });

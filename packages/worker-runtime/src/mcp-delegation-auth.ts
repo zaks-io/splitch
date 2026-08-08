@@ -2,14 +2,20 @@ import {
   type McpDelegationActor,
   type McpDelegationReplayGuard,
   parseMcpDelegation,
-  type RouteOwner,
+  type PublicSurface,
 } from "@splitch/contracts";
 import type { AuthResolver, Principal } from "./principal";
 
 const ORG_SCOPE = /^org:([^:]+):(owner|admin|member)$/;
 const APP_SCOPE = /^app:([^:]+):(owner|admin|member)$/;
+/**
+ * MCP addresses an operation at the PUBLIC SURFACE its credential belongs to, not
+ * at the Worker that executes it (ADR-0046), so only a public surface can accept
+ * an MCP delegation. A Worker that merely owns delegated routes has no MCP door:
+ * it is reached over the surface's own binding, after the surface's gates.
+ */
 export function makeMcpDelegationAuthResolver(options: {
-  owner: RouteOwner;
+  surface: PublicSurface;
   secret: string;
   replayGuard: McpDelegationReplayGuard;
 }): AuthResolver {
