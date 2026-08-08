@@ -1,6 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { routesDelegatedBy } from "@splitch/contracts";
 import { parseConfigFileTextToJson } from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -23,44 +22,65 @@ describe("Evaluation Worker service bindings", () => {
   });
 
   /**
-   * The binding is shared, so the entrypoint behind it has to answer every
-   * operation this Worker sends over it. A second binding would only give the
-   * same caller a second identity; the fix for a new operation is teaching this
-   * entrypoint, and this test is what says so.
+   * The binding is shared, so the entrypoint behind it has to answer every sink
+   * this Worker addresses. A second binding would only give the same caller a
+   * second identity; the fix for a new sink is teaching that entrypoint.
+   *
+   * Only this direction is a source read, and only the internal sinks: it catches
+   * a URL built here that Event Ingest never routes. Whether the entrypoint
+   * recognises each delegated operation is answered at runtime, by the registry
+   * sweep in `apps/event-ingest-api/src/evaluation-entrypoint.test.ts`.
    */
-  it("routes every operation the Evaluation Worker sends over that binding", () => {
-    const entrypointSource = readFileSync(
-      fileURLToPath(new URL("../../event-ingest-api/src/index.ts", import.meta.url)),
-      "utf8",
-    );
+  it("routes every internal sink the Evaluation Worker addresses", () => {
+    const routed = routedInternalPaths();
 
-    for (const path of delegatedOperationPaths()) {
-      expect(entrypointSource, `${path} is not routed by EvaluationEntrypoint`).toContain(
-        `"${path}"`,
-      );
+    for (const path of internalSinkPaths()) {
+      expect([...routed], `${path} is not routed by EvaluationEntrypoint`).toContain(path);
     }
   });
 });
 
-/** Every Event Ingest path this Worker addresses: internal sinks plus delegated routes. */
-function delegatedOperationPaths(): readonly string[] {
-  const paths = new Set<string>(internalSinkPaths());
-  for (const route of routesDelegatedBy("evaluation-api")) {
-    if (route.owner === "event-ingest-api") paths.add(route.path);
+/**
+ * The paths Event Ingest's `internalRoutes` table actually dispatches on, read
+ * off the table itself with comments stripped: a path named in a comment is not
+ * a route, and matching the whole file would let one satisfy this gate.
+ */
+function routedInternalPaths(): Set<string> {
+  const source = stripComments(
+    readFileSync(
+      fileURLToPath(new URL("../../event-ingest-api/src/index.ts", import.meta.url)),
+      "utf8",
+    ),
+  );
+  const start = source.indexOf("const internalRoutes");
+  const end = source.indexOf("\n};", start);
+  if (start === -1 || end === -1) throw new Error("event-ingest-api has no internalRoutes table");
+  const paths = new Set<string>();
+  for (const [, key] of source.slice(start, end).matchAll(/\[(\w+)\]\s*:/g)) {
+    const declaration = source.match(new RegExp(`const ${key} = "([^"]+)"`));
+    if (!declaration?.[1]) throw new Error(`internalRoutes key ${key} declares no path`);
+    paths.add(declaration[1]);
   }
-  expect(paths.size).toBeGreaterThan(1);
-  return [...paths];
+  return paths;
 }
 
 /** The token-authenticated sinks, read off the URLs this Worker's own source builds. */
-function internalSinkPaths(): string[] {
+function internalSinkPaths(): readonly string[] {
   const sinkDir = fileURLToPath(new URL(".", import.meta.url));
   const sources = readdirSync(sinkDir)
     .filter((file) => file.endsWith(".ts") && !file.includes(".test") && !file.includes("fixtures"))
     .map((file) => readFileSync(`${sinkDir}${file}`, "utf8"));
-  return sources
-    .flatMap((source) => [...source.matchAll(/new URL\("(\/api\/internal\/[^"]+)"/g)])
-    .flatMap(([, path]) => (path ? [path] : []));
+  const paths = new Set(
+    sources
+      .flatMap((source) => [...source.matchAll(/new URL\("(\/api\/internal\/[^"]+)"/g)])
+      .flatMap(([, path]) => (path ? [path] : [])),
+  );
+  expect(paths.size).toBeGreaterThan(1);
+  return [...paths];
+}
+
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 }
 
 interface WranglerTarget {

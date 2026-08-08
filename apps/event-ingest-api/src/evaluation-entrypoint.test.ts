@@ -1,4 +1,6 @@
+import { routesDelegatedBy } from "@splitch/contracts";
 import { __setSentryModuleForTests } from "@splitch/observability/worker";
+import { delegatedRequest } from "@splitch/worker-runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EvaluationEntrypoint } from "./index";
 import {
@@ -21,6 +23,44 @@ import {
 import type { Env } from "./types";
 
 type SentryModule = NonNullable<Parameters<typeof __setSentryModuleForTests>[0]>;
+
+const NOT_DELEGATED = "delegated request was not recognized by its owner";
+
+/**
+ * Deliberately not read off `internalRoutes`: the point of the sweep below is to
+ * be an oracle the routing table cannot move. These three are the sinks
+ * `apps/evaluation-api` builds URLs for; the rest come from the route registry.
+ */
+const INTERNAL_SINK_PATHS = [
+  "/api/internal/exposures",
+  "/api/internal/evaluations",
+  "/api/internal/evaluation-commits",
+];
+
+/** Every operation the single EVENT_INGEST binding carries, as a callable request. */
+const DELEGATED_OPERATIONS: Array<[string, () => Request]> = [
+  ...INTERNAL_SINK_PATHS.map((path): [string, () => Request] => [
+    path,
+    () => new Request(`https://splitch-event-ingest.internal${path}`, { method: "POST" }),
+  ]),
+  ...routesDelegatedBy("evaluation-api")
+    .filter((route) => route.owner === "event-ingest-api")
+    .map((route): [string, () => Request] => [
+      route.path,
+      () =>
+        delegatedRequest(
+          route,
+          {
+            operation: route.id,
+            actorId: "client_key:sweep",
+            orgId: organizationId,
+            appId,
+            environmentId,
+          },
+          { body: {} },
+        ),
+    ]),
+];
 
 afterEach(() => {
   __setSentryModuleForTests(undefined);
@@ -66,6 +106,23 @@ describe("Evaluation binding entrypoint", () => {
 
     expect(response.status).toBe(202);
     expect(fixture.claims.size).toBe(1);
+  });
+
+  /**
+   * The four cases above name their operations by hand; this one sweeps the whole
+   * delegated set and grows with the route registry. It asks only whether the
+   * entrypoint recognises the address, so a bad body answering 4xx passes and the
+   * refusal is the sole failure, because that refusal is what a missed operation
+   * looks like in production.
+   */
+  it.each(DELEGATED_OPERATIONS)("recognises %s over the binding", async (path, build) => {
+    const response = await new EvaluationEntrypoint(new TestExecutionContext(), makeEnv() as Env)
+      .fetch(build())
+      .catch(() => new Response("threw", { status: 599 }));
+
+    expect(await response.text(), `${path} is not routed by EvaluationEntrypoint`).not.toContain(
+      NOT_DELEGATED,
+    );
   });
 
   it("reports an unhandled throw through the Sentry capture seam", async () => {

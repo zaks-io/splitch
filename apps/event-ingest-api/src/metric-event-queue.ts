@@ -3,7 +3,8 @@ import type { Env } from "./types";
 
 type MetricEventRow = Record<string, unknown>;
 
-const METRIC_EVENT_MAX_RETRIES = 7;
+/** Must equal `queues.consumers[].max_retries` in wrangler.jsonc; a test holds the two together. */
+export const METRIC_EVENT_MAX_RETRIES = 7;
 
 export async function handleMetricEventQueue(
   batch: MessageBatch<MetricEventRow>,
