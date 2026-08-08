@@ -1,10 +1,11 @@
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { bumpWins, isBumpExpr } from "./flag-config-version-writer-sweep-lib";
 import {
   FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT,
   resolveFlagConfigUpdates,
+  type FlagConfigUpdateResolution,
   type ResolvedUpdateSite,
 } from "./flag-config-version-writer-sweep-resolve";
 
@@ -29,6 +30,10 @@ import {
  * (non-trivial site count spanning the known writer modules). There is no
  * hand-maintained `file:line` inventory — line numbers move under unrelated
  * edits and are not the invariant.
+ *
+ * The TypeChecker program is built once in `beforeAll` (paid once for both
+ * assertions below). Individual `it`s keep vitest's 5s default; only the hook
+ * that constructs the program is allowed the repo's established 15s budget.
  *
  * The narrowed `repo.flags.flagConfigs` export (findMany/findOne/insert only)
  * makes a facade bypass a compile error in typechecked source and a TypeError
@@ -61,13 +66,24 @@ const MIN_WRITER_SITES = 5;
 /** Modules that currently host writers; site set must span both. */
 const KNOWN_WRITER_FILES = ["repo/flag-config-ops.ts", "repo/flag-variant-approval.ts"] as const;
 
+/** Repo-standard budget for hooks that build a TypeScript program (not per-`it`). */
+const PROGRAM_HOOK_TIMEOUT_MS = 15_000;
+
 function siteKey(site: ResolvedUpdateSite): string {
   return `${site.file}:${site.line}`;
 }
 
 describe("every flag_configs UPDATE bumps version", () => {
+  let resolution: FlagConfigUpdateResolution;
+
+  // Program construction is the slow part (~seconds). Pay it once; leave the
+  // default 5s `testTimeout` protecting every other db unit test.
+  beforeAll(() => {
+    resolution = resolveFlagConfigUpdates();
+  }, PROGRAM_HOOK_TIMEOUT_MS);
+
   it("states a scan root that the production tsconfig actually covers", () => {
-    const { scanRoot, scannedFiles } = resolveFlagConfigUpdates();
+    const { scanRoot, scannedFiles } = resolution;
     expect(scanRoot).toBe(SCAN_ROOT);
     expect(relative(REPO_ROOT, FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT).replaceAll("\\", "/")).toBe(
       SCAN_ROOT,
@@ -81,7 +97,7 @@ describe("every flag_configs UPDATE bumps version", () => {
   });
 
   it("discovers a non-trivial writer set and every site bumps version", () => {
-    const { sites } = resolveFlagConfigUpdates();
+    const { sites } = resolution;
 
     expect(
       sites.length,
