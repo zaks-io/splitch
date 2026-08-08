@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { ErrorResponseSchema } from "./errors";
+import { KILL_SWITCH_OFF_EXEMPTION } from "./kill-switch-off-exemption";
 import { deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
 import { getRoute, routeRegistry } from "./route-registry";
 
@@ -191,6 +192,12 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
       dryRun: { type: "boolean" },
       force: { type: "boolean" },
     });
+  });
+
+  it("flag_config_update description carries the kill-switch-off exemption (SPL-312)", () => {
+    const update = tools.find((tool) => tool.name === "flag_config_update");
+    expect(update?.description).toContain(KILL_SWITCH_OFF_EXEMPTION);
+    expect(getRoute("flag_config_update")?.summary).not.toContain(KILL_SWITCH_OFF_EXEMPTION);
   });
 
   it("tool output = the route 200 response schema", () => {

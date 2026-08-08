@@ -343,6 +343,9 @@ Flags:
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
+Behavior:
+  Turning a Flag Config off applies without approval regardless of this level.
+
 Example:
   splitch env-policy get --json",
     "env-policy set": "Update the selected Environment Policy.
@@ -365,6 +368,9 @@ Request body (--body-json):
   startExperimentRun     required  string ("allow" | "confirm")
   Example:
     {"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}
+
+Behavior:
+  Turning a Flag Config off applies without approval regardless of this level.
 
 Example:
   splitch env-policy set --body-json '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}' --json",
@@ -648,7 +654,7 @@ Flags:
 
 Example:
   splitch flag-config get <flag-id-or-key> --json",
-    "flag-config update": "Update enabled state / available Variants (Policy-gated change types).
+    "flag-config update": "Update enabled state / available Variants (Policy-gated change types). Turning a Flag Config off applies without approval regardless of this level.
 
 Usage:
   splitch flag-config update <flag-id-or-key> [flags]
@@ -1524,7 +1530,7 @@ Usage:
 
 Commands:
   get             Get a Flag's per-Environment Configuration.
-  update          Update enabled state / available Variants (Policy-gated change types).
+  update          Update enabled state / available Variants (Policy-gated change types). Turning a Flag Config off applies without approval regardless of this level.
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.

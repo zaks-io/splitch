@@ -115,7 +115,7 @@ Body:
 `{ enabled?: boolean, available_variant_names?: string[], rollout?: { percentage: number } | null, review?: { action: "approve_and_apply" }, idempotency_key: string }`.
 `available_variant_names` must be a subset of the Flag's catalog (ADR-0028). Subject to this
 Environment's Policy (ADR-0029): the "Variant availability" and "enabled state" change types may
-require Review. **Turning `enabled` off is never gated** (kill-switch exemption).
+require Review. Turning a Flag Config off applies without approval regardless of this level.
 
 `rollout` takes a **percentage only** — a caller-supplied `salt` is rejected. The salt IS the bucket
 assignment, so the server mints it once when the baseline is first established and carries it through
