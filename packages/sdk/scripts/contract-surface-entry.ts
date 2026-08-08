@@ -1,18 +1,27 @@
 /**
- * Build-only entry: bundles the minimal contracts surface the public SDK needs.
+ * Build-only entry: zod-free validators for the public SDK contract surface.
  * tsup reads this file and emits src/generated/contract-surface.{js,d.ts}.
- * Do not import this module from runtime code outside the build.
+ *
+ * Authoring source of truth remains Zod in the contracts package. This entry
+ * re-exports the compiled validators so the published package ships zero
+ * runtime zod. Do not import this module from runtime code outside the build.
  */
 
-export { type ErrorCode, ErrorCodeSchema } from "../../contracts/src/error-code";
+export type {
+  DataPlaneEvaluateResponse,
+  ErrorCode,
+  EvaluateAllEntry,
+  EvaluateAllReason,
+  EvaluateAllResponse,
+  PeekEvaluateResponse,
+  ResolutionDetails,
+  ResolutionReason,
+  VariantValue,
+} from "./contract-surface-validators";
 export {
   DataPlaneEvaluateResponseSchema,
-  type EvaluateAllEntry,
-  type EvaluateAllReason,
+  ErrorCodeSchema,
   EvaluateAllResponseSchema,
   PeekEvaluateResponseSchema,
-  type ResolutionDetails,
   ResolutionDetailsSchema,
-  type ResolutionReason,
-  type VariantValue,
-} from "../../contracts/src/sdk-data-plane-surface";
+} from "./contract-surface-validators";
