@@ -70,5 +70,15 @@ export interface ApprovalFailure {
   errorCode: string;
   errorDetails: string;
   /** What the attempt left behind in the target; see `approvalReviews.targetState`. */
-  targetState: string;
+  targetState: ApprovalTargetState;
 }
+
+/**
+ * The three states a failed application can leave the target in.
+ *
+ * Constrained at the insert, not just at the reader: the row outlives the
+ * response that reported it, and a replay reads the column back and refuses
+ * anything outside this set. A near-miss spelling would insert cleanly and then
+ * turn every later exact-key replay of that Review into a 500.
+ */
+export type ApprovalTargetState = "rolled_back" | "applied" | "unknown";

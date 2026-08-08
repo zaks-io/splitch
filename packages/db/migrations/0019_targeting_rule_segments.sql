@@ -21,4 +21,5 @@ INSERT INTO `__new_targeting_rules`("id", "app_id", "environment_id", "flag_id",
 DROP TABLE `targeting_rules`;--> statement-breakpoint
 ALTER TABLE `__new_targeting_rules` RENAME TO `targeting_rules`;--> statement-breakpoint
 PRAGMA defer_foreign_keys=OFF;--> statement-breakpoint
+-- SPL-280: what a failed application left behind, so an exact-key replay repeats the first refusal.
 ALTER TABLE `approval_reviews` ADD `target_state` text;

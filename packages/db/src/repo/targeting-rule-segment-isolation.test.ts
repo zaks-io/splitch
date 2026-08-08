@@ -180,6 +180,8 @@ describe("the Segment approval write is App-scoped", () => {
       commit,
     );
 
+    // Not the guard: the re-read after the UPDATE is App-scoped, so this is null
+    // either way. The App B row below is the assertion that goes red.
     expect(result).toBeNull();
     // `approvalPendingCondition` is an EXISTS over `approval_requests` that is
     // uncorrelated to the row being updated: it proves the Approval Request
