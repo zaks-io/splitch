@@ -99,6 +99,16 @@ Key:   ak:{key_hash}
 Value: { app_id, environment_id, scopes: string[], revoked: boolean, valid_until: ISO8601 }
 ```
 
+**Terminal revocation marker:**
+
+```
+Key:   revoked:{credential_cache_key}
+Value: presence marker
+```
+
+The data plane checks this permanent marker before the mutable credential entry. Backfill and other
+active writers never delete it, so an in-flight stale write cannot make a revoked credential active.
+
 ### Credential cache schema-v1 rollout
 
 Credential cache payload version 2 adds the owning `organizationId`. This value is authoritative D1
@@ -107,8 +117,10 @@ but treats it as unscoped and returns `503 SERVICE_UNAVAILABLE` for the billing-
 route. It never guesses an Organization or writes usage without one.
 
 The control-plane daily scheduled job is the steady-state backfill path. During a hosted rollout, the
-deployment workflow first deploys the Control Plane compatibility writer, drives its protected backfill
-gate to `done`, and verifies that checkpoint before it deploys an Evaluation Worker that requires v2.
+deployment workflow first deploys the marker-aware Evaluation Worker, which remains compatible with
+marker-less schema-v1 entries. It then deploys the Control Plane compatibility writer, drives its protected,
+versioned backfill gate to `done`, and verifies that checkpoint before the final Control Plane cutover. A
+legacy `done` checkpoint cannot satisfy a newer migration.
 This is CI-owned automation, never a manual production deploy. The backfill joins every D1 Client Key
 and API Key to `apps.organization_id` and rewrites its KV entry as schema v2. The write is fail-loud
 and idempotent, so the next scheduled run retries an incomplete migration. Once the v2 entry exists,
@@ -124,8 +136,9 @@ Environment's Flag Configuration — the key carries its Environment, so the cal
   UNAUTHORIZED, so an expiring active entry would brick a deployed SDK key one TTL after the
   last control-plane touch. Revocation correctness comes from the explicit tombstone, never
   from active-entry expiry.
-- On D1 revoke: write a **revoked tombstone** KV entry (`revoked: true`) with a short TTL, and
-  **fail loud** if the write-through errors (see revoke contract below) — revoke is never best-effort
+- On D1 revoke: write the permanent terminal marker, then a **revoked tombstone** KV entry
+  (`revoked: true`) with a short TTL, and **fail loud** if either write-through errors (see revoke
+  contract below) — revoke is never best-effort
 - KV miss on hot path (future, requires a data-plane path to D1): fall back to D1 lookup. If D1
   marks the key revoked, **re-assert the revoked tombstone** in KV rather than treating the miss
   as "unknown / re-validate as valid", then reject
@@ -138,9 +151,14 @@ fire-and-forget — a leaked secret API Key is exactly the incident the threat m
 
 - The revoke KV write-through is **surfaced and retried on failure**, never silently accepted. A failed
   revoke propagation is an operational alarm, not an accepted window.
-- The revoked key id is **negative-cached** (an explicit revoked tombstone), so a KV miss for a key D1
-  marks revoked re-asserts the tombstone instead of falling back to a stale "valid" read. This bounds the
-  post-revoke access window to "until the next read re-asserts," and it never silently exceeds the TTL.
+- The revoked key id is **negative-cached** by a permanent terminal marker plus the short-lived
+  tombstone at the mutable entry. A stale active writer can replace the mutable entry, but cannot remove
+  the marker that the data plane checks first.
+- The schema-v1 rollout backfill writes terminal markers for credentials already revoked in D1. Until
+  the version 2 backfill reaches `done`, operators must assume a pre-rollout revoked credential may still
+  have an active legacy cache entry. After version 2 reaches `done`, the marker is the durable revocation
+  authority. The deployment order never runs this backfill while a marker-blind Evaluation Worker is live.
+  Rolling Evaluation back to a marker-blind version requires reasserting revoked primary entries first.
 - The kill-switch / incident posture wins (CONTEXT.md): revoke must propagate as fast as the edge allows
   and must report when it does not.
 

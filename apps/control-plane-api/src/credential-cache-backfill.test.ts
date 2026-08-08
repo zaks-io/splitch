@@ -1,5 +1,12 @@
-import { CredentialCacheKVSchema, clientKeyCacheKey, kvEnvelope } from "@splitch/contracts";
+import {
+  apiKeyCacheKey,
+  CredentialCacheKVSchema,
+  clientKeyCacheKey,
+  credentialRevocationCacheKey,
+  kvEnvelope,
+} from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
+import { makeDataPlaneAuthResolver } from "../../evaluation-api/src/data-plane-auth";
 import {
   backfillCredentialCaches,
   type CredentialCacheBackfillRows,
@@ -9,7 +16,7 @@ import {
 import {
   AuthoritativeSerialWriter,
   OrderedWriter,
-  SerialWriter,
+  StaleBackfillWinsStore,
   writerAccess,
 } from "./credential-cache-writers-fixture";
 
@@ -76,16 +83,17 @@ describe("credential cache schema-v1 backfill", () => {
 
     await backfillCredentialCaches({ credentialStore }, rows);
 
-    const value = [...writes.values()][0];
+    const value = writes.get(apiKeyCacheKey("hash_a"));
     expect(cacheEnvelope.parse(JSON.parse(value as string)).data).toMatchObject({
       organizationId: "org_a",
       revoked: true,
     });
   });
 
-  it("serializes a stale active backfill before a concurrent revocation for the same key", async () => {
+  it("keeps the terminal marker when a stale active raw KV put lands last", async () => {
     const writes = new Map<string, string>();
-    const writer = new SerialWriter(writes);
+    const cacheKey = clientKeyCacheKey(await sha256Hex("pk_race"));
+    const store = new StaleBackfillWinsStore(writes, cacheKey);
     const rows: CredentialCacheBackfillRows = {
       clientKeys: [
         {
@@ -105,9 +113,9 @@ describe("credential cache schema-v1 backfill", () => {
     if (stale === undefined) throw new Error("test fixture must contain a Client Key");
 
     await Promise.all([
-      backfillCredentialCaches({ credentialCacheWriter: writerAccess(writer) }, rows),
+      backfillCredentialCaches({ credentialStore: store as unknown as KVNamespace }, rows),
       writeClientKeyCache(
-        { credentialCacheWriter: writerAccess(writer) },
+        { credentialStore: store as unknown as KVNamespace },
         stale,
         true,
         "org_a",
@@ -115,8 +123,17 @@ describe("credential cache schema-v1 backfill", () => {
       ),
     ]);
 
-    const raw = writes.get(clientKeyCacheKey(await sha256Hex("pk_race")));
-    expect(cacheEnvelope.parse(JSON.parse(raw as string)).data.revoked).toBe(true);
+    const raw = writes.get(cacheKey);
+    expect(cacheEnvelope.parse(JSON.parse(raw as string)).data.revoked).toBe(false);
+    expect(writes.get(credentialRevocationCacheKey(cacheKey))).toBeDefined();
+
+    await expect(
+      makeDataPlaneAuthResolver(store)(
+        new Request("https://edge.test/api/sdk/evaluate", {
+          headers: { authorization: "Bearer pk_race" },
+        }),
+      ),
+    ).resolves.toEqual({ ok: false, reason: "CREDENTIAL_REVOKED" });
   });
 
   it("does not reopen a Client Key allowlist after a restriction has serialized", async () => {
