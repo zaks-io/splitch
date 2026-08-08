@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MCP_RESOURCE_URIS } from "./mcp-resources";
 import {
   anonymousActor,
@@ -12,6 +12,10 @@ import {
   mcp,
   trackingSessionStore,
 } from "./mcp-resources-harness";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("MCP resources discovery", () => {
   it("lists all five splitch resources", async () => {
@@ -96,8 +100,14 @@ describe("MCP resources discovery", () => {
       demoExpiresAt,
     });
   });
+});
 
+describe("MCP resource reads", () => {
   it("returns a structured resource-read error when the session store fails", async () => {
+    const logged: unknown[][] = [];
+    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args);
+    });
     const sessionStore = failingSessionStore();
     const sessionId = await initializeSession(sessionStore);
 
@@ -108,11 +118,10 @@ describe("MCP resources discovery", () => {
     );
     const body = (await response.json()) as JsonRpcError;
 
-    expect(body.error).toMatchObject({
-      code: -32603,
-      message: "Internal error",
-      data: { message: "mcp-server: session store read failed" },
-    });
+    expect(body.error).toMatchObject({ code: -32603, message: "Internal error" });
+    // The store's own words go to the Worker log; the caller gets its handle.
+    expect(String(logged[0]?.[1])).toContain("session store read failed");
+    expect(body.error.data).toMatchObject({ reference: expect.stringMatching(/^[0-9a-f-]{36}$/) });
   });
 
   it("returns null active-context fields when the session has no selected context", async () => {

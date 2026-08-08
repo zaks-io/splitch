@@ -16,6 +16,12 @@ export interface McpSessionStore {
   end(id: string): Promise<void>;
 }
 
+type McpSessionContextValidation = { ok: true } | { ok: false; message: string };
+
+export type McpSessionContextValidator = (
+  context: McpSessionContext,
+) => Promise<McpSessionContextValidation>;
+
 export const contextUseTool = {
   name: "context_use",
   description: "Set the active App and Environment for this MCP transport session.",
@@ -45,6 +51,7 @@ export async function setSessionContext(
   arguments_: unknown,
   sessionId: string | null,
   sessionStore: McpSessionStore,
+  validate: McpSessionContextValidator,
 ): Promise<{ ok: true; value: McpSessionContext } | { ok: false; message: string }> {
   if (!sessionId) {
     return { ok: false, message: "MCP session is required before calling context_use." };
@@ -53,12 +60,14 @@ export async function setSessionContext(
   if (!context) {
     return { ok: false, message: "context_use requires non-empty appId and environmentId." };
   }
-  try {
-    await sessionStore.set(sessionId, context);
-    return { ok: true, value: context };
-  } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) };
-  }
+  // Only a resolution refusal is the caller's to fix. A validator or session
+  // store that throws is an outage, and dressing it as `{ ok: false }` tells the
+  // agent its own ids were wrong, so it retries new ids forever. Let it reach the
+  // internal-error path instead.
+  const validation = await validate(context);
+  if (!validation.ok) return validation;
+  await sessionStore.set(sessionId, context);
+  return { ok: true, value: context };
 }
 
 export async function resolveScope(
@@ -68,9 +77,10 @@ export async function resolveScope(
   sessionStore: McpSessionStore,
 ): Promise<{ ok: true; value: Record<string, unknown> } | { ok: false; message: string }> {
   const input = inputRecord(arguments_);
-  const session = await readSessionContext(sessionId, sessionStore);
-  if (!session.ok) return session;
-  return resolveRouteScope(path, input, session.value);
+  // A session store that throws is an outage, not an unresolved scope: it
+  // propagates to the internal-error path rather than posing as a caller fix.
+  const context = sessionId ? await sessionStore.get(sessionId) : undefined;
+  return resolveRouteScope(path, input, context);
 }
 
 function resolveRouteScope(
@@ -107,17 +117,6 @@ function resolveRouteScope(
         : {}),
     },
   };
-}
-
-async function readSessionContext(
-  sessionId: string | null,
-  sessionStore: McpSessionStore,
-): Promise<{ ok: true; value: McpSessionContext | undefined } | { ok: false; message: string }> {
-  try {
-    return { ok: true, value: sessionId ? await sessionStore.get(sessionId) : undefined };
-  } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) };
-  }
 }
 
 function environmentScopeParameter(

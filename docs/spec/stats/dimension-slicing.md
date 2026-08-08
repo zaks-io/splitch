@@ -17,8 +17,10 @@ Per-Dimension results are separate CI computations scoped to `Dimension = dimens
 | Secondary | At Experiment design time | No           | Exploratory; discovery, not guardians |
 
 The class is set once, at Experiment creation or during the draft phase, and is frozen per Run.
-Post-start Dimensions are allowed only as Secondary / exploratory outputs for the current Run.
-They do not change the BH family size `m` and cannot produce decision-valid significance.
+Post-start Dimensions are allowed only as Secondary / exploratory, non-decision outputs for the
+current Run. They do not change the BH family size `m`, cannot produce decision-valid significance,
+and cannot enter decision diagnostics because partial capture would make a Run-wide SRM cut
+misleading.
 
 ## Family expansion for Primary Dimensions
 

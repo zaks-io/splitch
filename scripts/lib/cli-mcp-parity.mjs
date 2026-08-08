@@ -112,3 +112,30 @@ export function assertCliMcpParity({
   assertSurface("MCP tools", expectedOperations(contract, exceptions, "mcp"), mcp);
   assertSkinLocalCapabilities(skinLocalCapabilities);
 }
+
+/**
+ * MCP must publish the JSON Schema derived from the route contracts. Comparing
+ * the canonical derivation with the registered tools catches a hand-written MCP
+ * definition or wrapper override; CLI validation is not exercised here.
+ */
+export function assertDerivedMcpSchemaParity({ derivedSchemas, publishedSchemas }) {
+  const derivedOperations = [...derivedSchemas.keys()].sort();
+  const publishedOperations = [...publishedSchemas.keys()].sort();
+  if (derivedOperations.join(",") !== publishedOperations.join(",")) {
+    throw new Error(
+      `cli-mcp-parity: schema coverage differs. Derived: ${derivedOperations.join(", ")}; published MCP: ${publishedOperations.join(", ")}`,
+    );
+  }
+  for (const operationId of derivedOperations) {
+    for (const kind of ["input", "output"]) {
+      const derived = JSON.stringify(derivedSchemas.get(operationId)[kind]);
+      const published = JSON.stringify(publishedSchemas.get(operationId)[kind]);
+      if (derived !== published) {
+        throw new Error(
+          `cli-mcp-parity: ${operationId} ${kind} schema differs from the published MCP tool\n  Derived: ${derived}\n  Published MCP: ${published}`,
+        );
+      }
+    }
+  }
+  return derivedOperations.length;
+}

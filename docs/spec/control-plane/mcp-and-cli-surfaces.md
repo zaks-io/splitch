@@ -207,9 +207,12 @@ Agent connects to MCP server URL
 ```
 
 For each tool call, MCP creates a separate short-lived delegated credential bound to the derived
-operation, owning Worker, verified actor and scopes, method, exact downstream path/query, and body
-digest. The credential is signed with the owning service's delegation key, expires after 30 seconds,
-and carries a one-use identifier consumed by the Worker's replay guard. Only named Worker
+operation, the public surface that operation is addressed at, verified actor and scopes, method,
+exact downstream path/query, and body digest. Every management operation is addressed at the Control
+Plane, because a route's public address follows its credential rather than its owner (ADR-0046); the
+Control Plane runs its gates and then delegates onward to Analysis or Evaluation when the registered
+route says so. The credential is signed with the Control Plane delegation key, expires after 30
+seconds, and carries a one-use identifier consumed by the Worker's replay guard. Only named Worker
 service-binding entrypoints accept it. Public Worker entrypoints do not, and downstream requests
 never contain the client bearer. The signed delegated principal carries only the already-verified
 actor and scopes, so it cannot be forged or widen the caller's authority. Replay identifiers are

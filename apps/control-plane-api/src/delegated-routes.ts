@@ -104,11 +104,19 @@ function delegatingHandler(
 
 function missingOwnerBinding(route: ApiRouteContract, requestId: string): Response {
   // A deployed control plane without the owner's binding cannot answer this
-  // route at all. Saying so beats a 404 that reads as "no such operation".
+  // route at all. Saying so beats a 404 that reads as "no such operation" --
+  // but this route is reachable through the MCP door (ADR-0046/SPL-313), and an
+  // agent there cannot act on a binding it cannot see, and "analysis-api" is
+  // exactly the internal vocabulary that door refuses to leak. The owner name
+  // stays on the operator side: console.error, untruncated, next to the
+  // operationId, for `wrangler tail`.
+  console.error(
+    `control-plane-api: ${route.operationId} is executed by ${route.owner}, whose service binding is not configured`,
+  );
   return renderError(
     {
       code: "SERVICE_UNAVAILABLE",
-      message: `${route.operationId} is executed by ${route.owner}, whose service binding is not configured`,
+      message: `${route.operationId} is temporarily unavailable`,
       details: { retryAfterMs: 30_000 },
     },
     { requestId },

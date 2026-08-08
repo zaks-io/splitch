@@ -4,7 +4,7 @@ import {
   type ExposureBatchResponse,
 } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption";
+import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 import {
   APP_B,
   CLIENT_KEY_B,
@@ -164,6 +164,45 @@ describe("POST /api/sdk/exposures: forgery and integrity", () => {
     expect(exposureSink.writes).toHaveLength(1);
     // Dedup re-schedules the idempotent Assignment Store put (partial-claim recovery).
     expect(assignmentStore.putHashedCalls).toHaveLength(2);
+  });
+});
+
+describe("POST /api/sdk/exposures: ticket-fingerprint binding", () => {
+  it("binds a fresh ID on ticket dedup so Ticket B with that ID returns EVENT_ID_CONFLICT", async () => {
+    const claims = new MemoryExposureRedemptionClaimStore();
+    const { app, exposureSink } = await makeSdkRouteHarness({
+      liveRun: true,
+      exposureRedemptionClaims: claims,
+    });
+    const ticketA = await mintTicket({ targetingKey: "user-a" });
+    const ticketB = await mintTicket({ targetingKey: "user-b" });
+
+    const first = await app.request(
+      PATH,
+      exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticketA }]),
+    );
+    const second = await app.request(
+      PATH,
+      exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_B, exposureTicket: ticketA }]),
+    );
+    const third = await app.request(
+      PATH,
+      exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_B, exposureTicket: ticketB }]),
+    );
+    const firstBody = (await first.json()) as ExposureBatchResponse;
+    const secondBody = (await second.json()) as ExposureBatchResponse;
+    const thirdBody = (await third.json()) as ExposureBatchResponse;
+
+    expect(firstBody.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "accepted", code: null },
+    ]);
+    expect(secondBody.results).toEqual([
+      { exposureId: EXPOSURE_ID_B, status: "deduplicated", code: null },
+    ]);
+    expect(thirdBody.results).toEqual([
+      { exposureId: EXPOSURE_ID_B, status: "rejected", code: "EVENT_ID_CONFLICT" },
+    ]);
+    expect(exposureSink.writes).toHaveLength(1);
   });
 });
 
