@@ -38,6 +38,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey")({
     );
     return {
       detail: result.data,
+      environmentNames: environmentNames(scoped.context.navigation, scoped.context.scope.appId),
       scope: scoped.context.scope,
       promotionSourceEnv: sources[0]?.env,
     };
@@ -51,7 +52,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey")({
 });
 
 function FlagDetailRoute() {
-  const { detail, scope, promotionSourceEnv } = Route.useLoaderData();
+  const { detail, environmentNames, scope, promotionSourceEnv } = Route.useLoaderData();
 
   if (isFlagDetailNotFound(detail)) {
     // The key is resolved against a bounded catalog read. When that read was
@@ -74,9 +75,30 @@ function FlagDetailRoute() {
     <FlagDetailPage
       appId={scope.appId}
       environmentId={scope.environmentId}
+      environmentNames={environmentNames}
       promotionSourceEnv={promotionSourceEnv}
       scopeHref={scopedHref(scope)}
       view={detail}
     />
+  );
+}
+
+function environmentNames(
+  navigation: {
+    orgs: Array<{
+      apps: Array<{
+        appId: string;
+        environments: readonly { environmentId: string; env: string }[];
+      }>;
+    }>;
+  },
+  appId: string,
+): Record<string, string> {
+  const app = navigation.orgs
+    .flatMap((org) => org.apps)
+    .find((candidate) => candidate.appId === appId);
+  if (!app) throw new Error("App navigation is incomplete");
+  return Object.fromEntries(
+    app.environments.map((environment) => [environment.environmentId, environment.env]),
   );
 }

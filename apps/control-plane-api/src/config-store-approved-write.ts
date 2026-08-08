@@ -14,6 +14,7 @@ import {
 } from "./config-store-shared";
 import { baselineIsUnresolvable } from "./flag-config-rollout";
 import { diffEntriesTouch } from "./flag-config-run-freeze-proposal";
+import { resolveTargetingRules } from "./targeting-rule-resolution";
 
 /**
  * The write an approved Approval Request performs. It is separate from the
@@ -28,7 +29,7 @@ export async function applyApprovedFlagConfig(
   const scope = envScope(input.appId, input.environmentId);
   const current = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
   if (!current) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  const invalid = validateProposal(current, input);
+  const invalid = await validateProposal(deps, current, input);
   if (invalid) return invalid;
   // Judged against the request's own changed-field set (`diff.entries`), not
   // against a re-diff of the complete proposed snapshot: a Run started after
@@ -103,10 +104,11 @@ export function approvedPatchMovesConfig(patch: ReturnType<typeof approvedConfig
   );
 }
 
-function validateProposal(
+async function validateProposal(
+  deps: ConfigStoreDeps,
   current: Snapshot,
   input: ApplyApprovedFlagConfigInput,
-): Extract<FlagConfigWriteResult, { ok: false }> | null {
+): Promise<Extract<FlagConfigWriteResult, { ok: false }> | null> {
   const missingVariants = missingAvailableVariants(
     input.proposed.availableVariantNames,
     current.flag.variants,
@@ -121,6 +123,18 @@ function validateProposal(
       ok: false,
       reason: "VARIANT_NOT_AVAILABLE",
       missingVariants: [...new Set([...missingVariants, ...missingRuleVariants])],
+    };
+  }
+  const resolved = await resolveTargetingRules(
+    deps.repo,
+    input.appId,
+    input.proposed.targetingRules,
+  );
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      reason: "SEGMENT_NOT_FOUND",
+      missingSegmentIds: resolved.missingSegmentIds,
     };
   }
   const defaultVariant = current.flag.variants.find(

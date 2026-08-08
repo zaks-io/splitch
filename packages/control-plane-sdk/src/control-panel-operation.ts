@@ -68,6 +68,7 @@ export type ControlPanelOperation =
       id:
         | "metrics_list"
         | "metrics_create"
+        | "segments_list"
         | "overview_get"
         | "settings_get"
         | "environment_update"
@@ -105,6 +106,7 @@ const FLAG_PROMOTE_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/prom
 const APPROVAL_REQUEST_PATH = /^\/apps\/([^/]+)\/approval-requests\/([^/]+)\/?$/;
 const APPROVAL_REVIEWS_PATH = /^\/apps\/([^/]+)\/approval-requests\/([^/]+)\/reviews\/?$/;
 const METRICS_PATH = /^\/apps\/([^/]+)\/metrics\/?$/;
+const SEGMENTS_PATH = /^\/apps\/([^/]+)\/segments\/?$/;
 const METRIC_PATH = /^\/apps\/([^/]+)\/metrics\/([^/]+)\/?$/;
 const METRIC_COLLECTION_METHODS = {
   GET: "metrics_list",
@@ -137,8 +139,20 @@ export function parseControlPanelOperation(
     parseConfig(method, pathname) ??
     parseApproval(method, pathname) ??
     parseEnvironmentSettings(method, pathname) ??
+    parseSegments(method, pathname, panelEnvironmentId) ??
     parseMetrics(method, pathname, panelEnvironmentId)
   );
+}
+
+function parseSegments(
+  method: string,
+  pathname: string,
+  environmentValue?: string,
+): ControlPanelOperation | null {
+  if (method !== "GET" || !environmentValue) return null;
+  const appId = decodeMatch(pathname.match(SEGMENTS_PATH), 1);
+  const environmentId = decodeSegment(environmentValue);
+  return appId && environmentId ? { id: "segments_list", appId, environmentId } : null;
 }
 
 /**

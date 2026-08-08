@@ -1,4 +1,9 @@
-import type { Condition, ErrorCode, EvaluationContext, TargetingRule } from "@splitch/contracts";
+import type {
+  Condition,
+  ErrorCode,
+  EvaluationContext,
+  ResolvedTargetingRule,
+} from "@splitch/contracts";
 
 export class ConditionMatchError extends Error {
   readonly errorCode: ErrorCode;
@@ -20,7 +25,7 @@ export interface ConditionMatchOptions {
 }
 
 export function matchesConditions(
-  conditions: TargetingRule["conditions"],
+  conditions: ResolvedTargetingRule["conditions"],
   context: EvaluationContext,
   options: ConditionMatchOptions = {},
 ) {

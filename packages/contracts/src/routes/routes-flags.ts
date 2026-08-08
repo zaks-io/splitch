@@ -196,6 +196,7 @@ export const flagRoutes = [
     errors: [
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
+      "SEGMENT_NOT_FOUND",
       "FORBIDDEN",
       // A live Run owns availability and the baseline rollout in its Environment
       // and refuses both; `enabled` is exempt so the kill switch always works.
@@ -218,6 +219,7 @@ export const flagRoutes = [
     errors: [
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
+      "SEGMENT_NOT_FOUND",
       "FORBIDDEN",
       // A live Run owns this Environment's Targeting and refuses the replace.
       "RUN_FROZEN",
@@ -239,6 +241,7 @@ export const flagRoutes = [
     errors: [
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
+      "SEGMENT_NOT_FOUND",
       "FORBIDDEN",
       // A live Run in the TARGET Environment owns the availability, baseline
       // rollout, and Targeting a Promotion would overwrite there.

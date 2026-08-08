@@ -16,6 +16,7 @@ const SCOPED_OPERATION_IDS = [
   "experiments_create",
   "metrics_list",
   "metrics_create",
+  "segments_list",
   "overview_get",
   "settings_get",
   "environment_update",

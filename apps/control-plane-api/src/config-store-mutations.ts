@@ -1,5 +1,6 @@
 import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
 import { type EnvScope, envScope } from "@splitch/db";
+import { promotionFreeze, targetingFreeze } from "./config-store-freeze";
 import {
   buildSnapshotFromD1,
   type ConfigStoreDeps,
@@ -16,9 +17,9 @@ import {
   targetingRuleRows,
   writeSnapshotAndBroadcast,
 } from "./config-store-shared";
-import { promotionFreeze, targetingFreeze } from "./config-store-freeze";
 import { randomHex } from "./credential-cache";
 import { baselineIsUnresolvable, mintSalt } from "./flag-config-rollout";
+import { resolveTargetingRules } from "./targeting-rule-resolution";
 
 interface PreparedPromotion {
   availableVariantNames: string[];
@@ -46,6 +47,15 @@ export async function replaceTargetingRules(
   );
   if (missingVariants.length > 0) {
     return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants };
+  }
+
+  const resolved = await resolveTargetingRules(deps.repo, input.appId, input.targetingRules);
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      reason: "SEGMENT_NOT_FOUND",
+      missingSegmentIds: resolved.missingSegmentIds,
+    };
   }
 
   return commitTargetingRules(deps, scope, input.flagId, input.targetingRules, input.approval);
@@ -234,8 +244,8 @@ function promotedRules(
   target: Snapshot,
 ): TargetingRule[] {
   return input.select.targeting
-    ? promotedTargetingRules(source.flag.targetingRules)
-    : target.flag.targetingRules;
+    ? promotedTargetingRules(source.authoringTargetingRules)
+    : target.authoringTargetingRules;
 }
 
 /**

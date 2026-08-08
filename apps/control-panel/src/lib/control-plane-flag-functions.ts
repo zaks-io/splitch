@@ -5,7 +5,7 @@ import { draftIssues, FlagDraftSchema, flagCreateInput } from "./create-flag-mod
 import { type FlagDetailNotFound, isFlagDetailNotFound, readFlagDetail } from "./flag-detail-data";
 import { type FlagDetailView, flagDetailView } from "./flag-detail-view";
 import { type FlagsPageData, readFlagsPage } from "./flags-page-data";
-import { authorizedFlagsClient } from "./panel-authorized-clients";
+import { authorizedFlagsClient, authorizedSegmentsClient } from "./panel-authorized-clients";
 
 type FlagsPageScope = { appId: string; environmentId: string };
 type CreateFlagResult = ControlPlaneOperationResult<{ key: string }>;
@@ -42,14 +42,20 @@ export const loadControlPanelFlagDetail = createServerFn({ method: "GET" })
     async ({ data }): Promise<ControlPlaneOperationResult<FlagDetailView | FlagDetailNotFound>> => {
       const authorized = await authorizedFlagsClient(data.environmentId);
       if (!authorized.ok) return authorized.result;
-      const detail = await readFlagDetail(authorized.client, data, data.flagKey);
+      const segments = await authorizedSegmentsClient(data.environmentId);
+      if (!segments.ok) return segments.result;
+      const [detail, segmentList] = await Promise.all([
+        readFlagDetail(authorized.client, data, data.flagKey),
+        segments.client.list({ appId: data.appId }),
+      ]);
       if (!detail.ok) return detail;
+      if (!segmentList.ok) return segmentList;
       return {
         ok: true,
         status: detail.status,
         data: isFlagDetailNotFound(detail.data)
           ? detail.data
-          : flagDetailView(detail.data, data.env),
+          : flagDetailView(detail.data, data.env, segmentList.data),
       };
     },
   );

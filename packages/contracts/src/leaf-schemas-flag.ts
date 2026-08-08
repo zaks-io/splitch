@@ -87,16 +87,35 @@ export type Variant = z.infer<typeof VariantSchema>;
 // TargetingRule
 // ---------------------------------------------------------------------------
 
-export const TargetingRuleSchema = z.object({
+const TargetingRuleFields = {
   id: z.string(),
   flagId: z.string(),
   // Integer ≥ 0; lower = evaluated first
   priority: z.number().int().min(0),
-  conditions: z.array(ConditionSchema).min(1),
+  conditions: z.array(ConditionSchema),
   variantId: z.string(),
   percentageRollout: PercentageRolloutSchema.nullable().optional(),
-});
+};
+
+export const TargetingRuleSchema = z
+  .object({
+    ...TargetingRuleFields,
+    segmentId: z.string().optional(),
+  })
+  .refine((rule) => rule.conditions.length > 0 || rule.segmentId !== undefined, {
+    message: "a Targeting Rule requires direct Conditions or a Segment",
+    path: ["conditions"],
+  });
 export type TargetingRule = z.infer<typeof TargetingRuleSchema>;
+
+/** Concrete publication/Run projection. Segment references never reach evaluation. */
+export const ResolvedTargetingRuleSchema = z
+  .object({
+    ...TargetingRuleFields,
+    conditions: z.array(ConditionSchema),
+  })
+  .strict();
+export type ResolvedTargetingRule = z.infer<typeof ResolvedTargetingRuleSchema>;
 
 // ---------------------------------------------------------------------------
 // Flag

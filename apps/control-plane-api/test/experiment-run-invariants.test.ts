@@ -84,10 +84,22 @@ describe("control-plane Experiment Run invariants", () => {
 
   it("checks Policy confirmation before state change and freezes Segment rules", async () => {
     const fx = await experimentFixture(ctx, "prod");
+    const treatmentVariantId = fx.flag.variants.find((variant) => variant.name === "treatment")?.id;
+    if (!treatmentVariantId) throw new Error("Experiment fixture lacks treatment Variant");
     const experiment = await createExperimentDraft(ctx, fx, {
       key: "policy-gated",
       allocation: { control: 50, treatment: 50 },
-      segmentIds: [fx.segmentId],
+      targetingRules: [
+        {
+          id: "rule_segment_paid",
+          flagId: fx.flag.id,
+          priority: 0,
+          conditions: [],
+          segmentId: fx.segmentId,
+          variantId: treatmentVariantId,
+          percentageRollout: null,
+        },
+      ],
     });
 
     const gated = await startExperiment(ctx, fx, experiment.id);
@@ -140,6 +152,13 @@ describe("control-plane Experiment Run invariants", () => {
       },
     );
     expect(segmentPatch.status).toBe(200);
+    const segmentDelete = await request(
+      ctx.h,
+      "DELETE",
+      `/apps/${fx.appId}/segments/${fx.segmentId}`,
+      fx.jwt,
+    );
+    expect(segmentDelete.status).toBe(200);
 
     const getRun = await request(
       ctx.h,

@@ -1,7 +1,7 @@
 import type { ApprovalRequest } from "@splitch/contracts";
 import type { ConfigStoreWriter } from "./config-store";
 import { variantNotAvailable } from "./experiment-errors";
-import { flagConfigNotFound, rolloutAmbiguous } from "./flag-config-errors";
+import { flagConfigNotFound, flagSegmentNotFound, rolloutAmbiguous } from "./flag-config-errors";
 import { runFrozenResponse } from "./flag-config-run-freeze";
 
 /**
@@ -61,6 +61,9 @@ export function renderFlagConfigWriteResult(
   if (result.reason === "ROLLOUT_AMBIGUOUS") {
     return rolloutAmbiguous(result.availableVariantNames, requestId);
   }
+  if (result.reason === "SEGMENT_NOT_FOUND") {
+    return flagSegmentNotFound(result.missingSegmentIds, requestId);
+  }
   if (result.reason === "RUN_FROZEN") return runFrozenResponse(result, requestId);
   // Direct writers never produce APPROVAL_NOT_APPLIED, CHANGED_FIELDS_UNDETERMINED,
   // or APPROVAL_EMPTY_CHANGE.
@@ -82,6 +85,9 @@ export function renderPromotionResult(
   }
   if (result.reason === "ROLLOUT_AMBIGUOUS") {
     return rolloutAmbiguous(result.availableVariantNames, requestId);
+  }
+  if (result.reason === "SEGMENT_NOT_FOUND") {
+    return flagSegmentNotFound(result.missingSegmentIds, requestId);
   }
   if (result.reason === "RUN_FROZEN") return runFrozenResponse(result, requestId);
   // Direct writers never produce APPROVAL_NOT_APPLIED, CHANGED_FIELDS_UNDETERMINED,

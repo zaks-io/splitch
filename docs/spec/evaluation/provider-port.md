@@ -52,7 +52,7 @@ It returns the rule set; the evaluate path iterates and matches.
 | `enabled`        | boolean                                                            | yes      | If false: return Default Variant on all requests                                                                                                                                                                                                                                                                                                                                                             |
 | `defaultVariant` | string                                                             | yes      | Variant **name** returned when disabled or no rule matches. The Provider resolves it from the stored `FlagConfigKV.defaultVariantId` (an ID; see [contracts/storage-schemas-kv.md](../contracts/storage-schemas-kv.md)) into the name — the evaluate path works in names throughout (assign() returns a name; Exposure logs a name; see [contracts/leaf-schemas-flag.md](../contracts/leaf-schemas-flag.md)) |
 | `variants`       | `{ name: string; value: boolean \| string \| number \| object }[]` | yes      | All possible Variants; value type is JSON. Resolved view of the stored catalog (which also carries `id`); the evaluate path keys on `name`                                                                                                                                                                                                                                                                   |
-| `targetingRules` | `TargetingRule[]`                                                  | yes      | Priority-ordered; evaluate path iterates, first match wins                                                                                                                                                                                                                                                                                                                                                   |
+| `targetingRules` | `ResolvedTargetingRule[]`                                          | yes      | Priority-ordered concrete Conditions; evaluate path iterates, first match wins                                                                                                                                                                                                                                                                                                                               |
 
 ## TargetingRule shape
 
@@ -67,15 +67,14 @@ It returns the rule set; the evaluate path iterates and matches.
 
 ## Condition shape
 
-| Field       | Type                                                                                                                    | Required | Meaning                                               |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------- |
-| `attribute` | string                                                                                                                  | yes      | Key in EvaluationContext (e.g. `"country"`, `"plan"`) |
-| `operator`  | `'eq' \| 'neq' \| 'in' \| 'not_in' \| 'gt' \| 'lt' \| 'gte' \| 'lte' \| 'contains' \| 'segment_in' \| 'segment_not_in'` | yes      | Comparison or Segment membership                      |
-| `value`     | `string \| number \| boolean \| string[]`                                                                               | yes      | Operand                                               |
+| Field       | Type                                                                                                | Required | Meaning                                               |
+| ----------- | --------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------- |
+| `attribute` | string                                                                                              | yes      | Key in EvaluationContext (e.g. `"country"`, `"plan"`) |
+| `operator`  | `'eq' \| 'neq' \| 'in' \| 'not_in' \| 'gt' \| 'lt' \| 'gte' \| 'lte' \| 'matches' \| 'not_matches'` | yes      | Direct comparison                                     |
+| `value`     | `string \| number \| boolean \| string[]`                                                           | yes      | Operand                                               |
 
-`segment_in` / `segment_not_in`: the `value` is a Segment ID. Segment membership = the
-Entity matches the Segment's own Conditions. Segments are Conditions, not a separate
-authorization layer.
+Segment references are resolved by the control plane before this Provider view exists. The Provider
+never receives a Segment id and performs no Segment lookup.
 
 ## EvaluationContext shape
 

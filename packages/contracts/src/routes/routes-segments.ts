@@ -17,7 +17,10 @@ const OWNER = "control-plane-api" as const;
 const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
-const SegmentListResponse = z.object({ items: z.array(SegmentSchema) });
+const SegmentListResponse = z.object({
+  items: z.array(SegmentSchema),
+  affectedEnvironmentIds: z.record(z.string(), z.array(z.string())),
+});
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 
 export const segmentRoutes = [
@@ -78,12 +81,12 @@ export const segmentRoutes = [
     owner: OWNER,
     method: "DELETE",
     path: "/apps/:appId/segments/:segmentId",
-    summary: "Delete a Segment (blocked if referenced by a running Experiment).",
+    summary: "Delete a Segment when no mutable Flag Configuration or Experiment draft uses it.",
     request: { params: SegmentParams },
     response: DeletedResponse,
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["SEGMENT_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING"],
+    errors: ["SEGMENT_NOT_FOUND", "FORBIDDEN", "RESOURCE_NOT_EMPTY"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

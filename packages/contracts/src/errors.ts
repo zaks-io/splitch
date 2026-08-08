@@ -4,6 +4,7 @@ import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
 import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
 import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
+import { SegmentDependenciesSchema, SegmentNotFoundDetailsSchema } from "./segment-error-details";
 
 /**
  * Canonical error contract. One base shape, discriminated on `code`, parsed by
@@ -180,7 +181,7 @@ const errorMembers = [
   member(
     "RESOURCE_NOT_EMPTY",
     z.object({
-      resourceType: z.enum(["app", "environment", "flag", "variant", "organization"]),
+      resourceType: z.enum(["app", "environment", "flag", "variant", "organization", "segment"]),
       resourceId: z.string(),
       /**
        * First blocker group's CLI child type (back-compat summary). Prefer
@@ -196,6 +197,7 @@ const errorMembers = [
        * tree yet).
        */
       blockers: z.array(ResourceDeleteBlockerSchema).min(1).optional(),
+      segmentDependencies: SegmentDependenciesSchema.optional(),
     }),
   ),
 
@@ -234,7 +236,7 @@ const errorMembers = [
   member("ORGANIZATION_NOT_FOUND", EmptyDetails),
   member("USER_NOT_FOUND", EmptyDetails),
   member("CREDENTIAL_NOT_FOUND", EmptyDetails),
-  member("SEGMENT_NOT_FOUND", EmptyDetails),
+  member("SEGMENT_NOT_FOUND", SegmentNotFoundDetailsSchema),
   member("PRIVACY_JOB_NOT_FOUND", EmptyDetails),
   member("APPROVAL_REQUEST_NOT_FOUND", EmptyDetails),
 

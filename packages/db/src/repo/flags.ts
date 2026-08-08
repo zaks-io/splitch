@@ -172,6 +172,17 @@ export function makeFlagRepo(db: Db) {
       return segmentsTable.findOne(scope, eq(segments.id, segmentId));
     },
 
+    listTargetingRulesBySegment(scope: TenantScope, segmentId: string) {
+      return db
+        .select()
+        .from(targetingRules)
+        .where(and(eq(targetingRules.appId, scope.appId), eq(targetingRules.segmentId, segmentId)));
+    },
+
+    listTargetingRulesForApp(scope: TenantScope) {
+      return db.select().from(targetingRules).where(eq(targetingRules.appId, scope.appId));
+    },
+
     updateSegment(
       scope: TenantScope,
       segmentId: string,

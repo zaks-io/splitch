@@ -1,4 +1,5 @@
-import type { Variant } from "@splitch/contracts";
+import type { Segment, Variant } from "@splitch/contracts";
+import type { PanelSegmentsListOutput } from "@splitch/control-plane-sdk";
 import type { FlagDetailData } from "./flag-detail-data";
 
 /**
@@ -34,6 +35,14 @@ type TargetingRuleView = {
   variantName: string;
   conditions: Array<{ attribute: string; operator: string; value: string }>;
   rolloutPercentage: number | null;
+  segmentId: string | null;
+  segmentName: string | null;
+};
+
+type SegmentReferenceView = {
+  id: string;
+  name: string;
+  affectedEnvironmentIds: string[];
 };
 
 /**
@@ -59,12 +68,17 @@ export type FlagDetailView = {
   availabilityNarrowed: boolean;
   defaultVariantName: string;
   targetingRules: TargetingRuleView[];
+  segments: SegmentReferenceView[];
   baselineRolloutPercentage: number | null;
   /** The running Experiment that owns some of these fields, or null. */
   controllingExperiment: { id: string; name: string } | null;
 };
 
-export function flagDetailView(data: FlagDetailData, env: string): FlagDetailView {
+export function flagDetailView(
+  data: FlagDetailData,
+  env: string,
+  segmentList: PanelSegmentsListOutput,
+): FlagDetailView {
   const config = data.configuration;
   const catalog = data.definition.variants;
   const available = config ? config.availableVariantNames : [];
@@ -102,10 +116,29 @@ export function flagDetailView(data: FlagDetailData, env: string): FlagDetailVie
           value: JSON.stringify(condition.value),
         })),
         rolloutPercentage: rule.percentageRollout?.percentage ?? null,
+        segmentId: rule.segmentId ?? null,
+        segmentName: rule.segmentId ? segmentName(segmentList.items, rule.segmentId) : null,
       })),
+    segments: segmentList.items.map((segment) => ({
+      id: segment.id,
+      name: segment.name,
+      affectedEnvironmentIds: affectedEnvironments(segmentList, segment.id),
+    })),
     baselineRolloutPercentage: config?.rollout?.percentage ?? null,
     controllingExperiment: config?.experiment ?? null,
   };
+}
+
+function affectedEnvironments(list: PanelSegmentsListOutput, segmentId: string): string[] {
+  const environmentIds = list.affectedEnvironmentIds[segmentId];
+  if (!environmentIds) throw new Error("Segment dependency projection is incomplete");
+  return environmentIds;
+}
+
+function segmentName(segments: Segment[], segmentId: string): string {
+  const segment = segments.find((candidate) => candidate.id === segmentId);
+  if (!segment) throw new Error("Flag Configuration references an unavailable Segment");
+  return segment.name;
 }
 
 /**

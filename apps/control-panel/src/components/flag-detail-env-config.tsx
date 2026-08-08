@@ -17,9 +17,11 @@ import { FlagTargetingSummary } from "./flag-targeting-summary";
  */
 export function FlagDetailEnvConfig({
   editing,
+  environmentNames,
   view,
 }: {
   editing: FlagEditing;
+  environmentNames: Record<string, string>;
   view: FlagDetailView;
 }) {
   const experiment = view.controllingExperiment;
@@ -59,7 +61,7 @@ export function FlagDetailEnvConfig({
             in this Environment, and a frozen-but-present control is a control that
             can still misfire; the read-only summary carries the state instead.
           */}
-          {renderTargeting(editing, view)}
+          {renderTargeting(editing, environmentNames, view)}
         </section>
 
         <section className="grid gap-2" aria-label="Baseline rollout">
@@ -104,14 +106,18 @@ function renderBaselineRollout(editing: FlagEditing, view: FlagDetailView) {
  * the editor is absent rather than offered against a resource the Worker would
  * refuse to write.
  */
-function renderTargeting(editing: FlagEditing, view: FlagDetailView) {
+function renderTargeting(
+  editing: FlagEditing,
+  environmentNames: Record<string, string>,
+  view: FlagDetailView,
+) {
   if (!view.configured) {
     return <Empty>No Flag Configuration here, so there are no Targeting Rules to edit.</Empty>;
   }
   return isLocked(view, "targeting") ? (
     <FlagTargetingSummary view={view} />
   ) : (
-    <FlagTargetingRulesEditor editing={editing} view={view} />
+    <FlagTargetingRulesEditor editing={editing} environmentNames={environmentNames} view={view} />
   );
 }
 

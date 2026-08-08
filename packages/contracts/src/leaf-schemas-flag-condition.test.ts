@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   ConditionOperatorSchema,
   ConditionSchema,
+  conditionOperators,
   PercentageRolloutSchema,
   SegmentSchema,
-  conditionOperators,
 } from "./leaf-schemas-flag";
 
 const validCondition = {
@@ -44,6 +44,10 @@ describe("ConditionOperatorSchema", () => {
     expect(ConditionOperatorSchema.safeParse("contains").success).toBe(false);
     expect(ConditionOperatorSchema.safeParse("").success).toBe(false);
     expect(ConditionOperatorSchema.safeParse(null).success).toBe(false);
+  });
+
+  it.each(["segment_in", "segment_not_in"])("rejects runtime Segment operator %s", (operator) => {
+    expect(ConditionOperatorSchema.safeParse(operator).success).toBe(false);
   });
 });
 

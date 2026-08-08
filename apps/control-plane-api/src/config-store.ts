@@ -1,9 +1,10 @@
 import { DeltaNudgeSchema } from "@splitch/contracts";
 import { appScope, type EnvScope, envScope } from "@splitch/db";
 import { applyApprovedFlagConfig } from "./config-store-approved-write";
-import { configPatchFreeze, targetingFreeze } from "./config-store-freeze";
+import { configPatchFreeze } from "./config-store-freeze";
 import { deleteFlagConfigSnapshot } from "./config-store-kv";
 import { promoteFlagConfig, replaceTargetingRules } from "./config-store-mutations";
+import { previewSnapshotResult, previewTargetingRules } from "./config-store-preview";
 import {
   type ApplyApprovedFlagConfigInput,
   buildExperimentSnapshotFromD1,
@@ -104,23 +105,7 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
     },
 
     async previewTargetingRules(input) {
-      const frozen = await targetingFreeze(deps, input);
-      if (frozen) return frozen;
-
-      const scope = envScope(input.appId, input.environmentId);
-      const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
-      if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
-      const missingVariants = missingRuleVariantNames(
-        input.targetingRules,
-        snapshot.flag.variants,
-        snapshot.flag.availableVariantNames,
-      );
-      if (missingVariants.length > 0) {
-        return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants };
-      }
-      return previewSnapshotResult(snapshot, {
-        targetingRules: input.targetingRules,
-      });
+      return previewTargetingRules(deps, input);
     },
 
     async previewPromotion(input) {
@@ -262,32 +247,6 @@ async function previewFlagConfig(
       : {}),
     ...(rollout !== undefined ? { rollout } : {}),
   });
-}
-
-function previewSnapshotResult(
-  current: Snapshot,
-  patch: Partial<
-    Pick<Snapshot["flag"], "enabled" | "availableVariantNames" | "targetingRules" | "rollout">
-  >,
-): FlagConfigWriteResult {
-  const proposed: Snapshot = {
-    ...current,
-    version: current.version + 1,
-    flag: {
-      ...current.flag,
-      ...patch,
-    },
-  };
-  return {
-    ok: true,
-    config: responseFromSnapshot(proposed),
-    nudge: DeltaNudgeSchema.parse({
-      type: "config.changed",
-      entity: "flag",
-      id: current.flag.id,
-      version: proposed.version,
-    }),
-  };
 }
 
 function validateFlagConfigPatch(

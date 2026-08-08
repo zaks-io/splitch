@@ -99,6 +99,10 @@ const OPERATION_ROUTES: OperationCoverage = {
     route: { method: "POST", pathname: `/apps/${APP}/flags`, environmentId: ENV },
     operation: { id: "flags_create", appId: APP, environmentId: ENV },
   },
+  segments_list: {
+    route: { method: "GET", pathname: `/apps/${APP}/segments`, environmentId: ENV },
+    operation: { id: "segments_list", appId: APP, environmentId: ENV },
+  },
   flag_config_get: {
     route: { method: "GET", pathname: `/apps/${APP}/envs/${ENV}/flags/flag_1/config` },
     operation: { id: "flag_config_get", appId: APP, environmentId: ENV, flagId: "flag_1" },

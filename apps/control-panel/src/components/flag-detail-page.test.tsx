@@ -135,7 +135,13 @@ describe("Flag detail page", () => {
 
 function render(next: FlagDetailView): string {
   return renderToStaticMarkup(
-    <FlagDetailPage appId="app_1" environmentId="env_dev" scopeHref={scopeHref} view={next} />,
+    <FlagDetailPage
+      appId="app_1"
+      environmentId="env_dev"
+      environmentNames={{ env_dev: "dev" }}
+      scopeHref={scopeHref}
+      view={next}
+    />,
   );
 }
 
@@ -180,8 +186,11 @@ function view(overrides: Partial<FlagDetailView> = {}): FlagDetailView {
         variantName: "treatment",
         conditions: [{ attribute: "plan", operator: "eq", value: '"pro"' }],
         rolloutPercentage: 25,
+        segmentId: null,
+        segmentName: null,
       },
     ],
+    segments: [],
     baselineRolloutPercentage: null,
     controllingExperiment: null,
     ...overrides,

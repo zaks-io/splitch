@@ -1,7 +1,13 @@
 import type { FlagConfigGetOutput } from "@splitch/control-plane-sdk";
 import { describe, expect, it } from "vitest";
 import type { FlagDetailData } from "./flag-detail-data";
-import { flagDetailView, isLocked } from "./flag-detail-view";
+import { flagDetailView as buildFlagDetailView, isLocked } from "./flag-detail-view";
+
+const NO_SEGMENTS = { items: [], affectedEnvironmentIds: {} };
+
+function flagDetailView(data: FlagDetailData, env: string) {
+  return buildFlagDetailView(data, env, NO_SEGMENTS);
+}
 
 describe("Flag detail view model", () => {
   it("shows the same Flag differently per Environment from each Environment's config", () => {
