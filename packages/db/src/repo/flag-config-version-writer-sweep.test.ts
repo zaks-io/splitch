@@ -27,12 +27,20 @@ import {
  * still go through the receiver path. Direct `.update(...)` on a typed facade
  * receiver is the same rule as a detached ref — one callee-type match.
  *
- * Assertions are the property (every discovered site bumps) plus derived
- * anti-vacuity: the walk list must equal a filesystem listing of the scan root
- * (same production-source filter as the resolver), and discovered sites must
- * span at least two modules. No hand-maintained file or `file:line` inventory.
+ * walk from tsconfig fileNames; raw sql`UPDATE`, sql.raw, prepare fail loud;
+ * DO UPDATE rejection deliberate; control-plane fixture WITHOUT line number;
+ * no hand-maintained inventory. Assertions are the property (every discovered
+ * site bumps) plus derived anti-vacuity: the walk list must equal the same
+ * tsconfig fileNames source the resolver uses, and discovered sites must span
+ * at least two modules.
  *
- * The TypeChecker program is built once in `beforeAll` (paid once for both
+ * Raw sql`UPDATE`, sql.raw(...), and prepare(...) UPDATEs of `flag_configs`
+ * fail loud because they cannot be scored by the type-driven selectors. INSERT
+ * ... ON CONFLICT DO UPDATE rejection is deliberate: raw upserts are unscored.
+ * The control-plane fixture WITHOUT line number remains outside this package's
+ * production tsconfig and is not a production writer.
+ *
+ * The TypeChecker program is built once in `beforeAll` (paid once for all
  * assertions below). Individual `it`s keep vitest's 5s default; only the hook
  * that constructs the program is allowed the repo's established 15s budget.
  *
@@ -42,13 +50,6 @@ import {
  * `@splitch/db` importers in `apps/cli` that sit outside every tsconfig
  * (`quickstart-local-harness.ts`, `dark-launch-experiment.ts`,
  * `dark-launch-http.ts`), where the runtime TypeError is what covers them.
- *
- * Raw SQL UPDATEs of `flag_configs` **inside** `packages/db/src` fail loud
- * (they cannot be scored by the type-driven selectors). Raw
- * `D1Database.prepare` UPDATEs outside this package remain unguarded —
- * including the live `UPDATE flag_configs SET …` at
- * `apps/control-plane-api/src/config-store-fixture-data.ts:169` (test-fixture
- * helper imported only by `.test.ts` files, not a production writer).
  *
  * Including those harnesses in a tsconfig would typecheck them and their
  * transitive helpers under CI, lengthening typecheck and likely surfacing latent
@@ -82,20 +83,20 @@ describe("every flag_configs UPDATE bumps version", () => {
     expect(relative(REPO_ROOT, FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT).replaceAll("\\", "/")).toBe(
       SCAN_ROOT,
     );
-    // Walk anti-narrowing: filesystem listing (same production filter) must
-    // equal what the resolver actually visited — no pinned writer filenames.
     expect(scannedFiles).toEqual(listExpectedScannedFiles());
   });
 
   it("discovers a non-trivial writer set and every site bumps version", () => {
-    const { sites } = resolution;
+    const { candidateCount, sites } = resolution;
+    const siteFiles = new Set(sites.map((s) => s.file));
 
-    // Site-set anti-narrowing: collecting from a single module while still
-    // walking everything fails without naming any writer path.
     expect(
-      new Set(sites.map((s) => s.file)).size,
+      siteFiles.size,
       "discovered sites must span at least two modules",
     ).toBeGreaterThanOrEqual(2);
+    expect(sites.length, "resolver dropped flag_configs update CallExpressions").toBe(
+      candidateCount,
+    );
 
     const violators = sites.filter((site) => !bumpWins(site));
     expect(

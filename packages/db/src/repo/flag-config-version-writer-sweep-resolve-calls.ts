@@ -174,6 +174,31 @@ function argIsFlagConfigsTable(anchor: FacadeAnchor, tableArg: ts.Expression): b
   return typesMatch(anchor.checker, argType, flagType);
 }
 
+/**
+ * How an expression relates to the `flag_configs` table for raw-SQL analysis.
+ * String-literal `"flag_configs"` counts; a broad `string` is unknown (fail closed).
+ * Do not run string literals through `unwrapType` — `getApparentType` widens them
+ * to `string`, which would mis-classify `const TABLE = "flag_configs"`.
+ */
+export function flagConfigsRelationOfExpr(
+  anchor: FacadeAnchor,
+  expr: ts.Expression,
+): "flag_configs" | "other" | "unknown" {
+  if (argIsFlagConfigsTable(anchor, expr)) return "flag_configs";
+  const type = anchor.checker.getNonNullableType(anchor.checker.getTypeAtLocation(expr));
+  if (type.isStringLiteral()) {
+    return type.value === "flag_configs" ? "flag_configs" : "other";
+  }
+  if (type.isUnion() && type.types.every((t) => t.isStringLiteral())) {
+    return type.types.some((t) => t.isStringLiteral() && t.value === "flag_configs")
+      ? "flag_configs"
+      : "other";
+  }
+  if (type.flags & ts.TypeFlags.String) return "unknown";
+  if (tableArgSymbol(anchor, expr)) return "other";
+  return "unknown";
+}
+
 function chainedSetCall(updateCall: ts.CallExpression): ts.CallExpression | undefined {
   const parent = updateCall.parent;
   if (!ts.isPropertyAccessExpression(parent) && !ts.isPropertyAccessChain(parent)) return undefined;
