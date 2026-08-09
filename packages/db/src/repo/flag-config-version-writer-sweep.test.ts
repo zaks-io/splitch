@@ -19,26 +19,28 @@ import {
  * passes review, and silently disables the CAS for every path that races it.
  *
  * Writer set is derived by the TypeScript type checker from
- * `packages/db/tsconfig.json` (scan root asserted against the resolver below):
- * every `CallExpression` whose receiver/argument resolves — by symbol/type
- * identity — to the `flag_configs` scoped-table facade or table, including
- * detached `update` callees whose apparent type matches the facade's `update`
- * member (parameter destructure, multi-hop alias, callback). `.call`/`.apply`
- * still go through the receiver path. Direct `.update(...)` on a typed facade
- * receiver is the same rule as a detached ref — one callee-type match.
+ * `packages/db/tsconfig.json` `fileNames` (the sole walk source — no mirrored
+ * exclude list). Every `CallExpression` whose receiver/argument resolves — by
+ * symbol/type identity — to the `flag_configs` scoped-table facade or table,
+ * including detached `update` callees whose apparent type matches the facade's
+ * `update` member (parameter destructure, multi-hop alias, callback).
+ * `.call`/`.apply` still go through the receiver path.
  *
- * walk from tsconfig fileNames; raw sql`UPDATE`, sql.raw, prepare fail loud;
- * DO UPDATE rejection deliberate; control-plane fixture WITHOUT line number;
- * no hand-maintained inventory. Assertions are the property (every discovered
- * site bumps) plus derived anti-vacuity: the walk list must equal the same
- * tsconfig fileNames source the resolver uses, and discovered sites must span
- * at least two modules.
+ * Assertions are the property (every discovered site bumps) plus derived
+ * anti-vacuity: `scannedFiles` must equal the tsconfig `fileNames` listing,
+ * discovered sites must span at least two modules, and `sites.length` must
+ * equal the independent candidate CallExpression count (so a silent
+ * first-match-per-file narrow cannot pass). No hand-maintained inventory.
  *
- * Raw sql`UPDATE`, sql.raw(...), and prepare(...) UPDATEs of `flag_configs`
- * fail loud because they cannot be scored by the type-driven selectors. INSERT
- * ... ON CONFLICT DO UPDATE rejection is deliberate: raw upserts are unscored.
- * The control-plane fixture WITHOUT line number remains outside this package's
- * production tsconfig and is not a production writer.
+ * Inside production sources, raw SQL UPDATEs of `flag_configs` fail loud as
+ * `sql\`UPDATE …\``, `sql.raw(...)`, or `.prepare(...)` — including `${alias}`
+ * interpolations resolved by symbol identity, string-literal `"flag_configs"`,
+ * and UPDATE table expressions the checker cannot resolve (unknown ≠
+ * not-flag_configs). `INSERT … ON CONFLICT DO UPDATE` of flag_configs is
+ * rejected deliberately (unscored). Raw `D1Database.prepare` UPDATEs outside
+ * this package remain unguarded — including the live UPDATE in
+ * `apps/control-plane-api/src/config-store-fixture-data.ts` (test-fixture
+ * helper imported only by `.test.ts` files, not a production writer).
  *
  * The TypeChecker program is built once in `beforeAll` (paid once for all
  * assertions below). Individual `it`s keep vitest's 5s default; only the hook
