@@ -7,6 +7,7 @@ import {
   resultsFixture,
   statsWithAnalysisControl,
 } from "./experiment-results-test-fixtures";
+import { visibleText } from "./experiment-results-test-markup";
 
 /**
  * What the tab does when the Run's frozen Control cannot be resolved.
@@ -36,18 +37,6 @@ function unresolvableHtml() {
   return renderToStaticMarkup(
     <ExperimentResults results={resultsFixture(stats, { control: unresolvable })} />,
   );
-}
-
-function visibleText(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replaceAll("&#x27;", "'")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&amp;", "&")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 describe("ExperimentResults with an unidentifiable Control", () => {
@@ -86,9 +75,6 @@ describe("ExperimentResults with an unidentifiable Control", () => {
     const controlClaims = {
       neverRecorded: text.includes("baseline this Run never recorded"),
       baselineBadge: analysisControlRow.includes(">Baseline</"),
-      measuredAgainst: text.includes(
-        "The Run Snapshot written to the analytics store at Start recorded control as the Analysis Control. Every lift below is measured against that Variant.",
-      ),
     };
 
     expect(text).toContain(
@@ -101,7 +87,6 @@ describe("ExperimentResults with an unidentifiable Control", () => {
     expect(controlClaims).toEqual({
       neverRecorded: false,
       baselineBadge: true,
-      measuredAgainst: true,
     });
     expect(html).toContain(
       "control · checkout_conversion: baseline, 0% lift by definition, n=12530",

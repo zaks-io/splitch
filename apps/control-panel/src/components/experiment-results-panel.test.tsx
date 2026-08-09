@@ -6,6 +6,7 @@ import {
   resultsNoDataFixture,
   statsFixture,
 } from "./experiment-results-test-fixtures";
+import { visibleText } from "./experiment-results-test-markup";
 
 const resultsData = vi.hoisted(() => ({
   current: null as unknown,
@@ -134,8 +135,8 @@ describe("Experiment Results route no_data waiting state", () => {
     );
     expect(html).toContain("The Run froze");
     expect(html).toContain("control, treatment");
-    expect(html).toContain(
-      'The Run Snapshot written to the analytics store at Start recorded <code class="font-mono text-foreground text-xs">control</code> as the Analysis Control. Results for this Run will be measured against that Variant when they arrive.',
+    expect(visibleText(alertMarkup(html))).toContain(
+      "The Run Snapshot written to the analytics store at Start recorded control as the Analysis Control. Results for this Run will be measured against that Variant when they arrive.",
     );
     expect(html).toContain(
       "This Run cannot produce a ship decision. Start a new Run to get a Control that is frozen and validated.",

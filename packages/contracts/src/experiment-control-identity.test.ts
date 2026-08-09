@@ -143,5 +143,8 @@ describe("control_identity gate check", () => {
       "underpowered",
       "decision_valid_result",
     ]);
+    expect(check(gate, "control_identity").detail).toBe(
+      "This Run's frozen Control cannot be identified because the frozen Variant set could not be read. The Experiment's default Variant was backfilled onto this Run as \"variant_gone\", which the Run itself may never have carried. The Run Snapshot's Control anchors the lift, but nothing can be promoted against a Control this Run may never have carried. Start a new Run to get a Control that is frozen and validated.",
+    );
   });
 });
