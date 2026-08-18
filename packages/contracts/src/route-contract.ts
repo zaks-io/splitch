@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ErrorCode } from "./errors";
+import type { ErrorCode, ErrorResponse } from "./errors";
 
 /**
  * Route-contract metadata. Each authored route in @splitch/contracts carries this
@@ -108,6 +108,11 @@ export const idempotencyModes = ["none", "optional", "required"] as const;
 export const IdempotencyModeSchema = z.enum(idempotencyModes);
 export type IdempotencyMode = z.infer<typeof IdempotencyModeSchema>;
 
+export interface RawBodyByteLimit {
+  readonly maxBytes: number;
+  readonly error: ErrorResponse;
+}
+
 /**
  * The runtime-enforcement metadata for one route. `input`/`output` are Zod
  * schemas; everything else is guard policy the registrar reads.
@@ -126,6 +131,7 @@ export interface RouteContract<
   scopes: readonly string[];
   rateLimit: RateLimitClass;
   idempotency: IdempotencyMode;
+  rawBodyByteLimit?: RawBodyByteLimit;
   errors: readonly ErrorCode[];
 }
 

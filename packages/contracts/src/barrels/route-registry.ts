@@ -9,6 +9,7 @@ export type {
   HttpMethod,
   IdempotencyMode,
   PublicSurface,
+  RawBodyByteLimit,
   RateLimitClass,
   RouteContract,
   RouteOwner,

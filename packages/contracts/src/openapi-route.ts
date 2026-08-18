@@ -5,6 +5,7 @@ import {
   defineRoute,
   type HttpMethod,
   type IdempotencyMode,
+  type RawBodyByteLimit,
   type RateLimitClass,
   type RouteContract,
   type RouteOwner,
@@ -59,6 +60,7 @@ export interface DefineApiRouteInput {
   scopes?: readonly string[];
   rateLimit: RateLimitClass;
   idempotency: IdempotencyMode;
+  rawBodyByteLimit?: RawBodyByteLimit;
   errors: readonly ErrorCode[];
 }
 
@@ -154,6 +156,7 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
     scopes: input.scopes ?? [],
     rateLimit: input.rateLimit,
     idempotency: input.idempotency,
+    rawBodyByteLimit: input.rawBodyByteLimit,
     errors: input.errors,
   });
 
