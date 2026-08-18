@@ -7,7 +7,6 @@ import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-
  * the exception because that hop is Worker-to-Worker, not a user credential.
  */
 export interface AnalysisApiEnv {
-  MCP_ANALYSIS_DELEGATION_SECRET?: string;
   MCP_DELEGATION_REPLAY?: McpDelegationReplayDurableObjectNamespace;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;

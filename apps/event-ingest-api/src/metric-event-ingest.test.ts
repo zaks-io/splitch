@@ -1,0 +1,80 @@
+import { eventDefinitionConfigKey } from "@splitch/contracts";
+import { describe, expect, it } from "vitest";
+import worker from "./index";
+import {
+  hotConfig,
+  METRIC_APP_ID,
+  METRIC_CLIENT_KEY,
+  METRIC_EVENT_NAME,
+  makeMetricEventFixture,
+  metricEventBody,
+  sendMetricEvent,
+} from "./metric-event.test-fixture";
+import { TestExecutionContext } from "./test-fixtures";
+
+describe("Metric Event ingest", () => {
+  it("accepts the Evaluation-authorized caller only through the binding entrypoint", async () => {
+    const fixture = await makeMetricEventFixture();
+
+    const bound = await sendMetricEvent(fixture, metricEventBody());
+    expect(bound.status).toBe(202);
+
+    const publicResponse = await worker.fetch(
+      new Request("https://ingest.test/api/sdk/events", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${METRIC_CLIENT_KEY}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(metricEventBody({ eventId: "123e4567-e89b-42d3-a456-426614174001" })),
+      }) as Parameters<typeof worker.fetch>[0],
+      fixture.env,
+      new TestExecutionContext(),
+    );
+    expect(publicResponse.status).toBe(404);
+  });
+
+  it("accepts once, returns the original Version on retry, and rejects conflicting reuse", async () => {
+    const fixture = await makeMetricEventFixture();
+    const first = await sendMetricEvent(fixture, metricEventBody());
+    expect(first.status).toBe(202);
+    expect(await first.json()).toMatchObject({
+      duplicate: false,
+      eventDefinitionVersionId: "edv_1",
+    });
+
+    fixture.config.set(
+      eventDefinitionConfigKey(METRIC_APP_ID, METRIC_EVENT_NAME),
+      hotConfig("edv_2", 2),
+    );
+    const retry = await sendMetricEvent(fixture, metricEventBody());
+    expect(retry.status).toBe(202);
+    expect(await retry.json()).toMatchObject({
+      duplicate: true,
+      eventDefinitionVersionId: "edv_1",
+    });
+
+    const conflict = await sendMetricEvent(
+      fixture,
+      metricEventBody({ fields: { converted: false } }),
+    );
+    expect(conflict.status).toBe(409);
+    expect(await responseCode(conflict)).toBe("EVENT_ID_CONFLICT");
+    expect(fixture.claims.size).toBe(1);
+  });
+
+  it("rejects unknown fields before creating a durable claim", async () => {
+    const fixture = await makeMetricEventFixture();
+    const response = await sendMetricEvent(
+      fixture,
+      metricEventBody({ fields: { converted: true, profile: "forbidden" } }),
+    );
+    expect(response.status).toBe(400);
+    expect(await responseCode(response)).toBe("EVENT_SCHEMA_MISMATCH");
+    expect(fixture.claims.size).toBe(0);
+  });
+});
+
+async function responseCode(response: Response): Promise<unknown> {
+  return ((await response.json()) as { code?: unknown }).code;
+}

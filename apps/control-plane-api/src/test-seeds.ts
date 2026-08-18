@@ -12,6 +12,8 @@
  * the deletes respect the real foreign keys.
  */
 const RESET_TABLES = [
+  "event_definition_versions",
+  "event_definitions",
   "approval_reviews",
   "approval_requests",
   "api_keys",
@@ -19,8 +21,8 @@ const RESET_TABLES = [
   "runs",
   "experiments",
   "metrics",
-  "segments",
   "targeting_rules",
+  "segments",
   "flag_configs",
   "variants",
   "flags",

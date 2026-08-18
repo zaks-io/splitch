@@ -95,7 +95,8 @@ Use this only after a human approves the package release.
 - [ ] Description, Apache-2.0 SPDX license, repository directory, ESM export, Node engine, public
       access, and dist-only files whitelist are correct.
 - [ ] The consumer README and license appear in the actual package tarball.
-- [ ] SDK only: declarations and packed manifest contain no `@splitch/contracts`.
+- [ ] SDK only: declarations and packed manifest contain no `@splitch/contracts`;
+      packed manifest has zero runtime dependencies (no zod).
 - [ ] CLI only: `dist/cli.js` has the Node shebang; workspace packages are bundled; packed
       dependencies are exactly the external runtime set; no workspace range or dev dependency
       ships.

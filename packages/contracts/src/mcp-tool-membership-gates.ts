@@ -1,3 +1,4 @@
+import { type UserRole, userRoles } from "./leaf-schemas-runtime";
 import { isMcpToolRoute } from "./mcp-tools";
 import type { ApiRouteContract } from "./openapi-route";
 import { routeRegistry } from "./route-registry";
@@ -11,8 +12,8 @@ import { routeRegistry } from "./route-registry";
 export const membershipAxes = ["token", "org", "app"] as const;
 export type MembershipAxis = (typeof membershipAxes)[number];
 
-export const membershipRoles = ["member", "admin", "owner"] as const;
-export type MembershipRole = (typeof membershipRoles)[number];
+export const membershipRoles = userRoles;
+export type MembershipRole = UserRole;
 
 export interface RouteMembershipGate {
   readonly axis: MembershipAxis;
@@ -70,6 +71,13 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   segments_get: APP_MEMBER,
   segments_update: APP_ADMIN,
   segments_delete: APP_ADMIN,
+  event_definitions_list: APP_MEMBER,
+  event_definitions_create: APP_ADMIN,
+  event_definitions_get: APP_MEMBER,
+  event_definitions_update: APP_ADMIN,
+  event_definition_versions_create: APP_ADMIN,
+  event_definition_versions_list: APP_MEMBER,
+  event_definition_versions_get: APP_MEMBER,
   experiments_list: APP_MEMBER,
   experiments_create: APP_ADMIN,
   experiments_get: APP_MEMBER,
@@ -118,8 +126,15 @@ export function membershipGatePatterns(gate: RouteMembershipGate): readonly stri
   return [`${gate.axis}:${gate.minimumRole}`];
 }
 
-const APP_SCOPE = /^app:([^:]+):(owner|admin|member)$/;
-const ORG_SCOPE = /^org:([^:]+):(owner|admin|member)$/;
+/**
+ * Derived from the role vocabulary, not retyped. A hard-coded alternation fails
+ * silently when a role is added: the new role simply matches no gate. `ROLE_RANK`
+ * below stays an explicit table because rank is ordering, not membership, and its
+ * `Record` type turns the same addition into a compile error.
+ */
+const roleAlternation = membershipRoles.join("|");
+const APP_SCOPE = new RegExp(`^app:([^:]+):(${roleAlternation})$`);
+const ORG_SCOPE = new RegExp(`^org:([^:]+):(${roleAlternation})$`);
 
 const ROLE_RANK: Record<MembershipRole, number> = {
   member: 1,

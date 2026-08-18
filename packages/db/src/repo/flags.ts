@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   experiments,
   flagConfigs,
@@ -19,7 +19,7 @@ import { makeFlagConfigOps, scopedFlagConfig, scopedTargetingRule } from "./flag
 import { type FlagInScope, makeVariantOps } from "./flag-variant-ops";
 import { idBatches } from "./id-batches";
 import type { TenantScope } from "./scope";
-import { envScope } from "./scope";
+import { assertMintedScope, envScope } from "./scope";
 import { scopedTable } from "./scoped-table";
 
 /**
@@ -172,13 +172,51 @@ export function makeFlagRepo(db: Db) {
       return segmentsTable.findOne(scope, eq(segments.id, segmentId));
     },
 
-    updateSegment(
+    listTargetingRulesBySegment(scope: TenantScope, segmentId: string) {
+      assertMintedScope(scope);
+      return db
+        .select()
+        .from(targetingRules)
+        .where(and(eq(targetingRules.appId, scope.appId), eq(targetingRules.segmentId, segmentId)));
+    },
+
+    listTargetingRuleEnvironmentReferences(scope: TenantScope) {
+      assertMintedScope(scope);
+      return db
+        .select({
+          segmentId: targetingRules.segmentId,
+          environmentId: targetingRules.environmentId,
+        })
+        .from(targetingRules)
+        .where(and(eq(targetingRules.appId, scope.appId), isNotNull(targetingRules.segmentId)))
+        .groupBy(targetingRules.segmentId, targetingRules.environmentId)
+        .orderBy(asc(targetingRules.segmentId), asc(targetingRules.environmentId));
+    },
+
+    async updateSegment(
       scope: TenantScope,
       segmentId: string,
       patch: Partial<
         Pick<typeof segments.$inferInsert, "name" | "description" | "conditions" | "updatedAt">
       >,
+      approval?: ApprovalCommit,
     ): Promise<typeof segments.$inferSelect | null> {
+      assertMintedScope(scope);
+      if (approval) {
+        const rows = await db
+          .update(segments)
+          .set(patch)
+          .where(
+            and(
+              eq(segments.appId, scope.appId),
+              eq(segments.id, segmentId),
+              approvalPendingCondition(db, scope, approval),
+            ),
+          )
+          .returning({ id: segments.id });
+        if (rows.length !== 1) return null;
+        return segmentsTable.findOne(scope, eq(segments.id, segmentId));
+      }
       return segmentsTable
         .update(scope, patch, eq(segments.id, segmentId))
         .then((rows) => rows[0] ?? null);

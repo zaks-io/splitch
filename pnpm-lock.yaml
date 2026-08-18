@@ -289,6 +289,9 @@ importers:
       '@splitch/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@splitch/worker-runtime':
+        specifier: workspace:*
+        version: link:../../packages/worker-runtime
 
   apps/marketing:
     dependencies:
@@ -427,11 +430,7 @@ importers:
         specifier: ^26.1.1
         version: 26.1.2
 
-  packages/sdk:
-    dependencies:
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
+  packages/sdk: {}
 
   packages/stats:
     dependencies:

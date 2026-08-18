@@ -28,12 +28,9 @@ import {
 import type { AssembledExposure } from "./evaluate/exposure-assembly";
 import type { EvaluationCommitEvent, EvaluationCommitSink } from "./evaluation-commit-sink";
 import type { EvaluationUsageEvent, EvaluationUsageSink } from "./evaluation-usage-sink";
-import {
-  type ExposureIngestSink,
-  type ExposureRedemptionClaimStore,
-  MemoryExposureRedemptionClaimStore,
-  RecordingExposureIngestSink,
-} from "./exposure-redemption";
+import { type ExposureIngestSink, RecordingExposureIngestSink } from "./exposure-redemption";
+import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
+import type { ExposureRedemptionClaimStore } from "./exposure-redemption-claim-core";
 import { FakeKv } from "./provider/fake-kv";
 import { experimentConfigKV, flagConfigKV, runConfigKV } from "./provider/fixtures";
 import { KvProvider } from "./provider/kv-provider";
@@ -66,6 +63,9 @@ interface SdkRouteHarnessOptions {
   /** Override Exposure Ticket issued_at for ETag-stability tests. */
   readonly ticketNow?: () => Date;
   readonly previousTicketKey?: string;
+  readonly eventIngest?: {
+    fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  };
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -100,7 +100,7 @@ async function seededCredentialKv(options: SdkRouteHarnessOptions = {}): Promise
         credentialSchemaVersion: 2,
         organizationId: ORGANIZATION_ID,
         kind: "client_key",
-        scopes: ["data-plane:evaluate"],
+        scopes: ["data-plane:evaluate", "data-plane:write"],
         originAllowlist: null,
         rateLimitRps: null,
         revoked: false,
@@ -206,6 +206,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     authResolver: controlPlaneAuthResolver,
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(credentialKv),
     rateLimiter: allowLimiter,
+    delegationBindings: { "event-ingest-api": options.eventIngest },
     provider: new KvProvider(configKv),
     assignmentStore,
     exposureAssembly: {

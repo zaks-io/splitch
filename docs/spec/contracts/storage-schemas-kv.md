@@ -22,7 +22,8 @@ control-plane reader rebuilds from D1 instead (see [../platform/contracts-and-va
 | `app:{appId}:{environmentId}:run:{runId}`               | `RunConfigKV`        | none                         | Hot-path live Experiment Run config, read only from `ExperimentConfigKV.liveRunId`           |
 | `app:{appId}:{environmentId}:experiment:{experimentId}` | `ExperimentConfigKV` | none (invalidated on change) | Edge Experiment config read; carries nullable `liveRunId` for evaluation and ingest          |
 | `live_run:{appId}:{environmentId}:{experimentId}`       | `LiveRunKV`          | none                         | Explicit live Run pointer written on Start and cleared on End; never inferred from latest D1 |
-| `ck:{keyMaterialHash}` / `ak:{keyHash}`                 | `CredentialCacheKV`  | 60s                          | Credential validation cache; evicted on revoke; prefixes distinguish Client vs API Keys      |
+| `ck:{keyMaterialHash}` / `ak:{keyHash}`                 | `CredentialCacheKV`  | active: none; revoked: 5m    | Mutable credential entry; prefixes distinguish Client Keys from API Keys                     |
+| `revoked:{credentialCacheKey}`                          | presence marker      | none                         | Terminal revocation marker; checked before the mutable credential entry                      |
 | `member-profile:{userId}`                               | `{ email }`          | none                         | SESSION_STORE identity cache for Org member email; written at login, never in D1             |
 
 ### FlagConfigKV
@@ -44,7 +45,7 @@ Per-Environment resolved Flag CONFIGURATION (ADR-0027): the App-level Variant ca
   defaultVariantId:      string
   variants:              Variant[]
   availableVariantNames: string[]
-  targetingRules:        TargetingRule[]
+  targetingRules:        ResolvedTargetingRule[]
   rollout:               PercentageRollout | null  // baseline rollout for traffic matching NO
                                           // Targeting Rule; null = none. NULLABLE-NOT-ABSENT, like
                                           // experimentId, so the writer must commit to a rollout or
@@ -65,6 +66,10 @@ of `FlagConfigKV`, so the flag and its controlling-Experiment pointer can never 
 null `experimentId` flows straight to the evaluate path's "no live Run" branch — no separate lookup, no
 new entity, just a nullable field on config the path already reads.
 
+`ResolvedTargetingRule` contains concrete Conditions and cannot contain `segmentId`. Publication
+resolves authoring Segment references before this blob is written; edge evaluation performs no
+Segment read or recursive evaluation.
+
 ### RunConfigKV
 
 ```
@@ -74,7 +79,7 @@ new entity, just a nullable field on config the path already reads.
   salt:                string
   allocation:          Record<string, number>  // variantName -> percentage
   variantSet:          Variant[]
-  targetingRules:      TargetingRule[]          // resolved snapshot frozen at Start; [] = all eligible
+  targetingRules:      ResolvedTargetingRule[]  // resolved snapshot frozen at Start; [] = all eligible
   configHash:          string
   startedAt:           string  // ISO 8601
 }

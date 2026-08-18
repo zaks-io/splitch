@@ -131,7 +131,7 @@ function realControlPlaneFetch(): typeof fetch {
     authResolver: async (request: Request) => {
       const actor = await parseMcpDelegation({
         request,
-        owner: "control-plane-api",
+        surface: "control-plane-api",
         secret: TEST_MCP_DELEGATION_SECRET,
         replayGuard,
       });

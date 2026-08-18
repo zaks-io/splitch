@@ -1,7 +1,7 @@
 import { integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { createdAt, updatedAt, userRef } from "./columns";
-import { apps, environments } from "./identity";
 import { flags } from "./flags";
+import { apps, environments } from "./identity";
 
 /**
  * Experiment-domain D1 tables: Experiments (with the draft_* next-Run staging
@@ -147,8 +147,8 @@ export const metrics = sqliteTable(
     name: text("name").notNull(),
     description: text("description"),
     kind: text("kind").notNull(),
-    eventName: text("event_name").notNull(),
-    eventValueField: text("event_value_field"),
+    eventDefinitionId: text("event_definition_id"),
+    eventFieldName: text("event_field_name"),
     denominatorMetricId: text("denominator_metric_id"),
     // Guardrail bound and variance-reduction knobs. Null means "engine default";
     // Run Start resolves and freezes them onto the Run.

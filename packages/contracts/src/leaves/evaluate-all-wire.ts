@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ErrorCodeSchema } from "../error-code";
+import { OWN_PROTO_KEY, protoSafeRecord } from "../proto-safe-record";
 import { VariantValueSchema } from "./variant-value";
 
 /**
@@ -16,11 +17,16 @@ import { VariantValueSchema } from "./variant-value";
 const NonEmptyDataPlaneStringSchema = z.string().min(1);
 const AttributeValueSchema = z.union([z.boolean(), z.string(), z.number(), z.array(z.unknown())]);
 
+const PROTO_KEY_MESSAGE = `must not contain a "${OWN_PROTO_KEY}" key`;
+
+/** Proto-safe attributes map (`record` + refine so OpenAPI/CLI help keep the record shape). */
+export const EvaluateAllAttributesSchema = protoSafeRecord(AttributeValueSchema, PROTO_KEY_MESSAGE);
+
 export const EvaluateAllRequestSchema = z.object({
   appId: NonEmptyDataPlaneStringSchema.optional(),
   targetingKey: NonEmptyDataPlaneStringSchema,
   idType: NonEmptyDataPlaneStringSchema,
-  attributes: z.record(z.string(), AttributeValueSchema).default({}),
+  attributes: EvaluateAllAttributesSchema.default({}),
 });
 export type EvaluateAllRequest = z.infer<typeof EvaluateAllRequestSchema>;
 
@@ -45,9 +51,20 @@ export const EvaluateAllEntrySchema = EvaluateAllEntryBaseSchema.refine(
 });
 export type EvaluateAllEntry = z.infer<typeof EvaluateAllEntrySchema>;
 
+/**
+ * Proto-safe evaluations map. Zod's `z.record` would otherwise silently drop a
+ * JSON own `"__proto__"` Flag Key. Both this contract and the SDK's compiled,
+ * zod-free response parser refuse that key. Built as `record` + refine so the
+ * served OpenAPI document keeps the real additionalProperties shape (not `{}`).
+ */
+export const EvaluateAllEvaluationsSchema = protoSafeRecord(
+  EvaluateAllEntrySchema,
+  PROTO_KEY_MESSAGE,
+);
+
 export const EvaluateAllResponseSchema = z
   .object({
-    evaluations: z.record(z.string(), EvaluateAllEntrySchema),
+    evaluations: EvaluateAllEvaluationsSchema,
   })
   .strict();
 export type EvaluateAllResponse = z.infer<typeof EvaluateAllResponseSchema>;

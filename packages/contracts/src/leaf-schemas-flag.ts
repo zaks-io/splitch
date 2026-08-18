@@ -33,8 +33,10 @@ export type ConditionOperator = z.infer<typeof ConditionOperatorSchema>;
 // ---------------------------------------------------------------------------
 
 // `in`/`not_in` require an array value; all other operators accept a scalar or array.
+// Array elements are the same scalar union the Panel can render — a null or object
+// element is a write-time 400, not a 200 that poisons a later Panel list parse.
 const ScalarConditionValue = z.union([z.boolean(), z.string(), z.number()]);
-const ArrayConditionValue = z.array(z.unknown());
+const ArrayConditionValue = z.array(ScalarConditionValue);
 const ConditionValue = z.union([ScalarConditionValue, ArrayConditionValue]);
 
 const BaseConditionSchema = z.object({
@@ -87,16 +89,35 @@ export type Variant = z.infer<typeof VariantSchema>;
 // TargetingRule
 // ---------------------------------------------------------------------------
 
-export const TargetingRuleSchema = z.object({
+const TargetingRuleFields = {
   id: z.string(),
   flagId: z.string(),
   // Integer ≥ 0; lower = evaluated first
   priority: z.number().int().min(0),
-  conditions: z.array(ConditionSchema).min(1),
+  conditions: z.array(ConditionSchema),
   variantId: z.string(),
   percentageRollout: PercentageRolloutSchema.nullable().optional(),
-});
+};
+
+export const TargetingRuleSchema = z
+  .object({
+    ...TargetingRuleFields,
+    segmentId: z.string().optional(),
+  })
+  .refine((rule) => rule.conditions.length > 0 || rule.segmentId !== undefined, {
+    message: "a Targeting Rule requires direct Conditions or a Segment",
+    path: ["conditions"],
+  });
 export type TargetingRule = z.infer<typeof TargetingRuleSchema>;
+
+/** Concrete publication/Run projection. Segment references never reach evaluation. */
+export const ResolvedTargetingRuleSchema = z
+  .object({
+    ...TargetingRuleFields,
+    conditions: z.array(ConditionSchema).min(1),
+  })
+  .strict();
+export type ResolvedTargetingRule = z.infer<typeof ResolvedTargetingRuleSchema>;
 
 // ---------------------------------------------------------------------------
 // Flag
@@ -132,7 +153,7 @@ export const SegmentSchema = z.object({
   appId: z.string(),
   name: z.string(),
   // AND-combined; Entity "in Segment" iff all conditions match
-  conditions: z.array(ConditionSchema),
+  conditions: z.array(ConditionSchema).min(1),
   description: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),

@@ -3,6 +3,7 @@ import { createRegistrar } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import { makeCachedEvaluationTelemetryHandler } from "./cached-evaluation-telemetry";
 import { makeApiKeyOnlyAuthResolver, makeClientKeyOnlyAuthResolver } from "./data-plane-auth";
+import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
 import { makeEvaluateHandler } from "./evaluate";
 import type { EvaluatePathDeps } from "./evaluate/evaluate-path";
 import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
@@ -10,7 +11,8 @@ import type { MintExposureTicketDeps } from "./evaluate/exposure-ticket";
 import { makeEvaluateAllHandler } from "./evaluate-all";
 import type { EvaluationCommitSink } from "./evaluation-commit-sink";
 import type { EvaluationUsageSink } from "./evaluation-usage-sink";
-import type { ExposureIngestSink, ExposureRedemptionClaimStore } from "./exposure-redemption";
+import type { ExposureIngestSink } from "./exposure-redemption";
+import type { ExposureRedemptionClaimStore } from "./exposure-redemption-claim-core";
 import { makeExposuresHandler } from "./exposures";
 import { makePeekHandler } from "./peek";
 import { evaluationRoute } from "./routes";
@@ -43,6 +45,7 @@ export interface AppDeps extends EvaluatePathDeps {
   evaluationCommitSink: EvaluationCommitSink;
   evaluationUsageSink: EvaluationUsageSink;
   rateLimiter: RateLimiter;
+  delegationBindings?: DelegationBindings;
   defaultHeaders?: Record<string, string>;
   observability?: RegistrarDeps["observability"];
   /** `ctx.waitUntil` seam for the fire-and-forget Assignment Store write. */
@@ -72,6 +75,8 @@ export function createApp(deps: AppDeps): Hono {
     defaultHeaders: deps.defaultHeaders,
     observability: deps.observability,
   });
+
+  mountDelegatedRoutes(app, registrar, deps.delegationBindings ?? {});
 
   registrar.mount(app, evaluationRoute("sdk_evaluate"), makeEvaluateHandler(deps));
   registrar.mount(

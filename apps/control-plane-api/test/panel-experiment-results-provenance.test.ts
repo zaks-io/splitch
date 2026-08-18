@@ -54,9 +54,17 @@ beforeAll(async () => {
   };
 });
 
-async function readResults(): Promise<Extract<PanelExperimentResultsOutput, { state: "ready" }>> {
+async function readResults(
+  analysisControlVariant = "control",
+): Promise<Extract<PanelExperimentResultsOutput, { state: "ready" }>> {
   const response = await callPanelResults(
-    analysisReturning(Response.json(analysisEnvelope(target.runId, statsOutput()))),
+    analysisReturning(
+      Response.json(
+        analysisEnvelope(target.runId, statsOutput(), {
+          control_variant: analysisControlVariant,
+        }),
+      ),
+    ),
     target,
   );
   if (response.status !== 200) {
@@ -93,6 +101,20 @@ describe("Results Control provenance", () => {
     expect(results.control.variantId).toBe(controlVariantId);
     expect(results.control).toMatchObject({ state: "frozen", variant: "control" });
     expect(results.gate.blockedBy).not.toContain("control_identity");
+  });
+
+  it("surfaces and blocks when Analysis reports a different Control", async () => {
+    const results = await readResults("legacy_checkout");
+
+    expect(results.control).toEqual({
+      state: "disagreement",
+      variantId: controlVariantId,
+      variant: "control",
+      analysisVariant: "legacy_checkout",
+    });
+    expect(results.gate.shipAllowed).toBe(false);
+    expect(results.gate.blockedBy).toContain("control_identity");
+    expect(results.stats.arm_results.length).toBeGreaterThan(0);
   });
 
   // Written the way the SPL-184 backfill writes: raw SQL, no membership check

@@ -140,7 +140,11 @@ function typeLabel(schema: z.ZodTypeAny, depth = 0): string {
       return `string (${options.map((value) => JSON.stringify(value)).join(" | ")})`;
     }
     case "array": {
-      return `${typeLabel(zodElement(schema), depth + 1)}[]`;
+      const elementSchema = zodElement(schema);
+      const element = typeLabel(elementSchema, depth + 1);
+      const elementType = zodDefType(unwrapField(elementSchema).inner);
+      const needsParens = elementType === "union" || elementType === "xor";
+      return `${needsParens ? `(${element})` : element}[]`;
     }
     case "record": {
       // Identity check — rename the field, keep the schema, label stays.
@@ -149,6 +153,8 @@ function typeLabel(schema: z.ZodTypeAny, depth = 0): string {
       }
       return `Record<string, ${typeLabel(zodValueType(schema), depth + 1)}>`;
     }
+    case "lazy":
+      return "closed JSON Schema";
     case "object":
       return objectTypeLabel(schema as z.ZodObject, depth);
     case "union":

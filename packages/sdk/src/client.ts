@@ -7,7 +7,7 @@ import { createFetchTransport } from "./fetch-transport";
 import type { VariantValue } from "./generated/contract-surface.js";
 import type { SdkResolutionDetails } from "./resolution";
 import { SeenSet } from "./seen-set";
-import type { Transport } from "./transport";
+import type { TrackRequest, Transport } from "./transport";
 
 /**
  * Options for {@link createSplitchClient}. Exactly one credential is required:
@@ -44,6 +44,19 @@ export interface SplitchClientOptions {
 }
 
 export interface SplitchClient {
+  /**
+   * Append one declared Metric Event. The caller owns the UUID `eventId` and
+   * reuses it for retries of the same logical event.
+   */
+  track(
+    eventName: string,
+    event: Omit<TrackRequest, "eventName">,
+  ): Promise<{
+    eventId: string;
+    eventDefinitionId: string;
+    eventDefinitionVersionId: string;
+    duplicate: boolean;
+  }>;
   /**
    * Resolve a Flag and return the unwrapped Variant value. Fires an Exposure
    * (the event experiment analysis counts), deduplicated locally per Flag and
@@ -160,6 +173,29 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
   };
 
   return {
+    async track(eventName, event) {
+      const result = await deps.transport.track({ eventName, ...event });
+      if (
+        !result.accepted ||
+        result.eventId === null ||
+        result.eventDefinitionId === null ||
+        result.eventDefinitionVersionId === null
+      ) {
+        throw new SplitchSdkError({
+          code: result.errorCode ?? "SDK_TRANSPORT_PARSE",
+          causeSummary: result.errorMessage ?? "Metric Event was rejected",
+          remediation: "Correct the Event Definition, identity, or payload and retry",
+          status: result.status ?? undefined,
+          originalError: result.cause,
+        });
+      }
+      return {
+        eventId: result.eventId,
+        eventDefinitionId: result.eventDefinitionId,
+        eventDefinitionVersionId: result.eventDefinitionVersionId,
+        duplicate: result.duplicate,
+      };
+    },
     async evaluate(flagKey, context) {
       const details = await runEvaluate(deps, flagKey, context);
       return details.value;

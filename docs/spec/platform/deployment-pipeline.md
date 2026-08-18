@@ -377,9 +377,9 @@ Tinybird flow:
    deployment. Tinybird, D1, and Worker phases run only when their owned inputs changed, and
    the Worker phase follows workspace dependencies to select its deployable packages. Missing, divergent,
    or unclassified baseline evidence fails closed to the full deployment. When a Control Plane or Control
-   Panel input changed, the deployment job retains the complete bounded compatibility cutover. When
-   Evaluation changed, it retains the credential backfill and Event Ingest ordering. The gate is
-   bearer-protected by the hosted
+   Panel input changed, the deployment job retains the complete bounded compatibility cutover and
+   credential backfill. When Evaluation changed, it retains the Event Ingest ordering without requiring
+   a Control Plane checkpoint. The backfill gate is bearer-protected by the hosted
    `SPLITCH_DEPLOY_GATE_TOKEN`, reports only migration checkpoints, and fails the release instead of
    allowing a partial rollout. The remaining Worker phase excludes Analysis and Control Plane and
    runs only after that verification.
@@ -438,13 +438,13 @@ recovery. That override does not provide data rollback.
 5. When D1 migration or Cloudflare toolchain inputs changed, apply D1 migrations to production.
 6. When Worker inputs changed, follow workspace dependencies to the affected deployable Workers, then
    build or restore only those Worker artifacts through Turborepo. A `services` binding resolves when
-   the caller deploys, so every callee deploys first: complete credential-cache backfill through the
-   Control Plane already serving traffic, then Event Ingest, Analysis, and Evaluation, each when
-   affected. Analysis and Evaluation export the named entrypoint the Control Plane delegates to
+   the caller deploys, so every affected callee deploys first: Event Ingest, Analysis, then Evaluation.
+   Analysis and Evaluation export the named entrypoint the Control Plane delegates to
    (ADR-0046), so deploying the Control Plane ahead of either binds it to an entrypoint the live
    Worker does not export yet. If either Control Plane or Control Panel is affected, preserve the full
    bounded cutover: deploy the Control Plane with the predecessor session-handle binding entrypoint
-   enabled with a 30-minute expiry, deploy the V2 Panel bound to the signed entrypoint, then
+   enabled with a 30-minute expiry, complete its versioned credential-cache backfill after marker-aware
+   Evaluation is live, deploy the V2 Panel bound to the signed entrypoint, then
    immediately redeploy the Control Plane from its checked-in config with predecessor session
    redemption disabled. Turborepo deploys the remaining independent affected Workers together.
    `scripts/deploy-worker-order.test.mjs` derives these edges from the Workers' own wrangler configs

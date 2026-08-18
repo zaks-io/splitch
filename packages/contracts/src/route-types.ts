@@ -1,4 +1,14 @@
 import { z } from "@hono/zod-openapi";
+import type {
+  CreateEventDefinitionRequestSchema,
+  EventDefinitionDetailSchema,
+  EventDefinitionListResponseSchema,
+  EventDefinitionSchema,
+  EventDefinitionVersionListResponseSchema,
+  EventDefinitionVersionSchema,
+  PatchEventDefinitionRequestSchema,
+  PublishEventDefinitionVersionRequestSchema,
+} from "./event-definition";
 import { AppSchema, type ClientKeySchema, EnvironmentSchema } from "./leaf-schemas-runtime";
 import type {
   ResourceDeleteModeQuerySchema,
@@ -44,6 +54,7 @@ import type {
   ExperimentParams,
   FlagConfigMutationResponseSchema,
   FlagConfigResponseSchema,
+  FlagGetQuerySchema,
   FlagParams,
   FlagVariantParams,
   OrgAppsParams,
@@ -72,11 +83,33 @@ const ExperimentListResponseSchema = z.object({ items: z.array(ExperimentRespons
 const ApprovalRequestListResponseSchema = paginatedResponse(ApprovalRequestSchema);
 const DeletedResponseSchema = z.object({ deleted: z.literal(true) });
 
+type EventDefinitionPath = z.infer<typeof AppParams> & { eventDefinitionId: string };
+type EventDefinitionVersionPath = EventDefinitionPath & { versionId: string };
+export type EventDefinitionsListInput = z.infer<typeof AppParams>;
+export type EventDefinitionsListOutput = z.infer<typeof EventDefinitionListResponseSchema>;
+export type EventDefinitionsCreateInput = z.infer<typeof AppParams> &
+  z.infer<typeof CreateEventDefinitionRequestSchema>;
+export type EventDefinitionsCreateOutput = z.infer<typeof EventDefinitionSchema>;
+export type EventDefinitionsGetInput = EventDefinitionPath;
+export type EventDefinitionsGetOutput = z.infer<typeof EventDefinitionDetailSchema>;
+export type EventDefinitionsUpdateInput = EventDefinitionPath &
+  z.infer<typeof PatchEventDefinitionRequestSchema>;
+export type EventDefinitionsUpdateOutput = z.infer<typeof EventDefinitionSchema>;
+export type EventDefinitionVersionsCreateInput = EventDefinitionPath &
+  z.infer<typeof PublishEventDefinitionVersionRequestSchema>;
+export type EventDefinitionVersionsCreateOutput = z.infer<typeof EventDefinitionVersionSchema>;
+export type EventDefinitionVersionsListInput = EventDefinitionPath;
+export type EventDefinitionVersionsListOutput = z.infer<
+  typeof EventDefinitionVersionListResponseSchema
+>;
+export type EventDefinitionVersionsGetInput = EventDefinitionVersionPath;
+export type EventDefinitionVersionsGetOutput = z.infer<typeof EventDefinitionVersionSchema>;
+
 export type FlagsListInput = z.infer<typeof AppParams>;
 export type FlagsListOutput = z.infer<typeof FlagListResponseSchema>;
 export type FlagsCreateInput = z.infer<typeof AppParams> & z.infer<typeof CreateFlagRequestSchema>;
 export type FlagsCreateOutput = z.infer<typeof FlagResponseSchema>;
-export type FlagsGetInput = z.infer<typeof FlagParams>;
+export type FlagsGetInput = z.infer<typeof FlagParams> & z.infer<typeof FlagGetQuerySchema>;
 export type FlagsGetOutput = z.infer<typeof FlagResponseSchema>;
 export type FlagsUpdateInput = z.infer<typeof FlagParams> & z.infer<typeof PatchFlagRequestSchema>;
 export type FlagsUpdateOutput = z.infer<typeof FlagResponseSchema>;
@@ -194,6 +227,28 @@ export type ApiKeysRevokeOutput = z.infer<typeof ApiKeyRevokeResponseSchema>;
  * is one entry rather than three parallel edits.
  */
 export interface RouteTypeMap {
+  event_definitions_list: { input: EventDefinitionsListInput; output: EventDefinitionsListOutput };
+  event_definitions_create: {
+    input: EventDefinitionsCreateInput;
+    output: EventDefinitionsCreateOutput;
+  };
+  event_definitions_get: { input: EventDefinitionsGetInput; output: EventDefinitionsGetOutput };
+  event_definitions_update: {
+    input: EventDefinitionsUpdateInput;
+    output: EventDefinitionsUpdateOutput;
+  };
+  event_definition_versions_create: {
+    input: EventDefinitionVersionsCreateInput;
+    output: EventDefinitionVersionsCreateOutput;
+  };
+  event_definition_versions_list: {
+    input: EventDefinitionVersionsListInput;
+    output: EventDefinitionVersionsListOutput;
+  };
+  event_definition_versions_get: {
+    input: EventDefinitionVersionsGetInput;
+    output: EventDefinitionVersionsGetOutput;
+  };
   organizations_create: { input: OrganizationsCreateInput; output: OrganizationsCreateOutput };
 
   apps_list: { input: AppsListInput; output: AppsListOutput };

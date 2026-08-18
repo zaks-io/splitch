@@ -1,8 +1,9 @@
 import { and, asc, desc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { approvalRequests, approvalReviews } from "../schema/index";
+import { appliedReviewQueries, approvalPendingCondition } from "./approval-atomic";
 import { dispositionQueries, failureInsert } from "./approval-dispositions";
 import { type ApprovalArchiveFinalization, finalizeApprovalArchive } from "./approval-finalization";
-import type { ApprovalDisposition, ApprovalFailure } from "./approval-types";
+import type { ApprovalCommit, ApprovalDisposition, ApprovalFailure } from "./approval-types";
 import type { Db } from "./client";
 import type { TenantScope } from "./scope";
 import { assertMintedScope } from "./scope";
@@ -216,17 +217,14 @@ export function makeApprovalRepo(db: Db, d1: D1Database) {
       return results[1].length === 1;
     },
 
-    /**
-     * Writes a `failed` audit row. Unlike the apply and disposition paths this
-     * one carries NO reviewer-role condition, because a review that already
-     * failed must leave evidence rather than be silently dropped by a role the
-     * reviewer lost mid-flight (ADR-0036).
-     *
-     * That makes one invariant load-bearing: `failure.reviewedBy` MUST be the
-     * authenticated reviewer this request was authorized as, never a
-     * caller-supplied identity. Nothing in D1 re-checks it here. Attribution of
-     * the audit row is only as trustworthy as the caller's principal.
-     */
+    async recordApplied(scope: TenantScope, commit: ApprovalCommit): Promise<boolean> {
+      assertMintedScope(scope);
+      const results = await db.batch(
+        appliedReviewQueries(db, scope, commit, approvalPendingCondition(db, scope, commit)),
+      );
+      return results[0].length === 1 && results[1].length === 1;
+    },
+
     /**
      * Writes a `failed` audit row. Unlike the apply and disposition paths this
      * one carries NO reviewer-role condition, because a review that already

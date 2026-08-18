@@ -28,8 +28,8 @@ export const approvalErrorDocs = {
   },
   APPROVAL_APPLICATION_FAILED: {
     cause:
-      "The Review was authorized but applying the change failed and rolled back. Nothing was written, and the request is still pending.",
-    fix: "Read `details.applicationError` for the underlying failure, fix that, then retry the Review with a new idempotency key. The rollback is complete: no partial application survives.",
+      "The Review was authorized but applying the change did not complete. The request remains pending; inspect `details.applicationError` before retrying with a new Review idempotency key.",
+    fix: "Read `details.applicationError` and the response message to determine whether the target was rolled back, changed before a later failure, or left in an unknown state. Fix the underlying failure, re-read the target when its state is unknown, then retry the Review with a new idempotency key.",
     details:
       '{ approvalRequestId: string, reviewId: string, applicationError: { code: ErrorCode, details: object }, recommendedAction: "RETRY_REVIEW" }',
     recommendedAction: "RETRY_REVIEW",
@@ -38,8 +38,8 @@ export const approvalErrorDocs = {
   IDEMPOTENCY_KEY_CONFLICT: {
     cause:
       "The same idempotency key was reused with a different canonical payload. Honoring it would let one key stand for two different changes.",
-    fix: "Use a fresh key for the new payload, or resend the original payload unchanged to get the original result. `details.scope` says whether the key was scoped to an `approval_request` or a `review`.",
-    details: '{ scope: "approval_request" | "review", idempotencyKey: string }',
+    fix: "Use a fresh key for the new payload, or resend the original payload unchanged to get the original result. `details.scope` says whether the key was scoped to an `approval_request`, a `review`, or a `conclusion`.",
+    details: '{ scope: "approval_request" | "review" | "conclusion", idempotencyKey: string }',
     related: ["APPROVAL_APPLICATION_FAILED", "APPROVAL_REVIEW_REQUIRED"],
   },
 } satisfies Record<string, ErrorDoc>;

@@ -8,6 +8,7 @@ import {
   panelFlagsIds,
   panelTestEnv,
   seedAppMembership,
+  seedMetricEventDefinition,
   seedPanelFlags,
   signedPanelRequest,
   testCtx,
@@ -30,27 +31,27 @@ describe("SignedControlPanelEntrypoint Metric operations", () => {
       key: "signup",
       name: "Signup",
       kind: "binomial",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
     });
     const count = await createMetric({
       key: "items-added",
       name: "Items added",
       kind: "count",
-      eventName: "cart_item_added",
-      eventValueField: "quantity",
+      eventDefinitionId: "cart_item_added",
+      eventFieldName: "quantity",
     });
     const revenue = await createMetric({
       key: "purchase-revenue",
       name: "Purchase revenue",
       kind: "revenue",
-      eventName: "purchase_completed",
-      eventValueField: "amount",
+      eventDefinitionId: "purchase_completed",
+      eventFieldName: "amount",
     });
     const ratio = await createMetric({
       key: "signup-rate",
       name: "Signup rate",
       kind: "ratio",
-      eventName: "signed_up",
+      eventDefinitionId: "signed_up",
       denominator: { metricId: binomial.id },
     });
     const created = [binomial, count, revenue, ratio];
@@ -117,12 +118,13 @@ describe("SignedControlPanelEntrypoint Metric operations", () => {
   });
 
   it("keeps Metric delegations off public HTTP and binds them to the exact resource", async () => {
+    const eventDefinitionId = await seedMetricEventDefinition(ids, "resource_bound");
     const createBody = {
       appId: APP_ID,
       key: "resource-bound",
       name: "Resource bound",
       kind: "binomial",
-      eventName: "resource_bound",
+      eventDefinitionId,
     };
     const request = await signedPanelRequest(ids, "POST", `/apps/${APP_ID}/metrics`, createBody);
     expect(request.headers.get("authorization")).toBeNull();
@@ -154,15 +156,21 @@ type MetricCreateBody = {
   key: string;
   name: string;
   kind: MetricKind;
-  eventName: string;
-  eventValueField?: string;
+  eventDefinitionId: string;
+  eventFieldName?: string;
   denominator?: { metricId: string };
 };
 
 async function createMetric(body: MetricCreateBody) {
+  const eventDefinitionId = await seedMetricEventDefinition(
+    ids,
+    body.eventDefinitionId,
+    body.eventFieldName,
+  );
   const response = await panelRequest("POST", `/apps/${APP_ID}/metrics`, {
     appId: APP_ID,
     ...body,
+    eventDefinitionId,
   });
   if (!response.ok) throw new Error(`Metric create failed: ${await response.text()}`);
   return (await response.json()) as {

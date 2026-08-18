@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   ConditionOperatorSchema,
   ConditionSchema,
+  conditionOperators,
   PercentageRolloutSchema,
   SegmentSchema,
-  conditionOperators,
 } from "./leaf-schemas-flag";
 
 const validCondition = {
@@ -44,6 +44,10 @@ describe("ConditionOperatorSchema", () => {
     expect(ConditionOperatorSchema.safeParse("contains").success).toBe(false);
     expect(ConditionOperatorSchema.safeParse("").success).toBe(false);
     expect(ConditionOperatorSchema.safeParse(null).success).toBe(false);
+  });
+
+  it.each(["segment_in", "segment_not_in"])("rejects runtime Segment operator %s", (operator) => {
+    expect(ConditionOperatorSchema.safeParse(operator).success).toBe(false);
   });
 });
 
@@ -96,6 +100,23 @@ describe("ConditionSchema", () => {
   it("rejects missing required fields", () => {
     expect(ConditionSchema.safeParse({ operator: "eq", value: 1 }).success).toBe(false);
   });
+
+  it("rejects null or object elements inside an array Condition value", () => {
+    expect(
+      ConditionSchema.safeParse({
+        attribute: "plan",
+        operator: "in",
+        value: [null, "paid"],
+      }).success,
+    ).toBe(false);
+    expect(
+      ConditionSchema.safeParse({
+        attribute: "plan",
+        operator: "in",
+        value: [{ nested: true }],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("PercentageRolloutSchema", () => {
@@ -143,9 +164,8 @@ describe("SegmentSchema", () => {
     expect(s.conditions).toHaveLength(1);
   });
 
-  it("accepts empty conditions (Segments may have zero conditions)", () => {
-    const s = SegmentSchema.parse({ ...validSegment, conditions: [] });
-    expect(s.conditions).toHaveLength(0);
+  it("rejects empty conditions", () => {
+    expect(SegmentSchema.safeParse({ ...validSegment, conditions: [] }).success).toBe(false);
   });
 
   it("accepts optional description", () => {

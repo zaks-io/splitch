@@ -254,11 +254,17 @@ once and cannot be updated.
 | `family`                       | text        | not null; immutable `metric \| web`                                                   |
 | `display_name`                 | text        | not null                                                                              |
 | `description`                  | text        | nullable                                                                              |
+| `state`                        | text        | not null; `draft \| incomplete \| published`                                          |
 | `current_published_version_id` | text        | nullable, FK → event_definition_versions; must belong to this definition and `app_id` |
 | `created_at`                   | timestamptz | not null                                                                              |
 | `updated_at`                   | timestamptz | not null                                                                              |
 | `created_by`                   | text        | WorkOS user ID or deleted-user tombstone                                              |
 | `updated_by`                   | text        | WorkOS user ID or deleted-user tombstone                                              |
+
+`published` requires a non-null `current_published_version_id`; `draft` and `incomplete` require
+null. Migration 0019 uses `incomplete` for a legacy Metric Event binding because the source row has
+neither an Entity type nor a numeric domain. It creates no Event Definition Version. The operator's
+first complete publish creates Version 1.
 
 ### `event_definition_versions` (immutable after creation)
 
@@ -343,10 +349,16 @@ malformed value is corrupt config, not "no rollout", so reads fail loud rather t
 | `flag_id`            | text        | FK → flags, not null                                            |
 | `priority`           | integer     | not null                                                        |
 | `conditions`         | text        | not null (JSON array of Condition)                              |
+| `segment_id`         | text        | nullable; same-App FK → segments, restrictive delete            |
 | `variant_id`         | text        | FK → variants                                                   |
 | `percentage_rollout` | text        | nullable (JSON PercentageRollout)                               |
 | `created_at`         | timestamptz | not null                                                        |
 | `updated_at`         | timestamptz | not null                                                        |
+
+`conditions` may be empty only when `segment_id` is present. Publication resolves the Segment and
+AND-merges its Conditions with this direct array; the authoring reference remains in D1 across
+Promotion. The composite `(app_id, segment_id)` foreign key prevents cross-App references and blocks
+deletion while a live Flag Configuration depends on the Segment.
 
 ### `segments`
 
@@ -359,6 +371,8 @@ malformed value is corrupt config, not "no rollout", so reads fail loud rather t
 | `description` | text        | nullable              |
 | `created_at`  | timestamptz | not null              |
 | `updated_at`  | timestamptz | not null              |
+
+UNIQUE constraint: `(app_id, id)`, the parent key for same-App Targeting Rule references.
 
 ## Sources
 

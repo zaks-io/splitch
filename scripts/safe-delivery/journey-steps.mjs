@@ -30,13 +30,9 @@ function cohortConditions() {
 /**
  * Create the real Segment resource naming the cohort we target.
  *
- * CONTRACT NOTE: TargetingRuleSchema carries inline `conditions` and has no
- * `segmentId`, so the contract offers no way to bind a Targeting Rule to a
- * Segment. The Segment is therefore the named, reusable definition of the
- * cohort, and the Rule restates the same conditions inline because that is the
- * only shape the Flag targeting path accepts. Creating the Segment proves the
- * resource is real and reachable in this loop rather than leaving the Segment
- * leg of SPL-151 silently unexercised.
+ * The Targeting Rule references this resource by id. Publication resolves its
+ * Conditions into the edge projection, so the tracer exercises the authoring
+ * reference without making edge evaluation depend on a Segment read.
  */
 export async function defineCohortSegment(deps, keys) {
   const segment = await createSegment(deps, deps.appId, keys.segmentName, cohortConditions());
@@ -71,7 +67,7 @@ export function prodVerify(deps, keys, targetingKey, cohort) {
  * so every write must land directly: a non-null approvalRequest here would mean
  * the Policy fixture drifted and the rest of the proof would be meaningless.
  */
-export async function tuneInDev(deps, flagId, variantId, ruleId, extra) {
+export async function tuneInDev(deps, flagId, variantId, ruleId, segmentId, extra) {
   const patch = requireOk(
     await patchFlagConfig(
       deps,
@@ -100,7 +96,8 @@ export async function tuneInDev(deps, flagId, variantId, ruleId, extra) {
           id: ruleId,
           flagId,
           priority: 0,
-          conditions: cohortConditions(),
+          conditions: [],
+          segmentId,
           variantId,
           percentageRollout: null,
         },

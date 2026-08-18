@@ -37,3 +37,14 @@ export function flagConfigNotFound(requestId: string): Response {
     { requestId },
   );
 }
+
+export function flagSegmentNotFound(missingSegmentIds: string[], requestId: string): Response {
+  return renderError(
+    {
+      code: "SEGMENT_NOT_FOUND",
+      message: `Targeting Rule references Segment(s) not found in this App: ${missingSegmentIds.join(", ")}`,
+      details: { missingSegmentIds },
+    },
+    { requestId },
+  );
+}

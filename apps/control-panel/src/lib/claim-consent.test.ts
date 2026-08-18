@@ -3,6 +3,8 @@ import type { ControlPanelBindings } from "./bindings";
 import { consentLoginRedirect, forwardClaimConsent, renderConsentPage } from "./claim-consent";
 import { createSession } from "./session";
 
+const SAME_ORIGIN = "https://app.splitch.dev";
+
 describe("claim consent browser ceremony", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -42,7 +44,11 @@ describe("claim consent browser ceremony", () => {
       bindings(kv.namespace()),
       new Request("https://app.splitch.dev/claim/consent/ccons_123", {
         method: "POST",
-        headers: { cookie: session.cookie, "content-type": "application/x-www-form-urlencoded" },
+        headers: {
+          cookie: session.cookie,
+          origin: SAME_ORIGIN,
+          "content-type": "application/x-www-form-urlencoded",
+        },
         body: "decision=deny",
       }),
       "ccons_123",
@@ -73,12 +79,45 @@ describe("claim consent browser ceremony", () => {
       bindings(kv.namespace()),
       new Request("https://app.splitch.dev/claim/consent/ccons_123", {
         method: "POST",
-        headers: { cookie: session.cookie, "content-type": "application/x-www-form-urlencoded" },
+        headers: {
+          cookie: session.cookie,
+          origin: SAME_ORIGIN,
+          "content-type": "application/x-www-form-urlencoded",
+        },
       }),
       "ccons_123",
     );
 
     expect(response.status).toBe(400);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("rejects a cross-origin POST before reading the session", async () => {
+    const kv = new MemoryKv();
+    const session = await createSession(
+      kv.namespace(),
+      { userId: "user_existing", orgs: [], workosAccessToken: "workos-jwt" },
+      Date.now(),
+    );
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+
+    const response = await forwardClaimConsent(
+      bindings(kv.namespace()),
+      new Request("https://app.splitch.dev/claim/consent/ccons_123", {
+        method: "POST",
+        headers: {
+          cookie: session.cookie,
+          origin: "https://evil.example",
+          "sec-fetch-site": "cross-site",
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: "decision=approve",
+      }),
+      "ccons_123",
+    );
+
+    expect(response.status).toBe(403);
     expect(fetcher).not.toHaveBeenCalled();
   });
 });

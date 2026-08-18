@@ -3,6 +3,7 @@ import type {
   GuardrailDecision,
   MetricRef,
   MetricVarianceConfig,
+  ResolvedTargetingRule,
   TargetingRule,
   Variant,
 } from "@splitch/contracts";
@@ -14,16 +15,17 @@ import {
   segmentReferenceMissing,
   variantNotAvailable,
 } from "./experiment-errors";
-import { frozenAnalysisConfig } from "./experiment-start-analysis";
 import { validateMetricRefs } from "./experiment-handler-shared";
 import {
+  type ExperimentRow,
   jsonArray,
   jsonArrayOrNull,
   jsonObject,
   runConfigHash,
-  type ExperimentRow,
 } from "./experiment-model";
+import { frozenAnalysisConfig } from "./experiment-start-analysis";
 import { flagNotFound } from "./flag-definition-errors";
+import { resolveTargetingRules } from "./targeting-rule-resolution";
 
 type Result<T> = { ok: true; value: T } | { ok: false; response: Response };
 
@@ -38,7 +40,7 @@ export async function prepareStart(
     salt: string;
     variantSet: Variant[];
     controlVariantId: string;
-    targetingRules: TargetingRule[];
+    targetingRules: ResolvedTargetingRule[];
     configHash: string;
     decisionFamily: MetricRef[];
     guardrailDecisions: GuardrailDecision[];
@@ -245,8 +247,15 @@ async function resolvedTargetingRules(
   scope: EnvScope,
   experiment: ExperimentRow,
   requestId: string,
-): Promise<Result<TargetingRule[]>> {
+): Promise<Result<ResolvedTargetingRule[]>> {
   const rules = jsonArray<TargetingRule>(experiment.draftTargetingRules);
+  const resolvedRules = await resolveTargetingRules(repo, scope.appId, rules);
+  if (!resolvedRules.ok) {
+    return {
+      ok: false,
+      response: segmentReferenceMissing(experiment.id, resolvedRules.missingSegmentIds, requestId),
+    };
+  }
   const segmentIds = jsonArrayOrNull<string>(experiment.draftSegmentIds) ?? [];
   const segments = await repo.flags.listSegmentsByIds(appScope(scope.appId), segmentIds);
 
@@ -262,7 +271,7 @@ async function resolvedTargetingRules(
   return {
     ok: true,
     value: [
-      ...rules,
+      ...resolvedRules.rules,
       ...segments.map((segment, index) => ({
         id: `rule_${segment.id}`,
         flagId: experiment.flagId,

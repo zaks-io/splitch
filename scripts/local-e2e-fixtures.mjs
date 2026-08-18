@@ -22,6 +22,30 @@ export const LOCAL_E2E_NEWCOMER_SESSION_KEY = `session:${createHash("sha256")
   .update(LOCAL_E2E_NEWCOMER_SESSION_TOKEN)
   .digest("hex")}`;
 
+/**
+ * A signed-in User with a profile but no Organization membership anywhere: the
+ * person the Members screen adds and then removes. Kept out of `org_memberships`
+ * on purpose, so the add leg starts from a real absence every run.
+ */
+export const LOCAL_E2E_RECRUIT_USER_ID = "user_local_recruit_e2e";
+export const LOCAL_E2E_PROFILELESS_USER_ID = "user_local_profileless_e2e";
+
+/**
+ * `member-profile:{userId}` in SESSION_STORE, mirroring
+ * `memberProfileCacheKey` in @splitch/contracts. Org member responses resolve
+ * email from here (never a D1 column); the profileless fixture below proves the
+ * roster keeps a membership row until that User signs in.
+ */
+export const LOCAL_E2E_MEMBER_PROFILES = Object.freeze({
+  user_local_e2e: "owner@acme-labs.e2e",
+  user_local_member_e2e: "member@acme-labs.e2e",
+  [LOCAL_E2E_RECRUIT_USER_ID]: "recruit@acme-labs.e2e",
+});
+
+export function memberProfileKey(userId) {
+  return `member-profile:${userId}`;
+}
+
 export const LOCAL_E2E_FIXTURE_CONTRACT = Object.freeze({
   organization: {
     id: "org_acme_e2e",
@@ -178,7 +202,8 @@ INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at,
 INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES
   ('org_acme_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
   ('org_orbit_e2e', 'user_local_e2e', 'admin', '${createdAt}'),
-  ('org_acme_e2e', 'user_local_member_e2e', 'member', '${createdAt}');
+  ('org_acme_e2e', 'user_local_member_e2e', 'member', '${createdAt}'),
+  ('org_acme_e2e', '${LOCAL_E2E_PROFILELESS_USER_ID}', 'member', '${createdAt}');
 INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES
   ('app_checkout_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
   ('app_billing_e2e', 'user_local_e2e', 'admin', '${createdAt}'),
@@ -224,6 +249,10 @@ INSERT INTO metrics (id, app_id, key, name, kind, event_name, created_at, create
   ('metric_setup_secondary_e2e', 'app_checkout_e2e', 'setup-secondary', 'Order value', 'binomial', 'order_value_recorded', '${createdAt}', 'user_local_e2e'),
   ('metric_setup_guardrail_e2e', 'app_checkout_e2e', 'setup-guardrail', 'Checkout errors', 'binomial', 'checkout_error', '${createdAt}', 'user_local_e2e'),
   ('metric_setup_activation_e2e', 'app_checkout_e2e', 'setup-activation', 'Checkout opened', 'binomial', 'checkout_opened', '${createdAt}', 'user_local_e2e');
+INSERT INTO segments (id, app_id, name, conditions, description, created_at, updated_at) VALUES
+  ('segment_paid_e2e', 'app_checkout_e2e', 'Paid plan', '[{"attribute":"plan","operator":"eq","value":"paid"}]', 'Entities on a paid plan', '${createdAt}', '${createdAt}'),
+  ('segment_enterprise_e2e', 'app_checkout_e2e', 'Enterprise markets', '[{"attribute":"plan","operator":"eq","value":"enterprise"},{"attribute":"country","operator":"in","value":["US","CA"]}]', 'Enterprise plan in US or CA', '${createdAt}', '${createdAt}'),
+  ('segment_draft_locked_e2e', 'app_checkout_e2e', 'Draft-locked cohort', '[{"attribute":"cohort","operator":"eq","value":"locked"}]', 'Referenced by the draft Experiment', '${createdAt}', '${createdAt}');
 INSERT INTO experiments (id, app_id, environment_id, key, flag_id, name, status, targeting_key_field, targeting_key_type, default_variant_id, metrics, guardrail_metrics, dimensions, live_run_id, created_at, updated_at, created_by, updated_by) VALUES
   ('experiment_checkout_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'checkout-copy-dev', 'flag_checkout_e2e', 'Checkout Copy Dev', 'running', 'targetingKey', 'user', 'variant_checkout_control_e2e', '[]', '[]', '[]', 'run_checkout_dev_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
   ('experiment_checkout_significance_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'checkout-significance', 'flag_checkout_significance_e2e', 'Checkout Conversion Lift', 'running', 'targetingKey', 'user', 'variant_significance_control_e2e', '[{"metricId":"checkout-conversion"}]', '[]', '[]', 'run_checkout_significance_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
@@ -234,6 +263,7 @@ INSERT INTO experiments (id, app_id, environment_id, key, flag_id, name, status,
   ('experiment_checkout_srm_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'checkout-srm', 'flag_checkout_srm_e2e', 'Checkout Routing Split', 'running', 'targetingKey', 'user', 'variant_srm_control_e2e', '[{"metricId":"checkout-conversion"}]', '[]', '[]', 'run_checkout_srm_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
   ('experiment_checkout_setup_e2e', 'app_checkout_e2e', 'env_checkout_setup_e2e', 'checkout-setup', 'flag_checkout_e2e', 'Checkout Setup Taxonomy', 'running', 'targetingKey', 'user', 'variant_checkout_control_e2e', '${d1RunDecisions("metric_setup_goal_e2e", "metric_setup_secondary_e2e")}', '${d1RunDecisions("metric_setup_guardrail_e2e")}', '[]', 'run_checkout_setup_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
   ('experiment_agent_e2e', 'app_agent_e2e', 'env_agent_prod_e2e', 'routing-model', 'flag_agent_e2e', 'Routing Model', 'draft', 'targetingKey', 'user', NULL, '[]', '[]', '[]', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e');
+UPDATE experiments SET draft_segment_ids = '["segment_draft_locked_e2e"]' WHERE id = 'experiment_checkout_draft_e2e';
 INSERT INTO runs (id, app_id, environment_id, experiment_id, run_number, status, targeting_key_field, targeting_key_type, salt, allocation, variant_set, control_variant_id, targeting_rules, activation_metric_id, confidence_level, decision_family, guardrail_decisions, config_hash, started_at, created_at, created_by) VALUES
   ('run_checkout_dev_previous_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_dev_e2e', 1, 'ended', 'targetingKey', 'user', '${run.salt.devPrevious}', '${json(run.allocation.checkout)}', '${json(run.variants.checkout)}', 'variant_checkout_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '[]', '[]', '${run.hash.devPrevious}', '2026-07-16T00:00:00.000Z', '2026-07-16T00:00:00.000Z', 'user_local_e2e'),
   ('run_checkout_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_dev_e2e', 2, 'running', 'targetingKey', 'user', '${run.salt.dev}', '${json(run.allocation.checkoutExpanded)}', '${json(run.variants.checkout)}', 'variant_checkout_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '[]', '[]', '${run.hash.dev}', '${createdAt}', '${createdAt}', 'user_local_e2e'),

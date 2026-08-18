@@ -79,12 +79,7 @@ export async function seedAppChildren(
     )
     .bind(`${appId}_segment`, appId, "Reaper segment", "[]", nowIso, nowIso)
     .run();
-  await d1
-    .prepare(
-      "INSERT INTO metrics (id, app_id, key, name, kind, event_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(metricId, appId, `${appId}-metric`, "Reaper metric", "count", "reaper", nowIso)
-    .run();
+  await seedMetric(d1, metricId, appId, nowIso);
   await d1
     .prepare(
       "INSERT INTO experiments (id, app_id, environment_id, key, flag_id, name, targeting_key_field, targeting_key_type, metrics, guardrail_metrics, dimensions, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -168,4 +163,13 @@ export async function seedAppChildren(
     .run();
 
   return refs;
+}
+
+function seedMetric(d1: D1Database, metricId: string, appId: string, nowIso: string) {
+  return d1
+    .prepare(
+      "INSERT INTO metrics (id, app_id, key, name, kind, event_definition_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(metricId, appId, `${appId}-metric`, "Reaper metric", "count", "reaper", nowIso)
+    .run();
 }

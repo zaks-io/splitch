@@ -16,8 +16,5 @@
   "files": ["dist"],
   "publishConfig": {
     "access": "restricted"
-  },
-  "dependencies": {
-    "zod": "^4.4.3"
   }
 }

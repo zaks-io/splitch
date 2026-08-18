@@ -7,6 +7,7 @@ import {
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { SignedControlPanelEntrypoint } from "../src/index.js";
+import { ensureMetricEventDefinition } from "./metric-event-definition-fixture";
 
 export const ORIGIN = "https://cp.splitch.test";
 export const NOW = "2026-07-19T00:00:00.000Z";
@@ -29,6 +30,9 @@ export type PanelFlagsIds = {
   envId: string;
   otherEnvId: string;
   flagId: string;
+  /** A second Flag in the same App — distinct id and key for cross-delegation. */
+  otherFlagId: string;
+  otherFlagKey: string;
   userId: string;
 };
 
@@ -41,6 +45,8 @@ export function panelFlagsIds(suffix: string): PanelFlagsIds {
     envId: `env_panel_flags_${suffix}`,
     otherEnvId: `env_panel_flags_other_${suffix}`,
     flagId: `flag_panel_flags_${suffix}`,
+    otherFlagId: `flag_panel_flags_other_${suffix}`,
+    otherFlagKey: `other-checkout-${suffix}`,
     userId: `user_panel_flags_${suffix}`,
   };
 }
@@ -77,10 +83,16 @@ export async function signedPanelRequest(
     // supplies one per action, so the harness does the same.
     ...(method === "GET" ? {} : { "idempotency-key": `idem-panel-${crypto.randomUUID()}` }),
   });
-  const expectedOperation = parseControlPanelOperation(method, path, ids.envId);
+  const url = new URL(`${ORIGIN}${path}`);
+  const expectedOperation = parseControlPanelOperation(
+    method,
+    url.pathname,
+    ids.envId,
+    url.searchParams,
+  );
   if (expectedOperation) {
     const nowSeconds = Math.floor(Date.now() / 1000);
-    const signedRequest = new Request(`${ORIGIN}${path}`, {
+    const signedRequest = new Request(url, {
       method,
       headers,
       body: delegatedBody ? JSON.stringify(delegatedBody) : undefined,
@@ -99,7 +111,7 @@ export async function signedPanelRequest(
       ),
     );
   }
-  return new Request(`${ORIGIN}${path}`, {
+  return new Request(url, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
@@ -110,12 +122,87 @@ export function panelEntrypoint(testEnv: ControlPlaneApiEnv): SignedControlPanel
   return new SignedControlPanelEntrypoint(testCtx, testEnv);
 }
 
-export async function seedAppMembership(ids: PanelFlagsIds): Promise<void> {
+export async function seedAppMembership(
+  ids: PanelFlagsIds,
+  role: "owner" | "admin" | "member" = "owner",
+  userId = ids.userId,
+): Promise<void> {
   await env.DB.prepare(
     "INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)",
   )
-    .bind(ids.appId, ids.userId, "owner", NOW)
+    .bind(ids.appId, userId, role, NOW)
     .run();
+}
+
+export async function seedMetricEventDefinition(
+  ids: PanelFlagsIds,
+  name: string,
+  eventFieldName?: string,
+): Promise<string> {
+  return ensureMetricEventDefinition(env.DB, ids.appId, name, NOW, eventFieldName);
+}
+
+/**
+ * A fully separate Organization/App/Environment/actor graph. Distinct salts and
+ * ids so cross-tenant leakage cannot look like a fixture coincidence.
+ */
+export type IsolatedPanelTenant = {
+  suffix: string;
+  tag: string;
+  orgId: string;
+  appId: string;
+  envId: string;
+  userId: string;
+};
+
+export function isolatedPanelTenant(suffix: string, tag: string): IsolatedPanelTenant {
+  return {
+    suffix,
+    tag,
+    orgId: `org_seg_${tag}_${suffix}`,
+    appId: `app_seg_${tag}_${suffix}`,
+    envId: `env_seg_${tag}_${suffix}`,
+    userId: `user_seg_${tag}_${suffix}`,
+  };
+}
+
+export function isolatedTenantAsPanelIds(tenant: IsolatedPanelTenant): PanelFlagsIds {
+  return {
+    suffix: `${tenant.tag}_${tenant.suffix}`,
+    orgId: tenant.orgId,
+    appId: tenant.appId,
+    otherAppId: `app_seg_unused_${tenant.tag}_${tenant.suffix}`,
+    envId: tenant.envId,
+    otherEnvId: `env_seg_unused_${tenant.tag}_${tenant.suffix}`,
+    flagId: `flag_seg_unused_${tenant.tag}_${tenant.suffix}`,
+    otherFlagId: `flag_seg_other_unused_${tenant.tag}_${tenant.suffix}`,
+    otherFlagKey: `other-seg-unused-${tenant.tag}-${tenant.suffix}`,
+    userId: tenant.userId,
+  };
+}
+
+export async function seedIsolatedPanelTenant(
+  tenant: IsolatedPanelTenant,
+  appRole: "owner" | "admin" | "member" = "owner",
+): Promise<void> {
+  const keySalt = `${tenant.tag}-${tenant.suffix}`;
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO organizations (id, name, slug, plan, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+    ).bind(tenant.orgId, `Seg Org ${tenant.tag}`, tenant.orgId, "free", NOW, NOW),
+    env.DB.prepare(
+      "INSERT INTO apps (id, organization_id, name, key, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+    ).bind(tenant.appId, tenant.orgId, `Seg App ${tenant.tag}`, `seg-app-${keySalt}`, NOW, NOW),
+    env.DB.prepare(
+      "INSERT INTO environments (id, app_id, key, name, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+    ).bind(tenant.envId, tenant.appId, "dev", "Development", NOW, NOW),
+    env.DB.prepare(
+      "INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES (?,?,?,?)",
+    ).bind(tenant.orgId, tenant.userId, "owner", NOW),
+    env.DB.prepare(
+      "INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)",
+    ).bind(tenant.appId, tenant.userId, appRole, NOW),
+  ]);
 }
 
 export async function seedPanelFlags(ids: PanelFlagsIds): Promise<void> {
@@ -159,6 +246,21 @@ export async function seedPanelFlags(ids: PanelFlagsIds): Promise<void> {
     env.DB.prepare(
       "INSERT INTO variants (id, flag_id, name, value, created_at) VALUES (?,?,?,?,?)",
     ).bind(`var_enabled_${ids.suffix}`, ids.flagId, "enabled", "true", NOW),
+    env.DB.prepare(
+      "INSERT INTO flags (id, app_id, key, name, schema, default_variant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+    ).bind(
+      ids.otherFlagId,
+      ids.appId,
+      ids.otherFlagKey,
+      "Other Checkout",
+      '{"type":"boolean"}',
+      `var_other_disabled_${ids.suffix}`,
+      NOW,
+      NOW,
+    ),
+    env.DB.prepare(
+      "INSERT INTO variants (id, flag_id, name, value, created_at) VALUES (?,?,?,?,?)",
+    ).bind(`var_other_disabled_${ids.suffix}`, ids.otherFlagId, "disabled", "false", NOW),
     env.DB.prepare(
       "INSERT INTO flag_configs (id, app_id, environment_id, flag_id, enabled, available_variant_names, default_variant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
     ).bind(

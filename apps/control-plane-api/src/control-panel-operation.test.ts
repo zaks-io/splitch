@@ -12,6 +12,22 @@ describe("Control Panel binding operation allowlist", () => {
     ["POST", "/apps/app_1/flags", { id: "flags_create", appId: "app_1", environmentId: "env_1" }],
     [
       "GET",
+      "/apps/app_1/segments",
+      { id: "segments_list", appId: "app_1", environmentId: "env_1" },
+    ],
+    [
+      "GET",
+      "/apps/app_1/flags/checkout?by=key",
+      {
+        id: "flag_get",
+        appId: "app_1",
+        environmentId: "env_1",
+        flagId: "checkout",
+        by: "key",
+      },
+    ],
+    [
+      "GET",
       "/apps/app_1/envs/env_1/flags/flag_1/config",
       { id: "flag_config_get", appId: "app_1", environmentId: "env_1", flagId: "flag_1" },
     ],
@@ -75,13 +91,20 @@ describe("Control Panel binding operation allowlist", () => {
       "/apps/app_1/envs/env_1/api-keys/ak_1/revoke",
       { id: "api_key_revoke", appId: "app_1", environmentId: "env_1", keyId: "ak_1" },
     ],
-  ])("allows %s %s", (method, pathname, expected) => {
-    expect(parseControlPanelOperation(method, pathname, "env_1")).toEqual(expected);
+  ])("allows %s %s", (method, path, expected) => {
+    const url = new URL(`https://control-plane.internal${path}`);
+    expect(parseControlPanelOperation(method, url.pathname, "env_1", url.searchParams)).toEqual(
+      expected,
+    );
   });
 
   it.each([
     ["GET", "/orgs/org_1/apps"],
     ["PATCH", "/apps/app_1/flags/flag_1"],
+    // Dual-selector mode is required on the Flag resource read: missing or
+    // unknown `by` is not claimable (never defaulted to id).
+    ["GET", "/apps/app_1/flags/checkout"],
+    ["GET", "/apps/app_1/flags/checkout?by=name"],
     // The panel writes Flag Configuration and reviews Approval Requests, but the
     // method is part of the operation: no other verb on those paths is claimable.
     ["DELETE", "/apps/app_1/envs/env_1/flags/flag_1/config"],
@@ -93,8 +116,11 @@ describe("Control Panel binding operation allowlist", () => {
     ["GET", "/apps/app_1/envs/env_1/api-keys"],
     ["POST", "/apps/app_1/envs/env_1/client-key/revoke"],
     ["GET", "/health"],
-  ])("rejects unsupported %s %s", (method, pathname) => {
-    expect(parseControlPanelOperation(method, pathname)).toBeNull();
+  ])("rejects unsupported %s %s", (method, path) => {
+    const url = new URL(`https://control-plane.internal${path}`);
+    expect(
+      parseControlPanelOperation(method, url.pathname, undefined, url.searchParams),
+    ).toBeNull();
   });
 
   it("rejects forwarded bearer material before dispatch", () => {

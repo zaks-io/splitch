@@ -1,14 +1,19 @@
-import { CredentialCacheKVSchema, kvEnvelope } from "@splitch/contracts";
+import {
+  CredentialCacheKVSchema,
+  credentialRevocationCacheKey,
+  kvEnvelope,
+  TERMINAL_CREDENTIAL_REVOCATION_MARKER,
+} from "@splitch/contracts";
 import type { CredentialCacheWriter } from "./credential-cache";
 
 /**
- * Test doubles for the credential cache write path: a serializing writer and the
- * two authority-checking variants that mirror CredentialCacheWriterDurableObject.
+ * Credential-cache concurrency doubles: one raw KV ordering store plus the
+ * serializing writer and authority-checking writer variants.
  */
 
 const cacheEnvelope = kvEnvelope(CredentialCacheKVSchema);
 
-export class SerialWriter implements CredentialCacheWriter {
+class SerialWriter implements CredentialCacheWriter {
   private tail = Promise.resolve();
 
   constructor(private readonly writes: Map<string, string>) {}
@@ -22,7 +27,40 @@ export class SerialWriter implements CredentialCacheWriter {
   }
 }
 
-/** Mirrors the CredentialCacheWriterDurableObject authority checks. */
+export class StaleBackfillWinsStore {
+  private readonly revocationLanded: Promise<void>;
+  private releaseRevocation: () => void = () => {};
+
+  constructor(
+    private readonly writes: Map<string, string>,
+    private readonly credentialCacheKey: string,
+  ) {
+    this.revocationLanded = new Promise((resolve) => {
+      this.releaseRevocation = resolve;
+    });
+  }
+
+  get(key: string): Promise<string | null> {
+    return Promise.resolve(this.writes.get(key) ?? null);
+  }
+
+  async put(key: string, value: string): Promise<void> {
+    if (key === credentialRevocationCacheKey(this.credentialCacheKey)) {
+      if (value !== TERMINAL_CREDENTIAL_REVOCATION_MARKER) {
+        throw new Error("test fixture received an invalid terminal revocation marker");
+      }
+      this.writes.set(key, value);
+      return;
+    }
+
+    const candidate = cacheEnvelope.parse(JSON.parse(value)).data;
+    if (!candidate.revoked) await this.revocationLanded;
+    this.writes.set(key, value);
+    if (candidate.revoked) this.releaseRevocation();
+  }
+}
+
+/** Covers the Durable Object's revocation and Client Key restriction authority decisions. */
 export class AuthoritativeSerialWriter extends SerialWriter {
   revoked = false;
   originAllowlist: string[] | null = null;

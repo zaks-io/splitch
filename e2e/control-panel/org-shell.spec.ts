@@ -45,7 +45,12 @@ test.describe("Org shell and App list", () => {
     const hrefs = await page
       .locator("a[href]")
       .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href") ?? ""));
-    expect(hrefs.filter((href) => /^\/acme-labs\/[^/?#]+$/.test(href))).toEqual([]);
+    // An Org section (`/{orgSlug}/billing`) has the same shape as a bare-App
+    // href without being one, so it is named rather than loosening the pattern.
+    const orgSections = new Set(["/acme-labs/billing", "/acme-labs/members"]);
+    expect(
+      hrefs.filter((href) => /^\/acme-labs\/[^/?#]+$/.test(href) && !orgSections.has(href)),
+    ).toEqual([]);
 
     await page.locator("a[href='/acme-labs/checkout-api/prod']").click();
     await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute(

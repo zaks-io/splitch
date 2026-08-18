@@ -21,6 +21,10 @@
       "types": "./src/control-panel-identity.ts",
       "default": "./src/control-panel-identity.ts"
     },
+    "./flag-selector-unaddressable-error": {
+      "types": "./src/flag-selector-unaddressable-error.ts",
+      "default": "./src/flag-selector-unaddressable-error.ts"
+    },
     "./panel-experiments": {
       "types": "./src/panel-experiments.ts",
       "default": "./src/panel-experiments.ts"
@@ -29,6 +33,14 @@
       "types": "./src/panel-metrics.ts",
       "default": "./src/panel-metrics.ts"
     },
+    "./panel-org-members": {
+      "types": "./src/panel-org-members.ts",
+      "default": "./src/panel-org-members.ts"
+    },
+    "./panel-segments": {
+      "types": "./src/panel-segments.ts",
+      "default": "./src/panel-segments.ts"
+    },
     "./panel-overview": {
       "types": "./src/panel-overview.ts",
       "default": "./src/panel-overview.ts"
@@ -36,6 +48,10 @@
     "./panel-settings": {
       "types": "./src/panel-settings.ts",
       "default": "./src/panel-settings.ts"
+    },
+    "./panel-usage": {
+      "types": "./src/panel-usage.ts",
+      "default": "./src/panel-usage.ts"
     }
   },
   "files": [

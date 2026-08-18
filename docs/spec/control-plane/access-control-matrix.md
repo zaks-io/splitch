@@ -108,7 +108,7 @@ only (seeded at deploy; not user-facing).
 - Flag **definition** CRUD (App-level), Flag **Configuration** + Promotion across Environments (per-Env, ADR-0028)
 - Environment Policy edits (per-change-type confirm gates, ADR-0029)
 - Variant, Targeting Rule CRUD
-- Experiment, Run CRUD and lifecycle operations (Start/end; per-Environment)
+- Experiment, Run CRUD and lifecycle operations (Start, End, Conclude; per-Environment)
 - Segment, Metric CRUD
 - SDK credential (Client Key, API Key) management (per-Environment)
 - Privacy request intake, export jobs, deletion jobs, and Entity tombstones
@@ -120,28 +120,32 @@ only (seeded at deploy; not user-facing).
 - RS256/JWKS verification of the exact MCP-resource bearer; the client bearer terminates here and is
   never forwarded to a downstream Worker
 - Tool registry and schema derivation
-- Calls the Control Plane SDK; no direct D1/KV/Tinybird bindings and no domain invariants
+- Calls the Control Plane SDK; no direct D1/KV/Tinybird bindings, no Analysis or Evaluation
+  binding, and no domain invariants
 
 Each MCP tool call receives a separate 30-second, one-use delegated credential over a named Worker
-service-binding entrypoint. Control Plane, Evaluation, and Analysis use separate least-privilege
-credentials: `MCP_CONTROL_PLANE_DELEGATION_SECRET`, `MCP_EVALUATION_DELEGATION_SECRET`, and
-`MCP_ANALYSIS_DELEGATION_SECRET`. For each pair, MCP and the owning downstream Worker receive the
-same named value; the three values must be distinct. Hosted workflows validate this contract before
+service-binding entrypoint. MCP has exactly one downstream, the Control Plane, so it holds exactly
+one least-privilege credential: `MCP_CONTROL_PLANE_DELEGATION_SECRET`. MCP and the Control Plane
+receive the same named value. Analysis and Evaluation are reached only through the Control Plane's
+registered delegation routes, after its membership, Environment scope, and Policy gates, so MCP
+holds no Analysis or Evaluation credential. Hosted workflows validate this contract before
 deploying, and missing secrets or replay bindings fail closed.
 
 **Evaluation Worker** owns resolution:
 
 - Public SDK evaluate and peek endpoints (Client Key or API Key for evaluate; peek is API Key only,
-  ADR-0034). Metric Event and Web Event ingress are owned by the Event Ingest Worker; Evaluation
-  does not authenticate, validate, or persist `POST /api/sdk/events` or
-  `POST /api/sdk/web-events`.
+  ADR-0034). For delegated `POST /api/sdk/events`, Evaluation authenticates the data-plane
+  credential and enforces the Client Key origin allow-list at the public edge, then forwards caller
+  identity to Event Ingest over the service binding.
 - Control-plane dry-run test-evaluation using the control-plane bearer token
 - Provider and Assignment Store read orchestration
 - No config writes, no analytics reads, and no direct result calculation
 
 **Event Ingest Worker** owns append-only intake:
 
-- Public SDK Metric Event `track` (`POST /api/sdk/events`) under Client Key or API Key
+- Delegated public SDK Metric Event `track` (`POST /api/sdk/events`): Event Ingest owns schema,
+  rate, identity, and storage validation and persistence after Evaluation forwards the authenticated
+  caller identity over the service binding
 - Public SDK Web Event `web.track` (`POST /api/sdk/web-events`) under Client Key or API Key
 - Evaluation usage, Exposure, Activation, Metric Event, and Web Event validation
 - Per-scope Admission Gate Durable Objects, durable claim/outbox shards, datasource queues, write-ahead

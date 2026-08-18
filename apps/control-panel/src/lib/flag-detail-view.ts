@@ -1,5 +1,7 @@
-import type { Variant } from "@splitch/contracts";
+import type { Condition, Segment, Variant } from "@splitch/contracts";
+import type { PanelSegmentsListOutput } from "@splitch/control-plane-sdk";
 import type { FlagDetailData } from "./flag-detail-data";
+import { formatConditionSummary } from "./segment-form-model";
 
 /**
  * The read-only view model for the Flag detail screen.
@@ -32,8 +34,17 @@ type TargetingRuleView = {
   priority: number;
   /** Catalog name of the served Variant, or the raw id if it left the catalog. */
   variantName: string;
-  conditions: Array<{ attribute: string; operator: string; value: string }>;
+  conditions: Array<{ attribute: string; operator: string; value: Condition["value"] }>;
+  segmentConditions: Array<{ attribute: string; operator: string; value: Condition["value"] }>;
   rolloutPercentage: number | null;
+  segmentId: string | null;
+  segmentName: string | null;
+};
+
+type SegmentReferenceView = {
+  id: string;
+  name: string;
+  affectedEnvironmentIds: string[];
 };
 
 /**
@@ -59,12 +70,17 @@ export type FlagDetailView = {
   availabilityNarrowed: boolean;
   defaultVariantName: string;
   targetingRules: TargetingRuleView[];
+  segments: SegmentReferenceView[];
   baselineRolloutPercentage: number | null;
   /** The running Experiment that owns some of these fields, or null. */
   controllingExperiment: { id: string; name: string } | null;
 };
 
-export function flagDetailView(data: FlagDetailData, env: string): FlagDetailView {
+export function flagDetailView(
+  data: FlagDetailData,
+  env: string,
+  segmentList: PanelSegmentsListOutput,
+): FlagDetailView {
   const config = data.configuration;
   const catalog = data.definition.variants;
   const available = config ? config.availableVariantNames : [];
@@ -92,20 +108,75 @@ export function flagDetailView(data: FlagDetailData, env: string): FlagDetailVie
     targetingRules: (config?.targetingRules ?? [])
       .slice()
       .sort((a, b) => a.priority - b.priority)
-      .map((rule) => ({
-        id: rule.id,
-        priority: rule.priority,
-        variantName: variantName(catalog, rule.variantId),
-        conditions: rule.conditions.map((condition) => ({
-          attribute: condition.attribute,
-          operator: condition.operator,
-          value: JSON.stringify(condition.value),
-        })),
-        rolloutPercentage: rule.percentageRollout?.percentage ?? null,
-      })),
+      .map((rule) => {
+        const segment = rule.segmentId
+          ? referencedSegment(segmentList.items, rule.segmentId)
+          : null;
+        return {
+          id: rule.id,
+          priority: rule.priority,
+          variantName: variantName(catalog, rule.variantId),
+          conditions: displayConditions(rule.conditions),
+          segmentConditions: displayConditions(segment?.conditions ?? []),
+          rolloutPercentage: rule.percentageRollout?.percentage ?? null,
+          segmentId: rule.segmentId ?? null,
+          segmentName: segment?.name ?? null,
+        };
+      }),
+    segments: segmentList.items.map((segment) => ({
+      id: segment.id,
+      name: segment.name,
+      affectedEnvironmentIds: affectedEnvironments(segmentList, segment.id),
+    })),
     baselineRolloutPercentage: config?.rollout?.percentage ?? null,
     controllingExperiment: config?.experiment ?? null,
   };
+}
+
+function affectedEnvironments(list: PanelSegmentsListOutput, segmentId: string): string[] {
+  const environmentIds = list.affectedEnvironmentIds[segmentId];
+  if (!environmentIds) {
+    throw new Error(`Segment dependency projection is incomplete: ${segmentId}`);
+  }
+  return environmentIds;
+}
+
+function referencedSegment(segments: Segment[], segmentId: string): Segment {
+  const segment = segments.find((candidate) => candidate.id === segmentId);
+  if (!segment) {
+    throw new Error(`Flag Configuration references an unavailable Segment: ${segmentId}`);
+  }
+  return segment;
+}
+
+function displayConditions(conditions: Segment["conditions"]) {
+  return conditions.map((condition) => ({
+    attribute: condition.attribute,
+    operator: condition.operator,
+    value: condition.value,
+  }));
+}
+
+/**
+ * One rule's Conditions as a single line, shared by the editable table and the
+ * Experiment-owned summary so the two can never drift.
+ *
+ * The Segment's own Conditions nest under its name rather than sitting beside it
+ * as peers: flattened, `Segment Beta AND tier eq gold AND country eq US` reads as
+ * three constraints someone put on this rule, when `tier eq gold` is simply what
+ * Beta IS. Nesting says which half the rule owns and which half moves when the
+ * Segment is edited.
+ */
+export function targetingRuleConditionsText(
+  rule: FlagDetailView["targetingRules"][number],
+): string {
+  const own = rule.conditions.map(formatConditionSummary);
+  if (!rule.segmentName) return own.join(" AND ");
+  const definition = rule.segmentConditions.map(formatConditionSummary).join(" AND ");
+  const segment = definition
+    ? `Segment ${rule.segmentName} (${definition})`
+    : `Segment ${rule.segmentName}`;
+  return [segment, ...own].join(" AND ");
 }
 
 /**

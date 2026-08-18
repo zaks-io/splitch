@@ -14,6 +14,7 @@ import {
 } from "./config-store-shared";
 import { baselineIsUnresolvable } from "./flag-config-rollout";
 import { diffEntriesTouch } from "./flag-config-run-freeze-proposal";
+import { resolveTargetingRules } from "./targeting-rule-resolution";
 
 /**
  * The write an approved Approval Request performs. It is separate from the
@@ -28,7 +29,7 @@ export async function applyApprovedFlagConfig(
   const scope = envScope(input.appId, input.environmentId);
   const current = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
   if (!current) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  const invalid = validateProposal(current, input);
+  const invalid = await validateProposal(deps, current, input);
   if (invalid) return invalid;
   // Judged against the request's own changed-field set (`diff.entries`), not
   // against a re-diff of the complete proposed snapshot: a Run started after
@@ -39,13 +40,14 @@ export async function applyApprovedFlagConfig(
   const frozen = await approvedProposalFreeze(deps, input);
   if (frozen) return frozen;
 
-  // Write only fields the request's own entries move. Production writers bump
-  // `flag_configs.version`, so a post-mint direct PATCH makes the Request stale
-  // before apply (`approval-service` target hash). The gate still matters for the
-  // TOCTOU window between that staleness read and this function's independent
-  // re-read: `updateFlagConfig` CASes the version it just read, not the approved
-  // version, so a concurrent PATCH in that window is invisible to staleness and
-  // would otherwise overwrite live frozen fields from mint-time `proposed`.
+  // Write only fields the Request's own entries move. The Approval target hash
+  // treats `flagConfigVersion` as the whole Flag Configuration content signal,
+  // and every production writer bumps it, so a normal PATCH landing before the
+  // staleness read makes the Request stale. This is defense in depth for the
+  // TOCTOU window after that read but before this function's independent re-read:
+  // `updateFlagConfig` CASes the version it just read, not the approved version,
+  // so a concurrent PATCH still satisfies CAS and must not be overwritten from
+  // the mint-time `proposed` snapshot.
   const patch = approvedConfigPatch(input);
   const rulesChanged = diffEntriesTouch(input.diffEntries, "targetingRules");
   if (!rulesChanged && !approvedPatchMovesConfig(patch)) {
@@ -103,10 +105,11 @@ export function approvedPatchMovesConfig(patch: ReturnType<typeof approvedConfig
   );
 }
 
-function validateProposal(
+async function validateProposal(
+  deps: ConfigStoreDeps,
   current: Snapshot,
   input: ApplyApprovedFlagConfigInput,
-): Extract<FlagConfigWriteResult, { ok: false }> | null {
+): Promise<Extract<FlagConfigWriteResult, { ok: false }> | null> {
   const missingVariants = missingAvailableVariants(
     input.proposed.availableVariantNames,
     current.flag.variants,
@@ -121,6 +124,18 @@ function validateProposal(
       ok: false,
       reason: "VARIANT_NOT_AVAILABLE",
       missingVariants: [...new Set([...missingVariants, ...missingRuleVariants])],
+    };
+  }
+  const resolved = await resolveTargetingRules(
+    deps.repo,
+    input.appId,
+    input.proposed.targetingRules,
+  );
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      reason: "SEGMENT_NOT_FOUND",
+      missingSegmentIds: resolved.missingSegmentIds,
     };
   }
   const defaultVariant = current.flag.variants.find(

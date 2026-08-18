@@ -455,6 +455,119 @@ Request body (--body-json):
 
 Example:
   splitch envs update --body-json '{"name":"name"}' --json",
+    "event-definition-versions create": "Publish the next immutable Event Definition Version.
+
+Usage:
+  splitch event-definition-versions create <event-definition-id> [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  entityType       required  string | null
+  fields           required  ({ name: string; type: "boolean"; required: boolean; allowedValues?: boolean[] } | { name: string; type: "string"; required: boolean; allowedValues: string[] } | { name: string; type: "number"; required: boolean; numberKind: string ("measurement" | "count" | "amount" | "duration" | "ratio" | "score" | "delta"); allowedValues?: number[]; minimum?: number; maximum?: number } | { name: string; type: "json"; required: boolean; jsonSchema: closed JSON Schema })[]
+  dimensions       required  ({ name: string; type: "boolean"; required: boolean; allowedValues?: boolean[] } | { name: string; type: "string"; required: boolean; allowedValues: string[] } | { name: string; type: "number"; required: boolean; numberKind: string ("measurement" | "count" | "amount" | "duration" | "ratio" | "score" | "delta"); allowedValues?: number[]; minimum?: number; maximum?: number })[]
+  idempotency_key  optional  string
+  Example:
+    {"entityType":"entityType","fields":[],"dimensions":[]}
+
+Example:
+  splitch event-definition-versions create <event-definition-id> --body-json '{"entityType":"entityType","fields":[],"dimensions":[]}' --json",
+    "event-definition-versions get": "Get one immutable Event Definition Version.
+
+Usage:
+  splitch event-definition-versions get <event-definition-id> <version-id> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch event-definition-versions get <event-definition-id> <version-id> --json",
+    "event-definition-versions list": "List immutable Event Definition Versions.
+
+Usage:
+  splitch event-definition-versions list <event-definition-id> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch event-definition-versions list <event-definition-id> --json",
+    "event-definitions create": "Create an App-level Event Definition.
+
+Usage:
+  splitch event-definitions create [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>            [type: string; default: none] Resource name.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  name             required  string
+  family           required  string ("metric" | "web")
+  displayName      required  string
+  description      optional  string
+  idempotency_key  optional  string
+  Example:
+    {"name":"name","family":"metric","displayName":"displayName"}
+
+Example:
+  splitch event-definitions create --body-json '{"name":"name","family":"metric","displayName":"displayName"}' --json",
+    "event-definitions get": "Get an Event Definition and its immutable published Versions.
+
+Usage:
+  splitch event-definitions get <event-definition-id> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch event-definitions get <event-definition-id> --json",
+    "event-definitions list": "List Event Definitions in an App.
+
+Usage:
+  splitch event-definitions list [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch event-definitions list --json",
+    "event-definitions update": "Update Event Definition display metadata.
+
+Usage:
+  splitch event-definitions update <event-definition-id> [flags]
+
+Flags:
+  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
+  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help          [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  displayName  optional  string
+  description  optional  string
+  Example:
+    {"displayName":"displayName"}
+
+Example:
+  splitch event-definitions update <event-definition-id> --body-json '{"displayName":"displayName"}' --json",
     "experiment-results get": "Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.
 
 Usage:
@@ -520,7 +633,7 @@ Request body (--body-json):
   dimensions          optional; default []  string[]
   allocation          optional  Record<Variant name, number>
   salt                optional  string
-  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null; segmentId?: string }[]
   segmentIds          optional  string[]
   idempotency_key     optional  string
   Example:
@@ -623,7 +736,7 @@ Request body (--body-json):
   allocation          optional  Record<Variant name, number>
   salt                optional  string
   variantSet          optional  { id: string; name: string; value: boolean | string | number | Record<string, unknown>; description?: string }[]
-  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null; segmentId?: string }[]
   segmentIds          optional  string[]
   metrics             optional  { metricId: string }[]
   guardrailMetrics    optional  { metricId: string }[]
@@ -696,7 +809,7 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  targetingRules   required  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null }[]
+  targetingRules   required  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null; segmentId?: string }[]
   review           optional  { action: "approve_and_apply" }
   idempotency_key  required  string
   Example:
@@ -813,7 +926,7 @@ Flags:
 
 Example:
   splitch flags delete <flag-id-or-key> --json",
-    "flags get": "Get a Flag definition.
+    "flags get": "Get a Flag definition by canonical id.
 
 Usage:
   splitch flags get <flag-id-or-key> [flags]
@@ -941,8 +1054,8 @@ Request body (--body-json):
   name                       required  string
   key                        required  string
   kind                       required  string ("binomial" | "count" | "revenue" | "ratio")
-  eventName                  required  string
-  eventValueField            optional  string
+  eventDefinitionId          required  string
+  eventFieldName             optional  string
   denominator                optional  { metricId: string }
   description                optional  string
   downsideThresholdPct       optional  number | null
@@ -952,10 +1065,10 @@ Request body (--body-json):
   cupedCoverageThresholdPct  optional  number | null
   idempotency_key            optional  string
   Example:
-    {"appId":"app_1","name":"name","key":"key","kind":"binomial","eventName":"eventName"}
+    {"appId":"app_1","name":"name","key":"key","kind":"binomial","eventDefinitionId":"eventDefinition_1"}
 
 Example:
-  splitch metrics create --body-json '{"appId":"app_1","name":"name","key":"key","kind":"binomial","eventName":"eventName"}' --json",
+  splitch metrics create --body-json '{"appId":"app_1","name":"name","key":"key","kind":"binomial","eventDefinitionId":"eventDefinition_1"}' --json",
     "metrics delete": "Delete a Metric (blocked if referenced by a running Experiment).
 
 Usage:
@@ -1009,8 +1122,8 @@ Request body (--body-json):
   name                       optional  string
   key                        optional  string
   kind                       optional  string ("binomial" | "count" | "revenue" | "ratio")
-  eventName                  optional  string
-  eventValueField            optional  string
+  eventDefinitionId          optional  string
+  eventFieldName             optional  string
   denominator                optional  { metricId: string }
   description                optional  string
   downsideThresholdPct       optional  number | null
@@ -1254,14 +1367,14 @@ Flags:
 Request body (--body-json):
   name             required  string
   description      optional  string
-  conditions       required  { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]
+  conditions       required  { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]
   idempotency_key  optional  string
   Example:
     {"name":"name","conditions":[{"attribute":"attribute","operator":"eq","value":true}]}
 
 Example:
   splitch segments create --body-json '{"name":"name","conditions":[{"attribute":"attribute","operator":"eq","value":true}]}' --json",
-    "segments delete": "Delete a Segment (blocked if referenced by a running Experiment).
+    "segments delete": "Delete a Segment when no mutable Flag Configuration or Experiment draft uses it.
 
 Usage:
   splitch segments delete <segment-id> [flags]
@@ -1303,16 +1416,19 @@ Usage:
   splitch segments update <segment-id> [flags]
 
 Flags:
-  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --name <name>       [type: string; default: none] Resource name.
-  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
-  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help          [type: boolean; default: false] Show help and exit.
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>            [type: string; default: none] Resource name.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  name         optional  string
-  description  optional  string
-  conditions   optional  { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | unknown[] }[]
+  name             optional  string
+  description      optional  string
+  conditions       optional  { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]
+  review           optional  { action: "approve_and_apply" }
+  idempotency_key  optional  string
   Example:
     {"name":"name"}
 
@@ -1491,6 +1607,37 @@ Flags:
 
 Example:
   splitch envs list --help",
+    "event-definition-versions": "Manage event-definition-versions resources.
+
+Usage:
+  splitch event-definition-versions <action> [arguments] [flags]
+
+Commands:
+  create          Publish the next immutable Event Definition Version.
+  list            List immutable Event Definition Versions.
+  get             Get one immutable Event Definition Version.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch event-definition-versions create --help",
+    "event-definitions": "Manage event-definitions resources.
+
+Usage:
+  splitch event-definitions <action> [arguments] [flags]
+
+Commands:
+  list            List Event Definitions in an App.
+  create          Create an App-level Event Definition.
+  get             Get an Event Definition and its immutable published Versions.
+  update          Update Event Definition display metadata.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch event-definitions list --help",
     "experiment-results": "Manage experiment-results resources.
 
 Usage:
@@ -1573,7 +1720,7 @@ Usage:
 Commands:
   list            List Flag definitions in an App (bounded; reports its own truncation).
   create          Create a Flag definition (key, schema, Variant catalog).
-  get             Get a Flag definition.
+  get             Get a Flag definition by canonical id.
   update          Update a Flag definition's name/description/schema.
   delete          Delete a Flag (blocked if referenced by a running Experiment).
   promote         Promote selected Flag Configuration field-groups between Environments.
@@ -1699,7 +1846,7 @@ Commands:
   create          Create a Segment.
   get             Get a Segment.
   update          Update a Segment.
-  delete          Delete a Segment (blocked if referenced by a running Experiment).
+  delete          Delete a Segment when no mutable Flag Configuration or Experiment draft uses it.
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.
@@ -1796,6 +1943,8 @@ Resource groups:
   entity-privacy
   env-policy
   envs
+  event-definition-versions
+  event-definitions
   experiment-results
   experiments
   flag-config

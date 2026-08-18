@@ -1,0 +1,41 @@
+DESCRIPTION >
+    Tenant- and time-bounded logical Metric Events with physical retries collapsed.
+
+NODE deduped_metric_events
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(from_ts) %}
+    {{error('from_ts is required')}}
+    {% end %}
+    {% if not defined(to_ts) %}
+    {{error('to_ts is required')}}
+    {% end %}
+    SELECT
+        app_id,
+        environment_id,
+        event_definition_id,
+        id_type,
+        targeting_key_hash,
+        dedup_key,
+        tupleElement(argMinMerge(canonical_state), 1) AS event_id,
+        tupleElement(argMinMerge(canonical_state), 2) AS event_definition_version_id,
+        tupleElement(argMinMerge(canonical_state), 3) AS event_name,
+        tupleElement(argMinMerge(canonical_state), 4) AS fields,
+        tupleElement(argMinMerge(canonical_state), 5) AS dimensions,
+        tupleElement(argMinMerge(canonical_state), 6) AS accepted_at
+    FROM deduped_metric_events_state
+    WHERE app_id = {{String(app_id)}}
+        AND environment_id = {{String(environment_id)}}
+        AND event_date >= toDate({{DateTime64(from_ts)}})
+        AND event_date <= toDate({{DateTime64(to_ts)}})
+        AND server_received_at >= {{DateTime64(from_ts)}}
+        AND server_received_at < {{DateTime64(to_ts)}}
+    GROUP BY app_id, environment_id, event_definition_id, id_type, targeting_key_hash, dedup_key
+
+TYPE ENDPOINT

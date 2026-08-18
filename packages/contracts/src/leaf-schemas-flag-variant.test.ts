@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { FlagSchema, TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
+import {
+  FlagSchema,
+  ResolvedTargetingRuleSchema,
+  TargetingRuleSchema,
+  VariantSchema,
+} from "./leaf-schemas-flag";
 
 const validCondition = {
   attribute: "plan",
@@ -113,10 +118,32 @@ describe("TargetingRuleSchema", () => {
     );
   });
 
-  it("rejects empty conditions array", () => {
+  it("accepts a Segment-only authoring rule", () => {
+    expect(
+      TargetingRuleSchema.parse({
+        ...validTargetingRule,
+        conditions: [],
+        segmentId: "segment_enterprise",
+      }),
+    ).toMatchObject({ segmentId: "segment_enterprise", conditions: [] });
+  });
+
+  it("rejects an authoring rule without direct Conditions or a Segment", () => {
     expect(TargetingRuleSchema.safeParse({ ...validTargetingRule, conditions: [] }).success).toBe(
       false,
     );
+  });
+
+  it("keeps Segment references and empty Conditions out of resolved rules", () => {
+    expect(
+      ResolvedTargetingRuleSchema.safeParse({
+        ...validTargetingRule,
+        segmentId: "segment_enterprise",
+      }).success,
+    ).toBe(false);
+    expect(
+      ResolvedTargetingRuleSchema.safeParse({ ...validTargetingRule, conditions: [] }).success,
+    ).toBe(false);
   });
 });
 

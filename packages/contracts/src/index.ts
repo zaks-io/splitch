@@ -18,9 +18,11 @@ export {
   OriginAllowlistSchema,
 } from "./client-origin";
 export { CONTROL_PANEL_DELEGATION_HEADER, PANEL_API_KEY_SCOPES } from "./control-panel-binding";
+export { CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION } from "./credential-cache-backfill";
 export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
 export { DeltaNudgeEntitySchema, DeltaNudgeSchema, deltaNudgeEntities } from "./delta-nudge";
 export { errorStatusByCode, httpStatusForError } from "./error-status";
+export { SegmentListResponseSchema } from "./routes/routes-segments";
 export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
 export {
   ErrorCodeSchema,
@@ -32,6 +34,17 @@ export {
   RecommendedActionSchema,
   recommendedActions,
 } from "./errors";
+// biome-ignore lint/performance/noReExportAll: Event Definition and Metric Event exports are grouped by domain
+export * from "./events";
+export type { DecisionFailure } from "./experiment-conclusion-errors";
+export {
+  DecisionBlockedDetailsSchema,
+  DecisionFailureSchema,
+  DecisionResultStaleDetailsSchema,
+  DecisionResultUnavailableDetailsSchema,
+  TargetConfigurationStaleDetailsSchema,
+  decisionFailureCodeByCheckId,
+} from "./experiment-conclusion-errors";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped rigor API
 export * from "./experiment-rigor";
 export type { HealthResponse, PlatformTarget } from "./health-response";
@@ -69,6 +82,7 @@ export type {
   ConditionOperator,
   Flag,
   PercentageRollout,
+  ResolvedTargetingRule,
   Segment,
   TargetingRule,
   Variant,
@@ -79,6 +93,7 @@ export {
   conditionOperators,
   FlagSchema,
   PercentageRolloutSchema,
+  ResolvedTargetingRuleSchema,
   SegmentSchema,
   TargetingRuleSchema,
   VariantSchema,
@@ -95,6 +110,7 @@ export type {
   ExposureEvent,
   ExposureType,
   Organization,
+  OrganizationMember,
   OrgPlan,
   ResolutionDetails,
   ResolutionReason,
@@ -117,6 +133,7 @@ export {
   environmentPolicyLevels,
   exposureTypes,
   OrganizationSchema,
+  OrganizationMemberSchema,
   OrgPlanSchema,
   orgPlans,
   ResolutionDetailsSchema,
@@ -196,6 +213,12 @@ export * from "./resource-delete-tree";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped resource envelope API
 export * from "./resource-envelopes";
 export {
+  type CreateSegmentRequest,
+  CreateSegmentRequestSchema,
+  type PatchSegmentRequest,
+  PatchSegmentRequestSchema,
+} from "./routes/route-shapes";
+export {
   type ApprovalApplicationResult,
   ApprovalApplicationResultSchema,
   type ApprovalRequest,
@@ -251,11 +274,14 @@ export {
   apiKeyCacheKey,
   assignmentKey,
   clientKeyCacheKey,
+  credentialRevocationCacheKey,
+  eventDefinitionConfigKey,
   experimentConfigKey,
   flagConfigKey,
   liveRunKey,
   memberProfileCacheKey,
   runConfigKey,
+  TERMINAL_CREDENTIAL_REVOCATION_MARKER,
 } from "./storage-keys-kv";
 export type {
   AssignmentStoreEntry,
