@@ -92,8 +92,10 @@ so identity is stable until a swap.
 The first `evaluate`/`evaluateDetails` read of a Flag whose held entry carries an Exposure Ticket
 enqueues exactly one redemption item (`exposureId` minted at enqueue, stable across retries).
 Repeat reads enqueue nothing; a revalidation swap that changes the Flag's resolution arms the next
-read to redeem the **new** ticket. Queue mechanics reuse the Web Event queue contract
-(`packages/sdk/CONTEXT.md`) verbatim:
+read to redeem the **new** ticket. Entry equality includes the opaque `exposureIdentity` and excludes
+the ticket bytes themselves, so a same-Variant Experiment Run rollover re-arms the read while a
+routine `issued_at` remint of the same pending Exposure does not. Queue mechanics reuse the Web
+Event queue contract (`packages/sdk/CONTEXT.md`) verbatim:
 
 - Memory-only — never IndexedDB, `localStorage`, `sessionStorage`, or cookies.
 - Flush at 5 seconds after the first queued item, at the batch caps (25 items / 32 KiB), or when
@@ -133,8 +135,9 @@ splitch.evaluate("new-checkout", false); // sync, immediately — init() not req
 - A valid bootstrap makes reads available synchronously pre-`init()`; the revalidation loop still
   starts (first tick validates the bootstrap's `etag`). Bootstrap reads bill zero (ADR-0033).
 - The serialized object is public page content by design: evaluated results, non-revealing reasons,
-  and tickets only — never rules or salt ([evaluate-all-endpoint.md](./evaluate-all-endpoint.md),
-  "destination-fixed"). The API Key stays server-side; only `pk_…` reaches the page.
+  opaque Exposure identities, and tickets only — never rules or salt
+  ([evaluate-all-endpoint.md](./evaluate-all-endpoint.md), "destination-fixed"). The API Key stays
+  server-side; only `pk_…` reaches the page.
 
 ## Revalidation
 
@@ -142,7 +145,11 @@ A single loop revalidates the held evaluations every `revalidateMs` (default 60s
 `If-None-Match`:
 
 - `304` → no-op. Changed body → **atomic swap**; per-Flag `subscribe` listeners fire only for Flags
-  whose entry actually changed (compared by entry equality, tickets excluded).
+  whose entry actually changed. Entry equality compares `variant`, `variantName`, `reason`,
+  `errorCode`, and `exposureIdentity`; it excludes `exposureTicket` bytes. The opaque identity changes
+  across Experiment Run rollover and fresh-assignment-to-holdover materialization even when the
+  visible Variant does not. An ETag-only ticket refresh window may replace ticket bytes without
+  changing entry equality, notifying listeners, or re-arming an already-read Exposure.
 - Failure → keep serving last-known-good, log loudly every failed tick, and mark subsequently read
   entries `STALE` (`errorCode: PROVIDER_NOT_READY`) until a tick succeeds — degraded is always
   observable, never disguised (ADR-0036).

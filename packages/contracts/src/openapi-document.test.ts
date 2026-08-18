@@ -81,6 +81,7 @@ describe("openapi document: evaluate-all evaluations shape", () => {
         type: "object",
         properties: expect.objectContaining({
           reason: expect.objectContaining({ enum: expect.any(Array) }),
+          exposureIdentity: expect.anything(),
           exposureTicket: expect.anything(),
         }),
       }),
