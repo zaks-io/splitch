@@ -3,14 +3,13 @@ import { type FrozenControlIdentity, unresolvableControlReasonMessages } from "@
 /**
  * How the Results tab talks about the Run's Control arm.
  *
- * When the frozen Control cannot be resolved there is no baseline arm: every
- * caller gets `null` rather than a plausible-looking name, so no row can be
- * coloured or labelled as the baseline on a guess.
+ * Analysis always names the Control used to measure lift, which is the baseline
+ * for every rendered result. Resolving the Run's own frozen Control is a
+ * separate configuration-integrity question.
  */
 
-export function baselineVariant(control: FrozenControlIdentity): string | null {
-  if (control.state === "unresolvable") return null;
-  return control.state === "disagreement" ? control.analysisVariant : control.variant;
+export function analysisControlVariant(control: FrozenControlIdentity): string {
+  return control.state === "frozen" ? control.variant : control.analysisVariant;
 }
 
 export function ExperimentResultsControlIntegrity({
@@ -77,15 +76,17 @@ export function ExperimentResultsControlIntegrity({
           .
         </p>
       ) : null}
-      {resultsRendered ? (
-        <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
-          The numbers below are still shown, because they are what this Run measured. What cannot be
-          shown is which arm they are measured against.
-        </p>
-      ) : null}
+      <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
+        The Run Snapshot written to the analytics store at Start recorded{" "}
+        <code className="font-mono text-foreground text-xs">{control.analysisVariant}</code> as the
+        Analysis Control.{" "}
+        {resultsRendered
+          ? "Every lift below is measured against that Variant."
+          : "Results for this Run will be measured against that Variant when they arrive."}
+      </p>
       <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
         {resultsRendered
-          ? "No arm below is marked as the baseline, and the ship decision is blocked. Start a new Run to get a Control that is frozen and validated."
+          ? "What the Snapshot cannot establish is the Run's own frozen Control, so the ship decision is blocked. Start a new Run to get a Control that is frozen and validated."
           : "This Run cannot produce a ship decision. Start a new Run to get a Control that is frozen and validated."}
       </p>
     </div>

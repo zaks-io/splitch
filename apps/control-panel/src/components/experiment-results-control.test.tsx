@@ -5,8 +5,9 @@ import { ExperimentResults } from "./experiment-results";
 import {
   controlDisagreementStats,
   resultsFixture,
-  statsFixture,
+  statsWithAnalysisControl,
 } from "./experiment-results-test-fixtures";
+import { visibleText } from "./experiment-results-test-markup";
 
 /**
  * What the tab does when the Run's frozen Control cannot be resolved.
@@ -21,6 +22,7 @@ const unresolvable: FrozenControlIdentity = {
   variantId: "variant_from_a_later_edit",
   reason: "absent_from_frozen_variant_set",
   frozenVariantNames: ["control", "treatment"],
+  analysisVariant: "control",
 };
 
 const disagreement: FrozenControlIdentity = {
@@ -31,7 +33,7 @@ const disagreement: FrozenControlIdentity = {
 };
 
 function unresolvableHtml() {
-  const stats = statsFixture();
+  const stats = statsWithAnalysisControl();
   return renderToStaticMarkup(
     <ExperimentResults results={resultsFixture(stats, { control: unresolvable })} />,
   );
@@ -53,29 +55,53 @@ describe("ExperimentResults with an unidentifiable Control", () => {
 
   it("keeps the numbers on the page and blocks only the decision", () => {
     const html = unresolvableHtml();
+    const text = visibleText(html);
 
     expect(html).toContain("+6.4%");
     expect(html).toContain("<svg");
     expect(html).toContain('data-testid="ship-blocked"');
-    expect(html).toContain("The numbers below are still shown");
-    expect(html).toContain(
-      "No arm below is marked as the baseline, and the ship decision is blocked. Start a new Run to get a Control that is frozen and validated.",
+    expect(text).toContain(
+      "The Run Snapshot written to the analytics store at Start recorded control as the Analysis Control. Every lift below is measured against that Variant.",
+    );
+    expect(text).toContain(
+      "What the Snapshot cannot establish is the Run's own frozen Control, so the ship decision is blocked.",
     );
   });
 
-  it("marks no arm as the baseline rather than guessing one", () => {
+  it("names and renders the Analysis Control as the baseline while blocking the decision", () => {
     const html = unresolvableHtml();
+    const text = visibleText(html);
+    const analysisControlRow = metricRow(html, "control");
+    const controlClaims = {
+      neverRecorded: text.includes("baseline this Run never recorded"),
+      baselineBadge: analysisControlRow.includes(">Baseline</"),
+    };
 
-    expect(html).toContain("Baseline unidentified");
-    expect(html).not.toContain("baseline, by definition");
-    expect(html).not.toContain("0% lift by definition");
-  });
-
-  it("says the baseline is unidentified everywhere it would have named it", () => {
-    const html = unresolvableHtml();
-
-    expect(html).toContain("an unidentified Control");
-    expect(html).not.toContain("against control,");
+    expect(text).toContain(
+      "Relative lift against control, with an always-valid confidence sequence.",
+    );
+    expect(text).toContain("Relative lift and confidence interval per arm, against control.");
+    expect(text).toContain("relative lift vs control (%)");
+    expect(html).toContain('aria-label="Relative lift with confidence intervals against control"');
+    expect(text).not.toContain("unidentified");
+    expect(controlClaims).toEqual({
+      neverRecorded: false,
+      baselineBadge: true,
+    });
+    expect(html).toContain(
+      "control · checkout_conversion: baseline, 0% lift by definition, n=12530",
+    );
+    expect(html).not.toContain(
+      "control · checkout_conversion: not estimable lift, [−∞, +∞], n=12530",
+    );
+    expect(html).toContain("Baseline (control) at zero lift by definition");
+    expect(analysisControlRow).toContain("0.0%");
+    expect(analysisControlRow).toContain("baseline, by definition");
+    expect(analysisControlRow).toContain(">Baseline</");
+    expect(analysisControlRow).not.toContain("not estimable");
+    expect(analysisControlRow).not.toContain("[−∞, +∞]");
+    expect(analysisControlRow).not.toContain("Not decision-valid");
+    expect(analysisControlRow).not.toContain(">1.0</td>");
   });
 });
 

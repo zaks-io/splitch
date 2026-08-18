@@ -14,7 +14,7 @@ import {
   VALUE_WIDTH,
 } from "./experiment-results-ci-plot-geometry";
 import { ArmRow, BaselineRow } from "./experiment-results-ci-plot-rows";
-import { baselineVariant } from "./experiment-results-control";
+import { analysisControlVariant } from "./experiment-results-control";
 
 /**
  * Per-arm lift with its Confidence Interval, rendered for every Run state.
@@ -34,8 +34,7 @@ export function ExperimentResultsCiPlot({
   control: FrozenControlIdentity;
   significance: ExperimentSignificanceDisplays;
 }) {
-  const baseline = baselineVariant(control);
-  const measurementAnchor = baseline ?? "an unidentified Control";
+  const analysisControl = analysisControlVariant(control);
   if (results.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
@@ -44,9 +43,9 @@ export function ExperimentResultsCiPlot({
     );
   }
   // Legend (and only the legend) claims a zero-lift baseline when a matching
-  // arm is actually drawn. A frozen Control name with no ArmResult is missing
+  // arm is actually drawn. An Analysis Control name with no ArmResult is missing
   // data, not a cosmetic gap.
-  const baselineDrawn = baseline !== null && results.some((result) => result.variant === baseline);
+  const baselineDrawn = results.some((result) => result.variant === analysisControl);
   const domain = ciPlotDomain(
     results.map((result) => ({
       estimate: result.relative_lift_pct,
@@ -61,11 +60,11 @@ export function ExperimentResultsCiPlot({
   return (
     <figure className="m-0">
       <figcaption className="sr-only">
-        Relative lift and confidence interval per arm, against {measurementAnchor}.
+        Relative lift and confidence interval per arm, against {analysisControl}.
       </figcaption>
       <div className="overflow-x-auto">
         <svg
-          aria-label={`Relative lift with confidence intervals against ${measurementAnchor}`}
+          aria-label={`Relative lift with confidence intervals against ${analysisControl}`}
           className="h-auto w-full min-w-[44rem]"
           role="img"
           viewBox={`0 0 ${totalWidth} ${height}`}
@@ -80,7 +79,7 @@ export function ExperimentResultsCiPlot({
             y2={TOP_PAD + results.length * ROW_HEIGHT}
           />
           {results.map((result, index) =>
-            result.variant === baseline ? (
+            result.variant === analysisControl ? (
               <BaselineRow
                 index={index}
                 key={`${result.metric_id}:${result.variant}`}
@@ -103,11 +102,11 @@ export function ExperimentResultsCiPlot({
             x={LABEL_WIDTH + PLOT_WIDTH / 2}
             y={height - 5}
           >
-            relative lift vs {measurementAnchor} (%)
+            relative lift vs {analysisControl} (%)
           </text>
         </svg>
       </div>
-      <Legend baselineDrawn={baselineDrawn} control={control} />
+      <Legend baseline={analysisControl} baselineDrawn={baselineDrawn} />
     </figure>
   );
 }
@@ -142,19 +141,10 @@ function Ticks({ domain, height }: { domain: CiPlotDomain; height: number }) {
   );
 }
 
-function Legend({
-  control,
-  baselineDrawn,
-}: {
-  control: FrozenControlIdentity;
-  baselineDrawn: boolean;
-}) {
-  const baseline = baselineVariant(control);
-  const baselineLegend = !baseline
-    ? "Baseline unidentified, so no arm is drawn at zero lift"
-    : baselineDrawn
-      ? `Baseline (${baseline}) at zero lift by definition`
-      : `Baseline (${baseline}) arm is missing from these results`;
+function Legend({ baseline, baselineDrawn }: { baseline: string; baselineDrawn: boolean }) {
+  const baselineLegend = baselineDrawn
+    ? `Baseline (${baseline}) at zero lift by definition`
+    : `Baseline (${baseline}) arm is missing from these results`;
 
   return (
     <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-muted-foreground text-xs">
