@@ -84,7 +84,7 @@
     "workers:secrets:production": "node scripts/sync-worker-secrets.mjs production",
     "workers:secrets:shared-preview": "node scripts/sync-worker-secrets.mjs shared-preview",
     "typecheck": "turbo run typecheck",
-    "verify:ci": "turbo run //#knip //#format:check //#spec:lint //#check:cli-mcp-parity //#test:scripts lint typecheck test test:connect-snippet stats:golden stats:property build",
+    "verify:ci": "turbo run //#knip //#format:check //#spec:lint //#check:cli-mcp-parity //#test:scripts lint typecheck test test:connect-snippet @splitch/sdk#test:consumer-smoke stats:golden stats:property build",
     "verify:commit": "turbo run //#knip //#format:check //#secrets:staged lint typecheck",
     "verify:push": "turbo run //#knip //#format:check //#secrets:range //#tinybird:local //#d1:migrate:local //#d1:migrate:populated lint typecheck"
   },

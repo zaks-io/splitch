@@ -440,7 +440,8 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/docs/spec/quickstart.md",
-        "$TURBO_ROOT$/fixtures/convex-sdk-consumer/**"
+        "$TURBO_ROOT$/fixtures/convex-sdk-consumer/**",
+        "$TURBO_ROOT$/fixtures/ssr-sdk-consumer/**"
       ]
     },
     "@splitch/sdk#test:browser-pagehide": {

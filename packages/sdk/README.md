@@ -183,6 +183,142 @@ const details = splitch.evaluateDetails("new-checkout", false);
 await splitch.flush();
 ```
 
+### Server-rendered hydration
+
+Use an API Key on the server to resolve the page once, then serialize that exact
+`evaluateAll` result into the HTML. Only the public Client Key belongs in the
+page. The bootstrap payload is public page content, so pass only Evaluation
+Context attributes you are willing to publish.
+
+```js
+// server.mjs
+import { readFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { dirname, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createSplitchClient } from "@splitch/sdk";
+
+const requiredEnv = (name) => {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+};
+const splitch = createSplitchClient({
+  apiKey: requiredEnv("SPLITCH_API_KEY"),
+});
+const recipeRoot = dirname(fileURLToPath(import.meta.url));
+const sdkDistRoot = resolve(recipeRoot, "node_modules/@splitch/sdk/dist");
+
+const serveFile = async (response, pathname, root, prefix) => {
+  const target = resolve(root, pathname.slice(prefix.length));
+  if (!target.startsWith(`${root}${sep}`)) {
+    response.writeHead(404).end("Not Found");
+    return;
+  }
+  try {
+    const source = await readFile(target);
+    response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+    response.end(source);
+  } catch {
+    response.writeHead(404).end("Not Found");
+  }
+};
+
+const jsonForHtml = (value) => {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) throw new Error("SSR JSON value is not serializable");
+  return serialized
+    .replaceAll("<", "\\u003c")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
+};
+
+createServer(async (request, response) => {
+  try {
+    const url = new URL(request.url ?? "/", "http://localhost:3000");
+    if (url.pathname === "/browser.mjs") {
+      await serveFile(response, url.pathname, recipeRoot, "/");
+      return;
+    }
+    if (url.pathname.startsWith("/vendor/sdk/")) {
+      await serveFile(response, url.pathname, sdkDistRoot, "/vendor/sdk/");
+      return;
+    }
+    if (url.pathname !== "/") {
+      response.writeHead(404).end("Not Found");
+      return;
+    }
+
+    const targetingKey = url.searchParams.get("user");
+    if (!targetingKey) {
+      response.writeHead(400).end("user is required");
+      return;
+    }
+    const context = {
+      targetingKey,
+      idType: "user",
+      attributes: { plan: "pro" },
+    };
+    const bootstrap = await splitch.evaluateAll(context);
+    const entry = bootstrap.evaluations["new-checkout"];
+    if (entry === undefined || typeof entry.variant !== "boolean" || entry.reason === "ERROR") {
+      throw new Error("SSR requires a successful new-checkout evaluation");
+    }
+
+    const html = `
+      <main id="app">${entry.variant ? "New checkout" : "Current checkout"}</main>
+      <script type="importmap">{"imports":{"@splitch/sdk/browser":"/vendor/sdk/browser/index.js"}}</script>
+      <script id="splitch-bootstrap" type="application/json">${jsonForHtml(bootstrap)}</script>
+      <script id="splitch-config" type="application/json">${jsonForHtml({
+        clientKey: requiredEnv("SPLITCH_CLIENT_KEY"),
+        context,
+      })}</script>
+      <script type="module" src="/browser.mjs"></script>
+    `;
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(html);
+  } catch (error) {
+    response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+    response.end(error instanceof Error ? error.message : "SSR failed");
+  }
+}).listen(3000);
+```
+
+The browser constructs the static-context client with the matching Evaluation
+Context. A valid bootstrap makes `init()` perform no fetch. The first local read
+queues one Exposure, and `flush()` acknowledges its delivery.
+
+```js
+// browser.mjs
+import { createSplitchBrowserClient } from "@splitch/sdk/browser";
+
+const readJson = (id) => {
+  const text = document.getElementById(id)?.textContent;
+  if (!text) throw new Error(`SSR page is missing #${id}`);
+  return JSON.parse(text);
+};
+
+const bootstrap = readJson("splitch-bootstrap");
+const config = readJson("splitch-config");
+const splitch = createSplitchBrowserClient({
+  clientKey: config.clientKey,
+  context: config.context,
+  bootstrap,
+});
+
+await splitch.init();
+const value = splitch.evaluate("new-checkout", false);
+const app = document.getElementById("app");
+if (!app) throw new Error("SSR page is missing #app");
+app.textContent = value ? "New checkout" : "Current checkout";
+await splitch.flush();
+```
+
+The complete framework-neutral Node fixture is in
+`fixtures/ssr-sdk-consumer/`. Its packed-tarball test also proves byte-identical
+server and hydrated values, zero bootstrap fetches, one first-read Exposure, and
+the fail-loud `SDK_BOOTSTRAP_CONTEXT_MISMATCH` path.
+
 Reading before `init()` throws `SDK_NOT_INITIALIZED`. An unknown Flag Key returns
 your default with `reason: "ERROR"` / `FLAG_NOT_FOUND` and a loud log — never a
 silent invented default.
