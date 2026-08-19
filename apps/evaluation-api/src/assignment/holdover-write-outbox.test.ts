@@ -1,18 +1,28 @@
 import { describe, expect, it } from "vitest";
 import type { HashedAssignmentPutInput } from "./assignment-store";
+import { RecordingKv } from "./assignment-store-test-fixtures";
+import {
+  suppressAndPurgeEntityHoldoverWriteOutbox,
+  suppressAppHoldoverWriteOutbox,
+} from "./holdover-write-deletion";
 import {
   DirectHoldoverWriteCoordinator,
   MemoryHoldoverWriteCoordinator,
 } from "./holdover-write-outbox";
 import {
   ensureHoldoverWriteJob,
-  HOLDOVER_WRITE_JOB_KEY,
+  HOLDOVER_WRITE_ENTITY_SUPPRESSED_KEY,
+  HOLDOVER_WRITE_JOB_PREFIX,
   HOLDOVER_WRITE_MAX_ATTEMPTS,
   type HoldoverWriteJob,
   type HoldoverWriteOutboxStorage,
+  holdoverWriteJobKey,
   holdoverWriteOutboxName,
   holdoverWriteRetryDelayMs,
+  purgeEntityOutboxState,
+  runHoldoverWriteAlarm,
   scopedHoldoverWriteLog,
+  suppressEntityOutbox,
 } from "./holdover-write-outbox-core";
 
 const basePut: HashedAssignmentPutInput = {
@@ -37,33 +47,46 @@ class FailNTimesPut {
 }
 
 class MemoryStorage implements HoldoverWriteOutboxStorage {
-  job: HoldoverWriteJob | undefined;
+  readonly values = new Map<string, unknown>();
   alarms: number[] = [];
   async get<T>(key: string): Promise<T | undefined> {
-    if (key !== HOLDOVER_WRITE_JOB_KEY) return undefined;
-    return this.job as T | undefined;
+    return this.values.get(key) as T | undefined;
   }
   async put<T>(key: string, value: T): Promise<void> {
-    if (key === HOLDOVER_WRITE_JOB_KEY) this.job = value as HoldoverWriteJob;
+    this.values.set(key, value);
   }
   async delete(key: string): Promise<boolean | undefined> {
-    if (key === HOLDOVER_WRITE_JOB_KEY) {
-      const had = this.job !== undefined;
-      this.job = undefined;
-      return had;
+    const had = this.values.has(key);
+    this.values.delete(key);
+    return had;
+  }
+  async list<T>(options?: { prefix?: string }): Promise<Map<string, T>> {
+    const out = new Map<string, T>();
+    for (const [key, value] of this.values) {
+      if (options?.prefix === undefined || key.startsWith(options.prefix)) {
+        out.set(key, value as T);
+      }
     }
-    return false;
+    return out;
   }
   async setAlarm(scheduledTime: number): Promise<void> {
     this.alarms.push(scheduledTime);
   }
   async deleteAlarm(): Promise<void> {}
+  get job(): HoldoverWriteJob | undefined {
+    return this.values.get(holdoverWriteJobKey(basePut.experimentId)) as
+      | HoldoverWriteJob
+      | undefined;
+  }
 }
 
 describe("holdover write outbox core", () => {
-  it("names the outbox with only pseudonymous identity fields", () => {
-    expect(holdoverWriteOutboxName(basePut)).toBe("app-A\u001fuser\u001fhash-abc\u001fexp-1");
+  it("names the outbox with the Entity writer slot (no experiment suffix)", () => {
+    expect(holdoverWriteOutboxName(basePut)).toBe("app-A:user:hash-abc");
     expect(holdoverWriteOutboxName(basePut)).not.toMatch(/ticket|credential|targetingKey[^H]/i);
+    expect(holdoverWriteJobKey(basePut.experimentId)).toBe(
+      `${HOLDOVER_WRITE_JOB_PREFIX}${basePut.experimentId}`,
+    );
   });
 
   it("logs scoped identifiers without truncating actionable fields", () => {
@@ -84,14 +107,14 @@ describe("holdover write outbox core", () => {
     });
   });
 
-  it("completes on the first successful put without scheduling an alarm", async () => {
+  it("completes on the first successful put without scheduling an alarm or retaining hashes", async () => {
     const put = new FailNTimesPut(0);
     const storage = new MemoryStorage();
     const result = await ensureHoldoverWriteJob(storage, put, basePut, 1_000);
     expect(result).toEqual({ status: "completed" });
     expect(put.calls).toHaveLength(1);
     expect(storage.alarms).toEqual([]);
-    expect(storage.job?.status).toBe("completed");
+    expect(storage.job).toBeUndefined();
   });
 
   it("owns retry work when the first put fails and retries on alarm", async () => {
@@ -112,17 +135,17 @@ describe("holdover write outbox core", () => {
     const retry = await ensureHoldoverWriteJob(storage, put, basePut, 2_000);
     expect(retry).toEqual({ status: "completed" });
     expect(put.calls).toHaveLength(2);
-    expect(storage.job?.status).toBe("completed");
+    expect(storage.job).toBeUndefined();
   });
 
-  it("duplicate ensure delivery remains idempotent through putIfAbsent-style puts", async () => {
+  it("duplicate ensure after completion re-asserts via putIfAbsent without retaining completed rows", async () => {
     const put = new FailNTimesPut(0);
     const storage = new MemoryStorage();
     await ensureHoldoverWriteJob(storage, put, basePut, 1_000);
     const second = await ensureHoldoverWriteJob(storage, put, basePut, 2_000);
     expect(second).toEqual({ status: "completed" });
-    // Second ensure short-circuits on completed status — no second put.
-    expect(put.calls).toHaveLength(1);
+    expect(put.calls).toHaveLength(2);
+    expect(storage.job).toBeUndefined();
   });
 
   it("marks poisoned and logs exhaustion after max attempts", async () => {
@@ -159,6 +182,33 @@ describe("holdover write outbox core", () => {
     });
     expect(JSON.stringify(exhaustion?.detail)).not.toMatch(/ticket|pk_|sk_|raw.?targeting/i);
   });
+
+  it("Entity suppress cancels alarms and purge drops pending/poisoned hashes", async () => {
+    const put = new FailNTimesPut(5);
+    const storage = new MemoryStorage();
+    await ensureHoldoverWriteJob(storage, put, basePut, 1_000);
+    expect(storage.job?.status).toBe("pending");
+    await suppressEntityOutbox(storage);
+    await runHoldoverWriteAlarm(storage, put, 2_000);
+    expect(put.calls).toHaveLength(1);
+    await purgeEntityOutboxState(storage);
+    expect(storage.job).toBeUndefined();
+    expect(await storage.get(HOLDOVER_WRITE_ENTITY_SUPPRESSED_KEY)).toBe(true);
+  });
+
+  it("App suppress tombstone purges Entity jobs without further puts", async () => {
+    const put = new FailNTimesPut(5);
+    const storage = new MemoryStorage();
+    await ensureHoldoverWriteJob(storage, put, basePut, 1_000);
+    const callsBefore = put.calls.length;
+    await ensureHoldoverWriteJob(storage, put, basePut, 2_000, undefined, {
+      async isAppSuppressed() {
+        return true;
+      },
+    });
+    expect(put.calls).toHaveLength(callsBefore);
+    expect(storage.job).toBeUndefined();
+  });
 });
 
 describe("HoldoverWriteCoordinator adapters", () => {
@@ -173,7 +223,36 @@ describe("HoldoverWriteCoordinator adapters", () => {
     const coordinator = new MemoryHoldoverWriteCoordinator(put);
     await expect(coordinator.ensure(basePut)).resolves.toEqual({ status: "owned" });
     await coordinator.alarm(basePut);
-    await expect(coordinator.ensure(basePut)).resolves.toEqual({ status: "completed" });
     expect(put.calls).toHaveLength(2);
+    // Job row deleted on success; a follow-up ensure re-asserts via putIfAbsent.
+    await expect(coordinator.ensure(basePut)).resolves.toEqual({ status: "completed" });
+    expect(put.calls).toHaveLength(3);
+  });
+});
+
+describe("holdover write deletion consumer", () => {
+  it("suppressAppHoldoverWriteOutbox writes the App suppress tombstone", async () => {
+    const kv = new RecordingKv();
+    await suppressAppHoldoverWriteOutbox(kv, "app-A");
+    expect(kv.raw("holdover-write-suppress:app:app-A")).toBe("1");
+  });
+
+  it("suppressAndPurgeEntityHoldoverWriteOutbox posts suppress then purge", async () => {
+    const paths: string[] = [];
+    const namespace = {
+      idFromName(name: string) {
+        return name as unknown as DurableObjectId;
+      },
+      get() {
+        return {
+          async fetch(input: RequestInfo | URL) {
+            paths.push(new URL(String(input)).pathname);
+            return Response.json({ ok: true });
+          },
+        };
+      },
+    };
+    await suppressAndPurgeEntityHoldoverWriteOutbox(namespace, basePut);
+    expect(paths).toEqual(["/suppress", "/purge"]);
   });
 });

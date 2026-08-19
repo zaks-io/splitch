@@ -2,7 +2,16 @@ import type { ExposureBatchResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import type { HashedAssignmentPutInput } from "./assignment/assignment-store";
 import { MemoryHoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
+import { HOLDOVER_WRITE_MAX_ATTEMPTS } from "./assignment/holdover-write-outbox-core";
 import { RecordingAssignmentStore, RecordingLogger } from "./evaluate/evaluate-path-test-fixtures";
+import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
+import type {
+  ExposureRedemptionAcknowledgeOutcome,
+  ExposureRedemptionClaimInput,
+  ExposureRedemptionClaimOutcome,
+  ExposureRedemptionClaimStore,
+} from "./exposure-redemption-claim-core";
+import { ExposureRedemptionClaimTransportError } from "./exposure-redemption-claim-errors";
 import { EXPOSURE_ID_A, exposuresInit, mintTicket, PATH } from "./exposures-test-fixtures";
 import { APP_ID, CLIENT_KEY, EXPERIMENT_ID, makeSdkRouteHarness } from "./sdk-route-test-fixtures";
 
@@ -26,6 +35,50 @@ class FailOnceAssignmentStore extends RecordingAssignmentStore {
   override async getAll(_input?: { appId: string; idType: string; targetingKey: string }) {
     return this.readable;
   }
+}
+
+class AlwaysFailAssignmentStore extends RecordingAssignmentStore {
+  override async putHashed(input: HashedAssignmentPutInput): Promise<never> {
+    this.putHashedCalls.push(input);
+    throw new Error("Assignment Store permanently unavailable");
+  }
+}
+
+class FailOnceAcknowledgeStore implements ExposureRedemptionClaimStore {
+  private acknowledgeAttempts = 0;
+  private readonly inner = new MemoryExposureRedemptionClaimStore();
+
+  claim(input: ExposureRedemptionClaimInput): Promise<ExposureRedemptionClaimOutcome> {
+    return this.inner.claim(input);
+  }
+  release(input: ExposureRedemptionClaimInput): Promise<void> {
+    return this.inner.release(input);
+  }
+  markSealed(input: ExposureRedemptionClaimInput): Promise<void> {
+    return this.inner.markSealed(input);
+  }
+  async acknowledge(
+    input: ExposureRedemptionClaimInput,
+  ): Promise<ExposureRedemptionAcknowledgeOutcome> {
+    this.acknowledgeAttempts += 1;
+    if (this.acknowledgeAttempts === 1) {
+      throw new ExposureRedemptionClaimTransportError(
+        new Error("acknowledge Durable Object put failed"),
+      );
+    }
+    return this.inner.acknowledge(input);
+  }
+}
+
+function holdoverIdentityFromSeal(targetingKeyHash: string): HashedAssignmentPutInput {
+  return {
+    appId: APP_ID,
+    experimentId: EXPERIMENT_ID,
+    idType: "user",
+    targetingKeyHash,
+    runId: "run-42",
+    variant: "treatment",
+  };
 }
 
 describe("POST /api/sdk/exposures: durable holdover write retry (SPL-346)", () => {
@@ -53,17 +106,9 @@ describe("POST /api/sdk/exposures: durable holdover write retry (SPL-346)", () =
     ).toBe(true);
     expect(assignmentStore.readable.size).toBe(0);
 
-    // No further client redemption — drive the durable retry alarm.
     const sealed = exposureSink.writes[0];
     expect(sealed).toBeDefined();
-    await holdoverWrite.alarm({
-      appId: APP_ID,
-      experimentId: EXPERIMENT_ID,
-      idType: "user",
-      targetingKeyHash: sealed?.targetingKeyHash ?? "",
-      runId: "run-42",
-      variant: "treatment",
-    });
+    await holdoverWrite.alarm(holdoverIdentityFromSeal(sealed?.targetingKeyHash ?? ""));
     expect(assignmentStore.putHashedCalls).toHaveLength(2);
     const holdovers = await assignmentStore.getAll({
       appId: APP_ID,
@@ -116,5 +161,88 @@ describe("POST /api/sdk/exposures: durable holdover write retry (SPL-346)", () =
       { exposureId: EXPOSURE_ID_A, status: "rejected", code: "SERVICE_UNAVAILABLE" },
     ]);
     expect(assignmentStore.putHashedCalls).toEqual([]);
+  });
+});
+
+describe("POST /api/sdk/exposures: holdover exhaustion and deletion (SPL-346)", () => {
+  it("resume-ack after holdover retry exhaustion fails loud with INTERNAL_SERVER_ERROR", async () => {
+    const assignmentStore = new AlwaysFailAssignmentStore();
+    const holdoverWrite = new MemoryHoldoverWriteCoordinator(assignmentStore);
+    const claims = new FailOnceAcknowledgeStore();
+    const { app, exposureSink, logger } = await makeSdkRouteHarness({
+      liveRun: true,
+      holdoverWrite,
+      exposureRedemptionClaims: claims,
+    });
+
+    const ticket = await mintTicket();
+    const init = exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]);
+
+    const first = (await (await app.request(PATH, init)).json()) as ExposureBatchResponse;
+    expect(first.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "SERVICE_UNAVAILABLE" },
+    ]);
+    expect(exposureSink.writes).toHaveLength(1);
+    expect(assignmentStore.putHashedCalls).toHaveLength(1);
+
+    const identity = holdoverIdentityFromSeal(exposureSink.writes[0]?.targetingKeyHash ?? "");
+    for (let i = 0; i < HOLDOVER_WRITE_MAX_ATTEMPTS - 1; i += 1) {
+      await holdoverWrite.alarm(identity);
+    }
+    expect(holdoverWrite.jobFor(identity)?.status).toBe("poisoned");
+
+    const second = (await (await app.request(PATH, init)).json()) as ExposureBatchResponse;
+    expect(second.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "INTERNAL_SERVER_ERROR" },
+    ]);
+    expect(exposureSink.writes).toHaveLength(1);
+    expect(logger.errors.some((e) => e.message === "holdover_write_retry_exhausted_at_ack")).toBe(
+      true,
+    );
+  });
+
+  it("App deletion suppress prevents pending alarm from recreating Assignment Store state", async () => {
+    const assignmentStore = new FailOnceAssignmentStore();
+    const holdoverWrite = new MemoryHoldoverWriteCoordinator(assignmentStore);
+    const { app, exposureSink } = await makeSdkRouteHarness({
+      liveRun: true,
+      holdoverWrite,
+    });
+    const ticket = await mintTicket();
+    await app.request(
+      PATH,
+      exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]),
+    );
+    const identity = holdoverIdentityFromSeal(exposureSink.writes[0]?.targetingKeyHash ?? "");
+    expect(holdoverWrite.jobFor(identity)?.status).toBe("pending");
+    holdoverWrite.suppressApp(APP_ID);
+    await holdoverWrite.alarm(identity);
+    expect(assignmentStore.putHashedCalls).toHaveLength(1);
+    expect(holdoverWrite.jobFor(identity)).toBeUndefined();
+    expect(assignmentStore.readable.size).toBe(0);
+  });
+
+  it("Entity deletion suppress+purge drops poisoned hashes and blocks further puts", async () => {
+    const assignmentStore = new AlwaysFailAssignmentStore();
+    const holdoverWrite = new MemoryHoldoverWriteCoordinator(assignmentStore);
+    const { app, exposureSink } = await makeSdkRouteHarness({
+      liveRun: true,
+      holdoverWrite,
+    });
+    const ticket = await mintTicket();
+    await app.request(
+      PATH,
+      exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]),
+    );
+    const identity = holdoverIdentityFromSeal(exposureSink.writes[0]?.targetingKeyHash ?? "");
+    for (let i = 0; i < HOLDOVER_WRITE_MAX_ATTEMPTS - 1; i += 1) {
+      await holdoverWrite.alarm(identity);
+    }
+    expect(holdoverWrite.jobFor(identity)?.status).toBe("poisoned");
+    await holdoverWrite.suppressEntity(identity);
+    await holdoverWrite.purgeEntity(identity);
+    expect(holdoverWrite.jobFor(identity)).toBeUndefined();
+    await expect(holdoverWrite.ensure(identity)).resolves.toEqual({ status: "suppressed" });
+    expect(assignmentStore.putHashedCalls.length).toBeGreaterThan(0);
   });
 });

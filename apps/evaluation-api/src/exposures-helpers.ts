@@ -97,7 +97,9 @@ export async function releaseClaimQuietly(
 /**
  * Completes the Assignment Store holdover or durably owns retry before the
  * caller may report `accepted` (SPL-346). Returns a transient rejection when
- * ownership cannot be sealed so the SDK retains the queue item.
+ * ownership cannot be sealed so the SDK retains the queue item. Exhausted
+ * (poisoned) retries fail loud as non-retryable INTERNAL_SERVER_ERROR so a
+ * resume-ack cannot acknowledge with no completion and no retry left.
  */
 export async function ensureHoldoverWrite(
   ticket: {
@@ -115,7 +117,7 @@ export async function ensureHoldoverWrite(
   },
 ): Promise<ExposureBatchResult | null> {
   try {
-    await deps.holdoverWrite.ensure({
+    const result = await deps.holdoverWrite.ensure({
       appId: scope.appId,
       experimentId: ticket.experiment_id,
       idType: ticket.id_type,
@@ -123,6 +125,18 @@ export async function ensureHoldoverWrite(
       runId: ticket.run_id,
       variant: ticket.variant,
     });
+    if (result.status === "poisoned") {
+      deps.logger?.error("holdover_write_retry_exhausted_at_ack", {
+        appId: scope.appId,
+        experimentId: ticket.experiment_id,
+        idType: ticket.id_type,
+        targetingKeyHash: ticket.targeting_key_hash,
+        runId: ticket.run_id,
+        variant: ticket.variant,
+        exposureId,
+      });
+      return rejected(exposureId, "INTERNAL_SERVER_ERROR");
+    }
     return null;
   } catch (cause) {
     deps.logger?.error("holdover_write_ensure_failed", {

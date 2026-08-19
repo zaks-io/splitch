@@ -59,18 +59,14 @@ describe("InMemoryAssignmentStore", () => {
 });
 
 describe("AssignmentStoreWriter", () => {
-  it("write-through merges the stored winner into the Entity KV value", async () => {
+  it("write-through merges the stored winner into the Entity KV value before put returns", async () => {
     const kv = new RecordingKv();
-    const waits: Promise<unknown>[] = [];
-    const writer = new AssignmentStoreWriter(new MapStorage(), kv, (promise) =>
-      waits.push(promise),
-    );
+    const writer = new AssignmentStoreWriter(new MapStorage(), kv, () => undefined);
 
     await expect(writer.put({ ...basePut, targetingKeyHash: "v1:hash-a" })).resolves.toMatchObject({
       status: "stored",
       assignment: { runId: "run-1", variant: "control" },
     });
-    await Promise.all(waits);
 
     const raw = kv.raw(assignmentKey("app-A", "user", "v1:hash-a"));
     expect(raw).toBeDefined();
@@ -83,10 +79,7 @@ describe("AssignmentStoreWriter", () => {
     // The writer DO is per ENTITY; the same instance serializes first-touch
     // puts for different Experiments without clobbering the shared KV blob.
     const kv = new RecordingKv();
-    const waits: Promise<unknown>[] = [];
-    const writer = new AssignmentStoreWriter(new MapStorage(), kv, (promise) =>
-      waits.push(promise),
-    );
+    const writer = new AssignmentStoreWriter(new MapStorage(), kv, () => undefined);
 
     await writer.put({ ...basePut, targetingKeyHash: "v1:hash-a" });
     await writer.put({
@@ -96,7 +89,6 @@ describe("AssignmentStoreWriter", () => {
       runId: "run-9",
       variant: "treatment",
     });
-    await Promise.all(waits);
 
     expect(JSON.parse(kv.raw(assignmentKey("app-A", "user", "v1:hash-a")) as string).data).toEqual({
       "exp-checkout": { runId: "run-1", variant: "control" },
@@ -104,18 +96,21 @@ describe("AssignmentStoreWriter", () => {
     });
   });
 
-  it("re-asserts a failed write-through on the next put (self-healing)", async () => {
+  it("fails the put when write-through fails, then re-asserts KV on the next put", async () => {
     const key = assignmentKey("app-A", "user", "v1:hash-a");
     const kv = new RecordingKv({ failPuts: true });
-    const waits: Promise<unknown>[] = [];
-    const writer = new AssignmentStoreWriter(new MapStorage(), kv, (promise) =>
-      waits.push(promise.catch(() => undefined)),
-    );
+    const storage = new MapStorage();
+    const writer = new AssignmentStoreWriter(storage, kv, () => undefined);
 
-    // First put: DO storage commits, the KV write-through fails (transient).
-    await writer.put({ ...basePut, targetingKeyHash: "v1:hash-a" });
-    await Promise.all(waits);
+    // First put: DO storage commits, awaited KV write-through fails — put rejects
+    // so callers (outbox) own retry instead of treating HTTP 200 as KV-complete.
+    await expect(writer.put({ ...basePut, targetingKeyHash: "v1:hash-a" })).rejects.toThrow(
+      "forced KV put failure",
+    );
     expect(kv.raw(key)).toBeUndefined();
+    expect(await storage.get("assignment:exp-checkout")).toMatchObject({
+      targetingKeyHash: "v1:hash-a",
+    });
 
     // Second put for the same assignment: still "existing", but the KV entry is
     // re-asserted so the holdover becomes visible to getAll.
@@ -123,27 +118,22 @@ describe("AssignmentStoreWriter", () => {
     await expect(writer.put({ ...basePut, targetingKeyHash: "v1:hash-a" })).resolves.toMatchObject({
       status: "existing",
     });
-    await Promise.all(waits);
     expect(JSON.parse(kv.raw(key) as string).data).toEqual({
       "exp-checkout": { runId: "run-1", variant: "control" },
     });
   });
 
-  it("does not corrupt existing KV when fire-and-forget write-through fails", async () => {
+  it("does not corrupt existing KV when awaited write-through fails", async () => {
     const key = assignmentKey("app-A", "user", "v1:hash-a");
     const kv = new RecordingKv({ failPuts: true }).putRaw(
       key,
       serializeAssignmentValue({ "exp-old": { runId: "run-old", variant: "old" } }),
     );
-    const waits: Promise<unknown>[] = [];
-    const writer = new AssignmentStoreWriter(new MapStorage(), kv, (promise) =>
-      waits.push(promise),
-    );
+    const writer = new AssignmentStoreWriter(new MapStorage(), kv, () => undefined);
 
-    await expect(writer.put({ ...basePut, targetingKeyHash: "v1:hash-a" })).resolves.toMatchObject({
-      status: "stored",
-    });
-    await expect(Promise.all(waits)).rejects.toThrow("forced KV put failure");
+    await expect(writer.put({ ...basePut, targetingKeyHash: "v1:hash-a" })).rejects.toThrow(
+      "forced KV put failure",
+    );
 
     expect(JSON.parse(kv.raw(key) as string).data).toEqual({
       "exp-old": { runId: "run-old", variant: "old" },

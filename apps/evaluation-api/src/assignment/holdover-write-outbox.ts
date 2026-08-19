@@ -1,14 +1,19 @@
+import type { AssignmentKv } from "./assignment-store";
 import { assignmentWriterName, type HashedAssignmentPutInput } from "./assignment-store";
 import {
+  appHoldoverWriteSuppressKey,
   ensureHoldoverWriteJob,
-  HOLDOVER_WRITE_JOB_KEY,
+  HOLDOVER_WRITE_JOB_PREFIX,
   type HoldoverWriteEnsureResult,
   type HoldoverWriteJob,
   type HoldoverWriteOutboxLogger,
   type HoldoverWriteOutboxStorage,
   type HoldoverWritePutPort,
+  type HoldoverWriteSuppressionPort,
   holdoverWriteOutboxName,
+  purgeEntityOutboxState,
   runHoldoverWriteAlarm,
+  suppressEntityOutbox,
 } from "./holdover-write-outbox-core";
 import type { AssignmentWriterNamespace } from "./kv-assignment-store";
 
@@ -21,8 +26,10 @@ export interface HoldoverWriteOutboxNamespace {
 
 export interface HoldoverWriteCoordinator {
   /**
-   * Either completes `putHashed` or durably owns retry work before resolving.
-   * Rejects when ownership cannot be sealed (caller must not report `accepted`).
+   * Either completes `putHashed` (KV-visible) or durably owns retry work before
+   * resolving. Rejects when ownership cannot be sealed (caller must not report
+   * `accepted`). May resolve `poisoned` / `suppressed` for the route to fail-loud
+   * or skip writes.
    */
   ensure(input: HashedAssignmentPutInput): Promise<HoldoverWriteEnsureResult>;
 }
@@ -65,7 +72,8 @@ export class DirectHoldoverWriteCoordinator implements HoldoverWriteCoordinator 
 
 /** In-memory outbox for tests that need failure-then-retry without Miniflare. */
 export class MemoryHoldoverWriteCoordinator implements HoldoverWriteCoordinator {
-  private readonly jobs = new Map<string, HoldoverWriteJob>();
+  private readonly entities = new Map<string, Map<string, unknown>>();
+  private appSuppressed = new Set<string>();
 
   constructor(
     private readonly putPort: HoldoverWritePutPort,
@@ -80,28 +88,78 @@ export class MemoryHoldoverWriteCoordinator implements HoldoverWriteCoordinator 
       input,
       this.now(),
       this.logger,
+      this.suppressionPort(),
     );
   }
 
-  /** Drive one alarm tick for the named job (test seam). */
+  /** Drive one alarm tick for the Entity outbox (test seam). */
   alarm(input: HashedAssignmentPutInput): Promise<void> {
-    return runHoldoverWriteAlarm(this.storageFor(input), this.putPort, this.now(), this.logger);
+    return runHoldoverWriteAlarm(
+      this.storageFor(input),
+      this.putPort,
+      this.now(),
+      this.logger,
+      this.suppressionPort(),
+    );
+  }
+
+  /** Test / deletion seam: mark the Entity outbox suppressed. */
+  suppressEntity(input: HashedAssignmentPutInput): Promise<void> {
+    return suppressEntityOutbox(this.storageFor(input));
+  }
+
+  /** Test / deletion seam: purge pending/poisoned jobs for the Entity. */
+  purgeEntity(input: HashedAssignmentPutInput): Promise<void> {
+    return purgeEntityOutboxState(this.storageFor(input));
+  }
+
+  /** Test seam: App-wide deletion suppress tombstone. */
+  suppressApp(appId: string): void {
+    this.appSuppressed.add(appId);
+  }
+
+  /** Inspect durable job state for tests. */
+  jobFor(input: HashedAssignmentPutInput): HoldoverWriteJob | undefined {
+    const bucket = this.entities.get(holdoverWriteOutboxName(input));
+    return bucket?.get(`${HOLDOVER_WRITE_JOB_PREFIX}${input.experimentId}`) as
+      | HoldoverWriteJob
+      | undefined;
+  }
+
+  private suppressionPort(): HoldoverWriteSuppressionPort {
+    return {
+      isAppSuppressed: async (appId) => this.appSuppressed.has(appId),
+    };
   }
 
   private storageFor(input: HashedAssignmentPutInput): HoldoverWriteOutboxStorage {
-    const key = holdoverWriteOutboxName(input);
-    const jobs = this.jobs;
+    const entity = holdoverWriteOutboxName(input);
+    let bucket = this.entities.get(entity);
+    if (bucket === undefined) {
+      bucket = new Map();
+      this.entities.set(entity, bucket);
+    }
+    const store = bucket;
     return {
-      async get<T>(_storageKey: string): Promise<T | undefined> {
-        return jobs.get(key) as T | undefined;
+      async get<T>(key: string): Promise<T | undefined> {
+        return store.get(key) as T | undefined;
       },
-      async put(_storageKey, value) {
-        jobs.set(key, value as HoldoverWriteJob);
+      async put(key, value) {
+        store.set(key, value);
       },
-      async delete(): Promise<boolean | undefined> {
-        const had = jobs.has(key);
-        jobs.delete(key);
+      async delete(key): Promise<boolean | undefined> {
+        const had = store.has(key);
+        store.delete(key);
         return had;
+      },
+      async list<T>(options?: { prefix?: string }): Promise<Map<string, T>> {
+        const out = new Map<string, T>();
+        for (const [key, value] of store) {
+          if (options?.prefix === undefined || key.startsWith(options.prefix)) {
+            out.set(key, value as T);
+          }
+        }
+        return out;
       },
       async setAlarm() {},
       async deleteAlarm() {},
@@ -111,7 +169,7 @@ export class MemoryHoldoverWriteCoordinator implements HoldoverWriteCoordinator 
 
 /**
  * Durable Object-backed coordinator: seals retry ownership in DO storage, then
- * writes through Assignment Store Writer (putIfAbsent).
+ * writes through Assignment Store Writer (putIfAbsent) until KV-complete.
  */
 export class DurableHoldoverWriteCoordinator implements HoldoverWriteCoordinator {
   constructor(private readonly namespace: HoldoverWriteOutboxNamespace) {}
@@ -140,6 +198,30 @@ export class DurableHoldoverWriteCoordinator implements HoldoverWriteCoordinator
     }
     return parseEnsureResult(body);
   }
+
+  async suppressEntity(input: HashedAssignmentPutInput): Promise<void> {
+    await this.postPath(input, "/suppress");
+  }
+
+  async purgeEntity(input: HashedAssignmentPutInput): Promise<void> {
+    await this.postPath(input, "/purge");
+  }
+
+  private async postPath(
+    input: HashedAssignmentPutInput,
+    path: "/suppress" | "/purge",
+  ): Promise<void> {
+    const name = holdoverWriteOutboxName(input);
+    const stub = this.namespace.get(this.namespace.idFromName(name));
+    const response = await stub.fetch(`https://holdover-write-outbox.local${path}`, {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new HoldoverWriteOutboxError(
+        `holdover write outbox ${path} returned HTTP ${response.status}`,
+      );
+    }
+  }
 }
 
 function parseEnsureResult(value: unknown): HoldoverWriteEnsureResult {
@@ -147,7 +229,10 @@ function parseEnsureResult(value: unknown): HoldoverWriteEnsureResult {
     typeof value !== "object" ||
     value === null ||
     !("status" in value) ||
-    (value.status !== "completed" && value.status !== "owned" && value.status !== "poisoned")
+    (value.status !== "completed" &&
+      value.status !== "owned" &&
+      value.status !== "poisoned" &&
+      value.status !== "suppressed")
   ) {
     throw new HoldoverWriteOutboxError("holdover write outbox returned an invalid ensure result");
   }
@@ -156,6 +241,7 @@ function parseEnsureResult(value: unknown): HoldoverWriteEnsureResult {
 
 export interface HoldoverWriteOutboxEnv {
   ASSIGNMENT_STORE_WRITER: AssignmentWriterNamespace;
+  ASSIGNMENTS_KV: AssignmentKv;
 }
 
 export async function handleHoldoverWriteOutboxFetch(
@@ -164,17 +250,30 @@ export async function handleHoldoverWriteOutboxFetch(
   request: Request,
   logger?: HoldoverWriteOutboxLogger,
   nowMs: number = Date.now(),
+  suppression?: HoldoverWriteSuppressionPort,
 ): Promise<Response> {
   const url = new URL(request.url);
+  if (request.method === "POST" && url.pathname === "/suppress") {
+    await suppressEntityOutbox(storage);
+    return Response.json({ ok: true });
+  }
+  if (request.method === "POST" && url.pathname === "/purge") {
+    await purgeEntityOutboxState(storage);
+    return Response.json({ ok: true });
+  }
   if (request.method === "GET" && url.pathname === "/status") {
-    const job = await storage.get<HoldoverWriteJob>(HOLDOVER_WRITE_JOB_KEY);
-    return Response.json(job ?? { status: "empty" });
+    const listed = await storage.list<HoldoverWriteJob>({ prefix: HOLDOVER_WRITE_JOB_PREFIX });
+    const jobs = [...listed.values()];
+    if (jobs.length === 0) {
+      return Response.json({ status: "empty" });
+    }
+    return Response.json({ jobs });
   }
   if (request.method !== "POST" || url.pathname !== "/ensure") {
     return new Response("not found", { status: 404 });
   }
   const input = parseEnsureRequest(await request.json());
-  const result = await ensureHoldoverWriteJob(storage, putPort, input, nowMs, logger);
+  const result = await ensureHoldoverWriteJob(storage, putPort, input, nowMs, logger, suppression);
   return Response.json(result);
 }
 
@@ -232,6 +331,14 @@ export function assignmentWriterPutPort(
         throw new HoldoverWriteOutboxError(`Assignment writer DO returned ${response.status}`);
       }
       await response.json();
+    },
+  };
+}
+
+export function appSuppressionFromKv(kv: AssignmentKv): HoldoverWriteSuppressionPort {
+  return {
+    async isAppSuppressed(appId) {
+      return (await kv.get(appHoldoverWriteSuppressKey(appId))) !== null;
     },
   };
 }

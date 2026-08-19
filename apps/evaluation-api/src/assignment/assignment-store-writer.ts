@@ -26,8 +26,12 @@ export class AssignmentStoreWriter {
   constructor(
     private readonly storage: AssignmentWriterStorage,
     private readonly kv: AssignmentKv,
-    private readonly waitUntil: WaitUntil,
-  ) {}
+    /** Retained for call-site compatibility; put awaits write-through so HTTP
+     * success means the Entity KV blob is visible (SPL-346 completion rule). */
+    waitUntil: WaitUntil,
+  ) {
+    void waitUntil;
+  }
 
   async put(input: HashedAssignmentPutInput): Promise<AssignmentStorePutResult> {
     const storageKey = `${STORAGE_KEY_PREFIX}${input.experimentId}`;
@@ -37,12 +41,12 @@ export class AssignmentStoreWriter {
       // entity KV blob. Re-assert the KV entry (idempotent merge, no-op put when
       // already present) so a write-through that failed once is retried on the
       // next put instead of leaving the holdover invisible forever.
-      this.waitUntil(this.writeThrough(existing));
+      await this.writeThrough(existing);
       return { status: "existing", assignment: entryFrom(existing) };
     }
 
     await this.storage.put(storageKey, input);
-    this.waitUntil(this.writeThrough(input));
+    await this.writeThrough(input);
     return { status: "stored", assignment: entryFrom(input) };
   }
 
