@@ -67,6 +67,7 @@ describe("createSplitchBrowserClient: construction", () => {
                 reason: "SPLIT",
                 errorCode: null,
                 exposureTicket: null,
+                exposureIdentity: null,
               },
             },
           }),
@@ -174,6 +175,7 @@ describe("createSplitchBrowserClient: sync reads", () => {
         reason: "SPLIT",
         errorCode: null,
         exposureTicket: "ticket-should-not-fire",
+        exposureIdentity: "identity-should-not-fire",
       },
     };
     const transport = new FakeBrowserTransport([browserOkPayload(evaluations)]);

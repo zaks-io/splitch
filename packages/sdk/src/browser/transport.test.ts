@@ -21,6 +21,7 @@ const OK_EVAL = {
       reason: "SPLIT",
       errorCode: null,
       exposureTicket: "t",
+      exposureIdentity: "id",
     },
   },
 };

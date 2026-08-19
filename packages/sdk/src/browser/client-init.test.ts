@@ -28,6 +28,7 @@ describe("createSplitchBrowserClient: init failure surface (B4)", () => {
             reason: "SPLIT",
             errorCode: null,
             exposureTicket: null,
+            exposureIdentity: null,
           },
         },
         etag: '"e"',
