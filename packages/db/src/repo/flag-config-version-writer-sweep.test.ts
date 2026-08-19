@@ -63,8 +63,12 @@ const SCAN_ROOT = "packages/db/src";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../../../..", import.meta.url)));
 
-/** Repo-standard budget for hooks that build a TypeScript program (not per-`it`). */
-const PROGRAM_HOOK_TIMEOUT_MS = 15_000;
+/**
+ * Budget for anything that builds a TypeScript program (~1s warm locally, but
+ * over 15s on a loaded CI runner; matches the 30s sweep budget in
+ * apps/control-panel/src/lib/session-cookie.test.ts).
+ */
+const PROGRAM_HOOK_TIMEOUT_MS = 30_000;
 
 /** Current production code has five writers; dropping any is a reviewable change. */
 const MINIMUM_KNOWN_UPDATE_SITES = 5;
