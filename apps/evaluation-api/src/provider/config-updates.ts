@@ -32,11 +32,11 @@ export interface ConfigUpdateListener {
 }
 
 interface Subscription {
-  // Only plain state crosses requests. The WebSocket remains in the event
-  // closures created by its originating request context, avoiding cross-request
-  // access to a Workers I/O object.
+  // The WebSocket remains in event closures created by its originating request
+  // context. Only the connect promise is shared so concurrent cold reads await
+  // the same readiness result.
   connected: boolean;
-  connecting: boolean;
+  connecting: Promise<void> | undefined;
   listener: ConfigUpdateListener;
 }
 
@@ -57,21 +57,21 @@ export class DurableConfigUpdates {
     const key = scopeKey(appId, environmentId);
     const state = this.subscriptions.get(key) ?? {
       connected: false,
-      connecting: false,
+      connecting: undefined,
       listener,
     };
     state.listener = listener;
     this.subscriptions.set(key, state);
 
     if (state.connected) return;
-    if (state.connecting) {
-      throw new Error("config update subscription is still connecting");
-    }
-    state.connecting = true;
+    if (state.connecting !== undefined) return state.connecting;
+
+    const connecting = this.connect(appId, environmentId, state);
+    state.connecting = connecting;
     try {
-      await this.connect(appId, environmentId, state);
+      await connecting;
     } finally {
-      state.connecting = false;
+      if (state.connecting === connecting) state.connecting = undefined;
     }
   }
 

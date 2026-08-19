@@ -67,9 +67,11 @@ describe("KvProvider.getFlag", () => {
     kv.put(flagConfigKey("app-A", "env-1", "f"), flagConfigKV({ key: "f" }));
     await provider.getFlag("app-A", "env-1", "f");
 
-    expect(kv.getCalls).toHaveLength(2);
+    expect(kv.getCalls).toHaveLength(0);
   });
+});
 
+describe("KvProvider.getFlag authoritative reads", () => {
   it("checks authoritative config on cold start before serving or caching", async () => {
     const kv = new FakeKv().put(
       flagConfigKey("app-A", "env-1", "f"),
@@ -86,16 +88,19 @@ describe("KvProvider.getFlag", () => {
       enabled: true,
     });
     expect(readCurrentFlagConfig).toHaveBeenCalledWith("app-A", "env-1", "f");
+    expect(kv.getCalls).toHaveLength(0);
   });
 
   it("recovers a cold-start KV miss from the authoritative snapshot", async () => {
-    const provider = new KvProvider(new FakeKv(), {
+    const kv = new FakeKv();
+    const provider = new KvProvider(kv, {
       configUpdates: updates(async () => snapshot(flagConfigKV({ key: "f" }), 2)),
     });
 
     await expect(provider.getFlag("app-A", "env-1", "f")).resolves.toMatchObject({
       flagKey: "f",
     });
+    expect(kv.getCalls).toHaveLength(0);
   });
 
   it("recovers a malformed KV blob from the authoritative snapshot", async () => {
@@ -108,8 +113,11 @@ describe("KvProvider.getFlag", () => {
     await expect(provider.getFlag("app-A", "env-1", "f")).resolves.toMatchObject({
       flagKey: "f",
     });
+    expect(kv.getCalls).toHaveLength(0);
   });
+});
 
+describe("KvProvider.getFlag freshness failures", () => {
   it("fails as STALE and reports a five-second propagation breach", async () => {
     const kv = new FakeKv().put(flagConfigKey("app-A", "env-1", "f"), flagConfigKV({ key: "f" }));
     const breach = vi.fn();
@@ -153,6 +161,47 @@ describe("KvProvider.getFlag", () => {
       errorCode: "SERVICE_UNAVAILABLE",
       resolutionReason: "ERROR",
     });
+    expect(kv.getCalls).toHaveLength(1);
+  });
+
+  it("does not report a satisfied announcement as a breach after reconnect", async () => {
+    const kv = new FakeKv().put(flagConfigKey("app-A", "env-1", "f"), flagConfigKV({ key: "f" }));
+    const breach = vi.fn();
+    let currentVersion = 4;
+    let authoritativeFailure = false;
+    let reconnect: (() => void) | undefined;
+    const provider = new KvProvider(kv, {
+      configUpdates: {
+        async ensureSubscribed(_appId, _environmentId, listener) {
+          reconnect = listener.onReconnect;
+        },
+        async readCurrentFlagConfig() {
+          if (authoritativeFailure) throw new Error("DO unavailable");
+          return snapshot(flagConfigKV({ key: "f" }), currentVersion);
+        },
+      },
+      now: () => 30_000,
+      onPropagationBreach: breach,
+    });
+    await provider.getFlag("app-A", "env-1", "f");
+    provider.invalidate("app-A", "env-1", {
+      type: "config.changed",
+      entity: "flag",
+      id: "flag-id-1",
+      version: 5,
+    });
+    currentVersion = 5;
+    await provider.getFlag("app-A", "env-1", "f");
+
+    reconnect?.();
+    authoritativeFailure = true;
+
+    await expect(provider.getFlag("app-A", "env-1", "f")).rejects.toMatchObject({
+      errorCode: "SERVICE_UNAVAILABLE",
+      resolutionReason: "ERROR",
+    });
+    expect(breach).not.toHaveBeenCalled();
+    expect(kv.getCalls).toHaveLength(1);
   });
 });
 

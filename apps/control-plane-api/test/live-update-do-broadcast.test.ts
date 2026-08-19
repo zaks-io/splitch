@@ -98,7 +98,7 @@ describe("Evaluation Worker live-update subscription", () => {
     ).resolves.toMatchObject({
       enabled: true,
     });
-    expect(staleKv.getCalls).toHaveLength(2);
+    expect(staleKv.getCalls).toHaveLength(0);
 
     await stub.setLiveUpdatesAvailable(false);
     await delay(25);
@@ -108,7 +108,7 @@ describe("Evaluation Worker live-update subscription", () => {
     ).resolves.toMatchObject({
       enabled: true,
     });
-    expect(staleKv.getCalls).toHaveLength(3);
+    expect(staleKv.getCalls).toHaveLength(0);
   });
 });
 

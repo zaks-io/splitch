@@ -23,15 +23,14 @@ export class FlagConfigCache {
   }
 
   set(kvKey: string, flagId: string, version: number, config: FlagConfig): boolean {
-    const announced = this.announcedVersion(config.appId, config.environmentId, flagId);
+    const announcementKey = flagAnnouncementKey(config.appId, config.environmentId, flagId);
+    const announced = this.announcements.get(announcementKey);
     if (announced !== undefined && version < announced.version) {
       return false;
     }
     this.entries.set(kvKey, { config, flagId, version });
-    this.servedVersions.set(
-      flagAnnouncementKey(config.appId, config.environmentId, flagId),
-      version,
-    );
+    this.servedVersions.set(announcementKey, version);
+    if (announced !== undefined) this.announcements.delete(announcementKey);
     return true;
   }
 
@@ -39,14 +38,21 @@ export class FlagConfigCache {
     if (nudge.entity !== "flag") return;
 
     const announcementKey = flagAnnouncementKey(appId, environmentId, nudge.id);
-    const existing = this.announcements.get(announcementKey);
-    if (existing === undefined || nudge.version >= existing.version) {
-      this.announcements.set(announcementKey, { version: nudge.version, announcedAt });
-    }
+    this.recordAnnouncement(announcementKey, nudge.version, announcedAt);
 
     const prefix = environmentPrefix(appId, environmentId);
     for (const [key, entry] of this.entries) {
       if (key.startsWith(prefix) && entry.flagId === nudge.id) this.entries.delete(key);
+    }
+  }
+
+  private recordAnnouncement(key: string, version: number, announcedAt: number): void {
+    const existing = this.announcements.get(key);
+    const servedVersion = this.servedVersions.get(key) ?? 0;
+    if (version > servedVersion && (existing === undefined || version >= existing.version)) {
+      this.announcements.set(key, { version, announcedAt });
+    } else if (existing !== undefined && existing.version <= servedVersion) {
+      this.announcements.delete(key);
     }
   }
 

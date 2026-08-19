@@ -59,6 +59,18 @@ describe("FlagConfigCache", () => {
     expect(cache.size).toBe(0);
   });
 
+  it("prunes an announcement after serving its version", () => {
+    const cache = new FlagConfigCache();
+    const value = config("app-A", "env-1", nudge.version);
+    cache.invalidate("app-A", "env-1", nudge, 100);
+
+    expect(cache.set("app:app-A:env-1:flag:f", value.blob.id, value.version, value.resolved)).toBe(
+      true,
+    );
+    expect(cache.announcedVersion("app-A", "env-1", value.blob.id)).toBeUndefined();
+    expect(cache.servedVersion("app-A", "env-1", value.blob.id)).toBe(nudge.version);
+  });
+
   it("invalidates on a same-version nudge because related experiment state may have changed", () => {
     const cache = new FlagConfigCache();
     const value = config("app-A", "env-1");

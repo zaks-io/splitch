@@ -1,26 +1,26 @@
-import type { DeltaNudge, ExperimentConfigKV, FlagConfigKV, RunConfigKV } from "@splitch/contracts";
-import {
-  ExperimentConfigKVSchema,
-  experimentConfigKey,
-  FlagConfigKVSchema,
-  flagConfigKey,
-  kvEnvelope,
-  RunConfigKVSchema,
-  runConfigKey,
-} from "@splitch/contracts";
+import type { DeltaNudge, FlagConfigKV } from "@splitch/contracts";
+import { experimentConfigKey, flagConfigKey, runConfigKey } from "@splitch/contracts";
 import { FlagConfigCache } from "./cache";
 import type {
   ConfigUpdateListener,
   DurableConfigUpdates,
   EvaluationConfigSnapshot,
 } from "./config-updates";
+import {
+  type BlobParse,
+  parseExperimentConfig,
+  parseFlagConfig,
+  parseRunConfig,
+  readKvBlob,
+} from "./kv-provider-blobs";
 import { type ExperimentConfig, type FlagConfig, type Provider, ProviderError } from "./provider";
 import { experimentConfigFromKV, flagConfigFromKV } from "./resolve";
 
 /**
- * KV-backed Provider adapter. Read-side ONLY: it reads app-scoped KV keys, parses
- * every blob, and resolves them into evaluate-path views. It never writes — the
- * platform write path is a different seam — and it never reaches D1.
+ * Read-side Provider adapter. With live updates, Flag Configuration comes from
+ * the authoritative Config Store snapshot; KV is consulted only when that read
+ * fails and the announced version must be classified. Without live updates it
+ * reads app-scoped KV keys directly. It never writes.
  *
  * Fail-loud (ADR-0025/0036): EVERY read is Zod-parsed against the schema-version
  * envelope plus the inner schema. A KV miss, malformed JSON, unknown schema
@@ -58,38 +58,13 @@ export interface KvProviderOptions {
   onPropagationBreach?: (breach: PropagationBreach) => void;
 }
 
-/**
- * Typed envelope parsers. Each wraps `kvEnvelope(payload).safeParse` so the
- * adapter never references zod's types directly (evaluation-api has no zod dep);
- * the inner KV payload type is asserted by the contract schema, so the closure's
- * return type is the concrete KV shape. A failure yields a stable error string the
- * read boundary turns into a ProviderError.
- */
-type BlobParse<T> = (json: unknown) => { ok: true; value: T } | { ok: false; error: string };
-
-function blobParser<T>(envelope: { safeParse: (json: unknown) => SafeParse<T> }): BlobParse<T> {
-  return (json) => {
-    const parsed = envelope.safeParse(json);
-    return parsed.success
-      ? { ok: true, value: parsed.data.data }
-      : { ok: false, error: parsed.error.message };
-  };
-}
-
-type SafeParse<T> =
-  | { success: true; data: { data: T } }
-  | { success: false; error: { message: string } };
-
-const parseFlagConfig = blobParser<FlagConfigKV>(kvEnvelope(FlagConfigKVSchema));
-const parseExperimentConfig = blobParser<ExperimentConfigKV>(kvEnvelope(ExperimentConfigKVSchema));
-const parseRunConfig = blobParser<RunConfigKV>(kvEnvelope(RunConfigKVSchema));
-
 export class KvProvider implements Provider {
   private readonly cache = new FlagConfigCache();
   private readonly experimentSnapshots = new Map<
     string,
     Pick<EvaluationConfigSnapshot, "experiment" | "run">
   >();
+  private readonly flagExperiments = new Map<string, string>();
   private readonly now: () => number;
 
   constructor(
@@ -203,6 +178,10 @@ export class KvProvider implements Provider {
     for (const key of this.experimentSnapshots.keys()) {
       if (key.startsWith(prefix)) this.experimentSnapshots.delete(key);
     }
+    const flagPrefix = `app:${appId}:${environmentId}:flag:`;
+    for (const key of this.flagExperiments.keys()) {
+      if (key.startsWith(flagPrefix)) this.flagExperiments.delete(key);
+    }
   }
 
   /**
@@ -235,23 +214,7 @@ export class KvProvider implements Provider {
     label: string,
     missCode: ProviderError["errorCode"] = "INTERNAL_SERVER_ERROR",
   ): Promise<T> {
-    const raw = await this.kv.get(key);
-    if (raw === null) {
-      throw new ProviderError(`KV miss for ${label} (key "${key}")`, { errorCode: missCode });
-    }
-
-    let json: unknown;
-    try {
-      json = JSON.parse(raw);
-    } catch (cause) {
-      throw new ProviderError(`Malformed JSON for ${label} (key "${key}")`, { cause });
-    }
-
-    const parsed = parse(json);
-    if (!parsed.ok) {
-      throw new ProviderError(`Invalid KV blob for ${label} (key "${key}"): ${parsed.error}`);
-    }
-    return parsed.value;
+    return readKvBlob(this.kv, key, parse, label, missCode);
   }
 
   private async readFreshFlagBlob(
@@ -267,23 +230,14 @@ export class KvProvider implements Provider {
       return { flag: await this.readBlob(key, parseFlagConfig, label, missCode), version: 0 };
     }
 
-    let served: FlagConfigKV | undefined;
-    let kvFailure: unknown;
-    try {
-      served = await this.readBlob(key, parseFlagConfig, label, missCode);
-    } catch (cause) {
-      kvFailure = cause;
-    }
-
     let current: EvaluationConfigSnapshot | null;
     try {
       current = await updates.readCurrentFlagConfig(appId, environmentId, flagKey);
     } catch (cause) {
-      throw this.authoritativeReadError(appId, environmentId, served, cause);
+      throw await this.authoritativeReadError(appId, environmentId, key, label, missCode, cause);
     }
     if (current === null) {
       throw new ProviderError(`Flag Configuration ${appId}/${environmentId}/${flagKey} is gone`, {
-        cause: kvFailure,
         errorCode: "FLAG_NOT_FOUND",
       });
     }
@@ -294,24 +248,32 @@ export class KvProvider implements Provider {
     if (current.version < minimumVersion) {
       throw this.staleReadError(appId, environmentId, current.flag.id, current.version);
     }
-    this.rememberExperimentSnapshot(appId, environmentId, served, current);
+    this.rememberExperimentSnapshot(appId, environmentId, current);
     return { flag: current.flag, version: current.version };
   }
 
-  private authoritativeReadError(
+  private async authoritativeReadError(
     appId: string,
     environmentId: string,
-    served: FlagConfigKV | undefined,
+    key: string,
+    label: string,
+    missCode: ProviderError["errorCode"],
     cause: unknown,
-  ): ProviderError {
-    if (served !== undefined && this.cache.announcedVersion(appId, environmentId, served.id)) {
-      return this.staleReadError(
-        appId,
-        environmentId,
-        served.id,
-        this.cache.servedVersion(appId, environmentId, served.id) ?? 0,
-        cause,
-      );
+  ): Promise<ProviderError> {
+    let served: FlagConfigKV | undefined;
+    try {
+      served = await this.readBlob(key, parseFlagConfig, label, missCode);
+    } catch {
+      served = undefined;
+    }
+    const servedVersion =
+      served === undefined ? 0 : (this.cache.servedVersion(appId, environmentId, served.id) ?? 0);
+    const announced =
+      served === undefined
+        ? undefined
+        : this.cache.announcedVersion(appId, environmentId, served.id);
+    if (served !== undefined && announced !== undefined && announced.version > servedVersion) {
+      return this.staleReadError(appId, environmentId, served.id, servedVersion, cause);
     }
     return new ProviderError("Authoritative Flag Configuration read is unavailable", {
       cause,
@@ -322,14 +284,17 @@ export class KvProvider implements Provider {
   private rememberExperimentSnapshot(
     appId: string,
     environmentId: string,
-    served: FlagConfigKV | undefined,
     current: EvaluationConfigSnapshot,
   ): void {
-    if (served?.experimentId && served.experimentId !== current.flag.experimentId) {
+    const key = flagConfigKey(appId, environmentId, current.flag.key);
+    const previousExperimentId = this.flagExperiments.get(key);
+    if (previousExperimentId && previousExperimentId !== current.flag.experimentId) {
       this.experimentSnapshots.delete(
-        experimentConfigKey(appId, environmentId, served.experimentId),
+        experimentConfigKey(appId, environmentId, previousExperimentId),
       );
     }
+    if (current.flag.experimentId === null) this.flagExperiments.delete(key);
+    else this.flagExperiments.set(key, current.flag.experimentId);
     if (current.experiment !== null) {
       this.experimentSnapshots.set(
         experimentConfigKey(appId, environmentId, current.experiment.id),
@@ -348,7 +313,11 @@ export class KvProvider implements Provider {
     const announced = this.cache.announcedVersion(appId, environmentId, flagId);
     const announcedVersion = announced?.version ?? servedVersion;
     const elapsedMs = announced === undefined ? 0 : Math.max(0, this.now() - announced.announcedAt);
-    if (announced !== undefined && elapsedMs >= PROPAGATION_BREACH_MS) {
+    if (
+      announced !== undefined &&
+      announced.version > servedVersion &&
+      elapsedMs >= PROPAGATION_BREACH_MS
+    ) {
       this.options.onPropagationBreach?.({
         appId,
         environmentId,
