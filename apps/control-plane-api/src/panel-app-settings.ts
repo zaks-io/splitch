@@ -1,10 +1,10 @@
-import { UserRoleSchema } from "@splitch/contracts";
 import {
   canGrantAppAccess,
   type PanelAppSettings,
 } from "@splitch/control-plane-sdk/panel-app-settings";
 import { appScope, type Repository } from "@splitch/db";
 import { appResponse } from "./app-environment-model";
+import { ORG_ADMIN_ROLES } from "./org-authz";
 import type { MemberProfileResolver } from "./org-handlers";
 import { FLAG_LIST_READ_LIMIT } from "./overview-thresholds";
 import { catalogFlag } from "./panel-app-settings-catalog";
@@ -52,10 +52,11 @@ export async function panelAppSettingsRead(
     scope,
     rows.map((row) => row.id),
   );
-  const viewerRole = UserRoleSchema.parse(access.role);
+  const viewerRole = access.role;
 
   const people = await appAccessPeople(deps, {
     canGrantAccess: canGrantAppAccess(viewerRole),
+    canListCandidates: ORG_ADMIN_ROLES.includes(access.orgRole),
     orgId: access.app.organizationId,
     memberships,
     request,

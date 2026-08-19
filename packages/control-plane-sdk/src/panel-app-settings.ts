@@ -73,7 +73,8 @@ export interface PanelAppSettings {
   members: AppMember[];
   /**
    * Present only when the viewer may grant App access. An empty array means the
-   * viewer may grant access, but every Organization member already has it.
+   * response exposes no candidates, including when the viewer may grant App
+   * access but may not enumerate the Organization roster.
    */
   candidates?: PanelAppAccessCandidate[];
   flags: PanelAppFlagCatalog;

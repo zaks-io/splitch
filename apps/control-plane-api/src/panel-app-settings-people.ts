@@ -23,6 +23,7 @@ export async function appAccessPeople(
   deps: PeopleDeps,
   input: {
     canGrantAccess: boolean;
+    canListCandidates: boolean;
     orgId: string;
     memberships: readonly AppMembershipRow[];
     request: Request;
@@ -40,6 +41,7 @@ export async function appAccessPeople(
   }
 
   if (!input.canGrantAccess) return { members, candidates: undefined };
+  if (!input.canListCandidates) return { members, candidates: [] };
 
   const orgMemberships = await deps.repo.identity.listOrgMemberships(input.orgId);
   const hasAppAccess = new Set(input.memberships.map((membership) => membership.userId));

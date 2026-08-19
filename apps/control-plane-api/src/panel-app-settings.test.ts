@@ -164,13 +164,28 @@ describe("App Settings read", () => {
     }
   });
 
-  it("offers the candidate roster to an admin", async () => {
-    const payload = await settings(USER_ADMIN, ALPHA.appId);
+  it("gates the candidate roster on the Org role, not the App role", async () => {
+    await d1
+      .prepare("UPDATE app_memberships SET role = ? WHERE app_id = ? AND user_id = ?")
+      .bind("admin", ALPHA.appId, USER_MEMBER)
+      .run();
 
-    expect(payload.viewerRole).toBe("admin");
-    expect(payload.candidates).toEqual([
-      { userId: USER_CANDIDATE, email: "candidate@alpha.test", orgRole: "member" },
-    ]);
+    try {
+      const appAdminOrgMember = await settings(USER_MEMBER, ALPHA.appId);
+      const orgAdmin = await settings(USER_ADMIN, ALPHA.appId);
+
+      expect(appAdminOrgMember.viewerRole).toBe("admin");
+      expect(appAdminOrgMember.candidates).toEqual([]);
+      expect(orgAdmin.viewerRole).toBe("admin");
+      expect(orgAdmin.candidates).toEqual([
+        { userId: USER_CANDIDATE, email: "candidate@alpha.test", orgRole: "member" },
+      ]);
+    } finally {
+      await d1
+        .prepare("UPDATE app_memberships SET role = ? WHERE app_id = ? AND user_id = ?")
+        .bind("member", ALPHA.appId, USER_MEMBER)
+        .run();
+    }
   });
 
   it("returns this App's Flag catalog and no other App's", async () => {

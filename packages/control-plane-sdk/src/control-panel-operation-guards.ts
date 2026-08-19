@@ -265,10 +265,12 @@ function isApiKeyRevokeOperation(value: Record<string, unknown>): boolean {
 export function sameOperation(left: ControlPanelOperation, right: ControlPanelOperation): boolean {
   const claimed = left as Record<string, unknown>;
   const presented = right as Record<string, unknown>;
-  const keys = Object.keys(claimed);
-  return (
-    keys.length === Object.keys(presented).length &&
-    keys.every((key) => claimed[key] === presented[key])
+  const keys = new Set([...Object.keys(claimed), ...Object.keys(presented)]);
+  return [...keys].every(
+    (key) =>
+      Object.hasOwn(claimed, key) &&
+      Object.hasOwn(presented, key) &&
+      claimed[key] === presented[key],
   );
 }
 
@@ -277,7 +279,9 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function hasKeys(value: Record<string, unknown>, keys: string[]): boolean {
-  return Object.keys(value).length === keys.length && keys.every((key) => key in value);
+  return (
+    Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key))
+  );
 }
 
 export function isNonEmptyString(value: unknown): value is string {
