@@ -121,6 +121,12 @@ h.append(["set", "cookie"].join("-"), raw(token));
     );
   });
 
+  it("ignores a non-header set call on an unresolved receiver", () => {
+    const source = `declare const someMap: any; someMap.set("probe", "value");`;
+
+    expect(discover(source)).toEqual([]);
+  });
+
   it("resolves reviewed header-name bindings before classifying them", () => {
     const source = `
 import { CONTROL_PANEL_ENVIRONMENT_HEADER } from "@splitch/control-plane-sdk/control-panel-identity";

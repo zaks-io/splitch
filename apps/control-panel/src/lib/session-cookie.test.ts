@@ -52,11 +52,14 @@ const FORM_POST_SURFACE = createFormPostSurfaceDiscovery(SOURCE_PROGRAM, {
  * is a site boundary and insufficient across *.splitch.dev. createServerFn
  * POSTs require TanStack CSRF middleware from `src/start.ts`.
  *
- * Both inventories are reviewed surfaces. Discovery walks every source file.
- * Form handlers are classified by checker-resolved reachability to the session
- * cookie accessor and Origin guard. createServerFn POSTs are identified by file
- * and exported or local binding, so a new write in an existing file moves the
- * discovered side of the equality.
+ * Both inventories are reviewed surfaces. The createServerFn inventory walks
+ * every source file. Form discovery starts from statically named POST properties
+ * declared in route source files, then follows checker-resolved calls and
+ * function-valued call arguments to the session accessor and Origin guard.
+ * Imported or spread handler objects and runtime-dispatched function values are
+ * outside that sweep. createServerFn POSTs are identified by file and exported
+ * or local binding, so a new write in an existing file moves the discovered side
+ * of the equality.
  */
 const FORM_POST_COOKIE_AUTHENTICATED_WRITES = [
   "routes/auth.logout.ts",

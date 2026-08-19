@@ -20,8 +20,8 @@ import {
   type SourceFile,
   SymbolFlags,
   type Type,
-  TypeFlags,
   type TypeChecker,
+  TypeFlags,
 } from "typescript";
 import { visitNodes } from "./source-file-test-helpers";
 
@@ -129,6 +129,10 @@ function callHeaderWrite(
   if (!isCallExpression(node) || !isPropertyAccessExpression(node.expression)) return null;
   const method = node.expression.name.text;
   if (method !== "append" && method !== "set") return null;
+
+  const [headerName, value] = node.arguments;
+  const staticName = headerName ? staticString(headerName, headerNameBindings) : null;
+  if (isOtherHeaderName(staticName)) return null;
   if (
     !isHeadersReceiver(
       node.expression.expression,
@@ -141,19 +145,18 @@ function callHeaderWrite(
   ) {
     return null;
   }
-
-  const [headerName, value] = node.arguments;
-  const staticName = headerName ? staticString(headerName, headerNameBindings) : null;
   if (staticName === null) {
     const expression = headerName?.getText(sourceFile) ?? "<missing>";
     throw new Error(`${fileName}: ${method}() has a non-literal header name: ${expression}`);
   }
-  if (staticName.toLowerCase() !== "set-cookie") return null;
   return {
     argument: value?.getText(sourceFile) ?? "<missing>",
     method,
   };
 }
+
+const isOtherHeaderName = (name: string | null): boolean =>
+  name !== null && name.toLowerCase() !== "set-cookie";
 
 function isHeadersReceiver(
   receiver: Expression,

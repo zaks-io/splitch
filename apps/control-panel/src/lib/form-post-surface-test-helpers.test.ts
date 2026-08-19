@@ -52,6 +52,80 @@ export const route = { handlers: { POST: () => sessionHelper() } };
       { reachesOriginGuard: false, reachesSessionCookie: true },
     ]);
   });
+
+  it("follows a function-valued handler passed to a call", () => {
+    const program = sourceProgram(TSCONFIG, {
+      [SESSION]: `export function loadSessionFromCookieHeader(): void {}`,
+      [CSRF]: `export function rejectCrossOriginWrite(): void {}`,
+      [HELPER]: `export function runHandler(handler: () => void): void { handler(); }`,
+      [ROUTE]: `
+import { runHandler } from "../lib/form-post-probe-helper";
+import { loadSessionFromCookieHeader } from "../lib/form-post-probe-session";
+export const route = { handlers: { POST: () => runHandler(loadSessionFromCookieHeader) } };
+`,
+    });
+
+    expect(discovery(program).formPostSecurity(ROUTE, "routes/form-post-probe.ts")).toEqual([
+      { reachesOriginGuard: false, reachesSessionCookie: true },
+    ]);
+  });
+
+  it.each([
+    ["quoted", ``, `"POST"`],
+    ["computed", `const METHOD = "POST";`, `[METHOD]`],
+  ])("classifies a %s POST property", (_name, declaration, property) => {
+    const program = sourceProgram(TSCONFIG, {
+      [SESSION]: `export function loadSessionFromCookieHeader(): void {}`,
+      [CSRF]: `export function rejectCrossOriginWrite(): void {}`,
+      [ROUTE]: `
+import { loadSessionFromCookieHeader } from "../lib/form-post-probe-session";
+${declaration}
+export const route = { handlers: { ${property}: () => loadSessionFromCookieHeader() } };
+`,
+    });
+
+    expect(discovery(program).formPostSecurity(ROUTE, "routes/form-post-probe.ts")).toEqual([
+      { reachesOriginGuard: false, reachesSessionCookie: true },
+    ]);
+  });
+
+  it("does not count an Origin guard inside an uninvoked closure", () => {
+    const program = sourceProgram(TSCONFIG, {
+      [SESSION]: `export function loadSessionFromCookieHeader(): void {}`,
+      [CSRF]: `export function rejectCrossOriginWrite(): void {}`,
+      [ROUTE]: `
+import { rejectCrossOriginWrite } from "../lib/form-post-probe-csrf";
+import { loadSessionFromCookieHeader } from "../lib/form-post-probe-session";
+export const route = {
+  handlers: {
+    POST: () => {
+      const neverCalled = () => rejectCrossOriginWrite();
+      loadSessionFromCookieHeader();
+    },
+  },
+};
+`,
+    });
+
+    expect(discovery(program).formPostSecurity(ROUTE, "routes/form-post-probe.ts")).toEqual([
+      { reachesOriginGuard: false, reachesSessionCookie: true },
+    ]);
+  });
+
+  it("distinguishes a POST that does not reach the session cookie", () => {
+    const program = sourceProgram(TSCONFIG, {
+      [SESSION]: `export function loadSessionFromCookieHeader(): void {}`,
+      [CSRF]: `export function rejectCrossOriginWrite(): void {}`,
+      [ROUTE]: `
+import { rejectCrossOriginWrite } from "../lib/form-post-probe-csrf";
+export const route = { handlers: { POST: () => rejectCrossOriginWrite() } };
+`,
+    });
+
+    expect(discovery(program).formPostSecurity(ROUTE, "routes/form-post-probe.ts")).toEqual([
+      { reachesOriginGuard: true, reachesSessionCookie: false },
+    ]);
+  });
 });
 
 function discovery(program: ReturnType<typeof sourceProgram>) {
