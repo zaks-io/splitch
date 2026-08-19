@@ -1,6 +1,7 @@
 import { createRepository, type Repository } from "@splitch/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { makeAppHandlers } from "./app-handlers";
+import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import {
   ALPHA,
   args,
@@ -21,6 +22,10 @@ import {
  * from the live `app_memberships` read rather than from the claim.
  */
 
+const noOpExposureStatusCleanup: EnvironmentExposureStatusCleanup = {
+  delete: async () => undefined,
+};
+
 let dispose: () => Promise<void>;
 let repo: Repository;
 let handlers: ReturnType<typeof makeAppHandlers>;
@@ -29,7 +34,13 @@ beforeAll(async () => {
   const local = await seedTwoTenants();
   dispose = local.dispose;
   repo = createRepository(local.d1);
-  handlers = makeAppHandlers({ repo, nowIso: () => "2026-08-07T00:00:00.000Z" });
+  handlers = makeAppHandlers({
+    repo,
+    nowIso: () => "2026-08-07T00:00:00.000Z",
+    // Force-delete runs Exposure status cleanup after the D1 cascade (main);
+    // unit fixtures use a no-op so Tinybird is never required.
+    exposureStatusCleanup: noOpExposureStatusCleanup,
+  });
 
   await seedFlag(local.d1, {
     appId: ALPHA.appId,
