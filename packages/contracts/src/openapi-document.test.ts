@@ -115,6 +115,18 @@ describe("openapi document: full route coverage", () => {
     });
   });
 
+  it("emits only the error codes declared by each route", () => {
+    const operation = doc.paths?.["/apps/{appId}/attention-rollup"]?.get as {
+      responses?: Record<string, unknown>;
+    };
+    const conflictResponse = JSON.stringify(operation.responses?.["409"]);
+
+    expect(conflictResponse).toContain("ATTENTION_FANOUT_LIMIT_EXCEEDED");
+    expect(conflictResponse).toContain("message");
+    expect(conflictResponse).toContain("details");
+    expect(conflictResponse).not.toContain("RUN_FROZEN");
+  });
+
   it("emits one operationId per registered route, no more no less", () => {
     const emittedIds = documentOperations()
       .map((op) => op.operationId)
