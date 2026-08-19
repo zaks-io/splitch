@@ -95,15 +95,19 @@ Each hook is one `useSyncExternalStore` per rendered call site:
   `errorCode: PROVIDER_NOT_READY`. The decorator replaces only `reason` and `errorCode`; every other
   details field remains the held resolution's field.
 
-  Staleness is read fresh on every eligible render, but the returned details object must be
-  memoized on the pair (held-details identity, current degradation state). While that pair is
-  unchanged, `useFlagDetails` returns the same object reference. This identity memo is separate
-  from the stable held-resolution memo. Degradation state does not become a snapshot, invalidate a
-  held entry, or notify a subscriber.
+  A render that is not decoration-eligible returns the held details object directly and neither
+  populates nor consults the decoration identity memo. On each decoration-eligible render,
+  staleness is read fresh and the returned details object must be memoized on the pair (held-details
+  identity, current degradation state). The same-object identity guarantee applies only among
+  decoration-eligible renders while that pair is unchanged. This identity memo is separate from
+  the stable held-resolution memo. Degradation state does not become a snapshot, invalidate a held
+  entry, or notify a subscriber.
 
   Because the overlay reads mutable client state outside `useSyncExternalStore`, components in the
   same render pass may observe different staleness, and a render begun before a failed tick may
-  commit un-overlaid details. This intra-commit inconsistency is accepted because staleness is
+  commit un-overlaid details. The transition from an ineligible render to an eligible render may
+  likewise change the returned object identity once even when the held-details identity and
+  degradation state are unchanged. These inconsistencies are accepted because staleness is
   read-time metadata corrected on the component's next render.
 
 Three guarantees this shape requires of the browser client (restated in
@@ -152,12 +156,14 @@ sees it. No server-side flush question exists for the hooks; an app that additio
 
 The provider's decoration-eligibility ref remains `false` during server rendering through
 `getServerSnapshot` and during the hydration render. Both return the held details unchanged so the
-server HTML and hydration output match. The provider's mount effect then flips the ref without a
-state update or extra render, and the decorator first applies on the next render caused by
-something else. The same rule applies to a client-only tree with no SSR: its first render is not
-decoration-eligible, its mount effect schedules no render, and the decorator first applies on its
-next render. This delay is accepted for the same reason as intra-commit tearing: staleness is
-read-time metadata corrected on the component's next render.
+server HTML and hydration output match; neither render populates or consults the decoration identity
+memo. The provider's mount effect then flips the ref without a state update or extra render, and the
+decorator first applies on the next render caused by something else. The same rule applies to a
+client-only tree with no SSR: its first render returns the held details directly without populating
+or consulting the decoration identity memo, its mount effect schedules no render, and the decorator
+first applies on its next render. Either transition to the first eligible render may change the
+returned object identity once. This delay and identity change are accepted for the same reason as
+intra-commit tearing: staleness is read-time metadata corrected on the component's next render.
 
 ## Fail-loud (ADR-0036)
 
@@ -187,8 +193,9 @@ For browser revalidation, `PROVIDER_NOT_READY` is a details-only `errorCode` adm
 member of `sdkClientErrorCodes` and never a valid thrown `SplitchSdkError` code.
 
 Normative sequence (the server and hydration renders, or the initial render in a client-only tree,
-precede this sequence and return unchanged held details; the provider mount effect has then run,
-and the held `SPLIT` result below is entry-derived and reaches the client decorator):
+precede this sequence and return unchanged held details without consulting or populating the
+decoration identity memo; the provider mount effect has then run, and the held `SPLIT` result below
+is entry-derived and reaches the client decorator):
 
 1. The first decoration-eligible render returns `useFlagDetails("new-checkout", false)` with the
    held value `true` and held `reason: SPLIT`.
@@ -221,11 +228,13 @@ The hook implementation slice must ship tests that prove all of the following:
   staleness decoration produce the same fields because both call the identical decorator at the
   same point.
 - A server render and its hydration render both return the unchanged held details even when the
-  client is already degraded. The provider mount effect schedules no render; the next render caused
-  by something else applies the stale decoration.
+  client is already degraded. Neither render populates or consults the decoration identity memo.
+  The provider mount effect schedules no render; the next render caused by something else applies
+  the stale decoration and may change the returned object identity once.
 - In a client-only tree, the first render returns unchanged held details even when the client is
-  already degraded. The provider mount effect schedules no render; the next render caused by
-  something else applies the stale decoration.
+  already degraded and does not populate or consult the decoration identity memo. The provider
+  mount effect schedules no render; the next render caused by something else applies the stale
+  decoration and may change the returned object identity once.
 - A typecheckable assertion proves that a details object carrying `reason: STALE` and
   `errorCode: PROVIDER_NOT_READY` satisfies `SdkResolutionDetails`. `PROVIDER_NOT_READY` is admitted
   by `SdkResolutionDetails.errorCode` as a details-only union member alongside

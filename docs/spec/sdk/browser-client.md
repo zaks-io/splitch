@@ -150,12 +150,14 @@ splitch.evaluate("new-checkout", false); // sync, immediately — init() not req
 A single loop revalidates the held evaluations every `revalidateMs` (default 60s) with
 `If-None-Match`:
 
-- `304` → no-op. Changed body → **atomic swap**; per-Flag `subscribe` listeners fire only for Flags
-  whose entry actually changed. Entry equality compares `variant`, `variantName`, `reason`,
-  `errorCode`, and `exposureIdentity`; it excludes `exposureTicket` bytes. The opaque identity changes
-  across Experiment Run rollover and fresh-assignment-to-holdover materialization even when the
-  visible Variant does not. An ETag-only ticket refresh window may replace ticket bytes without
-  changing entry equality, notifying listeners, or re-arming an already-read Exposure.
+- `304` → successful tick: clear revalidation degradation while swapping no payload, changing no
+  held details, and notifying no `subscribe` listeners. Changed body → **atomic swap**; per-Flag
+  `subscribe` listeners fire only for Flags whose entry actually changed. Entry equality compares
+  `variant`, `variantName`, `reason`, `errorCode`, and `exposureIdentity`; it excludes
+  `exposureTicket` bytes. The opaque identity changes across Experiment Run rollover and
+  fresh-assignment-to-holdover materialization even when the visible Variant does not. An ETag-only
+  ticket refresh window may replace ticket bytes without changing entry equality, notifying
+  listeners, or re-arming an already-read Exposure.
 - Failure → keep serving last-known-good and log loudly every failed tick. Until a tick succeeds,
   the read-time decorator marks only entry-derived held details that reach it `STALE`
   (`errorCode: PROVIDER_NOT_READY`); absent-flag (`ERROR` / `FLAG_NOT_FOUND`), held-`ERROR`, and
