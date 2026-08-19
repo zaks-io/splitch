@@ -104,6 +104,14 @@ const FORBIDDEN_PUBLIC_BUNDLE_MARKERS = [
   "variantWeights",
 ];
 
+const FORBIDDEN_PUBLIC_DECLARATION_MARKERS = [
+  "@splitch/contracts",
+  "contracts package",
+  "scripts/",
+  "release pack",
+  "release-pack",
+];
+
 export function assertReleaseBundleJs(bundleJs) {
   for (const marker of FORBIDDEN_PUBLIC_BUNDLE_MARKERS) {
     if (bundleJs.includes(marker)) {
@@ -139,6 +147,17 @@ function assertZeroRuntimeDependencies(manifest) {
   }
 }
 
+function assertNoInternalPlumbingInDeclarations(declarationText) {
+  const normalizedDeclarationText = declarationText.toLowerCase();
+  for (const marker of FORBIDDEN_PUBLIC_DECLARATION_MARKERS) {
+    if (normalizedDeclarationText.includes(marker)) {
+      throw new Error(
+        `release declaration dist/index.d.ts contains internal plumbing marker: ${marker}`,
+      );
+    }
+  }
+}
+
 export function assertReleaseTarballContents({ listing, manifestText, declarationText, bundleJs }) {
   for (const file of listing) {
     if (file.endsWith(".map")) {
@@ -157,10 +176,7 @@ export function assertReleaseTarballContents({ listing, manifestText, declaratio
     throw new Error("release manifest still lists @splitch/contracts in devDependencies");
   }
   assertZeroRuntimeDependencies(manifest);
-
-  if (declarationText.includes("@splitch/contracts")) {
-    throw new Error("release declarations still import @splitch/contracts");
-  }
+  assertNoInternalPlumbingInDeclarations(declarationText);
 
   if (manifest.devDependencies && Object.keys(manifest.devDependencies).length > 0) {
     throw new Error(

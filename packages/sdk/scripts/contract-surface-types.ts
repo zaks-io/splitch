@@ -1,3 +1,4 @@
+// Docblocks ship verbatim in dist/index.d.ts; keep them consumer-facing. See generate-contract-surface.mjs.
 import type {
   ErrorCode,
   EvaluateAllReason,

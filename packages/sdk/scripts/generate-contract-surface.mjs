@@ -10,7 +10,7 @@
  *
  * Zod runs at build time only. This script reads schema members and writes
  * plain TypeScript literals; nothing it emits carries a zod import, so the
- * published bundle stays dependency-free. Docblocks anywhere in this generated
+ * published bundle stays dependency-free. Docblocks anywhere in this
  * surface can land verbatim in the published `dist/index.d.ts`, so comments in
  * the surface must stay consumer-facing: no script paths, release-pack rules,
  * or contracts-package plumbing. In particular, the emitted header must never
