@@ -239,9 +239,7 @@ describe("POST /api/sdk/exposures: claim failure and concurrency", () => {
     // under CI load when release() races ahead of the gate.
     const firstPromise = app.request(PATH, init);
     await gated.waitUntilBlocked();
-    const second = (await (
-      await app.request(PATH, init)
-    ).json()) as ExposureBatchResponse;
+    const second = (await (await app.request(PATH, init)).json()) as ExposureBatchResponse;
     gated.release();
     const first = (await (await firstPromise).json()) as ExposureBatchResponse;
     expect(second.results).toEqual([
