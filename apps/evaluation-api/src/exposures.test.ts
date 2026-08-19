@@ -70,7 +70,14 @@ class FailOnceIngestSink implements ExposureIngestSink {
 class GatedIngestSink implements ExposureIngestSink {
   readonly writes: AssembledExposure[] = [];
   private readonly waiters: Array<() => void> = [];
+  private readonly blockedResolvers: Array<() => void> = [];
   private open = false;
+
+  /** Resolves once at least one `write` is waiting on the gate (pending claim held). */
+  waitUntilBlocked(): Promise<void> {
+    if (this.waiters.length > 0) return Promise.resolve();
+    return new Promise<void>((resolve) => this.blockedResolvers.push(resolve));
+  }
 
   release(): void {
     this.open = true;
@@ -79,7 +86,10 @@ class GatedIngestSink implements ExposureIngestSink {
 
   async write(exposure: AssembledExposure): Promise<void> {
     if (!this.open) {
-      await new Promise<void>((resolve) => this.waiters.push(resolve));
+      await new Promise<void>((resolve) => {
+        this.waiters.push(resolve);
+        for (const notify of this.blockedResolvers.splice(0)) notify();
+      });
     }
     this.writes.push(exposure);
   }
@@ -225,19 +235,19 @@ describe("POST /api/sdk/exposures: claim failure and concurrency", () => {
     });
     const ticket = await mintTicket();
     const init = exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]);
+    // Hold the first writer on ingest so its claim stays pending; fixed sleeps flake
+    // under CI load when release() races ahead of the gate.
     const firstPromise = app.request(PATH, init);
-    await new Promise((r) => setTimeout(r, 20));
-    const secondPromise = app.request(PATH, init);
-    await new Promise((r) => setTimeout(r, 20));
+    await gated.waitUntilBlocked();
+    const second = (await (
+      await app.request(PATH, init)
+    ).json()) as ExposureBatchResponse;
     gated.release();
-    const [first, second] = await Promise.all([firstPromise, secondPromise]);
-    const bodies = [
-      (await first.json()) as ExposureBatchResponse,
-      (await second.json()) as ExposureBatchResponse,
-    ];
-    const statuses = bodies.map((b) => b.results[0]?.status).sort();
-    expect(statuses).toEqual(["accepted", "rejected"]);
-    expect(bodies.some((b) => b.results[0]?.code === "SERVICE_UNAVAILABLE")).toBe(true);
+    const first = (await (await firstPromise).json()) as ExposureBatchResponse;
+    expect(second.results).toEqual([
+      { exposureId: EXPOSURE_ID_A, status: "rejected", code: "SERVICE_UNAVAILABLE" },
+    ]);
+    expect(first.results).toEqual([{ exposureId: EXPOSURE_ID_A, status: "accepted", code: null }]);
     expect(gated.writes).toHaveLength(1);
   });
 
