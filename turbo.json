@@ -117,6 +117,7 @@
     "//#test:scripts": {
       "inputs": [
         "scripts/**",
+        "packages/db/migrations/**",
         ".github/workflows/**",
         ".github/actions/**",
         "apps/control-panel/playwright.config.ts",

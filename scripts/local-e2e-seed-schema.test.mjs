@@ -19,6 +19,11 @@ const WRANGLER_TIMEOUT_MS = 5 * 60 * 1000;
  * with SQLite's own "no column named" error -- the same failure the e2e fleet
  * hits at boot -- rather than a hand-copied snapshot of column names that
  * would just drift again the next time a migration touches the same table.
+ *
+ * This only proves column SHAPE, not referential integrity: `metrics.
+ * event_definition_id` (packages/db/migrations/0019_event_definitions.sql)
+ * is a plain `text` column with no `REFERENCES` clause, so a seed row
+ * pointing at a nonexistent `event_definitions.id` would still pass here.
  */
 function applySeedToMigratedD1() {
   const sandbox = mkdtempSync(join(tmpdir(), "splitch-e2e-seed-schema-"));
