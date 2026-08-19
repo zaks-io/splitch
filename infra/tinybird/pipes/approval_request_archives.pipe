@@ -81,3 +81,4 @@ SQL >
     LIMIT {{Int32(limit)}}
 
 TYPE ENDPOINT
+TOKEN approval_request_archives_read READ
