@@ -2,6 +2,7 @@ import { createAuthKitClient } from "./authkit";
 import type { ControlPanelBindings } from "./bindings";
 import { rejectCrossOriginWrite } from "./panel-csrf";
 import { destroySession } from "./session";
+import { appendHttpOnlyCookie } from "./session-cookie";
 
 export const LOGOUT_PATH = "/auth/logout";
 
@@ -32,7 +33,7 @@ export async function destroyPanelSession(
     : returnTo;
 
   const headers = new Headers({ "cache-control": "no-store", location });
-  headers.append("set-cookie", destroyed.cookie);
+  appendHttpOnlyCookie(headers, destroyed.cookie);
   return new Response(null, { headers, status: 302 });
 }
 
