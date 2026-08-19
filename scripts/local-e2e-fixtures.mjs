@@ -249,13 +249,23 @@ INSERT INTO flag_configs (id, app_id, environment_id, flag_id, enabled, availabl
   ('config_srm_overview_e2e', 'app_checkout_e2e', 'env_checkout_overview_e2e', 'flag_checkout_srm_e2e', 0, '["control"]', 'variant_srm_control_e2e', '${createdAt}', '${staleChangedAt}'),
   ('config_create_lab_e2e', 'app_checkout_e2e', 'env_checkout_create_e2e', 'flag_checkout_ended_e2e', 1, '["control","treatment"]', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_create_gated_e2e', 'app_checkout_e2e', 'env_checkout_creategate_e2e', 'flag_checkout_ended_e2e', 1, '["control","treatment"]', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}');
-INSERT INTO metrics (id, app_id, key, name, kind, event_name, created_at, created_by) VALUES
-  ('checkout-conversion', 'app_checkout_e2e', 'checkout-conversion', 'Checkout conversion', 'binomial', 'checkout_completed', '${createdAt}', 'user_local_e2e'),
-  ('checkout-reliability', 'app_checkout_e2e', 'checkout-reliability', 'Checkout reliability', 'binomial', 'checkout_succeeded', '${createdAt}', 'user_local_e2e'),
-  ('metric_setup_goal_e2e', 'app_checkout_e2e', 'setup-goal', 'Checkout conversion', 'binomial', 'checkout_completed', '${createdAt}', 'user_local_e2e'),
-  ('metric_setup_secondary_e2e', 'app_checkout_e2e', 'setup-secondary', 'Order value', 'binomial', 'order_value_recorded', '${createdAt}', 'user_local_e2e'),
-  ('metric_setup_guardrail_e2e', 'app_checkout_e2e', 'setup-guardrail', 'Checkout errors', 'binomial', 'checkout_error', '${createdAt}', 'user_local_e2e'),
-  ('metric_setup_activation_e2e', 'app_checkout_e2e', 'setup-activation', 'Checkout opened', 'binomial', 'checkout_opened', '${createdAt}', 'user_local_e2e');
+-- SPL-369: migration 0019 replaced the Metric's free-text \`event_name\` with an
+-- \`event_definition_id\` FK into \`event_definitions\`. Seed the Event Definitions
+-- a legacy Metric would carry after that migration's own backfill (state
+-- 'incomplete', no published Version) rather than pointing at a dangling id.
+INSERT INTO event_definitions (id, app_id, name, family, display_name, state, current_published_version_id, created_at, updated_at, created_by, updated_by) VALUES
+  ('event_def_checkout_completed_e2e', 'app_checkout_e2e', 'checkout_completed', 'metric', 'Checkout completed', 'incomplete', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
+  ('event_def_checkout_succeeded_e2e', 'app_checkout_e2e', 'checkout_succeeded', 'metric', 'Checkout succeeded', 'incomplete', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
+  ('event_def_order_value_recorded_e2e', 'app_checkout_e2e', 'order_value_recorded', 'metric', 'Order value recorded', 'incomplete', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
+  ('event_def_checkout_error_e2e', 'app_checkout_e2e', 'checkout_error', 'metric', 'Checkout error', 'incomplete', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
+  ('event_def_checkout_opened_e2e', 'app_checkout_e2e', 'checkout_opened', 'metric', 'Checkout opened', 'incomplete', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e');
+INSERT INTO metrics (id, app_id, key, name, kind, event_definition_id, created_at, created_by) VALUES
+  ('checkout-conversion', 'app_checkout_e2e', 'checkout-conversion', 'Checkout conversion', 'binomial', 'event_def_checkout_completed_e2e', '${createdAt}', 'user_local_e2e'),
+  ('checkout-reliability', 'app_checkout_e2e', 'checkout-reliability', 'Checkout reliability', 'binomial', 'event_def_checkout_succeeded_e2e', '${createdAt}', 'user_local_e2e'),
+  ('metric_setup_goal_e2e', 'app_checkout_e2e', 'setup-goal', 'Checkout conversion', 'binomial', 'event_def_checkout_completed_e2e', '${createdAt}', 'user_local_e2e'),
+  ('metric_setup_secondary_e2e', 'app_checkout_e2e', 'setup-secondary', 'Order value', 'binomial', 'event_def_order_value_recorded_e2e', '${createdAt}', 'user_local_e2e'),
+  ('metric_setup_guardrail_e2e', 'app_checkout_e2e', 'setup-guardrail', 'Checkout errors', 'binomial', 'event_def_checkout_error_e2e', '${createdAt}', 'user_local_e2e'),
+  ('metric_setup_activation_e2e', 'app_checkout_e2e', 'setup-activation', 'Checkout opened', 'binomial', 'event_def_checkout_opened_e2e', '${createdAt}', 'user_local_e2e');
 INSERT INTO segments (id, app_id, name, conditions, description, created_at, updated_at) VALUES
   ('segment_paid_e2e', 'app_checkout_e2e', 'Paid plan', '[{"attribute":"plan","operator":"eq","value":"paid"}]', 'Entities on a paid plan', '${createdAt}', '${createdAt}'),
   ('segment_enterprise_e2e', 'app_checkout_e2e', 'Enterprise markets', '[{"attribute":"plan","operator":"eq","value":"enterprise"},{"attribute":"country","operator":"in","value":["US","CA"]}]', 'Enterprise plan in US or CA', '${createdAt}', '${createdAt}'),
