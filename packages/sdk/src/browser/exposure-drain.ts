@@ -1,30 +1,50 @@
 import { formatSdkErrorMessage, SplitchSdkError } from "../errors";
 import type { Logger } from "../evaluate";
-import type { ExposureBatchResult } from "../generated/contract-surface.js";
+import { retainRetryableExposures } from "../exposure-retry";
+import type { ExposureBatchItem, ExposureBatchResult } from "../generated/contract-surface.js";
 import type { QueuedExposure } from "./exposure-batch";
-import type { BrowserExposuresResult } from "./transport";
+import type { BrowserExposuresResult, BrowserTransport } from "./transport";
 
-export function correlateBatchResults(
+export async function redeemExposureBatch(
+  transport: Pick<BrowserTransport, "redeemExposures">,
+  items: readonly ExposureBatchItem[],
+  keepalive: boolean,
+): Promise<BrowserExposuresResult> {
+  try {
+    return await transport.redeemExposures(items, { keepalive });
+  } catch (cause) {
+    return {
+      status: null,
+      results: null,
+      errorCode: "SDK_TRANSPORT_NETWORK",
+      errorMessage: cause instanceof Error ? cause.message : "Exposure transport rejected",
+      cause,
+    };
+  }
+}
+
+export function applyExposureBatchResults(
   batch: readonly QueuedExposure[],
   results: readonly ExposureBatchResult[],
   status: number | null,
   logRejected: (item: QueuedExposure, row: ExposureBatchResult, status: number | null) => void,
-): { completed: ExposureBatchResult[]; retained: QueuedExposure[] } {
+): { completed: ExposureBatchResult[]; retained: QueuedExposure[]; unmatchedCount: number } {
+  const retained = retainRetryableExposures(batch, results);
   const byId = new Map(results.map((row) => [row.exposureId, row]));
-  const retained: QueuedExposure[] = [];
   const completed: ExposureBatchResult[] = [];
+  let unmatchedCount = 0;
   for (const item of batch) {
     const row = byId.get(item.exposureId);
     if (row === undefined) {
-      retained.push(item);
-      continue;
-    }
-    completed.push(row);
-    if (row.status === "rejected") {
-      logRejected(item, row, status);
+      unmatchedCount += 1;
+    } else {
+      completed.push(row);
+      if (row.status === "rejected") {
+        logRejected(item, row, status);
+      }
     }
   }
-  return { completed, retained };
+  return { completed, retained, unmatchedCount };
 }
 
 export function logZeroProgress(
@@ -40,6 +60,16 @@ export function logZeroProgress(
   });
   logger.error(error.message, { errorCode: error.code, pendingCount });
   return error;
+}
+
+export function logMissingBatchResults(logger: Logger, unmatchedCount: number): void {
+  const error = new SplitchSdkError({
+    code: "SERVICE_UNAVAILABLE",
+    causeSummary: `Exposure batch response omitted ${unmatchedCount} sent exposureId(s)`,
+    remediation:
+      "Inspect the exposures response: every sent exposureId must appear in results, or automatic delivery stops after the retry bound",
+  });
+  logger.error(error.message, { errorCode: error.code, unmatchedCount });
 }
 
 export const EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION =

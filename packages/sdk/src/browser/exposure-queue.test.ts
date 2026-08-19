@@ -152,7 +152,9 @@ describe("ExposureQueue: overlapping flush drain (handoff)", () => {
 
     expect(redeemCalls.reduce((sum, n) => sum + n, 0)).toBeGreaterThanOrEqual(2);
     expect(calls).toBeGreaterThanOrEqual(2);
-    expect(logger.errors).toHaveLength(0);
+    expect(logger.errors.some((row) => row.message.includes("omitted 1 sent exposureId"))).toBe(
+      true,
+    );
   });
 
   it("pagehide after an in-flight flush still sends remaining with keepalive (probe C)", async () => {

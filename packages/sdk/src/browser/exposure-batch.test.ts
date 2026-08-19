@@ -1,10 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   EXPOSURE_BATCH_MAX_BODY_BYTES,
   EXPOSURE_BATCH_MAX_ITEMS,
 } from "../generated/contract-surface.js";
 import { FakeLogger } from "../test-fixtures";
-import { mintExposureId, takeBatch, type QueuedExposure } from "./exposure-batch";
+import { mintExposureId, type QueuedExposure, takeBatch } from "./exposure-batch";
+
+const originalRandomUUID = globalThis.crypto.randomUUID;
+
+afterEach(() => {
+  globalThis.crypto.randomUUID = originalRandomUUID;
+});
 
 function item(flagKey: string, ticket = "t"): QueuedExposure {
   return {
@@ -45,12 +51,10 @@ describe("takeBatch caps in isolation (M40/M41)", () => {
 
 describe("mintExposureId (M17)", () => {
   it("throws when crypto.randomUUID is unavailable", () => {
-    const original = globalThis.crypto.randomUUID;
     // @ts-expect-error intentional mutation probe
     globalThis.crypto.randomUUID = undefined;
     const logger = new FakeLogger();
     expect(() => mintExposureId(logger, "flag")).toThrow(/SDK_IDEMPOTENCY_KEY_UNAVAILABLE/);
     expect(logger.errors.length).toBeGreaterThan(0);
-    globalThis.crypto.randomUUID = original;
   });
 });

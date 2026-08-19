@@ -6,9 +6,8 @@ import { ErrorCodeSchema } from "./generated/contract-surface.js";
  * contract (`@splitch/contracts` `RETRYABLE_EXPOSURE_REJECTION_CODES` /
  * docs/spec/sdk/exposures-endpoint.md) — not a free-floating literal.
  *
- * Staged landing: this module is not yet wired into a shipping flush/queue
- * (not exported from index.ts). Spec + tests pin the contract ahead of the
- * consumer.
+ * The browser Exposure queue is the shipping consumer. This stays internal to
+ * the package rather than becoming a public SDK export.
  */
 export const RETRYABLE_EXPOSURE_REJECTION_CODES = [
   "SERVICE_UNAVAILABLE",

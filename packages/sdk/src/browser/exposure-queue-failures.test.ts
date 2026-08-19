@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EXPOSURE_BATCH_MAX_ITEMS } from "../generated/contract-surface.js";
 import { FakeLogger } from "../test-fixtures";
 import { ExposureQueue } from "./exposure-queue";
 import type { BrowserExposuresResult } from "./transport";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function acceptAll(exposures: readonly { exposureId: string }[]): BrowserExposuresResult {
   return {
@@ -88,7 +92,6 @@ describe("ExposureQueue: empty results fail loud (B3)", () => {
     const rejected = logger.errors.find((row) => row.message.includes("rejected"));
     expect(rejected).toBeDefined();
     expect(rejected?.detail).toMatchObject({ exposureId: idB, flagKey: "flag-b" });
-    vi.restoreAllMocks();
   });
 
   it("throws when maxBatchesPerDrain is exceeded on a healthy stream", async () => {

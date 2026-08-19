@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EvaluateAllEntry } from "../generated/contract-surface.js";
 import { FakeLogger } from "../test-fixtures";
 import { createSplitchBrowserClient } from "./client";
 import { browserOkPayload, FakeBrowserTransport } from "./test-fixtures";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("createSplitchBrowserClient: construction", () => {
   it("throws when a secret sk_ key is passed", () => {
@@ -212,6 +216,5 @@ describe("createSplitchBrowserClient: sync reads", () => {
     client.evaluate("new-checkout", false);
     const results = await client.flush();
     expect(results).toEqual([{ exposureId, status: "accepted", code: null }]);
-    vi.restoreAllMocks();
   });
 });

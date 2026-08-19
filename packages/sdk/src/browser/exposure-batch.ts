@@ -49,6 +49,14 @@ export function pendingBodyBytes(items: readonly QueuedExposure[]): number {
   return new TextEncoder().encode(JSON.stringify(wire)).byteLength;
 }
 
+export function toExposureBatchItems(items: readonly QueuedExposure[]): ExposureBatchItem[] {
+  return items.map(({ exposureId, exposureTicket, clientTimestamp }) => ({
+    exposureId,
+    exposureTicket,
+    clientTimestamp,
+  }));
+}
+
 export function trimFailedOverflow(
   pending: QueuedExposure[],
   enqueuedFlags: Set<string>,

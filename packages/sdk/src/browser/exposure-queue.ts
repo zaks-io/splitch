@@ -1,6 +1,6 @@
 import { formatSdkErrorMessage } from "../errors";
 import type { Logger } from "../evaluate";
-import type { ExposureBatchItem, ExposureBatchResult } from "../generated/contract-surface.js";
+import type { ExposureBatchResult } from "../generated/contract-surface.js";
 import {
   EXPOSURE_BATCH_MAX_BODY_BYTES,
   EXPOSURE_BATCH_MAX_ITEMS,
@@ -10,17 +10,20 @@ import {
   pendingBodyBytes,
   type QueuedExposure,
   takeBatch,
+  toExposureBatchItems,
   trimFailedOverflow,
 } from "./exposure-batch";
 import {
-  correlateBatchResults,
+  applyExposureBatchResults,
   logBatchFailure,
+  logMissingBatchResults,
   logRejectedItem,
   logZeroProgress,
+  redeemExposureBatch,
 } from "./exposure-drain";
 import { ExposureRetryPolicy } from "./exposure-retry";
 import { resolveDocument, resolveWindow } from "./lifecycle-targets";
-import type { BrowserExposuresResult, BrowserTransport } from "./transport";
+import type { BrowserTransport } from "./transport";
 
 const FLUSH_DELAY_MS = 5_000;
 /**
@@ -197,8 +200,17 @@ export class ExposureQueue {
     let batches = 0;
     try {
       while (this.pending.length > 0) {
-        batches = await this.drainNextBatch(keepalive, batches, batchLimit, completed);
-        if (this.queuedDrains > 1) {
+        const [nextBatches, retainedForRetry] = await this.drainNextBatch(
+          keepalive,
+          batches,
+          batchLimit,
+          completed,
+        );
+        batches = nextBatches;
+        if (
+          (retainedForRetry && (!this.closed || !this.retryPolicy.automaticRetryAllowed)) ||
+          this.queuedDrains > 1
+        ) {
           break;
         }
       }
@@ -213,7 +225,7 @@ export class ExposureQueue {
     batches: number,
     batchLimit: number,
     completed: ExposureBatchResult[],
-  ): Promise<number> {
+  ): Promise<readonly [batches: number, retainedForRetry: boolean]> {
     if (batches >= batchLimit) {
       throw logZeroProgress(
         this.deps.logger,
@@ -221,21 +233,9 @@ export class ExposureQueue {
         this.pending.length,
       );
     }
-    const batchCompleted = await this.runOneBatch(keepalive);
-    if (batchCompleted.length === 0) {
-      this.retryPolicy.recordFailure(
-        { status: null, errorCode: "SERVICE_UNAVAILABLE" },
-        this.pending.length,
-      );
-      throw logZeroProgress(
-        this.deps.logger,
-        "Exposure batch response made zero progress (empty or unmatched results)",
-        this.pending.length,
-      );
-    }
-    this.retryPolicy.recordSuccess();
-    completed.push(...batchCompleted);
-    return batches + 1;
+    const outcome = await this.runOneBatch(keepalive);
+    completed.push(...outcome.completed);
+    return [batches + 1, outcome.retainedForRetry];
   }
 
   private afterDrain(): void {
@@ -250,37 +250,13 @@ export class ExposureQueue {
     this.detachLifecycle();
   }
 
-  private async runOneBatch(keepalive: boolean): Promise<readonly ExposureBatchResult[]> {
+  private async runOneBatch(
+    keepalive: boolean,
+  ): Promise<{ completed: readonly ExposureBatchResult[]; retainedForRetry: boolean }> {
     const batch = takeBatch(this.pending);
-    const wireItems: ExposureBatchItem[] = batch.map(
-      ({ exposureId, exposureTicket, clientTimestamp }) => ({
-        exposureId,
-        exposureTicket,
-        clientTimestamp,
-      }),
-    );
+    const wireItems = toExposureBatchItems(batch);
 
-    let result: BrowserExposuresResult;
-    try {
-      result = await this.deps.transport.redeemExposures(wireItems, { keepalive });
-    } catch (cause) {
-      const failure: BrowserExposuresResult = {
-        status: null,
-        results: null,
-        errorCode: "SDK_TRANSPORT_NETWORK",
-        errorMessage: cause instanceof Error ? cause.message : "Exposure transport rejected",
-        cause,
-      };
-      // Rejecting transports must not destroy the batch: re-queue and fail loud
-      // exactly like a null-results transport failure (ADR-0036).
-      this.pending.unshift(...batch);
-      throw logBatchFailure(
-        this.deps.logger,
-        failure,
-        batch.length,
-        this.retryPolicy.remediationForFailure(failure, batch.length, this.closed),
-      );
-    }
+    const result = await redeemExposureBatch(this.deps.transport, wireItems, keepalive);
     if (result.results === null) {
       this.pending.unshift(...batch);
       throw logBatchFailure(
@@ -291,16 +267,44 @@ export class ExposureQueue {
       );
     }
 
-    const { completed, retained } = correlateBatchResults(
-      batch,
-      result.results,
-      result.status,
-      (item, row, status) => logRejectedItem(this.deps.logger, item, row, status),
-    );
-    if (retained.length > 0) {
-      this.pending.unshift(...retained);
+    let outcome: ReturnType<typeof applyExposureBatchResults>;
+    try {
+      outcome = applyExposureBatchResults(
+        batch,
+        result.results,
+        result.status,
+        (item, row, status) => logRejectedItem(this.deps.logger, item, row, status),
+      );
+    } catch (cause) {
+      this.pending.unshift(...batch);
+      this.retryPolicy.recordFailure(result, batch.length);
+      throw logZeroProgress(
+        this.deps.logger,
+        cause instanceof Error ? cause.message : "Exposure batch response is invalid",
+        batch.length,
+      );
     }
-    return completed;
+    if (outcome.retained.length > 0) {
+      this.pending.unshift(...outcome.retained);
+    }
+    if (outcome.unmatchedCount > 0) {
+      this.retryPolicy.recordFailure(result, outcome.unmatchedCount);
+      if (outcome.completed.length === 0) {
+        throw logZeroProgress(
+          this.deps.logger,
+          "Exposure batch response made zero progress because it omitted one or more sent exposureIds",
+          outcome.unmatchedCount,
+        );
+      }
+      logMissingBatchResults(this.deps.logger, outcome.unmatchedCount);
+      return { completed: outcome.completed, retainedForRetry: true };
+    }
+    if (outcome.retained.length > 0) {
+      this.retryPolicy.recordFailure(result, outcome.retained.length);
+      return { completed: outcome.completed, retainedForRetry: true };
+    }
+    this.retryPolicy.recordSuccess();
+    return { completed: outcome.completed, retainedForRetry: false };
   }
 
   private automaticFlushAllowed(): boolean {

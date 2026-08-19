@@ -189,8 +189,8 @@ silent invented default.
 32 KiB) and a forced flush fails, the oldest 25 items are retained for retry by
 item count; retained items are not additionally bounded by the byte cap. Only
 the excess tail is dropped loudly (`RATE_LIMITED`). A single-batch queue that
-fails once drops nothing. Retryable delivery failures make at most three total
-attempts; a non-retryable 4xx stops automatic delivery after its first attempt.
+fails once drops nothing. Retryable delivery failures make at most three automatic
+delivery attempts; a non-retryable 4xx stops automatic delivery after its first attempt.
 Both terminal paths log loudly and retain the items for an explicit `flush()`.
 
 ## Convex

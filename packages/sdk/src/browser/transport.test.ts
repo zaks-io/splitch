@@ -194,7 +194,11 @@ describe("createBrowserFetchTransport: failure surface (B4)", () => {
       endpoint: "https://edge.test",
       timeoutMs: 1000,
       fetchImpl: (async () =>
-        jsonResponse(500, { error: { code: "INTERNAL_SERVER_ERROR" } })) as typeof fetch,
+        jsonResponse(500, {
+          code: "INTERNAL_SERVER_ERROR",
+          message: "evaluation failed",
+          details: [],
+        })) as typeof fetch,
     });
     const result = await transport.evaluateAll({
       targetingKey: "u1",
@@ -205,6 +209,7 @@ describe("createBrowserFetchTransport: failure surface (B4)", () => {
     expect(result.evaluations).toBeNull();
     expect(result.etag).toBeNull();
     expect(result.status).toBe(500);
+    expect(result.errorCode).toBe("INTERNAL_SERVER_ERROR");
   });
 
   it("rejects evaluate-all success bodies without an ETag (M19)", async () => {
@@ -231,7 +236,11 @@ describe("createBrowserFetchTransport: failure surface (B4)", () => {
       endpoint: "https://edge.test",
       timeoutMs: 1000,
       fetchImpl: (async () =>
-        jsonResponse(400, { error: { code: "VALIDATION_ERROR" } })) as typeof fetch,
+        jsonResponse(400, {
+          code: "VALIDATION_ERROR",
+          message: "invalid exposure batch",
+          details: [],
+        })) as typeof fetch,
     });
     const result = await transport.redeemExposures([
       {
@@ -242,6 +251,7 @@ describe("createBrowserFetchTransport: failure surface (B4)", () => {
     ]);
     expect(result.results).toBeNull();
     expect(result.status).toBe(400);
+    expect(result.errorCode).toBe("VALIDATION_ERROR");
   });
 });
 
