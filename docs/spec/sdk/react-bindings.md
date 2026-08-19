@@ -224,9 +224,9 @@ The hook implementation slice must ship tests that prove all of the following:
   details.
 - Absent-flag details (including `ERROR` / `FLAG_NOT_FOUND`), held-`ERROR` details, and null-variant
   details retain their held fields and object references while the client is degraded.
-- For any held entry and degradation state, `useFlagDetails` and the client's `evaluateDetails`
-  staleness decoration produce the same fields because both call the identical decorator at the
-  same point.
+- On a decoration-eligible render, for any held entry and degradation state, `useFlagDetails` and
+  the client's `evaluateDetails` staleness decoration produce the same fields because both call the
+  identical decorator at the same point.
 - A server render and its hydration render both return the unchanged held details even when the
   client is already degraded. Neither render populates or consults the decoration identity memo.
   The provider mount effect schedules no render; the next render caused by something else applies
