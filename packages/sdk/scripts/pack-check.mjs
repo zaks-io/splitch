@@ -18,6 +18,7 @@ import {
   packStagingDir,
   parseTarballName,
   readTarballFile,
+  readTarballDeclarations,
 } from "./pack-staging.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -36,10 +37,11 @@ try {
   assertPublishKeepsManifest(staging);
   const output = packStagingDir(staging, { destination: staging });
   const tarballPath = join(staging, parseTarballName(output));
+  const listing = listTarballFiles(tarballPath);
   assertReleaseTarballContents({
-    listing: listTarballFiles(tarballPath),
+    listing,
     manifestText: readTarballFile(tarballPath, "package/package.json"),
-    declarationText: readTarballFile(tarballPath, "package/dist/index.d.ts"),
+    declarationTexts: readTarballDeclarations(tarballPath, listing),
     bundleJs: readTarballFile(tarballPath, "package/dist/index.js"),
   });
   // Browser subpath must ship beside the root entry (SPL-332).

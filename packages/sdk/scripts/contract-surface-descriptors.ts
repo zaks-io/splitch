@@ -1,3 +1,4 @@
+// Docblocks ship verbatim in dist/index.d.ts; keep them consumer-facing. See generate-contract-surface.mjs.
 /**
  * Hand-written structural descriptors for the SDK contract surface, compared
  * against `z.toJSONSchema()` (+ unknown-key policy) of the contracts Zod

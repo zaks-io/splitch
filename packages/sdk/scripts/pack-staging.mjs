@@ -88,6 +88,20 @@ export function readTarballFile(tarballPath, entryPath) {
   return execFileSync("tar", ["-xOf", tarballPath, entryPath], { encoding: "utf8" });
 }
 
+function declarationFiles(listing) {
+  return listing.filter((file) => file.endsWith(".d.ts"));
+}
+
+function packageRelativePath(file) {
+  return file.replace(/^package\//, "");
+}
+
+export function readTarballDeclarations(tarballPath, listing) {
+  return Object.fromEntries(
+    declarationFiles(listing).map((file) => [file, readTarballFile(tarballPath, file)]),
+  );
+}
+
 /** Control-plane / test-eval schema names that must never ship in the public SDK bundle. */
 const FORBIDDEN_PUBLIC_BUNDLE_MARKERS = [
   "OrganizationSchema",
@@ -147,18 +161,37 @@ function assertZeroRuntimeDependencies(manifest) {
   }
 }
 
-function assertNoInternalPlumbingInDeclarations(declarationText) {
-  const normalizedDeclarationText = declarationText.toLowerCase();
+function assertNoInternalPlumbingInDeclaration(file, declarationText) {
+  const normalizedDeclarationText = declarationText.toLowerCase().replace(/\s*\n\s*\*\s*/g, " ");
   for (const marker of FORBIDDEN_PUBLIC_DECLARATION_MARKERS) {
-    if (normalizedDeclarationText.includes(marker)) {
+    if (normalizedDeclarationText.includes(marker.toLowerCase())) {
       throw new Error(
-        `release declaration dist/index.d.ts contains internal plumbing marker: ${marker}`,
+        `release declaration ${packageRelativePath(file)} contains internal plumbing marker: ${marker}`,
       );
     }
   }
 }
 
-export function assertReleaseTarballContents({ listing, manifestText, declarationText, bundleJs }) {
+function assertNoInternalPlumbingInDeclarations(listing, declarationTexts) {
+  const files = declarationFiles(listing);
+  if (files.length === 0) {
+    throw new Error("release tarball must ship declarations");
+  }
+  for (const file of files) {
+    const declarationText = declarationTexts[file];
+    if (typeof declarationText !== "string") {
+      throw new Error(`release declaration text is missing for ${packageRelativePath(file)}`);
+    }
+    assertNoInternalPlumbingInDeclaration(file, declarationText);
+  }
+}
+
+export function assertReleaseTarballContents({
+  listing,
+  manifestText,
+  declarationTexts,
+  bundleJs,
+}) {
   for (const file of listing) {
     if (file.endsWith(".map")) {
       throw new Error(`release tarball must not include sourcemaps: ${file}`);
@@ -176,7 +209,7 @@ export function assertReleaseTarballContents({ listing, manifestText, declaratio
     throw new Error("release manifest still lists @splitch/contracts in devDependencies");
   }
   assertZeroRuntimeDependencies(manifest);
-  assertNoInternalPlumbingInDeclarations(declarationText);
+  assertNoInternalPlumbingInDeclarations(listing, declarationTexts);
 
   if (manifest.devDependencies && Object.keys(manifest.devDependencies).length > 0) {
     throw new Error(
@@ -233,10 +266,16 @@ export function assertDryRunListing(packOutput) {
 
   const releaseManifest = readReleaseManifest(getPackageRoot());
   const bundleJs = readFileSync(join(getPackageRoot(), "dist/index.js"), "utf8");
+  const declarationTexts = Object.fromEntries(
+    declarationFiles(listing).map((file) => [
+      file,
+      readFileSync(join(getPackageRoot(), packageRelativePath(file)), "utf8"),
+    ]),
+  );
   assertReleaseTarballContents({
     listing,
     manifestText: JSON.stringify(releaseManifest),
-    declarationText: readFileSync(join(getPackageRoot(), "dist/index.d.ts"), "utf8"),
+    declarationTexts,
     bundleJs,
   });
 }

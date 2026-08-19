@@ -13,9 +13,8 @@
  * published bundle stays dependency-free. Docblocks anywhere in this
  * surface can land verbatim in the published `dist/index.d.ts`, so comments in
  * the surface must stay consumer-facing: no script paths, release-pack rules,
- * or contracts-package plumbing. In particular, the emitted header must never
- * name the contracts package by its scoped name because the release pack
- * rejects any published declaration containing it.
+ * or contracts-package plumbing. The complete forbidden marker list is
+ * maintained in `scripts/pack-staging.mjs`.
  *
  * What is NOT generated: the object shapes in `contract-surface-types.ts` and
  * the JSON type nodes in `contract-surface-descriptors.ts`. Emitting TypeScript
