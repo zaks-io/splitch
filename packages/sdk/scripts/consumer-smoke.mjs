@@ -11,13 +11,14 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyBuildStamp } from "../../../scripts/release/build-stamp.mjs";
+import { runConvexConsumerSmoke } from "./convex-consumer-smoke.mjs";
 import {
   extractQuickstartSdkSnippet,
   stripIdempotencyKeyFromSnippet,
   wrapQuickstartSnippetForTypecheck,
 } from "./extract-quickstart-snippet.mjs";
-import { runConvexConsumerSmoke } from "./convex-consumer-smoke.mjs";
 import { assertReleaseBundleJs } from "./pack-staging.mjs";
+import { runReactConsumerSmoke } from "./react-consumer-smoke.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(packageRoot, "../..");
@@ -200,6 +201,9 @@ client.evaluate("checkout", false);
     "utf8",
   );
   assertReleaseBundleJs(bundleJs);
+
+  // Packed React leg: real browser client and SSR hook render with React installed.
+  runReactConsumerSmoke(tarballPath);
 
   // Convex isolate fixture: packed-tarball install + convex-test (SPL-336).
   // Transport is stubbed at the fixture seam (global fetch), not a live edge.

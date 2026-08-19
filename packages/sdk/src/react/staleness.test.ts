@@ -4,13 +4,13 @@ import { act, createElement, useState } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createSplitchBrowserClient, type SplitchBrowserClient } from "../browser/client";
+import { getBrowserClientInternalAccess } from "../browser/client-internals";
+import { FakeBrowserTransport } from "../browser/test-fixtures";
 import type { PrecomputedEvaluations } from "../evaluate-all";
 import type { EvaluateAllEntry, VariantValue } from "../generated/contract-surface.js";
 import type { SdkResolutionDetails } from "../resolution";
 import { FakeLogger } from "../test-fixtures";
-import { createSplitchBrowserClient, type SplitchBrowserClient } from "../browser/client";
-import { getBrowserClientInternalAccess } from "../browser/client-internals";
-import { FakeBrowserTransport } from "../browser/test-fixtures";
 import { SplitchProvider, useFlag, useFlagDetails } from "./index";
 
 const CONTEXT = { targetingKey: "u1", idType: "user", attributes: {} } as const;
@@ -184,6 +184,30 @@ describe("useFlagDetails staleness updates", () => {
 });
 
 describe("useFlagDetails initial rendering", () => {
+  it("preserves details identity for structurally equal object defaults", async () => {
+    const client = createClient({ checkout: entry(true) }, []);
+    const defaults: VariantValue[] = [];
+    const seen: SdkResolutionDetails[] = [];
+    let bump = () => undefined;
+    function Consumer() {
+      const [, setCount] = useState(0);
+      bump = () => setCount((value) => value + 1);
+      const defaultValue = { nested: { value: "fallback" } };
+      defaults.push(defaultValue);
+      seen.push(useFlagDetails("checkout", defaultValue));
+      return null;
+    }
+    const mounted = await mount(client, createElement(Consumer));
+    await act(async () => bump());
+    await act(async () => bump());
+
+    expect(defaults[1]).not.toBe(defaults[2]);
+    expect(seen[1]).toBe(seen[2]);
+
+    await unmount(mounted.root, mounted.container);
+    await client.close();
+  });
+
   it("leaves the first client-only render undecorated, then decorates an unrelated render", async () => {
     const client = createClient({ checkout: entry(true) }, [FAILURE]);
     await vi.advanceTimersByTimeAsync(1_000);

@@ -1,3 +1,4 @@
+import type { SplitchBrowserClient } from "@splitch/sdk/browser";
 import {
   createContext,
   createElement,
@@ -10,8 +11,8 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import type { SplitchBrowserClient } from "../browser/client";
 import { getBrowserClientInternalAccess } from "../browser/client-internals";
+import { canonicalEqual } from "../browser/payload-store";
 import { SplitchSdkError } from "../errors";
 import type { VariantValue } from "../generated/contract-surface.js";
 import type { SdkResolutionDetails } from "../resolution";
@@ -87,12 +88,16 @@ function useHeldResolution(flagKey: string, defaultValue: VariantValue) {
   );
   const getSnapshot = useCallback(() => access.readHeldEntry(flagKey), [access, flagKey]);
   const entry = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const resolution = useMemo(
-    () => getBrowserClientInternalAccess(client).deriveHeldResolution(flagKey, entry, defaultValue),
-    [client, entry, flagKey, defaultValue],
-  );
   const latestDefault = useRef(defaultValue);
-  latestDefault.current = defaultValue;
+  if (!canonicalEqual(latestDefault.current, defaultValue)) {
+    latestDefault.current = defaultValue;
+  }
+  const stableDefault = latestDefault.current;
+  const resolution = useMemo(
+    () =>
+      getBrowserClientInternalAccess(client).deriveHeldResolution(flagKey, entry, stableDefault),
+    [client, entry, flagKey, stableDefault],
+  );
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new held entry arms its new Exposure Ticket for the committed read
   useEffect(() => {
     client.evaluate(flagKey, latestDefault.current);

@@ -4,12 +4,12 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PrecomputedEvaluations } from "../evaluate-all";
-import type { EvaluateAllEntry } from "../generated/contract-surface.js";
-import { FakeLogger } from "../test-fixtures";
 import { createSplitchBrowserClient, type SplitchBrowserClient } from "../browser/client";
 import { FakeBrowserTransport } from "../browser/test-fixtures";
 import { sdkClientErrorCodes } from "../errors";
+import type { PrecomputedEvaluations } from "../evaluate-all";
+import type { EvaluateAllEntry } from "../generated/contract-surface.js";
+import { FakeLogger } from "../test-fixtures";
 import { SplitchProvider, useFlag, useFlagDetails, useSplitchClient } from "./index";
 
 const CONTEXT = { targetingKey: "u1", idType: "user", attributes: {} } as const;
@@ -230,6 +230,37 @@ describe("React fail-loud behavior", () => {
       errorCode: "FLAG_NOT_FOUND",
     });
     expect(logger.errors).toHaveLength(1);
+
+    await unmount(mounted.root, mounted.container);
+    await client.close();
+  });
+
+  it("logs an SSR missing Flag once across render and commit without an Exposure", async () => {
+    const logger = new FakeLogger();
+    const transport = new FakeBrowserTransport([]);
+    const client = createSplitchBrowserClient({
+      clientKey: "pk_test",
+      context: { targetingKey: "u1" },
+      bootstrap: bootstrap({ checkout: entry(true) }),
+      revalidateMs: 0,
+      transport,
+      logger,
+      document: null,
+      window: null,
+    });
+    function Consumer() {
+      return createElement("span", null, String(useFlag("missing", "fallback")));
+    }
+    const tree = createElement(Consumer);
+
+    expect(renderToString(createElement(SplitchProvider, { client }, tree))).toBe(
+      "<span>fallback</span>",
+    );
+    expect(logger.errors).toHaveLength(1);
+    const mounted = await mount(client, tree);
+    await client.flush();
+    expect(logger.errors).toHaveLength(1);
+    expect(transport.redeemCalls).toHaveLength(0);
 
     await unmount(mounted.root, mounted.container);
     await client.close();

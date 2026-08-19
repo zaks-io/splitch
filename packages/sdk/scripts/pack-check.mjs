@@ -62,6 +62,9 @@ try {
       throw new Error(`release React declarations missing ${symbol}`);
     }
   }
+  if (!/from ['"]@splitch\/sdk\/browser['"]/.test(reactDts)) {
+    throw new Error("release React declarations do not reference the browser entry types");
+  }
   assertReleaseBundleJs(reactJs);
 } finally {
   rmSync(staging, { recursive: true, force: true });
