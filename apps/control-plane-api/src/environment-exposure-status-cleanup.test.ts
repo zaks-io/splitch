@@ -56,4 +56,24 @@ describe("Control Plane Environment Exposure status cleanup", () => {
       }),
     ).rejects.toThrow("HTTP 503");
   });
+
+  it.each([
+    ["an empty object", {}],
+    ["deleted false", { deleted: false }],
+    ["an extra response field", { deleted: true, extra: 1 }],
+  ])("rejects a 200 acknowledgement containing %s", async (_case, body) => {
+    const cleanup = createEnvironmentExposureStatusCleanup({
+      fetch: async () => Response.json(body),
+    } as unknown as Fetcher);
+
+    await expect(
+      cleanup.delete({
+        appId: "app_acknowledgement",
+        environmentId: "env_acknowledgement",
+        actorId: "user_acknowledgement",
+        orgId: "org_acknowledgement",
+        requestId: "req_acknowledgement",
+      }),
+    ).rejects.toThrow("Exposure status cleanup returned an invalid response");
+  });
 });

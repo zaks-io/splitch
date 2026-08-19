@@ -2,7 +2,7 @@ import { EnvironmentExposureStatusResponseSchema, type ErrorResponse } from "@sp
 import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
 import { createApp } from "./app";
-import { readExposureStatusFromTinybird } from "./exposure-status";
+import { makeExposureStatusHandler, readExposureStatusFromTinybird } from "./exposure-status";
 import { type PipeParams, TinybirdReadError, type TinybirdReadTransport } from "./tinybird";
 
 const APP_ID = "app_checkout";
@@ -126,14 +126,43 @@ describe("Environment Exposure status", () => {
 });
 
 describe("Environment Exposure status isolation", () => {
-  it("rejects a delegated identity outside the requested App or Environment before Tinybird", async () => {
-    for (const scope of [principal("app_other", ENVIRONMENT_ID), principal(APP_ID, "env_other")]) {
-      const tinybird = new FakeTinybird([]);
-      const response = await appWith(tinybird, scope).request(STATUS_PATH);
+  it("fails closed when an Environment-unbound delegated principal reaches another Environment scope", async () => {
+    const tinybird = new FakeTinybird([]);
+    const response = await appWith(tinybird, principal("app_checkout_unbound", null)).request(
+      "/apps/app_checkout_unbound/envs/env_checkout_target/exposure-status",
+    );
 
-      expect(response.status).toBe(403);
-      expect(tinybird.calls).toEqual([]);
-    }
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      code: "FORBIDDEN",
+      message: "credential is not scoped to this Environment",
+    });
+    expect(tinybird.calls).toEqual([]);
+  });
+
+  it("fails closed when the delegated principal carries a different App scope", async () => {
+    const tinybird = new FakeTinybird([]);
+    const handler = makeExposureStatusHandler({ tinybird });
+    const response = await handler({
+      input: {
+        params: {
+          appId: "app_checkout_requested",
+          environmentId: "env_checkout_requested",
+        },
+      },
+      principal: principal("app_billing_principal", "env_billing_principal"),
+      requestId: "req_cross_app_scope",
+      request: new Request(
+        "https://analysis.internal/apps/app_checkout_requested/envs/env_checkout_requested/exposure-status",
+      ),
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      code: "FORBIDDEN",
+      message: "credential is not scoped to this Environment",
+    });
+    expect(tinybird.calls).toEqual([]);
   });
 
   it("fails closed if Tinybird returns a row outside either requested tenant axis", async () => {
