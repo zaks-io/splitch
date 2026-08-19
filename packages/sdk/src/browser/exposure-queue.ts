@@ -11,7 +11,6 @@ import {
   type QueuedExposure,
   takeBatch,
   toExposureBatchItems,
-  trimFailedOverflow,
 } from "./exposure-batch";
 import {
   applyExposureBatchResults,
@@ -20,7 +19,9 @@ import {
   logRejectedItem,
   logZeroProgress,
   redeemExposureBatch,
+  waitForExposureDrain,
 } from "./exposure-drain";
+import { ExposureOverflow } from "./exposure-overflow";
 import { ExposureRetryPolicy } from "./exposure-retry";
 import { resolveDocument, resolveWindow } from "./lifecycle-targets";
 import type { BrowserTransport } from "./transport";
@@ -64,6 +65,7 @@ export class ExposureQueue {
   private activeDrain: Promise<readonly ExposureBatchResult[]> | null = null;
   /** Callers currently inside enqueueDrain (includes waiters). */
   private queuedDrains = 0;
+  private readonly overflow: ExposureOverflow;
   private readonly retryPolicy: ExposureRetryPolicy;
 
   private readonly onVisibilityChange = (): void => {
@@ -77,6 +79,7 @@ export class ExposureQueue {
   };
 
   constructor(private readonly deps: ExposureQueueDeps) {
+    this.overflow = new ExposureOverflow(this.pending, this.enqueuedFlags, deps.logger);
     this.retryPolicy = new ExposureRetryPolicy(deps.logger);
   }
 
@@ -113,12 +116,15 @@ export class ExposureQueue {
       this.pending.length >= EXPOSURE_BATCH_MAX_ITEMS ||
       pendingBodyBytes(this.pending) > EXPOSURE_BATCH_MAX_BODY_BYTES
     ) {
-      void this.flushOverflow();
+      void this.overflow.flush(
+        () => this.enqueueDrain({ keepalive: false, automatic: true }),
+        this.retryPolicy,
+      );
     }
   }
 
   async flush(): Promise<readonly ExposureBatchResult[]> {
-    return this.enqueueDrain({ keepalive: false });
+    return this.enqueueDrain({ keepalive: false, automatic: false });
   }
 
   async close(): Promise<readonly ExposureBatchResult[]> {
@@ -129,7 +135,7 @@ export class ExposureQueue {
     this.clearTimer();
     this.closePromise = (async () => {
       try {
-        return await this.enqueueDrain({ keepalive: false });
+        return await this.enqueueDrain({ keepalive: false, automatic: false });
       } finally {
         this.detachLifecycle();
       }
@@ -139,26 +145,10 @@ export class ExposureQueue {
 
   private async flushBestEffort(options: { keepalive: boolean }): Promise<void> {
     try {
-      await this.enqueueDrain({ keepalive: options.keepalive });
+      await this.enqueueDrain({ keepalive: options.keepalive, automatic: true });
     } catch {
       // Best-effort page-lifecycle path: failures already logged in runOneBatch.
     }
-  }
-
-  private async flushOverflow(): Promise<void> {
-    let failed = false;
-    try {
-      await this.enqueueDrain({ keepalive: false });
-    } catch {
-      failed = true;
-    }
-    if (!failed) {
-      return;
-    }
-    // Bound memory on a genuine failure: keep the oldest one-batch for the 5s
-    // retry; drop only the excess tail. A queue that never exceeded one batch
-    // drops nothing — and must not emit a RATE_LIMITED "overflow" log for that.
-    trimFailedOverflow(this.pending, this.enqueuedFlags, this.deps.logger);
   }
 
   /**
@@ -167,17 +157,18 @@ export class ExposureQueue {
    * batch. Hand off remaining pending when another drain is already queued
    * (so pagehide can send with keepalive).
    */
-  private enqueueDrain(options: { keepalive: boolean }): Promise<readonly ExposureBatchResult[]> {
+  private enqueueDrain(options: {
+    keepalive: boolean;
+    automatic: boolean;
+  }): Promise<readonly ExposureBatchResult[]> {
     this.queuedDrains += 1;
     return (async () => {
       try {
-        while (this.activeDrain !== null) {
-          try {
-            await this.activeDrain;
-          } catch {
-            // Drain owner already logged; waiters must not adopt that failure —
-            // close()/flush() still get their own send attempt.
-          }
+        if (this.activeDrain !== null) {
+          await waitForExposureDrain(() => this.activeDrain);
+        }
+        if (options.automatic && !this.retryPolicy.automaticRetryAllowed) {
+          return [];
         }
         const work = this.drainPending(options.keepalive);
         this.activeDrain = work;
@@ -258,7 +249,7 @@ export class ExposureQueue {
 
     const result = await redeemExposureBatch(this.deps.transport, wireItems, keepalive);
     if (result.results === null) {
-      this.pending.unshift(...batch);
+      this.overflow.retain(batch);
       throw logBatchFailure(
         this.deps.logger,
         result,
@@ -276,19 +267,20 @@ export class ExposureQueue {
         (item, row, status) => logRejectedItem(this.deps.logger, item, row, status),
       );
     } catch (cause) {
-      this.pending.unshift(...batch);
+      this.overflow.retain(batch);
       this.retryPolicy.recordFailure(result, batch.length);
       throw logZeroProgress(
         this.deps.logger,
         cause instanceof Error ? cause.message : "Exposure batch response is invalid",
         batch.length,
+        cause,
       );
     }
     if (outcome.retained.length > 0) {
-      this.pending.unshift(...outcome.retained);
+      this.overflow.retain(outcome.retained);
     }
     if (outcome.unmatchedCount > 0) {
-      this.retryPolicy.recordFailure(result, outcome.unmatchedCount);
+      this.retryPolicy.recordFailure(result, outcome.retained.length);
       if (outcome.completed.length === 0) {
         throw logZeroProgress(
           this.deps.logger,

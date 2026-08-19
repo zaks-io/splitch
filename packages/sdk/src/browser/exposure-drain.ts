@@ -23,6 +23,18 @@ export async function redeemExposureBatch(
   }
 }
 
+export async function waitForExposureDrain(
+  activeDrain: () => Promise<readonly ExposureBatchResult[]> | null,
+): Promise<void> {
+  while (activeDrain() !== null) {
+    try {
+      await activeDrain();
+    } catch {
+      // The owner logged its failure. A waiter still gets its own send attempt.
+    }
+  }
+}
+
 export function applyExposureBatchResults(
   batch: readonly QueuedExposure[],
   results: readonly ExposureBatchResult[],
@@ -51,14 +63,16 @@ export function logZeroProgress(
   logger: Logger,
   causeSummary: string,
   pendingCount: number,
+  originalError?: unknown,
 ): SplitchSdkError {
   const error = new SplitchSdkError({
     code: "SERVICE_UNAVAILABLE",
     causeSummary,
     remediation:
       "Inspect the exposures response: every sent exposureId must appear in results, or flush fails loud",
+    originalError,
   });
-  logger.error(error.message, { errorCode: error.code, pendingCount });
+  logger.error(error.message, { errorCode: error.code, pendingCount, cause: originalError });
   return error;
 }
 

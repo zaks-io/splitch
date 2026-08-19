@@ -197,7 +197,7 @@ describe("createBrowserFetchTransport: failure surface (B4)", () => {
         jsonResponse(500, {
           code: "INTERNAL_SERVER_ERROR",
           message: "evaluation failed",
-          details: [],
+          details: { fault: "evaluation failed" },
         })) as typeof fetch,
     });
     const result = await transport.evaluateAll({
@@ -239,7 +239,9 @@ describe("createBrowserFetchTransport: failure surface (B4)", () => {
         jsonResponse(400, {
           code: "VALIDATION_ERROR",
           message: "invalid exposure batch",
-          details: [],
+          details: {
+            issues: [{ path: ["exposures"], message: "invalid exposure batch" }],
+          },
         })) as typeof fetch,
     });
     const result = await transport.redeemExposures([

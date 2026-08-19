@@ -35,6 +35,7 @@ const EVALUATE_ALL_BODY = JSON.stringify({
       variantName: "on",
       reason: "SPLIT",
       errorCode: null,
+      exposureIdentity: "pagehide-exposure-identity",
       exposureTicket: "ticket-pagehide",
     },
   },

@@ -164,23 +164,30 @@ describe("ExposureQueue: per-item retry accounting", () => {
     expect(redeemCalls[3]).toEqual([retryId]);
   });
 
-  it("bounds omitted exposureIds even when a sibling is accepted", async () => {
+  it("counts all retained items when omitted and retryable results are mixed", async () => {
     const logger = new FakeLogger();
     const redeemCalls: string[][] = [];
     let omittedId: string | undefined;
+    const retryIds = new Set<string>();
     const queue = new ExposureQueue({
       transport: {
         async redeemExposures(exposures) {
           redeemCalls.push(exposures.map((item) => item.exposureId));
           omittedId ??= exposures[0]?.exposureId;
+          if (retryIds.size === 0) {
+            retryIds.add(exposures[1]?.exposureId ?? "missing-retry-1");
+            retryIds.add(exposures[2]?.exposureId ?? "missing-retry-2");
+          }
           return {
             status: 202,
             results: exposures
               .filter((item) => item.exposureId !== omittedId)
               .map((item) => ({
                 exposureId: item.exposureId,
-                status: "accepted" as const,
-                code: null,
+                status: retryIds.has(item.exposureId)
+                  ? ("rejected" as const)
+                  : ("accepted" as const),
+                code: retryIds.has(item.exposureId) ? ("SERVICE_UNAVAILABLE" as const) : null,
               })),
           };
         },
@@ -190,17 +197,21 @@ describe("ExposureQueue: per-item retry accounting", () => {
     });
 
     queue.enqueue("omitted", "ticket-omitted");
+    queue.enqueue("retry-1", "ticket-retry-1");
+    queue.enqueue("retry-2", "ticket-retry-2");
     queue.enqueue("accepted-0", "ticket-accepted-0");
-    await expect(queue.flush()).resolves.toHaveLength(1);
+    await expect(queue.flush()).resolves.toHaveLength(3);
     queue.enqueue("accepted-1", "ticket-accepted-1");
-    await expect(queue.flush()).resolves.toHaveLength(1);
+    await expect(queue.flush()).resolves.toHaveLength(3);
     queue.enqueue("accepted-2", "ticket-accepted-2");
-    await expect(queue.flush()).resolves.toHaveLength(1);
+    await expect(queue.flush()).resolves.toHaveLength(3);
 
     expect(redeemCalls).toHaveLength(3);
     expect(redeemCalls.every((ids) => ids.includes(omittedId ?? "missing"))).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
-    expect(logger.errors.some((row) => row.detail.attemptCount === 3)).toBe(true);
+    expect(
+      logger.errors.some((row) => row.detail.attemptCount === 3 && row.detail.count === 3),
+    ).toBe(true);
     expect(logger.errors.filter((row) => row.detail.unmatchedCount === 1)).toHaveLength(3);
   });
 });
@@ -240,7 +251,11 @@ describe("ExposureQueue: invalid per-item results", () => {
     });
 
     queue.enqueue("flag", "ticket");
-    await expect(queue.flush()).rejects.toThrow(expected);
+    const thrown = await queue.flush().catch((error: unknown) => error);
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toMatch(expected);
+    expect((thrown as Error).cause).toBeInstanceOf(Error);
+    expect(((thrown as Error).cause as Error).message).toMatch(expected);
     await expect(queue.flush()).rejects.toThrow(expected);
     expect(redeemCalls).toHaveLength(2);
     expect(redeemCalls[1]).toEqual(redeemCalls[0]);
