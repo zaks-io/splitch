@@ -69,12 +69,16 @@ function isUnderSrcRoot(fileName: string): boolean {
 }
 
 function virtualFilesOf(
+  parsed: ts.ParsedCommandLine,
   extraFiles: ReadonlyArray<FlagConfigSweepExtraFile>,
 ): ReadonlyMap<string, string> {
   const files = new Map<string, string>();
+  const productionFiles = new Set(parsed.fileNames.map((fileName) => resolve(fileName)));
   for (const file of extraFiles) {
     const path = resolve(file.path);
     if (!isUnderSrcRoot(path)) fail(`extra file outside scan root: ${path}`);
+    if (productionFiles.has(path))
+      fail(`extra file collides with production source: ${relPath(path)}`);
     if (files.has(path)) fail(`duplicate extra file: ${path}`);
     files.set(path, file.content);
   }
@@ -248,7 +252,7 @@ export function resolveFlagConfigUpdates(
   extraFiles: ReadonlyArray<FlagConfigSweepExtraFile> = [],
 ): FlagConfigUpdateResolution {
   const parsed = parseProductionTsconfig();
-  const virtualFiles = virtualFilesOf(extraFiles);
+  const virtualFiles = virtualFilesOf(parsed, extraFiles);
   const scanFileNames = productionScanFileNames(parsed, virtualFiles);
   const program = createProductionProgram(parsed, virtualFiles);
   assertProgramReliable(program);

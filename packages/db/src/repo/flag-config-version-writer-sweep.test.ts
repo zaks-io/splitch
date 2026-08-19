@@ -95,6 +95,13 @@ function expectInMemoryFileScanned(baseline: FlagConfigUpdateResolution): void {
   expect(withVirtualFile.sites).toEqual(baseline.sites);
 }
 
+function expectProductionCollisionRejected(): void {
+  const path = resolve(FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT, "repo/flag-variant-approval.ts");
+  expect(() => resolveFlagConfigUpdates([{ path, content: "export {};" }])).toThrowError(
+    "flag_configs version sweep: extra file collides with production source: repo/flag-variant-approval.ts",
+  );
+}
+
 describe("every flag_configs UPDATE bumps version", () => {
   let resolution: FlagConfigUpdateResolution;
 
@@ -112,11 +119,12 @@ describe("every flag_configs UPDATE bumps version", () => {
         SCAN_ROOT,
       );
       expect(scannedFiles).toEqual(listExpectedScannedFiles());
-      expect(resolveFlagConfigUpdates([]).sites).toEqual(resolution.sites);
       expectInMemoryFileScanned(resolution);
     },
     PROGRAM_HOOK_TIMEOUT_MS,
   );
+
+  it("rejects a production-file collision", expectProductionCollisionRejected);
 
   it("discovers a non-trivial writer set and every site bumps version", () => {
     const { sites } = resolution;
