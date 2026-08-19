@@ -1,8 +1,14 @@
 import { formatSdkErrorMessage, SplitchSdkError } from "../errors";
 import { DEFAULT_ID_TYPE, type EvaluateContext, type Logger } from "../evaluate";
-import type { EvaluateAllEntry, VariantValue } from "../generated/contract-surface.js";
+import type { PrecomputedEvaluations } from "../evaluate-all";
+import {
+  type EvaluateAllEntry,
+  EvaluateAllResponseSchema,
+  type VariantValue,
+} from "../generated/contract-surface.js";
 import type { SdkResolutionDetails } from "../resolution";
 import type { AttributeValue } from "../transport";
+import { canonicalEqual, type HeldPayload, type ListenerFailure } from "./payload-store";
 
 export function resolveBrowserClientKey(clientKey: string): string {
   if (typeof clientKey !== "string" || clientKey.length === 0) {
@@ -49,10 +55,72 @@ export function resolveContext(context: EvaluateContext): {
     attributes: Object.fromEntries(
       Object.entries(context.attributes ?? {}).map(([key, value]) => [
         key,
-        Array.isArray(value) ? [...value] : value,
+        Array.isArray(value) ? value.map(detachNested) : value,
       ]),
     ),
   };
+}
+
+function detachNested(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(detachNested);
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [key, detachNested(nested)]),
+    );
+  }
+  return value;
+}
+
+export function resolveBootstrap(
+  bootstrap: PrecomputedEvaluations,
+  context: ReturnType<typeof resolveContext>,
+): HeldPayload {
+  if (!canonicalEqual(bootstrap.context, context)) {
+    throw new SplitchSdkError({
+      code: "SDK_BOOTSTRAP_CONTEXT_MISMATCH",
+      causeSummary: "The bootstrap Evaluation Context does not match the browser client's context",
+      remediation:
+        "Generate bootstrap for the same targetingKey, idType, and attributes passed to createSplitchBrowserClient",
+    });
+  }
+  if (typeof bootstrap.etag !== "string" || bootstrap.etag.length === 0) {
+    throw new SplitchSdkError({
+      code: "VALIDATION_ERROR",
+      causeSummary: "The browser bootstrap is missing its non-empty etag",
+      remediation: "Pass the complete object returned by the server SDK's evaluateAll accessor",
+    });
+  }
+  const parsed = EvaluateAllResponseSchema.parse({ evaluations: bootstrap.evaluations });
+  return { evaluations: parsed.evaluations, etag: bootstrap.etag };
+}
+
+export function resolveRevalidateMs(value: number | undefined, defaultValue: number): number {
+  const resolved = value ?? defaultValue;
+  if (!Number.isFinite(resolved) || resolved < 0) {
+    throw new SplitchSdkError({
+      code: "VALIDATION_ERROR",
+      causeSummary: "revalidateMs must be a finite non-negative duration",
+      remediation: "Pass milliseconds greater than or equal to zero; use 0 to disable revalidation",
+    });
+  }
+  return resolved;
+}
+
+export function logListenerFailures(logger: Logger, failures: readonly ListenerFailure[]): void {
+  for (const { flagKey, cause } of failures) {
+    logger.error(
+      formatSdkErrorMessage({
+        code: "VALIDATION_ERROR",
+        causeSummary: `Flag change listener for ${JSON.stringify(flagKey)} threw`,
+        remediation:
+          "Fix the listener; the new payload is active and other listeners were still notified",
+        originalError: cause,
+      }),
+      { flagKey, cause },
+    );
+  }
 }
 
 export function mintIdempotencyKey(logger: Logger, targetingKey: string): string {

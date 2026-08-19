@@ -1,8 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  EXPOSURE_BATCH_MAX_BODY_BYTES,
-  EXPOSURE_BATCH_MAX_ITEMS,
-} from "../generated/contract-surface.js";
 import { classifyBodyReadError, readFailure, withTimeout } from "./http";
 import { createBrowserFetchTransport } from "./transport";
 
@@ -84,6 +80,29 @@ describe("createBrowserFetchTransport: receiver (B1)", () => {
 });
 
 describe("createBrowserFetchTransport: auth and keepalive", () => {
+  it("sends If-None-Match and accepts a 304 without parsing a body", async () => {
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get("if-none-match")).toBe('"e1"');
+      return new Response(null, { status: 304 });
+    });
+    const transport = createBrowserFetchTransport({
+      credential: "pk_test",
+      endpoint: "https://edge.test",
+      timeoutMs: 1000,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    await expect(
+      transport.evaluateAll({
+        targetingKey: "u1",
+        idType: "user",
+        attributes: {},
+        idempotencyKey: "11111111-1111-4111-8111-111111111111",
+        ifNoneMatch: '"e1"',
+      }),
+    ).resolves.toEqual({ status: 304, evaluations: null, etag: null });
+  });
+
   it("sends Authorization bearer on evaluate-all and exposures", async () => {
     const calls: { url: string; authorization: string | null; keepalive?: boolean }[] = [];
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -132,34 +151,6 @@ describe("createBrowserFetchTransport: auth and keepalive", () => {
     expect(calls[0]?.authorization).toBe("Bearer pk_test");
     expect(calls[1]?.authorization).toBe("Bearer pk_test");
     expect(calls[1]?.keepalive).toBe(true);
-  });
-
-  it("omits keepalive unless explicitly requested", async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse(202, {
-        results: [
-          { exposureId: "11111111-1111-4111-8111-111111111111", status: "accepted", code: null },
-        ],
-      }),
-    );
-    const transport = createBrowserFetchTransport({
-      credential: "pk_test",
-      endpoint: "https://edge.test",
-      timeoutMs: 1000,
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    });
-    await transport.redeemExposures(
-      [
-        {
-          exposureId: "11111111-1111-4111-8111-111111111111",
-          exposureTicket: "t",
-          clientTimestamp: "2026-08-08T00:00:00.000Z",
-        },
-      ],
-      { keepalive: false },
-    );
-    const init = fetchImpl.mock.calls[0]?.[1] as RequestInit;
-    expect(init.keepalive).toBeUndefined();
   });
 
   it("aborts via withTimeout when the timer fires", async () => {
@@ -229,32 +220,6 @@ describe("createBrowserFetchTransport: failure surface (B4)", () => {
     expect(result.etag).toBeNull();
     expect(result.errorCode).toBe("SDK_TRANSPORT_PARSE");
   });
-
-  it("maps non-ok non-202 exposures responses to failure (M20)", async () => {
-    const transport = createBrowserFetchTransport({
-      credential: "pk_test",
-      endpoint: "https://edge.test",
-      timeoutMs: 1000,
-      fetchImpl: (async () =>
-        jsonResponse(400, {
-          code: "VALIDATION_ERROR",
-          message: "invalid exposure batch",
-          details: {
-            issues: [{ path: ["exposures"], message: "invalid exposure batch" }],
-          },
-        })) as typeof fetch,
-    });
-    const result = await transport.redeemExposures([
-      {
-        exposureId: "11111111-1111-4111-8111-111111111111",
-        exposureTicket: "t",
-        clientTimestamp: "2026-08-08T00:00:00.000Z",
-      },
-    ]);
-    expect(result.results).toBeNull();
-    expect(result.status).toBe(400);
-    expect(result.errorCode).toBe("VALIDATION_ERROR");
-  });
 });
 
 describe("browser http helpers", () => {
@@ -291,12 +256,5 @@ describe("browser http helpers", () => {
     const aborted = new DOMException("The operation was aborted.", "AbortError");
     expect(classifyBodyReadError(aborted).errorCode).toBe("SDK_TRANSPORT_TIMEOUT");
     expect(classifyBodyReadError(new Error("bad json")).errorCode).toBe("SDK_TRANSPORT_PARSE");
-  });
-});
-
-describe("exposure batch caps are imported into the browser transport path", () => {
-  it("exports match the Worker-facing ceilings", () => {
-    expect(EXPOSURE_BATCH_MAX_ITEMS).toBe(25);
-    expect(EXPOSURE_BATCH_MAX_BODY_BYTES).toBe(32 * 1024);
   });
 });

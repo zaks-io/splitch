@@ -8,6 +8,7 @@ export {
   sdkErrorCodes,
 } from "../errors";
 export type { EvaluateContext, Logger } from "../evaluate";
+export type { PrecomputedEvaluations, PrecomputedEvaluationsContext } from "../evaluate-all";
 export type {
   ErrorCode,
   EvaluateAllEntry,

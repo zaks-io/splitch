@@ -30,6 +30,7 @@ interface BrowserEvaluateAllRequest {
   readonly idType: string;
   readonly attributes: Readonly<Record<string, AttributeValue>>;
   readonly idempotencyKey: string;
+  readonly ifNoneMatch?: string;
 }
 
 export interface BrowserEvaluateAllResult extends BrowserTransportFailure {
@@ -73,6 +74,9 @@ export function createBrowserFetchTransport(config: BrowserFetchTransportConfig)
               "content-type": "application/json",
               "idempotency-key": request.idempotencyKey,
               "x-splitch-sdk-runtime": "javascript",
+              ...(request.ifNoneMatch === undefined
+                ? {}
+                : { "if-none-match": request.ifNoneMatch }),
             },
             body: JSON.stringify({
               targetingKey: request.targetingKey,
@@ -112,6 +116,9 @@ export function createBrowserFetchTransport(config: BrowserFetchTransportConfig)
 }
 
 async function readEvaluateAllResponse(response: Response): Promise<BrowserEvaluateAllResult> {
+  if (response.status === 304) {
+    return { status: 304, evaluations: null, etag: null };
+  }
   if (!response.ok) {
     return { ...(await readFailure(response)), evaluations: null, etag: null };
   }
