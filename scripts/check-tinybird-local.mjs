@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { proveAnalysisScopePredicates } from "./lib/tinybird-analysis-scope-proof.mjs";
+import { assertEnvironmentExposureStatusContract } from "./lib/tinybird-exposure-status-contract.mjs";
 import { assertMetricStubsRetiredWhenMetricEventsExist } from "./lib/tinybird-metric-stub-tripwire.mjs";
 import { output, quietExitCode, quietExitCodeWithInput, run } from "./lib/tinybird-process.mjs";
 import { acquireMachineLock } from "./machine-lock.mjs";
@@ -123,6 +124,7 @@ function validateSplitchDatasourceContracts(root) {
   );
 
   requireIdenticalFirstTouchRule(root);
+  assertEnvironmentExposureStatusContract(root, fail);
   // SPL-290 empty Metric stubs must die the moment metric_events lands; a
   // pipe-header comment alone would let Results keep reporting zero-event
   // Metrics forever after real ingest ships.

@@ -3,16 +3,19 @@ import { describe, expect, it } from "vitest";
 import { EvaluateAllEntrySchema } from "./leaves/evaluate-all-wire";
 import { buildOpenApiDocument } from "./openapi-document";
 import { renderOpenApiSchema } from "./openapi-proto-safe-record";
-import { operationIds, routeRegistry } from "./route-registry";
+import { publicSurfaceFor } from "./route-contract";
+import { routeRegistry } from "./route-registry";
 
 /**
  * The OpenAPI document is emitted on demand from the registry and proven HERE —
  * never committed to disk. These assertions are the contract that the emitted
- * doc is valid OpenAPI 3.1 and covers EVERY registered route (path + operationId),
- * so a new route automatically appears in discovery with no second authoring step.
+ * doc is valid OpenAPI 3.1 and covers every publicly surfaced registered route
+ * (path + operationId), so a new public route automatically appears in discovery
+ * with no second authoring step while binding-only contracts stay private.
  */
 
 const doc = buildOpenApiDocument();
+const publicRoutes = routeRegistry.filter((route) => publicSurfaceFor(route) !== null);
 
 /** Collect every (operationId, path, method) the emitted document advertises. */
 function documentOperations(): { operationId: string; path: string; method: string }[] {
@@ -81,6 +84,7 @@ describe("openapi document: evaluate-all evaluations shape", () => {
         type: "object",
         properties: expect.objectContaining({
           reason: expect.objectContaining({ enum: expect.any(Array) }),
+          exposureIdentity: expect.anything(),
           exposureTicket: expect.anything(),
         }),
       }),
@@ -114,18 +118,53 @@ describe("openapi document: full route coverage", () => {
     });
   });
 
-  it("emits one operationId per registered route, no more no less", () => {
+  it("addresses Environment Exposure status only at the Control Plane surface", () => {
+    const operation = documentOperations().find(
+      (entry) => entry.operationId === "environment_exposure_status_get",
+    );
+
+    expect(operation).toEqual({
+      operationId: "environment_exposure_status_get",
+      path: "/apps/{appId}/envs/{environmentId}/exposure-status",
+      method: "get",
+    });
+  });
+
+  it("does not publish binding-only internal Exposure cleanup", () => {
+    const operations = documentOperations();
+
+    expect({
+      internalPaths: Object.keys(doc.paths ?? {}).filter((path) => path.startsWith("/internal/")),
+      cleanupOperations: operations.filter(
+        ({ operationId }) => operationId === "environment_exposure_status_delete",
+      ),
+    }).toEqual({ internalPaths: [], cleanupOperations: [] });
+  });
+
+  it("emits only the error codes declared by each route", () => {
+    const operation = doc.paths?.["/apps/{appId}/attention-rollup"]?.get as {
+      responses?: Record<string, unknown>;
+    };
+    const conflictResponse = JSON.stringify(operation.responses?.["409"]);
+
+    expect(conflictResponse).toContain("ATTENTION_FANOUT_LIMIT_EXCEEDED");
+    expect(conflictResponse).toContain("message");
+    expect(conflictResponse).toContain("details");
+    expect(conflictResponse).not.toContain("RUN_FROZEN");
+  });
+
+  it("emits one operationId per publicly surfaced route, no more no less", () => {
     const emittedIds = documentOperations()
       .map((op) => op.operationId)
       .sort();
-    expect(emittedIds).toEqual([...operationIds].sort());
+    expect(emittedIds).toEqual(publicRoutes.map((route) => route.operationId).sort());
   });
 
-  it("emits a path + matching method for EVERY registered route", () => {
+  it("emits a path + matching method for every publicly surfaced route", () => {
     const emitted = new Set(
       documentOperations().map((op) => `${op.method.toUpperCase()} ${op.path}`),
     );
-    for (const route of routeRegistry) {
+    for (const route of publicRoutes) {
       // OpenAPI paths use {param}; our routes use :param — compare on operationId
       // presence plus method via the per-route openapi config the doc was built from.
       const expectedMethod = route.method.toUpperCase();
@@ -135,8 +174,8 @@ describe("openapi document: full route coverage", () => {
   });
 
   it("covers a non-trivial number of routes (N > 0)", () => {
-    expect(routeRegistry.length).toBeGreaterThan(0);
-    expect(documentOperations().length).toBe(routeRegistry.length);
+    expect(publicRoutes.length).toBeGreaterThan(0);
+    expect(documentOperations().length).toBe(publicRoutes.length);
   });
 
   it("attaches a request body or a 200 response schema to each operation", () => {

@@ -9,6 +9,7 @@ import {
   packStagingDir,
   parseTarballName,
   readTarballFile,
+  readTarballDeclarations,
 } from "./pack-staging.mjs";
 
 const packageRoot = getPackageRoot();
@@ -21,9 +22,9 @@ try {
   const tarballPath = join(destination, tarballName);
   const listing = listTarballFiles(tarballPath);
   const manifestText = readTarballFile(tarballPath, "package/package.json");
-  const declarationText = readTarballFile(tarballPath, "package/dist/index.d.ts");
+  const declarationTexts = readTarballDeclarations(tarballPath, listing);
   const bundleJs = readTarballFile(tarballPath, "package/dist/index.js");
-  assertReleaseTarballContents({ listing, manifestText, declarationText, bundleJs });
+  assertReleaseTarballContents({ listing, manifestText, declarationTexts, bundleJs });
   process.stdout.write(`${tarballName}\n`);
 } finally {
   rmSync(staging, { recursive: true, force: true });

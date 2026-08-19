@@ -25,6 +25,7 @@ const SCOPED_OPERATION_IDS = [
   "api_keys_create",
   "event_definitions_list",
   "event_definitions_create",
+  "environment_exposure_status_get",
 ] as const;
 
 /** Operations that name no resource, so their claims carry only the id. */

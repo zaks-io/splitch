@@ -1,6 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@splitch/sdk/browser": ["src/browser/index.ts"]
+    },
     "rootDir": "src",
     "noEmit": true,
     "ignoreDeprecations": "6.0"

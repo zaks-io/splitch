@@ -6,7 +6,7 @@ import type {
 } from "@splitch/contracts";
 import { formatPValue, significanceKey } from "@splitch/contracts";
 import { Badge } from "@splitch/ui/components/badge";
-import { baselineVariant } from "./experiment-results-control";
+import { analysisControlVariant } from "./experiment-results-control";
 import { formatInterval, formatLift } from "./experiment-results-format";
 
 /**
@@ -26,7 +26,7 @@ export function ExperimentResultsMetricsTable({
   significance: ExperimentSignificanceDisplays;
 }) {
   if (results.length === 0) return null;
-  const baseline = baselineVariant(control);
+  const baseline = analysisControlVariant(control);
   return (
     <section aria-labelledby="results-table-heading" className="grid gap-2">
       <h3 className="font-semibold text-base text-foreground" id="results-table-heading">
@@ -83,8 +83,7 @@ function Row({
   significance,
 }: {
   result: ArmResult;
-  /** Null when the Run's frozen Control could not be resolved: no row is the baseline. */
-  baseline: string | null;
+  baseline: string;
   significance: ExperimentSignificanceDisplays;
 }) {
   const isBaseline = result.variant === baseline;

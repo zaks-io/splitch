@@ -43,7 +43,9 @@ describe("Analysis Worker Wrangler runtime config", () => {
     ["production", config.env?.production],
   ])("declares the Tinybird read token as a required secret for %s", (_target, target) => {
     expect(target?.secrets?.required).toContain("TINYBIRD_READ_TOKEN");
+    expect(target?.secrets?.required).toContain("TINYBIRD_DELETE_TOKEN");
     expect(target?.vars?.TINYBIRD_READ_TOKEN).toBeUndefined();
+    expect(target?.vars?.TINYBIRD_DELETE_TOKEN).toBeUndefined();
   });
 
   it.each([
@@ -62,7 +64,9 @@ describe("Analysis Worker Wrangler runtime config", () => {
     ["production", config.env?.production],
   ])("declares the Tinybird copy token for scheduled snapshots in %s", (_target, target) => {
     expect(target?.secrets?.required).toContain("TINYBIRD_COPY_TOKEN");
+    expect(target?.secrets?.required).toContain("TINYBIRD_DELETE_TOKEN");
     expect(target?.vars?.TINYBIRD_COPY_TOKEN).toBeUndefined();
+    expect(target?.vars?.TINYBIRD_DELETE_TOKEN).toBeUndefined();
   });
 });
 

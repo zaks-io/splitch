@@ -24,6 +24,7 @@ const variants = Object.freeze({
   guardrail: variantPair("guardrail"),
   ended: variantPair("ended"),
   srm: variantPair("srm"),
+  integrity: variantPair("integrity"),
 });
 
 const salt = Object.freeze({
@@ -35,6 +36,7 @@ const salt = Object.freeze({
   guardrail: "local-e2e-guardrail",
   ended: "local-e2e-ended",
   srm: "local-e2e-srm",
+  integrity: "local-e2e-integrity",
 });
 
 export const LOCAL_E2E_RUN_CONFIG = Object.freeze({
@@ -54,6 +56,7 @@ export const LOCAL_E2E_RUN_CONFIG = Object.freeze({
     guardrail: runConfigHash(salt.guardrail, checkoutAllocation, variants.guardrail),
     ended: runConfigHash(salt.ended, checkoutAllocation, variants.ended),
     srm: runConfigHash(salt.srm, checkoutAllocation, variants.srm),
+    integrity: runConfigHash(salt.integrity, checkoutAllocation, variants.integrity),
   }),
 });
 

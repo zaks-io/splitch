@@ -161,6 +161,220 @@ the type level instead of resolving `undefined` into an `await`. If you pass you
 own object literal there, add the method; the type will tell you. Nothing else is
 affected, and the built-in adapter needs no change.
 
+## Browser client (`@splitch/sdk/browser`)
+
+Static-context client for browsers: one Evaluation Context, one Precomputed
+Evaluations fetch, then synchronous Flag reads with zero per-read network.
+Exposures fire on the first local read by redeeming Exposure Tickets.
+
+```ts
+import { createSplitchBrowserClient } from "@splitch/sdk/browser";
+
+const splitch = createSplitchBrowserClient({
+  clientKey: "pk_...", // secrets (sk_/ak_) throw at construction
+  context: { targetingKey: user.id },
+  bootstrap: precomputed, // optional server evaluateAll result; reads work immediately
+  revalidateMs: 60_000, // default; 0 disables ETag polling
+});
+await splitch.init(); // no fetch when bootstrap is present
+
+const on = splitch.evaluate("new-checkout", false); // sync
+const details = splitch.evaluateDetails("new-checkout", false);
+await splitch.flush();
+```
+
+### Server-rendered hydration
+
+Use an API Key on the server to resolve the page once, then serialize that exact
+`evaluateAll` result into the HTML. Only the public Client Key belongs in the
+page. The bootstrap payload is public page content, so pass only Evaluation
+Context attributes you are willing to publish.
+
+```js
+// server.mjs
+import { readFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { dirname, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createSplitchClient } from "@splitch/sdk";
+
+const requiredEnv = (name) => {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+};
+const splitch = createSplitchClient({
+  apiKey: requiredEnv("SPLITCH_API_KEY"),
+});
+const recipeRoot = dirname(fileURLToPath(import.meta.url));
+const sdkDistRoot = resolve(recipeRoot, "node_modules/@splitch/sdk/dist");
+
+const serveFile = async (response, pathname, root, prefix) => {
+  const target = resolve(root, pathname.slice(prefix.length));
+  if (!target.startsWith(`${root}${sep}`)) {
+    response.writeHead(404).end("Not Found");
+    return;
+  }
+  try {
+    const source = await readFile(target);
+    response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+    response.end(source);
+  } catch {
+    response.writeHead(404).end("Not Found");
+  }
+};
+
+const jsonForHtml = (value) => {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) throw new Error("SSR JSON value is not serializable");
+  return serialized
+    .replaceAll("<", "\\u003c")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
+};
+
+createServer(async (request, response) => {
+  try {
+    const url = new URL(request.url ?? "/", "http://localhost:3000");
+    if (url.pathname === "/browser.mjs") {
+      await serveFile(response, url.pathname, recipeRoot, "/");
+      return;
+    }
+    if (url.pathname.startsWith("/vendor/sdk/")) {
+      await serveFile(response, url.pathname, sdkDistRoot, "/vendor/sdk/");
+      return;
+    }
+    if (url.pathname !== "/") {
+      response.writeHead(404).end("Not Found");
+      return;
+    }
+
+    const targetingKey = url.searchParams.get("user");
+    if (!targetingKey) {
+      response.writeHead(400).end("user is required");
+      return;
+    }
+    const context = {
+      targetingKey,
+      idType: "user",
+      attributes: { plan: "pro" },
+    };
+    const bootstrap = await splitch.evaluateAll(context);
+    const entry = bootstrap.evaluations["new-checkout"];
+    if (entry === undefined || typeof entry.variant !== "boolean" || entry.reason === "ERROR") {
+      throw new Error("SSR requires a successful new-checkout evaluation");
+    }
+
+    const html = `
+      <main id="app">${entry.variant ? "New checkout" : "Current checkout"}</main>
+      <script type="importmap">{"imports":{"@splitch/sdk/browser":"/vendor/sdk/browser/index.js"}}</script>
+      <script id="splitch-bootstrap" type="application/json">${jsonForHtml(bootstrap)}</script>
+      <script id="splitch-config" type="application/json">${jsonForHtml({
+        clientKey: requiredEnv("SPLITCH_CLIENT_KEY"),
+        context,
+      })}</script>
+      <script type="module" src="/browser.mjs"></script>
+    `;
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(html);
+  } catch (error) {
+    response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+    response.end(error instanceof Error ? error.message : "SSR failed");
+  }
+}).listen(3000);
+```
+
+The browser constructs the static-context client with the matching Evaluation
+Context. A valid bootstrap makes `init()` perform no fetch. The first local read
+queues one Exposure, and `flush()` acknowledges its delivery.
+
+```js
+// browser.mjs
+import { createSplitchBrowserClient } from "@splitch/sdk/browser";
+
+const readJson = (id) => {
+  const text = document.getElementById(id)?.textContent;
+  if (!text) throw new Error(`SSR page is missing #${id}`);
+  return JSON.parse(text);
+};
+
+const bootstrap = readJson("splitch-bootstrap");
+const config = readJson("splitch-config");
+const splitch = createSplitchBrowserClient({
+  clientKey: config.clientKey,
+  context: config.context,
+  bootstrap,
+});
+
+await splitch.init();
+const value = splitch.evaluate("new-checkout", false);
+const app = document.getElementById("app");
+if (!app) throw new Error("SSR page is missing #app");
+app.textContent = value ? "New checkout" : "Current checkout";
+await splitch.flush();
+```
+
+The complete framework-neutral Node fixture is in
+`fixtures/ssr-sdk-consumer/`. Its packed-tarball test also proves byte-identical
+server and hydrated values, zero bootstrap fetches, one first-read Exposure, and
+the fail-loud `SDK_BOOTSTRAP_CONTEXT_MISMATCH` path.
+
+Reading before `init()` throws `SDK_NOT_INITIALIZED`. An unknown Flag Key returns
+your default with `reason: "ERROR"` / `FLAG_NOT_FOUND` and a loud log — never a
+silent invented default.
+
+Bootstrap must carry the exact normalized Evaluation Context used to construct
+the browser client. A mismatch throws `SDK_BOOTSTRAP_CONTEXT_MISMATCH` during
+construction. A valid bootstrap serves the server's values synchronously with no
+initial fetch. The client then revalidates with `If-None-Match` every 60 seconds
+by default. A `304` keeps the held payload unchanged; a changed response swaps it
+atomically and notifies only subscribers for changed Flags. Failed ticks log on
+every attempt and keep serving last-known-good values as `STALE` /
+`PROVIDER_NOT_READY` until recovery. Call `close()` to stop polling.
+
+`flush()` drains the Exposure queue. If the queue hits the batch caps (25 items /
+32 KiB) and a forced flush fails, the oldest 25 items are retained for retry by
+item count; retained items are not additionally bounded by the byte cap. Only
+the excess tail is dropped loudly (`RATE_LIMITED`). A single-batch queue that
+fails once drops nothing. Retryable delivery failures make at most three automatic
+delivery attempts; a non-retryable 4xx stops automatic delivery after its first attempt.
+Both terminal paths log loudly and retain the items for an explicit `flush()`.
+
+## React bindings (`@splitch/sdk/react`)
+
+The React provider borrows an initialized browser client. Each hook subscribes
+to one Flag, so a changed Flag re-renders only its own subscribers. The first
+committed read redeems its Exposure Ticket.
+
+```tsx
+import { createRoot } from "react-dom/client";
+import { createSplitchBrowserClient } from "@splitch/sdk/browser";
+import { SplitchProvider, useFlag, useFlagDetails } from "@splitch/sdk/react";
+
+const splitch = createSplitchBrowserClient({
+  clientKey: "pk_...",
+  context: { targetingKey: "user-123" },
+});
+await splitch.init();
+
+function Checkout() {
+  const enabled = useFlag("new-checkout", false);
+  const details = useFlagDetails("new-checkout", false);
+  return <p>{enabled ? details.variantName : "control"}</p>;
+}
+
+createRoot(document.getElementById("root")!).render(
+  <SplitchProvider client={splitch}>
+    <Checkout />
+  </SplitchProvider>,
+);
+```
+
+`useSplitchClient()` returns the borrowed client for `flush()`, `close()`, and
+imperative reads. Hooks outside `SplitchProvider` throw
+`SDK_REACT_PROVIDER_MISSING`. An unknown Flag keeps the browser client's loud
+`FLAG_NOT_FOUND` details and returns the caller's Default Variant.
+
 ## Convex
 
 Convex's default runtime is a custom V8 isolate (no Node built-ins). `fetch` is

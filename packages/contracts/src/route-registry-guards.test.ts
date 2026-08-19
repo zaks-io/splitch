@@ -58,9 +58,10 @@ describe("registry guard: unknown ErrorCode fails loud at runtime", () => {
     // Cast past the compile-time ErrorCode guard to prove the runtime check ALSO
     // fires (defense in depth): a hand-edited/JSON-sourced registry can't smuggle
     // an unknown code past validation.
-    const bad = sampleRoute({
+    const bad = {
+      ...sampleRoute(),
       errors: ["NOT_A_REAL_ERROR_CODE" as ErrorCode],
-    });
+    };
     expect(() => assertRegistry([bad])).toThrow(/unknown ErrorCode "NOT_A_REAL_ERROR_CODE"/);
   });
 

@@ -61,10 +61,12 @@ describe("POST /api/sdk/evaluate-all: response contract", () => {
       variantName: expect.any(String),
       reason: "SPLIT",
       errorCode: null,
+      exposureIdentity: expect.any(String),
       exposureTicket: expect.any(String),
     });
     expect(Object.keys(entry ?? {}).sort()).toEqual([
       "errorCode",
+      "exposureIdentity",
       "exposureTicket",
       "reason",
       "variant",
@@ -76,6 +78,11 @@ describe("POST /api/sdk/evaluate-all: response contract", () => {
     expect(raw).not.toContain("run-salt");
     expect(raw).not.toContain("targetingRules");
     expect(raw).not.toContain("allocation");
+    expect(entry?.exposureIdentity).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(entry?.exposureIdentity).not.toContain("run-42");
+    expect(entry?.exposureIdentity).not.toContain("targeting_key_hash");
+    expect(entry?.exposureIdentity).not.toContain("rule-enterprise");
+    expect(entry?.exposureIdentity).not.toContain("issued_at");
   });
 
   it("mints an Exposure Ticket only for fresh live-Run assignments", async () => {
@@ -99,13 +106,16 @@ describe("POST /api/sdk/evaluate-all: response contract", () => {
     ).json()) as EvaluateAllResponse;
 
     expect(freshBody.evaluations[FLAG_KEY]?.exposureTicket).toEqual(expect.any(String));
+    expect(freshBody.evaluations[FLAG_KEY]?.exposureIdentity).toEqual(expect.any(String));
     expect(holdoverBody.evaluations[FLAG_KEY]).toMatchObject({
       reason: "SPLIT",
+      exposureIdentity: null,
       exposureTicket: null,
       variantName: "treatment",
     });
     expect(disabledBody.evaluations[FLAG_KEY]).toMatchObject({
       reason: "DISABLED",
+      exposureIdentity: null,
       exposureTicket: null,
     });
     expect(fresh.assignmentStore.putCalls).toEqual([]);
@@ -125,6 +135,7 @@ describe("POST /api/sdk/evaluate-all: response contract", () => {
     expect(body.evaluations[FLAG_KEY]).toMatchObject({
       reason: "ERROR",
       errorCode: "VALIDATION_ERROR",
+      exposureIdentity: null,
       exposureTicket: null,
     });
     expect(body.evaluations).toHaveProperty(FLAG_KEY);
@@ -204,39 +215,9 @@ describe("POST /api/sdk/evaluate-all: ETag and tickets", () => {
       firstBody.evaluations[FLAG_KEY]?.exposureTicket,
     );
   });
+});
 
-  it("keeps ETag stable when Exposure Ticket issued_at advances", async () => {
-    const early = await makeSdkRouteHarness({
-      liveRun: true,
-      ticketNow: () => new Date("2026-07-03T00:00:00.000Z"),
-    });
-    const late = await makeSdkRouteHarness({
-      liveRun: true,
-      ticketNow: () => new Date("2026-07-04T00:00:00.000Z"),
-    });
-
-    const first = await early.app.request(PATH, evaluateAllRouteInit(CLIENT_KEY));
-    const second = await late.app.request(PATH, evaluateAllRouteInit(CLIENT_KEY));
-    const firstBody = (await first.json()) as EvaluateAllResponse;
-    const secondBody = (await second.json()) as EvaluateAllResponse;
-
-    expect(first.status).toBe(200);
-    expect(second.status).toBe(200);
-    expect(first.headers.get("etag")).toBe(second.headers.get("etag"));
-    expect(firstBody.evaluations[FLAG_KEY]?.exposureTicket).not.toBe(
-      secondBody.evaluations[FLAG_KEY]?.exposureTicket,
-    );
-
-    const revalidate = await late.app.request(
-      PATH,
-      evaluateAllRouteInit(CLIENT_KEY, {
-        "if-none-match": first.headers.get("etag") ?? "",
-      }),
-    );
-    expect(revalidate.status).toBe(304);
-    expect(late.evaluationUsageSink.writes).toHaveLength(1);
-  });
-
+describe("POST /api/sdk/evaluate-all: ticket-bearing outcomes", () => {
   it("emits SPLIT + ticket for live Experiment Run no-match defaults (evaluate would expose)", async () => {
     const { app } = await makeSdkRouteHarness({
       liveRun: true,

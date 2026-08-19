@@ -198,7 +198,10 @@ INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at,
   ('env_billing_prod_e2e', 'app_billing_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_agent_prod_e2e', 'app_agent_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_checkout_create_e2e', 'app_checkout_e2e', 'create-lab', 'Creation Lab', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('env_checkout_creategate_e2e', 'app_checkout_e2e', 'create-gated', 'Creation Gated', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e');
+  ('env_checkout_creategate_e2e', 'app_checkout_e2e', 'create-gated', 'Creation Gated', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  -- SPL-189: dedicated Environment for the unresolvable-Control Run, so it
+  -- cannot shift the running-Experiment counts other specs hard-code for dev/prod.
+  ('env_checkout_integrity_e2e', 'app_checkout_e2e', 'integrity', 'Integrity QA', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e');
 INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES
   ('org_acme_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
   ('org_orbit_e2e', 'user_local_e2e', 'admin', '${createdAt}'),
@@ -216,6 +219,7 @@ INSERT INTO flags (id, app_id, key, name, schema, default_variant_id, created_at
   ('flag_checkout_draft_e2e', 'app_checkout_e2e', 'checkout-draft', 'Checkout Draft', '{"type":"boolean"}', 'variant_draft_control_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
   ('flag_checkout_srm_e2e', 'app_checkout_e2e', 'checkout-srm', 'Checkout Routing', '{"type":"boolean"}', 'variant_srm_control_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
   ('flag_checkout_ended_e2e', 'app_checkout_e2e', 'checkout-ended', 'Checkout History', '{"type":"boolean"}', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
+  ('flag_checkout_integrity_e2e', 'app_checkout_e2e', 'checkout-integrity', 'Checkout Integrity', '{"type":"boolean"}', 'variant_integrity_control_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
   ('flag_agent_e2e', 'app_agent_e2e', 'agent-routing', 'Agent Routing', NULL, NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e');
 INSERT INTO variants (id, flag_id, name, value, created_at) VALUES
   ('variant_checkout_control_e2e', 'flag_checkout_e2e', 'control', 'false', '${createdAt}'),
@@ -228,7 +232,9 @@ INSERT INTO variants (id, flag_id, name, value, created_at) VALUES
   ('variant_ended_control_e2e', 'flag_checkout_ended_e2e', 'control', 'false', '${createdAt}'),
   ('variant_ended_treatment_e2e', 'flag_checkout_ended_e2e', 'treatment', 'true', '${createdAt}'),
   ('variant_srm_control_e2e', 'flag_checkout_srm_e2e', 'control', 'false', '${createdAt}'),
-  ('variant_srm_treatment_e2e', 'flag_checkout_srm_e2e', 'treatment', 'true', '${createdAt}');
+  ('variant_srm_treatment_e2e', 'flag_checkout_srm_e2e', 'treatment', 'true', '${createdAt}'),
+  ('variant_integrity_control_e2e', 'flag_checkout_integrity_e2e', 'control', 'false', '${createdAt}'),
+  ('variant_integrity_treatment_e2e', 'flag_checkout_integrity_e2e', 'treatment', 'true', '${createdAt}');
 INSERT INTO flag_configs (id, app_id, environment_id, flag_id, enabled, available_variant_names, default_variant_id, created_at, updated_at) VALUES
   ('config_checkout_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_e2e', 1, '["control","treatment"]', 'variant_checkout_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'flag_checkout_e2e', 0, '["control"]', 'variant_checkout_control_e2e', '${createdAt}', '${createdAt}'),
@@ -238,17 +244,28 @@ INSERT INTO flag_configs (id, app_id, environment_id, flag_id, enabled, availabl
   ('config_draft_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_draft_e2e', 1, '["control"]', 'variant_draft_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_ended_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_ended_e2e', 1, '["control"]', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_srm_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'flag_checkout_srm_e2e', 1, '["control","treatment"]', 'variant_srm_control_e2e', '${createdAt}', '${createdAt}'),
+  ('config_integrity_e2e', 'app_checkout_e2e', 'env_checkout_integrity_e2e', 'flag_checkout_integrity_e2e', 1, '["control","treatment"]', 'variant_integrity_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_checkout_overview_e2e', 'app_checkout_e2e', 'env_checkout_overview_e2e', 'flag_checkout_e2e', 1, '["control","treatment"]', 'variant_checkout_control_e2e', '${createdAt}', '${recentlyChangedAt}'),
   ('config_srm_overview_e2e', 'app_checkout_e2e', 'env_checkout_overview_e2e', 'flag_checkout_srm_e2e', 0, '["control"]', 'variant_srm_control_e2e', '${createdAt}', '${staleChangedAt}'),
   ('config_create_lab_e2e', 'app_checkout_e2e', 'env_checkout_create_e2e', 'flag_checkout_ended_e2e', 1, '["control","treatment"]', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_create_gated_e2e', 'app_checkout_e2e', 'env_checkout_creategate_e2e', 'flag_checkout_ended_e2e', 1, '["control","treatment"]', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}');
-INSERT INTO metrics (id, app_id, key, name, kind, event_name, created_at, created_by) VALUES
-  ('checkout-conversion', 'app_checkout_e2e', 'checkout-conversion', 'Checkout conversion', 'binomial', 'checkout_completed', '${createdAt}', 'user_local_e2e'),
-  ('checkout-reliability', 'app_checkout_e2e', 'checkout-reliability', 'Checkout reliability', 'binomial', 'checkout_succeeded', '${createdAt}', 'user_local_e2e'),
-  ('metric_setup_goal_e2e', 'app_checkout_e2e', 'setup-goal', 'Checkout conversion', 'binomial', 'checkout_completed', '${createdAt}', 'user_local_e2e'),
-  ('metric_setup_secondary_e2e', 'app_checkout_e2e', 'setup-secondary', 'Order value', 'binomial', 'order_value_recorded', '${createdAt}', 'user_local_e2e'),
-  ('metric_setup_guardrail_e2e', 'app_checkout_e2e', 'setup-guardrail', 'Checkout errors', 'binomial', 'checkout_error', '${createdAt}', 'user_local_e2e'),
-  ('metric_setup_activation_e2e', 'app_checkout_e2e', 'setup-activation', 'Checkout opened', 'binomial', 'checkout_opened', '${createdAt}', 'user_local_e2e');
+-- SPL-369: migration 0019 replaced the Metric's free-text \`event_name\` with an
+-- \`event_definition_id\` FK into \`event_definitions\`. Seed the Event Definitions
+-- a legacy Metric would carry after that migration's own backfill (state
+-- 'incomplete', no published Version) rather than pointing at a dangling id.
+INSERT INTO event_definitions (id, app_id, name, family, display_name, state, current_published_version_id, created_at, updated_at, created_by, updated_by) VALUES
+  ('event_def_checkout_completed_e2e', 'app_checkout_e2e', 'checkout_completed', 'metric', 'Checkout completed', 'incomplete', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
+  ('event_def_checkout_succeeded_e2e', 'app_checkout_e2e', 'checkout_succeeded', 'metric', 'Checkout succeeded', 'incomplete', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
+  ('event_def_order_value_recorded_e2e', 'app_checkout_e2e', 'order_value_recorded', 'metric', 'Order value recorded', 'incomplete', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
+  ('event_def_checkout_error_e2e', 'app_checkout_e2e', 'checkout_error', 'metric', 'Checkout error', 'incomplete', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
+  ('event_def_checkout_opened_e2e', 'app_checkout_e2e', 'checkout_opened', 'metric', 'Checkout opened', 'incomplete', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e');
+INSERT INTO metrics (id, app_id, key, name, kind, event_definition_id, created_at, created_by) VALUES
+  ('checkout-conversion', 'app_checkout_e2e', 'checkout-conversion', 'Checkout conversion', 'binomial', 'event_def_checkout_completed_e2e', '${createdAt}', 'user_local_e2e'),
+  ('checkout-reliability', 'app_checkout_e2e', 'checkout-reliability', 'Checkout reliability', 'binomial', 'event_def_checkout_succeeded_e2e', '${createdAt}', 'user_local_e2e'),
+  ('metric_setup_goal_e2e', 'app_checkout_e2e', 'setup-goal', 'Checkout conversion', 'binomial', 'event_def_checkout_completed_e2e', '${createdAt}', 'user_local_e2e'),
+  ('metric_setup_secondary_e2e', 'app_checkout_e2e', 'setup-secondary', 'Order value', 'binomial', 'event_def_order_value_recorded_e2e', '${createdAt}', 'user_local_e2e'),
+  ('metric_setup_guardrail_e2e', 'app_checkout_e2e', 'setup-guardrail', 'Checkout errors', 'binomial', 'event_def_checkout_error_e2e', '${createdAt}', 'user_local_e2e'),
+  ('metric_setup_activation_e2e', 'app_checkout_e2e', 'setup-activation', 'Checkout opened', 'binomial', 'event_def_checkout_opened_e2e', '${createdAt}', 'user_local_e2e');
 INSERT INTO segments (id, app_id, name, conditions, description, created_at, updated_at) VALUES
   ('segment_paid_e2e', 'app_checkout_e2e', 'Paid plan', '[{"attribute":"plan","operator":"eq","value":"paid"}]', 'Entities on a paid plan', '${createdAt}', '${createdAt}'),
   ('segment_enterprise_e2e', 'app_checkout_e2e', 'Enterprise markets', '[{"attribute":"plan","operator":"eq","value":"enterprise"},{"attribute":"country","operator":"in","value":["US","CA"]}]', 'Enterprise plan in US or CA', '${createdAt}', '${createdAt}'),
@@ -261,6 +278,7 @@ INSERT INTO experiments (id, app_id, environment_id, key, flag_id, name, status,
   ('experiment_checkout_ended_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'checkout-ended', 'flag_checkout_ended_e2e', 'Checkout Baseline', 'ended', 'targetingKey', 'user', 'variant_ended_control_e2e', '[]', '[]', '[]', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
   ('experiment_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'checkout-copy-prod', 'flag_checkout_e2e', 'Checkout Copy Prod', 'running', 'targetingKey', 'user', 'variant_checkout_control_e2e', '[]', '[]', '[]', 'run_checkout_prod_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
   ('experiment_checkout_srm_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'checkout-srm', 'flag_checkout_srm_e2e', 'Checkout Routing Split', 'running', 'targetingKey', 'user', 'variant_srm_control_e2e', '[{"metricId":"checkout-conversion"}]', '[]', '[]', 'run_checkout_srm_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
+  ('experiment_checkout_integrity_e2e', 'app_checkout_e2e', 'env_checkout_integrity_e2e', 'checkout-integrity', 'flag_checkout_integrity_e2e', 'Checkout Integrity Alert', 'running', 'targetingKey', 'user', 'variant_integrity_control_e2e', '[{"metricId":"checkout-conversion"}]', '[]', '[]', 'run_checkout_integrity_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
   ('experiment_checkout_setup_e2e', 'app_checkout_e2e', 'env_checkout_setup_e2e', 'checkout-setup', 'flag_checkout_e2e', 'Checkout Setup Taxonomy', 'running', 'targetingKey', 'user', 'variant_checkout_control_e2e', '${d1RunDecisions("metric_setup_goal_e2e", "metric_setup_secondary_e2e")}', '${d1RunDecisions("metric_setup_guardrail_e2e")}', '[]', 'run_checkout_setup_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
   ('experiment_agent_e2e', 'app_agent_e2e', 'env_agent_prod_e2e', 'routing-model', 'flag_agent_e2e', 'Routing Model', 'draft', 'targetingKey', 'user', NULL, '[]', '[]', '[]', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e');
 UPDATE experiments SET draft_segment_ids = '["segment_draft_locked_e2e"]' WHERE id = 'experiment_checkout_draft_e2e';
@@ -272,7 +290,11 @@ INSERT INTO runs (id, app_id, environment_id, experiment_id, run_number, status,
   ('run_checkout_significance_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_significance_e2e', 1, 'running', 'targetingKey', 'user', '${run.salt.significance}', '${json(run.allocation.checkout)}', '${json(run.variants.significance)}', 'variant_significance_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '${d1RunDecisions("checkout-conversion")}', '[]', '${run.hash.significance}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('run_checkout_guardrail_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_guardrail_e2e', 1, 'running', 'targetingKey', 'user', '${run.salt.guardrail}', '${json(run.allocation.checkout)}', '${json(run.variants.guardrail)}', 'variant_guardrail_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '[]', '${d1RunDecisions("checkout-reliability")}', '${run.hash.guardrail}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('run_checkout_srm_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'experiment_checkout_srm_e2e', 1, 'running', 'targetingKey', 'user', '${run.salt.srm}', '${json(run.allocation.checkout)}', '${json(run.variants.srm)}', 'variant_srm_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '${d1RunDecisions("checkout-conversion")}', '[]', '${run.hash.srm}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('run_checkout_ended_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_ended_e2e', 1, 'ended', 'targetingKey', 'user', '${run.salt.ended}', '${json(run.allocation.checkout)}', '${json(run.variants.ended)}', 'variant_ended_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '[]', '[]', '${run.hash.ended}', '${createdAt}', '${createdAt}', 'user_local_e2e');
+  ('run_checkout_ended_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_ended_e2e', 1, 'ended', 'targetingKey', 'user', '${run.salt.ended}', '${json(run.allocation.checkout)}', '${json(run.variants.ended)}', 'variant_ended_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '[]', '[]', '${run.hash.ended}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  -- SPL-189: control_variant_id names a Variant this Run never froze — the
+  -- SPL-184 backfill scenario the "unresolvable" Control state exists for.
+  -- variant_set below is real (control/treatment), the frozen id just is not in it.
+  ('run_checkout_integrity_e2e', 'app_checkout_e2e', 'env_checkout_integrity_e2e', 'experiment_checkout_integrity_e2e', 1, 'running', 'targetingKey', 'user', '${run.salt.integrity}', '${json(run.allocation.checkout)}', '${json(run.variants.integrity)}', 'variant_integrity_control_backfilled_e2e', '${json(run.targetingRules)}', NULL, 0.95, '${d1RunDecisions("checkout-conversion")}', '[]', '${run.hash.integrity}', '${createdAt}', '${createdAt}', 'user_local_e2e');
 UPDATE runs SET ended_at = '2026-07-17T12:00:00.000Z', end_reason = 'Prepared a larger treatment allocation' WHERE id = 'run_checkout_dev_previous_e2e';
 UPDATE runs SET start_reason = 'Increase treatment traffic' WHERE id = 'run_checkout_dev_e2e';
 UPDATE experiments SET description = 'A dedicated Setup-tab acceptance fixture', owner = 'growth', tags = '["checkout","setup"]', activation_metric_id = 'metric_setup_activation_e2e', conversion_window_ms = 86400000 WHERE id = 'experiment_checkout_setup_e2e';

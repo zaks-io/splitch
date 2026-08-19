@@ -13,9 +13,11 @@ import {
   analysisResultsNoRunEnvelope,
   resolveExperimentResultsTarget,
 } from "./analysis-results-request";
+import { requireAppMember } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
 import { experimentNotFound, runNotFound } from "./experiment-errors";
 import { environmentExists } from "./experiment-handler-shared";
+import { ORG_MEMBER_ROLES, requireOrgRole } from "./org-authz";
 import { controlPlaneRoute } from "./routes";
 
 /**
@@ -81,7 +83,13 @@ function delegatingHandler(
 ): RouteHandler<unknown> {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     const parts = inputParts(input);
-    const scopeError = await environmentScopeError(repo, parts.params ?? {}, requestId);
+    const scopeError = await delegationScopeError(
+      route,
+      repo,
+      parts.params ?? {},
+      principal,
+      requestId,
+    );
     if (scopeError) return scopeError;
 
     // Experiment results: D1 can finish the read without Analysis (draft →
@@ -100,6 +108,44 @@ function delegatingHandler(
       }),
     );
   };
+}
+
+async function delegationScopeError(
+  route: ApiRouteContract,
+  repo: Repository,
+  params: Record<string, string>,
+  principal: HandlerArgs<unknown>["principal"],
+  requestId: string,
+): Promise<Response | null> {
+  return (
+    (await exposureStatusMembershipError(route, repo, params, principal, requestId)) ??
+    (await environmentScopeError(repo, params, requestId))
+  );
+}
+
+/**
+ * This durable onboarding read leaves D1 for Analysis, so a long-lived bearer
+ * must not keep working after either live membership is removed. The signed
+ * Panel resolver already performs these checks; repeating them here keeps the
+ * public Control Plane route equally strict for every control-plane token.
+ */
+async function exposureStatusMembershipError(
+  route: ApiRouteContract,
+  repo: Repository,
+  params: Record<string, string>,
+  principal: HandlerArgs<unknown>["principal"],
+  requestId: string,
+): Promise<Response | null> {
+  if (route.operationId !== "environment_exposure_status_get") return null;
+  const appId = params.appId;
+  if (!appId) return appNotFound(requestId);
+
+  const appMembershipError = await requireAppMember({ repo }, appId, principal, requestId);
+  if (appMembershipError) return appMembershipError;
+
+  const app = await repo.identity.getApp(appId);
+  if (!app) return appNotFound(requestId);
+  return requireOrgRole({ repo }, app.organizationId, principal, ORG_MEMBER_ROLES, requestId);
 }
 
 function missingOwnerBinding(route: ApiRouteContract, requestId: string): Response {

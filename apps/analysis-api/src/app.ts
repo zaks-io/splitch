@@ -7,6 +7,11 @@ import {
   type RegistrarDeps,
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
+import {
+  makeExposureStatusCleanupHandler,
+  type ExposureStatusCleanupDeps,
+} from "./exposure-status-cleanup";
+import { makeExposureStatusHandler, type ExposureStatusDeps } from "./exposure-status";
 import { makeResultsHandler, type ResultsDeps } from "./results";
 import { analysisRoute } from "./routes";
 import { makeUsageHandler, type UsageDeps } from "./usage";
@@ -24,7 +29,11 @@ const service = "splitch-analysis-api";
  */
 export type AnalysisDoor = "public" | "binding";
 
-export interface AnalysisAppDeps extends ResultsDeps, UsageDeps {
+export interface AnalysisAppDeps
+  extends ResultsDeps,
+    UsageDeps,
+    ExposureStatusDeps,
+    ExposureStatusCleanupDeps {
   door: AnalysisDoor;
   authResolver: AuthResolver;
   rateLimiter: RateLimiter;
@@ -53,16 +62,27 @@ export function createApp(deps: AnalysisAppDeps): Hono {
   const registrar = analysisRegistrar(deps);
   const resultsHandler = makeResultsHandler(deps);
   const usageHandler = makeUsageHandler(deps);
+  const exposureStatusHandler = makeExposureStatusHandler(deps);
+  const exposureStatusCleanupHandler = makeExposureStatusCleanupHandler(deps);
   registrar.mount(app, analysisRoute("experiment_results_get"), resultsHandler);
   registrar.mount(app, analysisRoute("experiment_results_post"), resultsHandler);
   registrar.mount(app, analysisRoute("organization_usage_get"), usageHandler);
+  registrar.mount(app, analysisRoute("environment_exposure_status_get"), exposureStatusHandler);
+  registrar.mount(
+    app,
+    analysisRoute("environment_exposure_status_delete"),
+    exposureStatusCleanupHandler,
+  );
 
   return app;
 }
 
 function analysisRegistrar(deps: AnalysisAppDeps): Registrar {
   return createRegistrar({
-    authResolvers: { "control-plane-token": deps.authResolver },
+    authResolvers: {
+      "control-plane-token": deps.authResolver,
+      "internal-worker": deps.authResolver,
+    },
     rateLimiter: deps.rateLimiter,
     defaultHeaders: deps.defaultHeaders,
     observability: deps.observability,

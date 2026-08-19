@@ -39,6 +39,7 @@ const EvaluateAllEntryBaseSchema = z
     variantName: z.string().nullable(),
     reason: EvaluateAllReasonSchema,
     errorCode: ErrorCodeSchema.nullable(),
+    exposureIdentity: z.string().nullable(),
     exposureTicket: z.string().nullable(),
   })
   .strict();
@@ -46,9 +47,16 @@ const EvaluateAllEntryBaseSchema = z
 export const EvaluateAllEntrySchema = EvaluateAllEntryBaseSchema.refine(
   (entry) => (entry.reason === "ERROR" ? entry.errorCode !== null : entry.errorCode === null),
   { message: "errorCode is present iff reason === 'ERROR'" },
-).refine((entry) => entry.reason === "SPLIT" || entry.exposureTicket === null, {
-  message: "exposureTicket is only allowed when reason === 'SPLIT'",
-});
+)
+  .refine((entry) => entry.reason === "SPLIT" || entry.exposureTicket === null, {
+    message: "exposureTicket is only allowed when reason === 'SPLIT'",
+  })
+  .refine((entry) => entry.reason === "SPLIT" || entry.exposureIdentity === null, {
+    message: "exposureIdentity is only allowed when reason === 'SPLIT'",
+  })
+  .refine((entry) => (entry.exposureTicket === null) === (entry.exposureIdentity === null), {
+    message: "exposureIdentity is present iff exposureTicket is present",
+  });
 export type EvaluateAllEntry = z.infer<typeof EvaluateAllEntrySchema>;
 
 /**
