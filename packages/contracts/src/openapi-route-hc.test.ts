@@ -64,4 +64,22 @@ describe("openapi route parity", () => {
       304: { description: "Not Modified — cached response is still current." },
     });
   });
+
+  it("fails loud when a declared error has no mapped HTTP status", () => {
+    expect(() =>
+      defineApiRoute({
+        operationId: "things_get",
+        owner: "control-plane-api",
+        method: "GET",
+        path: "/things",
+        summary: "Get a thing.",
+        response: z.object({ ok: z.boolean() }),
+        auth: "public",
+        rateLimit: "none",
+        idempotency: "none",
+        // @ts-expect-error -- bypass the authoring guard to prove generation fails loud.
+        errors: ["NOT_A_REAL_ERROR_CODE"],
+      }),
+    ).toThrow(/has no mapped HTTP status/);
+  });
 });
