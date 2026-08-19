@@ -158,6 +158,10 @@ A single loop revalidates the held evaluations every `revalidateMs` (default 60s
 - Failure → keep serving last-known-good, log loudly every failed tick, and mark subsequently read
   entries `STALE` (`errorCode: PROVIDER_NOT_READY`) until a tick succeeds — degraded is always
   observable, never disguised (ADR-0036).
+- The client maintains current revalidation-degradation state, entering degraded on a failed tick
+  and clearing it on the next successful tick. It exposes a synchronous, render-safe read of that
+  state to same-package consumers through an internal seam; this is not a public accessor or a
+  notification channel.
 - End-to-end freshness is revalidation interval + the accepted ~60s KV propagation window
   ([five-runtimes.md](./five-runtimes.md), ADR-0009); this client does not try to beat the data
   plane's own propagation. The ADR-0019-style WebSocket nudge, when it lands, only triggers an
