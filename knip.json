@@ -5,7 +5,12 @@
   "stryker": {
     "config": ["stryker.base.mjs", "packages/*/stryker.config.mjs"]
   },
-  "ignore": [".agents/**", ".claude/**", "fixtures/convex-sdk-consumer/**"],
+  "ignore": [
+    ".agents/**",
+    ".claude/**",
+    "fixtures/convex-sdk-consumer/**",
+    "fixtures/ssr-sdk-consumer/**"
+  ],
   "workspaces": {
     ".": {
       "entry": [

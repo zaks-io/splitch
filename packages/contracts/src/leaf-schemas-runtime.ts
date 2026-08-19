@@ -197,6 +197,26 @@ export const UserSchema = z.object({
 export type User = z.infer<typeof UserSchema>;
 
 /**
+ * A member of ONE App (`app_memberships`), which is a different grant from
+ * Organization membership: the App role decides who may rename the App, manage
+ * its members, and delete it (organization-and-membership.md App role matrix).
+ *
+ * `email` is nullable ON PURPOSE. It is resolved from the identity profile cache
+ * written at first sign-in, so a member who has been granted access but has not
+ * signed in yet genuinely has no email here. Rendering a placeholder would be a
+ * silent substitution (ADR-0036); the absence is modelled so the surface can say
+ * so out loud.
+ */
+export const AppMemberSchema = z.object({
+  appId: z.string(),
+  userId: z.string(),
+  email: z.string().nullable(),
+  role: UserRoleSchema,
+  createdAt: z.string(),
+});
+export type AppMember = z.infer<typeof AppMemberSchema>;
+
+/**
  * An Organization membership row may exist before the User has signed in and
  * populated the shared profile cache. `email: null` preserves that distinction
  * without inventing identity data or dropping the membership from the roster.

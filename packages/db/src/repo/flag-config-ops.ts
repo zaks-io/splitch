@@ -102,12 +102,7 @@ export function makeFlagConfigOps(
       patch: Partial<
         Pick<
           typeof flagConfigs.$inferInsert,
-          | "enabled"
-          | "availableVariantNames"
-          | "defaultVariantId"
-          | "rollout"
-          | "updatedAt"
-          | "version"
+          "enabled" | "availableVariantNames" | "defaultVariantId" | "rollout" | "updatedAt"
         >
       >,
       approval?: ApprovalCommit,

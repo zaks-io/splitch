@@ -10,9 +10,11 @@
  *
  * Zod runs at build time only. This script reads schema members and writes
  * plain TypeScript literals; nothing it emits carries a zod import, so the
- * published bundle stays dependency-free. The emitted header must not name the
- * contracts package by its scoped name: this file's output is bundled into
- * `dist/index.d.ts`, and the release pack rejects declarations mentioning it.
+ * published bundle stays dependency-free. Docblocks anywhere in this
+ * surface can land verbatim in the published `dist/index.d.ts`, so comments in
+ * the surface must stay consumer-facing: no script paths, release-pack rules,
+ * or contracts-package plumbing. The complete forbidden marker list is
+ * maintained in `scripts/pack-staging.mjs`.
  *
  * What is NOT generated: the object shapes in `contract-surface-types.ts` and
  * the JSON type nodes in `contract-surface-descriptors.ts`. Emitting TypeScript
@@ -128,7 +130,7 @@ function unionAlias(typeName, constName) {
   return `export type ${typeName} = (typeof ${constName})[number];`;
 }
 
-const HEADER = `/** @generated from the contracts package by scripts/generate-contract-surface.mjs; do not edit. */`;
+const HEADER = `/** Generated file; do not edit. */`;
 
 function render(contracts) {
   const { z } = contracts;

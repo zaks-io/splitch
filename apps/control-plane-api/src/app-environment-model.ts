@@ -12,12 +12,14 @@ import { collectEnvironmentDeleteBlockers } from "./app-delete-tree";
 import { clientKeyResponse, provisionClientKey } from "./client-key-provisioning";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { type CredentialCacheWriterAccess, randomHex } from "./credential-cache";
+import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 
 export interface AppEnvironmentDeps {
   repo: Repository;
   credentialStore?: KVNamespace;
   credentialCacheWriter?: CredentialCacheWriterAccess;
   configStore?: ConfigStoreAccess;
+  exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
   nowIso?: () => string;
 }
 
@@ -211,6 +213,21 @@ export function unusableAppKey(name: string, requestId: string): Response {
       code: "VALIDATION_ERROR",
       message: `no App key could be derived from name "${name}"; supply an explicit "key"`,
       details: { issues: [{ path: ["key"], message: "could not be derived from name" }] },
+    },
+    { requestId },
+  );
+}
+
+export function appSlugConflict(slug: string, requestId: string): Response {
+  return renderError(
+    {
+      code: "SLUG_CONFLICT",
+      message: `URL slug "${slug}" is already taken in this organization`,
+      details: {
+        resourceType: "app",
+        conflictingSlug: slug,
+        recommendedAction: "CHOOSE_DIFFERENT_SLUG",
+      },
     },
     { requestId },
   );

@@ -25,6 +25,7 @@ const SCOPED_OPERATION_IDS = [
   "api_keys_create",
   "event_definitions_list",
   "event_definitions_create",
+  "environment_exposure_status_get",
 ] as const;
 
 /** Operations that name no resource, so their claims carry only the id. */
@@ -45,6 +46,17 @@ const FLAG_CONFIG_OPERATION_IDS = [
 ] as const;
 
 const APPROVAL_OPERATION_IDS = ["approval_request_get", "approval_request_review"] as const;
+
+/** App Settings operations whose claim names the App and nothing else. */
+const APP_SCOPED_OPERATION_IDS = [
+  "app_settings_get",
+  "apps_update",
+  "apps_delete",
+  "app_members_list",
+  "app_members_add",
+] as const;
+
+const APP_MEMBER_RESOURCE_OPERATION_IDS = ["app_members_update", "app_members_remove"] as const;
 
 const METRIC_RESOURCE_OPERATION_IDS = ["metrics_get", "metrics_update", "metrics_delete"] as const;
 const EVENT_DEFINITION_RESOURCE_OPERATION_IDS = [
@@ -84,6 +96,8 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ["apps_create", (value) => isResourceOperation(value, "orgId")],
   ["organization_usage_get", (value) => isResourceOperation(value, "orgId")],
   ["app_attention_rollup_get", (value) => isResourceOperation(value, "appId")],
+  ...family(APP_SCOPED_OPERATION_IDS, (value) => isResourceOperation(value, "appId")),
+  ...family(APP_MEMBER_RESOURCE_OPERATION_IDS, isAppMemberResourceOperation),
   ["api_key_revoke", isApiKeyRevokeOperation],
   ["flag_get", isFlagGetOperation],
   ...family(UNBOUND_OPERATION_IDS, (value) => hasKeys(value, ["id"])),
@@ -154,6 +168,20 @@ function isApprovalOperation(value: Record<string, unknown>): boolean {
     hasKeys(value, ["id", "appId", "approvalRequestId"]) &&
     isNonEmptyString(value.appId) &&
     isNonEmptyString(value.approvalRequestId)
+  );
+}
+
+/**
+ * An App-membership mutation names the App and the member being changed. The
+ * exact-length check is what keeps a claim minted for one member from being
+ * replayed against another, or from smuggling an `environmentId` that would
+ * assert a narrower scope than the App-scoped route actually carries.
+ */
+function isAppMemberResourceOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "userId"]) &&
+    isNonEmptyString(value.appId) &&
+    isNonEmptyString(value.userId)
   );
 }
 
@@ -238,10 +266,12 @@ function isApiKeyRevokeOperation(value: Record<string, unknown>): boolean {
 export function sameOperation(left: ControlPanelOperation, right: ControlPanelOperation): boolean {
   const claimed = left as Record<string, unknown>;
   const presented = right as Record<string, unknown>;
-  const keys = Object.keys(claimed);
-  return (
-    keys.length === Object.keys(presented).length &&
-    keys.every((key) => claimed[key] === presented[key])
+  const keys = new Set([...Object.keys(claimed), ...Object.keys(presented)]);
+  return [...keys].every(
+    (key) =>
+      Object.hasOwn(claimed, key) &&
+      Object.hasOwn(presented, key) &&
+      claimed[key] === presented[key],
   );
 }
 
@@ -250,7 +280,9 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function hasKeys(value: Record<string, unknown>, keys: string[]): boolean {
-  return Object.keys(value).length === keys.length && keys.every((key) => key in value);
+  return (
+    Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key))
+  );
 }
 
 export function isNonEmptyString(value: unknown): value is string {

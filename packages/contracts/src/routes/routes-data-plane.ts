@@ -224,6 +224,7 @@ export const dataPlaneRoutes = [
       "EVENT_ID_CONFLICT",
       "RATE_LIMITED",
       "SERVICE_UNAVAILABLE",
+      "INTERNAL_SERVER_ERROR",
     ],
   }),
 ] as const satisfies readonly ApiRouteContract[];

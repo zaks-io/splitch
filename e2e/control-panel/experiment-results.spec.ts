@@ -87,6 +87,50 @@ test.describe("Experiment Results tab", () => {
     await captureThemeScreenshots(page, testInfo, "experiment-results-gated");
   });
 
+  // SPL-189: this Run's frozen control_variant_id was backfilled (SPL-184) onto a
+  // value absent from its own frozen variant_set, so the Control cannot be
+  // identified by inference. It also carries the SRM fixture's exact imbalance, so
+  // both destructive-severity cards fire on the same Run and must stay tellable
+  // apart without reading their body copy.
+  test("names an unresolvable Control and keeps it distinguishable from a firing SRM", async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await page.goto(
+      "/acme-labs/checkout-api/integrity/experiments/experiment_checkout_integrity_e2e/results",
+    );
+
+    const integrity = page
+      .getByRole("alert")
+      .filter({ hasText: "Control arm cannot be identified" });
+    await expect(integrity).toBeVisible();
+    await expect(integrity.getByText(/absent from the Variant set this Run froze/)).toBeVisible();
+
+    const srm = page.locator('[data-srm-tier="confirmed"]');
+    await expect(srm).toBeVisible();
+    await expect(srm.getByText("Confirmed mismatch").first()).toBeVisible();
+
+    // Neither card withholds the numbers.
+    await expect(page.getByRole("heading", { name: "Lift by arm" })).toBeVisible();
+
+    // Distinguishable by icon, not by reading either card's copy.
+    const integrityIcon = page.getByTestId("control-integrity-alert-icon");
+    const srmIcon = page.getByTestId("srm-confirmed-alert-icon");
+    await expect(integrityIcon).toBeVisible();
+    await expect(srmIcon).toBeVisible();
+    await expect(integrityIcon).toHaveClass(/lucide-circle-alert/);
+    await expect(srmIcon).toHaveClass(/lucide-triangle-alert/);
+
+    const blocked = page.getByTestId("ship-blocked");
+    await expect(blocked).toBeVisible();
+    // The unresolvable Control is itself a named, gating check, not just a
+    // visual alongside an SRM/power failure that would block regardless.
+    await expect(blocked).toContainText("Control arm cannot be identified");
+    await expect(page.getByRole("button", { name: "Conclude and promote winner" })).toBeDisabled();
+
+    await captureThemeScreenshots(page, testInfo, "experiment-results-control-integrity");
+  });
+
   // Guardrails deliberately do not gate. A breach beside an otherwise clean
   // gate is the most misleading state this tab can reach, so it has to be named
   // where the decision is made rather than only in the Guardrails tile.

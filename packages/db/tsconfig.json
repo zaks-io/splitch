@@ -11,6 +11,7 @@
     "src/repo/test-d1.ts",
     "src/repo/test-d1-pool.ts",
     "src/repo/test-d1-pool-setup.ts",
-    "src/repo/test-seed.ts"
+    "src/repo/test-seed.ts",
+    "src/repo/flag-config-version-writer-sweep*.ts"
   ]
 }

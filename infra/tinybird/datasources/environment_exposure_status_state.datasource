@@ -1,0 +1,9 @@
+DESCRIPTION Durable earliest real Exposure timestamp per App and Environment.
+
+SCHEMA >
+    `app_id` String `json:$.app_id`,
+    `environment_id` String `json:$.environment_id`,
+    `first_exposure_state` AggregateFunction(min, DateTime64(3)) `json:$.first_exposure_state`
+
+ENGINE "AggregatingMergeTree"
+ENGINE_SORTING_KEY "app_id, environment_id"

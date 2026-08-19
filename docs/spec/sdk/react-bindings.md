@@ -49,6 +49,10 @@ Standard context semantics: providers may nest, innermost wins. Changing user me
 new client and passing it as the new `client` prop (static-context paradigm — no `setContext`);
 context propagation resubscribes every hook to the new client.
 
+Each provider owns a decoration-eligibility ref, initially `false`. The provider's mount effect
+flips it to `true` without scheduling a state update or an extra render. A render is eligible for
+read-time staleness decoration if and only if that provider's mount effect has already run.
+
 ## Hooks are `useSyncExternalStore` over per-Flag subscription
 
 Each hook is one `useSyncExternalStore` per rendered call site:
@@ -70,24 +74,55 @@ Each hook is one `useSyncExternalStore` per rendered call site:
 - **getServerSnapshot**: the same read. It is valid exactly when the client is readable without
   `init()` — under bootstrap ([browser-client.md](./browser-client.md), Bootstrap). Without
   bootstrap, a server render throws `SDK_NOT_INITIALIZED` like any other pre-init read.
-- **derivation**: the hook's render-time return value is derived from the held entry through the
-  same internal seam — **not** by calling `evaluate`/`evaluateDetails` during render (see Exposure
-  fires on commit) — and memoized on the client, the entry reference, `flagKey`, and
-  `defaultValue`. The client is a memo key because a provider swap can change every result while
-  the snapshot stays `undefined` (Flag absent from both clients, or the new client un-inited); the
-  memo must never serve one client's derivation under another. The derived value and details are
-  exactly what `evaluate`/`evaluateDetails` return for the same entry and default — one mapping,
-  shared with the client's accessors, never duplicated. An unstable inline default re-runs the memo
-  but never re-renders (snapshots compare entry identity, not derived values).
+- **held-resolution derivation**: the hook's render-time held value and held details are derived
+  from the held entry through the same internal seam, **not** by calling
+  `evaluate`/`evaluateDetails` during render (see Exposure fires on commit). This derivation stays
+  memoized on exactly the client, the entry reference, `flagKey`, and `defaultValue`. The client is
+  a memo key because a provider swap can change every result while the snapshot stays `undefined`
+  (Flag absent from both clients, or the new client un-inited); the memo must never serve one
+  client's derivation under another. The held value and held details use the same entry-to-result
+  mapping as the client's accessors, never a duplicated mapping. An unstable inline default re-runs
+  the memo but never re-renders (snapshots compare entry identity, not derived values).
+- **details staleness overlay**: on every decoration-eligible render, after the stable
+  held-resolution memo is read, `useFlagDetails` reads the client's current revalidation-degradation
+  state through the same-package internal seam. The hook passes the held details through the
+  client's own read-time staleness decorator at the same point in the mapping as `evaluateDetails`;
+  React never reimplements the mapping or its application set. The decorator applies exactly where
+  the client's `evaluateDetails` applies it: only entry-derived held details that reach that point
+  are decorated. Absent-flag details (for example, `ERROR` / `FLAG_NOT_FOUND`), held-`ERROR`
+  details, and null-variant details bypass the decorator and render unchanged. When the client is
+  degraded and details reach the decorator, it returns the held value with `reason: STALE` and
+  `errorCode: PROVIDER_NOT_READY`. The decorator replaces only `reason` and `errorCode`; every other
+  details field remains the held resolution's field.
 
-Two guarantees this shape requires of the browser client (normative for SPL-332, restated in
-[browser-client.md](./browser-client.md)):
+  A render that is not decoration-eligible returns the held details object directly and neither
+  populates nor consults the decoration identity memo. On each decoration-eligible render,
+  staleness is read fresh and the returned details object must be memoized on the pair (held-details
+  identity, current degradation state). The same-object identity guarantee applies only among
+  decoration-eligible renders while that pair is unchanged. This identity memo is separate from
+  the stable held-resolution memo. Degradation state does not become a snapshot, invalidate a held
+  entry, or notify a subscriber.
+
+  Because the overlay reads mutable client state outside `useSyncExternalStore`, components in the
+  same render pass may observe different staleness, and a render begun before a failed tick may
+  commit un-overlaid details. The transition from an ineligible render to an eligible render may
+  likewise change the returned object identity once even when the held-details identity and
+  degradation state are unchanged. These inconsistencies are accepted because staleness is
+  read-time metadata corrected on the component's next render.
+
+Three guarantees this shape requires of the browser client (restated in
+[browser-client.md](./browser-client.md)). Guarantees 1 and 2 are normative for SPL-332 (shipped);
+guarantee 3 is normative for SPL-333, the browser-client revalidation slice:
 
 1. `subscribe(flagKey, listener)` accepts keys absent from the held evaluations. The subscription
    registers by key; if a later swap introduces the Flag, its listeners fire and subscribers
    re-render from the caller default onto the real Variant.
 2. Held Variant values are returned by reference, never cloned, and are immutable. JSON Variants
    keep referential identity across renders until a swap — safe in dependency arrays.
+3. The client exposes to same-package consumers both a synchronous, render-safe read of its current
+   revalidation-degradation state and its read-time staleness decorator, the exact function
+   `evaluateDetails` uses. The React bindings call that identical decorator. Neither capability is
+   public API or a notification channel.
 
 ## Exposure fires on commit, not render
 
@@ -119,6 +154,17 @@ sees it. No server-side flush question exists for the hooks; an app that additio
 `evaluate` imperatively on the server is outside their concern, and pipeline first-touch dedup
 (ADR-0005) keeps any such double-fire safe.
 
+The provider's decoration-eligibility ref remains `false` during server rendering through
+`getServerSnapshot` and during the hydration render. Both return the held details unchanged so the
+server HTML and hydration output match; neither render populates or consults the decoration identity
+memo. The provider's mount effect then flips the ref without a state update or extra render, and the
+decorator first applies on the next render caused by something else. The same rule applies to a
+client-only tree with no SSR: its first render returns the held details directly without populating
+or consulting the decoration identity memo, its mount effect schedules no render, and the decorator
+first applies on its next render. Either transition to the first eligible render may change the
+returned object identity once. This delay and identity change are accepted for the same reason as
+intra-commit tearing: staleness is read-time metadata corrected on the component's next render.
+
 ## Fail-loud (ADR-0036)
 
 Hooks add no defaults and no error handling of their own — every row below is the client's
@@ -129,15 +175,79 @@ specified behavior surfaced through React:
 | Any hook outside a `SplitchProvider`         | throws `SplitchSdkError SDK_REACT_PROVIDER_MISSING` during render (message names `SplitchProvider`)                                                                                                              |
 | Read before `init()` resolves (no bootstrap) | throws the client's `SDK_NOT_INITIALIZED` during render → nearest error boundary. Gate rendering on `await init()`, or bootstrap                                                                                 |
 | Flag key absent from the held evaluations    | `useFlag` returns the caller's Default Variant with the client's loud log; `useFlagDetails` returns `value` = caller default, `reason: ERROR`, `errorCode: FLAG_NOT_FOUND` — the error is carried, never dropped |
-| Stale (revalidation failing)                 | held value; `useFlagDetails` carries `STALE` on the component's next render (see below); the client's per-tick logging is the immediate signal                                                                   |
+| Stale (revalidation failing)                 | entry-derived held details that reach the client decorator carry `STALE` on the next eligible render; bypassed details remain unchanged; per-tick logging is immediate                                           |
 
 Staleness is **read-time metadata, not a change event**. A failed revalidation tick changes no
 Flag's resolution, so the client fires no per-Flag listeners and subscribers do not re-render for
-it; a component sees `STALE` in its details whenever it next renders for any reason. This delay is
-deliberate: re-rendering every subscriber on every failed tick would add a second notification
-channel (the Web Analytics rule browser-client.md already reuses) to redraw unchanged values, while
-the degraded state is already observable the fail-loud way — the client logs loudly on every failed
-tick ([browser-client.md](./browser-client.md), Revalidation).
+it. On a decoration-eligible render, `useFlagDetails` must apply the client's current read-time
+staleness decorator outside the stable held-resolution memo, so entry-derived held details that
+reach the decorator carry `STALE` whenever the component next renders for any other reason.
+`useFlag` remains the held value and must not re-render solely because staleness entered or cleared.
+This delay is deliberate: re-rendering every subscriber on every failed tick would add a second
+notification channel (the Web Analytics rule browser-client.md already reuses) to redraw unchanged
+values, while the degraded state is already observable the fail-loud way because the client logs
+loudly on every failed tick ([browser-client.md](./browser-client.md), Revalidation).
+
+For browser revalidation, `PROVIDER_NOT_READY` is a details-only `errorCode` admitted by
+`SdkResolutionDetails.errorCode` as a union member alongside `SplitchSdkErrorCode`. It is never a
+member of `sdkClientErrorCodes` and never a valid thrown `SplitchSdkError` code.
+
+Normative sequence (the server and hydration renders, or the initial render in a client-only tree,
+precede this sequence and return unchanged held details without consulting or populating the
+decoration identity memo; the provider mount effect has then run, and the held `SPLIT` result below
+is entry-derived and reaches the client decorator):
+
+1. The first decoration-eligible render returns `useFlagDetails("new-checkout", false)` with the
+   held value `true` and held `reason: SPLIT`.
+2. The next revalidation fails. The client keeps the same entry reference, logs the failure, and
+   invokes no listener registered for `new-checkout`; the component does not re-render from that
+   tick.
+3. Unrelated component state or props then cause that component to render again.
+4. The stable held-resolution memo still supplies value `true`, and the client's shared staleness
+   decorator makes `useFlagDetails` return value `true`, `reason: STALE`, and
+   `errorCode: PROVIDER_NOT_READY`. Later renders return the same details object reference while the
+   held-details identity and degradation state remain unchanged.
+
+## SPL-334 implementation proof obligations
+
+The hook implementation slice must ship tests that prove all of the following:
+
+- The normative sequence above: a successful details render, a failed revalidation with zero
+  per-Flag listener calls and zero render caused by the tick, an unrelated render, then the held
+  value with `STALE` / `PROVIDER_NOT_READY`.
+- Failed revalidation preserves the held entry reference and does not invalidate the
+  held-resolution memo. The test must still observe current staleness after an unrelated render,
+  proving that the shared decorator is applied outside that memo.
+- Repeated decoration-eligible renders for entry-derived held details that reach the decorator
+  return the same decorated details object reference while both the held-details identity and
+  degradation state are unchanged. A change to either member of that pair recomputes the returned
+  details.
+- Absent-flag details (including `ERROR` / `FLAG_NOT_FOUND`), held-`ERROR` details, and null-variant
+  details retain their held fields and object references while the client is degraded.
+- On a decoration-eligible render, for any held entry and degradation state, `useFlagDetails` and
+  the client's `evaluateDetails` staleness decoration produce the same fields because both call the
+  identical decorator at the same point.
+- A server render and its hydration render both return the unchanged held details even when the
+  client is already degraded. Neither render populates or consults the decoration identity memo.
+  The provider mount effect schedules no render; the next render caused by something else applies
+  the stale decoration and may change the returned object identity once.
+- In a client-only tree, the first render returns unchanged held details even when the client is
+  already degraded and does not populate or consult the decoration identity memo. The provider
+  mount effect schedules no render; the next render caused by something else applies the stale
+  decoration and may change the returned object identity once.
+- A typecheckable assertion proves that a details object carrying `reason: STALE` and
+  `errorCode: PROVIDER_NOT_READY` satisfies `SdkResolutionDetails`. `PROVIDER_NOT_READY` is admitted
+  by `SdkResolutionDetails.errorCode` as a details-only union member alongside
+  `SplitchSdkErrorCode`; the assertion must not make it a member of `sdkClientErrorCodes` or a valid
+  thrown `SplitchSdkError` code.
+- `useFlag` keeps returning the held value and does not re-render solely when staleness enters or
+  clears.
+- After a successful recovery tick clears degradation without changing the Flag entry, no per-Flag
+  listener fires; on the next unrelated render, `useFlagDetails` returns the memoized held details
+  without the stale overlay.
+- A subscription-spy test proves that the hooks register only the existing per-Flag subscription
+  and that failed revalidation invokes no notification callback. The React bindings must introduce
+  no global staleness subscription or second notification channel.
 
 `SDK_REACT_PROVIDER_MISSING` is a new `SplitchSdkError` code (`packages/sdk/src/errors.ts`
 vocabulary). Throwing during render is deliberate: a missing provider or an un-inited client is a

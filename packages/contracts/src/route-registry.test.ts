@@ -49,6 +49,10 @@ const CANONICAL_OPERATION_IDS = [
   "app_attention_rollup_get",
   "apps_update",
   "apps_delete",
+  "app_members_list",
+  "app_members_add",
+  "app_members_update",
+  "app_members_remove",
   // Environments
   "environments_list",
   "environments_create",
@@ -116,6 +120,8 @@ const CANONICAL_OPERATION_IDS = [
   "flags_test_eval",
   "experiment_results_get",
   "experiment_results_post",
+  "environment_exposure_status_get",
+  "environment_exposure_status_delete",
   "organization_usage_get",
   "openapi_document_get",
   // Privacy
@@ -218,6 +224,18 @@ describe("route registry: lookup", () => {
     expect(route?.path).toBe("/apps/:appId/flags");
   });
 
+  it("declares conflicts and availability failures on the App membership surface", () => {
+    for (const operationId of [
+      "app_members_list",
+      "app_members_add",
+      "app_members_update",
+      "app_members_remove",
+    ]) {
+      expect(getRoute(operationId)?.errors).toContain("SERVICE_UNAVAILABLE");
+    }
+    expect(getRoute("app_members_add")?.errors).toContain("MEMBERSHIP_CONFLICT");
+  });
+
   it("getRoute returns undefined for an unknown operationId", () => {
     expect(getRoute("not_a_real_tool")).toBeUndefined();
   });
@@ -254,19 +272,15 @@ describe("route registry: public surface is total over AuthKind", () => {
     // same operation answered on a public hostname AND over the binding is the
     // second address ADR-0046 exists to prevent.
     //
-    // The identity holds only while every route HAS a public surface. A
-    // binding-only (`internal-worker`) route would reach `routesMountedBy` through
-    // ownership while belonging to neither door, so it would be mounted by the
-    // union and addressed by nothing. Assert that precondition rather than let the
-    // loop below pass vacuously: the door model has to grow before such a route is
-    // added, and this is what makes that a failing test instead of a mount gap.
-    expect(ids(routeRegistry.filter((route) => publicSurfaceFor(route) === null))).toEqual([]);
-
     for (const worker of routeOwners) {
       const surfaced = ids(routesSurfacedBy(worker));
       const delegated = ids(routesDelegatedTo(worker));
+      const internal = ids(
+        routeRegistry.filter((route) => route.owner === worker && publicSurfaceFor(route) === null),
+      );
       expect(surfaced.filter((id) => delegated.includes(id))).toEqual([]);
-      expect([...surfaced, ...delegated].sort()).toEqual(ids(routesMountedBy(worker)));
+      expect(surfaced.filter((id) => internal.includes(id))).toEqual([]);
+      expect([...surfaced, ...delegated, ...internal].sort()).toEqual(ids(routesMountedBy(worker)));
     }
   });
 });

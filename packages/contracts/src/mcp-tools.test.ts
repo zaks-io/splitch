@@ -27,6 +27,7 @@ const NON_TOOL_OPERATION_IDS = [
   "sdk_exposures",
   "sdk_track",
   "openapi_document_get",
+  "environment_exposure_status_delete",
 ] as const;
 
 describe("mcp tools: surface isolation (CRITICAL)", () => {
@@ -42,6 +43,10 @@ describe("mcp tools: surface isolation (CRITICAL)", () => {
 
   it("derives NO tool for the public OpenAPI discovery doc", () => {
     expect(toolNames.has("openapi_document_get")).toBe(false);
+  });
+
+  it("derives NO tool for binding-only analytics cleanup", () => {
+    expect(toolNames.has("environment_exposure_status_delete")).toBe(false);
   });
 
   it("every excluded route is genuinely in the registry but not a tool", () => {
@@ -98,6 +103,15 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
     expect(usage).toBeDefined();
     expect(objectShape(usage?.inputSchema)).toHaveProperty("orgId");
     expect(usage?.outputSchema).toBe(schema);
+  });
+
+  it("derives the Environment Exposure status tool with both tenant axes", () => {
+    const status = tools.find((tool) => tool.name === "environment_exposure_status_get");
+
+    expect(status).toBeDefined();
+    expect(objectShape(status?.inputSchema)).toEqual(
+      expect.objectContaining({ appId: expect.anything(), environmentId: expect.anything() }),
+    );
   });
 
   it("derives the Organization create tool with a body-only input (SPL-171)", () => {

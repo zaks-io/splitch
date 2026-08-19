@@ -45,6 +45,10 @@
       "types": "./src/panel-overview.ts",
       "default": "./src/panel-overview.ts"
     },
+    "./panel-app-settings": {
+      "types": "./src/panel-app-settings.ts",
+      "default": "./src/panel-app-settings.ts"
+    },
     "./panel-settings": {
       "types": "./src/panel-settings.ts",
       "default": "./src/panel-settings.ts"
@@ -52,6 +56,10 @@
     "./panel-usage": {
       "types": "./src/panel-usage.ts",
       "default": "./src/panel-usage.ts"
+    },
+    "./panel-exposure-status": {
+      "types": "./src/panel-exposure-status.ts",
+      "default": "./src/panel-exposure-status.ts"
     }
   },
   "files": [

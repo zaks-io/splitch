@@ -105,9 +105,15 @@ export async function canonicalRequestBodyDigest(request: Request): Promise<stri
       return null;
     }
   }
+  const searchParams = new URL(request.url).searchParams;
+  searchParams.sort();
+  const canonicalRequest = canonicalJson({
+    body: canonicalBody,
+    query: searchParams.toString(),
+  });
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(canonicalBody) as unknown as BufferSource,
+    new TextEncoder().encode(canonicalRequest) as unknown as BufferSource,
   );
   return `sha256:${base64UrlEncode(new Uint8Array(digest))}`;
 }

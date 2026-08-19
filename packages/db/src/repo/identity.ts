@@ -1,6 +1,5 @@
 import { and, eq } from "drizzle-orm";
 import {
-  appMemberships,
   apps,
   deviceRefreshSessions,
   environments,
@@ -9,6 +8,7 @@ import {
 } from "../schema/index";
 import { makeDeleteAppCascade } from "./app-delete-cascade";
 import type { Db } from "./client";
+import { makeAppMembershipRepo } from "./identity-app-memberships";
 import { makeDemoReaper } from "./identity-demo-reaper";
 import { makeOrgMutations } from "./identity-org-mutations";
 import { makeSessionReads } from "./identity-session-reads";
@@ -39,7 +39,7 @@ import { type ReadOptions, scopedTable } from "./scoped-table";
  */
 export function makeIdentityRepo(db: Db, d1: D1Database) {
   const environmentsTable = scopedTable(db, environments);
-  const appMembershipsTable = scopedTable(db, appMemberships);
+  const appMembershipRepo = makeAppMembershipRepo(db);
   const orgMutations = makeOrgMutations(db);
   const sessionReads = makeSessionReads(db);
   const demoReaper = makeDemoReaper(db, d1);
@@ -48,7 +48,7 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
 
   return {
     environments: environmentsTable,
-    appMemberships: appMembershipsTable,
+    appMemberships: appMembershipRepo.table,
     deleteAppCascade,
 
     listEnvironments(scope: TenantScope, options?: ReadOptions) {
@@ -77,13 +77,7 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
       return environmentsTable.remove(scope, eq(environments.id, environmentId));
     },
 
-    listAppMembers(scope: TenantScope) {
-      return appMembershipsTable.findMany(scope);
-    },
-
-    getAppMembership(scope: TenantScope, userId: string) {
-      return appMembershipsTable.findOne(scope, eq(appMemberships.userId, userId));
-    },
+    ...appMembershipRepo,
 
     // --- Org-or-identity scoped (NOT app-scoped) -------------------------------
 
@@ -169,7 +163,7 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
 
     async updateApp(
       appId: string,
-      values: Partial<Pick<typeof apps.$inferInsert, "name" | "description" | "updatedAt">>,
+      values: Partial<Pick<typeof apps.$inferInsert, "name" | "key" | "description" | "updatedAt">>,
     ): Promise<typeof apps.$inferSelect | null> {
       const rows = await db.update(apps).set(values).where(eq(apps.id, appId)).returning();
       return rows[0] ?? null;
@@ -178,21 +172,6 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
     async deleteApp(appId: string): Promise<number> {
       const rows = await db.delete(apps).where(eq(apps.id, appId)).returning();
       return rows.length;
-    },
-
-    async createAppMembership(
-      values: typeof appMemberships.$inferInsert,
-    ): Promise<typeof appMemberships.$inferSelect> {
-      const rows = await db.insert(appMemberships).values(values).returning();
-      const inserted = rows[0];
-      if (!inserted) {
-        throw new Error("createAppMembership: no row returned");
-      }
-      return inserted;
-    },
-
-    deleteAppMemberships(scope: TenantScope) {
-      return appMembershipsTable.remove(scope);
     },
 
     /**

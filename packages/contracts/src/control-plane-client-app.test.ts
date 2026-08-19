@@ -88,6 +88,10 @@ describe("control plane SDK route selection", () => {
       "apps_get",
       "apps_update",
       "apps_delete",
+      "app_members_list",
+      "app_members_add",
+      "app_members_update",
+      "app_members_remove",
     ]);
     expect(operationIdsAt(attentionRoutes, ATTENTION_SDK_INDICES)).toEqual([
       "app_attention_rollup_get",
@@ -128,7 +132,7 @@ describe("control plane SDK route selection", () => {
     // the SDK app changes them here and fails the by-name assertions above.
     expect(FLAGS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     expect(EXPERIMENTS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5]);
-    expect(APPS_SDK_INDICES).toEqual([9, 10, 11, 12, 13]);
+    expect(APPS_SDK_INDICES).toEqual([9, 10, 11, 12, 13, 19, 20, 21, 22]);
     expect(ATTENTION_SDK_INDICES).toEqual([0]);
     expect(ENVIRONMENTS_SDK_INDICES).toEqual([14, 15, 16, 17, 18]);
     expect(CREDENTIALS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5]);

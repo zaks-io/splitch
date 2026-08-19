@@ -1,5 +1,6 @@
 import {
   formatSdkErrorMessage,
+  type ResolutionDetails,
   resolveErrorDocsUrl,
   SplitchSdkError,
   type SplitchSdkErrorCode,
@@ -65,6 +66,20 @@ export class SplitchCliError extends Error {
     this.remediation = sentence(detail.remediation);
     this.docsUrl = resolveErrorDocsUrl(detail.code);
   }
+}
+
+export function cliErrorCodeForVerifyDetails(
+  errorCode: ResolutionDetails["errorCode"],
+): SplitchCliErrorCode {
+  if (errorCode === "PROVIDER_NOT_READY") {
+    throw new SplitchCliError({
+      code: "CLI_UNEXPECTED_ERROR",
+      causeSummary: "flags verify received the browser-only PROVIDER_NOT_READY staleness signal",
+      remediation:
+        "Report SDK contract drift; the server data-plane verify path has no stale browser cache",
+    });
+  }
+  return errorCode ?? "CLI_DATA_PLANE_ERROR_CODE_MISSING";
 }
 
 export function normalizeCliError(error: unknown): SplitchCliError {

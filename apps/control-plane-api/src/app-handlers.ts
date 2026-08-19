@@ -1,6 +1,6 @@
 import { deriveSlug } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
-import type { HandlerArgs } from "@splitch/worker-runtime";
+import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz";
 import { forceDeleteApp } from "./app-delete-force";
 import { collectAppDeleteBlockers } from "./app-delete-tree";
@@ -11,6 +11,7 @@ import {
   type AppRow,
   appNotFound,
   appResponse,
+  appSlugConflict,
   CONFIRM_POLICY,
   createEnvironmentRecord,
   type EnvironmentRow,
@@ -25,6 +26,7 @@ import {
 import { randomHex } from "./credential-cache";
 import { objectBody, pathParam, queryFlags } from "./handler-input";
 import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, requireOrgRole } from "./org-authz";
+import { EnvironmentExposureStatusCleanupError } from "./environment-exposure-status-cleanup";
 
 export function makeAppHandlers(deps: AppEnvironmentDeps) {
   return {
@@ -68,8 +70,7 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
         createdBy: principal.id,
       });
       const scope = appScope(app.id);
-      await deps.repo.identity.createAppMembership({
-        appId: app.id,
+      await deps.repo.identity.createAppMembership(appScope(app.id), {
         userId: principal.id,
         role: "owner",
         createdAt: now,
@@ -114,9 +115,12 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
       if (writeError) return writeError;
 
       const body = objectBody(input);
+      const key = body.key as string | undefined;
+      const conflict = await slugConflictResponse(deps, app, key, requestId);
+      if (conflict) return conflict;
+
       const updated = await deps.repo.identity.updateApp(appId, {
-        ...(body.name !== undefined ? { name: body.name as string } : {}),
-        ...(body.description !== undefined ? { description: body.description as string } : {}),
+        ...appPatch(body, key),
         updatedAt: nowIso(deps),
       });
       if (!updated) return appNotFound(requestId);
@@ -132,9 +136,55 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
       if (deleteError) return deleteError;
 
       const mode = queryFlags(input);
-      return deleteAppAfterAuth(deps, app, principal, requestId, mode);
+      try {
+        return await deleteAppAfterAuth(deps, app, principal, requestId, mode);
+      } catch (cause) {
+        if (!(cause instanceof EnvironmentExposureStatusCleanupError)) throw cause;
+        return renderError(
+          {
+            code: "SERVICE_UNAVAILABLE",
+            message: "Exposure status cleanup is unavailable",
+            details: { retryAfterMs: 30_000 },
+          },
+          { requestId },
+        );
+      }
     },
   };
+}
+
+/**
+ * Only the fields the caller actually sent. An absent field is left alone rather
+ * than written back as a default, so a partial update cannot quietly blank a
+ * name or a description the caller never mentioned.
+ */
+function appPatch(
+  body: Record<string, unknown>,
+  key: string | undefined,
+): { name?: string; key?: string; description?: string } {
+  return {
+    ...(body.name !== undefined ? { name: body.name as string } : {}),
+    ...(key !== undefined ? { key } : {}),
+    ...(body.description !== undefined ? { description: body.description as string } : {}),
+  };
+}
+
+/**
+ * The slug is unique within the Organization and every URL for the App is built
+ * from it, so a collision is refused with the losing slug named rather than
+ * silently deduped into a second handle. `apps_org_key_unique` still backs this
+ * up in D1; the pre-check exists to turn that constraint into a typed refusal.
+ */
+async function slugConflictResponse(
+  deps: AppEnvironmentDeps,
+  app: AppRow,
+  key: string | undefined,
+  requestId: string,
+): Promise<Response | null> {
+  if (key === undefined || key === app.key) return null;
+  const siblings = await deps.repo.identity.listAppsForOrg(app.organizationId);
+  const taken = siblings.some((sibling) => sibling.key === key && sibling.id !== app.id);
+  return taken ? appSlugConflict(key, requestId) : null;
 }
 
 async function deleteAppAfterAuth(
@@ -155,13 +205,26 @@ async function deleteAppAfterAuth(
   }
 
   if (mode.force) {
+    const deleteAuthorizedAppRows = (
+      cleanupDeps: AppEnvironmentDeps,
+      appId: string,
+      liveEnvironments: readonly EnvironmentRow[],
+    ) =>
+      deleteAppRows(
+        cleanupDeps,
+        appId,
+        app.organizationId,
+        liveEnvironments,
+        principal.id,
+        requestId,
+      );
     const result = await forceDeleteApp(
       deps,
       app,
       environments,
       principal,
       requestId,
-      deleteAppRows,
+      deleteAuthorizedAppRows,
       blockers,
     );
     return Response.json(result.response);
@@ -171,14 +234,17 @@ async function deleteAppAfterAuth(
     return resourceNotEmptyFromBlockers(app.id, "app", blockers, "DELETE_APP", requestId);
   }
 
-  await deleteAppRows(deps, app.id, environments);
+  await deleteAppRows(deps, app.id, app.organizationId, environments, principal.id, requestId);
   return Response.json({ deleted: true });
 }
 
 async function deleteAppRows(
   deps: AppEnvironmentDeps,
   appId: string,
+  organizationId: string,
   environments: readonly EnvironmentRow[],
+  actorId: string,
+  requestId: string,
 ): Promise<void> {
   // Revoke + KV tombstone only — leave D1 credential rows for the cascade
   // batch. Removing them here would destroy Client Keys before a late FK
@@ -188,4 +254,15 @@ async function deleteAppRows(
     await revokeEnvironmentCredentialsForAppDelete(deps, appId, env.id);
   }
   await deps.repo.identity.deleteAppCascade(appScope(appId));
+  // Stop every credential and finish the D1 cascade before deleting durable
+  // analytics state. Cleanup is idempotent and remains recoverable if its
+  // external request fails; a live App can never be left falsely reset.
+  const cleanup = deps.exposureStatusCleanup;
+  if (!cleanup) throw new Error("App delete requires Exposure status cleanup");
+  await cleanup.delete({
+    appId,
+    actorId,
+    orgId: organizationId,
+    requestId,
+  });
 }

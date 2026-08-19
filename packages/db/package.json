@@ -37,6 +37,7 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.18.8",
     "drizzle-kit": "^0.31.10",
-    "miniflare": "^4.20260722.0"
+    "miniflare": "^4.20260722.0",
+    "typescript": "^6.0.3"
   }
 }

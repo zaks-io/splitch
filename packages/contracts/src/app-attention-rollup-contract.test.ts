@@ -55,11 +55,8 @@ describe("App attention rollup contract", () => {
   // The handler can refuse an oversized fan-out, so the route metadata has to
   // declare the code: it is the single list every derived surface reads from.
   //
-  // This asserts the metadata, NOT emitted OpenAPI. openapi-route.ts emits only
-  // the 200 response and never consumes `route.errors` for ANY route, so no
-  // assertion on the generated document could pass today. That generator gap is
-  // pre-existing and platform-wide, and is tracked separately; when it is closed,
-  // extend this test to assert the emitted 409 response as well.
+  // The generated-document proof that this metadata emits the declared 409 and
+  // excludes undeclared 409 codes lives in openapi-document.test.ts.
   //
   // Set EQUALITY, not containment: this is the full set of codes
   // makeAttentionRollupHandler can emit (attention-rollup.ts +

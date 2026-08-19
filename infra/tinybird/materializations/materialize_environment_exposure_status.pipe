@@ -1,0 +1,16 @@
+DESCRIPTION >
+    Record the durable first real Exposure for each App and Environment.
+    Deployment population backfills every retained raw Exposure on first deploy.
+
+NODE environment_first_exposure_state
+SQL >
+    SELECT
+        app_id,
+        environment_id,
+        minState(server_received_at) AS first_exposure_state
+    FROM raw_events
+    WHERE type = 'exposure'
+    GROUP BY app_id, environment_id
+
+TYPE MATERIALIZED
+DATASOURCE environment_exposure_status_state

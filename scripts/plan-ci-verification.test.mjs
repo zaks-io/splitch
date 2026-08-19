@@ -94,6 +94,24 @@ test("cache-policy-only changes force the Turbo graph without unrelated validato
   assert.equal(plan.d1, false);
 });
 
+test("turbo.json changes stay affected and cache-first: Turbo's global hash owns them", () => {
+  // turbo.json is part of Turbo's global hash, so an edit already misses every
+  // cache entry and re-executes the full graph without a forced run. The
+  // validators never invoke turbo, so it must not trigger them either.
+  const plan = createCiVerificationPlan({
+    afterSha: headSha,
+    beforeSha: baseSha,
+    eventName: "push",
+    runGit: () => ok("turbo.json\n"),
+  });
+
+  assert.equal(plan.cachePolicyChanged, false);
+  assert.equal(plan.useAffected, true);
+  assert.equal(plan.forceFull, false);
+  assert.equal(plan.tinybird, false);
+  assert.equal(plan.d1, false);
+});
+
 test("Tinybird, D1, and production Vite inputs are classified independently", () => {
   assert.deepEqual(classifyCiChanges(["infra/tinybird/pipes/example.pipe"]), {
     cachePolicyChanged: false,
