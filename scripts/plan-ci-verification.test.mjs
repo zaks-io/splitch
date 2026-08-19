@@ -26,7 +26,6 @@ test("pull requests use the exact merge base and head for affected verification"
   assert.equal(plan.baseSha, mergeBaseSha);
   assert.equal(plan.headSha, headSha);
   assert.equal(plan.useAffected, true);
-  assert.equal(plan.forceFull, false);
   assert.equal(plan.productionVite, false);
 });
 
@@ -47,10 +46,9 @@ test("main pushes compare the exact before and after commits", () => {
   assert.equal(plan.productionVite, true);
 });
 
-test("missing or unresolvable comparisons fail closed to full verification", () => {
+test("missing or unresolvable comparisons fail closed to the full cache-first graph", () => {
   const missing = createCiVerificationPlan({ eventName: "workflow_dispatch" });
   assert.equal(missing.useAffected, false);
-  assert.equal(missing.forceFull, true);
   assert.equal(missing.tinybird, true);
   assert.equal(missing.d1, true);
 
@@ -64,40 +62,33 @@ test("missing or unresolvable comparisons fail closed to full verification", () 
   assert.match(unresolved.reason, /no merge base/u);
 });
 
-test("cache-policy changes force complete uncached verification", () => {
-  const plan = createCiVerificationPlan({
-    afterSha: headSha,
-    beforeSha: baseSha,
-    eventName: "push",
-    runGit: () => ok(".github/workflows/ci.yml\n"),
-  });
-
-  assert.equal(plan.cachePolicyChanged, true);
-  assert.equal(plan.useAffected, false);
-  assert.equal(plan.forceFull, true);
-  assert.equal(plan.tinybird, true);
-  assert.equal(plan.d1, true);
+test("no change forces an uncached run: the nightly backstop owns staleness proof", () => {
+  // SPL-258's cache-policy guard forced a full uncached run on every push of
+  // any PR touching ci.yml or the planner, including its own merge commit.
+  // That billed the whole suite repeatedly to prove what nightly-verify
+  // already proves within 24h, so it was dropped.
+  for (const path of [
+    ".github/workflows/ci.yml",
+    ".github/workflows/nightly-verify.yml",
+    "scripts/check-turbo-remote-cache-env.mjs",
+    "scripts/plan-ci-verification.mjs",
+    "turbo.json",
+  ]) {
+    const plan = createCiVerificationPlan({
+      afterSha: headSha,
+      beforeSha: baseSha,
+      eventName: "push",
+      runGit: () => ok(`${path}\n`),
+    });
+    assert.equal(plan.useAffected, true, `${path} must stay cache-first`);
+    assert.equal("forceFull" in plan, false);
+  }
 });
 
-test("cache-policy-only changes force the Turbo graph without unrelated validators", () => {
-  const plan = createCiVerificationPlan({
-    afterSha: headSha,
-    beforeSha: baseSha,
-    eventName: "push",
-    runGit: () => ok("scripts/check-turbo-remote-cache-env.mjs\n"),
-  });
-
-  assert.equal(plan.cachePolicyChanged, true);
-  assert.equal(plan.useAffected, false);
-  assert.equal(plan.forceFull, true);
-  assert.equal(plan.tinybird, false);
-  assert.equal(plan.d1, false);
-});
-
-test("turbo.json changes stay affected and cache-first: Turbo's global hash owns them", () => {
+test("turbo.json changes stay affected and trigger no validators", () => {
   // turbo.json is part of Turbo's global hash, so an edit already misses every
-  // cache entry and re-executes the full graph without a forced run. The
-  // validators never invoke turbo, so it must not trigger them either.
+  // cache entry and re-executes the full graph. The validators never invoke
+  // turbo, so it must not trigger them either.
   const plan = createCiVerificationPlan({
     afterSha: headSha,
     beforeSha: baseSha,
@@ -105,22 +96,18 @@ test("turbo.json changes stay affected and cache-first: Turbo's global hash owns
     runGit: () => ok("turbo.json\n"),
   });
 
-  assert.equal(plan.cachePolicyChanged, false);
   assert.equal(plan.useAffected, true);
-  assert.equal(plan.forceFull, false);
   assert.equal(plan.tinybird, false);
   assert.equal(plan.d1, false);
 });
 
 test("Tinybird, D1, and production Vite inputs are classified independently", () => {
   assert.deepEqual(classifyCiChanges(["infra/tinybird/pipes/example.pipe"]), {
-    cachePolicyChanged: false,
     d1: false,
     productionVite: false,
     tinybird: true,
   });
   assert.deepEqual(classifyCiChanges(["packages/db/migrations/0017_example.sql"]), {
-    cachePolicyChanged: false,
     d1: true,
     productionVite: false,
     tinybird: false,

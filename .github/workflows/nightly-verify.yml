@@ -56,6 +56,9 @@ jobs:
       - name: Require signed Turbo remote cache
         run: node scripts/check-turbo-remote-cache-env.mjs --required
 
+      # The SDK consumer smoke packs and installs the real tarball, so it is
+      # cache:false by design. Running it per-PR re-billed every push; it rides
+      # the nightly forced run instead.
       - name: Verify (forced, no cache reads)
         timeout-minutes: 20
-        run: pnpm verify:ci
+        run: pnpm verify:ci "@splitch/sdk#test:consumer-smoke"

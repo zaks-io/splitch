@@ -5,14 +5,16 @@ import { classifyProductionChanges } from "./lib/production-deploy-plan.mjs";
 
 const FULL_SHA = /^[0-9a-f]{40}$/u;
 const ZERO_SHA = "0".repeat(40);
-// turbo.json is deliberately absent from both input sets below. It is part of
+// turbo.json is deliberately absent from the input sets below. It is part of
 // Turbo's global hash, so any edit already misses every cache entry and
-// re-executes the full graph on that run — forcing on top of that proves
-// nothing extra and re-runs the whole suite uncached on every subsequent push
-// of the PR plus the merge commit. `--affected` likewise treats root-config
-// changes as affecting all packages. And the local validators
+// re-executes the full graph on that run. `--affected` likewise treats
+// root-config changes as affecting all packages. And the local validators
 // (check-d1-*.mjs, check-tinybird-local.mjs) never invoke turbo, so a
 // turbo.json edit cannot change what they prove.
+//
+// There is deliberately no forced-uncached mode here either (SPL-258's
+// cache-policy guard is gone): every plan is cache-first, and the nightly
+// forced verify is the sole staleness backstop.
 const GLOBAL_VALIDATION_INPUTS = new Set([
   ".github/workflows/ci.yml",
   "package.json",
@@ -31,12 +33,6 @@ const TINYBIRD_INPUTS = new Set([
   "scripts/machine-lock.mjs",
   "tinybird.config.json",
 ]);
-const CACHE_POLICY_INPUTS = new Set([
-  ".github/workflows/ci.yml",
-  ".github/workflows/nightly-verify.yml",
-  "scripts/check-turbo-remote-cache-env.mjs",
-  "scripts/plan-ci-verification.mjs",
-]);
 
 export function classifyCiChanges(paths) {
   const changedPaths = paths.map(normalizePath).filter(Boolean);
@@ -45,7 +41,6 @@ export function classifyCiChanges(paths) {
   const dependencyGraphChanged = changedPaths.some((path) => DEPENDENCY_GRAPH_INPUTS.has(path));
 
   return {
-    cachePolicyChanged: changedPaths.some((path) => CACHE_POLICY_INPUTS.has(path)),
     d1:
       globalValidationChanged ||
       dependencyGraphChanged ||
@@ -90,24 +85,10 @@ export function createCiVerificationPlan({
   }
 
   const changedPaths = diff.stdout.split(/\r?\n/u).map(normalizePath).filter(Boolean);
-  const classification = classifyCiChanges(changedPaths);
-  if (classification.cachePolicyChanged) {
-    return {
-      ...classification,
-      baseSha: range.baseSha,
-      changedPaths,
-      forceFull: true,
-      headSha: range.headSha,
-      reason: "cache-policy inputs changed",
-      useAffected: false,
-    };
-  }
-
   return {
-    ...classification,
+    ...classifyCiChanges(changedPaths),
     baseSha: range.baseSha,
     changedPaths,
-    forceFull: false,
     headSha: range.headSha,
     reason: `resolved ${eventName} comparison`,
     useAffected: true,
@@ -138,13 +119,15 @@ function resolveRange({ afterSha, baseSha, beforeSha, eventName, headSha, runGit
   return failedRange(`event ${eventName || "unknown"} has no trustworthy comparison`);
 }
 
+// Unresolvable ranges fail closed to the FULL task graph, but stay cache-first:
+// the graph is complete either way, and the nightly forced run is the sole
+// owner of cache-staleness proof. Forcing here only re-bills for work whose
+// hashes have not changed.
 function fullPlan(reason) {
   return {
     baseSha: undefined,
-    cachePolicyChanged: false,
     changedPaths: [],
     d1: true,
-    forceFull: true,
     headSha: undefined,
     productionVite: true,
     reason,
@@ -187,7 +170,6 @@ function writePlan(plan) {
 
   if (outputPath) {
     const outputs = {
-      cache_policy_changed: plan.cachePolicyChanged,
       d1: plan.d1,
       production_vite: plan.productionVite,
       tinybird: plan.tinybird,
@@ -198,12 +180,9 @@ function writePlan(plan) {
     }
   }
 
-  if (envPath) {
-    if (plan.forceFull) appendFileSync(envPath, "TURBO_FORCE=true\n");
-    if (plan.useAffected) {
-      appendFileSync(envPath, `TURBO_SCM_BASE=${plan.baseSha}\n`);
-      appendFileSync(envPath, `TURBO_SCM_HEAD=${plan.headSha}\n`);
-    }
+  if (envPath && plan.useAffected) {
+    appendFileSync(envPath, `TURBO_SCM_BASE=${plan.baseSha}\n`);
+    appendFileSync(envPath, `TURBO_SCM_HEAD=${plan.headSha}\n`);
   }
 
   if (summaryPath) {
@@ -223,7 +202,7 @@ function writePlan(plan) {
     );
   }
 
-  const level = plan.forceFull ? "warning" : "notice";
+  const level = plan.useAffected ? "notice" : "warning";
   console.log(`::${level} title=CI verification plan::${singleLine(plan.reason)}`);
   console.log(JSON.stringify(plan, null, 2));
 }
