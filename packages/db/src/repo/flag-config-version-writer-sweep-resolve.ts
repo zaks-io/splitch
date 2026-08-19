@@ -17,6 +17,8 @@ import { assertNoRawFlagConfigsSqlUpdate } from "./flag-config-version-writer-sw
 
 export type { ResolvedUpdateSite } from "./flag-config-version-writer-sweep-resolve-calls";
 
+export type FlagConfigSweepExtraFile = { path: string; content: string };
+
 const PKG_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const REPO_ROOT = resolve(PKG_ROOT, "../..");
 /** Absolute path of the production sources the checker program walks. */
@@ -66,15 +68,50 @@ function isUnderSrcRoot(fileName: string): boolean {
   return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
 }
 
-function productionScanFileNames(parsed: ts.ParsedCommandLine): string[] {
-  return parsed.fileNames
+function virtualFilesOf(
+  extraFiles: ReadonlyArray<FlagConfigSweepExtraFile>,
+): ReadonlyMap<string, string> {
+  const files = new Map<string, string>();
+  for (const file of extraFiles) {
+    const path = resolve(file.path);
+    if (!isUnderSrcRoot(path)) fail(`extra file outside scan root: ${path}`);
+    if (files.has(path)) fail(`duplicate extra file: ${path}`);
+    files.set(path, file.content);
+  }
+  return files;
+}
+
+function productionScanFileNames(
+  parsed: ts.ParsedCommandLine,
+  virtualFiles: ReadonlyMap<string, string> = new Map(),
+): string[] {
+  return [...new Set([...parsed.fileNames, ...virtualFiles.keys()])]
     .filter((fileName) => isUnderSrcRoot(fileName))
     .filter((fileName) => !fileName.endsWith(".d.ts"))
     .sort((a, b) => relPath(a).localeCompare(relPath(b)));
 }
 
-function createProductionProgram(parsed: ts.ParsedCommandLine): ts.Program {
-  return ts.createProgram({ rootNames: parsed.fileNames, options: parsed.options });
+function createProductionProgram(
+  parsed: ts.ParsedCommandLine,
+  virtualFiles: ReadonlyMap<string, string>,
+): ts.Program {
+  const host = ts.createCompilerHost(parsed.options);
+  const hostFileExists = host.fileExists.bind(host);
+  const hostReadFile = host.readFile.bind(host);
+  const hostGetSourceFile = host.getSourceFile.bind(host);
+  host.fileExists = (fileName) => virtualFiles.has(resolve(fileName)) || hostFileExists(fileName);
+  host.readFile = (fileName) => virtualFiles.get(resolve(fileName)) ?? hostReadFile(fileName);
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+    const content = virtualFiles.get(resolve(fileName));
+    return content === undefined
+      ? hostGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile)
+      : ts.createSourceFile(fileName, content, languageVersion, true);
+  };
+  return ts.createProgram({
+    rootNames: [...new Set([...parsed.fileNames, ...virtualFiles.keys()])],
+    options: parsed.options,
+    host,
+  });
 }
 
 function assertProgramReliable(program: ts.Program): void {
@@ -207,10 +244,13 @@ export type FlagConfigUpdateResolution = {
  * Every `flag_configs` UPDATE call in the production `packages/db` program,
  * resolved by TypeChecker symbol/type identity (not source-text spellings).
  */
-export function resolveFlagConfigUpdates(): FlagConfigUpdateResolution {
+export function resolveFlagConfigUpdates(
+  extraFiles: ReadonlyArray<FlagConfigSweepExtraFile> = [],
+): FlagConfigUpdateResolution {
   const parsed = parseProductionTsconfig();
-  const scanFileNames = productionScanFileNames(parsed);
-  const program = createProductionProgram(parsed);
+  const virtualFiles = virtualFilesOf(extraFiles);
+  const scanFileNames = productionScanFileNames(parsed, virtualFiles);
+  const program = createProductionProgram(parsed, virtualFiles);
   assertProgramReliable(program);
   const checker = program.getTypeChecker();
   const schemaSource = program.getSourceFile(SCHEMA_FLAGS);

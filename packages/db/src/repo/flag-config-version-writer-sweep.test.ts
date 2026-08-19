@@ -1,4 +1,3 @@
-import { unlinkSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -43,8 +42,8 @@ import {
  * helper imported only by `.test.ts` files, not a production writer).
  *
  * The baseline TypeChecker program is built once in `beforeAll`. The mutation
- * regressions each build a fresh program while their temporary source exists;
- * every program-construction path gets the repo's established 15s budget.
+ * regressions each build a fresh program with their source injected in memory;
+ * every program-construction path gets the repo's established 30s budget.
  *
  * The narrowed `repo.flags.flagConfigs` export (findMany/findOne/insert only)
  * makes a facade bypass a compile error in typechecked source and a TypeError
@@ -73,41 +72,51 @@ const PROGRAM_HOOK_TIMEOUT_MS = 30_000;
 /** Current production code has five writers; dropping any is a reviewable change. */
 const MINIMUM_KNOWN_UPDATE_SITES = 5;
 
-const MUTATION_FILE = resolve(
+const MUTATION_PATH = resolve(
   FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT,
   "repo/spl350-writer-sweep-mutation.ts",
 );
 
 function expectSweepMutationToFail(source: string, message: RegExp): void {
-  writeFileSync(MUTATION_FILE, source, { flag: "wx" });
-  try {
-    expect(() => resolveFlagConfigUpdates()).toThrowError(message);
-  } finally {
-    unlinkSync(MUTATION_FILE);
-  }
+  expect(() => resolveFlagConfigUpdates([{ path: MUTATION_PATH, content: source }])).toThrowError(
+    message,
+  );
 }
 
 function siteKey(site: ResolvedUpdateSite): string {
   return `${site.file}:${site.line}`;
 }
 
+function expectInMemoryFileScanned(baseline: FlagConfigUpdateResolution): void {
+  const withVirtualFile = resolveFlagConfigUpdates([
+    { path: MUTATION_PATH, content: "export {};" },
+  ]);
+  expect(withVirtualFile.scannedFiles).toContain("repo/spl350-writer-sweep-mutation.ts");
+  expect(withVirtualFile.sites).toEqual(baseline.sites);
+}
+
 describe("every flag_configs UPDATE bumps version", () => {
   let resolution: FlagConfigUpdateResolution;
 
-  // Program construction is the slow part (~seconds). Pay it once; leave the
-  // default 5s `testTimeout` protecting every other db unit test.
+  // Program construction is the slow part; pay for the baseline once.
   beforeAll(() => {
     resolution = resolveFlagConfigUpdates();
   }, PROGRAM_HOOK_TIMEOUT_MS);
 
-  it("states a scan root that the production tsconfig actually covers", () => {
-    const { scanRoot, scannedFiles } = resolution;
-    expect(scanRoot).toBe(SCAN_ROOT);
-    expect(relative(REPO_ROOT, FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT).replaceAll("\\", "/")).toBe(
-      SCAN_ROOT,
-    );
-    expect(scannedFiles).toEqual(listExpectedScannedFiles());
-  });
+  it(
+    "states a scan root that the production tsconfig actually covers",
+    () => {
+      const { scanRoot, scannedFiles } = resolution;
+      expect(scanRoot).toBe(SCAN_ROOT);
+      expect(relative(REPO_ROOT, FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT).replaceAll("\\", "/")).toBe(
+        SCAN_ROOT,
+      );
+      expect(scannedFiles).toEqual(listExpectedScannedFiles());
+      expect(resolveFlagConfigUpdates([]).sites).toEqual(resolution.sites);
+      expectInMemoryFileScanned(resolution);
+    },
+    PROGRAM_HOOK_TIMEOUT_MS,
+  );
 
   it("discovers a non-trivial writer set and every site bumps version", () => {
     const { sites } = resolution;
