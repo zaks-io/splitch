@@ -27,6 +27,7 @@ import { randomHex } from "./credential-cache";
 import { objectBody, pathParam, queryFlags } from "./handler-input";
 import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, requireOrgRole } from "./org-authz";
 import { EnvironmentExposureStatusCleanupError } from "./environment-exposure-status-cleanup";
+import { HoldoverWriteOutboxCleanupError } from "./holdover-write-outbox-cleanup";
 
 export function makeAppHandlers(deps: AppEnvironmentDeps) {
   return {
@@ -139,18 +140,36 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
       try {
         return await deleteAppAfterAuth(deps, app, principal, requestId, mode);
       } catch (cause) {
-        if (!(cause instanceof EnvironmentExposureStatusCleanupError)) throw cause;
-        return renderError(
-          {
-            code: "SERVICE_UNAVAILABLE",
-            message: "Exposure status cleanup is unavailable",
-            details: { retryAfterMs: 30_000 },
-          },
-          { requestId },
-        );
+        const cleanupError = renderAppDeleteCleanupError(cause, requestId);
+        if (cleanupError) return cleanupError;
+        throw cause;
       }
     },
   };
+}
+
+function renderAppDeleteCleanupError(cause: unknown, requestId: string): Response | null {
+  if (cause instanceof EnvironmentExposureStatusCleanupError) {
+    return renderError(
+      {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Exposure status cleanup is unavailable",
+        details: { retryAfterMs: 30_000 },
+      },
+      { requestId },
+    );
+  }
+  if (cause instanceof HoldoverWriteOutboxCleanupError) {
+    return renderError(
+      {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Holdover write outbox cleanup is unavailable",
+        details: { retryAfterMs: 30_000 },
+      },
+      { requestId },
+    );
+  }
+  return null;
 }
 
 /**
@@ -260,6 +279,14 @@ async function deleteAppRows(
   const cleanup = deps.exposureStatusCleanup;
   if (!cleanup) throw new Error("App delete requires Exposure status cleanup");
   await cleanup.delete({
+    appId,
+    actorId,
+    orgId: organizationId,
+    requestId,
+  });
+  const holdoverCleanup = deps.holdoverWriteOutboxCleanup;
+  if (!holdoverCleanup) throw new Error("App delete requires holdover write outbox cleanup");
+  await holdoverCleanup.delete({
     appId,
     actorId,
     orgId: organizationId,

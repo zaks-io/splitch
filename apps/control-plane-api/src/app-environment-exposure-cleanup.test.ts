@@ -175,5 +175,8 @@ function app(
     exposureStatusCleanup: {
       delete: cleanup,
     },
+    holdoverWriteOutboxCleanup: {
+      delete: async () => undefined,
+    },
   });
 }

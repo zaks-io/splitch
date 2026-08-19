@@ -1,5 +1,10 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { createHealthResponse, parsePlatformTarget, routesDelegatedTo } from "@splitch/contracts";
+import {
+  createHealthResponse,
+  getRoute,
+  parsePlatformTarget,
+  routesDelegatedTo,
+} from "@splitch/contracts";
 import {
   createWorkerFaultReporter,
   createWorkerObservability,
@@ -44,6 +49,11 @@ const service = "splitch-evaluation-api";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 /** The operations `api.splitch.dev` may hand this Worker over the binding (ADR-0046). */
 const delegatedRoutes = routesDelegatedTo("evaluation-api");
+const holdoverWriteOutboxCleanupRoute = getRoute("holdover_write_outbox_delete");
+if (!holdoverWriteOutboxCleanupRoute) {
+  throw new Error("evaluation-api: holdover write outbox cleanup route is not registered");
+}
+const bindingRoutes = [...delegatedRoutes, holdoverWriteOutboxCleanupRoute];
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -64,7 +74,7 @@ export default wrapWorkerHandler(handler, { surface: "evaluation-api" });
  */
 export class ControlPlaneEntrypoint extends WorkerEntrypoint<EvaluationApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    const identity = delegatedIdentityFor(request, delegatedRoutes);
+    const identity = delegatedIdentityFor(request, bindingRoutes);
     if (!identity) return notDelegatedResponse(request);
     return handleRequest(request, this.env, this.ctx, { kind: "control-plane", identity });
   }
@@ -114,6 +124,10 @@ async function handleRequest(
       saltStore,
     ),
     holdoverWrite: new DurableHoldoverWriteCoordinator(holdoverWriteOutbox),
+    holdoverWriteOutboxCleanup: {
+      assignmentsKv: env.ASSIGNMENTS_KV,
+      holdoverWriteOutbox,
+    },
     exposureAssembly: {
       saltStore,
       sourceId: env.SPLITCH_SOURCE_ID ?? "local",

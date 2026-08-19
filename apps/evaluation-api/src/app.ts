@@ -3,6 +3,10 @@ import { createRegistrar } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import { DirectHoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
+import {
+  makeHoldoverWriteOutboxCleanupHandler,
+  type HoldoverWriteOutboxCleanupDeps,
+} from "./assignment/holdover-write-outbox-cleanup";
 import { makeCachedEvaluationTelemetryHandler } from "./cached-evaluation-telemetry";
 import { makeApiKeyOnlyAuthResolver, makeClientKeyOnlyAuthResolver } from "./data-plane-auth";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
@@ -46,6 +50,8 @@ export interface AppDeps extends EvaluatePathDeps {
   exposureRedemptionClaims: ExposureRedemptionClaimStore;
   /** Completes or durably owns Assignment Store holdover writes after redemption. */
   holdoverWrite?: HoldoverWriteCoordinator;
+  /** Binding-door App/Entity deletion consumer for the holdover-write outbox. */
+  holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanupDeps;
   evaluationCommitSink: EvaluationCommitSink;
   evaluationUsageSink: EvaluationUsageSink;
   rateLimiter: RateLimiter;
@@ -74,6 +80,7 @@ export function createApp(deps: AppDeps): Hono {
       "client-key": makeClientKeyOnlyAuthResolver(deps.dataPlaneAuthResolver),
       "api-key": makeApiKeyOnlyAuthResolver(deps.dataPlaneAuthResolver),
       "data-plane-key": deps.dataPlaneAuthResolver,
+      "internal-worker": deps.authResolver,
     },
     rateLimiter: deps.rateLimiter,
     defaultHeaders: deps.defaultHeaders,
@@ -106,6 +113,13 @@ export function createApp(deps: AppDeps): Hono {
   );
   if (deps.door === "binding") {
     registrar.mount(app, evaluationRoute("flags_test_eval"), makeTestEvaluationHandler(deps));
+    if (deps.holdoverWriteOutboxCleanup) {
+      registrar.mount(
+        app,
+        evaluationRoute("holdover_write_outbox_delete"),
+        makeHoldoverWriteOutboxCleanupHandler(deps.holdoverWriteOutboxCleanup),
+      );
+    }
   }
   return app;
 }

@@ -34,6 +34,7 @@ import type { ExposureRedemptionClaimStore } from "./exposure-redemption-claim-c
 import { FakeKv } from "./provider/fake-kv";
 import { experimentConfigKV, flagConfigKV, runConfigKV } from "./provider/fixtures";
 import { KvProvider } from "./provider/kv-provider";
+import { stubHoldoverWriteOutboxCleanup } from "./sdk-route-binding-cleanup-fixture";
 
 export { APP_ID, ENVIRONMENT_ID, EXPERIMENT_ID, FLAG_KEY, sha256Hex };
 
@@ -211,6 +212,8 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     provider: new KvProvider(configKv),
     assignmentStore,
     holdoverWrite: options.holdoverWrite,
+    holdoverWriteOutboxCleanup:
+      options.door === "binding" ? stubHoldoverWriteOutboxCleanup() : undefined,
     exposureAssembly: {
       saltStore: new StaticSaltStore(),
       sourceId: "pop-route-test",

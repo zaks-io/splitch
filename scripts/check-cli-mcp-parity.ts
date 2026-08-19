@@ -33,6 +33,13 @@ const CONTRACT_EXCEPTIONS = [
       "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
   },
   {
+    operationId: "holdover_write_outbox_delete",
+    cli: false,
+    mcp: false,
+    reason:
+      "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
+  },
+  {
     operationId: "openapi_document_get",
     cli: false,
     mcp: false,

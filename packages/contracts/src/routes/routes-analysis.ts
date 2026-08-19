@@ -29,6 +29,12 @@ const OptionalResultsSelectorSchema = ResultsSelectorSchema.default({});
 const ExposureStatusDeleteQuerySchema = z
   .object({ environmentId: z.string().min(1).optional() })
   .strict();
+const HoldoverWriteOutboxDeleteQuerySchema = z
+  .object({
+    idType: z.string().min(1).optional(),
+    targetingKeyHash: z.string().min(1).optional(),
+  })
+  .strict();
 
 export const analysisRoutes = [
   defineApiRoute({
@@ -121,6 +127,20 @@ export const analysisRoutes = [
     path: "/internal/apps/:appId/exposure-status",
     summary: "Delete durable Exposure status when an App or Environment is deleted.",
     request: { params: AppParams, query: ExposureStatusDeleteQuerySchema },
+    response: z.object({ deleted: z.literal(true) }).strict(),
+    auth: "internal-worker",
+    rateLimit: "none",
+    idempotency: "none",
+    errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
+  }),
+  defineApiRoute({
+    operationId: "holdover_write_outbox_delete",
+    owner: "evaluation-api",
+    method: "DELETE",
+    path: "/internal/apps/:appId/holdover-write-outbox",
+    summary:
+      "Suppress and purge Assignment Store holdover-write outbox state on App or Entity deletion.",
+    request: { params: AppParams, query: HoldoverWriteOutboxDeleteQuerySchema },
     response: z.object({ deleted: z.literal(true) }).strict(),
     auth: "internal-worker",
     rateLimit: "none",

@@ -12,9 +12,10 @@ import {
 import { holdoverWriteOutboxName } from "./holdover-write-outbox-core";
 
 /**
- * Miniflare boundary: real HoldoverWriteOutbox DO + production Assignment Store
- * writer semantics (awaited KV write-through). Injects a first KV put failure so
- * completion cannot mean "DO HTTP 200 while KV is still pending in waitUntil".
+ * Miniflare boundary: real HoldoverWriteOutbox DO + production
+ * `AssignmentStoreWriter` / `AssignmentStoreDurableObject` sources. Injects a
+ * first KV put failure so completion cannot mean "DO HTTP 200 while KV is still
+ * pending in waitUntil".
  */
 
 const PUT = {
@@ -104,65 +105,53 @@ function bundleWorker(failFirstKvPut: boolean): string {
   const outbox = readSource(join(root, "holdover-write-outbox.ts"))
     .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/gm, "")
     .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/gm, "")
-    .replace(/^import[\s\S]*?from ["']\.\/kv-assignment-store["'];?\s*/gm, "");
-  const doClass = readSource(join(root, "holdover-write-outbox-do.ts"))
+    .replace(/^import[\s\S]*?from ["']\.\/kv-assignment-store["'];?\s*/gm, "")
+    // Shared helpers also exist on the production Assignment Store DO module.
+    .replace(
+      /\nfunction isRecord\(value: unknown\): value is Record<string, unknown> \{[\s\S]*?\n\}\n\nfunction requireString\(value: Record<string, unknown>, key: string\): string \{[\s\S]*?\n\}\n/,
+      "\n",
+    );
+  const outboxDo = readSource(join(root, "holdover-write-outbox-do.ts"))
     .replace(/^import \{ DurableObject \} from "cloudflare:workers";\s*/m, "")
     .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox["'];?\s*/m, "")
     .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/m, "");
 
-  // Production Assignment Store writer + DO, with optional first-KV-failure injection.
-  const assignmentDo = `
-const STORAGE_KEY_PREFIX = "assignment:";
+  // Production writer + DO (not an inlined twin). Contracts/Zod are stubbed;
+  // write-through helpers match the production assignment-store module.
+  const writer = readSource(join(root, "assignment-store-writer.ts")).replace(
+    /^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m,
+    "",
+  );
+  const assignmentDo = readSource(join(root, "assignment-store-do.ts"))
+    .replace(/^import \{ DurableObject \} from "cloudflare:workers";\s*/m, "")
+    .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m, "")
+    .replace(/^import[\s\S]*?from ["']\.\/assignment-store-writer["'];?\s*/m, "");
+
+  const stubs = `
+globalThis.__holdoverKvFailsRemaining = ${failFirstKvPut ? "1" : "0"};
 const CURRENT_KV_SCHEMA_VERSION = 1;
-
-class AssignmentStoreWriter {
-  constructor(storage, kv, _waitUntil) {
-    this.storage = storage;
-    this.kv = kv;
-  }
-  async put(input) {
-    const storageKey = STORAGE_KEY_PREFIX + input.experimentId;
-    const existing = await this.storage.get(storageKey);
-    if (existing !== undefined) {
-      await this.writeThrough(existing);
-      return { status: "existing", assignment: entryFrom(existing) };
-    }
-    await this.storage.put(storageKey, input);
-    await this.writeThrough(input);
-    return { status: "stored", assignment: entryFrom(input) };
-  }
-  async writeThrough(input) {
-    const key = assignmentKey(input.appId, input.idType, input.targetingKeyHash);
-    const current = await readAssignmentValue(this.kv, key);
-    const next = mergeAssignmentValue(current, input);
-    if (next === current) return;
-    await this.kv.put(key, JSON.stringify({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data: next }));
-  }
+function assignmentWriterName(input) {
+  return input.appId + ":" + input.idType + ":" + input.targetingKeyHash;
 }
-
 function assignmentKey(appId, idType, targetingKeyHash) {
   return "assignment:" + appId + ":" + idType + ":" + targetingKeyHash;
 }
-function entryFrom(input) {
-  return { runId: input.runId, variant: input.variant };
-}
 function mergeAssignmentValue(value, input) {
   if (value[input.experimentId] !== undefined) return value;
-  return { ...value, [input.experimentId]: entryFrom(input) };
+  return { ...value, [input.experimentId]: { runId: input.runId, variant: input.variant } };
+}
+function serializeAssignmentValue(value) {
+  return JSON.stringify({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data: value });
 }
 async function readAssignmentValue(kv, key) {
   const raw = await kv.get(key);
   if (raw === null) return {};
   return JSON.parse(raw).data;
 }
-
 function failOnceKv(kv) {
   return {
     get: (key) => kv.get(key),
     put: async (key, value) => {
-      // Module-level gate: DO storage must not be the fail-once ledger — a thrown
-      // writeThrough after storage.put can leave test harnesses ambiguous about
-      // whether the gate row persisted before the HTTP 503.
       if (${failFirstKvPut ? "true" : "false"} && globalThis.__holdoverKvFailsRemaining > 0) {
         globalThis.__holdoverKvFailsRemaining -= 1;
         throw new Error("forced KV put failure");
@@ -170,34 +159,6 @@ function failOnceKv(kv) {
       return kv.put(key, value);
     },
   };
-}
-
-export class AssignmentStoreDurableObject extends DurableObject {
-  async fetch(request) {
-    if (request.method !== "POST" || new URL(request.url).pathname !== "/put") {
-      return Response.json({ error: "not found" }, { status: 404 });
-    }
-    const input = await request.json();
-    try {
-      const result = await this.ctx.blockConcurrencyWhile(() =>
-        new AssignmentStoreWriter(
-          this.ctx.storage,
-          failOnceKv(this.env.ASSIGNMENTS_KV),
-          (promise) => this.ctx.waitUntil(promise),
-        ).put(input),
-      );
-      return Response.json(result);
-    } catch (cause) {
-      return new Response(cause instanceof Error ? cause.message : String(cause), { status: 503 });
-    }
-  }
-}
-`;
-
-  const stubs = `
-globalThis.__holdoverKvFailsRemaining = ${failFirstKvPut ? "1" : "0"};
-function assignmentWriterName(input) {
-  return input.appId + ":" + input.idType + ":" + input.targetingKeyHash;
 }
 `;
 
@@ -210,16 +171,27 @@ import { DurableObject } from "cloudflare:workers";
 ${stubs}
 ${stripExport(core)}
 ${stripExport(outbox)}
-${doClass}
+${outboxDo}
+${stripExport(writer)}
 ${assignmentDo}
-const __prodFetch = HoldoverWriteOutboxDurableObject.prototype.fetch;
+const __prodOutboxFetch = HoldoverWriteOutboxDurableObject.prototype.fetch;
 HoldoverWriteOutboxDurableObject.prototype.fetch = async function (request) {
   const url = new URL(request.url);
   if (url.pathname === "/__test/alarm" && request.method === "POST") {
     await this.alarm();
     return Response.json({ ok: true });
   }
-  return __prodFetch.call(this, request);
+  return __prodOutboxFetch.call(this, request);
+};
+const __prodAssignmentFetch = AssignmentStoreDurableObject.prototype.fetch;
+AssignmentStoreDurableObject.prototype.fetch = async function (request) {
+  const originalKv = this.env.ASSIGNMENTS_KV;
+  this.env.ASSIGNMENTS_KV = failOnceKv(originalKv);
+  try {
+    return await __prodAssignmentFetch.call(this, request);
+  } finally {
+    this.env.ASSIGNMENTS_KV = originalKv;
+  }
 };
 export default {
   async fetch() {

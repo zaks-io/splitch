@@ -122,6 +122,7 @@ const CANONICAL_OPERATION_IDS = [
   "experiment_results_post",
   "environment_exposure_status_get",
   "environment_exposure_status_delete",
+  "holdover_write_outbox_delete",
   "organization_usage_get",
   "openapi_document_get",
   // Privacy

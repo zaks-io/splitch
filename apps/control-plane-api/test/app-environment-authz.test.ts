@@ -12,6 +12,7 @@ import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 import { noOpExposureStatusCleanup } from "./exposure-status-cleanup-fixture";
+import { noOpHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup-fixture";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
@@ -72,6 +73,7 @@ beforeEach(async () => {
       repo: createRepository(bindings.d1),
       credentialStore: bindings.credentialKv,
       exposureStatusCleanup: noOpExposureStatusCleanup,
+      holdoverWriteOutboxCleanup: noOpHoldoverWriteOutboxCleanup,
       nowIso: () => NOW_ISO,
     }),
     signer,

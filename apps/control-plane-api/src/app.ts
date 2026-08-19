@@ -21,10 +21,9 @@ import { makeCredentialHandlers } from "./credential-handlers";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
 import { registerEventDefinitionRoutes } from "./event-definition-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
-import {
-  createEnvironmentExposureStatusCleanup,
-  type EnvironmentExposureStatusCleanup,
-} from "./environment-exposure-status-cleanup";
+import { appEnvironmentCleanupDeps } from "./app-environment-cleanup-deps";
+import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
+import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
 import { diagnosableHandlers } from "./flag-config-policy";
 import { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
 import { makeHandlers } from "./handlers";
@@ -68,6 +67,7 @@ export interface AppDeps {
   delegationBindings?: DelegationBindings;
   approvalArchiveStore?: import("./approval-archive").ApprovalArchiveStore;
   exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
+  holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
@@ -124,9 +124,7 @@ export function createApp(deps: AppDeps): Hono {
     credentialStore: deps.credentialStore,
     credentialCacheWriter: deps.credentialCacheWriter,
     configStore: deps.configStore,
-    exposureStatusCleanup:
-      deps.exposureStatusCleanup ??
-      createEnvironmentExposureStatusCleanup(deps.delegationBindings?.["analysis-api"]),
+    ...appEnvironmentCleanupDeps(deps),
     nowIso: deps.nowIso,
   });
   const registrar = controlPlaneRegistrar(deps);
