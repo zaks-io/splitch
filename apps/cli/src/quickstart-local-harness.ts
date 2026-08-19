@@ -172,12 +172,17 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
     exposureSink,
     evaluationCommitSink,
     invalidateFlagCache(targetAppId = appId) {
-      provider.invalidate(targetAppId, {
-        type: "config.changed",
-        entity: "flag",
-        id: "*",
-        version: Date.now(),
-      });
+      // SPL-322 scoped Provider invalidation to (App, Environment, Flag). This
+      // harness has no live-update socket, so after CLI Flag Configuration
+      // writes it drops both Environments' caches the way reconnect does.
+      const dropEnvironment = (
+        provider as unknown as {
+          invalidateEnvironment(appId: string, environmentId: string): void;
+        }
+      ).invalidateEnvironment.bind(provider);
+      for (const environmentId of [devEnvironmentId, prodEnvironmentId]) {
+        dropEnvironment(targetAppId, environmentId);
+      }
     },
     dispose: async () => {
       await flagHarness.bindings.dispose();
