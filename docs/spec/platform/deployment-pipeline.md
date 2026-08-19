@@ -330,9 +330,12 @@ or any Durable Object migration.
   `TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN` value is Tinybird's deployment-defined
   `audit_log_ingest` token and needs APPEND on the shared `audit_log` datasource. That scope is
   broader than Approval Request archival because Tinybird's token granularity stops at the
-  datasource. The `TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN` value is the static Tinybird token named
-  `approval_request_archives_read`; it needs READ only on the `approval_request_archives` endpoint.
-  Both are scoped to the Control Plane Tinybird folder and neither is a workspace admin token.
+  datasource. The `TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN` value is the deployment-defined Tinybird
+  token named `approval_request_archives_read`, declared with `TOKEN ... READ` in
+  `pipes/approval_request_archives.pipe`; it has READ only on the `approval_request_archives`
+  endpoint. It cannot be a hand-created static token: the production workspace rejects out-of-band
+  resource-scoped tokens ("can only be done via deployments"). Neither value is a workspace admin
+  token.
 - Secret rotation is its own release. Do not hide secret changes inside an unrelated code deploy.
 
 ### Sentry source maps
