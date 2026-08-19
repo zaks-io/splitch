@@ -5,7 +5,10 @@ import {
 } from "../generated/contract-surface.js";
 import { mintExposureId, pendingBodyBytes, type QueuedExposure } from "./exposure-batch";
 
-/** Null means this Flag was already admitted; otherwise reports whether caps were reached. */
+export type ExposureAdmission =
+  | { readonly admitted: false }
+  | { readonly admitted: true; readonly atCapacity: boolean };
+
 export function admitExposure(
   pending: QueuedExposure[],
   enqueuedFlags: Set<string>,
@@ -13,9 +16,9 @@ export function admitExposure(
   now: () => number,
   flagKey: string,
   exposureTicket: string,
-): boolean | null {
+): ExposureAdmission {
   if (enqueuedFlags.has(flagKey)) {
-    return null;
+    return { admitted: false };
   }
   const exposureId = mintExposureId(logger, flagKey);
   enqueuedFlags.add(flagKey);
@@ -25,10 +28,12 @@ export function admitExposure(
     exposureTicket,
     clientTimestamp: new Date(now()).toISOString(),
   });
-  return (
-    pending.length >= EXPOSURE_BATCH_MAX_ITEMS ||
-    pendingBodyBytes(pending) > EXPOSURE_BATCH_MAX_BODY_BYTES
-  );
+  return {
+    admitted: true,
+    atCapacity:
+      pending.length >= EXPOSURE_BATCH_MAX_ITEMS ||
+      pendingBodyBytes(pending) > EXPOSURE_BATCH_MAX_BODY_BYTES,
+  };
 }
 
 export function rearmExposureFlags(enqueuedFlags: Set<string>, flagKeys: readonly string[]): void {

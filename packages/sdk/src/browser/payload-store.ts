@@ -15,7 +15,7 @@ export interface ListenerFailure {
 /** Mutable identity for one atomically replaced Precomputed Evaluations payload. */
 export class BrowserPayloadStore {
   private held: HeldPayload | null;
-  private stale = false;
+  private degraded = false;
   private readonly listeners = new Map<string, Set<FlagListener>>();
 
   constructor(initial: HeldPayload | null) {
@@ -26,21 +26,21 @@ export class BrowserPayloadStore {
     return this.held;
   }
 
-  isStale(): boolean {
-    return this.stale;
+  isDegraded(): boolean {
+    return this.degraded;
   }
 
   setInitial(payload: HeldPayload): void {
     this.held = payload;
-    this.stale = false;
+    this.degraded = false;
   }
 
-  markStale(): void {
-    this.stale = true;
+  markDegraded(): void {
+    this.degraded = true;
   }
 
-  markFresh(): void {
-    this.stale = false;
+  markRecovered(): void {
+    this.degraded = false;
   }
 
   swap(payload: HeldPayload): readonly string[] {
@@ -48,7 +48,7 @@ export class BrowserPayloadStore {
     const changed =
       previous === null ? Object.keys(payload.evaluations) : diffFlags(previous, payload);
     this.held = payload;
-    this.stale = false;
+    this.degraded = false;
     return changed;
   }
 
@@ -74,8 +74,12 @@ export class BrowserPayloadStore {
     }
     flagListeners.add(listener);
     return () => {
-      flagListeners?.delete(listener);
-      if (flagListeners?.size === 0) {
+      const current = this.listeners.get(flagKey);
+      if (current !== flagListeners) {
+        return;
+      }
+      current.delete(listener);
+      if (current.size === 0) {
         this.listeners.delete(flagKey);
       }
     };

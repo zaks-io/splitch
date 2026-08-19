@@ -122,8 +122,8 @@ export function createSplitchBrowserClient(
       queue.rearm(changed);
       logListenerFailures(logger, store.notify(changed));
     },
-    onNotModified: () => store.markFresh(),
-    onFailure: () => store.markStale(),
+    onNotModified: () => store.markRecovered(),
+    onFailure: () => store.markDegraded(),
   });
 
   function requireHeld(): HeldPayload {
@@ -153,7 +153,7 @@ export function createSplitchBrowserClient(
     if (entry.exposureTicket !== null) {
       queue.enqueue(flagKey, entry.exposureTicket);
     }
-    return decorateHeldDetails(entry.variant, entry.variantName, entry.reason, store.isStale());
+    return decorateHeldDetails(entry.variant, entry.variantName, entry.reason, store.isDegraded());
   }
 
   const client: SplitchBrowserClient = {
@@ -215,7 +215,7 @@ export function createSplitchBrowserClient(
       return queue.close();
     },
   };
-  registerBrowserClientInternalAccess(client, () => store.isStale());
+  registerBrowserClientInternalAccess(client, () => store.isDegraded());
 
   if (initial !== null) {
     revalidation.start();

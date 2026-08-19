@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { SplitchSdkError } from "../errors";
+import type { PrecomputedEvaluations } from "../evaluate-all";
 import type { EvaluateAllEntry } from "../generated/contract-surface.js";
 import { FakeLogger } from "../test-fixtures";
 import { createSplitchBrowserClient } from "./client";
@@ -48,6 +50,26 @@ describe("createSplitchBrowserClient: construction", () => {
     });
     expect(transport.evaluateAllCalls).toHaveLength(0);
     expect(transport.redeemCalls).toHaveLength(0);
+  });
+
+  it("throws a typed validation error for malformed bootstrap evaluations", () => {
+    let thrown: unknown;
+    try {
+      createSplitchBrowserClient({
+        clientKey: "pk_test",
+        context: { targetingKey: "u1" },
+        bootstrap: {
+          context: { targetingKey: "u1", idType: "user", attributes: {} },
+          evaluations: { checkout: { variant: true } },
+          etag: '"etag-1"',
+        } as unknown as PrecomputedEvaluations,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(SplitchSdkError);
+    expect(thrown).toMatchObject({ code: "VALIDATION_ERROR" });
   });
 
   it("default fetch is not invoked as a method on a foreign receiver (M01)", async () => {

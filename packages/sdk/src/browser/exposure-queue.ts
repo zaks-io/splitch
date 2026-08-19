@@ -89,7 +89,7 @@ export class ExposureQueue {
       );
       return;
     }
-    const atCapacity = admitExposure(
+    const admission = admitExposure(
       this.pending,
       this.enqueuedFlags,
       this.deps.logger,
@@ -97,12 +97,12 @@ export class ExposureQueue {
       flagKey,
       exposureTicket,
     );
-    if (atCapacity === null) {
+    if (!admission.admitted) {
       return;
     }
     this.ensureLifecycle();
     this.ensureTimer();
-    if (atCapacity) {
+    if (admission.atCapacity) {
       void this.overflow.flush(
         () => this.enqueueDrain({ keepalive: false, automatic: true }),
         this.retryPolicy,

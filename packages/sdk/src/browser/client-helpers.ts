@@ -92,7 +92,18 @@ export function resolveBootstrap(
       remediation: "Pass the complete object returned by the server SDK's evaluateAll accessor",
     });
   }
-  const parsed = EvaluateAllResponseSchema.parse({ evaluations: bootstrap.evaluations });
+  let parsed: ReturnType<typeof EvaluateAllResponseSchema.parse>;
+  try {
+    parsed = EvaluateAllResponseSchema.parse({ evaluations: bootstrap.evaluations });
+  } catch (cause) {
+    throw new SplitchSdkError({
+      code: "VALIDATION_ERROR",
+      causeSummary:
+        cause instanceof Error ? cause.message : "The browser bootstrap evaluations are invalid",
+      remediation: "Regenerate the bootstrap payload server-side with the SDK evaluateAll accessor",
+      originalError: cause,
+    });
+  }
   return { evaluations: parsed.evaluations, etag: bootstrap.etag };
 }
 

@@ -77,6 +77,9 @@ export class RevalidationLoop {
         ifNoneMatch: this.deps.getEtag(),
       });
     } catch (cause) {
+      if (this.stopped) {
+        return;
+      }
       this.fail(
         new SplitchSdkError({
           code: "SDK_TRANSPORT_NETWORK",
