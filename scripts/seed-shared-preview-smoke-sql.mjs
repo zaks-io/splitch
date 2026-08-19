@@ -34,16 +34,15 @@ export const TRANSIENT_APP_KEY_PREFIXES = [
 ];
 
 /**
- * Child tables deleted before their transient App, parents last. Every one of these
- * carries `app_id`, so a single scope predicate covers the whole graph.
+ * Every table carrying `app_id`, children before their transient App. D1 enforces
+ * foreign keys, so a table missing here fails the App delete outright rather than
+ * orphaning rows. Kept in sync with the Drizzle schema by shared-preview-panel-smoke.test.mjs.
  */
 const TRANSIENT_APP_SCOPED_TABLES = [
   "approval_reviews",
   "approval_requests",
-  "runs_next",
   "runs",
   "experiments",
-  "metrics_v2",
   "metrics",
   "event_definition_versions",
   "event_definitions",
@@ -52,6 +51,8 @@ const TRANSIENT_APP_SCOPED_TABLES = [
   "flag_configs",
   "client_keys",
   "api_keys",
+  "entity_deletions",
+  "privacy_requests",
   "environments",
   "app_memberships",
 ];
