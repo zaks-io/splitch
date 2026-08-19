@@ -20,7 +20,7 @@ function lineOf(source: ts.SourceFile, node: ts.Node): number {
 type SqlParts = { statics: string[]; exprs: ts.Expression[] };
 
 const SQL_IDENTIFIER =
-  '(?:[A-Za-z_][A-Za-z0-9_$]*|"(?:[^"]|"")*"|`(?:[^`]|``)*`|\\[(?:[^\\]]|\\]\\])*\\])';
+  "(?:[A-Za-z_][A-Za-z0-9_$]*|'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"|`(?:[^`]|``)*`|\\[(?:[^\\]]|\\]\\])*\\])";
 const SQL_TARGET_PART = `(?:${SQL_IDENTIFIER}|«\\d+»)`;
 const SQL_GAP = String.raw`(?:\s|\/\*[\s\S]*?\*\/|--[^\r\n]*(?:\r?\n|$))+`;
 const UPDATE_TARGET = new RegExp(
@@ -116,6 +116,7 @@ function assertExprTargetNotFlagConfigs(
 
 function normalizedIdentifier(identifier: string): string {
   const first = identifier[0];
+  if (first === "'") return identifier.slice(1, -1).replaceAll("''", "'");
   if (first === '"') return identifier.slice(1, -1).replaceAll('""', '"');
   if (first === "`") return identifier.slice(1, -1).replaceAll("``", "`");
   if (first === "[") return identifier.slice(1, -1).replaceAll("]]", "]");
