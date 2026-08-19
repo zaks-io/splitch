@@ -326,6 +326,13 @@ or any Durable Object migration.
   intake ships, the Event Ingest token must have APPEND access to exactly all four owned
   datasources: `raw_events`, `raw_evaluations`, `metric_events`, and `web_events`.
   `TINYBIRD_API_URL` is non-secret Worker config and points at the Tinybird region API.
+- Control Plane declares two separate Approval Request archive secrets. The
+  `TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN` value is Tinybird's deployment-defined
+  `audit_log_ingest` token and needs APPEND on the shared `audit_log` datasource. That scope is
+  broader than Approval Request archival because Tinybird's token granularity stops at the
+  datasource. The `TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN` value is the static Tinybird token named
+  `approval_request_archives_read`; it needs READ only on the `approval_request_archives` endpoint.
+  Both are scoped to the Control Plane Tinybird folder and neither is a workspace admin token.
 - Secret rotation is its own release. Do not hide secret changes inside an unrelated code deploy.
 
 ### Sentry source maps

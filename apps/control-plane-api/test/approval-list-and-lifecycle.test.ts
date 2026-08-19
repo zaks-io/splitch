@@ -1,6 +1,13 @@
 import { appScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type Harness, ids, setProdPolicy, token } from "../src/config-store-harness-core";
+import {
+  type Harness,
+  ids,
+  makeAuthedApp,
+  setProdPolicy,
+  token,
+} from "../src/config-store-harness-core";
+import { MemoryApprovalArchiveStore } from "./approval-archive-test-store";
 import { makePoolHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -91,6 +98,8 @@ function countProjectionReads(): () => number {
 describe("Approval Request list paging", () => {
   it("projects only the page, not every request in the App", async () => {
     for (let i = 0; i < 4; i += 1) await proposeConfigChange(`idem_page_a_${i}`);
+    const writeApp = h.app;
+    h.app = makeAuthedApp(h, undefined, new MemoryApprovalArchiveStore());
     const small = countProjectionReads();
     const first = await list("?limit=2");
     const readsWithFourRows = small();
@@ -98,15 +107,17 @@ describe("Approval Request list paging", () => {
     expect(first.status).toBe(200);
     expect(first.body.items).toHaveLength(2);
     expect(first.body.cursor).toBe(first.body.items[1]?.id);
-    expect(first.body.total).toBe(4);
+    expect(first.body.total).toBeNull();
 
     // Triple the table. The cost of the same page must not move: if the handler
     // materialized every request before slicing, this doubles or worse.
+    h.app = writeApp;
     for (let i = 0; i < 8; i += 1) await proposeConfigChange(`idem_page_b_${i}`);
+    h.app = makeAuthedApp(h, undefined, new MemoryApprovalArchiveStore());
     const large = countProjectionReads();
     const again = await list("?limit=2");
     expect(again.body.items).toHaveLength(2);
-    expect(again.body.total).toBe(12);
+    expect(again.body.total).toBeNull();
     expect(large()).toBe(readsWithFourRows);
   });
 

@@ -4,7 +4,6 @@ import { createRepository } from "@splitch/db";
 import {
   createWorkerFaultReporter,
   createWorkerObservability,
-  workerEmitter,
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
@@ -14,6 +13,7 @@ import {
   makeMcpDelegationAuthResolver,
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
+import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
 import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
@@ -31,11 +31,7 @@ import {
   durableCredentialCacheWriterAccess,
 } from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
-import {
-  handleCredentialCacheBackfillGate,
-  handleLiveUpdateTestControl,
-  runCredentialCacheBackfill,
-} from "./internal-routes";
+import { handleCredentialCacheBackfillGate, handleLiveUpdateTestControl } from "./internal-routes";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { panelAppSettingsRead } from "./panel-app-settings";
@@ -45,6 +41,7 @@ import { panelOverviewRead } from "./panel-overview";
 import { panelSettingsRead } from "./panel-settings";
 import { rateLimiterForTarget } from "./rate-limit";
 import { runSnapshotDeliveryFromEnv } from "./run-snapshot";
+import { runControlPlaneScheduled } from "./scheduled";
 import { makeSessionStore } from "./session-store";
 import { unauthorized } from "./unauthorized";
 
@@ -55,8 +52,7 @@ const handler = {
   },
 
   scheduled(event, env, ctx): void {
-    ctx.waitUntil(runDemoReaper(env, event, ctx));
-    ctx.waitUntil(runCredentialCacheBackfill(env));
+    runControlPlaneScheduled(event, env, ctx);
   },
 } satisfies ExportedHandler<ControlPlaneApiEnv>;
 
@@ -182,6 +178,7 @@ async function handleRequest(
       "analysis-api": env.ANALYSIS_API,
       "evaluation-api": env.EVALUATION_API,
     },
+    approvalArchiveStore: approvalArchiveStoreFromEnv(env),
   });
 
   return app.fetch(request, env);
@@ -276,29 +273,6 @@ function reportRunSnapshotFault(
   createWorkerFaultReporter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx))(
     "run_snapshot_unshipped",
     detail,
-  );
-}
-
-async function runDemoReaper(
-  env: ControlPlaneApiEnv,
-  event: ScheduledController,
-  ctx: Pick<ExecutionContext, "waitUntil">,
-): Promise<void> {
-  const now = new Date(event.scheduledTime).toISOString();
-  const repo = createRepository(env.DB);
-  const result = await repo.identity.reapExpiredProvisionalOrganizations(now);
-  const claimArtifacts = await repo.claim.purgeExpiredClaimArtifacts({ now, limit: 100 });
-  workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
-    "info",
-    "demo-reaper",
-    {
-      service,
-      job: "demo-reaper",
-      cron: event.cron,
-      candidates: result.candidates,
-      reaped: result.reaped,
-      claimArtifacts,
-    },
   );
 }
 
