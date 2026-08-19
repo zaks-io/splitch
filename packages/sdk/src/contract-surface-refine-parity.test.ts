@@ -70,6 +70,13 @@ const parityFixtures: readonly ParityFixture[] = [
     input: { evaluations: { flag: { ...evaluateAllEntry, exposureIdentity: null } } },
   },
   {
+    name: "Evaluate All refuses an own __proto__ Flag Key",
+    schemaName: "EvaluateAllResponseSchema",
+    input: JSON.parse(
+      '{"evaluations":{"__proto__":{"variant":false,"variantName":null,"reason":"DEFAULT","errorCode":null,"exposureIdentity":null,"exposureTicket":null}}}',
+    ) as unknown,
+  },
+  {
     name: "Exposure rejection status and code must agree",
     schemaName: "ExposureBatchResponseSchema",
     input: { results: [{ exposureId: id, status: "accepted", code: "VALIDATION_ERROR" }] },

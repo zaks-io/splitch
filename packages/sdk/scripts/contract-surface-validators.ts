@@ -1,11 +1,12 @@
 /**
  * Zod-free parsers mirroring the contracts package authoring schemas.
- * Contract-generated member lists, `contract-surface-structural.test.ts`, and
- * `contract-surface-assignability.ts` guard enum members, JSON-expressible
- * shapes, and TypeScript assignability respectively. Cross-field `.refine()`
- * rules are outside those guards because `z.toJSONSchema()` cannot represent
- * them; `contract-surface-refine-parity.test.ts` walks the live schemas and
- * requires a parity fixture for every such rule.
+ * Contract-generated member lists and the lockstep tests cover JSON-expressible
+ * shapes (`contract-surface-structural.test.ts`), behavior and members
+ * (`contract-surface-parity.test.ts`), proto-safe records
+ * (`contract-surface-proto-safe.test.ts`), and TypeScript assignability
+ * (`contract-surface-assignability.ts`). Cross-field `.refine()` and
+ * `.superRefine()` rules are outside JSON Schema; `contract-surface-refine-parity.test.ts`
+ * walks the live schemas and requires a parity fixture for every such rule.
  *
  * Accepted domain is JSON-only by construction today: every `parse()` call
  * takes `await response.json()`, and these schemas are not exported on a

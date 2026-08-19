@@ -27,7 +27,7 @@ export type Refinement = {
   readonly path: readonly string[];
   readonly index: number;
   readonly message?: string;
-  readonly predicate: (input: unknown) => unknown;
+  readonly check: (payload: { value: unknown; issues: unknown[] }) => unknown;
 };
 
 type Child = { readonly schema: Schema; readonly segment?: string };
@@ -65,17 +65,23 @@ function renderMessage(def: Record<string, unknown>): string | undefined {
 }
 
 function refineCheck(value: unknown): {
-  readonly predicate: (input: unknown) => unknown;
+  readonly check: (payload: { value: unknown; issues: unknown[] }) => unknown;
   readonly message?: string;
 } | null {
   if (typeof value !== "object" || value === null || !("_zod" in value)) return null;
-  const def = (value as { readonly _zod?: { readonly def?: Record<string, unknown> } })._zod?.def;
-  // Zod v4 gives `.refine()` a ZodCustom definition; `.superRefine()` has no
-  // `type` or `fn` and remains under the dedicated proto-safe guard.
-  if (def?.type !== "custom" || typeof def.fn !== "function") return null;
+  const internals = (
+    value as {
+      readonly _zod?: {
+        readonly def?: Record<string, unknown>;
+        readonly check?: (payload: { value: unknown; issues: unknown[] }) => unknown;
+      };
+    }
+  )._zod;
+  const def = internals?.def;
+  if (def?.check !== "custom" || typeof internals?.check !== "function") return null;
   const message = renderMessage(def);
   return {
-    predicate: def.fn as (input: unknown) => unknown,
+    check: internals.check,
     ...(message === undefined ? {} : { message }),
   };
 }
@@ -125,7 +131,8 @@ function appendRefinements(
   path: readonly string[],
   def: SchemaDefinition,
 ): void {
-  for (const [index, candidate] of (def.checks ?? []).entries()) {
+  let index = 0;
+  for (const candidate of def.checks ?? []) {
     const check = refineCheck(candidate);
     if (check === null) continue;
     state.refinements.push({
@@ -135,6 +142,7 @@ function appendRefinements(
       index,
       ...check,
     });
+    index += 1;
   }
 }
 
@@ -213,10 +221,11 @@ function valuesAtPath(input: unknown, path: readonly string[]): readonly unknown
 
 export function refinementRejects(refinement: Refinement, input: unknown): boolean {
   return valuesAtPath(input, refinement.path).some((value) => {
-    const result = refinement.predicate(value);
+    const payload = { value, issues: [] };
+    const result = refinement.check(payload);
     if (result instanceof Promise) {
       throw new Error(`${refinement.schemaName}: async refine is unsupported`);
     }
-    return !result;
+    return payload.issues.length > 0;
   });
 }
