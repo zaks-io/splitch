@@ -23,8 +23,9 @@ const SQL_IDENTIFIER =
   "(?:[A-Za-z_][A-Za-z0-9_$]*|'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"|`(?:[^`]|``)*`|\\[(?:[^\\]]|\\]\\])*\\])";
 const SQL_TARGET_PART = `(?:${SQL_IDENTIFIER}|«\\d+»)`;
 const SQL_GAP = String.raw`(?:\s|\/\*[\s\S]*?\*\/|--[^\r\n]*(?:\r?\n|$))+`;
+const SQL_TARGET_GAP = `(?:${SQL_GAP}|(?=['"\`\\[«]))`;
 const UPDATE_TARGET = new RegExp(
-  String.raw`\bUPDATE${SQL_GAP}(?:OR${SQL_GAP}(?:ROLLBACK|ABORT|REPLACE|FAIL|IGNORE)${SQL_GAP})?(?:ONLY${SQL_GAP})?(${SQL_TARGET_PART}(?:\s*\.\s*${SQL_TARGET_PART})*)`,
+  String.raw`\bUPDATE${SQL_TARGET_GAP}(?:OR${SQL_GAP}(?:ROLLBACK|ABORT|REPLACE|FAIL|IGNORE)${SQL_TARGET_GAP})?(?:ONLY${SQL_TARGET_GAP})?(${SQL_TARGET_PART}(?:\s*\.\s*${SQL_TARGET_PART})*)`,
   "gi",
 );
 const TARGET_PART = new RegExp(`${SQL_IDENTIFIER}|«(\\d+)»`, "g");

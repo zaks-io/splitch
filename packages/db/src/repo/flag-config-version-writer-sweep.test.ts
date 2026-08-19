@@ -174,6 +174,31 @@ describe("every flag_configs UPDATE bumps version", () => {
       /spl350-writer-sweep-mutation\.ts:2: raw SQL UPDATE of flag_configs/,
     ],
     [
+      "gapless single-quoted target",
+      [
+        'import { sql } from "drizzle-orm";',
+        "sql`UPDATE'flag_configs'SET version = version`;",
+      ].join("\n"),
+      /spl350-writer-sweep-mutation\.ts:2: raw SQL UPDATE of flag_configs/,
+    ],
+    [
+      "gapless double-quoted target after OR REPLACE",
+      [
+        'import { sql } from "drizzle-orm";',
+        'sql`UPDATE OR REPLACE"flag_configs"SET version = version`;',
+      ].join("\n"),
+      /spl350-writer-sweep-mutation\.ts:2: raw SQL UPDATE of flag_configs/,
+    ],
+    [
+      "gapless flag_configs interpolation",
+      [
+        'import { sql } from "drizzle-orm";',
+        'import { flagConfigs } from "../schema/flags";',
+        "sql`UPDATE$" + "{flagConfigs} SET version = version`;",
+      ].join("\n"),
+      /spl350-writer-sweep-mutation\.ts:3: raw SQL UPDATE of flag_configs via flagConfigs/,
+    ],
+    [
       "dynamic sql.raw argument",
       [
         'import { sql } from "drizzle-orm";',
