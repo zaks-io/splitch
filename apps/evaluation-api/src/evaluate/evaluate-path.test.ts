@@ -9,13 +9,13 @@ import { KvAssignmentStore } from "../assignment/kv-assignment-store";
 import { ProviderError } from "../provider/provider";
 import { evaluatePath } from "./evaluate-path";
 import {
+  baseInput,
   EXPERIMENT_ID,
+  experimentConfig,
+  flagConfig,
   RecordingAssignmentStore,
   RecordingLogger,
   RecordingProvider,
-  baseInput,
-  experimentConfig,
-  flagConfig,
   runConfig,
 } from "./evaluate-path-test-fixtures";
 
@@ -227,6 +227,26 @@ describe("evaluatePath failure path", () => {
       exposure: null,
     });
     expect(logger.errors).toHaveLength(1);
+    expect(store.putCalls).toEqual([]);
+  });
+
+  it("a stale Provider read yields reason STALE with no Exposure", async () => {
+    const store = new RecordingAssignmentStore();
+    const provider = new RecordingProvider({
+      getFlagError: new ProviderError("announced version is not readable", {
+        errorCode: "SERVICE_UNAVAILABLE",
+        resolutionReason: "STALE",
+      }),
+    });
+
+    const result = await evaluatePath(baseInput(), { assignmentStore: store, provider });
+
+    expect(result).toMatchObject({
+      kind: "error",
+      reason: "STALE",
+      errorCode: "SERVICE_UNAVAILABLE",
+      exposure: null,
+    });
     expect(store.putCalls).toEqual([]);
   });
 });

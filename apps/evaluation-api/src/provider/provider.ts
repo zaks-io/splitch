@@ -102,10 +102,19 @@ export interface ExperimentConfig {
  */
 export class ProviderError extends Error {
   readonly errorCode: ErrorCode;
+  readonly resolutionReason: "ERROR" | "STALE";
 
-  constructor(message: string, options: { cause?: unknown; errorCode?: ErrorCode } = {}) {
+  constructor(
+    message: string,
+    options: {
+      cause?: unknown;
+      errorCode?: ErrorCode;
+      resolutionReason?: "ERROR" | "STALE";
+    } = {},
+  ) {
     super(message, options);
     this.name = "ProviderError";
     this.errorCode = options.errorCode ?? "INTERNAL_SERVER_ERROR";
+    this.resolutionReason = options.resolutionReason ?? "ERROR";
   }
 }

@@ -1,6 +1,7 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { createHealthResponse, parsePlatformTarget, routesDelegatedTo } from "@splitch/contracts";
 import {
+  createWorkerFaultReporter,
   createWorkerObservability,
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
@@ -33,7 +34,7 @@ import { requiredExposureRedemptionClaimsBinding } from "./exposure-redemption-c
 import { ExposureRedemptionClaimDurableObject } from "./exposure-redemption-do";
 import { makeEnvSaltStore } from "./local-salt-store";
 import { exposureTicketKeyFromEnv } from "./local-ticket-key";
-import { KvProvider } from "./provider/kv-provider";
+import { runtimeKvProvider } from "./provider/runtime-provider";
 
 const service = "splitch-evaluation-api";
 
@@ -84,6 +85,13 @@ async function handleRequest(
       ),
     );
   }
+  const exposureRedemptionClaims = requiredExposureRedemptionClaimsBinding(
+    env.EXPOSURE_REDEMPTION_CLAIMS,
+  );
+  const reportPropagationBreach = createWorkerFaultReporter(
+    env,
+    workerObservabilityWithWaitUntil("evaluation-api", ctx),
+  );
   const saltStore = makeEnvSaltStore(env);
   const app = createApp({
     door: authority ? "binding" : "public",
@@ -91,7 +99,9 @@ async function handleRequest(
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(env.CREDENTIAL_STORE),
     rateLimiter: allowLimiter,
     delegationBindings: { "event-ingest-api": env.EVENT_INGEST },
-    provider: new KvProvider(env.CONFIG_STORE),
+    provider: runtimeKvProvider(env, (breach) =>
+      reportPropagationBreach("flag_config_propagation_breach", { ...breach }),
+    ),
     assignmentStore: new KvAssignmentStore(
       env.ASSIGNMENTS_KV,
       env.ASSIGNMENT_STORE_WRITER,
@@ -111,9 +121,7 @@ async function handleRequest(
       fetcher: env.EVENT_INGEST,
       token: env.SPLITCH_EVENT_INGEST_TOKEN,
     }),
-    exposureRedemptionClaims: new DurableExposureRedemptionClaimStore(
-      requiredExposureRedemptionClaimsBinding(env.EXPOSURE_REDEMPTION_CLAIMS),
-    ),
+    exposureRedemptionClaims: new DurableExposureRedemptionClaimStore(exposureRedemptionClaims),
     evaluationCommitSink: makeHttpEvaluationCommitSink({
       endpoint: env.EVENT_INGEST_URL,
       fetcher: env.EVENT_INGEST,

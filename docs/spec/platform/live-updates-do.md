@@ -1,13 +1,13 @@
-# Per-App live-update DO: fan-out, write-through, delta-nudge
+# Per-Environment live-update DO: fan-out, write-through, delta-nudge
 
-One Durable Object per App serializes config writes and fans out delta-nudge signals to subscribed
-control-panel WebSocket clients.
+One Durable Object per `(App, Environment)` serializes config writes and fans out delta-nudge
+signals to subscribed control-panel clients and Evaluation Worker isolates.
 
 ## DO identity and isolation
 
-- DO name: `idFromName(appId)` — one DO per App
-- A WebSocket connection authenticated to App X can attach only to `DO(X)`. This extends the
-  `app_id` isolation boundary (ADR-0018) to the live-update channel.
+- DO name: `getByName(appId + ":" + environmentId)`
+- A connection authenticated to `(App X, Environment Y)` can attach only to `DO(X:Y)`. This
+  extends the App and Environment isolation boundary (ADR-0018/0027) to the live-update channel.
 
 ## Transport: Hibernating WebSocket (ADR-0019)
 
@@ -18,11 +18,11 @@ billing for the full connection duration.
 
 ## Write-through-the-DO
 
-All config writes route through the per-App DO:
+All config writes route through the per-Environment DO:
 
 ```
 Config-write Worker
-  → DO(appId).write(configDelta)
+  → DO(appId, environmentId).write(configDelta)
     → validate invariants (Run immutability, schema shape)
     → commit to D1
     → write-through to KV
@@ -47,18 +47,18 @@ DeltaNudge {
 }
 ```
 
-The DO never learns the config schema. Clients do not apply the delta. On receiving a nudge, the
-client:
+The DO never sends config data. Clients do not apply the delta. On receiving a nudge:
 
-1. Checks if `nudge.version <= cached_version` — if so, skip (self-edit, already have this state)
-2. Invalidates the matching TanStack Query cache key via the query-key factory
-3. Refetches from the read API
+1. Evaluation records the announced version and invalidates the matching Flag Configuration only.
+2. Evaluation refetches the authoritative snapshot through the DO and rejects any version below
+   the announcement as `STALE`.
+3. The control panel invalidates its matching TanStack Query cache key and refetches from the API.
 
 ## Reconnect recovery
 
-On WebSocket reconnect, the client triggers a full invalidate-and-refetch (same path the loader
-runs). No delta-replay log, no last-seen-version bookkeeping. A missed broadcast during a
-reconnect window self-heals with one refetch.
+On reconnect, Evaluation invalidates the whole `(App, Environment)` cache and obtains current
+committed versions before serving. The control panel triggers its existing full
+invalidate-and-refetch. There is no delta-replay log.
 
 ## Scope
 
@@ -69,16 +69,20 @@ mechanism.
 
 ## Seam contract
 
-| Side                          | Responsibility                                                   |
-| ----------------------------- | ---------------------------------------------------------------- |
-| Config-write Worker (caller)  | Passes validated input to DO; surfaces DO error to user          |
-| DO (this seam)                | Validates invariants, commits to D1, writes KV, broadcasts nudge |
-| WebSocket client (subscriber) | Receives nudge, invalidates Query cache key, refetches           |
-| TanStack Query cache          | Sole synced server-state store; authoritative after refetch      |
+| Side                         | Responsibility                                                    |
+| ---------------------------- | ----------------------------------------------------------------- |
+| Config-write Worker (caller) | Passes validated input to DO; surfaces DO error to user           |
+| DO (this seam)               | Validates invariants, commits to D1, writes KV, broadcasts nudge  |
+| Evaluation subscriber        | Tracks version, invalidates Flag cache, reads current DO snapshot |
+| Control-panel subscriber     | Invalidates Query cache key and refetches                         |
+| Evaluation Flag cache        | Cross-request, version-aware cache scoped by App and Environment  |
+| TanStack Query cache         | Control-panel synced server-state store                           |
 
 **Failure contract:** if D1 commit fails → error returned to Worker → no KV write, no broadcast,
-caller retries. If KV write fails after D1 commit → KV miss self-heals via D1 fallback on next
-read. If broadcast fails → clients recover on reconnect via full refetch.
+caller retries. If KV write fails after D1 commit → the authoritative DO read still serves the D1
+snapshot and control-plane reads repair KV. If the subscriber cannot connect or cannot read at least
+the announced version → Evaluation fails loud. A five-second lag emits a propagation breach with
+App, Environment, announced version, served version, and elapsed time.
 
 ## Sources
 

@@ -146,8 +146,8 @@ A single loop revalidates the held evaluations every `revalidateMs` (default 60s
 - Failure → keep serving last-known-good, log loudly every failed tick, and mark subsequently read
   entries `STALE` (`errorCode: PROVIDER_NOT_READY`) until a tick succeeds — degraded is always
   observable, never disguised (ADR-0036).
-- End-to-end freshness is revalidation interval + the accepted ~60s KV propagation window
-  ([five-runtimes.md](./five-runtimes.md), ADR-0009); this client does not try to beat the data
+- End-to-end freshness is the revalidation interval plus the edge's five-second propagation bound
+  ([five-runtimes.md](./five-runtimes.md)); this client does not try to beat the data
   plane's own propagation. The ADR-0019-style WebSocket nudge, when it lands, only triggers an
   early revalidation tick — polling remains the substrate and fallback.
 - `close()` stops the loop; no timers leak.

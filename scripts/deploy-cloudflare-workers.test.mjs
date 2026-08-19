@@ -40,7 +40,7 @@ test("deploys an affected Evaluation Worker without requiring a Control Plane ch
 
 // Evaluation exports the entrypoint Control Plane binds (ADR-0046), so a release
 // touching both must put Evaluation on the wire before Control Plane rebinds it.
-test("deploys an affected Evaluation Worker before its Control Plane caller", () => {
+test("deploys the Control Plane compatibility RPC before Evaluation and final Control Plane", () => {
   assert.deepEqual(
     deploymentCommands(
       "production",
@@ -48,8 +48,8 @@ test("deploys an affected Evaluation Worker before its Control Plane caller", ()
       workspacePackages,
     ),
     [
-      ["run", "deploy:cloudflare:evaluation:production"],
       ["run", "deploy:cloudflare:control-plane-compat:production"],
+      ["run", "deploy:cloudflare:evaluation:production"],
       ["run", "credential-cache:backfill:production"],
       ["run", "deploy:cloudflare:control-panel:production"],
       ["run", "deploy:cloudflare:control-plane:production"],

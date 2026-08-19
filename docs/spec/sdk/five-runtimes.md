@@ -21,11 +21,11 @@ server Workers), and the same flag config. Flags are defined once and consumed e
 
 ## Consistency properties
 
-### Flag config propagation: ~60s window (ADR-0009)
+### Flag Configuration propagation: under five seconds
 
-Flag config is cached in Workers KV with up to ~60s propagation delay. A Start that
-changes assignment config (opens a new Run) may not be visible at all POPs simultaneously.
-During this window:
+Flag Configuration is held in a version-aware Evaluation Worker cache and invalidated by the
+Config Store DO's `DeltaNudge`. A Start that changes assignment config opens a new Run and makes
+the committed snapshot visible at each POP within five seconds. During propagation:
 
 - Some Workers evaluate with Run N config, others with Run N+1 config.
 - Exposures are stamped with the `run_id` the Worker resolved — whichever Run was live in
@@ -33,8 +33,8 @@ During this window:
 - The pipeline dedup handles mixed-Run Exposures correctly (they are separate rows; there
   is no cross-Run contamination because `run_id` is a dedup dimension).
 
-This window is **accepted and self-healing** (ADR-0009, ADR-0009). No SDK-level
-mitigation is required or possible.
+A read below the announced version fails loud instead of serving stale config. A lag of five
+seconds or more emits an actionable propagation breach.
 
 ### Assignment Store propagation: ~60s window (ADR-0009)
 

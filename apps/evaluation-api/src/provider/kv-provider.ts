@@ -1,14 +1,19 @@
 import type { DeltaNudge, ExperimentConfigKV, FlagConfigKV, RunConfigKV } from "@splitch/contracts";
 import {
-  experimentConfigKey,
   ExperimentConfigKVSchema,
-  flagConfigKey,
+  experimentConfigKey,
   FlagConfigKVSchema,
+  flagConfigKey,
   kvEnvelope,
-  runConfigKey,
   RunConfigKVSchema,
+  runConfigKey,
 } from "@splitch/contracts";
 import { FlagConfigCache } from "./cache";
+import type {
+  ConfigUpdateListener,
+  DurableConfigUpdates,
+  EvaluationConfigSnapshot,
+} from "./config-updates";
 import { type ExperimentConfig, type FlagConfig, type Provider, ProviderError } from "./provider";
 import { experimentConfigFromKV, flagConfigFromKV } from "./resolve";
 
@@ -39,6 +44,20 @@ export interface KvReader {
   }>;
 }
 
+export interface PropagationBreach {
+  announcedVersion: number;
+  appId: string;
+  elapsedMs: number;
+  environmentId: string;
+  servedVersion: number;
+}
+
+export interface KvProviderOptions {
+  configUpdates?: Pick<DurableConfigUpdates, "ensureSubscribed" | "readCurrentFlagConfig">;
+  now?: () => number;
+  onPropagationBreach?: (breach: PropagationBreach) => void;
+}
+
 /**
  * Typed envelope parsers. Each wraps `kvEnvelope(payload).safeParse` so the
  * adapter never references zod's types directly (evaluation-api has no zod dep);
@@ -67,26 +86,47 @@ const parseRunConfig = blobParser<RunConfigKV>(kvEnvelope(RunConfigKVSchema));
 
 export class KvProvider implements Provider {
   private readonly cache = new FlagConfigCache();
+  private readonly experimentSnapshots = new Map<
+    string,
+    Pick<EvaluationConfigSnapshot, "experiment" | "run">
+  >();
+  private readonly now: () => number;
 
-  constructor(private readonly kv: KvReader) {}
+  constructor(
+    private readonly kv: KvReader,
+    private readonly options: KvProviderOptions = {},
+  ) {
+    this.now = options.now ?? Date.now;
+  }
 
   async getFlag(appId: string, environmentId: string, flagKey: string): Promise<FlagConfig> {
+    await this.ensureSubscribed(appId, environmentId);
     const key = flagConfigKey(appId, environmentId, flagKey);
 
     const cached = this.cache.get(key);
     if (cached !== undefined) {
-      return cached;
+      return cached.config;
     }
 
     // ONE read: experimentId is denormalized on the flag blob, so flag ->
     // experiment never needs a second KV get here.
-    const blob = await this.readBlob(key, parseFlagConfig, `flag ${flagKey}`, "FLAG_NOT_FOUND");
-    const config = flagConfigFromKV(appId, blob);
-    this.cache.set(key, config);
+    const fresh = await this.readFreshFlagBlob(
+      appId,
+      environmentId,
+      flagKey,
+      key,
+      `flag ${flagKey}`,
+      "FLAG_NOT_FOUND",
+    );
+    const config = flagConfigFromKV(appId, fresh.flag);
+    if (!this.cache.set(key, fresh.flag.id, fresh.version, config)) {
+      throw this.staleReadError(appId, environmentId, fresh.flag.id, fresh.version);
+    }
     return config;
   }
 
   async getFlags(appId: string, environmentId: string): Promise<FlagConfig[]> {
+    await this.ensureSubscribed(appId, environmentId);
     const prefix = `app:${appId}:${environmentId}:flag:`;
     const keys = await this.listAllKeys(prefix);
 
@@ -94,11 +134,14 @@ export class KvProvider implements Provider {
       keys.map(async ({ name }) => {
         const cached = this.cache.get(name);
         if (cached !== undefined) {
-          return cached;
+          return cached.config;
         }
-        const blob = await this.readBlob(name, parseFlagConfig, name);
-        const config = flagConfigFromKV(appId, blob);
-        this.cache.set(name, config);
+        const flagKey = name.slice(prefix.length);
+        const fresh = await this.readFreshFlagBlob(appId, environmentId, flagKey, name, name);
+        const config = flagConfigFromKV(appId, fresh.flag);
+        if (!this.cache.set(name, fresh.flag.id, fresh.version, config)) {
+          throw this.staleReadError(appId, environmentId, fresh.flag.id, fresh.version);
+        }
         return config;
       }),
     );
@@ -109,8 +152,13 @@ export class KvProvider implements Provider {
     environmentId: string,
     experimentId: string,
   ): Promise<ExperimentConfig> {
+    const key = experimentConfigKey(appId, environmentId, experimentId);
+    const current = this.experimentSnapshots.get(key);
+    if (current?.experiment !== null && current?.experiment !== undefined) {
+      return experimentConfigFromKV(appId, current.experiment, current.run);
+    }
     const experiment = await this.readBlob(
-      experimentConfigKey(appId, environmentId, experimentId),
+      key,
       parseExperimentConfig,
       `experiment ${experimentId}`,
     );
@@ -127,9 +175,34 @@ export class KvProvider implements Provider {
     return experimentConfigFromKV(appId, experiment, run);
   }
 
-  /** Invalidate one App's cached flag config on a WebSocket DeltaNudge (ADR-0019). */
-  invalidate(appId: string, nudge: DeltaNudge): void {
-    this.cache.invalidateApp(appId, nudge);
+  invalidate(appId: string, environmentId: string, nudge: DeltaNudge): void {
+    this.cache.invalidate(appId, environmentId, nudge, this.now());
+  }
+
+  private async ensureSubscribed(appId: string, environmentId: string): Promise<void> {
+    const updates = this.options.configUpdates;
+    if (updates === undefined) return;
+
+    const listener: ConfigUpdateListener = {
+      onNudge: (nudge) => this.invalidate(appId, environmentId, nudge),
+      onReconnect: () => this.invalidateEnvironment(appId, environmentId),
+    };
+    try {
+      await updates.ensureSubscribed(appId, environmentId, listener);
+    } catch (cause) {
+      throw new ProviderError("Flag Configuration live updates are unavailable", {
+        cause,
+        errorCode: "SERVICE_UNAVAILABLE",
+      });
+    }
+  }
+
+  private invalidateEnvironment(appId: string, environmentId: string): void {
+    this.cache.invalidateEnvironment(appId, environmentId);
+    const prefix = `app:${appId}:${environmentId}:experiment:`;
+    for (const key of this.experimentSnapshots.keys()) {
+      if (key.startsWith(prefix)) this.experimentSnapshots.delete(key);
+    }
   }
 
   /**
@@ -180,4 +253,116 @@ export class KvProvider implements Provider {
     }
     return parsed.value;
   }
+
+  private async readFreshFlagBlob(
+    appId: string,
+    environmentId: string,
+    flagKey: string,
+    key: string,
+    label: string,
+    missCode: ProviderError["errorCode"] = "INTERNAL_SERVER_ERROR",
+  ): Promise<{ flag: FlagConfigKV; version: number }> {
+    const updates = this.options.configUpdates;
+    if (updates === undefined) {
+      return { flag: await this.readBlob(key, parseFlagConfig, label, missCode), version: 0 };
+    }
+
+    let served: FlagConfigKV | undefined;
+    let kvFailure: unknown;
+    try {
+      served = await this.readBlob(key, parseFlagConfig, label, missCode);
+    } catch (cause) {
+      kvFailure = cause;
+    }
+
+    let current: EvaluationConfigSnapshot | null;
+    try {
+      current = await updates.readCurrentFlagConfig(appId, environmentId, flagKey);
+    } catch (cause) {
+      throw this.authoritativeReadError(appId, environmentId, served, cause);
+    }
+    if (current === null) {
+      throw new ProviderError(`Flag Configuration ${appId}/${environmentId}/${flagKey} is gone`, {
+        cause: kvFailure,
+        errorCode: "FLAG_NOT_FOUND",
+      });
+    }
+
+    const announced = this.cache.announcedVersion(appId, environmentId, current.flag.id);
+    const servedVersion = this.cache.servedVersion(appId, environmentId, current.flag.id) ?? 0;
+    const minimumVersion = Math.max(servedVersion, announced?.version ?? 0);
+    if (current.version < minimumVersion) {
+      throw this.staleReadError(appId, environmentId, current.flag.id, current.version);
+    }
+    this.rememberExperimentSnapshot(appId, environmentId, served, current);
+    return { flag: current.flag, version: current.version };
+  }
+
+  private authoritativeReadError(
+    appId: string,
+    environmentId: string,
+    served: FlagConfigKV | undefined,
+    cause: unknown,
+  ): ProviderError {
+    if (served !== undefined && this.cache.announcedVersion(appId, environmentId, served.id)) {
+      return this.staleReadError(
+        appId,
+        environmentId,
+        served.id,
+        this.cache.servedVersion(appId, environmentId, served.id) ?? 0,
+        cause,
+      );
+    }
+    return new ProviderError("Authoritative Flag Configuration read is unavailable", {
+      cause,
+      errorCode: "SERVICE_UNAVAILABLE",
+    });
+  }
+
+  private rememberExperimentSnapshot(
+    appId: string,
+    environmentId: string,
+    served: FlagConfigKV | undefined,
+    current: EvaluationConfigSnapshot,
+  ): void {
+    if (served?.experimentId && served.experimentId !== current.flag.experimentId) {
+      this.experimentSnapshots.delete(
+        experimentConfigKey(appId, environmentId, served.experimentId),
+      );
+    }
+    if (current.experiment !== null) {
+      this.experimentSnapshots.set(
+        experimentConfigKey(appId, environmentId, current.experiment.id),
+        { experiment: current.experiment, run: current.run },
+      );
+    }
+  }
+
+  private staleReadError(
+    appId: string,
+    environmentId: string,
+    flagId: string,
+    servedVersion: number,
+    cause?: unknown,
+  ): ProviderError {
+    const announced = this.cache.announcedVersion(appId, environmentId, flagId);
+    const announcedVersion = announced?.version ?? servedVersion;
+    const elapsedMs = announced === undefined ? 0 : Math.max(0, this.now() - announced.announcedAt);
+    if (announced !== undefined && elapsedMs >= PROPAGATION_BREACH_MS) {
+      this.options.onPropagationBreach?.({
+        appId,
+        environmentId,
+        announcedVersion,
+        servedVersion,
+        elapsedMs,
+      });
+    }
+    return new ProviderError(
+      `Stale Flag Configuration ${appId}/${environmentId}/${flagId}: ` +
+        `announced ${announcedVersion}, served ${servedVersion}, elapsed ${elapsedMs}ms`,
+      { cause, errorCode: "SERVICE_UNAVAILABLE", resolutionReason: "STALE" },
+    );
+  }
 }
+
+const PROPAGATION_BREACH_MS = 5_000;

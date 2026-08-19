@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { deploymentCommands } from "./deploy-cloudflare-workers.mjs";
-import { parseWranglerConfigFile } from "./lib/wrangler-config.mjs";
 import { readWorkspacePackages } from "./lib/production-deploy-plan.mjs";
+import { parseWranglerConfigFile } from "./lib/wrangler-config.mjs";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspacePackages = readWorkspacePackages(repoRoot);
@@ -25,30 +25,35 @@ function serviceEdges() {
   const bindings = new Map();
 
   for (const entry of readdirSync(join(repoRoot, "apps"), { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    let config;
-    try {
-      config = parseWranglerConfigFile(join(repoRoot, "apps", entry.name, "wrangler.jsonc"));
-    } catch (error) {
-      if (error?.code === "ENOENT") continue;
-      throw error;
-    }
-    const packageName = JSON.parse(
-      readFileSync(join(repoRoot, "apps", entry.name, "package.json"), "utf8"),
-    ).name;
+    const worker = readWorker(entry);
+    if (worker === null) continue;
     // Every env alias of the same Worker maps back to the one package that ships it.
-    for (const name of workerNames(config)) workerToPackage.set(name, packageName);
-    bindings.set(packageName, collectServices(config));
+    for (const name of workerNames(worker.config)) workerToPackage.set(name, worker.packageName);
+    bindings.set(worker.packageName, collectServices(worker.config));
   }
 
-  const edges = [];
-  for (const [caller, services] of bindings) {
-    for (const service of services) {
-      const callee = workerToPackage.get(service);
-      if (callee && callee !== caller) edges.push({ caller, callee });
-    }
+  return [...bindings].flatMap(([caller, services]) =>
+    [...services].flatMap((service) => workerBindingEdge(caller, service, workerToPackage)),
+  );
+}
+
+function workerBindingEdge(caller, service, workerToPackage) {
+  const callee = workerToPackage.get(service);
+  return callee && callee !== caller ? [{ caller, callee }] : [];
+}
+
+function readWorker(entry) {
+  if (!entry.isDirectory()) return null;
+  const appRoot = join(repoRoot, "apps", entry.name);
+  try {
+    return {
+      config: parseWranglerConfigFile(join(appRoot, "wrangler.jsonc")),
+      packageName: JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")).name,
+    };
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
   }
-  return edges;
 }
 
 function workerNames(config) {
@@ -60,17 +65,11 @@ function workerNames(config) {
   return names;
 }
 
-function collectServices(node, found = new Set()) {
-  if (Array.isArray(node)) {
-    for (const item of node) collectServices(item, found);
-    return found;
-  }
-  if (!node || typeof node !== "object") return found;
-  for (const [key, value] of Object.entries(node)) {
-    if (key === "services" && Array.isArray(value)) {
-      for (const binding of value) if (binding?.service) found.add(binding.service);
-    } else {
-      collectServices(value, found);
+function collectServices(config) {
+  const found = new Set();
+  for (const target of [config, ...Object.values(config.env ?? {})]) {
+    for (const binding of target?.services ?? []) {
+      if (binding?.service) found.add(binding.service);
     }
   }
   return found;
@@ -117,12 +116,27 @@ function packageScripts() {
   return cachedScripts;
 }
 
+function fullFleetOrder(environment) {
+  const chain = packageScripts()[`deploy:cloudflare:${environment}`].split(" && ");
+  const order = [];
+  for (const step of chain) {
+    const script = step.replace(/^pnpm /, "");
+    order.push(...packagesDeployedBy(script));
+    if (!script.startsWith("deploy:cloudflare:remaining")) continue;
+    const body = packageScripts()[script] ?? "";
+    for (const name of deployable) {
+      if (!body.includes(`--filter=!${name}`) && !order.includes(name)) order.push(name);
+    }
+  }
+  return order;
+}
+
 for (const environment of ["production", "shared-preview"]) {
   test(`${environment} selective deploy orders every service callee before its caller`, () => {
     const order = deployOrder(deploymentCommands(environment, deployable, workspacePackages));
 
     for (const { caller, callee } of serviceEdges()) {
-      const callerAt = order.indexOf(caller);
+      const callerAt = order.lastIndexOf(caller);
       const calleeAt = order.indexOf(callee);
       assert.notEqual(calleeAt, -1, `${callee} is bound by ${caller} but never deployed`);
       assert.notEqual(callerAt, -1, `${caller} was never deployed`);
@@ -134,22 +148,10 @@ for (const environment of ["production", "shared-preview"]) {
   });
 
   test(`${environment} full-fleet script orders every service callee before its caller`, () => {
-    const chain = packageScripts()[`deploy:cloudflare:${environment}`].split(" && ");
-    const order = [];
-    for (const step of chain) {
-      const script = step.replace(/^pnpm /, "");
-      order.push(...packagesDeployedBy(script));
-      // `remaining` is a negated glob: whatever no earlier step deployed lands here.
-      if (script.startsWith("deploy:cloudflare:remaining")) {
-        const body = packageScripts()[script] ?? "";
-        for (const name of deployable) {
-          if (!body.includes(`--filter=!${name}`) && !order.includes(name)) order.push(name);
-        }
-      }
-    }
+    const order = fullFleetOrder(environment);
 
     for (const { caller, callee } of serviceEdges()) {
-      const callerAt = order.indexOf(caller);
+      const callerAt = order.lastIndexOf(caller);
       const calleeAt = order.indexOf(callee);
       assert.ok(
         calleeAt !== -1 && callerAt !== -1 && calleeAt < callerAt,

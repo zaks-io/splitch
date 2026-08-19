@@ -53,7 +53,7 @@ describe("KvProvider fail-loud (malformed KV never yields a half-valid config)",
     // The payload satisfies today's inner schema; only the version is unknown.
     // The version is GATED, not merely bounded below, so this must fail loud — a
     // schemaVersion:0 floor test would not catch this regression.
-    const kv = new FakeKv().put(KEY, flagConfigKV(), 2);
+    const kv = new FakeKv().put(KEY, flagConfigKV(), 999);
     await expectProviderError(new KvProvider(kv).getFlag("app-A", "env-1", "f"));
   });
 

@@ -23,10 +23,10 @@ const EVENT_INGEST = "@splitch/event-ingest-api";
 const ORDERED_PREREQUISITES = [
   [EVENT_INGEST, "event-ingest"],
   [ANALYSIS, "analysis"],
-  [EVALUATION, "evaluation"],
 ];
 const SPECIAL_WORKERS = new Set([
   ...ORDERED_PREREQUISITES.map(([packageName]) => packageName),
+  EVALUATION,
   CONTROL_PANEL,
   CONTROL_PLANE,
 ]);
@@ -50,9 +50,18 @@ export function deploymentCommands(environment, requestedPackages, workspacePack
   const requiresControlPanelCutover = selected.has(CONTROL_PANEL) || selected.has(CONTROL_PLANE);
   const commands = selectedPrerequisiteCommands(environment, selected, ORDERED_PREREQUISITES);
 
-  // Evaluation reads both legacy entries and terminal markers, so deploy it before
-  // the compatible writer runs a backfill that can race a live revocation.
-  commands.push(...controlPlaneMigrationCommands(environment, requiresControlPanelCutover));
+  // Evaluation binds the Config Store DO while Control Plane binds Evaluation's
+  // named entrypoint. When both change, the compatibility deploy supplies the
+  // new DO RPC first, Evaluation moves second, and final Control Plane moves last.
+  if (requiresControlPanelCutover) {
+    commands.push(["run", `deploy:cloudflare:control-plane-compat:${environment}`]);
+  }
+  if (selected.has(EVALUATION)) {
+    commands.push(["run", `deploy:cloudflare:evaluation:${environment}`]);
+  }
+  if (requiresControlPanelCutover) {
+    commands.push(["run", `credential-cache:backfill:${environment}`]);
+  }
 
   if (requiresControlPanelCutover) {
     commands.push(
@@ -76,15 +85,6 @@ export function deploymentCommands(environment, requestedPackages, workspacePack
   }
 
   return commands;
-}
-
-function controlPlaneMigrationCommands(environment, required) {
-  return required
-    ? [
-        ["run", `deploy:cloudflare:control-plane-compat:${environment}`],
-        ["run", `credential-cache:backfill:${environment}`],
-      ]
-    : [];
 }
 
 function selectedPrerequisiteCommands(environment, selected, prerequisites) {

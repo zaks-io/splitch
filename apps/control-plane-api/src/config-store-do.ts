@@ -2,12 +2,16 @@ import { DurableObject } from "cloudflare:workers";
 import {
   authorizesLiveUpdateConnection,
   type DeltaNudge,
+  type ExperimentConfigKV,
+  type FlagConfigKV,
   type LiveUpdateAuthorizationContext,
   type LiveUpdateConnectionContext,
   parseLiveUpdateConnectionContext,
+  type RunConfigKV,
 } from "@splitch/contracts";
-import { createRepository } from "@splitch/db";
+import { appScope, createRepository, envScope } from "@splitch/db";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
+import { buildSnapshotFromD1 } from "./config-store-shared";
 import type { ControlPlaneApiEnv } from "./env";
 
 export interface ConfigStoreDurableObjectNamespace {
@@ -16,7 +20,23 @@ export interface ConfigStoreDurableObjectNamespace {
 
 interface ConfigStoreDurableObjectStub extends ConfigStoreWriter {
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  readFlagConfigForEvaluation(
+    input: EvaluationFlagConfigRead,
+  ): Promise<EvaluationFlagConfigSnapshot | null>;
   setLiveUpdatesAvailable(available: boolean): Promise<void>;
+}
+
+export interface EvaluationFlagConfigRead {
+  appId: string;
+  environmentId: string;
+  flagKey: string;
+}
+
+export interface EvaluationFlagConfigSnapshot {
+  experiment: ExperimentConfigKV | null;
+  flag: FlagConfigKV;
+  run: RunConfigKV | null;
+  version: number;
 }
 
 interface ConfigStoreLiveUpdates {
@@ -53,6 +73,27 @@ export class ConfigStoreDurableObject
   extends DurableObject<ControlPlaneApiEnv>
   implements ConfigStoreWriter
 {
+  async readFlagConfigForEvaluation(
+    input: EvaluationFlagConfigRead,
+  ): Promise<EvaluationFlagConfigSnapshot | null> {
+    const repo = createRepository(this.env.DB);
+    const flag = await repo.flags.getFlagByKey(appScope(input.appId), input.flagKey);
+    if (!flag) return null;
+    const snapshot = await buildSnapshotFromD1(
+      repo,
+      envScope(input.appId, input.environmentId),
+      flag.id,
+    );
+    return snapshot === null
+      ? null
+      : {
+          flag: snapshot.flag,
+          experiment: snapshot.experiment,
+          run: snapshot.run,
+          version: snapshot.version,
+        };
+  }
+
   readFlagConfig(
     input: Parameters<ConfigStoreWriter["readFlagConfig"]>[0],
   ): ReturnType<ConfigStoreWriter["readFlagConfig"]> {

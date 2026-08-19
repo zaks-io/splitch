@@ -21,6 +21,20 @@ describe("Evaluation Worker service bindings", () => {
     ]);
   });
 
+  it.each(targets)("subscribes to the Config Store DO for %s", (targetName, target) => {
+    const binding = target?.durable_objects?.bindings?.find(
+      (candidate) => candidate.name === "CONFIG_STORE_WRITER",
+    );
+    expect(binding).toEqual({
+      name: "CONFIG_STORE_WRITER",
+      class_name: "ConfigStoreDurableObject",
+      script_name:
+        targetName === "shared-preview"
+          ? "splitch-control-plane-api-shared-preview"
+          : "splitch-control-plane-api",
+    });
+  });
+
   /**
    * The binding is shared, so the entrypoint behind it has to answer every sink
    * this Worker addresses. A second binding would only give the same caller a
@@ -84,6 +98,9 @@ function stripComments(source: string): string {
 }
 
 interface WranglerTarget {
+  durable_objects?: {
+    bindings?: Array<{ name?: string; class_name?: string; script_name?: string }>;
+  };
   env?: Record<string, WranglerTarget | undefined>;
   services?: Array<{ binding?: string; service?: string; entrypoint?: string }>;
 }

@@ -32,7 +32,8 @@ The Worker executes in this order for every `evaluate` call:
 
 ```
 1. Validate credential (Client Key via KV)
-2. Load Provider flag config for flagKey (KV cache; ~60s propagation window)
+2. Load Provider Flag Configuration for `flagKey` (version-aware cache; committed changes
+   propagate within five seconds)
 3. Determine if flagKey is controlled by a live Experiment; get experimentId and liveRunId
 4. Validate request idType against the Experiment's pinned idType
 5. held = AssignmentStore.getAll(appId, validatedIdType, targetingKey)   [KV read, edge-local, all experiments]

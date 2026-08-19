@@ -122,6 +122,7 @@ const DURABLE_OBJECT_ONLY: Record<string, string> = {
   ctx: "DurableObjectState the base class assigns",
   env: "bindings the base class assigns",
   fetch: "WebSocket upgrade only; refuses any other request with 426",
+  readFlagConfigForEvaluation: "reads the committed Flag Configuration snapshot; no D1 write",
   webSocketMessage: "revalidates the socket's session",
   webSocketClose: "reschedules the expiry alarm",
   webSocketError: "no-op",

@@ -1,60 +1,83 @@
 import type { DeltaNudge } from "@splitch/contracts";
 import type { FlagConfig } from "./provider";
 
-/**
- * The Provider's ONLY state: an invalidatable cache of resolved flag config
- * (ADR-0007). Entries are keyed by the full app-scoped KV key, so an entry for
- * App A can never be returned for App B — tenant isolation rides on the key.
- *
- * Draft exclusion is an UPSTREAM invariant, not enforced here: KV only ever holds
- * live flag config (drafts live in D1 until promoted), so every value the Provider
- * reads and caches is already live. The cache does not itself inspect liveness —
- * it caches what the KV read produced.
- *
- * A WebSocket DeltaNudge (ADR-0019) invalidates the affected App's entries so the
- * next read re-fetches. The DO is per-App, so the nudge's App is implied by the
- * connection and passed in by the caller.
- */
-export class FlagConfigCache {
-  private readonly entries = new Map<string, FlagConfig>();
+export interface CachedFlagConfig {
+  config: FlagConfig;
+  flagId: string;
+  version: number;
+}
 
-  get(kvKey: string): FlagConfig | undefined {
+export interface AnnouncedFlagVersion {
+  announcedAt: number;
+  version: number;
+}
+
+/** Isolate-wide, version-aware Flag Configuration cache. */
+export class FlagConfigCache {
+  private readonly entries = new Map<string, CachedFlagConfig>();
+  private readonly announcements = new Map<string, AnnouncedFlagVersion>();
+  private readonly servedVersions = new Map<string, number>();
+
+  get(kvKey: string): CachedFlagConfig | undefined {
     return this.entries.get(kvKey);
   }
 
-  /**
-   * Cache a resolved FlagConfig under its app-scoped KV key. The cached value is
-   * whatever the KV read produced; since KV holds only live config, only live
-   * config is ever cached (draft exclusion is the writer's invariant, above).
-   */
-  set(kvKey: string, config: FlagConfig): void {
-    this.entries.set(kvKey, config);
+  set(kvKey: string, flagId: string, version: number, config: FlagConfig): boolean {
+    const announced = this.announcedVersion(config.appId, config.environmentId, flagId);
+    if (announced !== undefined && version < announced.version) {
+      return false;
+    }
+    this.entries.set(kvKey, { config, flagId, version });
+    this.servedVersions.set(
+      flagAnnouncementKey(config.appId, config.environmentId, flagId),
+      version,
+    );
+    return true;
   }
 
-  /**
-   * Invalidate every entry for one App on a DeltaNudge. The DO that broadcasts the
-   * nudge is per-App, so `appId` comes from the WebSocket connection, not the
-   * nudge body (which is schema-opaque and carries only the changed entity id).
-   * Any `config.changed` nudge re-fetches the App's config on next read; we do not
-   * try to map an entity id to individual flag keys (the spec invalidates at App
-   * granularity, then re-fetches).
-   */
-  invalidateApp(appId: string, _nudge: DeltaNudge): void {
-    const prefix = `app:${appId}:`;
-    for (const key of this.entries.keys()) {
-      if (key.startsWith(prefix)) {
-        this.entries.delete(key);
-      }
+  invalidate(appId: string, environmentId: string, nudge: DeltaNudge, announcedAt: number): void {
+    if (nudge.entity !== "flag") return;
+
+    const announcementKey = flagAnnouncementKey(appId, environmentId, nudge.id);
+    const existing = this.announcements.get(announcementKey);
+    if (existing === undefined || nudge.version >= existing.version) {
+      this.announcements.set(announcementKey, { version: nudge.version, announcedAt });
+    }
+
+    const prefix = environmentPrefix(appId, environmentId);
+    for (const [key, entry] of this.entries) {
+      if (key.startsWith(prefix) && entry.flagId === nudge.id) this.entries.delete(key);
     }
   }
 
-  /** Drop a single entry by its app-scoped KV key. */
-  invalidateKey(kvKey: string): void {
-    this.entries.delete(kvKey);
+  invalidateEnvironment(appId: string, environmentId: string): void {
+    const prefix = environmentPrefix(appId, environmentId);
+    for (const key of this.entries.keys()) {
+      if (key.startsWith(prefix)) this.entries.delete(key);
+    }
   }
 
-  /** Test/observability aid: number of cached entries. */
+  announcedVersion(
+    appId: string,
+    environmentId: string,
+    flagId: string,
+  ): AnnouncedFlagVersion | undefined {
+    return this.announcements.get(flagAnnouncementKey(appId, environmentId, flagId));
+  }
+
+  servedVersion(appId: string, environmentId: string, flagId: string): number | undefined {
+    return this.servedVersions.get(flagAnnouncementKey(appId, environmentId, flagId));
+  }
+
   get size(): number {
     return this.entries.size;
   }
+}
+
+function environmentPrefix(appId: string, environmentId: string): string {
+  return `app:${appId}:${environmentId}:`;
+}
+
+function flagAnnouncementKey(appId: string, environmentId: string, flagId: string): string {
+  return `${appId}\u0000${environmentId}\u0000${flagId}`;
 }

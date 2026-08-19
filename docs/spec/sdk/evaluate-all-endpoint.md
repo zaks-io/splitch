@@ -110,7 +110,8 @@ commit step removed):
 
 ```
 1. Validate credential (KV); resolve app_id + environment_id from it
-2. Load Provider config for ALL Flags in the Environment (KV; ~60s propagation window)
+2. Load Provider config for ALL Flags in the Environment (version-aware cache; committed changes
+   propagate within five seconds)
 3. held = AssignmentStore.getAll(appId, idType, targetingKey)     [ONE read for all Experiments]
 4. For each Flag: resolve via the SAME evaluate-path resolver as `evaluate`
      - holdover in `held` -> replay variantName verbatim; no ticket
