@@ -4,7 +4,7 @@ import {
   assignmentWriterPutPort,
   type HoldoverWriteOutboxEnv,
 } from "./holdover-write-outbox";
-import { runHoldoverWriteAlarm } from "./holdover-write-outbox-core";
+import { runHoldoverWriteAlarm } from "./holdover-write-outbox-ensure";
 import { handleHoldoverWriteOutboxFetch } from "./holdover-write-outbox-fetch";
 
 /**
@@ -33,6 +33,7 @@ export class HoldoverWriteOutboxDurableObject extends DurableObject<HoldoverWrit
       console,
       Date.now(),
       appSuppressionFromKv(this.env.ASSIGNMENTS_KV),
+      this.env.HOLDOVER_WRITE_APP_INVENTORY,
     );
   }
 

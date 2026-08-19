@@ -1,10 +1,9 @@
 /**
  * Binding-door deletion consumer for the holdover-write outbox (SPL-346).
  *
- * App delete (no entity query): suppress App-wide pending/alarm puts via KV
- * tombstone, then purge Entity outboxes discovered from Assignment Store KV.
- * Entity delete (idType + targetingKeyHash + deleteBeforeTs): cutoff-aware
- * suppress+purge handshake on that Entity's outbox DO.
+ * App delete: durable App inventory coordinator — suppress first, purge every
+ * registered Entity outbox (pending/completed/poisoned), mark complete.
+ * Entity delete: cutoff-aware suppress+purge on that Entity's outbox DO.
  *
  * @module
  */
@@ -12,16 +11,17 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import type { AssignmentKv } from "./assignment-store";
+import type { HoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
 import {
-  purgeAppHoldoverWriteOutboxes,
+  runAppHoldoverWriteDeletion,
   suppressAndPurgeEntityHoldoverWriteOutbox,
-  suppressAppHoldoverWriteOutbox,
 } from "./holdover-write-deletion";
 import type { HoldoverWriteOutboxNamespace } from "./holdover-write-outbox";
 
 export interface HoldoverWriteOutboxCleanupDeps {
   readonly assignmentsKv: AssignmentKv;
   readonly holdoverWriteOutbox: HoldoverWriteOutboxNamespace;
+  readonly holdoverWriteAppInventory: HoldoverWriteAppInventoryClient;
 }
 
 export function makeHoldoverWriteOutboxCleanupHandler(deps: HoldoverWriteOutboxCleanupDeps) {
@@ -40,17 +40,12 @@ async function runHoldoverWriteOutboxCleanup(
   scope: CleanupScope,
 ): Promise<void> {
   if (scope.kind === "app") {
-    await suppressAppHoldoverWriteOutbox(deps.assignmentsKv, scope.appId);
-    if (typeof deps.assignmentsKv.list === "function") {
-      await purgeAppHoldoverWriteOutboxes(
-        deps.assignmentsKv as AssignmentKv & {
-          list(options: { prefix: string }): Promise<{ keys: { name: string }[] }>;
-        },
-        deps.holdoverWriteOutbox,
-        scope.appId,
-        scope.deleteBeforeTsMs,
-      );
-    }
+    await runAppHoldoverWriteDeletion(
+      deps.holdoverWriteAppInventory,
+      deps.holdoverWriteOutbox,
+      scope.appId,
+      scope.deleteBeforeTsMs,
+    );
     return;
   }
   await suppressAndPurgeEntityHoldoverWriteOutbox(deps.holdoverWriteOutbox, {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { RecordingKv } from "./assignment-store-test-fixtures";
+import { MemoryHoldoverWriteAppInventoryClient } from "../sdk-route-binding-cleanup-fixture";
 import { makeHoldoverWriteOutboxCleanupHandler } from "./holdover-write-outbox-cleanup";
-import { appHoldoverWriteSuppressKey } from "./holdover-write-outbox-core";
 
 function handlerArgs(
   input: unknown,
@@ -17,15 +17,16 @@ function handlerArgs(
       actorId: "user_1",
       orgId: "org_1",
       appId,
-      environmentId: null,
     } as never,
     requestId: "req-1",
   };
 }
 
 describe("holdover write outbox cleanup handler", () => {
-  it("App deletion writes the App suppress tombstone", async () => {
+  it("App deletion suppresses via inventory then purges registered Entity outboxes", async () => {
     const kv = new RecordingKv();
+    const inventory = new MemoryHoldoverWriteAppInventoryClient();
+    await inventory.registerEntity("app-A", { idType: "user", targetingKeyHash: "hash-poison" });
     const paths: string[] = [];
     const handler = makeHoldoverWriteOutboxCleanupHandler({
       assignmentsKv: kv,
@@ -42,14 +43,50 @@ describe("holdover write outbox cleanup handler", () => {
           };
         },
       },
+      holdoverWriteAppInventory: inventory,
     });
 
     const response = await handler(handlerArgs({ params: { appId: "app-A" }, query: {} }, "app-A"));
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ deleted: true });
-    expect(kv.raw(appHoldoverWriteSuppressKey("app-A"))).toBe("1");
-    expect(paths).toEqual([]);
+    expect(paths).toEqual(["/delete"]);
+    expect(await inventory.status("app-A")).toMatchObject({
+      suppressed: true,
+      deletionComplete: true,
+      entities: [],
+    });
+    // begin-deletion on the real DO also writes KV; memory inventory does not —
+    // production boundary covers KV. App coordinator no longer requires a prior
+    // standalone KV suppress call from the handler.
+  });
+
+  it("App deletion resume is a no-op once inventory marks complete", async () => {
+    const inventory = new MemoryHoldoverWriteAppInventoryClient();
+    await inventory.beginDeletion("app-A", 1_000);
+    await inventory.completeDeletion("app-A");
+    let deleteCalls = 0;
+    const handler = makeHoldoverWriteOutboxCleanupHandler({
+      assignmentsKv: new RecordingKv(),
+      holdoverWriteOutbox: {
+        idFromName(name) {
+          return name as unknown as DurableObjectId;
+        },
+        get() {
+          return {
+            async fetch() {
+              deleteCalls += 1;
+              return Response.json({ ok: true });
+            },
+          };
+        },
+      },
+      holdoverWriteAppInventory: inventory,
+    });
+
+    const response = await handler(handlerArgs({ params: { appId: "app-A" }, query: {} }, "app-A"));
+    expect(response.status).toBe(200);
+    expect(deleteCalls).toBe(0);
   });
 
   it("Entity deletion posts /delete handshake with deleteBeforeTs", async () => {
@@ -72,6 +109,7 @@ describe("holdover write outbox cleanup handler", () => {
           };
         },
       },
+      holdoverWriteAppInventory: new MemoryHoldoverWriteAppInventoryClient(),
     });
 
     const response = await handler(
@@ -109,6 +147,7 @@ describe("holdover write outbox cleanup handler", () => {
           };
         },
       },
+      holdoverWriteAppInventory: new MemoryHoldoverWriteAppInventoryClient(),
     });
 
     const response = await handler(
@@ -138,6 +177,7 @@ describe("holdover write outbox cleanup handler", () => {
           };
         },
       },
+      holdoverWriteAppInventory: new MemoryHoldoverWriteAppInventoryClient(),
     });
 
     const response = await handler(handlerArgs({ params: { appId: "app-A" }, query: {} }, "app-B"));

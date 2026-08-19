@@ -22,8 +22,13 @@ import {
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
 import { AssignmentStoreDurableObject } from "./assignment/assignment-store-do";
+import { DurableHoldoverWriteAppInventoryClient } from "./assignment/holdover-write-app-inventory-client";
+import { HoldoverWriteAppInventoryDurableObject } from "./assignment/holdover-write-app-inventory-do";
 import { DurableHoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
-import { requiredHoldoverWriteOutboxBinding } from "./assignment/holdover-write-outbox-binding";
+import {
+  requiredHoldoverWriteAppInventoryBinding,
+  requiredHoldoverWriteOutboxBinding,
+} from "./assignment/holdover-write-outbox-binding";
 import { HoldoverWriteOutboxDurableObject } from "./assignment/holdover-write-outbox-do";
 import { KvAssignmentStore } from "./assignment/kv-assignment-store";
 import {
@@ -102,6 +107,9 @@ async function handleRequest(
     env.EXPOSURE_REDEMPTION_CLAIMS,
   );
   const holdoverWriteOutbox = requiredHoldoverWriteOutboxBinding(env.HOLDOVER_WRITE_OUTBOX);
+  const holdoverWriteAppInventory = new DurableHoldoverWriteAppInventoryClient(
+    requiredHoldoverWriteAppInventoryBinding(env.HOLDOVER_WRITE_APP_INVENTORY),
+  );
   const reportPropagationBreach = createWorkerFaultReporter(
     env,
     workerObservabilityWithWaitUntil("evaluation-api", ctx),
@@ -127,6 +135,7 @@ async function handleRequest(
     holdoverWriteOutboxCleanup: {
       assignmentsKv: env.ASSIGNMENTS_KV,
       holdoverWriteOutbox,
+      holdoverWriteAppInventory,
     },
     exposureAssembly: {
       saltStore,
@@ -197,6 +206,7 @@ function requestAuthResolver(
 export {
   AssignmentStoreDurableObject,
   ExposureRedemptionClaimDurableObject,
+  HoldoverWriteAppInventoryDurableObject,
   HoldoverWriteOutboxDurableObject,
   McpDelegationReplayDurableObject,
 };

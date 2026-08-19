@@ -9,7 +9,6 @@ import { DirectHoldoverWriteCoordinator } from "./holdover-write-outbox";
 import { MemoryHoldoverWriteCoordinator } from "./holdover-write-outbox-memory";
 import {
   deleteEntityOutbox,
-  ensureHoldoverWriteJob,
   HOLDOVER_WRITE_ENTITY_SUPPRESSED_KEY,
   HOLDOVER_WRITE_JOB_PREFIX,
   HOLDOVER_WRITE_MAX_ATTEMPTS,
@@ -19,10 +18,10 @@ import {
   holdoverWriteOutboxName,
   holdoverWriteRetryDelayMs,
   purgeEntityOutboxState,
-  runHoldoverWriteAlarm,
   scopedHoldoverWriteLog,
   suppressEntityOutbox,
 } from "./holdover-write-outbox-core";
+import { ensureHoldoverWriteJob, runHoldoverWriteAlarm } from "./holdover-write-outbox-ensure";
 
 const basePut: HashedAssignmentPutInput = {
   appId: "app-A",

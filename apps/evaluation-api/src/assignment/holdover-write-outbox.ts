@@ -1,5 +1,6 @@
 import type { AssignmentKv } from "./assignment-store";
 import { assignmentWriterName, type HashedAssignmentPutInput } from "./assignment-store";
+import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
 import {
   appHoldoverWriteSuppressKey,
   type HoldoverWriteEnsureResult,
@@ -158,6 +159,8 @@ function parseEnsureResult(value: unknown): HoldoverWriteEnsureResult {
 export interface HoldoverWriteOutboxEnv {
   ASSIGNMENT_STORE_WRITER: AssignmentWriterNamespace;
   ASSIGNMENTS_KV: AssignmentKv;
+  /** App-scoped Entity outbox inventory + deletion coordinator (SPL-346). */
+  HOLDOVER_WRITE_APP_INVENTORY?: HoldoverWriteAppInventoryNamespace;
 }
 
 export function assignmentWriterPutPort(

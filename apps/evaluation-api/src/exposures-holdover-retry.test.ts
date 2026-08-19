@@ -222,6 +222,27 @@ describe("POST /api/sdk/exposures: holdover exhaustion and deletion (SPL-346)", 
     expect(assignmentStore.readable.size).toBe(0);
   });
 
+  it("suppressed holdover is an explicit batch status, never accepted or deduplicated", async () => {
+    const assignmentStore = new RecordingAssignmentStore();
+    const holdoverWrite = new MemoryHoldoverWriteCoordinator(assignmentStore);
+    holdoverWrite.suppressApp(APP_ID);
+    const { app } = await makeSdkRouteHarness({
+      liveRun: true,
+      holdoverWrite,
+    });
+    const ticket = await mintTicket();
+    const body = (await (
+      await app.request(
+        PATH,
+        exposuresInit(CLIENT_KEY, [{ exposureId: EXPOSURE_ID_A, exposureTicket: ticket }]),
+      )
+    ).json()) as ExposureBatchResponse;
+    expect(body.results).toEqual([{ exposureId: EXPOSURE_ID_A, status: "suppressed", code: null }]);
+    expect(body.results[0]?.status).not.toBe("accepted");
+    expect(body.results[0]?.status).not.toBe("deduplicated");
+    expect(assignmentStore.putHashedCalls).toHaveLength(0);
+  });
+
   it("Entity deletion suppress+purge drops poisoned hashes and blocks further puts", async () => {
     const assignmentStore = new AlwaysFailAssignmentStore();
     const holdoverWrite = new MemoryHoldoverWriteCoordinator(assignmentStore);

@@ -97,11 +97,19 @@ operational failures and are not described as self-healing.
 
 ## Connection between ingest and DO write
 
-Both the raw Exposure handoff and the DO write originate from the **same Evaluation Worker** that
-processed the evaluate request. The Event Ingest Worker owns Tinybird delivery after that handoff.
-The DO is accessed via its binding (`env.ASSIGNMENT_STORE`), which is local to the Worker runtime
-(one network hop to the DO instance in the nearest location per Cloudflare's DO placement, not
-necessarily the same POP).
+**`evaluate`:** the Evaluation Worker seals the Exposure in the Event Ingest raw_events outbox,
+returns the Variant, then drives Assignment Store via `ctx.waitUntil` → Assignment Store Writer DO
+(`env.ASSIGNMENT_STORE_WRITER`) → `putIfAbsent` + awaited KV write-through. Event Ingest owns
+Tinybird delivery after the handoff. The writer DO is one network hop away (Cloudflare placement),
+not necessarily the same POP.
+
+**`POST /api/sdk/exposures`:** after the Exposure seal and claim acknowledge path, the Evaluation
+Worker **awaits** the holdover-write outbox Durable Object (`env.HOLDOVER_WRITE_OUTBOX`, one DO per
+Entity slot). That outbox seals durable ownership, attempts the Assignment Store Writer inline
+(`putHashed` → writer DO → KV), and on failure schedules DO alarm retries without a later Evaluation
+re-run. Ownership (or KV-complete) is required before an `accepted`/`deduplicated` ack; deletion
+cutoff returns `suppressed`. App deletion enumerates Entity outboxes via
+`env.HOLDOVER_WRITE_APP_INVENTORY` (strongly consistent), not Assignment Store KV list.
 
 ## Holdover retention policy
 
@@ -121,7 +129,7 @@ There is no multi-Run holdover history in the DO. The pipeline's `raw_events` lo
   decides when to call `AssignmentStore.put()` (on KV miss) and supplies `(key, run_id, variant)`.
 - DO: serializes concurrent writes; guarantees one true first-touch winner; write-throughs to KV.
 
-**Failure contract:** DO timeout is non-blocking; retry is async; result is cosmetic miss within KV propagation window. Not a distributed transaction.
+**Failure contract:** On `evaluate`, DO timeout in `waitUntil` is non-blocking (async retry; cosmetic miss within the KV window). On exposures redemption, ownership seal or inline writer failure rejects the item (SDK retains the queue); after ownership, alarm retry continues without re-evaluation until KV-complete or poison. Not a distributed transaction.
 
 **Deletion test:** Two real adapters exist — (1) the DO-backed Assignment Store (production), (2) an in-memory map (testing/local dev). The seam passes the deletion test.
 

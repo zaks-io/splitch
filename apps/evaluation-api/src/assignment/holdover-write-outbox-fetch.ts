@@ -1,7 +1,11 @@
 import type { HashedAssignmentPutInput } from "./assignment-store";
+import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
+import {
+  DurableHoldoverWriteAppInventoryClient,
+  inventoryRegisterPortForApp,
+} from "./holdover-write-app-inventory-client";
 import {
   deleteEntityOutbox,
-  ensureHoldoverWriteJob,
   HOLDOVER_WRITE_JOB_PREFIX,
   type HoldoverWriteJob,
   type HoldoverWriteOutboxLogger,
@@ -11,6 +15,10 @@ import {
   purgeEntityOutboxState,
   suppressEntityOutbox,
 } from "./holdover-write-outbox-core";
+import {
+  ensureHoldoverWriteJob,
+  type HoldoverWriteInventoryRegisterPort,
+} from "./holdover-write-outbox-ensure";
 
 export async function handleHoldoverWriteOutboxFetch(
   storage: HoldoverWriteOutboxStorage,
@@ -19,6 +27,7 @@ export async function handleHoldoverWriteOutboxFetch(
   logger?: HoldoverWriteOutboxLogger,
   nowMs: number = Date.now(),
   suppression?: HoldoverWriteSuppressionPort,
+  appInventory?: HoldoverWriteAppInventoryNamespace,
 ): Promise<Response> {
   const url = new URL(request.url);
   if (request.method === "POST" && url.pathname === "/delete") {
@@ -39,7 +48,15 @@ export async function handleHoldoverWriteOutboxFetch(
     return statusResponse(storage);
   }
   if (request.method === "POST" && url.pathname === "/ensure") {
-    return ensureResponse(storage, putPort, await request.json(), nowMs, logger, suppression);
+    return ensureResponse(
+      storage,
+      putPort,
+      await request.json(),
+      nowMs,
+      logger,
+      suppression,
+      appInventory,
+    );
   }
   return new Response("not found", { status: 404 });
 }
@@ -58,8 +75,15 @@ async function ensureResponse(
   nowMs: number,
   logger: HoldoverWriteOutboxLogger | undefined,
   suppression: HoldoverWriteSuppressionPort | undefined,
+  appInventory: HoldoverWriteAppInventoryNamespace | undefined,
 ): Promise<Response> {
   const parsed = parseEnsureRequest(body);
+  const inventory: HoldoverWriteInventoryRegisterPort | undefined = appInventory
+    ? inventoryRegisterPortForApp(
+        new DurableHoldoverWriteAppInventoryClient(appInventory),
+        parsed.input.appId,
+      )
+    : undefined;
   const result = await ensureHoldoverWriteJob(
     storage,
     putPort,
@@ -68,6 +92,7 @@ async function ensureResponse(
     logger,
     suppression,
     { sourceCreatedAtMs: parsed.sourceCreatedAtMs },
+    inventory,
   );
   return Response.json(result);
 }

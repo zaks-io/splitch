@@ -116,9 +116,15 @@ async function miniflareWithOutboxAndAssignmentStore(options: {
 function bundleWorker(failFirstKvPut: boolean): string {
   const root = dirname(fileURLToPath(import.meta.url));
   const core = readSource(join(root, "holdover-write-outbox-core.ts"));
+  const ensure = readSource(join(root, "holdover-write-outbox-ensure.ts"))
+    .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m, "")
+    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/m, "");
   const fetchHandler = readSource(join(root, "holdover-write-outbox-fetch.ts"))
     .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m, "")
+    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-app-inventory["'];?\s*/m, "")
+    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-app-inventory-client["'];?\s*/m, "")
     .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/m, "")
+    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-ensure["'];?\s*/m, "")
     .replace(
       /\nfunction isRecord\(value: unknown\): value is Record<string, unknown> \{[\s\S]*?\n\}\n\nfunction requireString\(value: Record<string, unknown>, key: string\): string \{[\s\S]*?\n\}\n/,
       "\n",
@@ -136,6 +142,7 @@ function bundleWorker(failFirstKvPut: boolean): string {
     .replace(/^import \{ DurableObject \} from "cloudflare:workers";\s*/m, "")
     .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox["'];?\s*/m, "")
     .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/m, "")
+    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-ensure["'];?\s*/m, "")
     .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-fetch["'];?\s*/m, "");
 
   // Production writer + DO (not an inlined twin). Contracts/Zod are stubbed;
@@ -196,6 +203,17 @@ function failOnceKv(kv) {
     },
   };
 }
+class DurableHoldoverWriteAppInventoryClient {
+  constructor() {}
+  registerEntity() {
+    return Promise.resolve();
+  }
+}
+function inventoryRegisterPortForApp(client, appId) {
+  return {
+    registerEntity: (ref) => client.registerEntity(appId, ref),
+  };
+}
 `;
 
   const stripExport = (source: string) =>
@@ -206,6 +224,7 @@ function failOnceKv(kv) {
 import { DurableObject } from "cloudflare:workers";
 ${stubs}
 ${stripExport(core)}
+${stripExport(ensure)}
 ${stripExport(fetchHandler)}
 ${stripExport(outbox)}
 ${outboxDo}

@@ -2,7 +2,6 @@ import type { HashedAssignmentPutInput } from "./assignment-store";
 import type { HoldoverWriteCoordinator } from "./holdover-write-outbox";
 import {
   deleteEntityOutbox,
-  ensureHoldoverWriteJob,
   HOLDOVER_WRITE_JOB_PREFIX,
   type HoldoverWriteEnsureResult,
   type HoldoverWriteJob,
@@ -12,9 +11,9 @@ import {
   type HoldoverWriteSuppressionPort,
   holdoverWriteOutboxName,
   purgeEntityOutboxState,
-  runHoldoverWriteAlarm,
   suppressEntityOutbox,
 } from "./holdover-write-outbox-core";
+import { ensureHoldoverWriteJob, runHoldoverWriteAlarm } from "./holdover-write-outbox-ensure";
 
 /** In-memory outbox for tests that need failure-then-retry without Miniflare. */
 export class MemoryHoldoverWriteCoordinator implements HoldoverWriteCoordinator {

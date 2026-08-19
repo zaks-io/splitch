@@ -52,6 +52,23 @@ describe("Evaluation Worker service bindings", () => {
     ).toBe(true);
   });
 
+  it.each(targets)("binds the holdover write App inventory DO for %s", (_target, target) => {
+    const binding = target?.durable_objects?.bindings?.find(
+      (candidate) => candidate.name === "HOLDOVER_WRITE_APP_INVENTORY",
+    );
+    expect(binding).toEqual({
+      name: "HOLDOVER_WRITE_APP_INVENTORY",
+      class_name: "HoldoverWriteAppInventoryDurableObject",
+    });
+    expect(
+      target?.migrations?.some(
+        (migration) =>
+          migration.tag === "v5_holdover_write_app_inventory" &&
+          migration.new_sqlite_classes?.includes("HoldoverWriteAppInventoryDurableObject"),
+      ),
+    ).toBe(true);
+  });
+
   /**
    * The binding is shared, so the entrypoint behind it has to answer every sink
    * this Worker addresses. A second binding would only give the same caller a

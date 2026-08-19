@@ -1,18 +1,23 @@
 /**
  * Privacy deletion consumer for the holdover-write outbox (SPL-346).
  *
- * App deletion: write the App suppress tombstone first so pending alarms cannot
- * recreate Assignment Store state during destructive cleanup, then purge every
- * Entity outbox whose Assignment Store KV blob is still present.
+ * App deletion: begin strongly consistent App inventory suppression (also
+ * writes the KV hot-path tombstone), purge every registered Entity outbox
+ * (pending / completed-empty / poisoned — including never-KV rows), mark each
+ * purged, then mark deletion complete before Control Plane continues to D1.
+ * Public retry resumes from inventory state.
  *
  * Entity deletion: cutoff-aware suppress + drain + purge on that Entity's
  * outbox DO so stale work cannot finish after the handshake returns, while
- * post-`delete_before_ts` ensures remain allowed.
+ * post-`delete_before_ts` ensures remain allowed. The DO runs under
+ * `blockConcurrencyWhile`, so an in-flight Assignment Store writer call is
+ * serialized before purge complete.
  *
  * @module
  */
 
 import type { AssignmentKv } from "./assignment-store";
+import type { HoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
 import type { HoldoverWriteOutboxNamespace } from "./holdover-write-outbox";
 import { appHoldoverWriteSuppressKey, holdoverWriteOutboxName } from "./holdover-write-outbox-core";
 
@@ -62,39 +67,49 @@ export async function suppressAndPurgeEntityHoldoverWriteOutbox(
 }
 
 /**
- * After App suppress + destructive cascade: purge each Entity outbox that still
- * has an Assignment Store KV blob so pending jobs / hashes cannot linger or
- * recreate Assignment Store state after delete completes.
+ * App deletion coordinator: suppress via inventory (+ KV), purge every
+ * registered Entity outbox, mark complete. Idempotent for public retry.
  */
-export async function purgeAppHoldoverWriteOutboxes(
-  kv: AssignmentKv & {
-    list(options: { prefix: string }): Promise<{ keys: { name: string }[] }>;
-  },
-  namespace: HoldoverWriteOutboxNamespace,
+export async function runAppHoldoverWriteDeletion(
+  inventory: HoldoverWriteAppInventoryClient,
+  outbox: HoldoverWriteOutboxNamespace,
   appId: string,
   deleteBeforeTsMs: number,
 ): Promise<void> {
-  const prefix = `assignment:${appId}:`;
-  const listed = await kv.list({ prefix });
-  for (const { name } of listed.keys) {
-    const identity = parseAssignmentKvKey(name, appId);
-    if (identity === null) continue;
-    await suppressAndPurgeEntityHoldoverWriteOutbox(namespace, {
-      ...identity,
-      deleteBeforeTsMs,
-    });
+  if (appId.length === 0) {
+    throw new Error("runAppHoldoverWriteDeletion: appId is required");
   }
-}
+  if (!Number.isFinite(deleteBeforeTsMs)) {
+    throw new Error("runAppHoldoverWriteDeletion: deleteBeforeTsMs is required");
+  }
 
-function parseAssignmentKvKey(key: string, appId: string): HoldoverWriteEntityIdentity | null {
-  const prefix = `assignment:${appId}:`;
-  if (!key.startsWith(prefix)) return null;
-  const rest = key.slice(prefix.length);
-  const sep = rest.indexOf(":");
-  if (sep <= 0 || sep === rest.length - 1) return null;
-  return {
-    appId,
-    idType: rest.slice(0, sep),
-    targetingKeyHash: rest.slice(sep + 1),
-  };
+  const begun = await inventory.beginDeletion(appId, deleteBeforeTsMs);
+  if (begun.deletionComplete) {
+    return;
+  }
+
+  for (const entity of begun.entities) {
+    await suppressAndPurgeEntityHoldoverWriteOutbox(outbox, {
+      appId,
+      idType: entity.idType,
+      targetingKeyHash: entity.targetingKeyHash,
+      deleteBeforeTsMs: begun.deleteBeforeTsMs,
+    });
+    await inventory.markEntityPurged(appId, entity);
+  }
+
+  // Resume path: inventory may still list entities registered after a prior
+  // partial failure; re-read status and drain any remainder before complete.
+  const status = await inventory.status(appId);
+  for (const entity of status.entities) {
+    await suppressAndPurgeEntityHoldoverWriteOutbox(outbox, {
+      appId,
+      idType: entity.idType,
+      targetingKeyHash: entity.targetingKeyHash,
+      deleteBeforeTsMs: begun.deleteBeforeTsMs,
+    });
+    await inventory.markEntityPurged(appId, entity);
+  }
+
+  await inventory.completeDeletion(appId);
 }
