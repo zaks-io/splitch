@@ -70,22 +70,23 @@ caller's Default Variant, same as the root client.
 
 Fail-loud rules (ADR-0036):
 
-| Read state                                     | `evaluate` returns                           | `evaluateDetails.reason` / `errorCode`                                                 |
-| ---------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Before `init()` resolves (and no bootstrap)    | throws `SplitchSdkError SDK_NOT_INITIALIZED` | throws — reading nothing is a bug, not a default                                       |
-| Flag key absent from the held evaluations      | caller default, loud log                     | `ERROR` / `FLAG_NOT_FOUND`                                                             |
-| Held entry with `reason: ERROR`                | caller default, loud log                     | the entry's `ERROR` / `errorCode`                                                      |
-| Revalidation failing (serving last-known-good) | held value                                   | held reason; `STALE` surfaces via logger + entry once refetch fails (see Revalidation) |
-| Normal held entry                              | held value                                   | the entry's `reason` (`SPLIT`/`DEFAULT`/`DISABLED`)                                    |
+| Read state                                     | `evaluate` returns                           | `evaluateDetails.reason` / `errorCode`                                                                                                                        |
+| ---------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Before `init()` resolves (and no bootstrap)    | throws `SplitchSdkError SDK_NOT_INITIALIZED` | throws — reading nothing is a bug, not a default                                                                                                              |
+| Flag key absent from the held evaluations      | caller default, loud log                     | `ERROR` / `FLAG_NOT_FOUND`                                                                                                                                    |
+| Held entry with `reason: ERROR`                | caller default, loud log                     | the entry's `ERROR` / `errorCode`                                                                                                                             |
+| Revalidation failing (serving last-known-good) | held value                                   | entry-derived held details reaching the decorator: `STALE` / `PROVIDER_NOT_READY`; absent-flag, held-`ERROR`, and null-variant details: held fields unchanged |
+| Normal held entry                              | held value                                   | the entry's `reason` (`SPLIT`/`DEFAULT`/`DISABLED`)                                                                                                           |
 
 `subscribe(flagKey, listener)` registers a per-Flag listener invoked when a revalidation swap
 changes that Flag's resolution; it returns an unsubscribe function. Subscribing is **not** a read:
 it fires no Exposure until the value is actually read. Errors surface through the injectable
-`logger` — no second hook system (the Web Analytics rule, reused). Two guarantees the React
+`logger` — no second hook system (the Web Analytics rule, reused). Three guarantees the React
 bindings ([react-bindings.md](./react-bindings.md)) depend on: `subscribe` accepts keys absent
 from the held evaluations (the subscription registers by key and fires if a later swap introduces
 the Flag), and held Variant values are returned by reference — never cloned, treated as immutable —
-so identity is stable until a swap.
+so identity is stable until a swap; the third is the SPL-333-owned degradation-state read plus
+decorator seam specified under [Revalidation](#revalidation).
 
 ## Exposure queue (redemption)
 

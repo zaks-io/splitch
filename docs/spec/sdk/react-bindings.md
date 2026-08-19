@@ -86,12 +86,12 @@ Each hook is one `useSyncExternalStore` per rendered call site:
 - **details staleness overlay**: on every decoration-eligible render, after the stable
   held-resolution memo is read, `useFlagDetails` reads the client's current revalidation-degradation
   state through the same-package internal seam. The hook passes the held details through the
-  client's own read-time staleness decorator at exactly the same point as `evaluateDetails`; React
-  never reimplements the mapping or its application set. The decorator applies exactly where the
-  client's `evaluateDetails` applies it: only entry-derived held details that reach that point are
-  decorated. Absent-flag details (for example, `ERROR` / `FLAG_NOT_FOUND`), held-`ERROR` details,
-  and null-variant details bypass the decorator and render unchanged. When the client is degraded
-  and details reach the decorator, it returns the held value with `reason: STALE` and
+  client's own read-time staleness decorator at the same point in the mapping as `evaluateDetails`;
+  React never reimplements the mapping or its application set. The decorator applies exactly where
+  the client's `evaluateDetails` applies it: only entry-derived held details that reach that point
+  are decorated. Absent-flag details (for example, `ERROR` / `FLAG_NOT_FOUND`), held-`ERROR`
+  details, and null-variant details bypass the decorator and render unchanged. When the client is
+  degraded and details reach the decorator, it returns the held value with `reason: STALE` and
   `errorCode: PROVIDER_NOT_READY`. The decorator replaces only `reason` and `errorCode`; every other
   details field remains the held resolution's field.
 
