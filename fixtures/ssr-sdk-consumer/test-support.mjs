@@ -99,18 +99,21 @@ function createEdgeDouble() {
 
 export async function withFixture(run) {
   const edge = createEdgeDouble();
-  const edgeOrigin = await listen(edge.server);
-  const serverModule = await import(pathToFileURL(join(consumerRoot, "server.mjs")));
-  const ssrServer = serverModule.createSsrServer({
-    apiKey: "sk_ssr_fixture",
-    clientKey: "pk_ssr_fixture",
-    endpoint: edgeOrigin,
-  });
-  const ssrOrigin = await listen(ssrServer);
+  let ssrServer;
   try {
+    const edgeOrigin = await listen(edge.server);
+    const serverModule = await import(pathToFileURL(join(consumerRoot, "server.mjs")));
+    ssrServer = serverModule.createSsrServer({
+      apiKey: "sk_ssr_fixture",
+      clientKey: "pk_ssr_fixture",
+      endpoint: edgeOrigin,
+    });
+    const ssrOrigin = await listen(ssrServer);
     await run({ edge, edgeOrigin, ssrOrigin });
   } finally {
-    await close(ssrServer);
-    await close(edge.server);
+    await Promise.all([
+      ssrServer?.listening ? close(ssrServer) : undefined,
+      edge.server.listening ? close(edge.server) : undefined,
+    ]);
   }
 }

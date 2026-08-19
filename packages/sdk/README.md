@@ -192,6 +192,8 @@ Context attributes you are willing to publish.
 
 ```js
 // server.mjs
+import { readFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { createSplitchClient } from "@splitch/sdk";
 
 const requiredEnv = (name) => {
@@ -199,23 +201,16 @@ const requiredEnv = (name) => {
   if (!value) throw new Error(`${name} is required`);
   return value;
 };
-const context = {
-  targetingKey: "user-123",
-  idType: "user",
-  attributes: { plan: "pro" },
-};
 const splitch = createSplitchClient({
   apiKey: requiredEnv("SPLITCH_API_KEY"),
-  endpoint: "https://edge.splitch.dev",
 });
-const bootstrap = await splitch.evaluateAll({
-  ...context,
-  idempotencyKey: crypto.randomUUID(),
-});
-const entry = bootstrap.evaluations["new-checkout"];
-if (entry === undefined || typeof entry.variant !== "boolean" || entry.reason === "ERROR") {
-  throw new Error("SSR requires a successful new-checkout evaluation");
-}
+const modules = new Map([
+  ["/browser.mjs", new URL("./browser.mjs", import.meta.url)],
+  [
+    "/vendor/sdk/browser/index.js",
+    new URL("./node_modules/@splitch/sdk/dist/browser/index.js", import.meta.url),
+  ],
+]);
 
 const jsonForHtml = (value) => {
   const serialized = JSON.stringify(value);
@@ -226,15 +221,54 @@ const jsonForHtml = (value) => {
     .replaceAll("\u2029", "\\u2029");
 };
 
-const html = `
-  <main id="app">${entry.variant ? "New checkout" : "Current checkout"}</main>
-  <script id="splitch-bootstrap" type="application/json">${jsonForHtml(bootstrap)}</script>
-  <script id="splitch-config" type="application/json">${jsonForHtml({
-    clientKey: requiredEnv("SPLITCH_CLIENT_KEY"),
-    context,
-  })}</script>
-  <script type="module" src="/browser.mjs"></script>
-`;
+createServer(async (request, response) => {
+  try {
+    const url = new URL(request.url ?? "/", "http://localhost:3000");
+    const moduleUrl = modules.get(url.pathname);
+    if (moduleUrl) {
+      const source = await readFile(moduleUrl);
+      response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+      response.end(source);
+      return;
+    }
+    if (url.pathname !== "/") {
+      response.writeHead(404).end("Not Found");
+      return;
+    }
+
+    const targetingKey = url.searchParams.get("user");
+    if (!targetingKey) {
+      response.writeHead(400).end("user is required");
+      return;
+    }
+    const context = {
+      targetingKey,
+      idType: "user",
+      attributes: { plan: "pro" },
+    };
+    const bootstrap = await splitch.evaluateAll(context);
+    const entry = bootstrap.evaluations["new-checkout"];
+    if (entry === undefined || typeof entry.variant !== "boolean" || entry.reason === "ERROR") {
+      throw new Error("SSR requires a successful new-checkout evaluation");
+    }
+
+    const html = `
+      <main id="app">${entry.variant ? "New checkout" : "Current checkout"}</main>
+      <script type="importmap">{"imports":{"@splitch/sdk/browser":"/vendor/sdk/browser/index.js"}}</script>
+      <script id="splitch-bootstrap" type="application/json">${jsonForHtml(bootstrap)}</script>
+      <script id="splitch-config" type="application/json">${jsonForHtml({
+        clientKey: requiredEnv("SPLITCH_CLIENT_KEY"),
+        context,
+      })}</script>
+      <script type="module" src="/browser.mjs"></script>
+    `;
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(html);
+  } catch (error) {
+    response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+    response.end(error instanceof Error ? error.message : "SSR failed");
+  }
+}).listen(3000);
 ```
 
 The browser constructs the static-context client with the matching Evaluation
@@ -261,6 +295,9 @@ const splitch = createSplitchBrowserClient({
 
 await splitch.init();
 const value = splitch.evaluate("new-checkout", false);
+const app = document.getElementById("app");
+if (!app) throw new Error("SSR page is missing #app");
+app.textContent = value ? "New checkout" : "Current checkout";
 await splitch.flush();
 ```
 

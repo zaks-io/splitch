@@ -33,18 +33,23 @@ export async function hydratePage(documentRoot = globalThis.document, testHooks 
     revalidateMs: 60_000,
     ...(testHooks.fetch === undefined ? {} : { fetch: testHooks.fetch }),
   });
-  await splitch.init();
-  await testHooks.beforeFirstRead?.();
+  let completed = false;
+  try {
+    await splitch.init();
+    await testHooks.beforeFirstRead?.();
 
-  const hydratedValueJson = JSON.stringify(splitch.evaluate(config.flagKey, false));
-  output.textContent = hydratedValueJson;
-  await testHooks.afterFirstRead?.();
+    const hydratedValueJson = JSON.stringify(splitch.evaluate(config.flagKey, false));
+    output.textContent = hydratedValueJson;
+    await testHooks.afterFirstRead?.();
 
-  const exposureResults = await splitch.flush();
-  if (testHooks.closeAfterProof === true) {
-    await splitch.close();
+    const exposureResults = await splitch.flush();
+    completed = true;
+    return { exposureResults, hydratedValueJson, serverValueJson };
+  } finally {
+    if (!completed || testHooks.closeAfterProof === true) {
+      await splitch.close();
+    }
   }
-  return { exposureResults, hydratedValueJson, serverValueJson };
 }
 
 if (typeof document !== "undefined") {

@@ -79,8 +79,9 @@ async function serveFile(response, pathname, root, prefix) {
     return;
   }
   try {
+    const contents = await readFile(target);
     response.writeHead(200, { "content-type": contentType(target) });
-    response.end(await readFile(target));
+    response.end(contents);
   } catch {
     response.writeHead(404).end("Not Found");
   }

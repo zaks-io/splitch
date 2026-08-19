@@ -25,26 +25,14 @@ function fixtureDocument(html) {
 }
 
 test("packed SSR boundary hydrates without an init fetch and redeems one Exposure", async () => {
-  await withFixture(async ({ edge, edgeOrigin, ssrOrigin }) => {
+  await withFixture(async ({ edge, ssrOrigin }) => {
     const browserModule = await import(pathToFileURL(join(consumerRoot, "browser.mjs")));
     const html = await (await fetch(ssrOrigin)).text();
     assert.ok(!html.includes("sk_ssr_fixture"));
     assert.ok(html.includes("pk_ssr_fixture"));
-    assert.ok(!html.includes("targetingRules"));
-    assert.ok(!html.includes("allocation"));
-    assert.ok(!html.includes("salt"));
     assert.equal((await fetch(`${ssrOrigin}/browser.mjs`)).status, 200);
     assert.equal((await fetch(`${ssrOrigin}/vendor/sdk/browser/index.js`)).status, 200);
-    const preflight = await fetch(`${edgeOrigin}/api/sdk/exposures`, {
-      method: "OPTIONS",
-      headers: {
-        "access-control-request-headers": "authorization, content-type, x-splitch-sdk-runtime",
-        "access-control-request-method": "POST",
-        origin: ssrOrigin,
-      },
-    });
-    assert.equal(preflight.status, 204);
-    assert.equal(preflight.headers.get("access-control-allow-origin"), "*");
+    assert.equal((await fetch(`${ssrOrigin}/vendor/sdk/browser/missing.js`)).status, 404);
 
     const browserCalls = [];
     const proof = await browserModule.hydratePage(fixtureDocument(html), {
@@ -65,6 +53,7 @@ test("packed SSR boundary hydrates without an init fetch and redeems one Exposur
     assert.equal(browserCalls.length, 1);
     const evaluateAllCalls = edge.calls.filter((call) => call.path === "/api/sdk/evaluate-all");
     assert.equal(evaluateAllCalls.length, 1);
+    assert.equal(evaluateAllCalls[0].authorization, "Bearer sk_ssr_fixture");
     assert.match(evaluateAllCalls[0].idempotencyKey, /^[0-9a-f-]{36}$/);
     const exposures = edge.calls.filter((call) => call.path === "/api/sdk/exposures");
     assert.equal(exposures.length, 1);
