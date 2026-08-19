@@ -155,13 +155,14 @@ A single loop revalidates the held evaluations every `revalidateMs` (default 60s
   across Experiment Run rollover and fresh-assignment-to-holdover materialization even when the
   visible Variant does not. An ETag-only ticket refresh window may replace ticket bytes without
   changing entry equality, notifying listeners, or re-arming an already-read Exposure.
-- Failure → keep serving last-known-good, log loudly every failed tick, and mark subsequently read
-  entries `STALE` (`errorCode: PROVIDER_NOT_READY`) until a tick succeeds — degraded is always
-  observable, never disguised (ADR-0036).
-- The client maintains current revalidation-degradation state, entering degraded on a failed tick
-  and clearing it on the next successful tick. It exposes a synchronous, render-safe read of that
-  state to same-package consumers through an internal seam; this is not a public accessor or a
-  notification channel.
+- Failure → keep serving last-known-good and log loudly every failed tick. Until a tick succeeds,
+  the read-time decorator marks only entry-derived held details that reach it `STALE`
+  (`errorCode: PROVIDER_NOT_READY`); absent-flag (`ERROR` / `FLAG_NOT_FOUND`), held-`ERROR`, and
+  null-variant details bypass it and are never overwritten (ADR-0036).
+- SPL-333 owns the current revalidation-degradation state and same-package internal seam. A failed
+  tick enters degradation and the next successful tick clears it. The seam exposes both a
+  synchronous, render-safe state read and the exact read-time staleness decorator
+  `evaluateDetails` uses; neither is public API or a notification channel.
 - End-to-end freshness is revalidation interval + the accepted ~60s KV propagation window
   ([five-runtimes.md](./five-runtimes.md), ADR-0009); this client does not try to beat the data
   plane's own propagation. The ADR-0019-style WebSocket nudge, when it lands, only triggers an
