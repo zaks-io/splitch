@@ -35,6 +35,7 @@ function wellFormedEvaluateAllEntry(reason: string) {
     variantName: reason === "ERROR" ? null : "on",
     reason,
     errorCode: reason === "ERROR" ? ("INTERNAL_SERVER_ERROR" as const) : null,
+    exposureIdentity: reason === "SPLIT" ? "identity" : null,
     exposureTicket: reason === "SPLIT" ? "ticket" : null,
   };
 }
@@ -142,6 +143,7 @@ describe("contract-surface schema fixtures", () => {
               variantName: "on",
               reason: "SPLIT",
               errorCode: null,
+              exposureIdentity: "identity",
               exposureTicket: "ticket",
             },
           },
@@ -156,6 +158,22 @@ describe("contract-surface schema fixtures", () => {
               variantName: null,
               reason: "DEFAULT",
               errorCode: null,
+              exposureIdentity: "identity",
+              exposureTicket: "ticket",
+            },
+          },
+        },
+        ok: false,
+      },
+      {
+        input: {
+          evaluations: {
+            "new-checkout": {
+              variant: true,
+              variantName: "on",
+              reason: "SPLIT",
+              errorCode: null,
+              exposureIdentity: null,
               exposureTicket: "ticket",
             },
           },
@@ -199,6 +217,7 @@ describe("contract-surface schema fixtures", () => {
             variantName: "",
             reason: "SPLIT",
             errorCode: null,
+            exposureIdentity: "identity",
             exposureTicket: "",
           },
         },
@@ -244,52 +263,28 @@ describe("contract-surface schema fixtures", () => {
   });
 });
 
-describe("contract-surface known __proto__ divergences", () => {
-  it("EvaluateAllResponseSchema keeps a __proto__ flag key as an own property", () => {
+describe("contract-surface __proto__ parity", () => {
+  it("both refuse an own __proto__ Flag Key with the contract message", () => {
     const input = JSON.parse(
-      '{"evaluations":{"__proto__":{"variant":false,"variantName":null,"reason":"DEFAULT","errorCode":null,"exposureTicket":null}}}',
-    ) as unknown;
-
-    const compiled = EvaluateAllResponseSchema.safeParse(input);
-    expect(compiled.success).toBe(true);
-    if (!compiled.success) {
-      return;
-    }
-
-    const evaluations = compiled.data.evaluations;
-    expect(Object.getPrototypeOf(evaluations)).toBe(Object.prototype);
-    expect(typeof evaluations.hasOwnProperty).toBe("function");
-    // biome-ignore lint/suspicious/noPrototypeBuiltins: pin hasOwnProperty on the map itself
-    expect(evaluations.hasOwnProperty("__proto__")).toBe(true);
-    expect(Object.keys(evaluations)).toEqual(["__proto__"]);
-    expect(Object.getOwnPropertyDescriptor(evaluations, "__proto__")?.value).toEqual({
-      variant: false,
-      variantName: null,
-      reason: "DEFAULT",
-      errorCode: null,
-      exposureTicket: null,
-    });
-    expect(String(evaluations)).toBe("[object Object]");
-  });
-
-  it("compiled keeps a __proto__ flag key; zod 4.4.3 drops it (SPL-353)", () => {
-    // Known wire divergence. Do not "fix" by dropping the key — Worker-side
-    // silent drop is SPL-353.
-    const input = JSON.parse(
-      '{"evaluations":{"__proto__":{"variant":false,"variantName":null,"reason":"DEFAULT","errorCode":null,"exposureTicket":null}}}',
+      '{"evaluations":{"__proto__":{"variant":false,"variantName":null,"reason":"DEFAULT","errorCode":null,"exposureIdentity":null,"exposureTicket":null}}}',
     ) as unknown;
 
     const compiled = EvaluateAllResponseSchema.safeParse(input);
     const zod = ZodEvaluateAllResponseSchema.safeParse(input);
-    expect(compiled.success).toBe(true);
-    expect(zod.success).toBe(true);
-    if (!compiled.success || !zod.success) {
-      return;
+    expect(compiled.success).toBe(false);
+    expect(zod.success).toBe(false);
+    if (!compiled.success) {
+      expect(compiled.error.message).toBe('must not contain a "__proto__" key');
     }
-
-    expect(Object.keys(compiled.data.evaluations)).toEqual(["__proto__"]);
-    expect(Object.keys(zod.data.evaluations)).toEqual([]);
-    expect(compiled.data).not.toEqual(zod.data);
+    if (!zod.success) {
+      expect(zod.error.issues).toContainEqual(
+        expect.objectContaining({
+          code: "custom",
+          message: 'must not contain a "__proto__" key',
+          path: ["evaluations", "__proto__"],
+        }),
+      );
+    }
   });
 
   it("compiled strips a JSON own __proto__ sibling key; zod 4.4.3 also strips it", () => {

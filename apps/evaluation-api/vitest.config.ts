@@ -14,9 +14,8 @@ const sharedAlias = {
 };
 
 /**
- * `cloudflare:workers` is stubbed only for the request-binding test that imports
- * `index.ts`. Other suites must not resolve Durable Object / WorkerEntrypoint
- * modules against a plain-class stub.
+ * Worker entrypoint imports are isolated so Durable Object suites still resolve
+ * the real runtime instead of a plain-class stub.
  */
 export default defineConfig({
   test: {
@@ -37,11 +36,32 @@ export default defineConfig({
         },
       },
       {
+        resolve: {
+          alias: {
+            ...sharedAlias,
+            "cloudflare:workers": fileURLToPath(
+              new URL(
+                "../event-ingest-api/src/cloudflare-workers.test-fixture.ts",
+                import.meta.url,
+              ),
+            ),
+          },
+        },
+        test: {
+          name: "event-ingest-seam",
+          include: ["src/exposures-seam.test.ts"],
+        },
+      },
+      {
         resolve: { alias: sharedAlias },
         test: {
           name: "unit",
           include: ["src/**/*.{test,spec}.ts"],
-          exclude: [...configDefaults.exclude, "src/index-request-binding.test.ts"],
+          exclude: [
+            ...configDefaults.exclude,
+            "src/exposures-seam.test.ts",
+            "src/index-request-binding.test.ts",
+          ],
         },
       },
     ],

@@ -50,6 +50,12 @@ const CONTRACT_EXCEPTIONS = [
     reason: "SDK data-plane operation",
   },
   {
+    operationId: "sdk_track",
+    cli: false,
+    mcp: false,
+    reason: "SDK Metric Event data-plane operation",
+  },
+  {
     operationId: "sdk_cached_evaluation_telemetry",
     cli: false,
     mcp: false,

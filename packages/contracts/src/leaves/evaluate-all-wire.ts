@@ -39,6 +39,7 @@ const EvaluateAllEntryBaseSchema = z
     variantName: z.string().nullable(),
     reason: EvaluateAllReasonSchema,
     errorCode: ErrorCodeSchema.nullable(),
+    exposureIdentity: z.string().nullable(),
     exposureTicket: z.string().nullable(),
   })
   .strict();
@@ -46,17 +47,23 @@ const EvaluateAllEntryBaseSchema = z
 export const EvaluateAllEntrySchema = EvaluateAllEntryBaseSchema.refine(
   (entry) => (entry.reason === "ERROR" ? entry.errorCode !== null : entry.errorCode === null),
   { message: "errorCode is present iff reason === 'ERROR'" },
-).refine((entry) => entry.reason === "SPLIT" || entry.exposureTicket === null, {
-  message: "exposureTicket is only allowed when reason === 'SPLIT'",
-});
+)
+  .refine((entry) => entry.reason === "SPLIT" || entry.exposureTicket === null, {
+    message: "exposureTicket is only allowed when reason === 'SPLIT'",
+  })
+  .refine((entry) => entry.reason === "SPLIT" || entry.exposureIdentity === null, {
+    message: "exposureIdentity is only allowed when reason === 'SPLIT'",
+  })
+  .refine((entry) => (entry.exposureTicket === null) === (entry.exposureIdentity === null), {
+    message: "exposureIdentity is present iff exposureTicket is present",
+  });
 export type EvaluateAllEntry = z.infer<typeof EvaluateAllEntrySchema>;
 
 /**
  * Proto-safe evaluations map. Zod's `z.record` would otherwise silently drop a
- * JSON own `"__proto__"` Flag Key; the SDK contract-surface pack currently uses
- * this same schema and therefore rejects that key too. Built as `record` +
- * refine so the served OpenAPI document keeps the real additionalProperties
- * shape (not `{}`).
+ * JSON own `"__proto__"` Flag Key. Both this contract and the SDK's compiled,
+ * zod-free response parser refuse that key. Built as `record` + refine so the
+ * served OpenAPI document keeps the real additionalProperties shape (not `{}`).
  */
 export const EvaluateAllEvaluationsSchema = protoSafeRecord(
   EvaluateAllEntrySchema,

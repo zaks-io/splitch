@@ -1,4 +1,5 @@
 import { ResolutionDetailsSchema } from "../leaf-schemas-runtime";
+import { MetricEventTrackRequestSchema, MetricEventTrackResponseSchema } from "../metric-event";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   CachedEvaluationTelemetryRequestSchema,
@@ -37,6 +38,33 @@ import {
 const OWNER = "evaluation-api" as const;
 
 export const dataPlaneRoutes = [
+  defineApiRoute({
+    operationId: "sdk_track",
+    owner: "event-ingest-api",
+    method: "POST",
+    path: "/api/sdk/events",
+    summary: "Submit one declared Metric Event with explicit Entity identity.",
+    request: { body: MetricEventTrackRequestSchema },
+    response: MetricEventTrackResponseSchema,
+    auth: "data-plane-key",
+    scopes: ["data-plane:write"],
+    rateLimit: "client-key",
+    idempotency: "none",
+    errors: [
+      "UNAUTHORIZED",
+      "CREDENTIAL_REVOKED",
+      "INSUFFICIENT_SCOPES",
+      "ORIGIN_NOT_ALLOWED",
+      "VALIDATION_ERROR",
+      "EVENT_DEFINITION_NOT_FOUND",
+      "EVENT_DEFINITION_UNPUBLISHED",
+      "EVENT_SCHEMA_MISMATCH",
+      "ENTITY_TYPE_MISMATCH",
+      "EVENT_ID_CONFLICT",
+      "RATE_LIMITED",
+      "SERVICE_UNAVAILABLE",
+    ],
+  }),
   defineApiRoute({
     operationId: "sdk_evaluate",
     owner: OWNER,
@@ -180,6 +208,7 @@ export const dataPlaneRoutes = [
       "EVENT_ID_CONFLICT",
       "RATE_LIMITED",
       "SERVICE_UNAVAILABLE",
+      "INTERNAL_SERVER_ERROR",
     ],
   }),
 ] as const satisfies readonly ApiRouteContract[];

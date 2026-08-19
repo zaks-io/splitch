@@ -22,6 +22,7 @@ export { CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION } from "./credential-cache
 export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
 export { DeltaNudgeEntitySchema, DeltaNudgeSchema, deltaNudgeEntities } from "./delta-nudge";
 export { errorStatusByCode, httpStatusForError } from "./error-status";
+export { SegmentListResponseSchema } from "./routes/routes-segments";
 export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
 export {
   ErrorCodeSchema,
@@ -33,6 +34,8 @@ export {
   RecommendedActionSchema,
   recommendedActions,
 } from "./errors";
+// biome-ignore lint/performance/noReExportAll: Event Definition and Metric Event exports are grouped by domain
+export * from "./events";
 export type { DecisionFailure } from "./experiment-conclusion-errors";
 export {
   DecisionBlockedDetailsSchema,
@@ -79,6 +82,7 @@ export type {
   ConditionOperator,
   Flag,
   PercentageRollout,
+  ResolvedTargetingRule,
   Segment,
   TargetingRule,
   Variant,
@@ -89,6 +93,7 @@ export {
   conditionOperators,
   FlagSchema,
   PercentageRolloutSchema,
+  ResolvedTargetingRuleSchema,
   SegmentSchema,
   TargetingRuleSchema,
   VariantSchema,
@@ -270,6 +275,7 @@ export {
   assignmentKey,
   clientKeyCacheKey,
   credentialRevocationCacheKey,
+  eventDefinitionConfigKey,
   experimentConfigKey,
   flagConfigKey,
   liveRunKey,

@@ -6,6 +6,7 @@ import {
   nowSeconds,
   parseCookie,
   serializeHttpOnlyCookie,
+  type SerializedHttpOnlyCookie,
   tokenHash,
 } from "./session-cookie";
 
@@ -23,7 +24,7 @@ export async function createOAuthState(
   kv: KVNamespace,
   returnTo: string,
   now = Date.now(),
-): Promise<{ state: string; cookie: string }> {
+): Promise<{ state: string; cookie: SerializedHttpOnlyCookie }> {
   const state = generateOpaqueToken();
   const expiresAt = nowSeconds(now) + OAUTH_STATE_TTL_SECONDS;
   const value: OAuthState = { returnTo, expiresAt };
@@ -43,7 +44,8 @@ export async function consumeOAuthState(
   callbackState: string | null,
   now = Date.now(),
 ): Promise<
-  { ok: true; returnTo: string; clearCookie: string } | { ok: false; clearCookie: string }
+  | { ok: true; returnTo: string; clearCookie: SerializedHttpOnlyCookie }
+  | { ok: false; clearCookie: SerializedHttpOnlyCookie }
 > {
   const clearStateCookie = clearHttpOnlyCookie(OAUTH_STATE_COOKIE_NAME);
   const cookieState = parseCookie(request.headers.get("cookie")).get(OAUTH_STATE_COOKIE_NAME);
@@ -104,7 +106,7 @@ function oauthStateKey(stateHash: string): string {
   return `${OAUTH_STATE_KEY_PREFIX}${stateHash}`;
 }
 
-function oauthStateCookie(state: string): string {
+function oauthStateCookie(state: string): SerializedHttpOnlyCookie {
   return serializeHttpOnlyCookie(OAUTH_STATE_COOKIE_NAME, state, {
     maxAge: OAUTH_STATE_TTL_SECONDS,
   });

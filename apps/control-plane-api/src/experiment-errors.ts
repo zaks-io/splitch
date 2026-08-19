@@ -121,14 +121,13 @@ export function segmentReferenceMissing(
   missingSegmentIds: string[],
   requestId: string,
 ): Response {
-  // Fail loud rather than freeze a Run with a silently-dropped Segment rule
-  // (which would target the entire audience). Details are empty per the
-  // SEGMENT_NOT_FOUND contract; the offending IDs go in the message.
+  // Fail loud rather than freeze a Run with a silently-dropped Segment rule,
+  // which would target the entire audience.
   return renderError(
     {
       code: "SEGMENT_NOT_FOUND",
       message: `Experiment ${experimentId} references Segment(s) that no longer exist: ${missingSegmentIds.join(", ")}. Edit the draft before starting.`,
-      details: {},
+      details: { missingSegmentIds },
     },
     { requestId },
   );

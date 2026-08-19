@@ -1,4 +1,4 @@
-import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
+import type { PercentageRollout, ResolvedTargetingRule, Variant } from "@splitch/contracts";
 import { assign } from "../assignment/assign";
 import { AssignmentStoreError } from "../assignment/assignment-store";
 import { fractionalEval } from "../assignment/fractional-eval";
@@ -181,7 +181,7 @@ function evaluateTargetingRule(
   flag: FlagConfig,
   experimentId: string | null,
   run: RunConfig | null,
-  rule: TargetingRule,
+  rule: ResolvedTargetingRule,
   logger: EvaluatePathDeps["logger"],
 ): RuleMatchEvaluateResult | null {
   if (!matchesConditions(rule.conditions, input.evaluationContext, { logger, ruleId: rule.id })) {

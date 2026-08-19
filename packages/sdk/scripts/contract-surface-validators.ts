@@ -4,7 +4,8 @@
  * contracts by `scripts/generate-contract-surface.mjs`; the parsing logic and
  * the object shapes in `contract-surface-types.ts` are hand-written and held in
  * lockstep by `contract-surface-structural.test.ts` (shape),
- * `contract-surface-parity.test.ts` (fixtures / divergences), and
+ * `contract-surface-parity.test.ts` (behavior),
+ * `contract-surface-proto-safe.test.ts` (derived runtime refinements), and
  * `contract-surface-assignability.ts` (types).
  *
  * Accepted domain is JSON-only by construction today: every `parse()` call
@@ -98,6 +99,15 @@ function asSchema<T>(check: (input: unknown) => T): Schema<T> {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const OWN_PROTO_KEY = "__proto__";
+const OWN_PROTO_KEY_MESSAGE = `must not contain a "${OWN_PROTO_KEY}" key`;
+
+function rejectOwnProtoKey(value: Record<string, unknown>): void {
+  if (Object.hasOwn(value, OWN_PROTO_KEY)) {
+    fail(OWN_PROTO_KEY_MESSAGE);
+  }
 }
 
 function requireKeys(
@@ -244,6 +254,19 @@ function assertEvaluateAllEntryRefinements(entry: EvaluateAllEntry, path: string
   if (entry.reason !== "SPLIT" && entry.exposureTicket !== null) {
     fail(`${path}: exposureTicket is only allowed when reason === 'SPLIT'`);
   }
+  if (entry.reason !== "SPLIT" && entry.exposureIdentity !== null) {
+    fail(`${path}: exposureIdentity is only allowed when reason === 'SPLIT'`);
+  }
+  if ((entry.exposureTicket === null) !== (entry.exposureIdentity === null)) {
+    fail(`${path}: exposureIdentity is present iff exposureTicket is present`);
+  }
+}
+
+function nullableString(value: unknown, path: string): string | null {
+  if (!(typeof value === "string" || value === null)) {
+    fail(`${path} must be string | null`);
+  }
+  return value;
 }
 
 function parseEvaluateAllEntry(input: unknown, path: string): EvaluateAllEntry {
@@ -254,25 +277,20 @@ function parseEvaluateAllEntry(input: unknown, path: string): EvaluateAllEntry {
   if (input.variant !== null && !isVariantValue(input.variant)) {
     fail(`${path}.variant must be VariantValue | null`);
   }
-  if (!(typeof input.variantName === "string" || input.variantName === null)) {
-    fail(`${path}.variantName must be string | null`);
-  }
   if (typeof input.reason !== "string" || !evaluateAllReasonSet.has(input.reason)) {
     fail(`${path}.reason is invalid`);
   }
   if (input.errorCode !== null) {
     ErrorCodeSchema.parse(input.errorCode);
   }
-  if (!(typeof input.exposureTicket === "string" || input.exposureTicket === null)) {
-    fail(`${path}.exposureTicket must be string | null`);
-  }
 
   const entry: EvaluateAllEntry = {
     variant: input.variant as VariantValue | null,
-    variantName: input.variantName as string | null,
+    variantName: nullableString(input.variantName, `${path}.variantName`),
     reason: input.reason as EvaluateAllReason,
     errorCode: input.errorCode as ErrorCode | null,
-    exposureTicket: input.exposureTicket as string | null,
+    exposureIdentity: nullableString(input.exposureIdentity, `${path}.exposureIdentity`),
+    exposureTicket: nullableString(input.exposureTicket, `${path}.exposureTicket`),
   };
   assertEvaluateAllEntryRefinements(entry, path);
   return entry;
@@ -286,11 +304,9 @@ function parseEvaluateAllResponse(input: unknown): EvaluateAllResponse {
   if (!isPlainObject(input.evaluations)) {
     fail("evaluations must be an object");
   }
-  // Write with defineProperty so a flag key of "__proto__" becomes an own
-  // property instead of hitting Object.prototype.__proto__. The map keeps a
-  // normal Object.prototype so Record consumers can call hasOwnProperty /
-  // toString. (zod 4.4.3 drops the "__proto__" entry entirely — see the
-  // parity suite's divergence pin; Worker-side silent drop is SPL-353.)
+  // Match the Worker contract's fail-loud refusal before zod 4.4.3 or object
+  // assignment can silently drop an own "__proto__" Flag Key.
+  rejectOwnProtoKey(input.evaluations);
   const evaluations: Record<string, EvaluateAllEntry> = {};
   for (const [flagKey, entry] of Object.entries(input.evaluations)) {
     Object.defineProperty(evaluations, flagKey, {

@@ -6,6 +6,7 @@ import {
   resultsNoDataFixture,
   statsFixture,
 } from "./experiment-results-test-fixtures";
+import { visibleText } from "./experiment-results-test-markup";
 
 const resultsData = vi.hoisted(() => ({
   current: null as unknown,
@@ -114,6 +115,7 @@ describe("Experiment Results route no_data waiting state", () => {
         variantId: "variant_from_a_later_edit",
         reason: "absent_from_frozen_variant_set",
         frozenVariantNames: ["control", "treatment"],
+        analysisVariant: "control",
       },
     });
 
@@ -133,10 +135,12 @@ describe("Experiment Results route no_data waiting state", () => {
     );
     expect(html).toContain("The Run froze");
     expect(html).toContain("control, treatment");
+    expect(visibleText(alertMarkup(html))).toContain(
+      "The Run Snapshot written to the analytics store at Start recorded control as the Analysis Control. Results for this Run will be measured against that Variant when they arrive.",
+    );
     expect(html).toContain(
       "This Run cannot produce a ship decision. Start a new Run to get a Control that is frozen and validated.",
     );
-    expect(html).not.toContain("The numbers below are still shown");
     expect(html).not.toContain("variant_from_a_later_edit");
     expect(html).not.toContain("absent_from_frozen_variant_set");
     expect(html).toContain('role="alert"');

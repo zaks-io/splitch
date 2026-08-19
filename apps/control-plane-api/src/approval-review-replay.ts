@@ -1,8 +1,9 @@
 import { ApprovalPolicyContextSchema, ErrorCodeSchema } from "@splitch/contracts";
 import { renderError } from "@splitch/worker-runtime";
-import { projectedResult } from "./approval-review-outcomes";
+import { applicationFailureMessage, projectedResult } from "./approval-review-outcomes";
 import { rowTargetVersion } from "./approval-row-target";
 import type {
+  ApplicationTargetState,
   ApprovalRequestRow,
   ApprovalResult,
   ApprovalReviewRow,
@@ -63,7 +64,7 @@ function failedReplay(
     response: renderError(
       {
         code: "APPROVAL_APPLICATION_FAILED",
-        message: "Approval Request application failed and was rolled back",
+        message: applicationFailureMessage(recordedTargetState(review.targetState)),
         details: {
           approvalRequestId: row.id,
           reviewId: review.id,
@@ -77,6 +78,21 @@ function failedReplay(
       { requestId },
     ),
   };
+}
+
+/**
+ * The target state the first attempt reported, off the Review row.
+ *
+ * Only `failed` rows reach here, so NULL is a fact about the row rather than a
+ * fallback: it was written before the column existed, no record of what the
+ * attempt left behind was kept, and `unknown` is the true answer for it.
+ * Anything else in the column is corrupt data and says so rather than picking a
+ * plausible state (ADR-0036).
+ */
+function recordedTargetState(stored: string | null): ApplicationTargetState {
+  if (stored === null) return "unknown";
+  if (stored === "rolled_back" || stored === "applied" || stored === "unknown") return stored;
+  throw new Error(`Approval Review target_state is not a known state: ${stored}`);
 }
 
 export async function staleReplay(

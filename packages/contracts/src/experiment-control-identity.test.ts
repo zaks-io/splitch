@@ -57,7 +57,7 @@ describe("resolveAnalysisControlIntegrity", () => {
     });
   });
 
-  it("preserves an unresolvable frozen Control instead of inventing an identity to compare", () => {
+  it("adds the Analysis Control to an unresolvable frozen Control", () => {
     const unresolvable = {
       state: "unresolvable" as const,
       variantId: "variant_missing",
@@ -65,7 +65,23 @@ describe("resolveAnalysisControlIntegrity", () => {
       frozenVariantNames: ["control", "treatment"],
     };
 
-    expect(resolveAnalysisControlIntegrity(unresolvable, "control")).toEqual(unresolvable);
+    expect(resolveAnalysisControlIntegrity(unresolvable, "control")).toEqual({
+      ...unresolvable,
+      analysisVariant: "control",
+    });
+  });
+
+  it("fails loudly when the Analysis Control name is missing", () => {
+    const unresolvable = {
+      state: "unresolvable" as const,
+      variantId: "variant_missing",
+      reason: "absent_from_frozen_variant_set" as const,
+      frozenVariantNames: ["control", "treatment"],
+    };
+
+    expect(() => resolveAnalysisControlIntegrity(unresolvable, "")).toThrow(
+      "Analysis Control name is missing from resolveAnalysisControlIntegrity input",
+    );
   });
 });
 
@@ -82,12 +98,13 @@ describe("control_identity gate check", () => {
       variantId: "variant_from_a_later_edit",
       reason: "absent_from_frozen_variant_set",
       frozenVariantNames: ["control", "treatment"],
+      analysisVariant: "control",
     });
     expect(gate.shipAllowed).toBe(false);
     expect(gate.blockedBy).toContain("control_identity");
     const identity = check(gate, "control_identity");
     expect(identity.detail).toBe(
-      'This Run\'s frozen Control cannot be identified because it is absent from the Variant set this Run froze. The Run froze "control", "treatment". The Experiment\'s default Variant was backfilled onto this Run as "variant_from_a_later_edit", which the Run itself never froze. Nothing can be promoted against a baseline this Run never recorded, and guessing one would invent provenance. Start a new Run to get a Control that is frozen and validated.',
+      'This Run\'s frozen Control cannot be identified because it is absent from the Variant set this Run froze. The Run froze "control", "treatment". The Experiment\'s default Variant was backfilled onto this Run as "variant_from_a_later_edit", which the Run itself never froze. The Run Snapshot\'s Control anchors the lift, but nothing can be promoted against a Control this Run never froze. Start a new Run to get a Control that is frozen and validated.',
     );
     expect(identity.detail).not.toContain("absent_from_frozen_variant_set");
   });
@@ -115,6 +132,7 @@ describe("control_identity gate check", () => {
       variantId: "variant_gone",
       reason: "unreadable_frozen_variant_set",
       frozenVariantNames: [],
+      analysisVariant: "control",
     });
     expect(gate.checks.map((entry) => entry.id)).toEqual([
       "control_identity",
@@ -125,5 +143,8 @@ describe("control_identity gate check", () => {
       "underpowered",
       "decision_valid_result",
     ]);
+    expect(check(gate, "control_identity").detail).toBe(
+      "This Run's frozen Control cannot be identified because the frozen Variant set could not be read. The Experiment's default Variant was backfilled onto this Run as \"variant_gone\", which the Run itself may never have carried. The Run Snapshot's Control anchors the lift, but nothing can be promoted against a Control this Run may never have carried. Start a new Run to get a Control that is frozen and validated.",
+    );
   });
 });

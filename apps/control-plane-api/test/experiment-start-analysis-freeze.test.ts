@@ -39,7 +39,7 @@ async function metric(
     key: id,
     name: id,
     kind: "binomial",
-    eventName: id,
+    eventDefinitionId: id,
     createdAt: NOW_ISO,
     ...overrides,
   });
@@ -98,7 +98,7 @@ describe("Experiment Start freezes the analysis config", () => {
     const fx = await experimentFixture(ctx);
     const revenueId = await metric(fx.appId, "metric_revenue", {
       kind: "revenue",
-      eventValueField: "amount",
+      eventFieldName: "amount",
       winsorizePct: 99,
     });
     const experiment = await createExperimentDraft(ctx, fx, {

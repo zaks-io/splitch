@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
+import {
+  ResolvedTargetingRuleSchema,
+  TargetingRuleSchema,
+  VariantSchema,
+} from "./leaf-schemas-flag";
 
 /**
  * Canonical Zod leaf schemas for the experiment-side glossary nouns.
@@ -55,7 +59,7 @@ export type MetricRef = z.infer<typeof MetricRefSchema>;
 // ---------------------------------------------------------------------------
 // Metric
 //
-// `eventValueField` is required for count/revenue (the field summed per Entity);
+// `eventFieldName` is required for count/revenue (the field summed per Entity);
 // `denominator` is required for ratio (numerator/denominator per Entity). Both
 // are otherwise null. Conditionals are enforced loudly at parse time.
 //
@@ -74,8 +78,8 @@ const BaseMetricSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   kind: MetricKindSchema,
-  eventName: z.string(),
-  eventValueField: z.string().nullable().optional(),
+  eventDefinitionId: z.string(),
+  eventFieldName: z.string().nullable().optional(),
   denominator: MetricRefSchema.nullable().optional(),
   downsideThresholdPct: z.number().nullable().optional(),
   winsorize: z.boolean().nullable().optional(),
@@ -88,11 +92,11 @@ const BaseMetricSchema = z.object({
 export const MetricSchema = BaseMetricSchema.refine(
   (m) => {
     if (m.kind === "count" || m.kind === "revenue") {
-      return typeof m.eventValueField === "string";
+      return typeof m.eventFieldName === "string";
     }
     return true;
   },
-  { message: "metric kind 'count' / 'revenue' requires eventValueField" },
+  { message: "metric kind 'count' / 'revenue' requires eventFieldName" },
 ).refine(
   (m) => {
     if (m.kind === "ratio") {
@@ -175,7 +179,7 @@ export const RunSchema = z.object({
     { message: "allocation percentages must sum to 100" },
   ),
   variantSet: z.array(VariantSchema),
-  targetingRules: z.array(TargetingRuleSchema),
+  targetingRules: z.array(ResolvedTargetingRuleSchema),
   configHash: z.string(),
   startedAt: z.string(),
   endedAt: z.string().nullable().optional(),

@@ -3,6 +3,7 @@ import {
   ExperimentConfigKVSchema,
   FlagConfigKVSchema,
   flagConfigKey,
+  type ResolvedTargetingRule,
   RunConfigKVSchema,
   type TargetingRule,
   TargetingRuleSchema,
@@ -22,6 +23,7 @@ import type {
   Snapshot,
 } from "./config-store-types";
 import { parseStoredRollout } from "./flag-config-rollout";
+import { requireResolvedTargetingRules, resolveTargetingRules } from "./targeting-rule-resolution";
 
 export type {
   ApplyApprovedFlagConfigInput,
@@ -84,18 +86,16 @@ async function buildSnapshot(
   flagId: string,
   experiment: Awaited<ReturnType<Repository["experiments"]["getExperiment"]>>,
 ): Promise<Snapshot | null> {
-  const flag = await repo.flags.getFlag(appScope(scope.appId), flagId);
-  const config = await repo.flags.getFlagConfig(scope, flagId);
-  if (!flag || !config) return null;
+  const inputs = await loadFlagConfigWriteContext(repo, scope, flagId);
+  if (!inputs) return null;
+  const { flag, config, variants } = inputs;
 
-  const variants = (await repo.flags.listVariants(appScope(scope.appId), flagId)).map((v) => ({
-    id: v.id,
-    name: v.name,
-    value: JSON.parse(v.value) as Variant["value"],
-    ...(v.description ? { description: v.description } : {}),
-  }));
-
-  const targetingRules = (await repo.flags.listTargetingRules(scope, flagId)).map(toTargetingRule);
+  const authoringTargetingRules = (await repo.flags.listTargetingRules(scope, flagId)).map(
+    toTargetingRule,
+  );
+  const resolved = requireResolvedTargetingRules(
+    await resolveTargetingRules(repo, scope.appId, authoringTargetingRules),
+  );
   const run = experiment?.liveRunId
     ? await repo.experiments.getRun(scope, experiment.liveRunId)
     : null;
@@ -113,16 +113,36 @@ async function buildSnapshot(
       defaultVariantId: requiredString(config.defaultVariantId, "defaultVariantId"),
       variants,
       availableVariantNames: JSON.parse(config.availableVariantNames) as string[],
-      targetingRules,
+      targetingRules: resolved,
       rollout: parseStoredRollout(config.rollout),
       updatedAt: config.updatedAt,
     }),
+    authoringTargetingRules,
     experiment: experimentConfig(scope, experiment),
     controllingExperiment:
       experiment?.status === "running" ? { id: experiment.id, name: experiment.name } : null,
     run: runConfig(run),
     version: config.version,
   };
+}
+
+export async function loadFlagConfigWriteContext(
+  repo: Repository,
+  scope: EnvScope,
+  flagId: string,
+) {
+  const [flag, config] = await Promise.all([
+    repo.flags.getFlag(appScope(scope.appId), flagId),
+    repo.flags.getFlagConfig(scope, flagId),
+  ]);
+  if (!flag || !config) return null;
+  const variants = (await repo.flags.listVariants(appScope(scope.appId), flagId)).map((v) => ({
+    id: v.id,
+    name: v.name,
+    value: JSON.parse(v.value) as Variant["value"],
+    ...(v.description ? { description: v.description } : {}),
+  }));
+  return { flag, config, variants };
 }
 
 export async function writeSnapshotAndBroadcast(
@@ -163,7 +183,7 @@ export function responseFromSnapshot(snapshot: Snapshot): FlagConfigResult {
     version: snapshot.version,
     enabled: snapshot.flag.enabled,
     availableVariantNames: snapshot.flag.availableVariantNames,
-    targetingRules: snapshot.flag.targetingRules,
+    targetingRules: snapshot.authoringTargetingRules,
     rollout: snapshot.flag.rollout,
     experiment: snapshot.controllingExperiment,
   };
@@ -175,6 +195,7 @@ export function targetingRuleRows(rules: TargetingRule[], now: Date) {
     id: rule.id,
     priority: rule.priority,
     conditions: json(rule.conditions),
+    segmentId: rule.segmentId ?? null,
     variantId: rule.variantId,
     percentageRollout: rule.percentageRollout ? json(rule.percentageRollout) : null,
     createdAt: timestamp,
@@ -238,7 +259,7 @@ function runConfig(run: Awaited<ReturnType<Repository["experiments"]["getRun"]>>
     salt: run.salt,
     allocation: JSON.parse(run.allocation) as Record<string, number>,
     variantSet: JSON.parse(run.variantSet) as Variant[],
-    targetingRules: JSON.parse(run.targetingRules) as TargetingRule[],
+    targetingRules: JSON.parse(run.targetingRules) as ResolvedTargetingRule[],
     configHash: run.configHash,
     startedAt: run.startedAt,
   });
@@ -252,6 +273,7 @@ function toTargetingRule(
     flagId: rule.flagId,
     priority: rule.priority,
     conditions: JSON.parse(rule.conditions),
+    ...(rule.segmentId ? { segmentId: rule.segmentId } : {}),
     variantId: requiredString(rule.variantId, "variantId"),
     ...(rule.percentageRollout ? { percentageRollout: JSON.parse(rule.percentageRollout) } : {}),
   });

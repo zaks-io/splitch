@@ -1,14 +1,6 @@
-DESCRIPTION Returns pre-period CUPED covariate rows for one Run, shaped as the Stats Engine's PrePeriodRow.
+DESCRIPTION Returns deduplicated pre-period covariates for one Binomial Metric in one Run.
 
-# SPLITCH_EMPTY_STUB_UNTIL=metric_events
-# Same stub rationale as `analysis_metric_values`: pre-period covariates need
-# Metric Event history that is not ingested yet. An absent covariate set is
-# optional on StatsInput (`pre_period_covariates?`); empty rows here mean CUPED
-# is not applied (`cuped_method = none`), not that analysis is unavailable.
-# scripts/lib/tinybird-metric-stub-tripwire.mjs fails tinybird:local the moment
-# metric_events.datasource exists while this marker remains.
-
-NODE empty_pre_period_covariates
+NODE scoped_pre_period_exposures
 SQL >
     %
     {% if not defined(app_id) %}
@@ -23,15 +15,101 @@ SQL >
     {% if not defined(run_id) %}
     {{error('run_id is required')}}
     {% end %}
+    {% if not defined(metric_id) %}
+    {{error('metric_id is required')}}
+    {% end %}
+    {% if not defined(event_definition_id) %}
+    {{error('event_definition_id is required')}}
+    {% end %}
+    {% if not defined(lookback_ms) %}
+    {{error('lookback_ms is required')}}
+    {% end %}
+    {% if not defined(from_ts) %}
+    {{error('from_ts is required')}}
+    {% end %}
+    {% if not defined(to_ts) %}
+    {{error('to_ts is required')}}
+    {% end %}
     SELECT
-        cast('' AS String) AS targeting_key_hash,
-        cast('' AS String) AS metric_id,
-        cast(0 AS Float64) AS pre_period_value,
-        cast('pre_period' AS String) AS covariate_source
-    WHERE 0
-        AND {{String(app_id)}} = {{String(app_id)}}
-        AND {{String(environment_id)}} = {{String(environment_id)}}
-        AND {{String(experiment_id)}} = {{String(experiment_id)}}
-        AND {{String(run_id)}} = {{String(run_id)}}
+        app_id,
+        environment_id,
+        id_type,
+        targeting_key_hash,
+        first_exposure_ts
+    FROM serve_deduped_exposures
+    WHERE app_id = {{String(app_id)}}
+        AND environment_id = {{String(environment_id)}}
+        AND experiment_id = {{String(experiment_id)}}
+        AND run_id = {{String(run_id)}}
+
+NODE scoped_pre_period_events
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(event_definition_id) %}
+    {{error('event_definition_id is required')}}
+    {% end %}
+    {% if not defined(from_ts) %}
+    {{error('from_ts is required')}}
+    {% end %}
+    {% if not defined(to_ts) %}
+    {{error('to_ts is required')}}
+    {% end %}
+    SELECT
+        app_id,
+        environment_id,
+        event_definition_id,
+        id_type,
+        targeting_key_hash,
+        accepted_at
+    FROM serve_deduped_metric_events
+    WHERE app_id = {{String(app_id)}}
+        AND environment_id = {{String(environment_id)}}
+        AND event_definition_id = {{String(event_definition_id)}}
+        AND accepted_at >= {{DateTime64(from_ts)}}
+        AND accepted_at < {{DateTime64(to_ts)}}
+
+NODE binomial_pre_period_values
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(metric_id) %}
+    {{error('metric_id is required')}}
+    {% end %}
+    {% if not defined(lookback_ms) %}
+    {{error('lookback_ms is required')}}
+    {% end %}
+    SELECT
+        exposures.targeting_key_hash AS targeting_key_hash,
+        {{String(metric_id)}} AS metric_id,
+        toFloat64(1) AS pre_period_value,
+        'pre_period' AS covariate_source
+    FROM scoped_pre_period_exposures AS exposures
+    INNER JOIN scoped_pre_period_events AS events
+        ON events.app_id = exposures.app_id
+        AND events.environment_id = exposures.environment_id
+        AND events.id_type = exposures.id_type
+        AND events.targeting_key_hash = exposures.targeting_key_hash
+    WHERE exposures.app_id = {{String(app_id)}}
+        AND exposures.environment_id = {{String(environment_id)}}
+        AND events.app_id = {{String(app_id)}}
+        AND events.environment_id = {{String(environment_id)}}
+        AND events.accepted_at >= subtractMilliseconds(
+            exposures.first_exposure_ts,
+            {{UInt64(lookback_ms)}}
+        )
+        AND events.accepted_at < exposures.first_exposure_ts
+    GROUP BY exposures.targeting_key_hash
+    ORDER BY targeting_key_hash
 
 TYPE ENDPOINT

@@ -2,6 +2,7 @@ import {
   ApprovalDiffSchema,
   type ApprovalOperation,
   type ApprovalPolicyContext,
+  SegmentSchema,
 } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { absentVariantHint } from "./approval-row-target";
@@ -32,6 +33,18 @@ export async function resultingVersionFor(
   // Same rule one level up: an applied Flag delete leaves nothing behind.
   if (operation === "flags_delete") {
     return absentTargetVersion({ type: "flag", id: row.targetId });
+  }
+  if (operation === "segments_update") {
+    const segment = SegmentSchema.parse(ApprovalDiffSchema.parse(JSON.parse(row.diff)).proposed);
+    return approvalTargetVersion(repo, row.appId, { type: "segment", id: row.targetId }, contexts, {
+      segment: {
+        id: segment.id,
+        appId: segment.appId,
+        name: segment.name,
+        description: segment.description ?? null,
+        conditions: segment.conditions,
+      },
+    });
   }
   // An empty context list is a malformed row, not a missing Experiment. An
   // `envScope(appId, "")` would match nothing and report the two as one.

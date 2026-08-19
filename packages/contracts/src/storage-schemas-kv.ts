@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { ExperimentStatusSchema } from "./leaf-schemas-experiment";
-import { PercentageRolloutSchema, TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
+import {
+  PercentageRolloutSchema,
+  ResolvedTargetingRuleSchema,
+  VariantSchema,
+} from "./leaf-schemas-flag";
 import { memberProfileCacheKey } from "./storage-keys-kv";
 
 /**
@@ -61,7 +65,7 @@ export const FlagConfigKVSchema = z
     defaultVariantId: z.string(),
     variants: z.array(VariantSchema),
     availableVariantNames: z.array(z.string()),
-    targetingRules: z.array(TargetingRuleSchema),
+    targetingRules: z.array(ResolvedTargetingRuleSchema),
     rollout: PercentageRolloutSchema.nullable(),
     updatedAt: z.string(),
   })
@@ -87,7 +91,7 @@ export const RunConfigKVSchema = z
     salt: z.string(),
     allocation: z.record(z.string(), z.number().min(0).max(100)),
     variantSet: z.array(VariantSchema),
-    targetingRules: z.array(TargetingRuleSchema),
+    targetingRules: z.array(ResolvedTargetingRuleSchema),
     configHash: z.string(),
     startedAt: z.string(),
   })

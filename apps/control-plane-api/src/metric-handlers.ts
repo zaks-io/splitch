@@ -68,8 +68,8 @@ async function createMetric(
     name: body.name as string,
     ...(body.description ? { description: body.description as string } : {}),
     kind: prepared.value.kind,
-    eventName: prepared.value.eventName,
-    eventValueField: prepared.value.eventValueField,
+    eventDefinitionId: prepared.value.eventDefinitionId,
+    eventFieldName: prepared.value.eventFieldName,
     denominatorMetricId: prepared.value.denominatorMetricId,
     ...prepared.value.analysis,
     createdAt: nowIso(deps),
@@ -134,8 +134,8 @@ async function deleteMetric(
 
 interface PreparedMetricWrite {
   kind: MetricKind;
-  eventName: string;
-  eventValueField: string | null;
+  eventDefinitionId: string;
+  eventFieldName: string | null;
   denominatorMetricId: string | null;
   analysis: MetricAnalysisConfig;
 }
@@ -158,18 +158,18 @@ async function prepareMetricWrite(
 
   const prepared = {
     kind: (current?.kind ?? body.kind) as MetricKind,
-    eventName: (body.eventName ?? current?.eventName) as string,
-    eventValueField: metricField(body, current),
+    eventDefinitionId: (body.eventDefinitionId ?? current?.eventDefinitionId) as string,
+    eventFieldName: metricField(body, current),
     denominatorMetricId: metricDenominator(body, current),
     analysis: metricAnalysisConfig(body, current),
   };
-  return (await validateMetricShape(deps, scope, current?.id, prepared, requestId)) ?? ok(prepared);
+  return (await validateMetricShape(deps, scope, current, prepared, requestId)) ?? ok(prepared);
 }
 
 function metricField(body: Record<string, unknown>, current: MetricRow | null): string | null {
-  return body.eventValueField !== undefined
-    ? (body.eventValueField as string)
-    : (current?.eventValueField ?? null);
+  return body.eventFieldName !== undefined
+    ? (body.eventFieldName as string)
+    : (current?.eventFieldName ?? null);
 }
 
 function metricDenominator(
@@ -185,12 +185,59 @@ function metricDenominator(
 async function validateMetricShape(
   deps: MetricSegmentDeps,
   scope: TenantScope,
-  metricId: string | undefined,
+  current: MetricRow | null,
   prepared: PreparedMetricWrite,
   requestId: string,
 ): Promise<Result<never> | null> {
-  const shapeIssue = metricShapeIssue(prepared, metricId, requestId);
+  const shapeIssue = metricShapeIssue(prepared, current?.id, requestId);
   if (shapeIssue) return fail(shapeIssue);
+  const definition = await deps.repo.eventDefinitions.get(scope, prepared.eventDefinitionId);
+  if (definition?.family !== "metric") {
+    return fail(
+      metricIssue(
+        requestId,
+        "eventDefinitionId",
+        "Metric requires a metric Event Definition in this App",
+      ),
+    );
+  }
+  if (!definition.currentPublishedVersionId) {
+    if (
+      definition.state === "incomplete" &&
+      current?.eventDefinitionId === prepared.eventDefinitionId &&
+      current.eventFieldName === prepared.eventFieldName
+    ) {
+      return validateDenominator(deps, scope, prepared, requestId);
+    }
+    return fail(
+      metricIssue(requestId, "eventDefinitionId", "Metric requires a published Event Definition"),
+    );
+  }
+  const version = await deps.repo.eventDefinitions.getVersion(
+    scope,
+    definition.id,
+    definition.currentPublishedVersionId,
+  );
+  if (!version) throw new Error("Metric Event Definition points to a missing Version");
+  const fields = JSON.parse(version.fields) as Array<{ name: string }>;
+  if (prepared.eventFieldName && !fields.some(({ name }) => name === prepared.eventFieldName)) {
+    return fail(
+      metricIssue(
+        requestId,
+        "eventFieldName",
+        "Metric field must be declared by the Event Definition Version",
+      ),
+    );
+  }
+  return validateDenominator(deps, scope, prepared, requestId);
+}
+
+async function validateDenominator(
+  deps: MetricSegmentDeps,
+  scope: TenantScope,
+  prepared: PreparedMetricWrite,
+  requestId: string,
+): Promise<Result<never> | null> {
   if (!prepared.denominatorMetricId) return null;
   if (!(await deps.repo.experiments.getMetric(scope, prepared.denominatorMetricId))) {
     return fail(
@@ -215,15 +262,15 @@ function metricShapeIssue(
 }
 
 function metricValueFieldIssue(prepared: PreparedMetricWrite, requestId: string): Response | null {
-  if ((prepared.kind === "count" || prepared.kind === "revenue") && !prepared.eventValueField) {
+  if ((prepared.kind === "count" || prepared.kind === "revenue") && !prepared.eventFieldName) {
     return metricIssue(
       requestId,
-      "eventValueField",
-      `${prepared.kind} Metric requires eventValueField`,
+      "eventFieldName",
+      `${prepared.kind} Metric requires eventFieldName`,
     );
   }
-  if (prepared.kind === "binomial" && prepared.eventValueField) {
-    return metricIssue(requestId, "eventValueField", "binomial Metric cannot set eventValueField");
+  if (prepared.kind === "binomial" && prepared.eventFieldName) {
+    return metricIssue(requestId, "eventFieldName", "binomial Metric cannot set eventFieldName");
   }
   return null;
 }
@@ -267,8 +314,10 @@ function metricPatch(
     ...(body.key !== undefined ? { key: body.key as string } : {}),
     ...(body.name !== undefined ? { name: body.name as string } : {}),
     ...(body.description !== undefined ? { description: body.description as string } : {}),
-    ...(body.eventName !== undefined ? { eventName: prepared.eventName } : {}),
-    ...(body.eventValueField !== undefined ? { eventValueField: prepared.eventValueField } : {}),
+    ...(body.eventDefinitionId !== undefined
+      ? { eventDefinitionId: prepared.eventDefinitionId }
+      : {}),
+    ...(body.eventFieldName !== undefined ? { eventFieldName: prepared.eventFieldName } : {}),
     ...(body.denominator !== undefined
       ? { denominatorMetricId: prepared.denominatorMetricId }
       : {}),

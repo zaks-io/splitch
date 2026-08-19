@@ -81,6 +81,7 @@ describe("openapi document: evaluate-all evaluations shape", () => {
         type: "object",
         properties: expect.objectContaining({
           reason: expect.objectContaining({ enum: expect.any(Array) }),
+          exposureIdentity: expect.anything(),
           exposureTicket: expect.anything(),
         }),
       }),
@@ -112,6 +113,18 @@ describe("openapi document: full route coverage", () => {
       path: "/orgs/{orgId}/usage",
       method: "get",
     });
+  });
+
+  it("emits only the error codes declared by each route", () => {
+    const operation = doc.paths?.["/apps/{appId}/attention-rollup"]?.get as {
+      responses?: Record<string, unknown>;
+    };
+    const conflictResponse = JSON.stringify(operation.responses?.["409"]);
+
+    expect(conflictResponse).toContain("ATTENTION_FANOUT_LIMIT_EXCEEDED");
+    expect(conflictResponse).toContain("message");
+    expect(conflictResponse).toContain("details");
+    expect(conflictResponse).not.toContain("RUN_FROZEN");
   });
 
   it("emits one operationId per registered route, no more no less", () => {

@@ -20,10 +20,10 @@ export interface PrecomputedEvaluationsContext {
  * Evaluation Context, plus the strong validator the payload was tagged with.
  *
  * Keyed by Flag Key. Each entry carries the resolved value, the immutable
- * Variant name, a non-revealing `reason`, and an Exposure Ticket when reading
- * that Flag would create a new Exposure, never Targeting Rules, allocation
- * fractions, or the salt. The object is what the browser client consumes as its
- * `bootstrap`.
+ * Variant name, a non-revealing `reason`, and an opaque Exposure identity plus
+ * Exposure Ticket when reading that Flag would create a new Exposure, never
+ * Targeting Rules, allocation fractions, or the salt. The object is what the
+ * browser client consumes as its `bootstrap`.
  *
  * `context` echoes the Evaluation Context this was resolved for, `targetingKey`
  * and every attribute included, so the browser client can prove it is hydrating

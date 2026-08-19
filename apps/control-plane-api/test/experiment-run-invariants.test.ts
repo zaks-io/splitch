@@ -1,5 +1,5 @@
 import { flagConfigKey, liveRunKey } from "@splitch/contracts";
-import { envScope } from "@splitch/db";
+import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createExperimentDraft,
@@ -24,6 +24,63 @@ beforeEach(async () => {
 afterEach(async () => ctx.h.bindings.dispose());
 
 describe("control-plane Experiment Run invariants", () => {
+  it("rejects a cross-App Segment before freezing Experiment Run Conditions", async () => {
+    const fx = await experimentFixture(ctx);
+    const currentApp = await ctx.repo.identity.getApp(fx.appId);
+    if (!currentApp) throw new Error("Experiment fixture App is missing");
+    const otherAppId = "app_experiment_other";
+    const foreignSegmentId = "segment_other_app";
+    await ctx.repo.identity.createApp({
+      id: otherAppId,
+      organizationId: currentApp.organizationId,
+      name: "Other Experiment App",
+      key: "other-experiment-app",
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+    });
+    await ctx.repo.flags.segments.insert(appScope(otherAppId), {
+      id: foreignSegmentId,
+      appId: otherAppId,
+      name: "Other App Segment",
+      conditions: JSON.stringify([
+        { attribute: "victimSecretTier", operator: "eq", value: "whale" },
+      ]),
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+    });
+    const treatmentVariantId = fx.flag.variants.find((variant) => variant.name === "treatment")?.id;
+    if (!treatmentVariantId) throw new Error("Experiment fixture lacks treatment Variant");
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "cross-app-segment",
+      allocation: { control: 50, treatment: 50 },
+      targetingRules: [
+        {
+          id: "rule_probe",
+          flagId: fx.flag.id,
+          priority: 0,
+          conditions: [],
+          segmentId: foreignSegmentId,
+          variantId: treatmentVariantId,
+          percentageRollout: null,
+        },
+      ],
+    });
+
+    const response = await startExperiment(ctx, fx, experiment.id);
+
+    expect(response.status).toBe(404);
+    expect(await errorBody(response)).toMatchObject({
+      code: "SEGMENT_NOT_FOUND",
+      details: { missingSegmentIds: [foreignSegmentId] },
+    });
+    expect(
+      await ctx.repo.experiments.listRunsForExperiment(
+        envScope(fx.appId, fx.environmentId),
+        experiment.id,
+      ),
+    ).toEqual([]);
+  });
+
   it("returns ALLOCATION_INVALID, VARIANT_NOT_AVAILABLE, RUN_NOT_RUNNING, and RUN_FROZEN", async () => {
     const fx = await experimentFixture(ctx);
     const badAllocation = await createExperimentDraft(ctx, fx, {
@@ -84,10 +141,22 @@ describe("control-plane Experiment Run invariants", () => {
 
   it("checks Policy confirmation before state change and freezes Segment rules", async () => {
     const fx = await experimentFixture(ctx, "prod");
+    const treatmentVariantId = fx.flag.variants.find((variant) => variant.name === "treatment")?.id;
+    if (!treatmentVariantId) throw new Error("Experiment fixture lacks treatment Variant");
     const experiment = await createExperimentDraft(ctx, fx, {
       key: "policy-gated",
       allocation: { control: 50, treatment: 50 },
-      segmentIds: [fx.segmentId],
+      targetingRules: [
+        {
+          id: "rule_segment_paid",
+          flagId: fx.flag.id,
+          priority: 0,
+          conditions: [],
+          segmentId: fx.segmentId,
+          variantId: treatmentVariantId,
+          percentageRollout: null,
+        },
+      ],
     });
 
     const gated = await startExperiment(ctx, fx, experiment.id);
@@ -140,6 +209,13 @@ describe("control-plane Experiment Run invariants", () => {
       },
     );
     expect(segmentPatch.status).toBe(200);
+    const segmentDelete = await request(
+      ctx.h,
+      "DELETE",
+      `/apps/${fx.appId}/segments/${fx.segmentId}`,
+      fx.jwt,
+    );
+    expect(segmentDelete.status).toBe(200);
 
     const getRun = await request(
       ctx.h,

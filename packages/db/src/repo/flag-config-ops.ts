@@ -178,6 +178,7 @@ export function makeFlagConfigOps(
                 flagId: sql<string>`${flagId}`.as("flag_id"),
                 priority: sql<number>`${row.priority}`.as("priority"),
                 conditions: sql<string>`${row.conditions}`.as("conditions"),
+                segmentId: sql<string | null>`${row.segmentId ?? null}`.as("segment_id"),
                 variantId: sql<string | null>`${row.variantId ?? null}`.as("variant_id"),
                 percentageRollout: sql<string | null>`${row.percentageRollout ?? null}`.as(
                   "percentage_rollout",

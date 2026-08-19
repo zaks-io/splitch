@@ -1,6 +1,9 @@
 import type { EvaluateAllEntry, EvaluateAllReason, Variant } from "@splitch/contracts";
 import type { EvaluateResult } from "./evaluate/evaluate-path-types";
-import { type MintExposureTicketDeps, mintExposureTicket } from "./evaluate/exposure-ticket";
+import {
+  type MintExposureTicketDeps,
+  mintExposureTicketWithIdentity,
+} from "./evaluate/exposure-ticket";
 import type { FlagConfig } from "./provider/provider";
 
 export async function entryFor(
@@ -14,20 +17,23 @@ export async function entryFor(
       variantName: result.variant,
       reason: "ERROR",
       errorCode: result.errorCode,
+      exposureIdentity: null,
       exposureTicket: null,
     };
   }
 
   const reason = reasonFor(result);
-  const exposureTicket =
-    result.exposure === null ? null : await mintExposureTicket(result.exposure, ticketDeps);
+  const minted =
+    result.exposure === null
+      ? { exposureIdentity: null, exposureTicket: null }
+      : await mintExposureTicketWithIdentity(result.exposure, ticketDeps);
 
   return {
     variant: valueForVariantName(flag.variants, result.variant),
     variantName: result.variant,
     reason,
     errorCode: null,
-    exposureTicket,
+    ...minted,
   };
 }
 

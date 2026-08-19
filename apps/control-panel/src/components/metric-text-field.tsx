@@ -16,7 +16,7 @@ export function MetricTextField({
   draft: MetricDraft;
   label: string;
   onEdit: (patch: Partial<MetricDraft>) => void;
-  path: "name" | "key" | "eventName" | "eventValueField";
+  path: "name" | "key" | "eventDefinitionId" | "eventFieldName";
   placeholder: string;
   shown: ReturnType<typeof metricDraftIssues>;
   workerError?: string;

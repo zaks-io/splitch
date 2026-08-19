@@ -1,17 +1,18 @@
 import { appScope } from "@splitch/db";
-import type { HandlerArgs } from "@splitch/worker-runtime";
+import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
+import { makeOtherApprovalApplication } from "./approval-application";
 import { randomHex } from "./credential-cache";
-import { runningExperimentError } from "./flag-definition-errors";
 import { objectBody, pathParam } from "./handler-input";
 import {
   type MetricSegmentDeps,
   requireWritableApp,
-  runningSegmentReference,
   segmentFromPath,
   segmentNotFound,
   segmentResponse,
 } from "./metric-segment-shared";
+import { type SegmentDependencies, segmentDependencies } from "./segment-dependencies";
+import { updateSegmentMutation } from "./segment-update";
 
 export function makeSegmentHandlers(deps: MetricSegmentDeps) {
   return {
@@ -29,8 +30,22 @@ async function listSegments(
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
   if (!(await deps.repo.identity.getApp(appId))) return appNotFound(requestId);
-  const rows = await deps.repo.flags.segments.findMany(appScope(appId));
-  return Response.json({ items: rows.map(segmentResponse) });
+  const [rows, references] = await Promise.all([
+    deps.repo.flags.segments.findMany(appScope(appId)),
+    deps.repo.flags.listTargetingRuleEnvironmentReferences(appScope(appId)),
+  ]);
+  const affectedEnvironmentIds: Record<string, string[]> = Object.fromEntries(
+    rows.map((row) => [row.id, []]),
+  );
+  for (const reference of references) {
+    if (!reference.segmentId) throw new Error("Segment reference query returned a null Segment");
+    const environmentIds = affectedEnvironmentIds[reference.segmentId];
+    if (!environmentIds) {
+      throw new Error(`Targeting Rule references missing Segment ${reference.segmentId}`);
+    }
+    environmentIds.push(reference.environmentId);
+  }
+  return Response.json({ items: rows.map(segmentResponse), affectedEnvironmentIds });
 }
 
 async function createSegment(
@@ -75,15 +90,14 @@ async function updateSegment(
   const writeError = await requireWritableApp(deps, appId, args.principal, args.requestId);
   if (writeError) return writeError;
 
-  const body = objectBody(args.input);
-  const updated = await deps.repo.flags.updateSegment(appScope(appId), segment.id, {
-    ...(body.name !== undefined ? { name: body.name as string } : {}),
-    ...(body.description !== undefined ? { description: body.description as string } : {}),
-    ...(body.conditions !== undefined ? { conditions: JSON.stringify(body.conditions) } : {}),
-    updatedAt: nowIso(deps),
+  return updateSegmentMutation(deps, {
+    appId,
+    segment,
+    body: objectBody(args.input),
+    principal: args.principal,
+    requestId: args.requestId,
+    applyOther: makeOtherApprovalApplication(deps),
   });
-  if (!updated) return segmentNotFound(args.requestId);
-  return Response.json(segmentResponse(updated));
 }
 
 async function deleteSegment(
@@ -97,9 +111,39 @@ async function deleteSegment(
   const writeError = await requireWritableApp(deps, appId, args.principal, args.requestId);
   if (writeError) return writeError;
 
-  const blocker = await runningSegmentReference(deps, appId, segment.id);
-  if (blocker) return runningExperimentError(blocker, "DELETE_SEGMENT", args.requestId);
+  const dependencies = await segmentDependencies(deps.repo, appId, segment.id);
+  if (dependencies.flagConfigurations.length + dependencies.experimentDrafts.length > 0) {
+    return segmentNotEmpty(segment.id, dependencies, args.requestId);
+  }
 
   await deps.repo.flags.removeSegment(appScope(appId), segment.id);
   return Response.json({ deleted: true });
+}
+
+function segmentNotEmpty(
+  segmentId: string,
+  dependencies: SegmentDependencies,
+  requestId: string,
+): Response {
+  const childCounts = {
+    "flag-config": dependencies.flagConfigurations.length,
+    "experiment-draft": dependencies.experimentDrafts.length,
+  };
+  const childType = dependencies.flagConfigurations.length > 0 ? "flag-config" : "experiment-draft";
+  return renderError(
+    {
+      code: "RESOURCE_NOT_EMPTY",
+      message: "Segment is referenced by mutable Flag Configurations or Experiment drafts",
+      details: {
+        resourceType: "segment",
+        resourceId: segmentId,
+        childType,
+        childCount: childCounts[childType],
+        childCounts,
+        attemptedOp: "DELETE_SEGMENT",
+        segmentDependencies: dependencies,
+      },
+    },
+    { requestId },
+  );
 }
