@@ -97,10 +97,10 @@ describe("BrowserPayloadStore swaps", () => {
     store.notify(changed);
     const currentEntry = store.current()?.evaluations.checkout;
 
+    expect(currentEntry?.exposureTicket).toBe("ticket-fresh");
     expect(currentEntry).not.toBe(previousEntry);
     expect(currentEntry).not.toBe(incomingEntry);
     expect(currentEntry?.variant).toBe(previousVariant);
-    expect(currentEntry?.exposureTicket).toBe("ticket-fresh");
     expect(changed).toEqual([]);
     expect(listener).not.toHaveBeenCalled();
   });

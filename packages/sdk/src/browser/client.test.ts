@@ -12,6 +12,7 @@ afterEach(() => {
 });
 
 describe("createSplitchBrowserClient: construction", () => {
+  // The client filters null/undefined first; these rows pin resolveBootstrap's own contract.
   it.each([
     ["null", null],
     ["undefined", undefined],

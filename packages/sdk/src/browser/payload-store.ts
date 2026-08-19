@@ -96,7 +96,10 @@ function mergeEvaluations(
 ): Readonly<Record<string, EvaluateAllEntry>> {
   return Object.fromEntries(
     Object.entries(next.evaluations).map(([flagKey, incoming]) => {
-      const before = previous?.evaluations[flagKey];
+      const before =
+        previous !== null && Object.hasOwn(previous.evaluations, flagKey)
+          ? previous.evaluations[flagKey]
+          : undefined;
       if (before === undefined || changed.has(flagKey)) {
         return [flagKey, incoming];
       }
