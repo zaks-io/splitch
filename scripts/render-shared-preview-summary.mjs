@@ -25,6 +25,7 @@ export function renderSummary(input) {
     lines.push(`- Smoke outcome: \`${input.smokeOutcome}\``);
     lines.push(`- Dark-launch outcome: \`${input.darkLaunchOutcome}\``);
     lines.push(`- Safe-delivery outcome: \`${input.safeDeliveryOutcome}\``);
+    lines.push(`- Panel browser install outcome: \`${input.panelBrowserOutcome}\``);
     lines.push(`- Panel login seed outcome: \`${input.panelSeedOutcome}\``);
     lines.push(`- Panel golden path outcome: \`${input.panelSmokeOutcome}\``);
   }
@@ -76,6 +77,7 @@ function summaryInput(summaryMode) {
     smokeOutcome,
     darkLaunchOutcome: stepOutcome("DARK_LAUNCH"),
     safeDeliveryOutcome: stepOutcome("SAFE_DELIVERY"),
+    panelBrowserOutcome: stepOutcome("PANEL_BROWSER"),
     panelSeedOutcome: stepOutcome("PANEL_SEED"),
     panelSmokeOutcome: stepOutcome("PANEL_SMOKE"),
     cleanupOutcome: stepOutcome("CLEANUP"),

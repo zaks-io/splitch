@@ -35,8 +35,9 @@ export const TRANSIENT_APP_KEY_PREFIXES = [
 
 /**
  * Every table carrying `app_id`, children before their transient App. D1 enforces
- * foreign keys, so a table missing here fails the App delete outright rather than
- * orphaning rows. Kept in sync with the Drizzle schema by shared-preview-panel-smoke.test.mjs.
+ * foreign keys, so a table missing here or ordered after its parent fails the App
+ * delete outright rather than orphaning rows. Both the membership and the ordering
+ * are derived from the Drizzle schema by shared-preview-panel-smoke.test.mjs.
  */
 const TRANSIENT_APP_SCOPED_TABLES = [
   "approval_reviews",
@@ -46,8 +47,8 @@ const TRANSIENT_APP_SCOPED_TABLES = [
   "metrics",
   "event_definition_versions",
   "event_definitions",
-  "segments",
   "targeting_rules",
+  "segments",
   "flag_configs",
   "client_keys",
   "api_keys",

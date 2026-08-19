@@ -11,9 +11,18 @@ export async function signInThroughAuthKit(
   config: SmokeConfig,
   credentials: PanelCredentials,
 ): Promise<void> {
-  await page.goto(`${config.panelBaseUrl}/auth/login?returnTo=%2F`, {
-    waitUntil: "domcontentloaded",
-  });
+  const loginUrl = `${config.panelBaseUrl}/auth/login?returnTo=%2F`;
+  try {
+    await page.goto(loginUrl, { waitUntil: "domcontentloaded" });
+  } catch (cause) {
+    // A DNS, TLS, or connection-refused failure never reaches the step assertions below,
+    // so name the origin and the variable that sets it here or the cause is unstated.
+    throw new Error(
+      `Could not open the Control Panel login at ${loginUrl}. Check the deploy is serving ` +
+        `this origin; it comes from SPLITCH_SMOKE_PANEL_BASE_URL (${config.panelBaseUrl}). ` +
+        `Underlying failure: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+  }
   await assertAuthKitAccepted(page, config);
 
   const email = page.locator('input[type="email"]').first();

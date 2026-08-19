@@ -152,6 +152,9 @@ test("shared-preview deploy keeps every post-deploy smoke phase non-blocking", (
     /name: Install Playwright Chromium\n\s+id: browser\n\s+if: steps\.safe_delivery\.outcome == 'success'/,
   );
   // A silent panel failure is worse than none: both outcomes must reach the summary.
+  // Without the browser outcome a failed Chromium install renders the panel steps as
+  // "unknown" with no stated cause.
+  assert.match(deployJob, /SPLITCH_PANEL_BROWSER_OUTCOME: \$\{\{ steps\.browser\.outcome \}\}/);
   assert.match(deployJob, /SPLITCH_PANEL_SEED_OUTCOME: \$\{\{ steps\.panel_seed\.outcome \}\}/);
   assert.match(deployJob, /SPLITCH_PANEL_SMOKE_OUTCOME: \$\{\{ steps\.panel_smoke\.outcome \}\}/);
   assert.match(deployJob, /steps\.panel_smoke\.outcome == 'failure'/);

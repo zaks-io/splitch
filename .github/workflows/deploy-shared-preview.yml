@@ -210,6 +210,7 @@ jobs:
           SPLITCH_SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
           SPLITCH_DARK_LAUNCH_OUTCOME: ${{ steps.dark_launch.outcome }}
           SPLITCH_SAFE_DELIVERY_OUTCOME: ${{ steps.safe_delivery.outcome }}
+          SPLITCH_PANEL_BROWSER_OUTCOME: ${{ steps.browser.outcome }}
           SPLITCH_PANEL_SEED_OUTCOME: ${{ steps.panel_seed.outcome }}
           SPLITCH_PANEL_SMOKE_OUTCOME: ${{ steps.panel_smoke.outcome }}
           SPLITCH_CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}

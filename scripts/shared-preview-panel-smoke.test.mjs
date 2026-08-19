@@ -15,26 +15,61 @@ import {
 
 const WORKOS_USER_ID = "user_01JQPANELSMOKE0000000000";
 
-/**
- * D1 enforces foreign keys, so a new `app_id` table that cleanup does not delete makes the
- * transient App delete fail outright. Reads the Drizzle schema, where each `sqliteTable(`
- * block runs until the next one, and treats a block declaring `app_id` as in scope.
- */
-function appScopedSchemaTables() {
+function schemaSources() {
   const dir = new URL("../packages/db/src/schema/", import.meta.url);
-  const tables = new Set();
-  for (const file of readdirSync(dir).filter((name) => name.endsWith(".ts"))) {
-    const blocks = readFileSync(new URL(file, dir), "utf8")
-      .split(/sqliteTable\(\s*/)
-      .slice(1);
-    for (const block of blocks) {
-      const name = block.match(/^"([a-z_]+)"/)?.[1];
-      if (name && /text\("app_id"\)/.test(block)) {
-        tables.add(name);
-      }
+  return readdirSync(dir)
+    .filter((name) => name.endsWith(".ts"))
+    .map((name) => readFileSync(new URL(name, dir), "utf8"));
+}
+
+/**
+ * The Drizzle schema as a graph: for each table, whether it carries `app_id` and which
+ * tables it points at. Parents come from both the inline `references(() => table.column)`
+ * form and the composite `foreignKey({ foreignColumns: [table.column] })` form; missing
+ * either would leave an ordering edge unguarded. Each `sqliteTable(` block runs until the
+ * next one, so splitting on that gives one block per table.
+ */
+function schemaGraph() {
+  const sources = schemaSources();
+  const tableOfVariable = new Map();
+  for (const source of sources) {
+    for (const [, variable, table] of source.matchAll(
+      /export const (\w+) = sqliteTable\(\s*"([a-z_0-9]+)"/g,
+    )) {
+      tableOfVariable.set(variable, table);
     }
   }
-  return [...tables].sort();
+
+  const graph = new Map();
+  for (const source of sources) {
+    for (const block of source.split(/sqliteTable\(\s*/).slice(1)) {
+      const table = block.match(/^"([a-z_0-9]+)"/)?.[1];
+      if (!table) {
+        continue;
+      }
+      const parents = new Set();
+      for (const [, variable] of block.matchAll(/references\(\(\)\s*=>\s*(\w+)\./g)) {
+        parents.add(tableOfVariable.get(variable));
+      }
+      for (const [, columns] of block.matchAll(/foreignColumns:\s*\[([^\]]*)\]/g)) {
+        for (const [, variable] of columns.matchAll(/(\w+)\./g)) {
+          parents.add(tableOfVariable.get(variable));
+        }
+      }
+      // A self-reference imposes no ordering between separate DELETE statements.
+      parents.delete(table);
+      parents.delete(undefined);
+      graph.set(table, { hasAppId: /text\("app_id"\)/.test(block), parents });
+    }
+  }
+  return graph;
+}
+
+function appScopedSchemaTables() {
+  return [...schemaGraph()]
+    .filter(([, table]) => table.hasAppId)
+    .map(([name]) => name)
+    .sort();
 }
 
 test("cleanup deletes from every app_id table in the Drizzle schema", () => {
@@ -63,10 +98,31 @@ test("cleanup removes every table the panel golden path writes to", () => {
   for (const table of ["experiments", "runs", "metrics", "flags", "variants", "apps"]) {
     assert.match(sql, new RegExp(`DELETE FROM ${table} `), `cleanup never deletes ${table}`);
   }
-  // Children before parents, or the delete strands rows behind foreign keys.
-  assert.ok(sql.indexOf("DELETE FROM runs ") < sql.indexOf("DELETE FROM experiments "));
-  assert.ok(sql.indexOf("DELETE FROM experiments ") < sql.indexOf("DELETE FROM apps "));
-  assert.ok(sql.indexOf("DELETE FROM variants ") < sql.indexOf("DELETE FROM flags "));
+});
+
+test("cleanup deletes every child table before the parent it references", () => {
+  const sql = buildCleanupSql();
+  const positionOf = (table) => sql.indexOf(`DELETE FROM ${table} `);
+  let pairs = 0;
+  for (const [child, { parents }] of schemaGraph()) {
+    const childAt = positionOf(child);
+    if (childAt === -1) {
+      continue;
+    }
+    for (const parent of parents) {
+      const parentAt = positionOf(parent);
+      if (parentAt === -1) {
+        continue;
+      }
+      pairs += 1;
+      assert.ok(
+        childAt < parentAt,
+        `cleanup deletes ${parent} before its child ${child}; D1 rejects that foreign key ` +
+          "and aborts the whole cleanup, so nothing is deleted",
+      );
+    }
+  }
+  assert.ok(pairs > 0, "no foreign-key pairs were checked; the schema parse found no edges");
 });
 
 test("cleanup is scoped to transient Apps in the smoke Organization only", () => {

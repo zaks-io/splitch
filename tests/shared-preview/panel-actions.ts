@@ -112,7 +112,15 @@ export async function editFlag(
   await expectHydratedShell(page, appSlug);
 
   const state = page.locator("[data-kill-switch-state]");
+  // A null read means the attribute is absent, and `not.toHaveAttribute(..., "")` would
+  // then pass against nothing. Fail here instead of asserting a change that cannot happen.
   const before = await state.getAttribute("data-kill-switch-state");
+  if (before === null) {
+    throw new Error(
+      `Flag ${flagKey} rendered no data-kill-switch-state attribute, so the kill-switch ` +
+        "assertion has nothing to compare against",
+    );
+  }
   await page.locator("[data-kill-switch-input='true']").click();
 
   await expect(
@@ -123,7 +131,7 @@ export async function editFlag(
   await expect(
     state,
     "kill-switch state never changed after the write applied",
-  ).not.toHaveAttribute("data-kill-switch-state", before ?? "", { timeout: HYDRATION_TIMEOUT_MS });
+  ).not.toHaveAttribute("data-kill-switch-state", before, { timeout: HYDRATION_TIMEOUT_MS });
 }
 
 /**
