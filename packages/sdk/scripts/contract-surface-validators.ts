@@ -66,7 +66,7 @@ interface ParseFailure {
 
 type ParseResult<T> = ParseSuccess<T> | ParseFailure;
 
-interface Schema<T> {
+export interface Schema<T> {
   parse(input: unknown): T;
   safeParse(input: unknown): ParseResult<T>;
 }
@@ -75,11 +75,11 @@ interface EnumSchema<T extends string> extends Schema<T> {
   readonly options: readonly T[];
 }
 
-function fail(message: string): never {
+export function fail(message: string): never {
   throw new Error(message);
 }
 
-function asSchema<T>(check: (input: unknown) => T): Schema<T> {
+export function asSchema<T>(check: (input: unknown) => T): Schema<T> {
   return {
     parse(input: unknown): T {
       return check(input);
@@ -97,7 +97,7 @@ function asSchema<T>(check: (input: unknown) => T): Schema<T> {
   };
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 

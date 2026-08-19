@@ -2,8 +2,14 @@
  * Zod-free Exposure batch validators for the public SDK contract surface.
  */
 
+import {
+  asSchema,
+  ErrorCodeSchema,
+  fail,
+  isPlainObject,
+  type Schema,
+} from "./contract-surface-validators";
 import type { ErrorCode } from "./generated/contract-surface-members";
-import { ErrorCodeSchema } from "./contract-surface-validators";
 
 /** Max items per Exposure batch (Web Event parity; contracts exposures-wire). */
 export const EXPOSURE_BATCH_MAX_ITEMS = 25;
@@ -31,49 +37,6 @@ export interface ExposureBatchResult {
 
 export interface ExposureBatchResponse {
   results: ExposureBatchResult[];
-}
-
-interface ParseSuccess<T> {
-  success: true;
-  data: T;
-}
-
-interface ParseFailure {
-  success: false;
-  error: Error;
-}
-
-type ParseResult<T> = ParseSuccess<T> | ParseFailure;
-
-interface Schema<T> {
-  parse(input: unknown): T;
-  safeParse(input: unknown): ParseResult<T>;
-}
-
-function fail(message: string): never {
-  throw new Error(message);
-}
-
-function asSchema<T>(check: (input: unknown) => T): Schema<T> {
-  return {
-    parse(input: unknown): T {
-      return check(input);
-    },
-    safeParse(input: unknown): ParseResult<T> {
-      try {
-        return { success: true, data: check(input) };
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error : new Error(String(error)),
-        };
-      }
-    },
-  };
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function assertExactKeys(value: Record<string, unknown>, allowed: readonly string[]): void {

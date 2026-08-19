@@ -19,7 +19,6 @@ import {
   logRejectedItem,
   logZeroProgress,
   redeemExposureBatch,
-  waitForExposureDrain,
 } from "./exposure-drain";
 import { ExposureOverflow } from "./exposure-overflow";
 import { ExposureRetryPolicy } from "./exposure-retry";
@@ -162,10 +161,15 @@ export class ExposureQueue {
     automatic: boolean;
   }): Promise<readonly ExposureBatchResult[]> {
     this.queuedDrains += 1;
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: ownership check/set must stay in one microtask
     return (async () => {
       try {
-        if (this.activeDrain !== null) {
-          await waitForExposureDrain(() => this.activeDrain);
+        while (this.activeDrain !== null) {
+          try {
+            await this.activeDrain;
+          } catch {
+            // The owner logged its failure. A waiter still gets its own send attempt.
+          }
         }
         if (options.automatic && !this.retryPolicy.automaticRetryAllowed) {
           return [];

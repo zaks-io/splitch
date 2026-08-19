@@ -23,18 +23,6 @@ export async function redeemExposureBatch(
   }
 }
 
-export async function waitForExposureDrain(
-  activeDrain: () => Promise<readonly ExposureBatchResult[]> | null,
-): Promise<void> {
-  while (activeDrain() !== null) {
-    try {
-      await activeDrain();
-    } catch {
-      // The owner logged its failure. A waiter still gets its own send attempt.
-    }
-  }
-}
-
 export function applyExposureBatchResults(
   batch: readonly QueuedExposure[],
   results: readonly ExposureBatchResult[],

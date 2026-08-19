@@ -39,22 +39,12 @@ function batchEndIndex(pending: readonly QueuedExposure[]): number {
 }
 
 export function pendingBodyBytes(items: readonly QueuedExposure[]): number {
-  const wire = {
-    exposures: items.map(({ exposureId, exposureTicket, clientTimestamp }) => ({
-      exposureId,
-      exposureTicket,
-      clientTimestamp,
-    })),
-  };
+  const wire = { exposures: toExposureBatchItems(items) };
   return new TextEncoder().encode(JSON.stringify(wire)).byteLength;
 }
 
 export function toExposureBatchItems(items: readonly QueuedExposure[]): ExposureBatchItem[] {
-  return items.map(({ exposureId, exposureTicket, clientTimestamp }) => ({
-    exposureId,
-    exposureTicket,
-    clientTimestamp,
-  }));
+  return items.map(toExposureBatchItem);
 }
 
 export function trimFailedOverflow(
@@ -106,11 +96,13 @@ function bodyPrefixBytes(): number {
 }
 
 function itemWireBytes(item: QueuedExposure): number {
-  return new TextEncoder().encode(
-    JSON.stringify({
-      exposureId: item.exposureId,
-      exposureTicket: item.exposureTicket,
-      clientTimestamp: item.clientTimestamp,
-    }),
-  ).byteLength;
+  return new TextEncoder().encode(JSON.stringify(toExposureBatchItem(item))).byteLength;
+}
+
+function toExposureBatchItem({
+  exposureId,
+  exposureTicket,
+  clientTimestamp,
+}: QueuedExposure): ExposureBatchItem {
+  return { exposureId, exposureTicket, clientTimestamp };
 }
