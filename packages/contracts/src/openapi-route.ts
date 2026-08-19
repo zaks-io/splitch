@@ -1,5 +1,6 @@
 import { createRoute, type RouteConfig, z } from "@hono/zod-openapi";
-import type { ErrorCode } from "./errors";
+import { errorStatusByCode } from "./error-status";
+import { type ErrorCode, ErrorResponseSchema } from "./errors";
 import {
   type AuthKind,
   defineRoute,
@@ -142,6 +143,37 @@ function idempotencyHeader(mode: IdempotencyMode) {
   });
 }
 
+const errorSchemaByCode = new Map<ErrorCode, z.ZodTypeAny>(
+  ErrorResponseSchema.options.map((schema) => [schema.shape.code.value, schema]),
+);
+
+function buildOpenApiErrorResponses(codes: readonly ErrorCode[]) {
+  const schemasByStatus = new Map<number, z.ZodTypeAny[]>();
+  for (const code of codes) {
+    const status = errorStatusByCode[code];
+    if (status === undefined) {
+      throw new Error(`openapi-route: ErrorCode "${code}" has no mapped HTTP status`);
+    }
+    const schema = errorSchemaByCode.get(code);
+    if (!schema) {
+      throw new Error(`openapi-route: ErrorCode "${code}" has no ErrorResponse schema`);
+    }
+    schemasByStatus.set(status, [...(schemasByStatus.get(status) ?? []), schema]);
+  }
+
+  return Object.fromEntries(
+    [...schemasByStatus].map(([status, schemas]) => [
+      status,
+      {
+        description: "Error response.",
+        content: {
+          [JSON_CONTENT]: { schema: schemas.length === 1 ? schemas[0] : z.union(schemas) },
+        },
+      },
+    ]),
+  );
+}
+
 export function defineApiRoute<const Input extends DefineApiRouteInput>(input: Input) {
   const contract = defineRoute({
     id: input.operationId,
@@ -173,6 +205,7 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
           : {}),
       },
       responses: {
+        ...buildOpenApiErrorResponses(input.errors),
         200: {
           description: input.summary,
           content: { [JSON_CONTENT]: { schema: input.response } },
