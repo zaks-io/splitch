@@ -5,7 +5,7 @@ import {
   RETRYABLE_EXPOSURE_REJECTION_CODE,
 } from "@splitch/contracts";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
-import type { AssignmentStore } from "./assignment/assignment-store";
+import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import { errorCauseChain } from "./error-cause-chain";
 import { assembleExposureFromTicket } from "./evaluate/exposure-assembly";
 import type { ExposureTicketPayload, MintExposureTicketDeps } from "./evaluate/exposure-ticket";
@@ -16,23 +16,22 @@ import {
 } from "./exposure-redemption";
 import type { ExposureRedemptionClaimStore } from "./exposure-redemption-claim-core";
 import {
+  ensureHoldoverWrite,
   ingestFailureCode,
   logAndRejectClaimStoreFault,
   type RedemptionClaimContext,
   rejected,
   releaseClaimQuietly,
-  scheduleHoldoverWrite,
   verifyTicketForScope,
 } from "./exposures-helpers";
 import { type CredentialScope, credentialScope, exposureBatchBody } from "./exposures-request";
 
 interface ExposuresRouteDeps {
-  readonly assignmentStore: AssignmentStore;
+  readonly holdoverWrite: HoldoverWriteCoordinator;
   readonly exposureIngestSink: ExposureIngestSink;
   readonly exposureRedemptionClaims: ExposureRedemptionClaimStore;
   readonly exposureTicket: MintExposureTicketDeps & { readonly previousTicketKey?: string };
   readonly sourceId: string;
-  readonly waitUntil?: (promise: Promise<unknown>) => void;
   readonly logger?: { error(message: string, detail: unknown): void };
   readonly now?: () => Date;
 }
@@ -92,7 +91,8 @@ async function redeemOne(
     return rejected(item.exposureId, RETRYABLE_EXPOSURE_REJECTION_CODE);
   }
   if (claim.status === "deduplicated") {
-    scheduleHoldoverWrite(verified.payload, scope, deps);
+    const holdoverFault = await ensureHoldoverWrite(verified.payload, scope, item.exposureId, deps);
+    if (holdoverFault) return holdoverFault;
     return { exposureId: item.exposureId, status: "deduplicated", code: null };
   }
   if (claim.status === "resume_ack") {
@@ -110,14 +110,16 @@ async function completeAcknowledgeOnly(
 ): Promise<ExposureBatchResult> {
   try {
     const ack = await deps.exposureRedemptionClaims.acknowledge(claimInput);
-    scheduleHoldoverWrite(ticket, scope, deps);
+    const holdoverFault = await ensureHoldoverWrite(ticket, scope, exposureId, deps);
+    if (holdoverFault) return holdoverFault;
     return {
       exposureId,
       status: ack.status === "already_accepted" ? "deduplicated" : "accepted",
       code: null,
     };
   } catch (cause) {
-    scheduleHoldoverWrite(ticket, scope, deps);
+    const holdoverFault = await ensureHoldoverWrite(ticket, scope, exposureId, deps);
+    if (holdoverFault) return holdoverFault;
     return logAndRejectClaimStoreFault(
       "exposure_redemption_acknowledge_failed",
       exposureId,
@@ -176,14 +178,16 @@ async function sealIngestAndConfirm(
   try {
     await deps.exposureRedemptionClaims.markSealed(claimInput);
     const ack = await deps.exposureRedemptionClaims.acknowledge(claimInput);
-    scheduleHoldoverWrite(ticket, scope, deps);
+    const holdoverFault = await ensureHoldoverWrite(ticket, scope, item.exposureId, deps);
+    if (holdoverFault) return holdoverFault;
     return {
       exposureId: item.exposureId,
       status: ack.status === "already_accepted" ? "deduplicated" : "accepted",
       code: null,
     };
   } catch (cause) {
-    // Ingest already committed. Holdover Assignment Store write still runs.
+    // Ingest already committed. Holdover must be completed or durably owned
+    // before any ack that lets the browser drop the queue item (SPL-346).
     // Classification is via the claim-store seam:
     // - Transient (SERVICE_UNAVAILABLE): SDK retries. If markSealed succeeded,
     //   exact-ID retry uses resume_ack (no second append). If markSealed failed,
@@ -192,7 +196,8 @@ async function sealIngestAndConfirm(
     //   risk; see that constant).
     // - Deterministic (INTERNAL_SERVER_ERROR): SDK drops; no retry, so the
     //   pending-lease re-acquire path does not run for 409 / protocol faults.
-    scheduleHoldoverWrite(ticket, scope, deps);
+    const holdoverFault = await ensureHoldoverWrite(ticket, scope, item.exposureId, deps);
+    if (holdoverFault) return holdoverFault;
     return logAndRejectClaimStoreFault(
       "exposure_redemption_confirm_failed",
       item.exposureId,

@@ -56,6 +56,7 @@ interface SdkRouteHarnessOptions {
   readonly evaluationUsageSink?: RecordingEvaluationUsageSink;
   readonly exposureIngestSink?: ExposureIngestSink;
   readonly exposureRedemptionClaims?: ExposureRedemptionClaimStore;
+  readonly holdoverWrite?: NonNullable<Parameters<typeof createApp>[0]["holdoverWrite"]>;
   readonly flagOverrides?: Partial<FlagConfigKV>;
   readonly holdovers?: Map<string, { runId: string; variant: string }>;
   readonly runOverrides?: Partial<RunConfigKV>;
@@ -209,6 +210,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     delegationBindings: { "event-ingest-api": options.eventIngest },
     provider: new KvProvider(configKv),
     assignmentStore,
+    holdoverWrite: options.holdoverWrite,
     exposureAssembly: {
       saltStore: new StaticSaltStore(),
       sourceId: "pop-route-test",

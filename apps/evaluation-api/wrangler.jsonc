@@ -72,6 +72,10 @@
       {
         "name": "EXPOSURE_REDEMPTION_CLAIMS",
         "class_name": "ExposureRedemptionClaimDurableObject"
+      },
+      {
+        "name": "HOLDOVER_WRITE_OUTBOX",
+        "class_name": "HoldoverWriteOutboxDurableObject"
       }
     ]
   },
@@ -87,6 +91,10 @@
     {
       "tag": "v3_exposure_redemption_claims",
       "new_sqlite_classes": ["ExposureRedemptionClaimDurableObject"]
+    },
+    {
+      "tag": "v4_holdover_write_outbox",
+      "new_sqlite_classes": ["HoldoverWriteOutboxDurableObject"]
     }
   ],
   "env": {
@@ -145,6 +153,10 @@
           {
             "name": "EXPOSURE_REDEMPTION_CLAIMS",
             "class_name": "ExposureRedemptionClaimDurableObject"
+          },
+          {
+            "name": "HOLDOVER_WRITE_OUTBOX",
+            "class_name": "HoldoverWriteOutboxDurableObject"
           }
         ]
       },
@@ -160,6 +172,10 @@
         {
           "tag": "v3_exposure_redemption_claims",
           "new_sqlite_classes": ["ExposureRedemptionClaimDurableObject"]
+        },
+        {
+          "tag": "v4_holdover_write_outbox",
+          "new_sqlite_classes": ["HoldoverWriteOutboxDurableObject"]
         }
       ],
       "services": [
@@ -225,6 +241,10 @@
           {
             "name": "EXPOSURE_REDEMPTION_CLAIMS",
             "class_name": "ExposureRedemptionClaimDurableObject"
+          },
+          {
+            "name": "HOLDOVER_WRITE_OUTBOX",
+            "class_name": "HoldoverWriteOutboxDurableObject"
           }
         ]
       },
@@ -240,6 +260,10 @@
         {
           "tag": "v3_exposure_redemption_claims",
           "new_sqlite_classes": ["ExposureRedemptionClaimDurableObject"]
+        },
+        {
+          "tag": "v4_holdover_write_outbox",
+          "new_sqlite_classes": ["HoldoverWriteOutboxDurableObject"]
         }
       ],
       "services": [

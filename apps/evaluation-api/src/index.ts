@@ -17,6 +17,9 @@ import {
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
 import { AssignmentStoreDurableObject } from "./assignment/assignment-store-do";
+import { DurableHoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
+import { requiredHoldoverWriteOutboxBinding } from "./assignment/holdover-write-outbox-binding";
+import { HoldoverWriteOutboxDurableObject } from "./assignment/holdover-write-outbox-do";
 import { KvAssignmentStore } from "./assignment/kv-assignment-store";
 import {
   makeControlPlaneAuthResolver,
@@ -88,6 +91,7 @@ async function handleRequest(
   const exposureRedemptionClaims = requiredExposureRedemptionClaimsBinding(
     env.EXPOSURE_REDEMPTION_CLAIMS,
   );
+  const holdoverWriteOutbox = requiredHoldoverWriteOutboxBinding(env.HOLDOVER_WRITE_OUTBOX);
   const reportPropagationBreach = createWorkerFaultReporter(
     env,
     workerObservabilityWithWaitUntil("evaluation-api", ctx),
@@ -109,6 +113,7 @@ async function handleRequest(
       env.ASSIGNMENT_STORE_WRITER,
       saltStore,
     ),
+    holdoverWrite: new DurableHoldoverWriteCoordinator(holdoverWriteOutbox),
     exposureAssembly: {
       saltStore,
       sourceId: env.SPLITCH_SOURCE_ID ?? "local",
@@ -178,5 +183,6 @@ function requestAuthResolver(
 export {
   AssignmentStoreDurableObject,
   ExposureRedemptionClaimDurableObject,
+  HoldoverWriteOutboxDurableObject,
   McpDelegationReplayDurableObject,
 };

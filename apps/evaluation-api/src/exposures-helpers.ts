@@ -1,6 +1,6 @@
 import type { ErrorCode, ExposureBatchResult } from "@splitch/contracts";
 import { RETRYABLE_EXPOSURE_REJECTION_CODE } from "@splitch/contracts";
-import type { AssignmentStore } from "./assignment/assignment-store";
+import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import { errorCauseChain } from "./error-cause-chain";
 import {
   type ExposureTicketPayload,
@@ -94,7 +94,12 @@ export async function releaseClaimQuietly(
   }
 }
 
-export function scheduleHoldoverWrite(
+/**
+ * Completes the Assignment Store holdover or durably owns retry before the
+ * caller may report `accepted` (SPL-346). Returns a transient rejection when
+ * ownership cannot be sealed so the SDK retains the queue item.
+ */
+export async function ensureHoldoverWrite(
   ticket: {
     readonly experiment_id: string;
     readonly id_type: string;
@@ -103,28 +108,33 @@ export function scheduleHoldoverWrite(
     readonly variant: string;
   },
   scope: CredentialScope,
+  exposureId: string,
   deps: {
-    readonly assignmentStore: AssignmentStore;
-    readonly waitUntil?: (promise: Promise<unknown>) => void;
+    readonly holdoverWrite: HoldoverWriteCoordinator;
     readonly logger?: { error(message: string, detail: unknown): void };
   },
-): void {
-  const write = deps.assignmentStore
-    .putHashed({
+): Promise<ExposureBatchResult | null> {
+  try {
+    await deps.holdoverWrite.ensure({
       appId: scope.appId,
       experimentId: ticket.experiment_id,
       idType: ticket.id_type,
       targetingKeyHash: ticket.targeting_key_hash,
       runId: ticket.run_id,
       variant: ticket.variant,
-    })
-    .then(
-      () => undefined,
-      (cause) => {
-        deps.logger?.error("assignment_store_put_failed", {
-          causeChain: errorCauseChain(cause),
-        });
-      },
-    );
-  deps.waitUntil?.(write);
+    });
+    return null;
+  } catch (cause) {
+    deps.logger?.error("holdover_write_ensure_failed", {
+      appId: scope.appId,
+      experimentId: ticket.experiment_id,
+      idType: ticket.id_type,
+      targetingKeyHash: ticket.targeting_key_hash,
+      runId: ticket.run_id,
+      variant: ticket.variant,
+      exposureId,
+      causeChain: errorCauseChain(cause),
+    });
+    return rejected(exposureId, RETRYABLE_EXPOSURE_REJECTION_CODE);
+  }
 }
