@@ -18,8 +18,6 @@ function jobSection(name) {
 }
 
 const verifyJob = jobSection("verify");
-const tinybirdJob = jobSection("tinybird");
-const d1Job = jobSection("d1");
 const productionCall = jobSection("deploy-production");
 
 test("new main pushes cannot cancel or coalesce an in-flight production call", () => {
@@ -96,53 +94,42 @@ test("the plan step gates affected verification and runs before Verify", () => {
   assert.match(verifyJob, /pnpm verify:ci --output-logs=new-only/);
 });
 
-test("the slow validators run beside Verify instead of ahead of it", () => {
+test("the validators are conditional steps inside Verify, not sibling jobs", () => {
   assert.ok(verifyJob);
-  assert.ok(tinybirdJob);
-  assert.ok(d1Job);
+  // A sibling job bills a full runner spin-up even when its steps skip. Most
+  // pushes skip both validators, so they must ride Verify's runner and gate
+  // per step off the plan outputs.
+  assert.equal(jobSection("tinybird"), undefined);
+  assert.equal(jobSection("d1"), undefined);
+  assert.match(verifyJob, /if: steps\.plan\.outputs\.tinybird == 'true'/);
+  assert.match(verifyJob, /run: pnpm tinybird:local/);
+  assert.match(verifyJob, /if: steps\.plan\.outputs\.d1 == 'true'/);
+  assert.match(verifyJob, /run: pnpm d1:migrate:local && pnpm d1:migrate:populated/);
 
-  // The whole point of the split: Verify must not carry either validator, and
-  // neither validator may wait on Verify.
-  assert.doesNotMatch(verifyJob, /tinybird|d1:migrate/i);
-  assert.doesNotMatch(tinybirdJob, /\n {4}needs:/u);
-  assert.doesNotMatch(d1Job, /\n {4}needs:/u);
-
-  assert.match(tinybirdJob, /if: steps\.plan\.outputs\.tinybird == 'true'/);
-  assert.match(tinybirdJob, /run: pnpm tinybird:local/);
-  assert.match(d1Job, /if: steps\.plan\.outputs\.d1 == 'true'/);
-  assert.match(d1Job, /run: pnpm d1:migrate:local && pnpm d1:migrate:populated/);
+  const verifyStepIndex = verifyJob.indexOf("- name: Verify\n");
+  const d1StepIndex = verifyJob.indexOf("name: Validate D1 migrations locally");
+  const tinybirdStepIndex = verifyJob.indexOf("name: Validate Tinybird locally");
+  assert.ok(verifyStepIndex > -1 && d1StepIndex > verifyStepIndex, "D1 runs after Verify");
+  assert.ok(tinybirdStepIndex > d1StepIndex, "Tinybird runs after D1");
 });
 
-test("skipping a validator cannot skip the production deploy that needs it", () => {
-  assert.ok(tinybirdJob);
-  assert.ok(d1Job);
-  // A job-level `if:` would resolve to `skipped`, and a skipped `needs` entry
-  // skips deploy-production. Both jobs must always run and gate per step.
-  assert.doesNotMatch(tinybirdJob, /\n {4}if:/u);
-  assert.doesNotMatch(d1Job, /\n {4}if:/u);
-  assert.match(productionCall, /needs:\n {6}- verify\n {6}- tinybird\n {6}- d1\n/u);
+test("production deploys wait on the single Verify job that carries the validators", () => {
+  assert.ok(productionCall);
+  assert.match(productionCall, /needs: verify\n/u);
 });
 
-test("the Tinybird validator stays off the workspace dependency graph", () => {
-  assert.ok(tinybirdJob);
-  // check-tinybird-local.mjs and its helpers import node builtins only, so
-  // installing the workspace here would buy nothing and re-couple this job to
-  // every lockfile bump.
-  assert.doesNotMatch(tinybirdJob, /run: pnpm install/);
-  assert.doesNotMatch(tinybirdJob, /cache: pnpm/);
-  assert.match(d1Job, /run: pnpm install --frozen-lockfile/);
+test("no plan ever forces an uncached run; nightly-verify owns staleness proof", () => {
+  assert.doesNotMatch(workflow, /TURBO_FORCE/);
 });
 
-test("every job plans from the exact pull request and push range endpoints", () => {
-  for (const job of [verifyJob, tinybirdJob, d1Job]) {
-    assert.ok(job);
-    const planStep = job.slice(job.indexOf("name: Plan CI verification"));
-    assert.match(planStep, /run: node scripts\/plan-ci-verification\.mjs/);
-    assert.match(planStep, /PR_BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
-    assert.match(planStep, /PR_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
-    assert.match(planStep, /PUSH_BEFORE_SHA: \$\{\{ github\.event\.before \}\}/);
-    assert.match(planStep, /PUSH_AFTER_SHA: \$\{\{ github\.sha \}\}/);
-    // The planner diffs against a merge base, which a shallow clone cannot resolve.
-    assert.match(job, /fetch-depth: 0/);
-  }
+test("Verify plans from the exact pull request and push range endpoints", () => {
+  assert.ok(verifyJob);
+  const planStep = verifyJob.slice(verifyJob.indexOf("name: Plan CI verification"));
+  assert.match(planStep, /run: node scripts\/plan-ci-verification\.mjs/);
+  assert.match(planStep, /PR_BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(planStep, /PR_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(planStep, /PUSH_BEFORE_SHA: \$\{\{ github\.event\.before \}\}/);
+  assert.match(planStep, /PUSH_AFTER_SHA: \$\{\{ github\.sha \}\}/);
+  // The planner diffs against a merge base, which a shallow clone cannot resolve.
+  assert.match(verifyJob, /fetch-depth: 0/);
 });

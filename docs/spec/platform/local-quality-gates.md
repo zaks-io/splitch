@@ -124,7 +124,8 @@ run the matching root script locally, fix the failure, and rerun `verify:push` b
 
 The required CI check runs on Blacksmith and executes the affected `verify:ci` graph. The workflow
 adds `tinybird:local`, `d1:migrate:local`, and `d1:migrate:populated` when their inputs change;
-missing comparison evidence fails closed to all three validators and a full uncached graph. Hosted
+missing comparison evidence fails closed to all three validators and the full, still cache-first,
+graph (only `nightly-verify` runs uncached). Hosted
 smoke checks run in trusted deploy workflows where the target has just been updated.
 
 Gitleaks runs as a dedicated step in the `ci` workflow (`secrets:range`), after `verify:ci`, scoped

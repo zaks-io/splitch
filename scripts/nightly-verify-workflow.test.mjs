@@ -21,7 +21,9 @@ test("nightly verify forces execution and rewrites signed cache entries", () => 
   );
   assert.match(workflow, /run: node scripts\/check-turbo-remote-cache-env\.mjs --required/);
   assert.match(workflow, /SPLITCH_PLATFORM_TARGET: pr-ci/);
-  assert.match(workflow, /run: pnpm verify:ci/);
+  // consumer-smoke is cache:false, so it was evicted from per-PR verify:ci
+  // and must keep running here or it runs nowhere.
+  assert.match(workflow, /run: pnpm verify:ci "@splitch\/sdk#test:consumer-smoke"/);
   assert.doesNotMatch(workflow, /Install Tinybird CLI|tinybird\.co/);
 });
 
