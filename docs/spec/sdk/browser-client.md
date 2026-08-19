@@ -17,7 +17,7 @@ One npm package, subpath exports — never per-environment packages:
 @splitch/sdk/react      -- provider + hooks over this client (react as optional peer)
 ```
 
-The `./react` surface (provider shape and hook API) is specified in
+The `./react` surface (provider shape, hook API, subscription seam) is specified in
 [react-bindings.md](./react-bindings.md).
 
 Each subpath is a separate bundle entry with its own size budget; server-only code never enters the
@@ -56,6 +56,7 @@ paradigm; no `setContext` in v1).
 await splitch.init(); // fetch; no-op when bootstrapped
 const value = splitch.evaluate("new-checkout", false); // sync; queues Exposure redemption
 const details = splitch.evaluateDetails("new-checkout", false); // sync; full ResolutionDetails
+const stop = splitch.subscribe("new-checkout", (details) => rerender());
 await splitch.flush(); // acknowledged queue flush
 await splitch.close(); // final flush; stops timers/listeners
 ```
@@ -77,17 +78,24 @@ Fail-loud rules (ADR-0036):
 | Revalidation failing (serving last-known-good) | held value                                   | held reason; `STALE` surfaces via logger + entry once refetch fails (see Revalidation) |
 | Normal held entry                              | held value                                   | the entry's `reason` (`SPLIT`/`DEFAULT`/`DISABLED`)                                    |
 
-Held Variant values are returned by reference, never cloned, and treated as immutable, so identity
-is stable until a revalidation swap. The browser client has no public listener registry or
-`subscribe` accessor.
+`subscribe(flagKey, listener)` registers a per-Flag listener invoked when a revalidation swap
+changes that Flag's resolution; it returns an unsubscribe function. Subscribing is **not** a read:
+it fires no Exposure until the value is actually read. Errors surface through the injectable
+`logger` — no second hook system (the Web Analytics rule, reused). Two guarantees the React
+bindings ([react-bindings.md](./react-bindings.md)) depend on: `subscribe` accepts keys absent
+from the held evaluations (the subscription registers by key and fires if a later swap introduces
+the Flag), and held Variant values are returned by reference — never cloned, treated as immutable —
+so identity is stable until a swap.
 
 ## Exposure queue (redemption)
 
 The first `evaluate`/`evaluateDetails` read of a Flag whose held entry carries an Exposure Ticket
 enqueues exactly one redemption item (`exposureId` minted at enqueue, stable across retries).
 Repeat reads enqueue nothing; a revalidation swap that changes the Flag's resolution arms the next
-read to redeem the **new** ticket. Queue mechanics reuse the Web Event queue contract
-(`packages/sdk/CONTEXT.md`) verbatim:
+read to redeem the **new** ticket. Entry equality includes the opaque `exposureIdentity` and excludes
+the ticket bytes themselves, so a same-Variant Experiment Run rollover re-arms the read while a
+routine `issued_at` remint of the same pending Exposure does not. Queue mechanics reuse the Web
+Event queue contract (`packages/sdk/CONTEXT.md`) verbatim:
 
 - Memory-only — never IndexedDB, `localStorage`, `sessionStorage`, or cookies.
 - Flush at 5 seconds after the first queued item, at the batch caps (25 items / 32 KiB), or when
@@ -97,12 +105,13 @@ read to redeem the **new** ticket. Queue mechanics reuse the Web Event queue con
   required, which rules out `sendBeacon`).
 - `flush()` awaits an acknowledged `ExposureBatchResponse` and resolves with the per-item results;
   an empty queue resolves without network I/O.
-- A failed flush is logged loudly and retained items keep the same `exposureId`s. Retryable failures
-  make at most three total delivery attempts. Non-retryable 4xx responses stop automatic delivery
-  after the first attempt. Both terminal paths log loudly and leave retained items available to an
-  explicit `flush()`.
-- Queue-cap overflow drops nothing silently: it forces an immediate flush, and if that fails the
-  overflow is logged as an explicit loss with count (fail-loud, never invisible).
+- A failed flush is logged loudly. Batch-level transport failure and per-item
+  `SERVICE_UNAVAILABLE` retain the same `exposureId`s for the next flush. Deterministic
+  per-item rejections (`INTERNAL_SERVER_ERROR`, `VALIDATION_ERROR`, ticket faults, conflicts)
+  are acknowledged as failed and dropped — see
+  [exposures-endpoint.md](./exposures-endpoint.md) Redemption semantics. Queue-cap overflow
+  drops nothing silently — it forces an immediate flush, and if that fails the overflow is
+  logged as an explicit loss with count (fail-loud, never invisible).
 
 ## Bootstrap (SSR hydration)
 
@@ -130,16 +139,21 @@ splitch.evaluate("new-checkout", false); // sync, immediately — init() not req
 - A valid bootstrap makes reads available synchronously pre-`init()`; the revalidation loop still
   starts (first tick validates the bootstrap's `etag`). Bootstrap reads bill zero (ADR-0033).
 - The serialized object is public page content by design: evaluated results, non-revealing reasons,
-  and tickets only — never rules or salt ([evaluate-all-endpoint.md](./evaluate-all-endpoint.md),
-  "destination-fixed"). The API Key stays server-side; only `pk_…` reaches the page.
+  opaque Exposure identities, and tickets only — never rules or salt
+  ([evaluate-all-endpoint.md](./evaluate-all-endpoint.md), "destination-fixed"). The API Key stays
+  server-side; only `pk_…` reaches the page.
 
 ## Revalidation
 
 A single loop revalidates the held evaluations every `revalidateMs` (default 60s) with
 `If-None-Match`:
 
-- `304` → no-op. Changed body → **atomic swap**; subsequent reads observe the replacement held
-  evaluations.
+- `304` → no-op. Changed body → **atomic swap**; per-Flag `subscribe` listeners fire only for Flags
+  whose entry actually changed. Entry equality compares `variant`, `variantName`, `reason`,
+  `errorCode`, and `exposureIdentity`; it excludes `exposureTicket` bytes. The opaque identity changes
+  across Experiment Run rollover and fresh-assignment-to-holdover materialization even when the
+  visible Variant does not. An ETag-only ticket refresh window may replace ticket bytes without
+  changing entry equality, notifying listeners, or re-arming an already-read Exposure.
 - Failure → keep serving last-known-good, log loudly every failed tick, and mark subsequently read
   entries `STALE` (`errorCode: PROVIDER_NOT_READY`) until a tick succeeds — degraded is always
   observable, never disguised (ADR-0036).

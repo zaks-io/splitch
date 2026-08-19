@@ -8,6 +8,7 @@ const EVALUATIONS = {
     variantName: "treatment",
     reason: "SPLIT",
     errorCode: null,
+    exposureIdentity: "identity-1",
     exposureTicket: "ticket-1",
   },
 };

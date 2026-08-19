@@ -254,6 +254,19 @@ function assertEvaluateAllEntryRefinements(entry: EvaluateAllEntry, path: string
   if (entry.reason !== "SPLIT" && entry.exposureTicket !== null) {
     fail(`${path}: exposureTicket is only allowed when reason === 'SPLIT'`);
   }
+  if (entry.reason !== "SPLIT" && entry.exposureIdentity !== null) {
+    fail(`${path}: exposureIdentity is only allowed when reason === 'SPLIT'`);
+  }
+  if ((entry.exposureTicket === null) !== (entry.exposureIdentity === null)) {
+    fail(`${path}: exposureIdentity is present iff exposureTicket is present`);
+  }
+}
+
+function nullableString(value: unknown, path: string): string | null {
+  if (!(typeof value === "string" || value === null)) {
+    fail(`${path} must be string | null`);
+  }
+  return value;
 }
 
 function parseEvaluateAllEntry(input: unknown, path: string): EvaluateAllEntry {
@@ -264,25 +277,20 @@ function parseEvaluateAllEntry(input: unknown, path: string): EvaluateAllEntry {
   if (input.variant !== null && !isVariantValue(input.variant)) {
     fail(`${path}.variant must be VariantValue | null`);
   }
-  if (!(typeof input.variantName === "string" || input.variantName === null)) {
-    fail(`${path}.variantName must be string | null`);
-  }
   if (typeof input.reason !== "string" || !evaluateAllReasonSet.has(input.reason)) {
     fail(`${path}.reason is invalid`);
   }
   if (input.errorCode !== null) {
     ErrorCodeSchema.parse(input.errorCode);
   }
-  if (!(typeof input.exposureTicket === "string" || input.exposureTicket === null)) {
-    fail(`${path}.exposureTicket must be string | null`);
-  }
 
   const entry: EvaluateAllEntry = {
     variant: input.variant as VariantValue | null,
-    variantName: input.variantName as string | null,
+    variantName: nullableString(input.variantName, `${path}.variantName`),
     reason: input.reason as EvaluateAllReason,
     errorCode: input.errorCode as ErrorCode | null,
-    exposureTicket: input.exposureTicket as string | null,
+    exposureIdentity: nullableString(input.exposureIdentity, `${path}.exposureIdentity`),
+    exposureTicket: nullableString(input.exposureTicket, `${path}.exposureTicket`),
   };
   assertEvaluateAllEntryRefinements(entry, path);
   return entry;

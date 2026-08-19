@@ -34,6 +34,7 @@ export interface EvaluateAllEntry {
   variantName: string | null;
   reason: EvaluateAllReason;
   errorCode: ErrorCode | null;
+  exposureIdentity: string | null;
   exposureTicket: string | null;
 }
 

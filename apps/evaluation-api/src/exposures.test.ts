@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AssembledExposure } from "./evaluate/exposure-assembly";
 import { type ExposureIngestSink, ExposureIngestSinkError } from "./exposure-redemption";
 import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
+import { ExposureRedemptionClaimTransportError } from "./exposure-redemption-claim-errors";
 import type {
   ExposureRedemptionAcknowledgeOutcome,
   ExposureRedemptionClaimInput,
@@ -42,7 +43,11 @@ class FailOnceAcknowledgeStore implements ExposureRedemptionClaimStore {
   ): Promise<ExposureRedemptionAcknowledgeOutcome> {
     this.acknowledgeAttempts += 1;
     if (this.acknowledgeAttempts === 1) {
-      throw new Error("acknowledge Durable Object put failed");
+      // Transient DO fault — must be typed so the claim-store seam classifies
+      // SERVICE_UNAVAILABLE (bare Error would fail-loud as INTERNAL_SERVER_ERROR).
+      throw new ExposureRedemptionClaimTransportError(
+        new Error("acknowledge Durable Object put failed"),
+      );
     }
     return this.inner.acknowledge(input);
   }
@@ -236,10 +241,12 @@ describe("POST /api/sdk/exposures: claim failure and concurrency", () => {
     expect(gated.writes).toHaveLength(1);
   });
 
-  it("rejects with SERVICE_UNAVAILABLE when the claim store throws (never fabricates acquired)", async () => {
+  it("rejects with SERVICE_UNAVAILABLE when the claim store throws a transport fault", async () => {
     const claims: ExposureRedemptionClaimStore = {
       claim: async () => {
-        throw new Error("claim Durable Object transport failed");
+        throw new ExposureRedemptionClaimTransportError(
+          new Error("claim Durable Object transport failed"),
+        );
       },
       release: async () => undefined,
       markSealed: async () => undefined,

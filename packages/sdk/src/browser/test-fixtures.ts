@@ -12,6 +12,7 @@ export const BROWSER_EVALUATIONS: Record<string, EvaluateAllEntry> = {
     reason: "SPLIT",
     errorCode: null,
     exposureTicket: "ticket-checkout",
+    exposureIdentity: "identity-checkout",
   },
   "legacy-banner": {
     variant: false,
@@ -19,6 +20,7 @@ export const BROWSER_EVALUATIONS: Record<string, EvaluateAllEntry> = {
     reason: "DEFAULT",
     errorCode: null,
     exposureTicket: null,
+    exposureIdentity: null,
   },
   "broken-flag": {
     variant: null,
@@ -26,6 +28,7 @@ export const BROWSER_EVALUATIONS: Record<string, EvaluateAllEntry> = {
     reason: "ERROR",
     errorCode: "SERVICE_UNAVAILABLE",
     exposureTicket: null,
+    exposureIdentity: null,
   },
 };
 

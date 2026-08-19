@@ -131,6 +131,7 @@ describe("Results Control provenance", () => {
       state: "unresolvable",
       variantId: "variant_from_a_later_edit",
       reason: "absent_from_frozen_variant_set",
+      analysisVariant: "control",
     });
     expect(results.gate.shipAllowed).toBe(false);
     expect(results.gate.blockedBy).toContain("control_identity");

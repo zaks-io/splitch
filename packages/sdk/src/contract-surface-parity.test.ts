@@ -35,6 +35,7 @@ function wellFormedEvaluateAllEntry(reason: string) {
     variantName: reason === "ERROR" ? null : "on",
     reason,
     errorCode: reason === "ERROR" ? ("INTERNAL_SERVER_ERROR" as const) : null,
+    exposureIdentity: reason === "SPLIT" ? "identity" : null,
     exposureTicket: reason === "SPLIT" ? "ticket" : null,
   };
 }
@@ -142,6 +143,7 @@ describe("contract-surface schema fixtures", () => {
               variantName: "on",
               reason: "SPLIT",
               errorCode: null,
+              exposureIdentity: "identity",
               exposureTicket: "ticket",
             },
           },
@@ -156,6 +158,22 @@ describe("contract-surface schema fixtures", () => {
               variantName: null,
               reason: "DEFAULT",
               errorCode: null,
+              exposureIdentity: "identity",
+              exposureTicket: "ticket",
+            },
+          },
+        },
+        ok: false,
+      },
+      {
+        input: {
+          evaluations: {
+            "new-checkout": {
+              variant: true,
+              variantName: "on",
+              reason: "SPLIT",
+              errorCode: null,
+              exposureIdentity: null,
               exposureTicket: "ticket",
             },
           },
@@ -199,6 +217,7 @@ describe("contract-surface schema fixtures", () => {
             variantName: "",
             reason: "SPLIT",
             errorCode: null,
+            exposureIdentity: "identity",
             exposureTicket: "",
           },
         },
@@ -247,7 +266,7 @@ describe("contract-surface schema fixtures", () => {
 describe("contract-surface __proto__ parity", () => {
   it("both refuse an own __proto__ Flag Key with the contract message", () => {
     const input = JSON.parse(
-      '{"evaluations":{"__proto__":{"variant":false,"variantName":null,"reason":"DEFAULT","errorCode":null,"exposureTicket":null}}}',
+      '{"evaluations":{"__proto__":{"variant":false,"variantName":null,"reason":"DEFAULT","errorCode":null,"exposureIdentity":null,"exposureTicket":null}}}',
     ) as unknown;
 
     const compiled = EvaluateAllResponseSchema.safeParse(input);
