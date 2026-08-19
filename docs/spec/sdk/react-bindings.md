@@ -70,15 +70,24 @@ Each hook is one `useSyncExternalStore` per rendered call site:
 - **getServerSnapshot**: the same read. It is valid exactly when the client is readable without
   `init()` — under bootstrap ([browser-client.md](./browser-client.md), Bootstrap). Without
   bootstrap, a server render throws `SDK_NOT_INITIALIZED` like any other pre-init read.
-- **derivation**: the hook's render-time return value is derived from the held entry through the
-  same internal seam — **not** by calling `evaluate`/`evaluateDetails` during render (see Exposure
-  fires on commit) — and memoized on the client, the entry reference, `flagKey`, and
-  `defaultValue`. The client is a memo key because a provider swap can change every result while
-  the snapshot stays `undefined` (Flag absent from both clients, or the new client un-inited); the
-  memo must never serve one client's derivation under another. The derived value and details are
-  exactly what `evaluate`/`evaluateDetails` return for the same entry and default — one mapping,
-  shared with the client's accessors, never duplicated. An unstable inline default re-runs the memo
-  but never re-renders (snapshots compare entry identity, not derived values).
+- **held-resolution derivation**: the hook's render-time held value and held details are derived
+  from the held entry through the same internal seam, **not** by calling
+  `evaluate`/`evaluateDetails` during render (see Exposure fires on commit). This derivation stays
+  memoized on exactly the client, the entry reference, `flagKey`, and `defaultValue`. The client is
+  a memo key because a provider swap can change every result while the snapshot stays `undefined`
+  (Flag absent from both clients, or the new client un-inited); the memo must never serve one
+  client's derivation under another. The held value and held details use the same entry-to-result
+  mapping as the client's accessors, never a duplicated mapping. An unstable inline default re-runs
+  the memo but never re-renders (snapshots compare entry identity, not derived values).
+- **details staleness overlay**: on every render, after the stable held-resolution memo is read,
+  `useFlagDetails` reads the client's current read-time staleness through the same internal seam. If
+  the client is currently degraded by failed revalidation, the hook returns the held value with
+  `reason: STALE` and `errorCode: PROVIDER_NOT_READY`; otherwise it returns the memoized held
+  details unchanged. The overlay replaces only `reason` and `errorCode`; every other details field
+  remains the held resolution's field. This overlay is outside the held-resolution memo and is not
+  a snapshot or a memo dependency. Entering or leaving staleness therefore cannot invalidate the
+  held entry or notify a subscriber, but any render caused by something else observes the current
+  state.
 
 Two guarantees this shape requires of the browser client (normative for SPL-332, restated in
 [browser-client.md](./browser-client.md)):
@@ -133,11 +142,44 @@ specified behavior surfaced through React:
 
 Staleness is **read-time metadata, not a change event**. A failed revalidation tick changes no
 Flag's resolution, so the client fires no per-Flag listeners and subscribers do not re-render for
-it; a component sees `STALE` in its details whenever it next renders for any reason. This delay is
-deliberate: re-rendering every subscriber on every failed tick would add a second notification
-channel (the Web Analytics rule browser-client.md already reuses) to redraw unchanged values, while
-the degraded state is already observable the fail-loud way — the client logs loudly on every failed
-tick ([browser-client.md](./browser-client.md), Revalidation).
+it. `useFlagDetails` must overlay the client's current read-time staleness on every render, outside
+the stable held-resolution memo, so a component sees `STALE` whenever it next renders for any other
+reason. `useFlag` remains the held value and must not re-render solely because staleness entered or
+cleared. This delay is deliberate: re-rendering every subscriber on every failed tick would add a
+second notification channel (the Web Analytics rule browser-client.md already reuses) to redraw
+unchanged values, while the degraded state is already observable the fail-loud way because the
+client logs loudly on every failed tick ([browser-client.md](./browser-client.md), Revalidation).
+
+Normative sequence:
+
+1. A successful read renders `useFlagDetails("new-checkout", false)` with the held value `true` and
+   held `reason: SPLIT`.
+2. The next revalidation fails. The client keeps the same entry reference, logs the failure, and
+   invokes no listener registered for `new-checkout`; the component does not re-render from that
+   tick.
+3. Unrelated component state or props then cause that component to render again.
+4. The stable held-resolution memo still supplies value `true`, and the per-render staleness overlay
+   makes `useFlagDetails` return value `true`, `reason: STALE`, and
+   `errorCode: PROVIDER_NOT_READY`.
+
+## SPL-334 implementation proof obligations
+
+The hook implementation slice must ship tests that prove all of the following:
+
+- The normative sequence above: a successful details render, a failed revalidation with zero
+  per-Flag listener calls and zero render caused by the tick, an unrelated render, then the held
+  value with `STALE` / `PROVIDER_NOT_READY`.
+- Failed revalidation preserves the held entry reference and does not invalidate the
+  held-resolution memo. The test must still observe current staleness after an unrelated render,
+  proving that the overlay is outside that memo.
+- `useFlag` keeps returning the held value and does not re-render solely when staleness enters or
+  clears.
+- After a successful recovery tick clears degradation without changing the Flag entry, no per-Flag
+  listener fires; on the next unrelated render, `useFlagDetails` returns the memoized held details
+  without the stale overlay.
+- A subscription-spy test proves that the hooks register only the existing per-Flag subscription
+  and that failed revalidation invokes no notification callback. The React bindings must introduce
+  no global staleness subscription or second notification channel.
 
 `SDK_REACT_PROVIDER_MISSING` is a new `SplitchSdkError` code (`packages/sdk/src/errors.ts`
 vocabulary). Throwing during render is deliberate: a missing provider or an un-inited client is a
