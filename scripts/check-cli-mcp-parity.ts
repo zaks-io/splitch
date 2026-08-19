@@ -26,6 +26,13 @@ import { assertSharedOperationParity } from "./lib/cli-mcp-shared-operation.js";
 // the list explicit makes every new exception a reviewed contract decision.
 const CONTRACT_EXCEPTIONS = [
   {
+    operationId: "environment_exposure_status_delete",
+    cli: false,
+    mcp: false,
+    reason:
+      "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
+  },
+  {
     operationId: "openapi_document_get",
     cli: false,
     mcp: false,
