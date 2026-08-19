@@ -146,6 +146,13 @@ Session identifiers follow those filters rather than blocking time-range data sk
 | `changes`       | String                 | JSON; before/after snapshot or description                                    |
 | `timestamp`     | DateTime               | Event time                                                                    |
 
+The physical datasource also carries archive-only indexing and verification columns:
+`dedup_key`, `archive_version`, `archived_d1_row_count`, `archive_checksum`, `request_status`,
+`target_type`, `proposed_at`, `resolved_at`, and `policy_contexts`. Ordinary audit rows leave the
+archive-only columns null. `archived_d1_row_count` counts the Request row plus every Review row in
+the archive payload, not Tinybird rows. The sorting key begins with `app_id`; no read can select an
+Approval Request archive before applying its App scope.
+
 Approval audit rows use this existing `audit_log` datasource, not a new datasource. The minimum
 projection is the ordinary `app_id`, `user_id`, `auth_method`, `action`, `resource_type`,
 `resource_id`, and `timestamp`, with `changes` carrying:
@@ -165,6 +172,20 @@ projection is the ordinary `app_id`, `user_id`, `auth_method`, `action`, `resour
 `resource_type` is `approval_request`; `resource_id` is the Approval Request ID. D1 remains
 canonical. Emitting these post-commit Approval audit rows through the D1-to-Tinybird bridge is
 forward-referenced here and implemented by the separately tracked bridge work.
+
+Terminal archival uses `action = 'approval_request.archive'`. Its `changes` value is the complete,
+RFC 8785-canonical payload `{ archiveVersion, request, reviews }`; `reviews` is ordered by
+`reviewed_at`, then Review ID. No field, diff, reason, error detail, or Review is truncated. The
+stable deduplication identity is Approval Request ID plus archive version. The worker reads the
+stored archive back and verifies version, `1 + reviews.length`, and the SHA-256 checksum of the
+canonical payload before removing D1 rows. The append uses `wait=true` and succeeds only on a `200`
+acknowledgment for exactly one successful row and zero quarantined rows. Replays with the same
+identity and checksum are idempotent; a conflicting payload fails loud.
+
+`audit_log` has no TTL. Approval Request archives remain readable for at least 24 months or the
+contracted audit period, whichever is longer. Archived read pipes preserve the Request wire
+projection, require `app_id`, and apply the same deleted-user tombstone values carried by the
+canonical audit rows.
 
 Not in D1 — unbounded, append-only workload fits Tinybird (ADR-0018). Audit reads must apply the
 deleted-user tombstone rules in [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md).

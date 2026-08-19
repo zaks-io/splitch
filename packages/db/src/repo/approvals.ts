@@ -1,7 +1,8 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { approvalRequests, approvalReviews } from "../schema/index";
 import { appliedReviewQueries, approvalPendingCondition } from "./approval-atomic";
 import { dispositionQueries, failureInsert } from "./approval-dispositions";
+import { type ApprovalArchiveFinalization, finalizeApprovalArchive } from "./approval-finalization";
 import type { ApprovalCommit, ApprovalDisposition, ApprovalFailure } from "./approval-types";
 import type { Db } from "./client";
 import type { TenantScope } from "./scope";
@@ -44,8 +45,51 @@ function pageFilters(
   return conditions;
 }
 
-export function makeApprovalRepo(db: Db) {
+function approvalArchiveQueries(db: Db, d1: D1Database) {
   return {
+    listReviews(scope: TenantScope, requestId: string) {
+      assertMintedScope(scope);
+      return db
+        .select()
+        .from(approvalReviews)
+        .where(
+          and(
+            eq(approvalReviews.appId, scope.appId),
+            eq(approvalReviews.approvalRequestId, requestId),
+          ),
+        )
+        .orderBy(asc(approvalReviews.reviewedAt), asc(approvalReviews.id));
+    },
+
+    /** System sweep only: each returned row mints its App scope before further access. */
+    listArchiveCandidates(resolvedBefore: string, limit: number) {
+      return db
+        .select()
+        .from(approvalRequests)
+        .where(
+          and(
+            inArray(approvalRequests.status, ["applied", "declined", "stale"]),
+            isNotNull(approvalRequests.resolvedAt),
+            lte(approvalRequests.resolvedAt, resolvedBefore),
+          ),
+        )
+        .orderBy(asc(approvalRequests.resolvedAt), asc(approvalRequests.id))
+        .limit(limit);
+    },
+
+    finalizeArchive(
+      scope: TenantScope,
+      input: ApprovalArchiveFinalization,
+      expectedStatus: "applied" | "declined" | "stale",
+    ) {
+      return finalizeApprovalArchive(d1, scope, input, expectedStatus);
+    },
+  };
+}
+
+export function makeApprovalRepo(db: Db, d1: D1Database) {
+  return {
+    ...approvalArchiveQueries(db, d1),
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the insert/race winner paths enforce one exact idempotency decision
     async createRequest(
       scope: TenantScope,
@@ -181,17 +225,6 @@ export function makeApprovalRepo(db: Db) {
       return results[0].length === 1 && results[1].length === 1;
     },
 
-    /**
-     * Writes a `failed` audit row. Unlike the apply and disposition paths this
-     * one carries NO reviewer-role condition, because a review that already
-     * failed must leave evidence rather than be silently dropped by a role the
-     * reviewer lost mid-flight (ADR-0036).
-     *
-     * That makes one invariant load-bearing: `failure.reviewedBy` MUST be the
-     * authenticated reviewer this request was authorized as, never a
-     * caller-supplied identity. Nothing in D1 re-checks it here. Attribution of
-     * the audit row is only as trustworthy as the caller's principal.
-     */
     /**
      * Writes a `failed` audit row. Unlike the apply and disposition paths this
      * one carries NO reviewer-role condition, because a review that already

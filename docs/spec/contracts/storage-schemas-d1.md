@@ -211,6 +211,14 @@ but cannot commit the target mutation. The Review row and Approval Request audit
 durable atomic audit metadata; the unbounded Tinybird audit row is emitted after commit and is
 never the mutation authority.
 
+Pending Approval Requests and their Reviews have no TTL, including Requests that render effectively
+stale before a Review materializes that state. A stored terminal `applied`, `declined`, or `stale`
+Request and every Review remain in D1 through 90 days after `resolved_at`. The daily archival worker
+then writes one versioned, canonical, untruncated Request-plus-ordered-Reviews payload to Tinybird,
+verifies its archive version, archived D1 row count, and SHA-256 content checksum, and only then atomically
+removes the Review rows followed by the Request. A failed append or verification changes no D1
+Request or Review row.
+
 ### `flags` (DEFINITION — App-level)
 
 Flag DEFINITION is App-level: `key`, value schema, and the Variant catalog. Per-Environment
