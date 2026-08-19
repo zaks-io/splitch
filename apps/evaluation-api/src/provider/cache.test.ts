@@ -80,4 +80,33 @@ describe("FlagConfigCache", () => {
 
     expect(cache.size).toBe(0);
   });
+
+  it("rejects a concurrent older fill after a newer version was already served", () => {
+    const cache = new FlagConfigCache();
+    const older = config("app-A", "env-1", 1);
+    const newer = config("app-A", "env-1", 2);
+    expect(cache.set("app:app-A:env-1:flag:f", newer.blob.id, newer.version, newer.resolved)).toBe(
+      true,
+    );
+
+    expect(cache.set("app:app-A:env-1:flag:f", older.blob.id, older.version, older.resolved)).toBe(
+      false,
+    );
+    expect(cache.get("app:app-A:env-1:flag:f")?.version).toBe(2);
+    expect(cache.servedVersion("app-A", "env-1", newer.blob.id)).toBe(2);
+  });
+
+  it("keeps the original breach clock when a same-version nudge repeats", () => {
+    const cache = new FlagConfigCache();
+    const value = config("app-A", "env-1", 1);
+    cache.set("app:app-A:env-1:flag:f", value.blob.id, value.version, value.resolved);
+    cache.invalidate("app-A", "env-1", nudge, 100);
+
+    cache.invalidate("app-A", "env-1", nudge, 250);
+
+    expect(cache.announcedVersion("app-A", "env-1", value.blob.id)).toEqual({
+      version: nudge.version,
+      announcedAt: 100,
+    });
+  });
 });

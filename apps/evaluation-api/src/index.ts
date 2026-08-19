@@ -99,8 +99,10 @@ async function handleRequest(
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(env.CREDENTIAL_STORE),
     rateLimiter: allowLimiter,
     delegationBindings: { "event-ingest-api": env.EVENT_INGEST },
-    provider: runtimeKvProvider(env, (breach) =>
-      reportPropagationBreach("flag_config_propagation_breach", { ...breach }),
+    provider: runtimeKvProvider(
+      env,
+      (breach) => reportPropagationBreach("flag_config_propagation_breach", { ...breach }),
+      (promise) => ctx.waitUntil(promise),
     ),
     assignmentStore: new KvAssignmentStore(
       env.ASSIGNMENTS_KV,

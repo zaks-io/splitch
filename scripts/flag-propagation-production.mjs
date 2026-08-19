@@ -108,7 +108,7 @@ async function runProductionPropagationHarness(config, deps = runtimeDeps()) {
   return { measurements, ...assertPropagationThresholds(measurements) };
 }
 
-async function waitForResolution(config, deps, expected) {
+export async function waitForResolution(config, deps, expected) {
   const startedAt = deps.now();
   let polls = 0;
   for (;;) {
@@ -128,12 +128,11 @@ async function waitForResolution(config, deps, expected) {
         attributes: {},
       }),
     });
-    const body = await response.json();
+    const body = await response.json().catch(() => null);
     const elapsedMs = deps.now() - startedAt;
-    if (!response.ok) {
-      throw new Error(`sdk_verify failed with HTTP ${response.status}: ${JSON.stringify(body)}`);
-    }
-    if (resolutionMatches(body, expected.enabled)) {
+    // Transient edge faults (live-update connect gaps, STALE → HTTP errors) are
+    // expected inside the five-second window; keep polling until the deadline.
+    if (response.ok && resolutionMatches(body, expected.enabled)) {
       if (elapsedMs >= PROPAGATION_LIMIT_MS) {
         throw new Error(`toggle ${expected.toggle} reached the edge in ${elapsedMs}ms`);
       }
@@ -148,7 +147,10 @@ async function waitForResolution(config, deps, expected) {
     }
     if (elapsedMs >= PROPAGATION_LIMIT_MS) {
       throw new Error(
-        `toggle ${expected.toggle} timed out after ${elapsedMs}ms: ${JSON.stringify(body)}`,
+        `toggle ${expected.toggle} timed out after ${elapsedMs}ms` +
+          (response.ok
+            ? `: ${JSON.stringify(body)}`
+            : ` (last HTTP ${response.status}: ${JSON.stringify(body)})`),
       );
     }
     await deps.sleep(POLL_INTERVAL_MS);

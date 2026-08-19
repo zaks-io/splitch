@@ -31,10 +31,12 @@ export interface ConfigUpdateListener {
   onReconnect(): void;
 }
 
+export type WaitUntil = (promise: Promise<unknown>) => void;
+
 interface Subscription {
-  // The WebSocket remains in event closures created by its originating request
-  // context. Only the connect promise is shared so concurrent cold reads await
-  // the same readiness result.
+  // waitUntil on the connecting request keeps the socket's I/O context alive
+  // across later isolate requests until close/error. Concurrent cold reads share
+  // one connect promise so siblings await readiness instead of failing loud.
   connected: boolean;
   connecting: Promise<void> | undefined;
   listener: ConfigUpdateListener;
@@ -43,11 +45,17 @@ interface Subscription {
 /** Evaluation-side client for the existing hibernating Config Store DO. */
 export class DurableConfigUpdates {
   private readonly subscriptions = new Map<string, Subscription>();
+  private waitUntil: WaitUntil | undefined;
 
   constructor(
     private readonly namespace: ConfigStoreNamespace,
     private readonly logger: Pick<Console, "error"> = console,
   ) {}
+
+  /** Refresh the per-request waitUntil seam used to pin open live-update sockets. */
+  setWaitUntil(waitUntil: WaitUntil | undefined): void {
+    this.waitUntil = waitUntil;
+  }
 
   async ensureSubscribed(
     appId: string,
@@ -113,6 +121,9 @@ export class DurableConfigUpdates {
     socket.addEventListener("error", () => this.disconnect(state));
     socket.accept();
     state.connected = true;
+    // Pin the originating request's I/O context for the socket lifetime so
+    // DeltaNudge delivery survives across Evaluation requests in this isolate.
+    this.waitUntil?.(untilSocketClosed(socket));
     state.listener.onReconnect();
   }
 
@@ -133,6 +144,14 @@ export class DurableConfigUpdates {
   private stub(appId: string, environmentId: string): ConfigStoreStub {
     return this.namespace.getByName(`${appId}:${environmentId}`);
   }
+}
+
+function untilSocketClosed(socket: WebSocket): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => resolve();
+    socket.addEventListener("close", done);
+    socket.addEventListener("error", done);
+  });
 }
 
 function parseNudge(raw: unknown): DeltaNudge | null {

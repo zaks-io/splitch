@@ -28,9 +28,15 @@ export class FlagConfigCache {
     if (announced !== undefined && version < announced.version) {
       return false;
     }
+    const servedVersion = this.servedVersions.get(announcementKey);
+    if (servedVersion !== undefined && version < servedVersion) {
+      return false;
+    }
     this.entries.set(kvKey, { config, flagId, version });
-    this.servedVersions.set(announcementKey, version);
-    if (announced !== undefined) this.announcements.delete(announcementKey);
+    this.servedVersions.set(announcementKey, Math.max(servedVersion ?? 0, version));
+    if (announced !== undefined && version >= announced.version) {
+      this.announcements.delete(announcementKey);
+    }
     return true;
   }
 
@@ -49,8 +55,12 @@ export class FlagConfigCache {
   private recordAnnouncement(key: string, version: number, announcedAt: number): void {
     const existing = this.announcements.get(key);
     const servedVersion = this.servedVersions.get(key) ?? 0;
-    if (version > servedVersion && (existing === undefined || version >= existing.version)) {
-      this.announcements.set(key, { version, announcedAt });
+    if (version > servedVersion) {
+      // Newer version floors the breach clock; same-version nudges keep the
+      // original announcedAt so experiment-only refreshes cannot suppress SLO.
+      if (existing === undefined || version > existing.version) {
+        this.announcements.set(key, { version, announcedAt });
+      }
     } else if (existing !== undefined && existing.version <= servedVersion) {
       this.announcements.delete(key);
     }

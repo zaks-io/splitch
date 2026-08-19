@@ -51,6 +51,31 @@ describe("DurableConfigUpdates", () => {
     );
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+
+  it("pins the open socket with waitUntil until close", async () => {
+    const socket = fakeSocket();
+    const waitUntil = vi.fn();
+    const updates = new DurableConfigUpdates({
+      getByName: () => ({
+        fetch: async () => upgradeResponse(socket),
+        readFlagConfigForEvaluation: async () => snapshot(),
+      }),
+    });
+    updates.setWaitUntil(waitUntil);
+    const provider = new KvProvider(new FakeKv(), { configUpdates: updates });
+
+    await provider.getFlag("app-A", "env-1", "f");
+
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+    const lifetime = waitUntil.mock.calls[0]?.[0] as Promise<unknown>;
+    expect(lifetime).toBeInstanceOf(Promise);
+    const closeHandlers = socket.addEventListener.mock.calls
+      .filter(([event]) => event === "close")
+      .map(([, handler]) => handler as () => void);
+    expect(closeHandlers.length).toBeGreaterThan(0);
+    for (const handler of closeHandlers) handler();
+    await expect(lifetime).resolves.toBeUndefined();
+  });
 });
 
 function snapshot(flag: FlagConfigKV = flagConfigKV({ key: "f" })): EvaluationConfigSnapshot {

@@ -12,8 +12,8 @@ for (const environment of ["production", "shared-preview"]) {
     assert.deepEqual(rollout.split(" && "), [
       `pnpm deploy:cloudflare:event-ingest:${environment}`,
       `pnpm deploy:cloudflare:analysis:${environment}`,
-      `pnpm deploy:cloudflare:evaluation:${environment}`,
       `pnpm deploy:cloudflare:control-plane-compat:${environment}`,
+      `pnpm deploy:cloudflare:evaluation:${environment}`,
       `pnpm credential-cache:backfill:${environment}`,
       `pnpm deploy:cloudflare:control-panel:${environment}`,
       `pnpm deploy:cloudflare:control-plane:${environment}`,
@@ -38,18 +38,18 @@ for (const environment of ["production", "shared-preview"]) {
   });
 
   /**
-   * Evaluation understands marker-less legacy entries, so it deploys first. The
-   * compatible Control Plane then publishes and completes the current backfill
-   * before the final Control Plane deploy (ADR-0046).
+   * Compat Control Plane publishes the Config Store DO RPC first, Evaluation
+   * consumes it second, then the credential backfill and final Control Plane
+   * complete the cutover (SPL-322 / ADR-0046).
    */
-  test(`${environment} deploys marker-aware Evaluation before the credential backfill`, async () => {
+  test(`${environment} deploys Evaluation after compat and before the credential backfill`, async () => {
     const { scripts } = JSON.parse(await readFile(packageJson, "utf8"));
     const rollout = scripts[`deploy:cloudflare:${environment}`];
 
     assert.ok(
-      rollout.indexOf(`deploy:cloudflare:evaluation:${environment}`) <
-        rollout.indexOf(`deploy:cloudflare:control-plane-compat:${environment}`) &&
-        rollout.indexOf(`deploy:cloudflare:control-plane-compat:${environment}`) <
+      rollout.indexOf(`deploy:cloudflare:control-plane-compat:${environment}`) <
+        rollout.indexOf(`deploy:cloudflare:evaluation:${environment}`) &&
+        rollout.indexOf(`deploy:cloudflare:evaluation:${environment}`) <
           rollout.indexOf(`credential-cache:backfill:${environment}`) &&
         rollout.indexOf(`credential-cache:backfill:${environment}`) <
           rollout.indexOf(`deploy:cloudflare:control-plane:${environment}`),
