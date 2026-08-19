@@ -37,7 +37,7 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
     appId: string,
     deleteBeforeTsMs: number,
   ): Promise<HoldoverWriteAppDeletionBeginResult> {
-    const body = await this.postJson(appId, "/begin-deletion", { deleteBeforeTsMs });
+    const body = await this.postJson(appId, "/begin-deletion", { appId, deleteBeforeTsMs });
     if (
       !isRecord(body) ||
       body.suppressed !== true ||
