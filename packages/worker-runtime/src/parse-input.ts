@@ -30,7 +30,7 @@ export async function parseInput<Schema extends z.ZodTypeAny>(
 ): Promise<ParseOutcome<z.infer<Schema>>> {
   const body = await readBody(request, rawBodyByteLimit);
   if (!body.ok) {
-    return { ok: false, error: rawBodyByteLimit?.error ?? body.error };
+    return { ok: false, error: body.error };
   }
 
   const raw: RawInput = {

@@ -46,6 +46,29 @@ describe("registrar raw-body byte limit", () => {
     expect(await response.json()).toEqual(LIMIT_ERROR);
   });
 
+  it("rejects an oversized body when Content-Length lies below the cap", async () => {
+    const auth = vi.fn(() => ({ ok: true as const, principal: principal() }));
+    const handler = vi.fn(() => Response.json({ ok: true }));
+    const body = controlledBody([JSON.stringify({ value: "x".repeat(1_000) })]);
+    const app = new Hono();
+    createRegistrar(deps({ authResolvers: { "control-plane-token": auth } })).mount(
+      app,
+      route({
+        auth: "control-plane-token",
+        input: z.any(),
+        rawBodyByteLimit: { maxBytes: 8, error: LIMIT_ERROR },
+      }),
+      handler,
+    );
+
+    const response = await app.request(requestWithBody(body.stream, { "content-length": "2" }));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual(LIMIT_ERROR);
+    expect(auth).not.toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it("bounds an untrusted Content-Length stream and stops at the first over-cap byte", async () => {
     const validate = vi.fn();
     const schema = z.any().superRefine(validate);

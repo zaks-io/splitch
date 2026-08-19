@@ -64,13 +64,14 @@ createRegistrar(deps).mount(contract, handler);
 The guard order is fixed for every mounted route:
 
 1. Attach request ID and observability context.
-2. Parse params, query, headers, and body with the route contract's Zod schemas.
-3. Resolve the principal through the Worker-provided auth resolver.
-4. Apply the route's rate-limit class. Missing or throwing rate-limit bindings fail closed for guarded routes.
-5. Enforce scopes and `app_id` / `environment_id` co-scope where the contract requires them.
-6. Validate idempotency headers for mutating routes. Durable idempotency claims remain in the owning data-access layer.
-7. Call the route handler with parsed input and the resolved principal.
-8. Render guard failures through the shared `ErrorResponse` shape and status map.
+2. Enforce the route contract's `RawBodyByteLimit` against raw body bytes when declared.
+3. Parse params, query, headers, and body with the route contract's Zod schemas.
+4. Resolve the principal through the Worker-provided auth resolver.
+5. Apply the route's rate-limit class. Missing or throwing rate-limit bindings fail closed for guarded routes.
+6. Enforce scopes and `app_id` / `environment_id` co-scope where the contract requires them.
+7. Validate idempotency headers for mutating routes. Durable idempotency claims remain in the owning data-access layer.
+8. Call the route handler with parsed input and the resolved principal.
+9. Render guard failures through the shared `ErrorResponse` shape and status map.
 
 Rate limits run before scope checks so floods of unauthorized-but-authenticated requests are still
 throttled. Route handlers do not render ad hoc guard errors and do not choose HTTP statuses for
