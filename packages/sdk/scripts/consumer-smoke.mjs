@@ -6,7 +6,7 @@
  * declarations.
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -129,7 +129,19 @@ console.log("runtime import ok");
     join(consumerRoot, "quickstart-snippet.ts"),
     wrapQuickstartSnippetForTypecheck(quickstartSnippet),
   );
-  writeConsumerTsconfig(["quickstart-snippet.ts"]);
+  writeFileSync(
+    join(consumerRoot, "browser-import.ts"),
+    `import { createSplitchBrowserClient } from "@splitch/sdk/browser";
+
+const client = createSplitchBrowserClient({
+  clientKey: "pk_smoke",
+  context: { targetingKey: "consumer" },
+  revalidateMs: 0,
+});
+client.evaluate("checkout", false);
+`,
+  );
+  writeConsumerTsconfig(["quickstart-snippet.ts", "browser-import.ts"]);
 
   run("node", ["runtime.mjs"]);
   runTypecheck();
@@ -158,6 +170,12 @@ console.log("runtime import ok");
   const packedManifest = JSON.parse(
     readFileSync(join(consumerRoot, "node_modules/@splitch/sdk/package.json"), "utf8"),
   );
+  if (existsSync(join(consumerRoot, "node_modules/react"))) {
+    throw new Error("root/browser consumer smoke unexpectedly installed optional React peer");
+  }
+  if (packedManifest.peerDependenciesMeta?.react?.optional !== true) {
+    throw new Error("packed manifest must mark the React peer optional");
+  }
   if (packedManifest.dependencies?.["@splitch/contracts"]) {
     throw new Error("packed manifest still depends on @splitch/contracts");
   }

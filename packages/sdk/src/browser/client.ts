@@ -5,12 +5,9 @@ import type { PrecomputedEvaluations } from "../evaluate-all";
 import type { ExposureBatchResult, VariantValue } from "../generated/contract-surface.js";
 import type { SdkResolutionDetails } from "../resolution";
 import {
-  heldErrorDetails,
   logListenerFailures,
   loudly,
   mintIdempotencyKey,
-  missingFlagDetails,
-  nullVariantDetails,
   resolveBootstrap,
   resolveBrowserClientKey,
   resolveContext,
@@ -18,6 +15,7 @@ import {
 } from "./client-helpers";
 import { decorateHeldDetails, registerBrowserClientInternalAccess } from "./client-internals";
 import { ExposureQueue } from "./exposure-queue";
+import { deriveHeldResolution, logHeldResolution } from "./held-resolution";
 import { BrowserPayloadStore, type HeldPayload } from "./payload-store";
 import { RevalidationLoop } from "./revalidation-loop";
 import { type BrowserTransport, createBrowserFetchTransport } from "./transport";
@@ -138,22 +136,27 @@ export function createSplitchBrowserClient(
     return held;
   }
 
-  function readDetails(flagKey: string, defaultValue: VariantValue): SdkResolutionDetails {
+  function readHeldEntry(flagKey: string) {
     const payload = requireHeld();
-    const entry = payload.evaluations[flagKey];
-    if (!Object.hasOwn(payload.evaluations, flagKey) || entry === undefined) {
-      return missingFlagDetails(flagKey, defaultValue, context.targetingKey, logger, loggedMissing);
+    return Object.hasOwn(payload.evaluations, flagKey) ? payload.evaluations[flagKey] : undefined;
+  }
+
+  function readDetails(flagKey: string, defaultValue: VariantValue): SdkResolutionDetails {
+    const entry = readHeldEntry(flagKey);
+    const resolution = deriveHeldResolution(flagKey, entry, defaultValue);
+    logHeldResolution(flagKey, resolution, context.targetingKey, logger, loggedMissing);
+    if (resolution.kind !== "entry") {
+      return resolution.details;
     }
-    if (entry.reason === "ERROR") {
-      return heldErrorDetails(flagKey, entry, defaultValue, context.targetingKey, logger);
-    }
-    if (entry.variant === null) {
-      return nullVariantDetails(flagKey, defaultValue, context.targetingKey, logger);
-    }
-    if (entry.exposureTicket !== null) {
+    if (entry?.exposureTicket !== null && entry?.exposureTicket !== undefined) {
       queue.enqueue(flagKey, entry.exposureTicket);
     }
-    return decorateHeldDetails(entry.variant, entry.variantName, entry.reason, store.isDegraded());
+    return decorateHeldDetails(
+      resolution.details.value,
+      resolution.details.variantName,
+      resolution.details.reason,
+      store.isDegraded(),
+    );
   }
 
   const client: SplitchBrowserClient = {
@@ -215,7 +218,11 @@ export function createSplitchBrowserClient(
       return queue.close();
     },
   };
-  registerBrowserClientInternalAccess(client, () => store.isDegraded());
+  registerBrowserClientInternalAccess(client, {
+    readRevalidationDegraded: () => store.isDegraded(),
+    readHeldEntry,
+    deriveHeldResolution,
+  });
 
   if (initial !== null) {
     revalidation.start();

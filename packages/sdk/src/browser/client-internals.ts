@@ -1,6 +1,7 @@
-import type { VariantValue } from "../generated/contract-surface.js";
+import type { EvaluateAllEntry, VariantValue } from "../generated/contract-surface.js";
 import type { SdkResolutionDetails } from "../resolution";
 import type { SplitchBrowserClient } from "./client";
+import type { HeldResolution } from "./held-resolution";
 
 export type HeldDetailsDecorator = (
   value: VariantValue,
@@ -11,6 +12,12 @@ export type HeldDetailsDecorator = (
 
 export interface BrowserClientInternalAccess {
   readonly readRevalidationDegraded: () => boolean;
+  readonly readHeldEntry: (flagKey: string) => EvaluateAllEntry | undefined;
+  readonly deriveHeldResolution: (
+    flagKey: string,
+    entry: EvaluateAllEntry | undefined,
+    defaultValue: VariantValue,
+  ) => HeldResolution;
   readonly decorateHeldDetails: HeldDetailsDecorator;
 }
 
@@ -26,12 +33,12 @@ export const decorateHeldDetails: HeldDetailsDecorator = (value, variantName, re
 
 export function registerBrowserClientInternalAccess(
   client: SplitchBrowserClient,
-  readRevalidationDegraded: () => boolean,
+  access: Omit<BrowserClientInternalAccess, "decorateHeldDetails">,
 ): void {
   accessByClient.set(
     client,
     Object.freeze({
-      readRevalidationDegraded,
+      ...access,
       decorateHeldDetails,
     }),
   );

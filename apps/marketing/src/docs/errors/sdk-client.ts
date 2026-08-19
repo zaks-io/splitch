@@ -54,6 +54,11 @@ export const sdkErrorDocs = {
     fix: "Generate bootstrap with `evaluateAll` for the exact context passed to the browser client. Do not catch this error and silently refetch because doing so can render another Entity's Variant.",
     related: ["SDK_CONTEXT_INVALID", "SDK_NOT_INITIALIZED"],
   },
+  SDK_REACT_PROVIDER_MISSING: {
+    cause: "A hook from `@splitch/sdk/react` rendered outside `SplitchProvider`.",
+    fix: "Wrap the component tree in `SplitchProvider` and pass the initialized browser client through its `client` prop.",
+    related: ["SDK_NOT_INITIALIZED"],
+  },
   SDK_TRANSPORT_NETWORK: {
     cause:
       "The SDK's transport threw before receiving an HTTP response — for example a network failure, a cancelled request that was not a timeout, or a local `fetch` misconfiguration such as an unbound `Window.fetch`.",

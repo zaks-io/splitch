@@ -1,12 +1,7 @@
 import { formatSdkErrorMessage, SplitchSdkError } from "../errors";
 import { DEFAULT_ID_TYPE, type EvaluateContext, type Logger } from "../evaluate";
 import type { PrecomputedEvaluations } from "../evaluate-all";
-import {
-  type EvaluateAllEntry,
-  EvaluateAllResponseSchema,
-  type VariantValue,
-} from "../generated/contract-surface.js";
-import type { SdkResolutionDetails } from "../resolution";
+import { EvaluateAllResponseSchema } from "../generated/contract-surface.js";
 import type { AttributeValue } from "../transport";
 import { canonicalEqual, type HeldPayload, type ListenerFailure } from "./payload-store";
 
@@ -170,83 +165,4 @@ export function loudly(
     cause,
   });
   return error;
-}
-
-export function missingFlagDetails(
-  flagKey: string,
-  defaultValue: VariantValue,
-  targetingKey: string,
-  logger: Logger,
-  loggedMissing: Set<string>,
-): SdkResolutionDetails {
-  const details: SdkResolutionDetails = {
-    value: defaultValue,
-    variantName: null,
-    reason: "ERROR",
-    errorCode: "FLAG_NOT_FOUND",
-    errorMessage: `Flag key ${JSON.stringify(flagKey)} is absent from the held Precomputed Evaluations`,
-  };
-  if (!loggedMissing.has(flagKey)) {
-    loggedMissing.add(flagKey);
-    logger.error(
-      formatSdkErrorMessage({
-        code: "FLAG_NOT_FOUND",
-        causeSummary: details.errorMessage ?? "Flag not found in held evaluations",
-        remediation: "Confirm the Flag Key exists in this App/Environment, then re-init",
-      }),
-      { flagKey, targetingKey, errorCode: "FLAG_NOT_FOUND" },
-    );
-  }
-  return details;
-}
-
-export function heldErrorDetails(
-  flagKey: string,
-  entry: EvaluateAllEntry,
-  defaultValue: VariantValue,
-  targetingKey: string,
-  logger: Logger,
-): SdkResolutionDetails {
-  const details: SdkResolutionDetails = {
-    value: defaultValue,
-    variantName: null,
-    reason: "ERROR",
-    errorCode: entry.errorCode ?? "INTERNAL_SERVER_ERROR",
-    errorMessage: `Held evaluation for ${JSON.stringify(flagKey)} carries reason ERROR`,
-  };
-  logger.error(
-    formatSdkErrorMessage({
-      code: details.errorCode ?? "INTERNAL_SERVER_ERROR",
-      causeSummary: details.errorMessage ?? "Held evaluation is ERROR",
-      remediation: "Inspect the held errorCode, then re-init after the underlying fault clears",
-    }),
-    { flagKey, targetingKey, errorCode: details.errorCode },
-  );
-  return details;
-}
-
-/**
- * Match the root client's null-variant treatment: DEFAULT, no Variant name, no Exposure.
- * A Split with a null Variant is a server-side Variant mismatch, not a served treatment.
- */
-export function nullVariantDetails(
-  flagKey: string,
-  defaultValue: VariantValue,
-  targetingKey: string,
-  logger: Logger,
-): SdkResolutionDetails {
-  logger.error(
-    formatSdkErrorMessage({
-      code: "VALIDATION_ERROR",
-      causeSummary: `Held evaluation for ${JSON.stringify(flagKey)} has a null variant with a non-ERROR reason`,
-      remediation:
-        "Re-init after the Flag's Variants are consistent; the caller's default was returned without recording an Exposure",
-    }),
-    { flagKey, targetingKey },
-  );
-  return {
-    value: defaultValue,
-    variantName: null,
-    reason: "DEFAULT",
-  };
 }
