@@ -26,6 +26,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "import": "./dist/browser/index.js"
     }
   },
   "files": [
@@ -34,15 +38,17 @@
   ],
   "scripts": {
     "generate": "node scripts/generate-contract-surface.mjs && npx tsup --config tsup.contract-surface.config.ts",
-    "build": "pnpm run generate && npx tsup --config tsup.config.ts && node scripts/write-build-stamp.mjs",
+    "build": "pnpm run generate && npx tsup --config tsup.config.ts && npx tsup --config tsup.browser.config.ts && node scripts/write-build-stamp.mjs",
     "clean": "rm -rf dist coverage src/generated/contract-surface.js src/generated/contract-surface.d.ts scripts/generated/contract-surface-members.ts",
     "lint": "biome lint src scripts",
     "test": "vitest run --passWithNoTests && node --test scripts/size-check.test.mjs",
     "test:browser-smoke": "node scripts/browser-smoke.mjs",
+    "test:browser-pagehide": "node scripts/browser-pagehide-smoke.mjs",
     "test:consumer-smoke": "node scripts/consumer-smoke.mjs",
     "test:mutation": "stryker run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.contract-assignability.json --noEmit",
     "pack:check": "node scripts/pack-check.mjs",
+    "size:check": "node scripts/size-check.mjs",
     "pack:dry-run": "node scripts/pack-dry-run.mjs",
     "prepack": "node scripts/prepack-guard.mjs"
   },

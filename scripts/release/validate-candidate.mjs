@@ -38,7 +38,9 @@ const TASKS = [
   "//#d1:migrate:populated",
   "pack:dry-run",
   "pack:check",
+  "size:check",
   "test:consumer-smoke",
+  "test:browser-pagehide",
 ];
 
 process.stdout.write(

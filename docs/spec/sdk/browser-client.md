@@ -106,9 +106,10 @@ Event queue contract (`packages/sdk/CONTEXT.md`) verbatim:
 - `flush()` awaits an acknowledged `ExposureBatchResponse` and resolves with the per-item results;
   an empty queue resolves without network I/O.
 - A failed flush is logged loudly. Batch-level transport failure and per-item
-  `SERVICE_UNAVAILABLE` retain the same `exposureId`s for the next flush. Deterministic
-  per-item rejections (`INTERNAL_SERVER_ERROR`, `VALIDATION_ERROR`, ticket faults, conflicts)
-  are acknowledged as failed and dropped — see
+  `SERVICE_UNAVAILABLE` retain the same `exposureId`s for the next flush and make at most three
+  automatic delivery attempts. An explicit `flush()` can still send retained items after automatic
+  delivery stops. Deterministic per-item rejections (`INTERNAL_SERVER_ERROR`, `VALIDATION_ERROR`,
+  ticket faults, conflicts) are acknowledged as failed and dropped — see
   [exposures-endpoint.md](./exposures-endpoint.md) Redemption semantics. Queue-cap overflow
   drops nothing silently — it forces an immediate flush, and if that fails the overflow is
   logged as an explicit loss with count (fail-loud, never invisible).

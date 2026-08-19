@@ -161,6 +161,38 @@ the type level instead of resolving `undefined` into an `await`. If you pass you
 own object literal there, add the method; the type will tell you. Nothing else is
 affected, and the built-in adapter needs no change.
 
+## Browser client (`@splitch/sdk/browser`)
+
+Static-context client for browsers: one Evaluation Context, one Precomputed
+Evaluations fetch, then synchronous Flag reads with zero per-read network.
+Exposures fire on the first local read by redeeming Exposure Tickets.
+
+```ts
+import { createSplitchBrowserClient } from "@splitch/sdk/browser";
+
+const splitch = createSplitchBrowserClient({
+  clientKey: "pk_...", // secrets (sk_/ak_) throw at construction
+  context: { targetingKey: user.id },
+});
+await splitch.init();
+
+const on = splitch.evaluate("new-checkout", false); // sync
+const details = splitch.evaluateDetails("new-checkout", false);
+await splitch.flush();
+```
+
+Reading before `init()` throws `SDK_NOT_INITIALIZED`. An unknown Flag Key returns
+your default with `reason: "ERROR"` / `FLAG_NOT_FOUND` and a loud log — never a
+silent invented default.
+
+`flush()` drains the Exposure queue. If the queue hits the batch caps (25 items /
+32 KiB) and a forced flush fails, the oldest 25 items are retained for retry by
+item count; retained items are not additionally bounded by the byte cap. Only
+the excess tail is dropped loudly (`RATE_LIMITED`). A single-batch queue that
+fails once drops nothing. Retryable delivery failures make at most three automatic
+delivery attempts; a non-retryable 4xx stops automatic delivery after its first attempt.
+Both terminal paths log loudly and retain the items for an explicit `flush()`.
+
 ## Convex
 
 Convex's default runtime is a custom V8 isolate (no Node built-ins). `fetch` is
