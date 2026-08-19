@@ -77,6 +77,13 @@ export function resolveBootstrap(
   bootstrap: PrecomputedEvaluations,
   context: ReturnType<typeof resolveContext>,
 ): HeldPayload {
+  if (typeof bootstrap !== "object" || bootstrap === null || Array.isArray(bootstrap)) {
+    throw new SplitchSdkError({
+      code: "VALIDATION_ERROR",
+      causeSummary: "The browser bootstrap must be a server-generated object",
+      remediation: "Regenerate the bootstrap payload server-side with the SDK evaluateAll accessor",
+    });
+  }
   if (!canonicalEqual(bootstrap.context, context)) {
     throw new SplitchSdkError({
       code: "SDK_BOOTSTRAP_CONTEXT_MISMATCH",
@@ -127,7 +134,6 @@ export function logListenerFailures(logger: Logger, failures: readonly ListenerF
         causeSummary: `Flag change listener for ${JSON.stringify(flagKey)} threw`,
         remediation:
           "Fix the listener; the new payload is active and other listeners were still notified",
-        originalError: cause,
       }),
       { flagKey, cause },
     );

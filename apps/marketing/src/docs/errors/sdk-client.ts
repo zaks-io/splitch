@@ -50,7 +50,7 @@ export const sdkErrorDocs = {
   },
   SDK_BOOTSTRAP_CONTEXT_MISMATCH: {
     cause:
-      "`createSplitchBrowserClient` received bootstrap evaluated for a different targeting key, id type, or attribute set than the client's fixed Evaluation Context.",
+      "`createSplitchBrowserClient` received bootstrap evaluated for a different Targeting Key, id type, or attribute set than the client's fixed Evaluation Context.",
     fix: "Generate bootstrap with `evaluateAll` for the exact context passed to the browser client. Do not catch this error and silently refetch because doing so can render another Entity's Variant.",
     related: ["SDK_CONTEXT_INVALID", "SDK_NOT_INITIALIZED"],
   },

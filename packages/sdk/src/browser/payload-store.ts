@@ -47,7 +47,10 @@ export class BrowserPayloadStore {
     const previous = this.held;
     const changed =
       previous === null ? Object.keys(payload.evaluations) : diffFlags(previous, payload);
-    this.held = payload;
+    this.held = {
+      evaluations: mergeEvaluations(previous, payload, new Set(changed)),
+      etag: payload.etag,
+    };
     this.degraded = false;
     return changed;
   }
@@ -84,6 +87,25 @@ export class BrowserPayloadStore {
       }
     };
   }
+}
+
+function mergeEvaluations(
+  previous: HeldPayload | null,
+  next: HeldPayload,
+  changed: ReadonlySet<string>,
+): Readonly<Record<string, EvaluateAllEntry>> {
+  return Object.fromEntries(
+    Object.entries(next.evaluations).map(([flagKey, incoming]) => {
+      const before = previous?.evaluations[flagKey];
+      if (before === undefined || changed.has(flagKey)) {
+        return [flagKey, incoming];
+      }
+      if (before.exposureTicket === incoming.exposureTicket) {
+        return [flagKey, before];
+      }
+      return [flagKey, { ...incoming, variant: before.variant }];
+    }),
+  );
 }
 
 function diffFlags(previous: HeldPayload, next: HeldPayload): string[] {

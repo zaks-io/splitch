@@ -4,6 +4,7 @@ import type { PrecomputedEvaluations } from "../evaluate-all";
 import type { EvaluateAllEntry } from "../generated/contract-surface.js";
 import { FakeLogger } from "../test-fixtures";
 import { createSplitchBrowserClient } from "./client";
+import { resolveBootstrap, resolveContext } from "./client-helpers";
 import { browserOkPayload, FakeBrowserTransport } from "./test-fixtures";
 
 afterEach(() => {
@@ -11,6 +12,25 @@ afterEach(() => {
 });
 
 describe("createSplitchBrowserClient: construction", () => {
+  it.each([
+    ["null", null],
+    ["undefined", undefined],
+    ["a primitive", 42],
+  ])("throws typed validation for %s bootstrap", (_label, bootstrap) => {
+    let thrown: unknown;
+    try {
+      resolveBootstrap(
+        bootstrap as unknown as PrecomputedEvaluations,
+        resolveContext({ targetingKey: "u1" }),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(SplitchSdkError);
+    expect(thrown).toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
   it("throws when a secret sk_ key is passed", () => {
     expect(() =>
       createSplitchBrowserClient({ clientKey: "sk_secret", context: { targetingKey: "u1" } }),

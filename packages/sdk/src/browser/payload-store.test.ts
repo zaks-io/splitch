@@ -1,17 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
-import type { EvaluateAllEntry } from "../generated/contract-surface.js";
+import type { EvaluateAllEntry, VariantValue } from "../generated/contract-surface.js";
 import { BrowserPayloadStore, type HeldPayload } from "./payload-store";
 
-function payload(variant: boolean, etag: string): HeldPayload {
-  const entry: EvaluateAllEntry = {
+function entry(variant: VariantValue, exposureTicket: string | null = null): EvaluateAllEntry {
+  return {
     variant,
-    variantName: variant ? "on" : "off",
+    variantName: "on",
     reason: "SPLIT",
     errorCode: null,
-    exposureIdentity: null,
-    exposureTicket: null,
+    exposureIdentity: exposureTicket === null ? null : "binding-1",
+    exposureTicket,
   };
-  return { evaluations: { checkout: entry }, etag };
+}
+
+function payload(variant: boolean, etag: string): HeldPayload {
+  return { evaluations: { checkout: entry(variant) }, etag };
 }
 
 describe("BrowserPayloadStore subscriptions", () => {
@@ -47,5 +50,58 @@ describe("BrowserPayloadStore subscriptions", () => {
     store.notify(changed);
 
     expect(replacement).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("BrowserPayloadStore swaps", () => {
+  it("preserves an unchanged entry and Variant reference during a partial swap", () => {
+    const stableVariant = { enabled: true };
+    const stableEntry = entry(stableVariant);
+    const changedEntry = entry(false);
+    const store = new BrowserPayloadStore({
+      evaluations: { stable: stableEntry, changed: changedEntry },
+      etag: '"etag-1"',
+    });
+    const stableListener = vi.fn();
+    store.subscribe("stable", stableListener);
+
+    const changed = store.swap({
+      evaluations: { stable: entry({ enabled: true }), changed: entry(true) },
+      etag: '"etag-2"',
+    });
+    store.notify(changed);
+    const current = store.current();
+
+    expect(current?.evaluations.stable).toBe(stableEntry);
+    expect(current?.evaluations.stable?.variant).toBe(stableVariant);
+    expect(current?.evaluations.changed).not.toBe(changedEntry);
+    expect(changed).toEqual(["changed"]);
+    expect(stableListener).not.toHaveBeenCalled();
+  });
+
+  it("keeps fresh ticket bytes while preserving the Variant reference", () => {
+    const previousVariant = { enabled: true };
+    const previousEntry = entry(previousVariant, "ticket-old");
+    const incomingEntry = entry({ enabled: true }, "ticket-fresh");
+    const store = new BrowserPayloadStore({
+      evaluations: { checkout: previousEntry },
+      etag: '"etag-1"',
+    });
+    const listener = vi.fn();
+    store.subscribe("checkout", listener);
+
+    const changed = store.swap({
+      evaluations: { checkout: incomingEntry },
+      etag: '"etag-2"',
+    });
+    store.notify(changed);
+    const currentEntry = store.current()?.evaluations.checkout;
+
+    expect(currentEntry).not.toBe(previousEntry);
+    expect(currentEntry).not.toBe(incomingEntry);
+    expect(currentEntry?.variant).toBe(previousVariant);
+    expect(currentEntry?.exposureTicket).toBe("ticket-fresh");
+    expect(changed).toEqual([]);
+    expect(listener).not.toHaveBeenCalled();
   });
 });
