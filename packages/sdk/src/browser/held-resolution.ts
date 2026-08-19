@@ -55,16 +55,17 @@ export function logHeldResolution(
   resolution: HeldResolution,
   targetingKey: string,
   logger: Logger,
-  loggedMissing: Set<string>,
+  loggedResolutions: Set<string>,
 ): void {
   if (resolution.kind === "entry") {
     return;
   }
+  const dedupeKey = `${flagKey}:${resolution.kind}`;
+  if (loggedResolutions.has(dedupeKey)) {
+    return;
+  }
+  loggedResolutions.add(dedupeKey);
   if (resolution.kind === "missing") {
-    if (loggedMissing.has(flagKey)) {
-      return;
-    }
-    loggedMissing.add(flagKey);
     logger.error(
       formatSdkErrorMessage({
         code: "FLAG_NOT_FOUND",

@@ -102,7 +102,7 @@ export function createSplitchBrowserClient(
     });
 
   let initPromise: Promise<void> | null = null;
-  const loggedMissing = new Set<string>();
+  const loggedResolutions = new Set<string>();
   const store = new BrowserPayloadStore(initial);
   // Pass document/window only when the key is present: an absent key means
   // "use the ambient global", while explicit undefined/null means "absent".
@@ -142,8 +142,8 @@ export function createSplitchBrowserClient(
   }
 
   function readHeldEntry(flagKey: string) {
-    const payload = requireHeld();
-    return Object.hasOwn(payload.evaluations, flagKey) ? payload.evaluations[flagKey] : undefined;
+    const { evaluations } = requireHeld();
+    return Object.hasOwn(evaluations, flagKey) ? evaluations[flagKey] : undefined;
   }
 
   function deriveDetails(
@@ -152,24 +152,25 @@ export function createSplitchBrowserClient(
     defaultValue: VariantValue,
   ) {
     const resolution = deriveHeldResolution(flagKey, entry, defaultValue);
-    logHeldResolution(flagKey, resolution, targetingKey, logger, loggedMissing);
+    logHeldResolution(flagKey, resolution, targetingKey, logger, loggedResolutions);
     return resolution;
   }
 
   function readDetails(flagKey: string, defaultValue: VariantValue): SdkResolutionDetails {
     const entry = readHeldEntry(flagKey);
     const resolution = deriveDetails(flagKey, entry, defaultValue);
+    const { details } = resolution;
     if (resolution.kind !== "entry") {
-      return resolution.details;
+      return details;
     }
     const { exposureTicket } = entry as EvaluateAllEntry;
     if (exposureTicket !== null) {
       queue.enqueue(flagKey, exposureTicket);
     }
     return decorateHeldDetails(
-      resolution.details.value,
-      resolution.details.variantName,
-      resolution.details.reason,
+      details.value,
+      details.variantName,
+      details.reason,
       store.isDegraded(),
     );
   }

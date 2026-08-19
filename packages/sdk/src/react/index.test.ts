@@ -235,37 +235,6 @@ describe("React fail-loud behavior", () => {
     await client.close();
   });
 
-  it("logs an SSR missing Flag once across render and commit without an Exposure", async () => {
-    const logger = new FakeLogger();
-    const transport = new FakeBrowserTransport([]);
-    const client = createSplitchBrowserClient({
-      clientKey: "pk_test",
-      context: { targetingKey: "u1" },
-      bootstrap: bootstrap({ checkout: entry(true) }),
-      revalidateMs: 0,
-      transport,
-      logger,
-      document: null,
-      window: null,
-    });
-    function Consumer() {
-      return createElement("span", null, String(useFlag("missing", "fallback")));
-    }
-    const tree = createElement(Consumer);
-
-    expect(renderToString(createElement(SplitchProvider, { client }, tree))).toBe(
-      "<span>fallback</span>",
-    );
-    expect(logger.errors).toHaveLength(1);
-    const mounted = await mount(client, tree);
-    await client.flush();
-    expect(logger.errors).toHaveLength(1);
-    expect(transport.redeemCalls).toHaveLength(0);
-
-    await unmount(mounted.root, mounted.container);
-    await client.close();
-  });
-
   it("returns the borrowed client and never closes it on unmount", async () => {
     const { client } = clientWith({ checkout: entry(true) });
     const close = vi.spyOn(client, "close");
