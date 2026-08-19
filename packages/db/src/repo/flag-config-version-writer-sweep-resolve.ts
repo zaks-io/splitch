@@ -195,27 +195,11 @@ function collectUpdateSites(anchor: FacadeAnchor, source: ts.SourceFile): Resolv
   return sites;
 }
 
-function countUpdateCandidates(anchor: FacadeAnchor, source: ts.SourceFile): number {
-  let count = 0;
-  const visit = (node: ts.Node): void => {
-    if (ts.isCallExpression(node)) {
-      const scoped = tryScopedSite(anchor, node, source);
-      if (scoped) count += 1;
-      else if (tryDrizzleSite(anchor, node, source)) count += 1;
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-  return count;
-}
-
 export type FlagConfigUpdateResolution = {
   /** Repo-relative scan root the resolver walks (`packages/db/src`). */
   scanRoot: string;
   /** Production source files under `scanRoot` that were walked for CallExpressions. */
   scannedFiles: string[];
-  /** Independent count of flag_configs UPDATE candidates before site collection. */
-  candidateCount: number;
   sites: ResolvedUpdateSite[];
 };
 
@@ -243,13 +227,11 @@ export function resolveFlagConfigUpdates(): FlagConfigUpdateResolution {
 
   const scannedFiles: string[] = [];
   const sites: ResolvedUpdateSite[] = [];
-  let candidateCount = 0;
   for (const fileName of scanFileNames) {
     const source = program.getSourceFile(fileName);
     if (!source) fail(`tsconfig fileName missing from program: ${fileName}`);
     assertNoRawFlagConfigsSqlUpdate(anchor, source);
     scannedFiles.push(relFile(source));
-    candidateCount += countUpdateCandidates(anchor, source);
     sites.push(...collectUpdateSites(anchor, source));
   }
 
@@ -257,7 +239,6 @@ export function resolveFlagConfigUpdates(): FlagConfigUpdateResolution {
   return {
     scanRoot: relative(REPO_ROOT, SRC_ROOT).replaceAll("\\", "/"),
     scannedFiles,
-    candidateCount,
     sites,
   };
 }

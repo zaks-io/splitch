@@ -19,6 +19,16 @@ function lineOf(source: ts.SourceFile, node: ts.Node): number {
 
 type SqlParts = { statics: string[]; exprs: ts.Expression[] };
 
+const SQL_IDENTIFIER =
+  '(?:[A-Za-z_][A-Za-z0-9_$]*|"(?:[^"]|"")*"|`(?:[^`]|``)*`|\\[(?:[^\\]]|\\]\\])*\\])';
+const SQL_TARGET_PART = `(?:${SQL_IDENTIFIER}|«\\d+»)`;
+const SQL_GAP = String.raw`(?:\s|\/\*[\s\S]*?\*\/|--[^\r\n]*(?:\r?\n|$))+`;
+const UPDATE_TARGET = new RegExp(
+  String.raw`\bUPDATE${SQL_GAP}(?:OR${SQL_GAP}(?:ROLLBACK|ABORT|REPLACE|FAIL|IGNORE)${SQL_GAP})?(?:ONLY${SQL_GAP})?(${SQL_TARGET_PART}(?:\s*\.\s*${SQL_TARGET_PART})*)`,
+  "gi",
+);
+const TARGET_PART = new RegExp(`${SQL_IDENTIFIER}|«(\\d+)»`, "g");
+
 function literalParts(text: string): SqlParts {
   return { statics: [text], exprs: [] };
 }
@@ -74,7 +84,7 @@ function assertNoRawFlagConfigsUpsert(anchor: FacadeAnchor, parts: SqlParts, whe
 }
 
 function assertNameTargetNotFlagConfigs(where: string, name: string): void {
-  if (name !== "flag_configs") return;
+  if (name.toLowerCase() !== "flag_configs") return;
   failRaw(where, "raw SQL UPDATE of flag_configs cannot be scored by the type-driven sweep");
 }
 
@@ -104,22 +114,39 @@ function assertExprTargetNotFlagConfigs(
   }
 }
 
+function normalizedIdentifier(identifier: string): string {
+  const first = identifier[0];
+  if (first === '"') return identifier.slice(1, -1).replaceAll('""', '"');
+  if (first === "`") return identifier.slice(1, -1).replaceAll("``", "`");
+  if (first === "[") return identifier.slice(1, -1).replaceAll("]]", "]");
+  return identifier;
+}
+
+function targetOf(
+  target: string,
+): { kind: "name"; name: string } | { kind: "expr"; index: number } | undefined {
+  const parts = [...target.matchAll(TARGET_PART)];
+  const table = parts.at(-1)?.[0];
+  if (!table) return undefined;
+  const interpolation = table.match(/^«(\d+)»$/)?.[1];
+  return interpolation === undefined
+    ? { kind: "name", name: normalizedIdentifier(table) }
+    : { kind: "expr", index: Number(interpolation) };
+}
+
 /**
- * Top-level `UPDATE <table>` targets. `DO UPDATE` is blanked so upsert SET
- * clauses are not mistaken for a top-level UPDATE of that table name.
+ * Top-level `UPDATE <table>` targets. Identifier quoting and optional schema
+ * qualification are normalized before comparing the final table component.
+ * `DO UPDATE` is blanked so upsert SET clauses are not mistaken for a target.
  */
 function updateTableTargets(
   parts: SqlParts,
 ): Array<{ kind: "name"; name: string } | { kind: "expr"; index: number }> {
   const blanked = patterned(parts).replace(/\bDO\s+UPDATE\b/gi, "DO /*upsert*/");
   const targets: Array<{ kind: "name"; name: string } | { kind: "expr"; index: number }> = [];
-  const re = /\bUPDATE\s+(?:ONLY\s+)?(?:«(\d+)»|([`"']?)([A-Za-z_][\w]*)\2)/gi;
-  for (const match of blanked.matchAll(re)) {
-    if (match[1] !== undefined) {
-      targets.push({ kind: "expr", index: Number(match[1]) });
-    } else if (match[3]) {
-      targets.push({ kind: "name", name: match[3] });
-    }
+  for (const match of blanked.matchAll(UPDATE_TARGET)) {
+    const target = match[1] ? targetOf(match[1]) : undefined;
+    if (target) targets.push(target);
   }
   return targets;
 }
@@ -169,6 +196,19 @@ function rawSqlPartsFromNode(node: ts.Node): SqlParts | undefined {
   return arg ? templateNodeParts(arg) : undefined;
 }
 
+function assertRawSqlCallResolved(
+  anchor: FacadeAnchor,
+  source: ts.SourceFile,
+  node: ts.Node,
+  parts: SqlParts | undefined,
+): void {
+  if (parts || !ts.isCallExpression(node) || (!isSqlRawCall(node) && !isPrepareCall(node))) return;
+  const where = `${anchor.relFile(source)}:${lineOf(source, node)}`;
+  const arg = node.arguments[0];
+  const expression = arg ? arg.getText(source) : "<missing>";
+  failRaw(where, `raw SQL argument ${expression} cannot be resolved statically`);
+}
+
 /**
  * Raw `sql\`…\``, `sql.raw(...)`, and `.prepare(...)` UPDATEs of `flag_configs`
  * (including aliased interpolations and unresolved table expressions) fail loud —
@@ -177,6 +217,7 @@ function rawSqlPartsFromNode(node: ts.Node): SqlParts | undefined {
 export function assertNoRawFlagConfigsSqlUpdate(anchor: FacadeAnchor, source: ts.SourceFile): void {
   const visit = (node: ts.Node): void => {
     const parts = rawSqlPartsFromNode(node);
+    assertRawSqlCallResolved(anchor, source, node, parts);
     if (parts) assertPartsNotFlagConfigsUpdate(anchor, source, node, parts);
     ts.forEachChild(node, visit);
   };

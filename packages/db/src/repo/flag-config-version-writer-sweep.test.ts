@@ -1,13 +1,14 @@
+import { unlinkSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { bumpWins, isBumpExpr } from "./flag-config-version-writer-sweep-lib";
 import {
   FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT,
-  listExpectedScannedFiles,
-  resolveFlagConfigUpdates,
   type FlagConfigUpdateResolution,
+  listExpectedScannedFiles,
   type ResolvedUpdateSite,
+  resolveFlagConfigUpdates,
 } from "./flag-config-version-writer-sweep-resolve";
 
 /**
@@ -26,25 +27,24 @@ import {
  * `update` member (parameter destructure, multi-hop alias, callback).
  * `.call`/`.apply` still go through the receiver path.
  *
- * Assertions are the property (every discovered site bumps) plus derived
+ * Assertions are the property (every discovered site bumps) plus pinned
  * anti-vacuity: `scannedFiles` must equal the tsconfig `fileNames` listing,
- * discovered sites must span at least two modules, and `sites.length` must
- * equal the independent candidate CallExpression count (so a silent
- * first-match-per-file narrow cannot pass). No hand-maintained inventory.
+ * the current five-site floor cannot shrink, and discovered sites must span at
+ * least two modules. A new writer may grow the set without updating an inventory.
  *
  * Inside production sources, raw SQL UPDATEs of `flag_configs` fail loud as
- * `sql\`UPDATE …\``, `sql.raw(...)`, or `.prepare(...)` — including `${alias}`
- * interpolations resolved by symbol identity, string-literal `"flag_configs"`,
- * and UPDATE table expressions the checker cannot resolve (unknown ≠
- * not-flag_configs). `INSERT … ON CONFLICT DO UPDATE` of flag_configs is
- * rejected deliberately (unscored). Raw `D1Database.prepare` UPDATEs outside
- * this package remain unguarded — including the live UPDATE in
+ * `sql\`UPDATE …\``, `sql.raw(...)`, or `.prepare(...)`. Quoted or qualified
+ * identifiers are normalized, interpolations are resolved by symbol identity,
+ * and any raw SQL argument or UPDATE table expression the checker cannot resolve
+ * fails loud. `INSERT … ON CONFLICT DO UPDATE` of flag_configs is rejected
+ * deliberately (unscored). Raw `D1Database.prepare` UPDATEs outside this package
+ * remain unguarded, including the live UPDATE in
  * `apps/control-plane-api/src/config-store-fixture-data.ts` (test-fixture
  * helper imported only by `.test.ts` files, not a production writer).
  *
- * The TypeChecker program is built once in `beforeAll` (paid once for all
- * assertions below). Individual `it`s keep vitest's 5s default; only the hook
- * that constructs the program is allowed the repo's established 15s budget.
+ * The baseline TypeChecker program is built once in `beforeAll`. The mutation
+ * regressions each build a fresh program while their temporary source exists;
+ * every program-construction path gets the repo's established 15s budget.
  *
  * The narrowed `repo.flags.flagConfigs` export (findMany/findOne/insert only)
  * makes a facade bypass a compile error in typechecked source and a TypeError
@@ -65,6 +65,23 @@ const REPO_ROOT = resolve(fileURLToPath(new URL("../../../..", import.meta.url))
 
 /** Repo-standard budget for hooks that build a TypeScript program (not per-`it`). */
 const PROGRAM_HOOK_TIMEOUT_MS = 15_000;
+
+/** Current production code has five writers; dropping any is a reviewable change. */
+const MINIMUM_KNOWN_UPDATE_SITES = 5;
+
+const MUTATION_FILE = resolve(
+  FLAG_CONFIG_VERSION_SWEEP_SRC_ROOT,
+  "repo/spl350-writer-sweep-mutation.ts",
+);
+
+function expectSweepMutationToFail(source: string, message: RegExp): void {
+  writeFileSync(MUTATION_FILE, source, { flag: "wx" });
+  try {
+    expect(() => resolveFlagConfigUpdates()).toThrowError(message);
+  } finally {
+    unlinkSync(MUTATION_FILE);
+  }
+}
 
 function siteKey(site: ResolvedUpdateSite): string {
   return `${site.file}:${site.line}`;
@@ -89,16 +106,17 @@ describe("every flag_configs UPDATE bumps version", () => {
   });
 
   it("discovers a non-trivial writer set and every site bumps version", () => {
-    const { candidateCount, sites } = resolution;
+    const { sites } = resolution;
     const siteFiles = new Set(sites.map((s) => s.file));
 
+    expect(
+      sites.length,
+      "resolver dropped a known flag_configs update site",
+    ).toBeGreaterThanOrEqual(MINIMUM_KNOWN_UPDATE_SITES);
     expect(
       siteFiles.size,
       "discovered sites must span at least two modules",
     ).toBeGreaterThanOrEqual(2);
-    expect(sites.length, "resolver dropped flag_configs update CallExpressions").toBe(
-      candidateCount,
-    );
 
     const violators = sites.filter((site) => !bumpWins(site));
     expect(
@@ -113,4 +131,39 @@ describe("every flag_configs UPDATE bumps version", () => {
     expect(isBumpExpr("patch.version + 1", new Set(["patch"]))).toBe(false);
     expect(isBumpExpr("patch.version ?? current.version + 1")).toBe(false);
   });
+
+  it.each([
+    [
+      "schema-qualified target",
+      [
+        'import { sql } from "drizzle-orm";',
+        "sql`UPDATE main.flag_configs SET version = version`;",
+      ].join("\n"),
+      /spl350-writer-sweep-mutation\.ts:2: raw SQL UPDATE of flag_configs/,
+    ],
+    [
+      "bracket-quoted target",
+      [
+        'import { sql } from "drizzle-orm";',
+        "sql`UPDATE [flag_configs] SET version = version`;",
+      ].join("\n"),
+      /spl350-writer-sweep-mutation\.ts:2: raw SQL UPDATE of flag_configs/,
+    ],
+    [
+      "dynamic sql.raw argument",
+      [
+        'import { sql } from "drizzle-orm";',
+        'const tableName: string = "flag_configs";',
+        "const statement = `UPDATE $" + "{tableName} SET version = version`;",
+        "sql.raw(statement);",
+      ].join("\n"),
+      /spl350-writer-sweep-mutation\.ts:4: raw SQL argument statement cannot be resolved statically/,
+    ],
+  ])(
+    "fails loud for a planted raw SQL bypass: %s",
+    (_name, source, message) => {
+      expectSweepMutationToFail(source, message);
+    },
+    PROGRAM_HOOK_TIMEOUT_MS,
+  );
 });
