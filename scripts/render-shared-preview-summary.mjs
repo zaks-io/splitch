@@ -25,6 +25,8 @@ export function renderSummary(input) {
     lines.push(`- Smoke outcome: \`${input.smokeOutcome}\``);
     lines.push(`- Dark-launch outcome: \`${input.darkLaunchOutcome}\``);
     lines.push(`- Safe-delivery outcome: \`${input.safeDeliveryOutcome}\``);
+    lines.push(`- Panel login seed outcome: \`${input.panelSeedOutcome}\``);
+    lines.push(`- Panel golden path outcome: \`${input.panelSmokeOutcome}\``);
   }
   lines.push(`- Cleanup outcome: \`${input.cleanupOutcome}\``);
   if (input.mode === "smoke") {
@@ -42,6 +44,11 @@ export function renderSummary(input) {
       "- Exercised health routes:",
       ...input.evidence.routes.map((route) => `  - ${route.surface}: ${route.url}`),
       "- Exercised functional routes: Auth discovery, device authorization, JWKS, client credentials, Control Plane reads, MCP tools/list, and MCP tools/call",
+      ...(input.panelSmokeOutcome === "success"
+        ? [
+            "- Exercised Control Panel golden path: AuthKit login, Organization shell, App create, Flag create and edit, Experiment draft, Run Start, and Results",
+          ]
+        : []),
       "- Applied D1 migrations:",
       ...input.migrations.map((migration) => `  - \`${migration}\``),
     );
@@ -64,17 +71,24 @@ function summaryInput(summaryMode) {
   return {
     mode: summaryMode,
     ref,
-    resetOutcome: process.env.SPLITCH_RESET_OUTCOME ?? "unknown",
-    seedOutcome: process.env.SPLITCH_SEED_OUTCOME ?? "unknown",
+    resetOutcome: stepOutcome("RESET"),
+    seedOutcome: stepOutcome("SEED"),
     smokeOutcome,
-    darkLaunchOutcome: process.env.SPLITCH_DARK_LAUNCH_OUTCOME ?? "unknown",
-    safeDeliveryOutcome: process.env.SPLITCH_SAFE_DELIVERY_OUTCOME ?? "unknown",
-    cleanupOutcome: process.env.SPLITCH_CLEANUP_OUTCOME ?? "unknown",
-    artifactOutcome: process.env.SPLITCH_ARTIFACT_OUTCOME ?? "unknown",
+    darkLaunchOutcome: stepOutcome("DARK_LAUNCH"),
+    safeDeliveryOutcome: stepOutcome("SAFE_DELIVERY"),
+    panelSeedOutcome: stepOutcome("PANEL_SEED"),
+    panelSmokeOutcome: stepOutcome("PANEL_SMOKE"),
+    cleanupOutcome: stepOutcome("CLEANUP"),
+    artifactOutcome: stepOutcome("ARTIFACT"),
     evidence,
     tinybirdBranch: "shared_preview",
     migrations: migrationNames(),
   };
+}
+
+/** A step that never ran reports `unknown`, which is distinct from `success` in the summary. */
+function stepOutcome(step) {
+  return process.env[`SPLITCH_${step}_OUTCOME`] ?? "unknown";
 }
 
 function readEvidence() {
