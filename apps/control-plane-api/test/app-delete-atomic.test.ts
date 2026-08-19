@@ -12,6 +12,7 @@ import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
+import { noOpExposureStatusCleanup } from "./exposure-status-cleanup-fixture";
 
 /**
  * SPL-298: a failed `apps delete` must leave the App manageable — live
@@ -69,6 +70,7 @@ beforeEach(async () => {
       rateLimiter: allowLimiter,
       repo: createRepository(bindings.d1),
       credentialStore: bindings.credentialKv,
+      exposureStatusCleanup: noOpExposureStatusCleanup,
       nowIso: () => NOW_ISO,
     }),
     signer,

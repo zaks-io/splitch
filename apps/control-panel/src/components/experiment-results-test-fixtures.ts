@@ -1,4 +1,4 @@
-import type { FrozenControlIdentity, StatsOutput } from "@splitch/contracts";
+import type { ArmResult, FrozenControlIdentity, StatsOutput } from "@splitch/contracts";
 import {
   evaluateExperimentDecisionGate,
   experimentSignificanceDisplays,
@@ -70,29 +70,27 @@ export function statsFixture(overrides: Partial<StatsOutput> = {}): StatsOutput 
   };
 }
 
-/** Both Control names are present, so a mistaken baseline substitution destroys a real result. */
-export function controlDisagreementStats(): StatsOutput {
+/** Mirrors the StatsEngine output, which always includes the Analysis Control arm. */
+export function statsWithAnalysisControl(analysisControl = "control"): StatsOutput {
   const base = statsFixture();
-  const [frozenControlResult] = base.arm_results;
-  if (!frozenControlResult) throw new Error("statsFixture must produce one arm result");
+  const [treatmentResult] = base.arm_results;
+  if (!treatmentResult) throw new Error("statsFixture must produce one Treatment result");
   return {
     ...base,
-    arm_results: [
-      {
-        ...frozenControlResult,
-        variant: "legacy_checkout",
-        sample_size_n: 12_530,
-        relative_lift_pct: null,
-        ci_lower: null,
-        ci_upper: null,
-        p_value: 1,
-        is_significant: false,
-        in_bh_family: false,
-        exploratory: true,
-        decision_valid: false,
-      },
-      { ...frozenControlResult, variant: "control" },
-    ],
+    arm_results: [analysisControlArmResult(treatmentResult, analysisControl), treatmentResult],
+  };
+}
+
+/** Both Control names are present, so a mistaken baseline substitution destroys a real result. */
+export function controlDisagreementStats(): StatsOutput {
+  const base = statsWithAnalysisControl("legacy_checkout");
+  const [analysisControlResult, treatmentResult] = base.arm_results;
+  if (!analysisControlResult || !treatmentResult) {
+    throw new Error("statsWithAnalysisControl must produce Control and Treatment results");
+  }
+  return {
+    ...base,
+    arm_results: [analysisControlResult, { ...treatmentResult, variant: "control" }],
     srm: {
       ...base.srm,
       observed_counts: { legacy_checkout: 12_530, control: 12_480 },
@@ -103,6 +101,22 @@ export function controlDisagreementStats(): StatsOutput {
       exposure_counts: { legacy_checkout: 12_560, control: 12_510 },
       deduped_counts: { legacy_checkout: 12_530, control: 12_480 },
     },
+  };
+}
+
+function analysisControlArmResult(template: ArmResult, variant: string): ArmResult {
+  return {
+    ...template,
+    variant,
+    sample_size_n: 12_530,
+    relative_lift_pct: null,
+    ci_lower: null,
+    ci_upper: null,
+    p_value: 1,
+    is_significant: false,
+    in_bh_family: false,
+    exploratory: true,
+    decision_valid: false,
   };
 }
 

@@ -12,6 +12,13 @@
  */
 
 export type {
+  ExposureBatchItem,
+  ExposureBatchRequest,
+  ExposureBatchResponse,
+  ExposureBatchResult,
+  ExposureBatchResultStatus,
+} from "./contract-surface-exposures";
+export type {
   DataPlaneEvaluateResponse,
   ErrorCode,
   EvaluateAllEntry,
@@ -22,11 +29,29 @@ export type {
   ResolutionReason,
   VariantValue,
 } from "./contract-surface-validators";
-// biome-ignore lint/performance/noBarrelFile: build-only tsup entry aggregating the contract surface
-export {
+
+import {
+  EXPOSURE_BATCH_MAX_BODY_BYTES,
+  EXPOSURE_BATCH_MAX_ITEMS,
+  ExposureBatchRequestSchema,
+  ExposureBatchResponseSchema,
+} from "./contract-surface-exposures";
+import {
   DataPlaneEvaluateResponseSchema,
   ErrorCodeSchema,
   EvaluateAllResponseSchema,
   PeekEvaluateResponseSchema,
   ResolutionDetailsSchema,
 } from "./contract-surface-validators";
+
+export {
+  DataPlaneEvaluateResponseSchema,
+  ErrorCodeSchema,
+  EvaluateAllResponseSchema,
+  EXPOSURE_BATCH_MAX_BODY_BYTES,
+  EXPOSURE_BATCH_MAX_ITEMS,
+  ExposureBatchRequestSchema,
+  ExposureBatchResponseSchema,
+  PeekEvaluateResponseSchema,
+  ResolutionDetailsSchema,
+};

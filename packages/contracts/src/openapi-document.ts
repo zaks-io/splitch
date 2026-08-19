@@ -1,4 +1,5 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
+import { publicSurfaceFor } from "./route-contract";
 import { routeRegistry } from "./route-registry";
 
 /**
@@ -8,11 +9,13 @@ import { routeRegistry } from "./route-registry";
  * the contracts test suite). Committing a generated openapi.json would invert the
  * source of truth and let it drift from the Zod routes — the registry IS the truth.
  *
- * Every registered route carries a `route.openapi` config (built by defineApiRoute
- * via createRoute); we register all of them on a throwaway OpenAPIHono and let
- * @hono/zod-openapi walk the Zod schemas into the document. The handler is a stub:
- * we never serve from this app, we only ask it for the document, so the handler is
- * never invoked.
+ * Every publicly surfaced route carries a `route.openapi` config (built by
+ * defineApiRoute via createRoute); we register those routes on a throwaway
+ * OpenAPIHono and let @hono/zod-openapi walk the Zod schemas into the document.
+ * Binding-only routes have no public address, so publishing them here would
+ * expose an internal contract through public discovery. The handler is a stub:
+ * we never serve from this app, we only ask it for the document, so the handler
+ * is never invoked.
  */
 
 export interface OpenApiDocumentInfo {
@@ -31,15 +34,16 @@ function unusedHandler(_c: { json: (body: unknown, status: number) => Response }
 }
 
 /**
- * Build the OpenAPI 3.1 document for the whole registry, on demand. Returns the
- * plain document object (an `OpenAPIObject`) so a caller can `JSON.stringify` it
- * or assert over it; this function does NOT serialize or persist it.
+ * Build the public OpenAPI 3.1 document from the registry, on demand. Returns
+ * the plain document object (an `OpenAPIObject`) so a caller can `JSON.stringify`
+ * it or assert over it; this function does NOT serialize or persist it.
  */
 export function buildOpenApiDocument(
   info: OpenApiDocumentInfo = DEFAULT_INFO,
 ): ReturnType<OpenAPIHono["getOpenAPI31Document"]> {
   const app = new OpenAPIHono();
   for (const route of routeRegistry) {
+    if (publicSurfaceFor(route) === null) continue;
     app.openapi(route.openapi, unusedHandler);
   }
   return app.getOpenAPI31Document({

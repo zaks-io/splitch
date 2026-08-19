@@ -1,5 +1,6 @@
 import type { ExperimentSrmDiagnostics, SrmSignal, StatsOutput } from "@splitch/contracts";
 import { formatPValue } from "@splitch/contracts";
+import { AlertTriangleIcon } from "lucide-react";
 
 /**
  * Graduated Sample Ratio Mismatch reporting.
@@ -7,6 +8,12 @@ import { formatPValue } from "@splitch/contracts";
  * Two tiers, because a p-value in the 0.001–0.01 band is noisy enough to watch
  * and not noisy enough to condemn. Neither tier ever hides the result numbers:
  * this block sits beside the lift plot, never in front of it.
+ *
+ * SPL-189: a confirmed mismatch shares its `border-destructive/40
+ * bg-destructive/5` surface with the Control-integrity card
+ * (experiment-results-control.tsx), so the confirmed tier alone gets
+ * `AlertTriangleIcon` — the pair's icon is the only thing distinguishing a
+ * statistical failure from a configuration one when both fire on one Run.
  */
 
 export function ExperimentResultsSrm({
@@ -25,6 +32,13 @@ export function ExperimentResultsSrm({
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="font-semibold text-base text-foreground" id="results-srm-heading">
+          {worst === "confirmed" ? (
+            <AlertTriangleIcon
+              aria-hidden="true"
+              className="mr-2 inline-block size-4 align-[-0.2em] text-destructive"
+              data-testid="srm-confirmed-alert-icon"
+            />
+          ) : null}
           Assignment balance
         </h3>
         <span className="font-mono text-muted-foreground text-xs uppercase tracking-[0.16em]">

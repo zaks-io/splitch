@@ -1,0 +1,13 @@
+{
+  "name": "ssr-sdk-consumer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Framework-neutral SSR consumer fixture for the packed @splitch/sdk tarball (SPL-335).",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node run-packed.mjs"
+  }
+}

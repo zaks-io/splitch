@@ -52,6 +52,10 @@ export const OPERATION_ROUTES: OperationCoverage = {
     route: { method: "GET", pathname: "/orgs/org_1/usage" },
     operation: { id: "organization_usage_get", orgId: "org_1" },
   },
+  environment_exposure_status_get: {
+    route: { method: "GET", pathname: `/apps/${APP}/envs/${ENV}/exposure-status` },
+    operation: { id: "environment_exposure_status_get", appId: APP, environmentId: ENV },
+  },
   organizations_create: {
     route: { method: "POST", pathname: "/orgs" },
     operation: { id: "organizations_create" },

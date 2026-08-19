@@ -48,6 +48,8 @@ export const FrozenControlIdentitySchema = z.discriminatedUnion("state", [
       reason: UnresolvableControlReasonSchema,
       /** The names the Run did freeze, so the reader can see what it is missing. */
       frozenVariantNames: z.array(z.string()),
+      /** The Run Snapshot Control that anchors lift in `stats`. */
+      analysisVariant: z.string().min(1),
     })
     .strict(),
 ]);
@@ -64,10 +66,14 @@ const FrozenVariantSetSchema = z.array(
   z.object({ id: z.string().min(1), name: z.string().min(1) }).loose(),
 );
 
+type FrozenControlResolution =
+  | Extract<FrozenControlIdentity, { state: "frozen" }>
+  | Omit<Extract<FrozenControlIdentity, { state: "unresolvable" }>, "analysisVariant">;
+
 export function resolveFrozenControlIdentity(
   controlVariantId: string,
   frozenVariantSetJson: string,
-): FrozenControlIdentity {
+): FrozenControlResolution {
   const variantSet = readFrozenVariantSet(frozenVariantSetJson);
   if (!variantSet) {
     return {
@@ -90,10 +96,16 @@ export function resolveFrozenControlIdentity(
 }
 
 export function resolveAnalysisControlIntegrity(
-  control: FrozenControlIdentity,
+  control: FrozenControlResolution,
   analysisVariant: string,
 ): FrozenControlIdentity {
-  if (control.state !== "frozen" || control.variant === analysisVariant) return control;
+  if (typeof analysisVariant !== "string" || analysisVariant.length === 0) {
+    throw new Error("Analysis Control name is missing from resolveAnalysisControlIntegrity input");
+  }
+  if (control.state === "unresolvable") {
+    return FrozenControlIdentitySchema.parse({ ...control, analysisVariant });
+  }
+  if (control.variant === analysisVariant) return control;
   return {
     state: "disagreement",
     variantId: control.variantId,

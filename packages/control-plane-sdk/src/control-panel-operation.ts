@@ -17,6 +17,7 @@
  */
 
 import { parseEventDefinitionOperation } from "./control-panel-event-definition-operation";
+import { parseEnvironmentExposureStatus } from "./control-panel-exposure-status-operation";
 import { parseFlags } from "./control-panel-operation-flags";
 import { parseAppScoped } from "./panel-app-settings-parse.js";
 import { parseMetrics } from "./panel-metrics-parse.js";
@@ -33,6 +34,7 @@ export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 export type ControlPanelOperation =
   | { id: "apps_create"; orgId: string }
   | { id: "organization_usage_get"; orgId: string }
+  | { id: "environment_exposure_status_get"; appId: string; environmentId: string }
   /**
    * Org membership. The collection pair names only the Organization; the
    * resource pair also names the member acted on, so a delegation minted to
@@ -200,6 +202,7 @@ export function parseControlPanelOperation(
   return (
     parseAppsCreate(method, pathname) ??
     parseOrganizationUsage(method, pathname) ??
+    parseEnvironmentExposureStatus(method, pathname) ??
     parseAppAttention(method, pathname) ??
     parseAppScoped(method, pathname) ??
     parseOrganizationsCreate(method, pathname) ??

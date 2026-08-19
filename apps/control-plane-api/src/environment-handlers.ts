@@ -1,6 +1,6 @@
 import type { EnvironmentPolicy } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
-import type { HandlerArgs } from "@splitch/worker-runtime";
+import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz";
 import { deleteEnvironmentCredentials } from "./app-environment-credentials";
 import {
@@ -20,6 +20,7 @@ import {
   rollbackCreatedEnvironment,
 } from "./flag-config-lifecycle";
 import { objectBody, pathParam } from "./handler-input";
+import { EnvironmentExposureStatusCleanupError } from "./environment-exposure-status-cleanup";
 
 export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
   return {
@@ -112,15 +113,40 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       const deleteError = await requireAppDelete(deps, appId, principal, requestId);
       if (deleteError) return deleteError;
 
-      return deleteEnvironmentAfterAuth(deps, appId, environmentId, requestId);
+      try {
+        return await deleteEnvironmentAfterAuth(
+          deps,
+          appId,
+          app.organizationId,
+          environmentId,
+          principal.id,
+          requestId,
+        );
+      } catch (cause) {
+        if (!(cause instanceof EnvironmentExposureStatusCleanupError)) throw cause;
+        return exposureCleanupUnavailable(requestId);
+      }
     },
   };
+}
+
+function exposureCleanupUnavailable(requestId: string): Response {
+  return renderError(
+    {
+      code: "SERVICE_UNAVAILABLE",
+      message: "Exposure status cleanup is unavailable",
+      details: { retryAfterMs: 30_000 },
+    },
+    { requestId },
+  );
 }
 
 async function deleteEnvironmentAfterAuth(
   deps: AppEnvironmentDeps,
   appId: string,
+  organizationId: string,
   environmentId: string,
+  actorId: string,
   requestId: string,
 ): Promise<Response> {
   const scope = appScope(appId);
@@ -144,6 +170,18 @@ async function deleteEnvironmentAfterAuth(
   if ((await deps.repo.identity.deleteEnvironment(scope, environmentId)) !== 1) {
     throw new Error("environment delete did not reach D1");
   }
+  // Credentials are quiesced and the Environment is unreachable before the
+  // analytics purge. A late D1/KV failure must never reset a live Environment
+  // to not_received, and no in-flight credential may rematerialize this row.
+  const cleanup = deps.exposureStatusCleanup;
+  if (!cleanup) throw new Error("environment delete requires Exposure status cleanup");
+  await cleanup.delete({
+    appId,
+    environmentId,
+    actorId,
+    orgId: organizationId,
+    requestId,
+  });
   return Response.json({ deleted: true });
 }
 

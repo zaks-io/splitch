@@ -7,7 +7,12 @@ import { missingPositionalError } from "./command-positionals.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { requireAppScope, requireEnvironmentScope } from "./context.js";
-import { normalizeCliError, SplitchCliError, writeCliError } from "./errors.js";
+import {
+  cliErrorCodeForVerifyDetails,
+  normalizeCliError,
+  SplitchCliError,
+  writeCliError,
+} from "./errors.js";
 import { emit } from "./execute-io.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
@@ -103,7 +108,7 @@ export async function executeFlagsVerify(
     if (verifyDetails.reason === "ERROR") {
       // The CLI renders this SDK failure once with command-specific remediation.
       writeCliError(io, {
-        code: verifyDetails.errorCode ?? "CLI_DATA_PLANE_ERROR_CODE_MISSING",
+        code: cliErrorCodeForVerifyDetails(verifyDetails.errorCode),
         causeSummary:
           verifyDetails.errorMessage ?? "The data plane returned ERROR without an explanation",
         remediation: "Correct the reported data-plane failure and retry flags verify",

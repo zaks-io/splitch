@@ -1,12 +1,12 @@
 /**
  * Zod-free parsers mirroring the contracts package authoring schemas.
- * Every enum member and required-key list they check against is generated from
- * contracts by `scripts/generate-contract-surface.mjs`; the parsing logic and
- * the object shapes in `contract-surface-types.ts` are hand-written and held in
- * lockstep by `contract-surface-structural.test.ts` (shape),
- * `contract-surface-parity.test.ts` (behavior),
- * `contract-surface-proto-safe.test.ts` (derived runtime refinements), and
- * `contract-surface-assignability.ts` (types).
+ * Contract-generated member lists and the lockstep tests cover JSON-expressible
+ * shapes (`contract-surface-structural.test.ts`), behavior and members
+ * (`contract-surface-parity.test.ts`), proto-safe records
+ * (`contract-surface-proto-safe.test.ts`), and TypeScript assignability
+ * (`contract-surface-assignability.ts`). Cross-field `.refine()` and
+ * `.superRefine()` rules are outside JSON Schema; `contract-surface-refine-parity.test.ts`
+ * walks the live schemas and requires a parity fixture for every such rule.
  *
  * Accepted domain is JSON-only by construction today: every `parse()` call
  * takes `await response.json()`, and these schemas are not exported on a
@@ -66,7 +66,7 @@ interface ParseFailure {
 
 type ParseResult<T> = ParseSuccess<T> | ParseFailure;
 
-interface Schema<T> {
+export interface Schema<T> {
   parse(input: unknown): T;
   safeParse(input: unknown): ParseResult<T>;
 }
@@ -75,11 +75,11 @@ interface EnumSchema<T extends string> extends Schema<T> {
   readonly options: readonly T[];
 }
 
-function fail(message: string): never {
+export function fail(message: string): never {
   throw new Error(message);
 }
 
-function asSchema<T>(check: (input: unknown) => T): Schema<T> {
+export function asSchema<T>(check: (input: unknown) => T): Schema<T> {
   return {
     parse(input: unknown): T {
       return check(input);
@@ -97,7 +97,7 @@ function asSchema<T>(check: (input: unknown) => T): Schema<T> {
   };
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -254,6 +254,19 @@ function assertEvaluateAllEntryRefinements(entry: EvaluateAllEntry, path: string
   if (entry.reason !== "SPLIT" && entry.exposureTicket !== null) {
     fail(`${path}: exposureTicket is only allowed when reason === 'SPLIT'`);
   }
+  if (entry.reason !== "SPLIT" && entry.exposureIdentity !== null) {
+    fail(`${path}: exposureIdentity is only allowed when reason === 'SPLIT'`);
+  }
+  if ((entry.exposureTicket === null) !== (entry.exposureIdentity === null)) {
+    fail(`${path}: exposureIdentity is present iff exposureTicket is present`);
+  }
+}
+
+function nullableString(value: unknown, path: string): string | null {
+  if (!(typeof value === "string" || value === null)) {
+    fail(`${path} must be string | null`);
+  }
+  return value;
 }
 
 function parseEvaluateAllEntry(input: unknown, path: string): EvaluateAllEntry {
@@ -264,25 +277,20 @@ function parseEvaluateAllEntry(input: unknown, path: string): EvaluateAllEntry {
   if (input.variant !== null && !isVariantValue(input.variant)) {
     fail(`${path}.variant must be VariantValue | null`);
   }
-  if (!(typeof input.variantName === "string" || input.variantName === null)) {
-    fail(`${path}.variantName must be string | null`);
-  }
   if (typeof input.reason !== "string" || !evaluateAllReasonSet.has(input.reason)) {
     fail(`${path}.reason is invalid`);
   }
   if (input.errorCode !== null) {
     ErrorCodeSchema.parse(input.errorCode);
   }
-  if (!(typeof input.exposureTicket === "string" || input.exposureTicket === null)) {
-    fail(`${path}.exposureTicket must be string | null`);
-  }
 
   const entry: EvaluateAllEntry = {
     variant: input.variant as VariantValue | null,
-    variantName: input.variantName as string | null,
+    variantName: nullableString(input.variantName, `${path}.variantName`),
     reason: input.reason as EvaluateAllReason,
     errorCode: input.errorCode as ErrorCode | null,
-    exposureTicket: input.exposureTicket as string | null,
+    exposureIdentity: nullableString(input.exposureIdentity, `${path}.exposureIdentity`),
+    exposureTicket: nullableString(input.exposureTicket, `${path}.exposureTicket`),
   };
   assertEvaluateAllEntryRefinements(entry, path);
   return entry;
