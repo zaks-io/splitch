@@ -112,7 +112,7 @@ test("fixture App has explicit Environments and Run-scoped Experiment health sta
   // Keyed by Run, not by Experiment: an Experiment can carry several frozen Runs
   // and each one is its own analysis window.
   const inputByRun = new Map(LOCAL_E2E_ANALYSIS_INPUTS.map((fixture) => [fixture.runId, fixture]));
-  assert.equal(inputByRun.size, 6);
+  assert.equal(inputByRun.size, 7);
   assert.deepEqual(inputByRun.get("run_checkout_dev_e2e")?.counts, {
     control: 10,
     treatment: 10,
@@ -184,6 +184,32 @@ test("every seeded Run freezes a Variant set containing its Experiment's control
     const names = JSON.parse(variantSetJson).map((variant) => variant.id);
     assert.ok(names.includes(control), `${runId} froze a set without ${control}`);
   }
+});
+
+// SPL-189: the one seeded Run the Results tab's unresolvable-Control alert is
+// proven against. Unlike every other Run above, its frozen control_variant_id
+// must NOT resolve inside its own variant_set — that is what makes the failure
+// genuine instead of a mocked component state. It also carries the SRM
+// fixture's exact imbalance, so this single Run fires both alert cards at once.
+test("the integrity fixture Run freezes a Control absent from its own Variant set", () => {
+  const runMatch = LOCAL_E2E_D1_SEED.match(
+    /\('run_checkout_integrity_e2e', '\w+', '\w+', 'experiment_checkout_integrity_e2e'[\s\S]*?'(\[\{"id":[^']*\])', '([^']+)',/,
+  );
+  assert.ok(runMatch, "the seed must insert the integrity Run");
+  const [, variantSetJson, controlVariantId] = runMatch;
+  const variantIds = JSON.parse(variantSetJson).map((variant) => variant.id);
+  assert.ok(variantIds.length > 0);
+  assert.equal(
+    variantIds.includes(controlVariantId),
+    false,
+    "the integrity Run's frozen Control must be absent from its own Variant set",
+  );
+
+  const inputByRun = new Map(LOCAL_E2E_ANALYSIS_INPUTS.map((fixture) => [fixture.runId, fixture]));
+  assert.deepEqual(inputByRun.get("run_checkout_integrity_e2e")?.counts, {
+    control: 210,
+    treatment: 90,
+  });
 });
 
 /**

@@ -1,4 +1,5 @@
 import { type FrozenControlIdentity, unresolvableControlReasonMessages } from "@splitch/contracts";
+import { AlertCircleIcon } from "lucide-react";
 
 /**
  * How the Results tab talks about the Run's Control arm.
@@ -6,6 +7,13 @@ import { type FrozenControlIdentity, unresolvableControlReasonMessages } from "@
  * Analysis always names the Control used to measure lift, which is the baseline
  * for every rendered result. Resolving the Run's own frozen Control is a
  * separate configuration-integrity question.
+ *
+ * SPL-189: this card and the confirmed-SRM card (experiment-results-srm.tsx)
+ * share the same destructive severity tokens on purpose — both are
+ * `border-destructive/40 bg-destructive/5` — but they mean different things
+ * (a configuration failure vs. a statistical one) and can fire on the same
+ * Run at once. `AlertCircleIcon` here vs. `AlertTriangleIcon` there is the
+ * only thing telling them apart at a glance.
  */
 
 export function analysisControlVariant(control: FrozenControlIdentity): string {
@@ -24,6 +32,11 @@ export function ExperimentResultsControlIntegrity({
     return (
       <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-5" role="alert">
         <h3 className="font-semibold text-base text-foreground">
+          <AlertCircleIcon
+            aria-hidden="true"
+            className="mr-2 inline-block size-4 align-[-0.2em] text-destructive"
+            data-testid="control-integrity-alert-icon"
+          />
           Analysis Control disagrees with the Run
         </h3>
         <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
@@ -61,7 +74,14 @@ export function ExperimentResultsControlIntegrity({
   const reason = unresolvableControlReasonMessages[control.reason];
   return (
     <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-5" role="alert">
-      <h3 className="font-semibold text-base text-foreground">Control arm cannot be identified</h3>
+      <h3 className="font-semibold text-base text-foreground">
+        <AlertCircleIcon
+          aria-hidden="true"
+          className="mr-2 inline-block size-4 align-[-0.2em] text-destructive"
+          data-testid="control-integrity-alert-icon"
+        />
+        Control arm cannot be identified
+      </h3>
       <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
         This Run&apos;s frozen Control cannot be identified because {reason}. Runs created before
         the Control was frozen on the Run were backfilled from the Experiment&apos;s default
