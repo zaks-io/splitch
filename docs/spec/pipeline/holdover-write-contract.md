@@ -57,10 +57,12 @@ evaluate() call
   ├── On fresh Exposure: synchronously seal retry-stable row in Event Ingest raw_events outbox
   │     └── Fail Evaluation before Assignment Store write if durable seal fails
   ├── Return Variant to SDK caller  ← response is here; not blocked by Queue, Tinybird, or DO write
-  └── ctx.waitUntil: after durable seal, if KV miss → call DO.putIfAbsent(key, run_id, variant)
-                        ├── DO responds within ~100ms timeout
-                        ├── On success: DO write-throughs to KV (awaited inside the writer)
-                        └── On timeout/failure: enqueue for async retry
+  └── ctx.waitUntil: after durable seal, if KV miss → call Assignment Store put (writer DO → KV)
+                        ├── Writer responds within the waitUntil promise
+                        ├── On success: KV write-through is awaited inside the writer
+                        └── On timeout/failure: log loud; no durable evaluate-path outbox —
+                              the next evaluate that still misses KV recomputes assign()
+                              (deterministic) and retries the same put
 ```
 
 **`POST /api/sdk/exposures` (ticket redemption):** the Worker **awaits** durable holdover-write
@@ -69,16 +71,18 @@ outbox ownership and attempts the writer inline before acknowledging the item. H
 never “ack then maybe write.” Deletion cutoff returns `suppressed` instead of `accepted`.
 
 The SDK caller of `evaluate` waits for durable Exposure ownership, not Queue publication or
-Tinybird. The outbox retries Queue publication until it succeeds. On the evaluate path the DO
-write remains non-blocking in `ctx.waitUntil` and starts only after the durable Exposure seal
-succeeds. This ordering prevents a successful holdover write from suppressing the only retry of
-an unaccepted Exposure.
+Tinybird. The outbox retries Queue publication until it succeeds. On the evaluate path the
+Assignment Store write remains non-blocking in `ctx.waitUntil` and starts only after the durable
+Exposure seal succeeds. Evaluate does **not** enqueue a separate durable holdover-write retry;
+recovery is the next Evaluation that still misses KV. Exposures-ticket redemption is the path that
+seals holdover-write outbox ownership and schedules DO alarm retries. This ordering prevents a
+successful holdover write from suppressing the only retry of an unaccepted Exposure.
 
 ## Failure contract
 
 | Failure                                          | Effect on experience                      | Effect on analysis                         | Recovery                                                                      |
 | ------------------------------------------------ | ----------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------- |
-| DO write fails on evaluate `waitUntil`           | Holdover miss on next cross-POP request   | None — raw log append unaffected           | Async retry; assign() deterministic → same Variant computed on miss           |
+| DO/KV write fails on evaluate `waitUntil`        | Holdover miss on next cross-POP request   | None — raw log append unaffected           | Next evaluate recomputes assign() (deterministic) and retries put; loud logs  |
 | DO/KV write fails after exposures ownership seal | SDK may still see `accepted` once owned   | None                                       | Holdover-write outbox Durable Object alarms retry until KV-complete or poison |
 | Exposures ownership seal fails                   | Item `rejected` (`SERVICE_UNAVAILABLE`)   | Exposure row may already be sealed         | SDK retries same `exposureId`                                                 |
 | Exposures retries exhausted (poisoned)           | Item `rejected` (`INTERNAL_SERVER_ERROR`) | None                                       | Fail loud; no silent ack                                                      |
@@ -91,9 +95,11 @@ an unaccepted Exposure.
 | Permanent Tinybird failure or quarantine         | Experience unaffected                     | Analysis unavailable until operator repair | Durable DLQ transfer, alert, and manual replay only                           |
 
 There is no distributed transaction across Tinybird and Assignment Store. Evaluate-path DO/KV
-propagation failures self-heal within the ~60s window or via outbox retry. Exposures-ticket
-acks require ownership first. Tinybird retry, reconciliation, and DLQ states are visible
-operational failures and are not described as self-healing.
+propagation failures self-heal on a later Evaluation within the ~60s window (deterministic
+`assign()`). Durable holdover-write alarm retry applies to exposures-ticket redemption, not to
+evaluate `waitUntil`. Exposures-ticket acks require ownership first. Tinybird retry,
+reconciliation, and DLQ states are visible operational failures and are not described as
+self-healing.
 
 ## Connection between ingest and DO write
 
@@ -129,7 +135,12 @@ There is no multi-Run holdover history in the DO. The pipeline's `raw_events` lo
   decides when to call `AssignmentStore.put()` (on KV miss) and supplies `(key, run_id, variant)`.
 - DO: serializes concurrent writes; guarantees one true first-touch winner; write-throughs to KV.
 
-**Failure contract:** On `evaluate`, DO timeout in `waitUntil` is non-blocking (async retry; cosmetic miss within the KV window). On exposures redemption, ownership seal or inline writer failure rejects the item (SDK retains the queue); after ownership, alarm retry continues without re-evaluation until KV-complete or poison. Not a distributed transaction.
+**Failure contract:** On `evaluate`, DO/KV failure in `waitUntil` is non-blocking (loud log; next
+evaluate that still misses KV retries the put; cosmetic miss within the KV window). On exposures
+redemption, ownership seal failure rejects the item (SDK retains the queue); after ownership is
+sealed, an inline writer failure may still return `owned` so the item can be acknowledged while DO
+alarm retry continues without re-evaluation until KV-complete or poison. Not a distributed
+transaction.
 
 **Deletion test:** Two real adapters exist — (1) the DO-backed Assignment Store (production), (2) an in-memory map (testing/local dev). The seam passes the deletion test.
 

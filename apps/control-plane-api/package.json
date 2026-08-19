@@ -25,6 +25,8 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.18.8",
-    "miniflare": "^4.20260722.0"
+    "@vitest/runner": "4.1.10",
+    "miniflare": "^4.20260722.0",
+    "vitest": "4.1.10"
   }
 }

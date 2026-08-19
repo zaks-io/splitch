@@ -2,6 +2,7 @@ import {
   type HoldoverWriteAppDeletionBeginResult,
   type HoldoverWriteAppEntityRef,
   type HoldoverWriteAppInventoryNamespace,
+  type HoldoverWriteAppInventoryRegisterResult,
   type HoldoverWriteAppInventoryStatus,
   holdoverWriteAppInventoryName,
 } from "./holdover-write-app-inventory";
@@ -15,7 +16,10 @@ class HoldoverWriteAppInventoryError extends Error {
 }
 
 export interface HoldoverWriteAppInventoryClient {
-  registerEntity(appId: string, ref: HoldoverWriteAppEntityRef): Promise<void>;
+  registerEntity(
+    appId: string,
+    ref: HoldoverWriteAppEntityRef,
+  ): Promise<HoldoverWriteAppInventoryRegisterResult>;
   beginDeletion(
     appId: string,
     deleteBeforeTsMs: number,
@@ -29,8 +33,15 @@ export interface HoldoverWriteAppInventoryClient {
 export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppInventoryClient {
   constructor(private readonly namespace: HoldoverWriteAppInventoryNamespace) {}
 
-  async registerEntity(appId: string, ref: HoldoverWriteAppEntityRef): Promise<void> {
-    await this.post(appId, "/register", ref);
+  async registerEntity(
+    appId: string,
+    ref: HoldoverWriteAppEntityRef,
+  ): Promise<HoldoverWriteAppInventoryRegisterResult> {
+    const body = await this.postJson(appId, "/register", ref);
+    if (!isRecord(body) || (body.status !== "registered" && body.status !== "suppressed")) {
+      throw new HoldoverWriteAppInventoryError("register returned an invalid payload");
+    }
+    return { status: body.status };
   }
 
   async beginDeletion(

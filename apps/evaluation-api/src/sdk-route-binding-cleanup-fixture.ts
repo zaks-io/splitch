@@ -1,6 +1,7 @@
 import type {
   HoldoverWriteAppDeletionBeginResult,
   HoldoverWriteAppEntityRef,
+  HoldoverWriteAppInventoryRegisterResult,
   HoldoverWriteAppInventoryStatus,
 } from "./assignment/holdover-write-app-inventory";
 import type { HoldoverWriteAppInventoryClient } from "./assignment/holdover-write-app-inventory-client";
@@ -18,9 +19,16 @@ export class MemoryHoldoverWriteAppInventoryClient implements HoldoverWriteAppIn
     }
   >();
 
-  async registerEntity(appId: string, ref: HoldoverWriteAppEntityRef): Promise<void> {
+  async registerEntity(
+    appId: string,
+    ref: HoldoverWriteAppEntityRef,
+  ): Promise<HoldoverWriteAppInventoryRegisterResult> {
     const state = this.state(appId);
+    if (state.suppressed || state.deletionComplete) {
+      return { status: "suppressed" };
+    }
     state.entities.set(`${ref.idType}:${ref.targetingKeyHash}`, ref);
+    return { status: "registered" };
   }
 
   async beginDeletion(

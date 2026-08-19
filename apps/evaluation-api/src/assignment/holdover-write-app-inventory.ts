@@ -35,6 +35,11 @@ export interface HoldoverWriteAppInventoryStatus {
   readonly entities: readonly HoldoverWriteAppEntityRef[];
 }
 
+/** Outcome of strongly consistent Entity registration against App deletion state. */
+export type HoldoverWriteAppInventoryRegisterResult =
+  | { readonly status: "registered" }
+  | { readonly status: "suppressed" };
+
 export interface HoldoverWriteAppInventoryNamespace {
   idFromName(name: string): DurableObjectId;
   get(id: DurableObjectId): {
@@ -61,9 +66,19 @@ function entityInventoryKey(ref: HoldoverWriteAppEntityRef): string {
 export async function registerAppInventoryEntity(
   storage: HoldoverWriteAppInventoryStorage,
   ref: HoldoverWriteAppEntityRef,
-): Promise<void> {
+): Promise<HoldoverWriteAppInventoryRegisterResult> {
   requireEntityRef(ref);
+  // App deletion suppress/complete is authoritative: refuse late registration so
+  // a register-versus-complete race cannot leave an unindexed Entity outbox
+  // after the App deletion coordinator reports complete.
+  if ((await storage.get<boolean>(SUPPRESSED_KEY)) === true) {
+    return { status: "suppressed" };
+  }
+  if ((await storage.get<boolean>(DELETION_COMPLETE_KEY)) === true) {
+    return { status: "suppressed" };
+  }
   await storage.put(entityInventoryKey(ref), ref);
+  return { status: "registered" };
 }
 
 export async function beginAppInventoryDeletion(

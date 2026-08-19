@@ -144,7 +144,6 @@ export function mountUnavailableControlPlaneRoutes(
   app: Hono,
   registrar: Registrar,
   repo: Repository,
-  options?: { skipEntityPrivacyDelete?: boolean },
 ): void {
   const operationIds = [
     "organizations_delete",
@@ -153,7 +152,7 @@ export function mountUnavailableControlPlaneRoutes(
     "organization_privacy_export",
     "app_privacy_export",
     "entity_privacy_export",
-    ...(options?.skipEntityPrivacyDelete ? [] : (["entity_privacy_delete"] as const)),
+    "entity_privacy_delete",
     "privacy_requests_get",
   ] as const;
   for (const operationId of operationIds) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { RecordingKv } from "./assignment-store-test-fixtures";
 import {
+  appInventoryStatus,
   beginAppInventoryDeletion,
   completeAppInventoryDeletion,
   type HoldoverWriteAppInventoryStorage,
@@ -80,6 +81,19 @@ describe("holdover write App inventory ordering / resumability", () => {
     });
     await client.beginDeletion("app-A", 1_000);
     expect(bodies).toEqual([{ appId: "app-A", deleteBeforeTsMs: 1_000 }]);
+  });
+
+  it("register refuses once deletion has begun or completed", async () => {
+    const storage = new MemoryInventoryStorage();
+    await beginAppInventoryDeletion(storage, 1_000);
+    await expect(
+      registerAppInventoryEntity(storage, { idType: "user", targetingKeyHash: "hash-1" }),
+    ).resolves.toEqual({ status: "suppressed" });
+    await completeAppInventoryDeletion(storage);
+    await expect(
+      registerAppInventoryEntity(storage, { idType: "user", targetingKeyHash: "hash-2" }),
+    ).resolves.toEqual({ status: "suppressed" });
+    expect((await appInventoryStatus(storage)).entities).toEqual([]);
   });
 
   it("inventory fetch /begin-deletion is handled by the DO path (fetch router leaves it)", async () => {

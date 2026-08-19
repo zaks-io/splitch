@@ -15,8 +15,8 @@ type InventoryRoute = (
 
 const postRoutes: Record<string, InventoryRoute> = {
   "/register": async (storage, body) => {
-    await registerAppInventoryEntity(storage, parseEntityRef(body));
-    return Response.json({ ok: true });
+    const result = await registerAppInventoryEntity(storage, parseEntityRef(body));
+    return Response.json(result);
   },
   "/begin-deletion": async (storage, body) => {
     const result = await beginAppInventoryDeletion(

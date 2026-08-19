@@ -1,5 +1,4 @@
-import { appScope, createRepository } from "@splitch/db";
-import { computeTargetingKeyHash } from "@splitch/privacy";
+import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
@@ -7,7 +6,6 @@ import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
-import { makeEnvSaltStore } from "../src/local-salt-store";
 import { appAdminScope } from "../src/scope-binding";
 import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
@@ -26,7 +24,7 @@ const PRIMARY = {
 const APP_ADMIN = "user_entity_privacy_admin";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 
-describe("entity privacy delete → holdover outbox boundary", () => {
+describe("entity privacy delete route availability", () => {
   let bindings: LocalBindings;
   let signer: FixtureSigner;
 
@@ -46,9 +44,7 @@ describe("entity privacy delete → holdover outbox boundary", () => {
 
   afterEach(async () => bindings.dispose());
 
-  it("inserts entity_deletions then awaits holdover cleanup with hashed identity and cutoff", async () => {
-    const deletes: unknown[] = [];
-    const saltStore = makeEnvSaltStore({ SPLITCH_PLATFORM_TARGET: "local" });
+  it("stays fail-loud unavailable even when holdover cleanup is wired", async () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
@@ -60,11 +56,9 @@ describe("entity privacy delete → holdover outbox boundary", () => {
       }),
       rateLimiter: allowLimiter,
       repo: createRepository(bindings.d1),
-      saltStore,
-      nowIso: () => NOW_ISO,
       holdoverWriteOutboxCleanup: {
-        async delete(input) {
-          deletes.push(input);
+        async delete() {
+          throw new Error("entity privacy must not claim queued deletion");
         },
       },
     });
@@ -77,52 +71,19 @@ describe("entity privacy delete → holdover outbox boundary", () => {
       exp: Math.floor(NOW_MS / 1000) + 3600,
       scopes: [appAdminScope(PRIMARY.appId)],
     });
-    const targetingKey = "subject_entity_privacy";
     const response = await app.request(`/apps/${PRIMARY.appId}/privacy/entities/delete`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${jwt}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ idType: "user", targetingKey }),
+      body: JSON.stringify({ idType: "user", targetingKey: "subject_entity_privacy" }),
     });
 
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      request: { status: string; subjectType: string };
-      job: { kind: string; status: string };
-    };
-    expect(body.request).toMatchObject({ status: "processing", subjectType: "entity" });
-    expect(body.job).toMatchObject({ kind: "delete", status: "queued" });
-
-    const targetingKeyHash = await computeTargetingKeyHash(saltStore, {
-      appId: PRIMARY.appId,
-      idType: "user",
-      targetingKey,
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: "SERVICE_UNAVAILABLE",
+      message: "operation is not available yet",
     });
-    expect(deletes).toEqual([
-      {
-        appId: PRIMARY.appId,
-        idType: "user",
-        targetingKeyHash,
-        deleteBeforeTs: NOW_ISO,
-        actorId: APP_ADMIN,
-        orgId: PRIMARY.orgId,
-        requestId: expect.any(String),
-      },
-    ]);
-    expect(JSON.stringify(deletes)).not.toContain(targetingKey);
-
-    const tombstones = await createRepository(bindings.d1).privacy.listEntityDeletions(
-      appScope(PRIMARY.appId),
-    );
-    expect(tombstones).toEqual([
-      expect.objectContaining({
-        appId: PRIMARY.appId,
-        idType: "user",
-        targetingKeyHash,
-        deleteBeforeTs: NOW_ISO,
-      }),
-    ]);
   });
 });

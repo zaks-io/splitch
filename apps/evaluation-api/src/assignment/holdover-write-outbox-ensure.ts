@@ -1,4 +1,5 @@
 import type { HashedAssignmentPutInput } from "./assignment-store";
+import type { HoldoverWriteAppInventoryRegisterResult } from "./holdover-write-app-inventory";
 import {
   HOLDOVER_WRITE_JOB_PREFIX,
   HOLDOVER_WRITE_MAX_ATTEMPTS,
@@ -26,7 +27,7 @@ export interface HoldoverWriteInventoryRegisterPort {
   registerEntity(ref: {
     readonly idType: string;
     readonly targetingKeyHash: string;
-  }): Promise<void>;
+  }): Promise<HoldoverWriteAppInventoryRegisterResult>;
 }
 
 /**
@@ -49,6 +50,20 @@ export async function ensureHoldoverWriteJob(
     return { status: "suppressed" };
   }
 
+  // Confirm App inventory registration on every ensure until acknowledged.
+  // Register before sealing a new local job so a transport failure cannot leave
+  // a durable unindexed Entity outbox; retries re-register until confirmed.
+  if (inventory) {
+    const registration = await inventory.registerEntity({
+      idType: input.idType,
+      targetingKeyHash: input.targetingKeyHash,
+    });
+    if (registration.status === "suppressed") {
+      await purgeEntityOutboxState(storage);
+      return { status: "suppressed" };
+    }
+  }
+
   const jobKey = holdoverWriteJobKey(input.experimentId);
   const existing = await storage.get<HoldoverWriteJob>(jobKey);
   if (existing?.status === "poisoned") {
@@ -67,14 +82,6 @@ export async function ensureHoldoverWriteJob(
 
   if (existing === undefined) {
     await storage.put(jobKey, job);
-    // Index before the first put attempt so poisoned / never-KV rows remain
-    // discoverable for App deletion (strongly consistent inventory).
-    if (inventory) {
-      await inventory.registerEntity({
-        idType: input.idType,
-        targetingKeyHash: input.targetingKeyHash,
-      });
-    }
   }
 
   return attemptHoldoverWriteJob(storage, putPort, job, nowMs, logger, suppression);

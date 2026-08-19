@@ -19,7 +19,6 @@ import type { ConfigStoreAccess } from "./config-store-do";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
-import { makeEntityPrivacyDeleteHandler } from "./entity-privacy-delete-handler";
 import { registerEventDefinitionRoutes } from "./event-definition-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
 import { appEnvironmentCleanupDeps } from "./app-environment-cleanup-deps";
@@ -70,6 +69,7 @@ export interface AppDeps {
   approvalArchiveStore?: import("./approval-archive").ApprovalArchiveStore;
   exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
   holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
+  /** Reserved for Entity privacy physical purge when that consumer ships. */
   saltStore?: SaltStore;
 }
 
@@ -249,23 +249,11 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("api_keys_list"), credentialHandlers.listApiKeys);
   registrar.mount(app, controlPlaneRoute("api_keys_create"), credentialHandlers.createApiKey);
   registrar.mount(app, controlPlaneRoute("api_keys_revoke"), credentialHandlers.revokeApiKey);
-  const entityPrivacyReady =
-    deps.saltStore !== undefined && deps.holdoverWriteOutboxCleanup !== undefined;
-  mountUnavailableControlPlaneRoutes(app, registrar, deps.repo, {
-    skipEntityPrivacyDelete: entityPrivacyReady,
-  });
-  if (entityPrivacyReady && deps.saltStore && deps.holdoverWriteOutboxCleanup) {
-    registrar.mount(
-      app,
-      controlPlaneRoute("entity_privacy_delete"),
-      makeEntityPrivacyDeleteHandler({
-        repo: deps.repo,
-        saltStore: deps.saltStore,
-        holdoverWriteOutboxCleanup: deps.holdoverWriteOutboxCleanup,
-        ...(deps.nowIso ? { nowIso: deps.nowIso } : {}),
-      }),
-    );
-  }
+  // Entity privacy physical purge (Assignment Store KV/DO + Tinybird) is not
+  // implemented in this slice — keep the route fail-loud unavailable rather than
+  // claiming a queued deletion job. Holdover-write Entity/App cleanup remains on
+  // the Evaluation App-deletion path.
+  mountUnavailableControlPlaneRoutes(app, registrar, deps.repo);
   mountDelegatedRoutes(app, registrar, deps.delegationBindings ?? {}, deps.repo);
 
   return app;
