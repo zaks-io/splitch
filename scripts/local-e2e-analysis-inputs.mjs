@@ -43,6 +43,17 @@ export const LOCAL_E2E_ANALYSIS_INPUTS = Object.freeze([
     { control: 140, treatment: 60 },
     { decisionMetric: "checkout-conversion", conversions: { control: 20, treatment: 12 } },
   ),
+  // SPL-189: the same imbalance as the SRM fixture above, reused on a Run whose
+  // frozen control_variant_id is absent from its own variant_set (see the D1
+  // seed). One Run firing both an unresolvable Control and a confirmed SRM is
+  // exactly the case the two alert cards have to stay distinguishable on.
+  analysisInput(
+    "env_checkout_integrity_e2e",
+    "experiment_checkout_integrity_e2e",
+    "run_checkout_integrity_e2e",
+    { control: 140, treatment: 60 },
+    { decisionMetric: "checkout-conversion", conversions: { control: 20, treatment: 12 } },
+  ),
   // Clean and decidable on every gate check, with a Guardrail Metric breached.
   // Guardrails deliberately do not gate, so this is the state where the ship
   // control sits next to a known regression.
