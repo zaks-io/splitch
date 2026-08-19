@@ -207,8 +207,8 @@ test("the integrity fixture Run freezes a Control absent from its own Variant se
 
   const inputByRun = new Map(LOCAL_E2E_ANALYSIS_INPUTS.map((fixture) => [fixture.runId, fixture]));
   assert.deepEqual(inputByRun.get("run_checkout_integrity_e2e")?.counts, {
-    control: 140,
-    treatment: 60,
+    control: 210,
+    treatment: 90,
   });
 });
 

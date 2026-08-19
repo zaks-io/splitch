@@ -31,10 +31,10 @@ export function ExperimentResultsControlIntegrity({
   if (control.state === "disagreement") {
     return (
       <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-5" role="alert">
-        <h3 className="flex items-center gap-2 font-semibold text-base text-foreground">
+        <h3 className="font-semibold text-base text-foreground">
           <AlertCircleIcon
             aria-hidden="true"
-            className="size-4 text-destructive"
+            className="mr-2 inline-block size-4 align-[-0.2em] text-destructive"
             data-testid="control-integrity-alert-icon"
           />
           Analysis Control disagrees with the Run
@@ -74,10 +74,10 @@ export function ExperimentResultsControlIntegrity({
   const reason = unresolvableControlReasonMessages[control.reason];
   return (
     <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-5" role="alert">
-      <h3 className="flex items-center gap-2 font-semibold text-base text-foreground">
+      <h3 className="font-semibold text-base text-foreground">
         <AlertCircleIcon
           aria-hidden="true"
-          className="size-4 text-destructive"
+          className="mr-2 inline-block size-4 align-[-0.2em] text-destructive"
           data-testid="control-integrity-alert-icon"
         />
         Control arm cannot be identified

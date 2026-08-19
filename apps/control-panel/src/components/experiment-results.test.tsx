@@ -182,6 +182,10 @@ describe("ExperimentResults warning states", () => {
 
     expect(html).toContain('data-srm-tier="confirmed"');
     expect(html).toContain("Confirmed mismatch");
+    // SPL-189: the PR gate's only coverage of the icon that distinguishes this
+    // card from the Control-integrity card, since that proof otherwise lives
+    // solely in the weekly, presently-unbootable e2e suite.
+    expect(html).toContain("lucide-triangle-alert");
     // The plot and every reported number survive the warning.
     expect(html).toContain("<svg");
     expect(html).toContain("+6.4%");

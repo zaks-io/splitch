@@ -114,10 +114,18 @@ test.describe("Experiment Results tab", () => {
     await expect(page.getByRole("heading", { name: "Lift by arm" })).toBeVisible();
 
     // Distinguishable by icon, not by reading either card's copy.
-    await expect(page.getByTestId("control-integrity-alert-icon")).toBeVisible();
-    await expect(page.getByTestId("srm-confirmed-alert-icon")).toBeVisible();
+    const integrityIcon = page.getByTestId("control-integrity-alert-icon");
+    const srmIcon = page.getByTestId("srm-confirmed-alert-icon");
+    await expect(integrityIcon).toBeVisible();
+    await expect(srmIcon).toBeVisible();
+    await expect(integrityIcon).toHaveClass(/lucide-circle-alert/);
+    await expect(srmIcon).toHaveClass(/lucide-triangle-alert/);
 
-    await expect(page.getByTestId("ship-blocked")).toBeVisible();
+    const blocked = page.getByTestId("ship-blocked");
+    await expect(blocked).toBeVisible();
+    // The unresolvable Control is itself a named, gating check, not just a
+    // visual alongside an SRM/power failure that would block regardless.
+    await expect(blocked).toContainText("Control arm cannot be identified");
     await expect(page.getByRole("button", { name: "Conclude and promote winner" })).toBeDisabled();
 
     await captureThemeScreenshots(page, testInfo, "experiment-results-control-integrity");

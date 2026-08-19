@@ -51,6 +51,10 @@ describe("ExperimentResults with an unidentifiable Control", () => {
     );
     expect(html).not.toContain("absent_from_frozen_variant_set");
     expect(html).toContain('role="alert"');
+    // SPL-189: the PR gate's only coverage of the icon that distinguishes this
+    // card from a confirmed-SRM card, since that proof otherwise lives solely in
+    // the weekly, presently-unbootable e2e suite.
+    expect(html).toContain("lucide-circle-alert");
   });
 
   it("keeps the numbers on the page and blocks only the decision", () => {

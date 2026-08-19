@@ -31,14 +31,11 @@ export function ExperimentResultsSrm({
       data-srm-tier={worst}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3
-          className="flex items-center gap-2 font-semibold text-base text-foreground"
-          id="results-srm-heading"
-        >
+        <h3 className="font-semibold text-base text-foreground" id="results-srm-heading">
           {worst === "confirmed" ? (
             <AlertTriangleIcon
               aria-hidden="true"
-              className="size-4 text-destructive"
+              className="mr-2 inline-block size-4 align-[-0.2em] text-destructive"
               data-testid="srm-confirmed-alert-icon"
             />
           ) : null}
