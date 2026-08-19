@@ -36,7 +36,6 @@ test("packed SSR boundary hydrates without an init fetch and redeems one Exposur
 
     const browserCalls = [];
     const proof = await browserModule.hydratePage(fixtureDocument(html), {
-      closeAfterProof: true,
       fetch: async (...args) => {
         browserCalls.push(String(args[0]));
         return fetch(...args);

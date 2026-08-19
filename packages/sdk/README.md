@@ -194,6 +194,8 @@ Context attributes you are willing to publish.
 // server.mjs
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import { dirname, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createSplitchClient } from "@splitch/sdk";
 
 const requiredEnv = (name) => {
@@ -204,13 +206,23 @@ const requiredEnv = (name) => {
 const splitch = createSplitchClient({
   apiKey: requiredEnv("SPLITCH_API_KEY"),
 });
-const modules = new Map([
-  ["/browser.mjs", new URL("./browser.mjs", import.meta.url)],
-  [
-    "/vendor/sdk/browser/index.js",
-    new URL("./node_modules/@splitch/sdk/dist/browser/index.js", import.meta.url),
-  ],
-]);
+const recipeRoot = dirname(fileURLToPath(import.meta.url));
+const sdkDistRoot = resolve(recipeRoot, "node_modules/@splitch/sdk/dist");
+
+const serveFile = async (response, pathname, root, prefix) => {
+  const target = resolve(root, pathname.slice(prefix.length));
+  if (!target.startsWith(`${root}${sep}`)) {
+    response.writeHead(404).end("Not Found");
+    return;
+  }
+  try {
+    const source = await readFile(target);
+    response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+    response.end(source);
+  } catch {
+    response.writeHead(404).end("Not Found");
+  }
+};
 
 const jsonForHtml = (value) => {
   const serialized = JSON.stringify(value);
@@ -224,11 +236,12 @@ const jsonForHtml = (value) => {
 createServer(async (request, response) => {
   try {
     const url = new URL(request.url ?? "/", "http://localhost:3000");
-    const moduleUrl = modules.get(url.pathname);
-    if (moduleUrl) {
-      const source = await readFile(moduleUrl);
-      response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
-      response.end(source);
+    if (url.pathname === "/browser.mjs") {
+      await serveFile(response, url.pathname, recipeRoot, "/");
+      return;
+    }
+    if (url.pathname.startsWith("/vendor/sdk/")) {
+      await serveFile(response, url.pathname, sdkDistRoot, "/vendor/sdk/");
       return;
     }
     if (url.pathname !== "/") {

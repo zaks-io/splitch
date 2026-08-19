@@ -33,7 +33,6 @@ export async function hydratePage(documentRoot = globalThis.document, testHooks 
     revalidateMs: 60_000,
     ...(testHooks.fetch === undefined ? {} : { fetch: testHooks.fetch }),
   });
-  let completed = false;
   try {
     await splitch.init();
     await testHooks.beforeFirstRead?.();
@@ -43,12 +42,9 @@ export async function hydratePage(documentRoot = globalThis.document, testHooks 
     await testHooks.afterFirstRead?.();
 
     const exposureResults = await splitch.flush();
-    completed = true;
     return { exposureResults, hydratedValueJson, serverValueJson };
   } finally {
-    if (!completed || testHooks.closeAfterProof === true) {
-      await splitch.close();
-    }
+    await splitch.close();
   }
 }
 

@@ -18,5 +18,5 @@ pnpm --dir fixtures/ssr-sdk-consumer test
 ```
 
 The API Key exists only in the server options. The rendered page contains the
-public Client Key, evaluated results, and Exposure bindings. It contains no
-Targeting Rules, allocation, or salts.
+public Client Key, evaluated results, and Exposure bindings. The SDK strips
+Targeting Rules, allocation data, and salts before the bootstrap is serialized.
