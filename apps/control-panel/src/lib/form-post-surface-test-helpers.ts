@@ -1,13 +1,17 @@
 import {
   forEachChild,
+  isAsExpression,
   isCallExpression,
   isComputedPropertyName,
   isFunctionLike,
   isIdentifier,
   isMethodDeclaration,
+  isNonNullExpression,
   isNoSubstitutionTemplateLiteral,
+  isParenthesizedExpression,
   isPropertyAccessExpression,
   isPropertyAssignment,
+  isSatisfiesExpression,
   isShorthandPropertyAssignment,
   isStringLiteral,
   type Node,
@@ -52,17 +56,21 @@ export function createFormPostSurfaceDiscovery(
       if (!sourceFile) {
         throw new Error(`${displayName}: source file is absent from TypeScript program`);
       }
-      return postHandlerRoots(sourceFile, checker).map((root) =>
+      return postHandlerRoots(sourceFile, displayName, checker).map((root) =>
         securityReachedFrom(root, checker, originGuard, sessionCookieAccessor),
       );
     },
   };
 }
 
-function postHandlerRoots(sourceFile: SourceFile, checker: TypeChecker): Node[] {
+function postHandlerRoots(
+  sourceFile: SourceFile,
+  displayName: string,
+  checker: TypeChecker,
+): Node[] {
   const roots: Node[] = [];
   visitNodes(sourceFile, (node) => {
-    if (propertyName(node, checker) !== "POST") return;
+    if (propertyName(node, sourceFile, displayName, checker) !== "POST") return;
     if (isPropertyAssignment(node)) roots.push(node.initializer);
     if (isShorthandPropertyAssignment(node)) roots.push(node.name);
     if (isMethodDeclaration(node) && node.body) roots.push(node.body);
@@ -70,7 +78,12 @@ function postHandlerRoots(sourceFile: SourceFile, checker: TypeChecker): Node[] 
   return roots;
 }
 
-function propertyName(node: Node, checker: TypeChecker): string | null {
+function propertyName(
+  node: Node,
+  sourceFile: SourceFile,
+  displayName: string,
+  checker: TypeChecker,
+): string | null {
   if (
     !isPropertyAssignment(node) &&
     !isShorthandPropertyAssignment(node) &&
@@ -87,7 +100,11 @@ function propertyName(node: Node, checker: TypeChecker): string | null {
     return name.expression.text;
   }
   const type = checker.getTypeAtLocation(name.expression);
-  return type.isStringLiteral() ? type.value : null;
+  if (type.isStringLiteral()) return type.value;
+  const position = sourceFile.getLineAndCharacterOfPosition(name.getStart(sourceFile));
+  throw new Error(
+    `${displayName}:${position.line + 1}:${position.character + 1}: computed property name is not statically resolvable: ${name.getText(sourceFile)}`,
+  );
 }
 
 function securityReachedFrom(
@@ -119,13 +136,14 @@ function reachableCallSymbols(root: Node, checker: TypeChecker): Set<TsSymbol> {
   }
 
   function enqueueFunctionValue(value: Node): void {
-    if (checker.getTypeAtLocation(value).getCallSignatures().length === 0) return;
-    const symbol = calledSymbol(value, checker);
+    const expression = unwrapExpression(value);
+    if (checker.getTypeAtLocation(expression).getCallSignatures().length === 0) return;
+    const symbol = calledSymbol(expression, checker);
     if (symbol) {
       enqueueSymbol(symbol);
       return;
     }
-    const implementation = callableImplementation(value);
+    const implementation = callableImplementation(expression);
     if (implementation) pending.push(implementation);
   }
 
@@ -147,6 +165,18 @@ function reachableCallSymbols(root: Node, checker: TypeChecker): Set<TsSymbol> {
   }
 
   return reached;
+}
+
+function unwrapExpression(expression: Node): Node {
+  while (
+    isParenthesizedExpression(expression) ||
+    isAsExpression(expression) ||
+    isNonNullExpression(expression) ||
+    isSatisfiesExpression(expression)
+  ) {
+    expression = expression.expression;
+  }
+  return expression;
 }
 
 function visitReachableNodes(root: Node, visitor: (node: Node) => void): void {

@@ -56,10 +56,11 @@ const FORM_POST_SURFACE = createFormPostSurfaceDiscovery(SOURCE_PROGRAM, {
  * every source file. Form discovery starts from statically named POST properties
  * declared in route source files, then follows checker-resolved calls and
  * function-valued call arguments to the session accessor and Origin guard.
- * Imported or spread handler objects and runtime-dispatched function values are
- * outside that sweep. createServerFn POSTs are identified by file and exported
- * or local binding, so a new write in an existing file moves the discovered side
- * of the equality.
+ * Unresolvable computed property names fail discovery at their source position.
+ * Imported or spread handler objects and runtime-dispatched function values
+ * remain outside that sweep. createServerFn POSTs are identified by file and
+ * exported or local binding, so a new write in an existing file moves the
+ * discovered side of the equality.
  */
 const FORM_POST_COOKIE_AUTHENTICATED_WRITES = [
   "routes/auth.logout.ts",

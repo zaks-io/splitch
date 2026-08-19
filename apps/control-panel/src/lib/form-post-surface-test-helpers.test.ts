@@ -71,6 +71,26 @@ export const route = { handlers: { POST: () => runHandler(loadSessionFromCookieH
   });
 
   it.each([
+    ["a parenthesized", `(loadSessionFromCookieHeader)`],
+    ["an as-asserted", `loadSessionFromCookieHeader as () => void`],
+  ])("follows %s function-valued handler argument", (_name, handler) => {
+    const program = sourceProgram(TSCONFIG, {
+      [SESSION]: `export function loadSessionFromCookieHeader(): void {}`,
+      [CSRF]: `export function rejectCrossOriginWrite(): void {}`,
+      [HELPER]: `export function runHandler(handler: () => void): void { handler(); }`,
+      [ROUTE]: `
+import { runHandler } from "../lib/form-post-probe-helper";
+import { loadSessionFromCookieHeader } from "../lib/form-post-probe-session";
+export const route = { handlers: { POST: () => runHandler(${handler}) } };
+`,
+    });
+
+    expect(discovery(program).formPostSecurity(ROUTE, "routes/form-post-probe.ts")).toEqual([
+      { reachesOriginGuard: false, reachesSessionCookie: true },
+    ]);
+  });
+
+  it.each([
     ["quoted", ``, `"POST"`],
     ["computed", `const METHOD = "POST";`, `[METHOD]`],
   ])("classifies a %s POST property", (_name, declaration, property) => {
@@ -87,6 +107,24 @@ export const route = { handlers: { ${property}: () => loadSessionFromCookieHeade
     expect(discovery(program).formPostSecurity(ROUTE, "routes/form-post-probe.ts")).toEqual([
       { reachesOriginGuard: false, reachesSessionCookie: true },
     ]);
+  });
+
+  it("fails loud on a computed handler key with a non-literal string type", () => {
+    const program = sourceProgram(TSCONFIG, {
+      [SESSION]: `export function loadSessionFromCookieHeader(): void {}`,
+      [CSRF]: `export function rejectCrossOriginWrite(): void {}`,
+      [ROUTE]: `
+import { loadSessionFromCookieHeader } from "../lib/form-post-probe-session";
+const someString: string = "POST";
+export const route = { handlers: { [someString]: () => loadSessionFromCookieHeader() } };
+`,
+    });
+
+    expect(() =>
+      discovery(program).formPostSecurity(ROUTE, "routes/form-post-probe.ts"),
+    ).toThrowError(
+      /routes\/form-post-probe\.ts:4:\d+: computed property name is not statically resolvable: \[someString\]/,
+    );
   });
 
   it("does not count an Origin guard inside an uninvoked closure", () => {
