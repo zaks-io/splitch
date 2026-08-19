@@ -89,7 +89,7 @@ describe("contract-surface wrong-type fixtures", () => {
       evaluateAllEntry({ reason: 1 }),
       evaluateAllEntry({ variant: null, variantName: null, reason: "ERROR", errorCode: 1 }),
       evaluateAllEntry({ reason: "SPLIT", exposureTicket: 123 }),
-      evaluateAllEntry({ reason: "SPLIT", exposureIdentity: 123 }),
+      evaluateAllEntry({ reason: "SPLIT", exposureIdentity: 123, exposureTicket: "ticket" }),
       { evaluations: { flag: [] } },
     ]) {
       expectParity(EvaluateAllResponseSchema, ZodEvaluateAllResponseSchema, input, false);
