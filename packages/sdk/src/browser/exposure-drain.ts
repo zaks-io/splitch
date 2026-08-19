@@ -48,6 +48,9 @@ export const EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION =
 export const EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION =
   "The pending batch was not sent and will not be retried; call flush() before close() or page teardown if redemption must complete";
 
+export const EXPOSURE_BATCH_FAILURE_TERMINAL_REMEDIATION =
+  "Automatic retries stopped; correct the delivery failure, then call flush() explicitly for the retained batch";
+
 export function logBatchFailure(
   logger: Logger,
   result: BrowserExposuresResult,

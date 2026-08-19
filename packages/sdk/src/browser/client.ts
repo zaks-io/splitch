@@ -113,7 +113,7 @@ export function createSplitchBrowserClient(
   function readDetails(flagKey: string, defaultValue: VariantValue): SdkResolutionDetails {
     const payload = requireHeld();
     const entry = payload.evaluations[flagKey];
-    if (entry === undefined) {
+    if (!Object.hasOwn(payload.evaluations, flagKey) || entry === undefined) {
       return missingFlagDetails(flagKey, defaultValue, context.targetingKey, logger, loggedMissing);
     }
     if (entry.reason === "ERROR") {

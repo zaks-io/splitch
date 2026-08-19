@@ -5,15 +5,20 @@ import {
   EXPOSURE_BATCH_MAX_BODY_BYTES,
   EXPOSURE_BATCH_MAX_ITEMS,
 } from "../generated/contract-surface.js";
-import { mintExposureId, pendingBodyBytes, type QueuedExposure, takeBatch } from "./exposure-batch";
+import {
+  mintExposureId,
+  pendingBodyBytes,
+  type QueuedExposure,
+  takeBatch,
+  trimFailedOverflow,
+} from "./exposure-batch";
 import {
   correlateBatchResults,
-  EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION,
-  EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION,
   logBatchFailure,
   logRejectedItem,
   logZeroProgress,
 } from "./exposure-drain";
+import { ExposureRetryPolicy } from "./exposure-retry";
 import { resolveDocument, resolveWindow } from "./lifecycle-targets";
 import type { BrowserExposuresResult, BrowserTransport } from "./transport";
 
@@ -56,6 +61,7 @@ export class ExposureQueue {
   private activeDrain: Promise<readonly ExposureBatchResult[]> | null = null;
   /** Callers currently inside enqueueDrain (includes waiters). */
   private queuedDrains = 0;
+  private readonly retryPolicy: ExposureRetryPolicy;
 
   private readonly onVisibilityChange = (): void => {
     if (resolveDocument(this.deps)?.visibilityState === "hidden") {
@@ -67,7 +73,9 @@ export class ExposureQueue {
     void this.flushBestEffort({ keepalive: true });
   };
 
-  constructor(private readonly deps: ExposureQueueDeps) {}
+  constructor(private readonly deps: ExposureQueueDeps) {
+    this.retryPolicy = new ExposureRetryPolicy(deps.logger);
+  }
 
   /**
    * Enqueue one redemption for a Flag's server-issued ticket. Idempotent per
@@ -147,27 +155,7 @@ export class ExposureQueue {
     // Bound memory on a genuine failure: keep the oldest one-batch for the 5s
     // retry; drop only the excess tail. A queue that never exceeded one batch
     // drops nothing — and must not emit a RATE_LIMITED "overflow" log for that.
-    const lost = this.pending.splice(EXPOSURE_BATCH_MAX_ITEMS);
-    for (const item of lost) {
-      this.enqueuedFlags.delete(item.flagKey);
-    }
-    if (lost.length === 0) {
-      return;
-    }
-    const retainedCount = this.pending.length;
-    this.deps.logger.error(
-      formatSdkErrorMessage({
-        code: "RATE_LIMITED",
-        causeSummary: `Exposure queue overflow dropped ${lost.length} redemption(s) after a failed forced flush; retained ${retainedCount} for retry`,
-        remediation:
-          "Reduce concurrent first-reads or call flush() more often; excess exposureIds were discarded loudly",
-      }),
-      {
-        droppedCount: lost.length,
-        retainedCount,
-        exposureIds: lost.map((item) => item.exposureId),
-      },
-    );
+    trimFailedOverflow(this.pending, this.enqueuedFlags, this.deps.logger);
   }
 
   /**
@@ -235,12 +223,17 @@ export class ExposureQueue {
     }
     const batchCompleted = await this.runOneBatch(keepalive);
     if (batchCompleted.length === 0) {
+      this.retryPolicy.recordFailure(
+        { status: null, errorCode: "SERVICE_UNAVAILABLE" },
+        this.pending.length,
+      );
       throw logZeroProgress(
         this.deps.logger,
         "Exposure batch response made zero progress (empty or unmatched results)",
         this.pending.length,
       );
     }
+    this.retryPolicy.recordSuccess();
     completed.push(...batchCompleted);
     return batches + 1;
   }
@@ -248,13 +241,13 @@ export class ExposureQueue {
   private afterDrain(): void {
     // Always re-arm (or clear) after a drain, including when runOneBatch throws:
     // a swallowed auto-flush failure must not permanently kill the 5s retry loop.
-    if (this.pending.length === 0) {
-      this.clearTimer();
-      this.detachLifecycle();
-    } else if (!this.closed) {
+    if (this.automaticFlushAllowed()) {
       this.ensureTimer();
       this.ensureLifecycle();
+      return;
     }
+    this.clearTimer();
+    this.detachLifecycle();
   }
 
   private async runOneBatch(keepalive: boolean): Promise<readonly ExposureBatchResult[]> {
@@ -271,22 +264,21 @@ export class ExposureQueue {
     try {
       result = await this.deps.transport.redeemExposures(wireItems, { keepalive });
     } catch (cause) {
+      const failure: BrowserExposuresResult = {
+        status: null,
+        results: null,
+        errorCode: "SDK_TRANSPORT_NETWORK",
+        errorMessage: cause instanceof Error ? cause.message : "Exposure transport rejected",
+        cause,
+      };
       // Rejecting transports must not destroy the batch: re-queue and fail loud
       // exactly like a null-results transport failure (ADR-0036).
       this.pending.unshift(...batch);
       throw logBatchFailure(
         this.deps.logger,
-        {
-          status: null,
-          results: null,
-          errorCode: "SDK_TRANSPORT_NETWORK",
-          errorMessage: cause instanceof Error ? cause.message : "Exposure transport rejected",
-          cause,
-        },
+        failure,
         batch.length,
-        this.closed
-          ? EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION
-          : EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION,
+        this.retryPolicy.remediationForFailure(failure, batch.length, this.closed),
       );
     }
     if (result.results === null) {
@@ -295,9 +287,7 @@ export class ExposureQueue {
         this.deps.logger,
         result,
         batch.length,
-        this.closed
-          ? EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION
-          : EXPOSURE_BATCH_FAILURE_RETRY_REMEDIATION,
+        this.retryPolicy.remediationForFailure(result, batch.length, this.closed),
       );
     }
 
@@ -313,8 +303,12 @@ export class ExposureQueue {
     return completed;
   }
 
+  private automaticFlushAllowed(): boolean {
+    return !this.closed && this.pending.length > 0 && this.retryPolicy.automaticRetryAllowed;
+  }
+
   private ensureTimer(): void {
-    if (this.flushTimer !== null || this.closed || this.pending.length === 0) {
+    if (this.flushTimer !== null || !this.automaticFlushAllowed()) {
       return;
     }
     this.flushTimer = setTimeout(() => {
@@ -331,7 +325,7 @@ export class ExposureQueue {
   }
 
   private ensureLifecycle(): void {
-    if (this.lifecycleAttached || this.closed || this.pending.length === 0) {
+    if (this.lifecycleAttached || !this.automaticFlushAllowed()) {
       return;
     }
     const doc = resolveDocument(this.deps);

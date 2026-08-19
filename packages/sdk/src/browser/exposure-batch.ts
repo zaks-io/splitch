@@ -1,4 +1,4 @@
-import { SplitchSdkError } from "../errors";
+import { formatSdkErrorMessage, SplitchSdkError } from "../errors";
 import type { Logger } from "../evaluate";
 import type { ExposureBatchItem } from "../generated/contract-surface.js";
 import {
@@ -47,6 +47,34 @@ export function pendingBodyBytes(items: readonly QueuedExposure[]): number {
     })),
   };
   return new TextEncoder().encode(JSON.stringify(wire)).byteLength;
+}
+
+export function trimFailedOverflow(
+  pending: QueuedExposure[],
+  enqueuedFlags: Set<string>,
+  logger: Logger,
+): void {
+  const lost = pending.splice(EXPOSURE_BATCH_MAX_ITEMS);
+  for (const item of lost) {
+    enqueuedFlags.delete(item.flagKey);
+  }
+  if (lost.length === 0) {
+    return;
+  }
+  const retainedCount = pending.length;
+  logger.error(
+    formatSdkErrorMessage({
+      code: "RATE_LIMITED",
+      causeSummary: `Exposure queue overflow dropped ${lost.length} redemption(s) after a failed forced flush; retained ${retainedCount} for retry`,
+      remediation:
+        "Reduce concurrent first-reads or call flush() more often; excess exposureIds were discarded loudly",
+    }),
+    {
+      droppedCount: lost.length,
+      retainedCount,
+      exposureIds: lost.map((item) => item.exposureId),
+    },
+  );
 }
 
 export function mintExposureId(logger: Logger, flagKey: string): string {

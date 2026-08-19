@@ -186,11 +186,12 @@ your default with `reason: "ERROR"` / `FLAG_NOT_FOUND` and a loud log — never 
 silent invented default.
 
 `flush()` drains the Exposure queue. If the queue hits the batch caps (25 items /
-32 KiB) and a forced flush fails, the oldest one batch (25 items / within the
-byte cap) is retained for the 5s retry and only the excess tail is dropped
-loudly (`RATE_LIMITED`). A single-batch queue that fails once drops nothing —
-call `flush()` sooner or reduce concurrent first-reads so the queue does not
-grow past one batch while a flush is in flight.
+32 KiB) and a forced flush fails, the oldest 25 items are retained for retry by
+item count; retained items are not additionally bounded by the byte cap. Only
+the excess tail is dropped loudly (`RATE_LIMITED`). A single-batch queue that
+fails once drops nothing. Retryable delivery failures make at most three total
+attempts; a non-retryable 4xx stops automatic delivery after its first attempt.
+Both terminal paths log loudly and retain the items for an explicit `flush()`.
 
 ## Convex
 
