@@ -7,9 +7,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
  * esbuild `--bundle --format=esm --minify`, then asserts total bytes under
  * ENTRY_MAX_BYTES.
  *
- * Budgets are per entry (`.`, and later `./browser`) so a future browser
- * subpath starts life inside the gate rather than inheriting a package-wide
- * allowance.
+ * Budgets are per entry so each subpath starts life inside the gate rather than
+ * inheriting a package-wide allowance.
  *
  * A reintroduced zod that is inlined into dist (via `external: []`) will not
  * appear as a metafile `node_modules/zod` path — the packed-manifest zero-dep
@@ -35,6 +34,12 @@ const repoRoot = resolve(packageRoot, "../..");
  * of re-vendoring zod (~300 KiB), which this budget alone is meant to reject.
  */
 export const ENTRY_MAX_BYTES = 22 * 1024;
+/** Measured 9_718 bytes at SPL-334; 12 KiB keeps roughly 25% growth headroom. */
+export const REACT_ENTRY_MAX_BYTES = 12 * 1024;
+
+function maxBytesForEntry(exportPath) {
+  return exportPath === "./react" ? REACT_ENTRY_MAX_BYTES : ENTRY_MAX_BYTES;
+}
 
 /**
  * Resolve esbuild from the workspace (tsup nests it). Prefer a direct
@@ -125,6 +130,11 @@ function assertNoZodInMetafile(metafile, exportPath) {
 }
 
 function consumerSource(entry) {
+  if (entry.exportPath === "./react") {
+    return `import { SplitchProvider, useFlag, useFlagDetails, useSplitchClient } from ${JSON.stringify(entry.importSpecifier)};
+console.log(SplitchProvider, useFlag, useFlagDetails, useSplitchClient);
+`;
+  }
   if (entry.exportPath === "./browser") {
     return `import { createSplitchBrowserClient } from ${JSON.stringify(entry.importSpecifier)};
 const client = createSplitchBrowserClient({ clientKey: "pk_size", context: { targetingKey: "u" } });
@@ -157,6 +167,7 @@ async function measureEntry(esbuild, entry) {
       minify: true,
       platform: "browser",
       target: ["es2022"],
+      external: entry.exportPath === "./react" ? ["react"] : [],
       write: true,
       metafile: true,
       logLevel: "silent",
@@ -177,9 +188,10 @@ async function measureEntry(esbuild, entry) {
 
     const bytes = Buffer.byteLength(readFileSync(outfile));
     assertNoZodInMetafile(result.metafile, entry.exportPath);
-    if (bytes > ENTRY_MAX_BYTES) {
+    const maxBytes = maxBytesForEntry(entry.exportPath);
+    if (bytes > maxBytes) {
       throw new Error(
-        `size:check ${entry.exportPath}: minified consumer bundle is ${bytes} bytes (max ${ENTRY_MAX_BYTES})`,
+        `size:check ${entry.exportPath}: minified consumer bundle is ${bytes} bytes (max ${maxBytes})`,
       );
     }
     return bytes;
@@ -188,28 +200,49 @@ async function measureEntry(esbuild, entry) {
   }
 }
 
+async function checkEntry(esbuild, entry) {
+  try {
+    readFileSync(entry.distFile);
+  } catch {
+    throw new Error(`size:check missing built entry ${entry.distFile}; run build first`);
+  }
+  const bytes = await measureEntry(esbuild, entry);
+  console.log(
+    `size:check ${entry.exportPath}: ${bytes} bytes (max ${maxBytesForEntry(entry.exportPath)})`,
+  );
+}
+
+function assertZeroRuntimeDependencies(manifest) {
+  const dependencies = Object.keys(manifest.dependencies ?? {});
+  if (dependencies.length > 0) {
+    throw new Error(
+      `size:check: package.json must have zero dependencies; got ${dependencies.join(", ")}`,
+    );
+  }
+}
+
 async function runSizeCheck({
   loadEsbuildFn = loadEsbuild,
   manifestPath = join(packageRoot, "package.json"),
 } = {}) {
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  if (manifest.dependencies && Object.keys(manifest.dependencies).length > 0) {
-    throw new Error(
-      `size:check: package.json must have zero dependencies; got ${Object.keys(manifest.dependencies).join(", ")}`,
-    );
-  }
+  assertZeroRuntimeDependencies(manifest);
 
   const esbuild = await loadEsbuildFn();
   const entries = publishedEntries(manifest);
+  const failures = [];
 
   for (const entry of entries) {
     try {
-      readFileSync(entry.distFile);
-    } catch {
-      throw new Error(`size:check missing built entry ${entry.distFile}; run build first`);
+      await checkEntry(esbuild, entry);
+    } catch (error) {
+      failures.push(error);
+      console.error(error instanceof Error ? error.message : String(error));
     }
-    const bytes = await measureEntry(esbuild, entry);
-    console.log(`size:check ${entry.exportPath}: ${bytes} bytes (max ${ENTRY_MAX_BYTES})`);
+  }
+  if (failures.length > 0) {
+    const noun = failures.length === 1 ? "entry" : "entries";
+    throw new AggregateError(failures, `size:check failed for ${failures.length} package ${noun}`);
   }
 
   console.log("size:check passed");

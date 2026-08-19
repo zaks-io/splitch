@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { ENTRY_MAX_BYTES, loadEsbuild } from "./size-check.mjs";
+import { ENTRY_MAX_BYTES, loadEsbuild, REACT_ENTRY_MAX_BYTES } from "./size-check.mjs";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = join(packageRoot, "../..");
@@ -12,6 +12,11 @@ test("ENTRY_MAX_BYTES is anchored near the measured ~18 KiB consumer bundle", ()
   assert.equal(ENTRY_MAX_BYTES, 22 * 1024);
   assert.ok(ENTRY_MAX_BYTES > 18_024);
   assert.ok(ENTRY_MAX_BYTES < 50 * 1024);
+});
+
+test("the React entry has its own narrow budget", () => {
+  assert.equal(REACT_ENTRY_MAX_BYTES, 12 * 1024);
+  assert.ok(REACT_ENTRY_MAX_BYTES < ENTRY_MAX_BYTES);
 });
 
 test("loadEsbuild resolves a usable esbuild via the workspace tsup nest", async () => {

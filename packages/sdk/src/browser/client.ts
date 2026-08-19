@@ -2,15 +2,16 @@ import { SplitchSdkError } from "../errors";
 import type { EvaluateContext, Logger } from "../evaluate";
 import { sdkErrorForFailure } from "../evaluate";
 import type { PrecomputedEvaluations } from "../evaluate-all";
-import type { ExposureBatchResult, VariantValue } from "../generated/contract-surface.js";
+import type {
+  EvaluateAllEntry,
+  ExposureBatchResult,
+  VariantValue,
+} from "../generated/contract-surface.js";
 import type { SdkResolutionDetails } from "../resolution";
 import {
-  heldErrorDetails,
   logListenerFailures,
   loudly,
   mintIdempotencyKey,
-  missingFlagDetails,
-  nullVariantDetails,
   resolveBootstrap,
   resolveBrowserClientKey,
   resolveContext,
@@ -18,6 +19,7 @@ import {
 } from "./client-helpers";
 import { decorateHeldDetails, registerBrowserClientInternalAccess } from "./client-internals";
 import { ExposureQueue } from "./exposure-queue";
+import { deriveHeldResolution, logHeldResolution } from "./held-resolution";
 import { BrowserPayloadStore, type HeldPayload } from "./payload-store";
 import { RevalidationLoop } from "./revalidation-loop";
 import { type BrowserTransport, createBrowserFetchTransport } from "./transport";
@@ -85,6 +87,7 @@ export function createSplitchBrowserClient(
 ): SplitchBrowserClient {
   const clientKey = resolveBrowserClientKey(options.clientKey);
   const context = resolveContext(options.context);
+  const { targetingKey } = context;
   const revalidateMs = resolveRevalidateMs(options.revalidateMs, DEFAULT_REVALIDATE_MS);
   const logger = options.logger ?? console;
   const now = options.now ?? Date.now;
@@ -99,7 +102,7 @@ export function createSplitchBrowserClient(
     });
 
   let initPromise: Promise<void> | null = null;
-  const loggedMissing = new Set<string>();
+  const loggedResolutions = new Set<string>();
   const store = new BrowserPayloadStore(initial);
   // Pass document/window only when the key is present: an absent key means
   // "use the ambient global", while explicit undefined/null means "absent".
@@ -138,22 +141,38 @@ export function createSplitchBrowserClient(
     return held;
   }
 
+  function readHeldEntry(flagKey: string) {
+    const { evaluations } = requireHeld();
+    return Object.hasOwn(evaluations, flagKey) ? evaluations[flagKey] : undefined;
+  }
+
+  function deriveDetails(
+    flagKey: string,
+    entry: ReturnType<typeof readHeldEntry>,
+    defaultValue: VariantValue,
+  ) {
+    const resolution = deriveHeldResolution(flagKey, entry, defaultValue);
+    logHeldResolution(flagKey, resolution, targetingKey, logger, loggedResolutions);
+    return resolution;
+  }
+
   function readDetails(flagKey: string, defaultValue: VariantValue): SdkResolutionDetails {
-    const payload = requireHeld();
-    const entry = payload.evaluations[flagKey];
-    if (!Object.hasOwn(payload.evaluations, flagKey) || entry === undefined) {
-      return missingFlagDetails(flagKey, defaultValue, context.targetingKey, logger, loggedMissing);
+    const entry = readHeldEntry(flagKey);
+    const resolution = deriveDetails(flagKey, entry, defaultValue);
+    const { details } = resolution;
+    if (resolution.kind !== "entry") {
+      return details;
     }
-    if (entry.reason === "ERROR") {
-      return heldErrorDetails(flagKey, entry, defaultValue, context.targetingKey, logger);
+    const { exposureTicket } = entry as EvaluateAllEntry;
+    if (exposureTicket !== null) {
+      queue.enqueue(flagKey, exposureTicket);
     }
-    if (entry.variant === null) {
-      return nullVariantDetails(flagKey, defaultValue, context.targetingKey, logger);
-    }
-    if (entry.exposureTicket !== null) {
-      queue.enqueue(flagKey, entry.exposureTicket);
-    }
-    return decorateHeldDetails(entry.variant, entry.variantName, entry.reason, store.isDegraded());
+    return decorateHeldDetails(
+      details.value,
+      details.variantName,
+      details.reason,
+      store.isDegraded(),
+    );
   }
 
   const client: SplitchBrowserClient = {
@@ -168,9 +187,9 @@ export function createSplitchBrowserClient(
         return initPromise;
       }
       initPromise = (async () => {
-        const idempotencyKey = mintIdempotencyKey(logger, context.targetingKey);
+        const idempotencyKey = mintIdempotencyKey(logger, targetingKey);
         const result = await transport.evaluateAll({
-          targetingKey: context.targetingKey,
+          targetingKey,
           idType: context.idType,
           attributes: context.attributes,
           idempotencyKey,
@@ -178,7 +197,7 @@ export function createSplitchBrowserClient(
         if (result.status !== 200 || result.evaluations === null || result.etag === null) {
           throw loudly(
             logger,
-            context.targetingKey,
+            targetingKey,
             sdkErrorForFailure("evaluateAll", result),
             result.cause,
           );
@@ -215,7 +234,11 @@ export function createSplitchBrowserClient(
       return queue.close();
     },
   };
-  registerBrowserClientInternalAccess(client, () => store.isDegraded());
+  registerBrowserClientInternalAccess(client, {
+    readRevalidationDegraded: () => store.isDegraded(),
+    readHeldEntry,
+    deriveHeldResolution: deriveDetails,
+  });
 
   if (initial !== null) {
     revalidation.start();

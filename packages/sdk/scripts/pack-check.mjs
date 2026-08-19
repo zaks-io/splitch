@@ -52,6 +52,20 @@ try {
     throw new Error("release browser declarations missing createSplitchBrowserClient");
   }
   assertReleaseBundleJs(browserJs);
+  const reactJs = readTarballFile(tarballPath, "package/dist/react/index.js");
+  const reactDts = readTarballFile(tarballPath, "package/dist/react/index.d.ts");
+  if (!reactJs.includes("SplitchProvider") || !reactJs.includes('from "react"')) {
+    throw new Error("release React bundle missing SplitchProvider or its React peer import");
+  }
+  for (const symbol of ["SplitchProvider", "useFlag", "useFlagDetails", "useSplitchClient"]) {
+    if (!reactDts.includes(symbol)) {
+      throw new Error(`release React declarations missing ${symbol}`);
+    }
+  }
+  if (!/from ['"]@splitch\/sdk\/browser['"]/.test(reactDts)) {
+    throw new Error("release React declarations do not reference the browser entry types");
+  }
+  assertReleaseBundleJs(reactJs);
 } finally {
   rmSync(staging, { recursive: true, force: true });
 }

@@ -11,6 +11,5 @@ export default defineConfig({
   splitting: false,
   clean: true,
   sourcemap: false,
-  // Published package has zero runtime dependencies (SPL-325).
   external: [],
 });

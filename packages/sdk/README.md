@@ -204,6 +204,41 @@ fails once drops nothing. Retryable delivery failures make at most three automat
 delivery attempts; a non-retryable 4xx stops automatic delivery after its first attempt.
 Both terminal paths log loudly and retain the items for an explicit `flush()`.
 
+## React bindings (`@splitch/sdk/react`)
+
+The React provider borrows an initialized browser client. Each hook subscribes
+to one Flag, so a changed Flag re-renders only its own subscribers. The first
+committed read redeems its Exposure Ticket.
+
+```tsx
+import { createRoot } from "react-dom/client";
+import { createSplitchBrowserClient } from "@splitch/sdk/browser";
+import { SplitchProvider, useFlag, useFlagDetails } from "@splitch/sdk/react";
+
+const splitch = createSplitchBrowserClient({
+  clientKey: "pk_...",
+  context: { targetingKey: "user-123" },
+});
+await splitch.init();
+
+function Checkout() {
+  const enabled = useFlag("new-checkout", false);
+  const details = useFlagDetails("new-checkout", false);
+  return <p>{enabled ? details.variantName : "control"}</p>;
+}
+
+createRoot(document.getElementById("root")!).render(
+  <SplitchProvider client={splitch}>
+    <Checkout />
+  </SplitchProvider>,
+);
+```
+
+`useSplitchClient()` returns the borrowed client for `flush()`, `close()`, and
+imperative reads. Hooks outside `SplitchProvider` throw
+`SDK_REACT_PROVIDER_MISSING`. An unknown Flag keeps the browser client's loud
+`FLAG_NOT_FOUND` details and returns the caller's Default Variant.
+
 ## Convex
 
 Convex's default runtime is a custom V8 isolate (no Node built-ins). `fetch` is

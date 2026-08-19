@@ -1,16 +1,19 @@
 import { defineConfig } from "tsup";
 
-/** Second entry for `@splitch/sdk/browser`. Runs after the root build (no clean). */
+/** Shared graph for the browser client and its optional React binding. */
 export default defineConfig({
-  entry: { "browser/index": "src/browser/index.ts" },
+  entry: {
+    "browser/index": "src/browser/index.ts",
+    "react/index": "src/react/index.ts",
+  },
   outDir: "dist",
   format: ["esm"],
   target: "es2022",
   platform: "neutral",
   dts: true,
   bundle: true,
-  splitting: false,
+  splitting: true,
   clean: false,
   sourcemap: false,
-  external: [],
+  external: ["react", "@splitch/sdk/browser"],
 });

@@ -14,6 +14,8 @@ export const sdkClientErrorCodes = [
   "SDK_CONTEXT_INVALID",
   /** Browser bootstrap was evaluated for a different Evaluation Context. */
   "SDK_BOOTSTRAP_CONTEXT_MISMATCH",
+  /** A React binding hook rendered outside SplitchProvider. */
+  "SDK_REACT_PROVIDER_MISSING",
   /** Local throw before/during fetch (network down, illegal invocation, etc.). */
   "SDK_TRANSPORT_NETWORK",
   /** Per-call timeout / AbortSignal abort — the request did not complete in time. */
