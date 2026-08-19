@@ -33,6 +33,7 @@ const HoldoverWriteOutboxDeleteQuerySchema = z
   .object({
     idType: z.string().min(1).optional(),
     targetingKeyHash: z.string().min(1).optional(),
+    deleteBeforeTs: z.string().datetime({ offset: true }).optional(),
   })
   .strict();
 

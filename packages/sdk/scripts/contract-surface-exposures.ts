@@ -16,7 +16,7 @@ export const EXPOSURE_BATCH_MAX_ITEMS = 25;
 /** Max UTF-8 JSON body bytes for an Exposure batch. */
 export const EXPOSURE_BATCH_MAX_BODY_BYTES = 32 * 1024;
 
-const exposureBatchResultStatuses = ["accepted", "deduplicated", "rejected"] as const;
+const exposureBatchResultStatuses = ["accepted", "deduplicated", "rejected", "suppressed"] as const;
 export type ExposureBatchResultStatus = (typeof exposureBatchResultStatuses)[number];
 
 export interface ExposureBatchItem {

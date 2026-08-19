@@ -14,6 +14,8 @@ interface HoldoverWriteOutboxCleanupInput {
   appId: string;
   idType?: string;
   targetingKeyHash?: string;
+  /** Required for Entity deletion; App deletion uses request time when omitted. */
+  deleteBeforeTs?: string;
   actorId: string;
   orgId: string | null;
   requestId: string;
@@ -66,6 +68,7 @@ async function sendCleanupRequest(
   const query: Record<string, string> = {};
   if (input.idType !== undefined) query.idType = input.idType;
   if (input.targetingKeyHash !== undefined) query.targetingKeyHash = input.targetingKeyHash;
+  if (input.deleteBeforeTs !== undefined) query.deleteBeforeTs = input.deleteBeforeTs;
   const response = await evaluation.fetch(
     delegatedRequest(
       cleanupRoute,

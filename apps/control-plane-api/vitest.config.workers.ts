@@ -49,6 +49,8 @@ export default defineConfig(async () => {
         "@splitch/db/test-d1": new URL("../../packages/db/src/repo/test-d1.ts", import.meta.url)
           .pathname,
         "@splitch/db": new URL("../../packages/db/src/index.ts", import.meta.url).pathname,
+        "@splitch/privacy": new URL("../../packages/privacy/src/index.ts", import.meta.url)
+          .pathname,
         "@splitch/worker-runtime": new URL(
           "../../packages/worker-runtime/src/index.ts",
           import.meta.url,

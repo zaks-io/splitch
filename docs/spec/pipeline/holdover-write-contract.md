@@ -47,8 +47,9 @@ KV propagation window: up to ~60s. During this window, a cross-POP evaluate may 
 
 ## Timing in the hot path
 
-The following is the accepted ADR-0043 target. The current Event Ingest implementation directly
-posts each Exposure row to Tinybird and has no Cloudflare Queue binding.
+Two callers drive Assignment Store writes. Timing differs:
+
+**`evaluate` (live path):** response is not blocked on the DO/KV write.
 
 ```
 evaluate() call
@@ -58,31 +59,41 @@ evaluate() call
   ├── Return Variant to SDK caller  ← response is here; not blocked by Queue, Tinybird, or DO write
   └── ctx.waitUntil: after durable seal, if KV miss → call DO.putIfAbsent(key, run_id, variant)
                         ├── DO responds within ~100ms timeout
-                        ├── On success: DO write-throughs to KV
+                        ├── On success: DO write-throughs to KV (awaited inside the writer)
                         └── On timeout/failure: enqueue for async retry
 ```
 
-The SDK caller waits for durable Exposure ownership, not Queue publication or Tinybird. The outbox
-retries Queue publication until it succeeds. The DO write remains non-blocking in `ctx.waitUntil`
-(Cloudflare's background task mechanism) and starts only after the durable Exposure seal succeeds.
-This ordering prevents a successful holdover write from suppressing the only retry of an unaccepted
-Exposure.
+**`POST /api/sdk/exposures` (ticket redemption):** the Worker **awaits** durable holdover-write
+outbox ownership and attempts the writer inline before acknowledging the item. HTTP success for
+`accepted` means ownership sealed and either KV-complete or owned for Durable Object alarm retry —
+never “ack then maybe write.” Deletion cutoff returns `suppressed` instead of `accepted`.
+
+The SDK caller of `evaluate` waits for durable Exposure ownership, not Queue publication or
+Tinybird. The outbox retries Queue publication until it succeeds. On the evaluate path the DO
+write remains non-blocking in `ctx.waitUntil` and starts only after the durable Exposure seal
+succeeds. This ordering prevents a successful holdover write from suppressing the only retry of
+an unaccepted Exposure.
 
 ## Failure contract
 
-| Failure                                          | Effect on experience                     | Effect on analysis                         | Recovery                                                            |
-| ------------------------------------------------ | ---------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------- |
-| DO write fails (timeout or error)                | Holdover miss on next cross-POP request  | None — raw log append unaffected           | Async retry; assign() deterministic → same Variant computed on miss |
-| KV write-through fails (after DO write succeeds) | KV miss for ~60s                         | None                                       | Self-healing: next evaluate hits KV miss → DO write-through retried |
-| Durable Exposure outbox seal fails               | Evaluation fails; no holdover is written | No accepted Exposure                       | Retry the same Evaluation idempotency key                           |
-| Queue publication fails after outbox seal        | Experience unaffected                    | Analysis availability is delayed           | Durable outbox retries Queue publication                            |
-| Tinybird `429`/`500`/`503` after queue handoff   | Experience unaffected                    | Analysis availability is delayed           | Bounded queue retry with the same row and stable dedup key          |
-| Tinybird `422` after queue handoff               | Experience unaffected                    | Raw/derived commit is indeterminate        | Durable scoped reconciliation; no ordinary retry                    |
-| Permanent Tinybird failure or quarantine         | Experience unaffected                    | Analysis unavailable until operator repair | Durable DLQ transfer, alert, and manual replay only                 |
+| Failure                                          | Effect on experience                      | Effect on analysis                         | Recovery                                                                      |
+| ------------------------------------------------ | ----------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------- |
+| DO write fails on evaluate `waitUntil`           | Holdover miss on next cross-POP request   | None — raw log append unaffected           | Async retry; assign() deterministic → same Variant computed on miss           |
+| DO/KV write fails after exposures ownership seal | SDK may still see `accepted` once owned   | None                                       | Holdover-write outbox Durable Object alarms retry until KV-complete or poison |
+| Exposures ownership seal fails                   | Item `rejected` (`SERVICE_UNAVAILABLE`)   | Exposure row may already be sealed         | SDK retries same `exposureId`                                                 |
+| Exposures retries exhausted (poisoned)           | Item `rejected` (`INTERNAL_SERVER_ERROR`) | None                                       | Fail loud; no silent ack                                                      |
+| Entity/App deletion cutoff                       | Item `suppressed` (not success)           | Stale Assignment Store writes stopped      | Post-`delete_before_ts` ensures remain allowed                                |
+| KV write-through fails (after DO write succeeds) | KV miss for ~60s                          | None                                       | Self-healing on evaluate; exposures outbox retries until complete             |
+| Durable Exposure outbox seal fails               | Evaluation fails; no holdover is written  | No accepted Exposure                       | Retry the same Evaluation idempotency key                                     |
+| Queue publication fails after outbox seal        | Experience unaffected                     | Analysis availability is delayed           | Durable outbox retries Queue publication                                      |
+| Tinybird `429`/`500`/`503` after queue handoff   | Experience unaffected                     | Analysis availability is delayed           | Bounded queue retry with the same row and stable dedup key                    |
+| Tinybird `422` after queue handoff               | Experience unaffected                     | Raw/derived commit is indeterminate        | Durable scoped reconciliation; no ordinary retry                              |
+| Permanent Tinybird failure or quarantine         | Experience unaffected                     | Analysis unavailable until operator repair | Durable DLQ transfer, alert, and manual replay only                           |
 
-There is no distributed transaction. DO and KV propagation failures self-heal within the ~60s
-window. Tinybird retry, reconciliation, and DLQ states are visible operational failures and are not
-described as self-healing.
+There is no distributed transaction across Tinybird and Assignment Store. Evaluate-path DO/KV
+propagation failures self-heal within the ~60s window or via outbox retry. Exposures-ticket
+acks require ownership first. Tinybird retry, reconciliation, and DLQ states are visible
+operational failures and are not described as self-healing.
 
 ## Connection between ingest and DO write
 

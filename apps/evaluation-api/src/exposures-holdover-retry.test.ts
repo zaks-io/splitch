@@ -1,7 +1,7 @@
 import type { ExposureBatchResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import type { HashedAssignmentPutInput } from "./assignment/assignment-store";
-import { MemoryHoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
+import { MemoryHoldoverWriteCoordinator } from "./assignment/holdover-write-outbox-memory";
 import { HOLDOVER_WRITE_MAX_ATTEMPTS } from "./assignment/holdover-write-outbox-core";
 import { RecordingAssignmentStore, RecordingLogger } from "./evaluate/evaluate-path-test-fixtures";
 import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
@@ -239,10 +239,31 @@ describe("POST /api/sdk/exposures: holdover exhaustion and deletion (SPL-346)", 
       await holdoverWrite.alarm(identity);
     }
     expect(holdoverWrite.jobFor(identity)?.status).toBe("poisoned");
-    await holdoverWrite.suppressEntity(identity);
-    await holdoverWrite.purgeEntity(identity);
+    await holdoverWrite.suppressEntity(identity, Date.now());
+    await holdoverWrite.purgeEntity(identity, Date.now());
     expect(holdoverWrite.jobFor(identity)).toBeUndefined();
-    await expect(holdoverWrite.ensure(identity)).resolves.toEqual({ status: "suppressed" });
+    await expect(
+      holdoverWrite.ensure(identity, { sourceCreatedAtMs: Date.parse("2026-07-03T00:00:00.000Z") }),
+    ).resolves.toEqual({ status: "suppressed" });
     expect(assignmentStore.putHashedCalls.length).toBeGreaterThan(0);
+  });
+
+  it("Entity deletion cutoff does not treat post-delete_before_ts holdover as suppressed success", async () => {
+    const assignmentStore = new RecordingAssignmentStore();
+    const holdoverWrite = new MemoryHoldoverWriteCoordinator(assignmentStore);
+    const cutoff = Date.parse("2026-07-03T00:00:00.000Z");
+    const identity = {
+      appId: APP_ID,
+      experimentId: EXPERIMENT_ID,
+      idType: "user",
+      targetingKeyHash: "hash-post-cutoff",
+      runId: "run-new",
+      variant: "treatment",
+    } as const;
+    await holdoverWrite.deleteEntity(identity, cutoff);
+    await expect(
+      holdoverWrite.ensure(identity, { sourceCreatedAtMs: cutoff + 1 }),
+    ).resolves.toEqual({ status: "completed" });
+    expect(assignmentStore.putHashedCalls).toHaveLength(1);
   });
 });

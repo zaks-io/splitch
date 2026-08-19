@@ -100,6 +100,8 @@ export async function releaseClaimQuietly(
  * ownership cannot be sealed so the SDK retains the queue item. Exhausted
  * (poisoned) retries fail loud as non-retryable INTERNAL_SERVER_ERROR so a
  * resume-ack cannot acknowledge with no completion and no retry left.
+ * Deletion-cutoff `suppressed` is an explicit non-success batch status — never
+ * silent holdover completion.
  */
 export async function ensureHoldoverWrite(
   ticket: {
@@ -108,6 +110,7 @@ export async function ensureHoldoverWrite(
     readonly targeting_key_hash: string;
     readonly run_id: string;
     readonly variant: string;
+    readonly issued_at: string;
   },
   scope: CredentialScope,
   exposureId: string,
@@ -117,14 +120,20 @@ export async function ensureHoldoverWrite(
   },
 ): Promise<ExposureBatchResult | null> {
   try {
-    const result = await deps.holdoverWrite.ensure({
-      appId: scope.appId,
-      experimentId: ticket.experiment_id,
-      idType: ticket.id_type,
-      targetingKeyHash: ticket.targeting_key_hash,
-      runId: ticket.run_id,
-      variant: ticket.variant,
-    });
+    const sourceCreatedAtMs = Date.parse(ticket.issued_at);
+    const result = await deps.holdoverWrite.ensure(
+      {
+        appId: scope.appId,
+        experimentId: ticket.experiment_id,
+        idType: ticket.id_type,
+        targetingKeyHash: ticket.targeting_key_hash,
+        runId: ticket.run_id,
+        variant: ticket.variant,
+      },
+      {
+        sourceCreatedAtMs: Number.isFinite(sourceCreatedAtMs) ? sourceCreatedAtMs : undefined,
+      },
+    );
     if (result.status === "poisoned") {
       deps.logger?.error("holdover_write_retry_exhausted_at_ack", {
         appId: scope.appId,
@@ -136,6 +145,9 @@ export async function ensureHoldoverWrite(
         exposureId,
       });
       return rejected(exposureId, "INTERNAL_SERVER_ERROR");
+    }
+    if (result.status === "suppressed") {
+      return { exposureId, status: "suppressed", code: null };
     }
     return null;
   } catch (cause) {

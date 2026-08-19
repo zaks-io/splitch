@@ -1,5 +1,9 @@
 import { AssignmentStoreValueSchema } from "@splitch/contracts";
 import { Miniflare } from "miniflare";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import {
   AssignmentStoreError,
@@ -17,52 +21,54 @@ import {
 import type { AssignmentWriterNamespace } from "./kv-assignment-store";
 import { KvAssignmentStore } from "./kv-assignment-store";
 
-const MINIFLARE_ASSIGNMENT_STORE_DO = `
-import { DurableObject } from "cloudflare:workers";
-
-const STORAGE_KEY_PREFIX = "assignment:";
+function productionAssignmentStoreScript(): string {
+  const root = dirname(fileURLToPath(import.meta.url));
+  const writer = readFileSync(join(root, "assignment-store-writer.ts"), "utf8").replace(
+    /^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m,
+    "",
+  );
+  const assignmentDo = readFileSync(join(root, "assignment-store-do.ts"), "utf8")
+    .replace(/^import \{ DurableObject \} from "cloudflare:workers";\s*/m, "")
+    .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m, "")
+    .replace(/^import[\s\S]*?from ["']\.\/assignment-store-writer["'];?\s*/m, "");
+  const stubs = `
 const CURRENT_KV_SCHEMA_VERSION = 1;
-
-export class AssignmentStoreDurableObject extends DurableObject {
-  async fetch(request) {
-    if (request.method !== "POST" || new URL(request.url).pathname !== "/put") {
-      return Response.json({ error: "not found" }, { status: 404 });
-    }
-
-    const input = await request.json();
-    const storageKey = \`\${STORAGE_KEY_PREFIX}\${input.experimentId}\`;
-    const result = await this.ctx.blockConcurrencyWhile(async () => {
-      const existing = await this.ctx.storage.get(storageKey);
-      if (existing !== undefined) {
-        this.ctx.waitUntil(writeThrough(this.env.ASSIGNMENTS_KV, existing));
-        return { status: "existing", assignment: entryFrom(existing) };
-      }
-
-      await this.ctx.storage.put(storageKey, input);
-      this.ctx.waitUntil(writeThrough(this.env.ASSIGNMENTS_KV, input));
-      return { status: "stored", assignment: entryFrom(input) };
-    });
-    return Response.json(result);
-  }
-}
-
-async function writeThrough(kv, input) {
-  const key = assignmentKey(input.appId, input.idType, input.targetingKeyHash);
-  const raw = await kv.get(key);
-  const current = raw === null ? {} : JSON.parse(raw).data;
-  if (current[input.experimentId] !== undefined) return;
-  const next = { ...current, [input.experimentId]: entryFrom(input) };
-  await kv.put(key, JSON.stringify({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data: next }));
-}
-
 function assignmentKey(appId, idType, targetingKeyHash) {
-  return \`assignment:\${appId}:\${idType}:\${targetingKeyHash}\`;
+  return "assignment:" + appId + ":" + idType + ":" + targetingKeyHash;
 }
-
-function entryFrom(input) {
-  return { runId: input.runId, variant: input.variant };
+function mergeAssignmentValue(value, input) {
+  if (value[input.experimentId] !== undefined) return value;
+  return { ...value, [input.experimentId]: { runId: input.runId, variant: input.variant } };
+}
+function serializeAssignmentValue(value) {
+  return JSON.stringify({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data: value });
+}
+async function readAssignmentValue(kv, key) {
+  const raw = await kv.get(key);
+  if (raw === null) return {};
+  return JSON.parse(raw).data;
 }
 `;
+  const stripExport = (source: string) =>
+    source.replace(/^export \{[\s\S]*?\};?\s*/gm, "").replace(/^export /gm, "");
+  return ts.transpileModule(
+    `
+import { DurableObject } from "cloudflare:workers";
+${stubs}
+${stripExport(writer)}
+${assignmentDo}
+export default { async fetch() { return new Response("ok"); } };
+`,
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ES2022,
+        strict: true,
+      },
+      fileName: "assignment-store.mf.ts",
+    },
+  ).outputText;
+}
 
 describe("KvAssignmentStore", () => {
   it("getAll returns an empty map for a never-seen Entity", async () => {
@@ -149,7 +155,7 @@ describe("KvAssignmentStore.put", () => {
   it("serializes concurrent put calls through a Miniflare Durable Object", async () => {
     const mf = new Miniflare({
       modules: true,
-      script: MINIFLARE_ASSIGNMENT_STORE_DO,
+      script: productionAssignmentStoreScript(),
       compatibilityDate: "2026-06-21",
       compatibilityFlags: ["nodejs_compat"],
       kvNamespaces: { ASSIGNMENTS_KV: "assignments" },
@@ -172,6 +178,8 @@ describe("KvAssignmentStore.put", () => {
 
       expect(results.map((result) => result.status).sort()).toEqual(["existing", "stored"]);
       expect(new Set(results.map((result) => result.assignment.runId)).size).toBe(1);
+      const { entityKey } = await hashedAssignmentIdentity(new StaticSaltStore(), basePut);
+      expect(await kv.get(entityKey)).toEqual(expect.any(String));
     } finally {
       await mf.dispose();
     }

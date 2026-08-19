@@ -1,9 +1,11 @@
 import type { Repository } from "@splitch/db";
-import type { HandlerArgs, RouteHandler } from "@splitch/worker-runtime";
+import type { HandlerArgs, Registrar, RouteHandler } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
+import type { Hono } from "hono";
 import { requireAppWrite } from "./app-authz";
 import { pathParam } from "./handler-input";
 import { ORG_OWNER_ROLES, requireOrgRole } from "./org-authz";
+import { controlPlaneRoute } from "./routes";
 
 type UnavailableOperationId =
   | "organizations_delete"
@@ -27,7 +29,7 @@ type PrivacyRequest = NonNullable<
  * Preserve the shared HTTP/MCP error contract for routes whose backing workflow
  * is intentionally not available in this slice.
  */
-export function unavailableControlPlaneOperation(
+function unavailableControlPlaneOperation(
   deps: UnavailableHandlerDeps,
   operationId: UnavailableOperationId,
 ): RouteHandler<unknown> {
@@ -136,4 +138,29 @@ function unavailableResponse(requestId: string): Response {
     },
     { requestId },
   );
+}
+
+export function mountUnavailableControlPlaneRoutes(
+  app: Hono,
+  registrar: Registrar,
+  repo: Repository,
+  options?: { skipEntityPrivacyDelete?: boolean },
+): void {
+  const operationIds = [
+    "organizations_delete",
+    "current_user_privacy_export",
+    "current_user_delete",
+    "organization_privacy_export",
+    "app_privacy_export",
+    "entity_privacy_export",
+    ...(options?.skipEntityPrivacyDelete ? [] : (["entity_privacy_delete"] as const)),
+    "privacy_requests_get",
+  ] as const;
+  for (const operationId of operationIds) {
+    registrar.mount(
+      app,
+      controlPlaneRoute(operationId),
+      unavailableControlPlaneOperation({ repo }, operationId),
+    );
+  }
 }

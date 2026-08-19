@@ -11,6 +11,8 @@ type HoldoverWriteJobStatus = "pending" | "poisoned";
 export interface HoldoverWriteJob extends HashedAssignmentPutInput {
   readonly status: HoldoverWriteJobStatus;
   readonly attempt: number;
+  /** First ownership / ensure time — compared to Entity delete_before_ts. */
+  readonly createdAtMs: number;
   readonly updatedAtMs: number;
 }
 
@@ -38,6 +40,11 @@ export interface HoldoverWriteSuppressionPort {
 
 export interface HoldoverWriteOutboxLogger {
   error(message: string, detail: unknown): void;
+}
+
+/** Cutoff tombstone: stale work ≤ deleteBeforeTsMs is suppressed; newer work may proceed. */
+interface EntityHoldoverWriteSuppression {
+  readonly deleteBeforeTsMs: number;
 }
 
 export const HOLDOVER_WRITE_JOB_PREFIX = "holdover-write-job:";
@@ -91,6 +98,11 @@ export function scopedHoldoverWriteLog(
   };
 }
 
+export interface HoldoverWriteEnsureOptions {
+  /** Exposure / source created-at; defaults to nowMs for first ownership. */
+  readonly sourceCreatedAtMs?: number;
+}
+
 /**
  * Seal durable ownership, attempt `putHashed` (KV-complete), and schedule alarm
  * retries on failure. Idempotent under duplicate ensure / alarm delivery.
@@ -102,9 +114,11 @@ export async function ensureHoldoverWriteJob(
   nowMs: number,
   logger?: HoldoverWriteOutboxLogger,
   suppression?: HoldoverWriteSuppressionPort,
+  options?: HoldoverWriteEnsureOptions,
 ): Promise<HoldoverWriteEnsureResult> {
-  if (await isSuppressed(storage, input.appId, suppression)) {
-    await purgeEntityOutboxState(storage);
+  const sourceCreatedAtMs = options?.sourceCreatedAtMs ?? nowMs;
+  if (await isStaleUnderSuppression(storage, input.appId, sourceCreatedAtMs, suppression)) {
+    await purgeStaleJobs(storage, sourceCreatedAtMs);
     return { status: "suppressed" };
   }
 
@@ -120,6 +134,7 @@ export async function ensureHoldoverWriteJob(
       ...input,
       status: "pending",
       attempt: 0,
+      createdAtMs: sourceCreatedAtMs,
       updatedAtMs: nowMs,
     } satisfies HoldoverWriteJob);
 
@@ -141,34 +156,61 @@ export async function runHoldoverWriteAlarm(
   if (jobs.length === 0) return;
 
   const appId = jobs[0]?.appId;
-  if (appId !== undefined && (await isSuppressed(storage, appId, suppression))) {
+  if (appId !== undefined && (await suppression?.isAppSuppressed(appId))) {
     await purgeEntityOutboxState(storage);
     return;
   }
 
+  const cutoff = await entitySuppression(storage);
   for (const job of jobs) {
     if (job.status !== "pending") continue;
+    if (cutoff !== undefined && job.createdAtMs <= cutoff.deleteBeforeTsMs) {
+      await storage.delete(holdoverWriteJobKey(job.experimentId));
+      continue;
+    }
     await attemptHoldoverWriteJob(storage, putPort, job, nowMs, logger, suppression);
   }
+  await rescheduleOrClearAlarm(storage, nowMs);
 }
 
-/** Mark the Entity outbox suppressed and cancel pending alarms (no further puts). */
-export async function suppressEntityOutbox(storage: HoldoverWriteOutboxStorage): Promise<void> {
-  await storage.put(HOLDOVER_WRITE_ENTITY_SUPPRESSED_KEY, true);
+/**
+ * Entity deletion handshake step 1: record cutoff and cancel alarms for stale
+ * work. Must run under DO `blockConcurrencyWhile` so it cannot interleave with
+ * an in-flight put — the caller waits until the current ensure/alarm finishes.
+ */
+export async function suppressEntityOutbox(
+  storage: HoldoverWriteOutboxStorage,
+  deleteBeforeTsMs: number,
+): Promise<void> {
+  if (!Number.isFinite(deleteBeforeTsMs)) {
+    throw new Error("suppressEntityOutbox: deleteBeforeTsMs must be finite");
+  }
+  await storage.put(HOLDOVER_WRITE_ENTITY_SUPPRESSED_KEY, {
+    deleteBeforeTsMs,
+  } satisfies EntityHoldoverWriteSuppression);
   await storage.deleteAlarm();
 }
 
 /**
- * Purge pending / poisoned job rows (hashes) and cancel alarms. Keeps the Entity
- * suppress tombstone so a post-deletion retry cannot recreate Assignment Store
- * state after physical purge of durable job payloads.
+ * Purge pending / poisoned job rows at or before the Entity cutoff (hashes) and
+ * cancel alarms. Keeps the Entity suppress tombstone so a stale post-deletion
+ * retry cannot recreate Assignment Store state.
  */
-export async function purgeEntityOutboxState(storage: HoldoverWriteOutboxStorage): Promise<void> {
-  const jobs = await storage.list({ prefix: HOLDOVER_WRITE_JOB_PREFIX });
-  for (const key of jobs.keys()) {
-    await storage.delete(key);
-  }
+export async function purgeEntityOutboxState(
+  storage: HoldoverWriteOutboxStorage,
+  deleteBeforeTsMs: number = Number.POSITIVE_INFINITY,
+): Promise<void> {
+  await purgeStaleJobs(storage, deleteBeforeTsMs);
   await storage.deleteAlarm();
+}
+
+/** Full Entity deletion handshake: suppress → purge stale under one critical section. */
+export async function deleteEntityOutbox(
+  storage: HoldoverWriteOutboxStorage,
+  deleteBeforeTsMs: number,
+): Promise<void> {
+  await suppressEntityOutbox(storage, deleteBeforeTsMs);
+  await purgeEntityOutboxState(storage, deleteBeforeTsMs);
 }
 
 async function attemptHoldoverWriteJob(
@@ -179,8 +221,9 @@ async function attemptHoldoverWriteJob(
   logger?: HoldoverWriteOutboxLogger,
   suppression?: HoldoverWriteSuppressionPort,
 ): Promise<HoldoverWriteEnsureResult> {
-  if (await isSuppressed(storage, job.appId, suppression)) {
-    await purgeEntityOutboxState(storage);
+  if (await isStaleUnderSuppression(storage, job.appId, job.createdAtMs, suppression)) {
+    await storage.delete(holdoverWriteJobKey(job.experimentId));
+    await rescheduleOrClearAlarm(storage, nowMs);
     return { status: "suppressed" };
   }
   if (job.status === "poisoned") return { status: "poisoned" };
@@ -234,18 +277,52 @@ async function attemptHoldoverWriteJob(
   }
 }
 
-async function isSuppressed(
+async function isStaleUnderSuppression(
   storage: HoldoverWriteOutboxStorage,
   appId: string,
+  sourceCreatedAtMs: number,
   suppression?: HoldoverWriteSuppressionPort,
 ): Promise<boolean> {
-  if ((await storage.get<boolean>(HOLDOVER_WRITE_ENTITY_SUPPRESSED_KEY)) === true) {
-    return true;
-  }
   if (suppression && (await suppression.isAppSuppressed(appId))) {
     return true;
   }
-  return false;
+  const entity = await entitySuppression(storage);
+  if (entity === undefined) return false;
+  return sourceCreatedAtMs <= entity.deleteBeforeTsMs;
+}
+
+async function entitySuppression(
+  storage: HoldoverWriteOutboxStorage,
+): Promise<EntityHoldoverWriteSuppression | undefined> {
+  const value = await storage.get<EntityHoldoverWriteSuppression | boolean>(
+    HOLDOVER_WRITE_ENTITY_SUPPRESSED_KEY,
+  );
+  if (value === true) {
+    // Legacy permanent tombstone from pre-cutoff builds.
+    return { deleteBeforeTsMs: Number.POSITIVE_INFINITY };
+  }
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    typeof value.deleteBeforeTsMs === "number" &&
+    Number.isFinite(value.deleteBeforeTsMs)
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+async function purgeStaleJobs(
+  storage: HoldoverWriteOutboxStorage,
+  deleteBeforeTsMs: number,
+): Promise<void> {
+  const jobs = await storage.list<HoldoverWriteJob>({ prefix: HOLDOVER_WRITE_JOB_PREFIX });
+  for (const [key, job] of jobs) {
+    const createdAtMs = typeof job.createdAtMs === "number" ? job.createdAtMs : 0;
+    if (createdAtMs <= deleteBeforeTsMs) {
+      await storage.delete(key);
+    }
+  }
 }
 
 async function listJobs(storage: HoldoverWriteOutboxStorage): Promise<HoldoverWriteJob[]> {

@@ -5,11 +5,10 @@ import {
   suppressAndPurgeEntityHoldoverWriteOutbox,
   suppressAppHoldoverWriteOutbox,
 } from "./holdover-write-deletion";
+import { DirectHoldoverWriteCoordinator } from "./holdover-write-outbox";
+import { MemoryHoldoverWriteCoordinator } from "./holdover-write-outbox-memory";
 import {
-  DirectHoldoverWriteCoordinator,
-  MemoryHoldoverWriteCoordinator,
-} from "./holdover-write-outbox";
-import {
+  deleteEntityOutbox,
   ensureHoldoverWriteJob,
   HOLDOVER_WRITE_ENTITY_SUPPRESSED_KEY,
   HOLDOVER_WRITE_JOB_PREFIX,
@@ -182,18 +181,51 @@ describe("holdover write outbox core", () => {
     });
     expect(JSON.stringify(exhaustion?.detail)).not.toMatch(/ticket|pk_|sk_|raw.?targeting/i);
   });
+});
 
+describe("holdover write outbox deletion cutoff", () => {
   it("Entity suppress cancels alarms and purge drops pending/poisoned hashes", async () => {
     const put = new FailNTimesPut(5);
     const storage = new MemoryStorage();
     await ensureHoldoverWriteJob(storage, put, basePut, 1_000);
     expect(storage.job?.status).toBe("pending");
-    await suppressEntityOutbox(storage);
+    await suppressEntityOutbox(storage, 1_500);
     await runHoldoverWriteAlarm(storage, put, 2_000);
     expect(put.calls).toHaveLength(1);
-    await purgeEntityOutboxState(storage);
+    await purgeEntityOutboxState(storage, 1_500);
     expect(storage.job).toBeUndefined();
-    expect(await storage.get(HOLDOVER_WRITE_ENTITY_SUPPRESSED_KEY)).toBe(true);
+    expect(await storage.get(HOLDOVER_WRITE_ENTITY_SUPPRESSED_KEY)).toEqual({
+      deleteBeforeTsMs: 1_500,
+    });
+  });
+
+  it("Entity cutoff allows post-delete_before_ts ensures while suppressing stale work", async () => {
+    const put = new FailNTimesPut(0);
+    const storage = new MemoryStorage();
+    await ensureHoldoverWriteJob(storage, put, basePut, 1_000, undefined, undefined, {
+      sourceCreatedAtMs: 1_000,
+    });
+    await deleteEntityOutbox(storage, 1_500);
+    expect(storage.job).toBeUndefined();
+    await expect(
+      ensureHoldoverWriteJob(storage, put, basePut, 2_000, undefined, undefined, {
+        sourceCreatedAtMs: 1_200,
+      }),
+    ).resolves.toEqual({ status: "suppressed" });
+    await expect(
+      ensureHoldoverWriteJob(
+        storage,
+        put,
+        { ...basePut, runId: "run-new" },
+        2_000,
+        undefined,
+        undefined,
+        {
+          sourceCreatedAtMs: 2_000,
+        },
+      ),
+    ).resolves.toEqual({ status: "completed" });
+    expect(put.calls).toHaveLength(2);
   });
 
   it("App suppress tombstone purges Entity jobs without further puts", async () => {
@@ -237,22 +269,28 @@ describe("holdover write deletion consumer", () => {
     expect(kv.raw("holdover-write-suppress:app:app-A")).toBe("1");
   });
 
-  it("suppressAndPurgeEntityHoldoverWriteOutbox posts suppress then purge", async () => {
+  it("suppressAndPurgeEntityHoldoverWriteOutbox posts /delete handshake", async () => {
     const paths: string[] = [];
+    const bodies: unknown[] = [];
     const namespace = {
       idFromName(name: string) {
         return name as unknown as DurableObjectId;
       },
       get() {
         return {
-          async fetch(input: RequestInfo | URL) {
+          async fetch(input: RequestInfo | URL, init?: RequestInit) {
             paths.push(new URL(String(input)).pathname);
+            bodies.push(JSON.parse(String(init?.body)));
             return Response.json({ ok: true });
           },
         };
       },
     };
-    await suppressAndPurgeEntityHoldoverWriteOutbox(namespace, basePut);
-    expect(paths).toEqual(["/suppress", "/purge"]);
+    await suppressAndPurgeEntityHoldoverWriteOutbox(namespace, {
+      ...basePut,
+      deleteBeforeTsMs: 1_700,
+    });
+    expect(paths).toEqual(["/delete"]);
+    expect(bodies).toEqual([{ deleteBeforeTsMs: 1_700 }]);
   });
 });

@@ -35,7 +35,12 @@ export const ExposureBatchRequestSchema = z
   .strict();
 export type ExposureBatchRequest = z.infer<typeof ExposureBatchRequestSchema>;
 
-export const ExposureBatchResultStatusSchema = z.enum(["accepted", "deduplicated", "rejected"]);
+export const ExposureBatchResultStatusSchema = z.enum([
+  "accepted",
+  "deduplicated",
+  "rejected",
+  "suppressed",
+]);
 export type ExposureBatchResultStatus = z.infer<typeof ExposureBatchResultStatusSchema>;
 
 export const ExposureBatchResultSchema = z

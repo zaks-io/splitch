@@ -52,9 +52,10 @@ describe("holdover write outbox cleanup handler", () => {
     expect(paths).toEqual([]);
   });
 
-  it("Entity deletion posts suppress then purge on the Entity outbox DO", async () => {
+  it("Entity deletion posts /delete handshake with deleteBeforeTs", async () => {
     const kv = new RecordingKv();
     const paths: string[] = [];
+    const bodies: unknown[] = [];
     const handler = makeHoldoverWriteOutboxCleanupHandler({
       assignmentsKv: kv,
       holdoverWriteOutbox: {
@@ -63,8 +64,46 @@ describe("holdover write outbox cleanup handler", () => {
         },
         get() {
           return {
-            async fetch(input: RequestInfo | URL) {
+            async fetch(input: RequestInfo | URL, init?: RequestInit) {
               paths.push(new URL(String(input)).pathname);
+              bodies.push(JSON.parse(String(init?.body)));
+              return Response.json({ ok: true });
+            },
+          };
+        },
+      },
+    });
+
+    const response = await handler(
+      handlerArgs(
+        {
+          params: { appId: "app-A" },
+          query: {
+            idType: "user",
+            targetingKeyHash: "hash-1",
+            deleteBeforeTs: "2026-07-03T00:00:00.000Z",
+          },
+        },
+        "app-A",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ deleted: true });
+    expect(paths).toEqual(["/delete"]);
+    expect(bodies).toEqual([{ deleteBeforeTsMs: Date.parse("2026-07-03T00:00:00.000Z") }]);
+  });
+
+  it("Entity deletion without deleteBeforeTs fails loud", async () => {
+    const handler = makeHoldoverWriteOutboxCleanupHandler({
+      assignmentsKv: new RecordingKv(),
+      holdoverWriteOutbox: {
+        idFromName(name) {
+          return name as unknown as DurableObjectId;
+        },
+        get() {
+          return {
+            async fetch() {
               return Response.json({ ok: true });
             },
           };
@@ -81,10 +120,7 @@ describe("holdover write outbox cleanup handler", () => {
         "app-A",
       ),
     );
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ deleted: true });
-    expect(paths).toEqual(["/suppress", "/purge"]);
+    expect(response.status).toBe(400);
   });
 
   it("refuses a principal scoped to a different App", async () => {

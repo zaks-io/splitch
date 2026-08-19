@@ -265,6 +265,18 @@ async function deleteAppRows(
   actorId: string,
   requestId: string,
 ): Promise<void> {
+  // Suppress holdover-write outboxes BEFORE destructive cleanup so pending
+  // alarms cannot recreate Assignment Store state during the cascade (SPL-346).
+  const holdoverCleanup = deps.holdoverWriteOutboxCleanup;
+  if (!holdoverCleanup) throw new Error("App delete requires holdover write outbox cleanup");
+  await holdoverCleanup.delete({
+    appId,
+    actorId,
+    orgId: organizationId,
+    requestId,
+    deleteBeforeTs: new Date().toISOString(),
+  });
+
   // Revoke + KV tombstone only — leave D1 credential rows for the cascade
   // batch. Removing them here would destroy Client Keys before a late FK
   // failure rolls the App/memberships back (SPL-298). The durable cache
@@ -279,14 +291,6 @@ async function deleteAppRows(
   const cleanup = deps.exposureStatusCleanup;
   if (!cleanup) throw new Error("App delete requires Exposure status cleanup");
   await cleanup.delete({
-    appId,
-    actorId,
-    orgId: organizationId,
-    requestId,
-  });
-  const holdoverCleanup = deps.holdoverWriteOutboxCleanup;
-  if (!holdoverCleanup) throw new Error("App delete requires holdover write outbox cleanup");
-  await holdoverCleanup.delete({
     appId,
     actorId,
     orgId: organizationId,

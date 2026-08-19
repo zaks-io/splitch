@@ -81,6 +81,20 @@ describe("HoldoverWriteOutboxDurableObject via Miniflare (real boundary)", () =>
       status: "empty",
     });
   });
+
+  it("completed ensure means KV is already visible (HTTP 200 cannot precede KV)", async () => {
+    mf = await miniflareWithOutboxAndAssignmentStore({ failFirstKvPut: false });
+    const outboxNs = (await mf.getDurableObjectNamespace(
+      "HOLDOVER_WRITE_OUTBOX",
+    )) as unknown as HoldoverWriteOutboxNamespace;
+    const coordinator = new DurableHoldoverWriteCoordinator(outboxNs);
+    await expect(coordinator.ensure(PUT)).resolves.toEqual({ status: "completed" });
+    const key = assignmentKey(PUT.appId, PUT.idType, PUT.targetingKeyHash);
+    const kv = await mf.getKVNamespace("ASSIGNMENTS_KV");
+    // Production AssignmentStoreWriter awaits write-through before HTTP 200.
+    // A waitUntil regression would ack completed while this get is still null.
+    expect(await kv.get(key)).toEqual(expect.any(String));
+  });
 });
 
 async function miniflareWithOutboxAndAssignmentStore(options: {
@@ -102,19 +116,27 @@ async function miniflareWithOutboxAndAssignmentStore(options: {
 function bundleWorker(failFirstKvPut: boolean): string {
   const root = dirname(fileURLToPath(import.meta.url));
   const core = readSource(join(root, "holdover-write-outbox-core.ts"));
-  const outbox = readSource(join(root, "holdover-write-outbox.ts"))
-    .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/gm, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/gm, "")
-    .replace(/^import[\s\S]*?from ["']\.\/kv-assignment-store["'];?\s*/gm, "")
-    // Shared helpers also exist on the production Assignment Store DO module.
+  const fetchHandler = readSource(join(root, "holdover-write-outbox-fetch.ts"))
+    .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m, "")
+    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/m, "")
     .replace(
       /\nfunction isRecord\(value: unknown\): value is Record<string, unknown> \{[\s\S]*?\n\}\n\nfunction requireString\(value: Record<string, unknown>, key: string\): string \{[\s\S]*?\n\}\n/,
       "\n",
     );
+  const outbox = readSource(join(root, "holdover-write-outbox.ts"))
+    .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/gm, "")
+    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/gm, "")
+    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-fetch["'];?\s*/gm, "")
+    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-memory["'];?\s*/gm, "")
+    .replace(/^import[\s\S]*?from ["']\.\/kv-assignment-store["'];?\s*/gm, "")
+    .replace(/^export \{[^}]*MemoryHoldoverWriteCoordinator[^}]*\} from [^;]+;?\s*/gm, "")
+    .replace(/^export \{ handleHoldoverWriteOutboxFetch \} from [^;]+;?\s*/gm, "")
+    .replace(/^export type \{[\s\S]*?\} from ["']\.\/holdover-write-outbox-core["'];?\s*/gm, "");
   const outboxDo = readSource(join(root, "holdover-write-outbox-do.ts"))
     .replace(/^import \{ DurableObject \} from "cloudflare:workers";\s*/m, "")
     .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox["'];?\s*/m, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/m, "");
+    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/m, "")
+    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-fetch["'];?\s*/m, "");
 
   // Production writer + DO (not an inlined twin). Contracts/Zod are stubbed;
   // write-through helpers match the production assignment-store module.
@@ -125,7 +147,11 @@ function bundleWorker(failFirstKvPut: boolean): string {
   const assignmentDo = readSource(join(root, "assignment-store-do.ts"))
     .replace(/^import \{ DurableObject \} from "cloudflare:workers";\s*/m, "")
     .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m, "")
-    .replace(/^import[\s\S]*?from ["']\.\/assignment-store-writer["'];?\s*/m, "");
+    .replace(/^import[\s\S]*?from ["']\.\/assignment-store-writer["'];?\s*/m, "")
+    .replace(
+      /\nfunction isRecord\(value: unknown\): value is Record<string, unknown> \{[\s\S]*?\n\}\n\nfunction requireString\(value: Record<string, unknown>, key: string\): string \{[\s\S]*?\n\}\n/,
+      "\n",
+    );
 
   const stubs = `
 globalThis.__holdoverKvFailsRemaining = ${failFirstKvPut ? "1" : "0"};
@@ -147,6 +173,16 @@ async function readAssignmentValue(kv, key) {
   const raw = await kv.get(key);
   if (raw === null) return {};
   return JSON.parse(raw).data;
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function requireString(value, key) {
+  const field = value[key];
+  if (typeof field !== "string" || field.length === 0) {
+    throw new TypeError("assignment-store: " + key + " must be a non-empty string");
+  }
+  return field;
 }
 function failOnceKv(kv) {
   return {
@@ -170,6 +206,7 @@ function failOnceKv(kv) {
 import { DurableObject } from "cloudflare:workers";
 ${stubs}
 ${stripExport(core)}
+${stripExport(fetchHandler)}
 ${stripExport(outbox)}
 ${outboxDo}
 ${stripExport(writer)}

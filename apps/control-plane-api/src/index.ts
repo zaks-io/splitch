@@ -31,8 +31,10 @@ import {
   durableCredentialCacheWriterAccess,
 } from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
+import { createHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
 import { handleCredentialCacheBackfillGate, handleLiveUpdateTestControl } from "./internal-routes";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
+import { makeEnvSaltStore } from "./local-salt-store";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { panelAppSettingsRead } from "./panel-app-settings";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
@@ -179,6 +181,8 @@ async function handleRequest(
       "evaluation-api": env.EVALUATION_API,
     },
     approvalArchiveStore: approvalArchiveStoreFromEnv(env),
+    saltStore: makeEnvSaltStore(env),
+    holdoverWriteOutboxCleanup: createHoldoverWriteOutboxCleanup(env.EVALUATION_API),
   });
 
   return app.fetch(request, env);

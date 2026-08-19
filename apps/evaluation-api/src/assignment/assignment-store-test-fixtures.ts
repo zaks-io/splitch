@@ -64,6 +64,13 @@ export class RecordingKv implements AssignmentKv {
     }
     this.store.set(key, value);
   }
+
+  list(options: { prefix: string }): Promise<{ keys: { name: string }[] }> {
+    const keys = [...this.store.keys()]
+      .filter((name) => name.startsWith(options.prefix))
+      .map((name) => ({ name }));
+    return Promise.resolve({ keys });
+  }
 }
 
 export class RecordingWriterNamespace implements AssignmentWriterNamespace {

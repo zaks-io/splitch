@@ -2,9 +2,9 @@
  * Binding-door deletion consumer for the holdover-write outbox (SPL-346).
  *
  * App delete (no entity query): suppress App-wide pending/alarm puts via KV
- * tombstone. Entity delete (idType + targetingKeyHash): suppress then purge
- * that Entity's outbox DO so hashes cannot linger and puts cannot recreate
- * Assignment Store state.
+ * tombstone, then purge Entity outboxes discovered from Assignment Store KV.
+ * Entity delete (idType + targetingKeyHash + deleteBeforeTs): cutoff-aware
+ * suppress+purge handshake on that Entity's outbox DO.
  *
  * @module
  */
@@ -13,6 +13,7 @@ import type { ErrorResponse } from "@splitch/contracts";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import type { AssignmentKv } from "./assignment-store";
 import {
+  purgeAppHoldoverWriteOutboxes,
   suppressAndPurgeEntityHoldoverWriteOutbox,
   suppressAppHoldoverWriteOutbox,
 } from "./holdover-write-deletion";
@@ -26,16 +27,7 @@ export interface HoldoverWriteOutboxCleanupDeps {
 export function makeHoldoverWriteOutboxCleanupHandler(deps: HoldoverWriteOutboxCleanupDeps) {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     try {
-      const scope = cleanupScope(input, principal.appId);
-      if (scope.kind === "app") {
-        await suppressAppHoldoverWriteOutbox(deps.assignmentsKv, scope.appId);
-      } else {
-        await suppressAndPurgeEntityHoldoverWriteOutbox(deps.holdoverWriteOutbox, {
-          appId: scope.appId,
-          idType: scope.idType,
-          targetingKeyHash: scope.targetingKeyHash,
-        });
-      }
+      await runHoldoverWriteOutboxCleanup(deps, cleanupScope(input, principal.appId));
       return Response.json({ deleted: true as const });
     } catch (cause) {
       return renderError(cleanupError(cause), { requestId });
@@ -43,13 +35,40 @@ export function makeHoldoverWriteOutboxCleanupHandler(deps: HoldoverWriteOutboxC
   };
 }
 
+async function runHoldoverWriteOutboxCleanup(
+  deps: HoldoverWriteOutboxCleanupDeps,
+  scope: CleanupScope,
+): Promise<void> {
+  if (scope.kind === "app") {
+    await suppressAppHoldoverWriteOutbox(deps.assignmentsKv, scope.appId);
+    if (typeof deps.assignmentsKv.list === "function") {
+      await purgeAppHoldoverWriteOutboxes(
+        deps.assignmentsKv as AssignmentKv & {
+          list(options: { prefix: string }): Promise<{ keys: { name: string }[] }>;
+        },
+        deps.holdoverWriteOutbox,
+        scope.appId,
+        scope.deleteBeforeTsMs,
+      );
+    }
+    return;
+  }
+  await suppressAndPurgeEntityHoldoverWriteOutbox(deps.holdoverWriteOutbox, {
+    appId: scope.appId,
+    idType: scope.idType,
+    targetingKeyHash: scope.targetingKeyHash,
+    deleteBeforeTsMs: scope.deleteBeforeTsMs,
+  });
+}
+
 type CleanupScope =
-  | { readonly kind: "app"; readonly appId: string }
+  | { readonly kind: "app"; readonly appId: string; readonly deleteBeforeTsMs: number }
   | {
       readonly kind: "entity";
       readonly appId: string;
       readonly idType: string;
       readonly targetingKeyHash: string;
+      readonly deleteBeforeTsMs: number;
     };
 
 function cleanupScope(input: unknown, principalAppId: string | null): CleanupScope {
@@ -61,15 +80,36 @@ function cleanupScope(input: unknown, principalAppId: string | null): CleanupSco
   const query = rowObject(parsed.query);
   const idType = optionalString(query.idType, "idType");
   const targetingKeyHash = optionalString(query.targetingKeyHash, "targetingKeyHash");
+  const deleteBeforeTsMs = parseDeleteBeforeTs(query.deleteBeforeTs);
   if (idType === undefined && targetingKeyHash === undefined) {
-    return { kind: "app", appId };
+    return { kind: "app", appId, deleteBeforeTsMs };
   }
   if (idType === undefined || targetingKeyHash === undefined) {
     throw new HoldoverWriteOutboxCleanupValidationError(
       "idType and targetingKeyHash must both be provided for Entity deletion",
     );
   }
-  return { kind: "entity", appId, idType, targetingKeyHash };
+  if (query.deleteBeforeTs === undefined) {
+    throw new HoldoverWriteOutboxCleanupValidationError(
+      "deleteBeforeTs is required for Entity deletion",
+    );
+  }
+  return { kind: "entity", appId, idType, targetingKeyHash, deleteBeforeTsMs };
+}
+
+function parseDeleteBeforeTs(value: unknown): number {
+  if (value === undefined) {
+    // App-wide suppress: every pending job is stale relative to delete time.
+    return Date.now();
+  }
+  if (typeof value !== "string" || value.length === 0) {
+    throw new HoldoverWriteOutboxCleanupValidationError("deleteBeforeTs must be an ISO timestamp");
+  }
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) {
+    throw new HoldoverWriteOutboxCleanupValidationError("deleteBeforeTs must be an ISO timestamp");
+  }
+  return ms;
 }
 
 function cleanupError(cause: unknown): ErrorResponse {

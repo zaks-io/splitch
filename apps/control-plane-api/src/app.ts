@@ -19,6 +19,7 @@ import type { ConfigStoreAccess } from "./config-store-do";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
+import { makeEntityPrivacyDeleteHandler } from "./entity-privacy-delete-handler";
 import { registerEventDefinitionRoutes } from "./event-definition-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
 import { appEnvironmentCleanupDeps } from "./app-environment-cleanup-deps";
@@ -31,7 +32,8 @@ import { mountLiveUpdateRoute } from "./live-updates";
 import { makeMetricSegmentHandlers } from "./metric-segment-handlers";
 import type { MemberProfileResolver } from "./org-handlers";
 import { controlPlaneRoute } from "./routes";
-import { unavailableControlPlaneOperation } from "./unavailable-handler";
+import type { SaltStore } from "@splitch/privacy";
+import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
 
 /**
  * Control Plane API Worker HTTP surface.
@@ -68,6 +70,7 @@ export interface AppDeps {
   approvalArchiveStore?: import("./approval-archive").ApprovalArchiveStore;
   exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
   holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
+  saltStore?: SaltStore;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
@@ -246,7 +249,23 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("api_keys_list"), credentialHandlers.listApiKeys);
   registrar.mount(app, controlPlaneRoute("api_keys_create"), credentialHandlers.createApiKey);
   registrar.mount(app, controlPlaneRoute("api_keys_revoke"), credentialHandlers.revokeApiKey);
-  mountUnavailableControlPlaneRoutes(app, registrar, deps.repo);
+  const entityPrivacyReady =
+    deps.saltStore !== undefined && deps.holdoverWriteOutboxCleanup !== undefined;
+  mountUnavailableControlPlaneRoutes(app, registrar, deps.repo, {
+    skipEntityPrivacyDelete: entityPrivacyReady,
+  });
+  if (entityPrivacyReady && deps.saltStore && deps.holdoverWriteOutboxCleanup) {
+    registrar.mount(
+      app,
+      controlPlaneRoute("entity_privacy_delete"),
+      makeEntityPrivacyDeleteHandler({
+        repo: deps.repo,
+        saltStore: deps.saltStore,
+        holdoverWriteOutboxCleanup: deps.holdoverWriteOutboxCleanup,
+        ...(deps.nowIso ? { nowIso: deps.nowIso } : {}),
+      }),
+    );
+  }
   mountDelegatedRoutes(app, registrar, deps.delegationBindings ?? {}, deps.repo);
 
   return app;
@@ -273,29 +292,6 @@ function mountAttentionRollupRoute(app: Hono, registrar: Registrar, deps: AppDep
       analysisResults: deps.analysisResults ?? unavailableAnalysisResults,
     }),
   );
-}
-
-function mountUnavailableControlPlaneRoutes(
-  app: Hono,
-  registrar: Registrar,
-  repo: Repository,
-): void {
-  for (const operationId of [
-    "organizations_delete",
-    "current_user_privacy_export",
-    "current_user_delete",
-    "organization_privacy_export",
-    "app_privacy_export",
-    "entity_privacy_export",
-    "entity_privacy_delete",
-    "privacy_requests_get",
-  ] as const) {
-    registrar.mount(
-      app,
-      controlPlaneRoute(operationId),
-      unavailableControlPlaneOperation({ repo }, operationId),
-    );
-  }
 }
 
 function mountExperimentRoutes(
