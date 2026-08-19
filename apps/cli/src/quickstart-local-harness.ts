@@ -172,16 +172,12 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
     exposureSink,
     evaluationCommitSink,
     invalidateFlagCache(targetAppId = appId) {
-      // SPL-322 scoped Provider invalidation to (App, Environment, Flag). This
-      // harness has no live-update socket, so after CLI Flag Configuration
-      // writes it drops both Environments' caches the way reconnect does.
-      const dropEnvironment = (
-        provider as unknown as {
-          invalidateEnvironment(appId: string, environmentId: string): void;
-        }
-      ).invalidateEnvironment.bind(provider);
+      // SPL-322 scoped Provider.invalidate to (appId, environmentId, nudge).
+      // This harness has no live-update socket, so after CLI Flag Configuration
+      // writes it drops both Environments' caches the way reconnect does —
+      // never call invalidate without an Environment or with a fabricated nudge.
       for (const environmentId of [devEnvironmentId, prodEnvironmentId]) {
-        dropEnvironment(targetAppId, environmentId);
+        provider.invalidateEnvironment(targetAppId, environmentId);
       }
     },
     dispose: async () => {

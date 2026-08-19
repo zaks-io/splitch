@@ -154,6 +154,22 @@ export class KvProvider implements Provider {
     this.cache.invalidate(appId, environmentId, nudge, this.now());
   }
 
+  /**
+   * Drop every cached Flag / Experiment snapshot for one Environment.
+   * Live-update reconnect uses this; local harnesses without a socket do too.
+   */
+  invalidateEnvironment(appId: string, environmentId: string): void {
+    this.cache.invalidateEnvironment(appId, environmentId);
+    const prefix = `app:${appId}:${environmentId}:experiment:`;
+    for (const key of this.experimentSnapshots.keys()) {
+      if (key.startsWith(prefix)) this.experimentSnapshots.delete(key);
+    }
+    const flagPrefix = `app:${appId}:${environmentId}:flag:`;
+    for (const key of this.flagExperiments.keys()) {
+      if (key.startsWith(flagPrefix)) this.flagExperiments.delete(key);
+    }
+  }
+
   private async ensureSubscribed(appId: string, environmentId: string): Promise<void> {
     const updates = this.options.configUpdates;
     if (updates === undefined) return;
@@ -169,18 +185,6 @@ export class KvProvider implements Provider {
         cause,
         errorCode: "SERVICE_UNAVAILABLE",
       });
-    }
-  }
-
-  private invalidateEnvironment(appId: string, environmentId: string): void {
-    this.cache.invalidateEnvironment(appId, environmentId);
-    const prefix = `app:${appId}:${environmentId}:experiment:`;
-    for (const key of this.experimentSnapshots.keys()) {
-      if (key.startsWith(prefix)) this.experimentSnapshots.delete(key);
-    }
-    const flagPrefix = `app:${appId}:${environmentId}:flag:`;
-    for (const key of this.flagExperiments.keys()) {
-      if (key.startsWith(flagPrefix)) this.flagExperiments.delete(key);
     }
   }
 
