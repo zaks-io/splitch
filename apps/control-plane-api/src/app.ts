@@ -9,6 +9,7 @@ import {
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
+import { makeAppMemberHandlers } from "./app-member-handlers";
 import { makeOtherApprovalApplication } from "./approval-application";
 import { makeApprovalHandlers } from "./approval-handlers";
 import {
@@ -160,6 +161,7 @@ export function createApp(deps: AppDeps): Hono {
   mountAttentionRollupRoute(app, registrar, deps);
   registrar.mount(app, controlPlaneRoute("apps_update"), appEnvironmentHandlers.updateApp);
   registrar.mount(app, controlPlaneRoute("apps_delete"), appEnvironmentHandlers.deleteApp);
+  mountAppMemberRoutes(app, registrar, deps);
   registrar.mount(
     app,
     controlPlaneRoute("environments_list"),
@@ -250,6 +252,18 @@ export function createApp(deps: AppDeps): Hono {
   mountDelegatedRoutes(app, registrar, deps.delegationBindings ?? {}, deps.repo);
 
   return app;
+}
+
+function mountAppMemberRoutes(app: Hono, registrar: Registrar, deps: AppDeps): void {
+  const handlers = makeAppMemberHandlers({
+    repo: deps.repo,
+    ...(deps.memberProfileResolver ? { memberProfileResolver: deps.memberProfileResolver } : {}),
+    ...(deps.nowIso ? { nowIso: deps.nowIso } : {}),
+  });
+  registrar.mount(app, controlPlaneRoute("app_members_list"), handlers.listAppMembers);
+  registrar.mount(app, controlPlaneRoute("app_members_add"), handlers.addAppMember);
+  registrar.mount(app, controlPlaneRoute("app_members_update"), handlers.updateAppMember);
+  registrar.mount(app, controlPlaneRoute("app_members_remove"), handlers.removeAppMember);
 }
 
 function mountAttentionRollupRoute(app: Hono, registrar: Registrar, deps: AppDeps): void {

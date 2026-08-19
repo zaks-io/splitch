@@ -31,6 +31,8 @@ import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdRouteImport } from './
 import { Route as OrgSlugAppSlugEnvExperimentsNewRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.new'
 import { Route as OrgSlugAppSlugEnvFlagsIndexRouteImport } from './routes/$orgSlug.$appSlug.$env.flags.index'
 import { Route as OrgSlugAppSlugEnvFlagsFlagKeyRouteImport } from './routes/$orgSlug.$appSlug.$env.flags.$flagKey'
+import { Route as OrgSlugAppSlugEnvSettingsIndexRouteImport } from './routes/$orgSlug.$appSlug.$env.settings.index'
+import { Route as OrgSlugAppSlugEnvSettingsEnvironmentRouteImport } from './routes/$orgSlug.$appSlug.$env.settings.environment'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdIndexRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.index'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdResultsRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.results'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdSetupRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.setup'
@@ -160,6 +162,18 @@ const OrgSlugAppSlugEnvFlagsFlagKeyRoute =
     path: '/flags/$flagKey',
     getParentRoute: () => OrgSlugAppSlugEnvRoute,
   } as any)
+const OrgSlugAppSlugEnvSettingsIndexRoute =
+  OrgSlugAppSlugEnvSettingsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => OrgSlugAppSlugEnvSettingsRoute,
+  } as any)
+const OrgSlugAppSlugEnvSettingsEnvironmentRoute =
+  OrgSlugAppSlugEnvSettingsEnvironmentRouteImport.update({
+    id: '/environment',
+    path: '/environment',
+    getParentRoute: () => OrgSlugAppSlugEnvSettingsRoute,
+  } as any)
 const OrgSlugAppSlugEnvExperimentsExperimentIdIndexRoute =
   OrgSlugAppSlugEnvExperimentsExperimentIdIndexRouteImport.update({
     id: '/',
@@ -234,13 +248,15 @@ export interface FileRoutesByFullPath {
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRouteWithChildren
   '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
   '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
-  '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
+  '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRouteWithChildren
   '/$orgSlug/$appSlug/$env/': typeof OrgSlugAppSlugEnvIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId': typeof OrgSlugAppSlugEnvExperimentsExperimentIdRouteWithChildren
   '/$orgSlug/$appSlug/$env/experiments/new': typeof OrgSlugAppSlugEnvExperimentsNewRoute
   '/$orgSlug/$appSlug/$env/flags/$flagKey': typeof OrgSlugAppSlugEnvFlagsFlagKeyRoute
+  '/$orgSlug/$appSlug/$env/settings/environment': typeof OrgSlugAppSlugEnvSettingsEnvironmentRoute
   '/$orgSlug/$appSlug/$env/experiments/': typeof OrgSlugAppSlugEnvExperimentsIndexRoute
   '/$orgSlug/$appSlug/$env/flags/': typeof OrgSlugAppSlugEnvFlagsIndexRoute
+  '/$orgSlug/$appSlug/$env/settings/': typeof OrgSlugAppSlugEnvSettingsIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/results': typeof OrgSlugAppSlugEnvExperimentsExperimentIdResultsRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup': typeof OrgSlugAppSlugEnvExperimentsExperimentIdSetupRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/draft': typeof OrgSlugAppSlugEnvExperimentsExperimentIdDraftRoute
@@ -265,12 +281,13 @@ export interface FileRoutesByTo {
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
   '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
-  '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/new': typeof OrgSlugAppSlugEnvExperimentsNewRoute
   '/$orgSlug/$appSlug/$env/flags/$flagKey': typeof OrgSlugAppSlugEnvFlagsFlagKeyRoute
+  '/$orgSlug/$appSlug/$env/settings/environment': typeof OrgSlugAppSlugEnvSettingsEnvironmentRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsIndexRoute
   '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsIndexRoute
+  '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/results': typeof OrgSlugAppSlugEnvExperimentsExperimentIdResultsRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup': typeof OrgSlugAppSlugEnvExperimentsExperimentIdSetupRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/draft': typeof OrgSlugAppSlugEnvExperimentsExperimentIdDraftRoute
@@ -297,13 +314,15 @@ export interface FileRoutesById {
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRouteWithChildren
   '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
   '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
-  '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
+  '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRouteWithChildren
   '/$orgSlug/$appSlug/$env/': typeof OrgSlugAppSlugEnvIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId': typeof OrgSlugAppSlugEnvExperimentsExperimentIdRouteWithChildren
   '/$orgSlug/$appSlug/$env/experiments/new': typeof OrgSlugAppSlugEnvExperimentsNewRoute
   '/$orgSlug/$appSlug/$env/flags/$flagKey': typeof OrgSlugAppSlugEnvFlagsFlagKeyRoute
+  '/$orgSlug/$appSlug/$env/settings/environment': typeof OrgSlugAppSlugEnvSettingsEnvironmentRoute
   '/$orgSlug/$appSlug/$env/experiments/': typeof OrgSlugAppSlugEnvExperimentsIndexRoute
   '/$orgSlug/$appSlug/$env/flags/': typeof OrgSlugAppSlugEnvFlagsIndexRoute
+  '/$orgSlug/$appSlug/$env/settings/': typeof OrgSlugAppSlugEnvSettingsIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/results': typeof OrgSlugAppSlugEnvExperimentsExperimentIdResultsRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup': typeof OrgSlugAppSlugEnvExperimentsExperimentIdSetupRoute
   '/$orgSlug/$appSlug/$env/experiments_/$experimentId/draft': typeof OrgSlugAppSlugEnvExperimentsExperimentIdDraftRoute
@@ -337,8 +356,10 @@ export interface FileRouteTypes {
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId'
     | '/$orgSlug/$appSlug/$env/experiments/new'
     | '/$orgSlug/$appSlug/$env/flags/$flagKey'
+    | '/$orgSlug/$appSlug/$env/settings/environment'
     | '/$orgSlug/$appSlug/$env/experiments/'
     | '/$orgSlug/$appSlug/$env/flags/'
+    | '/$orgSlug/$appSlug/$env/settings/'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/results'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/draft'
@@ -363,12 +384,13 @@ export interface FileRouteTypes {
     | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/metrics'
     | '/$orgSlug/$appSlug/$env/segments'
-    | '/$orgSlug/$appSlug/$env/settings'
     | '/$orgSlug/$appSlug/$env'
     | '/$orgSlug/$appSlug/$env/experiments/new'
     | '/$orgSlug/$appSlug/$env/flags/$flagKey'
+    | '/$orgSlug/$appSlug/$env/settings/environment'
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
+    | '/$orgSlug/$appSlug/$env/settings'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/results'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/draft'
@@ -399,8 +421,10 @@ export interface FileRouteTypes {
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId'
     | '/$orgSlug/$appSlug/$env/experiments/new'
     | '/$orgSlug/$appSlug/$env/flags/$flagKey'
+    | '/$orgSlug/$appSlug/$env/settings/environment'
     | '/$orgSlug/$appSlug/$env/experiments/'
     | '/$orgSlug/$appSlug/$env/flags/'
+    | '/$orgSlug/$appSlug/$env/settings/'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/results'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup'
     | '/$orgSlug/$appSlug/$env/experiments_/$experimentId/draft'
@@ -583,6 +607,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSlugAppSlugEnvFlagsFlagKeyRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvRoute
     }
+    '/$orgSlug/$appSlug/$env/settings/': {
+      id: '/$orgSlug/$appSlug/$env/settings/'
+      path: '/'
+      fullPath: '/$orgSlug/$appSlug/$env/settings/'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvSettingsIndexRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvSettingsRoute
+    }
+    '/$orgSlug/$appSlug/$env/settings/environment': {
+      id: '/$orgSlug/$appSlug/$env/settings/environment'
+      path: '/environment'
+      fullPath: '/$orgSlug/$appSlug/$env/settings/environment'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvSettingsEnvironmentRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvSettingsRoute
+    }
     '/$orgSlug/$appSlug/$env/experiments/$experimentId/': {
       id: '/$orgSlug/$appSlug/$env/experiments/$experimentId/'
       path: '/'
@@ -714,11 +752,28 @@ const OrgSlugAppSlugEnvExperimentsRouteWithChildren =
     OrgSlugAppSlugEnvExperimentsRouteChildren,
   )
 
+interface OrgSlugAppSlugEnvSettingsRouteChildren {
+  OrgSlugAppSlugEnvSettingsEnvironmentRoute: typeof OrgSlugAppSlugEnvSettingsEnvironmentRoute
+  OrgSlugAppSlugEnvSettingsIndexRoute: typeof OrgSlugAppSlugEnvSettingsIndexRoute
+}
+
+const OrgSlugAppSlugEnvSettingsRouteChildren: OrgSlugAppSlugEnvSettingsRouteChildren =
+  {
+    OrgSlugAppSlugEnvSettingsEnvironmentRoute:
+      OrgSlugAppSlugEnvSettingsEnvironmentRoute,
+    OrgSlugAppSlugEnvSettingsIndexRoute: OrgSlugAppSlugEnvSettingsIndexRoute,
+  }
+
+const OrgSlugAppSlugEnvSettingsRouteWithChildren =
+  OrgSlugAppSlugEnvSettingsRoute._addFileChildren(
+    OrgSlugAppSlugEnvSettingsRouteChildren,
+  )
+
 interface OrgSlugAppSlugEnvRouteChildren {
   OrgSlugAppSlugEnvExperimentsRoute: typeof OrgSlugAppSlugEnvExperimentsRouteWithChildren
   OrgSlugAppSlugEnvMetricsRoute: typeof OrgSlugAppSlugEnvMetricsRoute
   OrgSlugAppSlugEnvSegmentsRoute: typeof OrgSlugAppSlugEnvSegmentsRoute
-  OrgSlugAppSlugEnvSettingsRoute: typeof OrgSlugAppSlugEnvSettingsRoute
+  OrgSlugAppSlugEnvSettingsRoute: typeof OrgSlugAppSlugEnvSettingsRouteWithChildren
   OrgSlugAppSlugEnvIndexRoute: typeof OrgSlugAppSlugEnvIndexRoute
   OrgSlugAppSlugEnvFlagsFlagKeyRoute: typeof OrgSlugAppSlugEnvFlagsFlagKeyRoute
   OrgSlugAppSlugEnvFlagsIndexRoute: typeof OrgSlugAppSlugEnvFlagsIndexRoute
@@ -731,7 +786,7 @@ const OrgSlugAppSlugEnvRouteChildren: OrgSlugAppSlugEnvRouteChildren = {
     OrgSlugAppSlugEnvExperimentsRouteWithChildren,
   OrgSlugAppSlugEnvMetricsRoute: OrgSlugAppSlugEnvMetricsRoute,
   OrgSlugAppSlugEnvSegmentsRoute: OrgSlugAppSlugEnvSegmentsRoute,
-  OrgSlugAppSlugEnvSettingsRoute: OrgSlugAppSlugEnvSettingsRoute,
+  OrgSlugAppSlugEnvSettingsRoute: OrgSlugAppSlugEnvSettingsRouteWithChildren,
   OrgSlugAppSlugEnvIndexRoute: OrgSlugAppSlugEnvIndexRoute,
   OrgSlugAppSlugEnvFlagsFlagKeyRoute: OrgSlugAppSlugEnvFlagsFlagKeyRoute,
   OrgSlugAppSlugEnvFlagsIndexRoute: OrgSlugAppSlugEnvFlagsIndexRoute,

@@ -128,15 +128,29 @@ App membership controls who can read/write Flag, Experiment, and Run config for 
 
 **Role matrix (App scope):**
 
-| operation                       | owner | admin | member |
-| ------------------------------- | ----- | ----- | ------ |
-| Start, End, or Conclude Runs    | yes   | yes   | no     |
-| Edit Flags/Experiments (draft)  | yes   | yes   | yes    |
-| Promote Flag Config across Envs | yes   | yes   | no     |
-| Edit Environment Policy         | yes   | yes   | no     |
-| Manage SDK credentials          | yes   | yes   | no     |
-| View config/results             | yes   | yes   | yes    |
-| Delete Flags/Experiments        | yes   | no    | no     |
+| operation                            | owner | admin | member |
+| ------------------------------------ | ----- | ----- | ------ |
+| Start, End, or Conclude Runs         | yes   | yes   | no     |
+| Edit Flags/Experiments (draft)       | yes   | yes   | yes    |
+| Promote Flag Config across Envs      | yes   | yes   | no     |
+| Edit Environment Policy              | yes   | yes   | no     |
+| Manage SDK credentials               | yes   | yes   | no     |
+| View config/results                  | yes   | yes   | yes    |
+| Delete Flags/Experiments             | yes   | no    | no     |
+| Rename the App / change its URL slug | yes   | yes   | no     |
+| View who has access to the App       | yes   | yes   | yes    |
+| Grant App access                     | yes   | yes   | no     |
+| Change an App role or revoke access  | yes   | no    | no     |
+| Delete the App                       | yes   | no    | no     |
+
+Granting the `owner` role is owner-only even though granting access is not: an admin who could
+mint an owner would walk straight past the owner-only role-change and revoke gates. Viewing the
+access list follows the "View config/results" row, so any App member can see who else has access.
+A change that would leave the App with no owner is refused with `LAST_OWNER_REQUIRED`
+(`{ appId }`), mirroring the Organization rule.
+
+App access is granted from inside the Organization that owns the App: a user with no Org
+membership is refused with `USER_NOT_FOUND` rather than being implicitly added to the Org.
 
 Roles are still App/Org level (not per-Environment). Promotion (moving Flag Configuration between
 Environments, ADR-0028) and Environment Policy edits are additionally gated by the per-change-type

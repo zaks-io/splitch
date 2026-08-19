@@ -73,6 +73,11 @@ const FORM_POST_COOKIE_AUTHENTICATED_WRITES = [
 const CREATE_SERVER_FN_POST_WRITES = [
   "lib/claim-ceremony-functions.ts#submitClaimCeremony",
   "lib/control-plane-app-functions.ts#createControlPanelApp",
+  "lib/control-plane-app-settings-functions.ts#addControlPanelAppMember",
+  "lib/control-plane-app-settings-functions.ts#deleteControlPanelApp",
+  "lib/control-plane-app-settings-functions.ts#removeControlPanelAppMember",
+  "lib/control-plane-app-settings-functions.ts#updateControlPanelApp",
+  "lib/control-plane-app-settings-functions.ts#updateControlPanelAppMember",
   "lib/control-plane-experiment-functions.ts#createControlPanelExperiment",
   "lib/control-plane-experiment-functions.ts#stageAndStartControlPanelExperimentRun",
   "lib/control-plane-experiment-functions.ts#updateControlPanelExperiment",

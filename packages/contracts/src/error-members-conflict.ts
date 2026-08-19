@@ -8,13 +8,14 @@ import { UserRoleSchema } from "./leaf-schemas-runtime";
  * ordinary conflict details, not a separate error domain.
  */
 export const conflictErrorMembers = [
-  // The slug is a GLOBAL handle, so a conflict can name a resource the caller
-  // cannot see. `conflictingSlug` echoes only what the caller already sent; no
-  // id, name, or owner of the winning resource is disclosed (ADR-0018).
+  // An Organization slug is a GLOBAL handle and an App slug is unique within its
+  // Organization, so a conflict can name a resource the caller cannot see.
+  // `conflictingSlug` echoes only what the caller already sent; no id, name, or
+  // owner of the winning resource is disclosed (ADR-0018).
   member(
     "SLUG_CONFLICT",
     z.object({
-      resourceType: z.literal("organization"),
+      resourceType: z.enum(["organization", "app"]),
       conflictingSlug: z.string(),
       // A slug collision has exactly one remedy. The open enum would let an
       // unrelated action typecheck here and send a caller somewhere useless.

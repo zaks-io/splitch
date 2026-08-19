@@ -1,5 +1,5 @@
 import { z } from "@hono/zod-openapi";
-import { AppSchema, EnvironmentSchema } from "../leaf-schemas-runtime";
+import { AppMemberSchema, AppSchema, EnvironmentSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   ResourceDeleteModeQuerySchema,
@@ -11,11 +11,14 @@ import {
   PatchAppRequestSchema,
 } from "../resource-envelopes-account";
 import {
+  AddAppMemberRequestSchema,
+  AppMemberParams,
   AppParams,
   CreateEnvironmentRequestSchema,
   EnvParams,
   OrgAppsParams,
   PatchEnvironmentRequestSchema,
+  UpdateAppMemberRequestSchema,
 } from "./route-shapes";
 
 /**
@@ -30,6 +33,7 @@ const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
 const AppListResponse = z.object({ items: z.array(AppSchema) });
+const AppMemberListResponse = z.object({ items: z.array(AppMemberSchema) });
 const EnvListResponse = z.object({ items: z.array(EnvironmentSchema) });
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 
@@ -78,7 +82,7 @@ export const appEnvironmentRoutes = [
     owner: OWNER,
     method: "PATCH",
     path: "/apps/:appId",
-    summary: "Rename an App.",
+    summary: "Rename an App or change its URL slug.",
     request: { params: AppParams, body: PatchAppRequestSchema },
     response: AppSchema,
     auth: AUTH,
@@ -175,6 +179,84 @@ export const appEnvironmentRoutes = [
       "EXPERIMENT_RUNNING",
       "LAST_ENVIRONMENT_REQUIRED",
       "RESOURCE_NOT_EMPTY",
+    ],
+  }),
+  /**
+   * App membership is managed HERE, under the App, not under the Organization
+   * (screen-inventory.md Settings). Appended at the end of this list on purpose:
+   * `control-plane-client-app.ts` selects SDK routes by index, so inserting them
+   * mid-list would silently re-point every later selection.
+   */
+  defineApiRoute({
+    operationId: "app_members_list",
+    owner: OWNER,
+    method: "GET",
+    path: "/apps/:appId/members",
+    summary: "List the members of an App and their App roles.",
+    request: { params: AppParams },
+    response: AppMemberListResponse,
+    auth: AUTH,
+    rateLimit: RATE,
+    idempotency: "none",
+    errors: ["APP_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
+  }),
+  defineApiRoute({
+    operationId: "app_members_add",
+    owner: OWNER,
+    method: "POST",
+    path: "/apps/:appId/members",
+    summary: "Grant a user a role on an App.",
+    request: { params: AppParams, body: AddAppMemberRequestSchema },
+    response: AppMemberSchema,
+    auth: AUTH,
+    rateLimit: RATE,
+    idempotency: "none",
+    errors: [
+      "APP_NOT_FOUND",
+      "FORBIDDEN",
+      "USER_NOT_FOUND",
+      "MEMBERSHIP_CONFLICT",
+      "SERVICE_UNAVAILABLE",
+      "VALIDATION_ERROR",
+    ],
+  }),
+  defineApiRoute({
+    operationId: "app_members_update",
+    owner: OWNER,
+    method: "PATCH",
+    path: "/apps/:appId/members/:userId",
+    summary: "Change a member's App role.",
+    request: { params: AppMemberParams, body: UpdateAppMemberRequestSchema },
+    response: AppMemberSchema,
+    auth: AUTH,
+    rateLimit: RATE,
+    idempotency: "none",
+    errors: [
+      "APP_NOT_FOUND",
+      "USER_NOT_FOUND",
+      "FORBIDDEN",
+      "LAST_OWNER_REQUIRED",
+      "SERVICE_UNAVAILABLE",
+      "VALIDATION_ERROR",
+    ],
+  }),
+  defineApiRoute({
+    operationId: "app_members_remove",
+    owner: OWNER,
+    method: "DELETE",
+    path: "/apps/:appId/members/:userId",
+    summary: "Revoke a user's access to an App (rejected if removing the last owner).",
+    request: { params: AppMemberParams },
+    response: DeletedResponse,
+    auth: AUTH,
+    rateLimit: RATE,
+    idempotency: "none",
+    errors: [
+      "APP_NOT_FOUND",
+      "USER_NOT_FOUND",
+      "FORBIDDEN",
+      "LAST_OWNER_REQUIRED",
+      "SERVICE_UNAVAILABLE",
     ],
   }),
 ] as const satisfies readonly ApiRouteContract[];

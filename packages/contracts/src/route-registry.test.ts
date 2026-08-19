@@ -49,6 +49,10 @@ const CANONICAL_OPERATION_IDS = [
   "app_attention_rollup_get",
   "apps_update",
   "apps_delete",
+  "app_members_list",
+  "app_members_add",
+  "app_members_update",
+  "app_members_remove",
   // Environments
   "environments_list",
   "environments_create",
@@ -218,6 +222,18 @@ describe("route registry: lookup", () => {
     const route = getRoute("flags_create");
     expect(route?.method).toBe("POST");
     expect(route?.path).toBe("/apps/:appId/flags");
+  });
+
+  it("declares conflicts and availability failures on the App membership surface", () => {
+    for (const operationId of [
+      "app_members_list",
+      "app_members_add",
+      "app_members_update",
+      "app_members_remove",
+    ]) {
+      expect(getRoute(operationId)?.errors).toContain("SERVICE_UNAVAILABLE");
+    }
+    expect(getRoute("app_members_add")?.errors).toContain("MEMBERSHIP_CONFLICT");
   });
 
   it("getRoute returns undefined for an unknown operationId", () => {

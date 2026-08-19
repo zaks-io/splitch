@@ -218,6 +218,21 @@ export function unusableAppKey(name: string, requestId: string): Response {
   );
 }
 
+export function appSlugConflict(slug: string, requestId: string): Response {
+  return renderError(
+    {
+      code: "SLUG_CONFLICT",
+      message: `URL slug "${slug}" is already taken in this organization`,
+      details: {
+        resourceType: "app",
+        conflictingSlug: slug,
+        recommendedAction: "CHOOSE_DIFFERENT_SLUG",
+      },
+    },
+    { requestId },
+  );
+}
+
 export function appNotFound(requestId: string): Response {
   return renderError(
     { code: "APP_NOT_FOUND", message: "app not found", details: {} },

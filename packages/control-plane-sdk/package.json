@@ -45,6 +45,10 @@
       "types": "./src/panel-overview.ts",
       "default": "./src/panel-overview.ts"
     },
+    "./panel-app-settings": {
+      "types": "./src/panel-app-settings.ts",
+      "default": "./src/panel-app-settings.ts"
+    },
     "./panel-settings": {
       "types": "./src/panel-settings.ts",
       "default": "./src/panel-settings.ts"

@@ -1,3 +1,4 @@
+import { appScope } from "@splitch/db";
 import { DELEGATED_IDENTITY_HEADER } from "@splitch/worker-runtime";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -128,8 +129,7 @@ describe("attention rollup Organization isolation", { timeout: ATTENTION_TEST_TI
 
   it("rejects stale Organization membership before analysis reads", async () => {
     const repo = repository();
-    await repo.identity.createAppMembership({
-      appId: ids.appId,
+    await repo.identity.createAppMembership(appScope(ids.appId), {
       userId: "user_not_in_org",
       role: "member",
       createdAt: NOW,
