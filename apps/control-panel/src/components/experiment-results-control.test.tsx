@@ -122,6 +122,10 @@ describe("ExperimentResults with an Analysis Control disagreement", () => {
     const html = disagreementHtml();
 
     expect(html).toContain("Analysis Control disagrees with the Run");
+    // SPL-189: pins this branch's icon too — without it, swapping in
+    // AlertTriangleIcon here (the confirmed-SRM icon) passes every other
+    // assertion, which is exactly the severity-swap defect this PR gates.
+    expect(html).toContain("lucide-circle-alert");
     expect(html).toContain(
       'This Run froze <code class="font-mono text-foreground text-xs">control</code> as its Control, but the Run Snapshot written to the analytics store at Start recorded <code class="font-mono text-foreground text-xs">legacy_checkout</code>. Both are written at Start and should match. Because they do not, every lift below is measured against <code class="font-mono text-foreground text-xs">legacy_checkout</code> and not against the Run&#x27;s own Control.',
     );
