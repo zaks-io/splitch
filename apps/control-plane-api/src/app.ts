@@ -31,7 +31,6 @@ import { mountLiveUpdateRoute } from "./live-updates";
 import { makeMetricSegmentHandlers } from "./metric-segment-handlers";
 import type { MemberProfileResolver } from "./org-handlers";
 import { controlPlaneRoute } from "./routes";
-import type { SaltStore } from "@splitch/privacy";
 import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
 
 /**
@@ -69,8 +68,6 @@ export interface AppDeps {
   approvalArchiveStore?: import("./approval-archive").ApprovalArchiveStore;
   exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
   holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
-  /** Reserved for Entity privacy physical purge when that consumer ships. */
-  saltStore?: SaltStore;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */

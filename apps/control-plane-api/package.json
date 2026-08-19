@@ -19,7 +19,6 @@
     "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/db": "workspace:*",
     "@splitch/observability": "workspace:*",
-    "@splitch/privacy": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
     "hono": "^4.12.32"
   },

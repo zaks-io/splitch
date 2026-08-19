@@ -51,8 +51,6 @@ export interface ControlPlaneApiEnv {
   CONTROL_PANEL_LEGACY_SESSION_MODE?: string;
   /** Verifies signed one-call credentials accepted only by McpEntrypoint. */
   MCP_CONTROL_PLANE_DELEGATION_SECRET?: string;
-  /** Shared App Entity identity salt (same as Evaluation / Event Ingest). */
-  EVALUATION_PRIVACY_SALT?: string;
   SPLITCH_LOCAL_E2E_RUN_ID?: string;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;

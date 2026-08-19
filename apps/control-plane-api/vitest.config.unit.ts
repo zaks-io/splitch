@@ -50,10 +50,6 @@ export default defineConfig({
         replacement: new URL("../../packages/db/src/index.ts", import.meta.url).pathname,
       },
       {
-        find: "@splitch/privacy",
-        replacement: new URL("../../packages/privacy/src/index.ts", import.meta.url).pathname,
-      },
-      {
         find: "@splitch/worker-runtime",
         replacement: new URL("../../packages/worker-runtime/src/index.ts", import.meta.url)
           .pathname,
