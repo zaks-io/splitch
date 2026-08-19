@@ -1,8 +1,4 @@
-import {
-  type ErrorResponse,
-  EXPOSURE_BATCH_MAX_BODY_BYTES,
-  type ExposureBatchRequest,
-} from "@splitch/contracts";
+import type { ErrorResponse, ExposureBatchRequest } from "@splitch/contracts";
 import type { Principal } from "@splitch/worker-runtime";
 import { errorResponse } from "./evaluation-error-response";
 
@@ -11,29 +7,6 @@ export type CredentialScope = {
   readonly appId: string;
   readonly environmentId: string;
 };
-
-export async function assertBodyWithinCap(
-  request: Request,
-  input: unknown,
-): Promise<{ ok: true } | { ok: false; error: ErrorResponse }> {
-  const bytes = await utf8BodyByteLength(request, input);
-  if (bytes <= EXPOSURE_BATCH_MAX_BODY_BYTES) return { ok: true };
-  return {
-    ok: false,
-    error: {
-      code: "VALIDATION_ERROR",
-      message: `Exposure batch body exceeds ${EXPOSURE_BATCH_MAX_BODY_BYTES} UTF-8 bytes`,
-      details: {
-        issues: [
-          {
-            path: ["body"],
-            message: `body must be at most ${EXPOSURE_BATCH_MAX_BODY_BYTES} UTF-8 bytes`,
-          },
-        ],
-      },
-    },
-  };
-}
 
 export function exposureBatchBody(
   input: unknown,
@@ -75,18 +48,6 @@ export function credentialScope(
       environmentId: principal.environmentId,
     },
   };
-}
-
-async function utf8BodyByteLength(request: Request, input: unknown): Promise<number> {
-  try {
-    const buffer = await request.clone().arrayBuffer();
-    if (buffer.byteLength > 0) return buffer.byteLength;
-  } catch {
-    // Stream unavailable — fall through.
-  }
-  const root = asRecord(input);
-  const body = root?.body ?? input;
-  return new TextEncoder().encode(JSON.stringify(body)).length;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

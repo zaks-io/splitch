@@ -8,6 +8,7 @@ import {
   DataPlaneEvaluateResponseSchema,
   EvaluateAllRequestSchema,
   EvaluateAllResponseSchema,
+  EXPOSURE_BATCH_MAX_BODY_BYTES,
   ExposureBatchRequestSchema,
   ExposureBatchResponseSchema,
   PeekEvaluateResponseSchema,
@@ -197,6 +198,21 @@ export const dataPlaneRoutes = [
     rateLimit: "client-key",
     // Retry identity is per-item exposureId (SDK-owned), not a batch Idempotency-Key.
     idempotency: "none",
+    rawBodyByteLimit: {
+      maxBytes: EXPOSURE_BATCH_MAX_BODY_BYTES,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: `Exposure batch body exceeds ${EXPOSURE_BATCH_MAX_BODY_BYTES} UTF-8 bytes`,
+        details: {
+          issues: [
+            {
+              path: ["body"],
+              message: `body must be at most ${EXPOSURE_BATCH_MAX_BODY_BYTES} UTF-8 bytes`,
+            },
+          ],
+        },
+      },
+    },
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",

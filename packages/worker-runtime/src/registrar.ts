@@ -65,7 +65,7 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
   deps: RegistrarDeps,
   handler: RouteHandler<z.infer<Input>>,
 ): Promise<Response> {
-  const request = c.req.raw;
+  let request = c.req.raw;
   // Step 1: request id + observability context.
   const requestId = resolveRequestId(request);
   deps.observability?.onRequest?.({
@@ -85,10 +85,16 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
 
   try {
     // Step 2: parse params/query/headers/body with the route's Zod schema.
-    const parsed = await parseInput(contract.input, request, c.req.param());
+    const parsed = await parseInput(
+      contract.input,
+      request,
+      c.req.param(),
+      contract.rawBodyByteLimit,
+    );
     if (!parsed.ok) {
       return fail(parsed.error);
     }
+    request = parsed.request;
 
     // Step 3: resolve the principal through the Worker-provided resolver.
     const principalResult = await resolvePrincipal(contract, deps, request);

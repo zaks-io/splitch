@@ -365,8 +365,8 @@ After resolving the current `web` Event Definition Version, the Worker rejects i
 `idType` must match.
 
 The complete UTF-8 encoded JSON request body may not exceed 32 KiB (32,768 bytes). The Worker
-measures bytes, not JavaScript string length. The outer envelope validates authentication, the
-per-credential rate limit, strict top-level fields, the 1-to-25 item count, the byte limit, and a
+measures bytes, not JavaScript string length. The outer envelope validates the byte limit,
+authentication, the per-credential rate limit, strict top-level fields, the 1-to-25 item count, and a
 valid UUID `eventId` on every item before processing any item. Once those gates pass, item schema
 validation and existing-claim lookup are independent. The aggregate Ingest Admission Gate then
 charges all remaining new canonical items as one batch; failure rejects the complete request before

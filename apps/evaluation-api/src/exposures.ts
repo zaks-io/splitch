@@ -24,12 +24,7 @@ import {
   scheduleHoldoverWrite,
   verifyTicketForScope,
 } from "./exposures-helpers";
-import {
-  assertBodyWithinCap,
-  type CredentialScope,
-  credentialScope,
-  exposureBatchBody,
-} from "./exposures-request";
+import { type CredentialScope, credentialScope, exposureBatchBody } from "./exposures-request";
 
 interface ExposuresRouteDeps {
   readonly assignmentStore: AssignmentStore;
@@ -43,17 +38,9 @@ interface ExposuresRouteDeps {
 }
 
 export function makeExposuresHandler(deps: ExposuresRouteDeps) {
-  return async ({
-    input,
-    principal,
-    requestId,
-    request,
-  }: HandlerArgs<unknown>): Promise<Response> => {
+  return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     const scope = credentialScope(principal);
     if (!scope.ok) return renderError(scope.error, { requestId });
-
-    const bodyCheck = await assertBodyWithinCap(request, input);
-    if (!bodyCheck.ok) return renderError(bodyCheck.error, { requestId });
 
     const body = exposureBatchBody(input);
     if (!body.ok) return renderError(body.error, { requestId });
