@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { waitForHydration } from "./hydration";
 import {
   LOCAL_E2E_ONBOARDING_APP_SLUGS,
   LOCAL_E2E_SESSION_TOKEN,
 } from "../../scripts/local-e2e-fixtures.mjs";
+import { waitForHydration } from "./hydration";
 import { captureThemeScreenshots } from "./screenshot";
 
 const origin = "http://127.0.0.1:18793";
@@ -132,9 +132,13 @@ test.describe("onboarding: connect your code", () => {
     await dialog.getByLabel("Flag key").fill(flagKey);
     await dialog.getByRole("button", { name: "Create Flag" }).click();
 
-    const nudge = dialog.getByTestId("first-exposure-nudge");
-    await expect(nudge).toContainText("evaluate()");
-    await expect(nudge).toContainText("first Exposure");
+    const exposureStatus = dialog.getByTestId("exposure-status-not-received");
+    await expect(exposureStatus).toBeVisible();
+    await expect(exposureStatus).toContainText("Run your app");
+    await expect(exposureStatus).toContainText("evaluate()");
+    await expect(exposureStatus).toContainText("real Targeting Key");
+    await expect(exposureStatus).toContainText("Verify and test-eval");
+    await expect(exposureStatus).toContainText("do not record an Exposure");
 
     await dialog
       .locator("[data-slot='dialog-footer']")

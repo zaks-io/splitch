@@ -374,6 +374,19 @@ Behavior:
 
 Example:
   splitch env-policy set --body-json '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}' --json",
+    "environment-exposure-status get": "Get whether an Environment has received its first real Exposure.
+
+Usage:
+  splitch environment-exposure-status get [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch environment-exposure-status get --json",
     "envs create": "Create an Environment (auto-provisions its Client Key).
 
 Usage:
@@ -1590,6 +1603,19 @@ Flags:
 
 Example:
   splitch env-policy get --help",
+    "environment-exposure-status": "Manage environment-exposure-status resources.
+
+Usage:
+  splitch environment-exposure-status <action> [arguments] [flags]
+
+Commands:
+  get             Get whether an Environment has received its first real Exposure.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch environment-exposure-status get --help",
     "envs": "Manage envs resources.
 
 Usage:
@@ -1942,6 +1968,7 @@ Resource groups:
   current-user-privacy
   entity-privacy
   env-policy
+  environment-exposure-status
   envs
   event-definition-versions
   event-definitions

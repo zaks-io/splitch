@@ -12,6 +12,7 @@ export interface AnalysisApiEnv {
   SPLITCH_PLATFORM_TARGET?: string;
   TINYBIRD_API_URL?: string;
   TINYBIRD_COPY_TOKEN?: string;
+  TINYBIRD_DELETE_TOKEN?: string;
   TINYBIRD_READ_TOKEN?: string;
   SENTRY_DSN?: string;
 }

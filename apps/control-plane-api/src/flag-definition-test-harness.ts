@@ -11,6 +11,7 @@ import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import type { RunSnapshotDelivery } from "./run-snapshot";
 import { makeSessionStore } from "./session-store";
+import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import type { LocalBindings } from "./test-fixtures";
 import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "./test-seeds";
 
@@ -28,6 +29,9 @@ const ORG = {
 const OWNER = "user_flag_definition_owner";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
+const noOpExposureStatusCleanup: EnvironmentExposureStatusCleanup = {
+  delete: async () => undefined,
+};
 
 export interface FlagDefinitionHarness {
   app: Hono;
@@ -91,6 +95,7 @@ export function makeAppForRepo(
     configStore,
     runSnapshotDelivery,
     credentialStore,
+    exposureStatusCleanup: noOpExposureStatusCleanup,
     eventDefinitionStore,
     nowIso: () => NOW_ISO,
   });

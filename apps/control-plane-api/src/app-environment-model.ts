@@ -12,12 +12,14 @@ import { collectEnvironmentDeleteBlockers } from "./app-delete-tree";
 import { clientKeyResponse, provisionClientKey } from "./client-key-provisioning";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { type CredentialCacheWriterAccess, randomHex } from "./credential-cache";
+import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 
 export interface AppEnvironmentDeps {
   repo: Repository;
   credentialStore?: KVNamespace;
   credentialCacheWriter?: CredentialCacheWriterAccess;
   configStore?: ConfigStoreAccess;
+  exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
   nowIso?: () => string;
 }
 

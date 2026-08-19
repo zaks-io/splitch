@@ -11,6 +11,7 @@ import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
+import { noOpExposureStatusCleanup } from "./exposure-status-cleanup-fixture";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
@@ -67,6 +68,7 @@ beforeEach(async () => {
       rateLimiter: allowLimiter,
       repo: createRepository(bindings.d1),
       credentialStore: bindings.credentialKv,
+      exposureStatusCleanup: noOpExposureStatusCleanup,
       nowIso: () => NOW_ISO,
     }),
     signer,

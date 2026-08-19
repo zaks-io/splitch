@@ -52,6 +52,10 @@
     "./panel-usage": {
       "types": "./src/panel-usage.ts",
       "default": "./src/panel-usage.ts"
+    },
+    "./panel-exposure-status": {
+      "types": "./src/panel-exposure-status.ts",
+      "default": "./src/panel-exposure-status.ts"
     }
   },
   "files": [
