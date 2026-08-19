@@ -1,6 +1,7 @@
 import type { ExposureBatchResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
+import { ExposureRedemptionClaimTransportError } from "./exposure-redemption-claim-errors";
 import type {
   ExposureRedemptionClaimInput,
   ExposureRedemptionClaimOutcome,
@@ -24,11 +25,7 @@ class MiddleClaimFailureStore extends MemoryExposureRedemptionClaimStore {
   override claim(input: ExposureRedemptionClaimInput): Promise<ExposureRedemptionClaimOutcome> {
     this.claimExposureIds.push(input.exposureId);
     if (input.exposureId === EXPOSURE_ID_B) {
-      return Promise.reject(
-        new Error("exposure redemption claim Durable Object transport failed", {
-          cause: new Error(INNER_CAUSE),
-        }),
-      );
+      return Promise.reject(new ExposureRedemptionClaimTransportError(new Error(INNER_CAUSE)));
     }
     return super.claim(input);
   }

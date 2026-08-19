@@ -1,6 +1,11 @@
 const TOKEN_PREFIX = "spl_";
 const TOKEN_HEX_LENGTH = 64;
 const SESSION_TOKEN_PATTERN = /^spl_[0-9a-f]{64}$/;
+declare const serializedHttpOnlyCookieBrand: unique symbol;
+
+export type SerializedHttpOnlyCookie = string & {
+  readonly [serializedHttpOnlyCookieBrand]: true;
+};
 
 /**
  * Exact attribute set every Control Panel cookie must carry.
@@ -48,11 +53,15 @@ export function serializeHttpOnlyCookie(
   name: string,
   value: string,
   options: { maxAge: number },
-): string {
-  return `${name}=${encodeURIComponent(value)}; ${PANEL_COOKIE_ATTRIBUTES.join("; ")}; Max-Age=${options.maxAge}`;
+): SerializedHttpOnlyCookie {
+  return `${name}=${encodeURIComponent(value)}; ${PANEL_COOKIE_ATTRIBUTES.join("; ")}; Max-Age=${options.maxAge}` as SerializedHttpOnlyCookie;
 }
 
-export function clearHttpOnlyCookie(name: string): string {
+export function appendHttpOnlyCookie(headers: Headers, cookie: SerializedHttpOnlyCookie): void {
+  headers.append("set-cookie", cookie);
+}
+
+export function clearHttpOnlyCookie(name: string): SerializedHttpOnlyCookie {
   return serializeHttpOnlyCookie(name, "", { maxAge: 0 });
 }
 

@@ -31,6 +31,7 @@ import {
 export const OrgParams = z.object({ orgId: z.string() });
 export const OrgMemberParams = z.object({ orgId: z.string(), userId: z.string() });
 export const AppParams = z.object({ appId: z.string() });
+export const AppMemberParams = z.object({ appId: z.string(), userId: z.string() });
 export const OrgAppsParams = z.object({ orgId: z.string() });
 export const EnvParams = z.object({ appId: z.string(), environmentId: z.string() });
 export const FlagParams = z.object({ appId: z.string(), flagId: z.string() });
@@ -129,6 +130,18 @@ export const AddMemberRequestSchema = z.object({
 });
 
 export const UpdateMemberRequestSchema = z.object({ role: UserRoleSchema }).strict();
+
+// ---------------------------------------------------------------------------
+// App membership (`app_memberships`) — a SEPARATE grant from Organization
+// membership. Same request shapes, different axis: an Org admin is not an App
+// admin (organization-and-membership.md).
+// ---------------------------------------------------------------------------
+
+export const AddAppMemberRequestSchema = z
+  .object({ userId: z.string(), role: UserRoleSchema })
+  .strict();
+
+export const UpdateAppMemberRequestSchema = z.object({ role: UserRoleSchema }).strict();
 
 // ---------------------------------------------------------------------------
 // Flag Configuration (per-Environment) — config read/patch + targeting replace.

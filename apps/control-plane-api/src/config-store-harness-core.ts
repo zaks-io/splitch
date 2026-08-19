@@ -3,6 +3,7 @@ import { appScope, createRepository, envScope, type Repository } from "@splitch/
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { createApp } from "./app";
+import type { ApprovalArchiveStore } from "./approval-archive";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import { ids, NOW, NOW_MS, startSeededExperiment } from "./config-store-fixture-data";
@@ -69,7 +70,8 @@ export async function buildHarness(bindings: {
 
 export function makeAuthedApp(
   h: Pick<Harness, "repo" | "signer"> & { sessions?: KVNamespace },
-  store: ConfigStoreWriter,
+  store?: ConfigStoreWriter,
+  approvalArchiveStore?: ApprovalArchiveStore,
 ): Hono {
   const verifier = makeJwksVerifier({
     fetchJwks: async () => h.signer.jwks,
@@ -85,12 +87,17 @@ export function makeAuthedApp(
     }),
     rateLimiter: allowLimiter,
     repo: h.repo,
-    configStore: {
-      writerFor: () => store,
-      liveUpdatesFor: () => ({
-        connect: async () => new Response("test live updates unavailable", { status: 503 }),
-      }),
-    },
+    ...(store
+      ? {
+          configStore: {
+            writerFor: () => store,
+            liveUpdatesFor: () => ({
+              connect: async () => new Response("test live updates unavailable", { status: 503 }),
+            }),
+          },
+        }
+      : {}),
+    ...(approvalArchiveStore ? { approvalArchiveStore } : {}),
   });
 }
 

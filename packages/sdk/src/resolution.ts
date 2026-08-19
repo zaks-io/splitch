@@ -8,11 +8,11 @@ import type {
 import type { TransportFailure, TransportResult } from "./transport";
 
 /**
- * SDK-facing ResolutionDetails: wire `ErrorCode` values plus client-only
- * `SDK_TRANSPORT_*` codes for failures that never left the process.
+ * SDK-facing ResolutionDetails: wire `ErrorCode` values, client-only
+ * `SDK_TRANSPORT_*` failures, and OpenFeature's stale-provider signal.
  */
 export type SdkResolutionDetails = Omit<ContractResolutionDetails, "errorCode"> & {
-  readonly errorCode?: SplitchSdkErrorCode;
+  readonly errorCode?: SplitchSdkErrorCode | "PROVIDER_NOT_READY";
 };
 
 /**

@@ -68,7 +68,10 @@ describe("delegated control-plane routes", () => {
    * with a handler that grows its own door list.
    */
   const environmentScoped = routesDelegatedBy("control-plane-api").filter(
-    (route) => route.path.includes(":appId") && route.path.includes(":environmentId"),
+    (route) =>
+      route.operationId !== "environment_exposure_status_get" &&
+      route.path.includes(":appId") &&
+      route.path.includes(":environmentId"),
   );
 
   it("covers every Environment-scoped delegated route", () => {

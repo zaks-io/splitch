@@ -157,12 +157,11 @@ describe("panel Experiment Results Control integrity", () => {
     expect(body.stats.arm_results).toHaveLength(1);
   });
 
-  it("names an unresolvable frozen Control and blocks the decision on it", async () => {
-    // Shaped like the SPL-184 backfill: a Control copied from the Experiment's
-    // default that this Run's own frozen Variant set never held.
+  it("carries the server-reported Analysis Control onto an unresolvable Control", async () => {
+    // Shaped like SPL-184: a backfilled Control absent from the Run's frozen Variant set.
     const legacy = { ...runRow(ids, 1), controlVariantId: "variant_from_a_later_edit" };
     const response = await results(
-      analysisReturning(statsOutput()),
+      analysisReturning(statsOutput(), { control_variant: "control" }),
       { runId: PREVIOUS_RUN_ID },
       repository({ runs: [legacy, runRow(ids, 2)] }),
     );
@@ -176,6 +175,7 @@ describe("panel Experiment Results Control integrity", () => {
       variantId: "variant_from_a_later_edit",
       reason: "absent_from_frozen_variant_set",
       frozenVariantNames: ["control", "treatment"],
+      analysisVariant: "control",
     });
     expect(body.gate.shipAllowed).toBe(false);
     expect(body.gate.blockedBy).toContain("control_identity");

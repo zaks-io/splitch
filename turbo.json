@@ -10,6 +10,9 @@
     "SPLITCH_SMOKE_FLAG_ID",
     "SPLITCH_SMOKE_FLAG_KEY",
     "SPLITCH_SMOKE_ORG_ID",
+    "SPLITCH_SMOKE_ORG_SLUG",
+    "SPLITCH_SMOKE_PANEL_BASE_URL",
+    "SPLITCH_SMOKE_PANEL_EMAIL",
     "SPLITCH_SMOKE_RUN_ID"
   ],
   "remoteCache": {
@@ -117,6 +120,7 @@
     "//#test:scripts": {
       "inputs": [
         "scripts/**",
+        "packages/db/migrations/**",
         ".github/workflows/**",
         ".github/actions/**",
         "apps/control-panel/playwright.config.ts",
@@ -217,8 +221,11 @@
         "SPLITCH_EVENT_INGEST_TOKEN",
         "MCP_CONTROL_PLANE_DELEGATION_SECRET",
         "TINYBIRD_COPY_TOKEN",
+        "TINYBIRD_DELETE_TOKEN",
         "TINYBIRD_INGEST_TOKEN",
         "TINYBIRD_RUN_SNAPSHOT_TOKEN",
+        "TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN",
+        "TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN",
         "TINYBIRD_READ_TOKEN",
         "TURNSTILE_SECRET",
         "WORKOS_API_KEY",
@@ -254,8 +261,11 @@
         "SPLITCH_EVENT_INGEST_TOKEN",
         "MCP_CONTROL_PLANE_DELEGATION_SECRET",
         "TINYBIRD_COPY_TOKEN",
+        "TINYBIRD_DELETE_TOKEN",
         "TINYBIRD_INGEST_TOKEN",
         "TINYBIRD_RUN_SNAPSHOT_TOKEN",
+        "TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN",
+        "TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN",
         "TINYBIRD_READ_TOKEN",
         "TURNSTILE_SECRET",
         "WORKOS_API_KEY",
@@ -291,8 +301,11 @@
         "SPLITCH_EVENT_INGEST_TOKEN",
         "MCP_CONTROL_PLANE_DELEGATION_SECRET",
         "TINYBIRD_COPY_TOKEN",
+        "TINYBIRD_DELETE_TOKEN",
         "TINYBIRD_INGEST_TOKEN",
         "TINYBIRD_RUN_SNAPSHOT_TOKEN",
+        "TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN",
+        "TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN",
         "TINYBIRD_READ_TOKEN",
         "TURNSTILE_SECRET",
         "WORKOS_API_KEY",
@@ -328,8 +341,11 @@
         "SPLITCH_EVENT_INGEST_TOKEN",
         "MCP_CONTROL_PLANE_DELEGATION_SECRET",
         "TINYBIRD_COPY_TOKEN",
+        "TINYBIRD_DELETE_TOKEN",
         "TINYBIRD_INGEST_TOKEN",
         "TINYBIRD_RUN_SNAPSHOT_TOKEN",
+        "TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN",
+        "TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN",
         "TINYBIRD_READ_TOKEN",
         "TURNSTILE_SECRET",
         "WORKOS_API_KEY",
@@ -425,14 +441,23 @@
       "dependsOn": ["build"],
       "cache": false
     },
+    "@splitch/sdk#size:check": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
     "@splitch/sdk#test:consumer-smoke": {
       "dependsOn": ["build"],
       "cache": false,
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/docs/spec/quickstart.md",
-        "$TURBO_ROOT$/fixtures/convex-sdk-consumer/**"
+        "$TURBO_ROOT$/fixtures/convex-sdk-consumer/**",
+        "$TURBO_ROOT$/fixtures/ssr-sdk-consumer/**"
       ]
+    },
+    "@splitch/sdk#test:browser-pagehide": {
+      "dependsOn": ["build"],
+      "cache": false
     },
     "@splitch/cli#build": {
       "dependsOn": ["^build"],

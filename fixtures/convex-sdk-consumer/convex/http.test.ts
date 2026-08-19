@@ -55,6 +55,7 @@ describe("HTTP action evaluateAll bootstrap (fetch stubbed at fixture seam)", ()
         variantName: "treatment",
         reason: "SPLIT",
         exposureTicket: "ticket-convex-1",
+        exposureIdentity: "identity-convex-1",
       });
 
       // Round-trip through JSON the way an SSR page would embed it.

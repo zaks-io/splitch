@@ -37,6 +37,28 @@ export const sdkErrorDocs = {
     fix: "Pass your own `idempotencyKey` on the context, or serve the page from a secure context (`https://` or `localhost`). The SDK refuses to substitute a weaker random source: this key is the batch's billing replay identity, and a colliding one would let a repeated fetch be charged twice.",
     related: ["SDK_RETRIES_INVALID"],
   },
+  SDK_NOT_INITIALIZED: {
+    cause: "A synchronous Flag read on `@splitch/sdk/browser` happened before `init()` resolved.",
+    fix: "Await `init()` before the first `evaluate` / `evaluateDetails`. Reading nothing is a wiring bug, not a Default Variant.",
+    related: ["SDK_CREDENTIAL_CONFIGURATION_INVALID", "SDK_CONTEXT_INVALID", "FLAG_NOT_FOUND"],
+  },
+  SDK_CONTEXT_INVALID: {
+    cause:
+      "`createSplitchBrowserClient` was given an Evaluation Context without a non-empty `targetingKey`.",
+    fix: "Pass `context: { targetingKey: … }` at construction. The browser client is static-context: that key is fixed for the client's lifetime and is not a credential.",
+    related: ["SDK_CREDENTIAL_CONFIGURATION_INVALID", "SDK_NOT_INITIALIZED"],
+  },
+  SDK_BOOTSTRAP_CONTEXT_MISMATCH: {
+    cause:
+      "`createSplitchBrowserClient` received bootstrap evaluated for a different Targeting Key, id type, or attribute set than the client's fixed Evaluation Context.",
+    fix: "Generate bootstrap with `evaluateAll` for the exact context passed to the browser client. Do not catch this error and silently refetch because doing so can render another Entity's Variant.",
+    related: ["SDK_CONTEXT_INVALID", "SDK_NOT_INITIALIZED"],
+  },
+  SDK_REACT_PROVIDER_MISSING: {
+    cause: "A hook from `@splitch/sdk/react` rendered outside `SplitchProvider`.",
+    fix: "Wrap the component tree in `SplitchProvider` and pass the initialized browser client through its `client` prop.",
+    related: ["SDK_NOT_INITIALIZED"],
+  },
   SDK_TRANSPORT_NETWORK: {
     cause:
       "The SDK's transport threw before receiving an HTTP response — for example a network failure, a cancelled request that was not a timeout, or a local `fetch` misconfiguration such as an unbound `Window.fetch`.",

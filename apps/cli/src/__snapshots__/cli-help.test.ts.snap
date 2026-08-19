@@ -77,6 +77,67 @@ Flags:
 
 Example:
   splitch app-attention-rollup get --json",
+    "app-members add": "Grant a user a role on an App.
+
+Usage:
+  splitch app-members add [flags]
+
+Flags:
+  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
+  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help          [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  userId  required  string
+  role    required  string ("owner" | "admin" | "member")
+  Example:
+    {"userId":"user_1","role":"owner"}
+
+Example:
+  splitch app-members add --body-json '{"userId":"user_1","role":"owner"}' --json",
+    "app-members list": "List the members of an App and their App roles.
+
+Usage:
+  splitch app-members list [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch app-members list --json",
+    "app-members remove": "Revoke a user's access to an App (rejected if removing the last owner).
+
+Usage:
+  splitch app-members remove <user-id> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch app-members remove <user-id> --json",
+    "app-members update": "Change a member's App role.
+
+Usage:
+  splitch app-members update <user-id> [flags]
+
+Flags:
+  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
+  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help          [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  role  required  string ("owner" | "admin" | "member")
+  Example:
+    {"role":"owner"}
+
+Example:
+  splitch app-members update <user-id> --body-json '{"role":"owner"}' --json",
     "app-privacy export": "Export an App's data.
 
 Usage:
@@ -197,7 +258,7 @@ Flags:
 
 Example:
   splitch apps list <org-id> --json",
-    "apps update": "Rename an App.
+    "apps update": "Rename an App or change its URL slug.
 
 Usage:
   splitch apps update [flags]
@@ -205,12 +266,14 @@ Usage:
 Flags:
   --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
   --name <name>       [type: string; default: none] Resource name.
+  --key <key>         [type: string; default: none] Resource key.
   --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
   --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help          [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
   name         optional  string
+  key          optional  string
   description  optional  string
   Example:
     {"name":"name"}
@@ -374,6 +437,19 @@ Behavior:
 
 Example:
   splitch env-policy set --body-json '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}' --json",
+    "environment-exposure-status get": "Get whether an Environment has received its first real Exposure.
+
+Usage:
+  splitch environment-exposure-status get [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch environment-exposure-status get --json",
     "envs create": "Create an Environment (auto-provisions its Client Key).
 
 Usage:
@@ -1464,6 +1540,22 @@ Flags:
 
 Example:
   splitch app-attention-rollup get --help",
+    "app-members": "Manage app-members resources.
+
+Usage:
+  splitch app-members <action> [arguments] [flags]
+
+Commands:
+  list            List the members of an App and their App roles.
+  add             Grant a user a role on an App.
+  update          Change a member's App role.
+  remove          Revoke a user's access to an App (rejected if removing the last owner).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch app-members list --help",
     "app-privacy": "Manage app-privacy resources.
 
 Usage:
@@ -1513,7 +1605,7 @@ Commands:
   list            List the Apps in an organization.
   create          Create an App (provisions dev + prod Environments and Client Keys).
   get             Get one App.
-  update          Rename an App.
+  update          Rename an App or change its URL slug.
   delete          Delete an App. Dry-run mode lists every blocker with IDs and remove commands; force mode cascades non-gated children and stops with pending Approval Request IDs when Policy requires Review. Blocked while any Experiment is running.
 
 Flags:
@@ -1590,6 +1682,19 @@ Flags:
 
 Example:
   splitch env-policy get --help",
+    "environment-exposure-status": "Manage environment-exposure-status resources.
+
+Usage:
+  splitch environment-exposure-status <action> [arguments] [flags]
+
+Commands:
+  get             Get whether an Environment has received its first real Exposure.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch environment-exposure-status get --help",
     "envs": "Manage envs resources.
 
 Usage:
@@ -1933,6 +2038,7 @@ Commands:
 Resource groups:
   api-keys
   app-attention-rollup
+  app-members
   app-privacy
   approval-request-reviews
   approval-requests
@@ -1942,6 +2048,7 @@ Resource groups:
   current-user-privacy
   entity-privacy
   env-policy
+  environment-exposure-status
   envs
   event-definition-versions
   event-definitions

@@ -56,4 +56,22 @@ describe("organizations_create operation", () => {
       true,
     );
   });
+
+  it("rejects prototype-backed fields while plain parsed operations still match", () => {
+    const inheritedScope = Object.assign(Object.create({ orgId: "org_seed_a" }), {
+      id: "apps_create",
+      smuggled: "org_seed_b",
+    }) as Record<string, unknown>;
+    const presentedWithExtraOwnKey = Object.assign(Object.create({ appId: "app_seed_a" }), {
+      id: "app_settings_get",
+      smuggled: "app_seed_b",
+    });
+    const claimed = { id: "app_settings_get", appId: "app_seed_a" } as const;
+    const parsed = JSON.parse('{"id":"app_settings_get","appId":"app_seed_a"}') as typeof claimed;
+
+    expect(isControlPanelOperation(inheritedScope)).toBe(false);
+    expect(sameOperation(claimed, presentedWithExtraOwnKey)).toBe(false);
+    expect(isControlPanelOperation(parsed)).toBe(true);
+    expect(sameOperation(parsed, claimed)).toBe(true);
+  });
 });

@@ -59,6 +59,7 @@ function makeHarness(rows?: readonly unknown[]) {
     authResolver,
     rateLimiter: allowLimiter,
     tinybird,
+    tinybirdDelete: { deleteExposureStatus: async () => {} },
     now: () => NOW,
     platformTarget: "local",
   });
@@ -177,6 +178,7 @@ describe("Organization Evaluation usage", () => {
       authResolver,
       rateLimiter: allowLimiter,
       tinybird: new FailingTinybird(),
+      tinybirdDelete: { deleteExposureStatus: async () => {} },
       now: () => NOW,
       platformTarget: "local",
     });

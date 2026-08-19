@@ -112,8 +112,7 @@ export async function registerAnonymous(
     updatedAt: nowIso,
     createdBy: userId,
   });
-  await deps.repo.identity.createAppMembership({
-    appId,
+  await deps.repo.identity.createAppMembership(appScope(appId), {
     userId,
     role: "owner",
     createdAt: nowIso,

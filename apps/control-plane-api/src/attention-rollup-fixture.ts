@@ -35,8 +35,7 @@ export function setupAttentionRollupFixture(): void {
     // actually running here.
     await startSeededExperiment(bindings.d1);
     const repo = createRepository(bindings.d1);
-    await repo.identity.createAppMembership({
-      appId: ids.appId,
+    await repo.identity.createAppMembership(appScope(ids.appId), {
       userId: USER_ID,
       role: "member",
       createdAt: NOW,

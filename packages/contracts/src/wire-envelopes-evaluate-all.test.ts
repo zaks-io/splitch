@@ -43,6 +43,7 @@ const PROTO_FLAG_ENTRY = {
   variantName: null,
   reason: "DEFAULT",
   errorCode: null,
+  exposureIdentity: null,
   exposureTicket: null,
 } as const;
 
@@ -55,6 +56,7 @@ describe("EvaluateAllResponseSchema", () => {
           variantName: "treatment",
           reason: "SPLIT",
           errorCode: null,
+          exposureIdentity: "identity",
           exposureTicket: "ticket.payload",
         },
         banner: {
@@ -62,6 +64,7 @@ describe("EvaluateAllResponseSchema", () => {
           variantName: null,
           reason: "ERROR",
           errorCode: "INTERNAL_SERVER_ERROR",
+          exposureIdentity: null,
           exposureTicket: null,
         },
       },
@@ -75,6 +78,7 @@ describe("EvaluateAllResponseSchema", () => {
         variantName: "treatment",
         reason: "SPLIT",
         errorCode: null,
+        exposureIdentity: null,
         exposureTicket: null,
         ruleId: "rule-1",
       }).success,
@@ -84,8 +88,31 @@ describe("EvaluateAllResponseSchema", () => {
       EvaluateAllEntrySchema.safeParse({
         variant: true,
         variantName: "treatment",
+        reason: "SPLIT",
+        errorCode: null,
+        exposureIdentity: null,
+        exposureTicket: "ticket.payload",
+      }).success,
+    ).toBe(false);
+
+    expect(
+      EvaluateAllEntrySchema.safeParse({
+        variant: true,
+        variantName: "treatment",
+        reason: "SPLIT",
+        errorCode: null,
+        exposureIdentity: "identity",
+        exposureTicket: null,
+      }).success,
+    ).toBe(false);
+
+    expect(
+      EvaluateAllEntrySchema.safeParse({
+        variant: true,
+        variantName: "treatment",
         reason: "TARGETING_MATCH",
         errorCode: null,
+        exposureIdentity: null,
         exposureTicket: null,
       }).success,
     ).toBe(false);
@@ -96,6 +123,7 @@ describe("EvaluateAllResponseSchema", () => {
         variantName: "treatment",
         reason: "ERROR",
         errorCode: null,
+        exposureIdentity: null,
         exposureTicket: null,
       }).success,
     ).toBe(false);
@@ -110,6 +138,7 @@ describe("EvaluateAllResponseSchema", () => {
         variantName: "treatment",
         reason: "SPLIT",
         errorCode: null,
+        exposureIdentity: "identity",
         exposureTicket: "ticket.payload",
       })}}}`,
     ) as unknown;

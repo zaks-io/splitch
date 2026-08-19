@@ -1,3 +1,4 @@
+// Docblocks ship verbatim in dist/index.d.ts; keep them consumer-facing. See generate-contract-surface.mjs.
 /**
  * Hand-written structural descriptors for the SDK contract surface, compared
  * against `z.toJSONSchema()` (+ unknown-key policy) of the contracts Zod
@@ -23,7 +24,7 @@ import {
   evaluateAllReasons,
   evaluateAllResponseRequiredKeys,
   peekEvaluateRequiredKeys,
-  resolutionDetailsPropertyKeys,
+  type resolutionDetailsPropertyKeys,
   resolutionDetailsRequiredKeys,
   resolutionReasons,
 } from "./generated/contract-surface-members";
@@ -124,6 +125,7 @@ export const contractSurfaceDescriptors: ContractSurfaceDescriptors = {
       variantName: nullableString,
       reason: evaluateAllReasonEnum,
       errorCode: { anyOf: [errorCodeEnum, { type: "null" }] },
+      exposureIdentity: nullableString,
       exposureTicket: nullableString,
     },
     required: [...evaluateAllEntryRequiredKeys],
@@ -141,6 +143,7 @@ export const contractSurfaceDescriptors: ContractSurfaceDescriptors = {
             variantName: nullableString,
             reason: evaluateAllReasonEnum,
             errorCode: { anyOf: [errorCodeEnum, { type: "null" }] },
+            exposureIdentity: nullableString,
             exposureTicket: nullableString,
           },
           required: [...evaluateAllEntryRequiredKeys],

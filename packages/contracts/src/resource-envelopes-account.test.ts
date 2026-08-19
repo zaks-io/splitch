@@ -125,10 +125,13 @@ describe("CreateAppRequestSchema / PatchAppRequestSchema", () => {
     }
   });
 
-  it("rejects an immutable key/organizationId on patch (strict)", () => {
-    expect(PatchAppRequestSchema.safeParse({ key: "new" }).success).toBe(false);
+  it("rejects an immutable id/organizationId on patch, and validates a patched key", () => {
     expect(PatchAppRequestSchema.safeParse({ organizationId: "org_2" }).success).toBe(false);
+    expect(PatchAppRequestSchema.safeParse({ id: "app_2" }).success).toBe(false);
     expect(PatchAppRequestSchema.safeParse({ name: "Renamed" }).success).toBe(true);
+    // The URL slug IS patchable, and is held to the same shape as on create.
+    expect(PatchAppRequestSchema.safeParse({ key: "checkout-api-v2" }).success).toBe(true);
+    expect(PatchAppRequestSchema.safeParse({ key: "Not A Slug" }).success).toBe(false);
   });
 });
 

@@ -8,8 +8,12 @@ import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-r
 import { memoizeGetAll } from "./assignment/memoize-get-all";
 import { evaluateAllFlag } from "./evaluate/accessor-paths";
 import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
-import type { MintExposureTicketDeps } from "./evaluate/exposure-ticket";
+import {
+  exposureTicketRefreshWindow,
+  type MintExposureTicketDeps,
+} from "./evaluate/exposure-ticket";
 import { entryFor } from "./evaluate-all-entry";
+import { etagMaterial, ifNoneMatchMatches, strongEtag } from "./evaluate-all-exposure-identity";
 import { sdkRuntime } from "./evaluate-response";
 import { errorResponse } from "./evaluation-error-response";
 import type { EvaluationUsageScope } from "./evaluation-usage";
@@ -50,13 +54,17 @@ export function makeEvaluateAllHandler(deps: EvaluateAllRouteDeps) {
 
     const body = EvaluateAllResponseSchema.parse({ evaluations: payload.evaluations });
     const etag = await strongEtag(
-      etagMaterial(body, {
-        appId: scope.value.appId,
-        environmentId: scope.value.environmentId,
-        targetingKey: parsed.body.targetingKey,
-        idType: parsed.body.idType,
-        attributes: parsed.body.attributes,
-      }),
+      etagMaterial(
+        body,
+        {
+          appId: scope.value.appId,
+          environmentId: scope.value.environmentId,
+          targetingKey: parsed.body.targetingKey,
+          idType: parsed.body.idType,
+          attributes: parsed.body.attributes,
+        },
+        payload.ticketRefreshWindow,
+      ),
     );
     if (ifNoneMatchMatches(request.headers.get("if-none-match"), etag)) {
       return new Response(null, {
@@ -85,7 +93,12 @@ async function resolveAll(
   scope: CredentialScope,
   deps: EvaluateAllRouteDeps,
 ): Promise<
-  { ok: true; evaluations: Record<string, EvaluateAllEntry> } | { ok: false; error: ErrorResponse }
+  | {
+      ok: true;
+      evaluations: Record<string, EvaluateAllEntry>;
+      ticketRefreshWindow: number | null;
+    }
+  | { ok: false; error: ErrorResponse }
 > {
   let flags: FlagConfig[];
   try {
@@ -101,6 +114,12 @@ async function resolveAll(
   const assignmentStore = memoizeGetAll(deps.assignmentStore);
   const pathDeps: EvaluatePathDeps = { ...deps, assignmentStore };
   const evaluations: Record<string, EvaluateAllEntry> = {};
+  const ticketNow = (deps.exposureTicket.now ?? (() => new Date()))();
+  const ticketDeps: MintExposureTicketDeps = {
+    ...deps.exposureTicket,
+    now: () => ticketNow,
+  };
+  let hasExposureTicket = false;
 
   for (const flag of flags) {
     if (flag.flagKey === "__proto__") {
@@ -123,10 +142,16 @@ async function resolveAll(
       },
     };
     const output = await evaluateAllFlag(routeInput, pathDeps);
-    evaluations[flag.flagKey] = await entryFor(output.result, flag, deps.exposureTicket);
+    const entry = await entryFor(output.result, flag, ticketDeps);
+    evaluations[flag.flagKey] = entry;
+    hasExposureTicket ||= entry.exposureTicket !== null;
   }
 
-  return { ok: true, evaluations };
+  return {
+    ok: true,
+    evaluations,
+    ticketRefreshWindow: hasExposureTicket ? exposureTicketRefreshWindow(ticketNow) : null,
+  };
 }
 
 function credentialScope(
@@ -209,82 +234,6 @@ async function writeBatchUsage(
       ),
     };
   }
-}
-
-/**
- * ETag material excludes Exposure Tickets: tickets embed issued_at and would
- * make every revalidation miss (ADR-0048 freshness is config+context, not remint).
- * Evaluation Context is included so a tag is never reusable across contexts
- * (docs/spec/sdk/evaluate-all-endpoint.md).
- */
-function etagMaterial(
-  body: ReturnType<typeof EvaluateAllResponseSchema.parse>,
-  context: {
-    appId: string;
-    environmentId: string;
-    targetingKey: string;
-    idType: string;
-    attributes: EvaluateAllRequest["attributes"];
-  },
-): string {
-  const keys = Object.keys(body.evaluations).sort();
-  const evaluations: Record<
-    string,
-    {
-      variant: EvaluateAllEntry["variant"];
-      variantName: EvaluateAllEntry["variantName"];
-      reason: EvaluateAllEntry["reason"];
-      errorCode: EvaluateAllEntry["errorCode"];
-    }
-  > = {};
-  for (const key of keys) {
-    const entry = body.evaluations[key];
-    if (entry === undefined) continue;
-    evaluations[key] = {
-      variant: entry.variant,
-      variantName: entry.variantName,
-      reason: entry.reason,
-      errorCode: entry.errorCode,
-    };
-  }
-  return JSON.stringify({
-    appId: context.appId,
-    environmentId: context.environmentId,
-    targetingKey: context.targetingKey,
-    idType: context.idType,
-    attributes: canonicalizeJson(context.attributes),
-    evaluations,
-  });
-}
-
-function canonicalizeJson(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalizeJson);
-  if (value !== null && typeof value === "object") {
-    const recordValue = value as Record<string, unknown>;
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(recordValue).sort()) {
-      out[key] = canonicalizeJson(recordValue[key]);
-    }
-    return out;
-  }
-  return value;
-}
-
-async function strongEtag(canonical: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical));
-  const hex = [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-  return `"${hex}"`;
-}
-
-function ifNoneMatchMatches(header: string | null, etag: string): boolean {
-  if (header === null || header.trim() === "") return false;
-  if (header.trim() === "*") return true;
-  return header
-    .split(",")
-    .map((part) => part.trim())
-    .some((part) => part === etag || part === `W/${etag}`);
 }
 
 function record(value: unknown): Record<string, unknown> {

@@ -11,8 +11,10 @@ import type { ExposureDecision } from "./evaluate-path-types";
  */
 
 const MIN_TICKET_KEY_LENGTH = 32;
+const EXPOSURE_IDENTITY_DOMAIN = "splitch-exposure-identity-v1:";
 /** Tickets older than 24 hours are rejected EXPOSURE_TICKET_EXPIRED. */
 const EXPOSURE_TICKET_TTL_MS = 24 * 60 * 60 * 1000;
+const EXPOSURE_TICKET_REFRESH_WINDOW_MS = EXPOSURE_TICKET_TTL_MS / 2;
 
 export interface ExposureTicketPayload {
   readonly app_id: string;
@@ -43,10 +45,22 @@ export type VerifyExposureTicketResult =
   | { readonly ok: true; readonly payload: ExposureTicketPayload }
   | { readonly ok: false; readonly reason: "invalid" | "expired"; readonly issuedAt?: string };
 
+export interface MintedExposureTicket {
+  readonly exposureIdentity: string;
+  readonly exposureTicket: string;
+}
+
 export async function mintExposureTicket(
   exposure: ExposureDecision,
   deps: MintExposureTicketDeps,
 ): Promise<string> {
+  return (await mintExposureTicketWithIdentity(exposure, deps)).exposureTicket;
+}
+
+export async function mintExposureTicketWithIdentity(
+  exposure: ExposureDecision,
+  deps: MintExposureTicketDeps,
+): Promise<MintedExposureTicket> {
   assertStrongTicketKey(deps.ticketKey);
   const targetingKeyHash = await computeTargetingKeyHash(deps.saltStore, {
     appId: exposure.appId,
@@ -65,7 +79,36 @@ export async function mintExposureTicket(
     issued_at: (deps.now ?? (() => new Date()))().toISOString(),
   };
   const encoded = bytesToBase64Url(new TextEncoder().encode(JSON.stringify(payload)));
-  return `${encoded}.${await sign(encoded, deps.ticketKey)}`;
+  const identityMaterial = bytesToBase64Url(
+    new TextEncoder().encode(
+      JSON.stringify({
+        app_id: payload.app_id,
+        environment_id: payload.environment_id,
+        experiment_id: payload.experiment_id,
+        run_id: payload.run_id,
+        flag_key: payload.flag_key,
+        variant: payload.variant,
+        id_type: payload.id_type,
+        targeting_key_hash: payload.targeting_key_hash,
+      }),
+    ),
+  );
+  const [signature, exposureIdentity] = await Promise.all([
+    sign(encoded, deps.ticketKey),
+    sign(`${EXPOSURE_IDENTITY_DOMAIN}${identityMaterial}`, deps.ticketKey),
+  ]);
+  return {
+    exposureIdentity,
+    exposureTicket: `${encoded}.${signature}`,
+  };
+}
+
+/**
+ * Coarse ETag window that refreshes an unread ticket before its TTL can elapse.
+ * It is never serialized; routine remints inside the window keep the same tag.
+ */
+export function exposureTicketRefreshWindow(now: Date): number {
+  return Math.floor(now.getTime() / EXPOSURE_TICKET_REFRESH_WINDOW_MS);
 }
 
 export async function verifyExposureTicket(

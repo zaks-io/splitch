@@ -1,9 +1,16 @@
 import { z } from "@hono/zod-openapi";
+import { EnvironmentExposureStatusResponseSchema } from "../environment-exposure-status";
 import { TestEvaluationRequestSchema, TestEvaluationResponseSchema } from "../wire-envelopes-core";
 import { OrganizationUsageResponseSchema } from "../resource-envelopes-usage";
 import { AnalysisResultsEnvelopeSchema } from "../stats-result-contract";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
-import { EnvFlagKeyParams, ExperimentParams, OrgParams } from "./route-shapes";
+import {
+  AppParams,
+  EnvFlagKeyParams,
+  EnvParams,
+  ExperimentParams,
+  OrgParams,
+} from "./route-shapes";
 
 /**
  * Control-plane-AUTHORIZED reads that do not all live on the Control Plane Worker:
@@ -19,6 +26,9 @@ const RATE = "control-plane-actor" as const;
 
 const ResultsSelectorSchema = z.object({ runId: z.string().optional() }).strict();
 const OptionalResultsSelectorSchema = ResultsSelectorSchema.default({});
+const ExposureStatusDeleteQuerySchema = z
+  .object({ environmentId: z.string().min(1).optional() })
+  .strict();
 
 export const analysisRoutes = [
   defineApiRoute({
@@ -83,6 +93,39 @@ export const analysisRoutes = [
       "SERVICE_UNAVAILABLE",
       "INTERNAL_SERVER_ERROR",
     ],
+  }),
+  defineApiRoute({
+    operationId: "environment_exposure_status_get",
+    owner: "analysis-api",
+    method: "GET",
+    path: "/apps/:appId/envs/:environmentId/exposure-status",
+    summary: "Get whether an Environment has received its first real Exposure.",
+    request: { params: EnvParams },
+    response: EnvironmentExposureStatusResponseSchema,
+    auth: AUTH,
+    rateLimit: RATE,
+    idempotency: "none",
+    errors: [
+      "APP_NOT_FOUND",
+      "UNAUTHORIZED",
+      "FORBIDDEN",
+      "VALIDATION_ERROR",
+      "SERVICE_UNAVAILABLE",
+      "INTERNAL_SERVER_ERROR",
+    ],
+  }),
+  defineApiRoute({
+    operationId: "environment_exposure_status_delete",
+    owner: "analysis-api",
+    method: "DELETE",
+    path: "/internal/apps/:appId/exposure-status",
+    summary: "Delete durable Exposure status when an App or Environment is deleted.",
+    request: { params: AppParams, query: ExposureStatusDeleteQuerySchema },
+    response: z.object({ deleted: z.literal(true) }).strict(),
+    auth: "internal-worker",
+    rateLimit: "none",
+    idempotency: "none",
+    errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
     operationId: "organization_usage_get",

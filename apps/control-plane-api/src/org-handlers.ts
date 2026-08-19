@@ -7,6 +7,7 @@ import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, ORG_OWNER_ROLES, requireOrgRole } fr
 import { makeCreateOrganizationHandler } from "./org-create-handler";
 import { makeListOrganizationsHandler } from "./org-list-handler";
 import { organizationResponse } from "./org-response";
+import { membershipConflict } from "./membership-conflict";
 
 export interface MemberProfile {
   email: string;
@@ -93,7 +94,8 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       if (grantGuard) return grantGuard;
 
       const existing = await deps.repo.identity.getOrgMembership(orgId, userId);
-      if (existing) return membershipConflict(UserRoleSchema.parse(existing.role), requestId);
+      if (existing)
+        return membershipConflict(UserRoleSchema.parse(existing.role), "organization", requestId);
 
       const profile = await resolveNewMemberProfile(deps, orgId, userId, request, requestId);
       if (profile instanceof Response) return profile;
@@ -282,17 +284,6 @@ function organizationNotFound(requestId: string): Response {
 function userNotFound(requestId: string): Response {
   return renderError(
     { code: "USER_NOT_FOUND", message: "user not found", details: {} },
-    { requestId },
-  );
-}
-
-function membershipConflict(existingRole: UserRole, requestId: string): Response {
-  return renderError(
-    {
-      code: "MEMBERSHIP_CONFLICT",
-      message: "user is already an organization member",
-      details: { existingRole },
-    },
     { requestId },
   );
 }

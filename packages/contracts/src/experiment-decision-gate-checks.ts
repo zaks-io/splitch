@@ -1,7 +1,4 @@
-import {
-  type FrozenControlIdentity,
-  unresolvableControlReasonMessages,
-} from "./experiment-control-identity";
+import { controlIdentityCheck } from "./experiment-control-identity-check";
 import { decisionValidMembers, lockedFamilyMembers, named } from "./experiment-decision-family";
 import type {
   DecisionGateCheck,
@@ -10,6 +7,8 @@ import type {
 } from "./experiment-decision-gate";
 import { formatPValue } from "./p-value-format";
 import type { StatsOutput, StatsResultStatus } from "./stats-result-contract";
+
+export { controlIdentityCheck };
 
 /**
  * The individual readiness checks behind the ship-decision gate.
@@ -62,36 +61,6 @@ export function srmIsFiring(signal: {
 }): boolean {
   if (signal.isMismatch !== null) return signal.isMismatch;
   return signal.pValue !== null && signal.pValue < SRM_MISMATCH_P;
-}
-
-export function controlIdentityCheck(control: FrozenControlIdentity): DecisionGateCheck {
-  if (control.state === "frozen") {
-    return {
-      id: "control_identity",
-      status: "pass",
-      title: "Analysis Control matches the one the Run froze",
-      detail: `Every lift is measured against "${control.variant}", the Control this Run froze at Start and Analysis reported for this read. Editing the Experiment's default Variant since then did not move it.`,
-    };
-  }
-  if (control.state === "disagreement") {
-    return {
-      id: "control_identity",
-      status: "fail",
-      title: "Analysis Control disagrees with the Run",
-      detail: `This Run's frozen Control is "${control.variant}", but the Run Snapshot measured lift against "${control.analysisVariant}". The Run Snapshot cannot be rewritten, so no ship decision can be made for this Run. Start a new Run to get a Control that agrees across both stores.`,
-    };
-  }
-  const froze =
-    control.frozenVariantNames.length > 0
-      ? `The Run froze ${control.frozenVariantNames.map((name) => `"${name}"`).join(", ")}. `
-      : "";
-  const reason = unresolvableControlReasonMessages[control.reason];
-  return {
-    id: "control_identity",
-    status: "fail",
-    title: "Control arm cannot be identified",
-    detail: `This Run's frozen Control cannot be identified because ${reason}. ${froze}The Experiment's default Variant was backfilled onto this Run as "${control.variantId}", which the Run itself never froze. Nothing can be promoted against a baseline this Run never recorded, and guessing one would invent provenance. Start a new Run to get a Control that is frozen and validated.`,
-  };
 }
 
 export function exposureSrmCheck(signal: SrmSignal, isMismatch: boolean | null): DecisionGateCheck {

@@ -1,14 +1,4 @@
-/**
- * Zod-free object shapes for the public SDK contract surface. The enum members
- * and response key lists they build on are generated from the contracts
- * package; see `scripts/generate-contract-surface.mjs` for why these
- * declarations are the hand-written remainder and what fails when they drift.
- *
- * Docblocks in this graph land verbatim in the published `dist/index.d.ts`,
- * which must never mention the contracts package by its scoped name: the
- * release pack rejects a declaration file containing it.
- */
-
+// Docblocks ship verbatim in dist/index.d.ts; keep them consumer-facing. See generate-contract-surface.mjs.
 import type {
   ErrorCode,
   EvaluateAllReason,
@@ -34,6 +24,7 @@ export interface EvaluateAllEntry {
   variantName: string | null;
   reason: EvaluateAllReason;
   errorCode: ErrorCode | null;
+  exposureIdentity: string | null;
   exposureTicket: string | null;
 }
 

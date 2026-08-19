@@ -16,7 +16,7 @@ test.describe("per-Environment Settings", () => {
     const environmentKey = testInfo.retry === 0 ? "dev" : "settings-retry";
     const environmentName = testInfo.retry === 0 ? "Development" : "Settings Retry";
     await page.setViewportSize({ width: 1280, height: 1100 });
-    await page.goto(`/acme-labs/checkout-api/${environmentKey}/settings`);
+    await page.goto(`/acme-labs/checkout-api/${environmentKey}/settings/environment`);
 
     await waitForHydration(page);
     await expect(page.getByRole("heading", { name: environmentName })).toBeVisible();
@@ -88,7 +88,7 @@ test.describe("per-Environment Settings", () => {
     ).toBeChecked();
     expect((await Promise.all(postCreationBodies)).join("\n")).not.toContain(secret);
 
-    await page.goto("/acme-labs/checkout-api/prod/settings");
+    await page.goto("/acme-labs/checkout-api/prod/settings/environment");
     const prodRows = page.locator("fieldset");
     await expect(prodRows).toHaveCount(4);
     for (const row of await prodRows.all()) {

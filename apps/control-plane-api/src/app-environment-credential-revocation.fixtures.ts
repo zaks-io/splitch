@@ -14,6 +14,7 @@ import { sha256Hex, writeApiKeyCache } from "./credential-cache";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import { makeSessionStore } from "./session-store";
+import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import type { LocalBindings } from "./test-fixtures";
 import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "./test-seeds";
 
@@ -32,6 +33,9 @@ const allowLimiter: RateLimiter = () => ({ limited: false });
 const cacheEnvelope = kvEnvelope(CredentialCacheKVSchema);
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
 const nowIso = () => new Date(NOW_MS).toISOString();
+const noOpExposureStatusCleanup: EnvironmentExposureStatusCleanup = {
+  delete: async () => undefined,
+};
 
 interface Harness {
   app: Hono;
@@ -83,6 +87,7 @@ export function makeApp(
     rateLimiter: allowLimiter,
     repo: createRepository(bindings.d1),
     credentialStore,
+    exposureStatusCleanup: noOpExposureStatusCleanup,
     nowIso,
   });
 }

@@ -71,12 +71,20 @@ function _runSnapshotUpdateIsUnreachable(): void {
   });
 }
 
+function _flagConfigsUpdateIsUnreachable(): void {
+  const repo = createRepository(d1);
+
+  // @ts-expect-error — flagConfigs exposes findMany/findOne/insert only, never update.
+  void repo.flags.flagConfigs.update;
+}
+
 describe("scope is required by type (compile-time proof)", () => {
   it("the type-level proofs are present and compiled", () => {
     expect(typeof _appScopeIsRequired).toBe("function");
     expect(typeof _perEnvScopeRejectsAppOnlyScope).toBe("function");
     expect(typeof _rawClientIsUnreachable).toBe("function");
     expect(typeof _runSnapshotUpdateIsUnreachable).toBe("function");
+    expect(typeof _flagConfigsUpdateIsUnreachable).toBe("function");
   });
 
   it("rejects a runtime cast attack against an immutable Run snapshot field", async () => {
@@ -87,6 +95,10 @@ describe("scope is required by type (compile-time proof)", () => {
       const scope = envScope(a.appId, a.environmentId);
       expect(repo.experiments.runs).not.toHaveProperty("update");
       expect(repo.experiments).toHaveProperty("updateRunStatus");
+      // Structural pin for SPL-350: the export is a narrowed object, not a
+      // ScopedTable — Reflect.get(..., "update") is undefined and calling it throws.
+      expect(Object.keys(repo.flags.flagConfigs).sort()).toEqual(["findMany", "findOne", "insert"]);
+      expect(Reflect.get(repo.flags.flagConfigs, "update")).toBeUndefined();
 
       const forgedPatch = {
         status: "ended",

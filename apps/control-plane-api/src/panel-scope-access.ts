@@ -1,3 +1,4 @@
+import { type UserRole, UserRoleSchema } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import type { AppRow, EnvironmentRow } from "./app-environment-model";
@@ -11,6 +12,37 @@ export interface PanelScope {
 export type PanelScopeAccess =
   | { ok: true; app: AppRow; environment: EnvironmentRow }
   | { ok: false; response: Response };
+
+export type PanelAppScopeAccess =
+  | { ok: true; app: AppRow; role: UserRole; orgRole: UserRole }
+  | { ok: false; response: Response };
+
+/**
+ * The App-scoped half of the same recheck, for Panel operations that name no
+ * Environment (App Settings). Live Organization AND App membership, read fresh
+ * for this exact call, never from the delegation claim. Both live roles are
+ * handed back so the caller renders the viewer's real capabilities instead of
+ * a stale session claim.
+ */
+export async function panelAppScopeAccess(
+  repo: Repository,
+  scope: { actorId: string; appId: string },
+  requestId: string,
+): Promise<PanelAppScopeAccess> {
+  const app = await repo.identity.getApp(scope.appId);
+  if (!app) return { ok: false, response: notFound("App not found", requestId) };
+  const [orgMembership, appMembership] = await Promise.all([
+    repo.identity.getOrgMembership(app.organizationId, scope.actorId),
+    repo.identity.getAppMembership(appScope(scope.appId), scope.actorId),
+  ]);
+  if (!orgMembership || !appMembership) return { ok: false, response: forbidden(requestId) };
+  return {
+    ok: true,
+    app,
+    role: UserRoleSchema.parse(appMembership.role),
+    orgRole: UserRoleSchema.parse(orgMembership.role),
+  };
+}
 
 /**
  * Rechecks live Organization AND App membership plus Environment-belongs-to-App

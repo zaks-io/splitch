@@ -8,8 +8,11 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { parityHint } from "#lib/parity-hints";
+import { exposureStatusDisplayState } from "#lib/exposure-status-polling";
+import { environmentExposureStatusQuery } from "#lib/exposure-status-query";
 import { environmentSettingsQuery } from "#lib/settings-query";
 import { ConnectYourCodeCard } from "./connect-your-code-card";
+import { EnvironmentExposureStatus } from "./environment-exposure-status";
 import { FlagVerifyPanel } from "./flag-verify-panel";
 
 const CLIENT_KEY_PARITY = parityHint("client_key_get");
@@ -32,6 +35,8 @@ export function CreateFlagSuccess({
   const params = useParams({ strict: false });
   const settingsHref = `/${params.orgSlug}/${params.appSlug}/${params.env}/settings`;
   const settings = useQuery(environmentSettingsQuery({ appId, environmentId }));
+  const exposureStatus = useQuery(environmentExposureStatusQuery({ appId, environmentId }));
+  const exposureDisplayState = exposureStatusDisplayState(exposureStatus);
 
   return (
     <div className="grid max-h-[75vh] gap-5 overflow-y-auto" data-testid="create-flag-success">
@@ -70,11 +75,24 @@ export function CreateFlagSuccess({
         </>
       ) : null}
 
-      <p className="text-muted-foreground text-sm leading-6" data-testid="first-exposure-nudge">
-        Last step: run your app so it calls <code>evaluate()</code> for real. That is the first
-        Exposure, and it is what onboarding is actually waiting on. The test above deliberately does
-        not count.
-      </p>
+      {exposureDisplayState === "loading" ? <EnvironmentExposureStatus state="loading" /> : null}
+      {exposureDisplayState === "error" ? (
+        <EnvironmentExposureStatus
+          onRetry={() => {
+            void exposureStatus.refetch();
+          }}
+          state="error"
+        />
+      ) : null}
+      {exposureDisplayState === "not_received" ? (
+        <EnvironmentExposureStatus state="not_received" />
+      ) : null}
+      {exposureDisplayState === "received" && exposureStatus.data?.state === "received" ? (
+        <EnvironmentExposureStatus
+          firstExposureAt={exposureStatus.data.firstExposureAt}
+          state="received"
+        />
+      ) : null}
 
       <DialogFooter showCloseButton />
     </div>

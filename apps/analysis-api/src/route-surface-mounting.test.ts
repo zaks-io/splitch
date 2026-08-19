@@ -1,4 +1,4 @@
-import { mountedOperationIds, routesDelegatedTo, routesSurfacedBy } from "@splitch/contracts";
+import { mountedOperationIds, routesMountedBy, routesSurfacedBy } from "@splitch/contracts";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
 import { type AnalysisDoor, createApp } from "./app";
@@ -11,7 +11,7 @@ import { type AnalysisDoor, createApp } from "./app";
  */
 describe("analysis-api mounts exactly the routes it executes, on the binding door only", () => {
   it("mounts every Analysis-owned route the Control Plane can delegate to it", () => {
-    const expected = routesDelegatedTo("analysis-api").map((route) => route.operationId);
+    const expected = routesMountedBy("analysis-api").map((route) => route.operationId);
 
     expect([...mountedOperationIds(createApp(stubDeps("binding")).routes)].sort()).toEqual(
       [...expected].sort(),
@@ -38,5 +38,6 @@ function stubDeps(door: AnalysisDoor) {
     authResolver,
     rateLimiter,
     tinybird: { readPipe: async () => [] },
+    tinybirdDelete: { deleteExposureStatus: async () => {} },
   };
 }

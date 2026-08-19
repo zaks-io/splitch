@@ -14,6 +14,7 @@ export interface SmokeConfig {
   readonly healthRoutes: readonly HealthRoute[];
   readonly mcpBaseUrl: string;
   readonly mcpProtectedResource: string;
+  readonly panelBaseUrl: string;
   readonly runId: string;
   readonly smokeAppId: string;
   readonly smokeClientId: string;
@@ -22,6 +23,12 @@ export interface SmokeConfig {
   readonly smokeFlagId: string;
   readonly smokeFlagKey: string;
   readonly smokeOrgId: string;
+  readonly smokeOrgSlug: string;
+}
+
+export interface PanelCredentials {
+  readonly email: string;
+  readonly password: string;
 }
 
 export function readSmokeConfig(): SmokeConfig {
@@ -41,6 +48,7 @@ export function readSmokeConfig(): SmokeConfig {
     healthRoutes: healthRoutes(),
     mcpBaseUrl,
     mcpProtectedResource: `${mcpBaseUrl}/mcp`,
+    panelBaseUrl: originUrl("SPLITCH_SMOKE_PANEL_BASE_URL", "https://app.preview.splitch.dev"),
     runId: runId(),
     smokeAppId: process.env.SPLITCH_SMOKE_APP_ID ?? "app_shared_preview_smoke",
     smokeClientId: process.env.SPLITCH_SMOKE_CLIENT_ID ?? "splitch-shared-preview-smoke",
@@ -49,7 +57,26 @@ export function readSmokeConfig(): SmokeConfig {
     smokeFlagId: process.env.SPLITCH_SMOKE_FLAG_ID ?? "flag_shared_preview_smoke",
     smokeFlagKey: process.env.SPLITCH_SMOKE_FLAG_KEY ?? "shared-preview-smoke",
     smokeOrgId: process.env.SPLITCH_SMOKE_ORG_ID ?? "org_shared_preview_smoke",
+    smokeOrgSlug: process.env.SPLITCH_SMOKE_ORG_SLUG ?? "org_shared_preview_smoke",
   };
+}
+
+/**
+ * The panel smoke login is provisioned per run by `shared-preview:seed-panel-user`.
+ * Missing credentials mean that step did not run, which must fail the smoke rather than
+ * quietly degrade it to a signed-out crawl.
+ */
+export function readPanelCredentials(): PanelCredentials {
+  const email = process.env.SPLITCH_SMOKE_PANEL_EMAIL;
+  const password = process.env.SPLITCH_SMOKE_PANEL_PASSWORD;
+  if (!email || !password) {
+    throw new Error(
+      "SPLITCH_SMOKE_PANEL_EMAIL and SPLITCH_SMOKE_PANEL_PASSWORD are required for the " +
+        "Control Panel hosted smoke. Run `pnpm shared-preview:seed-panel-user` first; it " +
+        "provisions the AuthKit account and exports both.",
+    );
+  }
+  return { email, password };
 }
 
 function healthRoutes(): HealthRoute[] {

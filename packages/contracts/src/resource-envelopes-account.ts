@@ -109,10 +109,15 @@ export const CreateAppRequestSchema = z.object({
 });
 export type CreateAppRequest = z.infer<typeof CreateAppRequestSchema>;
 
-// `.strict()` rejects an immutable `key`, `id`, or `organizationId` on patch.
+// `.strict()` rejects an immutable `id` or `organizationId` on patch. `key` IS
+// patchable: it is the App's URL slug, the one identifier a human or agent picks
+// and later needs to correct (endpoints-org-app.md `PATCH /apps/{app_id}`).
+// Renaming it moves every URL for the App, so it is validated by the same
+// `SlugSchema` creation uses and rejected on collision, never silently deduped.
 export const PatchAppRequestSchema = z
   .object({
     name: z.string().optional(),
+    key: SlugSchema.optional(),
     description: z.string().optional(),
   })
   .strict();

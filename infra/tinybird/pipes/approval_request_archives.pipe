@@ -1,0 +1,83 @@
+NODE archived_requests
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(limit) %}
+    {{error('limit is required')}}
+    {% end %}
+    WITH deduped AS (
+        SELECT
+            resource_id,
+            archive_version,
+            argMax(audit_id, timestamp) AS audit_id,
+            argMax(dedup_key, timestamp) AS dedup_key,
+            argMax(app_id, timestamp) AS archived_app_id,
+            argMax(user_id, timestamp) AS user_id,
+            argMax(auth_method, timestamp) AS auth_method,
+            argMax(changes, timestamp) AS changes,
+            max(timestamp) AS archived_at,
+            argMax(archived_d1_row_count, timestamp) AS archived_d1_row_count,
+            argMax(archive_checksum, timestamp) AS archive_checksum,
+            argMax(request_status, timestamp) AS archived_request_status,
+            argMax(target_type, timestamp) AS archived_target_type,
+            argMax(proposed_at, timestamp) AS proposed_at,
+            argMax(resolved_at, timestamp) AS resolved_at,
+            argMax(policy_contexts, timestamp) AS archived_policy_contexts
+        FROM audit_log
+        WHERE app_id = {{String(app_id)}}
+            AND action = 'approval_request.archive'
+            AND resource_type = 'approval_request'
+            {% if defined(request_id) %}
+            AND resource_id = {{String(request_id)}}
+            {% end %}
+            {% if defined(archive_version) %}
+            AND archive_version = {{Int32(archive_version)}}
+            {% end %}
+            {% if defined(status) %}
+            AND request_status = {{String(status)}}
+            {% end %}
+            {% if defined(target_type) %}
+            AND target_type = {{String(target_type)}}
+            {% end %}
+            {% if defined(environment_id) %}
+            -- policy_contexts is canonical JSON, so this exact serialized property matches D1's JSON predicate.
+            AND position(
+                ifNull(policy_contexts, ''),
+                concat('"environmentId":"', {{String(environment_id)}}, '"')
+            ) > 0
+            {% end %}
+        GROUP BY resource_id, archive_version
+    )
+    SELECT
+        resource_id,
+        archive_version,
+        audit_id,
+        dedup_key,
+        archived_app_id AS app_id,
+        user_id,
+        auth_method,
+        'approval_request.archive' AS action,
+        'approval_request' AS resource_type,
+        changes,
+        archived_at AS timestamp,
+        archived_d1_row_count,
+        archive_checksum,
+        archived_request_status AS request_status,
+        archived_target_type AS target_type,
+        proposed_at,
+        resolved_at,
+        archived_policy_contexts AS policy_contexts
+    FROM deduped
+    WHERE 1
+        {% if defined(after_proposed_at) %}
+        AND (proposed_at, resource_id) < (
+            {{DateTime64(after_proposed_at, 3)}},
+            {{String(after_request_id)}}
+        )
+        {% end %}
+    ORDER BY proposed_at DESC, resource_id DESC
+    LIMIT {{Int32(limit)}}
+
+TYPE ENDPOINT

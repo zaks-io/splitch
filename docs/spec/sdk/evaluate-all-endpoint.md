@@ -48,6 +48,7 @@ EvaluateAllResponse {
       variantName:    string | null          -- immutable arm label; public-safe (ADR-0018)
       reason:         Reason                 -- non-revealing set ONLY, every tier (see below)
       errorCode:      ErrorCode | null       -- non-null only when reason = ERROR
+      exposureIdentity: string | null         -- opaque stable identity for the pending Exposure
       exposureTicket: string | null          -- non-null only for a fresh live-Run assignment
     }
   }
@@ -58,9 +59,20 @@ Standard wire conventions apply
 ([contracts/request-response-envelopes-conventions.md](../contracts/request-response-envelopes-conventions.md)):
 optional fields are present-with-null, never omitted. The response carries a strong **`ETag`**
 header computed over the canonical response body; `If-None-Match` with the current tag returns
-`304` with an empty body. The tag changes when any contained resolution changes (config change, Run
-Start/End, holdover materialization) and is scoped to `(credential, context)` — never reuse a tag
-across contexts.
+`304` with an empty body. The tag changes when any contained resolution or pending Exposure identity
+changes (config change, Experiment Run Start/End/rollover, holdover materialization) and is scoped to
+`(credential, context)` — never reuse a tag across contexts. Exposure Ticket bytes remain outside
+the validator. A non-serialized 12-hour refresh window changes the tag early enough to replace an
+unread ticket before its 24-hour TTL can elapse; reminting the same pending Exposure at a later
+`issued_at` inside one window does not create a false change.
+
+`exposureIdentity` is present exactly when `exposureTicket` is present. It is an opaque HMAC over
+the Exposure-relevant assignment and Experiment Run fields, excluding `issued_at`; clients compare
+it as an indivisible string and cannot recover the Run, Targeting Key hash, rule identity, or ticket
+payload from it. A same-Variant Experiment Run rollover changes the identity, while routine ticket
+reminting for the same assignment does not. Holdover and non-exposing entries carry `null`. The
+refresh window is ETag material only, never a response field, and therefore never changes browser
+entry equality or re-arms an already-read Exposure.
 
 `reason` reuses the `ResolutionReason` enum from
 [contracts/leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md); the server emits only
@@ -71,14 +83,14 @@ set under a Client Key, so no new disclosure is introduced.
 
 ### Per-entry outcomes
 
-| Resolution outcome                    | `reason`   | `exposureTicket` | Assignment Store                  |
-| ------------------------------------- | ---------- | ---------------- | --------------------------------- |
-| Fresh assignment under a live Run     | `SPLIT`    | ticket           | no write (deferred to redemption) |
-| Holdover replay (prior Run, ADR-0006) | `SPLIT`    | `null`           | read-only replay                  |
-| Rule/rollout resolution, no live Run  | `SPLIT`    | `null`           | —                                 |
-| No rule matched → Default Variant     | `DEFAULT`  | `null`           | —                                 |
-| Flag disabled / no Environment config | `DISABLED` | `null`           | —                                 |
-| Per-Flag resolution failure           | `ERROR`    | `null`           | —                                 |
+| Resolution outcome                    | `reason`   | `exposureIdentity` | `exposureTicket` | Assignment Store                  |
+| ------------------------------------- | ---------- | ------------------ | ---------------- | --------------------------------- |
+| Fresh assignment under a live Run     | `SPLIT`    | identity           | ticket           | no write (deferred to redemption) |
+| Holdover replay (prior Run, ADR-0006) | `SPLIT`    | `null`             | `null`           | read-only replay                  |
+| Rule/rollout resolution, no live Run  | `SPLIT`    | `null`             | `null`           | —                                 |
+| No rule matched → Default Variant     | `DEFAULT`  | `null`             | `null`           | —                                 |
+| Flag disabled / no Environment config | `DISABLED` | `null`             | `null`           | —                                 |
+| Per-Flag resolution failure           | `ERROR`    | `null`             | `null`           | —                                 |
 
 A Flag that fails resolution **appears** in `evaluations` with `reason: ERROR` + `errorCode`; it is
 never silently omitted (ADR-0036). A ticket's presence discloses only "reading this would create a
@@ -115,7 +127,7 @@ commit step removed):
 3. held = AssignmentStore.getAll(appId, idType, targetingKey)     [ONE read for all Experiments]
 4. For each Flag: resolve via the SAME evaluate-path resolver as `evaluate`
      - holdover in `held` -> replay variantName verbatim; no ticket
-     - fresh live-Run assignment -> assign() (pure, ADR-0001); mint Exposure Ticket
+     - fresh live-Run assignment -> assign() (pure, ADR-0001); mint Exposure identity + Ticket
      - no seal, no AssignmentStore.put, no Exposure — structural (ADR-0048)
 5. Compute ETag over the canonical body; return
 ```
@@ -165,8 +177,8 @@ never a silent swap to defaults (ADR-0036).
 - **Port:** `evaluateAll(credential, evaluationContext) -> { evaluations, etag }` — no side effects
 - **Left side:** browser client init/revalidation; server SDK `evaluateAll` (SSR bootstrap)
 - **Right side:** Evaluation Worker: validates credential, loads all Flag configs (KV), reads
-  holdovers once (`getAll`), resolves per Flag with the shared resolver, mints Exposure Tickets for
-  fresh live-Run assignments; wired to NO write path
+  holdovers once (`getAll`), resolves per Flag with the shared resolver, mints opaque Exposure
+  identities and Exposure Tickets for fresh live-Run assignments; wired to NO write path
 - **Failure contract:** per-Flag resolve failure → entry with `reason: ERROR` (fetch succeeds);
   whole-request failure → canonical error envelope, no partial body; ETag miss never fabricates a
   `304`

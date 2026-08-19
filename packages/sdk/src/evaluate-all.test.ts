@@ -16,6 +16,7 @@ const EVALUATIONS: Record<string, EvaluateAllEntry> = {
     variantName: "treatment",
     reason: "SPLIT",
     errorCode: null,
+    exposureIdentity: "identity-1",
     exposureTicket: "ticket-1",
   },
   "legacy-banner": {
@@ -23,6 +24,7 @@ const EVALUATIONS: Record<string, EvaluateAllEntry> = {
     variantName: null,
     reason: "DISABLED",
     errorCode: null,
+    exposureIdentity: null,
     exposureTicket: null,
   },
   "broken-flag": {
@@ -30,6 +32,7 @@ const EVALUATIONS: Record<string, EvaluateAllEntry> = {
     variantName: null,
     reason: "ERROR",
     errorCode: "SERVICE_UNAVAILABLE",
+    exposureIdentity: null,
     exposureTicket: null,
   },
 };

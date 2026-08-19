@@ -214,6 +214,29 @@ Shared-preview smoke is the first proof that hosted bindings are correct. Each s
 include the URL, expected `platformTarget = "shared-preview"`, deployed commit SHA, migration list,
 Tinybird Branch, and which routes were exercised.
 
+### Control Panel golden path
+
+The API smoke proves the machine surfaces; it cannot prove a human can use the product. The panel
+golden path closes that gap by signing in through real WorkOS AuthKit as a seeded smoke account and
+walking Organization shell, App create, Flag create and edit, Experiment draft, Run Start, and
+Results. It runs as the `panel` Playwright project against the deployed preview, so it is the only
+smoke phase that needs a browser, and its Chromium install stays gated behind the earlier phases.
+
+The login account is provisioned per run by `shared-preview:seed-panel-user` using the
+`WORKOS_API_KEY` the deploy already holds. The password is minted fresh each run, masked in the log
+stream, and passed to the smoke step through `$GITHUB_ENV`; no standing panel password exists as a
+repository or environment secret. Because the Control Panel session principal is the WorkOS user id
+itself, the same step grants that id owner access to the seeded smoke Organization and App.
+
+Every App the golden path creates uses a key prefix listed in `TRANSIENT_APP_KEY_PREFIXES`, and
+cleanup deletes the whole app-scoped graph (Runs, Experiments, Metrics, Event Definitions, Segments,
+Approvals, Flags, and Variants) for those Apps. An App created under any other prefix survives
+cleanup and orphans the shared preview.
+
+The panel golden path additionally requires the Control Panel callback URL for the target host to be
+registered in the WorkOS Dashboard under Applications -> Redirects. Redirect URIs are dashboard-managed
+and no API credential can add them, so this is a human prerequisite for every new hosted panel host.
+
 The smoke summary must also include Cloudflare-to-Axiom verification when Worker observability wiring
 changes. Use a unique smoke `User-Agent` value, wait for the destination ingestion delay, and query the
 shared Axiom `cloudflare` dataset for the same time window:
@@ -303,6 +326,13 @@ or any Durable Object migration.
   intake ships, the Event Ingest token must have APPEND access to exactly all four owned
   datasources: `raw_events`, `raw_evaluations`, `metric_events`, and `web_events`.
   `TINYBIRD_API_URL` is non-secret Worker config and points at the Tinybird region API.
+- Control Plane declares two separate Approval Request archive secrets. The
+  `TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN` value is Tinybird's deployment-defined
+  `audit_log_ingest` token and needs APPEND on the shared `audit_log` datasource. That scope is
+  broader than Approval Request archival because Tinybird's token granularity stops at the
+  datasource. The `TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN` value is the static Tinybird token named
+  `approval_request_archives_read`; it needs READ only on the `approval_request_archives` endpoint.
+  Both are scoped to the Control Plane Tinybird folder and neither is a workspace admin token.
 - Secret rotation is its own release. Do not hide secret changes inside an unrelated code deploy.
 
 ### Sentry source maps
@@ -633,6 +663,7 @@ is compatible with current data.
       `verify:commit`, `verify:push`, Knip, and Gitleaks.
 - [x] Add `deploy:shared-preview` and `deploy:production` scripts through Turborepo package tasks.
 - [x] Add script for `shared-preview:smoke`.
+- [x] Add the Control Panel golden path as the `shared-preview:smoke:panel` project.
 - [x] Add script for `shared-preview:reset`.
 - [ ] Add script for `rollback:production`.
 - [x] Add `deploy:production` and hook Tinybird deployment into it.

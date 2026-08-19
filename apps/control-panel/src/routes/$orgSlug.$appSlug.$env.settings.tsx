@@ -1,10 +1,7 @@
-import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute, getRouteApi } from "@tanstack/react-router";
-import { EnvironmentSettings } from "#components/environment-settings";
+import { createFileRoute, getRouteApi, Outlet, useRouterState } from "@tanstack/react-router";
+import { type SettingsTab, SettingsTabs } from "#components/settings-tabs";
 import { reportRouteError } from "#lib/panel-observability";
-import { environmentSettingsQuery } from "#lib/settings-query";
 
 const appScopeRoute = getRouteApi("/$orgSlug/$appSlug/$env");
 
@@ -13,17 +10,19 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/settings")({
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/settings");
   },
   errorComponent: () => <SectionErrorPage title="Settings unavailable" />,
-  pendingComponent: PanelSkeleton,
-  component: SettingsSectionRoute,
+  component: SettingsSectionLayout,
 });
 
-function SettingsSectionRoute() {
+function SettingsSectionLayout() {
   const { scope } = appScopeRoute.useLoaderData();
-  const { data } = useSuspenseQuery(
-    environmentSettingsQuery({
-      appId: scope.appId,
-      environmentId: scope.environmentId,
-    }),
+  const baseHref = `/${scope.orgSlug}/${scope.appSlug}/${scope.env}/settings`;
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const activeTab: SettingsTab = pathname.endsWith("/environment") ? "environment" : "app";
+
+  return (
+    <div className="grid gap-6">
+      <SettingsTabs activeTab={activeTab} baseHref={baseHref} />
+      <Outlet />
+    </div>
   );
-  return <EnvironmentSettings settings={data} />;
 }

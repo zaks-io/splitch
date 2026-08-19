@@ -46,6 +46,12 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   app_attention_rollup_get: APP_MEMBER,
   apps_update: APP_ADMIN,
   apps_delete: APP_OWNER,
+  // The App role matrix grants "view config" to every role, so listing who has
+  // access is a member read; changing who has access is not.
+  app_members_list: APP_MEMBER,
+  app_members_add: APP_ADMIN,
+  app_members_update: APP_OWNER,
+  app_members_remove: APP_OWNER,
   environments_list: APP_MEMBER,
   environments_create: APP_ADMIN,
   environments_get: APP_MEMBER,
@@ -101,6 +107,7 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   flags_test_eval: APP_MEMBER,
   experiment_results_get: APP_MEMBER,
   experiment_results_post: APP_MEMBER,
+  environment_exposure_status_get: APP_MEMBER,
   organization_usage_get: ORG_MEMBER,
   current_user_privacy_export: TOKEN,
   current_user_delete: TOKEN,

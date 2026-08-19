@@ -5,11 +5,18 @@ import { classifyProductionChanges } from "./lib/production-deploy-plan.mjs";
 
 const FULL_SHA = /^[0-9a-f]{40}$/u;
 const ZERO_SHA = "0".repeat(40);
+// turbo.json is deliberately absent from both input sets below. It is part of
+// Turbo's global hash, so any edit already misses every cache entry and
+// re-executes the full graph on that run — forcing on top of that proves
+// nothing extra and re-runs the whole suite uncached on every subsequent push
+// of the PR plus the merge commit. `--affected` likewise treats root-config
+// changes as affecting all packages. And the local validators
+// (check-d1-*.mjs, check-tinybird-local.mjs) never invoke turbo, so a
+// turbo.json edit cannot change what they prove.
 const GLOBAL_VALIDATION_INPUTS = new Set([
   ".github/workflows/ci.yml",
   "package.json",
   "scripts/plan-ci-verification.mjs",
-  "turbo.json",
 ]);
 // The D1 validators shell out to `pnpm exec wrangler`, so a resolved-dependency
 // change can alter what they prove. The Tinybird validator cannot: `tb` is
@@ -29,7 +36,6 @@ const CACHE_POLICY_INPUTS = new Set([
   ".github/workflows/nightly-verify.yml",
   "scripts/check-turbo-remote-cache-env.mjs",
   "scripts/plan-ci-verification.mjs",
-  "turbo.json",
 ]);
 
 export function classifyCiChanges(paths) {

@@ -12,6 +12,7 @@ const EVALUATE_ALL_BODY = JSON.stringify({
       reason: "SPLIT",
       errorCode: null,
       exposureTicket: "ticket-convex-1",
+      exposureIdentity: "identity-convex-1",
     },
     "legacy-banner": {
       variant: null,
@@ -19,6 +20,7 @@ const EVALUATE_ALL_BODY = JSON.stringify({
       reason: "DISABLED",
       errorCode: null,
       exposureTicket: null,
+      exposureIdentity: null,
     },
   },
 });

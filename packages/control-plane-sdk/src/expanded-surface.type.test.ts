@@ -131,8 +131,12 @@ async function typeChecks() {
   await sdk.apps.list({ orgId: "org_local" });
   await sdk.apps.get({ appId: "app_local" });
   await sdk.apps.update({ appId: "app_local", name: "Renamed" });
-  // @ts-expect-error apps_update cannot change the immutable App key (.strict())
+  // The URL slug IS patchable (SPL-114): it is the one identifier a human or
+  // agent picks and later needs to correct. `.strict()` still rejects the
+  // immutable `id` and `organizationId`.
   await sdk.apps.update({ appId: "app_local", key: "new-key" });
+  // @ts-expect-error apps_update cannot move an App between Organizations
+  await sdk.apps.update({ appId: "app_local", organizationId: "org_other" });
 
   await sdk.apps.delete({ appId: "app_local" });
 }

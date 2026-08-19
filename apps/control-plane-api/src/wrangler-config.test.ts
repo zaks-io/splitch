@@ -23,6 +23,17 @@ describe("Control Plane API Wrangler runtime config", () => {
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
+  ])("declares Approval Request archive Tinybird delivery for %s", (_targetName, target) => {
+    expect(target?.secrets?.required).toContain("TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN");
+    expect(target?.secrets?.required).toContain("TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN");
+    expect(target?.vars?.TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN).toBeUndefined();
+    expect(target?.vars?.TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN).toBeUndefined();
+  });
+
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
   ])("carries the daily demo-reaper cron for %s", (_target, target) => {
     expect(effectiveCrons(target)).toEqual(["0 8 * * *"]);
   });
