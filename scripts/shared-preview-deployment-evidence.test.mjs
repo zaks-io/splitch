@@ -139,6 +139,27 @@ test("shared-preview deploy keeps every post-deploy smoke phase non-blocking", (
   assert.match(deployJob, /SPLITCH_SMOKE_RUNS: "2"/);
   assert.match(
     deployJob,
+    /name: Seed shared preview panel login\n\s+id: panel_seed\n\s+if: steps\.browser\.outcome == 'success'\n\s+continue-on-error: true/,
+  );
+  assert.match(
+    deployJob,
+    /name: Panel golden path shared preview\n\s+id: panel_smoke\n\s+if: steps\.panel_seed\.outcome == 'success'\n\s+continue-on-error: true/,
+  );
+  assert.match(deployJob, /pnpm shared-preview:smoke:panel/);
+  // Chromium is the only added CI cost; it must stay gated behind the earlier phases.
+  assert.match(
+    deployJob,
+    /name: Install Playwright Chromium\n\s+id: browser\n\s+if: steps\.safe_delivery\.outcome == 'success'/,
+  );
+  // A silent panel failure is worse than none: both outcomes must reach the summary.
+  // Without the browser outcome a failed Chromium install renders the panel steps as
+  // "unknown" with no stated cause.
+  assert.match(deployJob, /SPLITCH_PANEL_BROWSER_OUTCOME: \$\{\{ steps\.browser\.outcome \}\}/);
+  assert.match(deployJob, /SPLITCH_PANEL_SEED_OUTCOME: \$\{\{ steps\.panel_seed\.outcome \}\}/);
+  assert.match(deployJob, /SPLITCH_PANEL_SMOKE_OUTCOME: \$\{\{ steps\.panel_smoke\.outcome \}\}/);
+  assert.match(deployJob, /steps\.panel_smoke\.outcome == 'failure'/);
+  assert.match(
+    deployJob,
     /if: always\(\)\n\s+continue-on-error: true\n\s+run: pnpm shared-preview:cleanup-smoke/,
   );
 });

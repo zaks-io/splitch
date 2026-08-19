@@ -23,37 +23,79 @@ export const SMOKE_IDS = {
   variantTreatment: "var_shared_preview_smoke_treatment",
 };
 
+/**
+ * Transient App key prefixes. Every smoke surface that creates an App must use one of
+ * these, or its rows survive cleanup and orphan the shared preview.
+ */
+export const TRANSIENT_APP_KEY_PREFIXES = [
+  "playwright-smoke-app-",
+  "dark-launch-app-",
+  "panel-smoke-app-",
+];
+
+/**
+ * Every table carrying `app_id`, children before their transient App. D1 enforces
+ * foreign keys, so a table missing here or ordered after its parent fails the App
+ * delete outright rather than orphaning rows. Both the membership and the ordering
+ * are derived from the Drizzle schema by shared-preview-panel-smoke.test.mjs.
+ */
+const TRANSIENT_APP_SCOPED_TABLES = [
+  "approval_reviews",
+  "approval_requests",
+  "runs",
+  "experiments",
+  "metrics",
+  "event_definition_versions",
+  "event_definitions",
+  "targeting_rules",
+  "segments",
+  "flag_configs",
+  "client_keys",
+  "api_keys",
+  "entity_deletions",
+  "privacy_requests",
+  "environments",
+  "app_memberships",
+];
+
 export function buildCleanupSql(ids = SMOKE_IDS) {
-  const transientAppPredicate =
-    "(key LIKE 'playwright-smoke-app-%' OR key LIKE 'dark-launch-app-%')";
+  const scope = transientAppScope(ids.org);
+  const statements = TRANSIENT_APP_SCOPED_TABLES.map(
+    (table) => `DELETE FROM ${table} WHERE app_id IN (${scope});`,
+  );
+  // Variants hang off flags, not apps, so they need the extra hop before flags go.
+  statements.push(
+    `DELETE FROM variants WHERE flag_id IN (\n  SELECT id FROM flags WHERE app_id IN (${scope})\n);`,
+    `DELETE FROM flags WHERE app_id IN (${scope});`,
+    `DELETE FROM apps WHERE id IN (${scope});`,
+  );
+  return `\n${statements.join("\n")}\n`;
+}
+
+function transientAppScope(orgId) {
+  const predicate = TRANSIENT_APP_KEY_PREFIXES.map((prefix) => `key LIKE '${prefix}%'`).join(
+    " OR ",
+  );
+  return `\n  SELECT id FROM apps WHERE organization_id = '${orgId}' AND (${predicate})\n`;
+}
+
+/**
+ * Grants the real WorkOS user behind the panel smoke login owner access to the seeded
+ * Organization and App. The Control Panel session principal is keyed by the WorkOS user
+ * id itself, so the seeded synthetic id cannot stand in for it.
+ */
+export function buildPanelUserSql(now, workosUserId, ids = SMOKE_IDS) {
+  if (!/^user_[A-Za-z0-9]+$/.test(workosUserId)) {
+    throw new Error(`panel smoke user id is not a WorkOS user id: ${workosUserId}`);
+  }
   return `
-DELETE FROM targeting_rules WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
-);
-DELETE FROM flag_configs WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
-);
-DELETE FROM variants WHERE flag_id IN (
-  SELECT id FROM flags WHERE app_id IN (
-    SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
-  )
-);
-DELETE FROM flags WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
-);
-DELETE FROM client_keys WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
-);
-DELETE FROM api_keys WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
-);
-DELETE FROM environments WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
-);
-DELETE FROM app_memberships WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
-);
-DELETE FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate};
+INSERT INTO org_memberships (org_id, user_id, role, created_at)
+VALUES ('${ids.org}', '${workosUserId}', 'owner', '${now}')
+ON CONFLICT(org_id, user_id) DO UPDATE SET role = excluded.role;
+
+INSERT INTO app_memberships (app_id, user_id, role, created_at)
+VALUES ('${ids.app}', '${workosUserId}', 'owner', '${now}')
+ON CONFLICT(app_id, user_id) DO UPDATE SET role = excluded.role;
 `;
 }
 
