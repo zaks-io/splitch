@@ -20,6 +20,9 @@ import { MemoryKv, NOW, sessionPrincipal } from "./session-test-harness";
 import { projectProgram } from "./typescript-program-test-helpers";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
+// The sweep tests walk every source file through the type checker; the walk
+// grows with the tree and already exceeds the 5s default under CI load.
+const SWEEP_TIMEOUT_MS = 30_000;
 const HEADER_NAME_MODULES = [
   {
     moduleSpecifier: "@splitch/control-plane-sdk/control-panel-identity",
@@ -220,7 +223,9 @@ describe("panel cookie attributes", () => {
     assertCookieAttributes(oauth.cookie, OAUTH_STATE_COOKIE_NAME);
   });
 
-  it("builds every cookie value through serializeHttpOnlyCookie", () => {
+  it("builds every cookie value through serializeHttpOnlyCookie", {
+    timeout: SWEEP_TIMEOUT_MS,
+  }, () => {
     const files = sourceFiles(SRC);
     const offenders = files.flatMap(cookieConstructionOffenders);
     const headerWrites = files.flatMap(cookieHeaderWrites);
@@ -231,7 +236,9 @@ describe("panel cookie attributes", () => {
     expectTypeOf(serializeHttpOnlyCookie).returns.toEqualTypeOf<SerializedHttpOnlyCookie>();
   });
 
-  it("enumerates every cookie-authenticated panel write surface", () => {
+  it("enumerates every cookie-authenticated panel write surface", {
+    timeout: SWEEP_TIMEOUT_MS,
+  }, () => {
     const files = sourceFiles(SRC);
     const formPosts = files.flatMap(formPostWrites);
     const serverFnPosts = files.flatMap(serverFnWrites);
@@ -240,7 +247,9 @@ describe("panel cookie attributes", () => {
     expect(serverFnPosts.sort()).toEqual([...CREATE_SERVER_FN_POST_WRITES].sort());
   });
 
-  it("flags every cookie-authenticated form POST without an Origin check", () => {
+  it("flags every cookie-authenticated form POST without an Origin check", {
+    timeout: SWEEP_TIMEOUT_MS,
+  }, () => {
     const offenders = sourceFiles(SRC).flatMap(formPostOriginOffenders);
     expect(offenders).toEqual([]);
   });
