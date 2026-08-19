@@ -1,0 +1,8 @@
+DESCRIPTION Durable App and Environment tombstones that suppress late Exposure rematerialization.
+
+SCHEMA >
+    `app_id` String `json:$.app_id`,
+    `environment_id` String `json:$.environment_id`
+
+ENGINE "ReplacingMergeTree"
+ENGINE_SORTING_KEY "app_id, environment_id"

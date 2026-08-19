@@ -115,6 +115,18 @@ describe("openapi document: full route coverage", () => {
     });
   });
 
+  it("addresses Environment Exposure status only at the Control Plane surface", () => {
+    const operation = documentOperations().find(
+      (entry) => entry.operationId === "environment_exposure_status_get",
+    );
+
+    expect(operation).toEqual({
+      operationId: "environment_exposure_status_get",
+      path: "/apps/{appId}/envs/{environmentId}/exposure-status",
+      method: "get",
+    });
+  });
+
   it("emits only the error codes declared by each route", () => {
     const operation = doc.paths?.["/apps/{appId}/attention-rollup"]?.get as {
       responses?: Record<string, unknown>;

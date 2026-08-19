@@ -84,6 +84,7 @@ const EXPECTED_GATES: Record<string, string> = {
   flags_test_eval: "app:member",
   experiment_results_get: "app:member",
   experiment_results_post: "app:member",
+  environment_exposure_status_get: "app:member",
   organization_usage_get: "org:member",
   current_user_privacy_export: "token",
   current_user_delete: "token",

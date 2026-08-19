@@ -51,6 +51,7 @@ export function makeResultsHarness(rows?: RowsByPipe) {
     authResolver: resultsAuthResolver,
     rateLimiter: allowLimiter,
     tinybird,
+    tinybirdDelete: { deleteExposureStatus: async () => {} },
     platformTarget: "local",
   });
   return { app, tinybird };
@@ -62,6 +63,7 @@ export function makeResultsApp(tinybird: TinybirdReadTransport) {
     authResolver: resultsAuthResolver,
     rateLimiter: allowLimiter,
     tinybird,
+    tinybirdDelete: { deleteExposureStatus: async () => {} },
     platformTarget: "local",
   });
 }

@@ -1,0 +1,30 @@
+DESCRIPTION Returns the durable first real Exposure timestamp for one Environment.
+
+NODE status
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    SELECT
+        app_id,
+        environment_id,
+        minMerge(first_exposure_state) AS first_exposure_at
+    FROM environment_exposure_status_state
+    WHERE app_id = {{String(app_id)}}
+        AND environment_id = {{String(environment_id)}}
+        AND NOT EXISTS (
+            SELECT 1
+            FROM environment_exposure_status_deletions
+            WHERE app_id = {{String(app_id)}}
+                AND (
+                    environment_id = ''
+                    OR environment_id = {{String(environment_id)}}
+                )
+        )
+    GROUP BY app_id, environment_id
+
+TYPE ENDPOINT

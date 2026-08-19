@@ -11,6 +11,7 @@ describe("Control Panel query keys", () => {
   it("builds every pinned key from the App and Environment root", () => {
     expect([
       queryKeys.app.root(scope.appId, scope.environmentId),
+      queryKeys.environment.exposureStatus(scope.appId, scope.environmentId),
       queryKeys.experiment.prefix(scope.appId, scope.environmentId),
       queryKeys.experiment.list(scope.appId, scope.environmentId),
       queryKeys.experiment.detailPrefix(scope.appId, scope.environmentId, "exp_1"),
@@ -32,6 +33,7 @@ describe("Control Panel query keys", () => {
       queryKeys.segment.detail(scope.appId, scope.environmentId, "segment_1"),
     ]).toEqual([
       ["app", "app_1", "env", "env_prod"],
+      ["app", "app_1", "env", "env_prod", "environment", "exposure-status"],
       ["app", "app_1", "env", "env_prod", "experiment"],
       ["app", "app_1", "env", "env_prod", "experiment", "list"],
       ["app", "app_1", "env", "env_prod", "experiment", "exp_1"],

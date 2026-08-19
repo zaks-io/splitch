@@ -54,3 +54,5 @@ export {
   RETRYABLE_EXPOSURE_REJECTION_CODE,
   RETRYABLE_EXPOSURE_REJECTION_CODES,
 } from "../exposure-retry-codes";
+export type { EnvironmentExposureStatusResponse } from "../environment-exposure-status";
+export { EnvironmentExposureStatusResponseSchema } from "../environment-exposure-status";
