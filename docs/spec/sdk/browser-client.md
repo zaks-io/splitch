@@ -70,22 +70,23 @@ caller's Default Variant, same as the root client.
 
 Fail-loud rules (ADR-0036):
 
-| Read state                                     | `evaluate` returns                           | `evaluateDetails.reason` / `errorCode`                                                 |
-| ---------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Before `init()` resolves (and no bootstrap)    | throws `SplitchSdkError SDK_NOT_INITIALIZED` | throws — reading nothing is a bug, not a default                                       |
-| Flag key absent from the held evaluations      | caller default, loud log                     | `ERROR` / `FLAG_NOT_FOUND`                                                             |
-| Held entry with `reason: ERROR`                | caller default, loud log                     | the entry's `ERROR` / `errorCode`                                                      |
-| Revalidation failing (serving last-known-good) | held value                                   | held reason; `STALE` surfaces via logger + entry once refetch fails (see Revalidation) |
-| Normal held entry                              | held value                                   | the entry's `reason` (`SPLIT`/`DEFAULT`/`DISABLED`)                                    |
+| Read state                                     | `evaluate` returns                           | `evaluateDetails.reason` / `errorCode`                                                                                                                        |
+| ---------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Before `init()` resolves (and no bootstrap)    | throws `SplitchSdkError SDK_NOT_INITIALIZED` | throws — reading nothing is a bug, not a default                                                                                                              |
+| Flag key absent from the held evaluations      | caller default, loud log                     | `ERROR` / `FLAG_NOT_FOUND`                                                                                                                                    |
+| Held entry with `reason: ERROR`                | caller default, loud log                     | the entry's `ERROR` / `errorCode`                                                                                                                             |
+| Revalidation failing (serving last-known-good) | held value                                   | entry-derived held details reaching the decorator: `STALE` / `PROVIDER_NOT_READY`; absent-flag, held-`ERROR`, and null-variant details: held fields unchanged |
+| Normal held entry                              | held value                                   | the entry's `reason` (`SPLIT`/`DEFAULT`/`DISABLED`)                                                                                                           |
 
 `subscribe(flagKey, listener)` registers a per-Flag listener invoked when a revalidation swap
 changes that Flag's resolution; it returns an unsubscribe function. Subscribing is **not** a read:
 it fires no Exposure until the value is actually read. Errors surface through the injectable
-`logger` — no second hook system (the Web Analytics rule, reused). Two guarantees the React
+`logger` — no second hook system (the Web Analytics rule, reused). Three guarantees the React
 bindings ([react-bindings.md](./react-bindings.md)) depend on: `subscribe` accepts keys absent
 from the held evaluations (the subscription registers by key and fires if a later swap introduces
 the Flag), and held Variant values are returned by reference — never cloned, treated as immutable —
-so identity is stable until a swap.
+so identity is stable until a swap; the third is the SPL-333-owned degradation-state read plus
+decorator seam specified under [Revalidation](#revalidation).
 
 ## Exposure queue (redemption)
 
@@ -149,15 +150,22 @@ splitch.evaluate("new-checkout", false); // sync, immediately — init() not req
 A single loop revalidates the held evaluations every `revalidateMs` (default 60s) with
 `If-None-Match`:
 
-- `304` → no-op. Changed body → **atomic swap**; per-Flag `subscribe` listeners fire only for Flags
-  whose entry actually changed. Entry equality compares `variant`, `variantName`, `reason`,
-  `errorCode`, and `exposureIdentity`; it excludes `exposureTicket` bytes. The opaque identity changes
-  across Experiment Run rollover and fresh-assignment-to-holdover materialization even when the
-  visible Variant does not. An ETag-only ticket refresh window may replace ticket bytes without
-  changing entry equality, notifying listeners, or re-arming an already-read Exposure.
-- Failure → keep serving last-known-good, log loudly every failed tick, and mark subsequently read
-  entries `STALE` (`errorCode: PROVIDER_NOT_READY`) until a tick succeeds — degraded is always
-  observable, never disguised (ADR-0036).
+- `304` → successful tick: clear revalidation degradation while swapping no payload, changing no
+  held details, and notifying no `subscribe` listeners. Changed body → **atomic swap**; per-Flag
+  `subscribe` listeners fire only for Flags whose entry actually changed. Entry equality compares
+  `variant`, `variantName`, `reason`, `errorCode`, and `exposureIdentity`; it excludes
+  `exposureTicket` bytes. The opaque identity changes across Experiment Run rollover and
+  fresh-assignment-to-holdover materialization even when the visible Variant does not. An ETag-only
+  ticket refresh window may replace ticket bytes without changing entry equality, notifying
+  listeners, or re-arming an already-read Exposure.
+- Failure → keep serving last-known-good and log loudly every failed tick. Until a tick succeeds,
+  the read-time decorator marks only entry-derived held details that reach it `STALE`
+  (`errorCode: PROVIDER_NOT_READY`); absent-flag (`ERROR` / `FLAG_NOT_FOUND`), held-`ERROR`, and
+  null-variant details bypass it and are never overwritten (ADR-0036).
+- SPL-333 owns the current revalidation-degradation state and same-package internal seam. A failed
+  tick enters degradation and the next successful tick clears it. The seam exposes both a
+  synchronous, render-safe state read and the exact read-time staleness decorator
+  `evaluateDetails` uses; neither is public API or a notification channel.
 - End-to-end freshness is revalidation interval + the accepted ~60s KV propagation window
   ([five-runtimes.md](./five-runtimes.md), ADR-0009); this client does not try to beat the data
   plane's own propagation. The ADR-0019-style WebSocket nudge, when it lands, only triggers an
