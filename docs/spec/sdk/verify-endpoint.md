@@ -143,8 +143,8 @@ a later real Exposure.
 ## Live config consistency
 
 `verify` resolves against the **same KV-backed Provider config path** the `evaluate` endpoint
-reads, so a green verify reflects the deployed truth the data plane serves — including the ~60s KV
-propagation window after a Start (ADR-0009). If `verify` shows the old Variant for a few seconds
+reads, so a green verify reflects the deployed truth the data plane serves, including the five-second
+Flag Configuration propagation contract. If `verify` shows the old Variant for a few seconds
 after Start, so does production. The verify step is honest about propagation rather than reading
 D1 and reporting a Variant the edge cannot yet serve.
 

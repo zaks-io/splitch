@@ -98,8 +98,8 @@ every evaluation produces exactly one. Rule details (`ruleId`, `ruleName`, `prio
 - Returns hash bucket or salt
 
 The endpoint reads the same live edge config the data-plane `evaluate` endpoint uses, so the result
-reflects the current deployed state (ADR-0026). A 60s KV propagation window applies equally here —
-the resolve uses the same KV-cached config. The endpoint may read `AssignmentStore.getAll()` to return
+reflects the current deployed state (ADR-0026). The five-second Flag Configuration propagation
+contract applies equally here. The endpoint may read `AssignmentStore.getAll()` to return
 `holdover_replay`, but it never calls `put()`. Condition matching — including absent or null
 attributes — is the same shared function as data-plane evaluate
 ([evaluate-path-orchestration.md § Absent or null Condition attribute](../evaluation/evaluate-path-orchestration.md#absent-or-null-condition-attribute)).
@@ -113,7 +113,7 @@ updates synchronously on Start) would let the dry-run report a Variant the data 
 yet serve, misleading the agent's verify step.
 
 Consequence: after Start, both test-evaluation and the data-plane endpoint observe the new
-config within the same ~60s KV propagation window (ADR-0009). The verify step is honest about
+config within the same five-second Evaluation propagation contract. The verify step is honest about
 propagation — if it shows the old Variant for a few seconds after Start, so does production.
 
 ## Error responses

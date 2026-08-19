@@ -10,10 +10,10 @@ must not expose. Every Zod-parsed surface is listed here. (ADR-0025 "reuse at th
 ## KV namespaces (Zod-parsed on every read)
 
 Every KV value is a JSON blob Zod-parsed on read inside a `schemaVersion` envelope whose version is
-**pinned to the current version** (`z.literal`, see `CURRENT_KV_SCHEMA_VERSION`). A malformed blob OR
-an unknown/future schema version fails loud — on the evaluation edge (no D1 binding) that is
-`INTERNAL_SERVER_ERROR`, never a partial or wrong-version object flowing into evaluation; a
-control-plane reader rebuilds from D1 instead (see [../platform/contracts-and-validation.md](../platform/contracts-and-validation.md)).
+**pinned to the current version** (`z.literal`, see `CURRENT_KV_SCHEMA_VERSION`). A malformed blob
+or an unknown/future schema version fails loud. Evaluation recovers Flag Configuration through the
+authoritative Config Store DO; control-plane readers rebuild KV from D1 (see
+[../platform/contracts-and-validation.md](../platform/contracts-and-validation.md)).
 (ADR-0025 "every KV read is Zod-parsed, including hot-path reads".)
 
 | Namespace key pattern                                   | Value schema         | TTL                          | Notes                                                                                        |

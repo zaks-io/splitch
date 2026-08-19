@@ -61,8 +61,8 @@ Worker validates input
   → calls DO(appId).write(configDelta)
     → DO validates invariants (Run immutability, schema shape)
     → DO commits to D1 (authoritative relational record)
-    → DO writes through to KV (read cache, ~60s propagation)
-    → DO broadcasts delta-nudge to subscribed WebSocket clients
+    → DO writes through to KV (read replica)
+    → DO broadcasts a version-carrying delta-nudge to subscribed clients
   → Worker returns 200 with new version to caller
 ```
 
@@ -75,24 +75,28 @@ D1 is the authoritative source. KV is a read-replica cache.
 
 - **D1 write fails:** DO returns error to the Worker; Worker returns 4xx/5xx to caller. No KV
   write, no broadcast. No partial state. Caller retries.
-- **D1 succeeds, KV write fails:** Config is durable in D1. The Worker may return success (the
-  durable write succeeded). The KV miss self-heals: the next Worker that reads KV and finds a
-  stale/missing blob falls back to D1 and re-populates KV. The propagation window extends by
-  however long it takes for that fallback read to occur. This is accepted eventual consistency,
-  not silent data loss.
-- **D1 succeeds, broadcast fails:** The nudge is best-effort. Panel clients reconnect and do a
-  full invalidate-refetch on reconnect, recovering any missed broadcast for free (ADR-0019).
+- **D1 succeeds, KV write fails:** Config is durable in D1. The Evaluation Worker reads the current
+  snapshot through the Config Store DO and never treats a stale or malformed KV payload as current.
+  Control-plane reads rebuild the KV projection from D1.
+- **D1 succeeds, broadcast fails:** Evaluation fails loud while live updates are unavailable.
+  Reconnect invalidates the Environment cache and obtains the current committed version before
+  serving. Panel clients retain their full invalidate-refetch reconnect behavior (ADR-0019).
 
-KV cache reads **always** include a D1 fallback path on Zod parse failure or cache miss. D1 is
-never bypassed as truth. See [contracts-and-validation.md](./contracts-and-validation.md) for
-the KV schema-version envelope and fallback rules.
+Flag Configuration reads **always** obtain an authoritative D1 snapshot through the Config Store DO
+on cold start, cache miss, or reconnect. A version below the latest nudge fails with `STALE`; it is
+never cached or served. See [contracts-and-validation.md](./contracts-and-validation.md) for the KV
+schema-version envelope and fallback rules.
 
-## ~60s KV propagation window (accepted)
+## Five-second Evaluation propagation contract
 
-After Start, Evaluation Worker instances serving old config for up to ~60s are accepted and self-healing
-(ADR-0009). New Entities hash deterministically to the same Variant under either config version.
-No Run dataset is corrupted; only a narrow window of returning-Entity experience near a Run
-boundary may temporarily serve the prior Variant, which converges as KV propagates.
+Every committed Flag Configuration write carries its monotonic D1 version in both the authoritative
+DO snapshot and `DeltaNudge`. Each Evaluation isolate maintains a cross-request cache and one subscription per
+`(App, Environment)`. A flag nudge invalidates only that Flag Configuration. The next evaluation
+reads the authoritative snapshot through the DO and may serve it only when its version is at least
+the announced version. Five seconds or more from announcement is an observable propagation breach.
+
+The Assignment Store's separate holdover projection retains its accepted approximately 60-second
+window because a miss deterministically recomputes the same assignment (ADR-0009).
 
 ## Sources
 

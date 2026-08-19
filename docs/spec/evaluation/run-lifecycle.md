@@ -102,9 +102,8 @@ A caller can always determine which case occurred by inspecting whether `runId` 
 
 ## Live Run is explicit persisted config
 
-The live config the edge reads (KV) carries `liveRunId`. Start writes the new
-`liveRunId`. Drafts never reach the edge. ~60s KV propagation window applies (self-healing,
-per ADR-0009).
+The live config the edge reads carries `liveRunId`. Start writes the new `liveRunId`. Drafts never
+reach the edge. The five-second Flag Configuration propagation contract applies.
 
 ## Sources
 

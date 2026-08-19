@@ -30,7 +30,7 @@ export function errorResult(
   return {
     kind: "error",
     variant: defaultVariant,
-    reason: "ERROR",
+    reason: cause instanceof ProviderError ? cause.resolutionReason : "ERROR",
     errorCode,
     errorMessage,
     liveRunId: null,

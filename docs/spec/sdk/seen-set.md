@@ -95,7 +95,7 @@ on it forever would make a long-lived instance (browser SPA, warm Worker — the
 **never** detect a new Run, re-introducing exactly the Run N+1 under-exposure above.
 
 The seen-set resolves this with a **revalidation window** (`revalidateMs`, default `60_000`,
-mirroring the ~60s KV config-propagation window the platform already tolerates):
+matching the browser client's revalidation interval):
 
 - A repeat **within** the window short-circuits to `CACHED` (no call, no Exposure) — the dedup
   benefit is preserved for the hot repeat case.

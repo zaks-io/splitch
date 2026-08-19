@@ -43,7 +43,7 @@ export interface ExposureDecision {
 interface BaseEvaluateResult {
   kind: EvaluateKind;
   variant: VariantName | null;
-  reason: TestEvaluationReason | "ERROR";
+  reason: TestEvaluationReason | "ERROR" | "STALE";
   exposure: ExposureDecision | null;
 }
 
@@ -113,7 +113,7 @@ export interface ErrorEvaluateResult extends BaseEvaluateResult {
   errorMessage: string;
   exposure: null;
   liveRunId: null;
-  reason: "ERROR";
+  reason: "ERROR" | "STALE";
 }
 
 export type EvaluateResult =

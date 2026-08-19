@@ -1,6 +1,7 @@
 import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
 import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store";
 import type { ExposureRedemptionClaimNamespace } from "./exposure-redemption-claim";
+import type { ConfigStoreNamespace } from "./provider/config-updates";
 
 interface ExposureIngestFetcher {
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
@@ -10,6 +11,7 @@ export interface EvaluationApiEnv {
   ASSIGNMENTS_KV: KVNamespace;
   ASSIGNMENT_STORE_WRITER: AssignmentWriterNamespace;
   CONFIG_STORE: KVNamespace;
+  CONFIG_STORE_WRITER?: ConfigStoreNamespace;
   CREDENTIAL_STORE: KVNamespace;
   EVENT_INGEST?: ExposureIngestFetcher;
   EVENT_INGEST_URL?: string;
