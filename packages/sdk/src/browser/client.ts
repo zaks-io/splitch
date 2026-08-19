@@ -1,39 +1,50 @@
 import { SplitchSdkError } from "../errors";
 import type { EvaluateContext, Logger } from "../evaluate";
 import { sdkErrorForFailure } from "../evaluate";
-import type {
-  EvaluateAllEntry,
-  ExposureBatchResult,
-  VariantValue,
-} from "../generated/contract-surface.js";
+import type { PrecomputedEvaluations } from "../evaluate-all";
+import type { ExposureBatchResult, VariantValue } from "../generated/contract-surface.js";
 import type { SdkResolutionDetails } from "../resolution";
 import {
   heldErrorDetails,
+  logListenerFailures,
   loudly,
   mintIdempotencyKey,
   missingFlagDetails,
   nullVariantDetails,
+  resolveBootstrap,
   resolveBrowserClientKey,
   resolveContext,
+  resolveRevalidateMs,
 } from "./client-helpers";
+import { decorateHeldDetails, registerBrowserClientInternalAccess } from "./client-internals";
 import { ExposureQueue } from "./exposure-queue";
+import { BrowserPayloadStore, type HeldPayload } from "./payload-store";
+import { RevalidationLoop } from "./revalidation-loop";
 import { type BrowserTransport, createBrowserFetchTransport } from "./transport";
 
 const DEFAULT_ENDPOINT = "https://edge.splitch.dev";
 const DEFAULT_TIMEOUT_MS = 5000;
+const DEFAULT_REVALIDATE_MS = 60_000;
 const FALLBACK_DEFAULT_VALUE: VariantValue = false;
 
 /**
  * Options for {@link createSplitchBrowserClient}. Client Key only; one Evaluation
  * Context for the client's lifetime. Construction performs no I/O.
  *
- * `bootstrap` and ETag revalidation polling are out of scope for this slice.
  */
 export interface SplitchBrowserClientOptions {
   /** Public Client Key (`pk_…`). A secret `sk_`/`ak_` value throws at construction. */
   readonly clientKey: string;
   /** One Evaluation Context for the client's lifetime (static-context paradigm). */
   readonly context: EvaluateContext;
+  /**
+   * Server-produced `evaluateAll` payload for synchronous SSR hydration. Its
+   * context must canonically equal {@link context} or construction throws
+   * `SDK_BOOTSTRAP_CONTEXT_MISMATCH`.
+   */
+  readonly bootstrap?: PrecomputedEvaluations | null;
+  /** ETag revalidation interval in milliseconds. Defaults to 60,000; 0 disables it. */
+  readonly revalidateMs?: number;
   readonly endpoint?: string;
   readonly timeoutMs?: number;
   readonly fetch?: typeof fetch;
@@ -47,26 +58,25 @@ export interface SplitchBrowserClientOptions {
 }
 
 export interface SplitchBrowserClient {
-  /** Fetch Precomputed Evaluations once. Idempotent after success. */
+  /** Fetch Precomputed Evaluations once; no network call when bootstrapped. */
   init(): Promise<void>;
   /** Synchronous exposing read of the held Variant value. */
   evaluate(flagKey: string, defaultValue?: VariantValue): VariantValue;
   /** Synchronous exposing read returning full ResolutionDetails. */
   evaluateDetails(flagKey: string, defaultValue?: VariantValue): SdkResolutionDetails;
+  /** Subscribe to swaps that change this Flag's resolution. Subscribing is non-exposing. */
+  subscribe(flagKey: string, listener: () => void): () => void;
   /** Acknowledged Exposure queue flush; resolves with per-item results. */
   flush(): Promise<readonly ExposureBatchResult[]>;
   /** Final flush; stops timers and page-lifecycle listeners. */
   close(): Promise<readonly ExposureBatchResult[]>;
 }
 
-interface HeldPayload {
-  readonly evaluations: Readonly<Record<string, EvaluateAllEntry>>;
-  readonly etag: string;
-}
-
 /**
- * Create the static-context browser client. Pass a Client Key only — secrets
- * throw. Call `init()` once, then read Flags synchronously.
+ * Create the static-context browser client. With `bootstrap`, reads are
+ * synchronous immediately and `init()` performs no fetch. Without it, await
+ * `init()` before the first read. Revalidation uses the held ETag and keeps
+ * serving last-known-good values through observable failures.
  *
  * @see https://splitch.dev/docs/sdk/install
  */
@@ -75,8 +85,10 @@ export function createSplitchBrowserClient(
 ): SplitchBrowserClient {
   const clientKey = resolveBrowserClientKey(options.clientKey);
   const context = resolveContext(options.context);
+  const revalidateMs = resolveRevalidateMs(options.revalidateMs, DEFAULT_REVALIDATE_MS);
   const logger = options.logger ?? console;
   const now = options.now ?? Date.now;
+  const initial = initialPayload(options.bootstrap, context);
   const transport =
     options.transport ??
     createBrowserFetchTransport({
@@ -86,9 +98,9 @@ export function createSplitchBrowserClient(
       fetchImpl: options.fetch ?? globalThis.fetch.bind(globalThis),
     });
 
-  let held: HeldPayload | null = null;
   let initPromise: Promise<void> | null = null;
   const loggedMissing = new Set<string>();
+  const store = new BrowserPayloadStore(initial);
   // Pass document/window only when the key is present: an absent key means
   // "use the ambient global", while explicit undefined/null means "absent".
   const queue = new ExposureQueue({
@@ -99,7 +111,23 @@ export function createSplitchBrowserClient(
     ...("window" in options ? { window: options.window } : {}),
   });
 
+  const revalidation = new RevalidationLoop({
+    transport,
+    logger,
+    context,
+    intervalMs: revalidateMs,
+    getEtag: () => requireHeld().etag,
+    onPayload: (evaluations, etag) => {
+      const changed = store.swap({ evaluations, etag });
+      queue.rearm(changed);
+      logListenerFailures(logger, store.notify(changed));
+    },
+    onNotModified: () => store.markRecovered(),
+    onFailure: () => store.markDegraded(),
+  });
+
   function requireHeld(): HeldPayload {
+    const held = store.current();
     if (held === null) {
       throw new SplitchSdkError({
         code: "SDK_NOT_INITIALIZED",
@@ -125,16 +153,15 @@ export function createSplitchBrowserClient(
     if (entry.exposureTicket !== null) {
       queue.enqueue(flagKey, entry.exposureTicket);
     }
-    // Return held Variant values by reference — never clone (React bindings rely on identity).
-    return {
-      value: entry.variant,
-      variantName: entry.variantName,
-      reason: entry.reason,
-    };
+    return decorateHeldDetails(entry.variant, entry.variantName, entry.reason, store.isDegraded());
   }
 
-  return {
+  const client: SplitchBrowserClient = {
     async init() {
+      if (store.current() !== null) {
+        revalidation.start();
+        return;
+      }
       // After success initPromise stays set, so concurrent/repeat callers await
       // the same promise (or return immediately once settled). Cleared only on failure.
       if (initPromise !== null) {
@@ -156,7 +183,8 @@ export function createSplitchBrowserClient(
             result.cause,
           );
         }
-        held = { evaluations: result.evaluations, etag: result.etag };
+        store.setInitial({ evaluations: result.evaluations, etag: result.etag });
+        revalidation.start();
       })();
       try {
         await initPromise;
@@ -174,12 +202,32 @@ export function createSplitchBrowserClient(
       return readDetails(flagKey, defaultValue);
     },
 
+    subscribe(flagKey, listener) {
+      return store.subscribe(flagKey, listener);
+    },
+
     async flush() {
       return queue.flush();
     },
 
     async close() {
+      revalidation.stop();
       return queue.close();
     },
   };
+  registerBrowserClientInternalAccess(client, () => store.isDegraded());
+
+  if (initial !== null) {
+    revalidation.start();
+  }
+  return client;
+}
+
+function initialPayload(
+  bootstrap: PrecomputedEvaluations | null | undefined,
+  context: ReturnType<typeof resolveContext>,
+): HeldPayload | null {
+  return bootstrap === undefined || bootstrap === null
+    ? null
+    : resolveBootstrap(bootstrap, context);
 }

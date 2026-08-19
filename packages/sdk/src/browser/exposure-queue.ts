@@ -1,17 +1,8 @@
 import { formatSdkErrorMessage } from "../errors";
 import type { Logger } from "../evaluate";
 import type { ExposureBatchResult } from "../generated/contract-surface.js";
-import {
-  EXPOSURE_BATCH_MAX_BODY_BYTES,
-  EXPOSURE_BATCH_MAX_ITEMS,
-} from "../generated/contract-surface.js";
-import {
-  mintExposureId,
-  pendingBodyBytes,
-  type QueuedExposure,
-  takeBatch,
-  toExposureBatchItems,
-} from "./exposure-batch";
+import { admitExposure, rearmExposureFlags } from "./exposure-admission";
+import { type QueuedExposure, takeBatch, toExposureBatchItems } from "./exposure-batch";
 import {
   applyExposureBatchResults,
   logBatchFailure,
@@ -98,28 +89,30 @@ export class ExposureQueue {
       );
       return;
     }
-    if (this.enqueuedFlags.has(flagKey)) {
+    const admission = admitExposure(
+      this.pending,
+      this.enqueuedFlags,
+      this.deps.logger,
+      this.deps.now,
+      flagKey,
+      exposureTicket,
+    );
+    if (!admission.admitted) {
       return;
     }
-    const exposureId = mintExposureId(this.deps.logger, flagKey);
-    this.enqueuedFlags.add(flagKey);
-    this.pending.push({
-      flagKey,
-      exposureId,
-      exposureTicket,
-      clientTimestamp: new Date(this.deps.now()).toISOString(),
-    });
     this.ensureLifecycle();
     this.ensureTimer();
-    if (
-      this.pending.length >= EXPOSURE_BATCH_MAX_ITEMS ||
-      pendingBodyBytes(this.pending) > EXPOSURE_BATCH_MAX_BODY_BYTES
-    ) {
+    if (admission.atCapacity) {
       void this.overflow.flush(
         () => this.enqueueDrain({ keepalive: false, automatic: true }),
         this.retryPolicy,
       );
     }
+  }
+
+  /** Arm the next read after the server changes a Flag's resolution identity. */
+  rearm(flagKeys: readonly string[]): void {
+    rearmExposureFlags(this.enqueuedFlags, flagKeys);
   }
 
   async flush(): Promise<readonly ExposureBatchResult[]> {

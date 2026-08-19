@@ -173,8 +173,10 @@ import { createSplitchBrowserClient } from "@splitch/sdk/browser";
 const splitch = createSplitchBrowserClient({
   clientKey: "pk_...", // secrets (sk_/ak_) throw at construction
   context: { targetingKey: user.id },
+  bootstrap: precomputed, // optional server evaluateAll result; reads work immediately
+  revalidateMs: 60_000, // default; 0 disables ETag polling
 });
-await splitch.init();
+await splitch.init(); // no fetch when bootstrap is present
 
 const on = splitch.evaluate("new-checkout", false); // sync
 const details = splitch.evaluateDetails("new-checkout", false);
@@ -184,6 +186,15 @@ await splitch.flush();
 Reading before `init()` throws `SDK_NOT_INITIALIZED`. An unknown Flag Key returns
 your default with `reason: "ERROR"` / `FLAG_NOT_FOUND` and a loud log — never a
 silent invented default.
+
+Bootstrap must carry the exact normalized Evaluation Context used to construct
+the browser client. A mismatch throws `SDK_BOOTSTRAP_CONTEXT_MISMATCH` during
+construction. A valid bootstrap serves the server's values synchronously with no
+initial fetch. The client then revalidates with `If-None-Match` every 60 seconds
+by default. A `304` keeps the held payload unchanged; a changed response swaps it
+atomically and notifies only subscribers for changed Flags. Failed ticks log on
+every attempt and keep serving last-known-good values as `STALE` /
+`PROVIDER_NOT_READY` until recovery. Call `close()` to stop polling.
 
 `flush()` drains the Exposure queue. If the queue hits the batch caps (25 items /
 32 KiB) and a forced flush fails, the oldest 25 items are retained for retry by

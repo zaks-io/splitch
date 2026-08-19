@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import {
   cliClientErrorCodes,
+  cliErrorCodeForVerifyDetails,
   cliErrorCodes,
   formatCliError,
   normalizeCliError,
@@ -72,6 +73,17 @@ describe("CLI actionable error catalog", () => {
     expect(normalized.code).toBe("UNAUTHORIZED");
     expect(normalized.cause).toBe(sdkError);
     expect(sdkError.cause).toBe(original);
+  });
+
+  it("rejects the browser-only stale code on the server verify path", () => {
+    expect(cliErrorCodeForVerifyDetails("FLAG_NOT_FOUND")).toBe("FLAG_NOT_FOUND");
+    expect(cliErrorCodeForVerifyDetails(undefined)).toBe("CLI_DATA_PLANE_ERROR_CODE_MISSING");
+    expect(() => cliErrorCodeForVerifyDetails("PROVIDER_NOT_READY")).toThrowError(
+      expect.objectContaining({
+        code: "CLI_UNEXPECTED_ERROR",
+        causeSummary: expect.stringContaining("browser-only PROVIDER_NOT_READY"),
+      }),
+    );
   });
 
   it("names an unrecognized server code instead of inventing a server failure", () => {
