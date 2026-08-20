@@ -1,5 +1,13 @@
 import { assertMintedScope, type TenantScope } from "./scope";
 
+export interface AppDeletionBoundary {
+  readonly generationId: string;
+  readonly actorId: string;
+  readonly organizationId: string;
+  readonly deleteBeforeTs: string;
+  readonly updatedAt: string;
+}
+
 /**
  * Atomic App teardown (SPL-298).
  *
@@ -34,10 +42,36 @@ import { assertMintedScope, type TenantScope } from "./scope";
  */
 
 export function makeDeleteAppCascade(d1: D1Database) {
-  return async function deleteAppCascade(scope: TenantScope): Promise<void> {
+  return async function deleteAppCascade(
+    scope: TenantScope,
+    boundary?: AppDeletionBoundary,
+  ): Promise<void> {
     assertMintedScope(scope);
     const appId = scope.appId;
-    const results = await d1.batch([
+    const boundaryStatements = boundary
+      ? [
+          d1
+            .prepare(
+              `UPDATE app_deletion_sagas SET phase = 'd1_deleted', updated_at = ?
+               WHERE app_id = ? AND organization_id = ? AND actor_id = ?
+                 AND delete_before_ts = ? AND generation_id = ? AND phase = 'started'
+               RETURNING app_id`,
+            )
+            .bind(
+              boundary.updatedAt,
+              appId,
+              boundary.organizationId,
+              boundary.actorId,
+              boundary.deleteBeforeTs,
+              boundary.generationId,
+            ),
+          // A zero-row UPDATE must abort the batch before any child deletion.
+          // SQLite evaluates the invalid JSON branch only when `changes()` is 0.
+          d1.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json('') END"),
+        ]
+      : [];
+    const statements = [
+      ...boundaryStatements,
       d1
         .prepare(
           `DELETE FROM runs
@@ -67,9 +101,13 @@ export function makeDeleteAppCascade(d1: D1Database) {
       d1.prepare(`DELETE FROM environments WHERE app_id = ?`).bind(appId),
       d1.prepare(`DELETE FROM app_memberships WHERE app_id = ?`).bind(appId),
       d1.prepare(`DELETE FROM apps WHERE id = ? RETURNING id`).bind(appId),
-    ]);
+    ];
+    const results = await d1.batch(statements);
     if ((results[results.length - 1]?.results ?? []).length !== 1) {
       throw new Error("app delete did not reach D1");
+    }
+    if (boundary && (results[0]?.results ?? []).length !== 1) {
+      throw new Error("App deletion boundary did not reach D1");
     }
   };
 }

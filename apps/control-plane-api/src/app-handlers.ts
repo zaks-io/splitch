@@ -1,10 +1,14 @@
 import { deriveSlug } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
-import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
+import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz";
 import { forceDeleteApp } from "./app-delete-force";
+import {
+  deleteAppRowsWithHoldoverSaga,
+  renderAppDeleteCleanupError,
+  resumeHoldoverFinalizeAfterAppGone,
+} from "./app-delete-holdover";
 import { collectAppDeleteBlockers } from "./app-delete-tree";
-import { revokeEnvironmentCredentialsForAppDelete } from "./app-environment-credentials";
 import {
   ALLOW_POLICY,
   type AppEnvironmentDeps,
@@ -26,7 +30,6 @@ import {
 import { randomHex } from "./credential-cache";
 import { objectBody, pathParam, queryFlags } from "./handler-input";
 import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, requireOrgRole } from "./org-authz";
-import { EnvironmentExposureStatusCleanupError } from "./environment-exposure-status-cleanup";
 
 export function makeAppHandlers(deps: AppEnvironmentDeps) {
   return {
@@ -128,29 +131,47 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
     },
 
     async deleteApp({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
-      const appId = pathParam(input, "appId");
-      const app = await deps.repo.identity.getApp(appId);
-      if (!app) return appNotFound(requestId);
-
-      const deleteError = await requireAppDelete(deps, appId, principal, requestId);
-      if (deleteError) return deleteError;
-
-      const mode = queryFlags(input);
-      try {
-        return await deleteAppAfterAuth(deps, app, principal, requestId, mode);
-      } catch (cause) {
-        if (!(cause instanceof EnvironmentExposureStatusCleanupError)) throw cause;
-        return renderError(
-          {
-            code: "SERVICE_UNAVAILABLE",
-            message: "Exposure status cleanup is unavailable",
-            details: { retryAfterMs: 30_000 },
-          },
-          { requestId },
-        );
-      }
+      return deleteAppRequest(deps, input, principal, requestId);
     },
   };
+}
+
+async function deleteAppRequest(
+  deps: AppEnvironmentDeps,
+  input: unknown,
+  principal: HandlerArgs<unknown>["principal"],
+  requestId: string,
+): Promise<Response> {
+  const appId = pathParam(input, "appId");
+  const app = await deps.repo.identity.getApp(appId);
+  if (!app) {
+    return resumeOrRethrowAppGone(deps, appId, principal, requestId);
+  }
+  const deleteError = await requireAppDelete(deps, appId, principal, requestId);
+  if (deleteError) return deleteError;
+  const mode = queryFlags(input);
+  try {
+    return await deleteAppAfterAuth(deps, app, principal, requestId, mode);
+  } catch (cause) {
+    const cleanupError = renderAppDeleteCleanupError(cause, requestId);
+    if (cleanupError) return cleanupError;
+    throw cause;
+  }
+}
+
+async function resumeOrRethrowAppGone(
+  deps: AppEnvironmentDeps,
+  appId: string,
+  principal: HandlerArgs<unknown>["principal"],
+  requestId: string,
+): Promise<Response> {
+  try {
+    return await resumeHoldoverFinalizeAfterAppGone(deps, appId, principal, requestId);
+  } catch (cause) {
+    const cleanupError = renderAppDeleteCleanupError(cause, requestId);
+    if (cleanupError) return cleanupError;
+    throw cause;
+  }
 }
 
 /**
@@ -210,7 +231,7 @@ async function deleteAppAfterAuth(
       appId: string,
       liveEnvironments: readonly EnvironmentRow[],
     ) =>
-      deleteAppRows(
+      deleteAppRowsWithHoldoverSaga(
         cleanupDeps,
         appId,
         app.organizationId,
@@ -234,35 +255,13 @@ async function deleteAppAfterAuth(
     return resourceNotEmptyFromBlockers(app.id, "app", blockers, "DELETE_APP", requestId);
   }
 
-  await deleteAppRows(deps, app.id, app.organizationId, environments, principal.id, requestId);
-  return Response.json({ deleted: true });
-}
-
-async function deleteAppRows(
-  deps: AppEnvironmentDeps,
-  appId: string,
-  organizationId: string,
-  environments: readonly EnvironmentRow[],
-  actorId: string,
-  requestId: string,
-): Promise<void> {
-  // Revoke + KV tombstone only — leave D1 credential rows for the cascade
-  // batch. Removing them here would destroy Client Keys before a late FK
-  // failure rolls the App/memberships back (SPL-298). The durable cache
-  // writer still sees matching revokedAt before any D1 delete.
-  for (const env of environments) {
-    await revokeEnvironmentCredentialsForAppDelete(deps, appId, env.id);
-  }
-  await deps.repo.identity.deleteAppCascade(appScope(appId));
-  // Stop every credential and finish the D1 cascade before deleting durable
-  // analytics state. Cleanup is idempotent and remains recoverable if its
-  // external request fails; a live App can never be left falsely reset.
-  const cleanup = deps.exposureStatusCleanup;
-  if (!cleanup) throw new Error("App delete requires Exposure status cleanup");
-  await cleanup.delete({
-    appId,
-    actorId,
-    orgId: organizationId,
+  await deleteAppRowsWithHoldoverSaga(
+    deps,
+    app.id,
+    app.organizationId,
+    environments,
+    principal.id,
     requestId,
-  });
+  );
+  return Response.json({ deleted: true });
 }

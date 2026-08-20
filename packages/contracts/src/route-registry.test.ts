@@ -122,6 +122,7 @@ const CANONICAL_OPERATION_IDS = [
   "experiment_results_post",
   "environment_exposure_status_get",
   "environment_exposure_status_delete",
+  "holdover_write_outbox_delete",
   "organization_usage_get",
   "openapi_document_get",
   // Privacy
@@ -222,6 +223,16 @@ describe("route registry: lookup", () => {
     const route = getRoute("flags_create");
     expect(route?.method).toBe("POST");
     expect(route?.path).toBe("/apps/:appId/flags");
+  });
+
+  it("accepts the deletion generation on internal App outbox cleanup", () => {
+    const route = getRoute("holdover_write_outbox_delete");
+    expect(
+      route?.input.safeParse({
+        params: { appId: "app-1" },
+        query: { phase: "finalize", generationId: "request-1" },
+      }).success,
+    ).toBe(true);
   });
 
   it("declares conflicts and availability failures on the App membership surface", () => {

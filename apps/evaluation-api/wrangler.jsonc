@@ -72,6 +72,14 @@
       {
         "name": "EXPOSURE_REDEMPTION_CLAIMS",
         "class_name": "ExposureRedemptionClaimDurableObject"
+      },
+      {
+        "name": "HOLDOVER_WRITE_OUTBOX",
+        "class_name": "HoldoverWriteOutboxDurableObject"
+      },
+      {
+        "name": "HOLDOVER_WRITE_APP_INVENTORY",
+        "class_name": "HoldoverWriteAppInventoryDurableObject"
       }
     ]
   },
@@ -87,6 +95,14 @@
     {
       "tag": "v3_exposure_redemption_claims",
       "new_sqlite_classes": ["ExposureRedemptionClaimDurableObject"]
+    },
+    {
+      "tag": "v4_holdover_write_outbox",
+      "new_sqlite_classes": ["HoldoverWriteOutboxDurableObject"]
+    },
+    {
+      "tag": "v5_holdover_write_app_inventory",
+      "new_sqlite_classes": ["HoldoverWriteAppInventoryDurableObject"]
     }
   ],
   "env": {
@@ -145,6 +161,14 @@
           {
             "name": "EXPOSURE_REDEMPTION_CLAIMS",
             "class_name": "ExposureRedemptionClaimDurableObject"
+          },
+          {
+            "name": "HOLDOVER_WRITE_OUTBOX",
+            "class_name": "HoldoverWriteOutboxDurableObject"
+          },
+          {
+            "name": "HOLDOVER_WRITE_APP_INVENTORY",
+            "class_name": "HoldoverWriteAppInventoryDurableObject"
           }
         ]
       },
@@ -160,6 +184,14 @@
         {
           "tag": "v3_exposure_redemption_claims",
           "new_sqlite_classes": ["ExposureRedemptionClaimDurableObject"]
+        },
+        {
+          "tag": "v4_holdover_write_outbox",
+          "new_sqlite_classes": ["HoldoverWriteOutboxDurableObject"]
+        },
+        {
+          "tag": "v5_holdover_write_app_inventory",
+          "new_sqlite_classes": ["HoldoverWriteAppInventoryDurableObject"]
         }
       ],
       "services": [
@@ -225,6 +257,14 @@
           {
             "name": "EXPOSURE_REDEMPTION_CLAIMS",
             "class_name": "ExposureRedemptionClaimDurableObject"
+          },
+          {
+            "name": "HOLDOVER_WRITE_OUTBOX",
+            "class_name": "HoldoverWriteOutboxDurableObject"
+          },
+          {
+            "name": "HOLDOVER_WRITE_APP_INVENTORY",
+            "class_name": "HoldoverWriteAppInventoryDurableObject"
           }
         ]
       },
@@ -240,6 +280,14 @@
         {
           "tag": "v3_exposure_redemption_claims",
           "new_sqlite_classes": ["ExposureRedemptionClaimDurableObject"]
+        },
+        {
+          "tag": "v4_holdover_write_outbox",
+          "new_sqlite_classes": ["HoldoverWriteOutboxDurableObject"]
+        },
+        {
+          "tag": "v5_holdover_write_app_inventory",
+          "new_sqlite_classes": ["HoldoverWriteAppInventoryDurableObject"]
         }
       ],
       "services": [

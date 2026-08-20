@@ -37,10 +37,24 @@ export class RecordingKv implements AssignmentKv {
   private readonly store = new Map<string, string>();
   readonly getCalls: string[] = [];
   readonly putCalls: string[] = [];
+  readonly deleteCalls: string[] = [];
   failPuts: boolean;
+  failDeletes: boolean;
+  failPutsRemaining: number;
+  failDeletesRemaining: number;
 
-  constructor(options: { failPuts?: boolean } = {}) {
+  constructor(
+    options: {
+      failPuts?: boolean;
+      failDeletes?: boolean;
+      failPutsRemaining?: number;
+      failDeletesRemaining?: number;
+    } = {},
+  ) {
     this.failPuts = options.failPuts ?? false;
+    this.failDeletes = options.failDeletes ?? false;
+    this.failPutsRemaining = options.failPutsRemaining ?? 0;
+    this.failDeletesRemaining = options.failDeletesRemaining ?? 0;
   }
 
   putRaw(key: string, value: string): this {
@@ -52,6 +66,10 @@ export class RecordingKv implements AssignmentKv {
     return this.store.get(key);
   }
 
+  has(key: string): boolean {
+    return this.store.has(key);
+  }
+
   get(key: string): Promise<string | null> {
     this.getCalls.push(key);
     return Promise.resolve(this.store.get(key) ?? null);
@@ -59,10 +77,27 @@ export class RecordingKv implements AssignmentKv {
 
   async put(key: string, value: string): Promise<void> {
     this.putCalls.push(key);
-    if (this.failPuts) {
+    if (this.failPuts || this.failPutsRemaining > 0) {
+      if (this.failPutsRemaining > 0) this.failPutsRemaining -= 1;
       throw new Error("forced KV put failure");
     }
     this.store.set(key, value);
+  }
+
+  async delete(key: string): Promise<void> {
+    this.deleteCalls.push(key);
+    if (this.failDeletes || this.failDeletesRemaining > 0) {
+      if (this.failDeletesRemaining > 0) this.failDeletesRemaining -= 1;
+      throw new Error("forced KV delete failure");
+    }
+    this.store.delete(key);
+  }
+
+  list(options: { prefix: string }): Promise<{ keys: { name: string }[] }> {
+    const keys = [...this.store.keys()]
+      .filter((name) => name.startsWith(options.prefix))
+      .map((name) => ({ name }));
+    return Promise.resolve({ keys });
   }
 }
 

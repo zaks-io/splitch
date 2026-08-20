@@ -23,6 +23,7 @@ export const RESET_TABLES = [
   "trusted_idps",
   "app_memberships",
   "environments",
+  "app_deletion_sagas",
   "apps",
   "org_memberships",
   "claim_verifications",

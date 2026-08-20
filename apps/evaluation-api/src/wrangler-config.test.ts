@@ -35,6 +35,40 @@ describe("Evaluation Worker service bindings", () => {
     });
   });
 
+  it.each(targets)("binds the holdover write outbox DO for %s", (_target, target) => {
+    const binding = target?.durable_objects?.bindings?.find(
+      (candidate) => candidate.name === "HOLDOVER_WRITE_OUTBOX",
+    );
+    expect(binding).toEqual({
+      name: "HOLDOVER_WRITE_OUTBOX",
+      class_name: "HoldoverWriteOutboxDurableObject",
+    });
+    expect(
+      target?.migrations?.some(
+        (migration) =>
+          migration.tag === "v4_holdover_write_outbox" &&
+          migration.new_sqlite_classes?.includes("HoldoverWriteOutboxDurableObject"),
+      ),
+    ).toBe(true);
+  });
+
+  it.each(targets)("binds the holdover write App inventory DO for %s", (_target, target) => {
+    const binding = target?.durable_objects?.bindings?.find(
+      (candidate) => candidate.name === "HOLDOVER_WRITE_APP_INVENTORY",
+    );
+    expect(binding).toEqual({
+      name: "HOLDOVER_WRITE_APP_INVENTORY",
+      class_name: "HoldoverWriteAppInventoryDurableObject",
+    });
+    expect(
+      target?.migrations?.some(
+        (migration) =>
+          migration.tag === "v5_holdover_write_app_inventory" &&
+          migration.new_sqlite_classes?.includes("HoldoverWriteAppInventoryDurableObject"),
+      ),
+    ).toBe(true);
+  });
+
   /**
    * The binding is shared, so the entrypoint behind it has to answer every sink
    * this Worker addresses. A second binding would only give the same caller a
@@ -101,6 +135,7 @@ interface WranglerTarget {
   durable_objects?: {
     bindings?: Array<{ name?: string; class_name?: string; script_name?: string }>;
   };
+  migrations?: Array<{ tag?: string; new_sqlite_classes?: string[]; new_classes?: string[] }>;
   env?: Record<string, WranglerTarget | undefined>;
   services?: Array<{ binding?: string; service?: string; entrypoint?: string }>;
 }

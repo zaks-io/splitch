@@ -32,6 +32,13 @@ const nowSeconds = () => Math.floor(NOW_MS / 1000);
 const noOpExposureStatusCleanup: EnvironmentExposureStatusCleanup = {
   delete: async () => undefined,
 };
+const noOpHoldoverWriteOutboxCleanup = {
+  prepare: async () => undefined,
+  markD1Deleted: async () => undefined,
+  finalize: async () => undefined,
+  cancel: async () => undefined,
+  delete: async () => undefined,
+};
 
 export interface FlagDefinitionHarness {
   app: Hono;
@@ -96,6 +103,7 @@ export function makeAppForRepo(
     runSnapshotDelivery,
     credentialStore,
     exposureStatusCleanup: noOpExposureStatusCleanup,
+    holdoverWriteOutboxCleanup: noOpHoldoverWriteOutboxCleanup,
     eventDefinitionStore,
     nowIso: () => NOW_ISO,
   });

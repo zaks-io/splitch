@@ -36,6 +36,13 @@ const nowIso = () => new Date(NOW_MS).toISOString();
 const noOpExposureStatusCleanup: EnvironmentExposureStatusCleanup = {
   delete: async () => undefined,
 };
+const noOpHoldoverWriteOutboxCleanup = {
+  prepare: async () => undefined,
+  markD1Deleted: async () => undefined,
+  finalize: async () => undefined,
+  cancel: async () => undefined,
+  delete: async () => undefined,
+};
 
 interface Harness {
   app: Hono;
@@ -88,6 +95,7 @@ export function makeApp(
     repo: createRepository(bindings.d1),
     credentialStore,
     exposureStatusCleanup: noOpExposureStatusCleanup,
+    holdoverWriteOutboxCleanup: noOpHoldoverWriteOutboxCleanup,
     nowIso,
   });
 }

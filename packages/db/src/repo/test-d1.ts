@@ -22,10 +22,21 @@ const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", 
  * comment broke every one of them separately.
  */
 export function migrationStatements(): string[] {
-  const sqlFiles = readdirSync(migrationsDir)
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
-  const sql = sqlFiles.map((f) => readFileSync(join(migrationsDir, f), "utf8")).join("\n");
+  return migrationFiles().flatMap(migrationFileStatements);
+}
+
+export function migrationStatementsThrough(lastFile: string): string[] {
+  const sqlFiles = migrationFiles();
+  const lastIndex = sqlFiles.indexOf(lastFile);
+  if (lastIndex < 0) throw new Error(`test-d1: migration not found: ${lastFile}`);
+  return sqlFiles.slice(0, lastIndex + 1).flatMap(migrationFileStatements);
+}
+
+export function migrationFileStatements(fileName: string): string[] {
+  if (!migrationFiles().includes(fileName)) {
+    throw new Error(`test-d1: migration not found: ${fileName}`);
+  }
+  const sql = readFileSync(join(migrationsDir, fileName), "utf8");
   // drizzle-kit separates statements with a breakpoint marker; split on it and
   // fall back to `;` so a single exec failure surfaces the offending statement.
   // Comments come off BEFORE the `;` fallback: a semicolon inside a rationale
@@ -42,6 +53,12 @@ export function migrationStatements(): string[] {
       // be flattened before it is handed over.
       .map((s) => s.replace(/\n/g, " "))
   );
+}
+
+function migrationFiles(): string[] {
+  return readdirSync(migrationsDir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
 }
 
 /**

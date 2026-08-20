@@ -17,7 +17,7 @@ export function isRetryableExposureRejection(code: ErrorCode): boolean {
   return (RETRYABLE_EXPOSURE_REJECTION_CODES as readonly ErrorCode[]).includes(code);
 }
 
-const EXPOSURE_RESULT_STATUSES = new Set(["accepted", "deduplicated", "rejected"]);
+const EXPOSURE_RESULT_STATUSES = new Set(["accepted", "deduplicated", "rejected", "suppressed"]);
 
 type ExposureResultRow = {
   readonly exposureId: string;

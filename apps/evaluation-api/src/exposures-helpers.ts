@@ -1,6 +1,6 @@
 import type { ErrorCode, ExposureBatchResult } from "@splitch/contracts";
 import { RETRYABLE_EXPOSURE_REJECTION_CODE } from "@splitch/contracts";
-import type { AssignmentStore } from "./assignment/assignment-store";
+import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import { errorCauseChain } from "./error-cause-chain";
 import {
   type ExposureTicketPayload,
@@ -94,37 +94,73 @@ export async function releaseClaimQuietly(
   }
 }
 
-export function scheduleHoldoverWrite(
+/**
+ * Completes the Assignment Store holdover or durably owns retry before the
+ * caller may report `accepted` (SPL-346). Returns a transient rejection when
+ * ownership cannot be sealed so the SDK retains the queue item. Exhausted
+ * (poisoned) retries fail loud as non-retryable INTERNAL_SERVER_ERROR so a
+ * resume-ack cannot acknowledge with no completion and no retry left.
+ * Deletion-cutoff `suppressed` is an explicit non-success batch status — never
+ * silent holdover completion.
+ */
+export async function ensureHoldoverWrite(
   ticket: {
     readonly experiment_id: string;
     readonly id_type: string;
     readonly targeting_key_hash: string;
     readonly run_id: string;
     readonly variant: string;
+    readonly issued_at: string;
   },
   scope: CredentialScope,
+  exposureId: string,
   deps: {
-    readonly assignmentStore: AssignmentStore;
-    readonly waitUntil?: (promise: Promise<unknown>) => void;
+    readonly holdoverWrite: HoldoverWriteCoordinator;
     readonly logger?: { error(message: string, detail: unknown): void };
   },
-): void {
-  const write = deps.assignmentStore
-    .putHashed({
+): Promise<ExposureBatchResult | null> {
+  try {
+    const sourceCreatedAtMs = Date.parse(ticket.issued_at);
+    const result = await deps.holdoverWrite.ensure(
+      {
+        appId: scope.appId,
+        experimentId: ticket.experiment_id,
+        idType: ticket.id_type,
+        targetingKeyHash: ticket.targeting_key_hash,
+        runId: ticket.run_id,
+        variant: ticket.variant,
+      },
+      {
+        sourceCreatedAtMs: Number.isFinite(sourceCreatedAtMs) ? sourceCreatedAtMs : undefined,
+      },
+    );
+    if (result.status === "poisoned") {
+      deps.logger?.error("holdover_write_retry_exhausted_at_ack", {
+        appId: scope.appId,
+        experimentId: ticket.experiment_id,
+        idType: ticket.id_type,
+        targetingKeyHash: ticket.targeting_key_hash,
+        runId: ticket.run_id,
+        variant: ticket.variant,
+        exposureId,
+      });
+      return rejected(exposureId, "INTERNAL_SERVER_ERROR");
+    }
+    if (result.status === "suppressed") {
+      return { exposureId, status: "suppressed", code: null };
+    }
+    return null;
+  } catch (cause) {
+    deps.logger?.error("holdover_write_ensure_failed", {
       appId: scope.appId,
       experimentId: ticket.experiment_id,
       idType: ticket.id_type,
       targetingKeyHash: ticket.targeting_key_hash,
       runId: ticket.run_id,
       variant: ticket.variant,
-    })
-    .then(
-      () => undefined,
-      (cause) => {
-        deps.logger?.error("assignment_store_put_failed", {
-          causeChain: errorCauseChain(cause),
-        });
-      },
-    );
-  deps.waitUntil?.(write);
+      exposureId,
+      causeChain: errorCauseChain(cause),
+    });
+    return rejected(exposureId, RETRYABLE_EXPOSURE_REJECTION_CODE);
+  }
 }

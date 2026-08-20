@@ -3,6 +3,7 @@ import { defineTestFileManifest } from "../../scripts/vitest-test-manifest";
 export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/repo/app-delete-cascade-isolation.test.ts",
   "src/repo/app-delete-cascade.test.ts",
+  "src/repo/app-deletion-sagas.test.ts",
   "src/repo/approval-decline-reviewer-role.test.ts",
   "src/repo/approval-disposition-isolation.test.ts",
   "src/repo/approval-variant-version-race.test.ts",

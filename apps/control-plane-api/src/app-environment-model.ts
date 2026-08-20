@@ -13,6 +13,7 @@ import { clientKeyResponse, provisionClientKey } from "./client-key-provisioning
 import type { ConfigStoreAccess } from "./config-store-do";
 import { type CredentialCacheWriterAccess, randomHex } from "./credential-cache";
 import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
+import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
 
 export interface AppEnvironmentDeps {
   repo: Repository;
@@ -20,6 +21,7 @@ export interface AppEnvironmentDeps {
   credentialCacheWriter?: CredentialCacheWriterAccess;
   configStore?: ConfigStoreAccess;
   exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
+  holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
   nowIso?: () => string;
 }
 

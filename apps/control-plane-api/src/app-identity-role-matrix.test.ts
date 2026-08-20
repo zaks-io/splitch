@@ -25,6 +25,13 @@ import {
 const noOpExposureStatusCleanup: EnvironmentExposureStatusCleanup = {
   delete: async () => undefined,
 };
+const noOpHoldoverWriteOutboxCleanup = {
+  prepare: async () => undefined,
+  markD1Deleted: async () => undefined,
+  finalize: async () => undefined,
+  cancel: async () => undefined,
+  delete: async () => undefined,
+};
 
 let dispose: () => Promise<void>;
 let repo: Repository;
@@ -40,6 +47,7 @@ beforeAll(async () => {
     // Force-delete runs Exposure status cleanup after the D1 cascade (main);
     // unit fixtures use a no-op so Tinybird is never required.
     exposureStatusCleanup: noOpExposureStatusCleanup,
+    holdoverWriteOutboxCleanup: noOpHoldoverWriteOutboxCleanup,
   });
 
   await seedFlag(local.d1, {

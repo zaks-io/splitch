@@ -128,7 +128,7 @@ describe("remaining applied D1 schema", () => {
     }
   });
 
-  it("contains the 26 named live D1 tables", async () => {
+  it("contains the 27 named live D1 tables", async () => {
     const local = await createLocalD1();
     try {
       const tables = await local.d1
@@ -139,6 +139,7 @@ describe("remaining applied D1 schema", () => {
       expect(tables.results.map((table) => table.name).sort()).toEqual([...RESET_TABLES].sort());
       expect(tables.results.map((table) => table.name).sort()).toEqual([
         "api_keys",
+        "app_deletion_sagas",
         "app_memberships",
         "approval_requests",
         "approval_reviews",

@@ -11,6 +11,7 @@ import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 import { noOpExposureStatusCleanup } from "./exposure-status-cleanup-fixture";
+import { noOpHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup-fixture";
 
 /** SPL-326 cascade test fixture: two distinct Organizations + App delete helpers. */
 
@@ -234,6 +235,7 @@ export async function makeCascadeHarness(): Promise<CascadeHarness> {
     repo: createRepository(bindings.d1),
     credentialStore: bindings.credentialKv,
     exposureStatusCleanup: noOpExposureStatusCleanup,
+    holdoverWriteOutboxCleanup: noOpHoldoverWriteOutboxCleanup,
     nowIso: () => NOW_ISO,
   });
 

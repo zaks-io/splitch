@@ -28,6 +28,7 @@ const RESET_TABLES = [
   "flags",
   "environments",
   "app_memberships",
+  "app_deletion_sagas",
   "apps",
   "org_memberships",
   "organizations",

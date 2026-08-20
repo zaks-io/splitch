@@ -21,10 +21,9 @@ import { makeCredentialHandlers } from "./credential-handlers";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
 import { registerEventDefinitionRoutes } from "./event-definition-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
-import {
-  createEnvironmentExposureStatusCleanup,
-  type EnvironmentExposureStatusCleanup,
-} from "./environment-exposure-status-cleanup";
+import { appEnvironmentCleanupDeps } from "./app-environment-cleanup-deps";
+import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
+import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
 import { diagnosableHandlers } from "./flag-config-policy";
 import { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
 import { makeHandlers } from "./handlers";
@@ -32,7 +31,7 @@ import { mountLiveUpdateRoute } from "./live-updates";
 import { makeMetricSegmentHandlers } from "./metric-segment-handlers";
 import type { MemberProfileResolver } from "./org-handlers";
 import { controlPlaneRoute } from "./routes";
-import { unavailableControlPlaneOperation } from "./unavailable-handler";
+import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
 
 /**
  * Control Plane API Worker HTTP surface.
@@ -68,6 +67,7 @@ export interface AppDeps {
   delegationBindings?: DelegationBindings;
   approvalArchiveStore?: import("./approval-archive").ApprovalArchiveStore;
   exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
+  holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
@@ -124,9 +124,7 @@ export function createApp(deps: AppDeps): Hono {
     credentialStore: deps.credentialStore,
     credentialCacheWriter: deps.credentialCacheWriter,
     configStore: deps.configStore,
-    exposureStatusCleanup:
-      deps.exposureStatusCleanup ??
-      createEnvironmentExposureStatusCleanup(deps.delegationBindings?.["analysis-api"]),
+    ...appEnvironmentCleanupDeps(deps),
     nowIso: deps.nowIso,
   });
   const registrar = controlPlaneRegistrar(deps);
@@ -248,6 +246,10 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("api_keys_list"), credentialHandlers.listApiKeys);
   registrar.mount(app, controlPlaneRoute("api_keys_create"), credentialHandlers.createApiKey);
   registrar.mount(app, controlPlaneRoute("api_keys_revoke"), credentialHandlers.revokeApiKey);
+  // Entity privacy physical purge (Assignment Store KV/DO + Tinybird) is not
+  // implemented in this slice — keep the route fail-loud unavailable rather than
+  // claiming a queued deletion job. Holdover-write Entity/App cleanup remains on
+  // the Evaluation App-deletion path.
   mountUnavailableControlPlaneRoutes(app, registrar, deps.repo);
   mountDelegatedRoutes(app, registrar, deps.delegationBindings ?? {}, deps.repo);
 
@@ -275,29 +277,6 @@ function mountAttentionRollupRoute(app: Hono, registrar: Registrar, deps: AppDep
       analysisResults: deps.analysisResults ?? unavailableAnalysisResults,
     }),
   );
-}
-
-function mountUnavailableControlPlaneRoutes(
-  app: Hono,
-  registrar: Registrar,
-  repo: Repository,
-): void {
-  for (const operationId of [
-    "organizations_delete",
-    "current_user_privacy_export",
-    "current_user_delete",
-    "organization_privacy_export",
-    "app_privacy_export",
-    "entity_privacy_export",
-    "entity_privacy_delete",
-    "privacy_requests_get",
-  ] as const) {
-    registrar.mount(
-      app,
-      controlPlaneRoute(operationId),
-      unavailableControlPlaneOperation({ repo }, operationId),
-    );
-  }
 }
 
 function mountExperimentRoutes(

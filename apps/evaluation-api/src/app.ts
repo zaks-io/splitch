@@ -1,6 +1,12 @@
 import type { AuthResolver, RateLimiter, RegistrarDeps } from "@splitch/worker-runtime";
 import { createRegistrar } from "@splitch/worker-runtime";
 import { Hono } from "hono";
+import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
+import { DirectHoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
+import {
+  makeHoldoverWriteOutboxCleanupHandler,
+  type HoldoverWriteOutboxCleanupDeps,
+} from "./assignment/holdover-write-outbox-cleanup";
 import { makeCachedEvaluationTelemetryHandler } from "./cached-evaluation-telemetry";
 import { makeApiKeyOnlyAuthResolver, makeClientKeyOnlyAuthResolver } from "./data-plane-auth";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
@@ -42,13 +48,17 @@ export interface AppDeps extends EvaluatePathDeps {
   exposureTicket: MintExposureTicketDeps & { previousTicketKey?: string };
   exposureIngestSink: ExposureIngestSink;
   exposureRedemptionClaims: ExposureRedemptionClaimStore;
+  /** Completes or durably owns Assignment Store holdover writes after redemption. */
+  holdoverWrite?: HoldoverWriteCoordinator;
+  /** Binding-door App/Entity deletion consumer for the holdover-write outbox. */
+  holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanupDeps;
   evaluationCommitSink: EvaluationCommitSink;
   evaluationUsageSink: EvaluationUsageSink;
   rateLimiter: RateLimiter;
   delegationBindings?: DelegationBindings;
   defaultHeaders?: Record<string, string>;
   observability?: RegistrarDeps["observability"];
-  /** `ctx.waitUntil` seam for the fire-and-forget Assignment Store write. */
+  /** `ctx.waitUntil` seam for the fire-and-forget Assignment Store write on evaluate. */
   waitUntil?: (promise: Promise<unknown>) => void;
 }
 
@@ -70,6 +80,7 @@ export function createApp(deps: AppDeps): Hono {
       "client-key": makeClientKeyOnlyAuthResolver(deps.dataPlaneAuthResolver),
       "api-key": makeApiKeyOnlyAuthResolver(deps.dataPlaneAuthResolver),
       "data-plane-key": deps.dataPlaneAuthResolver,
+      "internal-worker": deps.authResolver,
     },
     rateLimiter: deps.rateLimiter,
     defaultHeaders: deps.defaultHeaders,
@@ -91,17 +102,24 @@ export function createApp(deps: AppDeps): Hono {
     app,
     evaluationRoute("sdk_exposures"),
     makeExposuresHandler({
-      assignmentStore: deps.assignmentStore,
+      holdoverWrite:
+        deps.holdoverWrite ?? new DirectHoldoverWriteCoordinator(deps.assignmentStore, deps.logger),
       exposureIngestSink: deps.exposureIngestSink,
       exposureRedemptionClaims: deps.exposureRedemptionClaims,
       exposureTicket: deps.exposureTicket,
       sourceId: deps.exposureAssembly.sourceId,
-      waitUntil: deps.waitUntil,
       logger: deps.logger,
     }),
   );
   if (deps.door === "binding") {
     registrar.mount(app, evaluationRoute("flags_test_eval"), makeTestEvaluationHandler(deps));
+    if (deps.holdoverWriteOutboxCleanup) {
+      registrar.mount(
+        app,
+        evaluationRoute("holdover_write_outbox_delete"),
+        makeHoldoverWriteOutboxCleanupHandler(deps.holdoverWriteOutboxCleanup),
+      );
+    }
   }
   return app;
 }

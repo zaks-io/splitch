@@ -81,13 +81,16 @@ ExposureBatchRequest {
 ```
 ExposureBatchResponse {
   results: [                         -- same order as the request items
-    { exposureId: string, status: 'accepted' | 'deduplicated' | 'rejected',
+    { exposureId: string, status: 'accepted' | 'deduplicated' | 'rejected' | 'suppressed',
       code: ErrorCode | null }       -- non-null only when status = 'rejected'
   ]
 }
 ```
 
 `deduplicated` means this `exposureId` was already durably accepted — the ack a re-flush expects.
+`suppressed` means Entity/App deletion cutoff owned the slot — **not** holdover completion; the
+SDK drops the queue item the same way as `accepted`/`deduplicated` (no retry), but callers must
+not treat it as a successful Assignment Store write.
 
 ## Redemption semantics
 
@@ -99,8 +102,12 @@ For each accepted item, in order:
 3. Seal the canonical Exposure payload in the Event Ingest raw_events outbox
    (field-for-field the table in exposure-accessor.md; server_received_at = now;
     event_id / dedup_key generated per row as for evaluate)
-4. Async: AssignmentStore.put -> DO.putIfAbsent -> KV write-through
-   (the commit evaluate performs after its inline seal, deferred to redemption — ADR-0048)
+4. Await Assignment Store holdover-write ownership on the Evaluation Worker:
+   seal durable outbox ownership for the ticket, then attempt putIfAbsent → KV
+   write-through inline. Ownership or KV-complete success may ack; transport /
+   ownership failure rejects so the SDK retains the queue item. Exhausted
+   retries fail loud (`INTERNAL_SERVER_ERROR`). Deletion cutoff returns
+   per-item `suppressed` (not `accepted`).
 ```
 
 Ingest-write failure rejects the item loud and performs no Assignment Store write.
@@ -173,7 +180,8 @@ canonical registry) — do not invent a parallel code.
 ## Seam contract
 
 - **Port:** `redeemExposures(credential, items) -> per-item results` — side effect: canonical
-  Exposure seal + deferred Assignment Store write, per accepted item
+  Exposure seal + awaited Assignment Store holdover-write ownership (inline put attempt,
+  durable outbox retry on failure), per accepted item
 - **Left side:** the browser client's exposure queue ([browser-client.md](./browser-client.md));
   any SDK holding redeemable tickets
 - **Right side:** Evaluation Worker (owner of the Exposure pipeline seam and Assignment Store
@@ -182,7 +190,8 @@ canonical registry) — do not invent a parallel code.
 - **Failure contract:** batch gate failure → whole-request error envelope, zero rows; item
   failure → per-item `rejected` + code, siblings unaffected; transient item rejection
   (`SERVICE_UNAVAILABLE`) → SDK retries with the same `exposureId`; deterministic item
-  rejection → SDK drops after a loud log; nothing is ever silently dropped (ADR-0036)
+  rejection → SDK drops after a loud log; deletion cutoff → per-item `suppressed` (drop,
+  not success); nothing is ever silently dropped (ADR-0036)
 
 ## Sources
 

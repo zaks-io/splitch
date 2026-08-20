@@ -1,5 +1,10 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { createHealthResponse, parsePlatformTarget, routesDelegatedTo } from "@splitch/contracts";
+import {
+  createHealthResponse,
+  getRoute,
+  parsePlatformTarget,
+  routesDelegatedTo,
+} from "@splitch/contracts";
 import {
   createWorkerFaultReporter,
   createWorkerObservability,
@@ -17,6 +22,14 @@ import {
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
 import { AssignmentStoreDurableObject } from "./assignment/assignment-store-do";
+import { DurableHoldoverWriteAppInventoryClient } from "./assignment/holdover-write-app-inventory-client";
+import { HoldoverWriteAppInventoryDurableObject } from "./assignment/holdover-write-app-inventory-do";
+import { DurableHoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
+import {
+  requiredHoldoverWriteAppInventoryBinding,
+  requiredHoldoverWriteOutboxBinding,
+} from "./assignment/holdover-write-outbox-binding";
+import { HoldoverWriteOutboxDurableObject } from "./assignment/holdover-write-outbox-do";
 import { KvAssignmentStore } from "./assignment/kv-assignment-store";
 import {
   makeControlPlaneAuthResolver,
@@ -41,6 +54,11 @@ const service = "splitch-evaluation-api";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 /** The operations `api.splitch.dev` may hand this Worker over the binding (ADR-0046). */
 const delegatedRoutes = routesDelegatedTo("evaluation-api");
+const holdoverWriteOutboxCleanupRoute = getRoute("holdover_write_outbox_delete");
+if (!holdoverWriteOutboxCleanupRoute) {
+  throw new Error("evaluation-api: holdover write outbox cleanup route is not registered");
+}
+const bindingRoutes = [...delegatedRoutes, holdoverWriteOutboxCleanupRoute];
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -61,7 +79,7 @@ export default wrapWorkerHandler(handler, { surface: "evaluation-api" });
  */
 export class ControlPlaneEntrypoint extends WorkerEntrypoint<EvaluationApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    const identity = delegatedIdentityFor(request, delegatedRoutes);
+    const identity = delegatedIdentityFor(request, bindingRoutes);
     if (!identity) return notDelegatedResponse(request);
     return handleRequest(request, this.env, this.ctx, { kind: "control-plane", identity });
   }
@@ -88,6 +106,10 @@ async function handleRequest(
   const exposureRedemptionClaims = requiredExposureRedemptionClaimsBinding(
     env.EXPOSURE_REDEMPTION_CLAIMS,
   );
+  const holdoverWriteOutbox = requiredHoldoverWriteOutboxBinding(env.HOLDOVER_WRITE_OUTBOX);
+  const holdoverWriteAppInventory = new DurableHoldoverWriteAppInventoryClient(
+    requiredHoldoverWriteAppInventoryBinding(env.HOLDOVER_WRITE_APP_INVENTORY),
+  );
   const reportPropagationBreach = createWorkerFaultReporter(
     env,
     workerObservabilityWithWaitUntil("evaluation-api", ctx),
@@ -109,6 +131,12 @@ async function handleRequest(
       env.ASSIGNMENT_STORE_WRITER,
       saltStore,
     ),
+    holdoverWrite: new DurableHoldoverWriteCoordinator(holdoverWriteOutbox),
+    holdoverWriteOutboxCleanup: {
+      assignmentsKv: env.ASSIGNMENTS_KV,
+      holdoverWriteOutbox,
+      holdoverWriteAppInventory,
+    },
     exposureAssembly: {
       saltStore,
       sourceId: env.SPLITCH_SOURCE_ID ?? "local",
@@ -178,5 +206,7 @@ function requestAuthResolver(
 export {
   AssignmentStoreDurableObject,
   ExposureRedemptionClaimDurableObject,
+  HoldoverWriteAppInventoryDurableObject,
+  HoldoverWriteOutboxDurableObject,
   McpDelegationReplayDurableObject,
 };

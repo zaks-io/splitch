@@ -1,4 +1,6 @@
 import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
+import type { HoldoverWriteAppInventoryNamespace } from "./assignment/holdover-write-app-inventory";
+import type { HoldoverWriteOutboxNamespace } from "./assignment/holdover-write-outbox";
 import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store";
 import type { ExposureRedemptionClaimNamespace } from "./exposure-redemption-claim";
 import type { ConfigStoreNamespace } from "./provider/config-updates";
@@ -21,6 +23,10 @@ export interface EvaluationApiEnv {
   MCP_DELEGATION_REPLAY?: McpDelegationReplayDurableObjectNamespace;
   /** Strongly consistent Exposure Ticket claim DO namespace (SPL-345). */
   EXPOSURE_REDEMPTION_CLAIMS?: ExposureRedemptionClaimNamespace;
+  /** Durable Assignment Store holdover retry outbox (SPL-346). */
+  HOLDOVER_WRITE_OUTBOX?: HoldoverWriteOutboxNamespace;
+  /** App-scoped Entity outbox inventory + deletion coordinator (SPL-346). */
+  HOLDOVER_WRITE_APP_INVENTORY?: HoldoverWriteAppInventoryNamespace;
   EVALUATION_PRIVACY_SALT?: string;
   /** HMAC key for Exposure Ticket minting (ADR-0048). */
   EXPOSURE_TICKET_KEY?: string;

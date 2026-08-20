@@ -130,13 +130,15 @@ describe("openapi document: full route coverage", () => {
     });
   });
 
-  it("does not publish binding-only internal Exposure cleanup", () => {
+  it("does not publish binding-only internal cleanup routes", () => {
     const operations = documentOperations();
 
     expect({
       internalPaths: Object.keys(doc.paths ?? {}).filter((path) => path.startsWith("/internal/")),
       cleanupOperations: operations.filter(
-        ({ operationId }) => operationId === "environment_exposure_status_delete",
+        ({ operationId }) =>
+          operationId === "environment_exposure_status_delete" ||
+          operationId === "holdover_write_outbox_delete",
       ),
     }).toEqual({ internalPaths: [], cleanupOperations: [] });
   });

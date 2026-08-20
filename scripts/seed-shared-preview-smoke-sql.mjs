@@ -1,5 +1,7 @@
 /** SQL builders for shared-preview smoke seed / transient cleanup. */
 
+import { createHash } from "node:crypto";
+
 export const SMOKE_IDS = {
   app: "app_shared_preview_smoke",
   appOther: "app_shared_preview_smoke_other",
@@ -34,10 +36,10 @@ export const TRANSIENT_APP_KEY_PREFIXES = [
 ];
 
 /**
- * Every table carrying `app_id`, children before their transient App. D1 enforces
- * foreign keys, so a table missing here or ordered after its parent fails the App
- * delete outright rather than orphaning rows. Both the membership and the ordering
- * are derived from the Drizzle schema by shared-preview-panel-smoke.test.mjs.
+ * Every table carrying `app_id`, before its transient App. Foreign-key children
+ * must precede their parent, and no-foreign-key recovery rows must be removed
+ * before the App-backed selector disappears. Both membership and ordering are
+ * checked against the Drizzle schema by shared-preview-panel-smoke.test.mjs.
  */
 const TRANSIENT_APP_SCOPED_TABLES = [
   "approval_reviews",
@@ -60,9 +62,12 @@ const TRANSIENT_APP_SCOPED_TABLES = [
 
 export function buildCleanupSql(ids = SMOKE_IDS) {
   const scope = transientAppScope(ids.org);
-  const statements = TRANSIENT_APP_SCOPED_TABLES.map(
-    (table) => `DELETE FROM ${table} WHERE app_id IN (${scope});`,
-  );
+  const statements = [
+    `DELETE FROM app_deletion_sagas WHERE organization_scope_hash = '${organizationScopeHash(ids.org)}' OR organization_id = '${ids.org}';`,
+    ...TRANSIENT_APP_SCOPED_TABLES.map(
+      (table) => `DELETE FROM ${table} WHERE app_id IN (${scope});`,
+    ),
+  ];
   // Variants hang off flags, not apps, so they need the extra hop before flags go.
   statements.push(
     `DELETE FROM variants WHERE flag_id IN (\n  SELECT id FROM flags WHERE app_id IN (${scope})\n);`,
@@ -70,6 +75,12 @@ export function buildCleanupSql(ids = SMOKE_IDS) {
     `DELETE FROM apps WHERE id IN (${scope});`,
   );
   return `\n${statements.join("\n")}\n`;
+}
+
+function organizationScopeHash(organizationId) {
+  return createHash("sha256")
+    .update(`app-deletion-organization-scope:${organizationId}`)
+    .digest("hex");
 }
 
 function transientAppScope(orgId) {
