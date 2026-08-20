@@ -128,7 +128,9 @@ describe("App delete public finalize resume after D1 cascade", () => {
       phase: "complete",
     });
   });
+});
 
+describe("App delete public D1 cancellation races", () => {
   it("a D1 boundary crossing wins against a concurrent handler cancel", async () => {
     const realRepo = createRepository(bindings.d1);
     const realCancel = realRepo.identity.cancelAppDeletionSaga;
@@ -175,6 +177,46 @@ describe("App delete public finalize resume after D1 cascade", () => {
     expect(evaluationCancels).toBe(0);
     expect(await realRepo.identity.getApp(APP_ID)).toBeNull();
     expect(await realRepo.identity.getAppDeletionSaga(APP_ID)).toMatchObject({ phase: "complete" });
+  });
+
+  it("restores the live App when the cancel CAS response is lost after commit", async () => {
+    const realRepo = createRepository(bindings.d1);
+    const realCancel = realRepo.identity.cancelAppDeletionSaga;
+    let cancelCommitted = false;
+    let suppressed = false;
+    const holdover: HoldoverWriteOutboxCleanup = {
+      async prepare() {
+        suppressed = true;
+      },
+      async markD1Deleted() {},
+      async finalize() {},
+      async cancel() {
+        suppressed = false;
+      },
+      async delete() {},
+    };
+    const repo = {
+      ...realRepo,
+      identity: {
+        ...realRepo.identity,
+        async deleteAppCascade() {
+          throw new Error("forced failure before D1 boundary");
+        },
+        async cancelAppDeletionSaga(...args: Parameters<typeof realCancel>) {
+          cancelCommitted = await realCancel(...args);
+          throw new Error("forced lost cancel CAS response");
+        },
+      },
+    };
+    const app = createTestApp(holdover, [], false, repo);
+
+    const response = await deleteRequest(app);
+
+    expect(response.status).toBe(500);
+    expect(cancelCommitted).toBe(true);
+    expect(suppressed).toBe(false);
+    expect(await realRepo.identity.getApp(APP_ID)).not.toBeNull();
+    expect(await realRepo.identity.getAppDeletionSaga(APP_ID)).toBeNull();
   });
 });
 

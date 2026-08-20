@@ -8,6 +8,8 @@ export function holdoverWriteInventoryClientStubs(
   staleSuppressionReadsRemaining: number,
   writerPutFailsRemaining: number,
   purgeFailsRemaining: number,
+  markTransactionFailsBeforeCommitRemaining: number,
+  markTransactionThrowsAfterCommitRemaining: number,
 ): string {
   const transportAware = registerFailsRemaining > 0;
   return `
@@ -19,6 +21,8 @@ globalThis.__staleSuppressionReadsRemaining = ${String(staleSuppressionReadsRema
 globalThis.__writerPutFailsRemaining = ${String(writerPutFailsRemaining)};
 globalThis.__purgeFailsRemaining = 0;
 globalThis.__purgeFailsOnManualAlarm = ${String(purgeFailsRemaining)};
+globalThis.__markTransactionFailsBeforeCommitRemaining = ${String(markTransactionFailsBeforeCommitRemaining)};
+globalThis.__markTransactionThrowsAfterCommitRemaining = ${String(markTransactionThrowsAfterCommitRemaining)};
 const CURRENT_KV_SCHEMA_VERSION = 1;
 function assignmentWriterName(input) {
   return input.appId + ":" + input.idType + ":" + input.targetingKeyHash;
@@ -162,117 +166,5 @@ function inventoryRegisterPortForApp(client, appId) {
     registerEntity: (ref) => client.registerEntity(appId, ref),
   };
 }
-`;
-}
-
-export function holdoverWriteFaultHooks(
-  registerFailsRemaining: number,
-  suppressPutFailsRemaining: number,
-  cancelStatePutFailsRemaining: number,
-  cancelKvDeleteFailsRemaining: number,
-  staleSuppressionReadsRemaining: number,
-  writerPutFailsRemaining: number,
-  purgeFailsRemaining: number,
-): string {
-  if (
-    registerFailsRemaining <= 0 &&
-    suppressPutFailsRemaining <= 0 &&
-    cancelStatePutFailsRemaining <= 0 &&
-    cancelKvDeleteFailsRemaining <= 0 &&
-    staleSuppressionReadsRemaining <= 0 &&
-    writerPutFailsRemaining <= 0 &&
-    purgeFailsRemaining <= 0
-  ) {
-    return "";
-  }
-  return `
-const __prodInventoryFetch = HoldoverWriteAppInventoryDurableObject.prototype.fetch;
-HoldoverWriteAppInventoryDurableObject.prototype.fetch = async function (request) {
-  const url = new URL(request.url);
-  if (url.pathname === "/__test/alarm" && request.method === "POST") {
-    await this.ctx.storage.deleteAlarm();
-    if (globalThis.__purgeFailsOnManualAlarm > 0) {
-      globalThis.__purgeFailsRemaining = globalThis.__purgeFailsOnManualAlarm;
-      globalThis.__purgeFailsOnManualAlarm = 0;
-    }
-    try {
-      await this.handleAlarm();
-      return Response.json({ ok: true });
-    } catch (cause) {
-      return Response.json(
-        { error: cause instanceof Error ? cause.message : String(cause) },
-        { status: 503 },
-      );
-    }
-  }
-  if (
-    url.pathname === "/register" &&
-    request.method === "POST" &&
-    globalThis.__registerFailsRemaining > 0
-  ) {
-    globalThis.__registerFailsRemaining -= 1;
-    throw new Error("forced register transport failure");
-  }
-  const originalKv = this.env.ASSIGNMENTS_KV;
-  const originalStoragePut = this.ctx.storage.put.bind(this.ctx.storage);
-  if (url.pathname === "/begin-deletion" && globalThis.__suppressPutFailsRemaining > 0) {
-    this.env.ASSIGNMENTS_KV = failAppSuppressPut(originalKv);
-  }
-  if (url.pathname === "/begin-deletion" && globalThis.__cancelStatePutFailsRemaining > 0) {
-    this.ctx.storage.put = async (key, value) => {
-      if (
-        key === SAGA_KEY &&
-        value?.phase === "canceling" &&
-        globalThis.__cancelStatePutFailsRemaining > 0
-      ) {
-        globalThis.__cancelStatePutFailsRemaining -= 1;
-        throw new Error("forced cancel state persistence failure");
-      }
-      return originalStoragePut(key, value);
-    };
-  }
-  if (url.pathname === "/cancel-deletion" && globalThis.__cancelKvDeleteFailsRemaining > 0) {
-    this.env.ASSIGNMENTS_KV = failAppSuppressDelete(originalKv);
-  }
-  try {
-    return await __prodInventoryFetch.call(this, request);
-  } finally {
-    this.env.ASSIGNMENTS_KV = originalKv;
-    this.ctx.storage.put = originalStoragePut;
-  }
-};
-const __prodOutboxFetch = HoldoverWriteOutboxDurableObject.prototype.fetch;
-HoldoverWriteOutboxDurableObject.prototype.fetch = async function (request) {
-  const url = new URL(request.url);
-  if (url.pathname === "/__test/alarm" && request.method === "POST") {
-    await this.alarm();
-    return Response.json({ ok: true });
-  }
-  if (url.pathname === "/purge" && globalThis.__purgeFailsRemaining > 0) {
-    globalThis.__purgeFailsRemaining -= 1;
-    return Response.json({ error: "forced Entity purge failure" }, { status: 503 });
-  }
-  return __prodOutboxFetch.call(this, request);
-};
-const __prodOutboxAlarm = HoldoverWriteOutboxDurableObject.prototype.alarm;
-HoldoverWriteOutboxDurableObject.prototype.alarm = async function () {
-  const originalKv = this.env.ASSIGNMENTS_KV;
-  this.env.ASSIGNMENTS_KV = staleAppSuppressRead(originalKv);
-  try {
-    return await __prodOutboxAlarm.call(this);
-  } finally {
-    this.env.ASSIGNMENTS_KV = originalKv;
-  }
-};
-const __prodAssignmentFetch = AssignmentStoreDurableObject.prototype.fetch;
-AssignmentStoreDurableObject.prototype.fetch = async function (request) {
-  const originalKv = this.env.ASSIGNMENTS_KV;
-  this.env.ASSIGNMENTS_KV = failWriterPut(originalKv);
-  try {
-    return await __prodAssignmentFetch.call(this, request);
-  } finally {
-    this.env.ASSIGNMENTS_KV = originalKv;
-  }
-};
 `;
 }

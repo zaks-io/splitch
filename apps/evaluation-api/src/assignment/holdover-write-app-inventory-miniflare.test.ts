@@ -7,8 +7,7 @@ import {
   DurableHoldoverWriteCoordinator,
   type HoldoverWriteOutboxNamespace,
 } from "./holdover-write-outbox";
-import { appHoldoverWriteSuppressKey } from "./holdover-write-outbox-core";
-import { holdoverWriteOutboxName } from "./holdover-write-outbox-core";
+import { appHoldoverWriteSuppressKey, holdoverWriteOutboxName } from "./holdover-write-outbox-core";
 
 const PUT = {
   appId: "app-A",
@@ -169,45 +168,47 @@ describe("HoldoverWriteAppInventoryDurableObject deletion alarm recovery", () =>
     expect(await (await outboxStub.fetch("https://outbox.local/status")).json()).toMatchObject({
       jobs: [expect.objectContaining({ experimentId: PUT.experimentId })],
     });
+    const staleRecheck = await (
+      await outboxStub.fetch("https://outbox.local/__test/alarm-status")
+    ).json<{ alarm: number | null; nowMs: number }>();
+    expect(staleRecheck.alarm).not.toBeNull();
+    expect(staleRecheck.alarm).toBeGreaterThan(staleRecheck.nowMs);
     await outboxStub.fetch("https://outbox.local/__test/alarm", { method: "POST" });
     expect(await (await outboxStub.fetch("https://outbox.local/status")).json()).toEqual({
       status: "empty",
     });
+    expect(
+      await (await outboxStub.fetch("https://outbox.local/__test/alarm-status")).json(),
+    ).toMatchObject({ alarm: null });
   });
 
-  it("finishes Entity purge from the App alarm after a transient two-DO failure", async () => {
+  it("recovers finalize when the d1_deleted phase write response is lost", async () => {
     mf = await miniflareWithInventoryAndOutbox({
       registerFailsRemaining: 0,
-      purgeFailsRemaining: 1,
+      markTransactionThrowsAfterCommitRemaining: 1,
     });
     const inventoryNs = (await mf.getDurableObjectNamespace(
       "HOLDOVER_WRITE_APP_INVENTORY",
     )) as unknown as HoldoverWriteAppInventoryNamespace;
-    const outboxNs = (await mf.getDurableObjectNamespace(
-      "HOLDOVER_WRITE_OUTBOX",
-    )) as unknown as HoldoverWriteOutboxNamespace;
     const inventory = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
-    const coordinator = new DurableHoldoverWriteCoordinator(outboxNs);
     const inventoryStub = inventoryNs.get(inventoryNs.idFromName(PUT.appId));
 
-    await expect(coordinator.ensure(PUT)).resolves.toEqual({ status: "completed" });
     await inventory.beginDeletion(PUT.appId, 9_000);
-    await inventory.markD1Deleted(PUT.appId, 9_000);
-    const failedAlarm = await inventoryStub.fetch("https://inventory.local/__test/alarm", {
+    await expect(inventory.markD1Deleted(PUT.appId, 9_000)).rejects.toThrow(/HTTP 400/u);
+    expect(await inventory.status(PUT.appId)).toMatchObject({ sagaPhase: "d1_deleted" });
+    const secured = await (
+      await inventoryStub.fetch("https://inventory.local/__test/alarm-status")
+    ).json<{ alarm: number | null; nowMs: number }>();
+    expect(secured.alarm).not.toBeNull();
+    expect(secured.alarm).toBeGreaterThan(secured.nowMs);
+
+    const recovered = await inventoryStub.fetch("https://inventory.local/__test/alarm", {
       method: "POST",
     });
-    expect(failedAlarm.status).toBe(503);
-    expect(await failedAlarm.json()).toMatchObject({
-      error: expect.stringMatching(/purge|transport/u),
-    });
-    const retry = await inventoryStub.fetch("https://inventory.local/__test/alarm", {
-      method: "POST",
-    });
-    expect(retry.ok).toBe(true);
+    expect(recovered.ok).toBe(true);
     expect(await inventory.status(PUT.appId)).toMatchObject({
       sagaPhase: "completed",
       deletionComplete: true,
-      entities: [],
     });
   });
 });
@@ -220,6 +221,8 @@ async function miniflareWithInventoryAndOutbox(options: {
   staleSuppressionReadsRemaining?: number;
   writerPutFailsRemaining?: number;
   purgeFailsRemaining?: number;
+  markTransactionFailsBeforeCommitRemaining?: number;
+  markTransactionThrowsAfterCommitRemaining?: number;
 }): Promise<Miniflare> {
   return new Miniflare({
     modules: true,

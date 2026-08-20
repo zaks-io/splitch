@@ -11,6 +11,7 @@ import {
   readAppDeletionSaga,
 } from "./holdover-write-app-deletion-saga";
 import type { HoldoverWriteOutboxNamespace } from "./holdover-write-outbox";
+import type { HoldoverWriteEntityPurgePort } from "./holdover-write-app-deletion-saga-storage";
 import { holdoverWriteOutboxName } from "./holdover-write-outbox-core";
 
 export interface HoldoverWriteAppInventoryEnv {
@@ -153,14 +154,18 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
     const parsed = await parseMarkD1Body(request);
     if (!parsed.ok) return parsed.response;
     try {
-      const saga = await markAppDeletionSagaD1Deleted(
-        this.ctx.storage,
-        parsed.appId,
-        parsed.deleteBeforeTsMs,
-      );
-      if (saga.phase === "d1_deleted" || saga.phase === "finalizing") {
-        await this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
-      }
+      const retryAt = Date.now() + SAGA_RETRY_DELAY_MS;
+      const saga = await this.ctx.storage.transaction(async (transaction) => {
+        const next = await markAppDeletionSagaD1Deleted(
+          transaction,
+          parsed.appId,
+          parsed.deleteBeforeTsMs,
+        );
+        await (next.phase === "completed"
+          ? transaction.deleteAlarm()
+          : transaction.setAlarm(retryAt));
+        return next;
+      });
       return Response.json(saga);
     } catch (cause) {
       return Response.json(
@@ -194,23 +199,19 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
     };
   }
 
-  private purgePort() {
+  private purgePort(): HoldoverWriteEntityPurgePort {
     const namespace = this.env.HOLDOVER_WRITE_OUTBOX;
     if (!namespace) {
       throw new Error("HOLDOVER_WRITE_OUTBOX is required to finalize App deletion");
     }
     return {
-      async purgeEntity(deletion: {
-        readonly appId: string;
-        readonly idType: string;
-        readonly targetingKeyHash: string;
-        readonly deleteBeforeTsMs: number;
-      }) {
+      async purgeEntity(deletion) {
         const stub = namespace.get(namespace.idFromName(holdoverWriteOutboxName(deletion)));
         const response = await stub.fetch("https://holdover-write-outbox.local/purge", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ deleteBeforeTsMs: deletion.deleteBeforeTsMs }),
+          // App deletion removes the whole outbox. Cutoffs belong to Entity privacy deletion.
+          body: "{}",
         });
         if (!response.ok) {
           throw new Error(`holdover write outbox /purge failed: HTTP ${String(response.status)}`);

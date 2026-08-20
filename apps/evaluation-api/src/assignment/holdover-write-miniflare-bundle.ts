@@ -6,10 +6,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import {
-  holdoverWriteFaultHooks,
-  holdoverWriteInventoryClientStubs,
-} from "./holdover-write-miniflare-harness";
+import { holdoverWriteFaultHooks } from "./holdover-write-miniflare-faults";
+import { holdoverWriteInventoryClientStubs } from "./holdover-write-miniflare-harness";
 
 const root = dirname(fileURLToPath(import.meta.url));
 
@@ -21,6 +19,8 @@ export function bundleHoldoverWriteInventoryAndOutboxWorker(options?: {
   staleSuppressionReadsRemaining?: number;
   writerPutFailsRemaining?: number;
   purgeFailsRemaining?: number;
+  markTransactionFailsBeforeCommitRemaining?: number;
+  markTransactionThrowsAfterCommitRemaining?: number;
 }): string {
   const registerFailsRemaining = options?.registerFailsRemaining ?? 0;
   const suppressPutFailsRemaining = options?.suppressPutFailsRemaining ?? 0;
@@ -29,6 +29,10 @@ export function bundleHoldoverWriteInventoryAndOutboxWorker(options?: {
   const staleSuppressionReadsRemaining = options?.staleSuppressionReadsRemaining ?? 0;
   const writerPutFailsRemaining = options?.writerPutFailsRemaining ?? 0;
   const purgeFailsRemaining = options?.purgeFailsRemaining ?? 0;
+  const markTransactionFailsBeforeCommitRemaining =
+    options?.markTransactionFailsBeforeCommitRemaining ?? 0;
+  const markTransactionThrowsAfterCommitRemaining =
+    options?.markTransactionThrowsAfterCommitRemaining ?? 0;
   const inventory = readSource("holdover-write-app-inventory.ts");
   const sagaStorage = stripImport(
     readSource("holdover-write-app-deletion-saga-storage.ts"),
@@ -120,6 +124,8 @@ ${holdoverWriteInventoryClientStubs(
   staleSuppressionReadsRemaining,
   writerPutFailsRemaining,
   purgeFailsRemaining,
+  markTransactionFailsBeforeCommitRemaining,
+  markTransactionThrowsAfterCommitRemaining,
 )}
 ${stripExport(inventory)}
 ${stripExport(sagaStorage)}
@@ -143,6 +149,8 @@ ${holdoverWriteFaultHooks(
   staleSuppressionReadsRemaining,
   writerPutFailsRemaining,
   purgeFailsRemaining,
+  markTransactionFailsBeforeCommitRemaining,
+  markTransactionThrowsAfterCommitRemaining,
 )}
 export default {
   async fetch() {

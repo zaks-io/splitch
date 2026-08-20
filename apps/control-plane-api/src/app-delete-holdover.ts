@@ -125,13 +125,51 @@ async function recoverFailedAppDeletionBoundary(
   if (persisted?.phase !== "started") {
     throw new Error("App deletion lost its durable D1 recovery record", { cause });
   }
-  const cancelWon = await deps.repo.identity.cancelAppDeletionSaga({ appId, ...saga });
+  let cancelWon: boolean;
+  try {
+    cancelWon = await deps.repo.identity.cancelAppDeletionSaga({ appId, ...saga });
+  } catch (cancelCause) {
+    return recoverAfterAmbiguousCancel(deps, appId, cleanup, input, cause, cancelCause);
+  }
+  return recoverAfterCancelResult(deps, appId, cleanup, input, cause, cancelWon);
+}
+
+async function recoverAfterAmbiguousCancel(
+  deps: AppEnvironmentDeps,
+  appId: string,
+  cleanup: HoldoverWriteOutboxCleanup,
+  input: Parameters<HoldoverWriteOutboxCleanup["cancel"]>[0],
+  cause: unknown,
+  cancelCause: unknown,
+): Promise<void> {
+  const persisted = await deps.repo.identity.getAppDeletionSaga(appId);
+  if (persisted === null) {
+    await cleanup.cancel(input);
+    throw cause;
+  }
+  if (persisted.phase === "d1_deleted" || persisted.phase === "complete") return;
+  if (persisted.phase === "started") throw cancelCause;
+  throw new Error("App deletion lost its durable D1 recovery record", { cause: cancelCause });
+}
+
+async function recoverAfterCancelResult(
+  deps: AppEnvironmentDeps,
+  appId: string,
+  cleanup: HoldoverWriteOutboxCleanup,
+  input: Parameters<HoldoverWriteOutboxCleanup["cancel"]>[0],
+  cause: unknown,
+  cancelWon: boolean,
+): Promise<void> {
   if (cancelWon) {
     await cleanup.cancel(input);
     throw cause;
   }
   const raced = await deps.repo.identity.getAppDeletionSaga(appId);
-  if (raced?.phase !== "d1_deleted" && raced?.phase !== "complete") {
+  if (raced === null) {
+    await cleanup.cancel(input);
+    throw cause;
+  }
+  if (raced.phase !== "d1_deleted" && raced.phase !== "complete") {
     throw new Error("App deletion lost its durable D1 recovery record", { cause });
   }
 }
