@@ -2,9 +2,11 @@ type AppDeletionSagaPhase = "started" | "d1_deleted" | "complete";
 
 export interface AppDeletionSagaRow {
   readonly appId: string;
-  readonly organizationId: string;
-  readonly actorId: string;
-  readonly deleteBeforeTs: string;
+  readonly organizationId: string | null;
+  readonly actorId: string | null;
+  readonly deleteBeforeTs: string | null;
+  readonly retryActorHash: string | null;
+  readonly organizationScopeHash: string | null;
   readonly phase: AppDeletionSagaPhase;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -22,36 +24,50 @@ export function makeAppDeletionSagaRepo(d1: D1Database) {
   return {
     async beginAppDeletionSaga(input: AppDeletionSagaInput): Promise<AppDeletionSagaRow> {
       requireInput(input);
+      const retryActorHash = await appDeletionRetryActorHash(input.appId, input.actorId);
+      const organizationScopeHash = await hashDeletionIdentity(
+        "organization-scope",
+        input.organizationId,
+      );
       const result = await d1
         .prepare(
           `INSERT INTO app_deletion_sagas (
-             app_id, organization_id, actor_id, delete_before_ts, phase, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, 'started', ?, ?)
-           ON CONFLICT (app_id) DO UPDATE SET
-             organization_id = excluded.organization_id,
-             actor_id = excluded.actor_id,
-             delete_before_ts = excluded.delete_before_ts,
-             updated_at = excluded.updated_at
-           WHERE app_deletion_sagas.phase = 'started'
-           RETURNING app_id, organization_id, actor_id, delete_before_ts, phase, created_at, updated_at`,
+             app_id, organization_id, actor_id, delete_before_ts, retry_actor_hash,
+             organization_scope_hash,
+             phase, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, 'started', ?, ?)
+           ON CONFLICT (app_id) DO NOTHING
+           RETURNING app_id, organization_id, actor_id, delete_before_ts, retry_actor_hash,
+             organization_scope_hash, phase, created_at, updated_at`,
         )
         .bind(
           input.appId,
           input.organizationId,
           input.actorId,
           input.deleteBeforeTs,
+          retryActorHash,
+          organizationScopeHash,
           input.now,
           input.now,
         )
         .first<AppDeletionSagaDbRow>();
-      if (!result) throw new Error("App deletion has already crossed the D1 boundary");
-      return appDeletionSagaRow(result);
+      if (result) return appDeletionSagaRow(result);
+      const existing = await this.getAppDeletionSaga(input.appId);
+      if (
+        existing?.phase === "started" &&
+        existing.organizationId === input.organizationId &&
+        existing.actorId === input.actorId
+      ) {
+        return existing;
+      }
+      throw new Error("App deletion already has a different active recovery record");
     },
 
     async getAppDeletionSaga(appId: string): Promise<AppDeletionSagaRow | null> {
       const result = await d1
         .prepare(
-          `SELECT app_id, organization_id, actor_id, delete_before_ts, phase, created_at, updated_at
+          `SELECT app_id, organization_id, actor_id, delete_before_ts, retry_actor_hash,
+             organization_scope_hash, phase, created_at, updated_at
            FROM app_deletion_sagas WHERE app_id = ?`,
         )
         .bind(appId)
@@ -59,31 +75,75 @@ export function makeAppDeletionSagaRepo(d1: D1Database) {
       return result ? appDeletionSagaRow(result) : null;
     },
 
-    async cancelAppDeletionSaga(appId: string): Promise<void> {
-      await d1
-        .prepare("DELETE FROM app_deletion_sagas WHERE app_id = ? AND phase = 'started'")
-        .bind(appId)
+    async cancelAppDeletionSaga(input: {
+      appId: string;
+      organizationId: string;
+      actorId: string;
+      deleteBeforeTs: string;
+    }): Promise<boolean> {
+      const result = await d1
+        .prepare(
+          `DELETE FROM app_deletion_sagas
+           WHERE app_id = ? AND organization_id = ? AND actor_id = ?
+             AND delete_before_ts = ? AND phase = 'started'`,
+        )
+        .bind(input.appId, input.organizationId, input.actorId, input.deleteBeforeTs)
         .run();
+      return result.meta.changes === 1;
     },
 
     async completeAppDeletionSaga(appId: string, updatedAt: string): Promise<void> {
+      const existing = await this.getAppDeletionSaga(appId);
+      requireCompletableSaga(existing);
+      const { retryActorHash, organizationScopeHash } = await completionHashes(existing);
       const result = await d1
         .prepare(
-          `UPDATE app_deletion_sagas SET phase = 'complete', updated_at = ?
+          `UPDATE app_deletion_sagas
+           SET phase = 'complete', organization_id = NULL, actor_id = NULL,
+             delete_before_ts = NULL, retry_actor_hash = ?, organization_scope_hash = ?,
+             updated_at = ?
            WHERE app_id = ? AND phase IN ('d1_deleted', 'complete') RETURNING app_id`,
         )
-        .bind(updatedAt, appId)
+        .bind(retryActorHash, organizationScopeHash, updatedAt, appId)
         .first<{ app_id: string }>();
       if (!result) throw new Error("App deletion has not crossed the D1 boundary");
     },
   };
 }
 
+function requireCompletableSaga(
+  saga: AppDeletionSagaRow | null,
+): asserts saga is AppDeletionSagaRow {
+  if (!saga || (saga.phase !== "d1_deleted" && saga.phase !== "complete")) {
+    throw new Error("App deletion has not crossed the D1 boundary");
+  }
+}
+
+async function completionHashes(saga: AppDeletionSagaRow): Promise<{
+  retryActorHash: string;
+  organizationScopeHash: string;
+}> {
+  const retryActorHash =
+    saga.retryActorHash ??
+    (saga.actorId === null ? null : await appDeletionRetryActorHash(saga.appId, saga.actorId));
+  const organizationScopeHash =
+    saga.organizationScopeHash ??
+    (saga.organizationId === null
+      ? null
+      : await hashDeletionIdentity("organization-scope", saga.organizationId));
+  if (retryActorHash === null || organizationScopeHash === null) {
+    throw new Error("App deletion completion authorization is incomplete");
+  }
+  return { retryActorHash, organizationScopeHash };
+}
+
 interface AppDeletionSagaDbRow {
   readonly app_id: string;
-  readonly organization_id: string;
-  readonly actor_id: string;
-  readonly delete_before_ts: string;
+  readonly organization_id: string | null;
+  readonly actor_id: string | null;
+  readonly delete_before_ts: string | null;
+  readonly retry_actor_hash: string | null;
+  readonly organization_scope_hash: string | null;
   readonly phase: string;
   readonly created_at: string;
   readonly updated_at: string;
@@ -96,10 +156,22 @@ function appDeletionSagaRow(row: AppDeletionSagaDbRow): AppDeletionSagaRow {
     organizationId: row.organization_id,
     actorId: row.actor_id,
     deleteBeforeTs: row.delete_before_ts,
+    retryActorHash: row.retry_actor_hash,
+    organizationScopeHash: row.organization_scope_hash,
     phase: row.phase,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+export async function appDeletionRetryActorHash(appId: string, actorId: string): Promise<string> {
+  return hashDeletionIdentity("retry-actor", `${appId}:${actorId}`);
+}
+
+async function hashDeletionIdentity(domain: string, value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(`app-deletion-${domain}:${value}`);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function isPhase(value: string): value is AppDeletionSagaPhase {

@@ -6,6 +6,7 @@ import { afterEach, beforeEach } from "vitest";
 import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
 import type { EnvironmentExposureStatusCleanupInput } from "./environment-exposure-status-cleanup";
 import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
+import { makeControlPlaneAuthResolver } from "./auth-resolver";
 
 const APP_ID = "app_finalize_resume";
 const ORG_ID = "org_finalize_resume";
@@ -68,18 +69,32 @@ describe("App delete public finalize resume after D1 cascade", () => {
     const exposures: EnvironmentExposureStatusCleanupInput[] = [];
     const app = createTestApp(holdover, exposures);
 
-    const first = await app.request(`/apps/${APP_ID}`, { method: "DELETE" });
+    const first = await deleteRequest(app);
     expect(first.status).toBe(503);
     expect(await createRepository(bindings.d1).identity.getApp(APP_ID)).toBeNull();
-    expect(phases).toEqual(["prepare", "finalize"]);
+    expect(phases).toEqual(["prepare", "mark-d1-deleted", "finalize"]);
     expect(phases).not.toContain("cancel");
 
-    const retry = await app.request(`/apps/${APP_ID}`, { method: "DELETE" });
+    const retry = await deleteRequest(app);
     expect(retry.status).toBe(200);
     expect(await retry.json()).toEqual({ deleted: true });
-    expect(phases).toEqual(["prepare", "finalize", "finalize"]);
+    expect(phases).toEqual([
+      "prepare",
+      "mark-d1-deleted",
+      "finalize",
+      "mark-d1-deleted",
+      "finalize",
+    ]);
     expect(phases.filter((phase) => phase === "cancel")).toEqual([]);
     expect(exposures).toHaveLength(1);
+
+    const completedRetry = await deleteRequest(app);
+    expect(completedRetry.status).toBe(200);
+    const otherActor = createTestApp(holdover, exposures, false, undefined, {
+      actorId: "user_other",
+      scopes: [`app:${APP_ID}:owner`],
+    });
+    expect((await deleteRequest(otherActor)).status).toBe(403);
   });
 
   it("never cancels when the D1 commit response is lost", async () => {
@@ -104,14 +119,62 @@ describe("App delete public finalize resume after D1 cascade", () => {
     const exposures: EnvironmentExposureStatusCleanupInput[] = [];
     const app = createTestApp(holdover, exposures, true);
 
-    const response = await app.request(`/apps/${APP_ID}`, { method: "DELETE" });
+    const response = await deleteRequest(app);
 
     expect(response.status).toBe(200);
-    expect(phases).toEqual(["prepare", "finalize"]);
+    expect(phases).toEqual(["prepare", "mark-d1-deleted", "finalize"]);
     expect(await createRepository(bindings.d1).identity.getApp(APP_ID)).toBeNull();
     expect(await createRepository(bindings.d1).identity.getAppDeletionSaga(APP_ID)).toMatchObject({
       phase: "complete",
     });
+  });
+
+  it("a D1 boundary crossing wins against a concurrent handler cancel", async () => {
+    const realRepo = createRepository(bindings.d1);
+    const realCancel = realRepo.identity.cancelAppDeletionSaga;
+    const realDelete = realRepo.identity.deleteAppCascade;
+    const boundaryCrossed = deferred<void>();
+    let prepareCalls = 0;
+    let evaluationCancels = 0;
+    const holdover: HoldoverWriteOutboxCleanup = {
+      async prepare() {
+        prepareCalls += 1;
+        if (prepareCalls === 1) {
+          throw new Error("forced first prepare failure");
+        }
+      },
+      async markD1Deleted() {},
+      async finalize() {},
+      async cancel() {
+        evaluationCancels += 1;
+      },
+      async delete() {},
+    };
+    const repo = {
+      ...realRepo,
+      identity: {
+        ...realRepo.identity,
+        async cancelAppDeletionSaga(...args: Parameters<typeof realCancel>) {
+          await boundaryCrossed.promise;
+          return realCancel(...args);
+        },
+        async deleteAppCascade(...args: Parameters<typeof realDelete>) {
+          await realDelete(...args);
+          boundaryCrossed.resolve();
+        },
+      },
+    };
+    const app = createTestApp(holdover, [], false, repo);
+
+    const first = deleteRequest(app);
+    await waitFor(() => prepareCalls === 1);
+    const second = deleteRequest(app);
+    const responses = await Promise.all([first, second]);
+
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    expect(evaluationCancels).toBe(0);
+    expect(await realRepo.identity.getApp(APP_ID)).toBeNull();
+    expect(await realRepo.identity.getAppDeletionSaga(APP_ID)).toMatchObject({ phase: "complete" });
   });
 });
 
@@ -119,21 +182,30 @@ function createTestApp(
   holdover: HoldoverWriteOutboxCleanup,
   exposures: EnvironmentExposureStatusCleanupInput[],
   loseDeleteResponse = false,
+  repoOverride?: ReturnType<typeof createRepository>,
+  auth: { actorId: string; scopes: string[] } = {
+    actorId: "user_owner",
+    scopes: [`app:${APP_ID}:owner`],
+  },
 ) {
-  const authResolver: AuthResolver = () => ({
-    ok: true,
-    principal: {
-      kind: "control-plane-token",
-      id: "user_owner",
-      scopes: [`app:${APP_ID}:owner`],
-      orgId: ORG_ID,
-      appId: APP_ID,
-      environmentId: null,
-      authDoor: "device_flow",
+  const authResolver: AuthResolver = makeControlPlaneAuthResolver({
+    verifier: {
+      async verify() {
+        return {
+          sub: auth.actorId,
+          scopes: auth.scopes,
+          authDoor: "device_flow",
+        };
+      },
+    },
+    sessions: {
+      async isRevoked() {
+        return false;
+      },
     },
   });
   const rateLimiter: RateLimiter = () => ({ limited: false });
-  const repo = createRepository(bindings.d1);
+  const repo = repoOverride ?? createRepository(bindings.d1);
   const deleteAppCascade = repo.identity.deleteAppCascade;
   return createApp({
     authResolver,
@@ -158,4 +230,27 @@ function createTestApp(
     },
     holdoverWriteOutboxCleanup: holdover,
   });
+}
+
+function deleteRequest(app: ReturnType<typeof createTestApp>) {
+  return app.request(`/apps/${APP_ID}`, {
+    method: "DELETE",
+    headers: { authorization: "Bearer device-flow-token" },
+  });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error("condition was not reached");
 }

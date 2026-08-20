@@ -24,8 +24,8 @@ import {
 } from "./holdover-write-app-deletion-saga-storage";
 
 /**
- * Durable cancel: resume Entity alarms with per-Entity checkpoints, clear KV
- * tombstone, then clear DO suppress. Idempotent and alarm-resumable.
+ * Durable cancel: clear the KV tombstone, then resume Entity alarms with
+ * per-Entity checkpoints, then clear DO suppress. Idempotent and alarm-resumable.
  */
 export async function beginOrResumeAppDeletionCancelSaga(
   storage: HoldoverWriteAppInventoryStorage,
@@ -78,10 +78,6 @@ export async function advanceAppDeletionCancelSaga(
 
   const pending = [...saga.cancelResumePending];
   let cancelKvCleared = saga.cancelKvCleared;
-  if (!resume && pending.length > 0) return { done: false };
-  const failed = await resumePendingEntityAlarms(storage, saga, appId, resume, pending);
-  if (failed.length > 0) return { done: false };
-
   if (!cancelKvCleared) {
     const deleteKey = kv.delete?.bind(kv);
     if (!deleteKey) {
@@ -93,10 +89,16 @@ export async function advanceAppDeletionCancelSaga(
       phase: "canceling",
       appId: saga.appId,
       deleteBeforeTsMs: saga.deleteBeforeTsMs,
-      cancelResumePending: [],
+      cancelResumePending: pending,
       cancelKvCleared: true,
     });
   }
+
+  if (!resume && pending.length > 0) return { done: false };
+
+  const currentSaga = { ...saga, cancelKvCleared };
+  const failed = await resumePendingEntityAlarms(storage, currentSaga, appId, resume, pending);
+  if (failed.length > 0) return { done: false };
 
   await storage.delete(SAGA_SUPPRESSED_KEY);
   await storage.delete(SAGA_DELETE_BEFORE_TS_KEY);

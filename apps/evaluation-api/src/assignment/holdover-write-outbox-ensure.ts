@@ -21,6 +21,8 @@ export interface HoldoverWriteEnsureOptions {
   readonly sourceCreatedAtMs?: number;
 }
 
+const APP_SUPPRESSION_RECHECK_MS = 60_000;
+
 /** Registers this Entity in the App inventory before ownership is acknowledged. */
 export interface HoldoverWriteInventoryRegisterPort {
   registerEntity(ref: {
@@ -101,8 +103,9 @@ export async function runHoldoverWriteAlarm(
 
   const appId = jobs[0]?.appId;
   if (appId !== undefined && (await suppression?.isAppSuppressed(appId))) {
-    // Freeze: stop spinning without purging accepted durable work.
-    await storage.deleteAlarm();
+    // KV deletes are eventually consistent. Keep accepted work durably
+    // recheckable until every location observes App cancellation.
+    await storage.setAlarm(nowMs + APP_SUPPRESSION_RECHECK_MS);
     return;
   }
 
@@ -135,7 +138,7 @@ async function attemptHoldoverWriteJob(
   suppression?: HoldoverWriteSuppressionPort,
 ): Promise<HoldoverWriteEnsureResult> {
   if (suppression && (await suppression.isAppSuppressed(job.appId))) {
-    await storage.deleteAlarm();
+    await storage.setAlarm(nowMs + APP_SUPPRESSION_RECHECK_MS);
     return { status: "suppressed" };
   }
   if (await isStaleUnderEntityCutoff(storage, job.createdAtMs)) {

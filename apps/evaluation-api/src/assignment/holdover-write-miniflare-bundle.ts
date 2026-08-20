@@ -17,10 +17,18 @@ export function bundleHoldoverWriteInventoryAndOutboxWorker(options?: {
   registerFailsRemaining?: number;
   suppressPutFailsRemaining?: number;
   cancelStatePutFailsRemaining?: number;
+  cancelKvDeleteFailsRemaining?: number;
+  staleSuppressionReadsRemaining?: number;
+  writerPutFailsRemaining?: number;
+  purgeFailsRemaining?: number;
 }): string {
   const registerFailsRemaining = options?.registerFailsRemaining ?? 0;
   const suppressPutFailsRemaining = options?.suppressPutFailsRemaining ?? 0;
   const cancelStatePutFailsRemaining = options?.cancelStatePutFailsRemaining ?? 0;
+  const cancelKvDeleteFailsRemaining = options?.cancelKvDeleteFailsRemaining ?? 0;
+  const staleSuppressionReadsRemaining = options?.staleSuppressionReadsRemaining ?? 0;
+  const writerPutFailsRemaining = options?.writerPutFailsRemaining ?? 0;
+  const purgeFailsRemaining = options?.purgeFailsRemaining ?? 0;
   const inventory = readSource("holdover-write-app-inventory.ts");
   const sagaStorage = stripImport(
     readSource("holdover-write-app-deletion-saga-storage.ts"),
@@ -108,6 +116,10 @@ ${holdoverWriteInventoryClientStubs(
   registerFailsRemaining,
   suppressPutFailsRemaining,
   cancelStatePutFailsRemaining,
+  cancelKvDeleteFailsRemaining,
+  staleSuppressionReadsRemaining,
+  writerPutFailsRemaining,
+  purgeFailsRemaining,
 )}
 ${stripExport(inventory)}
 ${stripExport(sagaStorage)}
@@ -127,6 +139,10 @@ ${holdoverWriteFaultHooks(
   registerFailsRemaining,
   suppressPutFailsRemaining,
   cancelStatePutFailsRemaining,
+  cancelKvDeleteFailsRemaining,
+  staleSuppressionReadsRemaining,
+  writerPutFailsRemaining,
+  purgeFailsRemaining,
 )}
 export default {
   async fetch() {

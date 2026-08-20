@@ -18,7 +18,7 @@ const SCHEMA = [
   `CREATE TABLE org_memberships (org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (org_id, user_id))`,
   `CREATE TABLE apps (id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
   `CREATE UNIQUE INDEX apps_org_key_unique ON apps (organization_id, key)`,
-  `CREATE TABLE app_deletion_sagas (app_id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL, actor_id TEXT NOT NULL, delete_before_ts TEXT NOT NULL, phase TEXT NOT NULL CHECK (phase IN ('started', 'd1_deleted', 'complete')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE app_deletion_sagas (app_id TEXT PRIMARY KEY NOT NULL, organization_id TEXT, actor_id TEXT, delete_before_ts TEXT, retry_actor_hash TEXT NOT NULL, organization_scope_hash TEXT NOT NULL, phase TEXT NOT NULL CHECK (phase IN ('started', 'd1_deleted', 'complete')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE app_memberships (app_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (app_id, user_id))`,
   `CREATE TABLE environments (id TEXT PRIMARY KEY NOT NULL, app_id TEXT NOT NULL, key TEXT NOT NULL, name TEXT NOT NULL, policy TEXT DEFAULT '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}' NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
   `CREATE UNIQUE INDEX environments_app_key_unique ON environments (app_id, key)`,

@@ -4,12 +4,21 @@ export function holdoverWriteInventoryClientStubs(
   registerFailsRemaining: number,
   suppressPutFailsRemaining: number,
   cancelStatePutFailsRemaining: number,
+  cancelKvDeleteFailsRemaining: number,
+  staleSuppressionReadsRemaining: number,
+  writerPutFailsRemaining: number,
+  purgeFailsRemaining: number,
 ): string {
   const transportAware = registerFailsRemaining > 0;
   return `
 globalThis.__registerFailsRemaining = ${String(registerFailsRemaining)};
 globalThis.__suppressPutFailsRemaining = ${String(suppressPutFailsRemaining)};
 globalThis.__cancelStatePutFailsRemaining = ${String(cancelStatePutFailsRemaining)};
+globalThis.__cancelKvDeleteFailsRemaining = ${String(cancelKvDeleteFailsRemaining)};
+globalThis.__staleSuppressionReadsRemaining = ${String(staleSuppressionReadsRemaining)};
+globalThis.__writerPutFailsRemaining = ${String(writerPutFailsRemaining)};
+globalThis.__purgeFailsRemaining = 0;
+globalThis.__purgeFailsOnManualAlarm = ${String(purgeFailsRemaining)};
 const CURRENT_KV_SCHEMA_VERSION = 1;
 function assignmentWriterName(input) {
   return input.appId + ":" + input.idType + ":" + input.targetingKeyHash;
@@ -49,6 +58,48 @@ function failAppSuppressPut(kv) {
         globalThis.__suppressPutFailsRemaining -= 1;
         throw new Error("forced ambiguous App suppress KV put failure");
       }
+    },
+  };
+}
+function failAppSuppressDelete(kv) {
+  return {
+    get: (key) => kv.get(key),
+    put: (key, value) => kv.put(key, value),
+    delete: async (key) => {
+      if (globalThis.__cancelKvDeleteFailsRemaining > 0) {
+        globalThis.__cancelKvDeleteFailsRemaining -= 1;
+        throw new Error("forced App suppress KV delete failure");
+      }
+      return kv.delete(key);
+    },
+  };
+}
+function staleAppSuppressRead(kv) {
+  return {
+    get: async (key) => {
+      if (
+        key.startsWith("holdover-write-suppress:app:") &&
+        globalThis.__staleSuppressionReadsRemaining > 0
+      ) {
+        globalThis.__staleSuppressionReadsRemaining -= 1;
+        return "1";
+      }
+      return kv.get(key);
+    },
+    put: (key, value) => kv.put(key, value),
+    delete: (key) => kv.delete(key),
+  };
+}
+function failWriterPut(kv) {
+  return {
+    get: (key) => kv.get(key),
+    delete: (key) => kv.delete(key),
+    put: async (key, value) => {
+      if (globalThis.__writerPutFailsRemaining > 0) {
+        globalThis.__writerPutFailsRemaining -= 1;
+        throw new Error("forced assignment writer KV put failure");
+      }
+      return kv.put(key, value);
     },
   };
 }
@@ -118,11 +169,19 @@ export function holdoverWriteFaultHooks(
   registerFailsRemaining: number,
   suppressPutFailsRemaining: number,
   cancelStatePutFailsRemaining: number,
+  cancelKvDeleteFailsRemaining: number,
+  staleSuppressionReadsRemaining: number,
+  writerPutFailsRemaining: number,
+  purgeFailsRemaining: number,
 ): string {
   if (
     registerFailsRemaining <= 0 &&
     suppressPutFailsRemaining <= 0 &&
-    cancelStatePutFailsRemaining <= 0
+    cancelStatePutFailsRemaining <= 0 &&
+    cancelKvDeleteFailsRemaining <= 0 &&
+    staleSuppressionReadsRemaining <= 0 &&
+    writerPutFailsRemaining <= 0 &&
+    purgeFailsRemaining <= 0
   ) {
     return "";
   }
@@ -131,8 +190,20 @@ const __prodInventoryFetch = HoldoverWriteAppInventoryDurableObject.prototype.fe
 HoldoverWriteAppInventoryDurableObject.prototype.fetch = async function (request) {
   const url = new URL(request.url);
   if (url.pathname === "/__test/alarm" && request.method === "POST") {
-    await this.alarm();
-    return Response.json({ ok: true });
+    await this.ctx.storage.deleteAlarm();
+    if (globalThis.__purgeFailsOnManualAlarm > 0) {
+      globalThis.__purgeFailsRemaining = globalThis.__purgeFailsOnManualAlarm;
+      globalThis.__purgeFailsOnManualAlarm = 0;
+    }
+    try {
+      await this.handleAlarm();
+      return Response.json({ ok: true });
+    } catch (cause) {
+      return Response.json(
+        { error: cause instanceof Error ? cause.message : String(cause) },
+        { status: 503 },
+      );
+    }
   }
   if (
     url.pathname === "/register" &&
@@ -160,11 +231,47 @@ HoldoverWriteAppInventoryDurableObject.prototype.fetch = async function (request
       return originalStoragePut(key, value);
     };
   }
+  if (url.pathname === "/cancel-deletion" && globalThis.__cancelKvDeleteFailsRemaining > 0) {
+    this.env.ASSIGNMENTS_KV = failAppSuppressDelete(originalKv);
+  }
   try {
     return await __prodInventoryFetch.call(this, request);
   } finally {
     this.env.ASSIGNMENTS_KV = originalKv;
     this.ctx.storage.put = originalStoragePut;
+  }
+};
+const __prodOutboxFetch = HoldoverWriteOutboxDurableObject.prototype.fetch;
+HoldoverWriteOutboxDurableObject.prototype.fetch = async function (request) {
+  const url = new URL(request.url);
+  if (url.pathname === "/__test/alarm" && request.method === "POST") {
+    await this.alarm();
+    return Response.json({ ok: true });
+  }
+  if (url.pathname === "/purge" && globalThis.__purgeFailsRemaining > 0) {
+    globalThis.__purgeFailsRemaining -= 1;
+    return Response.json({ error: "forced Entity purge failure" }, { status: 503 });
+  }
+  return __prodOutboxFetch.call(this, request);
+};
+const __prodOutboxAlarm = HoldoverWriteOutboxDurableObject.prototype.alarm;
+HoldoverWriteOutboxDurableObject.prototype.alarm = async function () {
+  const originalKv = this.env.ASSIGNMENTS_KV;
+  this.env.ASSIGNMENTS_KV = staleAppSuppressRead(originalKv);
+  try {
+    return await __prodOutboxAlarm.call(this);
+  } finally {
+    this.env.ASSIGNMENTS_KV = originalKv;
+  }
+};
+const __prodAssignmentFetch = AssignmentStoreDurableObject.prototype.fetch;
+AssignmentStoreDurableObject.prototype.fetch = async function (request) {
+  const originalKv = this.env.ASSIGNMENTS_KV;
+  this.env.ASSIGNMENTS_KV = failWriterPut(originalKv);
+  try {
+    return await __prodAssignmentFetch.call(this, request);
+  } finally {
+    this.env.ASSIGNMENTS_KV = originalKv;
   }
 };
 `;

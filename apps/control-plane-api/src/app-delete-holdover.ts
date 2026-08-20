@@ -4,7 +4,7 @@
  * @module
  */
 
-import { appScope } from "@splitch/db";
+import { appDeletionRetryActorHash, appScope } from "@splitch/db";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { revokeEnvironmentCredentialsForAppDelete } from "./app-environment-credentials";
 import {
@@ -14,7 +14,10 @@ import {
   nowIso,
 } from "./app-environment-model";
 import { EnvironmentExposureStatusCleanupError } from "./environment-exposure-status-cleanup";
-import { HoldoverWriteOutboxCleanupError } from "./holdover-write-outbox-cleanup";
+import {
+  type HoldoverWriteOutboxCleanup,
+  HoldoverWriteOutboxCleanupError,
+} from "./holdover-write-outbox-cleanup";
 
 export function renderAppDeleteCleanupError(cause: unknown, requestId: string): Response | null {
   if (cause instanceof EnvironmentExposureStatusCleanupError) {
@@ -58,36 +61,23 @@ export async function deleteAppRowsWithHoldoverSaga(
     deleteBeforeTs: now,
     now,
   });
+  const activeSaga = requireActiveSaga(saga);
   const holdoverInput = {
     appId,
     actorId,
     orgId: organizationId,
     requestId,
-    deleteBeforeTs: saga.deleteBeforeTs,
+    deleteBeforeTs: activeSaga.deleteBeforeTs,
   };
-  try {
-    await holdoverCleanup.prepare(holdoverInput);
-    for (const env of environments) {
-      await revokeEnvironmentCredentialsForAppDelete(deps, appId, env.id);
-    }
-    await deps.repo.identity.deleteAppCascade(appScope(appId), {
-      actorId: saga.actorId,
-      organizationId: saga.organizationId,
-      deleteBeforeTs: saga.deleteBeforeTs,
-      updatedAt: nowIso(deps),
-    });
-  } catch (cause) {
-    const persisted = await deps.repo.identity.getAppDeletionSaga(appId);
-    const crossedBoundary = persisted?.phase === "d1_deleted" || persisted?.phase === "complete";
-    if (!crossedBoundary) {
-      if (persisted?.phase !== "started") {
-        throw new Error("App deletion lost its durable D1 recovery record", { cause });
-      }
-      await holdoverCleanup.cancel(holdoverInput);
-      await deps.repo.identity.cancelAppDeletionSaga(appId);
-      throw cause;
-    }
-  }
+  await prepareAndCrossAppDeletionBoundary(
+    deps,
+    appId,
+    environments,
+    activeSaga,
+    holdoverCleanup,
+    holdoverInput,
+  );
+  await holdoverCleanup.markD1Deleted(holdoverInput);
   await holdoverCleanup.finalize(holdoverInput);
   const cleanup = deps.exposureStatusCleanup;
   if (!cleanup) throw new Error("App delete requires Exposure status cleanup");
@@ -98,6 +88,52 @@ export async function deleteAppRowsWithHoldoverSaga(
     requestId,
   });
   await deps.repo.identity.completeAppDeletionSaga(appId, nowIso(deps));
+}
+
+async function prepareAndCrossAppDeletionBoundary(
+  deps: AppEnvironmentDeps,
+  appId: string,
+  environments: readonly EnvironmentRow[],
+  saga: ReturnType<typeof requireActiveSaga>,
+  cleanup: HoldoverWriteOutboxCleanup,
+  input: Parameters<HoldoverWriteOutboxCleanup["prepare"]>[0],
+): Promise<void> {
+  try {
+    await cleanup.prepare(input);
+    for (const environment of environments) {
+      await revokeEnvironmentCredentialsForAppDelete(deps, appId, environment.id);
+    }
+    await deps.repo.identity.deleteAppCascade(appScope(appId), {
+      ...saga,
+      updatedAt: nowIso(deps),
+    });
+  } catch (cause) {
+    await recoverFailedAppDeletionBoundary(deps, appId, saga, cleanup, input, cause);
+  }
+}
+
+async function recoverFailedAppDeletionBoundary(
+  deps: AppEnvironmentDeps,
+  appId: string,
+  saga: ReturnType<typeof requireActiveSaga>,
+  cleanup: HoldoverWriteOutboxCleanup,
+  input: Parameters<HoldoverWriteOutboxCleanup["cancel"]>[0],
+  cause: unknown,
+): Promise<void> {
+  const persisted = await deps.repo.identity.getAppDeletionSaga(appId);
+  if (persisted?.phase === "d1_deleted" || persisted?.phase === "complete") return;
+  if (persisted?.phase !== "started") {
+    throw new Error("App deletion lost its durable D1 recovery record", { cause });
+  }
+  const cancelWon = await deps.repo.identity.cancelAppDeletionSaga({ appId, ...saga });
+  if (cancelWon) {
+    await cleanup.cancel(input);
+    throw cause;
+  }
+  const raced = await deps.repo.identity.getAppDeletionSaga(appId);
+  if (raced?.phase !== "d1_deleted" && raced?.phase !== "complete") {
+    throw new Error("App deletion lost its durable D1 recovery record", { cause });
+  }
 }
 
 /**
@@ -112,11 +148,13 @@ export async function resumeHoldoverFinalizeAfterAppGone(
 ): Promise<Response> {
   const saga = await deps.repo.identity.getAppDeletionSaga(appId);
   if (!saga) return appNotFound(requestId);
-  if (
-    saga.actorId !== principal.id ||
-    !principal.scopes.includes(`app:${appId}:owner`) ||
-    principal.orgId !== saga.organizationId
-  ) {
+  const actorMatches =
+    saga.phase === "complete"
+      ? saga.retryActorHash !== null
+        ? saga.retryActorHash === (await appDeletionRetryActorHash(appId, principal.id))
+        : saga.actorId === principal.id
+      : saga.actorId === principal.id;
+  if (!actorMatches || !principal.scopes.includes(`app:${appId}:owner`)) {
     return renderError(
       {
         code: "FORBIDDEN",
@@ -131,20 +169,46 @@ export async function resumeHoldoverFinalizeAfterAppGone(
       "control-plane-api: App deletion has not crossed the irreversible boundary",
     );
   }
-  if (saga.phase === "complete") return Response.json({ deleted: true });
+  if (saga.phase === "complete") {
+    await deps.repo.identity.completeAppDeletionSaga(appId, nowIso(deps));
+    return Response.json({ deleted: true });
+  }
+  const activeSaga = requireActiveSaga(saga);
 
   const holdoverCleanup = deps.holdoverWriteOutboxCleanup;
   if (!holdoverCleanup) throw new Error("App delete requires holdover write outbox cleanup");
   const holdoverInput = {
     appId,
     actorId: principal.id,
-    orgId: saga.organizationId,
+    orgId: activeSaga.organizationId,
     requestId,
   };
+  await holdoverCleanup.markD1Deleted(holdoverInput);
   await holdoverCleanup.finalize(holdoverInput);
   const cleanup = deps.exposureStatusCleanup;
   if (!cleanup) throw new Error("App delete requires Exposure status cleanup");
   await cleanup.delete(holdoverInput);
   await deps.repo.identity.completeAppDeletionSaga(appId, nowIso(deps));
   return Response.json({ deleted: true });
+}
+
+function requireActiveSaga(saga: {
+  readonly phase: string;
+  readonly organizationId: string | null;
+  readonly actorId: string | null;
+  readonly deleteBeforeTs: string | null;
+}) {
+  if (
+    saga.phase === "complete" ||
+    saga.organizationId === null ||
+    saga.actorId === null ||
+    saga.deleteBeforeTs === null
+  ) {
+    throw new Error("App deletion active recovery record is incomplete");
+  }
+  return {
+    organizationId: saga.organizationId,
+    actorId: saga.actorId,
+    deleteBeforeTs: saga.deleteBeforeTs,
+  };
 }

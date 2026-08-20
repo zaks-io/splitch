@@ -91,9 +91,11 @@ export const apps = sqliteTable(
  */
 export const appDeletionSagas = sqliteTable("app_deletion_sagas", {
   appId: text("app_id").primaryKey(),
-  organizationId: text("organization_id").notNull(),
-  actorId: text("actor_id").notNull(),
-  deleteBeforeTs: text("delete_before_ts").notNull(),
+  organizationId: text("organization_id"),
+  actorId: text("actor_id"),
+  deleteBeforeTs: text("delete_before_ts"),
+  retryActorHash: text("retry_actor_hash"),
+  organizationScopeHash: text("organization_scope_hash"),
   phase: text("phase").notNull(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),

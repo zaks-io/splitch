@@ -4,6 +4,7 @@ import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-in
 import { handleHoldoverWriteAppInventoryFetch } from "./holdover-write-app-inventory-fetch";
 import {
   advanceAppDeletionCancelSaga,
+  advanceAppDeletionFinalizeSaga,
   beginOrResumeAppDeletionCancelSaga,
   markAppDeletionSagaD1Deleted,
   prepareAppDeletionSaga,
@@ -18,7 +19,7 @@ export interface HoldoverWriteAppInventoryEnv {
   HOLDOVER_WRITE_APP_INVENTORY?: HoldoverWriteAppInventoryNamespace;
 }
 
-const CANCEL_RETRY_DELAY_MS = 1_000;
+const SAGA_RETRY_DELAY_MS = 1_000;
 
 /**
  * One Durable Object per App: indexes Entity holdover-write outboxes and owns
@@ -53,21 +54,26 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
 
   private async handleAlarm(): Promise<void> {
     const saga = await readAppDeletionSaga(this.ctx.storage);
-    if (saga === null || (saga.phase !== "preparing" && saga.phase !== "canceling")) return;
-    await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
-    const advanced = await beginOrResumeAppDeletionCancelSaga(
-      this.ctx.storage,
-      this.env.ASSIGNMENTS_KV,
-      saga.appId,
-      this.resumePort(),
-    );
+    if (saga === null) return;
+    await this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
+    const advanced =
+      saga.phase === "preparing" || saga.phase === "canceling"
+        ? await beginOrResumeAppDeletionCancelSaga(
+            this.ctx.storage,
+            this.env.ASSIGNMENTS_KV,
+            saga.appId,
+            this.resumePort(),
+          )
+        : saga.phase === "d1_deleted" || saga.phase === "finalizing"
+          ? await advanceAppDeletionFinalizeSaga(this.ctx.storage, saga.appId, this.purgePort())
+          : { done: true };
     if (advanced.done) await this.ctx.storage.deleteAlarm();
   }
 
   private async beginDeletion(request: Request): Promise<Response> {
     const parsed = await parseDeletionBody(request);
     if (!parsed.ok) return parsed.response;
-    await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
+    await this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
     try {
       const result = await prepareAppDeletionSaga(
         this.ctx.storage,
@@ -98,7 +104,7 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
   private async cancelDeletion(request: Request): Promise<Response> {
     const parsed = await parseAppIdBody(request, this.ctx.id.name);
     if (!parsed.ok) return parsed.response;
-    await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
+    await this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
     try {
       const result = await beginOrResumeAppDeletionCancelSaga(
         this.ctx.storage,
@@ -125,7 +131,7 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
   private async advanceCancel(request: Request): Promise<Response> {
     const parsed = await parseAppIdBody(request, this.ctx.id.name);
     if (!parsed.ok) return parsed.response;
-    await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
+    await this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
     try {
       const advanced = await advanceAppDeletionCancelSaga(
         this.ctx.storage,
@@ -152,6 +158,9 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
         parsed.appId,
         parsed.deleteBeforeTsMs,
       );
+      if (saga.phase === "d1_deleted" || saga.phase === "finalizing") {
+        await this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
+      }
       return Response.json(saga);
     } catch (cause) {
       return Response.json(
@@ -180,6 +189,31 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
           throw new Error(
             `holdover write outbox /resume-alarms failed: HTTP ${String(response.status)}`,
           );
+        }
+      },
+    };
+  }
+
+  private purgePort() {
+    const namespace = this.env.HOLDOVER_WRITE_OUTBOX;
+    if (!namespace) {
+      throw new Error("HOLDOVER_WRITE_OUTBOX is required to finalize App deletion");
+    }
+    return {
+      async purgeEntity(deletion: {
+        readonly appId: string;
+        readonly idType: string;
+        readonly targetingKeyHash: string;
+        readonly deleteBeforeTsMs: number;
+      }) {
+        const stub = namespace.get(namespace.idFromName(holdoverWriteOutboxName(deletion)));
+        const response = await stub.fetch("https://holdover-write-outbox.local/purge", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ deleteBeforeTsMs: deletion.deleteBeforeTsMs }),
+        });
+        if (!response.ok) {
+          throw new Error(`holdover write outbox /purge failed: HTTP ${String(response.status)}`);
         }
       },
     };

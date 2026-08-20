@@ -94,26 +94,32 @@ describe("holdover write App deletion saga boundaries", () => {
       },
     };
 
-    await expect(beginOrResumeAppDeletionCancelSaga(storage, kv, "app-A", resume)).resolves.toEqual(
-      { done: false, cancelled: true },
+    kv.failDeletesRemaining = 1;
+    await expect(beginOrResumeAppDeletionCancelSaga(storage, kv, "app-A", resume)).rejects.toThrow(
+      /forced KV delete failure/,
     );
+    expect(resumed).toEqual([]);
+    expect(await readAppDeletionSaga(storage)).toMatchObject({
+      phase: "canceling",
+      cancelKvCleared: false,
+    });
+
+    await expect(advanceAppDeletionCancelSaga(storage, kv, "app-A", resume)).resolves.toEqual({
+      done: false,
+    });
     expect(await readAppDeletionSaga(storage)).toMatchObject({
       phase: "canceling",
       cancelResumePending: [{ idType: "user", targetingKeyHash: "hash-1" }],
     });
     expect(resumed).toEqual(["hash-2"]);
 
-    kv.failDeletesRemaining = 1;
-    await expect(advanceAppDeletionCancelSaga(storage, kv, "app-A", resume)).rejects.toThrow(
-      /forced KV delete failure/,
-    );
-    expect(resumed).toEqual(["hash-2", "hash-1"]);
-    expect(kv.has(appHoldoverWriteSuppressKey("app-A"))).toBe(true);
+    expect(kv.has(appHoldoverWriteSuppressKey("app-A"))).toBe(false);
     expect(await storage.get<boolean>("suppressed")).toBe(true);
 
     await expect(advanceAppDeletionCancelSaga(storage, kv, "app-A", resume)).resolves.toEqual({
       done: true,
     });
+    expect(resumed).toEqual(["hash-2", "hash-1"]);
     expect(kv.has(appHoldoverWriteSuppressKey("app-A"))).toBe(false);
     expect(await storage.get<boolean>("suppressed")).toBeUndefined();
     expect(await readAppDeletionSaga(storage)).toBeNull();

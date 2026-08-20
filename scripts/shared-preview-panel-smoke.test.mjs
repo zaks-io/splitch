@@ -91,12 +91,23 @@ test("cleanup removes App deletion recovery rows before their App selector disap
   const appAt = sql.indexOf("DELETE FROM apps ");
   assert.ok(
     recoveryAt !== -1 && recoveryAt < appAt,
-    "cleanup deletes Apps before their no-foreign-key recovery rows, leaving them orphaned",
+    "cleanup deletes Apps before their durable recovery rows, leaving them orphaned",
   );
+  assert.match(
+    sql,
+    /DELETE FROM app_deletion_sagas WHERE organization_scope_hash = '[a-f0-9]{64}'/u,
+    "cleanup cannot remove recovery rows after their App selector is already gone",
+  );
+  assert.match(sql, new RegExp(`OR organization_id = '${SMOKE_IDS.org}'`));
 });
 
 test("cleanup names only tables that exist in the Drizzle schema", () => {
-  const schemaTables = new Set([...appScopedSchemaTables(), "apps", "variants"]);
+  const schemaTables = new Set([
+    ...appScopedSchemaTables(),
+    "app_deletion_sagas",
+    "apps",
+    "variants",
+  ]);
   for (const table of buildCleanupSql().matchAll(/DELETE FROM ([a-z_]+) /g)) {
     assert.ok(schemaTables.has(table[1]), `cleanup deletes from unknown table ${table[1]}`);
   }

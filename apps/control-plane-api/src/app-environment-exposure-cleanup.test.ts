@@ -145,7 +145,7 @@ describe("App and Environment Exposure status cleanup", () => {
       method: "DELETE",
     });
     expect(response.status).toBe(200);
-    expect(holdover).toEqual(["prepare", "finalize"]);
+    expect(holdover).toEqual(["prepare", "mark-d1-deleted", "finalize"]);
     expect(await createRepository(bindings.d1).identity.getApp(APP_ID)).toBeNull();
   });
 
