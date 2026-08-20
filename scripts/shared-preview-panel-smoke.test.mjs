@@ -80,9 +80,19 @@ test("cleanup deletes from every app_id table in the Drizzle schema", () => {
     assert.match(
       sql,
       new RegExp(`DELETE FROM ${table} `),
-      `cleanup never deletes ${table}, so the transient App delete fails on its foreign key`,
+      `cleanup never deletes ${table}, so transient rows survive or the App delete fails`,
     );
   }
+});
+
+test("cleanup removes App deletion recovery rows before their App selector disappears", () => {
+  const sql = buildCleanupSql();
+  const recoveryAt = sql.indexOf("DELETE FROM app_deletion_sagas ");
+  const appAt = sql.indexOf("DELETE FROM apps ");
+  assert.ok(
+    recoveryAt !== -1 && recoveryAt < appAt,
+    "cleanup deletes Apps before their no-foreign-key recovery rows, leaving them orphaned",
+  );
 });
 
 test("cleanup names only tables that exist in the Drizzle schema", () => {
