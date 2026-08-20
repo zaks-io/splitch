@@ -153,6 +153,7 @@ describe("App Settings read", () => {
       expect(response.status).toBe(200);
       expect(payload.viewerRole).toBe("member");
       expect(payload).not.toHaveProperty("candidates");
+      expect(payload).not.toHaveProperty("candidatesWithheld");
       expect(responseBody).not.toHaveProperty("candidates");
       expect(serialized).not.toContain(USER_CANDIDATE);
       expect(serialized).not.toContain(EMAILS[USER_CANDIDATE]);
@@ -175,8 +176,12 @@ describe("App Settings read", () => {
       const orgAdmin = await settings(USER_ADMIN, ALPHA.appId);
 
       expect(appAdminOrgMember.viewerRole).toBe("admin");
-      expect(appAdminOrgMember.candidates).toEqual([]);
+      // Withheld, not exhausted: an empty array would claim everyone in the
+      // Organization already has access, which this viewer cannot know.
+      expect(appAdminOrgMember).not.toHaveProperty("candidates");
+      expect(appAdminOrgMember.candidatesWithheld).toBe(true);
       expect(orgAdmin.viewerRole).toBe("admin");
+      expect(orgAdmin).not.toHaveProperty("candidatesWithheld");
       expect(orgAdmin.candidates).toEqual([
         { userId: USER_CANDIDATE, email: "candidate@alpha.test", orgRole: "member" },
       ]);

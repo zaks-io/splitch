@@ -9,6 +9,7 @@ import { browserOkPayload, FakeBrowserTransport } from "./test-fixtures";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe("createSplitchBrowserClient: construction", () => {
@@ -259,5 +260,51 @@ describe("createSplitchBrowserClient: sync reads", () => {
     client.evaluate("new-checkout", false);
     const results = await client.flush();
     expect(results).toEqual([{ exposureId, status: "accepted", code: null }]);
+  });
+});
+
+describe("createSplitchBrowserClient: revalidation logging", () => {
+  it("re-logs a held fault after the flag recovers and degrades again", async () => {
+    vi.useFakeTimers();
+    const logger = new FakeLogger();
+    const broken: EvaluateAllEntry = {
+      variant: null,
+      variantName: null,
+      reason: "ERROR",
+      errorCode: "SERVICE_UNAVAILABLE",
+      exposureTicket: null,
+      exposureIdentity: null,
+    };
+    const healthy: EvaluateAllEntry = {
+      variant: true,
+      variantName: "on",
+      reason: "SPLIT",
+      errorCode: null,
+      exposureTicket: null,
+      exposureIdentity: null,
+    };
+    const transport = new FakeBrowserTransport([
+      { status: 200, evaluations: { "flaky-flag": broken }, etag: '"etag-1"' },
+      { status: 200, evaluations: { "flaky-flag": healthy }, etag: '"etag-2"' },
+      { status: 200, evaluations: { "flaky-flag": broken }, etag: '"etag-3"' },
+    ]);
+    const client = createSplitchBrowserClient({
+      clientKey: "pk_test",
+      context: { targetingKey: "u1" },
+      transport,
+      logger,
+      revalidateMs: 1000,
+    });
+    await client.init();
+
+    expect(client.evaluate("flaky-flag", false)).toBe(false);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(client.evaluate("flaky-flag", false)).toBe(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(client.evaluate("flaky-flag", false)).toBe(false);
+
+    expect(logger.errors.filter((row) => row.message.includes("SERVICE_UNAVAILABLE"))).toHaveLength(
+      2,
+    );
   });
 });

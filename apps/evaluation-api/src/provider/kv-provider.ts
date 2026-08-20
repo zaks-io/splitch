@@ -172,7 +172,12 @@ export class KvProvider implements Provider {
     }
   }
 
-  private invalidateEnvironment(appId: string, environmentId: string): void {
+  /**
+   * Forget everything cached for one Environment. Reconnects use it because
+   * nudges may have been missed; out-of-band writers with no nudge stream (the
+   * CLI quickstart harness) use it in place of a per-flag `invalidate`.
+   */
+  invalidateEnvironment(appId: string, environmentId: string): void {
     this.cache.invalidateEnvironment(appId, environmentId);
     const prefix = `app:${appId}:${environmentId}:experiment:`;
     for (const key of this.experimentSnapshots.keys()) {

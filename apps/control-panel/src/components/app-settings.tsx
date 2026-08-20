@@ -46,6 +46,7 @@ export function AppSettings({
       <AppMembersCard
         appId={settings.app.id}
         candidates={settings.candidates}
+        candidatesWithheld={settings.candidatesWithheld}
         capabilities={capabilities}
         members={settings.members}
       />

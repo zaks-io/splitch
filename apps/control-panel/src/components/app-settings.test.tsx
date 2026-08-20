@@ -66,6 +66,14 @@ describe("AppSettings", () => {
     ).toThrow("App Settings omitted access candidates for a viewer who may grant access");
   });
 
+  it("says the roster is withheld rather than exhausted for a grant-capable non-Org-admin", () => {
+    const html = render("admin", { candidates: undefined, candidatesWithheld: true });
+
+    expect(html).toContain('data-testid="app-grant-candidates-withheld"');
+    expect(html).not.toContain('data-testid="app-grant-no-candidates"');
+    expect(html).not.toContain('id="app-grant-person"');
+  });
+
   it("withholds the danger zone from an admin, who may still rename", () => {
     const html = render("admin");
 

@@ -248,7 +248,7 @@ async function createProbeFlag(
     },
   );
   expect(config.ok).toBe(true);
-  harness.invalidateFlagCache(appId);
+  harness.invalidateFlagCache(appId, [environmentId]);
   return flag.id;
 }
 
