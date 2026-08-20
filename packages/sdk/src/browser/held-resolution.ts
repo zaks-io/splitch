@@ -50,6 +50,24 @@ export function deriveHeldResolution(
   };
 }
 
+const LOGGED_RESOLUTION_KINDS = ["missing", "error", "null-variant"] as const;
+
+/**
+ * Forget the once-per-flag dedupe entries for flags a payload swap changed, so a
+ * flag that recovers and later degrades again logs the new fault instead of
+ * being silenced by the one before the recovery.
+ */
+export function rearmHeldResolutionLogs(
+  loggedResolutions: Set<string>,
+  flagKeys: readonly string[],
+): void {
+  for (const flagKey of flagKeys) {
+    for (const kind of LOGGED_RESOLUTION_KINDS) {
+      loggedResolutions.delete(`${flagKey}:${kind}`);
+    }
+  }
+}
+
 export function logHeldResolution(
   flagKey: string,
   resolution: HeldResolution,

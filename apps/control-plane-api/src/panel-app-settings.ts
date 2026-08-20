@@ -67,6 +67,7 @@ export async function panelAppSettingsRead(
     viewerRole,
     members: people.members,
     ...(people.candidates !== undefined ? { candidates: people.candidates } : {}),
+    ...(people.candidatesWithheld ? { candidatesWithheld: true } : {}),
     flags: {
       items: rows.map((row) => catalogFlag(row, catalogs.get(row.id) ?? [])),
       readTruncated,

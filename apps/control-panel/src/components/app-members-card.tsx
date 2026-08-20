@@ -28,11 +28,13 @@ import { AppMemberRow } from "./app-member-row";
 export function AppMembersCard({
   appId,
   candidates,
+  candidatesWithheld,
   capabilities,
   members,
 }: {
   appId: string;
   candidates?: PanelAppAccessCandidate[];
+  candidatesWithheld?: boolean;
   capabilities: AppSettingsCapabilities;
   members: AppMember[];
 }) {
@@ -83,20 +85,49 @@ export function AppMembersCard({
           </TableBody>
         </Table>
 
-        {capabilities.canGrantAccess ? (
-          <AppMemberGrantForm
-            appId={appId}
-            candidates={candidates}
-            capabilities={capabilities}
-            onError={setError}
-            onGranted={refresh}
-          />
-        ) : (
-          <p className="text-muted-foreground text-sm" data-testid="app-grant-not-permitted">
-            Owners and Admins of this App can grant access to it.
-          </p>
-        )}
+        {grantSection({ appId, candidates, candidatesWithheld, capabilities, setError, refresh })}
       </CardContent>
     </Card>
+  );
+}
+
+function grantSection({
+  appId,
+  candidates,
+  candidatesWithheld,
+  capabilities,
+  setError,
+  refresh,
+}: {
+  appId: string;
+  candidates?: PanelAppAccessCandidate[];
+  candidatesWithheld?: boolean;
+  capabilities: AppSettingsCapabilities;
+  setError: (message: string | undefined) => void;
+  refresh: () => Promise<void>;
+}) {
+  if (!capabilities.canGrantAccess) {
+    return (
+      <p className="text-muted-foreground text-sm" data-testid="app-grant-not-permitted">
+        Owners and Admins of this App can grant access to it.
+      </p>
+    );
+  }
+  if (candidatesWithheld === true) {
+    return (
+      <p className="text-muted-foreground text-sm" data-testid="app-grant-candidates-withheld">
+        Granting access starts from the Organization roster, which Organization Owners and Admins
+        can see. Ask one of them to grant access to this App.
+      </p>
+    );
+  }
+  return (
+    <AppMemberGrantForm
+      appId={appId}
+      candidates={candidates}
+      capabilities={capabilities}
+      onError={setError}
+      onGranted={refresh}
+    />
   );
 }

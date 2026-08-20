@@ -53,7 +53,7 @@ export interface QuickstartHarness {
   readonly evaluationUsageSink: RecordingEvaluationUsageSink;
   readonly exposureSink: RecordingExposureSink;
   readonly evaluationCommitSink: RecordingEvaluationCommitSink;
-  invalidateFlagCache(appId?: string): void;
+  invalidateFlagCache(appId?: string, environmentIds?: readonly string[]): void;
   dispose: () => Promise<void>;
 }
 
@@ -171,13 +171,13 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
     evaluationUsageSink,
     exposureSink,
     evaluationCommitSink,
-    invalidateFlagCache(targetAppId = appId) {
-      provider.invalidate(targetAppId, {
-        type: "config.changed",
-        entity: "flag",
-        id: "*",
-        version: Date.now(),
-      });
+    invalidateFlagCache(
+      targetAppId = appId,
+      environmentIds = [devEnvironmentId, prodEnvironmentId],
+    ) {
+      for (const environmentId of environmentIds) {
+        provider.invalidateEnvironment(targetAppId, environmentId);
+      }
     },
     dispose: async () => {
       await flagHarness.bindings.dispose();

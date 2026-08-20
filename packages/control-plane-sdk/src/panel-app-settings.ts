@@ -72,11 +72,17 @@ export interface PanelAppSettings {
   viewerRole: UserRole;
   members: AppMember[];
   /**
-   * Present only when the viewer may grant App access. An empty array means the
-   * response exposes no candidates, including when the viewer may grant App
-   * access but may not enumerate the Organization roster.
+   * Present only when the viewer may grant App access AND may enumerate the
+   * Organization roster. An empty array always means the roster is exhausted:
+   * everyone in the Organization already has access.
    */
   candidates?: PanelAppAccessCandidate[];
+  /**
+   * True when the viewer may grant App access but may not enumerate the
+   * Organization roster (they are not an Organization Owner or Admin), so
+   * `candidates` is withheld rather than exhausted.
+   */
+  candidatesWithheld?: boolean;
   flags: PanelAppFlagCatalog;
 }
 
@@ -101,6 +107,7 @@ export const PanelAppSettingsSchema = z
           .strict(),
       )
       .optional(),
+    candidatesWithheld: z.boolean().optional(),
     flags: z.object({
       items: z.array(
         z
