@@ -7,7 +7,7 @@ import {
   holdoverWriteJobKey,
   holdoverWriteRetryDelayMs,
 } from "./holdover-write-outbox-core";
-import { runHoldoverWriteAlarm } from "./holdover-write-outbox-ensure";
+import { ensureHoldoverWriteJob, runHoldoverWriteAlarm } from "./holdover-write-outbox-ensure";
 
 const BASE_PUT: HashedAssignmentPutInput = {
   appId: "app-A",
@@ -47,6 +47,38 @@ class MemoryStorage implements HoldoverWriteOutboxStorage {
 }
 
 describe("holdover write outbox scheduling", () => {
+  it("does not retry an exact existing job before its due time", async () => {
+    const storage = new MemoryStorage();
+    const calls: string[] = [];
+    const put = {
+      async putHashed(input: HashedAssignmentPutInput) {
+        calls.push(input.experimentId);
+        throw new Error("forced put failure");
+      },
+    };
+    await expect(ensureHoldoverWriteJob(storage, put, BASE_PUT, 1_000)).resolves.toEqual({
+      status: "owned",
+    });
+
+    await expect(ensureHoldoverWriteJob(storage, put, BASE_PUT, 1_500)).resolves.toEqual({
+      status: "owned",
+    });
+
+    expect(calls).toEqual([BASE_PUT.experimentId]);
+    expect(
+      await storage.get<HoldoverWriteJob>(holdoverWriteJobKey(BASE_PUT.experimentId)),
+    ).toMatchObject({ status: "pending", attempt: 1, updatedAtMs: 1_000 });
+    expect(storage.alarm).toBe(2_000);
+
+    await expect(ensureHoldoverWriteJob(storage, put, BASE_PUT, 2_000)).resolves.toEqual({
+      status: "owned",
+    });
+    expect(calls).toEqual([BASE_PUT.experimentId, BASE_PUT.experimentId]);
+    expect(
+      await storage.get<HoldoverWriteJob>(holdoverWriteJobKey(BASE_PUT.experimentId)),
+    ).toMatchObject({ status: "pending", attempt: 2, updatedAtMs: 2_000 });
+  });
+
   it("retries only pending jobs whose individual backoff is due", async () => {
     const storage = new MemoryStorage();
     const older = job({ experimentId: "exp-older", attempt: 6, updatedAtMs: 1_000 });
@@ -82,10 +114,25 @@ describe("holdover write outbox scheduling", () => {
     const retained = job({ experimentId: "exp-retained", attempt: 3, updatedAtMs: 2_500 });
     await storage.put(holdoverWriteJobKey(retained.experimentId), retained);
 
-    await deleteEntityOutbox(storage, 1_500);
+    const result = await deleteEntityOutbox(storage, 1_500);
 
+    expect(result).toEqual({ remainingJobs: true });
     expect(await storage.get(holdoverWriteJobKey(retained.experimentId))).toEqual(retained);
     expect(storage.alarm).toBe(2_500 + holdoverWriteRetryDelayMs(3));
+  });
+
+  it("reports a retained post-cutoff poisoned job even without a pending alarm", async () => {
+    const storage = new MemoryStorage();
+    const poisoned = {
+      ...job({ experimentId: "exp-poisoned", attempt: 8, updatedAtMs: 2_500 }),
+      status: "poisoned",
+    } satisfies HoldoverWriteJob;
+    await storage.put(holdoverWriteJobKey(poisoned.experimentId), poisoned);
+
+    await expect(deleteEntityOutbox(storage, 1_500)).resolves.toEqual({ remainingJobs: true });
+
+    expect(await storage.get(holdoverWriteJobKey(poisoned.experimentId))).toEqual(poisoned);
+    expect(storage.alarm).toBeUndefined();
   });
 });
 

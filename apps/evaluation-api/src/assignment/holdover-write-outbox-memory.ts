@@ -6,6 +6,7 @@ import {
   type HoldoverWriteEnsureResult,
   type HoldoverWriteJob,
   type HoldoverWriteOutboxLogger,
+  type HoldoverWriteOutboxPurgeResult,
   type HoldoverWriteOutboxStorage,
   type HoldoverWritePutPort,
   type HoldoverWriteSuppressionPort,
@@ -61,11 +62,14 @@ export class MemoryHoldoverWriteCoordinator implements HoldoverWriteCoordinator 
   purgeEntity(
     input: HashedAssignmentPutInput,
     deleteBeforeTsMs: number = Number.POSITIVE_INFINITY,
-  ): Promise<void> {
+  ): Promise<HoldoverWriteOutboxPurgeResult> {
     return purgeEntityOutboxState(this.storageFor(input), deleteBeforeTsMs);
   }
 
-  deleteEntity(input: HashedAssignmentPutInput, deleteBeforeTsMs: number): Promise<void> {
+  deleteEntity(
+    input: HashedAssignmentPutInput,
+    deleteBeforeTsMs: number,
+  ): Promise<HoldoverWriteOutboxPurgeResult> {
     return deleteEntityOutbox(this.storageFor(input), deleteBeforeTsMs);
   }
 

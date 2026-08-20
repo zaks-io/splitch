@@ -72,9 +72,8 @@ export async function ensureHoldoverWriteJob(
 
   const jobKey = holdoverWriteJobKey(input.experimentId);
   const existing = await storage.get<HoldoverWriteJob>(jobKey);
-  if (existing?.status === "poisoned") {
-    return { status: "poisoned" };
-  }
+  const deferred = await resultForDeferredExistingJob(storage, existing, nowMs);
+  if (deferred !== undefined) return deferred;
 
   const job: HoldoverWriteJob =
     existing ??
@@ -91,6 +90,17 @@ export async function ensureHoldoverWriteJob(
   }
 
   return attemptHoldoverWriteJob(storage, putPort, job, nowMs, logger, suppression);
+}
+
+async function resultForDeferredExistingJob(
+  storage: HoldoverWriteOutboxStorage,
+  existing: HoldoverWriteJob | undefined,
+  nowMs: number,
+): Promise<HoldoverWriteEnsureResult | undefined> {
+  if (existing?.status === "poisoned") return { status: "poisoned" };
+  if (existing === undefined || holdoverWriteJobDueAtMs(existing) <= nowMs) return undefined;
+  await reschedulePendingHoldoverWriteAlarm(storage);
+  return { status: "owned" };
 }
 
 export async function runHoldoverWriteAlarm(

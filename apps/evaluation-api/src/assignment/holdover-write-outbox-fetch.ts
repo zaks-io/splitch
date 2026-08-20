@@ -49,8 +49,11 @@ const outboxPostRoutes: Record<string, OutboxHandler> = {
   },
   "/purge": async (storage, _put, request, _ctx) => {
     const body = await request.json().catch(() => ({}));
-    await purgeEntityOutboxState(storage, parseDeleteBeforeTsMs(body, Number.POSITIVE_INFINITY));
-    return Response.json({ ok: true });
+    const result = await purgeEntityOutboxState(
+      storage,
+      parseDeleteBeforeTsMs(body, Number.POSITIVE_INFINITY),
+    );
+    return Response.json({ ok: true, ...result });
   },
   "/ensure": async (storage, putPort, request, ctx) =>
     ensureResponse(storage, putPort, await request.json(), ctx),
@@ -83,17 +86,17 @@ async function deleteResponse(
   appInventory: HoldoverWriteAppInventoryNamespace | undefined,
 ): Promise<Response> {
   const parsed = parseEntityDeleteBody(body);
-  await deleteEntityOutbox(storage, parsed.deleteBeforeTsMs);
+  const result = await deleteEntityOutbox(storage, parsed.deleteBeforeTsMs);
   // Unregister inside the same DO critical section as purge so a post-cutoff
   // ensure that serializes afterward can re-register cleanly (SPL-346).
-  if (appInventory && parsed.identity) {
+  if (!result.remainingJobs && appInventory && parsed.identity) {
     const client = new DurableHoldoverWriteAppInventoryClient(appInventory);
     await client.markEntityPurged(parsed.identity.appId, {
       idType: parsed.identity.idType,
       targetingKeyHash: parsed.identity.targetingKeyHash,
     });
   }
-  return Response.json({ ok: true });
+  return Response.json({ ok: true, ...result });
 }
 
 async function statusResponse(storage: HoldoverWriteOutboxStorage): Promise<Response> {

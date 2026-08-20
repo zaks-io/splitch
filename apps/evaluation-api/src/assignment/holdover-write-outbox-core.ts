@@ -20,6 +20,10 @@ export interface HoldoverWriteEnsureResult {
   readonly status: "completed" | "owned" | "poisoned" | "suppressed";
 }
 
+export interface HoldoverWriteOutboxPurgeResult {
+  readonly remainingJobs: boolean;
+}
+
 export interface HoldoverWriteOutboxStorage {
   get<T>(key: string): Promise<T | undefined>;
   put<T>(key: string, value: T): Promise<void>;
@@ -128,18 +132,18 @@ export async function suppressEntityOutbox(
 export async function purgeEntityOutboxState(
   storage: HoldoverWriteOutboxStorage,
   deleteBeforeTsMs: number = Number.POSITIVE_INFINITY,
-): Promise<void> {
+): Promise<HoldoverWriteOutboxPurgeResult> {
   await purgeStaleJobs(storage, deleteBeforeTsMs);
-  await reschedulePendingHoldoverWriteAlarm(storage);
+  return { remainingJobs: await reschedulePendingHoldoverWriteAlarm(storage) };
 }
 
 /** Full Entity deletion handshake: suppress → purge stale under one critical section. */
 export async function deleteEntityOutbox(
   storage: HoldoverWriteOutboxStorage,
   deleteBeforeTsMs: number,
-): Promise<void> {
+): Promise<HoldoverWriteOutboxPurgeResult> {
   await suppressEntityOutbox(storage, deleteBeforeTsMs);
-  await purgeEntityOutboxState(storage, deleteBeforeTsMs);
+  return purgeEntityOutboxState(storage, deleteBeforeTsMs);
 }
 
 export async function purgeStaleJobs(
@@ -157,14 +161,15 @@ export async function purgeStaleJobs(
 
 export async function reschedulePendingHoldoverWriteAlarm(
   storage: HoldoverWriteOutboxStorage,
-): Promise<void> {
+): Promise<boolean> {
   const jobs = await storage.list<HoldoverWriteJob>({ prefix: HOLDOVER_WRITE_JOB_PREFIX });
   const pending = [...jobs.values()].filter((job) => job.status === "pending");
   if (pending.length === 0) {
     await storage.deleteAlarm();
-    return;
+    return jobs.size > 0;
   }
   await storage.setAlarm(Math.min(...pending.map(holdoverWriteJobDueAtMs)));
+  return true;
 }
 
 export async function readEntitySuppression(

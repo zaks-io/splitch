@@ -24,6 +24,7 @@ globalThis.__cancelStatePutFailsRemaining = ${String(cancelStatePutFailsRemainin
 globalThis.__cancelKvDeleteFailsRemaining = ${String(cancelKvDeleteFailsRemaining)};
 globalThis.__staleSuppressionReadsRemaining = ${String(staleSuppressionReadsRemaining)};
 globalThis.__writerPutFailsRemaining = ${String(writerPutFailsRemaining)};
+globalThis.__writerPutAttempts = 0;
 globalThis.__purgeFailsRemaining = ${String(purgeFailsRemaining)};
 globalThis.__markTransactionFailsBeforeCommitRemaining = ${String(markTransactionFailsBeforeCommitRemaining)};
 globalThis.__markTransactionThrowsAfterCommitRemaining = ${String(markTransactionThrowsAfterCommitRemaining)};

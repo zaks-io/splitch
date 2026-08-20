@@ -14,6 +14,7 @@ import {
   HOLDOVER_WRITE_MAX_ATTEMPTS,
   type HoldoverWriteJob,
   type HoldoverWriteOutboxStorage,
+  holdoverWriteJobDueAtMs,
   holdoverWriteJobKey,
   holdoverWriteOutboxName,
   holdoverWriteRetryDelayMs,
@@ -158,7 +159,9 @@ describe("holdover write outbox core", () => {
     });
     expect(status).toEqual({ status: "owned" });
     for (let i = 0; i < HOLDOVER_WRITE_MAX_ATTEMPTS - 1; i += 1) {
-      now += 10_000;
+      const pending = storage.job;
+      if (pending === undefined) throw new Error("expected pending holdover write job");
+      now = holdoverWriteJobDueAtMs(pending);
       status = await ensureHoldoverWriteJob(storage, put, basePut, now, {
         error(message, detail) {
           logs.push({ message, detail: detail as Record<string, unknown> });

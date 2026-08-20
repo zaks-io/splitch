@@ -189,6 +189,9 @@ HoldoverWriteOutboxDurableObject.prototype.fetch = async function (request) {
   if (url.pathname === "/__test/alarm-status" && request.method === "GET") {
     return Response.json({ alarm: await this.ctx.storage.getAlarm(), nowMs: Date.now() });
   }
+  if (url.pathname === "/__test/writer-attempts" && request.method === "GET") {
+    return Response.json({ attempts: globalThis.__writerPutAttempts });
+  }
   if (url.pathname === "/__test/alarm" && request.method === "POST") {
     const scheduledAt = await this.ctx.storage.getAlarm();
     const originalDateNow = Date.now;
@@ -226,6 +229,7 @@ HoldoverWriteOutboxDurableObject.prototype.alarm = async function () {
 };
 const __prodAssignmentWriteThrough = AssignmentStoreWriter.prototype.writeThrough;
 AssignmentStoreWriter.prototype.writeThrough = async function (input) {
+  globalThis.__writerPutAttempts += 1;
   const originalKv = this.kv;
   this.kv = failWriterPut(originalKv);
   try {

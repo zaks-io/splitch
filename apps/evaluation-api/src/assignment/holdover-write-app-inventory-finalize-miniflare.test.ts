@@ -112,6 +112,48 @@ describe("HoldoverWriteAppInventoryDurableObject finalize alarm recovery", () =>
       await (await inventoryStub.fetch("https://inventory.local/__test/alarm-status")).json(),
     ).toMatchObject({ alarm: null });
   });
+
+  it("keeps a post-cutoff poisoned Entity inventoried until App finalize purges it", async () => {
+    const { coordinator, inventory, outboxStub } = await startFinalizeTest({
+      writerPutFailsRemaining: HOLDOVER_WRITE_MAX_ATTEMPTS,
+    });
+    await expect(coordinator.ensure(PUT, { sourceCreatedAtMs: 10_000 })).resolves.toEqual({
+      status: "owned",
+    });
+    for (let attempt = 1; attempt < HOLDOVER_WRITE_MAX_ATTEMPTS; attempt += 1) {
+      await outboxStub.fetch("https://outbox.local/__test/alarm", { method: "POST" });
+    }
+    expect(await (await outboxStub.fetch("https://outbox.local/status")).json()).toMatchObject({
+      jobs: [expect.objectContaining({ status: "poisoned", attempt: HOLDOVER_WRITE_MAX_ATTEMPTS })],
+    });
+
+    const deletion = await outboxStub.fetch("https://outbox.local/delete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        deleteBeforeTsMs: 9_999,
+        appId: PUT.appId,
+        idType: PUT.idType,
+        targetingKeyHash: PUT.targetingKeyHash,
+      }),
+    });
+
+    expect(await deletion.json()).toEqual({ ok: true, remainingJobs: true });
+    expect(await inventory.status(PUT.appId)).toMatchObject({
+      entities: [{ idType: PUT.idType, targetingKeyHash: PUT.targetingKeyHash }],
+    });
+    await inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000);
+    await inventory.markD1Deleted(PUT.appId, GENERATION_ID, 9_000);
+    await inventory.finalizeDeletion(PUT.appId, GENERATION_ID, 9_000);
+    expect(await (await outboxStub.fetch("https://outbox.local/status")).json()).toEqual({
+      status: "empty",
+    });
+    expect(await inventory.status(PUT.appId)).toMatchObject({
+      sagaPhase: "completed",
+      deletionComplete: true,
+      entities: [],
+    });
+  });
 });
 
 async function startFinalizeTest(options: {

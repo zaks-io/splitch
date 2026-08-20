@@ -13,6 +13,7 @@ import {
   type HoldoverWriteJob,
   type HoldoverWriteOutboxStorage,
   type HoldoverWritePutPort,
+  holdoverWriteJobDueAtMs,
   holdoverWriteJobKey,
 } from "./holdover-write-outbox-core";
 import { ensureHoldoverWriteJob } from "./holdover-write-outbox-ensure";
@@ -157,7 +158,9 @@ describe("holdover write Entity deletion boundary", () => {
       sourceCreatedAtMs: 1_000,
     });
     for (let i = 0; i < HOLDOVER_WRITE_MAX_ATTEMPTS - 1; i += 1) {
-      now += 1_000;
+      const pending = await storage.get<HoldoverWriteJob>(holdoverWriteJobKey(PUT.experimentId));
+      if (pending === undefined) throw new Error("expected pending holdover write job");
+      now = holdoverWriteJobDueAtMs(pending);
       await ensureHoldoverWriteJob(storage, put, PUT, now);
     }
     const poisoned = (await storage.get(holdoverWriteJobKey(PUT.experimentId))) as
