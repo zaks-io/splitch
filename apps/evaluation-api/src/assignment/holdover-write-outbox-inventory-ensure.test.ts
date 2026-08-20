@@ -140,6 +140,6 @@ describe("holdover write App inventory registration on ensure", () => {
         },
       }),
     ).resolves.toEqual({ status: "suppressed" });
-    expect(storage.job).toBeUndefined();
+    expect(storage.job?.status).toBe("pending");
   });
 });

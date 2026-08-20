@@ -227,7 +227,7 @@ describe("holdover write outbox deletion cutoff", () => {
     expect(put.calls).toHaveLength(2);
   });
 
-  it("App suppress tombstone purges Entity jobs without further puts", async () => {
+  it("App suppress tombstone blocks puts while preserving recoverable jobs", async () => {
     const put = new FailNTimesPut(5);
     const storage = new MemoryStorage();
     await ensureHoldoverWriteJob(storage, put, basePut, 1_000);
@@ -238,7 +238,7 @@ describe("holdover write outbox deletion cutoff", () => {
       },
     });
     expect(put.calls).toHaveLength(callsBefore);
-    expect(storage.job).toBeUndefined();
+    expect(storage.job?.status).toBe("pending");
   });
 });
 
@@ -290,6 +290,13 @@ describe("holdover write deletion consumer", () => {
       deleteBeforeTsMs: 1_700,
     });
     expect(paths).toEqual(["/delete"]);
-    expect(bodies).toEqual([{ deleteBeforeTsMs: 1_700 }]);
+    expect(bodies).toEqual([
+      {
+        deleteBeforeTsMs: 1_700,
+        appId: basePut.appId,
+        idType: basePut.idType,
+        targetingKeyHash: basePut.targetingKeyHash,
+      },
+    ]);
   });
 });

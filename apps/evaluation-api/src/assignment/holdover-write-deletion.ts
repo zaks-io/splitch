@@ -1,17 +1,13 @@
 /**
  * Privacy deletion consumer for the holdover-write outbox (SPL-346).
  *
- * App deletion: begin strongly consistent App inventory suppression (also
- * writes the KV hot-path tombstone), purge every registered Entity outbox
- * (pending / completed-empty / poisoned — including never-KV rows), mark each
- * purged, then mark deletion complete before Control Plane continues to D1.
- * Public retry resumes from inventory state.
+ * App deletion is reversible two-phase: prepare/freeze (suppress without purge),
+ * Control Plane D1/credential cascade, then finalize (drain/purge + complete).
+ * Cancel restores a still-live App so frozen durable jobs remain recoverable.
  *
- * Entity deletion: cutoff-aware suppress + drain + purge on that Entity's
- * outbox DO so stale work cannot finish after the handshake returns, while
- * post-`delete_before_ts` ensures remain allowed. The DO runs under
- * `blockConcurrencyWhile`, so an in-flight Assignment Store writer call is
- * serialized before purge complete.
+ * Entity deletion: cutoff-aware suppress + purge on that Entity's outbox DO,
+ * which also unregisters the Entity from App inventory under the same
+ * `blockConcurrencyWhile` critical section.
  *
  * @module
  */
@@ -32,7 +28,7 @@ export type EntityHoldoverWriteDeletion = HoldoverWriteEntityIdentity & {
   readonly deleteBeforeTsMs: number;
 };
 
-/** Immediate App deletion action: stop every pending/alarm put for this App. */
+/** Immediate App freeze helper: hot-path KV tombstone only (inventory DO also writes this). */
 export async function suppressAppHoldoverWriteOutbox(
   kv: AssignmentKv,
   appId: string,
@@ -45,7 +41,7 @@ export async function suppressAppHoldoverWriteOutbox(
 
 /**
  * Entity privacy deletion handshake: cutoff suppress, wait for any in-flight
- * stale put (DO concurrency), then purge stale job rows / hashes.
+ * stale put (DO concurrency), purge stale jobs, and unregister inventory.
  */
 export async function suppressAndPurgeEntityHoldoverWriteOutbox(
   namespace: HoldoverWriteOutboxNamespace,
@@ -59,57 +55,132 @@ export async function suppressAndPurgeEntityHoldoverWriteOutbox(
   const response = await stub.fetch("https://holdover-write-outbox.local/delete", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ deleteBeforeTsMs: deletion.deleteBeforeTsMs }),
+    body: JSON.stringify({
+      deleteBeforeTsMs: deletion.deleteBeforeTsMs,
+      appId: deletion.appId,
+      idType: deletion.idType,
+      targetingKeyHash: deletion.targetingKeyHash,
+    }),
   });
   if (!response.ok) {
     throw new Error(`holdover write outbox /delete failed: HTTP ${String(response.status)}`);
   }
 }
 
+/** Wake pending Entity outbox alarms after App deletion cancel/restore. */
+async function resumeEntityHoldoverWriteOutboxAlarms(
+  namespace: HoldoverWriteOutboxNamespace,
+  identity: HoldoverWriteEntityIdentity,
+): Promise<void> {
+  const name = holdoverWriteOutboxName(identity);
+  const stub = namespace.get(namespace.idFromName(name));
+  const response = await stub.fetch("https://holdover-write-outbox.local/resume-alarms", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  if (!response.ok) {
+    throw new Error(`holdover write outbox /resume-alarms failed: HTTP ${String(response.status)}`);
+  }
+}
+
+/** Phase 1: freeze App holdover work without purging accepted durable jobs. */
+export async function prepareAppHoldoverWriteDeletion(
+  inventory: HoldoverWriteAppInventoryClient,
+  appId: string,
+  deleteBeforeTsMs: number,
+): Promise<void> {
+  requireAppDeletionArgs(appId, deleteBeforeTsMs, "prepareAppHoldoverWriteDeletion");
+  await inventory.beginDeletion(appId, deleteBeforeTsMs);
+}
+
 /**
- * App deletion coordinator: suppress via inventory (+ KV), purge every
- * registered Entity outbox, mark complete. Idempotent for public retry.
+ * Phase 3: after successful D1 cascade, drain/purge every registered Entity
+ * outbox and mark App deletion complete. Idempotent for public retry.
  */
-export async function runAppHoldoverWriteDeletion(
+export async function finalizeAppHoldoverWriteDeletion(
+  inventory: HoldoverWriteAppInventoryClient,
+  outbox: HoldoverWriteOutboxNamespace,
+  appId: string,
+  deleteBeforeTsMs?: number,
+): Promise<void> {
+  if (appId.length === 0) {
+    throw new Error("finalizeAppHoldoverWriteDeletion: appId is required");
+  }
+  const status = await inventory.status(appId);
+  if (status.deletionComplete) {
+    return;
+  }
+  const cutoff =
+    deleteBeforeTsMs ?? (status.deleteBeforeTsMs !== null ? status.deleteBeforeTsMs : Number.NaN);
+  if (!Number.isFinite(cutoff)) {
+    throw new Error("finalizeAppHoldoverWriteDeletion: deleteBeforeTsMs is required");
+  }
+  if (!status.suppressed) {
+    await inventory.beginDeletion(appId, cutoff);
+  }
+  await drainRegisteredEntities(inventory, outbox, appId, cutoff);
+  await inventory.completeDeletion(appId);
+}
+
+/**
+ * Cancel/restore after prepare when a later pre-delete step fails: clear App
+ * suppress so a live App resumes ownership; wake frozen Entity alarms.
+ */
+export async function cancelAppHoldoverWriteDeletion(
+  inventory: HoldoverWriteAppInventoryClient,
+  outbox: HoldoverWriteOutboxNamespace,
+  appId: string,
+): Promise<void> {
+  if (appId.length === 0) {
+    throw new Error("cancelAppHoldoverWriteDeletion: appId is required");
+  }
+  const cancelled = await inventory.cancelDeletion(appId);
+  if (!cancelled.cancelled) {
+    return;
+  }
+  for (const entity of cancelled.entities) {
+    await resumeEntityHoldoverWriteOutboxAlarms(outbox, {
+      appId,
+      idType: entity.idType,
+      targetingKeyHash: entity.targetingKeyHash,
+    });
+  }
+}
+
+async function drainRegisteredEntities(
   inventory: HoldoverWriteAppInventoryClient,
   outbox: HoldoverWriteOutboxNamespace,
   appId: string,
   deleteBeforeTsMs: number,
 ): Promise<void> {
-  if (appId.length === 0) {
-    throw new Error("runAppHoldoverWriteDeletion: appId is required");
-  }
-  if (!Number.isFinite(deleteBeforeTsMs)) {
-    throw new Error("runAppHoldoverWriteDeletion: deleteBeforeTsMs is required");
-  }
-
-  const begun = await inventory.beginDeletion(appId, deleteBeforeTsMs);
-  if (begun.deletionComplete) {
-    return;
-  }
-
-  for (const entity of begun.entities) {
-    await suppressAndPurgeEntityHoldoverWriteOutbox(outbox, {
-      appId,
-      idType: entity.idType,
-      targetingKeyHash: entity.targetingKeyHash,
-      deleteBeforeTsMs: begun.deleteBeforeTsMs,
-    });
-    await inventory.markEntityPurged(appId, entity);
-  }
-
-  // Resume path: inventory may still list entities registered after a prior
-  // partial failure; re-read status and drain any remainder before complete.
   const status = await inventory.status(appId);
   for (const entity of status.entities) {
     await suppressAndPurgeEntityHoldoverWriteOutbox(outbox, {
       appId,
       idType: entity.idType,
       targetingKeyHash: entity.targetingKeyHash,
-      deleteBeforeTsMs: begun.deleteBeforeTsMs,
+      deleteBeforeTsMs,
     });
     await inventory.markEntityPurged(appId, entity);
   }
+  const remainder = await inventory.status(appId);
+  for (const entity of remainder.entities) {
+    await suppressAndPurgeEntityHoldoverWriteOutbox(outbox, {
+      appId,
+      idType: entity.idType,
+      targetingKeyHash: entity.targetingKeyHash,
+      deleteBeforeTsMs,
+    });
+    await inventory.markEntityPurged(appId, entity);
+  }
+}
 
-  await inventory.completeDeletion(appId);
+function requireAppDeletionArgs(appId: string, deleteBeforeTsMs: number, label: string): void {
+  if (appId.length === 0) {
+    throw new Error(`${label}: appId is required`);
+  }
+  if (!Number.isFinite(deleteBeforeTsMs)) {
+    throw new Error(`${label}: deleteBeforeTsMs is required`);
+  }
 }

@@ -24,6 +24,10 @@ export interface HoldoverWriteAppInventoryClient {
     appId: string,
     deleteBeforeTsMs: number,
   ): Promise<HoldoverWriteAppDeletionBeginResult>;
+  cancelDeletion(appId: string): Promise<{
+    readonly cancelled: boolean;
+    readonly entities: readonly HoldoverWriteAppEntityRef[];
+  }>;
   markEntityPurged(appId: string, ref: HoldoverWriteAppEntityRef): Promise<void>;
   completeDeletion(appId: string): Promise<void>;
   status(appId: string): Promise<HoldoverWriteAppInventoryStatus>;
@@ -62,6 +66,20 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
       suppressed: true,
       deletionComplete: body.deletionComplete,
       deleteBeforeTsMs: body.deleteBeforeTsMs,
+      entities: body.entities.map(parseEntityRef),
+    };
+  }
+
+  async cancelDeletion(appId: string): Promise<{
+    readonly cancelled: boolean;
+    readonly entities: readonly HoldoverWriteAppEntityRef[];
+  }> {
+    const body = await this.postJson(appId, "/cancel-deletion", { appId });
+    if (!isRecord(body) || typeof body.cancelled !== "boolean" || !Array.isArray(body.entities)) {
+      throw new HoldoverWriteAppInventoryError("cancel-deletion returned an invalid payload");
+    }
+    return {
+      cancelled: body.cancelled,
       entities: body.entities.map(parseEntityRef),
     };
   }

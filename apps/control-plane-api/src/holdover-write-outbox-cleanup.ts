@@ -10,18 +10,31 @@ function registeredCleanupRoute() {
 }
 const cleanupRoute = registeredCleanupRoute();
 
+type HoldoverWriteAppDeletionPhase = "prepare" | "finalize" | "cancel";
+
 interface HoldoverWriteOutboxCleanupInput {
   appId: string;
   idType?: string;
   targetingKeyHash?: string;
   /** Required for Entity deletion; App deletion uses request time when omitted. */
   deleteBeforeTs?: string;
+  /** Required for App deletion phases; ignored for Entity deletion. */
+  phase?: HoldoverWriteAppDeletionPhase;
   actorId: string;
   orgId: string | null;
   requestId: string;
 }
 
 export interface HoldoverWriteOutboxCleanup {
+  prepare(
+    input: Omit<HoldoverWriteOutboxCleanupInput, "phase" | "idType" | "targetingKeyHash">,
+  ): Promise<void>;
+  finalize(
+    input: Omit<HoldoverWriteOutboxCleanupInput, "phase" | "idType" | "targetingKeyHash">,
+  ): Promise<void>;
+  cancel(
+    input: Omit<HoldoverWriteOutboxCleanupInput, "phase" | "idType" | "targetingKeyHash">,
+  ): Promise<void>;
   delete(input: HoldoverWriteOutboxCleanupInput): Promise<void>;
 }
 
@@ -36,6 +49,9 @@ export function createHoldoverWriteOutboxCleanup(
   evaluation: Fetcher | undefined,
 ): HoldoverWriteOutboxCleanup {
   return {
+    prepare: (input) => deleteHoldoverWriteOutbox(evaluation, { ...input, phase: "prepare" }),
+    finalize: (input) => deleteHoldoverWriteOutbox(evaluation, { ...input, phase: "finalize" }),
+    cancel: (input) => deleteHoldoverWriteOutbox(evaluation, { ...input, phase: "cancel" }),
     delete: (input) => deleteHoldoverWriteOutbox(evaluation, input),
   };
 }
@@ -69,6 +85,7 @@ async function sendCleanupRequest(
   if (input.idType !== undefined) query.idType = input.idType;
   if (input.targetingKeyHash !== undefined) query.targetingKeyHash = input.targetingKeyHash;
   if (input.deleteBeforeTs !== undefined) query.deleteBeforeTs = input.deleteBeforeTs;
+  if (input.phase !== undefined) query.phase = input.phase;
   const response = await evaluation.fetch(
     delegatedRequest(
       cleanupRoute,

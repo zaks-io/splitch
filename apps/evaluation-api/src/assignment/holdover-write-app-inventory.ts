@@ -1,10 +1,10 @@
 /**
  * App-scoped durable inventory for holdover-write Entity outboxes (SPL-346).
  *
- * Strongly consistent registration + deletion coordinator: App delete suppresses
- * first, enumerates pending/completed/poisoned Entity outboxes (including those
- * that never wrote Assignment Store KV), drains each, then marks complete so a
- * public retry can resume before Control Plane D1 cascade.
+ * Strongly consistent registration + two-phase App deletion coordinator:
+ * prepare/freeze suppresses new work without purging accepted durable jobs;
+ * finalize drains every registered Entity outbox then marks complete; cancel
+ * restores a still-live App so frozen jobs remain recoverable.
  *
  * @module
  */
@@ -81,6 +81,10 @@ export async function registerAppInventoryEntity(
   return { status: "registered" };
 }
 
+/**
+ * Freeze/prepare: stop new registration and hot-path puts. Does not remove
+ * Entity inventory rows or purge Entity outbox jobs — that is finalize.
+ */
 export async function beginAppInventoryDeletion(
   storage: HoldoverWriteAppInventoryStorage,
   deleteBeforeTsMs: number,
@@ -107,6 +111,24 @@ export async function beginAppInventoryDeletion(
     entities,
     deleteBeforeTsMs,
   };
+}
+
+/**
+ * Cancel/restore: clear freeze on a still-live App so ownership and alarms can
+ * resume. Refuses once deletion is marked complete (App D1 row is gone).
+ */
+export async function cancelAppInventoryDeletion(
+  storage: HoldoverWriteAppInventoryStorage,
+): Promise<{
+  readonly cancelled: boolean;
+  readonly entities: readonly HoldoverWriteAppEntityRef[];
+}> {
+  if ((await storage.get<boolean>(DELETION_COMPLETE_KEY)) === true) {
+    return { cancelled: false, entities: [] };
+  }
+  await storage.delete(SUPPRESSED_KEY);
+  await storage.delete(DELETE_BEFORE_TS_KEY);
+  return { cancelled: true, entities: await listRegisteredEntities(storage) };
 }
 
 export async function markAppInventoryEntityPurged(

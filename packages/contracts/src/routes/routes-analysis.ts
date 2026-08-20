@@ -34,6 +34,8 @@ const HoldoverWriteOutboxDeleteQuerySchema = z
     idType: z.string().min(1).optional(),
     targetingKeyHash: z.string().min(1).optional(),
     deleteBeforeTs: z.string().datetime({ offset: true }).optional(),
+    /** App deletion phase: prepare (freeze), finalize (drain), or cancel (restore). */
+    phase: z.enum(["prepare", "finalize", "cancel"]).optional(),
   })
   .strict();
 
@@ -140,7 +142,7 @@ export const analysisRoutes = [
     method: "DELETE",
     path: "/internal/apps/:appId/holdover-write-outbox",
     summary:
-      "Suppress and purge Assignment Store holdover-write outbox state on App or Entity deletion.",
+      "Freeze, finalize, or cancel Assignment Store holdover-write outbox state on App deletion; suppress+purge on Entity deletion.",
     request: { params: AppParams, query: HoldoverWriteOutboxDeleteQuerySchema },
     response: z.object({ deleted: z.literal(true) }).strict(),
     auth: "internal-worker",

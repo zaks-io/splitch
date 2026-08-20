@@ -57,6 +57,15 @@ describe("entity privacy delete route availability", () => {
       rateLimiter: allowLimiter,
       repo: createRepository(bindings.d1),
       holdoverWriteOutboxCleanup: {
+        async prepare() {
+          throw new Error("entity privacy must not claim queued deletion");
+        },
+        async finalize() {
+          throw new Error("entity privacy must not claim queued deletion");
+        },
+        async cancel() {
+          throw new Error("entity privacy must not claim queued deletion");
+        },
         async delete() {
           throw new Error("entity privacy must not claim queued deletion");
         },

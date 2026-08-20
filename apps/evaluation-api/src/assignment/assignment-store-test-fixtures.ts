@@ -65,6 +65,10 @@ export class RecordingKv implements AssignmentKv {
     this.store.set(key, value);
   }
 
+  async delete(key: string): Promise<void> {
+    this.store.delete(key);
+  }
+
   list(options: { prefix: string }): Promise<{ keys: { name: string }[] }> {
     const keys = [...this.store.keys()]
       .filter((name) => name.startsWith(options.prefix))

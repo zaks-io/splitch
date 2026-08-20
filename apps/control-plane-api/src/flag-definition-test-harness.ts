@@ -33,6 +33,9 @@ const noOpExposureStatusCleanup: EnvironmentExposureStatusCleanup = {
   delete: async () => undefined,
 };
 const noOpHoldoverWriteOutboxCleanup = {
+  prepare: async () => undefined,
+  finalize: async () => undefined,
+  cancel: async () => undefined,
   delete: async () => undefined,
 };
 

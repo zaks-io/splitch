@@ -126,12 +126,27 @@ describe("App and Environment Exposure status cleanup", () => {
       )
       .run();
     const calls: EnvironmentExposureStatusCleanupInput[] = [];
+    const holdover: string[] = [];
 
-    const response = await app(calls).request(`/apps/${APP_ID}`, { method: "DELETE" });
+    const response = await app(calls, undefined, holdover).request(`/apps/${APP_ID}`, {
+      method: "DELETE",
+    });
 
     expect(response.status).toBe(500);
     expect(calls).toEqual([]);
+    expect(holdover).toEqual(["prepare", "cancel"]);
     expect(await createRepository(bindings.d1).identity.getApp(APP_ID)).not.toBeNull();
+  });
+
+  it("freezes holdover before cascade and finalizes after successful App delete", async () => {
+    const calls: EnvironmentExposureStatusCleanupInput[] = [];
+    const holdover: string[] = [];
+    const response = await app(calls, undefined, holdover).request(`/apps/${APP_ID}`, {
+      method: "DELETE",
+    });
+    expect(response.status).toBe(200);
+    expect(holdover).toEqual(["prepare", "finalize"]);
+    expect(await createRepository(bindings.d1).identity.getApp(APP_ID)).toBeNull();
   });
 
   it("returns a retryable failure when last-step cleanup is unavailable", async () => {
@@ -153,6 +168,7 @@ function app(
   cleanup: (input: EnvironmentExposureStatusCleanupInput) => Promise<void> = async (input) => {
     calls.push(input);
   },
+  holdoverPhases?: string[],
 ) {
   const authResolver: AuthResolver = () => ({
     ok: true,
@@ -176,7 +192,18 @@ function app(
       delete: cleanup,
     },
     holdoverWriteOutboxCleanup: {
-      delete: async () => undefined,
+      prepare: async () => {
+        holdoverPhases?.push("prepare");
+      },
+      finalize: async () => {
+        holdoverPhases?.push("finalize");
+      },
+      cancel: async () => {
+        holdoverPhases?.push("cancel");
+      },
+      delete: async () => {
+        holdoverPhases?.push("delete");
+      },
     },
   });
 }

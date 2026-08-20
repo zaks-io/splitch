@@ -131,7 +131,12 @@ export class DurableHoldoverWriteCoordinator implements HoldoverWriteCoordinator
     const response = await stub.fetch("https://holdover-write-outbox.local/delete", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ deleteBeforeTsMs }),
+      body: JSON.stringify({
+        deleteBeforeTsMs,
+        appId: input.appId,
+        idType: input.idType,
+        targetingKeyHash: input.targetingKeyHash,
+      }),
     });
     if (!response.ok) {
       throw new HoldoverWriteOutboxError(

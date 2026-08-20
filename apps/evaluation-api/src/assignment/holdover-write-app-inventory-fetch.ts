@@ -1,6 +1,7 @@
 import {
   appInventoryStatus,
   beginAppInventoryDeletion,
+  cancelAppInventoryDeletion,
   completeAppInventoryDeletion,
   type HoldoverWriteAppInventoryStorage,
   isAppInventorySuppressed,
@@ -24,6 +25,9 @@ const postRoutes: Record<string, InventoryRoute> = {
       parseDeleteBefore(body).deleteBeforeTsMs,
     );
     return Response.json(result);
+  },
+  "/cancel-deletion": async (storage) => {
+    return Response.json(await cancelAppInventoryDeletion(storage));
   },
   "/mark-entity-purged": async (storage, body) => {
     await markAppInventoryEntityPurged(storage, parseEntityRef(body));
@@ -68,7 +72,10 @@ async function dispatchInventoryRoute(
   if (method === "POST") {
     const post = postRoutes[pathname];
     if (post) {
-      const body = pathname === "/complete-deletion" ? {} : await request.json();
+      const body =
+        pathname === "/complete-deletion" || pathname === "/cancel-deletion"
+          ? {}
+          : await request.json();
       return post(storage, body);
     }
   }

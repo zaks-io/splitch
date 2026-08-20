@@ -1,9 +1,8 @@
 /**
  * Binding-door deletion consumer for the holdover-write outbox (SPL-346).
  *
- * App delete: durable App inventory coordinator — suppress first, purge every
- * registered Entity outbox (pending/completed/poisoned), mark complete.
- * Entity delete: cutoff-aware suppress+purge on that Entity's outbox DO.
+ * App delete: two-phase prepare (freeze) / finalize (drain+complete) / cancel
+ * (restore). Entity delete: cutoff-aware suppress+purge+inventory unregister.
  *
  * @module
  */
@@ -13,10 +12,14 @@ import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import type { AssignmentKv } from "./assignment-store";
 import type { HoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
 import {
-  runAppHoldoverWriteDeletion,
+  cancelAppHoldoverWriteDeletion,
+  finalizeAppHoldoverWriteDeletion,
+  prepareAppHoldoverWriteDeletion,
   suppressAndPurgeEntityHoldoverWriteOutbox,
 } from "./holdover-write-deletion";
 import type { HoldoverWriteOutboxNamespace } from "./holdover-write-outbox";
+
+type HoldoverWriteAppDeletionPhase = "prepare" | "finalize" | "cancel";
 
 export interface HoldoverWriteOutboxCleanupDeps {
   readonly assignmentsKv: AssignmentKv;
@@ -40,12 +43,7 @@ async function runHoldoverWriteOutboxCleanup(
   scope: CleanupScope,
 ): Promise<void> {
   if (scope.kind === "app") {
-    await runAppHoldoverWriteDeletion(
-      deps.holdoverWriteAppInventory,
-      deps.holdoverWriteOutbox,
-      scope.appId,
-      scope.deleteBeforeTsMs,
-    );
+    await runAppPhase(deps, scope);
     return;
   }
   await suppressAndPurgeEntityHoldoverWriteOutbox(deps.holdoverWriteOutbox, {
@@ -56,8 +54,43 @@ async function runHoldoverWriteOutboxCleanup(
   });
 }
 
+async function runAppPhase(
+  deps: HoldoverWriteOutboxCleanupDeps,
+  scope: Extract<CleanupScope, { kind: "app" }>,
+): Promise<void> {
+  switch (scope.phase) {
+    case "prepare":
+      await prepareAppHoldoverWriteDeletion(
+        deps.holdoverWriteAppInventory,
+        scope.appId,
+        scope.deleteBeforeTsMs ?? Date.now(),
+      );
+      return;
+    case "finalize":
+      await finalizeAppHoldoverWriteDeletion(
+        deps.holdoverWriteAppInventory,
+        deps.holdoverWriteOutbox,
+        scope.appId,
+        scope.deleteBeforeTsMs,
+      );
+      return;
+    case "cancel":
+      await cancelAppHoldoverWriteDeletion(
+        deps.holdoverWriteAppInventory,
+        deps.holdoverWriteOutbox,
+        scope.appId,
+      );
+      return;
+  }
+}
+
 type CleanupScope =
-  | { readonly kind: "app"; readonly appId: string; readonly deleteBeforeTsMs: number }
+  | {
+      readonly kind: "app";
+      readonly appId: string;
+      readonly deleteBeforeTsMs: number | undefined;
+      readonly phase: HoldoverWriteAppDeletionPhase;
+    }
   | {
       readonly kind: "entity";
       readonly appId: string;
@@ -75,9 +108,14 @@ function cleanupScope(input: unknown, principalAppId: string | null): CleanupSco
   const query = rowObject(parsed.query);
   const idType = optionalString(query.idType, "idType");
   const targetingKeyHash = optionalString(query.targetingKeyHash, "targetingKeyHash");
-  const deleteBeforeTsMs = parseDeleteBeforeTs(query.deleteBeforeTs);
   if (idType === undefined && targetingKeyHash === undefined) {
-    return { kind: "app", appId, deleteBeforeTsMs };
+    const phase = parseAppPhase(query.phase);
+    return {
+      kind: "app",
+      appId,
+      phase,
+      deleteBeforeTsMs: parseAppDeleteBeforeTs(query.deleteBeforeTs, phase),
+    };
   }
   if (idType === undefined || targetingKeyHash === undefined) {
     throw new HoldoverWriteOutboxCleanupValidationError(
@@ -89,14 +127,36 @@ function cleanupScope(input: unknown, principalAppId: string | null): CleanupSco
       "deleteBeforeTs is required for Entity deletion",
     );
   }
-  return { kind: "entity", appId, idType, targetingKeyHash, deleteBeforeTsMs };
+  return {
+    kind: "entity",
+    appId,
+    idType,
+    targetingKeyHash,
+    deleteBeforeTsMs: parseDeleteBeforeTs(query.deleteBeforeTs),
+  };
+}
+
+function parseAppDeleteBeforeTs(
+  value: unknown,
+  phase: HoldoverWriteAppDeletionPhase,
+): number | undefined {
+  if (value === undefined) {
+    // prepare defaults to now; finalize/cancel reuse the prepare cutoff in inventory.
+    return phase === "prepare" ? Date.now() : undefined;
+  }
+  return parseDeleteBeforeTs(value);
+}
+
+function parseAppPhase(value: unknown): HoldoverWriteAppDeletionPhase {
+  if (value === "prepare" || value === "finalize" || value === "cancel") {
+    return value;
+  }
+  throw new HoldoverWriteOutboxCleanupValidationError(
+    "phase must be prepare, finalize, or cancel for App deletion",
+  );
 }
 
 function parseDeleteBeforeTs(value: unknown): number {
-  if (value === undefined) {
-    // App-wide suppress: every pending job is stale relative to delete time.
-    return Date.now();
-  }
   if (typeof value !== "string" || value.length === 0) {
     throw new HoldoverWriteOutboxCleanupValidationError("deleteBeforeTs must be an ISO timestamp");
   }

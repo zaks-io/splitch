@@ -18,7 +18,43 @@ import {
 import {
   ensureHoldoverWriteJob,
   type HoldoverWriteInventoryRegisterPort,
+  resumeHoldoverWriteAlarms,
 } from "./holdover-write-outbox-ensure";
+
+type OutboxHandler = (
+  storage: HoldoverWriteOutboxStorage,
+  putPort: HoldoverWritePutPort,
+  request: Request,
+  ctx: OutboxFetchContext,
+) => Promise<Response>;
+
+interface OutboxFetchContext {
+  readonly logger?: HoldoverWriteOutboxLogger;
+  readonly nowMs: number;
+  readonly suppression?: HoldoverWriteSuppressionPort;
+  readonly appInventory?: HoldoverWriteAppInventoryNamespace;
+}
+
+const postRoutes: Record<string, OutboxHandler> = {
+  "/delete": async (storage, _put, request, ctx) =>
+    deleteResponse(storage, await request.json(), ctx.appInventory),
+  "/resume-alarms": async (storage, _put, _request, ctx) => {
+    await resumeHoldoverWriteAlarms(storage, ctx.nowMs);
+    return Response.json({ ok: true });
+  },
+  "/suppress": async (storage, _put, request) => {
+    const body = await request.json().catch(() => ({}));
+    await suppressEntityOutbox(storage, parseDeleteBeforeTsMs(body));
+    return Response.json({ ok: true });
+  },
+  "/purge": async (storage, _put, request) => {
+    const body = await request.json().catch(() => ({}));
+    await purgeEntityOutboxState(storage, parseDeleteBeforeTsMs(body, Number.POSITIVE_INFINITY));
+    return Response.json({ ok: true });
+  },
+  "/ensure": async (storage, putPort, request, ctx) =>
+    ensureResponse(storage, putPort, await request.json(), ctx),
+};
 
 export async function handleHoldoverWriteOutboxFetch(
   storage: HoldoverWriteOutboxStorage,
@@ -30,35 +66,34 @@ export async function handleHoldoverWriteOutboxFetch(
   appInventory?: HoldoverWriteAppInventoryNamespace,
 ): Promise<Response> {
   const url = new URL(request.url);
-  if (request.method === "POST" && url.pathname === "/delete") {
-    await deleteEntityOutbox(storage, parseDeleteBeforeTsMs(await request.json()));
-    return Response.json({ ok: true });
-  }
-  if (request.method === "POST" && url.pathname === "/suppress") {
-    const body = await request.json().catch(() => ({}));
-    await suppressEntityOutbox(storage, parseDeleteBeforeTsMs(body));
-    return Response.json({ ok: true });
-  }
-  if (request.method === "POST" && url.pathname === "/purge") {
-    const body = await request.json().catch(() => ({}));
-    await purgeEntityOutboxState(storage, parseDeleteBeforeTsMs(body, Number.POSITIVE_INFINITY));
-    return Response.json({ ok: true });
-  }
+  const ctx: OutboxFetchContext = { logger, nowMs, suppression, appInventory };
   if (request.method === "GET" && url.pathname === "/status") {
     return statusResponse(storage);
   }
-  if (request.method === "POST" && url.pathname === "/ensure") {
-    return ensureResponse(
-      storage,
-      putPort,
-      await request.json(),
-      nowMs,
-      logger,
-      suppression,
-      appInventory,
-    );
+  if (request.method === "POST") {
+    const route = postRoutes[url.pathname];
+    if (route) return route(storage, putPort, request, ctx);
   }
   return new Response("not found", { status: 404 });
+}
+
+async function deleteResponse(
+  storage: HoldoverWriteOutboxStorage,
+  body: unknown,
+  appInventory: HoldoverWriteAppInventoryNamespace | undefined,
+): Promise<Response> {
+  const parsed = parseEntityDeleteBody(body);
+  await deleteEntityOutbox(storage, parsed.deleteBeforeTsMs);
+  // Unregister inside the same DO critical section as purge so a post-cutoff
+  // ensure that serializes afterward can re-register cleanly (SPL-346).
+  if (appInventory && parsed.identity) {
+    const client = new DurableHoldoverWriteAppInventoryClient(appInventory);
+    await client.markEntityPurged(parsed.identity.appId, {
+      idType: parsed.identity.idType,
+      targetingKeyHash: parsed.identity.targetingKeyHash,
+    });
+  }
+  return Response.json({ ok: true });
 }
 
 async function statusResponse(storage: HoldoverWriteOutboxStorage): Promise<Response> {
@@ -72,15 +107,12 @@ async function ensureResponse(
   storage: HoldoverWriteOutboxStorage,
   putPort: HoldoverWritePutPort,
   body: unknown,
-  nowMs: number,
-  logger: HoldoverWriteOutboxLogger | undefined,
-  suppression: HoldoverWriteSuppressionPort | undefined,
-  appInventory: HoldoverWriteAppInventoryNamespace | undefined,
+  ctx: OutboxFetchContext,
 ): Promise<Response> {
   const parsed = parseEnsureRequest(body);
-  const inventory: HoldoverWriteInventoryRegisterPort | undefined = appInventory
+  const inventory: HoldoverWriteInventoryRegisterPort | undefined = ctx.appInventory
     ? inventoryRegisterPortForApp(
-        new DurableHoldoverWriteAppInventoryClient(appInventory),
+        new DurableHoldoverWriteAppInventoryClient(ctx.appInventory),
         parsed.input.appId,
       )
     : undefined;
@@ -88,13 +120,37 @@ async function ensureResponse(
     storage,
     putPort,
     parsed.input,
-    nowMs,
-    logger,
-    suppression,
+    ctx.nowMs,
+    ctx.logger,
+    ctx.suppression,
     { sourceCreatedAtMs: parsed.sourceCreatedAtMs },
     inventory,
   );
   return Response.json(result);
+}
+
+function parseEntityDeleteBody(value: unknown): {
+  deleteBeforeTsMs: number;
+  identity?: { appId: string; idType: string; targetingKeyHash: string };
+} {
+  const deleteBeforeTsMs = parseDeleteBeforeTsMs(value);
+  if (!isRecord(value)) {
+    return { deleteBeforeTsMs };
+  }
+  const appId = value.appId;
+  const idType = value.idType;
+  const targetingKeyHash = value.targetingKeyHash;
+  if (
+    typeof appId === "string" &&
+    appId.length > 0 &&
+    typeof idType === "string" &&
+    idType.length > 0 &&
+    typeof targetingKeyHash === "string" &&
+    targetingKeyHash.length > 0
+  ) {
+    return { deleteBeforeTsMs, identity: { appId, idType, targetingKeyHash } };
+  }
+  return { deleteBeforeTsMs };
 }
 
 function parseDeleteBeforeTsMs(value: unknown, fallback?: number): number {

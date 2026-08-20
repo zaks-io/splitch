@@ -54,6 +54,19 @@ export class MemoryHoldoverWriteAppInventoryClient implements HoldoverWriteAppIn
     };
   }
 
+  async cancelDeletion(appId: string): Promise<{
+    readonly cancelled: boolean;
+    readonly entities: readonly HoldoverWriteAppEntityRef[];
+  }> {
+    const state = this.state(appId);
+    if (state.deletionComplete) {
+      return { cancelled: false, entities: [] };
+    }
+    state.suppressed = false;
+    state.deleteBeforeTsMs = null;
+    return { cancelled: true, entities: [...state.entities.values()] };
+  }
+
   async markEntityPurged(appId: string, ref: HoldoverWriteAppEntityRef): Promise<void> {
     this.state(appId).entities.delete(`${ref.idType}:${ref.targetingKeyHash}`);
   }

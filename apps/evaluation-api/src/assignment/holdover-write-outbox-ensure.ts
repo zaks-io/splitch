@@ -11,7 +11,6 @@ import {
   type HoldoverWriteSuppressionPort,
   holdoverWriteJobKey,
   holdoverWriteRetryDelayMs,
-  purgeEntityOutboxState,
   purgeStaleJobs,
   readEntitySuppression,
   scopedHoldoverWriteLog,
@@ -45,7 +44,11 @@ export async function ensureHoldoverWriteJob(
   inventory?: HoldoverWriteInventoryRegisterPort,
 ): Promise<HoldoverWriteEnsureResult> {
   const sourceCreatedAtMs = options?.sourceCreatedAtMs ?? nowMs;
-  if (await isStaleUnderSuppression(storage, input.appId, sourceCreatedAtMs, suppression)) {
+  // App freeze/suppress must not destroy recoverable durable jobs — only block puts.
+  if (suppression && (await suppression.isAppSuppressed(input.appId))) {
+    return { status: "suppressed" };
+  }
+  if (await isStaleUnderEntityCutoff(storage, sourceCreatedAtMs)) {
     await purgeStaleJobs(storage, sourceCreatedAtMs);
     return { status: "suppressed" };
   }
@@ -59,7 +62,6 @@ export async function ensureHoldoverWriteJob(
       targetingKeyHash: input.targetingKeyHash,
     });
     if (registration.status === "suppressed") {
-      await purgeEntityOutboxState(storage);
       return { status: "suppressed" };
     }
   }
@@ -99,7 +101,8 @@ export async function runHoldoverWriteAlarm(
 
   const appId = jobs[0]?.appId;
   if (appId !== undefined && (await suppression?.isAppSuppressed(appId))) {
-    await purgeEntityOutboxState(storage);
+    // Freeze: stop spinning without purging accepted durable work.
+    await storage.deleteAlarm();
     return;
   }
 
@@ -115,6 +118,14 @@ export async function runHoldoverWriteAlarm(
   await rescheduleOrClearAlarm(storage, nowMs);
 }
 
+/** Re-arm alarms for pending jobs after App deletion cancel/restore. */
+export async function resumeHoldoverWriteAlarms(
+  storage: HoldoverWriteOutboxStorage,
+  nowMs: number = Date.now(),
+): Promise<void> {
+  await rescheduleOrClearAlarm(storage, nowMs);
+}
+
 async function attemptHoldoverWriteJob(
   storage: HoldoverWriteOutboxStorage,
   putPort: HoldoverWritePutPort,
@@ -123,7 +134,11 @@ async function attemptHoldoverWriteJob(
   logger?: HoldoverWriteOutboxLogger,
   suppression?: HoldoverWriteSuppressionPort,
 ): Promise<HoldoverWriteEnsureResult> {
-  if (await isStaleUnderSuppression(storage, job.appId, job.createdAtMs, suppression)) {
+  if (suppression && (await suppression.isAppSuppressed(job.appId))) {
+    await storage.deleteAlarm();
+    return { status: "suppressed" };
+  }
+  if (await isStaleUnderEntityCutoff(storage, job.createdAtMs)) {
     await storage.delete(holdoverWriteJobKey(job.experimentId));
     await rescheduleOrClearAlarm(storage, nowMs);
     return { status: "suppressed" };
@@ -178,15 +193,10 @@ async function attemptHoldoverWriteJob(
   }
 }
 
-async function isStaleUnderSuppression(
+async function isStaleUnderEntityCutoff(
   storage: HoldoverWriteOutboxStorage,
-  appId: string,
   sourceCreatedAtMs: number,
-  suppression?: HoldoverWriteSuppressionPort,
 ): Promise<boolean> {
-  if (suppression && (await suppression.isAppSuppressed(appId))) {
-    return true;
-  }
   const entity = await readEntitySuppression(storage);
   if (entity === undefined) return false;
   return sourceCreatedAtMs <= entity.deleteBeforeTsMs;

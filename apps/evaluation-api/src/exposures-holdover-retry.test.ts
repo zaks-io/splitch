@@ -218,7 +218,8 @@ describe("POST /api/sdk/exposures: holdover exhaustion and deletion (SPL-346)", 
     holdoverWrite.suppressApp(APP_ID);
     await holdoverWrite.alarm(identity);
     expect(assignmentStore.putHashedCalls).toHaveLength(1);
-    expect(holdoverWrite.jobFor(identity)).toBeUndefined();
+    // Freeze keeps accepted durable work; only puts are blocked.
+    expect(holdoverWrite.jobFor(identity)?.status).toBe("pending");
     expect(assignmentStore.readable.size).toBe(0);
   });
 

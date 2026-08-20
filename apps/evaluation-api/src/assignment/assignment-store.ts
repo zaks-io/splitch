@@ -49,6 +49,8 @@ export interface AssignmentStorePutResult {
 export interface AssignmentKv {
   get(key: string): Promise<string | null>;
   put(key: string, value: string): Promise<void>;
+  /** Optional: App holdover suppress cancel clears the KV tombstone. */
+  delete?(key: string): Promise<void>;
   list?(options: { prefix: string }): Promise<{ keys: { name: string }[] }>;
 }
 

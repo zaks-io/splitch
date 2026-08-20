@@ -265,26 +265,33 @@ async function deleteAppRows(
   actorId: string,
   requestId: string,
 ): Promise<void> {
-  // Suppress holdover-write outboxes BEFORE destructive cleanup so pending
-  // alarms cannot recreate Assignment Store state during the cascade (SPL-346).
+  // Two-phase holdover deletion (SPL-346): freeze before destructive cleanup so
+  // a failed cascade can cancel/restore and recover accepted durable work.
   const holdoverCleanup = deps.holdoverWriteOutboxCleanup;
   if (!holdoverCleanup) throw new Error("App delete requires holdover write outbox cleanup");
-  await holdoverCleanup.delete({
+  const holdoverInput = {
     appId,
     actorId,
     orgId: organizationId,
     requestId,
     deleteBeforeTs: new Date().toISOString(),
-  });
-
-  // Revoke + KV tombstone only — leave D1 credential rows for the cascade
-  // batch. Removing them here would destroy Client Keys before a late FK
-  // failure rolls the App/memberships back (SPL-298). The durable cache
-  // writer still sees matching revokedAt before any D1 delete.
-  for (const env of environments) {
-    await revokeEnvironmentCredentialsForAppDelete(deps, appId, env.id);
+  };
+  await holdoverCleanup.prepare(holdoverInput);
+  try {
+    // Revoke + KV tombstone only — leave D1 credential rows for the cascade
+    // batch. Removing them here would destroy Client Keys before a late FK
+    // failure rolls the App/memberships back (SPL-298). The durable cache
+    // writer still sees matching revokedAt before any D1 delete.
+    for (const env of environments) {
+      await revokeEnvironmentCredentialsForAppDelete(deps, appId, env.id);
+    }
+    await deps.repo.identity.deleteAppCascade(appScope(appId));
+  } catch (cause) {
+    await holdoverCleanup.cancel(holdoverInput);
+    throw cause;
   }
-  await deps.repo.identity.deleteAppCascade(appScope(appId));
+  // App D1 row is gone: drain/purge Entity outboxes and mark deletion complete.
+  await holdoverCleanup.finalize(holdoverInput);
   // Stop every credential and finish the D1 cascade before deleting durable
   // analytics state. Cleanup is idempotent and remains recoverable if its
   // external request fails; a live App can never be left falsely reset.
