@@ -1,13 +1,9 @@
 /**
  * Privacy deletion consumer for the holdover-write outbox (SPL-346).
  *
- * App deletion is reversible two-phase: prepare/freeze (suppress without purge),
- * Control Plane D1/credential cascade, then finalize (drain/purge + complete).
- * Cancel restores a still-live App so frozen durable jobs remain recoverable.
- *
- * Entity deletion: cutoff-aware suppress + purge on that Entity's outbox DO,
- * which also unregisters the Entity from App inventory under the same
- * `blockConcurrencyWhile` critical section.
+ * App deletion is a durable App-scoped saga owned by App inventory DO storage
+ * (outside the D1 App row): prepare/freeze, cancel restore, or mark D1-deleted
+ * then finalize drain.
  *
  * @module
  */
@@ -67,23 +63,6 @@ export async function suppressAndPurgeEntityHoldoverWriteOutbox(
   }
 }
 
-/** Wake pending Entity outbox alarms after App deletion cancel/restore. */
-async function resumeEntityHoldoverWriteOutboxAlarms(
-  namespace: HoldoverWriteOutboxNamespace,
-  identity: HoldoverWriteEntityIdentity,
-): Promise<void> {
-  const name = holdoverWriteOutboxName(identity);
-  const stub = namespace.get(namespace.idFromName(name));
-  const response = await stub.fetch("https://holdover-write-outbox.local/resume-alarms", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: "{}",
-  });
-  if (!response.ok) {
-    throw new Error(`holdover write outbox /resume-alarms failed: HTTP ${String(response.status)}`);
-  }
-}
-
 /** Phase 1: freeze App holdover work without purging accepted durable jobs. */
 export async function prepareAppHoldoverWriteDeletion(
   inventory: HoldoverWriteAppInventoryClient,
@@ -94,9 +73,21 @@ export async function prepareAppHoldoverWriteDeletion(
   await inventory.beginDeletion(appId, deleteBeforeTsMs);
 }
 
+/** Irreversible boundary after Control Plane `deleteAppCascade` commits. */
+export async function markAppHoldoverWriteD1Deleted(
+  inventory: HoldoverWriteAppInventoryClient,
+  appId: string,
+  deleteBeforeTsMs?: number,
+): Promise<void> {
+  if (appId.length === 0) {
+    throw new Error("markAppHoldoverWriteD1Deleted: appId is required");
+  }
+  await inventory.markD1Deleted(appId, deleteBeforeTsMs);
+}
+
 /**
- * Phase 3: after successful D1 cascade, drain/purge every registered Entity
- * outbox and mark App deletion complete. Idempotent for public retry.
+ * Phase 3: after D1 cascade, drain/purge every registered Entity outbox and
+ * mark App deletion complete. Idempotent for public retry after the App row is gone.
  */
 export async function finalizeAppHoldoverWriteDeletion(
   inventory: HoldoverWriteAppInventoryClient,
@@ -108,43 +99,53 @@ export async function finalizeAppHoldoverWriteDeletion(
     throw new Error("finalizeAppHoldoverWriteDeletion: appId is required");
   }
   const status = await inventory.status(appId);
-  if (status.deletionComplete) {
+  if (status.deletionComplete || status.sagaPhase === "completed") {
     return;
+  }
+  if (status.sagaPhase === "canceling") {
+    throw new Error("finalizeAppHoldoverWriteDeletion: refuse finalize while canceling");
   }
   const cutoff =
     deleteBeforeTsMs ?? (status.deleteBeforeTsMs !== null ? status.deleteBeforeTsMs : Number.NaN);
   if (!Number.isFinite(cutoff)) {
     throw new Error("finalizeAppHoldoverWriteDeletion: deleteBeforeTsMs is required");
   }
-  if (!status.suppressed) {
-    await inventory.beginDeletion(appId, cutoff);
+  if (status.sagaPhase !== "d1_deleted" && status.sagaPhase !== "finalizing") {
+    await inventory.markD1Deleted(appId, cutoff);
   }
   await drainRegisteredEntities(inventory, outbox, appId, cutoff);
   await inventory.completeDeletion(appId);
 }
 
 /**
- * Cancel/restore after prepare when a later pre-delete step fails: clear App
- * suppress so a live App resumes ownership; wake frozen Entity alarms.
+ * Cancel/restore when still pre-D1. Inventory DO owns durable checkpoints and
+ * alarm resume; incomplete cancel fails loud so the DO alarm continues without
+ * a browser request.
  */
 export async function cancelAppHoldoverWriteDeletion(
   inventory: HoldoverWriteAppInventoryClient,
-  outbox: HoldoverWriteOutboxNamespace,
+  _outbox: HoldoverWriteOutboxNamespace,
   appId: string,
 ): Promise<void> {
   if (appId.length === 0) {
     throw new Error("cancelAppHoldoverWriteDeletion: appId is required");
   }
+  const status = await inventory.status(appId);
+  if (status.sagaPhase === "d1_deleted" || status.sagaPhase === "finalizing") {
+    throw new Error("cancelAppHoldoverWriteDeletion: refuse cancel after D1 deletion");
+  }
+  if (status.deletionComplete || status.sagaPhase === "completed") {
+    return;
+  }
   const cancelled = await inventory.cancelDeletion(appId);
   if (!cancelled.cancelled) {
     return;
   }
-  for (const entity of cancelled.entities) {
-    await resumeEntityHoldoverWriteOutboxAlarms(outbox, {
-      appId,
-      idType: entity.idType,
-      targetingKeyHash: entity.targetingKeyHash,
-    });
+  if (!cancelled.done) {
+    // Leave canceling saga for inventory DO alarm / advance-cancel resume.
+    throw new Error(
+      "cancelAppHoldoverWriteDeletion: cancel saga incomplete; will resume via alarm",
+    );
   }
 }
 

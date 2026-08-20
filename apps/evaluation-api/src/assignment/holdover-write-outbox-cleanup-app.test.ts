@@ -92,20 +92,26 @@ describe("holdover write outbox cleanup App phases", () => {
   });
 
   it("cancel restores freeze and wakes Entity alarms", async () => {
-    const inventory = new MemoryHoldoverWriteAppInventoryClient();
+    const resumes: string[] = [];
+    const inventory = new MemoryHoldoverWriteAppInventoryClient({
+      resume: {
+        async resumeAlarms(identity) {
+          resumes.push(`${identity.idType}:${identity.targetingKeyHash}`);
+        },
+      },
+    });
     await inventory.registerEntity("app-A", { idType: "user", targetingKeyHash: "hash-1" });
     await inventory.beginDeletion("app-A", 1_000);
-    const paths: string[] = [];
     const handler = makeHoldoverWriteOutboxCleanupHandler({
       assignmentsKv: new RecordingKv(),
-      holdoverWriteOutbox: stubOutbox((path) => paths.push(path)),
+      holdoverWriteOutbox: stubOutbox(),
       holdoverWriteAppInventory: inventory,
     });
     const response = await handler(
       handlerArgs({ params: { appId: "app-A" }, query: { phase: "cancel" } }, "app-A"),
     );
     expect(response.status).toBe(200);
-    expect(paths).toEqual(["/resume-alarms"]);
+    expect(resumes).toEqual(["user:hash-1"]);
     expect(await inventory.status("app-A")).toMatchObject({
       suppressed: false,
       deletionComplete: false,

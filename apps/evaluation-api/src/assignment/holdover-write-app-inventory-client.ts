@@ -6,6 +6,7 @@ import {
   type HoldoverWriteAppInventoryStatus,
   holdoverWriteAppInventoryName,
 } from "./holdover-write-app-inventory";
+import type { HoldoverWriteAppDeletionSagaPhase } from "./holdover-write-app-deletion-saga";
 import type { HoldoverWriteInventoryRegisterPort } from "./holdover-write-outbox-ensure";
 
 class HoldoverWriteAppInventoryError extends Error {
@@ -13,6 +14,13 @@ class HoldoverWriteAppInventoryError extends Error {
     super(message, options);
     this.name = "HoldoverWriteAppInventoryError";
   }
+}
+
+export interface HoldoverWriteAppInventoryCancelResult {
+  readonly cancelled: boolean;
+  readonly done: boolean;
+  readonly entities: readonly HoldoverWriteAppEntityRef[];
+  readonly sagaPhase: HoldoverWriteAppDeletionSagaPhase | null;
 }
 
 export interface HoldoverWriteAppInventoryClient {
@@ -24,10 +32,9 @@ export interface HoldoverWriteAppInventoryClient {
     appId: string,
     deleteBeforeTsMs: number,
   ): Promise<HoldoverWriteAppDeletionBeginResult>;
-  cancelDeletion(appId: string): Promise<{
-    readonly cancelled: boolean;
-    readonly entities: readonly HoldoverWriteAppEntityRef[];
-  }>;
+  cancelDeletion(appId: string): Promise<HoldoverWriteAppInventoryCancelResult>;
+  advanceCancel(appId: string): Promise<{ readonly done: boolean }>;
+  markD1Deleted(appId: string, deleteBeforeTsMs?: number): Promise<void>;
   markEntityPurged(appId: string, ref: HoldoverWriteAppEntityRef): Promise<void>;
   completeDeletion(appId: string): Promise<void>;
   status(appId: string): Promise<HoldoverWriteAppInventoryStatus>;
@@ -70,18 +77,32 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
     };
   }
 
-  async cancelDeletion(appId: string): Promise<{
-    readonly cancelled: boolean;
-    readonly entities: readonly HoldoverWriteAppEntityRef[];
-  }> {
+  async cancelDeletion(appId: string): Promise<HoldoverWriteAppInventoryCancelResult> {
     const body = await this.postJson(appId, "/cancel-deletion", { appId });
     if (!isRecord(body) || typeof body.cancelled !== "boolean" || !Array.isArray(body.entities)) {
       throw new HoldoverWriteAppInventoryError("cancel-deletion returned an invalid payload");
     }
     return {
       cancelled: body.cancelled,
+      done: body.done === true,
       entities: body.entities.map(parseEntityRef),
+      sagaPhase: parseSagaPhase(body.sagaPhase),
     };
+  }
+
+  async advanceCancel(appId: string): Promise<{ readonly done: boolean }> {
+    const body = await this.postJson(appId, "/advance-cancel", { appId });
+    if (!isRecord(body) || typeof body.done !== "boolean") {
+      throw new HoldoverWriteAppInventoryError("advance-cancel returned an invalid payload");
+    }
+    return { done: body.done };
+  }
+
+  async markD1Deleted(appId: string, deleteBeforeTsMs?: number): Promise<void> {
+    await this.post(appId, "/mark-d1-deleted", {
+      appId,
+      ...(deleteBeforeTsMs !== undefined ? { deleteBeforeTsMs } : {}),
+    });
   }
 
   async markEntityPurged(appId: string, ref: HoldoverWriteAppEntityRef): Promise<void> {
@@ -115,6 +136,7 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
           ? body.deleteBeforeTsMs
           : null,
       entities: body.entities.map(parseEntityRef),
+      sagaPhase: parseSagaPhase(body.sagaPhase),
     };
   }
 
@@ -173,6 +195,20 @@ function parseEntityRef(value: unknown): HoldoverWriteAppEntityRef {
     throw new HoldoverWriteAppInventoryError("entity ref targetingKeyHash is required");
   }
   return { idType, targetingKeyHash };
+}
+
+function parseSagaPhase(value: unknown): HoldoverWriteAppDeletionSagaPhase | null {
+  if (
+    value === "preparing" ||
+    value === "prepared" ||
+    value === "d1_deleted" ||
+    value === "finalizing" ||
+    value === "completed" ||
+    value === "canceling"
+  ) {
+    return value;
+  }
+  return null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

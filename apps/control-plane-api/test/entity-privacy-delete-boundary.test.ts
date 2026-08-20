@@ -60,6 +60,9 @@ describe("entity privacy delete route availability", () => {
         async prepare() {
           throw new Error("entity privacy must not claim queued deletion");
         },
+        async markD1Deleted() {
+          throw new Error("entity privacy must not claim queued deletion");
+        },
         async finalize() {
           throw new Error("entity privacy must not claim queued deletion");
         },

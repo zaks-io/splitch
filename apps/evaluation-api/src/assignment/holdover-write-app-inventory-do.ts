@@ -1,24 +1,37 @@
 import { DurableObject } from "cloudflare:workers";
 import type { AssignmentKv } from "./assignment-store";
-import {
-  beginAppInventoryDeletion,
-  cancelAppInventoryDeletion,
-} from "./holdover-write-app-inventory";
+import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
 import { handleHoldoverWriteAppInventoryFetch } from "./holdover-write-app-inventory-fetch";
-import { appHoldoverWriteSuppressKey } from "./holdover-write-outbox-core";
+import {
+  advanceAppDeletionCancelSaga,
+  beginOrResumeAppDeletionCancelSaga,
+  markAppDeletionSagaD1Deleted,
+  prepareAppDeletionSaga,
+  readAppDeletionSaga,
+} from "./holdover-write-app-deletion-saga";
+import type { HoldoverWriteOutboxNamespace } from "./holdover-write-outbox";
+import { holdoverWriteOutboxName } from "./holdover-write-outbox-core";
 
 export interface HoldoverWriteAppInventoryEnv {
   ASSIGNMENTS_KV: AssignmentKv;
+  HOLDOVER_WRITE_OUTBOX?: HoldoverWriteOutboxNamespace;
+  HOLDOVER_WRITE_APP_INVENTORY?: HoldoverWriteAppInventoryNamespace;
 }
 
+const CANCEL_RETRY_DELAY_MS = 1_000;
+
 /**
- * One Durable Object per App: indexes Entity holdover-write outboxes and
- * coordinates two-phase App deletion (prepare → finalize / cancel) under
- * `blockConcurrencyWhile`.
+ * One Durable Object per App: indexes Entity holdover-write outboxes and owns
+ * the durable App deletion saga (prepare → finalize / cancel) under
+ * `blockConcurrencyWhile`, including alarm-driven cancel resume.
  */
 export class HoldoverWriteAppInventoryDurableObject extends DurableObject<HoldoverWriteAppInventoryEnv> {
   override async fetch(request: Request): Promise<Response> {
     return this.ctx.blockConcurrencyWhile(() => this.handleFetch(request));
+  }
+
+  override async alarm(): Promise<void> {
+    await this.ctx.blockConcurrencyWhile(() => this.handleAlarm());
   }
 
   private async handleFetch(request: Request): Promise<Response> {
@@ -29,17 +42,56 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
     if (request.method === "POST" && url.pathname === "/cancel-deletion") {
       return this.cancelDeletion(request);
     }
+    if (request.method === "POST" && url.pathname === "/mark-d1-deleted") {
+      return this.markD1Deleted(request);
+    }
+    if (request.method === "POST" && url.pathname === "/advance-cancel") {
+      return this.advanceCancel(request);
+    }
     return handleHoldoverWriteAppInventoryFetch(this.ctx.storage, request);
+  }
+
+  private async handleAlarm(): Promise<void> {
+    const saga = await readAppDeletionSaga(this.ctx.storage);
+    if (saga === null || saga.phase !== "canceling") return;
+    const advanced = await advanceAppDeletionCancelSaga(
+      this.ctx.storage,
+      this.env.ASSIGNMENTS_KV,
+      saga.appId,
+      this.resumePort(),
+    );
+    if (!advanced.done) {
+      await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
+    }
   }
 
   private async beginDeletion(request: Request): Promise<Response> {
     const parsed = await parseDeletionBody(request);
     if (!parsed.ok) return parsed.response;
     try {
-      const result = await beginAppInventoryDeletion(this.ctx.storage, parsed.deleteBeforeTsMs);
-      await this.env.ASSIGNMENTS_KV.put(appHoldoverWriteSuppressKey(parsed.appId), "1");
-      return Response.json(result);
+      const result = await prepareAppDeletionSaga(
+        this.ctx.storage,
+        this.env.ASSIGNMENTS_KV,
+        parsed.appId,
+        parsed.deleteBeforeTsMs,
+        this.resumePort(),
+      );
+      const saga = await readAppDeletionSaga(this.ctx.storage);
+      if (saga?.phase === "canceling") {
+        await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
+      }
+      return Response.json({
+        suppressed: true,
+        deletionComplete: result.deletionComplete,
+        deleteBeforeTsMs: parsed.deleteBeforeTsMs,
+        entities: [],
+        sagaPhase: saga?.phase ?? (result.deletionComplete ? "completed" : "prepared"),
+      });
     } catch (cause) {
+      const saga = await readAppDeletionSaga(this.ctx.storage);
+      if (saga?.phase === "canceling") {
+        await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
+      }
       return Response.json(
         { error: cause instanceof Error ? cause.message : String(cause) },
         { status: 400 },
@@ -48,24 +100,97 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
   }
 
   private async cancelDeletion(request: Request): Promise<Response> {
-    const parsed = await parseCancelBody(request, this.ctx.id.name);
+    const parsed = await parseAppIdBody(request, this.ctx.id.name);
     if (!parsed.ok) return parsed.response;
     try {
-      const result = await cancelAppInventoryDeletion(this.ctx.storage);
-      if (result.cancelled) {
-        const deleteKey = this.env.ASSIGNMENTS_KV.delete?.bind(this.env.ASSIGNMENTS_KV);
-        if (!deleteKey) {
-          throw new Error("ASSIGNMENTS_KV.delete is required to cancel App holdover suppress");
-        }
-        await deleteKey(appHoldoverWriteSuppressKey(parsed.appId));
+      const result = await beginOrResumeAppDeletionCancelSaga(
+        this.ctx.storage,
+        this.env.ASSIGNMENTS_KV,
+        parsed.appId,
+        this.resumePort(),
+      );
+      if (!result.done && result.cancelled) {
+        await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
       }
-      return Response.json(result);
+      const saga = await readAppDeletionSaga(this.ctx.storage);
+      return Response.json({
+        cancelled: result.cancelled,
+        done: result.done,
+        entities: saga?.cancelResumePending ?? [],
+        sagaPhase: saga?.phase ?? null,
+      });
+    } catch (cause) {
+      await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
+      return Response.json(
+        { error: cause instanceof Error ? cause.message : String(cause) },
+        { status: 400 },
+      );
+    }
+  }
+
+  private async advanceCancel(request: Request): Promise<Response> {
+    const parsed = await parseAppIdBody(request, this.ctx.id.name);
+    if (!parsed.ok) return parsed.response;
+    try {
+      const advanced = await advanceAppDeletionCancelSaga(
+        this.ctx.storage,
+        this.env.ASSIGNMENTS_KV,
+        parsed.appId,
+        this.resumePort(),
+      );
+      if (!advanced.done) {
+        await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
+      }
+      return Response.json({ done: advanced.done });
+    } catch (cause) {
+      await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
+      return Response.json(
+        { error: cause instanceof Error ? cause.message : String(cause) },
+        { status: 400 },
+      );
+    }
+  }
+
+  private async markD1Deleted(request: Request): Promise<Response> {
+    const parsed = await parseMarkD1Body(request);
+    if (!parsed.ok) return parsed.response;
+    try {
+      const saga = await markAppDeletionSagaD1Deleted(
+        this.ctx.storage,
+        parsed.appId,
+        parsed.deleteBeforeTsMs,
+      );
+      return Response.json(saga);
     } catch (cause) {
       return Response.json(
         { error: cause instanceof Error ? cause.message : String(cause) },
         { status: 400 },
       );
     }
+  }
+
+  private resumePort() {
+    const namespace = this.env.HOLDOVER_WRITE_OUTBOX;
+    if (!namespace) return null;
+    return {
+      async resumeAlarms(identity: {
+        readonly appId: string;
+        readonly idType: string;
+        readonly targetingKeyHash: string;
+      }) {
+        const stub = namespace.get(namespace.idFromName(holdoverWriteOutboxName(identity)));
+        const response = await stub.fetch("https://holdover-write-outbox.local/resume-alarms", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        });
+        if (!response.ok) {
+          throw new Error(
+            `holdover write outbox /resume-alarms failed: HTTP ${String(response.status)}`,
+          );
+        }
+      },
+    };
   }
 }
 
@@ -107,7 +232,7 @@ async function parseDeletionBody(
   return { ok: true, appId, deleteBeforeTsMs };
 }
 
-async function parseCancelBody(
+async function parseAppIdBody(
   request: Request,
   doName: string | undefined,
 ): Promise<{ ok: true; appId: string } | { ok: false; response: Response }> {
@@ -134,4 +259,36 @@ async function parseCancelBody(
     };
   }
   return { ok: true, appId };
+}
+
+async function parseMarkD1Body(
+  request: Request,
+): Promise<
+  | { ok: true; appId: string; deleteBeforeTsMs: number | undefined }
+  | { ok: false; response: Response }
+> {
+  let body: unknown = {};
+  try {
+    body = await request.json();
+  } catch {
+    body = {};
+  }
+  const appIdFromBody =
+    typeof body === "object" &&
+    body !== null &&
+    typeof (body as { appId?: unknown }).appId === "string"
+      ? (body as { appId: string }).appId
+      : "";
+  if (appIdFromBody.length === 0) {
+    return {
+      ok: false,
+      response: Response.json({ error: "appId is required to mark D1 deletion" }, { status: 400 }),
+    };
+  }
+  const raw =
+    typeof body === "object" && body !== null
+      ? (body as { deleteBeforeTsMs?: unknown }).deleteBeforeTsMs
+      : undefined;
+  const deleteBeforeTsMs = typeof raw === "number" && Number.isFinite(raw) ? raw : undefined;
+  return { ok: true, appId: appIdFromBody, deleteBeforeTsMs };
 }

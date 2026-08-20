@@ -14,12 +14,13 @@ import type { HoldoverWriteAppInventoryClient } from "./holdover-write-app-inven
 import {
   cancelAppHoldoverWriteDeletion,
   finalizeAppHoldoverWriteDeletion,
+  markAppHoldoverWriteD1Deleted,
   prepareAppHoldoverWriteDeletion,
   suppressAndPurgeEntityHoldoverWriteOutbox,
 } from "./holdover-write-deletion";
 import type { HoldoverWriteOutboxNamespace } from "./holdover-write-outbox";
 
-type HoldoverWriteAppDeletionPhase = "prepare" | "finalize" | "cancel";
+type HoldoverWriteAppDeletionPhase = "prepare" | "finalize" | "cancel" | "mark-d1-deleted";
 
 export interface HoldoverWriteOutboxCleanupDeps {
   readonly assignmentsKv: AssignmentKv;
@@ -64,6 +65,13 @@ async function runAppPhase(
         deps.holdoverWriteAppInventory,
         scope.appId,
         scope.deleteBeforeTsMs ?? Date.now(),
+      );
+      return;
+    case "mark-d1-deleted":
+      await markAppHoldoverWriteD1Deleted(
+        deps.holdoverWriteAppInventory,
+        scope.appId,
+        scope.deleteBeforeTsMs,
       );
       return;
     case "finalize":
@@ -148,11 +156,16 @@ function parseAppDeleteBeforeTs(
 }
 
 function parseAppPhase(value: unknown): HoldoverWriteAppDeletionPhase {
-  if (value === "prepare" || value === "finalize" || value === "cancel") {
+  if (
+    value === "prepare" ||
+    value === "finalize" ||
+    value === "cancel" ||
+    value === "mark-d1-deleted"
+  ) {
     return value;
   }
   throw new HoldoverWriteOutboxCleanupValidationError(
-    "phase must be prepare, finalize, or cancel for App deletion",
+    "phase must be prepare, finalize, cancel, or mark-d1-deleted for App deletion",
   );
 }
 

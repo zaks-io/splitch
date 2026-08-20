@@ -35,7 +35,7 @@ const HoldoverWriteOutboxDeleteQuerySchema = z
     targetingKeyHash: z.string().min(1).optional(),
     deleteBeforeTs: z.string().datetime({ offset: true }).optional(),
     /** App deletion phase: prepare (freeze), finalize (drain), or cancel (restore). */
-    phase: z.enum(["prepare", "finalize", "cancel"]).optional(),
+    phase: z.enum(["prepare", "finalize", "cancel", "mark-d1-deleted"]).optional(),
   })
   .strict();
 

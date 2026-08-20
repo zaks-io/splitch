@@ -116,9 +116,10 @@ Entity slot). That outbox seals durable ownership, attempts the Assignment Store
 re-run. Ownership (or KV-complete) is required before an `accepted`/`deduplicated` ack; deletion
 cutoff returns `suppressed`. App deletion enumerates Entity outboxes via
 `env.HOLDOVER_WRITE_APP_INVENTORY` (strongly consistent), not Assignment Store KV list.
-App deletion is two-phase: prepare/freeze (suppress without purge) before Control Plane
-D1/credential cascade, then finalize (drain/purge + complete). Cancel restores a still-live
-App so frozen durable jobs remain recoverable.
+App deletion is a durable App-scoped saga outside the D1 App row: prepare/freeze
+(suppress without purge), cancel restore while still pre-D1, or mark the irreversible
+D1-success boundary then finalize (drain/purge + complete). Public DELETE retries after
+the App row is gone resume pending finalize — never cancel/rollback past D1 deletion.
 
 ## Holdover retention policy
 

@@ -10,7 +10,7 @@ function registeredCleanupRoute() {
 }
 const cleanupRoute = registeredCleanupRoute();
 
-type HoldoverWriteAppDeletionPhase = "prepare" | "finalize" | "cancel";
+type HoldoverWriteAppDeletionPhase = "prepare" | "finalize" | "cancel" | "mark-d1-deleted";
 
 interface HoldoverWriteOutboxCleanupInput {
   appId: string;
@@ -27,6 +27,9 @@ interface HoldoverWriteOutboxCleanupInput {
 
 export interface HoldoverWriteOutboxCleanup {
   prepare(
+    input: Omit<HoldoverWriteOutboxCleanupInput, "phase" | "idType" | "targetingKeyHash">,
+  ): Promise<void>;
+  markD1Deleted(
     input: Omit<HoldoverWriteOutboxCleanupInput, "phase" | "idType" | "targetingKeyHash">,
   ): Promise<void>;
   finalize(
@@ -50,6 +53,8 @@ export function createHoldoverWriteOutboxCleanup(
 ): HoldoverWriteOutboxCleanup {
   return {
     prepare: (input) => deleteHoldoverWriteOutbox(evaluation, { ...input, phase: "prepare" }),
+    markD1Deleted: (input) =>
+      deleteHoldoverWriteOutbox(evaluation, { ...input, phase: "mark-d1-deleted" }),
     finalize: (input) => deleteHoldoverWriteOutbox(evaluation, { ...input, phase: "finalize" }),
     cancel: (input) => deleteHoldoverWriteOutbox(evaluation, { ...input, phase: "cancel" }),
     delete: (input) => deleteHoldoverWriteOutbox(evaluation, input),

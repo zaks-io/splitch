@@ -28,11 +28,21 @@ export interface HoldoverWriteAppDeletionBeginResult {
   readonly deleteBeforeTsMs: number;
 }
 
+type HoldoverWriteAppInventorySagaPhase =
+  | "preparing"
+  | "prepared"
+  | "d1_deleted"
+  | "finalizing"
+  | "completed"
+  | "canceling";
+
 export interface HoldoverWriteAppInventoryStatus {
   readonly suppressed: boolean;
   readonly deletionComplete: boolean;
   readonly deleteBeforeTsMs: number | null;
   readonly entities: readonly HoldoverWriteAppEntityRef[];
+  /** Durable App deletion saga phase; null when idle. */
+  readonly sagaPhase: HoldoverWriteAppInventorySagaPhase | null;
 }
 
 /** Outcome of strongly consistent Entity registration against App deletion state. */
@@ -150,19 +160,55 @@ export async function completeAppInventoryDeletion(
   }
   await storage.put(SUPPRESSED_KEY, true);
   await storage.put(DELETION_COMPLETE_KEY, true);
+  const prior = await storage.get<{
+    appId?: string;
+    deleteBeforeTsMs?: number;
+  }>("deletionSaga");
+  const deleteBefore =
+    typeof prior?.deleteBeforeTsMs === "number"
+      ? prior.deleteBeforeTsMs
+      : ((await storage.get<number>(DELETE_BEFORE_TS_KEY)) ?? 0);
+  await storage.put("deletionSaga", {
+    phase: "completed",
+    appId: typeof prior?.appId === "string" ? prior.appId : "",
+    deleteBeforeTsMs: deleteBefore,
+    cancelResumePending: [],
+    cancelKvCleared: true,
+  });
 }
 
 export async function appInventoryStatus(
   storage: HoldoverWriteAppInventoryStorage,
 ): Promise<HoldoverWriteAppInventoryStatus> {
   const deleteBefore = await storage.get<number>(DELETE_BEFORE_TS_KEY);
+  const saga = await storage.get<{ phase?: unknown }>("deletionSaga");
+  const sagaPhase =
+    saga !== undefined &&
+    typeof saga === "object" &&
+    saga !== null &&
+    typeof saga.phase === "string" &&
+    isSagaPhase(saga.phase)
+      ? saga.phase
+      : null;
   return {
     suppressed: (await storage.get<boolean>(SUPPRESSED_KEY)) === true,
     deletionComplete: (await storage.get<boolean>(DELETION_COMPLETE_KEY)) === true,
     deleteBeforeTsMs:
       typeof deleteBefore === "number" && Number.isFinite(deleteBefore) ? deleteBefore : null,
     entities: await listRegisteredEntities(storage),
+    sagaPhase,
   };
+}
+
+function isSagaPhase(value: string): value is HoldoverWriteAppInventorySagaPhase {
+  return (
+    value === "preparing" ||
+    value === "prepared" ||
+    value === "d1_deleted" ||
+    value === "finalizing" ||
+    value === "completed" ||
+    value === "canceling"
+  );
 }
 
 export async function isAppInventorySuppressed(

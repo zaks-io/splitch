@@ -49,7 +49,14 @@ class MemoryOutboxStorage implements HoldoverWriteOutboxStorage {
 
 describe("holdover write App deletion two-phase boundary", () => {
   it("prepare freezes without purge; cancel restores; finalize drains", async () => {
-    const inventory = new MemoryHoldoverWriteAppInventoryClient();
+    const resumes: string[] = [];
+    const inventory = new MemoryHoldoverWriteAppInventoryClient({
+      resume: {
+        async resumeAlarms(identity) {
+          resumes.push(identity.targetingKeyHash);
+        },
+      },
+    });
     await inventory.registerEntity("app-A", {
       idType: PUT.idType,
       targetingKeyHash: PUT.targetingKeyHash,
@@ -71,6 +78,7 @@ describe("holdover write App deletion two-phase boundary", () => {
     expect(await inventory.status("app-A")).toMatchObject({
       suppressed: true,
       deletionComplete: false,
+      sagaPhase: "prepared",
       entities: [{ idType: PUT.idType, targetingKeyHash: PUT.targetingKeyHash }],
     });
     const putsBefore = putCalls.length;
@@ -82,25 +90,24 @@ describe("holdover write App deletion two-phase boundary", () => {
     expect(putCalls).toHaveLength(putsBefore);
     expect(storage.values.has(holdoverWriteJobKey(PUT.experimentId))).toBe(true);
 
-    const resumePaths: string[] = [];
     const wakeOutbox = {
       idFromName(name: string) {
         return name as unknown as DurableObjectId;
       },
       get() {
         return {
-          async fetch(input: RequestInfo | URL) {
-            resumePaths.push(new URL(String(input)).pathname);
+          async fetch() {
             return Response.json({ ok: true });
           },
         };
       },
     };
     await cancelAppHoldoverWriteDeletion(inventory, wakeOutbox, "app-A");
-    expect(resumePaths).toEqual(["/resume-alarms"]);
+    expect(resumes).toEqual([PUT.targetingKeyHash]);
     expect(await inventory.status("app-A")).toMatchObject({
       suppressed: false,
       deletionComplete: false,
+      sagaPhase: null,
       entities: [{ idType: PUT.idType, targetingKeyHash: PUT.targetingKeyHash }],
     });
 
@@ -128,6 +135,7 @@ describe("holdover write App deletion two-phase boundary", () => {
     expect(await inventory.status("app-A")).toMatchObject({
       suppressed: true,
       deletionComplete: true,
+      sagaPhase: "completed",
       entities: [],
     });
   });
@@ -157,9 +165,11 @@ describe("holdover write App deletion two-phase boundary", () => {
     ).rejects.toThrow(/forced purge failure/);
     expect((await inventory.status("app-A")).deletionComplete).toBe(false);
     expect((await inventory.status("app-A")).suppressed).toBe(true);
+    expect((await inventory.status("app-A")).sagaPhase).toBe("d1_deleted");
     await finalizeAppHoldoverWriteDeletion(inventory, outbox, "app-A", 5_000);
     expect(await inventory.status("app-A")).toMatchObject({
       deletionComplete: true,
+      sagaPhase: "completed",
       entities: [],
     });
   });

@@ -28,7 +28,7 @@ describe("createHoldoverWriteOutboxCleanup", () => {
     expect(url.searchParams.get("phase")).toBe("prepare");
   });
 
-  it("finalize and cancel send their App deletion phases", async () => {
+  it("finalize, mark-d1-deleted, and cancel send their App deletion phases", async () => {
     const phases: string[] = [];
     const evaluation = {
       async fetch(input: RequestInfo | URL, init?: RequestInit) {
@@ -44,9 +44,10 @@ describe("createHoldoverWriteOutboxCleanup", () => {
       orgId: "org_1",
       requestId: "req_1",
     };
+    await cleanup.markD1Deleted(input);
     await cleanup.finalize(input);
     await cleanup.cancel(input);
-    expect(phases).toEqual(["finalize", "cancel"]);
+    expect(phases).toEqual(["mark-d1-deleted", "finalize", "cancel"]);
   });
 
   it("includes Entity identity query params when provided", async () => {
