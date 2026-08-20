@@ -26,6 +26,18 @@ import {
   sagaListRegisteredEntities,
 } from "./holdover-write-app-deletion-saga-storage";
 
+export interface HoldoverWriteAppDeletionCancelStep {
+  readonly appId: string;
+  readonly generationId: string | null;
+  readonly entity: HoldoverWriteAppEntityRef;
+}
+
+export interface HoldoverWriteAppDeletionCancelPlan {
+  readonly done: boolean;
+  readonly cancelled: boolean;
+  readonly step: HoldoverWriteAppDeletionCancelStep | null;
+}
+
 /**
  * Durable cancel: clear the KV tombstone, then resume Entity alarms with
  * per-Entity checkpoints, then clear DO suppress. Idempotent and alarm-resumable.
@@ -66,6 +78,55 @@ export async function beginOrResumeAppDeletionCancelSaga(
   );
   const advanced = await advanceAppDeletionCancelSaga(storage, kv, appId, resume);
   return { done: advanced.done, cancelled: true };
+}
+
+/** Select one child-DO resume hop after durable cancel setup and KV clear. */
+export async function planAppDeletionCancelStep(
+  storage: HoldoverWriteAppInventoryStorage,
+  kv: AssignmentKv,
+  appId: string,
+  expectedGenerationId?: string,
+): Promise<HoldoverWriteAppDeletionCancelPlan> {
+  const result = await beginOrResumeAppDeletionCancelSaga(
+    storage,
+    kv,
+    appId,
+    null,
+    expectedGenerationId,
+  );
+  if (result.done || !result.cancelled) return { ...result, step: null };
+  const saga = await readAppDeletionSaga(storage);
+  if (saga?.phase !== "canceling") return { ...result, step: null };
+  const entity = saga.cancelResumePending[0];
+  if (!entity) return { ...result, step: null };
+  return {
+    ...result,
+    step: { appId, generationId: saga.generationId, entity },
+  };
+}
+
+/** Checkpoint one completed child-DO resume hop without awaiting another DO. */
+export async function checkpointAppDeletionCancelStep(
+  storage: HoldoverWriteAppInventoryStorage,
+  step: HoldoverWriteAppDeletionCancelStep,
+): Promise<{ readonly done: boolean }> {
+  const saga = await readAppDeletionSaga(storage);
+  if (saga === null || saga.phase !== "canceling" || saga.generationId !== step.generationId) {
+    return { done: false };
+  }
+  const pending = saga.cancelResumePending.filter((entity) => !sameEntity(entity, step.entity));
+  if (pending.length > 0) {
+    await putAppDeletionSaga(storage, { ...saga, cancelResumePending: pending });
+    return { done: false };
+  }
+  await storage.delete(SAGA_SUPPRESSED_KEY);
+  await storage.delete(SAGA_DELETE_BEFORE_TS_KEY);
+  await storage.delete(SAGA_KEY);
+  return { done: true };
+}
+
+function sameEntity(left: HoldoverWriteAppEntityRef, right: HoldoverWriteAppEntityRef): boolean {
+  return left.idType === right.idType && left.targetingKeyHash === right.targetingKeyHash;
 }
 
 async function buildCancelingSaga(

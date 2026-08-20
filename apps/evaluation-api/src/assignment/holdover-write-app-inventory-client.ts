@@ -120,11 +120,17 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
     generationId: string,
     deleteBeforeTsMs?: number,
   ): Promise<void> {
-    await this.post(appId, "/finalize-deletion", {
+    const body = await this.postJson(appId, "/finalize-deletion", {
       appId,
       generationId,
       ...(deleteBeforeTsMs !== undefined ? { deleteBeforeTsMs } : {}),
     });
+    if (!isRecord(body) || typeof body.done !== "boolean") {
+      throw new HoldoverWriteAppInventoryError("finalize-deletion returned an invalid payload");
+    }
+    if (!body.done) {
+      throw new HoldoverWriteAppInventoryError("finalize-deletion is incomplete");
+    }
   }
 
   async markEntityPurged(appId: string, ref: HoldoverWriteAppEntityRef): Promise<void> {

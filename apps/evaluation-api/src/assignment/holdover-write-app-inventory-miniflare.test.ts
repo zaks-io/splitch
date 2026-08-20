@@ -1,8 +1,8 @@
-import { Miniflare } from "miniflare";
+import type { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it } from "vitest";
 import { DurableHoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
 import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
-import { bundleHoldoverWriteInventoryAndOutboxWorker } from "./holdover-write-miniflare-bundle";
+import { miniflareWithInventoryAndOutbox } from "./holdover-write-app-inventory-miniflare-fixture";
 import {
   DurableHoldoverWriteCoordinator,
   type HoldoverWriteOutboxNamespace,
@@ -219,7 +219,9 @@ describe("HoldoverWriteAppInventoryDurableObject deletion alarm recovery", () =>
       await (await outboxStub.fetch("https://outbox.local/__test/alarm-status")).json(),
     ).toMatchObject({ alarm: null });
   });
+});
 
+describe("HoldoverWriteAppInventoryDurableObject finalize alarm recovery", () => {
   it("recovers finalize when the d1_deleted phase write response is lost", async () => {
     mf = await miniflareWithInventoryAndOutbox({
       registerFailsRemaining: 0,
@@ -252,28 +254,3 @@ describe("HoldoverWriteAppInventoryDurableObject deletion alarm recovery", () =>
     });
   });
 });
-
-async function miniflareWithInventoryAndOutbox(options: {
-  registerFailsRemaining: number;
-  suppressPutFailsRemaining?: number;
-  cancelStatePutFailsRemaining?: number;
-  cancelKvDeleteFailsRemaining?: number;
-  staleSuppressionReadsRemaining?: number;
-  writerPutFailsRemaining?: number;
-  purgeFailsRemaining?: number;
-  markTransactionFailsBeforeCommitRemaining?: number;
-  markTransactionThrowsAfterCommitRemaining?: number;
-}): Promise<Miniflare> {
-  return new Miniflare({
-    modules: true,
-    script: bundleHoldoverWriteInventoryAndOutboxWorker(options),
-    compatibilityDate: "2026-06-21",
-    compatibilityFlags: ["nodejs_compat"],
-    kvNamespaces: { ASSIGNMENTS_KV: "assignments" },
-    durableObjects: {
-      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObject" },
-      HOLDOVER_WRITE_OUTBOX: { className: "HoldoverWriteOutboxDurableObject" },
-      HOLDOVER_WRITE_APP_INVENTORY: { className: "HoldoverWriteAppInventoryDurableObject" },
-    },
-  });
-}

@@ -17,10 +17,14 @@ import { appHoldoverWriteSuppressKey } from "./holdover-write-outbox-core";
 import {
   advanceAppDeletionCancelSaga,
   beginOrResumeAppDeletionCancelSaga,
+  checkpointAppDeletionCancelStep,
+  planAppDeletionCancelStep,
 } from "./holdover-write-app-deletion-saga-cancel";
 import {
   advanceAppDeletionFinalizeSaga,
+  checkpointAppDeletionFinalizeStep,
   markAppDeletionSagaD1Deleted,
+  planAppDeletionFinalizeStep,
 } from "./holdover-write-app-deletion-saga-finalize";
 import {
   type HoldoverWriteAppDeletionSaga,
@@ -46,7 +50,11 @@ export {
   advanceAppDeletionCancelSaga,
   advanceAppDeletionFinalizeSaga,
   beginOrResumeAppDeletionCancelSaga,
+  checkpointAppDeletionCancelStep,
+  checkpointAppDeletionFinalizeStep,
   markAppDeletionSagaD1Deleted,
+  planAppDeletionCancelStep,
+  planAppDeletionFinalizeStep,
   readAppDeletionSaga,
 };
 

@@ -1,6 +1,6 @@
 import { createRepository } from "@splitch/db";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
@@ -8,6 +8,9 @@ import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
 
 const APP_ID = "app_generation_race";
 const ORG_ID = "org_generation_race";
+const GENERATION_A = "00000000-0000-4000-8000-00000000000a";
+const GENERATION_B = "00000000-0000-4000-8000-00000000000b";
+const SHARED_REQUEST_ID = "shared-request-id";
 
 let bindings: LocalBindings;
 
@@ -32,10 +35,16 @@ beforeEach(async () => {
   ]);
 });
 
-afterEach(async () => bindings.dispose());
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await bindings.dispose();
+});
 
 describe("App delete public generation races", () => {
   it("a delayed old Evaluation cancel cannot unsuppress a newer deletion generation", async () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce(GENERATION_A)
+      .mockReturnValueOnce(GENERATION_B);
     const realRepo = createRepository(bindings.d1);
     const realCancel = realRepo.identity.cancelAppDeletionSaga;
     const realDelete = realRepo.identity.deleteAppCascade;
@@ -53,7 +62,7 @@ describe("App delete public generation races", () => {
         prepareGenerations.push(input.generationId);
         activeGeneration = input.generationId;
         suppressed = true;
-        if (input.generationId === "request-B") {
+        if (input.generationId === GENERATION_B) {
           secondPrepared.resolve();
           await releaseSecondPrepare.promise;
         }
@@ -85,24 +94,25 @@ describe("App delete public generation races", () => {
     };
     const app = createTestApp(holdover, repo);
 
-    const first = deleteRequest(app, "request-A");
+    const first = deleteRequest(app, SHARED_REQUEST_ID);
     await firstCancelCommitted.promise;
-    const second = deleteRequest(app, "request-B");
+    const second = deleteRequest(app, SHARED_REQUEST_ID);
     await secondPrepared.promise;
     releaseFirstCancel.resolve();
     await firstCancelFinished.promise;
-    expect(activeGeneration).toBe("request-B");
+    expect(activeGeneration).toBe(GENERATION_B);
     expect(suppressed).toBe(true);
     releaseSecondPrepare.resolve();
 
     const [firstResponse, secondResponse] = await Promise.all([first, second]);
     expect(firstResponse.status).toBe(500);
     expect(secondResponse.status).toBe(200);
-    expect(prepareGenerations).toEqual(["request-A", "request-B"]);
+    expect(prepareGenerations).toEqual([GENERATION_A, GENERATION_B]);
+    expect(prepareGenerations).not.toContain(SHARED_REQUEST_ID);
     expect(suppressed).toBe(true);
     expect(await realRepo.identity.getApp(APP_ID)).toBeNull();
     expect(await realRepo.identity.getAppDeletionSaga(APP_ID)).toMatchObject({
-      generationId: "request-B",
+      generationId: GENERATION_B,
       phase: "complete",
     });
   });

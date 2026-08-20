@@ -10,6 +10,9 @@ export function holdoverWriteInventoryClientStubs(
   purgeFailsRemaining: number,
   markTransactionFailsBeforeCommitRemaining: number,
   markTransactionThrowsAfterCommitRemaining: number,
+  pauseCancelAfterKvDelete: boolean,
+  pauseFinalizeAfterInventoryList: boolean,
+  missingSuppressionReadsRemaining: number,
 ): string {
   const transportAware = registerFailsRemaining > 0;
   return `
@@ -23,6 +26,20 @@ globalThis.__purgeFailsRemaining = ${String(purgeFailsRemaining)};
 globalThis.__markTransactionFailsBeforeCommitRemaining = ${String(markTransactionFailsBeforeCommitRemaining)};
 globalThis.__markTransactionThrowsAfterCommitRemaining = ${String(markTransactionThrowsAfterCommitRemaining)};
 globalThis.__markTransactionSagaPutObserved = false;
+globalThis.__pauseCancelAfterKvDelete = ${String(pauseCancelAfterKvDelete)};
+globalThis.__pauseFinalizeAfterInventoryList = ${String(pauseFinalizeAfterInventoryList)};
+globalThis.__missingSuppressionReadsRemaining = ${String(missingSuppressionReadsRemaining)};
+globalThis.__cancelKvDeleteReached = false;
+globalThis.__ensureRegisterAttempts = 0;
+globalThis.__releaseCancelKvDelete = undefined;
+globalThis.__cancelKvDeleteBarrier = new Promise((resolve) => {
+  globalThis.__releaseCancelKvDelete = resolve;
+});
+globalThis.__finalizeInventoryListReached = false;
+globalThis.__releaseFinalizeInventoryList = undefined;
+globalThis.__finalizeInventoryListBarrier = new Promise((resolve) => {
+  globalThis.__releaseFinalizeInventoryList = resolve;
+});
 const CURRENT_KV_SCHEMA_VERSION = 1;
 function assignmentWriterName(input) {
   return input.appId + ":" + input.idType + ":" + input.targetingKeyHash;
@@ -78,6 +95,18 @@ function failAppSuppressDelete(kv) {
     },
   };
 }
+function pauseAfterAppSuppressDelete(kv) {
+  return {
+    get: (key) => kv.get(key),
+    put: (key, value) => kv.put(key, value),
+    delete: async (key) => {
+      const result = await kv.delete(key);
+      globalThis.__cancelKvDeleteReached = true;
+      await globalThis.__cancelKvDeleteBarrier;
+      return result;
+    },
+  };
+}
 function staleAppSuppressRead(kv) {
   return {
     get: async (key) => {
@@ -89,6 +118,24 @@ function staleAppSuppressRead(kv) {
         return "1";
       }
       return kv.get(key);
+    },
+    put: (key, value) => kv.put(key, value),
+    delete: (key) => kv.delete(key),
+  };
+}
+function missAppSuppressRead(kv) {
+  return {
+    get: async (key) => {
+      const value = await kv.get(key);
+      if (
+        key.startsWith("holdover-write-suppress:app:") &&
+        value === "1" &&
+        globalThis.__missingSuppressionReadsRemaining > 0
+      ) {
+        globalThis.__missingSuppressionReadsRemaining -= 1;
+        return null;
+      }
+      return value;
     },
     put: (key, value) => kv.put(key, value),
     delete: (key) => kv.delete(key),
@@ -113,6 +160,7 @@ class DurableHoldoverWriteAppInventoryClient {
   }
   async registerEntity(appId, ref) {
     const stub = this.namespace.get(this.namespace.idFromName(appId));
+    globalThis.__ensureRegisterAttempts += 1;
     ${
       transportAware
         ? `let response;

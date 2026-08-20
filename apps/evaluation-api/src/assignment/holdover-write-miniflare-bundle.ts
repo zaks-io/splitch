@@ -11,7 +11,7 @@ import { holdoverWriteInventoryClientStubs } from "./holdover-write-miniflare-ha
 
 const root = dirname(fileURLToPath(import.meta.url));
 
-export function bundleHoldoverWriteInventoryAndOutboxWorker(options?: {
+interface HoldoverWriteMiniflareOptions {
   registerFailsRemaining?: number;
   suppressPutFailsRemaining?: number;
   cancelStatePutFailsRemaining?: number;
@@ -21,102 +21,170 @@ export function bundleHoldoverWriteInventoryAndOutboxWorker(options?: {
   purgeFailsRemaining?: number;
   markTransactionFailsBeforeCommitRemaining?: number;
   markTransactionThrowsAfterCommitRemaining?: number;
-}): string {
-  const registerFailsRemaining = options?.registerFailsRemaining ?? 0;
-  const suppressPutFailsRemaining = options?.suppressPutFailsRemaining ?? 0;
-  const cancelStatePutFailsRemaining = options?.cancelStatePutFailsRemaining ?? 0;
-  const cancelKvDeleteFailsRemaining = options?.cancelKvDeleteFailsRemaining ?? 0;
-  const staleSuppressionReadsRemaining = options?.staleSuppressionReadsRemaining ?? 0;
-  const writerPutFailsRemaining = options?.writerPutFailsRemaining ?? 0;
-  const purgeFailsRemaining = options?.purgeFailsRemaining ?? 0;
-  const markTransactionFailsBeforeCommitRemaining =
-    options?.markTransactionFailsBeforeCommitRemaining ?? 0;
-  const markTransactionThrowsAfterCommitRemaining =
-    options?.markTransactionThrowsAfterCommitRemaining ?? 0;
-  const inventory = readSource("holdover-write-app-inventory.ts");
-  const deletionInput = readSource("holdover-write-app-deletion-input.ts");
-  const sagaStorage = stripImport(
-    readSource("holdover-write-app-deletion-saga-storage.ts"),
-    "./holdover-write-app-inventory",
-  );
-  const sagaCancel = stripImports(readSource("holdover-write-app-deletion-saga-cancel.ts"), [
-    "./assignment-store",
-    "./holdover-write-app-inventory",
-    "./holdover-write-outbox-core",
-    "./holdover-write-app-deletion-saga-storage",
-  ]);
-  const sagaFinalize = stripImports(readSource("holdover-write-app-deletion-saga-finalize.ts"), [
-    "./holdover-write-app-inventory",
-    "./holdover-write-app-deletion-saga-storage",
-  ]);
-  const saga = stripImports(readSource("holdover-write-app-deletion-saga.ts"), [
-    "./assignment-store",
-    "./holdover-write-app-inventory",
-    "./holdover-write-outbox-core",
-    "./holdover-write-app-deletion-saga-cancel",
-    "./holdover-write-app-deletion-saga-finalize",
-    "./holdover-write-app-deletion-saga-storage",
-  ]);
-  const inventoryFetch = stripIsRecordHelpers(
-    stripImport(
-      readSource("holdover-write-app-inventory-fetch.ts"),
+  pauseCancelAfterKvDelete?: boolean;
+  pauseFinalizeAfterInventoryList?: boolean;
+  missingSuppressionReadsRemaining?: number;
+}
+
+const DEFAULT_OPTIONS = {
+  registerFailsRemaining: 0,
+  suppressPutFailsRemaining: 0,
+  cancelStatePutFailsRemaining: 0,
+  cancelKvDeleteFailsRemaining: 0,
+  staleSuppressionReadsRemaining: 0,
+  writerPutFailsRemaining: 0,
+  purgeFailsRemaining: 0,
+  markTransactionFailsBeforeCommitRemaining: 0,
+  markTransactionThrowsAfterCommitRemaining: 0,
+  pauseCancelAfterKvDelete: false,
+  pauseFinalizeAfterInventoryList: false,
+  missingSuppressionReadsRemaining: 0,
+} satisfies Required<HoldoverWriteMiniflareOptions>;
+
+export function bundleHoldoverWriteInventoryAndOutboxWorker(
+  options?: HoldoverWriteMiniflareOptions,
+): string {
+  const source = renderWorkerSource(readWorkerSources(), { ...DEFAULT_OPTIONS, ...options });
+  return ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+      strict: true,
+    },
+    fileName: "holdover-write-inventory-outbox.mf.ts",
+  }).outputText;
+}
+
+function readWorkerSources() {
+  return {
+    inventory: readSource("holdover-write-app-inventory.ts"),
+    deletionInput: readSource("holdover-write-app-deletion-input.ts"),
+    sagaStorage: stripImport(
+      readSource("holdover-write-app-deletion-saga-storage.ts"),
       "./holdover-write-app-inventory",
     ),
-  );
-  const inventoryDo = stripImports(readSource("holdover-write-app-inventory-do.ts"), [
-    "cloudflare:workers",
-    "./assignment-store",
-    "./holdover-write-app-inventory",
-    "./holdover-write-app-inventory-fetch",
-    "./holdover-write-app-deletion-input",
-    "./holdover-write-app-deletion-saga",
-    "./holdover-write-outbox",
-    "./holdover-write-outbox-core",
-  ]);
-  const core = readSource("holdover-write-outbox-core.ts");
-  const ensure = stripImports(readSource("holdover-write-outbox-ensure.ts"), [
-    "./assignment-store",
-    "./holdover-write-app-inventory",
-    "./holdover-write-outbox-core",
-  ]);
-  const fetchHandler = stripIsRecordHelpers(
-    stripImports(readSource("holdover-write-outbox-fetch.ts"), [
+    sagaCancel: stripImports(readSource("holdover-write-app-deletion-saga-cancel.ts"), [
       "./assignment-store",
       "./holdover-write-app-inventory",
-      "./holdover-write-app-inventory-client",
       "./holdover-write-outbox-core",
-      "./holdover-write-outbox-ensure",
+      "./holdover-write-app-deletion-saga-storage",
     ]),
-  );
-  const outbox = stripImports(readSource("holdover-write-outbox.ts"), [
-    "./assignment-store",
-    "./holdover-write-app-inventory",
-    "./holdover-write-outbox-core",
-    "./holdover-write-outbox-fetch",
-    "./holdover-write-outbox-memory",
-    "./kv-assignment-store",
-  ])
-    .replace(/^export \{[^}]*MemoryHoldoverWriteCoordinator[^}]*\} from [^;]+;?\s*/gm, "")
-    .replace(/^export \{ handleHoldoverWriteOutboxFetch \} from [^;]+;?\s*/gm, "")
-    .replace(/^export type \{[\s\S]*?\} from ["']\.\/holdover-write-outbox-core["'];?\s*/gm, "");
-  const outboxDo = stripImports(readSource("holdover-write-outbox-do.ts"), [
-    "cloudflare:workers",
-    "./holdover-write-outbox",
-    "./holdover-write-outbox-core",
-    "./holdover-write-outbox-ensure",
-    "./holdover-write-outbox-fetch",
-  ]);
-  const writer = stripImport(readSource("assignment-store-writer.ts"), "./assignment-store");
-  const assignmentDo = stripIsRecordHelpers(
-    stripImports(readSource("assignment-store-do.ts"), [
+    sagaFinalize: stripImports(readSource("holdover-write-app-deletion-saga-finalize.ts"), [
+      "./holdover-write-app-inventory",
+      "./holdover-write-app-deletion-saga-storage",
+    ]),
+    saga: stripImports(readSource("holdover-write-app-deletion-saga.ts"), [
+      "./assignment-store",
+      "./holdover-write-app-inventory",
+      "./holdover-write-outbox-core",
+      "./holdover-write-app-deletion-saga-cancel",
+      "./holdover-write-app-deletion-saga-finalize",
+      "./holdover-write-app-deletion-saga-storage",
+    ]),
+    inventoryFetch: stripIsRecordHelpers(
+      stripImport(
+        readSource("holdover-write-app-inventory-fetch.ts"),
+        "./holdover-write-app-inventory",
+      ),
+    ),
+    inventoryEntityPort: stripImports(readSource("holdover-write-app-inventory-entity-port.ts"), [
+      "./holdover-write-outbox",
+      "./holdover-write-app-deletion-saga-cancel",
+      "./holdover-write-app-deletion-saga-finalize",
+      "./holdover-write-outbox-core",
+    ]),
+    inventoryDo: stripImports(readSource("holdover-write-app-inventory-do.ts"), [
       "cloudflare:workers",
       "./assignment-store",
-      "./assignment-store-writer",
+      "./holdover-write-app-inventory",
+      "./holdover-write-app-inventory-fetch",
+      "./holdover-write-app-deletion-input",
+      "./holdover-write-app-deletion-saga",
+      "./holdover-write-app-inventory-entity-port",
+      "./holdover-write-outbox",
+      "./holdover-write-outbox-core",
     ]),
-  );
+    core: readSource("holdover-write-outbox-core.ts"),
+    ensure: stripImports(readSource("holdover-write-outbox-ensure.ts"), [
+      "./assignment-store",
+      "./holdover-write-app-inventory",
+      "./holdover-write-outbox-core",
+    ]),
+    fetchHandler: stripIsRecordHelpers(
+      stripImports(readSource("holdover-write-outbox-fetch.ts"), [
+        "./assignment-store",
+        "./holdover-write-app-inventory",
+        "./holdover-write-app-inventory-client",
+        "./holdover-write-outbox-core",
+        "./holdover-write-outbox-ensure",
+      ]),
+    ),
+    outbox: stripImports(readSource("holdover-write-outbox.ts"), [
+      "./assignment-store",
+      "./holdover-write-app-inventory",
+      "./holdover-write-outbox-core",
+      "./holdover-write-outbox-fetch",
+      "./holdover-write-outbox-memory",
+      "./kv-assignment-store",
+    ])
+      .replace(/^export \{[^}]*MemoryHoldoverWriteCoordinator[^}]*\} from [^;]+;?\s*/gm, "")
+      .replace(/^export \{ handleHoldoverWriteOutboxFetch \} from [^;]+;?\s*/gm, "")
+      .replace(/^export type \{[\s\S]*?\} from ["']\.\/holdover-write-outbox-core["'];?\s*/gm, ""),
+    outboxDo: stripImports(readSource("holdover-write-outbox-do.ts"), [
+      "cloudflare:workers",
+      "./holdover-write-outbox",
+      "./holdover-write-outbox-core",
+      "./holdover-write-outbox-ensure",
+      "./holdover-write-outbox-fetch",
+    ]),
+    writer: stripImport(readSource("assignment-store-writer.ts"), "./assignment-store"),
+    assignmentDo: stripIsRecordHelpers(
+      stripImports(readSource("assignment-store-do.ts"), [
+        "cloudflare:workers",
+        "./assignment-store",
+        "./assignment-store-writer",
+      ]),
+    ),
+  };
+}
 
-  return ts.transpileModule(
-    `
+function renderWorkerSource(
+  sources: ReturnType<typeof readWorkerSources>,
+  options: Required<HoldoverWriteMiniflareOptions>,
+): string {
+  const {
+    inventory,
+    deletionInput,
+    sagaStorage,
+    sagaCancel,
+    sagaFinalize,
+    saga,
+    inventoryFetch,
+    inventoryEntityPort,
+    inventoryDo,
+    core,
+    ensure,
+    fetchHandler,
+    outbox,
+    outboxDo,
+    writer,
+    assignmentDo,
+  } = sources;
+  const {
+    registerFailsRemaining,
+    suppressPutFailsRemaining,
+    cancelStatePutFailsRemaining,
+    cancelKvDeleteFailsRemaining,
+    staleSuppressionReadsRemaining,
+    writerPutFailsRemaining,
+    purgeFailsRemaining,
+    markTransactionFailsBeforeCommitRemaining,
+    markTransactionThrowsAfterCommitRemaining,
+    pauseCancelAfterKvDelete,
+    pauseFinalizeAfterInventoryList,
+    missingSuppressionReadsRemaining,
+  } = options;
+  return `
 import { DurableObject } from "cloudflare:workers";
 ${holdoverWriteInventoryClientStubs(
   registerFailsRemaining,
@@ -128,6 +196,9 @@ ${holdoverWriteInventoryClientStubs(
   purgeFailsRemaining,
   markTransactionFailsBeforeCommitRemaining,
   markTransactionThrowsAfterCommitRemaining,
+  pauseCancelAfterKvDelete,
+  pauseFinalizeAfterInventoryList,
+  missingSuppressionReadsRemaining,
 )}
 ${stripExport(inventory)}
 ${stripExport(deletionInput)}
@@ -136,6 +207,7 @@ ${stripExport(sagaCancel)}
 ${stripExport(sagaFinalize)}
 ${stripExport(saga)}
 ${stripExport(inventoryFetch)}
+${stripExport(inventoryEntityPort)}
 ${inventoryDo}
 ${stripExport(core)}
 ${stripExport(ensure)}
@@ -154,22 +226,32 @@ ${holdoverWriteFaultHooks(
   purgeFailsRemaining,
   markTransactionFailsBeforeCommitRemaining,
   markTransactionThrowsAfterCommitRemaining,
+  pauseCancelAfterKvDelete,
+  pauseFinalizeAfterInventoryList,
+  missingSuppressionReadsRemaining,
 )}
 export default {
-  async fetch() {
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === "/__test/deadlock-barrier-status") {
+      return Response.json({
+        cancelKvDeleteReached: globalThis.__cancelKvDeleteReached,
+        ensureRegisterAttempts: globalThis.__ensureRegisterAttempts,
+        finalizeInventoryListReached: globalThis.__finalizeInventoryListReached,
+      });
+    }
+    if (url.pathname === "/__test/release-cancel-kv-delete" && request.method === "POST") {
+      globalThis.__releaseCancelKvDelete?.();
+      return Response.json({ released: true });
+    }
+    if (url.pathname === "/__test/release-finalize-inventory-list" && request.method === "POST") {
+      globalThis.__releaseFinalizeInventoryList?.();
+      return Response.json({ released: true });
+    }
     return new Response("harness", { status: 200 });
   },
 };
-`,
-    {
-      compilerOptions: {
-        module: ts.ModuleKind.ESNext,
-        target: ts.ScriptTarget.ES2022,
-        strict: true,
-      },
-      fileName: "holdover-write-inventory-outbox.mf.ts",
-    },
-  ).outputText;
+`;
 }
 
 function readSource(name: string): string {

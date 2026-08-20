@@ -56,7 +56,7 @@ export async function deleteAppRowsWithHoldoverSaga(
   const now = nowIso(deps);
   const saga = await deps.repo.identity.beginAppDeletionSaga({
     appId,
-    generationId: requestId,
+    generationId: crypto.randomUUID(),
     organizationId,
     actorId,
     deleteBeforeTs: now,

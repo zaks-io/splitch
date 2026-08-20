@@ -8,15 +8,19 @@ import {
 import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
 import { handleHoldoverWriteAppInventoryFetch } from "./holdover-write-app-inventory-fetch";
 import {
-  advanceAppDeletionFinalizeSaga,
-  beginOrResumeAppDeletionCancelSaga,
+  checkpointAppDeletionCancelStep,
+  checkpointAppDeletionFinalizeStep,
   markAppDeletionSagaD1Deleted,
+  planAppDeletionCancelStep,
+  planAppDeletionFinalizeStep,
   prepareAppDeletionSaga,
   readAppDeletionSaga,
 } from "./holdover-write-app-deletion-saga";
 import type { HoldoverWriteOutboxNamespace } from "./holdover-write-outbox";
-import type { HoldoverWriteEntityPurgePort } from "./holdover-write-app-deletion-saga-storage";
-import { holdoverWriteOutboxName } from "./holdover-write-outbox-core";
+import {
+  purgeAppDeletionEntityOutbox,
+  resumeAppDeletionEntityAlarms,
+} from "./holdover-write-app-inventory-entity-port";
 
 export interface HoldoverWriteAppInventoryEnv {
   ASSIGNMENTS_KV: AssignmentKv;
@@ -28,16 +32,26 @@ const SAGA_RETRY_DELAY_MS = 1_000;
 
 /**
  * One Durable Object per App: indexes Entity holdover-write outboxes and owns
- * the durable App deletion saga (prepare → finalize / cancel) under
- * `blockConcurrencyWhile`, including alarm-driven cancel resume.
+ * the durable App deletion saga (prepare → finalize / cancel). Storage
+ * transitions serialize under short critical sections; child Entity DO calls
+ * run outside them so Entity → App registration cannot form a two-DO cycle.
  */
 export class HoldoverWriteAppInventoryDurableObject extends DurableObject<HoldoverWriteAppInventoryEnv> {
+  private sagaSection = Promise.resolve();
+
   override async fetch(request: Request): Promise<Response> {
-    return this.ctx.blockConcurrencyWhile(() => this.handleFetch(request));
+    const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname === "/cancel-deletion") {
+      return this.cancelDeletion(request);
+    }
+    if (request.method === "POST" && url.pathname === "/finalize-deletion") {
+      return this.finalizeDeletion(request);
+    }
+    return this.serialized(() => this.handleFetch(request));
   }
 
   override async alarm(): Promise<void> {
-    await this.ctx.blockConcurrencyWhile(() => this.handleAlarm());
+    await this.handleAlarm();
   }
 
   private async handleFetch(request: Request): Promise<Response> {
@@ -45,39 +59,24 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
     if (request.method === "POST" && url.pathname === "/begin-deletion") {
       return this.beginDeletion(request);
     }
-    if (request.method === "POST" && url.pathname === "/cancel-deletion") {
-      return this.cancelDeletion(request);
-    }
     if (request.method === "POST" && url.pathname === "/mark-d1-deleted") {
       return this.markD1Deleted(request);
-    }
-    if (request.method === "POST" && url.pathname === "/finalize-deletion") {
-      return this.finalizeDeletion(request);
     }
     return handleHoldoverWriteAppInventoryFetch(this.ctx.storage, request);
   }
 
   private async handleAlarm(): Promise<void> {
-    const saga = await readAppDeletionSaga(this.ctx.storage);
+    const saga = await this.serialized(() => readAppDeletionSaga(this.ctx.storage));
     if (saga === null) return;
-    await this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
-    const advanced =
-      saga.phase === "preparing" || saga.phase === "canceling"
-        ? await beginOrResumeAppDeletionCancelSaga(
-            this.ctx.storage,
-            this.env.ASSIGNMENTS_KV,
-            saga.appId,
-            this.resumePort(),
-          )
-        : saga.phase === "d1_deleted" || saga.phase === "finalizing"
-          ? await advanceAppDeletionFinalizeSaga(
-              this.ctx.storage,
-              saga.appId,
-              saga.generationId,
-              this.purgePort(),
-            )
-          : { done: true };
-    if (advanced.done) await this.ctx.storage.deleteAlarm();
+    if (saga.phase === "preparing" || saga.phase === "canceling") {
+      await this.advanceCancel(saga.appId);
+      return;
+    }
+    if (saga.phase === "d1_deleted" || saga.phase === "finalizing") {
+      await this.advanceFinalize(saga.appId, saga.generationId);
+      return;
+    }
+    await this.serialized(() => this.ctx.storage.deleteAlarm());
   }
 
   private async beginDeletion(request: Request): Promise<Response> {
@@ -91,7 +90,7 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
         parsed.appId,
         parsed.generationId,
         parsed.deleteBeforeTsMs,
-        this.resumePort(),
+        null,
       );
       const saga = await readAppDeletionSaga(this.ctx.storage);
       if (saga?.phase !== "canceling" && saga?.phase !== "preparing") {
@@ -116,35 +115,13 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
   private async cancelDeletion(request: Request): Promise<Response> {
     const parsed = await parseAppIdBody(request, this.ctx.id.name);
     if (!parsed.ok) return parsed.response;
-    const existing = await readAppDeletionSaga(this.ctx.storage);
-    if (
-      existing?.generationId !== null &&
-      existing?.generationId !== undefined &&
-      existing.generationId !== parsed.generationId
-    ) {
-      return Response.json({
-        cancelled: false,
-        done: true,
-        entities: [],
-        sagaPhase: existing.phase,
-      });
-    }
-    await this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
     try {
-      const result = await beginOrResumeAppDeletionCancelSaga(
-        this.ctx.storage,
-        this.env.ASSIGNMENTS_KV,
-        parsed.appId,
-        this.resumePort(),
-        parsed.generationId,
-      );
-      if (result.done) await this.ctx.storage.deleteAlarm();
-      const saga = await readAppDeletionSaga(this.ctx.storage);
+      const result = await this.advanceCancel(parsed.appId, parsed.generationId);
       return Response.json({
         cancelled: result.cancelled,
         done: result.done,
-        entities: saga?.cancelResumePending ?? [],
-        sagaPhase: saga?.phase ?? null,
+        entities: result.entities,
+        sagaPhase: result.sagaPhase,
       });
     } catch (cause) {
       return Response.json(
@@ -183,16 +160,12 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
   private async finalizeDeletion(request: Request): Promise<Response> {
     const parsed = await parseMarkD1Body(request);
     if (!parsed.ok) return parsed.response;
-    await this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
     try {
-      const result = await advanceAppDeletionFinalizeSaga(
-        this.ctx.storage,
+      const result = await this.advanceFinalize(
         parsed.appId,
         parsed.generationId,
-        this.purgePort(),
         parsed.deleteBeforeTsMs,
       );
-      if (result.done) await this.ctx.storage.deleteAlarm();
       return Response.json(result);
     } catch (cause) {
       return Response.json(
@@ -202,48 +175,71 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
     }
   }
 
-  private resumePort() {
-    const namespace = this.env.HOLDOVER_WRITE_OUTBOX;
-    if (!namespace) return null;
-    return {
-      async resumeAlarms(identity: {
-        readonly appId: string;
-        readonly idType: string;
-        readonly targetingKeyHash: string;
-      }) {
-        const stub = namespace.get(namespace.idFromName(holdoverWriteOutboxName(identity)));
-        const response = await stub.fetch("https://holdover-write-outbox.local/resume-alarms", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: "{}",
-        });
-        if (!response.ok) {
-          throw new Error(
-            `holdover write outbox /resume-alarms failed: HTTP ${String(response.status)}`,
-          );
-        }
-      },
-    };
+  private async advanceCancel(appId: string, generationId?: string) {
+    const plan = await this.serialized(async () => {
+      await this.armRetry();
+      return planAppDeletionCancelStep(
+        this.ctx.storage,
+        this.env.ASSIGNMENTS_KV,
+        appId,
+        generationId,
+      );
+    });
+    const step = plan.step;
+    if (step) {
+      await resumeAppDeletionEntityAlarms(this.env.HOLDOVER_WRITE_OUTBOX, step);
+      await this.serialized(() => checkpointAppDeletionCancelStep(this.ctx.storage, step));
+    }
+    return this.serialized(async () => {
+      const saga = await readAppDeletionSaga(this.ctx.storage);
+      const done = !plan.cancelled ? plan.done : saga === null;
+      if (saga === null && plan.cancelled) await this.ctx.storage.deleteAlarm();
+      return {
+        done,
+        cancelled: plan.cancelled,
+        entities: saga?.cancelResumePending ?? [],
+        sagaPhase: saga?.phase ?? null,
+      };
+    });
   }
 
-  private purgePort(): HoldoverWriteEntityPurgePort {
-    const namespace = this.env.HOLDOVER_WRITE_OUTBOX;
-    if (!namespace) {
-      throw new Error("HOLDOVER_WRITE_OUTBOX is required to finalize App deletion");
+  private async advanceFinalize(
+    appId: string,
+    generationId: string | null,
+    deleteBeforeTsMs?: number,
+  ): Promise<{ readonly done: boolean }> {
+    const plan = await this.serialized(async () => {
+      await this.armRetry();
+      return planAppDeletionFinalizeStep(this.ctx.storage, appId, generationId, deleteBeforeTsMs);
+    });
+    if (!plan.done) {
+      await purgeAppDeletionEntityOutbox(this.env.HOLDOVER_WRITE_OUTBOX, plan.step);
+      await this.serialized(() => checkpointAppDeletionFinalizeStep(this.ctx.storage, plan.step));
     }
-    return {
-      async purgeEntity(deletion) {
-        const stub = namespace.get(namespace.idFromName(holdoverWriteOutboxName(deletion)));
-        const response = await stub.fetch("https://holdover-write-outbox.local/purge", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          // App deletion removes the whole outbox. Cutoffs belong to Entity privacy deletion.
-          body: "{}",
-        });
-        if (!response.ok) {
-          throw new Error(`holdover write outbox /purge failed: HTTP ${String(response.status)}`);
-        }
-      },
-    };
+    const completed = await this.serialized(async () => {
+      const saga = await readAppDeletionSaga(this.ctx.storage);
+      const done = saga?.phase === "completed";
+      if (done) await this.ctx.storage.deleteAlarm();
+      return done;
+    });
+    return { done: completed };
+  }
+
+  private armRetry(): Promise<void> {
+    return this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
+  }
+
+  private async serialized<T>(closure: () => Promise<T>): Promise<T> {
+    const prior = this.sagaSection;
+    let release: () => void = () => undefined;
+    this.sagaSection = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await prior;
+    try {
+      return await closure();
+    } finally {
+      release();
+    }
   }
 }

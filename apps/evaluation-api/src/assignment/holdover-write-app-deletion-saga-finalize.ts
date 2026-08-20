@@ -20,6 +20,17 @@ import {
   sagaListRegisteredEntities,
 } from "./holdover-write-app-deletion-saga-storage";
 
+export interface HoldoverWriteAppDeletionFinalizeStep {
+  readonly appId: string;
+  readonly generationId: string | null;
+  readonly deleteBeforeTsMs: number;
+  readonly entity: { readonly idType: string; readonly targetingKeyHash: string };
+}
+
+export type HoldoverWriteAppDeletionFinalizePlan =
+  | { readonly done: true; readonly step: null }
+  | { readonly done: false; readonly step: HoldoverWriteAppDeletionFinalizeStep };
+
 /** Record the irreversible D1-success boundary before Entity drain. */
 export async function markAppDeletionSagaD1Deleted(
   storage: HoldoverWriteAppInventoryStorage,
@@ -108,6 +119,27 @@ export async function advanceAppDeletionFinalizeSaga(
   purge: HoldoverWriteEntityPurgePort,
   deleteBeforeTsMs?: number,
 ): Promise<{ readonly done: boolean }> {
+  while (true) {
+    const plan = await planAppDeletionFinalizeStep(storage, appId, generationId, deleteBeforeTsMs);
+    if (plan.done) return { done: true };
+    await purge.purgeEntity({
+      appId,
+      idType: plan.step.entity.idType,
+      targetingKeyHash: plan.step.entity.targetingKeyHash,
+      deleteBeforeTsMs: plan.step.deleteBeforeTsMs,
+    });
+    const checkpoint = await checkpointAppDeletionFinalizeStep(storage, plan.step);
+    if (checkpoint.done) return checkpoint;
+  }
+}
+
+/** Persist finalize phase and select one child-DO purge hop. */
+export async function planAppDeletionFinalizeStep(
+  storage: HoldoverWriteAppInventoryStorage,
+  appId: string,
+  generationId: string | null,
+  deleteBeforeTsMs?: number,
+): Promise<HoldoverWriteAppDeletionFinalizePlan> {
   requireSagaAppId(appId);
   if (generationId !== null) requireSagaGeneration(generationId);
   const deletionComplete = (await storage.get<boolean>(SAGA_DELETION_COMPLETE_KEY)) === true;
@@ -119,32 +151,56 @@ export async function advanceAppDeletionFinalizeSaga(
     deletionComplete,
   );
   requireMatchingFinalizeGeneration(saga, generationId);
-  if (deletionComplete) return { done: true };
+  if (deletionComplete) return { done: true, step: null };
   saga = await enterFinalizeBoundary(storage, appId, generationId, deleteBeforeTsMs, saga);
   if (saga.phase === "completed") {
-    return { done: true };
+    return { done: true, step: null };
   }
 
   const cutoff = deleteBeforeTsMs ?? saga.deleteBeforeTsMs;
   await putAppDeletionSaga(storage, { ...saga, phase: "finalizing", deleteBeforeTsMs: cutoff });
 
-  await purgeRegisteredEntities(storage, appId, cutoff, purge);
+  const entity = (await sagaListRegisteredEntities(storage))[0];
+  if (entity) {
+    return {
+      done: false,
+      step: { appId, generationId: saga.generationId, deleteBeforeTsMs: cutoff, entity },
+    };
+  }
+  await completeAppDeletionFinalizeSaga(storage, saga, cutoff);
+  return { done: true, step: null };
+}
 
-  const remaining = await sagaListRegisteredEntities(storage);
-  if (remaining.length > 0) {
+/** Checkpoint one completed child-DO purge hop without awaiting another DO. */
+export async function checkpointAppDeletionFinalizeStep(
+  storage: HoldoverWriteAppInventoryStorage,
+  step: HoldoverWriteAppDeletionFinalizeStep,
+): Promise<{ readonly done: boolean }> {
+  const saga = await readAppDeletionSaga(storage);
+  if (saga === null || saga.phase !== "finalizing" || saga.generationId !== step.generationId) {
     return { done: false };
   }
+  await storage.delete(sagaEntityInventoryKey(step.entity));
+  if ((await sagaListRegisteredEntities(storage)).length > 0) return { done: false };
+  await completeAppDeletionFinalizeSaga(storage, saga, step.deleteBeforeTsMs);
+  return { done: true };
+}
+
+async function completeAppDeletionFinalizeSaga(
+  storage: HoldoverWriteAppInventoryStorage,
+  saga: HoldoverWriteAppDeletionSaga,
+  cutoff: number,
+): Promise<void> {
   await storage.put(SAGA_SUPPRESSED_KEY, true);
   await storage.put(SAGA_DELETION_COMPLETE_KEY, true);
   await putAppDeletionSaga(storage, {
     phase: "completed",
-    appId,
+    appId: saga.appId,
     generationId: saga.generationId,
     deleteBeforeTsMs: cutoff,
     cancelResumePending: [],
     cancelKvCleared: true,
   });
-  return { done: true };
 }
 
 async function loadFinalizeSaga(
@@ -189,22 +245,4 @@ async function enterFinalizeBoundary(
     throw new Error("advanceAppDeletionFinalizeSaga: generation is required before D1 boundary");
   }
   return markAppDeletionSagaD1Deleted(storage, appId, generationId, deleteBeforeTsMs);
-}
-
-async function purgeRegisteredEntities(
-  storage: HoldoverWriteAppInventoryStorage,
-  appId: string,
-  deleteBeforeTsMs: number,
-  purge: HoldoverWriteEntityPurgePort,
-): Promise<void> {
-  const entities = await sagaListRegisteredEntities(storage);
-  for (const entity of entities) {
-    await purge.purgeEntity({
-      appId,
-      idType: entity.idType,
-      targetingKeyHash: entity.targetingKeyHash,
-      deleteBeforeTsMs,
-    });
-    await storage.delete(sagaEntityInventoryKey(entity));
-  }
 }

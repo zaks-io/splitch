@@ -10,6 +10,9 @@ export function holdoverWriteFaultHooks(
   purgeFailsRemaining: number,
   markTransactionFailsBeforeCommitRemaining: number,
   markTransactionThrowsAfterCommitRemaining: number,
+  pauseCancelAfterKvDelete: boolean,
+  pauseFinalizeAfterInventoryList: boolean,
+  missingSuppressionReadsRemaining: number,
 ): string {
   if (
     registerFailsRemaining <= 0 &&
@@ -20,7 +23,10 @@ export function holdoverWriteFaultHooks(
     writerPutFailsRemaining <= 0 &&
     purgeFailsRemaining <= 0 &&
     markTransactionFailsBeforeCommitRemaining <= 0 &&
-    markTransactionThrowsAfterCommitRemaining <= 0
+    markTransactionThrowsAfterCommitRemaining <= 0 &&
+    !pauseCancelAfterKvDelete &&
+    !pauseFinalizeAfterInventoryList &&
+    missingSuppressionReadsRemaining <= 0
   ) {
     return "";
   }
@@ -56,6 +62,7 @@ HoldoverWriteAppInventoryDurableObject.prototype.fetch = async function (request
   }
   const originalKv = this.env.ASSIGNMENTS_KV;
   const originalStoragePut = this.ctx.storage.put.bind(this.ctx.storage);
+  const originalStorageList = this.ctx.storage.list.bind(this.ctx.storage);
   const originalStorageTransaction = this.ctx.storage.transaction.bind(this.ctx.storage);
   if (url.pathname === "/begin-deletion" && globalThis.__suppressPutFailsRemaining > 0) {
     this.env.ASSIGNMENTS_KV = failAppSuppressPut(originalKv);
@@ -116,11 +123,25 @@ HoldoverWriteAppInventoryDurableObject.prototype.fetch = async function (request
   if (url.pathname === "/cancel-deletion" && globalThis.__cancelKvDeleteFailsRemaining > 0) {
     this.env.ASSIGNMENTS_KV = failAppSuppressDelete(originalKv);
   }
+  if (url.pathname === "/cancel-deletion" && globalThis.__pauseCancelAfterKvDelete) {
+    this.env.ASSIGNMENTS_KV = pauseAfterAppSuppressDelete(originalKv);
+  }
+  if (url.pathname === "/finalize-deletion" && globalThis.__pauseFinalizeAfterInventoryList) {
+    this.ctx.storage.list = async (options) => {
+      const result = await originalStorageList(options);
+      if (options?.prefix === "entity:" && !globalThis.__finalizeInventoryListReached) {
+        globalThis.__finalizeInventoryListReached = true;
+        await globalThis.__finalizeInventoryListBarrier;
+      }
+      return result;
+    };
+  }
   try {
     return await __prodInventoryFetch.call(this, request);
   } finally {
     this.env.ASSIGNMENTS_KV = originalKv;
     this.ctx.storage.put = originalStoragePut;
+    this.ctx.storage.list = originalStorageList;
     this.ctx.storage.transaction = originalStorageTransaction;
   }
 };
@@ -138,7 +159,15 @@ HoldoverWriteOutboxDurableObject.prototype.fetch = async function (request) {
     globalThis.__purgeFailsRemaining -= 1;
     return Response.json({ error: "forced Entity purge failure" }, { status: 503 });
   }
-  return __prodOutboxFetch.call(this, request);
+  const originalKv = this.env.ASSIGNMENTS_KV;
+  if (url.pathname === "/ensure" && globalThis.__missingSuppressionReadsRemaining > 0) {
+    this.env.ASSIGNMENTS_KV = missAppSuppressRead(originalKv);
+  }
+  try {
+    return await __prodOutboxFetch.call(this, request);
+  } finally {
+    this.env.ASSIGNMENTS_KV = originalKv;
+  }
 };
 const __prodOutboxAlarm = HoldoverWriteOutboxDurableObject.prototype.alarm;
 HoldoverWriteOutboxDurableObject.prototype.alarm = async function () {
