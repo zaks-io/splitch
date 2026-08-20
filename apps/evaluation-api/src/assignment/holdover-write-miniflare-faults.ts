@@ -190,8 +190,15 @@ HoldoverWriteOutboxDurableObject.prototype.fetch = async function (request) {
     return Response.json({ alarm: await this.ctx.storage.getAlarm(), nowMs: Date.now() });
   }
   if (url.pathname === "/__test/alarm" && request.method === "POST") {
-    await this.alarm();
-    return Response.json({ ok: true });
+    const scheduledAt = await this.ctx.storage.getAlarm();
+    const originalDateNow = Date.now;
+    if (scheduledAt !== null) Date.now = () => scheduledAt;
+    try {
+      await this.alarm();
+      return Response.json({ ok: true });
+    } finally {
+      Date.now = originalDateNow;
+    }
   }
   if (url.pathname === "/purge" && globalThis.__purgeFailsRemaining > 0) {
     globalThis.__purgeFailsRemaining -= 1;

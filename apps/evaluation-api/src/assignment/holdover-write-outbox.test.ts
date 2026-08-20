@@ -251,8 +251,10 @@ describe("HoldoverWriteCoordinator adapters", () => {
 
   it("MemoryHoldoverWriteCoordinator owns then completes on alarm", async () => {
     const put = new FailNTimesPut(1);
-    const coordinator = new MemoryHoldoverWriteCoordinator(put);
+    let nowMs = 1_000;
+    const coordinator = new MemoryHoldoverWriteCoordinator(put, undefined, () => nowMs);
     await expect(coordinator.ensure(basePut)).resolves.toEqual({ status: "owned" });
+    nowMs += holdoverWriteRetryDelayMs(1);
     await coordinator.alarm(basePut);
     expect(put.calls).toHaveLength(2);
     // Job row deleted on success; a follow-up ensure re-asserts via putIfAbsent.

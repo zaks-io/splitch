@@ -38,8 +38,8 @@ interface OutboxFetchContext {
 const outboxPostRoutes: Record<string, OutboxHandler> = {
   "/delete": async (storage, _put, request, ctx) =>
     deleteResponse(storage, await request.json(), ctx.appInventory),
-  "/resume-alarms": async (storage, _put, _request, ctx) => {
-    await resumeHoldoverWriteAlarms(storage, ctx.nowMs);
+  "/resume-alarms": async (storage, _put, _request, _ctx) => {
+    await resumeHoldoverWriteAlarms(storage);
     return Response.json({ ok: true });
   },
   "/suppress": async (storage, _put, request) => {
@@ -47,7 +47,7 @@ const outboxPostRoutes: Record<string, OutboxHandler> = {
     await suppressEntityOutbox(storage, parseDeleteBeforeTsMs(body));
     return Response.json({ ok: true });
   },
-  "/purge": async (storage, _put, request) => {
+  "/purge": async (storage, _put, request, _ctx) => {
     const body = await request.json().catch(() => ({}));
     await purgeEntityOutboxState(storage, parseDeleteBeforeTsMs(body, Number.POSITIVE_INFINITY));
     return Response.json({ ok: true });

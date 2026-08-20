@@ -9,10 +9,12 @@ import {
   type HoldoverWriteOutboxStorage,
   type HoldoverWritePutPort,
   type HoldoverWriteSuppressionPort,
+  holdoverWriteJobDueAtMs,
   holdoverWriteJobKey,
   holdoverWriteRetryDelayMs,
   purgeStaleJobs,
   readEntitySuppression,
+  reschedulePendingHoldoverWriteAlarm,
   scopedHoldoverWriteLog,
 } from "./holdover-write-outbox-core";
 
@@ -111,22 +113,34 @@ export async function runHoldoverWriteAlarm(
 
   const cutoff = await readEntitySuppression(storage);
   for (const job of jobs) {
-    if (job.status !== "pending") continue;
-    if (cutoff !== undefined && job.createdAtMs <= cutoff.deleteBeforeTsMs) {
-      await storage.delete(holdoverWriteJobKey(job.experimentId));
-      continue;
-    }
-    await attemptHoldoverWriteJob(storage, putPort, job, nowMs, logger, suppression);
+    await retryDueAlarmJob(storage, putPort, job, nowMs, cutoff, logger, suppression);
   }
-  await rescheduleOrClearAlarm(storage, nowMs);
+  await reschedulePendingHoldoverWriteAlarm(storage);
+}
+
+async function retryDueAlarmJob(
+  storage: HoldoverWriteOutboxStorage,
+  putPort: HoldoverWritePutPort,
+  job: HoldoverWriteJob,
+  nowMs: number,
+  cutoff: Awaited<ReturnType<typeof readEntitySuppression>>,
+  logger?: HoldoverWriteOutboxLogger,
+  suppression?: HoldoverWriteSuppressionPort,
+): Promise<void> {
+  if (job.status !== "pending") return;
+  if (cutoff !== undefined && job.createdAtMs <= cutoff.deleteBeforeTsMs) {
+    await storage.delete(holdoverWriteJobKey(job.experimentId));
+    return;
+  }
+  if (holdoverWriteJobDueAtMs(job) > nowMs) return;
+  await attemptHoldoverWriteJob(storage, putPort, job, nowMs, logger, suppression);
 }
 
 /** Re-arm alarms for pending jobs after App deletion cancel/restore. */
 export async function resumeHoldoverWriteAlarms(
   storage: HoldoverWriteOutboxStorage,
-  nowMs: number = Date.now(),
 ): Promise<void> {
-  await rescheduleOrClearAlarm(storage, nowMs);
+  await reschedulePendingHoldoverWriteAlarm(storage);
 }
 
 async function attemptHoldoverWriteJob(
@@ -143,7 +157,7 @@ async function attemptHoldoverWriteJob(
   }
   if (await isStaleUnderEntityCutoff(storage, job.createdAtMs)) {
     await storage.delete(holdoverWriteJobKey(job.experimentId));
-    await rescheduleOrClearAlarm(storage, nowMs);
+    await reschedulePendingHoldoverWriteAlarm(storage);
     return { status: "suppressed" };
   }
   if (job.status === "poisoned") return { status: "poisoned" };
@@ -160,7 +174,7 @@ async function attemptHoldoverWriteJob(
       variant: job.variant,
     });
     await storage.delete(jobKey);
-    await rescheduleOrClearAlarm(storage, nowMs);
+    await reschedulePendingHoldoverWriteAlarm(storage);
     return { status: "completed" };
   } catch (cause) {
     if (nextAttempt >= HOLDOVER_WRITE_MAX_ATTEMPTS) {
@@ -171,7 +185,7 @@ async function attemptHoldoverWriteJob(
         updatedAtMs: nowMs,
       };
       await storage.put(jobKey, poisoned);
-      await rescheduleOrClearAlarm(storage, nowMs);
+      await reschedulePendingHoldoverWriteAlarm(storage);
       logger?.error("holdover_write_retry_exhausted", {
         ...scopedHoldoverWriteLog(poisoned),
         causeChain: errorMessages(cause),
@@ -186,7 +200,7 @@ async function attemptHoldoverWriteJob(
       updatedAtMs: nowMs,
     };
     await storage.put(jobKey, pending);
-    await storage.setAlarm(nowMs + holdoverWriteRetryDelayMs(nextAttempt));
+    await reschedulePendingHoldoverWriteAlarm(storage);
     logger?.error("holdover_write_put_failed_owned_for_retry", {
       ...scopedHoldoverWriteLog(pending),
       nextRetryDelayMs: holdoverWriteRetryDelayMs(nextAttempt),
@@ -208,19 +222,6 @@ async function isStaleUnderEntityCutoff(
 async function listJobs(storage: HoldoverWriteOutboxStorage): Promise<HoldoverWriteJob[]> {
   const listed = await storage.list<HoldoverWriteJob>({ prefix: HOLDOVER_WRITE_JOB_PREFIX });
   return [...listed.values()];
-}
-
-async function rescheduleOrClearAlarm(
-  storage: HoldoverWriteOutboxStorage,
-  nowMs: number,
-): Promise<void> {
-  const pending = (await listJobs(storage)).filter((job) => job.status === "pending");
-  if (pending.length === 0) {
-    await storage.deleteAlarm();
-    return;
-  }
-  const nextAttempt = Math.min(...pending.map((job) => Math.max(1, job.attempt)));
-  await storage.setAlarm(nowMs + holdoverWriteRetryDelayMs(nextAttempt));
 }
 
 function errorMessages(cause: unknown): string[] {

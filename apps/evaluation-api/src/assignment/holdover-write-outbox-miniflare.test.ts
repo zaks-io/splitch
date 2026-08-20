@@ -95,6 +95,35 @@ describe("HoldoverWriteOutboxDurableObject via Miniflare (real boundary)", () =>
     // A waitUntil regression would ack completed while this get is still null.
     expect(await kv.get(key)).toEqual(expect.any(String));
   });
+
+  it("retains a real alarm for post-cutoff pending work and eventually runs it", async () => {
+    mf = await miniflareWithOutboxAndAssignmentStore({ failFirstKvPut: true });
+    const outboxNs = (await mf.getDurableObjectNamespace(
+      "HOLDOVER_WRITE_OUTBOX",
+    )) as unknown as HoldoverWriteOutboxNamespace;
+    const coordinator = new DurableHoldoverWriteCoordinator(outboxNs);
+    await expect(coordinator.ensure(PUT, { sourceCreatedAtMs: 10_000 })).resolves.toEqual({
+      status: "owned",
+    });
+    const stub = outboxNs.get(outboxNs.idFromName(holdoverWriteOutboxName(PUT)));
+
+    await coordinator.purgeEntity(PUT, 9_999);
+
+    const alarmState = await stub.fetch("https://holdover-write-outbox.local/__test/alarm-state");
+    const { alarm } = (await alarmState.json()) as { alarm: number | null };
+    expect(alarm).toEqual(expect.any(Number));
+    expect(await (await stub.fetch("https://holdover-write-outbox.local/status")).json()).toEqual({
+      jobs: [expect.objectContaining({ experimentId: PUT.experimentId, status: "pending" })],
+    });
+
+    await stub.fetch("https://holdover-write-outbox.local/__test/alarm", { method: "POST" });
+
+    expect(await (await stub.fetch("https://holdover-write-outbox.local/status")).json()).toEqual({
+      status: "empty",
+    });
+    const key = assignmentKey(PUT.appId, PUT.idType, PUT.targetingKeyHash);
+    expect(await (await mf.getKVNamespace("ASSIGNMENTS_KV")).get(key)).toEqual(expect.any(String));
+  });
 });
 
 async function miniflareWithOutboxAndAssignmentStore(options: {
@@ -233,9 +262,19 @@ ${assignmentDo}
 const __prodOutboxFetch = HoldoverWriteOutboxDurableObject.prototype.fetch;
 HoldoverWriteOutboxDurableObject.prototype.fetch = async function (request) {
   const url = new URL(request.url);
+  if (url.pathname === "/__test/alarm-state") {
+    return Response.json({ alarm: await this.ctx.storage.getAlarm() });
+  }
   if (url.pathname === "/__test/alarm" && request.method === "POST") {
-    await this.alarm();
-    return Response.json({ ok: true });
+    const scheduledAt = await this.ctx.storage.getAlarm();
+    const originalDateNow = Date.now;
+    if (scheduledAt !== null) Date.now = () => scheduledAt;
+    try {
+      await this.alarm();
+      return Response.json({ ok: true });
+    } finally {
+      Date.now = originalDateNow;
+    }
   }
   return __prodOutboxFetch.call(this, request);
 };

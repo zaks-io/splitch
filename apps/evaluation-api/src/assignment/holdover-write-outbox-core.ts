@@ -69,6 +69,10 @@ export function holdoverWriteRetryDelayMs(attempt: number): number {
   return HOLDOVER_WRITE_RETRY_BASE_MS * 2 ** Math.max(0, capped - 1);
 }
 
+export function holdoverWriteJobDueAtMs(job: HoldoverWriteJob): number {
+  return job.updatedAtMs + holdoverWriteRetryDelayMs(Math.max(1, job.attempt));
+}
+
 export function appHoldoverWriteSuppressKey(appId: string): string {
   return `holdover-write-suppress:app:${appId}`;
 }
@@ -117,16 +121,16 @@ export async function suppressEntityOutbox(
 }
 
 /**
- * Purge pending / poisoned job rows at or before the Entity cutoff (hashes) and
- * cancel alarms. Keeps the Entity suppress tombstone so a stale post-deletion
- * retry cannot recreate Assignment Store state.
+ * Purge pending / poisoned job rows at or before the Entity cutoff (hashes),
+ * then preserve scheduling for newer pending jobs. Keeps the Entity suppress
+ * tombstone so a stale post-deletion retry cannot recreate Assignment Store state.
  */
 export async function purgeEntityOutboxState(
   storage: HoldoverWriteOutboxStorage,
   deleteBeforeTsMs: number = Number.POSITIVE_INFINITY,
 ): Promise<void> {
   await purgeStaleJobs(storage, deleteBeforeTsMs);
-  await storage.deleteAlarm();
+  await reschedulePendingHoldoverWriteAlarm(storage);
 }
 
 /** Full Entity deletion handshake: suppress → purge stale under one critical section. */
@@ -149,6 +153,18 @@ export async function purgeStaleJobs(
       await storage.delete(key);
     }
   }
+}
+
+export async function reschedulePendingHoldoverWriteAlarm(
+  storage: HoldoverWriteOutboxStorage,
+): Promise<void> {
+  const jobs = await storage.list<HoldoverWriteJob>({ prefix: HOLDOVER_WRITE_JOB_PREFIX });
+  const pending = [...jobs.values()].filter((job) => job.status === "pending");
+  if (pending.length === 0) {
+    await storage.deleteAlarm();
+    return;
+  }
+  await storage.setAlarm(Math.min(...pending.map(holdoverWriteJobDueAtMs)));
 }
 
 export async function readEntitySuppression(

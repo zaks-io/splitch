@@ -18,6 +18,7 @@ import { ensureHoldoverWriteJob, runHoldoverWriteAlarm } from "./holdover-write-
 /** In-memory outbox for tests that need failure-then-retry without Miniflare. */
 export class MemoryHoldoverWriteCoordinator implements HoldoverWriteCoordinator {
   private readonly entities = new Map<string, Map<string, unknown>>();
+  private readonly alarms = new Map<string, number>();
   private appSuppressed = new Set<string>();
 
   constructor(
@@ -43,10 +44,11 @@ export class MemoryHoldoverWriteCoordinator implements HoldoverWriteCoordinator 
 
   /** Drive one alarm tick for the Entity outbox (test seam). */
   alarm(input: HashedAssignmentPutInput): Promise<void> {
+    const entity = holdoverWriteOutboxName(input);
     return runHoldoverWriteAlarm(
       this.storageFor(input),
       this.putPort,
-      this.now(),
+      Math.max(this.now(), this.alarms.get(entity) ?? 0),
       this.logger,
       this.suppressionPort(),
     );
@@ -113,8 +115,12 @@ export class MemoryHoldoverWriteCoordinator implements HoldoverWriteCoordinator 
         }
         return out;
       },
-      async setAlarm() {},
-      async deleteAlarm() {},
+      setAlarm: async (scheduledTime) => {
+        this.alarms.set(entity, scheduledTime);
+      },
+      deleteAlarm: async () => {
+        this.alarms.delete(entity);
+      },
     };
   }
 }
