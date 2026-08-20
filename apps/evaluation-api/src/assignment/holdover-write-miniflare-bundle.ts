@@ -24,6 +24,8 @@ interface HoldoverWriteMiniflareOptions {
   pauseCancelAfterKvDelete?: boolean;
   pauseFinalizeAfterInventoryList?: boolean;
   missingSuppressionReadsRemaining?: number;
+  pauseCancelAlarmAfterSnapshot?: boolean;
+  pausePreparedAlarmAfterSnapshot?: boolean;
 }
 
 const DEFAULT_OPTIONS = {
@@ -39,6 +41,8 @@ const DEFAULT_OPTIONS = {
   pauseCancelAfterKvDelete: false,
   pauseFinalizeAfterInventoryList: false,
   missingSuppressionReadsRemaining: 0,
+  pauseCancelAlarmAfterSnapshot: false,
+  pausePreparedAlarmAfterSnapshot: false,
 } satisfies Required<HoldoverWriteMiniflareOptions>;
 
 export function bundleHoldoverWriteInventoryAndOutboxWorker(
@@ -183,6 +187,8 @@ function renderWorkerSource(
     pauseCancelAfterKvDelete,
     pauseFinalizeAfterInventoryList,
     missingSuppressionReadsRemaining,
+    pauseCancelAlarmAfterSnapshot,
+    pausePreparedAlarmAfterSnapshot,
   } = options;
   return `
 import { DurableObject } from "cloudflare:workers";
@@ -199,6 +205,8 @@ ${holdoverWriteInventoryClientStubs(
   pauseCancelAfterKvDelete,
   pauseFinalizeAfterInventoryList,
   missingSuppressionReadsRemaining,
+  pauseCancelAlarmAfterSnapshot,
+  pausePreparedAlarmAfterSnapshot,
 )}
 ${stripExport(inventory)}
 ${stripExport(deletionInput)}
@@ -229,6 +237,8 @@ ${holdoverWriteFaultHooks(
   pauseCancelAfterKvDelete,
   pauseFinalizeAfterInventoryList,
   missingSuppressionReadsRemaining,
+  pauseCancelAlarmAfterSnapshot,
+  pausePreparedAlarmAfterSnapshot,
 )}
 export default {
   async fetch(request) {
@@ -238,6 +248,8 @@ export default {
         cancelKvDeleteReached: globalThis.__cancelKvDeleteReached,
         ensureRegisterAttempts: globalThis.__ensureRegisterAttempts,
         finalizeInventoryListReached: globalThis.__finalizeInventoryListReached,
+        cancelAlarmSnapshotReached: globalThis.__cancelAlarmSnapshotReached,
+        preparedAlarmSnapshotReached: globalThis.__preparedAlarmSnapshotReached,
       });
     }
     if (url.pathname === "/__test/release-cancel-kv-delete" && request.method === "POST") {
@@ -246,6 +258,14 @@ export default {
     }
     if (url.pathname === "/__test/release-finalize-inventory-list" && request.method === "POST") {
       globalThis.__releaseFinalizeInventoryList?.();
+      return Response.json({ released: true });
+    }
+    if (url.pathname === "/__test/release-cancel-alarm-snapshot" && request.method === "POST") {
+      globalThis.__cancelAlarmSnapshotReleased = true;
+      return Response.json({ released: true });
+    }
+    if (url.pathname === "/__test/release-prepared-alarm-snapshot" && request.method === "POST") {
+      globalThis.__preparedAlarmSnapshotReleased = true;
       return Response.json({ released: true });
     }
     return new Response("harness", { status: 200 });

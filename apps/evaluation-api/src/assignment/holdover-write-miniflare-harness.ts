@@ -13,6 +13,8 @@ export function holdoverWriteInventoryClientStubs(
   pauseCancelAfterKvDelete: boolean,
   pauseFinalizeAfterInventoryList: boolean,
   missingSuppressionReadsRemaining: number,
+  pauseCancelAlarmAfterSnapshot: boolean,
+  pausePreparedAlarmAfterSnapshot: boolean,
 ): string {
   const transportAware = registerFailsRemaining > 0;
   return `
@@ -29,6 +31,8 @@ globalThis.__markTransactionSagaPutObserved = false;
 globalThis.__pauseCancelAfterKvDelete = ${String(pauseCancelAfterKvDelete)};
 globalThis.__pauseFinalizeAfterInventoryList = ${String(pauseFinalizeAfterInventoryList)};
 globalThis.__missingSuppressionReadsRemaining = ${String(missingSuppressionReadsRemaining)};
+globalThis.__pauseCancelAlarmAfterSnapshot = ${String(pauseCancelAlarmAfterSnapshot)};
+globalThis.__pausePreparedAlarmAfterSnapshot = ${String(pausePreparedAlarmAfterSnapshot)};
 globalThis.__cancelKvDeleteReached = false;
 globalThis.__ensureRegisterAttempts = 0;
 globalThis.__releaseCancelKvDelete = undefined;
@@ -40,6 +44,11 @@ globalThis.__releaseFinalizeInventoryList = undefined;
 globalThis.__finalizeInventoryListBarrier = new Promise((resolve) => {
   globalThis.__releaseFinalizeInventoryList = resolve;
 });
+globalThis.__cancelAlarmSnapshotReached = false;
+globalThis.__cancelAlarmSnapshotReleased = false;
+globalThis.__preparedAlarmSnapshotReached = false;
+globalThis.__preparedAlarmSnapshotReleased = false;
+globalThis.__alarmInvocationActive = false;
 const CURRENT_KV_SCHEMA_VERSION = 1;
 function assignmentWriterName(input) {
   return input.appId + ":" + input.idType + ":" + input.targetingKeyHash;

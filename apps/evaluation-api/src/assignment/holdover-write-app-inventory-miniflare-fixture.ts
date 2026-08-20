@@ -14,12 +14,16 @@ export interface HoldoverWriteMiniflareOptions {
   pauseCancelAfterKvDelete?: boolean;
   pauseFinalizeAfterInventoryList?: boolean;
   missingSuppressionReadsRemaining?: number;
+  pauseCancelAlarmAfterSnapshot?: boolean;
+  pausePreparedAlarmAfterSnapshot?: boolean;
 }
 
 export interface DeadlockBarrierStatus {
   readonly cancelKvDeleteReached: boolean;
   readonly ensureRegisterAttempts: number;
   readonly finalizeInventoryListReached: boolean;
+  readonly cancelAlarmSnapshotReached: boolean;
+  readonly preparedAlarmSnapshotReached: boolean;
 }
 
 export function miniflareWithInventoryAndOutbox(options: HoldoverWriteMiniflareOptions): Miniflare {

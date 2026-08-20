@@ -47,15 +47,15 @@ export async function beginOrResumeAppDeletionCancelSaga(
   kv: AssignmentKv,
   appId: string,
   resume: HoldoverWriteEntityAlarmResumePort | null,
-  expectedGenerationId?: string,
+  expectedGenerationId?: string | null,
 ): Promise<{ readonly done: boolean; readonly cancelled: boolean }> {
   requireSagaAppId(appId);
-  if (expectedGenerationId !== undefined) requireSagaGeneration(expectedGenerationId);
+  validateExpectedGeneration(expectedGenerationId);
   if ((await storage.get<boolean>(SAGA_DELETION_COMPLETE_KEY)) === true) {
     return { done: true, cancelled: false };
   }
   let existing = await readAppDeletionSaga(storage);
-  if (existing !== null && expectedGenerationId !== undefined) {
+  if (existing !== null && typeof expectedGenerationId === "string") {
     existing = await adoptLegacyAppDeletionSagaGeneration(storage, existing, expectedGenerationId);
   }
   if (
@@ -80,12 +80,16 @@ export async function beginOrResumeAppDeletionCancelSaga(
   return { done: advanced.done, cancelled: true };
 }
 
+function validateExpectedGeneration(expectedGenerationId: string | null | undefined): void {
+  if (typeof expectedGenerationId === "string") requireSagaGeneration(expectedGenerationId);
+}
+
 /** Select one child-DO resume hop after durable cancel setup and KV clear. */
 export async function planAppDeletionCancelStep(
   storage: HoldoverWriteAppInventoryStorage,
   kv: AssignmentKv,
   appId: string,
-  expectedGenerationId?: string,
+  expectedGenerationId?: string | null,
 ): Promise<HoldoverWriteAppDeletionCancelPlan> {
   const result = await beginOrResumeAppDeletionCancelSaga(
     storage,
@@ -133,7 +137,7 @@ async function buildCancelingSaga(
   storage: HoldoverWriteAppInventoryStorage,
   appId: string,
   existing: HoldoverWriteAppDeletionSaga | null,
-  expectedGenerationId: string | undefined,
+  expectedGenerationId: string | null | undefined,
 ): Promise<HoldoverWriteAppDeletionSaga> {
   const deleteBeforeTsMs =
     existing?.deleteBeforeTsMs ?? (await storage.get<number>(SAGA_DELETE_BEFORE_TS_KEY)) ?? 0;

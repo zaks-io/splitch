@@ -13,6 +13,8 @@ export function holdoverWriteFaultHooks(
   pauseCancelAfterKvDelete: boolean,
   pauseFinalizeAfterInventoryList: boolean,
   missingSuppressionReadsRemaining: number,
+  pauseCancelAlarmAfterSnapshot: boolean,
+  pausePreparedAlarmAfterSnapshot: boolean,
 ): string {
   if (
     registerFailsRemaining <= 0 &&
@@ -26,11 +28,44 @@ export function holdoverWriteFaultHooks(
     markTransactionThrowsAfterCommitRemaining <= 0 &&
     !pauseCancelAfterKvDelete &&
     !pauseFinalizeAfterInventoryList &&
-    missingSuppressionReadsRemaining <= 0
+    missingSuppressionReadsRemaining <= 0 &&
+    !pauseCancelAlarmAfterSnapshot &&
+    !pausePreparedAlarmAfterSnapshot
   ) {
     return "";
   }
   return `
+const __prodAdvanceCancel = HoldoverWriteAppInventoryDurableObject.prototype.advanceCancel;
+HoldoverWriteAppInventoryDurableObject.prototype.advanceCancel = async function (
+  appId,
+  generationId,
+) {
+  if (
+    globalThis.__pauseCancelAlarmAfterSnapshot &&
+    globalThis.__alarmInvocationActive &&
+    !globalThis.__cancelAlarmSnapshotReached
+  ) {
+    globalThis.__cancelAlarmSnapshotReached = true;
+    while (!globalThis.__cancelAlarmSnapshotReleased) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+  }
+  return __prodAdvanceCancel.call(this, appId, generationId);
+};
+const __prodClearInertAlarm = HoldoverWriteAppInventoryDurableObject.prototype.clearInertAlarm;
+HoldoverWriteAppInventoryDurableObject.prototype.clearInertAlarm = async function (saga) {
+  if (
+    globalThis.__pausePreparedAlarmAfterSnapshot &&
+    globalThis.__alarmInvocationActive &&
+    !globalThis.__preparedAlarmSnapshotReached
+  ) {
+    globalThis.__preparedAlarmSnapshotReached = true;
+    while (!globalThis.__preparedAlarmSnapshotReleased) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+  }
+  return __prodClearInertAlarm.call(this, saga);
+};
 const __prodInventoryFetch = HoldoverWriteAppInventoryDurableObject.prototype.fetch;
 HoldoverWriteAppInventoryDurableObject.prototype.fetch = async function (request) {
   const url = new URL(request.url);
@@ -42,6 +77,7 @@ HoldoverWriteAppInventoryDurableObject.prototype.fetch = async function (request
   }
   if (url.pathname === "/__test/alarm" && request.method === "POST") {
     await this.ctx.storage.deleteAlarm();
+    globalThis.__alarmInvocationActive = true;
     try {
       await this.handleAlarm();
       return Response.json({ ok: true });
@@ -50,6 +86,8 @@ HoldoverWriteAppInventoryDurableObject.prototype.fetch = async function (request
         { error: cause instanceof Error ? cause.message : String(cause) },
         { status: 503 },
       );
+    } finally {
+      globalThis.__alarmInvocationActive = false;
     }
   }
   if (

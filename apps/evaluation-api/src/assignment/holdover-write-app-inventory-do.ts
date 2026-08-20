@@ -16,6 +16,7 @@ import {
   prepareAppDeletionSaga,
   readAppDeletionSaga,
 } from "./holdover-write-app-deletion-saga";
+import type { HoldoverWriteAppDeletionSaga } from "./holdover-write-app-deletion-saga-storage";
 import type { HoldoverWriteOutboxNamespace } from "./holdover-write-outbox";
 import {
   purgeAppDeletionEntityOutbox,
@@ -69,14 +70,23 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
     const saga = await this.serialized(() => readAppDeletionSaga(this.ctx.storage));
     if (saga === null) return;
     if (saga.phase === "preparing" || saga.phase === "canceling") {
-      await this.advanceCancel(saga.appId);
+      await this.advanceCancel(saga.appId, saga.generationId);
       return;
     }
     if (saga.phase === "d1_deleted" || saga.phase === "finalizing") {
       await this.advanceFinalize(saga.appId, saga.generationId);
       return;
     }
-    await this.serialized(() => this.ctx.storage.deleteAlarm());
+    await this.clearInertAlarm(saga);
+  }
+
+  private async clearInertAlarm(saga: HoldoverWriteAppDeletionSaga): Promise<void> {
+    await this.serialized(async () => {
+      const current = await readAppDeletionSaga(this.ctx.storage);
+      if (current?.generationId === saga.generationId && current.phase === saga.phase) {
+        await this.ctx.storage.deleteAlarm();
+      }
+    });
   }
 
   private async beginDeletion(request: Request): Promise<Response> {
@@ -175,8 +185,16 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
     }
   }
 
-  private async advanceCancel(appId: string, generationId?: string) {
+  private async advanceCancel(appId: string, generationId: string | null) {
     const plan = await this.serialized(async () => {
+      const current = await readAppDeletionSaga(this.ctx.storage);
+      if (
+        current !== null &&
+        current.generationId !== generationId &&
+        !(current.generationId === null && typeof generationId === "string")
+      ) {
+        return { done: true, cancelled: false, step: null } as const;
+      }
       await this.armRetry();
       return planAppDeletionCancelStep(
         this.ctx.storage,
