@@ -35,9 +35,7 @@ export function bundleHoldoverWriteInventoryAndOutboxWorker(options?: {
     "./holdover-write-app-deletion-saga-cancel",
     "./holdover-write-app-deletion-saga-finalize",
     "./holdover-write-app-deletion-saga-storage",
-  ])
-    .replace(/^export type \{[\s\S]*?\};?\s*/gm, "")
-    .replace(/^export \{[\s\S]*?\};?\s*/gm, "");
+  ]);
   const inventoryFetch = stripIsRecordHelpers(
     stripImport(
       readSource("holdover-write-app-inventory-fetch.ts"),
@@ -270,7 +268,15 @@ function stripIsRecordHelpers(source: string): string {
 }
 
 function stripExport(source: string): string {
-  return source.replace(/^export \{[\s\S]*?\};?\s*/gm, "").replace(/^export /gm, "");
+  // Drop barrel re-exports entirely (`export … { … } from "…"`), including
+  // type-only forms. Leaving a dangling `from "…"` after stripping `export type`
+  // becomes a runtime `from is not defined` in the Miniflare worker.
+  return source
+    .replace(/^export\s+type\s+\{[\s\S]*?\}\s+from\s+["'][^"']+["'];?\s*/gm, "")
+    .replace(/^export\s+\{[\s\S]*?\}\s+from\s+["'][^"']+["'];?\s*/gm, "")
+    .replace(/^export\s+type\s+\{[\s\S]*?\};?\s*/gm, "")
+    .replace(/^export\s+\{[\s\S]*?\};?\s*/gm, "")
+    .replace(/^export /gm, "");
 }
 
 function escapeRegExp(value: string): string {
