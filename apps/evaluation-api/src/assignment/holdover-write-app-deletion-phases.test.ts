@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { MemoryHoldoverWriteAppInventoryClient } from "../sdk-route-binding-cleanup-fixture";
 import {
   cancelAppHoldoverWriteDeletion,
-  finalizeAppHoldoverWriteDeletion,
   prepareAppHoldoverWriteDeletion,
 } from "./holdover-write-deletion";
 import {
@@ -20,6 +19,7 @@ const PUT = {
   runId: "run-1",
   variant: "treatment",
 } as const;
+const GENERATION_ID = "generation-A";
 
 class MemoryOutboxStorage implements HoldoverWriteOutboxStorage {
   readonly values = new Map<string, unknown>();
@@ -74,7 +74,7 @@ describe("holdover write App deletion two-phase boundary", () => {
     });
     expect(storage.values.has(holdoverWriteJobKey(PUT.experimentId))).toBe(true);
 
-    await prepareAppHoldoverWriteDeletion(inventory, "app-A", 5_000);
+    await prepareAppHoldoverWriteDeletion(inventory, "app-A", GENERATION_ID, 5_000);
     expect(await inventory.status("app-A")).toMatchObject({
       suppressed: true,
       deletionComplete: false,
@@ -90,19 +90,7 @@ describe("holdover write App deletion two-phase boundary", () => {
     expect(putCalls).toHaveLength(putsBefore);
     expect(storage.values.has(holdoverWriteJobKey(PUT.experimentId))).toBe(true);
 
-    const wakeOutbox = {
-      idFromName(name: string) {
-        return name as unknown as DurableObjectId;
-      },
-      get() {
-        return {
-          async fetch() {
-            return Response.json({ ok: true });
-          },
-        };
-      },
-    };
-    await cancelAppHoldoverWriteDeletion(inventory, wakeOutbox, "app-A");
+    await cancelAppHoldoverWriteDeletion(inventory, "app-A", GENERATION_ID);
     expect(resumes).toEqual([PUT.targetingKeyHash]);
     expect(await inventory.status("app-A")).toMatchObject({
       suppressed: false,
@@ -111,26 +99,15 @@ describe("holdover write App deletion two-phase boundary", () => {
       entities: [{ idType: PUT.idType, targetingKeyHash: PUT.targetingKeyHash }],
     });
 
-    await prepareAppHoldoverWriteDeletion(inventory, "app-A", 5_000);
+    await prepareAppHoldoverWriteDeletion(inventory, "app-A", GENERATION_ID, 5_000);
     const deleted: string[] = [];
-    const finalizeOutbox = {
-      idFromName(name: string) {
-        return name as unknown as DurableObjectId;
-      },
-      get(id: DurableObjectId) {
-        return {
-          async fetch() {
-            deleted.push(String(id));
-            await inventory.markEntityPurged("app-A", {
-              idType: PUT.idType,
-              targetingKeyHash: PUT.targetingKeyHash,
-            });
-            return Response.json({ ok: true });
-          },
-        };
+    inventory.purgePort = {
+      async purgeEntity(entity) {
+        deleted.push(`${entity.appId}:${entity.idType}:${entity.targetingKeyHash}`);
       },
     };
-    await finalizeAppHoldoverWriteDeletion(inventory, finalizeOutbox, "app-A", 5_000);
+    await inventory.markD1Deleted("app-A", GENERATION_ID, 5_000);
+    await inventory.finalizeDeletion("app-A", GENERATION_ID, 5_000);
     expect(deleted).toEqual([`${PUT.appId}:${PUT.idType}:${PUT.targetingKeyHash}`]);
     expect(await inventory.status("app-A")).toMatchObject({
       suppressed: true,
@@ -144,29 +121,22 @@ describe("holdover write App deletion two-phase boundary", () => {
     const inventory = new MemoryHoldoverWriteAppInventoryClient();
     await inventory.registerEntity("app-A", { idType: "user", targetingKeyHash: "hash-1" });
     await inventory.registerEntity("app-A", { idType: "user", targetingKeyHash: "hash-2" });
-    await prepareAppHoldoverWriteDeletion(inventory, "app-A", 5_000);
+    await prepareAppHoldoverWriteDeletion(inventory, "app-A", GENERATION_ID, 5_000);
     let calls = 0;
-    const outbox = {
-      idFromName(name: string) {
-        return name as unknown as DurableObjectId;
-      },
-      get() {
-        return {
-          async fetch() {
-            calls += 1;
-            if (calls === 1) throw new Error("forced purge failure");
-            return Response.json({ ok: true });
-          },
-        };
+    inventory.purgePort = {
+      async purgeEntity() {
+        calls += 1;
+        if (calls === 1) throw new Error("forced purge failure");
       },
     };
-    await expect(
-      finalizeAppHoldoverWriteDeletion(inventory, outbox, "app-A", 5_000),
-    ).rejects.toThrow(/forced purge failure/);
+    await inventory.markD1Deleted("app-A", GENERATION_ID, 5_000);
+    await expect(inventory.finalizeDeletion("app-A", GENERATION_ID, 5_000)).rejects.toThrow(
+      /forced purge failure/,
+    );
     expect((await inventory.status("app-A")).deletionComplete).toBe(false);
     expect((await inventory.status("app-A")).suppressed).toBe(true);
-    expect((await inventory.status("app-A")).sagaPhase).toBe("d1_deleted");
-    await finalizeAppHoldoverWriteDeletion(inventory, outbox, "app-A", 5_000);
+    expect((await inventory.status("app-A")).sagaPhase).toBe("finalizing");
+    await inventory.finalizeDeletion("app-A", GENERATION_ID, 5_000);
     expect(await inventory.status("app-A")).toMatchObject({
       deletionComplete: true,
       sagaPhase: "completed",

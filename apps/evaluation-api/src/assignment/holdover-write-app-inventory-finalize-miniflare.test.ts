@@ -17,6 +17,7 @@ const PUT = {
   runId: "run-42",
   variant: "treatment",
 } as const;
+const GENERATION_ID = "generation-A";
 
 let mf: Miniflare | undefined;
 
@@ -31,9 +32,12 @@ describe("HoldoverWriteAppInventoryDurableObject finalize alarm recovery", () =>
       markTransactionFailsBeforeCommitRemaining: 1,
     });
 
-    await inventory.beginDeletion(PUT.appId, 9_000);
-    await expect(inventory.markD1Deleted(PUT.appId, 9_000)).rejects.toThrow(/HTTP 400/u);
+    await inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000);
+    await expect(inventory.markD1Deleted(PUT.appId, GENERATION_ID, 9_000)).rejects.toThrow(
+      /HTTP 400/u,
+    );
     expect(await inventory.status(PUT.appId)).toMatchObject({
+      generationId: GENERATION_ID,
       suppressed: true,
       sagaPhase: "prepared",
       deletionComplete: false,
@@ -42,6 +46,9 @@ describe("HoldoverWriteAppInventoryDurableObject finalize alarm recovery", () =>
       await inventoryStub.fetch("https://inventory.local/__test/alarm-status")
     ).json<{ alarm: number | null }>();
     expect(uncommitted.alarm).toBeNull();
+    expect(
+      await (await inventoryStub.fetch("https://inventory.local/__test/transaction-status")).json(),
+    ).toEqual({ sagaPutObserved: true });
   });
 
   it("finishes Entity purge from the App alarm after a transient two-DO failure", async () => {
@@ -68,15 +75,11 @@ describe("HoldoverWriteAppInventoryDurableObject finalize alarm recovery", () =>
       ]),
     });
 
-    await inventory.beginDeletion(PUT.appId, 9_000);
-    await inventory.markD1Deleted(PUT.appId, 9_000);
-    const failedAlarm = await inventoryStub.fetch("https://inventory.local/__test/alarm", {
-      method: "POST",
-    });
-    expect(failedAlarm.status).toBe(503);
-    expect(await failedAlarm.json()).toMatchObject({
-      error: expect.stringMatching(/purge|transport/u),
-    });
+    await inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000);
+    await inventory.markD1Deleted(PUT.appId, GENERATION_ID, 9_000);
+    await expect(inventory.finalizeDeletion(PUT.appId, GENERATION_ID, 9_000)).rejects.toThrow(
+      /HTTP 400/u,
+    );
     const retryAlarm = await (
       await inventoryStub.fetch("https://inventory.local/__test/alarm-status")
     ).json<{ alarm: number | null; nowMs: number }>();

@@ -225,6 +225,16 @@ describe("route registry: lookup", () => {
     expect(route?.path).toBe("/apps/:appId/flags");
   });
 
+  it("accepts the deletion generation on internal App outbox cleanup", () => {
+    const route = getRoute("holdover_write_outbox_delete");
+    expect(
+      route?.input.safeParse({
+        params: { appId: "app-1" },
+        query: { phase: "finalize", generationId: "request-1" },
+      }).success,
+    ).toBe(true);
+  });
+
   it("declares conflicts and availability failures on the App membership surface", () => {
     for (const operationId of [
       "app_members_list",

@@ -22,6 +22,7 @@ export interface HoldoverWriteAppEntityRef {
 }
 
 export interface HoldoverWriteAppDeletionBeginResult {
+  readonly generationId: string | null;
   readonly suppressed: true;
   readonly deletionComplete: boolean;
   readonly entities: readonly HoldoverWriteAppEntityRef[];
@@ -37,6 +38,7 @@ type HoldoverWriteAppInventorySagaPhase =
   | "canceling";
 
 export interface HoldoverWriteAppInventoryStatus {
+  readonly generationId: string | null;
   readonly suppressed: boolean;
   readonly deletionComplete: boolean;
   readonly deleteBeforeTsMs: number | null;
@@ -107,6 +109,7 @@ export async function beginAppInventoryDeletion(
   await storage.put(DELETE_BEFORE_TS_KEY, deleteBeforeTsMs);
   if (alreadyComplete) {
     return {
+      generationId: null,
       suppressed: true,
       deletionComplete: true,
       entities: [],
@@ -116,6 +119,7 @@ export async function beginAppInventoryDeletion(
   await storage.delete(DELETION_COMPLETE_KEY);
   const entities = await listRegisteredEntities(storage);
   return {
+    generationId: null,
     suppressed: true,
     deletionComplete: false,
     entities,
@@ -162,6 +166,7 @@ export async function completeAppInventoryDeletion(
   await storage.put(DELETION_COMPLETE_KEY, true);
   const prior = await storage.get<{
     appId?: string;
+    generationId?: string;
     deleteBeforeTsMs?: number;
   }>("deletionSaga");
   const deleteBefore =
@@ -171,6 +176,7 @@ export async function completeAppInventoryDeletion(
   await storage.put("deletionSaga", {
     phase: "completed",
     appId: typeof prior?.appId === "string" ? prior.appId : "",
+    generationId: typeof prior?.generationId === "string" ? prior.generationId : null,
     deleteBeforeTsMs: deleteBefore,
     cancelResumePending: [],
     cancelKvCleared: true,
@@ -181,7 +187,7 @@ export async function appInventoryStatus(
   storage: HoldoverWriteAppInventoryStorage,
 ): Promise<HoldoverWriteAppInventoryStatus> {
   const deleteBefore = await storage.get<number>(DELETE_BEFORE_TS_KEY);
-  const saga = await storage.get<{ phase?: unknown }>("deletionSaga");
+  const saga = await storage.get<{ phase?: unknown; generationId?: unknown }>("deletionSaga");
   const sagaPhase =
     saga !== undefined &&
     typeof saga === "object" &&
@@ -191,6 +197,7 @@ export async function appInventoryStatus(
       ? saga.phase
       : null;
   return {
+    generationId: typeof saga?.generationId === "string" ? saga.generationId : null,
     suppressed: (await storage.get<boolean>(SUPPRESSED_KEY)) === true,
     deletionComplete: (await storage.get<boolean>(DELETION_COMPLETE_KEY)) === true,
     deleteBeforeTsMs:

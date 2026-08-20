@@ -91,6 +91,7 @@ export const apps = sqliteTable(
  */
 export const appDeletionSagas = sqliteTable("app_deletion_sagas", {
   appId: text("app_id").primaryKey(),
+  generationId: text("generation_id").notNull(),
   organizationId: text("organization_id"),
   actorId: text("actor_id"),
   deleteBeforeTs: text("delete_before_ts"),

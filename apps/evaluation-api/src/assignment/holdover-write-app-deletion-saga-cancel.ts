@@ -17,9 +17,12 @@ import {
   SAGA_DELETION_COMPLETE_KEY,
   SAGA_KEY,
   SAGA_SUPPRESSED_KEY,
+  adoptLegacyAppDeletionSagaGeneration,
+  appDeletionSagaCrossedBoundary,
   putAppDeletionSaga,
   readAppDeletionSaga,
   requireSagaAppId,
+  requireSagaGeneration,
   sagaListRegisteredEntities,
 } from "./holdover-write-app-deletion-saga-storage";
 
@@ -32,37 +35,59 @@ export async function beginOrResumeAppDeletionCancelSaga(
   kv: AssignmentKv,
   appId: string,
   resume: HoldoverWriteEntityAlarmResumePort | null,
+  expectedGenerationId?: string,
 ): Promise<{ readonly done: boolean; readonly cancelled: boolean }> {
   requireSagaAppId(appId);
+  if (expectedGenerationId !== undefined) requireSagaGeneration(expectedGenerationId);
   if ((await storage.get<boolean>(SAGA_DELETION_COMPLETE_KEY)) === true) {
     return { done: true, cancelled: false };
   }
-  const existing = await readAppDeletionSaga(storage);
-  if (existing?.phase === "d1_deleted" || existing?.phase === "finalizing") {
+  let existing = await readAppDeletionSaga(storage);
+  if (existing !== null && expectedGenerationId !== undefined) {
+    existing = await adoptLegacyAppDeletionSagaGeneration(storage, existing, expectedGenerationId);
+  }
+  if (
+    existing !== null &&
+    expectedGenerationId !== undefined &&
+    existing.generationId !== expectedGenerationId
+  ) {
     return { done: true, cancelled: false };
   }
-  if (existing?.phase === "completed") {
+  if (existing !== null && appDeletionSagaCrossedBoundary(existing)) {
     return { done: true, cancelled: false };
   }
   if (existing === null && (await storage.get<boolean>(SAGA_SUPPRESSED_KEY)) !== true) {
     return { done: true, cancelled: true };
   }
 
+  await putAppDeletionSaga(
+    storage,
+    await buildCancelingSaga(storage, appId, existing, expectedGenerationId),
+  );
+  const advanced = await advanceAppDeletionCancelSaga(storage, kv, appId, resume);
+  return { done: advanced.done, cancelled: true };
+}
+
+async function buildCancelingSaga(
+  storage: HoldoverWriteAppInventoryStorage,
+  appId: string,
+  existing: HoldoverWriteAppDeletionSaga | null,
+  expectedGenerationId: string | undefined,
+): Promise<HoldoverWriteAppDeletionSaga> {
   const deleteBeforeTsMs =
     existing?.deleteBeforeTsMs ?? (await storage.get<number>(SAGA_DELETE_BEFORE_TS_KEY)) ?? 0;
   const pending =
     existing?.phase === "canceling"
       ? existing.cancelResumePending
       : await sagaListRegisteredEntities(storage);
-  await putAppDeletionSaga(storage, {
+  return {
     phase: "canceling",
     appId,
+    generationId: existing?.generationId ?? expectedGenerationId ?? null,
     deleteBeforeTsMs,
     cancelResumePending: pending,
     cancelKvCleared: existing?.phase === "canceling" ? existing.cancelKvCleared : false,
-  });
-  const advanced = await advanceAppDeletionCancelSaga(storage, kv, appId, resume);
-  return { done: advanced.done, cancelled: true };
+  };
 }
 
 export async function advanceAppDeletionCancelSaga(
@@ -88,6 +113,7 @@ export async function advanceAppDeletionCancelSaga(
     await putAppDeletionSaga(storage, {
       phase: "canceling",
       appId: saga.appId,
+      generationId: saga.generationId,
       deleteBeforeTsMs: saga.deleteBeforeTsMs,
       cancelResumePending: pending,
       cancelKvCleared: true,
@@ -127,6 +153,7 @@ async function resumePendingEntityAlarms(
     await putAppDeletionSaga(storage, {
       phase: "canceling",
       appId: saga.appId,
+      generationId: saga.generationId,
       deleteBeforeTsMs: saga.deleteBeforeTsMs,
       cancelResumePending: [...failed, ...pending.slice(index + 1)],
       cancelKvCleared: saga.cancelKvCleared,

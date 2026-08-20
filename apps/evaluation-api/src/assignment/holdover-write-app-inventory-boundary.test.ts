@@ -12,6 +12,8 @@ import { DurableHoldoverWriteAppInventoryClient } from "./holdover-write-app-inv
 import { handleHoldoverWriteAppInventoryFetch } from "./holdover-write-app-inventory-fetch";
 import { appHoldoverWriteSuppressKey } from "./holdover-write-outbox-core";
 
+const GENERATION_ID = "req-generation-1";
+
 class MemoryInventoryStorage implements HoldoverWriteAppInventoryStorage {
   readonly values = new Map<string, unknown>();
   async get<T>(key: string): Promise<T | undefined> {
@@ -72,6 +74,7 @@ describe("holdover write App inventory ordering / resumability", () => {
             return Response.json({
               suppressed: true,
               deletionComplete: false,
+              generationId: GENERATION_ID,
               deleteBeforeTsMs: 1_000,
               entities: [],
             });
@@ -79,8 +82,10 @@ describe("holdover write App inventory ordering / resumability", () => {
         };
       },
     });
-    await client.beginDeletion("app-A", 1_000);
-    expect(bodies).toEqual([{ appId: "app-A", deleteBeforeTsMs: 1_000 }]);
+    await client.beginDeletion("app-A", GENERATION_ID, 1_000);
+    expect(bodies).toEqual([
+      { appId: "app-A", generationId: GENERATION_ID, deleteBeforeTsMs: 1_000 },
+    ]);
   });
 
   it("register refuses once deletion has begun or completed", async () => {

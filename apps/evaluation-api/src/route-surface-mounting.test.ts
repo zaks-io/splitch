@@ -1,6 +1,20 @@
 import { mountedOperationIds, routesMountedBy, routesSurfacedBy } from "@splitch/contracts";
+import type { AuthResolver } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
-import { makeSdkRouteHarness } from "./sdk-route-test-fixtures";
+import { APP_ID, makeSdkRouteHarness } from "./sdk-route-test-fixtures";
+
+const internalAuth: AuthResolver = () => ({
+  ok: true,
+  principal: {
+    kind: "control-plane-token",
+    id: "user-1",
+    scopes: [],
+    orgId: "org-1",
+    appId: APP_ID,
+    environmentId: null,
+    authDoor: "id_jag",
+  },
+});
 
 /**
  * The edge is the public surface for exactly the routes a customer's shipped
@@ -37,5 +51,17 @@ describe("evaluation-api mounts each door's routes and no others", () => {
     );
 
     expect(response.status).toBe(404);
+  });
+
+  it("accepts the generation-bound App deletion request through the real binding route", async () => {
+    const { app } = await makeSdkRouteHarness({ door: "binding", authResolver: internalAuth });
+
+    const response = await app.request(
+      `/internal/apps/${APP_ID}/holdover-write-outbox?phase=prepare&generationId=request-1`,
+      { method: "DELETE", headers: { authorization: "Bearer internal" } },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ deleted: true });
   });
 });

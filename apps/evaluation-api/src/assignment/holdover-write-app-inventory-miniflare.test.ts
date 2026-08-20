@@ -17,6 +17,7 @@ const PUT = {
   runId: "run-42",
   variant: "treatment",
 } as const;
+const GENERATION_ID = "generation-A";
 
 let mf: Miniflare | undefined;
 
@@ -59,8 +60,9 @@ describe("HoldoverWriteAppInventoryDurableObject via Miniflare", () => {
     const inventory = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
     const coordinator = new DurableHoldoverWriteCoordinator(outboxNs);
 
-    await inventory.beginDeletion(PUT.appId, 9_000);
-    await inventory.completeDeletion(PUT.appId);
+    await inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000);
+    await inventory.markD1Deleted(PUT.appId, GENERATION_ID, 9_000);
+    await inventory.finalizeDeletion(PUT.appId, GENERATION_ID, 9_000);
 
     await expect(
       inventory.registerEntity(PUT.appId, {
@@ -83,7 +85,8 @@ describe("HoldoverWriteAppInventoryDurableObject via Miniflare", () => {
     )) as unknown as HoldoverWriteAppInventoryNamespace;
     const inventory = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
 
-    await inventory.beginDeletion(PUT.appId, 9_000);
+    await inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000);
+    await inventory.markD1Deleted(PUT.appId, GENERATION_ID, 9_000);
     // Concurrent register + complete: DO blockConcurrencyWhile serializes them.
     // After suppress, register must return suppressed — never re-index post-complete.
     const [registerResult] = await Promise.all([
@@ -91,7 +94,7 @@ describe("HoldoverWriteAppInventoryDurableObject via Miniflare", () => {
         idType: PUT.idType,
         targetingKeyHash: PUT.targetingKeyHash,
       }),
-      inventory.completeDeletion(PUT.appId),
+      inventory.finalizeDeletion(PUT.appId, GENERATION_ID, 9_000),
     ]);
     expect(registerResult).toEqual({ status: "suppressed" });
     expect(await inventory.status(PUT.appId)).toMatchObject({
@@ -113,7 +116,7 @@ describe("HoldoverWriteAppInventoryDurableObject via Miniflare", () => {
     const inventory = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
     const stub = inventoryNs.get(inventoryNs.idFromName(PUT.appId));
 
-    await expect(inventory.beginDeletion(PUT.appId, 9_000)).rejects.toThrow(
+    await expect(inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000)).rejects.toThrow(
       "app inventory /begin-deletion returned HTTP 400",
     );
     expect(await inventory.status(PUT.appId)).toMatchObject({
@@ -136,6 +139,41 @@ describe("HoldoverWriteAppInventoryDurableObject via Miniflare", () => {
 });
 
 describe("HoldoverWriteAppInventoryDurableObject deletion alarm recovery", () => {
+  it("ignores a delayed stale cancel after a newer deletion generation prepares", async () => {
+    mf = await miniflareWithInventoryAndOutbox({ registerFailsRemaining: 0 });
+    const inventoryNs = (await mf.getDurableObjectNamespace(
+      "HOLDOVER_WRITE_APP_INVENTORY",
+    )) as unknown as HoldoverWriteAppInventoryNamespace;
+    const inventory = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
+    const nextGeneration = "generation-B";
+
+    await inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000);
+    await inventory.beginDeletion(PUT.appId, nextGeneration, 10_000);
+
+    await expect(inventory.cancelDeletion(PUT.appId, GENERATION_ID)).resolves.toMatchObject({
+      cancelled: false,
+      done: true,
+      sagaPhase: "prepared",
+    });
+    expect(await inventory.status(PUT.appId)).toMatchObject({
+      generationId: nextGeneration,
+      suppressed: true,
+      sagaPhase: "prepared",
+      deleteBeforeTsMs: 10_000,
+    });
+    const kv = await mf.getKVNamespace("ASSIGNMENTS_KV");
+    expect(await kv.get(appHoldoverWriteSuppressKey(PUT.appId))).toBe("1");
+
+    await inventory.markD1Deleted(PUT.appId, nextGeneration, 10_000);
+    await inventory.finalizeDeletion(PUT.appId, nextGeneration, 10_000);
+    expect(await inventory.status(PUT.appId)).toMatchObject({
+      generationId: nextGeneration,
+      suppressed: true,
+      sagaPhase: "completed",
+      deletionComplete: true,
+    });
+  });
+
   it("keeps accepted work alarm-recheckable across KV delete failure and stale visibility", async () => {
     mf = await miniflareWithInventoryAndOutbox({
       registerFailsRemaining: 0,
@@ -155,8 +193,8 @@ describe("HoldoverWriteAppInventoryDurableObject deletion alarm recovery", () =>
     const outboxStub = outboxNs.get(outboxNs.idFromName(holdoverWriteOutboxName(PUT)));
 
     await expect(coordinator.ensure(PUT)).resolves.toEqual({ status: "owned" });
-    await inventory.beginDeletion(PUT.appId, 9_000);
-    await expect(inventory.cancelDeletion(PUT.appId)).rejects.toThrow(/HTTP 400/u);
+    await inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000);
+    await expect(inventory.cancelDeletion(PUT.appId, GENERATION_ID)).rejects.toThrow(/HTTP 400/u);
     expect(await (await outboxStub.fetch("https://outbox.local/status")).json()).toMatchObject({
       jobs: [expect.objectContaining({ experimentId: PUT.experimentId })],
     });
@@ -193,8 +231,10 @@ describe("HoldoverWriteAppInventoryDurableObject deletion alarm recovery", () =>
     const inventory = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
     const inventoryStub = inventoryNs.get(inventoryNs.idFromName(PUT.appId));
 
-    await inventory.beginDeletion(PUT.appId, 9_000);
-    await expect(inventory.markD1Deleted(PUT.appId, 9_000)).rejects.toThrow(/HTTP 400/u);
+    await inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000);
+    await expect(inventory.markD1Deleted(PUT.appId, GENERATION_ID, 9_000)).rejects.toThrow(
+      /HTTP 400/u,
+    );
     expect(await inventory.status(PUT.appId)).toMatchObject({ sagaPhase: "d1_deleted" });
     const secured = await (
       await inventoryStub.fetch("https://inventory.local/__test/alarm-status")

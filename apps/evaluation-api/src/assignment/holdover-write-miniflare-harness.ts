@@ -19,10 +19,10 @@ globalThis.__cancelStatePutFailsRemaining = ${String(cancelStatePutFailsRemainin
 globalThis.__cancelKvDeleteFailsRemaining = ${String(cancelKvDeleteFailsRemaining)};
 globalThis.__staleSuppressionReadsRemaining = ${String(staleSuppressionReadsRemaining)};
 globalThis.__writerPutFailsRemaining = ${String(writerPutFailsRemaining)};
-globalThis.__purgeFailsRemaining = 0;
-globalThis.__purgeFailsOnManualAlarm = ${String(purgeFailsRemaining)};
+globalThis.__purgeFailsRemaining = ${String(purgeFailsRemaining)};
 globalThis.__markTransactionFailsBeforeCommitRemaining = ${String(markTransactionFailsBeforeCommitRemaining)};
 globalThis.__markTransactionThrowsAfterCommitRemaining = ${String(markTransactionThrowsAfterCommitRemaining)};
+globalThis.__markTransactionSagaPutObserved = false;
 const CURRENT_KV_SCHEMA_VERSION = 1;
 function assignmentWriterName(input) {
   return input.appId + ":" + input.idType + ":" + input.targetingKeyHash;

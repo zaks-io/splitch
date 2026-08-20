@@ -20,6 +20,8 @@ export type HoldoverWriteAppDeletionSagaPhase =
 export interface HoldoverWriteAppDeletionSaga {
   readonly phase: HoldoverWriteAppDeletionSagaPhase;
   readonly appId: string;
+  /** Null only for saga records written before generation IDs shipped. */
+  readonly generationId: string | null;
   readonly deleteBeforeTsMs: number;
   /** Entity outboxes still awaiting /resume-alarms during cancel. */
   readonly cancelResumePending: readonly HoldoverWriteAppEntityRef[];
@@ -64,6 +66,21 @@ export async function putAppDeletionSaga(
   await storage.put(SAGA_KEY, saga);
 }
 
+export async function adoptLegacyAppDeletionSagaGeneration(
+  storage: HoldoverWriteAppInventoryStorage,
+  saga: HoldoverWriteAppDeletionSaga,
+  generationId: string,
+): Promise<HoldoverWriteAppDeletionSaga> {
+  if (saga.generationId !== null) return saga;
+  const adopted = { ...saga, generationId };
+  await putAppDeletionSaga(storage, adopted);
+  return adopted;
+}
+
+export function appDeletionSagaCrossedBoundary(saga: HoldoverWriteAppDeletionSaga): boolean {
+  return saga.phase === "d1_deleted" || saga.phase === "finalizing" || saga.phase === "completed";
+}
+
 export function sagaEntityInventoryKey(ref: HoldoverWriteAppEntityRef): string {
   return `${SAGA_ENTITY_PREFIX}${ref.idType}:${ref.targetingKeyHash}`;
 }
@@ -90,6 +107,10 @@ export async function sagaListRegisteredEntities(
 
 export function requireSagaAppId(appId: string): void {
   if (appId.length === 0) throw new Error("app deletion saga: appId is required");
+}
+
+export function requireSagaGeneration(generationId: string): void {
+  if (generationId.length === 0) throw new Error("app deletion saga: generationId is required");
 }
 
 export function requireSagaCutoff(deleteBeforeTsMs: number): void {

@@ -1,9 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
 import type { AssignmentKv } from "./assignment-store";
+import {
+  parseAppIdBody,
+  parseDeletionBody,
+  parseMarkD1Body,
+} from "./holdover-write-app-deletion-input";
 import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
 import { handleHoldoverWriteAppInventoryFetch } from "./holdover-write-app-inventory-fetch";
 import {
-  advanceAppDeletionCancelSaga,
   advanceAppDeletionFinalizeSaga,
   beginOrResumeAppDeletionCancelSaga,
   markAppDeletionSagaD1Deleted,
@@ -47,8 +51,8 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
     if (request.method === "POST" && url.pathname === "/mark-d1-deleted") {
       return this.markD1Deleted(request);
     }
-    if (request.method === "POST" && url.pathname === "/advance-cancel") {
-      return this.advanceCancel(request);
+    if (request.method === "POST" && url.pathname === "/finalize-deletion") {
+      return this.finalizeDeletion(request);
     }
     return handleHoldoverWriteAppInventoryFetch(this.ctx.storage, request);
   }
@@ -66,7 +70,12 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
             this.resumePort(),
           )
         : saga.phase === "d1_deleted" || saga.phase === "finalizing"
-          ? await advanceAppDeletionFinalizeSaga(this.ctx.storage, saga.appId, this.purgePort())
+          ? await advanceAppDeletionFinalizeSaga(
+              this.ctx.storage,
+              saga.appId,
+              saga.generationId,
+              this.purgePort(),
+            )
           : { done: true };
     if (advanced.done) await this.ctx.storage.deleteAlarm();
   }
@@ -80,6 +89,7 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
         this.ctx.storage,
         this.env.ASSIGNMENTS_KV,
         parsed.appId,
+        parsed.generationId,
         parsed.deleteBeforeTsMs,
         this.resumePort(),
       );
@@ -89,6 +99,7 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
       }
       return Response.json({
         suppressed: true,
+        generationId: saga?.generationId ?? parsed.generationId,
         deletionComplete: result.deletionComplete,
         deleteBeforeTsMs: parsed.deleteBeforeTsMs,
         entities: [],
@@ -105,6 +116,19 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
   private async cancelDeletion(request: Request): Promise<Response> {
     const parsed = await parseAppIdBody(request, this.ctx.id.name);
     if (!parsed.ok) return parsed.response;
+    const existing = await readAppDeletionSaga(this.ctx.storage);
+    if (
+      existing?.generationId !== null &&
+      existing?.generationId !== undefined &&
+      existing.generationId !== parsed.generationId
+    ) {
+      return Response.json({
+        cancelled: false,
+        done: true,
+        entities: [],
+        sagaPhase: existing.phase,
+      });
+    }
     await this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
     try {
       const result = await beginOrResumeAppDeletionCancelSaga(
@@ -112,6 +136,7 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
         this.env.ASSIGNMENTS_KV,
         parsed.appId,
         this.resumePort(),
+        parsed.generationId,
       );
       if (result.done) await this.ctx.storage.deleteAlarm();
       const saga = await readAppDeletionSaga(this.ctx.storage);
@@ -129,27 +154,6 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
     }
   }
 
-  private async advanceCancel(request: Request): Promise<Response> {
-    const parsed = await parseAppIdBody(request, this.ctx.id.name);
-    if (!parsed.ok) return parsed.response;
-    await this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
-    try {
-      const advanced = await advanceAppDeletionCancelSaga(
-        this.ctx.storage,
-        this.env.ASSIGNMENTS_KV,
-        parsed.appId,
-        this.resumePort(),
-      );
-      if (advanced.done) await this.ctx.storage.deleteAlarm();
-      return Response.json({ done: advanced.done });
-    } catch (cause) {
-      return Response.json(
-        { error: cause instanceof Error ? cause.message : String(cause) },
-        { status: 400 },
-      );
-    }
-  }
-
   private async markD1Deleted(request: Request): Promise<Response> {
     const parsed = await parseMarkD1Body(request);
     if (!parsed.ok) return parsed.response;
@@ -159,6 +163,7 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
         const next = await markAppDeletionSagaD1Deleted(
           transaction,
           parsed.appId,
+          parsed.generationId,
           parsed.deleteBeforeTsMs,
         );
         await (next.phase === "completed"
@@ -167,6 +172,28 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
         return next;
       });
       return Response.json(saga);
+    } catch (cause) {
+      return Response.json(
+        { error: cause instanceof Error ? cause.message : String(cause) },
+        { status: 400 },
+      );
+    }
+  }
+
+  private async finalizeDeletion(request: Request): Promise<Response> {
+    const parsed = await parseMarkD1Body(request);
+    if (!parsed.ok) return parsed.response;
+    await this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
+    try {
+      const result = await advanceAppDeletionFinalizeSaga(
+        this.ctx.storage,
+        parsed.appId,
+        parsed.generationId,
+        this.purgePort(),
+        parsed.deleteBeforeTsMs,
+      );
+      if (result.done) await this.ctx.storage.deleteAlarm();
+      return Response.json(result);
     } catch (cause) {
       return Response.json(
         { error: cause instanceof Error ? cause.message : String(cause) },
@@ -219,103 +246,4 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
       },
     };
   }
-}
-
-async function parseDeletionBody(
-  request: Request,
-): Promise<
-  { ok: true; appId: string; deleteBeforeTsMs: number } | { ok: false; response: Response }
-> {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return { ok: false, response: Response.json({ error: "invalid JSON" }, { status: 400 }) };
-  }
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    typeof (body as { deleteBeforeTsMs?: unknown }).deleteBeforeTsMs !== "number" ||
-    !Number.isFinite((body as { deleteBeforeTsMs: number }).deleteBeforeTsMs)
-  ) {
-    return {
-      ok: false,
-      response: Response.json({ error: "deleteBeforeTsMs is required" }, { status: 400 }),
-    };
-  }
-  const deleteBeforeTsMs = (body as { deleteBeforeTsMs: number }).deleteBeforeTsMs;
-  const appIdFromBody = (body as { appId?: unknown }).appId;
-  const appId =
-    typeof appIdFromBody === "string" && appIdFromBody.length > 0 ? appIdFromBody : undefined;
-  if (appId === undefined) {
-    return {
-      ok: false,
-      response: Response.json(
-        { error: "appId is required for App deletion suppress" },
-        { status: 400 },
-      ),
-    };
-  }
-  return { ok: true, appId, deleteBeforeTsMs };
-}
-
-async function parseAppIdBody(
-  request: Request,
-  doName: string | undefined,
-): Promise<{ ok: true; appId: string } | { ok: false; response: Response }> {
-  let body: unknown = {};
-  try {
-    body = await request.json();
-  } catch {
-    body = {};
-  }
-  const appIdFromBody =
-    typeof body === "object" &&
-    body !== null &&
-    typeof (body as { appId?: unknown }).appId === "string"
-      ? (body as { appId: string }).appId
-      : "";
-  const appId = appIdFromBody.length > 0 ? appIdFromBody : doName;
-  if (typeof appId !== "string" || appId.length === 0) {
-    return {
-      ok: false,
-      response: Response.json(
-        { error: "appId is required to cancel App deletion" },
-        { status: 400 },
-      ),
-    };
-  }
-  return { ok: true, appId };
-}
-
-async function parseMarkD1Body(
-  request: Request,
-): Promise<
-  | { ok: true; appId: string; deleteBeforeTsMs: number | undefined }
-  | { ok: false; response: Response }
-> {
-  let body: unknown = {};
-  try {
-    body = await request.json();
-  } catch {
-    body = {};
-  }
-  const appIdFromBody =
-    typeof body === "object" &&
-    body !== null &&
-    typeof (body as { appId?: unknown }).appId === "string"
-      ? (body as { appId: string }).appId
-      : "";
-  if (appIdFromBody.length === 0) {
-    return {
-      ok: false,
-      response: Response.json({ error: "appId is required to mark D1 deletion" }, { status: 400 }),
-    };
-  }
-  const raw =
-    typeof body === "object" && body !== null
-      ? (body as { deleteBeforeTsMs?: unknown }).deleteBeforeTsMs
-      : undefined;
-  const deleteBeforeTsMs = typeof raw === "number" && Number.isFinite(raw) ? raw : undefined;
-  return { ok: true, appId: appIdFromBody, deleteBeforeTsMs };
 }

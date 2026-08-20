@@ -11,15 +11,15 @@ import type {
 } from "./assignment/holdover-write-app-inventory-client";
 import type { HoldoverWriteOutboxCleanupDeps } from "./assignment/holdover-write-outbox-cleanup";
 import {
-  advanceAppDeletionCancelSaga,
   beginOrResumeAppDeletionCancelSaga,
   markAppDeletionSagaD1Deleted,
   prepareAppDeletionSaga,
   readAppDeletionSaga,
   type HoldoverWriteEntityAlarmResumePort,
 } from "./assignment/holdover-write-app-deletion-saga";
+import type { HoldoverWriteEntityPurgePort } from "./assignment/holdover-write-app-deletion-saga-storage";
+import { advanceAppDeletionFinalizeSaga } from "./assignment/holdover-write-app-deletion-saga";
 import {
-  completeAppInventoryDeletion,
   markAppInventoryEntityPurged,
   registerAppInventoryEntity,
   type HoldoverWriteAppInventoryStorage,
@@ -31,8 +31,15 @@ export class MemoryHoldoverWriteAppInventoryClient implements HoldoverWriteAppIn
   readonly storage = new MemoryInventoryStorage();
   kv: AssignmentKv;
   resumePort: HoldoverWriteEntityAlarmResumePort | null = null;
+  purgePort: HoldoverWriteEntityPurgePort;
 
-  constructor(options: { kv?: AssignmentKv; resume?: HoldoverWriteEntityAlarmResumePort } = {}) {
+  constructor(
+    options: {
+      kv?: AssignmentKv;
+      resume?: HoldoverWriteEntityAlarmResumePort;
+      purge?: HoldoverWriteEntityPurgePort;
+    } = {},
+  ) {
     this.kv = options.kv ?? new MemoryAssignmentKv();
     this.resumePort =
       options.resume ??
@@ -41,6 +48,13 @@ export class MemoryHoldoverWriteAppInventoryClient implements HoldoverWriteAppIn
           return undefined;
         },
       } satisfies HoldoverWriteEntityAlarmResumePort);
+    this.purgePort =
+      options.purge ??
+      ({
+        async purgeEntity() {
+          return undefined;
+        },
+      } satisfies HoldoverWriteEntityPurgePort);
   }
 
   async registerEntity(
@@ -53,17 +67,20 @@ export class MemoryHoldoverWriteAppInventoryClient implements HoldoverWriteAppIn
 
   async beginDeletion(
     appId: string,
+    generationId: string,
     deleteBeforeTsMs: number,
   ): Promise<HoldoverWriteAppDeletionBeginResult> {
     const result = await prepareAppDeletionSaga(
       this.storage,
       this.kv,
       appId,
+      generationId,
       deleteBeforeTsMs,
       this.resumePort,
     );
     const status = await appInventoryStatus(this.storage);
     return {
+      generationId,
       suppressed: true,
       deletionComplete: result.deletionComplete,
       deleteBeforeTsMs,
@@ -71,12 +88,16 @@ export class MemoryHoldoverWriteAppInventoryClient implements HoldoverWriteAppIn
     };
   }
 
-  async cancelDeletion(appId: string): Promise<HoldoverWriteAppInventoryCancelResult> {
+  async cancelDeletion(
+    appId: string,
+    generationId: string,
+  ): Promise<HoldoverWriteAppInventoryCancelResult> {
     const result = await beginOrResumeAppDeletionCancelSaga(
       this.storage,
       this.kv,
       appId,
       this.resumePort,
+      generationId,
     );
     const saga = await readAppDeletionSaga(this.storage);
     return {
@@ -87,22 +108,31 @@ export class MemoryHoldoverWriteAppInventoryClient implements HoldoverWriteAppIn
     };
   }
 
-  async advanceCancel(appId: string): Promise<{ readonly done: boolean }> {
-    return advanceAppDeletionCancelSaga(this.storage, this.kv, appId, this.resumePort);
+  async markD1Deleted(
+    appId: string,
+    generationId: string,
+    deleteBeforeTsMs?: number,
+  ): Promise<void> {
+    await markAppDeletionSagaD1Deleted(this.storage, appId, generationId, deleteBeforeTsMs);
   }
 
-  async markD1Deleted(appId: string, deleteBeforeTsMs?: number): Promise<void> {
-    await markAppDeletionSagaD1Deleted(this.storage, appId, deleteBeforeTsMs);
+  async finalizeDeletion(
+    appId: string,
+    generationId: string,
+    deleteBeforeTsMs?: number,
+  ): Promise<void> {
+    await advanceAppDeletionFinalizeSaga(
+      this.storage,
+      appId,
+      generationId,
+      this.purgePort,
+      deleteBeforeTsMs,
+    );
   }
 
   async markEntityPurged(appId: string, ref: HoldoverWriteAppEntityRef): Promise<void> {
     void appId;
     await markAppInventoryEntityPurged(this.storage, ref);
-  }
-
-  async completeDeletion(appId: string): Promise<void> {
-    void appId;
-    await completeAppInventoryDeletion(this.storage);
   }
 
   async status(appId: string): Promise<HoldoverWriteAppInventoryStatus> {

@@ -51,6 +51,7 @@ const ORGANIZATION_ID = "org_verify";
 interface SdkRouteHarnessOptions {
   /** Defaults to the public edge, which is where every SDK route is addressed. */
   readonly door?: EvaluationDoor;
+  readonly authResolver?: AuthResolver;
   readonly liveRun?: boolean;
   readonly experimentOverrides?: Partial<ExperimentConfigKV>;
   readonly evaluationCommitSink?: EvaluationCommitSink;
@@ -205,7 +206,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
   const app = createApp({
     logger,
     door: options.door ?? "public",
-    authResolver: controlPlaneAuthResolver,
+    authResolver: options.authResolver ?? controlPlaneAuthResolver,
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(credentialKv),
     rateLimiter: allowLimiter,
     delegationBindings: { "event-ingest-api": options.eventIngest },

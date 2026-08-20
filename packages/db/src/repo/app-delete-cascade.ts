@@ -1,6 +1,7 @@
 import { assertMintedScope, type TenantScope } from "./scope";
 
 export interface AppDeletionBoundary {
+  readonly generationId: string;
   readonly actorId: string;
   readonly organizationId: string;
   readonly deleteBeforeTs: string;
@@ -53,7 +54,7 @@ export function makeDeleteAppCascade(d1: D1Database) {
             .prepare(
               `UPDATE app_deletion_sagas SET phase = 'd1_deleted', updated_at = ?
                WHERE app_id = ? AND organization_id = ? AND actor_id = ?
-                 AND delete_before_ts = ? AND phase = 'started'
+                 AND delete_before_ts = ? AND generation_id = ? AND phase = 'started'
                RETURNING app_id`,
             )
             .bind(
@@ -62,6 +63,7 @@ export function makeDeleteAppCascade(d1: D1Database) {
               boundary.organizationId,
               boundary.actorId,
               boundary.deleteBeforeTs,
+              boundary.generationId,
             ),
           // A zero-row UPDATE must abort the batch before any child deletion.
           // SQLite evaluates the invalid JSON branch only when `changes()` is 0.

@@ -18,6 +18,7 @@ describe("createHoldoverWriteOutboxCleanup", () => {
       actorId: "user_1",
       orgId: "org_1",
       requestId: "req_1",
+      generationId: "req-generation-1",
     });
 
     expect(requests).toHaveLength(1);
@@ -26,6 +27,7 @@ describe("createHoldoverWriteOutboxCleanup", () => {
     const url = new URL(request?.url ?? "");
     expect(url.pathname).toBe("/internal/apps/app_1/holdover-write-outbox");
     expect(url.searchParams.get("phase")).toBe("prepare");
+    expect(url.searchParams.get("generationId")).toBe("req-generation-1");
   });
 
   it("finalize, mark-d1-deleted, and cancel send their App deletion phases", async () => {
@@ -43,6 +45,7 @@ describe("createHoldoverWriteOutboxCleanup", () => {
       actorId: "user_1",
       orgId: "org_1",
       requestId: "req_1",
+      generationId: "req-generation-1",
     };
     await cleanup.markD1Deleted(input);
     await cleanup.finalize(input);
@@ -82,6 +85,7 @@ describe("createHoldoverWriteOutboxCleanup", () => {
         actorId: "user_1",
         orgId: null,
         requestId: "req_1",
+        generationId: "req-generation-1",
       }),
     ).rejects.toThrow(/EVALUATION_API is required/);
   });

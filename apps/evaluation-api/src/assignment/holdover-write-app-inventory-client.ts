@@ -30,13 +30,16 @@ export interface HoldoverWriteAppInventoryClient {
   ): Promise<HoldoverWriteAppInventoryRegisterResult>;
   beginDeletion(
     appId: string,
+    generationId: string,
     deleteBeforeTsMs: number,
   ): Promise<HoldoverWriteAppDeletionBeginResult>;
-  cancelDeletion(appId: string): Promise<HoldoverWriteAppInventoryCancelResult>;
-  advanceCancel(appId: string): Promise<{ readonly done: boolean }>;
-  markD1Deleted(appId: string, deleteBeforeTsMs?: number): Promise<void>;
+  cancelDeletion(
+    appId: string,
+    generationId: string,
+  ): Promise<HoldoverWriteAppInventoryCancelResult>;
+  markD1Deleted(appId: string, generationId: string, deleteBeforeTsMs?: number): Promise<void>;
+  finalizeDeletion(appId: string, generationId: string, deleteBeforeTsMs?: number): Promise<void>;
   markEntityPurged(appId: string, ref: HoldoverWriteAppEntityRef): Promise<void>;
-  completeDeletion(appId: string): Promise<void>;
   status(appId: string): Promise<HoldoverWriteAppInventoryStatus>;
   isSuppressed(appId: string): Promise<boolean>;
 }
@@ -57,19 +60,26 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
 
   async beginDeletion(
     appId: string,
+    generationId: string,
     deleteBeforeTsMs: number,
   ): Promise<HoldoverWriteAppDeletionBeginResult> {
-    const body = await this.postJson(appId, "/begin-deletion", { appId, deleteBeforeTsMs });
+    const body = await this.postJson(appId, "/begin-deletion", {
+      appId,
+      generationId,
+      deleteBeforeTsMs,
+    });
     if (
       !isRecord(body) ||
       body.suppressed !== true ||
       typeof body.deletionComplete !== "boolean" ||
       typeof body.deleteBeforeTsMs !== "number" ||
+      body.generationId !== generationId ||
       !Array.isArray(body.entities)
     ) {
       throw new HoldoverWriteAppInventoryError("begin-deletion returned an invalid payload");
     }
     return {
+      generationId,
       suppressed: true,
       deletionComplete: body.deletionComplete,
       deleteBeforeTsMs: body.deleteBeforeTsMs,
@@ -77,8 +87,11 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
     };
   }
 
-  async cancelDeletion(appId: string): Promise<HoldoverWriteAppInventoryCancelResult> {
-    const body = await this.postJson(appId, "/cancel-deletion", { appId });
+  async cancelDeletion(
+    appId: string,
+    generationId: string,
+  ): Promise<HoldoverWriteAppInventoryCancelResult> {
+    const body = await this.postJson(appId, "/cancel-deletion", { appId, generationId });
     if (!isRecord(body) || typeof body.cancelled !== "boolean" || !Array.isArray(body.entities)) {
       throw new HoldoverWriteAppInventoryError("cancel-deletion returned an invalid payload");
     }
@@ -90,27 +103,32 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
     };
   }
 
-  async advanceCancel(appId: string): Promise<{ readonly done: boolean }> {
-    const body = await this.postJson(appId, "/advance-cancel", { appId });
-    if (!isRecord(body) || typeof body.done !== "boolean") {
-      throw new HoldoverWriteAppInventoryError("advance-cancel returned an invalid payload");
-    }
-    return { done: body.done };
-  }
-
-  async markD1Deleted(appId: string, deleteBeforeTsMs?: number): Promise<void> {
+  async markD1Deleted(
+    appId: string,
+    generationId: string,
+    deleteBeforeTsMs?: number,
+  ): Promise<void> {
     await this.post(appId, "/mark-d1-deleted", {
       appId,
+      generationId,
+      ...(deleteBeforeTsMs !== undefined ? { deleteBeforeTsMs } : {}),
+    });
+  }
+
+  async finalizeDeletion(
+    appId: string,
+    generationId: string,
+    deleteBeforeTsMs?: number,
+  ): Promise<void> {
+    await this.post(appId, "/finalize-deletion", {
+      appId,
+      generationId,
       ...(deleteBeforeTsMs !== undefined ? { deleteBeforeTsMs } : {}),
     });
   }
 
   async markEntityPurged(appId: string, ref: HoldoverWriteAppEntityRef): Promise<void> {
     await this.post(appId, "/mark-entity-purged", ref);
-  }
-
-  async completeDeletion(appId: string): Promise<void> {
-    await this.post(appId, "/complete-deletion", {});
   }
 
   async status(appId: string): Promise<HoldoverWriteAppInventoryStatus> {
@@ -129,6 +147,7 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
       throw new HoldoverWriteAppInventoryError("status returned an invalid payload");
     }
     return {
+      generationId: typeof body.generationId === "string" ? body.generationId : null,
       suppressed: body.suppressed,
       deletionComplete: body.deletionComplete,
       deleteBeforeTsMs:

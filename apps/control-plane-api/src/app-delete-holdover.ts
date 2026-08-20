@@ -56,6 +56,7 @@ export async function deleteAppRowsWithHoldoverSaga(
   const now = nowIso(deps);
   const saga = await deps.repo.identity.beginAppDeletionSaga({
     appId,
+    generationId: requestId,
     organizationId,
     actorId,
     deleteBeforeTs: now,
@@ -67,6 +68,7 @@ export async function deleteAppRowsWithHoldoverSaga(
     actorId,
     orgId: organizationId,
     requestId,
+    generationId: activeSaga.generationId,
     deleteBeforeTs: activeSaga.deleteBeforeTs,
   };
   await prepareAndCrossAppDeletionBoundary(
@@ -87,7 +89,11 @@ export async function deleteAppRowsWithHoldoverSaga(
     orgId: organizationId,
     requestId,
   });
-  await deps.repo.identity.completeAppDeletionSaga(appId, nowIso(deps));
+  await deps.repo.identity.completeAppDeletionSaga({
+    appId,
+    generationId: activeSaga.generationId,
+    updatedAt: nowIso(deps),
+  });
 }
 
 async function prepareAndCrossAppDeletionBoundary(
@@ -208,7 +214,11 @@ export async function resumeHoldoverFinalizeAfterAppGone(
     );
   }
   if (saga.phase === "complete") {
-    await deps.repo.identity.completeAppDeletionSaga(appId, nowIso(deps));
+    await deps.repo.identity.completeAppDeletionSaga({
+      appId,
+      generationId: saga.generationId,
+      updatedAt: nowIso(deps),
+    });
     return Response.json({ deleted: true });
   }
   const activeSaga = requireActiveSaga(saga);
@@ -220,13 +230,18 @@ export async function resumeHoldoverFinalizeAfterAppGone(
     actorId: principal.id,
     orgId: activeSaga.organizationId,
     requestId,
+    generationId: activeSaga.generationId,
   };
   await holdoverCleanup.markD1Deleted(holdoverInput);
   await holdoverCleanup.finalize(holdoverInput);
   const cleanup = deps.exposureStatusCleanup;
   if (!cleanup) throw new Error("App delete requires Exposure status cleanup");
   await cleanup.delete(holdoverInput);
-  await deps.repo.identity.completeAppDeletionSaga(appId, nowIso(deps));
+  await deps.repo.identity.completeAppDeletionSaga({
+    appId,
+    generationId: activeSaga.generationId,
+    updatedAt: nowIso(deps),
+  });
   return Response.json({ deleted: true });
 }
 
@@ -235,6 +250,7 @@ function requireActiveSaga(saga: {
   readonly organizationId: string | null;
   readonly actorId: string | null;
   readonly deleteBeforeTs: string | null;
+  readonly generationId: string;
 }) {
   if (
     saga.phase === "complete" ||
@@ -248,5 +264,6 @@ function requireActiveSaga(saga: {
     organizationId: saga.organizationId,
     actorId: saga.actorId,
     deleteBeforeTs: saga.deleteBeforeTs,
+    generationId: saga.generationId,
   };
 }

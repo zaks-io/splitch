@@ -34,6 +34,7 @@ export function bundleHoldoverWriteInventoryAndOutboxWorker(options?: {
   const markTransactionThrowsAfterCommitRemaining =
     options?.markTransactionThrowsAfterCommitRemaining ?? 0;
   const inventory = readSource("holdover-write-app-inventory.ts");
+  const deletionInput = readSource("holdover-write-app-deletion-input.ts");
   const sagaStorage = stripImport(
     readSource("holdover-write-app-deletion-saga-storage.ts"),
     "./holdover-write-app-inventory",
@@ -67,6 +68,7 @@ export function bundleHoldoverWriteInventoryAndOutboxWorker(options?: {
     "./assignment-store",
     "./holdover-write-app-inventory",
     "./holdover-write-app-inventory-fetch",
+    "./holdover-write-app-deletion-input",
     "./holdover-write-app-deletion-saga",
     "./holdover-write-outbox",
     "./holdover-write-outbox-core",
@@ -128,6 +130,7 @@ ${holdoverWriteInventoryClientStubs(
   markTransactionThrowsAfterCommitRemaining,
 )}
 ${stripExport(inventory)}
+${stripExport(deletionInput)}
 ${stripExport(sagaStorage)}
 ${stripExport(sagaCancel)}
 ${stripExport(sagaFinalize)}

@@ -2,6 +2,7 @@ type AppDeletionSagaPhase = "started" | "d1_deleted" | "complete";
 
 export interface AppDeletionSagaRow {
   readonly appId: string;
+  readonly generationId: string;
   readonly organizationId: string | null;
   readonly actorId: string | null;
   readonly deleteBeforeTs: string | null;
@@ -14,6 +15,7 @@ export interface AppDeletionSagaRow {
 
 export interface AppDeletionSagaInput {
   readonly appId: string;
+  readonly generationId: string;
   readonly organizationId: string;
   readonly actorId: string;
   readonly deleteBeforeTs: string;
@@ -32,16 +34,17 @@ export function makeAppDeletionSagaRepo(d1: D1Database) {
       const result = await d1
         .prepare(
           `INSERT INTO app_deletion_sagas (
-             app_id, organization_id, actor_id, delete_before_ts, retry_actor_hash,
+             app_id, generation_id, organization_id, actor_id, delete_before_ts, retry_actor_hash,
              organization_scope_hash,
              phase, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, 'started', ?, ?)
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'started', ?, ?)
            ON CONFLICT (app_id) DO NOTHING
-           RETURNING app_id, organization_id, actor_id, delete_before_ts, retry_actor_hash,
+           RETURNING app_id, generation_id, organization_id, actor_id, delete_before_ts, retry_actor_hash,
              organization_scope_hash, phase, created_at, updated_at`,
         )
         .bind(
           input.appId,
+          input.generationId,
           input.organizationId,
           input.actorId,
           input.deleteBeforeTs,
@@ -66,7 +69,7 @@ export function makeAppDeletionSagaRepo(d1: D1Database) {
     async getAppDeletionSaga(appId: string): Promise<AppDeletionSagaRow | null> {
       const result = await d1
         .prepare(
-          `SELECT app_id, organization_id, actor_id, delete_before_ts, retry_actor_hash,
+          `SELECT app_id, generation_id, organization_id, actor_id, delete_before_ts, retry_actor_hash,
              organization_scope_hash, phase, created_at, updated_at
            FROM app_deletion_sagas WHERE app_id = ?`,
         )
@@ -80,21 +83,35 @@ export function makeAppDeletionSagaRepo(d1: D1Database) {
       organizationId: string;
       actorId: string;
       deleteBeforeTs: string;
+      generationId: string;
     }): Promise<boolean> {
       const result = await d1
         .prepare(
           `DELETE FROM app_deletion_sagas
            WHERE app_id = ? AND organization_id = ? AND actor_id = ?
-             AND delete_before_ts = ? AND phase = 'started'`,
+             AND delete_before_ts = ? AND generation_id = ? AND phase = 'started'`,
         )
-        .bind(input.appId, input.organizationId, input.actorId, input.deleteBeforeTs)
+        .bind(
+          input.appId,
+          input.organizationId,
+          input.actorId,
+          input.deleteBeforeTs,
+          input.generationId,
+        )
         .run();
       return result.meta.changes === 1;
     },
 
-    async completeAppDeletionSaga(appId: string, updatedAt: string): Promise<void> {
-      const existing = await this.getAppDeletionSaga(appId);
+    async completeAppDeletionSaga(input: {
+      appId: string;
+      generationId: string;
+      updatedAt: string;
+    }): Promise<void> {
+      const existing = await this.getAppDeletionSaga(input.appId);
       requireCompletableSaga(existing);
+      if (existing.generationId !== input.generationId) {
+        throw new Error("App deletion generation does not match the active recovery record");
+      }
       const { retryActorHash, organizationScopeHash } = await completionHashes(existing);
       const result = await d1
         .prepare(
@@ -102,9 +119,16 @@ export function makeAppDeletionSagaRepo(d1: D1Database) {
            SET phase = 'complete', organization_id = NULL, actor_id = NULL,
              delete_before_ts = NULL, retry_actor_hash = ?, organization_scope_hash = ?,
              updated_at = ?
-           WHERE app_id = ? AND phase IN ('d1_deleted', 'complete') RETURNING app_id`,
+           WHERE app_id = ? AND generation_id = ?
+             AND phase IN ('d1_deleted', 'complete') RETURNING app_id`,
         )
-        .bind(retryActorHash, organizationScopeHash, updatedAt, appId)
+        .bind(
+          retryActorHash,
+          organizationScopeHash,
+          input.updatedAt,
+          input.appId,
+          input.generationId,
+        )
         .first<{ app_id: string }>();
       if (!result) throw new Error("App deletion has not crossed the D1 boundary");
     },
@@ -139,6 +163,7 @@ async function completionHashes(saga: AppDeletionSagaRow): Promise<{
 
 interface AppDeletionSagaDbRow {
   readonly app_id: string;
+  readonly generation_id: string;
   readonly organization_id: string | null;
   readonly actor_id: string | null;
   readonly delete_before_ts: string | null;
@@ -153,6 +178,7 @@ function appDeletionSagaRow(row: AppDeletionSagaDbRow): AppDeletionSagaRow {
   if (!isPhase(row.phase)) throw new Error(`invalid App deletion phase: ${row.phase}`);
   return {
     appId: row.app_id,
+    generationId: row.generation_id,
     organizationId: row.organization_id,
     actorId: row.actor_id,
     deleteBeforeTs: row.delete_before_ts,
@@ -181,6 +207,7 @@ function isPhase(value: string): value is AppDeletionSagaPhase {
 function requireInput(input: AppDeletionSagaInput): void {
   if (
     input.appId.length === 0 ||
+    input.generationId.length === 0 ||
     input.organizationId.length === 0 ||
     input.actorId.length === 0 ||
     !Number.isFinite(Date.parse(input.deleteBeforeTs)) ||

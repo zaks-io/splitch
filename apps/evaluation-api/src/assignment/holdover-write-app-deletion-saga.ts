@@ -23,14 +23,18 @@ import {
   markAppDeletionSagaD1Deleted,
 } from "./holdover-write-app-deletion-saga-finalize";
 import {
+  type HoldoverWriteAppDeletionSaga,
   type HoldoverWriteEntityAlarmResumePort,
   SAGA_DELETE_BEFORE_TS_KEY,
   SAGA_DELETION_COMPLETE_KEY,
   SAGA_SUPPRESSED_KEY,
+  adoptLegacyAppDeletionSagaGeneration,
+  appDeletionSagaCrossedBoundary,
   putAppDeletionSaga,
   readAppDeletionSaga,
   requireSagaAppId,
   requireSagaCutoff,
+  requireSagaGeneration,
   sagaListRegisteredEntities,
 } from "./holdover-write-app-deletion-saga-storage";
 
@@ -55,26 +59,38 @@ export async function prepareAppDeletionSaga(
   storage: HoldoverWriteAppInventoryStorage,
   kv: AssignmentKv,
   appId: string,
+  generationId: string,
   deleteBeforeTsMs: number,
   resume: HoldoverWriteEntityAlarmResumePort | null,
 ): Promise<{ readonly suppressed: true; readonly deletionComplete: boolean }> {
   requireSagaAppId(appId);
+  requireSagaGeneration(generationId);
   requireSagaCutoff(deleteBeforeTsMs);
-  const early = await prepareSagaEarlyReturn(storage, kv, appId, resume);
+  const early = await prepareSagaEarlyReturn(storage, kv, appId, generationId, resume);
   if (early) return early;
 
   const entities = await sagaListRegisteredEntities(storage);
-  await writePreparingFreeze(storage, appId, deleteBeforeTsMs, entities);
+  await writePreparingFreeze(storage, appId, generationId, deleteBeforeTsMs, entities);
 
   try {
     await kv.put(appHoldoverWriteSuppressKey(appId), "1");
   } catch (cause) {
-    await failPrepareIntoCancel(storage, kv, appId, deleteBeforeTsMs, entities, resume, cause);
+    await failPrepareIntoCancel(
+      storage,
+      kv,
+      appId,
+      generationId,
+      deleteBeforeTsMs,
+      entities,
+      resume,
+      cause,
+    );
   }
 
   await putAppDeletionSaga(storage, {
     phase: "prepared",
     appId,
+    generationId,
     deleteBeforeTsMs,
     cancelResumePending: [],
     cancelKvCleared: false,
@@ -86,9 +102,46 @@ async function prepareSagaEarlyReturn(
   storage: HoldoverWriteAppInventoryStorage,
   kv: AssignmentKv,
   appId: string,
+  generationId: string,
   resume: HoldoverWriteEntityAlarmResumePort | null,
 ): Promise<{ readonly suppressed: true; readonly deletionComplete: boolean } | null> {
-  const existing = await readAppDeletionSaga(storage);
+  const stored = await readAppDeletionSaga(storage);
+  const existing =
+    stored === null
+      ? null
+      : await adoptLegacyAppDeletionSagaGeneration(storage, stored, generationId);
+  if (existing !== null && existing.generationId !== generationId) {
+    return supersedePreparedSaga(storage, kv, appId, existing, resume);
+  }
+  return sameGenerationPrepareEarlyReturn(storage, kv, appId, existing, resume);
+}
+
+async function supersedePreparedSaga(
+  storage: HoldoverWriteAppInventoryStorage,
+  kv: AssignmentKv,
+  appId: string,
+  existing: HoldoverWriteAppDeletionSaga,
+  resume: HoldoverWriteEntityAlarmResumePort | null,
+): Promise<null> {
+  if (appDeletionSagaCrossedBoundary(existing)) {
+    throw new Error("prepareAppDeletionSaga: another generation crossed the D1 boundary");
+  }
+  if (existing.phase === "preparing" || existing.phase === "canceling") {
+    const advanced = await beginOrResumeAppDeletionCancelSaga(storage, kv, appId, resume);
+    if (!advanced.done) {
+      throw new Error("prepareAppDeletionSaga: prior generation cancel still in progress");
+    }
+  }
+  return null;
+}
+
+async function sameGenerationPrepareEarlyReturn(
+  storage: HoldoverWriteAppInventoryStorage,
+  kv: AssignmentKv,
+  appId: string,
+  existing: HoldoverWriteAppDeletionSaga | null,
+  resume: HoldoverWriteEntityAlarmResumePort | null,
+): Promise<{ readonly suppressed: true; readonly deletionComplete: boolean } | null> {
   if (
     existing?.phase === "completed" ||
     (await storage.get<boolean>(SAGA_DELETION_COMPLETE_KEY)) === true
@@ -116,12 +169,14 @@ async function prepareSagaEarlyReturn(
 async function writePreparingFreeze(
   storage: HoldoverWriteAppInventoryStorage,
   appId: string,
+  generationId: string,
   deleteBeforeTsMs: number,
   entities: readonly HoldoverWriteAppEntityRef[],
 ): Promise<void> {
   await putAppDeletionSaga(storage, {
     phase: "preparing",
     appId,
+    generationId,
     deleteBeforeTsMs,
     cancelResumePending: entities,
     cancelKvCleared: false,
@@ -135,6 +190,7 @@ async function failPrepareIntoCancel(
   storage: HoldoverWriteAppInventoryStorage,
   kv: AssignmentKv,
   appId: string,
+  generationId: string,
   deleteBeforeTsMs: number,
   entities: readonly HoldoverWriteAppEntityRef[],
   resume: HoldoverWriteEntityAlarmResumePort | null,
@@ -143,6 +199,7 @@ async function failPrepareIntoCancel(
   await putAppDeletionSaga(storage, {
     phase: "canceling",
     appId,
+    generationId,
     deleteBeforeTsMs,
     cancelResumePending: entities,
     cancelKvCleared: false,

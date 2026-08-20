@@ -3,6 +3,8 @@ import { RecordingKv } from "./assignment-store-test-fixtures";
 import { MemoryHoldoverWriteAppInventoryClient } from "../sdk-route-binding-cleanup-fixture";
 import { makeHoldoverWriteOutboxCleanupHandler } from "./holdover-write-outbox-cleanup";
 
+const GENERATION_ID = "req-generation-1";
+
 function handlerArgs(
   input: unknown,
   appId: string,
@@ -51,7 +53,13 @@ describe("holdover write outbox cleanup App phases", () => {
       holdoverWriteAppInventory: inventory,
     });
     const response = await handler(
-      handlerArgs({ params: { appId: "app-A" }, query: { phase: "prepare" } }, "app-A"),
+      handlerArgs(
+        {
+          params: { appId: "app-A" },
+          query: { phase: "prepare", generationId: GENERATION_ID },
+        },
+        "app-A",
+      ),
     );
     expect(response.status).toBe(200);
     expect(deleteCalls).toBe(0);
@@ -62,10 +70,18 @@ describe("holdover write outbox cleanup App phases", () => {
     });
   });
 
-  it("finalize drains registered Entity outboxes then completes", async () => {
-    const inventory = new MemoryHoldoverWriteAppInventoryClient();
+  it("finalize enters the App inventory finalizer instead of draining outboxes here", async () => {
+    const purged: string[] = [];
+    const inventory = new MemoryHoldoverWriteAppInventoryClient({
+      purge: {
+        async purgeEntity(identity) {
+          purged.push(`${identity.idType}:${identity.targetingKeyHash}`);
+        },
+      },
+    });
     await inventory.registerEntity("app-A", { idType: "user", targetingKeyHash: "hash-poison" });
-    await inventory.beginDeletion("app-A", 1_000);
+    await inventory.beginDeletion("app-A", GENERATION_ID, 1_000);
+    await inventory.markD1Deleted("app-A", GENERATION_ID);
     const bodies: unknown[] = [];
     const handler = makeHoldoverWriteOutboxCleanupHandler({
       assignmentsKv: new RecordingKv(),
@@ -73,17 +89,17 @@ describe("holdover write outbox cleanup App phases", () => {
       holdoverWriteAppInventory: inventory,
     });
     const response = await handler(
-      handlerArgs({ params: { appId: "app-A" }, query: { phase: "finalize" } }, "app-A"),
+      handlerArgs(
+        {
+          params: { appId: "app-A" },
+          query: { phase: "finalize", generationId: GENERATION_ID },
+        },
+        "app-A",
+      ),
     );
     expect(response.status).toBe(200);
-    expect(bodies).toEqual([
-      {
-        deleteBeforeTsMs: 1_000,
-        appId: "app-A",
-        idType: "user",
-        targetingKeyHash: "hash-poison",
-      },
-    ]);
+    expect(bodies).toEqual([]);
+    expect(purged).toEqual(["user:hash-poison"]);
     expect(await inventory.status("app-A")).toMatchObject({
       suppressed: true,
       deletionComplete: true,
@@ -101,14 +117,20 @@ describe("holdover write outbox cleanup App phases", () => {
       },
     });
     await inventory.registerEntity("app-A", { idType: "user", targetingKeyHash: "hash-1" });
-    await inventory.beginDeletion("app-A", 1_000);
+    await inventory.beginDeletion("app-A", GENERATION_ID, 1_000);
     const handler = makeHoldoverWriteOutboxCleanupHandler({
       assignmentsKv: new RecordingKv(),
       holdoverWriteOutbox: stubOutbox(),
       holdoverWriteAppInventory: inventory,
     });
     const response = await handler(
-      handlerArgs({ params: { appId: "app-A" }, query: { phase: "cancel" } }, "app-A"),
+      handlerArgs(
+        {
+          params: { appId: "app-A" },
+          query: { phase: "cancel", generationId: GENERATION_ID },
+        },
+        "app-A",
+      ),
     );
     expect(response.status).toBe(200);
     expect(resumes).toEqual(["user:hash-1"]);
@@ -121,8 +143,9 @@ describe("holdover write outbox cleanup App phases", () => {
 
   it("finalize resume is a no-op once inventory marks complete", async () => {
     const inventory = new MemoryHoldoverWriteAppInventoryClient();
-    await inventory.beginDeletion("app-A", 1_000);
-    await inventory.completeDeletion("app-A");
+    await inventory.beginDeletion("app-A", GENERATION_ID, 1_000);
+    await inventory.markD1Deleted("app-A", GENERATION_ID, 1_000);
+    await inventory.finalizeDeletion("app-A", GENERATION_ID, 1_000);
     let deleteCalls = 0;
     const handler = makeHoldoverWriteOutboxCleanupHandler({
       assignmentsKv: new RecordingKv(),
@@ -132,7 +155,13 @@ describe("holdover write outbox cleanup App phases", () => {
       holdoverWriteAppInventory: inventory,
     });
     const response = await handler(
-      handlerArgs({ params: { appId: "app-A" }, query: { phase: "finalize" } }, "app-A"),
+      handlerArgs(
+        {
+          params: { appId: "app-A" },
+          query: { phase: "finalize", generationId: GENERATION_ID },
+        },
+        "app-A",
+      ),
     );
     expect(response.status).toBe(200);
     expect(deleteCalls).toBe(0);

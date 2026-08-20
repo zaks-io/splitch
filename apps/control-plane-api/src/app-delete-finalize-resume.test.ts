@@ -130,7 +130,7 @@ describe("App delete public finalize resume after D1 cascade", () => {
   });
 });
 
-describe("App delete public D1 cancellation races", () => {
+describe("App delete public D1 boundary recovery", () => {
   it("a D1 boundary crossing wins against a concurrent handler cancel", async () => {
     const realRepo = createRepository(bindings.d1);
     const realCancel = realRepo.identity.cancelAppDeletionSaga;
@@ -274,10 +274,13 @@ function createTestApp(
   });
 }
 
-function deleteRequest(app: ReturnType<typeof createTestApp>) {
+function deleteRequest(app: ReturnType<typeof createTestApp>, requestId?: string) {
   return app.request(`/apps/${APP_ID}`, {
     method: "DELETE",
-    headers: { authorization: "Bearer device-flow-token" },
+    headers: {
+      authorization: "Bearer device-flow-token",
+      ...(requestId === undefined ? {} : { "x-request-id": requestId }),
+    },
   });
 }
 

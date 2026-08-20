@@ -13,7 +13,6 @@ import type { AssignmentKv } from "./assignment-store";
 import type { HoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
 import {
   cancelAppHoldoverWriteDeletion,
-  finalizeAppHoldoverWriteDeletion,
   markAppHoldoverWriteD1Deleted,
   prepareAppHoldoverWriteDeletion,
   suppressAndPurgeEntityHoldoverWriteOutbox,
@@ -64,6 +63,7 @@ async function runAppPhase(
       await prepareAppHoldoverWriteDeletion(
         deps.holdoverWriteAppInventory,
         scope.appId,
+        scope.generationId,
         scope.deleteBeforeTsMs ?? Date.now(),
       );
       return;
@@ -71,22 +71,22 @@ async function runAppPhase(
       await markAppHoldoverWriteD1Deleted(
         deps.holdoverWriteAppInventory,
         scope.appId,
+        scope.generationId,
         scope.deleteBeforeTsMs,
       );
       return;
     case "finalize":
-      await finalizeAppHoldoverWriteDeletion(
-        deps.holdoverWriteAppInventory,
-        deps.holdoverWriteOutbox,
+      await deps.holdoverWriteAppInventory.finalizeDeletion(
         scope.appId,
+        scope.generationId,
         scope.deleteBeforeTsMs,
       );
       return;
     case "cancel":
       await cancelAppHoldoverWriteDeletion(
         deps.holdoverWriteAppInventory,
-        deps.holdoverWriteOutbox,
         scope.appId,
+        scope.generationId,
       );
       return;
   }
@@ -96,6 +96,7 @@ type CleanupScope =
   | {
       readonly kind: "app";
       readonly appId: string;
+      readonly generationId: string;
       readonly deleteBeforeTsMs: number | undefined;
       readonly phase: HoldoverWriteAppDeletionPhase;
     }
@@ -121,6 +122,7 @@ function cleanupScope(input: unknown, principalAppId: string | null): CleanupSco
     return {
       kind: "app",
       appId,
+      generationId: stringField(query, "generationId"),
       phase,
       deleteBeforeTsMs: parseAppDeleteBeforeTs(query.deleteBeforeTs, phase),
     };

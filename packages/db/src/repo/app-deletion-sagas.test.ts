@@ -6,6 +6,7 @@ const NOW = "2026-08-19T12:00:00.000Z";
 const APP_ID = "app_deletion_boundary";
 const ORG_ID = "org_deletion_boundary";
 const ACTOR_ID = "user_deletion_boundary";
+const GENERATION_ID = "req-generation-1";
 
 let local: LocalD1;
 let repo: ReturnType<typeof createRepository>;
@@ -57,6 +58,7 @@ describe("App deletion D1 boundary", () => {
       repo.identity.deleteAppCascade(appScope(APP_ID), {
         actorId: ACTOR_ID,
         organizationId: ORG_ID,
+        generationId: GENERATION_ID,
         deleteBeforeTs: NOW,
         updatedAt: NOW,
       }),
@@ -92,10 +94,12 @@ describe("App deletion D1 boundary", () => {
       appId: APP_ID,
       organizationId: ORG_ID,
       actorId: ACTOR_ID,
+      generationId: "req-generation-2",
       deleteBeforeTs: "2026-08-19T13:00:00.000Z",
       now: "2026-08-19T13:00:00.000Z",
     });
     expect(retry.deleteBeforeTs).toBe(NOW);
+    expect(retry.generationId).toBe(GENERATION_ID);
 
     const cancel = repo.identity.cancelAppDeletionSaga(activeIdentity(saga));
     const cross = repo.identity.deleteAppCascade(appScope(APP_ID), boundary(saga));
@@ -110,10 +114,47 @@ describe("App deletion D1 boundary", () => {
     }
   });
 
+  it("does not let a stale cancel remove a newer active generation", async () => {
+    const first = await beginSaga();
+    expect(await repo.identity.cancelAppDeletionSaga(activeIdentity(first))).toBe(true);
+
+    const second = await repo.identity.beginAppDeletionSaga({
+      appId: APP_ID,
+      organizationId: ORG_ID,
+      actorId: ACTOR_ID,
+      generationId: "req-generation-2",
+      deleteBeforeTs: "2026-08-19T13:00:00.000Z",
+      now: "2026-08-19T13:00:00.000Z",
+    });
+    expect(second.generationId).toBe("req-generation-2");
+    expect(await repo.identity.cancelAppDeletionSaga(activeIdentity(first))).toBe(false);
+    expect(await repo.identity.getAppDeletionSaga(APP_ID)).toMatchObject({
+      phase: "started",
+      generationId: "req-generation-2",
+    });
+
+    await repo.identity.deleteAppCascade(appScope(APP_ID), boundary(second));
+    await expect(
+      repo.identity.completeAppDeletionSaga({
+        appId: APP_ID,
+        generationId: GENERATION_ID,
+        updatedAt: NOW,
+      }),
+    ).rejects.toThrow(/generation does not match/u);
+    expect(await repo.identity.getAppDeletionSaga(APP_ID)).toMatchObject({
+      phase: "d1_deleted",
+      generationId: "req-generation-2",
+    });
+  });
+
   it("redacts the completed recovery row while retaining retry authorization", async () => {
     const saga = await beginSaga();
     await repo.identity.deleteAppCascade(appScope(APP_ID), boundary(saga));
-    await repo.identity.completeAppDeletionSaga(APP_ID, NOW);
+    await repo.identity.completeAppDeletionSaga({
+      appId: APP_ID,
+      generationId: GENERATION_ID,
+      updatedAt: NOW,
+    });
 
     expect(await repo.identity.getAppDeletionSaga(APP_ID)).toMatchObject({
       phase: "complete",
@@ -136,6 +177,7 @@ async function beginSaga() {
     appId: APP_ID,
     organizationId: ORG_ID,
     actorId: ACTOR_ID,
+    generationId: GENERATION_ID,
     deleteBeforeTs: NOW,
     now: NOW,
   });
@@ -157,6 +199,7 @@ function activeIdentity(saga: Awaited<ReturnType<typeof beginSaga>>) {
     appId: saga.appId,
     actorId: saga.actorId,
     organizationId: saga.organizationId,
+    generationId: saga.generationId,
     deleteBeforeTs: saga.deleteBeforeTs,
   };
 }

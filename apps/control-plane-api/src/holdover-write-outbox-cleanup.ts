@@ -14,6 +14,8 @@ type HoldoverWriteAppDeletionPhase = "prepare" | "finalize" | "cancel" | "mark-d
 
 interface HoldoverWriteOutboxCleanupInput {
   appId: string;
+  /** Required for every App deletion phase; absent for Entity deletion. */
+  generationId?: string;
   idType?: string;
   targetingKeyHash?: string;
   /** Required for Entity deletion; App deletion uses request time when omitted. */
@@ -25,19 +27,16 @@ interface HoldoverWriteOutboxCleanupInput {
   requestId: string;
 }
 
+type HoldoverWriteAppDeletionInput = Omit<
+  HoldoverWriteOutboxCleanupInput,
+  "phase" | "idType" | "targetingKeyHash" | "generationId"
+> & { generationId: string };
+
 export interface HoldoverWriteOutboxCleanup {
-  prepare(
-    input: Omit<HoldoverWriteOutboxCleanupInput, "phase" | "idType" | "targetingKeyHash">,
-  ): Promise<void>;
-  markD1Deleted(
-    input: Omit<HoldoverWriteOutboxCleanupInput, "phase" | "idType" | "targetingKeyHash">,
-  ): Promise<void>;
-  finalize(
-    input: Omit<HoldoverWriteOutboxCleanupInput, "phase" | "idType" | "targetingKeyHash">,
-  ): Promise<void>;
-  cancel(
-    input: Omit<HoldoverWriteOutboxCleanupInput, "phase" | "idType" | "targetingKeyHash">,
-  ): Promise<void>;
+  prepare(input: HoldoverWriteAppDeletionInput): Promise<void>;
+  markD1Deleted(input: HoldoverWriteAppDeletionInput): Promise<void>;
+  finalize(input: HoldoverWriteAppDeletionInput): Promise<void>;
+  cancel(input: HoldoverWriteAppDeletionInput): Promise<void>;
   delete(input: HoldoverWriteOutboxCleanupInput): Promise<void>;
 }
 
@@ -91,6 +90,7 @@ async function sendCleanupRequest(
   if (input.targetingKeyHash !== undefined) query.targetingKeyHash = input.targetingKeyHash;
   if (input.deleteBeforeTs !== undefined) query.deleteBeforeTs = input.deleteBeforeTs;
   if (input.phase !== undefined) query.phase = input.phase;
+  if (input.generationId !== undefined) query.generationId = input.generationId;
   const response = await evaluation.fetch(
     delegatedRequest(
       cleanupRoute,

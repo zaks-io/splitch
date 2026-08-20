@@ -31,12 +31,11 @@ HoldoverWriteAppInventoryDurableObject.prototype.fetch = async function (request
   if (url.pathname === "/__test/alarm-status" && request.method === "GET") {
     return Response.json({ alarm: await this.ctx.storage.getAlarm(), nowMs: Date.now() });
   }
+  if (url.pathname === "/__test/transaction-status" && request.method === "GET") {
+    return Response.json({ sagaPutObserved: globalThis.__markTransactionSagaPutObserved });
+  }
   if (url.pathname === "/__test/alarm" && request.method === "POST") {
     await this.ctx.storage.deleteAlarm();
-    if (globalThis.__purgeFailsOnManualAlarm > 0) {
-      globalThis.__purgeFailsRemaining = globalThis.__purgeFailsOnManualAlarm;
-      globalThis.__purgeFailsOnManualAlarm = 0;
-    }
     try {
       await this.handleAlarm();
       return Response.json({ ok: true });
@@ -81,8 +80,30 @@ HoldoverWriteAppInventoryDurableObject.prototype.fetch = async function (request
   ) {
     this.ctx.storage.transaction = async (closure) => {
       if (globalThis.__markTransactionFailsBeforeCommitRemaining > 0) {
-        globalThis.__markTransactionFailsBeforeCommitRemaining -= 1;
-        throw new Error("forced mark transaction failure before commit");
+        return originalStorageTransaction(async (transaction) => {
+          const faultedTransaction = new Proxy(transaction, {
+            get(target, property, receiver) {
+              if (property === "put") {
+                return async (key, value) => {
+                  const result = await target.put(key, value);
+                  if (key === SAGA_KEY && value?.phase === "d1_deleted") {
+                    globalThis.__markTransactionSagaPutObserved = true;
+                  }
+                  return result;
+                };
+              }
+              if (property === "setAlarm") {
+                return async () => {
+                  globalThis.__markTransactionFailsBeforeCommitRemaining -= 1;
+                  throw new Error("forced transactional setAlarm failure");
+                };
+              }
+              const value = Reflect.get(target, property, receiver);
+              return typeof value === "function" ? value.bind(target) : value;
+            },
+          });
+          return closure(faultedTransaction);
+        });
       }
       const result = await originalStorageTransaction(closure);
       if (globalThis.__markTransactionThrowsAfterCommitRemaining > 0) {

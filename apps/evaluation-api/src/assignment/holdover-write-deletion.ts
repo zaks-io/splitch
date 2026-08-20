@@ -67,54 +67,26 @@ export async function suppressAndPurgeEntityHoldoverWriteOutbox(
 export async function prepareAppHoldoverWriteDeletion(
   inventory: HoldoverWriteAppInventoryClient,
   appId: string,
+  generationId: string,
   deleteBeforeTsMs: number,
 ): Promise<void> {
   requireAppDeletionArgs(appId, deleteBeforeTsMs, "prepareAppHoldoverWriteDeletion");
-  await inventory.beginDeletion(appId, deleteBeforeTsMs);
+  requireGeneration(generationId, "prepareAppHoldoverWriteDeletion");
+  await inventory.beginDeletion(appId, generationId, deleteBeforeTsMs);
 }
 
 /** Irreversible boundary after Control Plane `deleteAppCascade` commits. */
 export async function markAppHoldoverWriteD1Deleted(
   inventory: HoldoverWriteAppInventoryClient,
   appId: string,
+  generationId: string,
   deleteBeforeTsMs?: number,
 ): Promise<void> {
   if (appId.length === 0) {
     throw new Error("markAppHoldoverWriteD1Deleted: appId is required");
   }
-  await inventory.markD1Deleted(appId, deleteBeforeTsMs);
-}
-
-/**
- * Phase 3: after D1 cascade, drain/purge every registered Entity outbox and
- * mark App deletion complete. Idempotent for public retry after the App row is gone.
- */
-export async function finalizeAppHoldoverWriteDeletion(
-  inventory: HoldoverWriteAppInventoryClient,
-  outbox: HoldoverWriteOutboxNamespace,
-  appId: string,
-  deleteBeforeTsMs?: number,
-): Promise<void> {
-  if (appId.length === 0) {
-    throw new Error("finalizeAppHoldoverWriteDeletion: appId is required");
-  }
-  const status = await inventory.status(appId);
-  if (status.deletionComplete || status.sagaPhase === "completed") {
-    return;
-  }
-  if (status.sagaPhase === "canceling") {
-    throw new Error("finalizeAppHoldoverWriteDeletion: refuse finalize while canceling");
-  }
-  const cutoff =
-    deleteBeforeTsMs ?? (status.deleteBeforeTsMs !== null ? status.deleteBeforeTsMs : Number.NaN);
-  if (!Number.isFinite(cutoff)) {
-    throw new Error("finalizeAppHoldoverWriteDeletion: deleteBeforeTsMs is required");
-  }
-  if (status.sagaPhase !== "d1_deleted" && status.sagaPhase !== "finalizing") {
-    await inventory.markD1Deleted(appId, cutoff);
-  }
-  await drainRegisteredEntities(inventory, outbox, appId, cutoff);
-  await inventory.completeDeletion(appId);
+  requireGeneration(generationId, "markAppHoldoverWriteD1Deleted");
+  await inventory.markD1Deleted(appId, generationId, deleteBeforeTsMs);
 }
 
 /**
@@ -124,56 +96,30 @@ export async function finalizeAppHoldoverWriteDeletion(
  */
 export async function cancelAppHoldoverWriteDeletion(
   inventory: HoldoverWriteAppInventoryClient,
-  _outbox: HoldoverWriteOutboxNamespace,
   appId: string,
+  generationId: string,
 ): Promise<void> {
   if (appId.length === 0) {
     throw new Error("cancelAppHoldoverWriteDeletion: appId is required");
   }
+  requireGeneration(generationId, "cancelAppHoldoverWriteDeletion");
   const status = await inventory.status(appId);
+  if (status.generationId !== null && status.generationId !== generationId) return;
   if (status.sagaPhase === "d1_deleted" || status.sagaPhase === "finalizing") {
     throw new Error("cancelAppHoldoverWriteDeletion: refuse cancel after D1 deletion");
   }
   if (status.deletionComplete || status.sagaPhase === "completed") {
     return;
   }
-  const cancelled = await inventory.cancelDeletion(appId);
+  const cancelled = await inventory.cancelDeletion(appId, generationId);
   if (!cancelled.cancelled) {
     return;
   }
   if (!cancelled.done) {
-    // Leave canceling saga for inventory DO alarm / advance-cancel resume.
+    // Leave the canceling saga for the inventory DO alarm to resume.
     throw new Error(
       "cancelAppHoldoverWriteDeletion: cancel saga incomplete; will resume via alarm",
     );
-  }
-}
-
-async function drainRegisteredEntities(
-  inventory: HoldoverWriteAppInventoryClient,
-  outbox: HoldoverWriteOutboxNamespace,
-  appId: string,
-  deleteBeforeTsMs: number,
-): Promise<void> {
-  const status = await inventory.status(appId);
-  for (const entity of status.entities) {
-    await suppressAndPurgeEntityHoldoverWriteOutbox(outbox, {
-      appId,
-      idType: entity.idType,
-      targetingKeyHash: entity.targetingKeyHash,
-      deleteBeforeTsMs,
-    });
-    await inventory.markEntityPurged(appId, entity);
-  }
-  const remainder = await inventory.status(appId);
-  for (const entity of remainder.entities) {
-    await suppressAndPurgeEntityHoldoverWriteOutbox(outbox, {
-      appId,
-      idType: entity.idType,
-      targetingKeyHash: entity.targetingKeyHash,
-      deleteBeforeTsMs,
-    });
-    await inventory.markEntityPurged(appId, entity);
   }
 }
 
@@ -184,4 +130,8 @@ function requireAppDeletionArgs(appId: string, deleteBeforeTsMs: number, label: 
   if (!Number.isFinite(deleteBeforeTsMs)) {
     throw new Error(`${label}: deleteBeforeTsMs is required`);
   }
+}
+
+function requireGeneration(generationId: string, label: string): void {
+  if (generationId.length === 0) throw new Error(`${label}: generationId is required`);
 }
