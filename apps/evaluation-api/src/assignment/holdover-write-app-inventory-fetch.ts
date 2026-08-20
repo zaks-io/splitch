@@ -14,7 +14,7 @@ type InventoryRoute = (
   body: unknown,
 ) => Promise<Response>;
 
-const postRoutes: Record<string, InventoryRoute> = {
+const inventoryPostRoutes: Record<string, InventoryRoute> = {
   "/register": async (storage, body) => {
     const result = await registerAppInventoryEntity(storage, parseEntityRef(body));
     return Response.json(result);
@@ -39,12 +39,14 @@ const postRoutes: Record<string, InventoryRoute> = {
   },
 };
 
-const getRoutes: Record<string, (storage: HoldoverWriteAppInventoryStorage) => Promise<Response>> =
-  {
-    "/status": async (storage) => Response.json(await appInventoryStatus(storage)),
-    "/suppressed": async (storage) =>
-      Response.json({ suppressed: await isAppInventorySuppressed(storage) }),
-  };
+const inventoryGetRoutes: Record<
+  string,
+  (storage: HoldoverWriteAppInventoryStorage) => Promise<Response>
+> = {
+  "/status": async (storage) => Response.json(await appInventoryStatus(storage)),
+  "/suppressed": async (storage) =>
+    Response.json({ suppressed: await isAppInventorySuppressed(storage) }),
+};
 
 export async function handleHoldoverWriteAppInventoryFetch(
   storage: HoldoverWriteAppInventoryStorage,
@@ -66,11 +68,11 @@ async function dispatchInventoryRoute(
   request: Request,
 ): Promise<Response> {
   if (method === "GET") {
-    const get = getRoutes[pathname];
+    const get = inventoryGetRoutes[pathname];
     if (get) return get(storage);
   }
   if (method === "POST") {
-    const post = postRoutes[pathname];
+    const post = inventoryPostRoutes[pathname];
     if (post) {
       const body =
         pathname === "/complete-deletion" || pathname === "/cancel-deletion"

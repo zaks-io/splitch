@@ -35,7 +35,7 @@ interface OutboxFetchContext {
   readonly appInventory?: HoldoverWriteAppInventoryNamespace;
 }
 
-const postRoutes: Record<string, OutboxHandler> = {
+const outboxPostRoutes: Record<string, OutboxHandler> = {
   "/delete": async (storage, _put, request, ctx) =>
     deleteResponse(storage, await request.json(), ctx.appInventory),
   "/resume-alarms": async (storage, _put, _request, ctx) => {
@@ -71,7 +71,7 @@ export async function handleHoldoverWriteOutboxFetch(
     return statusResponse(storage);
   }
   if (request.method === "POST") {
-    const route = postRoutes[url.pathname];
+    const route = outboxPostRoutes[url.pathname];
     if (route) return route(storage, putPort, request, ctx);
   }
   return new Response("not found", { status: 404 });
