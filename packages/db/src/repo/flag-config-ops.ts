@@ -107,6 +107,7 @@ export function makeFlagConfigOps(
       >,
       approval?: ApprovalCommit,
     ): Promise<typeof flagConfigs.$inferSelect | null> {
+      assertMintedScope(scope);
       const current = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
       if (!current) return null;
       if (approval) {
@@ -132,11 +133,14 @@ export function makeFlagConfigOps(
         if (!(await approvalReviewLanded(db, scope, approval))) return null;
         return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
       }
-      const rows = await flagConfigsTable.update(
-        scope,
-        { ...patch, version: current.version + 1 },
-        eq(flagConfigs.flagId, flagId),
-      );
+      // The version bumps in SQL: `current.version + 1` is a stale read-modify-
+      // write, and two concurrent writers would both land on the same version.
+      // Raw update because the scoped facade only accepts plain column values.
+      const rows = await db
+        .update(flagConfigs)
+        .set({ ...patch, version: sql`${flagConfigs.version} + 1` })
+        .where(scopedFlagConfig(scope, flagId))
+        .returning();
       return rows[0] ?? null;
     },
 
@@ -228,7 +232,7 @@ export function makeFlagConfigOps(
         ),
         db
           .update(flagConfigs)
-          .set({ ...configPatch, version: current.version + 1 })
+          .set({ ...configPatch, version: sql`${flagConfigs.version} + 1` })
           .where(scopedFlagConfig(scope, flagId))
           .returning(),
       ];

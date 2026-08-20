@@ -19,7 +19,11 @@ import {
 } from "./client-helpers";
 import { decorateHeldDetails, registerBrowserClientInternalAccess } from "./client-internals";
 import { ExposureQueue } from "./exposure-queue";
-import { deriveHeldResolution, logHeldResolution } from "./held-resolution";
+import {
+  deriveHeldResolution,
+  logHeldResolution,
+  rearmHeldResolutionLogs,
+} from "./held-resolution";
 import { BrowserPayloadStore, type HeldPayload } from "./payload-store";
 import { RevalidationLoop } from "./revalidation-loop";
 import { type BrowserTransport, createBrowserFetchTransport } from "./transport";
@@ -122,6 +126,7 @@ export function createSplitchBrowserClient(
     getEtag: () => requireHeld().etag,
     onPayload: (evaluations, etag) => {
       const changed = store.swap({ evaluations, etag });
+      rearmHeldResolutionLogs(loggedResolutions, changed);
       queue.rearm(changed);
       logListenerFailures(logger, store.notify(changed));
     },

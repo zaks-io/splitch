@@ -28,7 +28,11 @@ export async function appAccessPeople(
     memberships: readonly AppMembershipRow[];
     request: Request;
   },
-): Promise<{ members: AppMember[]; candidates: PanelAppAccessCandidate[] | undefined }> {
+): Promise<{
+  members: AppMember[];
+  candidates: PanelAppAccessCandidate[] | undefined;
+  candidatesWithheld: boolean;
+}> {
   const members: AppMember[] = [];
   for (const membership of input.memberships) {
     members.push({
@@ -40,8 +44,14 @@ export async function appAccessPeople(
     });
   }
 
-  if (!input.canGrantAccess) return { members, candidates: undefined };
-  if (!input.canListCandidates) return { members, candidates: [] };
+  if (!input.canGrantAccess) {
+    return { members, candidates: undefined, candidatesWithheld: false };
+  }
+  // A granting viewer without roster access must not see an empty array: that
+  // reads as "everyone already has access", which is a different fact (ADR-0036).
+  if (!input.canListCandidates) {
+    return { members, candidates: undefined, candidatesWithheld: true };
+  }
 
   const orgMemberships = await deps.repo.identity.listOrgMemberships(input.orgId);
   const hasAppAccess = new Set(input.memberships.map((membership) => membership.userId));
@@ -56,7 +66,7 @@ export async function appAccessPeople(
     });
   }
 
-  return { members, candidates };
+  return { members, candidates, candidatesWithheld: false };
 }
 
 async function resolveEmail(

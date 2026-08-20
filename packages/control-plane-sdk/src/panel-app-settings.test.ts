@@ -21,10 +21,14 @@ const settings: Omit<PanelAppSettings, "candidates"> = {
 
 describe("Panel App Settings contract", () => {
   it("distinguishes a withheld candidate roster from a visible empty roster", () => {
-    const withheld = PanelAppSettingsSchema.parse(settings);
+    const nonGranter = PanelAppSettingsSchema.parse(settings);
+    const withheld = PanelAppSettingsSchema.parse({ ...settings, candidatesWithheld: true });
     const empty = PanelAppSettingsSchema.parse({ ...settings, candidates: [] });
 
+    expect(nonGranter).not.toHaveProperty("candidates");
+    expect(nonGranter).not.toHaveProperty("candidatesWithheld");
     expect(withheld).not.toHaveProperty("candidates");
+    expect(withheld.candidatesWithheld).toBe(true);
     expect(empty.candidates).toEqual([]);
   });
 

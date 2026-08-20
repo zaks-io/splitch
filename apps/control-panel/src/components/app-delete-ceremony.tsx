@@ -2,10 +2,12 @@ import type { App, ResourceDeleteBlocker } from "@splitch/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { Button } from "@splitch/ui/components/button";
 import { Input } from "@splitch/ui/components/input";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { isDeleteConfirmed } from "#lib/app-delete-confirmation";
 import { deleteConsequences } from "#lib/app-delete-consequences";
 import { type DeleteOutcome, destroyApp } from "#lib/app-settings-mutations";
+import { refreshAppSettings } from "#lib/app-settings-query";
 import { AppDeleteConsequenceList } from "./app-delete-consequence-list";
 import { AppSessionStaleNotice } from "./app-session-stale-notice";
 
@@ -29,6 +31,7 @@ export function AppDeleteCeremony({
   environmentNames: readonly string[];
   onCancel: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string>();
   const [stale, setStale] = useState<{ reason: string; remedy: "reauth" | "retry" }>();
@@ -38,10 +41,20 @@ export function AppDeleteCeremony({
   const consequences = deleteConsequences(blockers);
   const confirmed = isDeleteConfirmed(typed, app.key);
 
-  function settle(outcome: DeleteOutcome) {
+  async function settle(outcome: DeleteOutcome) {
     if (outcome.kind === "refused") setError(outcome.message);
-    else if (outcome.kind === "review") setPending(outcome.reviewCommands);
-    else if (outcome.kind === "stale") setStale(outcome);
+    else if (outcome.kind === "review") {
+      setPending(outcome.reviewCommands);
+      // The cascade already removed part of the App; the cards above render
+      // from the same settings query and must not keep showing what is gone.
+      try {
+        await refreshAppSettings(queryClient, { appId: app.id });
+      } catch {
+        setError(
+          "Part of this App was removed, but this screen could not reload. Reload the page to see what remains.",
+        );
+      }
+    } else if (outcome.kind === "stale") setStale(outcome);
     else globalThis.location.assign("/");
   }
 
@@ -52,7 +65,7 @@ export function AppDeleteCeremony({
     setPending(undefined);
     setIsDeleting(true);
     try {
-      settle(await destroyApp(app.id));
+      await settle(await destroyApp(app.id));
     } finally {
       setIsDeleting(false);
     }

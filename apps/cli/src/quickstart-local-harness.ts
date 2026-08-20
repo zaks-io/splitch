@@ -53,7 +53,7 @@ export interface QuickstartHarness {
   readonly evaluationUsageSink: RecordingEvaluationUsageSink;
   readonly exposureSink: RecordingExposureSink;
   readonly evaluationCommitSink: RecordingEvaluationCommitSink;
-  invalidateFlagCache(appId?: string): void;
+  invalidateFlagCache(appId?: string, environmentIds?: readonly string[]): void;
   dispose: () => Promise<void>;
 }
 
@@ -171,12 +171,11 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
     evaluationUsageSink,
     exposureSink,
     evaluationCommitSink,
-    invalidateFlagCache(targetAppId = appId) {
-      // SPL-322 scoped Provider.invalidate to (appId, environmentId, nudge).
-      // This harness has no live-update socket, so after CLI Flag Configuration
-      // writes it drops both Environments' caches the way reconnect does —
-      // never call invalidate without an Environment or with a fabricated nudge.
-      for (const environmentId of [devEnvironmentId, prodEnvironmentId]) {
+    invalidateFlagCache(
+      targetAppId = appId,
+      environmentIds = [devEnvironmentId, prodEnvironmentId],
+    ) {
+      for (const environmentId of environmentIds) {
         provider.invalidateEnvironment(targetAppId, environmentId);
       }
     },
