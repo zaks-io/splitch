@@ -237,6 +237,20 @@ class DurableHoldoverWriteAppInventoryClient {
     }
     return { status: body.status };
   }
+  async markEntityPurged(appId, ref) {
+    const stub = this.namespace.get(this.namespace.idFromName(appId));
+    const response = await stub.fetch(
+      "https://holdover-write-app-inventory.local/mark-entity-purged",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(ref),
+      },
+    );
+    if (!response.ok) {
+      throw new Error("app inventory /mark-entity-purged returned HTTP " + String(response.status));
+    }
+  }
 }
 function inventoryRegisterPortForApp(client, appId) {
   return {
