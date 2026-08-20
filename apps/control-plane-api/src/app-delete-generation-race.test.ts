@@ -40,6 +40,86 @@ afterEach(async () => {
   await bindings.dispose();
 });
 
+describe("App delete shared-generation recovery", () => {
+  it("cancels Evaluation suppression when a shared saga disappears before the D1 boundary", async () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce(GENERATION_A)
+      .mockReturnValueOnce(GENERATION_B);
+    const realRepo = createRepository(bindings.d1);
+    const realCancel = realRepo.identity.cancelAppDeletionSaga;
+    const realDelete = realRepo.identity.deleteAppCascade;
+    const firstPrepareReached = deferred<void>();
+    const secondPrepareReached = deferred<void>();
+    const releaseFirstPrepare = deferred<void>();
+    const firstCancelCommitted = deferred<void>();
+    const releaseFirstCancelResponse = deferred<void>();
+    const prepareGenerations: string[] = [];
+    const cancelInputs: Array<{ generationId: string; requestId: string }> = [];
+    let suppressedGeneration: string | null = null;
+    let finalizeCalls = 0;
+    const holdover: HoldoverWriteOutboxCleanup = {
+      async prepare(input) {
+        prepareGenerations.push(input.generationId);
+        suppressedGeneration = input.generationId;
+        if (prepareGenerations.length === 1) {
+          firstPrepareReached.resolve();
+          await releaseFirstPrepare.promise;
+          throw new Error("forced first handler failure after prepare");
+        }
+        secondPrepareReached.resolve();
+      },
+      async markD1Deleted() {},
+      async finalize() {
+        finalizeCalls += 1;
+      },
+      async cancel(input) {
+        cancelInputs.push({ generationId: input.generationId, requestId: input.requestId });
+        if (suppressedGeneration === input.generationId) suppressedGeneration = null;
+      },
+      async delete() {},
+    };
+    const repo = {
+      ...realRepo,
+      identity: {
+        ...realRepo.identity,
+        async cancelAppDeletionSaga(...args: Parameters<typeof realCancel>) {
+          const won = await realCancel(...args);
+          firstCancelCommitted.resolve();
+          await releaseFirstCancelResponse.promise;
+          return won;
+        },
+        async deleteAppCascade(...args: Parameters<typeof realDelete>) {
+          await firstCancelCommitted.promise;
+          return realDelete(...args);
+        },
+      },
+    };
+    const app = createTestApp(holdover, repo);
+
+    const first = deleteRequest(app, "request-A");
+    await firstPrepareReached.promise;
+    const second = deleteRequest(app, "request-B");
+    await secondPrepareReached.promise;
+    releaseFirstPrepare.resolve();
+
+    const secondResponse = await second;
+    releaseFirstCancelResponse.resolve();
+    const firstResponse = await first;
+
+    expect(secondResponse.status).toBe(500);
+    expect(firstResponse.status).toBe(500);
+    expect(prepareGenerations).toEqual([GENERATION_A, GENERATION_A]);
+    expect(cancelInputs).toEqual([
+      { generationId: GENERATION_A, requestId: "request-B" },
+      { generationId: GENERATION_A, requestId: "request-A" },
+    ]);
+    expect(suppressedGeneration).toBeNull();
+    expect(finalizeCalls).toBe(0);
+    expect(await realRepo.identity.getApp(APP_ID)).not.toBeNull();
+    expect(await realRepo.identity.getAppDeletionSaga(APP_ID)).toBeNull();
+  });
+});
+
 describe("App delete public generation races", () => {
   it("a delayed old Evaluation cancel cannot unsuppress a newer deletion generation", async () => {
     vi.spyOn(crypto, "randomUUID")

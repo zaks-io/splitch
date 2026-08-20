@@ -128,7 +128,11 @@ async function recoverFailedAppDeletionBoundary(
 ): Promise<void> {
   const persisted = await deps.repo.identity.getAppDeletionSaga(appId);
   if (persisted?.phase === "d1_deleted" || persisted?.phase === "complete") return;
-  if (persisted?.phase !== "started") {
+  if (persisted === null) {
+    await cleanup.cancel(input);
+    throw cause;
+  }
+  if (persisted.phase !== "started") {
     throw new Error("App deletion lost its durable D1 recovery record", { cause });
   }
   let cancelWon: boolean;
