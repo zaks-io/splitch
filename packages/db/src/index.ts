@@ -39,6 +39,7 @@ export type { ScopedTable } from "./repo/scoped-table";
 
 export {
   apiKeys,
+  appDeletionSagas,
   appMemberships,
   approvalRequests,
   approvalReviews,

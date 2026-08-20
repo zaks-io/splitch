@@ -7,6 +7,7 @@ import {
   orgMemberships,
 } from "../schema/index";
 import { makeDeleteAppCascade } from "./app-delete-cascade";
+import { makeAppDeletionSagaRepo } from "./app-deletion-sagas";
 import type { Db } from "./client";
 import { makeAppMembershipRepo } from "./identity-app-memberships";
 import { makeDemoReaper } from "./identity-demo-reaper";
@@ -45,11 +46,13 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
   const demoReaper = makeDemoReaper(db, d1);
   const createOrganization = makeCreateOrganization(db, d1);
   const deleteAppCascade = makeDeleteAppCascade(d1);
+  const appDeletionSagaRepo = makeAppDeletionSagaRepo(d1);
 
   return {
     environments: environmentsTable,
     appMemberships: appMembershipRepo.table,
     deleteAppCascade,
+    ...appDeletionSagaRepo,
 
     listEnvironments(scope: TenantScope, options?: ReadOptions) {
       return environmentsTable.findMany(scope, undefined, options);

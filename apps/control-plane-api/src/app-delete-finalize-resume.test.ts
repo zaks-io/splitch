@@ -71,27 +71,54 @@ describe("App delete public finalize resume after D1 cascade", () => {
     const first = await app.request(`/apps/${APP_ID}`, { method: "DELETE" });
     expect(first.status).toBe(503);
     expect(await createRepository(bindings.d1).identity.getApp(APP_ID)).toBeNull();
-    expect(phases).toEqual(["prepare", "mark-d1-deleted", "finalize"]);
+    expect(phases).toEqual(["prepare", "finalize"]);
     expect(phases).not.toContain("cancel");
 
     const retry = await app.request(`/apps/${APP_ID}`, { method: "DELETE" });
     expect(retry.status).toBe(200);
     expect(await retry.json()).toEqual({ deleted: true });
-    expect(phases).toEqual([
-      "prepare",
-      "mark-d1-deleted",
-      "finalize",
-      "mark-d1-deleted",
-      "finalize",
-    ]);
+    expect(phases).toEqual(["prepare", "finalize", "finalize"]);
     expect(phases.filter((phase) => phase === "cancel")).toEqual([]);
     expect(exposures).toHaveLength(1);
+  });
+
+  it("never cancels when the D1 commit response is lost", async () => {
+    const phases: string[] = [];
+    const holdover: HoldoverWriteOutboxCleanup = {
+      async prepare() {
+        phases.push("prepare");
+      },
+      async markD1Deleted() {
+        phases.push("mark-d1-deleted");
+      },
+      async finalize() {
+        phases.push("finalize");
+      },
+      async cancel() {
+        phases.push("cancel");
+      },
+      async delete() {
+        phases.push("delete");
+      },
+    };
+    const exposures: EnvironmentExposureStatusCleanupInput[] = [];
+    const app = createTestApp(holdover, exposures, true);
+
+    const response = await app.request(`/apps/${APP_ID}`, { method: "DELETE" });
+
+    expect(response.status).toBe(200);
+    expect(phases).toEqual(["prepare", "finalize"]);
+    expect(await createRepository(bindings.d1).identity.getApp(APP_ID)).toBeNull();
+    expect(await createRepository(bindings.d1).identity.getAppDeletionSaga(APP_ID)).toMatchObject({
+      phase: "complete",
+    });
   });
 });
 
 function createTestApp(
   holdover: HoldoverWriteOutboxCleanup,
   exposures: EnvironmentExposureStatusCleanupInput[],
+  loseDeleteResponse = false,
 ) {
   const authResolver: AuthResolver = () => ({
     ok: true,
@@ -106,10 +133,23 @@ function createTestApp(
     },
   });
   const rateLimiter: RateLimiter = () => ({ limited: false });
+  const repo = createRepository(bindings.d1);
+  const deleteAppCascade = repo.identity.deleteAppCascade;
   return createApp({
     authResolver,
     rateLimiter,
-    repo: createRepository(bindings.d1),
+    repo: loseDeleteResponse
+      ? {
+          ...repo,
+          identity: {
+            ...repo.identity,
+            async deleteAppCascade(...args: Parameters<typeof deleteAppCascade>) {
+              await deleteAppCascade(...args);
+              throw new Error("forced lost D1 commit response");
+            },
+          },
+        }
+      : repo,
     credentialStore: bindings.credentialKv,
     exposureStatusCleanup: {
       delete: async (input) => {

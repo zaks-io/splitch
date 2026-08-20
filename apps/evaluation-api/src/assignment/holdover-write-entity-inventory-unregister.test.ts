@@ -63,12 +63,24 @@ describe("Entity /delete inventory unregister via Miniflare DOs", () => {
     expect(deleteResponse.ok).toBe(true);
     expect((await inventory.status(PUT.appId)).entities).toEqual([]);
 
-    const ensureAfter = await outboxStub.fetch("https://holdover-write-outbox.local/ensure", {
+    const racingDelete = outboxStub.fetch("https://holdover-write-outbox.local/delete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        deleteBeforeTsMs: 1_500,
+        appId: PUT.appId,
+        idType: PUT.idType,
+        targetingKeyHash: PUT.targetingKeyHash,
+      }),
+    });
+    const ensureAfter = outboxStub.fetch("https://holdover-write-outbox.local/ensure", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...PUT, sourceCreatedAtMs: 1_600 }),
     });
-    expect(ensureAfter.ok).toBe(true);
+    const [deleteAfter, ensuredAfter] = await Promise.all([racingDelete, ensureAfter]);
+    expect(deleteAfter.ok).toBe(true);
+    expect(ensuredAfter.ok).toBe(true);
     expect(await inventory.status(PUT.appId)).toMatchObject({
       entities: [{ idType: PUT.idType, targetingKeyHash: PUT.targetingKeyHash }],
     });

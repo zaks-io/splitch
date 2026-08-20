@@ -58,15 +58,6 @@ export async function requireAppDelete(
   return requireAppRole(deps, appId, actor, APP_DELETE_ROLES, requestId);
 }
 
-/** Owner App scopes only — used when the D1 App row is already gone. */
-export function requireAppDeleteScopes(
-  appId: string,
-  actor: ScopedActor,
-  requestId: string,
-): Response | null {
-  return requireAppRoleFromScopes(appId, actor.scopes, APP_DELETE_ROLES, requestId);
-}
-
 async function requireAppRole(
   deps: AppAuthzDeps,
   appId: string,

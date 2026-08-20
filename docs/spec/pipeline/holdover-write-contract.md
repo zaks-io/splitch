@@ -117,9 +117,10 @@ re-run. Ownership (or KV-complete) is required before an `accepted`/`deduplicate
 cutoff returns `suppressed`. App deletion enumerates Entity outboxes via
 `env.HOLDOVER_WRITE_APP_INVENTORY` (strongly consistent), not Assignment Store KV list.
 App deletion is a durable App-scoped saga outside the D1 App row: prepare/freeze
-(suppress without purge), cancel restore while still pre-D1, or mark the irreversible
-D1-success boundary then finalize (drain/purge + complete). Public DELETE retries after
-the App row is gone resume pending finalize — never cancel/rollback past D1 deletion.
+(suppress without purge), cancel restore while still pre-D1, then finalize (drain/purge +
+complete). A no-foreign-key D1 deletion record crosses its irreversible boundary in the same
+batch that deletes the App. Public DELETE retries authenticate against that surviving record and
+resume pending finalize; an ambiguous successful D1 response never enters cancellation.
 
 ## Holdover retention policy
 

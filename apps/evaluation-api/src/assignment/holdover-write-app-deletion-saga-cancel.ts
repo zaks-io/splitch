@@ -5,9 +5,13 @@
  */
 
 import type { AssignmentKv } from "./assignment-store";
-import type { HoldoverWriteAppInventoryStorage } from "./holdover-write-app-inventory";
+import type {
+  HoldoverWriteAppEntityRef,
+  HoldoverWriteAppInventoryStorage,
+} from "./holdover-write-app-inventory";
 import { appHoldoverWriteSuppressKey } from "./holdover-write-outbox-core";
 import {
+  type HoldoverWriteAppDeletionSaga,
   type HoldoverWriteEntityAlarmResumePort,
   SAGA_DELETE_BEFORE_TS_KEY,
   SAGA_DELETION_COMPLETE_KEY,
@@ -72,28 +76,11 @@ export async function advanceAppDeletionCancelSaga(
     return { done: true };
   }
 
-  let pending = [...saga.cancelResumePending];
+  const pending = [...saga.cancelResumePending];
   let cancelKvCleared = saga.cancelKvCleared;
-  while (pending.length > 0) {
-    if (!resume) {
-      return { done: false };
-    }
-    const [next, ...rest] = pending;
-    if (!next) break;
-    await resume.resumeAlarms({
-      appId,
-      idType: next.idType,
-      targetingKeyHash: next.targetingKeyHash,
-    });
-    pending = rest;
-    await putAppDeletionSaga(storage, {
-      phase: "canceling",
-      appId: saga.appId,
-      deleteBeforeTsMs: saga.deleteBeforeTsMs,
-      cancelResumePending: pending,
-      cancelKvCleared,
-    });
-  }
+  if (!resume && pending.length > 0) return { done: false };
+  const failed = await resumePendingEntityAlarms(storage, saga, appId, resume, pending);
+  if (failed.length > 0) return { done: false };
 
   if (!cancelKvCleared) {
     const deleteKey = kv.delete?.bind(kv);
@@ -115,4 +102,33 @@ export async function advanceAppDeletionCancelSaga(
   await storage.delete(SAGA_DELETE_BEFORE_TS_KEY);
   await storage.delete(SAGA_KEY);
   return { done: true };
+}
+
+async function resumePendingEntityAlarms(
+  storage: HoldoverWriteAppInventoryStorage,
+  saga: HoldoverWriteAppDeletionSaga,
+  appId: string,
+  resume: HoldoverWriteEntityAlarmResumePort | null,
+  pending: readonly HoldoverWriteAppEntityRef[],
+): Promise<readonly HoldoverWriteAppEntityRef[]> {
+  const failed: HoldoverWriteAppEntityRef[] = [];
+  for (const [index, entity] of pending.entries()) {
+    try {
+      await resume?.resumeAlarms({
+        appId,
+        idType: entity.idType,
+        targetingKeyHash: entity.targetingKeyHash,
+      });
+    } catch {
+      failed.push(entity);
+    }
+    await putAppDeletionSaga(storage, {
+      phase: "canceling",
+      appId: saga.appId,
+      deleteBeforeTsMs: saga.deleteBeforeTsMs,
+      cancelResumePending: [...failed, ...pending.slice(index + 1)],
+      cancelKvCleared: saga.cancelKvCleared,
+    });
+  }
+  return failed;
 }

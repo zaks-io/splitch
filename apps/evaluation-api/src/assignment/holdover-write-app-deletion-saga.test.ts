@@ -94,22 +94,20 @@ describe("holdover write App deletion saga boundaries", () => {
       },
     };
 
-    await expect(beginOrResumeAppDeletionCancelSaga(storage, kv, "app-A", resume)).rejects.toThrow(
-      /forced resume-alarms failure/,
+    await expect(beginOrResumeAppDeletionCancelSaga(storage, kv, "app-A", resume)).resolves.toEqual(
+      { done: false, cancelled: true },
     );
     expect(await readAppDeletionSaga(storage)).toMatchObject({
       phase: "canceling",
-      cancelResumePending: [
-        { idType: "user", targetingKeyHash: "hash-1" },
-        { idType: "user", targetingKeyHash: "hash-2" },
-      ],
+      cancelResumePending: [{ idType: "user", targetingKeyHash: "hash-1" }],
     });
+    expect(resumed).toEqual(["hash-2"]);
 
     kv.failDeletesRemaining = 1;
     await expect(advanceAppDeletionCancelSaga(storage, kv, "app-A", resume)).rejects.toThrow(
       /forced KV delete failure/,
     );
-    expect(resumed).toEqual(["hash-1", "hash-2"]);
+    expect(resumed).toEqual(["hash-2", "hash-1"]);
     expect(kv.has(appHoldoverWriteSuppressKey("app-A"))).toBe(true);
     expect(await storage.get<boolean>("suppressed")).toBe(true);
 

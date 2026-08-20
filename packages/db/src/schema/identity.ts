@@ -85,6 +85,20 @@ export const apps = sqliteTable(
   (t) => [uniqueIndex("apps_org_key_unique").on(t.organizationId, t.key)],
 );
 
+/**
+ * Durable recovery record for App deletion. It deliberately has no App foreign
+ * key: the record is the authenticated continuation after the App row is gone.
+ */
+export const appDeletionSagas = sqliteTable("app_deletion_sagas", {
+  appId: text("app_id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  actorId: text("actor_id").notNull(),
+  deleteBeforeTs: text("delete_before_ts").notNull(),
+  phase: text("phase").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 export const appMemberships = sqliteTable(
   "app_memberships",
   {

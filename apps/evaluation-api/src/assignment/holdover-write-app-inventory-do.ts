@@ -53,21 +53,21 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
 
   private async handleAlarm(): Promise<void> {
     const saga = await readAppDeletionSaga(this.ctx.storage);
-    if (saga === null || saga.phase !== "canceling") return;
-    const advanced = await advanceAppDeletionCancelSaga(
+    if (saga === null || (saga.phase !== "preparing" && saga.phase !== "canceling")) return;
+    await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
+    const advanced = await beginOrResumeAppDeletionCancelSaga(
       this.ctx.storage,
       this.env.ASSIGNMENTS_KV,
       saga.appId,
       this.resumePort(),
     );
-    if (!advanced.done) {
-      await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
-    }
+    if (advanced.done) await this.ctx.storage.deleteAlarm();
   }
 
   private async beginDeletion(request: Request): Promise<Response> {
     const parsed = await parseDeletionBody(request);
     if (!parsed.ok) return parsed.response;
+    await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
     try {
       const result = await prepareAppDeletionSaga(
         this.ctx.storage,
@@ -77,8 +77,8 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
         this.resumePort(),
       );
       const saga = await readAppDeletionSaga(this.ctx.storage);
-      if (saga?.phase === "canceling") {
-        await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
+      if (saga?.phase !== "canceling" && saga?.phase !== "preparing") {
+        await this.ctx.storage.deleteAlarm();
       }
       return Response.json({
         suppressed: true,
@@ -88,10 +88,6 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
         sagaPhase: saga?.phase ?? (result.deletionComplete ? "completed" : "prepared"),
       });
     } catch (cause) {
-      const saga = await readAppDeletionSaga(this.ctx.storage);
-      if (saga?.phase === "canceling") {
-        await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
-      }
       return Response.json(
         { error: cause instanceof Error ? cause.message : String(cause) },
         { status: 400 },
@@ -102,6 +98,7 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
   private async cancelDeletion(request: Request): Promise<Response> {
     const parsed = await parseAppIdBody(request, this.ctx.id.name);
     if (!parsed.ok) return parsed.response;
+    await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
     try {
       const result = await beginOrResumeAppDeletionCancelSaga(
         this.ctx.storage,
@@ -109,9 +106,7 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
         parsed.appId,
         this.resumePort(),
       );
-      if (!result.done && result.cancelled) {
-        await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
-      }
+      if (result.done) await this.ctx.storage.deleteAlarm();
       const saga = await readAppDeletionSaga(this.ctx.storage);
       return Response.json({
         cancelled: result.cancelled,
@@ -120,7 +115,6 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
         sagaPhase: saga?.phase ?? null,
       });
     } catch (cause) {
-      await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
       return Response.json(
         { error: cause instanceof Error ? cause.message : String(cause) },
         { status: 400 },
@@ -131,6 +125,7 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
   private async advanceCancel(request: Request): Promise<Response> {
     const parsed = await parseAppIdBody(request, this.ctx.id.name);
     if (!parsed.ok) return parsed.response;
+    await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
     try {
       const advanced = await advanceAppDeletionCancelSaga(
         this.ctx.storage,
@@ -138,12 +133,9 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
         parsed.appId,
         this.resumePort(),
       );
-      if (!advanced.done) {
-        await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
-      }
+      if (advanced.done) await this.ctx.storage.deleteAlarm();
       return Response.json({ done: advanced.done });
     } catch (cause) {
-      await this.ctx.storage.setAlarm(Date.now() + CANCEL_RETRY_DELAY_MS);
       return Response.json(
         { error: cause instanceof Error ? cause.message : String(cause) },
         { status: 400 },

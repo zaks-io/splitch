@@ -7,6 +7,7 @@ import {
   DurableHoldoverWriteCoordinator,
   type HoldoverWriteOutboxNamespace,
 } from "./holdover-write-outbox";
+import { appHoldoverWriteSuppressKey } from "./holdover-write-outbox-core";
 
 const PUT = {
   appId: "app-A",
@@ -99,16 +100,49 @@ describe("HoldoverWriteAppInventoryDurableObject via Miniflare", () => {
       entities: [],
     });
   });
+
+  it("recovers a preparing saga by alarm after an ambiguous KV freeze failure", async () => {
+    mf = await miniflareWithInventoryAndOutbox({
+      registerFailsRemaining: 0,
+      suppressPutFailsRemaining: 1,
+      cancelStatePutFailsRemaining: 1,
+    });
+    const inventoryNs = (await mf.getDurableObjectNamespace(
+      "HOLDOVER_WRITE_APP_INVENTORY",
+    )) as unknown as HoldoverWriteAppInventoryNamespace;
+    const inventory = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
+    const stub = inventoryNs.get(inventoryNs.idFromName(PUT.appId));
+
+    await expect(inventory.beginDeletion(PUT.appId, 9_000)).rejects.toThrow(
+      "app inventory /begin-deletion returned HTTP 400",
+    );
+    expect(await inventory.status(PUT.appId)).toMatchObject({
+      suppressed: true,
+      sagaPhase: "preparing",
+    });
+    const kv = await mf.getKVNamespace("ASSIGNMENTS_KV");
+    expect(await kv.get(appHoldoverWriteSuppressKey(PUT.appId))).toBe("1");
+
+    const alarm = await stub.fetch("https://holdover-write-app-inventory.local/__test/alarm", {
+      method: "POST",
+    });
+    expect(alarm.ok).toBe(true);
+    expect(await inventory.status(PUT.appId)).toMatchObject({
+      suppressed: false,
+      sagaPhase: null,
+    });
+    expect(await kv.get(appHoldoverWriteSuppressKey(PUT.appId))).toBeNull();
+  });
 });
 
 async function miniflareWithInventoryAndOutbox(options: {
   registerFailsRemaining: number;
+  suppressPutFailsRemaining?: number;
+  cancelStatePutFailsRemaining?: number;
 }): Promise<Miniflare> {
   return new Miniflare({
     modules: true,
-    script: bundleHoldoverWriteInventoryAndOutboxWorker({
-      registerFailsRemaining: options.registerFailsRemaining,
-    }),
+    script: bundleHoldoverWriteInventoryAndOutboxWorker(options),
     compatibilityDate: "2026-06-21",
     compatibilityFlags: ["nodejs_compat"],
     kvNamespaces: { ASSIGNMENTS_KV: "assignments" },
