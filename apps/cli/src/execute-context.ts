@@ -1,5 +1,6 @@
+import { describeOAuthFault, isSessionRefusal } from "./auth-binding.js";
 import { ensurePrincipalEmail } from "./auth-email-backfill.js";
-import { refreshAccessToken } from "./auth-token.js";
+import { refreshAccessToken, refreshFaultOf } from "./auth-token.js";
 import { type ResolvedContext, resolveContext } from "./context.js";
 import {
   type CliCredentialFile,
@@ -67,6 +68,9 @@ export async function executeContext(
     ...(verified.sessionUnverifiedReason
       ? { sessionUnverifiedReason: verified.sessionUnverifiedReason }
       : {}),
+    ...(verified.sessionUnverifiedDetail
+      ? { sessionUnverifiedDetail: verified.sessionUnverifiedDetail }
+      : {}),
     ...context,
     nextSteps: nextSteps(context),
   };
@@ -74,11 +78,14 @@ export async function executeContext(
   return { exitCode: EXIT_OK, payload };
 }
 
+type SessionUnverifiedReason = "refresh_unreachable" | "refresh_failed";
+
 type SessionVerification =
   | {
       readonly authenticated: true;
       readonly session: CliCredentialFile;
-      readonly sessionUnverifiedReason?: "refresh_unreachable";
+      readonly sessionUnverifiedReason?: SessionUnverifiedReason;
+      readonly sessionUnverifiedDetail?: string;
     }
   | { readonly authenticated: false };
 
@@ -89,8 +96,16 @@ type SessionVerification =
  * for them but was wrong here — it let a stale `credentialStore.load()` read
  * stand in for a live session (SPL-376). Reuse that same refresh-grant path,
  * no second session check, and only convert the one fault it already defines
- * as terminal. A transport failure (no response at all) proves nothing either
- * way, so it is never reported as a false `authenticated: false` (ADR-0036).
+ * as terminal.
+ *
+ * `CLI_SESSION_EXPIRED` is not by itself proof of that: `mintFailureError`
+ * (auth-token.ts) also raises it for a reachable auth service returning an
+ * ambiguous fault (a 5xx, a body with no OAuth `error` at all, or a code that
+ * isn't `invalid_grant`) — a transient outage looks identical to a dead
+ * session at that call site. Only `invalid_grant` proves the auth service
+ * looked at the refresh token and refused it; anything else, plus a transport
+ * failure that never got a response, proves nothing either way, so it is
+ * never reported as a false `authenticated: false` (ADR-0036).
  */
 async function verifySession(
   deps: CliDeps,
@@ -108,13 +123,37 @@ async function verifySession(
     return { authenticated: true, session };
   } catch (error) {
     if (error instanceof SplitchCliError && error.code === "CLI_SESSION_EXPIRED") {
-      return { authenticated: false };
+      return classifySessionExpiredFault(error, session);
     }
     if (error instanceof SplitchCliError) {
       throw error;
     }
     return { authenticated: true, session, sessionUnverifiedReason: "refresh_unreachable" };
   }
+}
+
+/**
+ * Split out of `verifySession` to keep the branching readable: a
+ * `CLI_SESSION_EXPIRED` error is only a proven refusal when its OAuth fault
+ * says `invalid_grant`; anything else is unverified, with the fault detail
+ * carried so a caller can tell the cases apart (SPL-378).
+ */
+function classifySessionExpiredFault(
+  error: SplitchCliError,
+  session: CliCredentialFile,
+): SessionVerification {
+  const fault = refreshFaultOf(error);
+  if (fault && isSessionRefusal(fault)) {
+    return { authenticated: false };
+  }
+  return {
+    authenticated: true,
+    session,
+    sessionUnverifiedReason: "refresh_failed",
+    sessionUnverifiedDetail: fault
+      ? describeOAuthFault(fault)
+      : "the auth service returned no OAuth fault detail",
+  };
 }
 
 function nextSteps(context: ResolvedContext): string[] {

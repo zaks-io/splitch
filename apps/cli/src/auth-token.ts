@@ -99,7 +99,24 @@ export function mintFailureError(fault: OAuthFault): SplitchCliError {
   if (isTokenBindingRefusal(fault)) {
     return tokenBindingRefusedError(fault);
   }
-  return sessionExpiredError(describeOAuthFault(fault));
+  return sessionExpiredError(describeOAuthFault(fault), fault);
+}
+
+/**
+ * The OAuth fault behind a `CLI_SESSION_EXPIRED` error, when the error came
+ * from a failed refresh-grant response. Nothing reads `Error.cause` today, so
+ * carrying it here changes no other command's behavior; `context` needs it to
+ * tell a definitive session refusal from an auth-service fault that merely
+ * looks like one (SPL-378).
+ */
+export function refreshFaultOf(error: SplitchCliError): OAuthFault | undefined {
+  return error.code === "CLI_SESSION_EXPIRED" && isOAuthFault(error.cause)
+    ? error.cause
+    : undefined;
+}
+
+function isOAuthFault(value: unknown): value is OAuthFault {
+  return typeof value === "object" && value !== null && "status" in value;
 }
 
 export async function formPost(
@@ -122,11 +139,12 @@ export function notAuthenticatedError(): SplitchCliError {
   });
 }
 
-export function sessionExpiredError(detail: string): SplitchCliError {
+export function sessionExpiredError(detail: string, fault?: OAuthFault): SplitchCliError {
   return new SplitchCliError({
     code: "CLI_SESSION_EXPIRED",
     causeSummary: `The CLI login session could not mint a usable token: ${detail}`,
     remediation: "Run splitch login again before retrying the command",
+    originalError: fault,
   });
 }
 

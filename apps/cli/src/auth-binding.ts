@@ -94,6 +94,18 @@ function readFaultText(value: unknown): string | undefined {
   return clean.slice(0, 300) || undefined;
 }
 
+/**
+ * True when the OAuth error body itself proves the session is gone: the auth
+ * service returned `invalid_grant`, meaning it looked at the refresh token
+ * and refused it (a plain dead session, or -- one call site up, before this
+ * runs -- a membership/binding refusal). Any other fault (a 5xx, a body with
+ * no `error` at all, or an error we don't recognize) proves nothing about the
+ * session either way, so it must never be read as a refusal (ADR-0036).
+ */
+export function isSessionRefusal(fault: OAuthFault): boolean {
+  return fault.error === "invalid_grant";
+}
+
 export function describeOAuthFault(fault: OAuthFault): string {
   const parts = [`HTTP ${fault.status}`];
   if (fault.error) parts.push(fault.error);

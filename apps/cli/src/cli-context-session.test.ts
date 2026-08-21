@@ -110,4 +110,40 @@ describe("splitch context reports the real session state (SPL-376)", () => {
     });
     expect(payload.sessionUnverifiedReason).toBe("refresh_unreachable");
   });
+
+  it("reports an unverified reason instead of a false negative when the auth service returns a 5xx (SPL-378)", async () => {
+    const { dir, credentialPath } = await makeTempHome();
+    await writeExpiredCredential(credentialPath);
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => request.url.endsWith("/oauth2/token"),
+        status: 500,
+        body: { error: "server_error", error_description: "upstream identity provider timed out" },
+      },
+    ]);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const code = await runCli(["context", "--json"], {
+      credentialPath,
+      cwd: dir,
+      fetch: transport.fetch,
+    });
+
+    expect(code).toBe(EXIT_OK);
+    const payload = JSON.parse(log.mock.calls.join("")) as {
+      authenticated: boolean;
+      principal: { userId: string; email: string };
+      sessionUnverifiedReason?: string;
+      sessionUnverifiedDetail?: string;
+    };
+    expect(payload.authenticated).toBe(true);
+    expect(payload.principal).toEqual({
+      userId: storedCredential().principal.userId,
+      email: storedCredential().principal.email,
+    });
+    expect(payload.sessionUnverifiedReason).toBe("refresh_failed");
+    expect(payload.sessionUnverifiedDetail).toBe(
+      "HTTP 500: server_error: upstream identity provider timed out",
+    );
+  });
 });
