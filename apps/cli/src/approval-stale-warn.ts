@@ -79,9 +79,25 @@ export function remediationForServerError(error: ErrorResponse): string {
   if (error.code === "APPROVAL_REQUEST_STALE") {
     return "Refresh the target and re-propose; a stale Approval Request cannot be applied";
   }
+  const reviewRequired = approvalReviewRequiredRemediation(error);
+  if (reviewRequired) return reviewRequired;
   const undetermined = undeterminedChangeRemediation(error);
   if (undetermined) return undetermined;
   return "Correct the reported API failure and retry the command";
+}
+
+const CONFIRM_HINT = "rerun the same command with --confirm if you hold approver rights";
+
+function approvalReviewRequiredRemediation(error: ErrorResponse): string | null {
+  if (error.code !== "APPROVAL_REVIEW_REQUIRED") return null;
+  const requestId =
+    "approvalRequestId" in error.details && typeof error.details.approvalRequestId === "string"
+      ? error.details.approvalRequestId
+      : null;
+  // The request id may be missing from a malformed response; still give the
+  // --confirm hint instead of falling through to the generic remediation.
+  if (!requestId) return `Correct the reported API failure, or ${CONFIRM_HINT}`;
+  return `Review Approval Request ${requestId} (splitch approval-requests get ${requestId}), or ${CONFIRM_HINT}`;
 }
 
 function runFrozenRemediation(error: ErrorResponse): string | null {
