@@ -9,7 +9,7 @@ import {
   panelVerifyOutcome,
   verifyFlagWithClientKey,
 } from "./panel-verify";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 
 const VerifyFlagSchema = z.object({
   appId: z.string().min(1),
@@ -37,7 +37,7 @@ export const verifyControlPanelFlag = createServerFn({ method: "POST" })
   .validator((data: unknown) => VerifyFlagSchema.parse(data))
   .handler(async ({ data }): Promise<VerifyFlagResult> => {
     const bindings = controlPanelMutationBindings(workerEnv);
-    const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+    const loaded = await loadSessionFromRequest(bindings, getRequest());
     if (!loaded.ok) {
       return failure(401, "UNAUTHORIZED", "authentication required");
     }

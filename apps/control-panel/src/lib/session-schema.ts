@@ -15,6 +15,8 @@ export const STORED_SESSION_KEYS = new Set([
   "expiresAt",
   "workosSessionId",
   "workosAccessToken",
+  "workosRefreshToken",
+  "workosAccessTokenExpiresAt",
   "version",
 ]);
 export const ORG_MEMBERSHIP_KEYS = new Set([
@@ -77,6 +79,9 @@ function isStoredSession(value: Partial<StoredSession>): value is StoredSession 
     (value.version === 1 || value.version === 2) &&
     (value.workosSessionId === undefined || isNonEmptyString(value.workosSessionId)) &&
     (value.workosAccessToken === undefined || isNonEmptyString(value.workosAccessToken)) &&
+    (value.workosRefreshToken === undefined || isNonEmptyString(value.workosRefreshToken)) &&
+    (value.workosAccessTokenExpiresAt === undefined ||
+      isPositiveInteger(value.workosAccessTokenExpiresAt)) &&
     (value.orgsTruncated === undefined || typeof value.orgsTruncated === "boolean") &&
     Array.isArray(value.orgs) &&
     value.orgs.every(isOrgMembership)
@@ -91,6 +96,9 @@ function isLegacyStoredSession(
     Number.isInteger(value.expiresAt) &&
     (value.workosSessionId === undefined || isNonEmptyString(value.workosSessionId)) &&
     (value.workosAccessToken === undefined || isNonEmptyString(value.workosAccessToken)) &&
+    (value.workosRefreshToken === undefined || isNonEmptyString(value.workosRefreshToken)) &&
+    (value.workosAccessTokenExpiresAt === undefined ||
+      isPositiveInteger(value.workosAccessTokenExpiresAt)) &&
     // Checked here too, not only on the v2 path: the key allowlist admits it and
     // `normalizeStoredSession` spreads the candidate through, so without this a
     // v1 session carrying `orgsTruncated: "definitely"` would load with the
@@ -150,6 +158,10 @@ function isAppMembership(value: unknown): value is AppMembership {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return Number.isInteger(value) && Number(value) > 0;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

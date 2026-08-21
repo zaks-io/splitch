@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { env as workerEnv } from "cloudflare:workers";
+import { createFileRoute } from "@tanstack/react-router";
 import { controlPanelBindings } from "#lib/bindings";
 import { consentLoginRedirect, forwardClaimConsent, renderConsentPage } from "#lib/claim-consent";
-import { loadSessionFromRequest } from "#lib/session";
+import { loadSessionFromRequest } from "#lib/session-refresh";
 
 export const Route = createFileRoute("/claim/consent/$attemptId")({
   component: () => (
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/claim/consent/$attemptId")({
     handlers: {
       GET: async ({ request, params }) => {
         const bindings = controlPanelBindings(workerEnv);
-        const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, request);
+        const loaded = await loadSessionFromRequest(bindings, request);
         if (!loaded.ok || !loaded.session.workosAccessToken) return consentLoginRedirect(request);
         return renderConsentPage(params.attemptId);
       },

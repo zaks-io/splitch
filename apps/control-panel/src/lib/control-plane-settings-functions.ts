@@ -5,7 +5,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelSettingsClient } from "./control-plane-settings";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 
 const SettingsScopeSchema = z.object({
   appId: z.string().min(1),
@@ -79,7 +79,7 @@ async function authorizedSettingsClient(): Promise<
     }
 > {
   const bindings = controlPanelMutationBindings(workerEnv);
-  const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+  const loaded = await loadSessionFromRequest(bindings, getRequest());
   if (!loaded.ok) {
     return {
       ok: false,

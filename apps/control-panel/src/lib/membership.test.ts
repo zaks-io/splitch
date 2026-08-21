@@ -120,6 +120,8 @@ describe("session membership materialization", () => {
       userId: "user_1",
       version: 1,
       workosAccessToken: "workos-access-token",
+      workosRefreshToken: "workos-refresh-token",
+      workosAccessTokenExpiresAt: Math.floor(Date.now() / 1000) + 60,
       workosSessionId: "workos_session_1",
     };
 
@@ -128,9 +130,16 @@ describe("session membership materialization", () => {
     expect(rehydrated).toMatchObject({
       version: 2,
       workosAccessToken: "workos-access-token",
+      workosRefreshToken: "workos-refresh-token",
+      workosAccessTokenExpiresAt: session.workosAccessTokenExpiresAt,
       orgs: [expect.objectContaining({ orgId: "org_1", orgSlug: "acme-inc" })],
     });
-    expect(kv.store.get("session:token")).toContain('"version":2');
+    expect(JSON.parse(kv.store.get("session:token") ?? "null")).toMatchObject({
+      version: 2,
+      workosAccessToken: "workos-access-token",
+      workosRefreshToken: "workos-refresh-token",
+      workosAccessTokenExpiresAt: session.workosAccessTokenExpiresAt,
+    });
   });
 });
 

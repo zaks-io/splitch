@@ -75,6 +75,11 @@ describe("session resync at the Organization cap", () => {
     expect(slugs).not.toContain(oldest);
     // And the list does not claim to be complete.
     expect(pub.orgsTruncated).toBe(true);
+    expect(loaded.session).toMatchObject({
+      workosAccessToken: "access_token_cap",
+      workosRefreshToken: "refresh_token_cap",
+      workosAccessTokenExpiresAt: expect.any(Number),
+    });
   }, 20_000);
 
   it("does not claim truncation when the create lands exactly on the cap", async () => {
@@ -145,6 +150,9 @@ function staleSession(): StoredSession {
     version: 2,
     userId: "user_cap",
     workosSessionId: "session_cap",
+    workosAccessToken: "access_token_cap",
+    workosRefreshToken: "refresh_token_cap",
+    workosAccessTokenExpiresAt: Math.floor(Date.now() / 1000) + 1_800,
     expiresAt: Math.floor(Date.now() / 1000) + 3_600,
     orgs: [],
   };

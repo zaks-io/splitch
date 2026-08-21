@@ -2,7 +2,9 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSession, loadSessionFromRequest } from "#lib/session";
+import type { ControlPanelBindings } from "#lib/bindings";
+import { createSession } from "#lib/session";
+import { loadSessionFromRequest } from "#lib/session-refresh";
 import { MemoryKv, sessionPrincipal } from "#lib/session-test-harness";
 
 /**
@@ -13,16 +15,17 @@ import { MemoryKv, sessionPrincipal } from "#lib/session-test-harness";
  */
 
 const kv = new MemoryKv();
+const bindings: ControlPanelBindings = {
+  DB: {} as D1Database,
+  SESSION_STORE: kv.namespace(),
+  WORKOS_API_KEY: "sk_test",
+  WORKOS_CLIENT_ID: "client_test",
+  AUTH_API_ORIGIN: "https://auth.splitch.test",
+  EVALUATION_API_ORIGIN: "https://edge.splitch.test",
+};
 
 vi.mock("cloudflare:workers", () => ({
-  env: {
-    DB: {},
-    SESSION_STORE: kv,
-    WORKOS_API_KEY: "sk_test",
-    WORKOS_CLIENT_ID: "client_test",
-    AUTH_API_ORIGIN: "https://auth.splitch.test",
-    EVALUATION_API_ORIGIN: "https://edge.splitch.test",
-  },
+  env: bindings,
 }));
 
 const { Route } = await import("./auth.logout");
@@ -43,7 +46,7 @@ async function signIn(): Promise<string> {
 /** What every authenticated route does with the cookie it was handed. */
 async function authenticatedRequestSucceeds(cookie: string): Promise<boolean> {
   const loaded = await loadSessionFromRequest(
-    kv.namespace(),
+    bindings,
     new Request("https://panel.splitch.test/acme", { headers: { cookie } }),
   );
   return loaded.ok;

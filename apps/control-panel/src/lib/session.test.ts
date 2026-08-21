@@ -3,6 +3,8 @@ import { consumeOAuthState, createOAuthState, OAUTH_STATE_COOKIE_NAME } from "./
 import {
   createSession,
   loadSessionFromCookieHeader,
+  PANEL_SESSION_MAX_SECONDS,
+  publicSession,
   refreshSession,
   SESSION_COOKIE_NAME,
   sessionKey,
@@ -19,11 +21,13 @@ describe("control-panel session cookie and KV validation", () => {
     expect(created.cookie).toContain("Secure");
     expect(created.cookie).toContain("SameSite=Lax");
     expect(created.cookie).toContain("Path=/");
+    expect(created.cookie).toContain(`Max-Age=${PANEL_SESSION_MAX_SECONDS}`);
     expect(created.cookie).not.toContain("user_1");
     expect(created.cookie).not.toContain("app_1");
 
     expect(kv.store.size).toBe(1);
     expect(kv.store.has(sessionKey(created.tokenHash))).toBe(true);
+    expect(created.session.expiresAt).toBe(Math.floor(NOW / 1000) + PANEL_SESSION_MAX_SECONDS);
 
     const loaded = await loadSessionFromCookieHeader(kv.namespace(), created.cookie, NOW);
     expect(loaded).toMatchObject({
@@ -39,6 +43,38 @@ describe("control-panel session cookie and KV validation", () => {
         ],
       },
     });
+  });
+
+  it("keeps WorkOS refresh credentials out of the public session", async () => {
+    const created = await createSession(
+      new MemoryKv().namespace(),
+      {
+        ...sessionPrincipal(),
+        workosAccessToken: "access_token_1",
+        workosRefreshToken: "refresh_token_1",
+        workosAccessTokenExpiresAt: Math.floor(NOW / 1000) + 300,
+      },
+      NOW,
+    );
+
+    const session = publicSession(created.session);
+
+    expect(session).not.toHaveProperty("workosRefreshToken");
+    expect(session).not.toHaveProperty("workosAccessTokenExpiresAt");
+  });
+
+  it("clamps an explicit expiry to the absolute panel session cap", async () => {
+    const created = await createSession(
+      new MemoryKv().namespace(),
+      {
+        ...sessionPrincipal(),
+        expiresAt: Math.floor(NOW / 1_000) + PANEL_SESSION_MAX_SECONDS * 2,
+      },
+      NOW,
+    );
+
+    expect(created.session.expiresAt).toBe(Math.floor(NOW / 1_000) + PANEL_SESSION_MAX_SECONDS);
+    expect(created.cookie).toContain(`Max-Age=${PANEL_SESSION_MAX_SECONDS}`);
   });
 
   it("rejects a tampered token without returning a principal", async () => {

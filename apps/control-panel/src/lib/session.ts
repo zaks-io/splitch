@@ -1,19 +1,19 @@
 import {
   clearHttpOnlyCookie,
   generateOpaqueToken,
+  tokenHash as hashOpaqueToken,
   isOpaqueToken,
   nowSeconds,
   parseCookie,
-  serializeHttpOnlyCookie,
   type SerializedHttpOnlyCookie,
-  tokenHash as hashOpaqueToken,
+  serializeHttpOnlyCookie,
 } from "./session-cookie";
 import { parseStoredSession } from "./session-schema";
 
 export const SESSION_COOKIE_NAME = "__session";
+export const PANEL_SESSION_MAX_SECONDS = 60 * 60 * 24 * 30;
 
 const SESSION_KEY_PREFIX = "session:";
-const MAX_SESSION_TTL_SECONDS = 60 * 60 * 24;
 const CURRENT_SESSION_VERSION = 2;
 
 export type OrgRole = "owner" | "admin" | "member";
@@ -55,6 +55,8 @@ export interface StoredSession extends SessionPrincipal {
   workosSessionId?: string;
   /** Server-only proof forwarded to Auth API; never included in publicSession. */
   workosAccessToken?: string;
+  workosRefreshToken?: string;
+  workosAccessTokenExpiresAt?: number;
 }
 
 export type SessionLoadResult =
@@ -85,6 +87,20 @@ export function publicSession(session: StoredSession): SessionPrincipal {
   };
 }
 
+type ServerOnlySessionFields = Pick<
+  StoredSession,
+  "workosSessionId" | "workosAccessToken" | "workosRefreshToken" | "workosAccessTokenExpiresAt"
+>;
+
+export function serverOnlySessionFields(session: ServerOnlySessionFields): ServerOnlySessionFields {
+  return {
+    workosSessionId: session.workosSessionId,
+    workosAccessToken: session.workosAccessToken,
+    workosRefreshToken: session.workosRefreshToken,
+    workosAccessTokenExpiresAt: session.workosAccessTokenExpiresAt,
+  };
+}
+
 export async function createSession(
   kv: KVNamespace,
   session: Omit<StoredSession, "expiresAt"> & { expiresAt?: number },
@@ -95,7 +111,7 @@ export async function createSession(
   cookie: SerializedHttpOnlyCookie;
   session: StoredSession;
 }> {
-  const maxExpiresAt = nowSeconds(now) + MAX_SESSION_TTL_SECONDS;
+  const maxExpiresAt = nowSeconds(now) + PANEL_SESSION_MAX_SECONDS;
   const expiresAt = Math.min(session.expiresAt ?? maxExpiresAt, maxExpiresAt);
   const ttl = ttlSeconds(expiresAt, now);
   if (ttl <= 0) {
@@ -115,14 +131,6 @@ export async function createSession(
     cookie: sessionCookie(token, ttl),
     session: stored,
   };
-}
-
-export async function loadSessionFromRequest(
-  kv: KVNamespace,
-  request: Request,
-  now = Date.now(),
-): Promise<SessionLoadResult> {
-  return loadSessionFromCookieHeader(kv, request.headers.get("cookie"), now);
 }
 
 export async function loadSessionFromCookieHeader(
@@ -158,7 +166,7 @@ export async function destroySession(
   request: Request,
   now = Date.now(),
 ): Promise<{ session: StoredSession | null; cookie: SerializedHttpOnlyCookie }> {
-  const loaded = await loadSessionFromRequest(kv, request, now);
+  const loaded = await loadSessionFromCookieHeader(kv, request.headers.get("cookie"), now);
   if (loaded.ok) {
     await kv.delete(sessionKey(loaded.tokenHash));
     return { session: loaded.session, cookie: clearHttpOnlyCookie(SESSION_COOKIE_NAME) };
@@ -199,5 +207,5 @@ function assertStoredSession(session: StoredSession, now: number): void {
 }
 
 function ttlSeconds(expiresAt: number, now: number): number {
-  return Math.min(MAX_SESSION_TTL_SECONDS, expiresAt - nowSeconds(now));
+  return Math.min(PANEL_SESSION_MAX_SECONDS, expiresAt - nowSeconds(now));
 }

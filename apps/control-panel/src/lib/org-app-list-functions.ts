@@ -7,7 +7,8 @@ import { createControlPanelAppsClient } from "./control-plane-apps";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
 import type { AppAttention, OrgAppListView, PendingAppResync } from "./org-app-list";
 import { type PendingResync, readPendingResync } from "./pending-resync";
-import { loadSessionFromRequest, type StoredSession } from "./session";
+import type { StoredSession } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 import { retryPendingResync } from "./session-resync";
 
 export type OrgAppListResult =
@@ -32,7 +33,7 @@ export async function loadOrgAppListForRequest(
   request: Request,
   orgSlug: string,
 ): Promise<OrgAppListResult> {
-  const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, request);
+  const loaded = await loadSessionFromRequest(bindings, request);
   if (!loaded.ok) return { kind: "unauthenticated" };
 
   const repo = createRepository(bindings.DB);

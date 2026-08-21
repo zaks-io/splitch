@@ -6,7 +6,7 @@ import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelAppsClient } from "./control-plane-apps";
 import { type CreateControlPanelAppResult, settleAfterCreate } from "./create-app-outcome";
 import { markPendingResyncBestEffort } from "./pending-resync";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 import { resyncSessionMemberships } from "./session-resync";
 
 /**
@@ -42,7 +42,7 @@ export const createControlPanelApp = createServerFn({ method: "POST" })
     }
 
     const bindings = controlPanelMutationBindings(workerEnv);
-    const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+    const loaded = await loadSessionFromRequest(bindings, getRequest());
     if (!loaded.ok) {
       return {
         outcome: "refused",

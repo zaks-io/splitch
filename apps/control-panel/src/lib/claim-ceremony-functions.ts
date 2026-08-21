@@ -1,16 +1,17 @@
+import { env as workerEnv } from "cloudflare:workers";
 import { createRepository } from "@splitch/db";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
-import { env as workerEnv } from "cloudflare:workers";
 import { controlPanelBindings } from "./bindings";
 import {
   assertClaimInitiator,
-  claimCompletionKind,
   ClaimCeremonyError,
+  claimCompletionKind,
   postClaimCeremony,
 } from "./claim-ceremony";
 import { buildSessionPrincipal, rehydrateLegacySession } from "./membership";
-import { loadSessionFromRequest, refreshSession, sessionKey } from "./session";
+import { refreshSession, type StoredSession, serverOnlySessionFields, sessionKey } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 
 export type ClaimActionResult =
   | { kind: "otp_required" }
@@ -48,7 +49,7 @@ export const submitClaimCeremony = createServerFn({ method: "POST" })
   .validator((data: ClaimActionInput) => data)
   .handler(async ({ data }): Promise<ClaimActionResult> => {
     const bindings = controlPanelBindings(workerEnv);
-    const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+    const loaded = await loadSessionFromRequest(bindings, getRequest());
     if (!loaded.ok) return error("unauthenticated", "Sign in before claiming this Organization.");
 
     const repo = createRepository(bindings.DB);
@@ -82,8 +83,21 @@ type ClaimContext = {
   orgId: string;
   workosSessionId: string;
   workosAccessToken?: string;
+  workosRefreshToken?: string;
+  workosAccessTokenExpiresAt?: number;
   expiresAt: number;
 };
+
+export function claimSessionAfterRefresh(
+  context: ClaimContext,
+  principal: Awaited<ReturnType<typeof buildSessionPrincipal>>,
+): StoredSession {
+  return {
+    ...principal,
+    expiresAt: context.expiresAt,
+    ...serverOnlySessionFields(context),
+  };
+}
 
 function claimContext(
   loaded: Awaited<ReturnType<typeof loadSessionFromRequest>>,
@@ -109,8 +123,8 @@ function claimContext(
     tokenHash: loaded.tokenHash,
     userId: loaded.session.userId,
     orgId: organization.orgId,
+    ...serverOnlySessionFields(loaded.session),
     workosSessionId: loaded.session.workosSessionId,
-    workosAccessToken: loaded.session.workosAccessToken,
     expiresAt: loaded.session.expiresAt,
   };
 }
@@ -183,11 +197,11 @@ async function verifyClaimCeremony(
 
   const repo = createRepository(bindings.DB);
   const refreshedPrincipal = await buildSessionPrincipal(repo, context);
-  await refreshSession(bindings.SESSION_STORE, context.tokenHash, {
-    ...refreshedPrincipal,
-    expiresAt: context.expiresAt,
-    workosAccessToken: context.workosAccessToken,
-  });
+  await refreshSession(
+    bindings.SESSION_STORE,
+    context.tokenHash,
+    claimSessionAfterRefresh(context, refreshedPrincipal),
+  );
   await bindings.SESSION_STORE.delete(pendingKey);
   return { kind: "claimed" };
 }

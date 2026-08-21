@@ -11,12 +11,12 @@ import { z } from "zod";
 import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelMetricsClient } from "./control-plane-metrics";
 import {
-  metricCreateInput,
   MetricDraftSchema,
+  metricCreateInput,
   metricDraftIssues,
   metricUpdateInput,
 } from "./metric-form-model";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 
 const MetricScopeSchema = z.object({
   appId: z.string().min(1),
@@ -86,7 +86,7 @@ export const deleteControlPanelMetric = createServerFn({ method: "POST" })
 
 async function authorizedMetricsClient(environmentId: string) {
   const bindings = controlPanelMutationBindings(workerEnv);
-  const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+  const loaded = await loadSessionFromRequest(bindings, getRequest());
   if (!loaded.ok) {
     return {
       ok: false as const,

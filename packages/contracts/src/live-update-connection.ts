@@ -64,6 +64,8 @@ const LiveUpdateSessionSchema = z
     expiresAt: z.int().positive(),
     workosSessionId: z.string().min(1).optional(),
     workosAccessToken: z.string().min(1).optional(),
+    workosRefreshToken: z.string().min(1).optional(),
+    workosAccessTokenExpiresAt: z.int().positive().optional(),
     version: z.union([z.literal(1), z.literal(2)]).optional(),
     /**
      * Carried, not used. Authorization asks whether the App is in `orgs`, and a

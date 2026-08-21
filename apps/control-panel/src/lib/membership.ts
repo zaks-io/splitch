@@ -1,12 +1,13 @@
 import { appScope, type Repository } from "@splitch/db";
 import type { EnvironmentResolver } from "./loader-context";
 import {
-  refreshSession,
   type AppMembership,
   type AppRole,
   type OrgMembership,
   type OrgRole,
+  refreshSession,
   type StoredSession,
+  serverOnlySessionFields,
 } from "./session";
 
 export interface SessionPrincipalInput {
@@ -118,7 +119,7 @@ export async function rehydrateLegacySession(
   const rehydrated: StoredSession = {
     ...principal,
     expiresAt: session.expiresAt,
-    workosAccessToken: session.workosAccessToken,
+    ...serverOnlySessionFields(session),
   };
   await refreshSession(kv, tokenHash, rehydrated);
   return { ...rehydrated, version: 2 };
