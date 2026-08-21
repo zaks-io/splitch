@@ -19,7 +19,7 @@ export function PanelSidebarOrganization({
       className="mt-auto grid gap-1 border-t border-border px-3 pt-3"
     >
       {navigation.orgs.length > 1 ? (
-        <ShellMenu label="Organization" value={org.orgSlug}>
+        <ShellMenu direction="up" label="Organization" value={org.orgSlug}>
           {navigation.orgs.map((candidate) => (
             <ShellMenuLink href={`/${encodeURIComponent(candidate.orgSlug)}`} key={candidate.orgId}>
               {candidate.orgSlug}

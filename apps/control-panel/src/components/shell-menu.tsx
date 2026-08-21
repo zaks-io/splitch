@@ -1,23 +1,24 @@
 import { useRouter } from "@tanstack/react-router";
-import type { MouseEvent, ReactNode } from "react";
+import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 import { SignOutForm } from "#components/sign-out-form";
 
-/**
- * The one dropdown used by both shells. The Org shell's switcher and user menu
- * and the App shell's three switchers are the same control; a second
- * implementation would let the two shells drift apart.
- */
-export function ShellMenu({
-  children,
-  label,
-  summary,
-  value,
-}: {
+type ShellMenuHeading =
+  | { summary: ReactNode; label?: never; value?: never }
+  | { label: string; value: string; summary?: never };
+
+type ShellMenuProps = ShellMenuHeading & {
   children: ReactNode;
-  label: string;
-  summary?: ReactNode;
-  value: string;
-}) {
+  /** Menus pinned to the bottom of the sidebar open upward so they stay on screen. */
+  direction?: "down" | "up";
+};
+
+/**
+ * The one dropdown used across the panel sidebar. The App switcher and the
+ * Organization switcher are the same control; a second implementation would
+ * let the two drift apart.
+ */
+export function ShellMenu({ children, direction = "down", label, summary, value }: ShellMenuProps) {
+  const placement = direction === "up" ? "bottom-full mb-1" : "top-full mt-1";
   return (
     <details className="group relative min-w-0">
       <summary className="grid cursor-pointer list-none gap-1 rounded-md border border-border bg-background px-2.5 py-1.5 shadow-xs outline-none marker:hidden focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30">
@@ -35,7 +36,9 @@ export function ShellMenu({
           </>
         )}
       </summary>
-      <div className="absolute top-full right-0 left-0 z-20 mt-1 max-h-72 min-w-52 overflow-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg">
+      <div
+        className={`absolute right-0 left-0 z-20 grid max-h-72 min-w-52 gap-0.5 overflow-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg ${placement}`}
+      >
         {children}
       </div>
     </details>
@@ -53,24 +56,37 @@ export function ShellMenuGroup({ children, label }: { children: ReactNode; label
   );
 }
 
-export function ShellMenuLink({ children, href }: { children: ReactNode; href: string }) {
+/**
+ * A plain anchor that navigates through the router on an unmodified left
+ * click. Takes a finished href (search and hash included) so callers never
+ * have to disassemble one into TanStack's `to`/`search`/`hash` options.
+ */
+export function RouterAnchor({
+  href,
+  onClick,
+  ...props
+}: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) {
   const router = useRouter();
   const navigate = (event: MouseEvent<HTMLAnchorElement>) => {
+    onClick?.(event);
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
       return;
     event.preventDefault();
-    event.currentTarget.closest("details")?.removeAttribute("open");
     router.history.push(href);
   };
 
+  return <a {...props} href={href} onClick={navigate} />;
+}
+
+export function ShellMenuLink({ children, href }: { children: ReactNode; href: string }) {
   return (
-    <a
+    <RouterAnchor
       className="rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
       href={href}
-      onClick={navigate}
+      onClick={(event) => event.currentTarget.closest("details")?.removeAttribute("open")}
     >
       {children}
-    </a>
+    </RouterAnchor>
   );
 }
 

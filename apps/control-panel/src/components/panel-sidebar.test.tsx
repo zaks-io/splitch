@@ -163,16 +163,21 @@ describe("PanelSidebar", () => {
     expect(html).toContain('href="/acme-labs/agent-console/prod"');
   });
 
-  it("passes preserved search and hash through TanStack Link options", () => {
+  it("keeps search and hash on Environment pill hrefs", () => {
     currentHref = "/acme-labs/checkout-api/dev/flags?state=active#rule";
     const html = renderSidebar({
       app: { appId: "app_checkout", appSlug: "checkout-api", env: "dev" },
     });
 
     expect(html).toContain('href="/acme-labs/checkout-api/prod/flags?state=active#rule"');
-    expect(html).toContain('data-link-to="/acme-labs/checkout-api/prod/flags"');
-    expect(html).toContain('data-link-search="preserve"');
-    expect(html).toContain('data-link-hash="preserve"');
+  });
+
+  it("opens the Organization menu upward from the sidebar foot", () => {
+    const html = renderSidebar({ navigation: navigation(true) });
+
+    expect(html).toMatch(
+      /<details[^>]*>(?:(?!<\/details>).)*Organization(?:(?!<\/details>).)*bottom-full/su,
+    );
   });
 
   it("renders an App chooser without App sections or Environment pills on Org screens", () => {

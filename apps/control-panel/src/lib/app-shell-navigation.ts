@@ -62,7 +62,7 @@ const APP_SCOPE_PREFIX = "/$orgSlug/$appSlug/$env";
  * treated as shipped — the disguised-default shape ADR-0036 bans. Fail loud
  * instead of shipping that gap quietly.
  */
-function destinationSection(to: string): string {
+export function destinationSection(to: string): string {
   if (!to.startsWith(APP_SCOPE_PREFIX)) {
     throw new Error(
       `appSectionRegistry entry "${to}" is outside the App scope (${APP_SCOPE_PREFIX}); ` +

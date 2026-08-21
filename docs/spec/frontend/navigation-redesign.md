@@ -125,7 +125,8 @@ sidebar renders from so `shell-navigation.spec.ts` keeps proving every destinati
 Left: optional crumb (`ORGANIZATION` on Org screens), the title, the Environment segmented control
 where the page has one (Flags, Experiments), and the prod badge when the active Environment is
 prod. Right: primary action, a divider, rarer actions. Height 14 (3.5rem); prod tints the header
-with `bg-warning-muted/40`.
+with `bg-warning-muted/40`. The prod tint and badge land with the first Environment-scoped
+header (slice 3b); slice 1 ships the header without them so it carries no dead branch.
 
 ### Home `/{org}`
 
@@ -218,6 +219,11 @@ merged before the next starts unless marked parallel.
 - Done: every route renders in one shell; from a Flag detail page Members is one click; the
   sidebar order matches decision 2; `pnpm verify:ci --force` green; screenshots of Home, Flags
   (dev), Flags (prod), Members attached to the PR.
+
+- Follow-up (found in review, not blocking): `resolveNavigation` resolves Environments for every
+  App in every Organization of the session, one D1 query per App, and only the current App's
+  Environments are rendered. Slice 2 moves the App switcher to App-home hrefs, after which
+  navigation needs Environments for the current App only; scope the resolver then.
 
 ### Slice 2: App home (Flags across all Environments)
 

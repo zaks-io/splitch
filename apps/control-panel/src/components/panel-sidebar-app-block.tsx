@@ -1,6 +1,12 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { ShellMenu, ShellMenuGroup, ShellMenuLink } from "#components/shell-menu";
-import { environmentSwitchHref, scopedHref, type UrlScope } from "#lib/app-shell-navigation";
+import { useRouterState } from "@tanstack/react-router";
+import { RouterAnchor, ShellMenu, ShellMenuGroup, ShellMenuLink } from "#components/shell-menu";
+import {
+  appSectionRegistry,
+  destinationSection,
+  environmentSwitchHref,
+  scopedHref,
+  type UrlScope,
+} from "#lib/app-shell-navigation";
 import type { ScopeNavigation } from "#lib/loader-context";
 
 type NavigationOrg = ScopeNavigation["orgs"][number];
@@ -17,7 +23,9 @@ export type PanelSidebarAppBlockProps = {
   orgSlug: string;
 };
 
-const SECTION_KEYS = new Set(["flags", "experiments", "segments", "metrics", "settings"]);
+const SECTION_KEYS = new Set(
+  appSectionRegistry.map((destination) => destinationSection(destination.to)),
+);
 
 export function PanelSidebarAppBlock({ app, currentOrg, orgSlug }: PanelSidebarAppBlockProps) {
   const href = useRouterState({ select: (state) => state.location.href });
@@ -33,11 +41,7 @@ export function PanelSidebarAppBlock({ app, currentOrg, orgSlug }: PanelSidebarA
 
   return (
     <div className="grid gap-2 px-3 pt-3">
-      <ShellMenu
-        label="App"
-        summary={appSummary(app?.appSlug)}
-        value={app?.appSlug ?? "Choose an App"}
-      >
+      <ShellMenu summary={appSummary(app?.appSlug)}>
         <ShellMenuGroup label="Apps">
           {currentOrg.apps.map((candidate) => (
             <ShellMenuLink
@@ -57,41 +61,28 @@ export function PanelSidebarAppBlock({ app, currentOrg, orgSlug }: PanelSidebarA
           </span>
           {currentApp.environments.map((environment) => {
             const active = environment.env === scope.env;
-            const linkProps = environmentLinkProps(href, scope, environment.env);
             const stateClassName = active
               ? environment.guarded
                 ? "bg-warning-muted text-warning-foreground ring-1 ring-warning/40"
                 : "bg-primary text-primary-foreground"
               : "text-muted-foreground hover:bg-accent hover:text-accent-foreground";
             return (
-              <Link
+              <RouterAnchor
                 className={`flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 ${stateClassName}`}
                 data-environment-pill={environment.env}
+                href={environmentSwitchHref(href, scope, environment.env)}
                 key={environment.environmentId}
                 title={environment.name}
-                {...linkProps}
               >
                 {environment.guarded ? <span className="size-1.5 rounded-full bg-warning" /> : null}
                 {environment.env}
-              </Link>
+              </RouterAnchor>
             );
           })}
         </div>
       ) : null}
     </div>
   );
-}
-
-function environmentLinkProps(currentHref: string, scope: UrlScope, nextEnv: string) {
-  const destination = new URL(
-    environmentSwitchHref(currentHref, scope, nextEnv),
-    "https://panel.splitch.dev",
-  );
-  return {
-    hash: destination.hash ? (true as const) : undefined,
-    search: destination.search ? (true as const) : undefined,
-    to: destination.pathname,
-  };
 }
 
 function appSummary(appSlug: string | undefined) {

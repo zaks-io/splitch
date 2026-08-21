@@ -131,7 +131,7 @@ export function createEnvironmentResolver(repo: Repository): EnvironmentResolver
     async listEnvironments(appId) {
       const environments = await repo.identity.listEnvironments(appScope(appId));
       return environments.map((environment) => {
-        const policy = EnvironmentPolicySchema.parse(JSON.parse(environment.policy));
+        const policy = parseEnvironmentPolicy(appId, environment.id, environment.policy);
         return {
           environmentId: environment.id,
           env: environment.key,
@@ -141,6 +141,22 @@ export function createEnvironmentResolver(repo: Repository): EnvironmentResolver
       });
     },
   };
+}
+
+/**
+ * Names the row when a stored Policy fails to parse. The resolver runs for
+ * every App in the session, so a bare ZodError would lock the user out of
+ * every screen without saying which Environment is corrupt.
+ */
+function parseEnvironmentPolicy(appId: string, environmentId: string, raw: string) {
+  try {
+    return EnvironmentPolicySchema.parse(JSON.parse(raw));
+  } catch (error) {
+    throw new Error(
+      `Environment ${appId}/${environmentId} has an unreadable Policy: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
 }
 
 function orgRole(role: string): OrgRole {
