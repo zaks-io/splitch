@@ -162,7 +162,7 @@ test.describe("shared-preview functional API workflow", () => {
       {
         appId: smoke.config.smokeAppId,
         environmentId: smoke.config.smokeEnvironmentId,
-        flagId: smoke.config.smokeFlagKey,
+        flagKey: smoke.config.smokeFlagKey,
         evaluationContext: {
           targetingKey: smoke.uniqueKey("user"),
           idType: "user",
