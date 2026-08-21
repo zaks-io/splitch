@@ -43,11 +43,12 @@ import { EmptyState } from "@splitch/ui/state/empty-state";
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { StaleDataToast } from "@splitch/ui/state/stale-data-toast";
 import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { KitchenSinkForms } from "#components/kitchen-sink-forms";
 import { KitchenSinkOverlays } from "#components/kitchen-sink-overlays";
+import { loginRedirect } from "#lib/login-redirect";
 import { loadCurrentSession } from "#lib/session-functions";
-import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 
 type ThemeMode = "system" | "light" | "dark";
 
@@ -55,9 +56,7 @@ export const Route = createFileRoute("/kitchen-sink")({
   loader: async ({ location }) => {
     const result = await loadCurrentSession();
     if (result.kind === "unauthenticated") {
-      throw redirect({
-        href: `/auth/login?returnTo=${encodeURIComponent(location.href)}`,
-      });
+      throw loginRedirect(location.href);
     }
     return result.session;
   },

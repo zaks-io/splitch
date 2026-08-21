@@ -1,7 +1,8 @@
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { OrgBillingPage } from "#components/org-billing-page";
 import { OrgShell } from "#components/org-shell";
+import { loginRedirect } from "#lib/login-redirect";
 import { loadOrgBilling } from "#lib/org-billing-functions";
 import { loadCurrentSession } from "#lib/session-functions";
 
@@ -12,7 +13,7 @@ export const Route = createFileRoute("/$orgSlug/billing")({
       loadCurrentSession(),
     ]);
     if (billing.kind === "unauthenticated" || session.kind === "unauthenticated") {
-      throw redirect({ href: `/auth/login?returnTo=${encodeURIComponent(location.href)}` });
+      throw loginRedirect(location.href);
     }
     return {
       view: billing.kind === "ok" ? billing.view : null,

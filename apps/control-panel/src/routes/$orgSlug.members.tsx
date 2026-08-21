@@ -1,8 +1,9 @@
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { OrgMembersPage } from "#components/org-members-page";
 import { OrgShell } from "#components/org-shell";
 import { OrganizationsTruncatedNotice } from "#components/organizations-truncated-notice";
+import { loginRedirect } from "#lib/login-redirect";
 import { loadOrgMembers } from "#lib/org-members-functions";
 import { loadCurrentSession } from "#lib/session-functions";
 
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/$orgSlug/members")({
       loadCurrentSession(),
     ]);
     if (members.kind === "unauthenticated" || session.kind === "unauthenticated") {
-      throw redirect({ href: `/auth/login?returnTo=${encodeURIComponent(location.href)}` });
+      throw loginRedirect(location.href);
     }
     return {
       view: members.kind === "ok" ? members.view : null,

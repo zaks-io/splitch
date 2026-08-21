@@ -3,6 +3,7 @@ import { AccessDeniedPage } from "@splitch/ui/state/access-denied-page";
 import { NotFoundPage } from "@splitch/ui/state/not-found-page";
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
+import { createFileRoute, notFound } from "@tanstack/react-router";
 import { AppShell } from "#components/app-shell";
 import { deferredDestinationAt } from "#lib/app-shell-navigation";
 import {
@@ -10,13 +11,13 @@ import {
   isAccessDeniedError,
   type ScopedLoaderContext,
 } from "#lib/loader-context";
+import { loginRedirect } from "#lib/login-redirect";
 import {
   configureControlPanelSentryScope,
   reportExpectedDomainFailure,
   reportRouteError,
 } from "#lib/panel-observability";
 import { loadScopedSession } from "#lib/session-functions";
-import { createFileRoute, notFound, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
   loader: async ({ location, params }): Promise<ScopedLoaderContext> => {
@@ -80,10 +81,4 @@ function AppScopeRoute() {
   const context = Route.useLoaderData();
   const { queryClient } = Route.useRouteContext();
   return <AppShell context={context} queryClient={queryClient} />;
-}
-
-function loginRedirect(returnTo: string): ReturnType<typeof redirect> {
-  return redirect({
-    href: `/auth/login?returnTo=${encodeURIComponent(returnTo)}`,
-  });
 }

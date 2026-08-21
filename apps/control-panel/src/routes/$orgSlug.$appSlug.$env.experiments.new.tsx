@@ -1,10 +1,11 @@
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
-import { createFileRoute, notFound, redirect } from "@tanstack/react-router";
+import { createFileRoute, notFound } from "@tanstack/react-router";
 import { ExperimentCreateForm } from "#components/experiment-create-form";
 import { scopedHref } from "#lib/app-shell-navigation";
 import { loadControlPanelFlags } from "#lib/control-plane-flag-functions";
 import { AccessDeniedError } from "#lib/loader-context";
+import { loginRedirect } from "#lib/login-redirect";
 import { reportRouteError } from "#lib/panel-observability";
 import { loadScopedSession } from "#lib/session-functions";
 
@@ -12,7 +13,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments/new")(
   loader: async ({ location, params }) => {
     const scoped = await loadScopedSession({ data: params });
     if (scoped.kind === "unauthenticated") {
-      throw redirect({ href: `/auth/login?returnTo=${encodeURIComponent(location.href)}` });
+      throw loginRedirect(location.href);
     }
     if (scoped.kind === "forbidden") throw new AccessDeniedError();
     if (scoped.kind === "notFound") throw notFound();
