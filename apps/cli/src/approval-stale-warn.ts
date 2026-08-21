@@ -72,16 +72,48 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Louder remediation when the API refusal already names frozen fields. */
-export function remediationForServerError(error: ErrorResponse): string {
+/**
+ * Louder remediation when the API refusal already names frozen fields.
+ *
+ * `commandSupportsConfirm` must be the invoking command's own
+ * `CliCommandDefinition.supportsConfirm` (see command-registry.ts): only 5 of
+ * the 9 operations that can answer APPROVAL_REVIEW_REQUIRED wire --confirm at
+ * all, so the copy must not invite a retry the command can never honor.
+ */
+export function remediationForServerError(
+  error: ErrorResponse,
+  commandSupportsConfirm: boolean,
+): string {
   const frozen = runFrozenRemediation(error);
   if (frozen) return frozen;
   if (error.code === "APPROVAL_REQUEST_STALE") {
     return "Refresh the target and re-propose; a stale Approval Request cannot be applied";
   }
+  const reviewRequired = approvalReviewRequiredRemediation(error, commandSupportsConfirm);
+  if (reviewRequired) return reviewRequired;
   const undetermined = undeterminedChangeRemediation(error);
   if (undetermined) return undetermined;
   return "Correct the reported API failure and retry the command";
+}
+
+const CONFIRM_HINT = "rerun the same command with --confirm if you hold approver rights";
+
+function approvalReviewRequiredRemediation(
+  error: ErrorResponse,
+  commandSupportsConfirm: boolean,
+): string | null {
+  if (error.code !== "APPROVAL_REVIEW_REQUIRED") return null;
+  const requestId =
+    "approvalRequestId" in error.details && typeof error.details.approvalRequestId === "string"
+      ? error.details.approvalRequestId
+      : null;
+  if (!requestId) {
+    // The request id may be missing from a malformed response; only add the
+    // --confirm hint when this command actually wires the flag.
+    return commandSupportsConfirm ? `Correct the reported API failure, or ${CONFIRM_HINT}` : null;
+  }
+  const reviewClause = `Review Approval Request ${requestId} (splitch approval-requests get ${requestId})`;
+  return commandSupportsConfirm ? `${reviewClause}, or ${CONFIRM_HINT}` : reviewClause;
 }
 
 function runFrozenRemediation(error: ErrorResponse): string | null {

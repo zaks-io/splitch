@@ -4,7 +4,7 @@ import { remediationForServerError, warnStaleApprovalDiscard } from "./approval-
 import { withAuthorizationRetry } from "./auth.js";
 import type { TokenBinding } from "./auth-binding.js";
 import { missingPositionalError } from "./command-positionals.js";
-import type { CliCommandDefinition } from "./command-registry.js";
+import { commandSupportsConfirm, type CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { requireAppScope, requireEnvironmentScope } from "./context.js";
 import {
@@ -84,7 +84,7 @@ export async function executeFlagsVerify(
     );
     if (!clientKeyResult.ok) {
       emit(io, invocation.flags.json, clientKeyResult.error);
-      writeServerError(io, clientKeyResult.error);
+      writeServerError(io, clientKeyResult.error, "client_key_get");
       return { exitCode: EXIT_API, payload: clientKeyResult.error };
     }
     const clientKey = clientKeyResult.data as { keyMaterial: string };
@@ -226,7 +226,7 @@ export async function executeApiOperation(
     );
     if (!payload.ok) {
       emit(io, invocation.flags.json, payload.error);
-      writeServerError(io, payload.error);
+      writeServerError(io, payload.error, operationId);
       return { exitCode: EXIT_API, payload: payload.error };
     }
     const projected = project ? project(payload.data) : payload.data;
@@ -300,7 +300,7 @@ export function handleExecutionError(error: unknown, io: CliIo): CliResult {
   return { exitCode: EXIT_USAGE };
 }
 
-export function writeServerError(io: CliIo, error: ErrorResponse): void {
+export function writeServerError(io: CliIo, error: ErrorResponse, operationId: string): void {
   const parsedCode = ErrorCodeSchema.safeParse(error.code);
   if (!parsedCode.success) {
     writeCliError(io, {
@@ -313,6 +313,6 @@ export function writeServerError(io: CliIo, error: ErrorResponse): void {
   writeCliError(io, {
     code: parsedCode.data,
     causeSummary: error.message,
-    remediation: remediationForServerError(error),
+    remediation: remediationForServerError(error, commandSupportsConfirm(operationId)),
   });
 }
