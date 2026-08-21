@@ -140,7 +140,7 @@ function renderSidebar(props: Partial<ComponentProps<typeof PanelSidebar>> = {})
 }
 
 describe("PanelSidebar", () => {
-  it("renders App sections and preserves the current section across compatible Apps", () => {
+  it("renders App sections and sends the App switcher to each App home", () => {
     currentHref = "/acme-labs/checkout-api/dev/flags";
     const html = renderSidebar({
       app: { appId: "app_checkout", appSlug: "checkout-api", env: "dev" },
@@ -159,8 +159,8 @@ describe("PanelSidebar", () => {
     expect(guardedHtml.match(/<a[^>]*data-environment-pill="prod"[^>]*>/u)?.[0]).toContain(
       "bg-warning-muted",
     );
-    expect(html).toContain('href="/acme-labs/billing-api/dev/flags"');
-    expect(html).toContain('href="/acme-labs/agent-console/prod"');
+    expect(html).toContain('href="/acme-labs/billing-api"');
+    expect(html).toContain('href="/acme-labs/agent-console"');
   });
 
   it("keeps search and hash on Environment pill hrefs", () => {
@@ -189,6 +189,16 @@ describe("PanelSidebar", () => {
     expect(html).toContain("billing-api");
     expect(html).not.toContain('aria-label="App sections"');
     expect(html).not.toContain("data-environment-pill");
+  });
+
+  it("renders Environment pills with no active pill or sections on the App home", () => {
+    currentHref = "/acme-labs/checkout-api";
+    const html = renderSidebar({ app: { appId: "app_checkout", appSlug: "checkout-api" } });
+
+    expect(html).toContain('href="/acme-labs/checkout-api/dev/flags"');
+    expect(html).toContain('href="/acme-labs/checkout-api/prod/flags"');
+    expect(html).not.toContain('aria-label="App sections"');
+    expect(html.match(/data-environment-pill="dev"[^>]*bg-primary/u)).toBeNull();
   });
 
   it("renders exactly one POST sign-out form", () => {

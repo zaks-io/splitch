@@ -2,9 +2,11 @@
 
 ## Scope roots in the URL
 
-Three scope segments, all in the URL, never in hidden session state:
+The App home has two scope segments; every Environment-scoped destination has three. All scope is
+in the URL, never in hidden session state:
 
 ```
+/{orgSlug}/{appSlug}                         App home: Flags across all Environments
 /{orgSlug}/{appSlug}/{env}/{section}/{...}
 ```
 
@@ -13,7 +15,8 @@ Three scope segments, all in the URL, never in hidden session state:
   and lands you on that org's App list. Apps are **never merged across orgs** in any list.
 - **`appSlug`** — the active App, the spine (see [appid-is-the-spine.md](./appid-is-the-spine.md)).
 - **`env`** — the active Environment (dev, prod, …), changed via the **environment switcher**
-  (ADR-0027). Per-Environment Flag Configuration, experiments, and data hang off this segment.
+  (ADR-0027). It is absent only on the App home, which shows every Environment. Per-Environment
+  Flag Configuration, experiments, and data hang off this segment.
 
 `orgSlug`/`appSlug`/`env` are **human/agent-readable handles only** — resolved to `orgId`/`appId`/
 `environment_id` once at the loader; everything below speaks IDs, and no cache, DO, or data lookup is
@@ -32,11 +35,11 @@ not exist _under this org_), rather than switching the user's org out from under
 
 ## The sidebar
 
-- **App switcher, top** — lists Apps within the **current Organization only**. On an App screen,
-  switching Apps preserves the current section when the target App has the same Environment;
-  otherwise it lands on the target App's first Environment.
+- **App switcher, top** — lists Apps within the **current Organization only**. Switching Apps lands
+  on the target App home without inventing an Environment.
 - **Environment pills, below the App** — list the active App's Environments and preserve the current
-  path, query, and hash when `env` changes. They render only when an App is active.
+  path, query, and hash when `env` changes. They also render on the App home with no active pill;
+  from there each opens that Environment's Flags list.
 - **Organization switcher, bottom** — present only for users in more than one Organization. It
   changes `orgSlug` and lands on that Organization's App list. A single-Organization user sees the
   Organization name without a switcher.
@@ -62,8 +65,9 @@ pills.
 Org-level concerns live at the org root, one level up from any App, as three screens (detailed in
 [screen-inventory.md](./screen-inventory.md)):
 
-- `/{orgSlug}` — the **App list** (org landing); each App card is the Environment picker (App name is
-  a label, one link per Environment, no implicit default).
+- `/{orgSlug}` — the **App list** (org landing); each App name links to the App home and each
+  Environment links to its Overview.
+- `/{orgSlug}/{appSlug}` — **Flags across all Environments**, the one Environment-less App URL.
 - `/{orgSlug}/members` — **Org Members** (distinct from per-App membership, which lives under App
   Settings).
 - `/{orgSlug}/billing` — **Billing & Usage** (Evaluation-quota usage is real v1; payment is the

@@ -8,28 +8,39 @@ import { CreateFlagSuccess } from "./create-flag-success";
 export function CreateFlagDialog({
   appId,
   environmentId,
+  onClosedAfterCreate,
+  settingsHref,
 }: {
   appId: string;
   environmentId: string;
+  settingsHref: string;
+  onClosedAfterCreate?: (key: string) => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [createdKey, setCreatedKey] = useState<string>();
 
-  function changeOpen(nextOpen: boolean) {
+  async function changeOpen(nextOpen: boolean) {
     setOpen(nextOpen);
-    if (!nextOpen) {
-      if (createdKey) void router.invalidate();
-      setCreatedKey(undefined);
-    }
+    if (nextOpen || !createdKey) return;
+
+    const key = createdKey;
+    await router.invalidate();
+    onClosedAfterCreate?.(key);
+    setCreatedKey(undefined);
   }
 
   return (
-    <Dialog onOpenChange={changeOpen} open={open}>
+    <Dialog onOpenChange={(nextOpen) => void changeOpen(nextOpen)} open={open}>
       <DialogTrigger render={<Button />}>Create Flag</DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         {createdKey ? (
-          <CreateFlagSuccess appId={appId} environmentId={environmentId} flagKey={createdKey} />
+          <CreateFlagSuccess
+            appId={appId}
+            environmentId={environmentId}
+            flagKey={createdKey}
+            settingsHref={settingsHref}
+          />
         ) : (
           <CreateFlagForm appId={appId} environmentId={environmentId} onCreated={setCreatedKey} />
         )}

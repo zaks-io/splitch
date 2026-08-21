@@ -6,7 +6,6 @@ import {
   DialogTitle,
 } from "@splitch/ui/components/dialog";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "@tanstack/react-router";
 import { parityHint } from "#lib/parity-hints";
 import { exposureStatusDisplayState } from "#lib/exposure-status-polling";
 import { environmentExposureStatusQuery } from "#lib/exposure-status-query";
@@ -27,13 +26,13 @@ export function CreateFlagSuccess({
   appId,
   environmentId,
   flagKey,
+  settingsHref,
 }: {
   appId: string;
   environmentId: string;
   flagKey: string;
+  settingsHref: string;
 }) {
-  const params = useParams({ strict: false });
-  const settingsHref = `/${params.orgSlug}/${params.appSlug}/${params.env}/settings`;
   const settings = useQuery(environmentSettingsQuery({ appId, environmentId }));
   const exposureStatus = useQuery(environmentExposureStatusQuery({ appId, environmentId }));
   const exposureDisplayState = exposureStatusDisplayState(exposureStatus);

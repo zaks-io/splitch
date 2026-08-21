@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { promotionSources, resolvePromotionSource } from "./promotion-source";
+import { promotionPair, promotionSources, resolvePromotionSource } from "./promotion-source";
 
 const navigation = {
   orgs: [
@@ -46,5 +46,20 @@ describe("Promotion sources", () => {
       environmentId: "env_dev",
       env: "dev",
     });
+  });
+});
+
+describe("Promotion pair", () => {
+  const environments = navigation.orgs[0]?.apps[0]?.environments ?? [];
+
+  it("compares the first Environment with the last", () => {
+    expect(promotionPair(environments)).toEqual({
+      source: { environmentId: "env_dev", env: "dev" },
+      target: { environmentId: "env_prod", env: "prod" },
+    });
+  });
+
+  it("has no pair for one Environment", () => {
+    expect(promotionPair(environments.slice(0, 1))).toBeNull();
   });
 });

@@ -226,8 +226,8 @@ test.describe("Control Panel local full-stack harness", () => {
     await page.goto("/acme-labs/checkout-api/dev");
 
     await waitForHydration(page);
-    await chooseScope(page, "App", "/acme-labs/billing-api/prod");
-    await expect(page).toHaveURL("/acme-labs/billing-api/prod");
+    await chooseScope(page, "App", "/acme-labs/billing-api");
+    await expect(page).toHaveURL("/acme-labs/billing-api");
     await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute(
       "data-app-id",
       "app_billing_e2e",

@@ -118,6 +118,58 @@ test.describe("per-Environment Flags", () => {
   });
 });
 
+test.describe("App home", () => {
+  test.beforeEach(async ({ context }) => {
+    await context.addCookies([{ name: "__session", value: LOCAL_E2E_SESSION_TOKEN, url: origin }]);
+  });
+
+  test("shows the matrix, Promotion destination, and prod Policy gate", async ({ page }) => {
+    await page.goto("/acme-labs/checkout-api");
+    await waitForHydration(page);
+    await expect(page.locator("[data-app-shell='ready']")).toBeVisible();
+    const headers = page.locator("table thead");
+    await expect(headers).toContainText("dev");
+    await expect(headers).toContainText("prod");
+    const row = page.locator("[data-flag-key='new-checkout']");
+    await expect(row).toBeVisible();
+    await expect(row.locator("[data-flag-promote-entry]")).toHaveAttribute(
+      "href",
+      "/acme-labs/checkout-api/integrity/flags/new-checkout/promote?from=dev",
+    );
+    const toggle = page.locator(
+      "[data-flag-key='new-checkout'] [data-matrix-cell='prod'] [data-kill-switch-input='true']",
+    );
+    const wasChecked = await toggle.isChecked();
+    await toggle.click();
+    const gate = page.locator("[data-approval-gate]");
+    await expect(gate).toBeVisible();
+    await expect(gate).toContainText("Cancelling leaves the proposal pending in the audit log");
+    await gate.getByRole("button", { name: "Cancel" }).click();
+    await expect(gate).toHaveCount(0);
+    await expect(toggle).toBeChecked({ checked: wasChecked });
+  });
+
+  test("returns a created Flag to a highlighted App-home row", async ({ page }, testInfo) => {
+    const flagKey = `billing-app-home-${testInfo.retry}`;
+    await page.goto("/acme-labs/billing-api");
+    await waitForHydration(page);
+    await page.getByRole("button", { name: "Create Flag" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Flag key").fill(flagKey);
+    await dialog.getByRole("button", { name: "Create Flag" }).click();
+    await expect(dialog.getByRole("heading", { name: "Connect your code" })).toBeVisible();
+    await dialog
+      .locator("[data-slot='dialog-footer']")
+      .getByRole("button", { name: "Close" })
+      .click();
+    await expect(page).toHaveURL(`/acme-labs/billing-api?created=${flagKey}`);
+    await expect(page.locator(`[data-flag-key='${flagKey}']`)).toHaveAttribute(
+      "data-flag-created",
+      "true",
+    );
+  });
+});
+
 test.describe("Flag detail", () => {
   test.beforeEach(async ({ context }) => {
     await context.addCookies([{ name: "__session", value: LOCAL_E2E_SESSION_TOKEN, url: origin }]);

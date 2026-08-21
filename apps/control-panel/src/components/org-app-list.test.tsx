@@ -40,15 +40,13 @@ const ready: AppAttention = {
 };
 
 describe("App card", () => {
-  it("is the Environment picker: one link per Environment, and none to the bare App", () => {
+  it("links the App home and each Environment", () => {
     const html = card(ready);
 
     expect(html).toContain('href="/acme-labs/checkout-api/dev"');
     expect(html).toContain('href="/acme-labs/checkout-api/prod"');
-    // The App name is a heading, not a link. Nothing offers an App without an
-    // Environment, because that destination would have to guess one.
     expect(html).toContain("<h3");
-    expect(html).not.toContain('href="/acme-labs/checkout-api"');
+    expect(html).toContain('href="/acme-labs/checkout-api"');
   });
 
   it("marks only the Environment that needs attention", () => {

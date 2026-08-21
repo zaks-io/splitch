@@ -7,13 +7,12 @@ import { ApprovalRefusalNotice } from "./approval/approval-refusal-notice";
  * The single place a screen reports what the Worker said about a Policy-gated
  * write.
  *
- * One outcome region per screen, because each has one write path: an ungated
- * apply, a gated confirm, or a structured refusal. Per-control error slots would
- * let two controls disagree about the state of one Flag.
+ * One outcome region per write controller: an ungated apply, a gated confirm, or
+ * a structured refusal. Detail and Promotion each have one controller; the App
+ * matrix has one Environment-pinned controller per cell.
  *
- * Both consumers — the Flag detail editor and the Promotion screen — reach the
- * same three states, so they render through this one component rather than two
- * that could drift on what a refusal or a pending record looks like.
+ * Every consumer reaches the same three states, so they render through this component rather than
+ * separate copies that could drift on what a refusal or a pending record looks like.
  */
 export type GatedWrite = {
   readonly state: GatedWritePhase;

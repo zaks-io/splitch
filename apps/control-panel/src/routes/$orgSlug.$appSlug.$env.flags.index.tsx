@@ -20,7 +20,12 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/")({
 
     const result = await loadControlPanelFlags({ data: scoped.context.scope });
     if (!result.ok) throw new Error(result.error.message);
+    const environments = scoped.context.navigation.orgs
+      .find((org) => org.orgId === scoped.context.scope.orgId)
+      ?.apps.find((app) => app.appId === scoped.context.scope.appId)?.environments;
+    if (!environments) throw new Error("Flags navigation is missing the current App");
     return {
+      environments,
       items: result.data.items,
       readLimit: result.data.readLimit,
       readTruncated: result.data.readTruncated,
@@ -36,16 +41,19 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/")({
 });
 
 function FlagsSectionRoute() {
-  const { items, readLimit, readTruncated, scope } = Route.useLoaderData();
+  const { environments, items, readLimit, readTruncated, scope } = Route.useLoaderData();
 
   return (
     <FlagsPage
       appId={scope.appId}
+      appSlug={scope.appSlug}
       env={scope.env}
+      environments={environments}
       environmentId={scope.environmentId}
       items={items}
       readLimit={readLimit}
       readTruncated={readTruncated}
+      orgSlug={scope.orgSlug}
       scopeHref={scopedHref(scope)}
     />
   );

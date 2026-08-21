@@ -7,7 +7,13 @@ import {
 } from "#components/panel-sidebar-link-styles";
 import { visibleAppSections } from "#lib/app-shell-navigation";
 
-export function PanelSidebarSections({ app, orgSlug }: { app: ActiveSidebarApp; orgSlug: string }) {
+export function PanelSidebarSections({
+  app,
+  orgSlug,
+}: {
+  app: ActiveSidebarApp & { env: string };
+  orgSlug: string;
+}) {
   return (
     <nav
       aria-label="App sections"

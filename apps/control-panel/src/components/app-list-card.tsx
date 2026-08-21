@@ -1,4 +1,5 @@
 import { EnvironmentLink } from "#components/environment-link";
+import { appHomeHref } from "#lib/app-shell-navigation";
 import {
   appAttentionSeverity,
   appAttentionSummary,
@@ -6,12 +7,6 @@ import {
   type OrgAppListApp,
 } from "#lib/org-app-list";
 
-/**
- * The card IS the Environment picker. The App name is a heading, not a link,
- * because everything below an App is `(appId, environmentId)`-scoped: a bare App
- * link would have to invent a default Environment, and prod is never a silent
- * destination.
- */
 export function AppListCard({ app, orgSlug }: { app: OrgAppListApp; orgSlug: string }) {
   const summary = appAttentionSummary(app);
   const severity = appAttentionSeverity(app);
@@ -32,14 +27,21 @@ export function AppListCard({ app, orgSlug }: { app: OrgAppListApp; orgSlug: str
       data-app-card={app.appSlug}
     >
       <header className="grid gap-1">
-        <h3 className="font-semibold text-foreground text-lg tracking-tight">{app.appSlug}</h3>
+        <h3 className="font-semibold text-foreground text-lg tracking-tight">
+          <a
+            className="underline underline-offset-4 hover:no-underline"
+            href={appHomeHref({ orgSlug, appSlug: app.appSlug })}
+          >
+            {app.appSlug}
+          </a>
+        </h3>
         <p
           className={summaryClassName}
           data-app-attention-severity={severity}
           data-app-attention-summary={app.appSlug}
         >
           {summary}
-          {unavailable && app.attention.kind === "unavailable" ? ` — ${app.attention.message}` : ""}
+          {unavailable && app.attention.kind === "unavailable" ? `: ${app.attention.message}` : ""}
         </p>
       </header>
 

@@ -48,6 +48,13 @@ export type UrlScope = {
   env: string;
 };
 
+export type AppUrlScope = { orgSlug: string; appSlug: string };
+
+/** The App home: Flags across every Environment. The only App URL without an Environment. */
+export function appHomeHref(scope: AppUrlScope): string {
+  return `/${encodeURIComponent(scope.orgSlug)}/${encodeURIComponent(scope.appSlug)}`;
+}
+
 export function scopedHref(scope: UrlScope, section = ""): string {
   const root = `/${encodeURIComponent(scope.orgSlug)}/${encodeURIComponent(scope.appSlug)}/${encodeURIComponent(scope.env)}`;
   return section ? `${root}/${section.replace(/^\/+/, "")}` : root;
@@ -62,7 +69,7 @@ const APP_SCOPE_PREFIX = "/$orgSlug/$appSlug/$env";
  * treated as shipped — the disguised-default shape ADR-0036 bans. Fail loud
  * instead of shipping that gap quietly.
  */
-export function destinationSection(to: string): string {
+function destinationSection(to: string): string {
   if (!to.startsWith(APP_SCOPE_PREFIX)) {
     throw new Error(
       `appSectionRegistry entry "${to}" is outside the App scope (${APP_SCOPE_PREFIX}); ` +

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AccessDeniedError,
   type EnvironmentResolver,
+  resolveAppLoaderContext,
   resolveScopedLoaderContext,
 } from "./loader-context";
 import type { SessionPrincipal } from "./session";
@@ -92,6 +93,62 @@ describe("scoped loader context", () => {
       ),
     ).rejects.toMatchObject({ resource: "environment", status: 404 });
     expect(calls).toBe(1);
+  });
+});
+
+describe("App-scoped loader context", () => {
+  it("resolves an App and all of its Environments without choosing one", async () => {
+    const environments = [
+      { environmentId: "env_1", env: "dev", guarded: false, name: "Development" },
+      { environmentId: "env_2", env: "prod", guarded: true, name: "Production" },
+    ];
+
+    const context = await resolveAppLoaderContext(
+      sessionPrincipal(),
+      { orgSlug: "acme", appSlug: "checkout-api" },
+      resolverFor(environments),
+    );
+
+    expect(context.scope).toMatchObject({
+      orgId: "org_1",
+      appId: "app_1",
+      appSlug: "checkout-api",
+      environments,
+    });
+  });
+
+  it("denies an Organization outside the session before resolving navigation", async () => {
+    let calls = 0;
+    await expect(
+      resolveAppLoaderContext(
+        sessionPrincipal(),
+        { orgSlug: "other-org", appSlug: "checkout-api" },
+        resolverFor(null, () => {
+          calls += 1;
+        }),
+      ),
+    ).rejects.toBeInstanceOf(AccessDeniedError);
+    expect(calls).toBe(0);
+  });
+
+  it("reports an unknown App", async () => {
+    await expect(
+      resolveAppLoaderContext(
+        sessionPrincipal(),
+        { orgSlug: "acme", appSlug: "unknown" },
+        resolverFor(null),
+      ),
+    ).rejects.toMatchObject({ resource: "app", status: 404 });
+  });
+
+  it("reports an App without an Environment as not found", async () => {
+    await expect(
+      resolveAppLoaderContext(
+        sessionPrincipal(),
+        { orgSlug: "acme", appSlug: "checkout-api" },
+        resolverFor([]),
+      ),
+    ).rejects.toMatchObject({ resource: "environment", status: 404 });
   });
 });
 

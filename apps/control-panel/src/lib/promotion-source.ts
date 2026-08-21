@@ -10,6 +10,17 @@
 
 export type PromotionSourceOption = { readonly env: string; readonly environmentId: string };
 
+export function promotionPair<T extends { env: string; environmentId: string }>(
+  environments: readonly T[],
+): { source: T; target: T } | null {
+  const target = environments.at(-1);
+  if (!target) return null;
+  const source = environments.find(
+    (environment) => environment.environmentId !== target.environmentId,
+  );
+  return source ? { source, target } : null;
+}
+
 type AppScopeNavigation = {
   orgs: Array<{
     apps: Array<{

@@ -20,6 +20,7 @@ describe("Flags page", () => {
               enabled: true,
               availableVariantCount: 2,
               rolloutPercentages: [25],
+              controllingExperiment: null,
             },
           },
         ]}
@@ -40,7 +41,11 @@ describe("Flags page", () => {
 
   it("teaches the Flag concept and the CLI/MCP equivalents in the empty state", () => {
     const html = renderToStaticMarkup(
-      <FlagsEmptyState appId="app_checkout" environmentId="env_dev" />,
+      <FlagsEmptyState
+        appId="app_checkout"
+        environmentId="env_dev"
+        settingsHref="/acme-labs/checkout-api/dev/settings"
+      />,
     );
 
     expect(html).toContain("Create your first Flag");
