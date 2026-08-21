@@ -74,7 +74,10 @@ describe("DurableConfigUpdates", () => {
     for (const handler of handlers) handler();
     await expect(lifetime).resolves.toBeUndefined();
   });
+});
 
+/** The 25s pin window: an open socket stops counting as a live socket. */
+describe("DurableConfigUpdates pin window", () => {
   it("re-subscribes and drops the Environment cache once the pin outlives the waitUntil window", async () => {
     const harness = pinHarness();
 
@@ -149,6 +152,61 @@ describe("DurableConfigUpdates", () => {
     expect(harness.readFlagConfigForEvaluation).toHaveBeenCalledTimes(3);
   });
 
+  it("fulfils every concurrent read of a Config Store outage", async () => {
+    const harness = pinHarness();
+
+    await harness.provider.getFlag("app-A", "env-1", "f");
+    harness.toggleOff();
+    harness.refuseConnects(3);
+    harness.advance(25_000);
+
+    // Siblings share the owner's in-flight connect, so they have to share its
+    // degrade too instead of getting the rejection handed straight back.
+    const reads = await Promise.allSettled(
+      Array.from({ length: 3 }, () => harness.provider.getFlag("app-A", "env-1", "f")),
+    );
+
+    expect(reads).toEqual(
+      Array.from({ length: 3 }, () => ({
+        status: "fulfilled",
+        value: expect.objectContaining({ enabled: false }),
+      })),
+    );
+    expect(harness.fetch).toHaveBeenCalledTimes(2);
+    expect(harness.logger.error).toHaveBeenCalledTimes(3);
+  });
+
+  it("re-subscribes when the live socket closes inside the pin window", async () => {
+    const harness = pinHarness();
+
+    await harness.provider.getFlag("app-A", "env-1", "f");
+    harness.invalidateEnvironment.mockClear();
+    for (const handler of closeHandlers(harness.sockets[0])) handler();
+    harness.toggleOff();
+
+    await expect(harness.provider.getFlag("app-A", "env-1", "f")).resolves.toMatchObject({
+      enabled: false,
+    });
+    expect(harness.fetch).toHaveBeenCalledTimes(2);
+    expect(harness.waitUntil).toHaveBeenCalledTimes(2);
+    expect(harness.invalidateEnvironment).toHaveBeenCalledWith("app-A", "env-1");
+  });
+
+  it("logs the re-pin so a healthy isolate is observable", async () => {
+    const harness = pinHarness();
+
+    await harness.provider.getFlag("app-A", "env-1", "f");
+    expect(harness.logger.info).not.toHaveBeenCalled();
+    harness.advance(25_000);
+    await harness.provider.getFlag("app-A", "env-1", "f");
+
+    expect(harness.logger.info).toHaveBeenCalledWith("evaluation_config_resubscribed", {
+      appId: "app-A",
+      environmentId: "env-1",
+      pinAgeMs: 25_000,
+    });
+  });
+
   it("ignores a close from the socket the re-subscribe replaced", async () => {
     const harness = pinHarness();
 
@@ -176,7 +234,7 @@ function pinHarness() {
   let enabled = true;
   let refusals = 0;
   const sockets: ReturnType<typeof fakeSocket>[] = [];
-  const logger = { error: vi.fn() };
+  const logger = { error: vi.fn(), info: vi.fn() };
   const waitUntil = vi.fn();
   const fetch = vi.fn(async () => {
     if (refusals > 0) {

@@ -62,7 +62,7 @@ export class DurableConfigUpdates {
 
   constructor(
     private readonly namespace: ConfigStoreNamespace,
-    private readonly logger: Pick<Console, "error"> = console,
+    private readonly logger: Pick<Console, "error" | "info"> = console,
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -88,16 +88,43 @@ export class DurableConfigUpdates {
     state.listener = listener;
     this.subscriptions.set(key, state);
 
-    if (state.connected && this.now() - state.pinnedAt < PIN_WINDOW_MS) return;
-    if (state.connecting !== undefined) return state.connecting;
+    const pinAgeMs = this.now() - state.pinnedAt;
+    if (state.connected && pinAgeMs < PIN_WINDOW_MS) return;
+    if (state.connecting !== undefined) {
+      return this.settle(appId, environmentId, state, state.connecting, state.everConnected);
+    }
 
     // A pin older than the window has been canceled, which kills the socket's
     // I/O context without ever firing close or error, so `connected` is not
     // liveness. Reconnect and re-pin on the request that got us here.
     const reSubscribe = state.everConnected;
+    if (reSubscribe) {
+      // A healthy isolate re-pins on schedule, so this is the only signal that
+      // PIN_WINDOW_MS still sits below the platform's waitUntil cancellation.
+      this.logger.info("evaluation_config_resubscribed", { appId, environmentId, pinAgeMs });
+    }
     state.connected = false;
     const connecting = this.connect(appId, environmentId, state);
     state.connecting = connecting;
+    try {
+      await this.settle(appId, environmentId, state, connecting, reSubscribe);
+    } finally {
+      if (state.connecting === connecting) state.connecting = undefined;
+    }
+  }
+
+  /**
+   * Siblings share the owner's connect, so they must share its failure handling
+   * too. Awaiting `state.connecting` directly hands a sibling the rejection and
+   * fails it loud even when the subscription is degradable.
+   */
+  private async settle(
+    appId: string,
+    environmentId: string,
+    state: Subscription,
+    connecting: Promise<void>,
+    reSubscribe: boolean,
+  ): Promise<void> {
     try {
       await connecting;
     } catch (cause) {
@@ -111,8 +138,6 @@ export class DurableConfigUpdates {
         cause,
       });
       state.listener.onReconnect();
-    } finally {
-      if (state.connecting === connecting) state.connecting = undefined;
     }
   }
 
@@ -152,13 +177,16 @@ export class DurableConfigUpdates {
     socket.addEventListener("message", (event) => this.receive(state, socket, event.data));
     socket.addEventListener("close", () => this.disconnect(state, socket));
     socket.addEventListener("error", () => this.disconnect(state, socket));
-    socket.accept();
+    // Adopt the socket before accepting it, so a close dispatched during accept
+    // matches the identity guard and retires this subscription instead of
+    // leaving `connected` true on a dead socket.
     state.socket = socket;
     state.connected = true;
     state.everConnected = true;
     // Pin the originating request's I/O context for the socket lifetime so
     // DeltaNudge delivery survives across Evaluation requests in this isolate.
     state.pinnedAt = this.now();
+    socket.accept();
     this.waitUntil?.(untilSocketClosed(socket));
     state.listener.onReconnect();
   }

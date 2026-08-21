@@ -78,6 +78,10 @@ invalidate. That degraded mode holds for every request of an outage, not only th
 found the pin expired, so a Config Store that refuses upgrades slows nudge delivery without taking
 evaluation down.
 
+Every re-subscribe logs `evaluation_config_resubscribed` with the pin age, so a healthy isolate is
+observably re-pinning on schedule and a pin window that drifts above the platform's cancellation
+bound shows up as a missing or over-age signal rather than as silent staleness.
+
 ## Scope
 
 Live-update DO covers **config/operational state only** — Flag edits, Experiment edits, Run state
