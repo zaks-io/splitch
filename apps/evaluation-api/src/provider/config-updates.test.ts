@@ -76,10 +76,114 @@ describe("DurableConfigUpdates", () => {
     for (const handler of closeHandlers) handler();
     await expect(lifetime).resolves.toBeUndefined();
   });
+
+  it("re-subscribes and drops the Environment cache once the pin outlives the waitUntil window", async () => {
+    const harness = pinHarness();
+
+    await expect(harness.provider.getFlag("app-A", "env-1", "f")).resolves.toMatchObject({
+      enabled: true,
+    });
+    harness.invalidateEnvironment.mockClear();
+    harness.toggleOff();
+    harness.advance(25_000);
+
+    await expect(harness.provider.getFlag("app-A", "env-1", "f")).resolves.toMatchObject({
+      enabled: false,
+    });
+    expect(harness.fetch).toHaveBeenCalledTimes(2);
+    expect(harness.waitUntil).toHaveBeenCalledTimes(2);
+    expect(harness.invalidateEnvironment).toHaveBeenCalledWith("app-A", "env-1");
+    expect(harness.readFlagConfigForEvaluation).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps serving the cache while the pin is still inside the waitUntil window", async () => {
+    const harness = pinHarness();
+
+    await harness.provider.getFlag("app-A", "env-1", "f");
+    harness.invalidateEnvironment.mockClear();
+    harness.toggleOff();
+    harness.advance(24_999);
+
+    await expect(harness.provider.getFlag("app-A", "env-1", "f")).resolves.toMatchObject({
+      enabled: true,
+    });
+    expect(harness.fetch).toHaveBeenCalledTimes(1);
+    expect(harness.invalidateEnvironment).not.toHaveBeenCalled();
+    expect(harness.readFlagConfigForEvaluation).toHaveBeenCalledTimes(1);
+  });
+
+  it("serves the authoritative read and logs when the re-subscribe fails", async () => {
+    const harness = pinHarness();
+
+    await harness.provider.getFlag("app-A", "env-1", "f");
+    harness.invalidateEnvironment.mockClear();
+    harness.toggleOff();
+    harness.refuseNextConnect();
+    harness.advance(25_000);
+
+    await expect(harness.provider.getFlag("app-A", "env-1", "f")).resolves.toMatchObject({
+      enabled: false,
+    });
+    expect(harness.logger.error).toHaveBeenCalledWith(
+      "evaluation_config_resubscribe_failed",
+      expect.objectContaining({ appId: "app-A", environmentId: "env-1" }),
+    );
+    expect(harness.invalidateEnvironment).toHaveBeenCalledWith("app-A", "env-1");
+  });
 });
 
-function snapshot(flag: FlagConfigKV = flagConfigKV({ key: "f" })): EvaluationConfigSnapshot {
-  return { flag, experiment: null, run: null, version: 1 };
+/**
+ * One warm isolate: a controllable clock, a Config Store that can change the
+ * Flag between reads, and the KvProvider that caches it.
+ */
+function pinHarness() {
+  let clock = 1_000;
+  let enabled = true;
+  let refuseNext = false;
+  const logger = { error: vi.fn() };
+  const waitUntil = vi.fn();
+  const fetch = vi.fn(async () => {
+    if (refuseNext) {
+      refuseNext = false;
+      return refusedResponse();
+    }
+    return upgradeResponse(fakeSocket());
+  });
+  const readFlagConfigForEvaluation = vi.fn(async () =>
+    snapshot(flagConfigKV({ key: "f", enabled }), enabled ? 1 : 2),
+  );
+  const updates = new DurableConfigUpdates(
+    { getByName: () => ({ fetch, readFlagConfigForEvaluation }) },
+    logger,
+    () => clock,
+  );
+  updates.setWaitUntil(waitUntil);
+  const provider = new KvProvider(new FakeKv(), { configUpdates: updates });
+
+  return {
+    advance: (ms: number) => {
+      clock += ms;
+    },
+    fetch,
+    invalidateEnvironment: vi.spyOn(provider, "invalidateEnvironment"),
+    logger,
+    provider,
+    readFlagConfigForEvaluation,
+    refuseNextConnect: () => {
+      refuseNext = true;
+    },
+    toggleOff: () => {
+      enabled = false;
+    },
+    waitUntil,
+  };
+}
+
+function snapshot(
+  flag: FlagConfigKV = flagConfigKV({ key: "f" }),
+  version = 1,
+): EvaluationConfigSnapshot {
+  return { flag, experiment: null, run: null, version };
 }
 
 function fakeSocket() {

@@ -33,6 +33,14 @@ export interface ConfigUpdateListener {
 
 export type WaitUntil = (promise: Promise<unknown>) => void;
 
+/**
+ * The platform cancels a `ctx.waitUntil` promise about 30 seconds after its
+ * request responds. Re-subscribe below that bound so a request always runs on a
+ * socket whose I/O context is still alive.
+ * https://developers.cloudflare.com/workers/runtime-apis/context/#waituntil
+ */
+const PIN_WINDOW_MS = 25_000;
+
 interface Subscription {
   // waitUntil on the connecting request keeps the socket's I/O context alive
   // across later isolate requests until close/error. Concurrent cold reads share
@@ -40,6 +48,8 @@ interface Subscription {
   connected: boolean;
   connecting: Promise<void> | undefined;
   listener: ConfigUpdateListener;
+  pinnedAt: number;
+  socket: WebSocket | undefined;
 }
 
 /** Evaluation-side client for the existing hibernating Config Store DO. */
@@ -50,6 +60,7 @@ export class DurableConfigUpdates {
   constructor(
     private readonly namespace: ConfigStoreNamespace,
     private readonly logger: Pick<Console, "error"> = console,
+    private readonly now: () => number = Date.now,
   ) {}
 
   /** Refresh the per-request waitUntil seam used to pin open live-update sockets. */
@@ -67,17 +78,35 @@ export class DurableConfigUpdates {
       connected: false,
       connecting: undefined,
       listener,
+      pinnedAt: 0,
+      socket: undefined,
     };
     state.listener = listener;
     this.subscriptions.set(key, state);
 
-    if (state.connected) return;
+    if (state.connected && this.now() - state.pinnedAt < PIN_WINDOW_MS) return;
     if (state.connecting !== undefined) return state.connecting;
 
+    // A pin older than the window has been canceled, which kills the socket's
+    // I/O context without ever firing close or error, so `connected` is not
+    // liveness. Reconnect and re-pin on the request that got us here.
+    const reSubscribe = state.connected;
+    state.connected = false;
     const connecting = this.connect(appId, environmentId, state);
     state.connecting = connecting;
     try {
       await connecting;
+    } catch (cause) {
+      if (!reSubscribe) throw cause;
+      // The nudge channel is down but the authoritative Config Store read is
+      // not, so drop the Environment cache and let reads go to the DO rather
+      // than serve a value nothing can invalidate.
+      this.logger.error("evaluation_config_resubscribe_failed", {
+        appId,
+        environmentId,
+        cause,
+      });
+      state.listener.onReconnect();
     } finally {
       if (state.connecting === connecting) state.connecting = undefined;
     }
@@ -117,12 +146,14 @@ export class DurableConfigUpdates {
     }
 
     socket.addEventListener("message", (event) => this.receive(state, socket, event.data));
-    socket.addEventListener("close", () => this.disconnect(state));
-    socket.addEventListener("error", () => this.disconnect(state));
+    socket.addEventListener("close", () => this.disconnect(state, socket));
+    socket.addEventListener("error", () => this.disconnect(state, socket));
     socket.accept();
+    state.socket = socket;
     state.connected = true;
     // Pin the originating request's I/O context for the socket lifetime so
     // DeltaNudge delivery survives across Evaluation requests in this isolate.
+    state.pinnedAt = this.now();
     this.waitUntil?.(untilSocketClosed(socket));
     state.listener.onReconnect();
   }
@@ -137,7 +168,9 @@ export class DurableConfigUpdates {
     state.listener.onNudge(parsed);
   }
 
-  private disconnect(state: Subscription): void {
+  private disconnect(state: Subscription, socket: WebSocket): void {
+    // A superseded socket can still emit close; it must not retire the live one.
+    if (state.socket !== socket) return;
     state.connected = false;
   }
 

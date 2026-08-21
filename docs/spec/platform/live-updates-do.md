@@ -60,6 +60,22 @@ On reconnect, Evaluation invalidates the whole `(App, Environment)` cache and ob
 committed versions before serving. The control panel triggers its existing full
 invalidate-and-refetch. There is no delta-replay log.
 
+### The pin window: an open socket is not a live socket
+
+The Evaluation subscriber keeps its socket alive across requests by pinning it on the connecting
+request's [`ctx.waitUntil`](https://developers.cloudflare.com/workers/runtime-apis/context/#waituntil),
+which the platform cancels about 30 seconds after that request responds. Cancellation destroys the
+socket's I/O context without delivering `close` or `error`, so a subscriber's own "connected" flag
+is not liveness: a warm isolate can hold a flag that looks subscribed and will never receive
+another nudge.
+
+Evaluation therefore records when each socket was pinned and treats a pin older than 25 seconds as
+disconnected. The next request re-subscribes, re-pins on its own `waitUntil`, and runs the
+reconnect recovery above, so the following read comes from the authoritative DO snapshot. If the
+re-subscribe fails, Evaluation logs at error and still drops the Environment cache: reads fall
+through to the authoritative DO snapshot rather than serve a cached value that nothing can
+invalidate.
+
 ## Scope
 
 Live-update DO covers **config/operational state only** — Flag edits, Experiment edits, Run state
