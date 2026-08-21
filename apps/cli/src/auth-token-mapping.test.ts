@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isTokenBindingRefusal } from "./auth-binding.js";
-import { mintFailureError, sessionExpiredError, tokenBindingRefusedError } from "./auth-token.js";
+import { isTokenBindingRefusal, type OAuthFault } from "./auth-binding.js";
+import {
+  mintFailureError,
+  refreshFaultOf,
+  sessionExpiredError,
+  tokenBindingRefusedError,
+} from "./auth-token.js";
 
 describe("refresh-grant fault mapping", () => {
   it("maps a genuine session-death invalid_grant to CLI_SESSION_EXPIRED with re-login remediation", () => {
@@ -125,5 +130,24 @@ describe("refresh-grant fault mapping", () => {
     ).toBe(true);
     expect(error.remediation.toLowerCase()).toContain("canonical app id");
     expect(error.remediation.toLowerCase()).not.toMatch(/log ?in|authenticate|membership/);
+  });
+
+  it("never carries a refresh_token the auth service echoes onto the error's cause (SPL-376)", () => {
+    const fault: OAuthFault = {
+      status: 500,
+      error: "server_error",
+      description: "upstream identity provider timed out",
+      refreshToken: "should-not-survive-onto-error-cause",
+    };
+
+    const error = mintFailureError(fault);
+
+    const carried = refreshFaultOf(error);
+    expect(carried).toEqual({
+      status: 500,
+      error: "server_error",
+      description: "upstream identity provider timed out",
+    });
+    expect(carried).not.toHaveProperty("refreshToken");
   });
 });

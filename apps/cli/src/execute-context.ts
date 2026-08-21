@@ -1,7 +1,13 @@
-import { ensurePrincipalEmail } from "./auth-email-backfill.js";
+import { describeOAuthFault, isSessionRefusal } from "./auth-binding.js";
+import { ensurePrincipalEmail, type SessionUnverifiedReason } from "./auth-email-backfill.js";
+import { refreshAccessToken, refreshFaultOf } from "./auth-token.js";
 import { type ResolvedContext, resolveContext } from "./context.js";
-import { emailUnavailableReason } from "./credentials.js";
-import { writeCliError } from "./errors.js";
+import {
+  type CliCredentialFile,
+  emailUnavailableReason,
+  isAccessTokenExpired,
+} from "./credentials.js";
+import { SplitchCliError, writeCliError } from "./errors.js";
 import { emit } from "./execute-io.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_AUTH, EXIT_OK } from "./exit-codes.js";
@@ -35,10 +41,21 @@ export async function executeContext(
     return { exitCode: EXIT_AUTH };
   }
 
+  const verified = await verifySession(deps, stored);
+  if (!verified.authenticated) {
+    const payload = {
+      authenticated: false,
+      ...context,
+      nextSteps: ["splitch login"],
+    };
+    emit(io, invocation.flags.json, payload);
+    return { exitCode: EXIT_OK, payload };
+  }
+
   // Prefer a real email when refresh can backfill one. When the Worker cannot
   // supply it yet, proceed with `{ userId }` plus a reason — never invent
   // `"unknown"`. Permanent unverified-email faults fail loud (ADR-0036).
-  const session = await ensurePrincipalEmail(deps);
+  const session = verified.session;
   const reason = emailUnavailableReason(session);
   const payload = {
     authenticated: true,
@@ -48,11 +65,112 @@ export async function executeContext(
           userId: session.principal.userId,
           ...(reason ? { emailUnavailableReason: reason } : {}),
         },
+    ...(verified.sessionUnverifiedReason
+      ? { sessionUnverifiedReason: verified.sessionUnverifiedReason }
+      : {}),
+    ...(verified.sessionUnverifiedDetail
+      ? { sessionUnverifiedDetail: verified.sessionUnverifiedDetail }
+      : {}),
     ...context,
     nextSteps: nextSteps(context),
   };
   emit(io, invocation.flags.json, payload);
   return { exitCode: EXIT_OK, payload };
+}
+
+type SessionVerification =
+  | {
+      readonly authenticated: true;
+      readonly session: CliCredentialFile;
+      readonly sessionUnverifiedReason?: SessionUnverifiedReason;
+      readonly sessionUnverifiedDetail?: string;
+    }
+  | { readonly authenticated: false };
+
+/**
+ * `context` is the only command that must answer "are you logged in" as data
+ * instead of failing loud: every other command treats a dead refresh token as
+ * a hard error (auth-token.ts throws `CLI_SESSION_EXPIRED`), which is correct
+ * for them but was wrong here — it let a stale `credentialStore.load()` read
+ * stand in for a live session (SPL-376). Reuse that same refresh-grant path,
+ * no second session check, and only convert the one fault it already defines
+ * as terminal.
+ *
+ * `CLI_SESSION_EXPIRED` is not by itself proof of that: `mintFailureError`
+ * (auth-token.ts) also raises it for a reachable auth service returning an
+ * ambiguous fault (a 5xx, a body with no OAuth `error` at all, or a code that
+ * isn't `invalid_grant`) — a transient outage looks identical to a dead
+ * session at that call site. Only `invalid_grant` proves the auth service
+ * looked at the refresh token and refused it; anything else, plus a transport
+ * failure that never got a response, proves nothing either way, so it is
+ * never reported as a false `authenticated: false` (ADR-0036).
+ *
+ * `ensurePrincipalEmail`'s own refresh call (triggered by a missing email, not
+ * by access-token expiry) runs through the same classification: a proven
+ * refusal rethrows as `CLI_SESSION_EXPIRED` and lands in the catch below just
+ * like the direct-refresh path; anything else it swallows still comes back as
+ * an `unverifiedReason`/`unverifiedDetail` pair instead of a bare credential,
+ * so that fault is never silently lost either (SPL-376).
+ */
+async function verifySession(
+  deps: CliDeps,
+  stored: CliCredentialFile,
+): Promise<SessionVerification> {
+  let session = stored;
+  try {
+    const backfilled = await ensurePrincipalEmail(deps);
+    session = backfilled.session;
+    let unverifiedReason = backfilled.unverifiedReason;
+    let unverifiedDetail = backfilled.unverifiedDetail;
+    if (isAccessTokenExpired(session.credential.accessTokenExpiresAt)) {
+      // ensurePrincipalEmail only refreshes to backfill a missing email; a
+      // session that already has one short-circuits without ever touching
+      // the refresh grant, so an expired access token still needs its own check.
+      session = await refreshAccessToken(deps, session, null, false);
+      // A freshly minted token supersedes whatever the backfill attempt
+      // reported: the session is confirmed live as of this call.
+      unverifiedReason = undefined;
+      unverifiedDetail = undefined;
+    }
+    return {
+      authenticated: true,
+      session,
+      sessionUnverifiedReason: unverifiedReason,
+      sessionUnverifiedDetail: unverifiedDetail,
+    };
+  } catch (error) {
+    if (error instanceof SplitchCliError && error.code === "CLI_SESSION_EXPIRED") {
+      return classifySessionExpiredFault(error, session);
+    }
+    if (error instanceof SplitchCliError) {
+      throw error;
+    }
+    return { authenticated: true, session, sessionUnverifiedReason: "refresh_unreachable" };
+  }
+}
+
+/**
+ * Split out of `verifySession` to keep the branching readable: a
+ * `CLI_SESSION_EXPIRED` error is only a proven refusal when its OAuth fault
+ * says `invalid_grant`; anything else is unverified, with the fault detail
+ * carried so a caller can tell the cases apart (SPL-376).
+ */
+function classifySessionExpiredFault(
+  error: SplitchCliError,
+  session: CliCredentialFile,
+): SessionVerification {
+  const fault = refreshFaultOf(error);
+  if (fault && isSessionRefusal(fault)) {
+    return { authenticated: false };
+  }
+  return {
+    authenticated: true,
+    session,
+    sessionUnverifiedReason: "refresh_failed",
+    sessionUnverifiedDetail: fault
+      ? describeOAuthFault(fault)
+      : "the auth service returned no OAuth fault detail",
+  };
 }
 
 function nextSteps(context: ResolvedContext): string[] {
