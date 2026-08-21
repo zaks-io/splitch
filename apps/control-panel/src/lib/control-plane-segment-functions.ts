@@ -16,7 +16,7 @@ import {
   segmentDraftIssues,
   segmentUpdateInput,
 } from "./segment-form-model";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 
 const SegmentScopeSchema = z.object({
   appId: z.string().min(1),
@@ -86,7 +86,7 @@ export const deleteControlPanelSegment = createServerFn({ method: "POST" })
 
 async function authorizedSegmentsClient(environmentId: string) {
   const bindings = controlPanelMutationBindings(workerEnv);
-  const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+  const loaded = await loadSessionFromRequest(bindings, getRequest());
   if (!loaded.ok) {
     return {
       ok: false as const,

@@ -12,7 +12,7 @@ import {
   toUsageDimensions,
   type UsageNames,
 } from "./org-billing";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 
 export type OrgBillingResult =
   | { kind: "ok"; view: OrgBillingView }
@@ -32,7 +32,7 @@ export async function loadOrgBillingForRequest(
   request: Request,
   orgSlug: string,
 ): Promise<OrgBillingResult> {
-  const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, request);
+  const loaded = await loadSessionFromRequest(bindings, request);
   if (!loaded.ok) return { kind: "unauthenticated" };
 
   const repo = createRepository(bindings.DB);

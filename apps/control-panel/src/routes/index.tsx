@@ -1,7 +1,8 @@
 import { Button } from "@splitch/ui/components/button";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { OrganizationChooser } from "#components/organization-chooser";
 import { SignOutForm } from "#components/sign-out-form";
+import { loginRedirect } from "#lib/login-redirect";
 import type { SessionPrincipal } from "#lib/session";
 import { loadCurrentSession } from "#lib/session-functions";
 import type { StaleSession } from "#lib/stale-session";
@@ -55,10 +56,4 @@ function IndexRoute() {
       />
     </main>
   );
-}
-
-function loginRedirect(returnTo: string): ReturnType<typeof redirect> {
-  return redirect({
-    href: `/auth/login?returnTo=${encodeURIComponent(returnTo)}`,
-  });
 }

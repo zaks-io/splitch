@@ -23,8 +23,16 @@ KV schema for cached session:
 
 ```
 key:   session:<sha256(token)>
-value: { userId: string, orgs: OrgMembership[], expiresAt: number }
-ttl:   aligned to token expiry (max 24 h)
+value: {
+  userId: string,
+  orgs: OrgMembership[],
+  expiresAt: number,
+  workosSessionId?: string,
+  workosAccessToken?: string,
+  workosRefreshToken?: string,
+  workosAccessTokenExpiresAt?: number
+}
+ttl:   30 days absolute; the WorkOS JWT is refreshed server-side inside it
 ```
 
 A user may belong to **multiple Orgs** (personal + enterprise siblings, ADR-0021); the session carries

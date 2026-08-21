@@ -11,7 +11,7 @@ import {
   type OrgMemberList,
   type OrgMembersView,
 } from "./org-members";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 
 export type OrgMembersResult =
   | { kind: "ok"; view: OrgMembersView }
@@ -30,7 +30,7 @@ export async function loadOrgMembersForRequest(
   request: Request,
   orgSlug: string,
 ): Promise<OrgMembersResult> {
-  const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, request);
+  const loaded = await loadSessionFromRequest(bindings, request);
   if (!loaded.ok) return { kind: "unauthenticated" };
 
   const session = await rehydrateLegacySession(

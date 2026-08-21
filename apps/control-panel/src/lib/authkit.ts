@@ -26,12 +26,19 @@ export interface AuthKitClient {
     ipAddress?: string;
     userAgent?: string;
   }): Promise<AuthKitAuthentication>;
+  authenticateWithRefreshToken(options: {
+    clientId: string;
+    refreshToken: string;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<{ accessToken: string; refreshToken: string }>;
   getLogoutUrl(options: { sessionId: string; returnTo: string }): string;
 }
 
 interface AuthKitAuthentication {
   user: { id: string; email: string; emailVerified: boolean };
   accessToken: string;
+  refreshToken: string;
 }
 
 export interface CompleteAuthKitCallbackInput {
@@ -73,7 +80,17 @@ export function createAuthKitClient(bindings: ControlPanelBindings): AuthKitClie
           emailVerified: response.user.emailVerified,
         },
         accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
       };
+    },
+    async authenticateWithRefreshToken({ clientId, refreshToken, ipAddress, userAgent }) {
+      const response = await workos.userManagement.authenticateWithRefreshToken({
+        clientId,
+        refreshToken,
+        ipAddress,
+        userAgent,
+      });
+      return { accessToken: response.accessToken, refreshToken: response.refreshToken };
     },
     getLogoutUrl({ sessionId, returnTo }) {
       return workos.userManagement.getLogoutUrl({ sessionId, returnTo });
@@ -91,8 +108,7 @@ export async function completeAuthKitCallback(input: CompleteAuthKitCallbackInpu
   const authentication = await input.authKit.authenticateWithCode({
     clientId: input.clientId,
     code: input.code,
-    ipAddress: requestIp(input.request),
-    userAgent: input.request.headers.get("user-agent") ?? undefined,
+    ...authKitRequestContext(input.request),
   });
 
   const accessClaims = decodeWorkOsAccessTokenClaims(authentication.accessToken);
@@ -112,8 +128,9 @@ export async function completeAuthKitCallback(input: CompleteAuthKitCallbackInpu
     input.kv,
     {
       ...sessionPrincipal,
-      expiresAt: accessClaims.expiresAt,
       workosAccessToken: authentication.accessToken,
+      workosRefreshToken: authentication.refreshToken,
+      workosAccessTokenExpiresAt: accessClaims.expiresAt,
     },
     input.now,
   );
@@ -124,7 +141,7 @@ export function callbackRedirectUri(request: Request): string {
   return new URL("/auth/callback", request.url).toString();
 }
 
-function decodeWorkOsAccessTokenClaims(accessToken: string): {
+export function decodeWorkOsAccessTokenClaims(accessToken: string): {
   sessionId: string;
   expiresAt: number;
 } {
@@ -132,7 +149,7 @@ function decodeWorkOsAccessTokenClaims(accessToken: string): {
   const sid = payload.sid;
   const exp = payload.exp;
   if (typeof sid !== "string" || sid.length === 0 || !Number.isInteger(exp)) {
-    throw new Error("WorkOS AuthKit callback returned incomplete access token claims");
+    throw new Error("WorkOS AuthKit returned incomplete access token claims");
   }
   return { sessionId: sid, expiresAt: exp as number };
 }
@@ -141,13 +158,13 @@ function decodeJwtPayload(jwt: string): Record<string, unknown> {
   const parts = jwt.split(".");
   const payload = parts[1];
   if (!payload) {
-    throw new Error("WorkOS AuthKit callback returned an invalid access token");
+    throw new Error("WorkOS AuthKit returned an invalid access token");
   }
 
   const json = base64UrlDecode(payload);
   const parsed = JSON.parse(json) as unknown;
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("WorkOS AuthKit callback returned an invalid access token payload");
+    throw new Error("WorkOS AuthKit returned an invalid access token payload");
   }
   return parsed as Record<string, unknown>;
 }
@@ -159,6 +176,16 @@ function base64UrlDecode(value: string): string {
     return atob(padded);
   }
   return Buffer.from(padded, "base64").toString("utf8");
+}
+
+export function authKitRequestContext(request: Request): {
+  ipAddress?: string;
+  userAgent?: string;
+} {
+  return {
+    ipAddress: requestIp(request),
+    userAgent: request.headers.get("user-agent") ?? undefined,
+  };
 }
 
 function requestIp(request: Request): string | undefined {

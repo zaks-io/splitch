@@ -6,15 +6,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@splitch/ui/components/card";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { ClaimCeremony } from "#components/claim-ceremony";
+import { loginRedirect } from "#lib/login-redirect";
 import { loadCurrentSession } from "#lib/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/claim")({
   loader: async ({ location, params }) => {
     const result = await loadCurrentSession();
     if (result.kind === "unauthenticated") {
-      throw redirect({ href: `/auth/login?returnTo=${encodeURIComponent(location.href)}` });
+      throw loginRedirect(location.href);
     }
     const organization = result.session.orgs.find((org) => org.orgSlug === params.orgSlug);
     return organization ?? null;

@@ -1,13 +1,14 @@
 import { NotFoundPage } from "@splitch/ui/state/not-found-page";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
-import { createFileRoute, notFound, redirect } from "@tanstack/react-router";
+import { createFileRoute, notFound } from "@tanstack/react-router";
 import { PromotionPage } from "#components/promotion-page";
 import { scopedHref } from "#lib/app-shell-navigation";
 import { loadControlPanelFlagDetail } from "#lib/control-plane-flag-functions";
 import { isFlagDetailNotFound } from "#lib/flag-detail-data";
 import type { FlagDetailView } from "#lib/flag-detail-view";
 import { AccessDeniedError } from "#lib/loader-context";
+import { loginRedirect } from "#lib/login-redirect";
 import { reportRouteError } from "#lib/panel-observability";
 import {
   type PromotionSourceOption,
@@ -55,7 +56,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey_/pr
   loader: async ({ deps, location, params }): Promise<PromotionLoaded | PromotionBlocked> => {
     const scoped = await loadScopedSession({ data: params });
     if (scoped.kind === "unauthenticated") {
-      throw redirect({ href: `/auth/login?returnTo=${encodeURIComponent(location.href)}` });
+      throw loginRedirect(location.href);
     }
     if (scoped.kind === "forbidden") throw new AccessDeniedError();
     if (scoped.kind === "notFound") throw notFound();

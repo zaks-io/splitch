@@ -43,6 +43,8 @@ const MAXIMAL_STORED_SESSION = {
   expiresAt: EXPIRES_AT,
   workosSessionId: "session_1",
   workosAccessToken: "token_1",
+  workosRefreshToken: "refresh_1",
+  workosAccessTokenExpiresAt: EXPIRES_AT - 300,
   version: 2,
 };
 

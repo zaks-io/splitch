@@ -4,7 +4,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelOverviewClient } from "./control-plane-overview";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 
 const OverviewScopeSchema = z.object({
   appId: z.string().min(1),
@@ -15,7 +15,7 @@ export const loadControlPanelOverview = createServerFn({ method: "GET" })
   .validator((data: unknown) => OverviewScopeSchema.parse(data))
   .handler(async ({ data }) => {
     const bindings = controlPanelMutationBindings(workerEnv);
-    const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+    const loaded = await loadSessionFromRequest(bindings, getRequest());
     if (!loaded.ok) {
       return {
         ok: false as const,

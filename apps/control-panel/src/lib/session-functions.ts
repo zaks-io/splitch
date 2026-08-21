@@ -11,7 +11,8 @@ import {
 } from "./loader-context";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
 import { readPendingResync } from "./pending-resync";
-import { loadSessionFromRequest, publicSession, type SessionPrincipal } from "./session";
+import { publicSession, type SessionPrincipal } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 import { retryPendingResync } from "./session-resync";
 import type { StaleSession } from "./stale-session";
 
@@ -39,7 +40,7 @@ export async function loadCurrentSessionForRequest(
   bindings: ControlPanelBindings,
   request: Request,
 ): Promise<CurrentSessionResult> {
-  const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, request);
+  const loaded = await loadSessionFromRequest(bindings, request);
   if (!loaded.ok) {
     return { kind: "unauthenticated" };
   }
@@ -90,7 +91,7 @@ export const loadScopedSession = createServerFn({ method: "GET" })
   .validator((data: ScopeParams) => data)
   .handler(async ({ data }): Promise<ScopedSessionResult> => {
     const bindings = controlPanelBindings(workerEnv);
-    const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+    const loaded = await loadSessionFromRequest(bindings, getRequest());
     if (!loaded.ok) {
       return { kind: "unauthenticated" };
     }

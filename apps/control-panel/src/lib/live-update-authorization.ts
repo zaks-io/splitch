@@ -1,4 +1,5 @@
 import { createRepository } from "@splitch/db";
+import type { ControlPanelBindings } from "./bindings";
 import type { LiveUpdateUpgradeAuthorization } from "./live-update-upgrade";
 import {
   AccessDeniedError,
@@ -6,19 +7,16 @@ import {
   ScopedNotFoundError,
 } from "./loader-context";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 
-export interface LiveUpdateAuthorizationBindings {
-  DB: D1Database;
-  SESSION_STORE: KVNamespace;
-}
+export type LiveUpdateAuthorizationBindings = ControlPanelBindings;
 
 export async function authorizeLiveUpdateUpgrade(
   request: Request,
   bindings: LiveUpdateAuthorizationBindings,
   params: { orgSlug: string; appSlug: string; env: string },
 ): Promise<LiveUpdateUpgradeAuthorization> {
-  const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, request);
+  const loaded = await loadSessionFromRequest(bindings, request);
   if (!loaded.ok) return { ok: false, status: 401 };
 
   const repo = createRepository(bindings.DB);

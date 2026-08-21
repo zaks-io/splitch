@@ -10,7 +10,7 @@ import {
 } from "./control-plane-apps";
 import { createControlPanelExposureStatusClient } from "./control-plane-exposure-status";
 import { createControlPanelSegmentsClient } from "./control-plane-segments";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 import { resyncSessionMemberships } from "./session-resync";
 
 /**
@@ -145,7 +145,7 @@ export async function authorizedAppSettingsClient(): Promise<AuthorizedAppSettin
 
 async function panelBindingContext() {
   const bindings = controlPanelMutationBindings(workerEnv);
-  const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+  const loaded = await loadSessionFromRequest(bindings, getRequest());
   if (!loaded.ok) return unauthorized();
   return {
     ok: true as const,

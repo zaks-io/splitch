@@ -10,7 +10,7 @@ import { type ControlPanelMutationBindings, controlPanelMutationBindings } from 
 import { createControlPanelOrgMembersClient } from "./control-plane-org-members";
 import { rehydrateLegacySession } from "./membership";
 import { ORGANIZATIONS_TRUNCATED_DESCRIPTION } from "./organizations-truncated";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 
 const OrgScopeSchema = z.object({ orgId: z.string().min(1) });
 const MemberScopeSchema = OrgScopeSchema.extend({ userId: z.string().min(1) });
@@ -59,7 +59,7 @@ export async function authorizeOrgMembersMutationForRequest(
   request: Request,
   orgId: string,
 ) {
-  const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, request);
+  const loaded = await loadSessionFromRequest(bindings, request);
   if (!loaded.ok) {
     return {
       ok: false as const,

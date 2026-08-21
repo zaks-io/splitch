@@ -2,23 +2,27 @@ import type { Repository } from "@splitch/db";
 import { describe, expect, it } from "vitest";
 import type { AuthKitClient } from "./authkit";
 import { AuthKitEmailUnverifiedError, completeAuthKitCallback } from "./authkit";
+import { PANEL_SESSION_MAX_SECONDS } from "./session";
 
 const NOW = Date.UTC(2026, 6, 5, 12, 0, 0);
 
 describe("WorkOS AuthKit callback materialization", () => {
   it("stores the WorkOS JWT only in the KV-backed server session, never in the cookie", async () => {
     const kv = new MemoryKv();
-    const expiresAt = Math.floor(NOW / 1000) + 300;
-    const accessToken = jwt({ sid: "workos_session_1", exp: expiresAt });
+    const accessTokenExpiresAt = Math.floor(NOW / 1000) + 300;
+    const sessionExpiresAt = Math.floor(NOW / 1000) + PANEL_SESSION_MAX_SECONDS;
+    const accessToken = jwt({ sid: "workos_session_1", exp: accessTokenExpiresAt });
     let authRequest: Parameters<AuthKitClient["authenticateWithCode"]>[0] | undefined;
     const authKit: AuthKitClient = {
       authenticateWithCode: async (request) => {
         authRequest = request;
         return {
           accessToken,
+          refreshToken: "refresh_token_1",
           user: { id: "user_1", email: "user_1@example.com", emailVerified: true },
         };
       },
+      authenticateWithRefreshToken: unusedRefresh,
       getAuthorizationUrl: () => "https://workos.example/authorize",
       getLogoutUrl: () => "https://workos.example/logout",
     };
@@ -54,9 +58,11 @@ describe("WorkOS AuthKit callback materialization", () => {
     expect(joined).toContain("user_1");
     expect(joined).toContain("checkout-api");
     expect(joined).toContain(accessToken);
-    expect(joined).toContain(`"expiresAt":${expiresAt}`);
+    expect(joined).toContain('"workosRefreshToken":"refresh_token_1"');
+    expect(joined).toContain(`"workosAccessTokenExpiresAt":${accessTokenExpiresAt}`);
+    expect(joined).toContain(`"expiresAt":${sessionExpiresAt}`);
     expect(joined).toContain("isProvisional");
-    expect(callback.cookie).toContain("Max-Age=300");
+    expect(callback.cookie).toContain(`Max-Age=${PANEL_SESSION_MAX_SECONDS}`);
     const profile = kv.store.get("member-profile:user_1");
     expect(profile).toBe(JSON.stringify({ email: "user_1@example.com" }));
   });
@@ -65,8 +71,10 @@ describe("WorkOS AuthKit callback materialization", () => {
     const authKit: AuthKitClient = {
       authenticateWithCode: async () => ({
         accessToken: jwt({ sid: "workos_session_1", exp: Math.floor(NOW / 1000) + 300 }),
+        refreshToken: "refresh_token_1",
         user: { id: "user_1", email: "user_1@example.com", emailVerified: false },
       }),
+      authenticateWithRefreshToken: unusedRefresh,
       getAuthorizationUrl: () => "https://workos.example/authorize",
       getLogoutUrl: () => "https://workos.example/logout",
     };
@@ -88,8 +96,10 @@ describe("WorkOS AuthKit callback materialization", () => {
     const authKit: AuthKitClient = {
       authenticateWithCode: async () => ({
         accessToken: jwt({ sid: "workos_session_1" }),
+        refreshToken: "refresh_token_1",
         user: { id: "user_1", email: "user_1@example.com", emailVerified: true },
       }),
+      authenticateWithRefreshToken: unusedRefresh,
       getAuthorizationUrl: () => "https://workos.example/authorize",
       getLogoutUrl: () => "https://workos.example/logout",
     };
@@ -107,6 +117,10 @@ describe("WorkOS AuthKit callback materialization", () => {
     ).rejects.toThrow("incomplete access token claims");
   });
 });
+
+const unusedRefresh: AuthKitClient["authenticateWithRefreshToken"] = async () => {
+  throw new Error("refresh is not used by the callback tests");
+};
 
 function repository(): Repository {
   return {

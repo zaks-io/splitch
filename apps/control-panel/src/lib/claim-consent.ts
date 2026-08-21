@@ -1,6 +1,6 @@
 import type { ControlPanelBindings } from "./bindings";
 import { rejectCrossOriginWrite } from "./panel-csrf";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 
 /** Browser sends only its opaque cookie. The WorkOS JWT stays in the KV record. */
 export async function forwardClaimConsent(
@@ -11,7 +11,7 @@ export async function forwardClaimConsent(
   const rejected = rejectCrossOriginWrite(request);
   if (rejected) return rejected;
 
-  const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, request);
+  const loaded = await loadSessionFromRequest(bindings, request);
   if (!loaded.ok || !loaded.session.workosAccessToken)
     return new Response("Unauthorized", { status: 401 });
   const decision = await consentDecision(request);

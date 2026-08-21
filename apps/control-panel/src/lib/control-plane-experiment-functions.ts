@@ -16,13 +16,13 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelExperimentsClient } from "./control-plane-experiments";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest } from "./session-refresh";
 
 export const loadControlPanelExperiments = createServerFn({ method: "GET" })
   .validator((data: PanelExperimentsListInput) => data)
   .handler(async ({ data }) => {
     const bindings = controlPanelMutationBindings(workerEnv);
-    const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+    const loaded = await loadSessionFromRequest(bindings, getRequest());
     if (!loaded.ok) {
       return {
         ok: false as const,
@@ -41,7 +41,7 @@ export const loadControlPanelExperimentDetail = createServerFn({ method: "GET" }
   .validator((data: PanelExperimentDetailInput) => data)
   .handler(async ({ data }) => {
     const bindings = controlPanelMutationBindings(workerEnv);
-    const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+    const loaded = await loadSessionFromRequest(bindings, getRequest());
     if (!loaded.ok) {
       return {
         ok: false as const,
@@ -60,7 +60,7 @@ export const loadControlPanelExperimentResults = createServerFn({ method: "GET" 
   .validator((data: PanelExperimentResultsInput) => data)
   .handler(async ({ data }) => {
     const bindings = controlPanelMutationBindings(workerEnv);
-    const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+    const loaded = await loadSessionFromRequest(bindings, getRequest());
     if (!loaded.ok) {
       return {
         ok: false as const,
@@ -177,7 +177,7 @@ export const stageAndStartControlPanelExperimentRun = createServerFn({ method: "
 
 async function authorizedExperimentsClient() {
   const bindings = controlPanelMutationBindings(workerEnv);
-  const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+  const loaded = await loadSessionFromRequest(bindings, getRequest());
   if (!loaded.ok) {
     return {
       ok: false as const,
