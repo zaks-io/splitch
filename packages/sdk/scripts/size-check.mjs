@@ -34,10 +34,15 @@ const repoRoot = resolve(packageRoot, "../..");
  * of re-vendoring zod (~300 KiB), which this budget alone is meant to reject.
  */
 export const ENTRY_MAX_BYTES = 22 * 1024;
+/** Measured 32_233 bytes after adding held evaluations and revalidation; 40 KiB keeps ~27% headroom. */
+export const BROWSER_ENTRY_MAX_BYTES = 40 * 1024;
 /** Measured 9_718 bytes at SPL-334; 12 KiB keeps roughly 25% growth headroom. */
 export const REACT_ENTRY_MAX_BYTES = 12 * 1024;
 
 function maxBytesForEntry(exportPath) {
+  if (exportPath === "./browser") {
+    return BROWSER_ENTRY_MAX_BYTES;
+  }
   return exportPath === "./react" ? REACT_ENTRY_MAX_BYTES : ENTRY_MAX_BYTES;
 }
 
