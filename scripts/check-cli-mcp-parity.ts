@@ -26,6 +26,54 @@ import { assertSharedOperationParity } from "./lib/cli-mcp-shared-operation.js";
 // the list explicit makes every new exception a reviewed contract decision.
 const CONTRACT_EXCEPTIONS = [
   {
+    operationId: "organizations_delete",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing deletion workflow",
+  },
+  {
+    operationId: "current_user_privacy_export",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing privacy workflow",
+  },
+  {
+    operationId: "current_user_delete",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing deletion workflow",
+  },
+  {
+    operationId: "organization_privacy_export",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing privacy workflow",
+  },
+  {
+    operationId: "app_privacy_export",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing privacy workflow",
+  },
+  {
+    operationId: "entity_privacy_export",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing privacy workflow",
+  },
+  {
+    operationId: "entity_privacy_delete",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing deletion workflow",
+  },
+  {
+    operationId: "privacy_requests_get",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing privacy workflow",
+  },
+  {
     operationId: "environment_exposure_status_delete",
     cli: false,
     mcp: false,

@@ -36,8 +36,8 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
     });
   });
 
-  it("returns 200 no_data naming Exposures when the Run has no Exposure rows", async () => {
-    const { app } = makeResultsHarness({
+  it("returns 200 no_data before querying Metric pipes when the Run has no Exposures", async () => {
+    const { app, tinybird } = makeResultsHarness({
       ...rowsByPipe(),
       analysis_deduped_exposures: [],
     });
@@ -51,6 +51,42 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
       control_variant: "control",
       missing: "exposures",
     });
+    expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
+      "analysis_run_inputs",
+      "analysis_deduped_exposures",
+    ]);
+  });
+
+  it("returns Exposure health without querying per-Metric pipes for a Run with no Metrics", async () => {
+    const rows = rowsByPipe();
+    const [runInput] = rows.analysis_run_inputs as Record<string, unknown>[];
+    const { app, tinybird } = makeResultsHarness({
+      ...rows,
+      analysis_run_inputs: [
+        {
+          ...runInput,
+          decision_family: JSON.stringify([]),
+          guardrail_decisions: JSON.stringify([]),
+        },
+      ],
+      analysis_metric_values: [],
+      analysis_pre_period_covariates: [],
+    });
+
+    const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+
+    expect(res.status).toBe(200);
+    expect(AnalysisResultsEnvelopeSchema.parse(await res.json())).toMatchObject({
+      state: "ready",
+      run_id: RUN_ID,
+      control_variant: "control",
+      stats: { health: { deduped_counts: { control: 2, treatment: 2 } } },
+    });
+    expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
+      "analysis_run_inputs",
+      "analysis_deduped_exposures",
+      "analysis_activation_rows",
+    ]);
   });
 
   it("expands production MetricRef decision_family and returns ready when Metric rows exist", async () => {

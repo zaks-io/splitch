@@ -1,10 +1,11 @@
 import { deriveMcpTools, getRoute } from "@splitch/contracts";
-import { createRepository, envScope } from "@splitch/db";
+import { appScope, createRepository, envScope } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import { createRequestHash } from "../src/create-idempotency";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
@@ -113,6 +114,9 @@ async function request(
     headers: {
       authorization: `Bearer ${jwt}`,
       ...(body ? { "content-type": "application/json" } : {}),
+      ...(typeof body?.idempotency_key === "string"
+        ? { "idempotency-key": body.idempotency_key }
+        : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -147,6 +151,72 @@ describe("control-plane App and Environment CRUD", () => {
       const keys = await repo.credentials.listClientKeys(envScope(created.app.id, env.id));
       expect(keys.filter((key) => !key.revokedAt)).toHaveLength(1);
     }
+  });
+
+  it("replays apps_create exactly and conflicts when the payload changes", async () => {
+    const jwt = await orgToken();
+    const original = {
+      name: "Idempotent App",
+      key: "idempotent-app",
+      idempotency_key: "idem_app_create_exact",
+    };
+    const first = await request("POST", `/orgs/${ORG.orgId}/apps`, jwt, original);
+    const replay = await request("POST", `/orgs/${ORG.orgId}/apps`, jwt, original);
+
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual(await first.json());
+    expect(
+      (await createRepository(h.bindings.d1).identity.listAppsForOrg(ORG.orgId)).filter(
+        (app) => app.key === original.key,
+      ),
+    ).toHaveLength(1);
+
+    const conflict = await request("POST", `/orgs/${ORG.orgId}/apps`, jwt, {
+      ...original,
+      name: "Different App",
+      key: "different-idempotent-app",
+    });
+    expect(conflict.status).toBe(409);
+    expect((await conflict.json()) as { code: string }).toMatchObject({
+      code: "IDEMPOTENCY_KEY_CONFLICT",
+    });
+  });
+
+  it("resumes apps_create when only the App row was provisioned", async () => {
+    const repo = createRepository(h.bindings.d1);
+    const body = {
+      name: "Recovered Partial App",
+      key: "recovered-partial-app",
+      idempotency_key: "idem_app_create_partial_recovery",
+    };
+    const appId = "app_partial_create_recovery";
+    await repo.identity.createApp({
+      id: appId,
+      organizationId: ORG.orgId,
+      name: body.name,
+      key: body.key,
+      createIdempotencyKey: body.idempotency_key,
+      createRequestHash: await createRequestHash({ name: body.name, key: body.key }),
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+      createdBy: OWNER,
+    });
+
+    const recovered = await request("POST", `/orgs/${ORG.orgId}/apps`, await orgToken(), body);
+
+    expect(recovered.status).toBe(200);
+    const response = (await recovered.json()) as {
+      app: { id: string };
+      environments: Array<{ id: string; key: string }>;
+      clientKeys: Array<{ environmentId: string }>;
+    };
+    expect(response.app.id).toBe(appId);
+    expect(response.environments.map((environment) => environment.key)).toEqual(["dev", "prod"]);
+    expect(response.clientKeys).toHaveLength(2);
+    expect(await repo.identity.getAppMembership(appScope(appId), OWNER)).toMatchObject({
+      role: "owner",
+    });
   });
 
   it("derives the App key from the name, so a caller with only a name gets an App", async () => {

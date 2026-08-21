@@ -164,7 +164,12 @@ async function deleteEnvironmentAfterAuth(
   const scope = appScope(appId);
   const environments = await deps.repo.identity.listEnvironments(scope);
   const environment = environments.find((env) => env.id === environmentId);
-  if (!environment) return appNotFound(requestId);
+  if (!environment) {
+    const cleanup = deps.exposureStatusCleanup;
+    if (!cleanup) throw new Error("environment delete requires Exposure status cleanup");
+    await cleanup.delete({ appId, environmentId, actorId, orgId: organizationId, requestId });
+    return Response.json({ deleted: true });
+  }
 
   const blocker = await environmentDeleteBlocker(
     deps,
@@ -182,18 +187,9 @@ async function deleteEnvironmentAfterAuth(
   if ((await deps.repo.identity.deleteEnvironment(scope, environmentId)) !== 1) {
     throw new Error("environment delete did not reach D1");
   }
-  // Credentials are quiesced and the Environment is unreachable before the
-  // analytics purge. A late D1/KV failure must never reset a live Environment
-  // to not_received, and no in-flight credential may rematerialize this row.
   const cleanup = deps.exposureStatusCleanup;
   if (!cleanup) throw new Error("environment delete requires Exposure status cleanup");
-  await cleanup.delete({
-    appId,
-    environmentId,
-    actorId,
-    orgId: organizationId,
-    requestId,
-  });
+  await cleanup.delete({ appId, environmentId, actorId, orgId: organizationId, requestId });
   return Response.json({ deleted: true });
 }
 

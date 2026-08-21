@@ -138,18 +138,6 @@ Request body (--body-json):
 
 Example:
   splitch app-members update <user-id> --body-json '{"role":"owner"}' --json",
-    "app-privacy export": "Export an App's data.
-
-Usage:
-  splitch app-privacy export [flags]
-
-Flags:
-  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help   [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch app-privacy export --json",
     "approval-request-reviews create": "Review a pending Approval Request and optionally apply its proposal.
 
 Usage:
@@ -335,66 +323,6 @@ Credential semantics:
 
 Example:
   splitch client-key update --body-json '{"originAllowlist":["https://app.example.com"]}' --json",
-    "current-user delete": "Request deletion of the authenticated User.
-
-Usage:
-  splitch current-user delete [flags]
-
-Flags:
-  --json      [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help  [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch current-user delete --json",
-    "current-user-privacy export": "Export the authenticated User's data.
-
-Usage:
-  splitch current-user-privacy export [flags]
-
-Flags:
-  --json      [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help  [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch current-user-privacy export --json",
-    "entity-privacy delete": "Delete an Entity's data (tombstones + queued physical purge).
-
-Usage:
-  splitch entity-privacy delete [flags]
-
-Flags:
-  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
-  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help          [type: boolean; default: false] Show help and exit.
-
-Request body (--body-json):
-  idType        required  string
-  targetingKey  required  string
-  Example:
-    {"idType":"idType","targetingKey":"userId"}
-
-Example:
-  splitch entity-privacy delete --body-json '{"idType":"idType","targetingKey":"userId"}' --json",
-    "entity-privacy export": "Export an Entity's data-subject records (Targeting Key hashed server-side).
-
-Usage:
-  splitch entity-privacy export [flags]
-
-Flags:
-  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
-  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help          [type: boolean; default: false] Show help and exit.
-
-Request body (--body-json):
-  idType        required  string
-  targetingKey  required  string
-  Example:
-    {"idType":"idType","targetingKey":"userId"}
-
-Example:
-  splitch entity-privacy export --body-json '{"idType":"idType","targetingKey":"userId"}' --json",
     "env-policy get": "Get the selected Environment Policy.
 
 Usage:
@@ -1273,18 +1201,6 @@ Request body (--body-json):
 
 Example:
   splitch organization-members update <org-id> <user-id> --body-json '{"role":"owner"}' --json",
-    "organization-privacy export": "Export an Organization's data.
-
-Usage:
-  splitch organization-privacy export <org-id> [flags]
-
-Flags:
-  --org <organization>  [type: string; default: none] Organization ID.
-  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help            [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch organization-privacy export <org-id> --json",
     "organization-usage get": "Get an Organization's current-month Evaluation usage breakdown.
 
 Usage:
@@ -1316,18 +1232,6 @@ Request body (--body-json):
 
 Example:
   splitch orgs create --body-json '{"name":"name"}' --json",
-    "orgs delete": "Delete an organization (requires a prior dry-run confirmation token).
-
-Usage:
-  splitch orgs delete <org-id> [flags]
-
-Flags:
-  --org <organization>  [type: string; default: none] Organization ID.
-  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help            [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch orgs delete <org-id> --json",
     "orgs get": "Get one organization.
 
 Usage:
@@ -1371,17 +1275,6 @@ Request body (--body-json):
 
 Example:
   splitch orgs update <org-id> --body-json '{"plan":"free"}' --json",
-    "privacy-requests get": "Get a privacy request's status (and its job, if any).
-
-Usage:
-  splitch privacy-requests get <request-id> [flags]
-
-Flags:
-  --json      [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help  [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch privacy-requests get <request-id> --json",
     "runs end": "End a running Run.
 
 Usage:
@@ -1556,19 +1449,6 @@ Flags:
 
 Example:
   splitch app-members list --help",
-    "app-privacy": "Manage app-privacy resources.
-
-Usage:
-  splitch app-privacy <action> [arguments] [flags]
-
-Commands:
-  export          Export an App's data.
-
-Flags:
-  -h, --help  [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch app-privacy export --help",
     "approval-request-reviews": "Manage approval-request-reviews resources.
 
 Usage:
@@ -1628,46 +1508,6 @@ Flags:
 
 Example:
   splitch client-key get --help",
-    "current-user": "Manage current-user resources.
-
-Usage:
-  splitch current-user <action> [arguments] [flags]
-
-Commands:
-  delete          Request deletion of the authenticated User.
-
-Flags:
-  -h, --help  [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch current-user delete --help",
-    "current-user-privacy": "Manage current-user-privacy resources.
-
-Usage:
-  splitch current-user-privacy <action> [arguments] [flags]
-
-Commands:
-  export          Export the authenticated User's data.
-
-Flags:
-  -h, --help  [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch current-user-privacy export --help",
-    "entity-privacy": "Manage entity-privacy resources.
-
-Usage:
-  splitch entity-privacy <action> [arguments] [flags]
-
-Commands:
-  export          Export an Entity's data-subject records (Targeting Key hashed server-side).
-  delete          Delete an Entity's data (tombstones + queued physical purge).
-
-Flags:
-  -h, --help  [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch entity-privacy export --help",
     "env-policy": "Manage env-policy resources.
 
 Usage:
@@ -1870,19 +1710,6 @@ Flags:
 
 Example:
   splitch organization-members list --help",
-    "organization-privacy": "Manage organization-privacy resources.
-
-Usage:
-  splitch organization-privacy <action> [arguments] [flags]
-
-Commands:
-  export          Export an Organization's data.
-
-Flags:
-  -h, --help  [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch organization-privacy export --help",
     "organization-usage": "Manage organization-usage resources.
 
 Usage:
@@ -1906,26 +1733,12 @@ Commands:
   create          Create an organization; the calling principal becomes its owner.
   get             Get one organization.
   update          Rename an organization or change its plan.
-  delete          Delete an organization (requires a prior dry-run confirmation token).
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.
 
 Example:
   splitch orgs list --help",
-    "privacy-requests": "Manage privacy-requests resources.
-
-Usage:
-  splitch privacy-requests <action> [arguments] [flags]
-
-Commands:
-  get             Get a privacy request's status (and its job, if any).
-
-Flags:
-  -h, --help  [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch privacy-requests get --help",
     "runs": "Manage runs resources.
 
 Usage:
@@ -2039,14 +1852,10 @@ Resource groups:
   api-keys
   app-attention-rollup
   app-members
-  app-privacy
   approval-request-reviews
   approval-requests
   apps
   client-key
-  current-user
-  current-user-privacy
-  entity-privacy
   env-policy
   environment-exposure-status
   envs
@@ -2060,10 +1869,8 @@ Resource groups:
   flags
   metrics
   organization-members
-  organization-privacy
   organization-usage
   orgs
-  privacy-requests
   runs
   segments
 

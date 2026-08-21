@@ -272,7 +272,7 @@ const errorMembers = [
   member(
     "IDEMPOTENCY_KEY_CONFLICT",
     z.object({
-      scope: z.enum(["approval_request", "review", "conclusion"]),
+      scope: z.enum(["approval_request", "review", "conclusion", "app_create", "flag_create"]),
       idempotencyKey: z.string().min(1),
     }),
   ),

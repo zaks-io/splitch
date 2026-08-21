@@ -18,7 +18,6 @@ const EXPECTED_GATES: Record<string, string> = {
   organizations_create: "token",
   organizations_get: "org:member",
   organizations_update: "org:owner",
-  organizations_delete: "org:owner",
   organization_members_list: "org:admin",
   organization_members_add: "org:admin",
   organization_members_update: "org:owner",
@@ -90,13 +89,6 @@ const EXPECTED_GATES: Record<string, string> = {
   experiment_results_post: "app:member",
   environment_exposure_status_get: "app:member",
   organization_usage_get: "org:member",
-  current_user_privacy_export: "token",
-  current_user_delete: "token",
-  organization_privacy_export: "org:owner",
-  app_privacy_export: "app:admin",
-  entity_privacy_export: "app:admin",
-  entity_privacy_delete: "app:admin",
-  privacy_requests_get: "token",
 };
 
 describe("mcp tool membership gates", () => {

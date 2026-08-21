@@ -111,14 +111,23 @@ export async function readStatsInputFromTinybird(
   }
   const params = scopedPipeParams({ ...scope, runId: run.run_id });
 
-  const [exposureRows, metricRows, prePeriodRows, activationRows] = await Promise.all([
-    pipeRows(tinybird, EXPOSURES_PIPE, params),
-    pipeRows(tinybird, METRIC_VALUES_PIPE, params),
-    pipeRows(tinybird, PRE_PERIOD_PIPE, params),
-    pipeRows(tinybird, ACTIVATION_PIPE, params),
-  ]);
-
+  const exposureRows = await pipeRows(tinybird, EXPOSURES_PIPE, params);
   const exposures = exposureRows.map((row) => materializeExposure(row, scope));
+  // An empty Exposure denominator is a healthy collecting state. Stop here so
+  // a fresh Run does not query Metric pipes before any Entity can have a value.
+  if (exposures.length === 0) {
+    throw new ResultsInsufficientDataError("exposures", run.run_id, run.control_variant);
+  }
+
+  const hasAnalyzedMetrics =
+    run.decision_family.length > 0 || (run.guardrail_decisions?.length ?? 0) > 0;
+  const [metricRows, prePeriodRows, activationRows] = hasAnalyzedMetrics
+    ? await Promise.all([
+        pipeRows(tinybird, METRIC_VALUES_PIPE, params),
+        pipeRows(tinybird, PRE_PERIOD_PIPE, params),
+        pipeRows(tinybird, ACTIVATION_PIPE, params),
+      ])
+    : [[], [], await pipeRows(tinybird, ACTIVATION_PIPE, params)];
   const metric_values = metricRows.map(materializeMetricRow);
   assertAnalysisInputsPresent({
     run_id: run.run_id,

@@ -96,6 +96,10 @@ export function makeDeleteAppCascade(d1: D1Database) {
       // Reviews FK → requests; requests FK → apps. Order matters inside the batch.
       d1.prepare(`DELETE FROM approval_reviews WHERE app_id = ?`).bind(appId),
       d1.prepare(`DELETE FROM approval_requests WHERE app_id = ?`).bind(appId),
+      // Immutable Event Definition publication history has no standalone
+      // delete route, so it is cascaded with its owning App.
+      d1.prepare(`DELETE FROM event_definition_versions WHERE app_id = ?`).bind(appId),
+      d1.prepare(`DELETE FROM event_definitions WHERE app_id = ?`).bind(appId),
       d1.prepare(`DELETE FROM api_keys WHERE app_id = ? AND revoked_at IS NOT NULL`).bind(appId),
       d1.prepare(`DELETE FROM client_keys WHERE app_id = ? AND revoked_at IS NOT NULL`).bind(appId),
       d1.prepare(`DELETE FROM environments WHERE app_id = ?`).bind(appId),

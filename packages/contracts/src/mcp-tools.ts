@@ -48,8 +48,26 @@ export interface McpProtocolToolDefinition {
 }
 
 /** A route is an MCP tool iff it is a control-plane (token-authed) route. */
+export const unavailableControlPlaneOperationIds = [
+  "organizations_delete",
+  "current_user_privacy_export",
+  "current_user_delete",
+  "organization_privacy_export",
+  "app_privacy_export",
+  "entity_privacy_export",
+  "entity_privacy_delete",
+  "privacy_requests_get",
+] as const;
+
+const UNAVAILABLE_CONTROL_PLANE_OPERATIONS = new Set<string>(unavailableControlPlaneOperationIds);
+
+export type UnavailableControlPlaneOperationId =
+  (typeof unavailableControlPlaneOperationIds)[number];
+
 export function isMcpToolRoute(route: ApiRouteContract): boolean {
-  return route.auth === MCP_AUTH_KIND;
+  return (
+    route.auth === MCP_AUTH_KIND && !UNAVAILABLE_CONTROL_PLANE_OPERATIONS.has(route.operationId)
+  );
 }
 
 /**

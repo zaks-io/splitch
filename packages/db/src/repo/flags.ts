@@ -35,11 +35,7 @@ export function makeFlagRepo(db: Db) {
   const flagConfigsTable = scopedTable(db, flagConfigs);
   const targetingRulesTable = scopedTable(db, targetingRules);
   const segmentsTable = scopedTable(db, segments);
-
-  async function flagInScope(
-    scope: TenantScope,
-    flagId: string,
-  ): Promise<typeof flags.$inferSelect | null> {
+  async function flagInScope(scope: TenantScope, flagId: string) {
     return flagsTable.findOne(scope, eq(flags.id, flagId));
   }
 
@@ -73,8 +69,15 @@ export function makeFlagRepo(db: Db) {
       return flagsTable.findOne(scope, eq(flags.key, key));
     },
 
+    getFlagCreateByIdempotency(scope: TenantScope, actorId: string, idempotencyKey: string) {
+      return flagsTable.findOne(
+        scope,
+        and(eq(flags.createdBy, actorId), eq(flags.createIdempotencyKey, idempotencyKey)),
+      );
+    },
+
     /**
-     * Insert a Flag, reporting a key collision as a result rather than throwing.
+     * Insert a Flag, reporting expected create collisions rather than throwing.
      *
      * The `flags_app_key_unique` index is what actually enforces uniqueness; the
      * caller's preceding `getFlagByKey` only buys a clean field error on the
@@ -89,8 +92,10 @@ export function makeFlagRepo(db: Db) {
       try {
         return { ok: true, flag: await flagsTable.insert(scope, values) };
       } catch (error) {
-        if (!isFlagKeyConflict(error)) throw error;
-        return { ok: false, reason: "key_conflict" };
+        if (isFlagCreateIdempotencyConflict(error))
+          return { ok: false, reason: "idempotency_conflict" };
+        if (isFlagKeyConflict(error)) return { ok: false, reason: "key_conflict" };
+        throw error;
       }
     },
 
@@ -105,6 +110,15 @@ export function makeFlagRepo(db: Db) {
       >,
     ): Promise<typeof flags.$inferSelect | null> {
       return flagsTable.update(scope, patch, eq(flags.id, flagId)).then((rows) => rows[0] ?? null);
+    },
+
+    async completeFlagCreate(
+      scope: TenantScope,
+      flagId: string,
+      createResponse: string,
+    ): Promise<void> {
+      const rows = await flagsTable.update(scope, { createResponse }, eq(flags.id, flagId));
+      if (rows.length !== 1) throw new Error("completeFlagCreate: Flag was not updated");
     },
 
     removeFlag(scope: TenantScope, flagId: string): Promise<number> {
@@ -237,7 +251,7 @@ export function makeFlagRepo(db: Db) {
 
 export type CreateFlagResult =
   | { ok: true; flag: typeof flags.$inferSelect }
-  | { ok: false; reason: "key_conflict" };
+  | { ok: false; reason: "key_conflict" | "idempotency_conflict" };
 
 /**
  * SQLite reports a composite unique-index violation by COLUMN LIST, not by index
@@ -248,6 +262,8 @@ export type CreateFlagResult =
  * succeed). Every other error still throws.
  */
 const FLAG_KEY_UNIQUE_VIOLATION = "UNIQUE constraint failed: flags.app_id, flags.key";
+const FLAG_CREATE_IDEMPOTENCY_UNIQUE_VIOLATION =
+  "UNIQUE constraint failed: flags.app_id, flags.created_by, flags.create_idempotency_key";
 
 /** SQLite's extended result code for the same failure, which no column list can spell. */
 const SQLITE_UNIQUE_CODE = "SQLITE_CONSTRAINT_UNIQUE";
@@ -258,9 +274,16 @@ const SQLITE_UNIQUE_CODE = "SQLITE_CONSTRAINT_UNIQUE";
  * The `D1_ERROR: ` prefix is optional so the match still holds if the seam ever
  * throws D1's error unwrapped.
  */
-const FLAG_KEY_UNIQUE_MESSAGE = new RegExp(
-  `^(D1_ERROR: )?${FLAG_KEY_UNIQUE_VIOLATION.replaceAll(".", "\\.")}: SQLITE_CONSTRAINT \\(extended: ${SQLITE_UNIQUE_CODE}\\)$`,
+const FLAG_KEY_UNIQUE_MESSAGE = uniqueViolationMessage(FLAG_KEY_UNIQUE_VIOLATION);
+const FLAG_CREATE_IDEMPOTENCY_UNIQUE_MESSAGE = uniqueViolationMessage(
+  FLAG_CREATE_IDEMPOTENCY_UNIQUE_VIOLATION,
 );
+
+function uniqueViolationMessage(violation: string): RegExp {
+  return new RegExp(
+    `^(D1_ERROR: )?${violation.replaceAll(".", "\\.")}: SQLITE_CONSTRAINT \\(extended: ${SQLITE_UNIQUE_CODE}\\)$`,
+  );
+}
 
 /**
  * Classify a write failure WITHOUT ever reading a message that embeds the bound
@@ -292,10 +315,16 @@ const FLAG_KEY_UNIQUE_MESSAGE = new RegExp(
  * message end to end. The parameter skip stays as defence in depth.
  */
 function isFlagKeyConflict(error: unknown): boolean {
+  return hasUniqueViolationMessage(error, FLAG_KEY_UNIQUE_MESSAGE);
+}
+
+function isFlagCreateIdempotencyConflict(error: unknown): boolean {
+  return hasUniqueViolationMessage(error, FLAG_CREATE_IDEMPOTENCY_UNIQUE_MESSAGE);
+}
+
+function hasUniqueViolationMessage(error: unknown, pattern: RegExp): boolean {
   for (const message of messagesNotCarryingParameters(error)) {
-    if (FLAG_KEY_UNIQUE_MESSAGE.test(message)) {
-      return true;
-    }
+    if (pattern.test(message)) return true;
   }
   return false;
 }

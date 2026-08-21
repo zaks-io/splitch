@@ -69,7 +69,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
+    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR", "IDEMPOTENCY_KEY_CONFLICT"],
   }),
   defineApiRoute({
     operationId: "flags_get",

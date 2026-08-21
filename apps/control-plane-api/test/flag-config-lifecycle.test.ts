@@ -68,7 +68,7 @@ describe("flag configuration lifecycle on Flag create", () => {
     }
   });
 
-  it("rolls back the Flag and purges KV when config initialization fails", async () => {
+  it("resumes Flag creation when config initialization fails partway", async () => {
     const createdApp = await lifecycleCreateDefaultApp(h);
     const jwt = await lifecycleAppToken(h, createdApp.app.id);
     const repo = createRepository(h.bindings.d1);
@@ -80,14 +80,16 @@ describe("flag configuration lifecycle on Flag create", () => {
       h.bindings.credentialKv,
     );
 
+    const idempotencyKey = `idem-create-flag-${crypto.randomUUID()}`;
+    const body = baseFlag(createdApp.app.id);
     const res = await h.app.request(`/apps/${createdApp.app.id}/flags`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${jwt}`,
         "content-type": "application/json",
-        "idempotency-key": `idem-create-flag-${crypto.randomUUID()}`,
+        "idempotency-key": idempotencyKey,
       },
-      body: JSON.stringify(baseFlag(createdApp.app.id)),
+      body: JSON.stringify(body),
     });
 
     expect(res.status).toBe(500);
@@ -95,17 +97,29 @@ describe("flag configuration lifecycle on Flag create", () => {
       (await repo.flags.flags.findMany(appScope(createdApp.app.id))).some(
         (row) => row.key === "checkout-redesign",
       ),
-    ).toBe(false);
+    ).toBe(true);
+
+    h.app = makeAppForRepo(h, repo, configStoreAccess(h.bindings), h.bindings.credentialKv);
+    const recovered = await h.app.request(`/apps/${createdApp.app.id}/flags`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify(body),
+    });
+    expect(recovered.status).toBe(200);
     for (const environment of environments) {
       expect(
         await repo.flags.flagConfigs.findMany(envScope(createdApp.app.id, environment.id)),
-      ).toHaveLength(0);
+      ).toHaveLength(1);
       expect(
         await h.bindings.configKv.get(
           flagConfigKey(createdApp.app.id, environment.id, "checkout-redesign"),
           "text",
         ),
-      ).toBeNull();
+      ).not.toBeNull();
     }
   });
 });

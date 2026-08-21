@@ -90,7 +90,7 @@ describe("App and Environment Exposure status cleanup", () => {
     expect(await createRepository(bindings.d1).identity.getApp(APP_ID)).toBeNull();
   });
 
-  it("does not purge status when a later Environment delete step fails", async () => {
+  it("does not purge status when a later D1 delete step fails", async () => {
     await bindings.d1
       .prepare(
         `CREATE TRIGGER fail_environment_delete
@@ -108,10 +108,32 @@ describe("App and Environment Exposure status cleanup", () => {
     });
 
     expect(response.status).toBe(500);
-    expect(calls).toEqual([]);
+    expect(calls).toHaveLength(0);
     expect(
       await createRepository(bindings.d1).identity.getEnvironment(appScope(APP_ID), ENV_DEV),
     ).not.toBeNull();
+  });
+
+  it("retries Exposure status cleanup after the Environment row is gone", async () => {
+    const calls: EnvironmentExposureStatusCleanupInput[] = [];
+    const first = await app(calls, async (input) => {
+      calls.push(input);
+      throw new EnvironmentExposureStatusCleanupError("forced cleanup outage");
+    }).request(`/apps/${APP_ID}/envs/${ENV_DEV}`, { method: "DELETE" });
+
+    expect(first.status).toBe(503);
+    expect(first.headers.get("retry-after")).toBe("30");
+    expect(calls).toHaveLength(1);
+    expect(
+      await createRepository(bindings.d1).identity.getEnvironment(appScope(APP_ID), ENV_DEV),
+    ).toBeNull();
+
+    const retry = await app(calls).request(`/apps/${APP_ID}/envs/${ENV_DEV}`, {
+      method: "DELETE",
+    });
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({ deleted: true });
+    expect(calls).toHaveLength(2);
   });
 
   it("does not purge status when the App cascade fails", async () => {

@@ -141,12 +141,17 @@ describe("Flag key collision on an App larger than the catalog read bound", () =
     // them selects the App's Flag set and filters in memory.
     const flagSelects = statements.filter((sql) => /^select .* from "flags"/.test(sql));
     expect(flagSelects.some((sql) => sql.includes('"flags"."key" = ?'))).toBe(true);
-    // Every read of `flags` on this path is keyed on `key` or `id`. A read scoped
-    // to the App alone is the scan this ticket removed, whether or not a LIMIT is
-    // bolted onto it.
+    // Every read of `flags` on this path is keyed on `key`, `id`, or the create
+    // idempotency tuple. A read scoped to the App alone is the scan this ticket
+    // removed, whether or not a LIMIT is bolted onto it.
     expect(
       flagSelects.filter(
-        (sql) => !(sql.includes('"flags"."key" = ?') || sql.includes('"flags"."id" = ?')),
+        (sql) =>
+          !(
+            sql.includes('"flags"."key" = ?') ||
+            sql.includes('"flags"."id" = ?') ||
+            sql.includes('"flags"."create_idempotency_key" = ?')
+          ),
       ),
     ).toEqual([]);
   });

@@ -78,11 +78,21 @@ export const apps = sqliteTable(
     name: text("name").notNull(),
     key: text("key").notNull(),
     description: text("description"),
+    createIdempotencyKey: text("create_idempotency_key"),
+    createRequestHash: text("create_request_hash"),
+    createResponse: text("create_response"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     createdBy: userRef("created_by"),
   },
-  (t) => [uniqueIndex("apps_org_key_unique").on(t.organizationId, t.key)],
+  (t) => [
+    uniqueIndex("apps_org_key_unique").on(t.organizationId, t.key),
+    uniqueIndex("apps_create_idempotency_unique").on(
+      t.organizationId,
+      t.createdBy,
+      t.createIdempotencyKey,
+    ),
+  ],
 );
 
 /**

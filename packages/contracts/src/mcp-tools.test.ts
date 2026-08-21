@@ -29,6 +29,14 @@ const NON_TOOL_OPERATION_IDS = [
   "openapi_document_get",
   "environment_exposure_status_delete",
   "holdover_write_outbox_delete",
+  "organizations_delete",
+  "current_user_privacy_export",
+  "current_user_delete",
+  "organization_privacy_export",
+  "app_privacy_export",
+  "entity_privacy_export",
+  "entity_privacy_delete",
+  "privacy_requests_get",
 ] as const;
 
 describe("mcp tools: surface isolation (CRITICAL)", () => {
@@ -49,6 +57,12 @@ describe("mcp tools: surface isolation (CRITICAL)", () => {
   it("derives NO tool for binding-only analytics cleanup", () => {
     expect(toolNames.has("environment_exposure_status_delete")).toBe(false);
     expect(toolNames.has("holdover_write_outbox_delete")).toBe(false);
+  });
+
+  it("derives NO tool for operations without a backing workflow", () => {
+    expect(toolNames.has("organizations_delete")).toBe(false);
+    expect(toolNames.has("current_user_privacy_export")).toBe(false);
+    expect(toolNames.has("privacy_requests_get")).toBe(false);
   });
 
   it("every excluded route is genuinely in the registry but not a tool", () => {

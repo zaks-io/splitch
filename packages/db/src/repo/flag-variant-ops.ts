@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { flags, variants } from "../schema/index";
 import { approvalPendingCondition, approvalReviewLanded } from "./approval-atomic";
 import type { Db } from "./client";
@@ -29,6 +29,56 @@ export type FlagInScope = (
   scope: TenantScope,
   flagId: string,
 ) => Promise<typeof flags.$inferSelect | null>;
+
+type VariantByName = (
+  scope: TenantScope,
+  flagId: string,
+  name: string,
+) => Promise<typeof variants.$inferSelect | null>;
+
+function variantsInInsertOrder(db: Db, predicate: SQL<unknown>) {
+  return db
+    .select()
+    .from(variants)
+    .where(predicate)
+    .orderBy(asc(sql`${variants}.rowid`));
+}
+
+async function insertCreateVariantOrWinner(
+  db: Db,
+  variantByName: VariantByName,
+  scope: TenantScope,
+  flagId: string,
+  values: Omit<typeof variants.$inferInsert, "flagId">,
+): Promise<typeof variants.$inferSelect> {
+  try {
+    const rows = await db
+      .insert(variants)
+      .values({ ...values, flagId })
+      .returning();
+    const inserted = rows[0];
+    if (!inserted) throw new Error("ensureCreateVariant: no row returned");
+    return inserted;
+  } catch (cause) {
+    const winner = await variantByName(scope, flagId, values.name);
+    if (winner) return winner;
+    throw cause;
+  }
+}
+
+function makeEnsureCreateVariant(db: Db, flagInScope: FlagInScope, variantByName: VariantByName) {
+  return async function ensureCreateVariant(
+    scope: TenantScope,
+    flagId: string,
+    values: Omit<typeof variants.$inferInsert, "flagId">,
+  ): Promise<typeof variants.$inferSelect> {
+    const flag = await flagInScope(scope, flagId);
+    if (!flag) throw new Error("ensureCreateVariant: flag is not in this App scope");
+    const existing = await variantByName(scope, flagId, values.name);
+    if (existing) return existing;
+    return insertCreateVariantOrWinner(db, variantByName, scope, flagId, values);
+  };
+}
 
 /**
  * The Approval-guarded delete, its landing check, and the confirming re-read.
@@ -91,7 +141,7 @@ export function makeVariantOps(
     ): Promise<(typeof variants.$inferSelect)[]> {
       const flag = await flagInScope(scope, flagId);
       if (!flag) return [];
-      return db.select().from(variants).where(eq(variants.flagId, flagId));
+      return variantsInInsertOrder(db, eq(variants.flagId, flagId));
     },
 
     /**
@@ -131,7 +181,7 @@ export function makeVariantOps(
       const rows = (
         await Promise.all(
           idBatches(scopedIds).map((batch) =>
-            db.select().from(variants).where(inArray(variants.flagId, batch)),
+            variantsInInsertOrder(db, inArray(variants.flagId, batch)),
           ),
         )
       ).flat();
@@ -173,6 +223,9 @@ export function makeVariantOps(
       if (!inserted) throw new Error("addVariant: no row returned");
       return inserted;
     },
+
+    /** Concurrent create retries converge on the row chosen by the database. */
+    ensureCreateVariant: makeEnsureCreateVariant(db, flagInScope, variantByName),
 
     getVariantByName: variantByName,
 

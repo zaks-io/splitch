@@ -17,7 +17,6 @@ import { requireAppMember } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
 import { experimentNotFound, runNotFound } from "./experiment-errors";
 import { environmentExists } from "./experiment-handler-shared";
-import { ORG_MEMBER_ROLES, requireOrgRole } from "./org-authz";
 import { controlPlaneRoute } from "./routes";
 
 /**
@@ -145,7 +144,19 @@ async function exposureStatusMembershipError(
 
   const app = await repo.identity.getApp(appId);
   if (!app) return appNotFound(requestId);
-  return requireOrgRole({ repo }, app.organizationId, principal, ORG_MEMBER_ROLES, requestId);
+  const orgMembership = await repo.identity.getOrgMembership(app.organizationId, principal.id);
+  return orgMembership ? null : exposureStatusOrgMembershipForbidden(requestId);
+}
+
+function exposureStatusOrgMembershipForbidden(requestId: string): Response {
+  return renderError(
+    {
+      code: "FORBIDDEN",
+      message: "credential owner is no longer a member of this App's organization",
+      details: {},
+    },
+    { requestId },
+  );
 }
 
 function missingOwnerBinding(route: ApiRouteContract, requestId: string): Response {

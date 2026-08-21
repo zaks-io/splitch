@@ -1,7 +1,7 @@
-import { deriveSlug } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz";
+import { createAppRequest } from "./app-create-handler";
 import { forceDeleteApp } from "./app-delete-force";
 import {
   deleteAppRowsWithHoldoverSaga,
@@ -10,26 +10,19 @@ import {
 } from "./app-delete-holdover";
 import { collectAppDeleteBlockers } from "./app-delete-tree";
 import {
-  ALLOW_POLICY,
   type AppEnvironmentDeps,
   type AppRow,
   appNotFound,
   appResponse,
   appSlugConflict,
-  CONFIRM_POLICY,
-  createEnvironmentRecord,
   type EnvironmentRow,
-  environmentResponse,
   firstRunningExperiment,
   nowIso,
   organizationNotFound,
-  provisionEnvironmentClientKeys,
   resourceNotEmptyFromBlockers,
-  unusableAppKey,
 } from "./app-environment-model";
-import { randomHex } from "./credential-cache";
 import { objectBody, pathParam, queryFlags } from "./handler-input";
-import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, requireOrgRole } from "./org-authz";
+import { ORG_MEMBER_ROLES, requireOrgRole } from "./org-authz";
 
 export function makeAppHandlers(deps: AppEnvironmentDeps) {
   return {
@@ -45,62 +38,8 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
       return Response.json({ items: rows.map(appResponse) });
     },
 
-    async createApp({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
-      const orgId = pathParam(input, "orgId");
-      const forbidden = await requireOrgRole(deps, orgId, principal, ORG_ADMIN_ROLES, requestId);
-      if (forbidden) return forbidden;
-
-      const org = await deps.repo.identity.getOrg(orgId);
-      if (!org) return organizationNotFound(requestId);
-
-      const body = objectBody(input);
-      const name = body.name as string;
-      // An explicit `key` is already schema-validated by the guard; derivation is
-      // the fallback and can legitimately fail, so it fails loud rather than
-      // inventing a handle the caller never chose. Same contract as an Org slug.
-      const key = typeof body.key === "string" ? body.key : deriveSlug(name);
-      if (!key) return unusableAppKey(name, requestId);
-
-      const now = nowIso(deps);
-      const app = await deps.repo.identity.createApp({
-        id: `app_${randomHex(12)}`,
-        organizationId: orgId,
-        name,
-        key,
-        ...(body.description ? { description: body.description as string } : {}),
-        createdAt: now,
-        updatedAt: now,
-        createdBy: principal.id,
-      });
-      const scope = appScope(app.id);
-      await deps.repo.identity.createAppMembership(appScope(app.id), {
-        userId: principal.id,
-        role: "owner",
-        createdAt: now,
-      });
-
-      const dev = await createEnvironmentRecord(deps, scope, app.id, {
-        key: "dev",
-        name: "Dev",
-        policy: ALLOW_POLICY,
-        actorId: principal.id,
-      });
-      const prod = await createEnvironmentRecord(deps, scope, app.id, {
-        key: "prod",
-        name: "Prod",
-        policy: CONFIRM_POLICY,
-        actorId: principal.id,
-      });
-      const clientKeys = await provisionEnvironmentClientKeys(deps, app.id, app.organizationId, [
-        dev,
-        prod,
-      ]);
-
-      return Response.json({
-        app: appResponse(app),
-        environments: [environmentResponse(dev), environmentResponse(prod)],
-        clientKeys,
-      });
+    async createApp(args: HandlerArgs<unknown>): Promise<Response> {
+      return createAppRequest(deps, args);
     },
 
     async getApp({ input, requestId }: HandlerArgs<unknown>): Promise<Response> {

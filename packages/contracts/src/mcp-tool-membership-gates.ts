@@ -35,7 +35,6 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   organizations_create: TOKEN,
   organizations_get: ORG_MEMBER,
   organizations_update: ORG_OWNER,
-  organizations_delete: ORG_OWNER,
   organization_members_list: ORG_ADMIN,
   organization_members_add: ORG_ADMIN,
   organization_members_update: ORG_OWNER,
@@ -109,13 +108,6 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   experiment_results_post: APP_MEMBER,
   environment_exposure_status_get: APP_MEMBER,
   organization_usage_get: ORG_MEMBER,
-  current_user_privacy_export: TOKEN,
-  current_user_delete: TOKEN,
-  organization_privacy_export: ORG_OWNER,
-  app_privacy_export: APP_ADMIN,
-  entity_privacy_export: APP_ADMIN,
-  entity_privacy_delete: APP_ADMIN,
-  privacy_requests_get: TOKEN,
 } as const satisfies Record<string, RouteMembershipGate>;
 
 export type McpToolOperationId = keyof typeof MCP_TOOL_MEMBERSHIP_GATES;

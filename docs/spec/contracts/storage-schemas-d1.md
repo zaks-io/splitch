@@ -58,16 +58,22 @@ Privacy request tables live in [storage-schemas-d1-privacy.md](./storage-schemas
 
 ### `apps`
 
-| Column            | Type        | Constraints                              |
-| ----------------- | ----------- | ---------------------------------------- |
-| `id`              | text        | PK                                       |
-| `organization_id` | text        | FK → organizations, not null             |
-| `name`            | text        | not null                                 |
-| `key`             | text        | not null, unique per org (index)         |
-| `description`     | text        | nullable                                 |
-| `created_at`      | timestamptz | not null                                 |
-| `updated_at`      | timestamptz | not null                                 |
-| `created_by`      | text        | WorkOS user ID or deleted-user tombstone |
+| Column                   | Type        | Constraints                              |
+| ------------------------ | ----------- | ---------------------------------------- |
+| `id`                     | text        | PK                                       |
+| `organization_id`        | text        | FK → organizations, not null             |
+| `name`                   | text        | not null                                 |
+| `key`                    | text        | not null, unique per org (index)         |
+| `description`            | text        | nullable                                 |
+| `create_idempotency_key` | text        | nullable                                 |
+| `create_request_hash`    | text        | nullable; canonical create payload hash  |
+| `create_response`        | text        | nullable; exact successful response JSON |
+| `created_at`             | timestamptz | not null                                 |
+| `updated_at`             | timestamptz | not null                                 |
+| `created_by`             | text        | WorkOS user ID or deleted-user tombstone |
+
+UNIQUE constraint: `(organization_id, created_by, create_idempotency_key)`. A successful exact-key
+retry returns `create_response`; different intent returns `IDEMPOTENCY_KEY_CONFLICT`.
 
 ### `environments`
 
@@ -225,20 +231,26 @@ Flag DEFINITION is App-level: `key`, value schema, and the Variant catalog. Per-
 CONFIGURATION (enabled state, available Variant subset, targeting, rollout) lives in `flag_configs`
 (ADR-0027).
 
-| Column               | Type        | Constraints                                                          |
-| -------------------- | ----------- | -------------------------------------------------------------------- |
-| `id`                 | text        | PK                                                                   |
-| `app_id`             | text        | FK → apps, not null                                                  |
-| `key`                | text        | not null, unique per `(app_id)`                                      |
-| `name`               | text        | not null                                                             |
-| `description`        | text        | nullable                                                             |
-| `schema`             | text        | nullable (JSON Schema); value contract Variant `value`s must satisfy |
-| `default_variant_id` | text        | FK → variants                                                        |
-| `created_at`         | timestamptz | not null                                                             |
-| `updated_at`         | timestamptz | not null                                                             |
-| `created_by`         | text        | WorkOS user ID or deleted-user tombstone                             |
-| `updated_by`         | text        | WorkOS user ID or deleted-user tombstone                             |
-| `version`            | integer     | not null, default 1; optimistic-lock counter                         |
+| Column                   | Type        | Constraints                                                          |
+| ------------------------ | ----------- | -------------------------------------------------------------------- |
+| `id`                     | text        | PK                                                                   |
+| `app_id`                 | text        | FK → apps, not null                                                  |
+| `key`                    | text        | not null, unique per `(app_id)`                                      |
+| `name`                   | text        | not null                                                             |
+| `description`            | text        | nullable                                                             |
+| `schema`                 | text        | nullable (JSON Schema); value contract Variant `value`s must satisfy |
+| `default_variant_id`     | text        | FK → variants                                                        |
+| `create_idempotency_key` | text        | nullable                                                             |
+| `create_request_hash`    | text        | nullable; canonical create payload hash                              |
+| `create_response`        | text        | nullable; exact successful response JSON                             |
+| `created_at`             | timestamptz | not null                                                             |
+| `updated_at`             | timestamptz | not null                                                             |
+| `created_by`             | text        | WorkOS user ID or deleted-user tombstone                             |
+| `updated_by`             | text        | WorkOS user ID or deleted-user tombstone                             |
+| `version`                | integer     | not null, default 1; optimistic-lock counter                         |
+
+UNIQUE constraint: `(app_id, created_by, create_idempotency_key)`. An exact-key retry returns the
+stored response; different intent returns `IDEMPOTENCY_KEY_CONFLICT`.
 
 ### `event_definitions` (App-level)
 

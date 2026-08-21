@@ -213,10 +213,13 @@ export function missingAvailableVariants(
 }
 
 export function missingRuleVariantNames(
-  rules: TargetingRule[],
-  variants: Variant[],
-  availableVariantNames: string[],
+  rules: readonly Pick<TargetingRule, "variantId">[],
+  variants: readonly Pick<Variant, "id" | "name">[],
+  availableVariantNames: readonly string[],
 ): string[] {
+  // Empty means the catalog has never been narrowed, so every Variant remains
+  // available to Targeting Rules.
+  if (availableVariantNames.length === 0) return [];
   const available = new Set(availableVariantNames);
   const namesById = new Map(variants.map((variant) => [variant.id, variant.name]));
   const missing = new Set<string>();
