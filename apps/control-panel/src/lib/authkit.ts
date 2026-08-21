@@ -149,7 +149,7 @@ export function decodeWorkOsAccessTokenClaims(accessToken: string): {
   const sid = payload.sid;
   const exp = payload.exp;
   if (typeof sid !== "string" || sid.length === 0 || !Number.isInteger(exp)) {
-    throw new Error("WorkOS AuthKit callback returned incomplete access token claims");
+    throw new Error("WorkOS AuthKit returned incomplete access token claims");
   }
   return { sessionId: sid, expiresAt: exp as number };
 }
@@ -158,13 +158,13 @@ function decodeJwtPayload(jwt: string): Record<string, unknown> {
   const parts = jwt.split(".");
   const payload = parts[1];
   if (!payload) {
-    throw new Error("WorkOS AuthKit callback returned an invalid access token");
+    throw new Error("WorkOS AuthKit returned an invalid access token");
   }
 
   const json = base64UrlDecode(payload);
   const parsed = JSON.parse(json) as unknown;
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("WorkOS AuthKit callback returned an invalid access token payload");
+    throw new Error("WorkOS AuthKit returned an invalid access token payload");
   }
   return parsed as Record<string, unknown>;
 }

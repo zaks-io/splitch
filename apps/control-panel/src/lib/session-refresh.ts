@@ -6,15 +6,16 @@ import {
   decodeWorkOsAccessTokenClaims,
 } from "./authkit";
 import type { ControlPanelBindings } from "./bindings";
-import {
-  loadSessionFromCookieHeader,
-  refreshSession,
-  type SessionLoadResult,
-  sessionKey,
-} from "./session";
+import { loadSessionFromCookieHeader, refreshSession, type SessionLoadResult } from "./session";
 import { nowSeconds } from "./session-cookie";
 
 const ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 30;
+
+// The same set the WorkOS SDK's own CookieSession.authenticate treats as "the
+// user must go back through AuthKit". Any other OauthException (invalid_client,
+// a 5xx with an OAuth error body) is a panel or provider fault and must surface
+// as an error, never as a sign-out (ADR-0036).
+const SESSION_ENDED_OAUTH_ERRORS = new Set(["invalid_grant", "mfa_enrollment", "sso_required"]);
 
 export async function loadSessionFromRequest(
   bindings: ControlPanelBindings,
@@ -22,8 +23,11 @@ export async function loadSessionFromRequest(
   now = Date.now(),
   deps?: { authKit?: AuthKitClient },
 ): Promise<SessionLoadResult> {
-  const cookieHeader = request.headers.get("cookie");
-  const loaded = await loadSessionFromCookieHeader(bindings.SESSION_STORE, cookieHeader, now);
+  const loaded = await loadSessionFromCookieHeader(
+    bindings.SESSION_STORE,
+    request.headers.get("cookie"),
+    now,
+  );
   if (!loaded.ok) {
     return loaded;
   }
@@ -34,8 +38,7 @@ export async function loadSessionFromRequest(
     return loaded;
   }
 
-  const currentSeconds = nowSeconds(now);
-  if (accessTokenExpiresAt > currentSeconds + ACCESS_TOKEN_REFRESH_SKEW_SECONDS) {
+  if (accessTokenExpiresAt > nowSeconds(now) + ACCESS_TOKEN_REFRESH_SKEW_SECONDS) {
     return loaded;
   }
 
@@ -57,29 +60,15 @@ export async function loadSessionFromRequest(
     await refreshSession(bindings.SESSION_STORE, loaded.tokenHash, refreshed, now);
     return { ok: true, session: refreshed, tokenHash: loaded.tokenHash };
   } catch (cause) {
-    if (!(cause instanceof OauthException)) {
+    if (!(cause instanceof OauthException) || !SESSION_ENDED_OAUTH_ERRORS.has(cause.error ?? "")) {
       throw cause;
     }
-    return expireRefusedRefresh(bindings.SESSION_STORE, cookieHeader, loaded, currentSeconds, now);
+    // The KV record is left for its TTL on purpose. Parallel requests that read
+    // the same stale record converge on identical tokens inside WorkOS's 30s
+    // replay grace; a replay after that window is refused, and because KV reads
+    // can lag a concurrent rotation by up to a minute, this request cannot tell
+    // a dead session from a stale replica. Deleting here could destroy the
+    // rotated record another request just wrote.
+    return { ok: false, reason: "expired" };
   }
-}
-
-async function expireRefusedRefresh(
-  kv: KVNamespace,
-  cookieHeader: string | null,
-  loaded: Extract<SessionLoadResult, { ok: true }>,
-  currentSeconds: number,
-  now: number,
-): Promise<SessionLoadResult> {
-  const concurrent = await loadSessionFromCookieHeader(kv, cookieHeader, now);
-  if (
-    concurrent.ok &&
-    concurrent.session.workosAccessTokenExpiresAt !== undefined &&
-    concurrent.session.workosAccessTokenExpiresAt > currentSeconds
-  ) {
-    return concurrent;
-  }
-
-  await kv.delete(sessionKey(loaded.tokenHash));
-  return { ok: false, reason: "expired" };
 }

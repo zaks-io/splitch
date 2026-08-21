@@ -124,6 +124,7 @@ function claimContext(
     userId: loaded.session.userId,
     orgId: organization.orgId,
     ...serverOnlySessionFields(loaded.session),
+    // Restated after the spread so the guard above narrows it to a required string.
     workosSessionId: loaded.session.workosSessionId,
     expiresAt: loaded.session.expiresAt,
   };

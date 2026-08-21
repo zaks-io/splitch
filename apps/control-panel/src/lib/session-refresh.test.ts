@@ -2,7 +2,7 @@ import { OauthException } from "@workos-inc/node/worker";
 import { describe, expect, it, vi } from "vitest";
 import type { AuthKitClient } from "./authkit";
 import type { ControlPanelBindings } from "./bindings";
-import { createSession, type StoredSession, sessionKey } from "./session";
+import { createSession, sessionKey } from "./session";
 import { loadSessionFromRequest } from "./session-refresh";
 import { MemoryKv, NOW, sessionPrincipal } from "./session-test-harness";
 
@@ -79,11 +79,16 @@ describe("control-panel WorkOS access token refresh", () => {
     expect(loaded).toEqual({ ok: true, session: created.session, tokenHash: created.tokenHash });
   });
 
-  it("deletes the session when WorkOS refuses refresh and no concurrent request won", async () => {
+  it.each([
+    "invalid_grant",
+    "mfa_enrollment",
+    "sso_required",
+  ])("ends the session without touching KV when WorkOS answers %s", async (error) => {
     const kv = new MemoryKv();
     const created = await refreshableSession(kv, NOW_SECONDS - 1);
+    const storedBefore = kv.store.get(sessionKey(created.tokenHash));
     const refresh = vi.fn<AuthKitClient["authenticateWithRefreshToken"]>(async () => {
-      throw oauthException();
+      throw oauthException(error);
     });
 
     const loaded = await loadSessionFromRequest(bindings(kv), request(created.cookie), NOW, {
@@ -91,33 +96,24 @@ describe("control-panel WorkOS access token refresh", () => {
     });
 
     expect(loaded).toEqual({ ok: false, reason: "expired" });
-    expect(kv.store.has(sessionKey(created.tokenHash))).toBe(false);
+    expect(kv.store.get(sessionKey(created.tokenHash))).toBe(storedBefore);
   });
 
-  it("uses the fresh KV record when another request won refresh-token rotation", async () => {
+  it("rethrows an OAuth error that is not a session ending, so misconfiguration fails loud", async () => {
     const kv = new MemoryKv();
     const created = await refreshableSession(kv, NOW_SECONDS - 1);
-    const concurrent: StoredSession = {
-      ...created.session,
-      workosAccessToken: "concurrent_access_token",
-      workosRefreshToken: "concurrent_refresh_token",
-      workosAccessTokenExpiresAt: NOW_SECONDS + 3_600,
-    };
+    const storedBefore = kv.store.get(sessionKey(created.tokenHash));
+    const failure = oauthException("invalid_client");
     const refresh = vi.fn<AuthKitClient["authenticateWithRefreshToken"]>(async () => {
-      kv.store.set(sessionKey(created.tokenHash), JSON.stringify(concurrent));
-      throw oauthException();
+      throw failure;
     });
 
-    const loaded = await loadSessionFromRequest(bindings(kv), request(created.cookie), NOW, {
-      authKit: fakeAuthKit(refresh),
-    });
-
-    expect(loaded).toEqual({
-      ok: true,
-      session: concurrent,
-      tokenHash: created.tokenHash,
-    });
-    expect(kv.store.get(sessionKey(created.tokenHash))).toBe(JSON.stringify(concurrent));
+    await expect(
+      loadSessionFromRequest(bindings(kv), request(created.cookie), NOW, {
+        authKit: fakeAuthKit(refresh),
+      }),
+    ).rejects.toBe(failure);
+    expect(kv.store.get(sessionKey(created.tokenHash))).toBe(storedBefore);
   });
 
   it("rethrows non-OAuth refresh failures without touching the session", async () => {
@@ -185,8 +181,8 @@ function fakeAuthKit(
   };
 }
 
-function oauthException(): OauthException {
-  return new OauthException(400, "request_1", "invalid_grant", "Session ended", {});
+function oauthException(error: string): OauthException {
+  return new OauthException(400, "request_1", error, "Refresh refused", {});
 }
 
 function jwt(payload: Record<string, unknown>): string {
