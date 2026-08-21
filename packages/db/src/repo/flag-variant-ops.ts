@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { flags, variants } from "../schema/index";
 import { approvalPendingCondition, approvalReviewLanded } from "./approval-atomic";
 import type { Db } from "./client";
@@ -35,6 +35,14 @@ type VariantByName = (
   flagId: string,
   name: string,
 ) => Promise<typeof variants.$inferSelect | null>;
+
+function variantsInInsertOrder(db: Db, predicate: SQL<unknown>) {
+  return db
+    .select()
+    .from(variants)
+    .where(predicate)
+    .orderBy(asc(sql`${variants}.rowid`));
+}
 
 async function insertCreateVariantOrWinner(
   db: Db,
@@ -133,7 +141,7 @@ export function makeVariantOps(
     ): Promise<(typeof variants.$inferSelect)[]> {
       const flag = await flagInScope(scope, flagId);
       if (!flag) return [];
-      return db.select().from(variants).where(eq(variants.flagId, flagId));
+      return variantsInInsertOrder(db, eq(variants.flagId, flagId));
     },
 
     /**
@@ -173,7 +181,7 @@ export function makeVariantOps(
       const rows = (
         await Promise.all(
           idBatches(scopedIds).map((batch) =>
-            db.select().from(variants).where(inArray(variants.flagId, batch)),
+            variantsInInsertOrder(db, inArray(variants.flagId, batch)),
           ),
         )
       ).flat();

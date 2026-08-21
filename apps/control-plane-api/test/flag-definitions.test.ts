@@ -76,33 +76,49 @@ describe("control-plane Flag definition CRUD", () => {
     ).toEqual([]);
   });
 
-  it("rolls back the Flag when catalog Variant insertion fails", async () => {
+  it("resumes the Flag when catalog Variant insertion fails", async () => {
     const createdApp = await createDefaultApp(h);
     const jwt = await appToken(h, createdApp.app.id);
     const repo = createRepository(h.bindings.d1);
-    const originalAddVariant = repo.flags.addVariant.bind(repo.flags);
+    const originalEnsureVariant = repo.flags.ensureCreateVariant.bind(repo.flags);
     let addAttempt = 0;
-    repo.flags.addVariant = async (...args) => {
+    repo.flags.ensureCreateVariant = async (...args) => {
       addAttempt += 1;
       if (addAttempt === 2) throw new Error("injected catalog insert failure");
-      return originalAddVariant(...args);
+      return originalEnsureVariant(...args);
     };
     const failingApp = makeAppForRepo(h, repo);
+    const idempotencyKey = `idem-create-flag-${crypto.randomUUID()}`;
+    const body = baseFlag(createdApp.app.id);
 
     const res = await failingApp.request(`/apps/${createdApp.app.id}/flags`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${jwt}`,
         "content-type": "application/json",
-        "idempotency-key": `idem-create-flag-${crypto.randomUUID()}`,
+        "idempotency-key": idempotencyKey,
       },
-      body: JSON.stringify(baseFlag(createdApp.app.id)),
+      body: JSON.stringify(body),
     });
 
     expect(res.status).toBe(500);
-    const flags = await createRepository(h.bindings.d1).flags.flags.findMany(
-      appScope(createdApp.app.id),
+    const durableRepo = createRepository(h.bindings.d1);
+    const flags = await durableRepo.flags.flags.findMany(appScope(createdApp.app.id));
+    const partial = flags.find((flag) => flag.key === "checkout-redesign");
+    expect(partial).toBeDefined();
+    expect(
+      await durableRepo.flags.listVariants(appScope(createdApp.app.id), partial?.id ?? "missing"),
+    ).toHaveLength(1);
+
+    const recovered = await request(
+      h,
+      "POST",
+      `/apps/${createdApp.app.id}/flags`,
+      jwt,
+      body,
+      idempotencyKey,
     );
-    expect(flags.some((flag) => flag.key === "checkout-redesign")).toBe(false);
+    expect(recovered.status).toBe(200);
+    expect(((await recovered.json()) as { variants: unknown[] }).variants).toHaveLength(2);
   });
 });
