@@ -14,7 +14,11 @@ import {
   nowIso,
   runningExperimentError,
 } from "./app-environment-model";
-import { provisionClientKey } from "./client-key-provisioning";
+import {
+  type ClientKeyRow,
+  clientKeyResponse,
+  provisionClientKey,
+} from "./client-key-provisioning";
 import {
   initializeFlagConfigsForEnvironment,
   rollbackCreatedEnvironment,
@@ -52,9 +56,10 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
         policy: (body.policy as EnvironmentPolicy | undefined) ?? ALLOW_POLICY,
         actorId: principal.id,
       });
+      let clientKey: ClientKeyRow;
       try {
         await initializeFlagConfigsForEnvironment(deps, appId, environment.id);
-        await provisionClientKey(deps, {
+        clientKey = await provisionClientKey(deps, {
           appId,
           environmentId: environment.id,
           organizationId: app.organizationId,
@@ -64,7 +69,14 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
         await rollbackCreatedEnvironment(deps, appId, environment.id);
         throw cause;
       }
-      return Response.json(environmentResponse(environment));
+      // The public Client Key rides the create response so the caller can point an
+      // SDK at the new Environment without a second command (ADR-0034, SPL-377).
+      // Provisioning failure rolls the Environment back above, so there is no
+      // success path that answers without a key.
+      return Response.json({
+        ...environmentResponse(environment),
+        clientKey: clientKeyResponse(clientKey),
+      });
     },
 
     async getEnvironment({ input, requestId }: HandlerArgs<unknown>): Promise<Response> {

@@ -226,6 +226,30 @@ describe("control-plane App and Environment CRUD", () => {
     expect(await deleteQa.json()).toEqual({ deleted: true });
   });
 
+  it("returns the auto-provisioned Client Key that client-key get reports for the new Environment", async () => {
+    const created = await createDefaultApp("checkout-env-key");
+    const ownerJwt = await appToken(created.app.id, "owner");
+
+    const res = await request("POST", `/apps/${created.app.id}/envs`, ownerJwt, {
+      key: "qa",
+      name: "QA",
+    });
+    expect(res.status).toBe(200);
+    const body = getRoute("environments_create")?.output?.parse(await res.json()) as {
+      id: string;
+      clientKey: { keyMaterial: string };
+    };
+
+    const fetched = await request(
+      "GET",
+      `/apps/${created.app.id}/envs/${body.id}/client-key`,
+      ownerJwt,
+    );
+    expect(fetched.status).toBe(200);
+    expect(body.clientKey).toEqual(await fetched.json());
+    expect(body.clientKey.keyMaterial.startsWith("pk_")).toBe(true);
+  });
+
   it("derives App and Environment MCP tools from the same routes", () => {
     const tools = deriveMcpTools();
     const expected = [

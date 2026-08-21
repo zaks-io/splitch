@@ -16,6 +16,24 @@ const environment = {
   updatedAt: "2026-07-18T00:00:00.000Z",
 };
 
+// Creating an Environment auto-provisions its Client Key, and the create
+// response carries that public key so a caller can evaluate without a second
+// call (SPL-377).
+const createdEnvironment = {
+  ...environment,
+  clientKey: {
+    keyId: "ck_staging",
+    appId: "app_checkout",
+    environmentId: "env_staging",
+    keyMaterial: "pk_staging",
+    originAllowlist: null,
+    isOriginOpen: true,
+    rateLimitRps: null,
+    revokedAt: null,
+    createdAt: "2026-07-18T00:00:00.000Z",
+  },
+};
+
 function sdkWith(response: () => Response) {
   const requests: Request[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -39,8 +57,8 @@ describe("control plane sdk Environments client", () => {
     expect(result).toEqual({ ok: true, status: 200, data: { items: [environment] } });
   });
 
-  it("creates an Environment and parses the Environment leaf", async () => {
-    const { sdk, requests } = sdkWith(() => Response.json(environment));
+  it("creates an Environment and parses its auto-provisioned Client Key", async () => {
+    const { sdk, requests } = sdkWith(() => Response.json(createdEnvironment));
 
     const result = await sdk.environments.create({
       appId: "app_checkout",
@@ -50,7 +68,8 @@ describe("control plane sdk Environments client", () => {
 
     expect(requests[0]?.method).toBe("POST");
     await expect(requests[0]?.json()).resolves.toEqual({ key: "staging", name: "Staging" });
-    expect(result).toEqual({ ok: true, status: 200, data: environment });
+    expect(result).toEqual({ ok: true, status: 200, data: createdEnvironment });
+    expect(result.ok && result.data.clientKey.keyMaterial).toBe("pk_staging");
   });
 
   it("gets one Environment including its inline Policy", async () => {

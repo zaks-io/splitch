@@ -23,6 +23,7 @@ import type {
   AppAttentionRollupResponseSchema,
   CreateAppRequestSchema,
   CreateAppResponseSchema,
+  CreateEnvironmentResponseSchema,
   CreateCredentialResponseSchema,
   CreateOrganizationRequestSchema,
   ListCredentialsResponseSchema,
@@ -208,7 +209,7 @@ export type EnvironmentsListInput = z.infer<typeof AppParams>;
 export type EnvironmentsListOutput = z.infer<typeof EnvironmentListResponseSchema>;
 export type EnvironmentsCreateInput = z.infer<typeof AppParams> &
   z.infer<typeof CreateEnvironmentRequestSchema>;
-export type EnvironmentsCreateOutput = z.infer<typeof EnvironmentSchema>;
+export type EnvironmentsCreateOutput = z.infer<typeof CreateEnvironmentResponseSchema>;
 export type EnvironmentsGetInput = z.infer<typeof EnvParams>;
 export type EnvironmentsGetOutput = z.infer<typeof EnvironmentSchema>;
 export type EnvironmentsUpdateInput = z.infer<typeof EnvParams> &

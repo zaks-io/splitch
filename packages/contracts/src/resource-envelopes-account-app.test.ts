@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { CreateAppResponseSchema } from "./resource-envelopes-account";
+import {
+  CreateAppResponseSchema,
+  CreateEnvironmentResponseSchema,
+} from "./resource-envelopes-account";
 
 const timestamp = "2026-06-28T00:00:00.000Z";
 
@@ -50,6 +53,41 @@ describe("CreateAppResponseSchema", () => {
         environmentId: "env_dev",
         apiKey: { id: "ak_1", value: "sk_raw_secret" },
         clientKey: { id: "ck_1", value: "pk_public" },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("CreateEnvironmentResponseSchema", () => {
+  it("carries the Client Key auto-provisioned with the new Environment", () => {
+    const res = CreateEnvironmentResponseSchema.parse({
+      ...environment("env_qa", "qa", "QA", allowPolicy),
+      clientKey: clientKey("ck_qa", "env_qa", "pk_qa"),
+    });
+    expect(res.key).toBe("qa");
+    expect(res.clientKey).toMatchObject({
+      keyId: "ck_qa",
+      environmentId: "env_qa",
+      keyMaterial: "pk_qa",
+      isOriginOpen: true,
+    });
+  });
+
+  it("rejects a create response that answered without the Client Key", () => {
+    expect(
+      CreateEnvironmentResponseSchema.safeParse(environment("env_qa", "qa", "QA", allowPolicy))
+        .success,
+    ).toBe(false);
+  });
+
+  it("rejects API Key material riding the Client Key member", () => {
+    expect(
+      CreateEnvironmentResponseSchema.safeParse({
+        ...environment("env_qa", "qa", "QA", allowPolicy),
+        clientKey: {
+          ...clientKey("ck_qa", "env_qa", "pk_qa"),
+          scopes: ["flags:write"],
+        },
       }).success,
     ).toBe(false);
   });

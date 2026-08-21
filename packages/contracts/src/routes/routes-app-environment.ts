@@ -8,6 +8,7 @@ import {
 import {
   CreateAppRequestSchema,
   CreateAppResponseSchema,
+  CreateEnvironmentResponseSchema,
   PatchAppRequestSchema,
 } from "../resource-envelopes-account";
 import {
@@ -128,9 +129,9 @@ export const appEnvironmentRoutes = [
     owner: OWNER,
     method: "POST",
     path: "/apps/:appId/envs",
-    summary: "Create an Environment (auto-provisions its Client Key).",
+    summary: "Create an Environment (auto-provisions its Client Key, returned inline).",
     request: { params: AppParams, body: CreateEnvironmentRequestSchema },
-    response: EnvironmentSchema,
+    response: CreateEnvironmentResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
