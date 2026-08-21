@@ -35,6 +35,15 @@ function supportsConfirm(operationId: string): boolean {
   );
 }
 
+/**
+ * Whether a command wires --confirm at all (apply-a-Policy-gated-change
+ * path). Approval-required remediation copy must not invite a --confirm
+ * retry on a command that never parses the flag (SPL-378 follow-up).
+ */
+export function commandSupportsConfirm(operationId: string): boolean {
+  return supportsConfirm(operationId);
+}
+
 function buildApiCommands(): CliCommandDefinition[] {
   return deriveMcpTools().map((tool: McpToolDefinition) => ({
     operationId: tool.name,

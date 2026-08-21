@@ -174,35 +174,44 @@ describe("warnStaleApprovalDiscard", () => {
 describe("remediationForServerError", () => {
   it("names frozen fields on RUN_FROZEN", () => {
     expect(
-      remediationForServerError({
-        code: "RUN_FROZEN",
-        message: "running Run run_live owns this Flag Configuration field",
-        details: {
-          frozenFields: ["flagConfig.availableVariantNames"],
-          currentRunId: "run_live",
-          attemptedChange: "APPLY_APPROVED_FLAG_CONFIG:flag_1",
-          recommendedAction: "END_RUNNING_RUN_FIRST",
+      remediationForServerError(
+        {
+          code: "RUN_FROZEN",
+          message: "running Run run_live owns this Flag Configuration field",
+          details: {
+            frozenFields: ["flagConfig.availableVariantNames"],
+            currentRunId: "run_live",
+            attemptedChange: "APPLY_APPROVED_FLAG_CONFIG:flag_1",
+            recommendedAction: "END_RUNNING_RUN_FIRST",
+          },
         },
-      }),
+        true,
+      ),
     ).toContain("flagConfig.availableVariantNames");
   });
 
   it("does not invite a retry for undetermined changed fields", () => {
-    const line = remediationForServerError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "changed-field set could not be determined",
-      details: { fault: "approval_changed_fields_undetermined" },
-    });
+    const line = remediationForServerError(
+      {
+        code: "INTERNAL_SERVER_ERROR",
+        message: "changed-field set could not be determined",
+        details: { fault: "approval_changed_fields_undetermined" },
+      },
+      true,
+    );
     expect(line).toContain("Re-propose");
     expect(line.toLowerCase()).not.toContain("retry the command");
   });
 
   it("does not invite a retry for an empty applyable change", () => {
-    const line = remediationForServerError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Approval Request does not change any Flag Configuration field",
-      details: { fault: "approval_empty_change" },
-    });
+    const line = remediationForServerError(
+      {
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Approval Request does not change any Flag Configuration field",
+        details: { fault: "approval_empty_change" },
+      },
+      true,
+    );
     expect(line).toContain("does not change any Flag Configuration field");
     expect(line.toLowerCase()).not.toContain("retry the command");
     expect(line).not.toContain("approval_empty_change");

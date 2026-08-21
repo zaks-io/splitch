@@ -89,11 +89,15 @@ describe("CLI actionable error catalog", () => {
   it("names an unrecognized server code instead of inventing a server failure", () => {
     const stderr = vi.fn();
 
-    writeServerError({ error: stderr, log: vi.fn() }, {
-      code: "FUTURE_SERVER_CODE",
-      message: "The server knows about a newer failure",
-      details: {},
-    } as never);
+    writeServerError(
+      { error: stderr, log: vi.fn() },
+      {
+        code: "FUTURE_SERVER_CODE",
+        message: "The server knows about a newer failure",
+        details: {},
+      } as never,
+      "flags_list",
+    );
 
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining("CLI_SERVER_CODE_UNRECOGNIZED"));
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining("FUTURE_SERVER_CODE"));
