@@ -93,6 +93,26 @@ describe("deleteAppCascade atomicity (SPL-298)", () => {
     });
     expect(created.ok).toBe(true);
 
+    await local.d1.batch([
+      local.d1
+        .prepare(
+          `INSERT INTO event_definitions
+           (id, app_id, name, family, display_name, state, current_published_version_id,
+            created_at, updated_at)
+           VALUES ('evt_cascade', ?, 'checkout.completed', 'metric', 'Checkout completed',
+                   'published', 'evt_ver_cascade', ?, ?)`,
+        )
+        .bind(APP_ID, NOW, NOW),
+      local.d1
+        .prepare(
+          `INSERT INTO event_definition_versions
+           (id, app_id, event_definition_id, version, schema_hash, fields, dimensions,
+            published_at)
+           VALUES ('evt_ver_cascade', ?, 'evt_cascade', 1, 'sha256:cascade', '[]', '[]', ?)`,
+        )
+        .bind(APP_ID, NOW),
+    ]);
+
     await local.d1
       .prepare(`UPDATE client_keys SET revoked_at = ? WHERE app_id = ?`)
       .bind(NOW, APP_ID)
@@ -105,6 +125,12 @@ describe("deleteAppCascade atomicity (SPL-298)", () => {
     expect(
       await local.d1
         .prepare("SELECT COUNT(*) AS n FROM approval_requests WHERE app_id = ?")
+        .bind(APP_ID)
+        .first<{ n: number }>(),
+    ).toMatchObject({ n: 0 });
+    expect(
+      await local.d1
+        .prepare("SELECT COUNT(*) AS n FROM event_definitions WHERE app_id = ?")
         .bind(APP_ID)
         .first<{ n: number }>(),
     ).toMatchObject({ n: 0 });

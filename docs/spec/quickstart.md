@@ -79,12 +79,19 @@ for the common case. The response includes the App **and** its two Environments:
 
 ```json
 {
-  "id": "app_...",
-  "organizationId": "org_...",
-  "name": "My App",
+  "app": {
+    "id": "app_...",
+    "organizationId": "org_...",
+    "name": "My App",
+    "key": "my-app"
+  },
   "environments": [
-    { "id": "env_...", "key": "dev", "name": "Development" },
-    { "id": "env_...", "key": "prod", "name": "Production" }
+    { "id": "env_...", "key": "dev", "name": "Dev" },
+    { "id": "env_...", "key": "prod", "name": "Prod" }
+  ],
+  "clientKeys": [
+    { "keyId": "ck_...", "environmentId": "env_...", "keyMaterial": "pk_..." },
+    { "keyId": "ck_...", "environmentId": "env_...", "keyMaterial": "pk_..." }
   ]
 }
 ```

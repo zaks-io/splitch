@@ -31,6 +31,9 @@ export const flags = sqliteTable(
     // JSON Schema (nullable): value contract Variant `value`s must satisfy.
     schema: text("schema"),
     defaultVariantId: text("default_variant_id"),
+    createIdempotencyKey: text("create_idempotency_key"),
+    createRequestHash: text("create_request_hash"),
+    createResponse: text("create_response"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     createdBy: userRef("created_by"),
@@ -38,20 +41,27 @@ export const flags = sqliteTable(
     // Optimistic-lock counter.
     version: integer("version").notNull().default(1),
   },
-  (t) => [uniqueIndex("flags_app_key_unique").on(t.appId, t.key)],
+  (t) => [
+    uniqueIndex("flags_app_key_unique").on(t.appId, t.key),
+    uniqueIndex("flags_create_idempotency_unique").on(t.appId, t.createdBy, t.createIdempotencyKey),
+  ],
 );
 
-export const variants = sqliteTable("variants", {
-  id: text("id").primaryKey(),
-  flagId: text("flag_id")
-    .notNull()
-    .references(() => flags.id),
-  name: text("name").notNull(),
-  // JSON-serialized Variant value.
-  value: text("value").notNull(),
-  description: text("description"),
-  createdAt: createdAt(),
-});
+export const variants = sqliteTable(
+  "variants",
+  {
+    id: text("id").primaryKey(),
+    flagId: text("flag_id")
+      .notNull()
+      .references(() => flags.id),
+    name: text("name").notNull(),
+    // JSON-serialized Variant value.
+    value: text("value").notNull(),
+    description: text("description"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("variants_flag_name_unique").on(t.flagId, t.name)],
+);
 
 export const flagConfigs = sqliteTable(
   "flag_configs",

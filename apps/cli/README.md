@@ -120,36 +120,34 @@ with no session it exits `2` with `CLI_NOT_AUTHENTICATED` rather than reporting 
 Run `splitch --help` for the root map, `splitch <resource> --help` for a resource group, or
 `splitch <resource> <action> --help` for typed flags, defaults, credential semantics, and an example.
 
-| Command group              | Actions                                                                       |
-| -------------------------- | ----------------------------------------------------------------------------- |
-| `login`, `logout`          | Authenticate or clear the control-plane session                               |
-| `use`, `context`, `health` | Select scope, inspect scope, or check API health                              |
-| `orgs`                     | `list`, `create`, `get`, `update`, `delete`                                   |
-| `organization-members`     | `list`, `add`, `update`, `remove`                                             |
-| `apps`                     | `list`, `create`, `get`, `update`, `delete`                                   |
-| `envs`                     | `list`, `create`, `get`, `update`, `delete`                                   |
-| `env-policy`               | `get`, `set`                                                                  |
-| `flags`                    | `list`, `create`, `get`, `update`, `delete`, `promote`, `test-eval`, `verify` |
-| `flag-variants`            | `create`, `update`, `delete`                                                  |
-| `flag-config`              | `get`, `update`                                                               |
-| `flag-targeting-rules`     | `replace`                                                                     |
-| `segments`                 | `list`, `create`, `get`, `update`, `delete`                                   |
-| `experiments`              | `list`, `create`, `get`, `update`, `start`, `delete`                          |
-| `runs`                     | `list`, `get`, `end`                                                          |
-| `metrics`                  | `list`, `create`, `get`, `update`, `delete`                                   |
-| `client-key`               | `get`, `update`, `rotate`                                                     |
-| `api-keys`                 | `list`, `create`, `revoke`                                                    |
-| `approval-requests`        | `list`, `get`                                                                 |
-| `approval-request-reviews` | `create`                                                                      |
-| `app-attention-rollup`     | `get`                                                                         |
-| `experiment-results`       | `get`, `post`                                                                 |
-| `organization-usage`       | `get`                                                                         |
-| `current-user-privacy`     | `export`                                                                      |
-| `current-user`             | `delete`                                                                      |
-| `organization-privacy`     | `export`                                                                      |
-| `app-privacy`              | `export`                                                                      |
-| `entity-privacy`           | `export`, `delete`                                                            |
-| `privacy-requests`         | `get`                                                                         |
+| Command group                 | Actions                                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| `login`, `logout`             | Authenticate or clear the control-plane session                               |
+| `use`, `context`, `health`    | Select scope, inspect scope, or check API health                              |
+| `orgs`                        | `list`, `create`, `get`, `update`                                             |
+| `organization-members`        | `list`, `add`, `update`, `remove`                                             |
+| `apps`                        | `list`, `create`, `get`, `update`, `delete`                                   |
+| `app-members`                 | `list`, `add`, `update`, `remove`                                             |
+| `envs`                        | `list`, `create`, `get`, `update`, `delete`                                   |
+| `env-policy`                  | `get`, `set`                                                                  |
+| `environment-exposure-status` | `get`                                                                         |
+| `event-definitions`           | `list`, `create`, `get`, `update`                                             |
+| `event-definition-versions`   | `create`, `list`, `get`                                                       |
+| `flags`                       | `list`, `create`, `get`, `update`, `delete`, `promote`, `test-eval`, `verify` |
+| `flag-variants`               | `create`, `update`, `delete`                                                  |
+| `flag-config`                 | `get`, `update`                                                               |
+| `flag-targeting-rules`        | `replace`                                                                     |
+| `segments`                    | `list`, `create`, `get`, `update`, `delete`                                   |
+| `experiments`                 | `list`, `create`, `get`, `update`, `start`, `delete`                          |
+| `runs`                        | `list`, `get`, `end`                                                          |
+| `metrics`                     | `list`, `create`, `get`, `update`, `delete`                                   |
+| `client-key`                  | `get`, `update`, `rotate`                                                     |
+| `api-keys`                    | `list`, `create`, `revoke`                                                    |
+| `approval-requests`           | `list`, `get`                                                                 |
+| `approval-request-reviews`    | `create`                                                                      |
+| `app-attention-rollup`        | `get`                                                                         |
+| `experiment-results`          | `get`, `post`                                                                 |
+| `organization-usage`          | `get`                                                                         |
 
 ## Errors and exit codes
 

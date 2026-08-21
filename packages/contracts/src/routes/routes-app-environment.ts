@@ -63,7 +63,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "optional",
-    errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
+    errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR", "IDEMPOTENCY_KEY_CONFLICT"],
   }),
   defineApiRoute({
     operationId: "apps_get",

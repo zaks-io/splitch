@@ -47,7 +47,9 @@ function deps(forwarded: Request[], missing?: "org" | "app") {
     principal: {
       kind: "control-plane-token" as const,
       id: "user_1",
-      scopes: ["org:org_1:member", "app:app_1:member"],
+      // Device tokens are App-bound. Organization membership is rechecked from
+      // D1 and must not require a second Org scope the token never carries.
+      scopes: ["app:app_1:member"],
       orgId: "org_1",
       appId: "app_1",
       environmentId: null,

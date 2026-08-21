@@ -1,25 +1,12 @@
-import { type ErrorResponse, parseMcpDelegation } from "@splitch/contracts";
+import { type ErrorResponse, unavailableControlPlaneOperationIds } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
-import {
-  allowMcpRevocations,
-  memoryMcpDelegationReplayGuard,
-  TEST_MCP_DELEGATION_SECRET,
-} from "./mcp-test-verifier";
+import { allowMcpRevocations, TEST_MCP_DELEGATION_SECRET } from "./mcp-test-verifier";
 
 const service = "splitch-mcp-server";
 
-// Imported at module scope so the cold transform of the entire
-// control-plane-api module graph lands in collection, not inside a test's
-// timeout budget (it blew the 5s default under a CPU-contended full run).
-const controlPlaneAppModule = (await import(
-  new URL("../../control-plane-api/src/app.ts", import.meta.url).href
-)) as {
-  createApp(deps: unknown): { fetch(request: Request): Promise<Response> };
-};
-
 describe("MCP contract errors", () => {
-  it("keeps unauthorized organization and privacy errors typed", async () => {
+  it("keeps unauthorized organization errors typed", async () => {
     const seen: Request[] = [];
     const controlPlaneFetch: typeof fetch = async (input, init) => {
       const request = input instanceof Request ? input : new Request(input, init);
@@ -31,59 +18,27 @@ describe("MCP contract errors", () => {
     };
 
     const orgs = await callTool("organizations_list", controlPlaneFetch);
-    const privacy = await callTool("current_user_privacy_export", controlPlaneFetch);
 
     expect(seen.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual([
       "GET /orgs",
-      "POST /users/me/privacy/export",
     ]);
     expect(orgs.result).toMatchObject({
       isError: true,
       structuredContent: { code: "UNAUTHORIZED" satisfies ErrorResponse["code"] },
     });
-    expect(privacy.result).toMatchObject({
-      isError: true,
-      structuredContent: { code: "UNAUTHORIZED" satisfies ErrorResponse["code"] },
-    });
   });
 
-  describe("returns the real Control Plane authorization result for privacy request status", () => {
-    const arguments_ = { requestId: "privacy_request_mcp_contract" };
-
-    it.each([
-      "Bearer member",
-      "Bearer unrelated",
-      "Bearer wrong-org-scope",
-      "Bearer wrong-app-scope",
-    ])("%s is FORBIDDEN", async (authorization) => {
-      const result = await callTool(
-        "privacy_requests_get",
-        realControlPlaneFetch(),
-        arguments_,
-        authorization,
-      );
-      expect(result.result).toMatchObject({
-        isError: true,
-        structuredContent: { code: "FORBIDDEN" satisfies ErrorResponse["code"] },
-      });
+  it.each(
+    unavailableControlPlaneOperationIds,
+  )("does not advertise or dispatch %s", async (name) => {
+    let forwarded = false;
+    const result = await callTool(name, async () => {
+      forwarded = true;
+      return Response.json({});
     });
 
-    it.each([
-      "Bearer requester",
-      "Bearer org-owner",
-      "Bearer app-admin",
-    ])("%s is authorized and surfaces SERVICE_UNAVAILABLE", async (authorization) => {
-      const result = await callTool(
-        "privacy_requests_get",
-        realControlPlaneFetch(),
-        arguments_,
-        authorization,
-      );
-      expect(result.result).toMatchObject({
-        isError: true,
-        structuredContent: { code: "SERVICE_UNAVAILABLE" satisfies ErrorResponse["code"] },
-      });
-    });
+    expect(forwarded).toBe(false);
+    expect(result.error).toMatchObject({ code: -32601, message: "Method not found" });
   });
 });
 
@@ -123,65 +78,6 @@ async function callTool(
     revocations: allowMcpRevocations(),
   });
   return (await response.json()) as ToolCallResult;
-}
-
-function realControlPlaneFetch(): typeof fetch {
-  const replayGuard = memoryMcpDelegationReplayGuard();
-  const app = controlPlaneAppModule.createApp({
-    authResolver: async (request: Request) => {
-      const actor = await parseMcpDelegation({
-        request,
-        surface: "control-plane-api",
-        secret: TEST_MCP_DELEGATION_SECRET,
-        replayGuard,
-      });
-      if (!actor) return { ok: false as const, reason: "UNAUTHORIZED" as const };
-      return {
-        ok: true as const,
-        principal: {
-          kind: "control-plane-token" as const,
-          id: actor.subject,
-          scopes: actor.scopes,
-          orgId: soleScopedId(actor.scopes, "org"),
-          appId: soleScopedId(actor.scopes, "app"),
-          environmentId: null,
-        },
-      };
-    },
-    rateLimiter: () => ({ limited: false }),
-    repo: {
-      identity: {
-        getOrgMembership: async (orgId: string, userId: string) =>
-          orgId === "org_mcp_contract" && userId === "org-owner" ? { role: "owner" } : null,
-        getAppMembership: async (scope: { appId: string }, userId: string) =>
-          scope.appId === "app_mcp_contract" && userId === "app-admin" ? { role: "admin" } : null,
-      },
-      privacy: {
-        getPrivacyRequestById: async (requestId: string) =>
-          requestId === "privacy_request_mcp_contract"
-            ? {
-                orgId: "org_mcp_contract",
-                appId: "app_mcp_contract",
-                requestedBy: "requester",
-              }
-            : null,
-      },
-    },
-  });
-  return async (input, init) => {
-    const request = input instanceof Request ? input : new Request(input, init);
-    return app.fetch(request);
-  };
-}
-
-function soleScopedId(scopes: readonly string[], kind: "org" | "app"): string | null {
-  const ids = new Set(
-    scopes.flatMap((scope) => {
-      const match = scope.match(new RegExp(`^${kind}:([^:]+):(owner|admin|member)$`));
-      return match?.[1] ? [match[1]] : [];
-    }),
-  );
-  return ids.size === 1 ? ([...ids][0] as string) : null;
 }
 
 function principalFor(authorization: string | null) {
@@ -240,8 +136,9 @@ function principalFor(authorization: string | null) {
 }
 
 interface ToolCallResult {
-  result: {
+  result?: {
     isError?: boolean;
     structuredContent: ErrorResponse;
   };
+  error?: { code: number; message: string };
 }

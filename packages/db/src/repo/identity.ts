@@ -9,6 +9,7 @@ import {
 import { makeDeleteAppCascade } from "./app-delete-cascade";
 import { makeAppDeletionSagaRepo } from "./app-deletion-sagas";
 import type { Db } from "./client";
+import { makeAppCreateIdempotencyRepo } from "./identity-app-create-idempotency";
 import { makeAppMembershipRepo } from "./identity-app-memberships";
 import { makeDemoReaper } from "./identity-demo-reaper";
 import { makeOrgMutations } from "./identity-org-mutations";
@@ -47,6 +48,7 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
   const createOrganization = makeCreateOrganization(db, d1);
   const deleteAppCascade = makeDeleteAppCascade(d1);
   const appDeletionSagaRepo = makeAppDeletionSagaRepo(d1);
+  const appCreateIdempotencyRepo = makeAppCreateIdempotencyRepo(db);
 
   return {
     environments: environmentsTable,
@@ -114,6 +116,7 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
     listAppsForOrg(orgId: string) {
       return db.select().from(apps).where(eq(apps.organizationId, orgId));
     },
+    ...appCreateIdempotencyRepo,
 
     ...orgMutations,
     ...sessionReads,

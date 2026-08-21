@@ -89,6 +89,26 @@ describe("Flag key uniqueness is enforced by the database", () => {
     expect(await rawFlagIds(local, seed.a.appId, "raced-key")).toHaveLength(1);
   });
 
+  it("classifies an idempotency collision separately from a Flag-key collision", async () => {
+    const scope = appScope(seed.a.appId);
+    const first = {
+      ...flagValues(seed.a.appId, "flag_idempotency_winner", "first-idempotent-key"),
+      createdBy: "user_create_actor",
+      createIdempotencyKey: "idem_flag_repo_collision",
+    };
+    const second = {
+      ...flagValues(seed.a.appId, "flag_idempotency_loser", "second-idempotent-key"),
+      createdBy: first.createdBy,
+      createIdempotencyKey: first.createIdempotencyKey,
+    };
+
+    expect((await repo.flags.createFlag(scope, first)).ok).toBe(true);
+    expect(await repo.flags.createFlag(scope, second)).toEqual({
+      ok: false,
+      reason: "idempotency_conflict",
+    });
+  });
+
   it("still throws on a write failure that is not a key collision", async () => {
     // `key_conflict` is a narrow classification, not a catch-all. A NOT NULL
     // violation names the same column and must NOT be reported as "pick another

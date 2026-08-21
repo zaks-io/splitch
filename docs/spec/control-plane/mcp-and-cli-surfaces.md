@@ -170,7 +170,7 @@ require a `--confirm` affordance (ADR-0029); it submits the canonical
 
 **Output and scripting:** every command accepts `--json` for machine-readable output (the same
 shape the MCP tool returns), so the CLI is pipe-able and an agent shelling out to the CLI parses one
-contract. Default output is human-formatted (tables, exit codes). When a required scope is
+contract. Default output is indented, human-readable JSON plus exit codes. When a required scope is
 unresolved, the CLI fails loud with the exact `splitch use` / `--app` remedy — never a silent
 default.
 
@@ -259,7 +259,7 @@ endpoint skins. The full design is in [mcp-discovery.md](./mcp-discovery.md).
 A capability available through the CLI must be available through an MCP tool and vice versa.
 Divergence only in presentation:
 
-- CLI: formatted text, exit codes, human-readable tables
+- CLI: indented JSON by default, compact JSON with `--json`, and exit codes
 - MCP: structured JSON, typed error responses, discriminated union reasons
 
 ## Invariants live in the Worker, not the skins

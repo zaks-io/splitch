@@ -1,3 +1,7 @@
+import {
+  type UnavailableControlPlaneOperationId,
+  unavailableControlPlaneOperationIds,
+} from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs, Registrar, RouteHandler } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
@@ -6,16 +10,6 @@ import { requireAppWrite } from "./app-authz";
 import { pathParam } from "./handler-input";
 import { ORG_OWNER_ROLES, requireOrgRole } from "./org-authz";
 import { controlPlaneRoute } from "./routes";
-
-type UnavailableOperationId =
-  | "organizations_delete"
-  | "current_user_privacy_export"
-  | "current_user_delete"
-  | "organization_privacy_export"
-  | "app_privacy_export"
-  | "entity_privacy_export"
-  | "entity_privacy_delete"
-  | "privacy_requests_get";
 
 interface UnavailableHandlerDeps {
   repo: Repository;
@@ -31,7 +25,7 @@ type PrivacyRequest = NonNullable<
  */
 function unavailableControlPlaneOperation(
   deps: UnavailableHandlerDeps,
-  operationId: UnavailableOperationId,
+  operationId: UnavailableControlPlaneOperationId,
 ): RouteHandler<unknown> {
   return async (args) => {
     const authorizationError = await authorizeUnavailableOperation(deps, operationId, args);
@@ -42,7 +36,7 @@ function unavailableControlPlaneOperation(
 
 async function authorizeUnavailableOperation(
   deps: UnavailableHandlerDeps,
-  operationId: UnavailableOperationId,
+  operationId: UnavailableControlPlaneOperationId,
   args: HandlerArgs<unknown>,
 ): Promise<Response | null> {
   switch (operationId) {
@@ -145,17 +139,7 @@ export function mountUnavailableControlPlaneRoutes(
   registrar: Registrar,
   repo: Repository,
 ): void {
-  const operationIds = [
-    "organizations_delete",
-    "current_user_privacy_export",
-    "current_user_delete",
-    "organization_privacy_export",
-    "app_privacy_export",
-    "entity_privacy_export",
-    "entity_privacy_delete",
-    "privacy_requests_get",
-  ] as const;
-  for (const operationId of operationIds) {
+  for (const operationId of unavailableControlPlaneOperationIds) {
     registrar.mount(
       app,
       controlPlaneRoute(operationId),
