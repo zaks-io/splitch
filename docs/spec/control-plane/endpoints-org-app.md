@@ -211,7 +211,11 @@ Auth: App member.
 ### `POST /apps/{app_id}/envs`
 
 Body: `{ slug: string, name?: string, policy?: EnvironmentPolicy }` (slug unique within App)
-Returns: the new Environment, with its default Policy if none supplied (dev-style all-`allow`).
+Returns: the new Environment, with its default Policy if none supplied (dev-style all-`allow`), plus
+the public Client Key auto-provisioned for it under `clientKey` (same shape as
+`GET /apps/{app_id}/envs/{environment_id}/client-key`), so a caller can point an SDK at the
+Environment without a second call. Provisioning failure rolls the Environment back; there is no
+success response without the key. No API Key material rides this response.
 Auth: App `owner` or `admin`.
 
 ### `GET /apps/{app_id}/envs/{environment_id}`

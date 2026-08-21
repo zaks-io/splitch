@@ -450,7 +450,7 @@ Flags:
 
 Example:
   splitch environment-exposure-status get --json",
-    "envs create": "Create an Environment (auto-provisions its Client Key).
+    "envs create": "Create an Environment (auto-provisions its Client Key, returned inline).
 
 Usage:
   splitch envs create [flags]
@@ -1702,7 +1702,7 @@ Usage:
 
 Commands:
   list            List an App's Environments.
-  create          Create an Environment (auto-provisions its Client Key).
+  create          Create an Environment (auto-provisions its Client Key, returned inline).
   get             Get one Environment (includes its inline Policy).
   update          Rename an Environment or edit its Policy.
   delete          Delete an Environment (blocked if running or last Environment).

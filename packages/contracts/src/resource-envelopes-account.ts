@@ -133,6 +133,24 @@ export type CreateAppResponse = z.infer<typeof CreateAppResponseSchema>;
 export const AppResponseSchema = AppSchema;
 export type AppResponse = z.infer<typeof AppResponseSchema>;
 
+// ---------------------------------------------------------------------------
+// Environment endpoints
+//
+// Creating an Environment auto-provisions its Client Key (ADR-0034), so the
+// create response carries that key: an agent that has just made an Environment
+// can point an SDK at it without discovering a second command. It is the same
+// public `ClientKeySchema` leaf `client_key_get` returns, never a second shape,
+// and the API Key (secret) stays off this response entirely.
+//
+// The key is nested on the Environment rather than wrapped in an envelope so the
+// Environment fields stay where every other Environment response puts them.
+// ---------------------------------------------------------------------------
+
+export const CreateEnvironmentResponseSchema = EnvironmentSchema.extend({
+  clientKey: ClientKeySchema,
+});
+export type CreateEnvironmentResponse = z.infer<typeof CreateEnvironmentResponseSchema>;
+
 /**
  * Minimal per-Environment health signal for the App-list attention rollup.
  * `state` keeps no data distinct from a measured clear result, while the two
