@@ -136,7 +136,7 @@ async function verifySession(
  * Split out of `verifySession` to keep the branching readable: a
  * `CLI_SESSION_EXPIRED` error is only a proven refusal when its OAuth fault
  * says `invalid_grant`; anything else is unverified, with the fault detail
- * carried so a caller can tell the cases apart (SPL-378).
+ * carried so a caller can tell the cases apart (SPL-376).
  */
 function classifySessionExpiredFault(
   error: SplitchCliError,

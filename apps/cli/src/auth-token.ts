@@ -107,7 +107,7 @@ export function mintFailureError(fault: OAuthFault): SplitchCliError {
  * from a failed refresh-grant response. Nothing reads `Error.cause` today, so
  * carrying it here changes no other command's behavior; `context` needs it to
  * tell a definitive session refusal from an auth-service fault that merely
- * looks like one (SPL-378).
+ * looks like one (SPL-376).
  */
 export function refreshFaultOf(error: SplitchCliError): OAuthFault | undefined {
   return error.code === "CLI_SESSION_EXPIRED" && isOAuthFault(error.cause)

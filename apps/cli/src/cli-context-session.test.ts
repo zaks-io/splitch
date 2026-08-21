@@ -111,7 +111,7 @@ describe("splitch context reports the real session state (SPL-376)", () => {
     expect(payload.sessionUnverifiedReason).toBe("refresh_unreachable");
   });
 
-  it("reports an unverified reason instead of a false negative when the auth service returns a 5xx (SPL-378)", async () => {
+  it("reports an unverified reason instead of a false negative when the auth service returns a 5xx (SPL-376)", async () => {
     const { dir, credentialPath } = await makeTempHome();
     await writeExpiredCredential(credentialPath);
     const transport = new FakeCliTransport([
