@@ -1,9 +1,9 @@
 # Control Panel navigation redesign
 
-Status: agreed 2026-08-21, implementation in progress. Clickable mocks that this doc describes
-live outside the repo (`~/.t3/userdata/attachments/splitch-nav-mocks`, served locally); this doc is
-the durable record. When it disagrees with `navigation-and-ia.md` or `screen-inventory.md`, this doc
-wins and those two are amended as each slice ships.
+Status: agreed 2026-08-21; Slice 1 shipped 2026-08-21 (#TBD); Slices 2–4 not started. Clickable mocks
+that this doc describes live outside the repo (`~/.t3/userdata/attachments/splitch-nav-mocks`, served
+locally); this doc is the durable record. When it disagrees with `navigation-and-ia.md` or
+`screen-inventory.md`, this doc wins and those two are amended as each slice ships.
 
 ## Why
 

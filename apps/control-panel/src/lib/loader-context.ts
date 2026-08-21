@@ -12,13 +12,14 @@ interface EnvironmentScope {
   environmentId: string;
   env: string;
   name: string;
+  guarded: boolean;
 }
 
 export interface EnvironmentResolver {
   listEnvironments(appId: string): Promise<readonly EnvironmentScope[]>;
 }
 
-interface ScopeNavigation {
+export interface ScopeNavigation {
   orgs: Array<{
     orgId: string;
     orgSlug: string;
@@ -90,21 +91,7 @@ export async function resolveScopedLoaderContext(
 ): Promise<ScopedLoaderContext> {
   const org = requireOrgAccess(session, params.orgSlug);
   const app = requireAppAccess(org, params.appSlug);
-  const navigation: ScopeNavigation = {
-    orgs: await Promise.all(
-      session.orgs.map(async (membership) => ({
-        orgId: membership.orgId,
-        orgSlug: membership.orgSlug,
-        apps: await Promise.all(
-          membership.apps.map(async (candidate) => ({
-            appId: candidate.appId,
-            appSlug: candidate.appSlug,
-            environments: await resolver.listEnvironments(candidate.appId),
-          })),
-        ),
-      })),
-    ),
-  };
+  const navigation = await resolveNavigation(session, resolver);
   const currentApp = navigation.orgs
     .find((candidate) => candidate.orgId === org.orgId)
     ?.apps.find((candidate) => candidate.appId === app.appId);
@@ -126,6 +113,27 @@ export async function resolveScopedLoaderContext(
       environmentId: environment.environmentId,
       env: environment.env,
     },
+  };
+}
+
+export async function resolveNavigation(
+  session: SessionPrincipal,
+  resolver: EnvironmentResolver,
+): Promise<ScopeNavigation> {
+  return {
+    orgs: await Promise.all(
+      session.orgs.map(async (membership) => ({
+        orgId: membership.orgId,
+        orgSlug: membership.orgSlug,
+        apps: await Promise.all(
+          membership.apps.map(async (candidate) => ({
+            appId: candidate.appId,
+            appSlug: candidate.appSlug,
+            environments: await resolver.listEnvironments(candidate.appId),
+          })),
+        ),
+      })),
+    ),
   };
 }
 

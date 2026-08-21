@@ -30,27 +30,34 @@ that a link could disagree with.
 `{orgSlug}` is a contradiction, not a silent redirect: the loader rejects it (404 — the app does
 not exist _under this org_), rather than switching the user's org out from under them.
 
-## The three switchers
+## The sidebar
 
-- **Org switcher** — present only for users in more than one org. Changes `orgSlug`. A
-  single-org user (the common self-serve case, a personal Organization) never sees it.
-- **App switcher** — lists Apps within the **current org only**. Changes `appSlug`.
-- **Environment switcher** — lists the active App's Environments. Changes `env`. Always present
-  (every App has at least a `prod` Environment).
+- **App switcher, top** — lists Apps within the **current Organization only**. On an App screen,
+  switching Apps preserves the current section when the target App has the same Environment;
+  otherwise it lands on the target App's first Environment.
+- **Environment pills, below the App** — list the active App's Environments and preserve the current
+  path, query, and hash when `env` changes. They render only when an App is active.
+- **Organization switcher, bottom** — present only for users in more than one Organization. It
+  changes `orgSlug` and lands on that Organization's App list. A single-Organization user sees the
+  Organization name without a switcher.
 
 ## Sidebar: scoped to the active App + Environment
 
-A persistent left sidebar, scoped to `/{orgSlug}/{appSlug}/{env}`, with sections mapping 1:1 to the
-App's first-class children plus settings:
+A persistent left sidebar wraps both Organization and App screens. When an App and Environment are
+active, its sections map 1:1 to the App's first-class children plus settings, in this order:
 
 - **Flags** — definition (App-level catalog) + the active Environment's Flag Configuration
 - **Experiments** — scoped to the active Environment
-- **Web Analytics** — Environment-scoped exploratory browser telemetry, separate from Experiment
-  results
+- **Overview** — third in the operator-use order; the active Environment's attention dashboard
 - **Segments** — App-level (usable in any Environment)
 - **Metrics** — App-level (definitions usable in any Environment)
 - **Settings** — App config + per-Environment settings: the active Environment's SDK keys
   (Client/API), its **Environment Policy** (confirm gates), and Environment management
+
+The bottom Organization block remains visible from every authenticated screen. It contains the
+Organization name or multi-Organization switcher, then Apps, Members, Billing & Usage, and the user
+row with Sign out. Organization screens show the same shell without App sections or Environment
+pills.
 
 Org-level concerns live at the org root, one level up from any App, as three screens (detailed in
 [screen-inventory.md](./screen-inventory.md)):

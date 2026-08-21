@@ -1,6 +1,11 @@
 import type { Repository } from "@splitch/db";
 import { describe, expect, it } from "vitest";
-import { buildSessionPrincipal, rehydrateLegacySession, SESSION_ORG_LIMIT } from "./membership";
+import {
+  buildSessionPrincipal,
+  createEnvironmentResolver,
+  rehydrateLegacySession,
+  SESSION_ORG_LIMIT,
+} from "./membership";
 import type { StoredSession } from "./session";
 
 describe("session membership materialization", () => {
@@ -143,6 +148,32 @@ describe("session membership materialization", () => {
   });
 });
 
+describe("Environment navigation policy", () => {
+  it("marks an all-allow Environment as unguarded", async () => {
+    const [environment] = await createEnvironmentResolver(
+      environmentRepository(policyJson("allow")),
+    ).listEnvironments("app_1");
+
+    expect(environment).toMatchObject({ env: "dev", guarded: false });
+  });
+
+  it("marks an Environment guarded when any change type confirms", async () => {
+    const [environment] = await createEnvironmentResolver(
+      environmentRepository(policyJson("confirm")),
+    ).listEnvironments("app_1");
+
+    expect(environment).toMatchObject({ env: "dev", guarded: true });
+  });
+
+  it("fails loud when persisted Environment Policy is unparsable", async () => {
+    await expect(
+      createEnvironmentResolver(environmentRepository('{"enabledState":"allow"}')).listEnvironments(
+        "app_1",
+      ),
+    ).rejects.toThrow();
+  });
+});
+
 interface RepositoryOptions {
   duplicateOrgSlug?: boolean;
   orgMissing?: boolean;
@@ -151,6 +182,34 @@ interface RepositoryOptions {
 }
 
 const queryCounts = new WeakMap<Repository, number>();
+
+function policyJson(enabledState: "allow" | "confirm"): string {
+  return JSON.stringify({
+    variantAvailability: "allow",
+    targetingRolloutValue: "allow",
+    enabledState,
+    startExperimentRun: "allow",
+  });
+}
+
+function environmentRepository(policy: string): Repository {
+  return {
+    identity: {
+      listEnvironments: async () => [
+        {
+          id: "env_1",
+          appId: "app_1",
+          key: "dev",
+          name: "Development",
+          policy,
+          createdAt: "2026-08-21T00:00:00.000Z",
+          updatedAt: "2026-08-21T00:00:00.000Z",
+          createdBy: "user_1",
+        },
+      ],
+    },
+  } as unknown as Repository;
+}
 
 function repository(options: RepositoryOptions = {}): Repository {
   const orgCount = options.duplicateOrgSlug ? 2 : (options.orgCount ?? 1);

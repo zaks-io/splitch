@@ -27,33 +27,35 @@ function IndexRoute() {
   const { session, pendingOrgResync } = Route.useLoaderData();
 
   return (
-    <main className="grid gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="grid gap-2">
-          <h1 className="font-semibold text-3xl text-foreground tracking-tight">Control Panel</h1>
-          <p className="max-w-2xl text-muted-foreground text-sm leading-6">
-            {session.orgs.length === 0
-              ? "Every App, Flag, and Experiment belongs to an Organization, so that is the first thing to make."
-              : "Choose an Organization to see its Apps. Flags and Experiments live inside an App's Environments."}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <p className="text-muted-foreground text-xs">
-            Signed in as <span className="font-mono text-foreground">{session.userId}</span>
-          </p>
-          <SignOutForm>
-            <Button size="sm" type="submit" variant="outline">
-              Sign out
-            </Button>
-          </SignOutForm>
-        </div>
-      </header>
+    <div className="mx-auto w-full max-w-6xl px-6 py-8">
+      <main className="grid gap-6">
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div className="grid gap-2">
+            <h1 className="font-semibold text-3xl text-foreground tracking-tight">Control Panel</h1>
+            <p className="max-w-2xl text-muted-foreground text-sm leading-6">
+              {session.orgs.length === 0
+                ? "Every App, Flag, and Experiment belongs to an Organization, so that is the first thing to make."
+                : "Choose an Organization to see its Apps. Flags and Experiments live inside an App's Environments."}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <p className="text-muted-foreground text-xs">
+              Signed in as <span className="font-mono text-foreground">{session.userId}</span>
+            </p>
+            <SignOutForm>
+              <Button size="sm" type="submit" variant="outline">
+                Sign out
+              </Button>
+            </SignOutForm>
+          </div>
+        </header>
 
-      <OrganizationChooser
-        orgs={session.orgs}
-        pendingResync={pendingOrgResync}
-        truncated={session.orgsTruncated ?? false}
-      />
-    </main>
+        <OrganizationChooser
+          orgs={session.orgs}
+          pendingResync={pendingOrgResync}
+          truncated={session.orgsTruncated ?? false}
+        />
+      </main>
+    </div>
   );
 }

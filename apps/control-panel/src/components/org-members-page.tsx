@@ -23,16 +23,11 @@ export function OrgMembersPage({ view }: { view: OrgMembersView }) {
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="grid gap-2">
-          {/* The Org shell frame owns the `h1` (the Organization); this screen is
-              the Members section within it. */}
-          <h2 className="font-semibold text-3xl text-foreground tracking-tight">Members</h2>
-          <p className="max-w-2xl text-muted-foreground text-sm leading-6">
-            Who is in this Organization and what they may do here. Who can touch a specific
-            App&apos;s configuration is managed under that App&apos;s Settings.
-          </p>
-        </div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <p className="max-w-2xl text-muted-foreground text-sm leading-6">
+          Who is in this Organization and what they may do here. Who can touch a specific App&apos;s
+          configuration is managed under that App&apos;s Settings.
+        </p>
         <AddOrgMemberDialog actorRole={view.orgRole} onAdded={reread} orgId={view.orgId} />
       </div>
 

@@ -1,4 +1,5 @@
 import { appScope, type Repository } from "@splitch/db";
+import { EnvironmentPolicySchema } from "@splitch/contracts";
 import type { EnvironmentResolver } from "./loader-context";
 import {
   type AppMembership,
@@ -129,11 +130,15 @@ export function createEnvironmentResolver(repo: Repository): EnvironmentResolver
   return {
     async listEnvironments(appId) {
       const environments = await repo.identity.listEnvironments(appScope(appId));
-      return environments.map((environment) => ({
-        environmentId: environment.id,
-        env: environment.key,
-        name: environment.name,
-      }));
+      return environments.map((environment) => {
+        const policy = EnvironmentPolicySchema.parse(JSON.parse(environment.policy));
+        return {
+          environmentId: environment.id,
+          env: environment.key,
+          name: environment.name,
+          guarded: Object.values(policy).some((level) => level !== "allow"),
+        };
+      });
     },
   };
 }

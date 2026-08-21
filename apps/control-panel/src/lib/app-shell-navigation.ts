@@ -16,9 +16,9 @@ export type NavigationDestination = {
 };
 
 export const appSectionRegistry = [
-  { label: "Overview", to: "/$orgSlug/$appSlug/$env", status: "shipped" },
   { label: "Flags", to: "/$orgSlug/$appSlug/$env/flags", status: "shipped" },
   { label: "Experiments", to: "/$orgSlug/$appSlug/$env/experiments", status: "shipped" },
+  { label: "Overview", to: "/$orgSlug/$appSlug/$env", status: "shipped" },
   {
     label: "Segments",
     to: "/$orgSlug/$appSlug/$env/segments",

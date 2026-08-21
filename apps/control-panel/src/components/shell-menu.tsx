@@ -10,24 +10,30 @@ import { SignOutForm } from "#components/sign-out-form";
 export function ShellMenu({
   children,
   label,
+  summary,
   value,
 }: {
   children: ReactNode;
   label: string;
+  summary?: ReactNode;
   value: string;
 }) {
   return (
     <details className="group relative min-w-0">
       <summary className="grid cursor-pointer list-none gap-1 rounded-md border border-border bg-background px-2.5 py-1.5 shadow-xs outline-none marker:hidden focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30">
-        <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.14em]">
-          {label}
-        </span>
-        <span className="flex min-w-0 items-center justify-between gap-2 text-sm text-foreground">
-          <span className="truncate">{value}</span>
-          <span aria-hidden="true" className="text-muted-foreground group-open:rotate-180">
-            ▾
-          </span>
-        </span>
+        {summary ?? (
+          <>
+            <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.14em]">
+              {label}
+            </span>
+            <span className="flex min-w-0 items-center justify-between gap-2 text-sm text-foreground">
+              <span className="truncate">{value}</span>
+              <span aria-hidden="true" className="text-muted-foreground group-open:rotate-180">
+                ▾
+              </span>
+            </span>
+          </>
+        )}
       </summary>
       <div className="absolute top-full right-0 left-0 z-20 mt-1 max-h-72 min-w-52 overflow-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg">
         {children}
@@ -59,7 +65,7 @@ export function ShellMenuLink({ children, href }: { children: ReactNode; href: s
 
   return (
     <a
-      className="rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+      className="rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
       href={href}
       onClick={navigate}
     >
@@ -69,13 +75,16 @@ export function ShellMenuLink({ children, href }: { children: ReactNode; href: s
 }
 
 /** The sign-out entry: a POST submit, never a link, so nothing can prefetch it. */
-export function ShellMenuSignOut({ children }: { children: ReactNode }) {
+export function ShellMenuSignOut({
+  children,
+  className = "rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <SignOutForm className="grid">
-      <button
-        className="rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
-        type="submit"
-      >
+      <button className={className} type="submit">
         {children}
       </button>
     </SignOutForm>

@@ -244,9 +244,5 @@ test.describe("Flag detail", () => {
 });
 
 async function chooseEnvironment(page: import("@playwright/test").Page, href: string) {
-  const switcher = page
-    .locator("details")
-    .filter({ has: page.getByText("Environment", { exact: true }) });
-  await switcher.locator("summary").click();
-  await switcher.locator(`a[href='${href}']`).click();
+  await page.locator(`[data-panel-sidebar] a[href='${href}']`).click();
 }

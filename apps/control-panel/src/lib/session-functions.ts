@@ -5,8 +5,10 @@ import { getRequest } from "@tanstack/react-start/server";
 import { type ControlPanelBindings, controlPanelBindings } from "./bindings";
 import {
   AccessDeniedError,
+  resolveNavigation,
   resolveScopedLoaderContext,
   ScopedNotFoundError,
+  type ScopeNavigation,
   type ScopeParams,
 } from "./loader-context";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
@@ -28,6 +30,14 @@ export type ScopedSessionResult =
   | { kind: "unauthenticated" }
   | { kind: "forbidden" }
   | { kind: "notFound" };
+
+export type PanelNavigationResult =
+  | {
+      kind: "authenticated";
+      session: SessionPrincipal;
+      navigation: ScopeNavigation;
+    }
+  | { kind: "unauthenticated" };
 
 /**
  * `bindings`/`request` are explicit parameters (rather than read internally
@@ -85,6 +95,30 @@ export async function loadCurrentSessionForRequest(
 
 export const loadCurrentSession = createServerFn({ method: "GET" }).handler(() =>
   loadCurrentSessionForRequest(controlPanelBindings(workerEnv), getRequest()),
+);
+
+export const loadPanelNavigation = createServerFn({ method: "GET" }).handler(
+  async (): Promise<PanelNavigationResult> => {
+    const bindings = controlPanelBindings(workerEnv);
+    const loaded = await loadSessionFromRequest(bindings, getRequest());
+    if (!loaded.ok) {
+      return { kind: "unauthenticated" };
+    }
+
+    const repo = createRepository(bindings.DB);
+    const session = await rehydrateLegacySession(
+      repo,
+      bindings.SESSION_STORE,
+      loaded.tokenHash,
+      loaded.session,
+    );
+    const principal = publicSession(session);
+    return {
+      kind: "authenticated",
+      session: principal,
+      navigation: await resolveNavigation(principal, createEnvironmentResolver(repo)),
+    };
+  },
 );
 
 export const loadScopedSession = createServerFn({ method: "GET" })

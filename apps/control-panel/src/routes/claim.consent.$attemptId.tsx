@@ -6,10 +6,12 @@ import { loadSessionFromRequest } from "#lib/session-refresh";
 
 export const Route = createFileRoute("/claim/consent/$attemptId")({
   component: () => (
-    <main>
-      <h1>Approve account linking</h1>
-      <p>This approval links the provisional Organization to your signed-in identity.</p>
-    </main>
+    <div className="mx-auto w-full max-w-6xl px-6 py-8">
+      <main>
+        <h1>Approve account linking</h1>
+        <p>This approval links the provisional Organization to your signed-in identity.</p>
+      </main>
+    </div>
   ),
   server: {
     handlers: {

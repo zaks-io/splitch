@@ -24,11 +24,12 @@ test.describe("Control Panel local full-stack harness", () => {
     await expect(page.locator("[data-org-slug='orbit-tools']")).toBeVisible();
     await expect(page.getByText("checkout-api")).toBeVisible();
     await expect(page.getByText("agent-console")).toBeVisible();
-    // The hosted product header carries product destinations only; the Kitchen
-    // Sink stays a local visual-development surface.
-    const header = page.locator("body > div > header").first();
-    await expect(header.locator("a[href='/kitchen-sink']")).toHaveCount(0);
-    await expect(header.getByRole("link", { name: /kitchen/i })).toHaveCount(0);
+    // The chooser has no authenticated product sidebar; the Kitchen Sink stays
+    // a local visual-development surface.
+    await expect(page.locator("[data-panel-sidebar]")).toHaveCount(0);
+    const main = page.locator("main").first();
+    await expect(main.locator("a[href='/kitchen-sink']")).toHaveCount(0);
+    await expect(main.getByRole("link", { name: /kitchen/i })).toHaveCount(0);
 
     await captureThemeScreenshots(page, testInfo, "template-shell");
   });
@@ -296,6 +297,11 @@ test.describe("Control Panel local full-stack harness", () => {
 });
 
 async function chooseScope(page: import("@playwright/test").Page, label: string, href: string) {
+  if (label === "Environment") {
+    await page.locator(`[data-panel-sidebar] a[href='${href}']`).click();
+    return;
+  }
+
   const switcher = page.locator("details").filter({ has: page.getByText(label, { exact: true }) });
   await switcher.locator("summary").click();
   await switcher.locator(`a[href='${href}']`).click();
