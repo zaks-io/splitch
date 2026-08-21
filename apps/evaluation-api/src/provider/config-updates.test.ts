@@ -69,11 +69,9 @@ describe("DurableConfigUpdates", () => {
     expect(waitUntil).toHaveBeenCalledTimes(1);
     const lifetime = waitUntil.mock.calls[0]?.[0] as Promise<unknown>;
     expect(lifetime).toBeInstanceOf(Promise);
-    const closeHandlers = socket.addEventListener.mock.calls
-      .filter(([event]) => event === "close")
-      .map(([, handler]) => handler as () => void);
-    expect(closeHandlers.length).toBeGreaterThan(0);
-    for (const handler of closeHandlers) handler();
+    const handlers = closeHandlers(socket);
+    expect(handlers.length).toBeGreaterThan(0);
+    for (const handler of handlers) handler();
     await expect(lifetime).resolves.toBeUndefined();
   });
 
@@ -118,7 +116,7 @@ describe("DurableConfigUpdates", () => {
     await harness.provider.getFlag("app-A", "env-1", "f");
     harness.invalidateEnvironment.mockClear();
     harness.toggleOff();
-    harness.refuseNextConnect();
+    harness.refuseConnects(1);
     harness.advance(25_000);
 
     await expect(harness.provider.getFlag("app-A", "env-1", "f")).resolves.toMatchObject({
@@ -130,6 +128,43 @@ describe("DurableConfigUpdates", () => {
     );
     expect(harness.invalidateEnvironment).toHaveBeenCalledWith("app-A", "env-1");
   });
+
+  it("keeps degrading gracefully for every request of a Config Store outage", async () => {
+    const harness = pinHarness();
+
+    await harness.provider.getFlag("app-A", "env-1", "f");
+    harness.toggleOff();
+    harness.refuseConnects(2);
+    harness.advance(25_000);
+
+    await expect(harness.provider.getFlag("app-A", "env-1", "f")).resolves.toMatchObject({
+      enabled: false,
+    });
+    // The second request of the same outage must not start failing loud just
+    // because the first one already cleared `connected`.
+    await expect(harness.provider.getFlag("app-A", "env-1", "f")).resolves.toMatchObject({
+      enabled: false,
+    });
+    expect(harness.logger.error).toHaveBeenCalledTimes(2);
+    expect(harness.readFlagConfigForEvaluation).toHaveBeenCalledTimes(3);
+  });
+
+  it("ignores a close from the socket the re-subscribe replaced", async () => {
+    const harness = pinHarness();
+
+    await harness.provider.getFlag("app-A", "env-1", "f");
+    harness.advance(25_000);
+    await harness.provider.getFlag("app-A", "env-1", "f");
+    expect(harness.fetch).toHaveBeenCalledTimes(2);
+    harness.invalidateEnvironment.mockClear();
+
+    // The 25s..30s overlap: the superseded socket finally closes.
+    for (const handler of closeHandlers(harness.sockets[0])) handler();
+    await harness.provider.getFlag("app-A", "env-1", "f");
+
+    expect(harness.fetch).toHaveBeenCalledTimes(2);
+    expect(harness.invalidateEnvironment).not.toHaveBeenCalled();
+  });
 });
 
 /**
@@ -139,15 +174,18 @@ describe("DurableConfigUpdates", () => {
 function pinHarness() {
   let clock = 1_000;
   let enabled = true;
-  let refuseNext = false;
+  let refusals = 0;
+  const sockets: ReturnType<typeof fakeSocket>[] = [];
   const logger = { error: vi.fn() };
   const waitUntil = vi.fn();
   const fetch = vi.fn(async () => {
-    if (refuseNext) {
-      refuseNext = false;
+    if (refusals > 0) {
+      refusals -= 1;
       return refusedResponse();
     }
-    return upgradeResponse(fakeSocket());
+    const socket = fakeSocket();
+    sockets.push(socket);
+    return upgradeResponse(socket);
   });
   const readFlagConfigForEvaluation = vi.fn(async () =>
     snapshot(flagConfigKV({ key: "f", enabled }), enabled ? 1 : 2),
@@ -169,9 +207,10 @@ function pinHarness() {
     logger,
     provider,
     readFlagConfigForEvaluation,
-    refuseNextConnect: () => {
-      refuseNext = true;
+    refuseConnects: (count: number) => {
+      refusals = count;
     },
+    sockets,
     toggleOff: () => {
       enabled = false;
     },
@@ -184,6 +223,13 @@ function snapshot(
   version = 1,
 ): EvaluationConfigSnapshot {
   return { flag, experiment: null, run: null, version };
+}
+
+function closeHandlers(socket: ReturnType<typeof fakeSocket> | undefined): (() => void)[] {
+  if (socket === undefined) throw new Error("no socket was opened");
+  return socket.addEventListener.mock.calls
+    .filter(([event]) => event === "close")
+    .map(([, handler]) => handler as () => void);
 }
 
 function fakeSocket() {

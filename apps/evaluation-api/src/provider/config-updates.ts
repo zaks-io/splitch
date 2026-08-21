@@ -47,6 +47,9 @@ interface Subscription {
   // one connect promise so siblings await readiness instead of failing loud.
   connected: boolean;
   connecting: Promise<void> | undefined;
+  // Sticky: a subscription that ever worked degrades gracefully for the whole
+  // outage, not just its first failing request.
+  everConnected: boolean;
   listener: ConfigUpdateListener;
   pinnedAt: number;
   socket: WebSocket | undefined;
@@ -77,6 +80,7 @@ export class DurableConfigUpdates {
     const state = this.subscriptions.get(key) ?? {
       connected: false,
       connecting: undefined,
+      everConnected: false,
       listener,
       pinnedAt: 0,
       socket: undefined,
@@ -90,7 +94,7 @@ export class DurableConfigUpdates {
     // A pin older than the window has been canceled, which kills the socket's
     // I/O context without ever firing close or error, so `connected` is not
     // liveness. Reconnect and re-pin on the request that got us here.
-    const reSubscribe = state.connected;
+    const reSubscribe = state.everConnected;
     state.connected = false;
     const connecting = this.connect(appId, environmentId, state);
     state.connecting = connecting;
@@ -151,6 +155,7 @@ export class DurableConfigUpdates {
     socket.accept();
     state.socket = socket;
     state.connected = true;
+    state.everConnected = true;
     // Pin the originating request's I/O context for the socket lifetime so
     // DeltaNudge delivery survives across Evaluation requests in this isolate.
     state.pinnedAt = this.now();

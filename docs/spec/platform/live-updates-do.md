@@ -69,12 +69,14 @@ socket's I/O context without delivering `close` or `error`, so a subscriber's ow
 is not liveness: a warm isolate can hold a flag that looks subscribed and will never receive
 another nudge.
 
-Evaluation therefore records when each socket was pinned and treats a pin older than 25 seconds as
+Evaluation therefore records when each socket was pinned and treats a pin 25 seconds or older as
 disconnected. The next request re-subscribes, re-pins on its own `waitUntil`, and runs the
 reconnect recovery above, so the following read comes from the authoritative DO snapshot. If the
 re-subscribe fails, Evaluation logs at error and still drops the Environment cache: reads fall
 through to the authoritative DO snapshot rather than serve a cached value that nothing can
-invalidate.
+invalidate. That degraded mode holds for every request of an outage, not only the first one that
+found the pin expired, so a Config Store that refuses upgrades slows nudge delivery without taking
+evaluation down.
 
 ## Scope
 
