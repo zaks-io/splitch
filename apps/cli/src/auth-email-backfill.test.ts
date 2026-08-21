@@ -68,7 +68,7 @@ describe("ensurePrincipalEmail concurrent rotation safety", () => {
       },
     });
 
-    expect(result.credential.refreshToken).toBe("refresh-r2");
+    expect(result.session.credential.refreshToken).toBe("refresh-r2");
     expect(get()?.credential.refreshToken).toBe("refresh-r2");
     expect(get()?.credential.accessToken).toBe("access-a2");
     expect(get()?.credential.emailBackfillUnavailableUntil).toBeUndefined();
@@ -87,7 +87,7 @@ describe("ensurePrincipalEmail concurrent rotation safety", () => {
         ),
     });
 
-    expect(result.credential.refreshToken).toBe("refresh-r1");
+    expect(result.session.credential.refreshToken).toBe("refresh-r1");
     expect(get()?.credential.emailBackfillUnavailableUntil).toBe(LIVE_EXPIRY);
   });
 

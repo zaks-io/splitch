@@ -194,8 +194,10 @@ export async function withAuthorizationRetry<T>(
   binding?: TokenBinding,
 ): Promise<T> {
   // Refresh first when the principal lacks a real email so member-profile
-  // backfill runs before any control-plane call (SPL-293).
-  const stored = await ensurePrincipalEmail(deps);
+  // backfill runs before any control-plane call (SPL-293). The command itself
+  // only needs the credential; a swallowed unverified reason is `context`'s
+  // concern, not this call's.
+  const { session: stored } = await ensurePrincipalEmail(deps);
   const usable = binding === undefined || storedBinding(stored) === bindingKey(binding);
   const current =
     usable && !isAccessTokenExpired(stored.credential.accessTokenExpiresAt)

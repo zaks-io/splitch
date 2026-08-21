@@ -1,5 +1,5 @@
 import { describeOAuthFault, isSessionRefusal } from "./auth-binding.js";
-import { ensurePrincipalEmail } from "./auth-email-backfill.js";
+import { ensurePrincipalEmail, type SessionUnverifiedReason } from "./auth-email-backfill.js";
 import { refreshAccessToken, refreshFaultOf } from "./auth-token.js";
 import { type ResolvedContext, resolveContext } from "./context.js";
 import {
@@ -78,8 +78,6 @@ export async function executeContext(
   return { exitCode: EXIT_OK, payload };
 }
 
-type SessionUnverifiedReason = "refresh_unreachable" | "refresh_failed";
-
 type SessionVerification =
   | {
       readonly authenticated: true;
@@ -106,6 +104,13 @@ type SessionVerification =
  * looked at the refresh token and refused it; anything else, plus a transport
  * failure that never got a response, proves nothing either way, so it is
  * never reported as a false `authenticated: false` (ADR-0036).
+ *
+ * `ensurePrincipalEmail`'s own refresh call (triggered by a missing email, not
+ * by access-token expiry) runs through the same classification: a proven
+ * refusal rethrows as `CLI_SESSION_EXPIRED` and lands in the catch below just
+ * like the direct-refresh path; anything else it swallows still comes back as
+ * an `unverifiedReason`/`unverifiedDetail` pair instead of a bare credential,
+ * so that fault is never silently lost either (SPL-376).
  */
 async function verifySession(
   deps: CliDeps,
@@ -113,14 +118,26 @@ async function verifySession(
 ): Promise<SessionVerification> {
   let session = stored;
   try {
-    session = await ensurePrincipalEmail(deps);
+    const backfilled = await ensurePrincipalEmail(deps);
+    session = backfilled.session;
+    let unverifiedReason = backfilled.unverifiedReason;
+    let unverifiedDetail = backfilled.unverifiedDetail;
     if (isAccessTokenExpired(session.credential.accessTokenExpiresAt)) {
       // ensurePrincipalEmail only refreshes to backfill a missing email; a
       // session that already has one short-circuits without ever touching
       // the refresh grant, so an expired access token still needs its own check.
       session = await refreshAccessToken(deps, session, null, false);
+      // A freshly minted token supersedes whatever the backfill attempt
+      // reported: the session is confirmed live as of this call.
+      unverifiedReason = undefined;
+      unverifiedDetail = undefined;
     }
-    return { authenticated: true, session };
+    return {
+      authenticated: true,
+      session,
+      sessionUnverifiedReason: unverifiedReason,
+      sessionUnverifiedDetail: unverifiedDetail,
+    };
   } catch (error) {
     if (error instanceof SplitchCliError && error.code === "CLI_SESSION_EXPIRED") {
       return classifySessionExpiredFault(error, session);

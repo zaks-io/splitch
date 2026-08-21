@@ -115,6 +115,16 @@ export function refreshFaultOf(error: SplitchCliError): OAuthFault | undefined {
     : undefined;
 }
 
+/**
+ * Only `status`/`error`/`description` are ever read back off `Error.cause`
+ * (`describeOAuthFault`, `isSessionRefusal`). A `refresh_token` the auth
+ * service echoes into an error body is never meant to leave this function, so
+ * it must not ride along onto a long-lived `Error` object.
+ */
+function causeSafeFault(fault: OAuthFault): OAuthFault {
+  return { status: fault.status, error: fault.error, description: fault.description };
+}
+
 function isOAuthFault(value: unknown): value is OAuthFault {
   return typeof value === "object" && value !== null && "status" in value;
 }
@@ -144,7 +154,7 @@ export function sessionExpiredError(detail: string, fault?: OAuthFault): Splitch
     code: "CLI_SESSION_EXPIRED",
     causeSummary: `The CLI login session could not mint a usable token: ${detail}`,
     remediation: "Run splitch login again before retrying the command",
-    originalError: fault,
+    originalError: fault ? causeSafeFault(fault) : undefined,
   });
 }
 
