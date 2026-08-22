@@ -43,7 +43,7 @@ export function FlagsTableRow({
             {item.definition.key}
           </a>
           <GatedWriteOutcome
-            ungatedCopy={`Applied in ${env}. Nothing was gated.`}
+            ungatedCopy={`Applied in the ${env} Environment. Nothing was gated.`}
             write={editing}
           />
         </div>
