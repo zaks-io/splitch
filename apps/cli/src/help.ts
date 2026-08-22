@@ -1,12 +1,9 @@
 import { deriveMcpTools } from "@splitch/contracts";
-import { commandUsageLine, requiredPositionals } from "./command-positionals.js";
+import { commandUsageLine } from "./command-positionals.js";
 import { CLI_COMMANDS, type CliCommandDefinition, META_COMMANDS } from "./command-registry.js";
 import { operationBehaviorNotes } from "./help-behavior-notes.js";
-import {
-  bodyJsonExampleFlag,
-  commandHasBodyJson,
-  renderBodyJsonSection,
-} from "./help-body-json.js";
+import { commandHasBodyJson, renderBodyJsonSection } from "./help-body-json.js";
+import { commandExample } from "./help-command-example.js";
 import { deleteModeHelpFlags } from "./help-delete-flags.js";
 import { META_DESCRIPTIONS, META_EXAMPLES } from "./help-meta.js";
 
@@ -34,7 +31,7 @@ export function renderHelp(args: readonly string[]): string | undefined {
 export function renderRootHelp(): string {
   const groups = [...commandGroups()].sort();
   return [
-    "splitch - agent-readable feature flag and experimentation control plane",
+    "splitch - feature flags and A/B experimentation from your terminal",
     "",
     "Usage:",
     "  splitch <command> [flags]",
@@ -47,14 +44,14 @@ export function renderRootHelp(): string {
     ...groups.map((group) => `  ${group}`),
     "",
     "Flags:",
-    formatFlags([helpFlag()]),
+    formatFlags([versionFlag(), helpFlag()]),
     "",
     "Credential semantics:",
     "  Client Key  Public data-plane key for browsers, mobile apps, and other untrusted clients.",
     "  API Key     Secret data-plane key for trusted servers; a newly created value is shown once.",
     "",
-    "Example:",
-    "  splitch flags list --app checkout --json",
+    "Start here:",
+    "  splitch login",
     "",
     "Run `splitch <command> --help` or `splitch <resource> <action> --help` for details.",
   ].join("\n");
@@ -258,25 +255,6 @@ function metaUsage(command: (typeof META_COMMANDS)[number]): string {
   return `${command} [flags]`;
 }
 
-function commandExample(command: CliCommandDefinition): string {
-  if (command.operationId === "flags_create")
-    return "splitch flags create --key checkout --variants on,off --json";
-  if (command.kind === "flags_verify")
-    return "splitch flags verify checkout --targeting-key user-123 --json";
-  const parts = [
-    "splitch",
-    ...command.path,
-    ...requiredPositionals(command).map((name) => `<${name}>`),
-  ];
-  if (command.operationId === "flags_test_eval") parts.push("--targeting-key", "user-123");
-  else {
-    const bodyExample = bodyJsonExampleFlag(command);
-    if (bodyExample) parts.push("--body-json", `'${bodyExample}'`);
-  }
-  parts.push("--json");
-  return parts.join(" ");
-}
-
 function credentialNotes(command: CliCommandDefinition): string[] {
   const group = command.path[0];
   if (group === "client-key" || command.kind === "flags_verify") {
@@ -314,6 +292,10 @@ function flag(syntax: string, type: string, defaultValue: string, description: s
 
 function helpFlag(): HelpFlag {
   return flag("-h, --help", "boolean", "false", "Show help and exit.");
+}
+
+function versionFlag(): HelpFlag {
+  return flag("-v, --version", "boolean", "false", "Show the installed CLI version and exit.");
 }
 
 function isMetaCommand(value: string | undefined): value is (typeof META_COMMANDS)[number] {

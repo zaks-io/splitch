@@ -207,7 +207,7 @@ Request body (--body-json):
     {"name":"name"}
 
 Example:
-  splitch apps create <org-id> --body-json '{"name":"name"}' --json",
+  splitch apps create --org <organization> --name "My App" --json",
     "apps delete": "Delete an App. Dry-run mode lists every blocker with IDs and remove commands; force mode cascades non-gated children and stops with pending Approval Request IDs when Policy requires Review. Blocked while any Experiment is running.
 
 Usage:
@@ -245,7 +245,7 @@ Flags:
   -h, --help            [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch apps list <org-id> --json",
+  splitch apps list --org <organization> --json",
     "apps update": "Rename an App or change its URL slug.
 
 Usage:
@@ -267,7 +267,7 @@ Request body (--body-json):
     {"name":"name"}
 
 Example:
-  splitch apps update --body-json '{"name":"name"}' --json",
+  splitch apps update --name "Checkout" --json",
     "client-key get": "Get the Environment's public Client Key (never 404s for a live Env).
 
 Usage:
@@ -399,7 +399,7 @@ Request body (--body-json):
     {"key":"key"}
 
 Example:
-  splitch envs create --body-json '{"key":"key"}' --json",
+  splitch envs create --key staging --name "Staging" --json",
     "envs delete": "Delete an Environment (blocked if running or last Environment).
 
 Usage:
@@ -458,7 +458,7 @@ Request body (--body-json):
     {"name":"name"}
 
 Example:
-  splitch envs update --body-json '{"name":"name"}' --json",
+  splitch envs update --name "Production" --json",
     "event-definition-versions create": "Publish the next immutable Event Definition Version.
 
 Usage:
@@ -797,7 +797,7 @@ Request body (--body-json):
     {"enabled":true,"availableVariantNames":[],"idempotency_key":"idem-1"}
 
 Example:
-  splitch flag-config update <flag-id-or-key> --body-json '{"enabled":true,"availableVariantNames":[],"idempotency_key":"idem-1"}' --json",
+  splitch flag-config update <flag-id-or-key> --enabled true --rollout 100 --json",
     "flag-targeting-rules replace": "Full-replace this Environment's ordered Targeting Rule list.
 
 Usage:
@@ -1020,7 +1020,7 @@ Request body (--body-json):
     {"name":"name"}
 
 Example:
-  splitch flags update <flag-id-or-key> --body-json '{"name":"name"}' --json",
+  splitch flags update <flag-id-or-key> --name "Checkout" --json",
     "flags verify": "Verify a Flag KEY through the data plane without firing an Exposure.
 
 Usage:
@@ -1231,7 +1231,7 @@ Request body (--body-json):
     {"name":"name"}
 
 Example:
-  splitch orgs create --body-json '{"name":"name"}' --json",
+  splitch orgs create --name "My Org" --json",
     "orgs get": "Get one organization.
 
 Usage:
@@ -1797,7 +1797,7 @@ Flags:
   -h, --help        [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch health --endpoint https://api.splitch.dev --json",
+  splitch health --json",
     "login": "Authenticate the control-plane session with the browser device flow.
 
 Usage:
@@ -1810,7 +1810,7 @@ Flags:
 
 Example:
   splitch login",
-    "logout": "Remove the stored control-plane session.
+    "logout": "Revoke and remove the stored control-plane session.
 
 Usage:
   splitch logout [flags]
@@ -1835,7 +1835,7 @@ Flags:
 Example:
   splitch use --app checkout --env dev --json",
   },
-  "root": "splitch - agent-readable feature flag and experimentation control plane
+  "root": "splitch - feature flags and A/B experimentation from your terminal
 
 Usage:
   splitch <command> [flags]
@@ -1843,7 +1843,7 @@ Usage:
 
 Commands:
   login           Authenticate the control-plane session with the browser device flow.
-  logout          Remove the stored control-plane session.
+  logout          Revoke and remove the stored control-plane session.
   use             Select the default App and Environment for the current directory.
   context         Show the logged-in principal and the resolved App and Environment.
   health          Check the Control Plane API health endpoint.
@@ -1875,14 +1875,15 @@ Resource groups:
   segments
 
 Flags:
-  -h, --help  [type: boolean; default: false] Show help and exit.
+  -v, --version  [type: boolean; default: false] Show the installed CLI version and exit.
+  -h, --help     [type: boolean; default: false] Show help and exit.
 
 Credential semantics:
   Client Key  Public data-plane key for browsers, mobile apps, and other untrusted clients.
   API Key     Secret data-plane key for trusted servers; a newly created value is shown once.
 
-Example:
-  splitch flags list --app checkout --json
+Start here:
+  splitch login
 
 Run \`splitch <command> --help\` or \`splitch <resource> <action> --help\` for details.",
 }

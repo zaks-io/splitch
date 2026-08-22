@@ -57,6 +57,24 @@ describe("published CLI help", () => {
     expect(apiKey).toContain("shown once and cannot be read back");
   });
 
+  it("leads a first-time user through the simple flag surface before body JSON", () => {
+    const root = renderRootHelp();
+    const orgCreate = renderHelp(["orgs", "create", "--help"]);
+    const appCreate = renderHelp(["apps", "create", "--help"]);
+    const flagConfig = renderHelp(["flag-config", "update", "--help"]);
+    const health = renderMetaHelp("health");
+
+    expect(root).toContain("feature flags and A/B experimentation from your terminal");
+    expect(root).toContain("-v, --version");
+    expect(root).toContain("Start here:\n  splitch login");
+    expect(orgCreate).toContain('splitch orgs create --name "My Org" --json');
+    expect(appCreate).toContain('splitch apps create --org <organization> --name "My App" --json');
+    expect(flagConfig).toContain(
+      "splitch flag-config update <flag-id-or-key> --enabled true --rollout 100 --json",
+    );
+    expect(health).toContain("splitch health --json");
+  });
+
   it("surfaces the kill-switch-off exemption on flag-config update and env-policy help (SPL-312)", () => {
     const flagConfigUpdate = renderHelp(["flag-config", "update", "--help"]);
     const envPolicyGet = renderHelp(["env-policy", "get", "--help"]);
