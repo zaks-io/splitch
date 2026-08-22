@@ -124,10 +124,11 @@ sidebar renders from so `shell-navigation.spec.ts` keeps proving every destinati
 ### Page header (`PanelPageHeader`)
 
 Left: optional crumb (`ORGANIZATION` on Org screens), the title, the Environment segmented control
-where the page has one (Flags, Experiments), and the prod badge when the active Environment is
-prod. Right: primary action, a divider, rarer actions. Height 14 (3.5rem); prod tints the header
-with `bg-warning-muted/40`. The prod tint and badge land with the first Environment-scoped
-header (slice 3b); slice 1 ships the header without them so it carries no dead branch.
+where the page has one (Flags, Experiments), and the Environment badge when the active Environment
+is guarded (its Policy confirms writes; prod by default). Right: primary action, a divider, rarer
+actions. Height 14 (3.5rem); a guarded Environment tints the header with `bg-warning-muted/40`.
+The guard tint and badge land with the first Environment-scoped header (slice 3b); slice 1 ships
+the header without them so it carries no dead branch.
 
 ### Home `/{org}`
 

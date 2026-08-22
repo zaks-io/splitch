@@ -1,5 +1,5 @@
-import type { FlagsPageItem } from "#lib/flags-page-data";
 import { scopedHref } from "#lib/app-shell-navigation";
+import type { FlagsPageItem } from "#lib/flags-page-data";
 import { CreateFlagDialog } from "./create-flag-dialog";
 import { EnvironmentSegmentedControl } from "./environment-segmented-control";
 import { FlagsEmptyState } from "./flags-empty-state";
@@ -28,26 +28,26 @@ export function FlagsPage(props: FlagsPageProps) {
   return (
     <section aria-labelledby="flags-title">
       <PanelPageHeader
+        environmentControl={
+          <EnvironmentSegmentedControl
+            active={props.env}
+            appSlug={props.appSlug}
+            environments={props.environments}
+            orgSlug={props.orgSlug}
+            section="flags"
+          />
+        }
         actions={
-          <>
-            <EnvironmentSegmentedControl
-              active={props.env}
-              appSlug={props.appSlug}
-              environments={props.environments}
-              orgSlug={props.orgSlug}
-              section="flags"
+          props.items.length > 0 ? (
+            <CreateFlagDialog
+              appId={props.appId}
+              environmentId={props.environmentId}
+              settingsHref={scopedHref(
+                { orgSlug: props.orgSlug, appSlug: props.appSlug, env: props.env },
+                "settings",
+              )}
             />
-            {props.items.length > 0 ? (
-              <CreateFlagDialog
-                appId={props.appId}
-                environmentId={props.environmentId}
-                settingsHref={scopedHref(
-                  { orgSlug: props.orgSlug, appSlug: props.appSlug, env: props.env },
-                  "settings",
-                )}
-              />
-            ) : null}
-          </>
+          ) : undefined
         }
         environment={{ env: props.env, guarded: props.guarded }}
         id="flags-title"
