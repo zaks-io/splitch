@@ -16,11 +16,13 @@ const index: PaletteIndex = {
 };
 
 describe("command palette items", () => {
-  it("lists Apps and Organization actions on Home", () => {
+  it("lists every App and Environment of the Organization plus Organization actions on Home", () => {
     const scope = paletteScope(navigation(), org);
 
     expect(itemIds(scope, index)).toEqual([
       "app:checkout-api",
+      "env:checkout-api/prod",
+      "env:checkout-api/dev",
       "app:billing-api",
       "org:members",
       "org:billing",

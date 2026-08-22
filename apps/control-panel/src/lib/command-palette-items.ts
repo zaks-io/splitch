@@ -72,26 +72,27 @@ export function paletteJumpItems(
   scope: ResolvedPaletteScope,
   index: PaletteIndex | null,
 ): PaletteItem[] {
-  const items: PaletteItem[] = scope.org.apps.map((app) => ({
-    id: `app:${app.appSlug}`,
-    group: "Jump to",
-    label: app.appSlug,
-    keywords: ["App", app.appSlug],
-    href: appHomeHref({ orgSlug: scope.org.orgSlug, appSlug: app.appSlug }),
-  }));
-
-  if (!scope.app) return items;
-  for (const environment of scope.app.environments) {
+  const items: PaletteItem[] = [];
+  for (const app of scope.org.apps) {
     items.push({
-      id: `env:${scope.app.appSlug}/${environment.env}`,
+      id: `app:${app.appSlug}`,
       group: "Jump to",
-      label: `${scope.app.appSlug} / ${environment.env}`,
-      keywords: [scope.app.appSlug, environment.env, environment.name, "Environment"],
-      href: scopedHref(
-        { orgSlug: scope.org.orgSlug, appSlug: scope.app.appSlug, env: environment.env },
-        "",
-      ),
+      label: app.appSlug,
+      keywords: ["App", app.appSlug],
+      href: appHomeHref({ orgSlug: scope.org.orgSlug, appSlug: app.appSlug }),
     });
+    for (const environment of app.environments) {
+      items.push({
+        id: `env:${app.appSlug}/${environment.env}`,
+        group: "Jump to",
+        label: `${app.appSlug} / ${environment.env}`,
+        keywords: [app.appSlug, environment.env, environment.name, "Environment"],
+        href: scopedHref(
+          { orgSlug: scope.org.orgSlug, appSlug: app.appSlug, env: environment.env },
+          "",
+        ),
+      });
+    }
   }
 
   if (!scope.target || !index) return items;

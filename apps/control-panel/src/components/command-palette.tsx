@@ -50,15 +50,18 @@ export function CommandPalette({
   const targetEnvironmentId = scope.target?.environmentId;
 
   useEffect(() => {
+    if (createOpen) return;
+    // Capture phase: cmdk binds Ctrl+K as "move up" inside the list and would
+    // swallow the toggle on Windows and Linux before a bubbling listener saw it.
     function handleKeyDown(event: KeyboardEvent) {
-      if (!event.defaultPrevented && (event.metaKey || event.ctrlKey) && event.key === "k") {
+      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
         event.preventDefault();
         onOpenChange(!open);
       }
     }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onOpenChange, open]);
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
+  }, [createOpen, onOpenChange, open]);
 
   useEffect(() => {
     if (!open || !targetAppId || !targetEnvironmentId) {

@@ -66,17 +66,16 @@ test.describe("Control Panel command palette", () => {
     await expect(dialog).toBeHidden();
   });
 
-  test("closes with Escape and returns focus to the page", async ({ page }) => {
+  test("closes with Escape and returns focus to the trigger", async ({ page }) => {
     await openAppPage(page, "/acme-labs/checkout-api/dev");
 
-    await page.keyboard.press("ControlOrMeta+k");
+    const trigger = page.locator("[data-command-palette-trigger]");
+    await trigger.click();
     await expect(page.locator("[data-command-palette]")).toBeVisible();
     await page.keyboard.press("Escape");
 
     await expect(page.locator("[data-command-palette]")).toBeHidden();
-    expect(
-      await page.evaluate(() => document.activeElement?.closest("[data-command-palette]") === null),
-    ).toBe(true);
+    await expect(trigger).toBeFocused();
   });
 });
 
