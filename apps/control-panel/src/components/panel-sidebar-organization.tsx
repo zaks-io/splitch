@@ -1,10 +1,22 @@
 import { Link } from "@tanstack/react-router";
+import { CreateOrganizationDialog } from "#components/create-organization-dialog";
 import {
   panelSidebarActiveLinkClassName,
   panelSidebarLinkClassName,
 } from "#components/panel-sidebar-link-styles";
 import { ShellMenu, ShellMenuLink } from "#components/shell-menu";
 import type { ScopeNavigation } from "#lib/loader-context";
+
+// Full document navigations, not client route changes: the new Organization is
+// in a session cookie the server re-reads on load, and a failed resync leaves a
+// durable marker that `/` reports with the chooser.
+function enterOrganization(orgSlug: string) {
+  globalThis.location.assign(`/${encodeURIComponent(orgSlug)}`);
+}
+
+function reportStaleSession() {
+  globalThis.location.assign("/");
+}
 
 export function PanelSidebarOrganization({
   navigation,
@@ -59,6 +71,12 @@ export function PanelSidebarOrganization({
       >
         Billing &amp; Usage
       </Link>
+      <CreateOrganizationDialog
+        className={panelSidebarLinkClassName}
+        onCreated={enterOrganization}
+        onStaleSession={reportStaleSession}
+        variant="ghost"
+      />
     </nav>
   );
 }

@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { waitForHydration } from "./hydration";
 import {
   LOCAL_E2E_MEMBER_SESSION_TOKEN,
   LOCAL_E2E_SESSION_TOKEN,
 } from "../../scripts/local-e2e-fixtures.mjs";
+import { waitForHydration } from "./hydration";
 import { captureThemeScreenshots } from "./screenshot";
 
 const origin = "http://127.0.0.1:18793";
@@ -80,20 +80,13 @@ test.describe("Honest Control Panel shell navigation", () => {
   });
 
   test("keeps development-only surfaces out of the hosted product shell", async ({ page }) => {
-    await page.goto("/");
-    const chooserMain = page.locator("main").first();
-    await expect(chooserMain).toBeVisible();
-    await expect(chooserMain.getByRole("link", { name: /kitchen/i })).toHaveCount(0);
-    await expect(chooserMain.locator("a[href='/kitchen-sink']")).toHaveCount(0);
-    // Sign out is a POST submit, never a link: a link is prefetchable and a
-    // prefetch would sign the operator out (SPL-227).
-    await expect(chooserMain.locator("form[action='/auth/logout'][method='post']")).toHaveCount(1);
-
     await page.goto("/acme-labs/checkout-api/dev");
     const sidebar = page.locator("[data-panel-sidebar]");
     await expect(sidebar).toBeVisible();
     await expect(sidebar.getByRole("link", { name: /kitchen/i })).toHaveCount(0);
     await expect(sidebar.locator("a[href='/kitchen-sink']")).toHaveCount(0);
+    // Sign out is a POST submit, never a link: a link is prefetchable and a
+    // prefetch would sign the operator out (SPL-227).
     await expect(sidebar.locator("a[href='/auth/logout']")).toHaveCount(0);
     await expect(sidebar.locator("form[action='/auth/logout'][method='post']")).toHaveCount(1);
     const organizationMenu = sidebar

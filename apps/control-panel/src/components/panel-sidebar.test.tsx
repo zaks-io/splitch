@@ -5,6 +5,12 @@ import type { ScopeNavigation } from "#lib/loader-context";
 
 let currentHref = "/acme-labs/checkout-api/dev/flags";
 
+// The sidebar reaches the create server function through the Create
+// Organization dialog; nothing under test here calls it.
+vi.mock("#lib/control-plane-organization-functions", () => ({
+  createControlPanelOrganization: vi.fn(),
+}));
+
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
     activeOptions: _activeOptions,
@@ -207,6 +213,13 @@ describe("PanelSidebar", () => {
 
     expect(html.match(/<form\b/gu) ?? []).toHaveLength(1);
     expect(html).toMatch(/<form[^>]*action="\/auth\/logout"[^>]*method="post"/u);
+  });
+
+  it("offers Create Organization in the Organization section of every session", () => {
+    expect(renderSidebar()).toMatch(/data-testid="create-organization"/u);
+    expect(renderSidebar({ navigation: navigation(true) })).toMatch(
+      /data-testid="create-organization"/u,
+    );
   });
 
   it("renders the Organization menu only for multi-Organization sessions", () => {

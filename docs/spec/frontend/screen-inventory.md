@@ -58,9 +58,10 @@ the panel renders locked affordances, the Worker is the guardian (ADR-0023).
 ### Home: `/{orgSlug}`
 
 Home contains this Organization's navigation and Experiment-health attention only. Apps are never
-merged across Organizations (`navigation-and-ia.md`). `/` redirects here when the session has
-exactly one Organization, no pending Organization resync, and a complete Organization list. Zero,
-multiple, pending, or truncated Organization sessions keep the chooser.
+merged across Organizations (`navigation-and-ia.md`). `/` redirects to the last-visited
+Organization's Home (else the first Organization) when the session has at least one Organization,
+no pending Organization resync, and a complete Organization list. Zero, pending, or truncated
+Organization sessions keep the chooser.
 
 - **Continue where you left off:** rendered only when the `__last_visited` httpOnly hint cookie has
   an entry for this Organization. It names the App, optional Environment, section, relative visit

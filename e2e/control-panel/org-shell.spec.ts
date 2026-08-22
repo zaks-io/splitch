@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { waitForHydration } from "./hydration";
 import {
   LOCAL_E2E_MEMBER_SESSION_TOKEN,
   LOCAL_E2E_SESSION_TOKEN,
 } from "../../scripts/local-e2e-fixtures.mjs";
+import { waitForHydration } from "./hydration";
 import { captureThemeScreenshots } from "./screenshot";
 
 const origin = "http://127.0.0.1:18793";
@@ -13,14 +13,32 @@ test.describe("Org shell and Home", () => {
     await context.addCookies([{ name: "__session", value: LOCAL_E2E_SESSION_TOKEN, url: origin }]);
   });
 
-  test("the root screen is a chooser that lands you on an Organization", async ({
+  test("the root lands on an Organization and remembers the last one visited", async ({
     page,
   }, testInfo) => {
+    // A fresh browser has no visit history, so `/` lands on an Organization
+    // Home rather than asking.
     await page.goto("/");
+    await expect(page).not.toHaveURL("/");
+    await expect(page.locator("[data-org-shell='ready']")).toBeVisible();
 
-    // No hidden default: the Organization is picked, not assumed, even though the
-    // destination is one click away.
-    await page.locator("[data-org-slug='acme-labs'] a").click();
+    // Visiting another Organization makes it the sticky landing.
+    await page.goto("/orbit-tools");
+    await expect(page.locator("[data-org-shell='ready']")).toHaveAttribute(
+      "data-org",
+      "orbit-tools",
+    );
+    await page.goto("/");
+    await expect(page).toHaveURL("/orbit-tools");
+    await expect(page.locator("[data-org-shell='ready']")).toHaveAttribute(
+      "data-org",
+      "orbit-tools",
+    );
+
+    // An App visit inside an Organization counts as using it too.
+    await page.goto("/acme-labs/checkout-api");
+    await expect(page.locator("[data-app-shell='ready']")).toBeVisible();
+    await page.goto("/");
     await expect(page).toHaveURL("/acme-labs");
     await expect(page.locator("[data-org-shell='ready']")).toHaveAttribute("data-org", "acme-labs");
     await expect(page.getByRole("heading", { name: "acme-labs" })).toBeVisible();

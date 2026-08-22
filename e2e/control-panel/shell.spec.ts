@@ -17,19 +17,19 @@ test.describe("Control Panel local full-stack harness", () => {
   test("accepts the KV-seeded session and proves the template shell", async ({
     page,
   }, testInfo) => {
-    await page.goto("/");
+    await page.goto("/acme-labs");
 
-    await expect(page.getByRole("heading", { name: "Control Panel" })).toBeVisible();
-    await expect(page.locator("[data-org-slug='acme-labs']")).toBeVisible();
-    await expect(page.locator("[data-org-slug='orbit-tools']")).toBeVisible();
-    await expect(page.getByText("checkout-api")).toBeVisible();
-    await expect(page.getByText("agent-console")).toBeVisible();
-    // The chooser has no authenticated product sidebar; the Kitchen Sink stays
-    // a local visual-development surface.
-    await expect(page.locator("[data-panel-sidebar]")).toHaveCount(0);
-    const main = page.locator("main").first();
-    await expect(main.locator("a[href='/kitchen-sink']")).toHaveCount(0);
-    await expect(main.getByRole("link", { name: /kitchen/i })).toHaveCount(0);
+    await expect(page.locator("[data-org-shell='ready']")).toHaveAttribute("data-org", "acme-labs");
+    await expect(page.locator("[data-app-row='checkout-api']")).toBeVisible();
+    // Both seeded Organizations reach the sidebar switcher.
+    const organizationMenu = page
+      .locator("[data-panel-sidebar] details")
+      .filter({ has: page.getByText("Organization", { exact: true }) });
+    await expect(organizationMenu.locator("a[href='/acme-labs']")).toHaveCount(1);
+    await expect(organizationMenu.locator("a[href='/orbit-tools']")).toHaveCount(1);
+    // The Kitchen Sink stays a local visual-development surface.
+    await expect(page.locator("a[href='/kitchen-sink']")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /kitchen/i })).toHaveCount(0);
 
     await captureThemeScreenshots(page, testInfo, "template-shell");
   });

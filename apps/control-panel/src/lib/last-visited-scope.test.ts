@@ -3,12 +3,14 @@ import {
   authorizedEntry,
   entryFor,
   formatRelativeTime,
-  lastVisitedEntry,
   LAST_VISITED_COOKIE_NAME,
+  type LastVisitedScope,
+  lastVisitedEntry,
+  lastVisitedOrgId,
   parseLastVisitedCookie,
+  recordOrgVisit,
   recordVisit,
   serializeLastVisitedCookie,
-  type LastVisitedScope,
 } from "./last-visited-scope";
 
 const entry = {
@@ -84,7 +86,25 @@ describe("last-visited scope cookie", () => {
     expect(entryFor(next, "org_1")?.path).toBe("/next");
 
     const other = recordVisit(next, "user_2", "org_2", entry);
-    expect(other).toEqual({ v: 1, actor: "user_2", orgs: { org_2: entry } });
+    expect(other).toEqual({ v: 1, actor: "user_2", orgs: { org_2: entry }, lastOrgId: "org_2" });
+  });
+
+  it("remembers the last Organization from App visits and from Home alone", () => {
+    expect(lastVisitedOrgId(null)).toBeNull();
+
+    const appVisit = recordVisit(null, "user_1", "org_1", entry);
+    expect(lastVisitedOrgId(appVisit)).toBe("org_1");
+
+    const homeVisit = recordOrgVisit(appVisit, "user_1", "org_2");
+    expect(lastVisitedOrgId(homeVisit)).toBe("org_2");
+    expect(entryFor(homeVisit, "org_1")).toEqual(entry);
+
+    const other = recordOrgVisit(homeVisit, "user_2", "org_3");
+    expect(other).toEqual({ v: 1, actor: "user_2", orgs: {}, lastOrgId: "org_3" });
+
+    const legacy = { v: 1, actor: "user_1", orgs: { org_1: entry } };
+    expect(parseLastVisitedCookie(encoded(legacy), "user_1")).toEqual(legacy);
+    expect(lastVisitedOrgId(parseLastVisitedCookie(encoded(legacy), "user_1"))).toBeNull();
   });
 
   it("derives registry sections from Environment paths and Flags for App home", () => {

@@ -1,15 +1,11 @@
 import { env as workerEnv } from "cloudflare:workers";
 import { createRepository } from "@splitch/db";
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
+import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { controlPanelBindings } from "./bindings";
-import {
-  lastVisitedEntry,
-  parseLastVisitedCookie,
-  recordVisit,
-  serializeLastVisitedCookie,
-} from "./last-visited-scope";
+import { lastVisitedEntry, parseLastVisitedCookie, recordVisit } from "./last-visited-scope";
+import { writeLastVisitedCookie } from "./last-visited-scope-cookie";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
 import { loadSessionFromRequest } from "./session-refresh";
 
@@ -26,13 +22,14 @@ export const recordLastVisitedScope = createServerFn({ method: "GET" })
     const request = getRequest();
     const { actorId } = await assertAuthorizedVisit(request, data);
     const existing = parseLastVisitedCookie(request.headers.get("cookie"), actorId);
-    const next = recordVisit(
-      existing,
-      actorId,
-      data.orgId,
-      lastVisitedEntry(data.appSlug, data.env, data.path, Date.now()),
+    writeLastVisitedCookie(
+      recordVisit(
+        existing,
+        actorId,
+        data.orgId,
+        lastVisitedEntry(data.appSlug, data.env, data.path, Date.now()),
+      ),
     );
-    setResponseHeader("set-cookie", serializeLastVisitedCookie(next));
   });
 
 async function assertAuthorizedVisit(

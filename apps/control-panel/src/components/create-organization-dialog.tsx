@@ -11,21 +11,27 @@ import type { StaleSession } from "#lib/stale-session";
  * form renders.
  */
 export function CreateOrganizationDialog({
+  className,
   label = "Create Organization",
   onCreated,
   onStaleSession,
   variant = "default",
 }: {
+  className?: string;
   label?: string;
   onCreated: (orgSlug: string) => void;
   onStaleSession: (stale: StaleSession) => void;
-  variant?: "default" | "outline";
+  variant?: "default" | "outline" | "ghost";
 }) {
   const [open, setOpen] = useState(false);
 
   return (
     <Dialog onOpenChange={setOpen} open={open}>
-      <DialogTrigger render={<Button data-testid="create-organization" variant={variant} />}>
+      <DialogTrigger
+        render={
+          <Button className={className} data-testid="create-organization" variant={variant} />
+        }
+      >
         {label}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">

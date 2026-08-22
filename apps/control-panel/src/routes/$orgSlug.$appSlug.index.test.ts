@@ -17,6 +17,10 @@ vi.mock("#lib/last-visited-scope-functions", () => ({
 }));
 vi.mock("#components/flags-matrix-page", () => ({ FlagsMatrixPage: () => null }));
 vi.mock("#components/command-palette", () => ({ CommandPalette: () => null }));
+// The sidebar's Create Organization dialog reaches the create server function.
+vi.mock("#lib/control-plane-organization-functions", () => ({
+  createControlPanelOrganization: vi.fn(),
+}));
 
 const { Route } = await import("./$orgSlug.$appSlug.index");
 const params = { appSlug: "checkout-api", orgSlug: "acme-labs" };

@@ -240,7 +240,7 @@ describe("panel cookie attributes", () => {
 
     expect(offenders).toEqual([]);
     expect(headerWrites.sort()).toEqual([
-      "lib/last-visited-scope-functions.ts: setResponseHeader",
+      "lib/last-visited-scope-cookie.ts: setResponseHeader",
       "lib/session-cookie.ts: append",
     ]);
     expectTypeOf<string>().not.toExtend<SerializedHttpOnlyCookie>();
