@@ -94,7 +94,7 @@ Evaluate the Flag through the authenticated control plane. This dry run returns 
 reason and does not fire an Exposure:
 
 ```bash
-splitch flags test-eval "$FLAG_ID" --targeting-key user-123 --json
+splitch flags test-eval checkout --targeting-key user-123 --json
 ```
 
 Verify the deployed data-plane setup by Flag KEY. The CLI fetches the selected Environment's public

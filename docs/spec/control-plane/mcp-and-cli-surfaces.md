@@ -145,7 +145,7 @@ splitch env-policy set [--app <app_id>] [--env <environment_id>] ...        # [c
 splitch experiments create [--app <app_id>] [--env <environment_id>] ...    # [ctx]
 splitch experiments start [--app <app_id>] [--env <environment_id>] <experiment_id>  # [ctx]
 splitch runs end [--app <app_id>] [--env <environment_id>] <run_id>         # [ctx]
-splitch flags test-eval [--app <app_id>] [--env <environment_id>] <flag_id> --targeting-key <key> [--context-json <json>]  # [ctx] control-plane, full reason
+splitch flags test-eval [--app <app_id>] [--env <environment_id>] <flag_key> --targeting-key <key> [--context-json <json>]  # [ctx] control-plane, full reason
 splitch flags verify [--app <app_id>] [--env <environment_id>] <flag_key> --targeting-key <key> [--context-json <json>]     # [ctx] setup confirmation (ADR-0037)
 splitch client-key get [--app <app_id>] [--env <environment_id>]            # [ctx]
 splitch api-keys create [--app <app_id>] [--env <environment_id>]           # [ctx]
