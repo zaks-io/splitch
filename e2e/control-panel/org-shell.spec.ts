@@ -87,7 +87,7 @@ test.describe("Org shell and Home", () => {
     ).toBeVisible();
   });
 
-  test("Home shows where you left off", async ({ page }) => {
+  test("Home shows where you left off", async ({ page, context }) => {
     await page.goto("/acme-labs/checkout-api/dev/flags");
     await waitForHydration(page);
     await page.goto("/acme-labs");
@@ -108,6 +108,14 @@ test.describe("Org shell and Home", () => {
       .getByRole("link", { name: "Experiments" })
       .click();
     await expect(page).toHaveURL("/acme-labs/checkout-api/dev/experiments");
+    // The env layout records the visit from a background revalidation, so the
+    // cookie lands shortly after the URL changes; wait for it before leaving.
+    await expect
+      .poll(async () => {
+        const cookie = (await context.cookies()).find(({ name }) => name === "__last_visited");
+        return cookie ? decodeURIComponent(cookie.value) : "";
+      })
+      .toContain("/acme-labs/checkout-api/dev/experiments");
     await page
       .getByRole("navigation", { name: "Organization sections" })
       .getByRole("link", { name: "Apps" })

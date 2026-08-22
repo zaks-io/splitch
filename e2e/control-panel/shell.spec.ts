@@ -137,7 +137,8 @@ test.describe("Control Panel local full-stack harness", () => {
     await expect(page).toHaveURL("/acme-labs");
     await expect(page.locator("[data-org-shell='ready']")).toHaveAttribute("data-org", "acme-labs");
     await expect(page.locator("[data-panel-sidebar]")).toContainText("user_local_member_e2e");
-    await expect(page.getByText("checkout-api")).toBeVisible();
+    await expect(page.locator("[data-app-row='checkout-api']")).toBeVisible();
+    await expect(page.locator("[data-app-row='orbit-tools']")).toHaveCount(0);
     await expect(page.getByText("orbit-tools")).toHaveCount(0);
 
     await page.goto("/acme-labs");
