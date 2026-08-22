@@ -160,6 +160,7 @@ export async function startExperiment(
     deps.runSnapshotDelivery,
     committed.run,
     scope,
+    prepared.value.metricQueryConfig,
     nowIso(deps),
   );
 

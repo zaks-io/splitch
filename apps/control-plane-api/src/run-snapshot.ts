@@ -1,3 +1,4 @@
+import type { MetricQueryConfig } from "@splitch/contracts";
 import type { EnvScope } from "@splitch/db";
 import type { ControlPlaneApiEnv } from "./env";
 import type { RunRow } from "./experiment-model";
@@ -30,6 +31,7 @@ export interface RunSnapshotRow {
   control_variant_id: string;
   decision_family: string;
   guardrail_decisions: string;
+  metric_query_config: string;
   metric_variance_config: string;
   dimensions: string;
   config_hash: string;
@@ -42,7 +44,12 @@ export function runSnapshotDeliveryFromEnv(env: ControlPlaneApiEnv): RunSnapshot
   };
 }
 
-export function runSnapshotRow(run: RunRow, scope: EnvScope, snapshotAt: string): RunSnapshotRow {
+export function runSnapshotRow(
+  run: RunRow,
+  scope: EnvScope,
+  metricQueryConfig: MetricQueryConfig[],
+  snapshotAt: string,
+): RunSnapshotRow {
   const variants = parseVariantSet(run.variantSet);
   const controlVariant = variants.find((variant) => variant.id === run.controlVariantId);
   if (!controlVariant) {
@@ -71,6 +78,7 @@ export function runSnapshotRow(run: RunRow, scope: EnvScope, snapshotAt: string)
     // Start freezes GuardrailDecision[] directly (thresholds and all), so this
     // only has to reject the pre-freeze MetricRef shape rather than convert it.
     guardrail_decisions: analysisGuardrailDecisions(run.guardrailDecisions),
+    metric_query_config: JSON.stringify(metricQueryConfig),
     metric_variance_config: run.metricVarianceConfig,
     // Dimension config has no backing data until SPL-183 lands.
     dimensions: "[]",
@@ -121,10 +129,11 @@ export async function shipCommittedRunSnapshot(
   delivery: RunSnapshotDelivery | undefined,
   run: RunRow,
   scope: EnvScope,
+  metricQueryConfig: MetricQueryConfig[],
   snapshotAt: string,
 ): Promise<boolean> {
   try {
-    await shipRunSnapshot(delivery, runSnapshotRow(run, scope, snapshotAt));
+    await shipRunSnapshot(delivery, runSnapshotRow(run, scope, metricQueryConfig, snapshotAt));
     return true;
   } catch (cause) {
     const detail = {

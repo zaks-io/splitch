@@ -81,7 +81,13 @@ export async function applyExperimentStart(
   });
   if (!committed.ok) return startRunFailure(committed.reason, experiment);
   await syncExperimentConfigFromD1(deps.configStore, scope, experiment.id);
-  await shipCommittedRunSnapshot(deps.runSnapshotDelivery, committed.run, scope, nowIso(deps));
+  await shipCommittedRunSnapshot(
+    deps.runSnapshotDelivery,
+    committed.run,
+    scope,
+    prepared.value.metricQueryConfig,
+    nowIso(deps),
+  );
   return { ok: true as const };
 }
 

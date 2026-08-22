@@ -14,6 +14,7 @@ SCHEMA >
     `control_variant_id` String `json:$.control_variant_id`,
     `decision_family` String `json:$.decision_family`,
     `guardrail_decisions` String `json:$.guardrail_decisions`,
+    `metric_query_config` String `json:$.metric_query_config` DEFAULT '[]',
     `metric_variance_config` String `json:$.metric_variance_config` DEFAULT '[]',
     `dimensions` String `json:$.dimensions`,
     `config_hash` String `json:$.config_hash`

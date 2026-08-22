@@ -59,6 +59,15 @@ describe("Experiment Start Run Snapshot delivery", () => {
       // D1 keeps MetricRef[]; the snapshot expands to DecisionFamilyMember[].
       decision_family: analysisDecisionFamilyFromD1(stored?.decisionFamily ?? "[]"),
       guardrail_decisions: stored?.guardrailDecisions,
+      metric_query_config: JSON.stringify([
+        {
+          metric_id: fx.metricId,
+          metric_type: "binomial",
+          event_definition_id: "event_definition_signed_up",
+          window_duration_ms: 0,
+          cuped_lookback_ms: 604_800_000,
+        },
+      ]),
       metric_variance_config: stored?.metricVarianceConfig,
       dimensions: "[]",
       config_hash: stored?.configHash,
