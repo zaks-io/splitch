@@ -43,7 +43,7 @@ function applyExplicitIdempotencyKey(
   flags: ParsedGlobalFlags,
   input: Record<string, unknown>,
 ): void {
-  if (flags.idempotencyKey) {
+  if (flags.idempotencyKey !== undefined) {
     input.idempotency_key = flags.idempotencyKey;
   }
 }
@@ -150,7 +150,7 @@ function applyDefaultIdempotencyKey(
   input: Record<string, unknown>,
 ): void {
   const route = getRoute(command.operationId);
-  if (route && route.idempotency !== "none" && typeof input.idempotency_key !== "string") {
+  if (route && route.idempotency !== "none" && !Object.hasOwn(input, "idempotency_key")) {
     input.idempotency_key = `cli_${randomUUID()}`;
   }
 }

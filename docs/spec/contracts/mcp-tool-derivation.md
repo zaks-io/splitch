@@ -203,9 +203,9 @@ Targeting Rule CRUD is intentionally not exposed until there is a separate endpo
 
 ### Test-evaluation (dry-run)
 
-| Tool              | Method | Path                                                       |
-| ----------------- | ------ | ---------------------------------------------------------- |
-| `flags_test_eval` | POST   | `/apps/:appId/envs/:environmentId/flags/:flagId/test-eval` |
+| Tool              | Method | Path                                                        |
+| ----------------- | ------ | ----------------------------------------------------------- |
+| `flags_test_eval` | POST   | `/apps/:appId/envs/:environmentId/flags/:flagKey/test-eval` |
 
 Input: `TestEvaluationRequest` body. Output: `TestEvaluationResponse`.
 Auth: control-plane token (not Client Key). Writes nothing; zero Exposures. (ADR-0026.)
