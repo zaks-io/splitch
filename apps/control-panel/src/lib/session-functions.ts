@@ -156,14 +156,22 @@ export const loadScopedSession = createServerFn({ method: "GET" })
   .validator((data: ScopeParams) => data)
   .handler(
     ({ data }): Promise<ScopedSessionResult> =>
-      loadScopedContext((session, resolver) => resolveScopedLoaderContext(session, data, resolver)),
+      loadScopedContextForRequest(
+        controlPanelBindings(workerEnv),
+        getRequest(),
+        (session, resolver) => resolveScopedLoaderContext(session, data, resolver),
+      ),
   );
 
 export const loadAppScopedSession = createServerFn({ method: "GET" })
   .validator((data: AppScopeParams) => data)
   .handler(
     ({ data }): Promise<AppScopedSessionResult> =>
-      loadScopedContext((session, resolver) => resolveAppLoaderContext(session, data, resolver)),
+      loadScopedContextForRequest(
+        controlPanelBindings(workerEnv),
+        getRequest(),
+        (session, resolver) => resolveAppLoaderContext(session, data, resolver),
+      ),
   );
 
 type AnyScopedSessionResult<T> =
@@ -172,24 +180,17 @@ type AnyScopedSessionResult<T> =
   | { kind: "forbidden" }
   | { kind: "notFound" };
 
-async function loadScopedContext<T>(
+export async function loadScopedContextForRequest<T>(
+  bindings: ControlPanelBindings,
+  request: Request,
   resolve: (session: SessionPrincipal, resolver: EnvironmentResolver) => Promise<T>,
 ): Promise<AnyScopedSessionResult<T>> {
-  const bindings = controlPanelBindings(workerEnv);
-  const loaded = await loadSessionFromRequest(bindings, getRequest());
-  if (!loaded.ok) return { kind: "unauthenticated" };
-
-  const repo = createRepository(bindings.DB);
-  const session = await rehydrateLegacySession(
-    repo,
-    bindings.SESSION_STORE,
-    loaded.tokenHash,
-    loaded.session,
-  );
+  const healed = await loadHealedSession(bindings, request);
+  if (healed.kind === "unauthenticated") return healed;
   try {
     return {
       kind: "ok",
-      context: await resolve(publicSession(session), createEnvironmentResolver(repo)),
+      context: await resolve(publicSession(healed.session), createEnvironmentResolver(healed.repo)),
     };
   } catch (error) {
     if (error instanceof AccessDeniedError) return { kind: "forbidden" };
