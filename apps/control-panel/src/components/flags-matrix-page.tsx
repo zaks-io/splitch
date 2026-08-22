@@ -77,6 +77,7 @@ export function FlagsMatrixPage({
           <FlagsEmptyState
             appId={appId}
             environmentId={delegation.environmentId}
+            onClosedAfterCreate={showCreatedFlag}
             settingsHref={settingsHref}
           />
         ) : (

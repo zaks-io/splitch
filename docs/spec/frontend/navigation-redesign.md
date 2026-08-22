@@ -63,8 +63,9 @@ key)`, `packages/db/src/schema/flags.ts:41`); keys can collide across Apps, so a
     the same Control Plane operation the CLI and MCP call, surfaced as a shortcut, never a fourth
     write path.
 11. **Create a Flag is two clicks from Home**: App name, New Flag. The created definition lands as
-    a new row on the App home with every Environment cell "Not configured" and a Configure action
-    per cell, so the first time prod is touched is a deliberate click on a cell labeled prod. The
+    a new row on the App home with a disabled Switch in every Environment cell (the Control Plane
+    initializes a disabled Flag Configuration per Environment at creation), so the first time prod
+    is touched is a deliberate click on a cell labeled prod. The
     CLI equivalent (`splitch flags config set <key> --env dev --enabled`) is shown inline for
     parity.
 12. **Promote is reachable from the source.** The App home matrix carries a per-row "Promote
@@ -173,7 +174,14 @@ section · n minutes ago`) with a Resume button. Rendered only when known. Sourc
   mint the delegation; pass the first non-guarded Environment, or the first Environment when all
   are guarded. On success the dialog closes, the
   loader is invalidated, the new row is highlighted (`?created=<key>`) and a success notice says
-  the definition serves nowhere until an Environment is configured, with the CLI line inline.
+  the Flag is disabled in every Environment until switched on, with the CLI line inline. The
+  empty-state dialog routes through the same created-row state.
+- Environments list in creation order everywhere (sidebar pills, segmented control, matrix columns,
+  promotion pair): `listEnvironments` orders by `createdAt, key` at the repo seam. The promotion
+  target is therefore the newest Environment; an App that adds an Environment after prod gets that
+  Environment as the target until a per-App promotion target exists (Phase 2).
+- `loadControlPanelFlagsMatrix` refuses Environment ids outside the App before reading, because an
+  App with zero Flags sends no per-column read that would otherwise catch a foreign column.
 - Empty state: the existing `FlagsEmptyState` teaching copy, New Flag primary.
 - `readTruncated` is carried and rendered with `FlagsTruncatedNotice`, as today.
 

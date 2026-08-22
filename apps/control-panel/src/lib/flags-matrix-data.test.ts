@@ -1,6 +1,7 @@
 import type { FlagConfigGetOutput, FlagsClient } from "@splitch/control-plane-sdk";
 import { describe, expect, it, vi } from "vitest";
 import {
+  assertMatrixEnvironments,
   classifyDrift,
   createDelegationEnvironment,
   readFlagsMatrix,
@@ -98,6 +99,20 @@ describe("Flags matrix data", () => {
   it("rejects an empty Environment list", async () => {
     await expect(readFlagsMatrix([], "app_checkout")).rejects.toThrow(
       "Flags matrix requires at least one Environment",
+    );
+  });
+});
+
+describe("Flags matrix Environment guard", () => {
+  const known = [{ environmentId: "env_dev" }, { environmentId: "env_prod" }];
+
+  it("accepts columns that all belong to the App", () => {
+    expect(() => assertMatrixEnvironments(["env_prod", "env_dev"], known)).not.toThrow();
+  });
+
+  it("refuses a column outside the App by name", () => {
+    expect(() => assertMatrixEnvironments(["env_dev", "env_other"], known)).toThrow(
+      "Flags matrix requested 1 Environment(s) outside the App: env_other",
     );
   });
 });

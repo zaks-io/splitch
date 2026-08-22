@@ -35,7 +35,7 @@ describe("FlagCreatedNotice", () => {
         orgSlug="acme-labs"
       />,
     );
-    expect(html).toContain("It serves nowhere until an Environment is configured.");
+    expect(html).toContain("It is disabled in every Environment until you switch it on.");
     expect(html).toContain("flag_config_update");
     expect(html).toContain('href="/acme-labs/checkout-api"');
   });

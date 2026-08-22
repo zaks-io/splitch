@@ -24,7 +24,7 @@ export function FlagCreatedNotice({
         <code>{createdKey}</code> created.
       </AlertTitle>
       <AlertDescription className="grid gap-3">
-        <p>It serves nowhere until an Environment is configured.</p>
+        <p>It is disabled in every Environment until you switch it on.</p>
         <ParityNote hint={parityHint("flag_config_update")} />
         <Link className="w-fit underline underline-offset-4" to={appHomeHref({ orgSlug, appSlug })}>
           Dismiss

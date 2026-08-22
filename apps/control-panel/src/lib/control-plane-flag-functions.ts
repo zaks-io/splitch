@@ -1,11 +1,19 @@
+import { env as workerEnv } from "cloudflare:workers";
+import { createRepository } from "@splitch/db";
 import type { ControlPlaneOperationResult } from "@splitch/control-plane-sdk";
 import { createServerFn } from "@tanstack/react-start";
+import { controlPanelBindings } from "./bindings";
 import { z } from "zod";
 import { draftIssues, FlagDraftSchema, flagCreateInput } from "./create-flag-model";
 import { type FlagDetailNotFound, isFlagDetailNotFound, readFlagDetail } from "./flag-detail-data";
 import { type FlagDetailView, flagDetailView } from "./flag-detail-view";
 import { type FlagsPageData, readFlagsPage } from "./flags-page-data";
-import { type FlagsMatrixData, readFlagsMatrix } from "./flags-matrix-data";
+import {
+  assertMatrixEnvironments,
+  type FlagsMatrixData,
+  readFlagsMatrix,
+} from "./flags-matrix-data";
+import { createEnvironmentResolver } from "./membership";
 import { authorizedFlagsClient, authorizedSegmentsClient } from "./panel-authorized-clients";
 
 type FlagsPageScope = { appId: string; environmentId: string };
@@ -43,6 +51,12 @@ export const loadControlPanelFlagsMatrix = createServerFn({ method: "GET" })
     );
     const refused = authorized.find((column) => !column.authorized.ok);
     if (refused && !refused.authorized.ok) return refused.authorized.result;
+
+    const repo = createRepository(controlPanelBindings(workerEnv).DB);
+    assertMatrixEnvironments(
+      data.environmentIds,
+      await createEnvironmentResolver(repo).listEnvironments(data.appId),
+    );
 
     return readFlagsMatrix(
       authorized.map((column) => {

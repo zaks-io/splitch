@@ -24,6 +24,25 @@ type MatrixColumn = {
   flags: Pick<FlagsClient, "list" | "getConfig">;
 };
 
+/**
+ * The matrix columns arrive from the browser, and the Worker only authorizes an
+ * Environment when a read is actually sent through its client. An App with no
+ * Flags sends nothing per column, so a column outside the App would otherwise
+ * come back as an empty, successful matrix. Refusing here keeps that failure loud.
+ */
+export function assertMatrixEnvironments(
+  requested: readonly string[],
+  known: ReadonlyArray<{ environmentId: string }>,
+): void {
+  const knownIds = new Set(known.map((environment) => environment.environmentId));
+  const foreign = requested.filter((environmentId) => !knownIds.has(environmentId));
+  if (foreign.length > 0) {
+    throw new Error(
+      `Flags matrix requested ${foreign.length} Environment(s) outside the App: ${foreign.join(", ")}`,
+    );
+  }
+}
+
 export async function readFlagsMatrix(
   columns: ReadonlyArray<MatrixColumn>,
   appId: string,

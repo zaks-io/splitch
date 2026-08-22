@@ -95,6 +95,12 @@ export const LOCAL_E2E_OVERVIEW_STATES = Object.freeze({
 });
 
 const createdAt = "2026-07-18T00:00:00.000Z";
+// Environments list in creation order (`listEnvironments` orders by created_at),
+// so checkout-api's Environments get distinct timestamps in seed order; identical
+// timestamps would leave the order to the key tiebreak and hide ordering bugs.
+function environmentCreatedAt(index) {
+  return new Date(Date.parse(createdAt) + index * 60_000).toISOString();
+}
 // The Overview's recently-changed window is relative to now, so the Flag
 // Configuration that must land inside it needs a relative timestamp; a frozen
 // one silently ages out of the window and the fixture stops proving anything.
@@ -198,19 +204,19 @@ INSERT INTO apps (id, organization_id, name, key, created_at, updated_at, create
   ('app_billing_e2e', 'org_acme_e2e', 'Billing API', 'billing-api', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('app_agent_e2e', 'org_orbit_e2e', 'Agent Console', 'agent-console', '${createdAt}', '${createdAt}', 'user_local_e2e');
 INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at, created_by) VALUES
-  ('env_checkout_dev_e2e', 'app_checkout_e2e', 'dev', 'Development', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('env_checkout_settings_retry_e2e', 'app_checkout_e2e', 'settings-retry', 'Settings Retry', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('env_checkout_overview_e2e', 'app_checkout_e2e', 'overview-changes', 'Overview Changes', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"confirm","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('env_checkout_calm_e2e', 'app_checkout_e2e', 'calm', 'Overview Calm', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('env_checkout_prod_e2e', 'app_checkout_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('env_checkout_setup_e2e', 'app_checkout_e2e', 'setup', 'Setup QA', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('env_checkout_dev_e2e', 'app_checkout_e2e', 'dev', 'Development', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${environmentCreatedAt(0)}', '${environmentCreatedAt(0)}', 'user_local_e2e'),
+  ('env_checkout_settings_retry_e2e', 'app_checkout_e2e', 'settings-retry', 'Settings Retry', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${environmentCreatedAt(1)}', '${environmentCreatedAt(1)}', 'user_local_e2e'),
+  ('env_checkout_overview_e2e', 'app_checkout_e2e', 'overview-changes', 'Overview Changes', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"confirm","startExperimentRun":"allow"}', '${environmentCreatedAt(2)}', '${environmentCreatedAt(2)}', 'user_local_e2e'),
+  ('env_checkout_calm_e2e', 'app_checkout_e2e', 'calm', 'Overview Calm', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${environmentCreatedAt(3)}', '${environmentCreatedAt(3)}', 'user_local_e2e'),
+  ('env_checkout_prod_e2e', 'app_checkout_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${environmentCreatedAt(4)}', '${environmentCreatedAt(4)}', 'user_local_e2e'),
+  ('env_checkout_setup_e2e', 'app_checkout_e2e', 'setup', 'Setup QA', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"confirm"}', '${environmentCreatedAt(5)}', '${environmentCreatedAt(5)}', 'user_local_e2e'),
   ('env_billing_prod_e2e', 'app_billing_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_agent_prod_e2e', 'app_agent_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('env_checkout_create_e2e', 'app_checkout_e2e', 'create-lab', 'Creation Lab', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('env_checkout_creategate_e2e', 'app_checkout_e2e', 'create-gated', 'Creation Gated', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('env_checkout_create_e2e', 'app_checkout_e2e', 'create-lab', 'Creation Lab', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${environmentCreatedAt(6)}', '${environmentCreatedAt(6)}', 'user_local_e2e'),
+  ('env_checkout_creategate_e2e', 'app_checkout_e2e', 'create-gated', 'Creation Gated', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"confirm"}', '${environmentCreatedAt(7)}', '${environmentCreatedAt(7)}', 'user_local_e2e'),
   -- SPL-189: dedicated Environment for the unresolvable-Control Run, so it
   -- cannot shift the running-Experiment counts other specs hard-code for dev/prod.
-  ('env_checkout_integrity_e2e', 'app_checkout_e2e', 'integrity', 'Integrity QA', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e');
+  ('env_checkout_integrity_e2e', 'app_checkout_e2e', 'integrity', 'Integrity QA', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${environmentCreatedAt(8)}', '${environmentCreatedAt(8)}', 'user_local_e2e');
 INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES
   ('org_acme_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
   ('org_orbit_e2e', 'user_local_e2e', 'admin', '${createdAt}'),
