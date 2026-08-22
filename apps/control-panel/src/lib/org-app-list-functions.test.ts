@@ -11,10 +11,11 @@ import { tokenHash as hashOpaqueToken } from "./session-cookie";
 // unavailable under plain vitest (no wrangler/workerd runtime), and unused
 // by `loadOrgAppListForRequest`, the function under test here.
 vi.mock("cloudflare:workers", () => ({ env: {} }));
-const authorizedFlagsClientMock = vi.fn();
+const createControlPanelFlagsClientMock = vi.fn();
 
-vi.mock("./panel-authorized-clients", () => ({
-  authorizedFlagsClient: (...args: unknown[]) => authorizedFlagsClientMock(...args),
+vi.mock("./control-plane-apps", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./control-plane-apps")>()),
+  createControlPanelFlagsClient: (...args: unknown[]) => createControlPanelFlagsClientMock(...args),
 }));
 
 const { loadOrgAppListForRequest } = await import("./org-app-list-functions");
@@ -58,7 +59,7 @@ beforeEach(async () => {
     AUTH_API_ORIGIN: "https://auth.example.test",
     EVALUATION_API_ORIGIN: "https://eval.example.test",
   };
-  authorizedFlagsClientMock.mockReset();
+  createControlPanelFlagsClientMock.mockReset();
 });
 
 afterEach(async () => {
@@ -185,14 +186,19 @@ describe("loadOrgAppListForRequest", () => {
         },
       ],
     });
-    authorizedFlagsClientMock.mockResolvedValue({
-      ok: true,
-      client: {
-        list: vi.fn().mockResolvedValue({
-          ok: true,
-          data: { items: [{ id: "flag_1" }], readTruncated: true, readLimit: 1 },
-        }),
-      },
+    const controlPlaneUnavailable = {
+      fetch: async () => new Response(null, { status: 503 }),
+    } as unknown as Fetcher;
+    const flagsBindings: ControlPanelBindings = {
+      ...bindings,
+      CONTROL_PLANE_API: controlPlaneUnavailable,
+      CONTROL_PANEL_DELEGATION_SECRET: "delegation-secret",
+    };
+    createControlPanelFlagsClientMock.mockReturnValue({
+      list: vi.fn().mockResolvedValue({
+        ok: true,
+        data: { items: [{ id: "flag_1" }], readTruncated: true, readLimit: 1 },
+      }),
     });
     const hint = encodeURIComponent(
       JSON.stringify({
@@ -214,16 +220,23 @@ describe("loadOrgAppListForRequest", () => {
       },
     });
 
-    const result = await loadOrgAppListForRequest(bindings, request, "org-000");
+    const result = await loadOrgAppListForRequest(flagsBindings, request, "org-000");
 
     if (result.kind !== "ok") throw new Error(`expected kind "ok", got "${result.kind}"`);
-    expect(authorizedFlagsClientMock).toHaveBeenCalledWith("env_000");
+    expect(createControlPanelFlagsClientMock).toHaveBeenCalledWith(
+      controlPlaneUnavailable,
+      expect.objectContaining({ actorId: expect.any(String) }),
+      "env_000",
+      "delegation-secret",
+    );
     expect(result.view.apps[0]?.flags).toEqual({ kind: "ready", count: 1, truncated: true });
     expect(result.view.lastVisited?.path).toBe("/org-000/checkout-api/dev/flags");
     expect(result.view.now).toBeTypeOf("number");
 
-    authorizedFlagsClientMock.mockRejectedValueOnce(new Error("catalog transport failed"));
-    const failed = await loadOrgAppListForRequest(bindings, request, "org-000");
+    createControlPanelFlagsClientMock.mockReturnValueOnce({
+      list: vi.fn().mockRejectedValue(new Error("catalog transport failed")),
+    });
+    const failed = await loadOrgAppListForRequest(flagsBindings, request, "org-000");
     if (failed.kind !== "ok") throw new Error(`expected kind "ok", got "${failed.kind}"`);
     expect(failed.view.apps[0]?.flags).toEqual({
       kind: "unavailable",

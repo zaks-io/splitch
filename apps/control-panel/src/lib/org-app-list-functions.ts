@@ -3,7 +3,7 @@ import { createRepository } from "@splitch/db";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { type ControlPanelBindings, controlPanelBindings } from "./bindings";
-import { createControlPanelAppsClient } from "./control-plane-apps";
+import { createControlPanelAppsClient, createControlPanelFlagsClient } from "./control-plane-apps";
 import { createDelegationEnvironment } from "./flags-matrix-data";
 import { entryFor, parseLastVisitedCookie } from "./last-visited-scope";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
@@ -14,7 +14,6 @@ import type {
   OrgAppListView,
   PendingAppResync,
 } from "./org-app-list";
-import { authorizedFlagsClient } from "./panel-authorized-clients";
 import { type PendingResync, readPendingResync } from "./pending-resync";
 import type { StoredSession } from "./session";
 import { loadSessionFromRequest } from "./session-refresh";
@@ -92,7 +91,7 @@ export async function loadOrgAppListForRequest(
           const environments = await resolver.listEnvironments(app.appId);
           const [attention, flags] = await Promise.all([
             readAttention(bindings, actor, app.appId),
-            readFlags(app.appId, environments),
+            readFlags(bindings, actor, app.appId, environments),
           ]);
           return { appId: app.appId, appSlug: app.appSlug, environments, attention, flags };
         }),
@@ -110,20 +109,27 @@ export async function loadOrgAppListForRequest(
 }
 
 async function readFlags(
+  bindings: ControlPanelBindings,
+  actor: { actorId: string; sessionExpiresAt: number },
   appId: string,
   environments: readonly OrgAppListEnvironment[],
 ): Promise<OrgAppListApp["flags"]> {
   if (environments.length === 0) {
     return { kind: "unavailable", message: "This App has no Environments" };
   }
+  const { CONTROL_PLANE_API, CONTROL_PANEL_DELEGATION_SECRET } = bindings;
+  if (!CONTROL_PLANE_API || !CONTROL_PANEL_DELEGATION_SECRET) {
+    return { kind: "unavailable", message: "the Control Plane binding is not configured" };
+  }
 
   try {
     const environment = createDelegationEnvironment(environments);
-    const authorized = await authorizedFlagsClient(environment.environmentId);
-    if (!authorized.ok) {
-      return { kind: "unavailable", message: authorized.result.error.message };
-    }
-    const result = await authorized.client.list({ appId });
+    const result = await createControlPanelFlagsClient(
+      CONTROL_PLANE_API,
+      actor,
+      environment.environmentId,
+      CONTROL_PANEL_DELEGATION_SECRET,
+    ).list({ appId });
     return result.ok
       ? {
           kind: "ready",
