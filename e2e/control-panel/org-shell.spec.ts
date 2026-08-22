@@ -8,7 +8,7 @@ import { captureThemeScreenshots } from "./screenshot";
 
 const origin = "http://127.0.0.1:18793";
 
-test.describe("Org shell and App list", () => {
+test.describe("Org shell and Home", () => {
   test.beforeEach(async ({ context }) => {
     await context.addCookies([{ name: "__session", value: LOCAL_E2E_SESSION_TOKEN, url: origin }]);
   });
@@ -28,20 +28,22 @@ test.describe("Org shell and App list", () => {
     await captureThemeScreenshots(page, testInfo, "org-app-list");
   });
 
-  test("the App card links to the App home and explicit Environments", async ({ page }) => {
+  test("the App row links to the App home and explicit Environments", async ({ page }) => {
     await page.goto("/acme-labs");
 
-    const card = page.locator("[data-app-card='checkout-api']");
-    await expect(card).toBeVisible();
-    await expect(card.getByRole("heading", { name: "checkout-api" })).toBeVisible();
-    await expect(card.getByRole("link", { name: "checkout-api" })).toHaveAttribute(
+    const row = page.locator("[data-app-row='checkout-api']");
+    await expect(row).toBeVisible();
+    await expect(row.getByRole("link", { name: "checkout-api" })).toHaveAttribute(
       "href",
       "/acme-labs/checkout-api",
     );
-    await expect(card.locator("a[href='/acme-labs/checkout-api/dev']")).toBeVisible();
-    await expect(card.locator("a[href='/acme-labs/checkout-api/prod']")).toBeVisible();
+    await expect(row.locator("a[href='/acme-labs/checkout-api/dev']")).toBeVisible();
+    await expect(row.locator("a[href='/acme-labs/checkout-api/prod']")).toBeVisible();
+    await expect(row.getByRole("cell")).toHaveCount(4);
+    await expect(page.getByRole("columnheader", { name: "Flags" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Attention" })).toBeVisible();
 
-    await card.getByRole("link", { name: "checkout-api" }).click();
+    await row.getByRole("link", { name: "checkout-api" }).click();
     await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute(
       "data-app-id",
       "app_checkout_e2e",
@@ -64,19 +66,66 @@ test.describe("Org shell and App list", () => {
     // org-app-list.test.ts until the fleet binds the entrypoint.
     await page.goto("/acme-labs");
 
-    const card = page.locator("[data-app-card='checkout-api']");
+    const row = page.locator("[data-app-row='checkout-api']");
     for (const environmentId of ["env_checkout_dev_e2e", "env_checkout_prod_e2e"]) {
       await expect(
-        card.locator(`[data-attention-environment-id='${environmentId}']`),
+        row.locator(`[data-attention-environment-id='${environmentId}']`),
       ).toHaveAttribute("data-attention-state", "unknown");
     }
-    await expect(card.locator("[data-app-attention-summary='checkout-api']")).toContainText(
+    await expect(row.locator("[data-app-attention-summary='checkout-api']")).toContainText(
       "Experiment health unavailable",
     );
     // The reason travels with the refusal instead of an absent marker (ADR-0036).
-    await expect(card).toContainText("analysis attention data is unavailable");
+    await expect(row).toContainText("analysis attention data is unavailable");
     // The marker must not rename the link it decorates.
-    await expect(card.getByRole("link", { name: "Production", exact: true })).toBeVisible();
+    await expect(row.getByRole("link", { name: "Production", exact: true })).toBeVisible();
+    await expect(page.getByText("Experiment health across Apps")).toBeVisible();
+    await expect(
+      page
+        .locator("[data-needs-you-item][data-severity='unknown']", { hasText: "checkout-api" })
+        .first(),
+    ).toBeVisible();
+  });
+
+  test("Home shows where you left off", async ({ page, context }) => {
+    await page.goto("/acme-labs/checkout-api/dev/flags");
+    await waitForHydration(page);
+    await page.goto("/acme-labs");
+
+    const continueCard = page.locator("[data-continue-card]");
+    await expect(continueCard).toContainText("checkout-api / dev");
+    await expect(continueCard).toContainText("Flags");
+    await expect(continueCard.locator("[data-continue-path]")).toHaveAttribute(
+      "href",
+      "/acme-labs/checkout-api/dev/flags",
+    );
+    await continueCard.getByRole("link", { name: "Resume" }).click();
+    await expect(page).toHaveURL("/acme-labs/checkout-api/dev/flags");
+
+    await waitForHydration(page);
+    await page
+      .getByRole("navigation", { name: "App sections" })
+      .getByRole("link", { name: "Experiments" })
+      .click();
+    await expect(page).toHaveURL("/acme-labs/checkout-api/dev/experiments");
+    // The env layout records the visit from a background revalidation, so the
+    // cookie lands shortly after the URL changes; wait for it before leaving.
+    await expect
+      .poll(async () => {
+        const cookie = (await context.cookies()).find(({ name }) => name === "__last_visited");
+        return cookie ? decodeURIComponent(cookie.value) : "";
+      })
+      .toContain("/acme-labs/checkout-api/dev/experiments");
+    await page
+      .getByRole("navigation", { name: "Organization sections" })
+      .getByRole("link", { name: "Apps" })
+      .click();
+    await expect(page).toHaveURL("/acme-labs");
+    await expect(page.locator("[data-continue-card]")).toContainText("Experiments");
+    await expect(page.locator("[data-continue-path]")).toHaveAttribute(
+      "href",
+      "/acme-labs/checkout-api/dev/experiments",
+    );
   });
 
   test("an owner creates an App and it appears in the Organization that owns it", async ({
@@ -90,15 +139,15 @@ test.describe("Org shell and App list", () => {
     await page.getByLabel("URL slug").fill(slug);
     await page.locator("form").getByRole("button", { name: "Create App" }).click();
 
-    const created = page.locator(`[data-app-card='${slug}']`);
+    const created = page.locator(`[data-app-row='${slug}']`);
     await expect(created).toBeVisible();
-    // dev and prod are provisioned with the App (ADR-0027), so the card is
+    // dev and prod are provisioned with the App (ADR-0027), so the row is
     // immediately usable rather than a dead entry.
     await expect(created.locator(`a[href='/acme-labs/${slug}/dev']`)).toBeVisible();
     await expect(created.locator(`a[href='/acme-labs/${slug}/prod']`)).toBeVisible();
 
     await page.goto("/orbit-tools");
-    await expect(page.locator(`[data-app-card='${slug}']`)).toHaveCount(0);
+    await expect(page.locator(`[data-app-row='${slug}']`)).toHaveCount(0);
   });
 
   test("a member sees Create App locked, and the Worker refuses it when forced", async ({
@@ -142,7 +191,7 @@ test.describe("Org shell and App list", () => {
     // The refusal is stated, not swallowed into an empty list (ADR-0036).
     expect(body).toMatch(/forbidden|not allowed|permission|role/i);
     await memberPage.goto("/acme-labs");
-    await expect(memberPage.locator(`[data-app-card='${slug}-forced']`)).toHaveCount(0);
+    await expect(memberPage.locator(`[data-app-row='${slug}-forced']`)).toHaveCount(0);
 
     await memberContext.close();
   });

@@ -9,10 +9,8 @@ import type { StaleSession } from "#lib/stale-session";
 import { useHydrated } from "#lib/use-hydrated";
 
 /**
- * The root landing screen. It is a chooser, not a redirect: a single-org user
- * still sees which Organization they are entering, so the scope they are about to
- * work in is never picked for them behind the URL. Each entry navigates to that
- * Organization's App list, which is the only way into an App.
+ * The root chooser for zero, multiple, pending-resync, or truncated Organization
+ * sessions. A complete one-Organization session redirects straight to Home.
  *
  * With zero memberships it is the sign-up surface rather than a dead end: a User
  * who just signed in has nothing to be a member of yet, so the only useful thing

@@ -3,9 +3,17 @@ import { createRepository } from "@splitch/db";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { type ControlPanelBindings, controlPanelBindings } from "./bindings";
-import { createControlPanelAppsClient } from "./control-plane-apps";
+import { createControlPanelAppsClient, createControlPanelFlagsClient } from "./control-plane-apps";
+import { createDelegationEnvironment } from "./flags-matrix-data";
+import { authorizedEntry, entryFor, parseLastVisitedCookie } from "./last-visited-scope";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
-import type { AppAttention, OrgAppListView, PendingAppResync } from "./org-app-list";
+import type {
+  AppAttention,
+  OrgAppListApp,
+  OrgAppListEnvironment,
+  OrgAppListView,
+  PendingAppResync,
+} from "./org-app-list";
 import { type PendingResync, readPendingResync } from "./pending-resync";
 import type { StoredSession } from "./session";
 import { loadSessionFromRequest } from "./session-refresh";
@@ -17,9 +25,9 @@ export type OrgAppListResult =
   | { kind: "forbidden" };
 
 /**
- * The Org landing read: the current Org's own Apps (never merged across Orgs),
+ * The Home read: the current Org's own Apps (never merged across Orgs),
  * each App's Environments, and each App's per-Environment attention rollup.
- * The rollup is read here rather than in the browser so the card renders in one
+ * The rollup is read here rather than in the browser so Home renders in one
  * pass, and a failed rollup travels as a stated reason instead of an empty list.
  *
  * `bindings`/`request` are explicit parameters (rather than read internally
@@ -33,6 +41,7 @@ export async function loadOrgAppListForRequest(
   request: Request,
   orgSlug: string,
 ): Promise<OrgAppListResult> {
+  const now = Date.now();
   const loaded = await loadSessionFromRequest(bindings, request);
   if (!loaded.ok) return { kind: "unauthenticated" };
 
@@ -69,6 +78,16 @@ export async function loadOrgAppListForRequest(
   const resolver = createEnvironmentResolver(repo);
   const actor = { actorId: session.userId, sessionExpiresAt: loaded.session.expiresAt };
 
+  const apps = await Promise.all(
+    organization.apps.map(async (app): Promise<OrgAppListApp> => {
+      const environments = await resolver.listEnvironments(app.appId);
+      const [attention, flags] = await Promise.all([
+        readAttention(bindings, actor, app.appId),
+        readFlags(bindings, actor, app.appId, environments),
+      ]);
+      return { appId: app.appId, appSlug: app.appSlug, environments, attention, flags };
+    }),
+  );
   return {
     kind: "ok",
     view: {
@@ -77,19 +96,57 @@ export async function loadOrgAppListForRequest(
       orgRole: organization.orgRole,
       isProvisional: organization.isProvisional,
       demoExpiresAt: organization.demoExpiresAt,
-      apps: await Promise.all(
-        organization.apps.map(async (app) => ({
-          appId: app.appId,
-          appSlug: app.appSlug,
-          environments: await resolver.listEnvironments(app.appId),
-          attention: await readAttention(bindings, actor, app.appId),
-        })),
-      ),
+      apps,
       // Scoped to this Organization only: a pending App create in a
       // different Organization must not surface a notice here.
       pendingAppResync: toPendingAppResync(pendingAfter, organization.orgId),
+      lastVisited: authorizedEntry(
+        entryFor(
+          parseLastVisitedCookie(request.headers.get("cookie"), session.userId),
+          organization.orgId,
+        ),
+        { orgSlug: organization.orgSlug, apps },
+      ),
+      now,
     },
   };
+}
+
+async function readFlags(
+  bindings: ControlPanelBindings,
+  actor: { actorId: string; sessionExpiresAt: number },
+  appId: string,
+  environments: readonly OrgAppListEnvironment[],
+): Promise<OrgAppListApp["flags"]> {
+  if (environments.length === 0) {
+    return { kind: "unavailable", message: "This App has no Environments" };
+  }
+  const { CONTROL_PLANE_API, CONTROL_PANEL_DELEGATION_SECRET } = bindings;
+  if (!CONTROL_PLANE_API || !CONTROL_PANEL_DELEGATION_SECRET) {
+    return { kind: "unavailable", message: "the Control Plane binding is not configured" };
+  }
+
+  try {
+    const environment = createDelegationEnvironment(environments);
+    const result = await createControlPanelFlagsClient(
+      CONTROL_PLANE_API,
+      actor,
+      environment.environmentId,
+      CONTROL_PANEL_DELEGATION_SECRET,
+    ).list({ appId });
+    return result.ok
+      ? {
+          kind: "ready",
+          count: result.data.items.length,
+          truncated: result.data.readTruncated,
+        }
+      : { kind: "unavailable", message: result.error.message };
+  } catch (cause) {
+    return {
+      kind: "unavailable",
+      message: cause instanceof Error ? cause.message : "the Control Plane could not be reached",
+    };
+  }
 }
 
 export const loadOrgAppList = createServerFn({ method: "GET" })

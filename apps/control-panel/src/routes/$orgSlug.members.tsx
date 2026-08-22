@@ -2,6 +2,7 @@ import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/aler
 import { createFileRoute } from "@tanstack/react-router";
 import { OrgMembersPage } from "#components/org-members-page";
 import { OrganizationsTruncatedNotice } from "#components/organizations-truncated-notice";
+import { PanelPageBody } from "#components/panel-page-body";
 import { PanelPageHeader } from "#components/panel-page-header";
 import { PanelShell } from "#components/panel-shell";
 import { loginRedirect } from "#lib/login-redirect";
@@ -58,9 +59,9 @@ function OrganizationMembersRoute() {
       }}
     >
       <PanelPageHeader crumb={view.orgSlug} title="Members" />
-      <div className="px-8 py-6">
+      <PanelPageBody>
         <OrgMembersPage view={view} />
-      </div>
+      </PanelPageBody>
     </PanelShell>
   );
 }

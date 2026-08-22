@@ -5,8 +5,6 @@ import {
   isCallExpression,
   isComputedPropertyName,
   isIdentifier,
-  isImportDeclaration,
-  isNamedImports,
   isNewExpression,
   isNoSubstitutionTemplateLiteral,
   isObjectLiteralExpression,
@@ -23,11 +21,17 @@ import {
   type TypeChecker,
   TypeFlags,
 } from "typescript";
+import {
+  importedHeaderNameBindings,
+  responseHeaderSetterBindings,
+  setterHeaderWrite,
+  staticString,
+} from "./response-header-setter-test-helpers";
 import { visitNodes } from "./source-file-test-helpers";
 
 interface SetCookieHeaderWrite {
   argument: string;
-  method: "append" | "entry" | "property" | "set";
+  method: "append" | "entry" | "property" | "set" | "setResponseHeader";
 }
 
 interface CookieHeaderWriteDiscoveryOptions {
@@ -67,55 +71,21 @@ export function createCookieHeaderWriteDiscovery(
         sourceFile,
         discoveryOptions.headerNameModules ?? [],
       );
+      const setterBindings = responseHeaderSetterBindings(sourceFile, displayName);
 
       const writes: SetCookieHeaderWrite[] = [];
       visitNodes(sourceFile, (node) => {
-        const callWrite = callHeaderWrite(
-          node,
-          sourceFile,
-          displayName,
-          headerNameBindings,
-          checker,
-          headersType,
-        );
-        if (callWrite) writes.push(callWrite);
-
-        const propertyWrite = propertyHeaderWrite(node, sourceFile, displayName);
-        if (propertyWrite) writes.push(propertyWrite);
-
-        const entryWrite = entryHeaderWrite(node, sourceFile, displayName);
-        if (entryWrite) writes.push(entryWrite);
+        const found = [
+          callHeaderWrite(node, sourceFile, displayName, headerNameBindings, checker, headersType),
+          setterHeaderWrite(node, sourceFile, displayName, setterBindings, headerNameBindings),
+          propertyHeaderWrite(node, sourceFile, displayName),
+          entryHeaderWrite(node, sourceFile, displayName),
+        ];
+        for (const write of found) if (write) writes.push(write);
       });
       return writes;
     },
   };
-}
-
-function importedHeaderNameBindings(
-  sourceFile: SourceFile,
-  modules: NonNullable<CookieHeaderWriteDiscoveryOptions["headerNameModules"]>,
-): Record<string, string> {
-  const configured = new Map(modules.map((module) => [module.moduleSpecifier, module.exports]));
-  return Object.fromEntries(
-    sourceFile.statements.flatMap((statement) => importHeaderNameBindings(statement, configured)),
-  );
-}
-
-function importHeaderNameBindings(
-  statement: Node,
-  configured: ReadonlyMap<string, Readonly<Record<string, string>>>,
-): Array<[string, string]> {
-  if (!isImportDeclaration(statement) || !isStringLiteral(statement.moduleSpecifier)) return [];
-  const exportedValues = configured.get(statement.moduleSpecifier.text);
-  const namedBindings = statement.importClause?.namedBindings;
-  if (!exportedValues || !namedBindings || !isNamedImports(namedBindings)) return [];
-  return namedBindings.elements.flatMap((element) => {
-    const importedName = element.propertyName?.text ?? element.name.text;
-    const value = exportedValues[importedName];
-    return Object.hasOwn(exportedValues, importedName) && value !== undefined
-      ? [[element.name.text, value]]
-      : [];
-  });
 }
 
 function callHeaderWrite(
@@ -282,18 +252,5 @@ function staticPropertyName(name: Node): string | null {
     return name.text;
   }
   if (isComputedPropertyName(name)) return staticString(name.expression);
-  return null;
-}
-
-function staticString(
-  expression: Expression,
-  bindings: Readonly<Record<string, string>> = {},
-): string | null {
-  if (isStringLiteral(expression) || isNoSubstitutionTemplateLiteral(expression)) {
-    return expression.text;
-  }
-  if (isIdentifier(expression) && Object.hasOwn(bindings, expression.text)) {
-    return bindings[expression.text] ?? null;
-  }
   return null;
 }

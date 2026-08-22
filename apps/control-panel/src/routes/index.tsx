@@ -1,5 +1,5 @@
 import { Button } from "@splitch/ui/components/button";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { OrganizationChooser } from "#components/organization-chooser";
 import { SignOutForm } from "#components/sign-out-form";
 import { loginRedirect } from "#lib/login-redirect";
@@ -17,6 +17,10 @@ export const Route = createFileRoute("/")({
     const result = await loadCurrentSession();
     if (result.kind === "unauthenticated") {
       throw loginRedirect(location.href);
+    }
+    const singleOrg = result.session.orgs.length === 1 ? result.session.orgs[0] : undefined;
+    if (singleOrg && result.pendingOrgResync === null && !result.session.orgsTruncated) {
+      throw redirect({ href: `/${encodeURIComponent(singleOrg.orgSlug)}` });
     }
     return { session: result.session, pendingOrgResync: result.pendingOrgResync };
   },

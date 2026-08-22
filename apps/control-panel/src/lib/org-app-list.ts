@@ -1,4 +1,5 @@
 import type { EnvironmentAttentionRollup } from "@splitch/contracts";
+import type { LastVisitedEntry } from "./last-visited-scope";
 import type { ResyncRemedy } from "./resync-remedy";
 import type { OrgRole } from "./session";
 
@@ -6,12 +7,13 @@ export interface OrgAppListEnvironment {
   readonly environmentId: string;
   readonly env: string;
   readonly name: string;
+  readonly guarded: boolean;
 }
 
 /**
  * Either the App's per-Environment health, or the reason it could not be read.
  * There is no third "assume clear" shape: a rollup that failed must render as a
- * stated unknown, because a silently-clear card is exactly the disguised failure
+ * stated unknown, because a silently-clear Home row is exactly the disguised failure
  * ADR-0036 forbids.
  */
 export type AppAttention =
@@ -23,6 +25,9 @@ export interface OrgAppListApp {
   readonly appSlug: string;
   readonly environments: readonly OrgAppListEnvironment[];
   readonly attention: AppAttention;
+  readonly flags:
+    | { readonly kind: "ready"; readonly count: number; readonly truncated: boolean }
+    | { readonly kind: "unavailable"; readonly message: string };
 }
 
 /**
@@ -45,6 +50,8 @@ export interface OrgAppListView {
   readonly demoExpiresAt: string | null;
   readonly apps: readonly OrgAppListApp[];
   readonly pendingAppResync: PendingAppResync | null;
+  readonly lastVisited: LastVisitedEntry | null;
+  readonly now: number;
 }
 
 export type EnvironmentAttentionState =
@@ -139,7 +146,7 @@ export function appAttentionSeverity(app: OrgAppListApp): AppAttentionSeverity {
   return "clear";
 }
 
-/** The one-line summary shown under the App name, above the Environment links. */
+/** The one-line summary shown in the Home table's Attention badge. */
 export function appAttentionSummary(app: OrgAppListApp): string {
   const severity = appAttentionSeverity(app);
   if (severity === "unavailable") return "Experiment health unavailable";

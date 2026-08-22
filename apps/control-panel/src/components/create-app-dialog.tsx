@@ -21,7 +21,7 @@ export function CreateAppDialog({ orgId, orgRole }: { orgId: string; orgRole: Or
   // this App's create is ever surfaced *for this tab*, since the session list
   // it would appear in is exactly what is stale (SPL-203). A reload replaces
   // this with the durable, server-read `view.pendingAppResync` notice in
-  // `org-app-list-page.tsx` instead — that one survives navigation, this one
+  // `home-page.tsx` instead: that one survives navigation, this one
   // only bridges the moment between submit and the next server read.
   const [staleApp, setStaleApp] = useState<StaleSession | null>(null);
 

@@ -1,8 +1,9 @@
 import { createAuthKitClient } from "./authkit";
 import type { ControlPanelBindings } from "./bindings";
 import { rejectCrossOriginWrite } from "./panel-csrf";
+import { LAST_VISITED_COOKIE_NAME } from "./last-visited-scope";
 import { destroySession } from "./session";
-import { appendHttpOnlyCookie } from "./session-cookie";
+import { appendHttpOnlyCookie, clearHttpOnlyCookie } from "./session-cookie";
 
 export const LOGOUT_PATH = "/auth/logout";
 
@@ -34,6 +35,9 @@ export async function destroyPanelSession(
 
   const headers = new Headers({ "cache-control": "no-store", location });
   appendHttpOnlyCookie(headers, destroyed.cookie);
+  // The navigation hint is this user's history; the next person to sign in on
+  // the same browser must not be greeted with it.
+  appendHttpOnlyCookie(headers, clearHttpOnlyCookie(LAST_VISITED_COOKIE_NAME));
   return new Response(null, { headers, status: 302 });
 }
 

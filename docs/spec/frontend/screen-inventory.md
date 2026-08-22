@@ -46,34 +46,36 @@ pinned in [navigation-redesign.md](./navigation-redesign.md).
 
 ## Org-level screens
 
-The org shell hangs three screens off `/{orgSlug}`: the **App list** (org landing), **Members**, and
+The Organization level hangs three screens off `/{orgSlug}`: **Home**, **Members**, and
 **Billing & Usage**. Org-scope role gates are the Org role matrix in
 [../control-plane/organization-and-membership.md](../control-plane/organization-and-membership.md);
 the panel renders locked affordances, the Worker is the guardian (ADR-0023).
 
-### App list — `/{orgSlug}` (org landing)
+### Home: `/{orgSlug}`
 
-The org's Apps for the current org only (never merged across orgs — `navigation-and-ia.md`). Each App
-is a **card** with its App home and Environment destinations:
+Home contains this Organization's navigation and Experiment-health attention only. Apps are never
+merged across Organizations (`navigation-and-ia.md`). `/` redirects here when the session has
+exactly one Organization, no pending Organization resync, and a complete Organization list. Zero,
+multiple, pending, or truncated Organization sessions keep the chooser.
 
-- **App name:** links to `/{orgSlug}/{appSlug}`, the App home showing Flags across every
-  Environment without choosing one.
-- **One link per Environment** (`dev`, `prod`, custom) → that env's App Overview
-  (`/{orgSlug}/{appSlug}/{env}`). No implicit default; you land where you mean to, and prod is never
-  the silent destination.
-- **A single attention rollup** — whether any Experiment in this App is in a failure state (SRM
-  firing, Guardrail breached) in any env. The rollup is **env-aware**: the marker sits on the failing
-  env's link (a dot on `prod` if prod is the one in trouble), so it points at _where_ to look. Deep
-  health lives on the App Overview; the card only flags which App and which env to open.
-
-- **Create App** — primary action, owner/admin only (Org role matrix). Provisions `dev` + `prod`
+- **Continue where you left off:** rendered only when the `__last_visited` httpOnly hint cookie has
+  an entry for this Organization. It names the App, optional Environment, section, relative visit
+  time, and exact Resume path. The cookie keeps at most eight Organization entries.
+- **Apps table:** one row per App. The App name links to `/{orgSlug}/{appSlug}`. Environment pills
+  link to each Environment Overview. The Flags column shows the bounded App catalog count and marks
+  truncation. The Attention badge uses the App's existing Experiment-health rollup. Health markers
+  remain attached to the affected Environment pills.
+- **Needs you:** every Environment with confirmed or unknown Experiment health, ordered with
+  confirmed attention first. Each item links to the Environment Overview. An unavailable App read
+  produces unknown items and never a calm empty state.
+- **Create App:** the Apps table action, owner/admin only (Org role matrix). Provisions `dev` + `prod`
   (ADR-0027). Parity: `apps_create`.
-- **Provisional-org claim banner** — if this Org is `is_provisional = 1` (anon door, not yet claimed —
+- **Provisional-org claim banner:** if this Org is `is_provisional = 1` (anon door, not yet claimed;
   organization-and-membership.md), a **loud, persistent banner**: "Demo workspace — expires
   `{demo_expires_at}`. Claim it to keep your work," with a one-click entry to the claim ceremony
   (auth-doors.md). Fail-loud: a reaper deletes provisional Orgs at expiry, so silently letting work
   evaporate is exactly the disguised failure the project forbids (ADR-0036).
-- **Empty state** — the onboarding teaching surface (see Onboarding below): "Create your first App,"
+- **Empty state:** the onboarding teaching surface (see Onboarding below): "Create your first App,"
   the App→Environment→Flag one-liner, and the CLI/agent equivalent.
 
 ### Members — `/{orgSlug}/members`

@@ -13,6 +13,7 @@ import {
   isAccessDeniedError,
   type ScopedLoaderContext,
 } from "#lib/loader-context";
+import { recordLastVisitedScope } from "#lib/last-visited-scope-functions";
 import { loginRedirect } from "#lib/login-redirect";
 import {
   configureControlPanelSentryScope,
@@ -48,6 +49,14 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
       throw notFound({ data: { deferred: true } });
     }
 
+    await recordLastVisitedScope({
+      data: {
+        orgId: result.context.scope.orgId,
+        appSlug: params.appSlug,
+        env: params.env,
+        path: location.pathname,
+      },
+    });
     configureControlPanelSentryScope(result.context);
     return result.context;
   },

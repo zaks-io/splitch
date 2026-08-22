@@ -21,6 +21,7 @@ export function EnvironmentSegmentedControl({
       <Tabs value={active}>
         <TabsList className="max-w-full overflow-x-auto">
           <TabsTrigger
+            nativeButton={false}
             data-environment-segment="all"
             render={<Link to={appHomeHref({ orgSlug, appSlug })} />}
             value="all"
@@ -29,6 +30,7 @@ export function EnvironmentSegmentedControl({
           </TabsTrigger>
           {environments.map((environment) => (
             <TabsTrigger
+              nativeButton={false}
               data-environment-segment={environment.env}
               key={environment.env}
               render={<Link to={scopedHref({ orgSlug, appSlug, env: environment.env }, section)} />}

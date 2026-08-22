@@ -11,6 +11,12 @@ import { tokenHash as hashOpaqueToken } from "./session-cookie";
 // unavailable under plain vitest (no wrangler/workerd runtime), and unused
 // by `loadOrgAppListForRequest`, the function under test here.
 vi.mock("cloudflare:workers", () => ({ env: {} }));
+const createControlPanelFlagsClientMock = vi.fn();
+
+vi.mock("./control-plane-apps", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./control-plane-apps")>()),
+  createControlPanelFlagsClient: (...args: unknown[]) => createControlPanelFlagsClientMock(...args),
+}));
 
 const { loadOrgAppListForRequest } = await import("./org-app-list-functions");
 
@@ -53,6 +59,7 @@ beforeEach(async () => {
     AUTH_API_ORIGIN: "https://auth.example.test",
     EVALUATION_API_ORIGIN: "https://eval.example.test",
   };
+  createControlPanelFlagsClientMock.mockReset();
 });
 
 afterEach(async () => {
@@ -64,6 +71,23 @@ function requestWithSessionCookie(): Request {
     headers: { cookie: `${SESSION_COOKIE_NAME}=${TOKEN}` },
   });
 }
+
+const lastVisitedHint = (actor: string) =>
+  encodeURIComponent(
+    JSON.stringify({
+      v: 1,
+      actor,
+      orgs: {
+        org_000: {
+          path: "/org-000/checkout-api/dev/flags",
+          appSlug: "checkout-api",
+          env: "dev",
+          section: "flags",
+          at: 1_000,
+        },
+      },
+    }),
+  );
 
 describe("loadOrgAppListForRequest", () => {
   it("re-attempts a pending App resync on load, returning the previously-missing App and clearing the marker", async () => {
@@ -158,6 +182,70 @@ describe("loadOrgAppListForRequest", () => {
     expect(result.view.pendingAppResync).toBeNull();
     expect(await readPendingResync(bindings.SESSION_STORE, tokenHash, "app")).not.toBeNull();
   }, 20_000);
+
+  it("reads Flag count through a delegation Environment and carries the Organization visit hint", async () => {
+    await seedOrganization(bindings.DB, "org_000", "org-000");
+    await seedApp(bindings.DB, "app_000", "org_000", "checkout-api");
+    await seedEnvironment(bindings.DB, "env_000", "app_000", "dev");
+    await refreshSession(bindings.SESSION_STORE, tokenHash, {
+      version: 2,
+      userId: "user_cap",
+      workosSessionId: "session_cap",
+      expiresAt: Math.floor(Date.now() / 1000) + 3_600,
+      orgs: [
+        {
+          orgId: "org_000",
+          orgSlug: "org-000",
+          orgRole: "owner",
+          isProvisional: false,
+          demoExpiresAt: null,
+          apps: [{ appId: "app_000", appSlug: "checkout-api", role: "owner" }],
+        },
+      ],
+    });
+    const controlPlaneUnavailable = {
+      fetch: async () => new Response(null, { status: 503 }),
+    } as unknown as Fetcher;
+    const flagsBindings: ControlPanelBindings = {
+      ...bindings,
+      CONTROL_PLANE_API: controlPlaneUnavailable,
+      CONTROL_PANEL_DELEGATION_SECRET: "delegation-secret",
+    };
+    createControlPanelFlagsClientMock.mockReturnValue({
+      list: vi.fn().mockResolvedValue({
+        ok: true,
+        data: { items: [{ id: "flag_1" }], readTruncated: true, readLimit: 1 },
+      }),
+    });
+    const request = new Request("https://control-panel.example.test/org-000", {
+      headers: {
+        cookie: `${SESSION_COOKIE_NAME}=${TOKEN}; __last_visited=${lastVisitedHint("user_cap")}`,
+      },
+    });
+
+    const result = await loadOrgAppListForRequest(flagsBindings, request, "org-000");
+
+    if (result.kind !== "ok") throw new Error(`expected kind "ok", got "${result.kind}"`);
+    expect(createControlPanelFlagsClientMock).toHaveBeenCalledWith(
+      controlPlaneUnavailable,
+      expect.objectContaining({ actorId: expect.any(String) }),
+      "env_000",
+      "delegation-secret",
+    );
+    expect(result.view.apps[0]?.flags).toEqual({ kind: "ready", count: 1, truncated: true });
+    expect(result.view.lastVisited?.path).toBe("/org-000/checkout-api/dev/flags");
+    expect(result.view.now).toBeTypeOf("number");
+
+    createControlPanelFlagsClientMock.mockReturnValueOnce({
+      list: vi.fn().mockRejectedValue(new Error("catalog transport failed")),
+    });
+    const failed = await loadOrgAppListForRequest(flagsBindings, request, "org-000");
+    if (failed.kind !== "ok") throw new Error(`expected kind "ok", got "${failed.kind}"`);
+    expect(failed.view.apps[0]?.flags).toEqual({
+      kind: "unavailable",
+      message: "catalog transport failed",
+    });
+  }, 20_000);
 });
 
 async function seedOrganization(d1: D1Database, id: string, slug: string): Promise<void> {
@@ -186,4 +274,25 @@ async function seedApp(d1: D1Database, id: string, orgId: string, key: string): 
       .prepare("INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)")
       .bind(id, "user_cap", "owner", now),
   ]);
+}
+
+async function seedEnvironment(
+  d1: D1Database,
+  id: string,
+  appId: string,
+  key: string,
+): Promise<void> {
+  const now = "2026-07-29T08:00:00.000Z";
+  const policy = JSON.stringify({
+    variantAvailability: "allow",
+    targetingRolloutValue: "allow",
+    enabledState: "allow",
+    startExperimentRun: "allow",
+  });
+  await d1
+    .prepare(
+      "INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at, created_by) VALUES (?,?,?,?,?,?,?,?)",
+    )
+    .bind(id, appId, key, "Development", policy, now, now, "user_cap")
+    .run();
 }

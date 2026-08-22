@@ -8,6 +8,7 @@ import { z } from "zod";
 import { FlagsMatrixPage } from "#components/flags-matrix-page";
 import { PanelShell } from "#components/panel-shell";
 import { loadControlPanelFlagsMatrix } from "#lib/control-plane-flag-functions";
+import { recordLastVisitedScope } from "#lib/last-visited-scope-functions";
 import { AccessDeniedError, isAccessDeniedError } from "#lib/loader-context";
 import {
   configureControlPanelSentryScope,
@@ -33,6 +34,14 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/")({
     }
 
     configureControlPanelSentryScope(result.context);
+    await recordLastVisitedScope({
+      data: {
+        orgId: result.context.scope.orgId,
+        appSlug: params.appSlug,
+        env: null,
+        path: location.pathname,
+      },
+    });
     const matrix = await loadControlPanelFlagsMatrix({
       data: {
         appId: result.context.scope.appId,

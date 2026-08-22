@@ -1,6 +1,7 @@
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { createFileRoute } from "@tanstack/react-router";
-import { OrgAppListPage } from "#components/org-app-list-page";
+import { HomePage } from "#components/home-page";
+import { PanelPageBody } from "#components/panel-page-body";
 import { PanelPageHeader } from "#components/panel-page-header";
 import { PanelShell } from "#components/panel-shell";
 import { loginRedirect } from "#lib/login-redirect";
@@ -56,9 +57,9 @@ function OrganizationRoute() {
         crumb="Organization"
         title={view.orgSlug}
       />
-      <div className="px-8 py-6">
-        <OrgAppListPage view={view} />
-      </div>
+      <PanelPageBody>
+        <HomePage view={view} />
+      </PanelPageBody>
     </PanelShell>
   );
 }
