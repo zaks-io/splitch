@@ -1,7 +1,8 @@
-import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
-import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { ExperimentCreateForm } from "#components/experiment-create-form";
+import { PanelPageBody } from "#components/panel-page-body";
+import { SectionPending } from "#components/section-pending";
+import { SectionUnavailable } from "#components/section-unavailable";
 import { scopedHref } from "#lib/app-shell-navigation";
 import { loadControlPanelFlags } from "#lib/control-plane-flag-functions";
 import { AccessDeniedError } from "#lib/loader-context";
@@ -30,16 +31,18 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments/new")(
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/experiments/new");
   },
-  errorComponent: () => <SectionErrorPage title="Experiment creation unavailable" />,
-  pendingComponent: TableSkeleton,
+  errorComponent: () => <SectionUnavailable title="Experiment creation unavailable" />,
+  pendingComponent: SectionPending,
   component: NewExperimentRoute,
 });
 
 function NewExperimentRoute() {
   const { flags, scope } = Route.useLoaderData();
   return (
-    <div className="mx-auto w-full max-w-2xl">
-      <ExperimentCreateForm flags={flags} scope={scope} scopeHref={scopedHref(scope)} />
-    </div>
+    <PanelPageBody>
+      <div className="mx-auto w-full max-w-2xl">
+        <ExperimentCreateForm flags={flags} scope={scope} scopeHref={scopedHref(scope)} />
+      </div>
+    </PanelPageBody>
   );
 }

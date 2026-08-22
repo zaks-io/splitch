@@ -6,6 +6,7 @@ export type FlagsPageItem = {
     id: string;
     key: string;
     variantCount: number;
+    variantLabels: Record<string, string>;
   };
   configuration: FlagConfigSummary | null;
 };
@@ -57,6 +58,9 @@ export async function readFlagsPage(
             id: definition.id,
             key: definition.key,
             variantCount: definition.variants.length,
+            variantLabels: Object.fromEntries(
+              definition.variants.map((variant) => [variant.id, variant.name]),
+            ),
           },
           configuration: configuration?.ok ? flagConfigSummary(configuration.data) : null,
         };

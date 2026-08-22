@@ -1,7 +1,7 @@
-import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
-import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
 import { createFileRoute } from "@tanstack/react-router";
 import { ExperimentResultsPanel } from "#components/experiment-results-panel";
+import { SectionPending } from "#components/section-pending";
+import { SectionUnavailable } from "#components/section-unavailable";
 import { useExperimentDetailRouteData } from "#lib/experiment-detail-route";
 
 export const Route = createFileRoute(
@@ -9,8 +9,8 @@ export const Route = createFileRoute(
 )({
   // A Results read that fails must say so. Rendering nothing would read as an
   // Experiment with no numbers rather than as a read that did not complete.
-  errorComponent: () => <SectionErrorPage title="Results unavailable" />,
-  pendingComponent: TableSkeleton,
+  errorComponent: () => <SectionUnavailable title="Results unavailable" />,
+  pendingComponent: SectionPending,
   component: PinnedRunResultsTab,
 });
 

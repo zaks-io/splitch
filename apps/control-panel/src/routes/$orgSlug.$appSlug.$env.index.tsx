@@ -1,7 +1,8 @@
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
-import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { createFileRoute, notFound, useRouter } from "@tanstack/react-router";
 import { OverviewPage } from "#components/overview-page";
+import { PanelPageBody } from "#components/panel-page-body";
+import { SectionUnavailable } from "#components/section-unavailable";
 import { scopedHref } from "#lib/app-shell-navigation";
 import { loadControlPanelOverview } from "#lib/control-plane-overview-functions";
 import { AccessDeniedError } from "#lib/loader-context";
@@ -30,8 +31,12 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/")({
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/");
   },
-  errorComponent: () => <SectionErrorPage title="Overview unavailable" />,
-  pendingComponent: PanelSkeleton,
+  errorComponent: () => <SectionUnavailable title="Overview unavailable" />,
+  pendingComponent: () => (
+    <PanelPageBody>
+      <PanelSkeleton />
+    </PanelPageBody>
+  ),
   component: OverviewSectionRoute,
 });
 
@@ -40,13 +45,15 @@ function OverviewSectionRoute() {
   const router = useRouter();
 
   return (
-    <OverviewPage
-      env={scope.env}
-      onRetry={() => {
-        void router.invalidate();
-      }}
-      overview={overview}
-      scopeHref={scopedHref(scope)}
-    />
+    <PanelPageBody>
+      <OverviewPage
+        env={scope.env}
+        onRetry={() => {
+          void router.invalidate();
+        }}
+        overview={overview}
+        scopeHref={scopedHref(scope)}
+      />
+    </PanelPageBody>
   );
 }

@@ -266,10 +266,17 @@ merged before the next starts unless marked parallel.
 
 ### Slice 3b: Flags in one Environment gets the segmented control and inline switches (parallel with 3a)
 
-- `FlagsPage` header uses `PanelPageHeader` with the segmented control; `FlagsTableRow` renders the
-  Switch through `useFlagEditing`; one `GatedWriteOutcome` above the table.
-- Done: flipping a dev Flag from the list applies and re-reads; flipping in prod raises the gate;
-  `flag-editing.spec.ts` gains a list-level case.
+- [x] `PanelPageBody` is the one inset paired with `PanelPageHeader`; env-scoped leaf routes own it
+      after the env layout renders its Outlet bare. `SectionPending` and `SectionUnavailable` keep
+      pending and error states on the same inset.
+- [x] `FlagsPage` uses `PanelPageHeader` with the segmented control. Its `environment` prop adds the
+      guarded Environment badge and warning tint, while the shared matrix passes no Environment.
+- [x] `FlagsTableRow` renders the Switch through `useFlagEditing`. The outcome renders per row because
+      the write controller is per Flag, preserving one `GatedWriteOutcome` per write controller.
+- Done:
+  - [x] Flipping a dev Flag from the list applies and re-reads.
+  - [x] Flipping in prod raises the gate.
+  - [x] `flag-editing.spec.ts` covers both list-level Policy paths.
 
 ### Slice 4: Command palette
 

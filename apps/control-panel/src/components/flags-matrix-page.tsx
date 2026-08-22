@@ -37,7 +37,7 @@ export function FlagsMatrixPage({
   }
 
   return (
-    <section>
+    <section aria-labelledby="flags-title">
       <PanelPageHeader
         actions={
           <>
@@ -59,6 +59,7 @@ export function FlagsMatrixPage({
           </>
         }
         crumb={appSlug}
+        id="flags-title"
         title="Flags"
       />
       <div className="grid gap-6 px-8 py-6">

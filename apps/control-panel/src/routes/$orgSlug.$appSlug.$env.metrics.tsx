@@ -1,7 +1,8 @@
-import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
-import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { MetricsPage } from "#components/metrics-page";
+import { PanelPageBody } from "#components/panel-page-body";
+import { SectionPending } from "#components/section-pending";
+import { SectionUnavailable } from "#components/section-unavailable";
 import { loadControlPanelMetrics } from "#lib/control-plane-metric-functions";
 import { AccessDeniedError } from "#lib/loader-context";
 import { loginRedirect } from "#lib/login-redirect";
@@ -24,12 +25,16 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/metrics")({
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/metrics");
   },
-  errorComponent: () => <SectionErrorPage title="Metrics unavailable" />,
-  pendingComponent: TableSkeleton,
+  errorComponent: () => <SectionUnavailable title="Metrics unavailable" />,
+  pendingComponent: SectionPending,
   component: MetricsSectionRoute,
 });
 
 function MetricsSectionRoute() {
   const { metrics, scope } = Route.useLoaderData();
-  return <MetricsPage appId={scope.appId} environmentId={scope.environmentId} metrics={metrics} />;
+  return (
+    <PanelPageBody>
+      <MetricsPage appId={scope.appId} environmentId={scope.environmentId} metrics={metrics} />
+    </PanelPageBody>
+  );
 }

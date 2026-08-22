@@ -1,8 +1,9 @@
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
-import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
 import { EnvironmentSettings } from "#components/environment-settings";
+import { PanelPageBody } from "#components/panel-page-body";
+import { SectionUnavailable } from "#components/section-unavailable";
 import { reportRouteError } from "#lib/panel-observability";
 import { environmentSettingsQuery } from "#lib/settings-query";
 
@@ -12,8 +13,12 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/settings/environme
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/settings/environment");
   },
-  errorComponent: () => <SectionErrorPage title="Settings unavailable" />,
-  pendingComponent: PanelSkeleton,
+  errorComponent: () => <SectionUnavailable title="Settings unavailable" />,
+  pendingComponent: () => (
+    <PanelPageBody>
+      <PanelSkeleton />
+    </PanelPageBody>
+  ),
   component: EnvironmentSettingsRoute,
 });
 

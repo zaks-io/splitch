@@ -1,4 +1,4 @@
-import { type BrowserContext, expect, type Page } from "@playwright/test";
+import { type BrowserContext, expect, type Locator, type Page } from "@playwright/test";
 import { LOCAL_E2E_SESSION_TOKEN } from "../../scripts/local-e2e-fixtures.mjs";
 import { LOCAL_E2E_FLAG_EDITING } from "../../scripts/local-e2e-flag-editing-fixture.mjs";
 
@@ -26,6 +26,20 @@ export async function openFlag(page: Page, environmentKey: string, flagKey: stri
   );
   await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
   await expect(page.locator(`[data-flag-env-config='${environmentKey}']`)).toBeVisible();
+}
+
+export async function openFlagsList(page: Page, environmentKey: string): Promise<void> {
+  await page.goto(`/acme-labs/${LOCAL_E2E_FLAG_EDITING.appSlug}/${environmentKey}/flags`);
+  await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+  await expect(page.locator("[data-flag-key]").first()).toBeVisible();
+}
+
+export function listRow(page: Page, flagKey: string): Locator {
+  return page.locator(`[data-flag-key='${flagKey}']`);
+}
+
+export function listKillSwitch(page: Page, flagKey: string): Locator {
+  return listRow(page, flagKey).locator("[data-kill-switch-input='true']");
 }
 
 export function killSwitch(page: Page) {

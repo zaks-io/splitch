@@ -1,8 +1,9 @@
 import { NotFoundPage } from "@splitch/ui/state/not-found-page";
-import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
-import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
 import { createFileRoute, notFound } from "@tanstack/react-router";
+import { PanelPageBody } from "#components/panel-page-body";
 import { PromotionPage } from "#components/promotion-page";
+import { SectionPending } from "#components/section-pending";
+import { SectionUnavailable } from "#components/section-unavailable";
 import { scopedHref } from "#lib/app-shell-navigation";
 import { loadControlPanelFlagDetail } from "#lib/control-plane-flag-functions";
 import { isFlagDetailNotFound } from "#lib/flag-detail-data";
@@ -96,26 +97,34 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey_/pr
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/flags/$flagKey/promote");
   },
-  errorComponent: () => <SectionErrorPage title="Promotion unavailable" />,
-  pendingComponent: TableSkeleton,
+  errorComponent: () => <SectionUnavailable title="Promotion unavailable" />,
+  pendingComponent: SectionPending,
   component: PromotionRoute,
 });
 
 function PromotionRoute() {
   const loaded = Route.useLoaderData();
 
-  if (loaded.kind !== "ready") return <PromotionBlockedPage blocked={loaded} />;
+  if (loaded.kind !== "ready") {
+    return (
+      <PanelPageBody>
+        <PromotionBlockedPage blocked={loaded} />
+      </PanelPageBody>
+    );
+  }
 
   return (
-    <PromotionPage
-      appId={loaded.appId}
-      scopeHref={loaded.scopeHref}
-      source={loaded.source}
-      sourceEnvironmentId={loaded.sourceEnvironmentId}
-      sourceOptions={loaded.sourceOptions}
-      target={loaded.target}
-      targetEnvironmentId={loaded.environmentId}
-    />
+    <PanelPageBody>
+      <PromotionPage
+        appId={loaded.appId}
+        scopeHref={loaded.scopeHref}
+        source={loaded.source}
+        sourceEnvironmentId={loaded.sourceEnvironmentId}
+        sourceOptions={loaded.sourceOptions}
+        target={loaded.target}
+        targetEnvironmentId={loaded.environmentId}
+      />
+    </PanelPageBody>
   );
 }
 

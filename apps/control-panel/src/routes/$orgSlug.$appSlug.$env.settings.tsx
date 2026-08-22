@@ -1,5 +1,6 @@
-import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { createFileRoute, getRouteApi, Outlet, useRouterState } from "@tanstack/react-router";
+import { PanelPageBody } from "#components/panel-page-body";
+import { SectionUnavailable } from "#components/section-unavailable";
 import { type SettingsTab, SettingsTabs } from "#components/settings-tabs";
 import { reportRouteError } from "#lib/panel-observability";
 
@@ -9,7 +10,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/settings")({
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/settings");
   },
-  errorComponent: () => <SectionErrorPage title="Settings unavailable" />,
+  errorComponent: () => <SectionUnavailable title="Settings unavailable" />,
   component: SettingsSectionLayout,
 });
 
@@ -20,9 +21,11 @@ function SettingsSectionLayout() {
   const activeTab: SettingsTab = pathname.endsWith("/environment") ? "environment" : "app";
 
   return (
-    <div className="grid gap-6">
-      <SettingsTabs activeTab={activeTab} baseHref={baseHref} />
-      <Outlet />
-    </div>
+    <PanelPageBody>
+      <div className="grid gap-6">
+        <SettingsTabs activeTab={activeTab} baseHref={baseHref} />
+        <Outlet />
+      </div>
+    </PanelPageBody>
   );
 }
