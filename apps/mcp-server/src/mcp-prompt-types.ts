@@ -70,7 +70,6 @@ export const PROMPT_DEFINITIONS: readonly McpPromptDefinition[] = [
       "Plan: create an Experiment, Start a Run, confirm resolution with flags_test_eval, then poll experiment_results_get.",
     arguments: [
       { name: "flagId", description: "Flag id the Experiment targets.", required: true },
-      { name: "flagKey", description: "Flag key used for test evaluation.", required: true },
       {
         name: "variants",
         description: "Variant set for the Experiment allocation.",
@@ -85,7 +84,11 @@ export const PROMPT_DEFINITIONS: readonly McpPromptDefinition[] = [
       "Plan: capture current resolution with flags_test_eval, End the Run, and confirm RUN_NOT_RUNNING.",
     arguments: [
       { name: "runId", description: "Run id to End.", required: true },
-      { name: "flagKey", description: "Flag key used for test evaluation.", required: true },
+      {
+        name: "experimentId",
+        description: "Experiment id that owns the Run.",
+        required: true,
+      },
     ],
   },
   {
@@ -102,6 +105,11 @@ export const PROMPT_DEFINITIONS: readonly McpPromptDefinition[] = [
         name: "details",
         description: "ErrorResponse.details object or JSON string; must include recommendedAction.",
         required: true,
+      },
+      {
+        name: "flagId",
+        description: "Affected Flag id; required when recommendedAction is CREATE_NEW_RUN.",
+        required: false,
       },
     ],
   },
@@ -121,7 +129,7 @@ export const PROMPT_DEFINITIONS: readonly McpPromptDefinition[] = [
 
 /** Remediation sequences keyed by recommendedAction (mcp-discovery.md Recovery). */
 export const RECOVERY_OPERATION_IDS: Readonly<Record<RecommendedAction, readonly string[]>> = {
-  CREATE_NEW_RUN: ["flags_list", "experiments_create", "experiments_start", "flags_test_eval"],
+  CREATE_NEW_RUN: ["flags_get", "experiments_create", "experiments_start", "flags_test_eval"],
   END_RUNNING_RUN_FIRST: ["runs_end"],
   START_A_RUN: ["experiments_start"],
   EDIT_DRAFT_THEN_START: ["experiments_start"],
@@ -180,6 +188,15 @@ export function requireString(args: Record<string, unknown>, name: string): stri
   const value = args[name];
   if (typeof value !== "string" || value.length === 0) {
     throw new PromptArgumentError(`Prompt argument "${name}" is required.`);
+  }
+  return value;
+}
+
+export function optionalString(args: Record<string, unknown>, name: string): string | undefined {
+  const value = args[name];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new PromptArgumentError(`Prompt argument "${name}" must be a non-empty string.`);
   }
   return value;
 }

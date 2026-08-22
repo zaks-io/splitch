@@ -18,7 +18,11 @@ import {
 
 const RECOMMENDED_ACTION_SET = new Set<string>(recommendedActions);
 
-export function recoverFromErrorPlan(errorCode: string, detailsRaw: unknown): McpPromptPlan {
+export function recoverFromErrorPlan(
+  errorCode: string,
+  detailsRaw: unknown,
+  flagId?: string,
+): McpPromptPlan {
   const details = parseDetails(detailsRaw);
   const recommendedAction = details.recommendedAction;
   if (typeof recommendedAction !== "string" || !RECOMMENDED_ACTION_SET.has(recommendedAction)) {
@@ -27,11 +31,16 @@ export function recoverFromErrorPlan(errorCode: string, detailsRaw: unknown): Mc
     );
   }
   const action = recommendedAction as RecommendedAction;
+  if (action === "CREATE_NEW_RUN" && !flagId) {
+    throw new PromptArgumentError(
+      'recover_from_error requires prompt argument "flagId" when recommendedAction is CREATE_NEW_RUN.',
+    );
+  }
   const operationIds = RECOVERY_OPERATION_IDS[action];
   return {
     description: promptDescription("recover_from_error"),
     operationIds,
-    messages: recoveryMessages(errorCode, action, details, operationIds),
+    messages: recoveryMessages(errorCode, action, details, operationIds, flagId),
   };
 }
 
@@ -40,13 +49,14 @@ function recoveryMessages(
   action: RecommendedAction,
   details: Record<string, unknown>,
   operationIds: readonly string[],
+  flagId?: string,
 ): readonly McpPromptMessage[] {
   const messages: McpPromptMessage[] = [
     message(
       "user",
       `Recover from errorCode=${errorCode} with recommendedAction=${action}. Execute only the tools named below, in order. This plan never mutates by itself.`,
     ),
-    ...recoverySteps(action, details),
+    ...recoverySteps(action, details, flagId),
   ];
 
   const named = messages
@@ -75,6 +85,7 @@ function isApprovalRecoveryAction(
 function recoverySteps(
   action: RecommendedAction,
   details: Record<string, unknown>,
+  flagId?: string,
 ): readonly McpPromptMessage[] {
   if (isApprovalRecoveryAction(action)) {
     return approvalRecoverySteps(action, details);
@@ -90,8 +101,8 @@ function recoverySteps(
     case "CREATE_NEW_RUN":
       return [
         toolMessage(
-          "flags_list",
-          "Find the affected Flag and retain its key for the final test evaluation.",
+          "flags_get",
+          `Get the affected flagId=${flagId} and retain its key for the final test evaluation.`,
         ),
         toolMessage(
           "experiments_create",
@@ -104,7 +115,7 @@ function recoverySteps(
         toolMessage("experiments_start", "Start the new draft Run."),
         toolMessage(
           "flags_test_eval",
-          "Use the Flag key returned by flags_list to confirm the new Run resolves without recording an Exposure.",
+          "Use the Flag key returned by flags_get. Require liveRunId to equal the Run id returned by experiments_start; stop with an identity-mismatch error otherwise.",
         ),
       ];
     case "END_RUNNING_RUN_FIRST": {

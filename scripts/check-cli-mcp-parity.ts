@@ -171,14 +171,16 @@ const promptPlans = [
     name: "run_an_experiment",
     plan: getPromptPlan("run_an_experiment", {
       flagId: "flag_example",
-      flagKey: "checkout",
       variants: "control,treatment",
       allocation: "50,50",
     }),
   },
   {
     name: "end_a_run",
-    plan: getPromptPlan("end_a_run", { runId: "run_example", flagKey: "checkout" }),
+    plan: getPromptPlan("end_a_run", {
+      runId: "run_example",
+      experimentId: "exp_example",
+    }),
   },
   {
     name: "diagnose_setup",
@@ -189,6 +191,7 @@ const promptPlans = [
     plan: getPromptPlan("recover_from_error", {
       errorCode: "FIXTURE",
       details: { recommendedAction: action },
+      ...(action === "CREATE_NEW_RUN" ? { flagId: "flag_example" } : {}),
     }),
   })),
 ];

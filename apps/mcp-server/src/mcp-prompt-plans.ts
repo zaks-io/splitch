@@ -89,11 +89,11 @@ export function shipAFlagPlan(flagKey: string, variants: string): McpPromptPlan 
 
 export function runAnExperimentPlan(
   flagId: string,
-  flagKey: string,
   variants: string,
   allocation: string,
 ): McpPromptPlan {
   const operationIds = [
+    "flags_get",
     "experiments_create",
     "experiments_start",
     "flags_test_eval",
@@ -105,7 +105,11 @@ export function runAnExperimentPlan(
     messages: [
       message(
         "user",
-        `Run an Experiment on flagId=${flagId} with flagKey=${JSON.stringify(flagKey)}, variants=${JSON.stringify(variants)}, and allocation=${JSON.stringify(allocation)}. Execute only the tools named below, in order.`,
+        `Run an Experiment on flagId=${flagId} with variants=${JSON.stringify(variants)} and allocation=${JSON.stringify(allocation)}. Execute only the tools named below, in order.`,
+      ),
+      toolMessage(
+        "flags_get",
+        `Get flagId=${flagId} and retain its returned key for the test evaluation.`,
       ),
       toolMessage(
         "experiments_create",
@@ -117,26 +121,31 @@ export function runAnExperimentPlan(
       ),
       toolMessage(
         "flags_test_eval",
-        `Use flagKey=${JSON.stringify(flagKey)} to confirm the live Run resolves before treating the Experiment as live.`,
+        "Use the Flag key returned by flags_get. Require liveRunId to equal the Run id returned by experiments_start; stop with an identity-mismatch error otherwise.",
       ),
       toolMessage("experiment_results_get", "Poll results for the running Experiment."),
     ],
   };
 }
 
-export function endARunPlan(runId: string, flagKey: string): McpPromptPlan {
-  const operationIds = ["flags_test_eval", "runs_end"] as const;
+export function endARunPlan(runId: string, experimentId: string): McpPromptPlan {
+  const operationIds = ["experiments_get", "flags_get", "flags_test_eval", "runs_end"] as const;
   return {
     description: promptDescription("end_a_run"),
     operationIds,
     messages: [
       message(
         "user",
-        `End Run runId=${runId} for flagKey=${JSON.stringify(flagKey)}. Execute only the tools named below, in order.`,
+        `End Run runId=${runId} owned by experimentId=${experimentId}. Execute only the tools named below, in order.`,
       ),
       toolMessage(
+        "experiments_get",
+        `Get experimentId=${experimentId} and retain its returned flagId.`,
+      ),
+      toolMessage("flags_get", "Get the Experiment's returned flagId and retain the Flag key."),
+      toolMessage(
         "flags_test_eval",
-        `Use flagKey=${JSON.stringify(flagKey)} to capture the current resolution before Ending the Run.`,
+        `Use the Flag key returned by flags_get. Require liveRunId=${runId}; stop with an identity-mismatch error instead of Ending if it differs.`,
       ),
       toolMessage("runs_end", `End the Run runId=${runId}.`),
       message(
