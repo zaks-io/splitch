@@ -540,7 +540,7 @@ under an API Key `verify` returns the full reason (ADR-0037). The mapping from H
   Environment Policy gate.
 - `VARIANT_NOT_AVAILABLE` / `FLAG_NOT_FOUND` / `VALIDATION_ERROR`
 
-**POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval** (dry-run, control-plane token)
+**POST /apps/:appId/envs/:environmentId/flags/:flagKey/test-eval** (dry-run, control-plane token)
 
 - `FLAG_NOT_FOUND`
 - `VALIDATION_ERROR`

@@ -33,14 +33,14 @@ Prompts are the "how do I…" layer. Each is a named, parameterized template tha
 message sequence naming the exact derived tools to call, in order, with the active-context and
 verify steps built in. The agent gets a plan, then executes it with tools.
 
-| Prompt               | Arguments                          | Returns a plan that…                                                                                                                                  |
-| -------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `onboard_new_app`    | `orgId`, `appName`                 | `apps_create` (provisions dev+prod Envs) → `context_use` (select dev) → `client_key_get` → `flags_create` → `flags_verify` round-trip → confirm green |
-| `ship_a_flag`        | `flagKey`, `variants`              | `flags_create` (App-level) → `flags_promote` into the active Env → `flags_test_eval` to confirm the rule set resolves                                 |
-| `run_an_experiment`  | `flagId`, `variants`, `allocation` | `experiments_create` → `experiments_start` → `flags_test_eval` to confirm the live Run resolves → poll `experiment_results_get`                       |
-| `end_a_run`          | `runId`                            | `flags_test_eval` (capture current resolution) → `runs_end` → confirm `RUN_NOT_RUNNING` is now the state                                              |
-| `recover_from_error` | `errorCode`, `details`             | reads `details.recommendedAction` and emits the remediation step sequence (see Recovery below)                                                        |
-| `diagnose_setup`     | (none; uses active context)        | `context` (resolve active app/env + source) → `client_key_get` → `flags_verify` on a known flag → report what is and isn't wired                      |
+| Prompt               | Arguments                                 | Returns a plan that…                                                                                                                                      |
+| -------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onboard_new_app`    | `orgId`, `appName`                        | `apps_create` (provisions dev+prod Envs) → `context_use` (select dev) → `client_key_get` → `flags_create` → `flags_test_eval` using the returned Flag key |
+| `ship_a_flag`        | `flagKey`, `variants`                     | `flags_create` (App-level) → `flags_promote` into the active Env → `flags_test_eval` using `flagKey`                                                      |
+| `run_an_experiment`  | `flagId`, `variants`, `allocation`        | `flags_get` derives the key → `experiments_create` → `experiments_start` → `flags_test_eval` must return the started Run id → poll results                |
+| `end_a_run`          | `runId`, `experimentId`                   | `experiments_get` derives `flagId` → `flags_get` derives the key → `flags_test_eval` must return `runId` → `runs_end`                                     |
+| `recover_from_error` | `errorCode`, `details`, optional `flagId` | reads `details.recommendedAction`; `CREATE_NEW_RUN` requires `flagId`, and other actions ignore it (see Recovery below)                                   |
+| `diagnose_setup`     | `flagKey`                                 | resolve active App/Environment → `client_key_get` → `flags_test_eval` using `flagKey` → report what is and is not wired                                   |
 
 Notes:
 
@@ -99,7 +99,7 @@ wants the full remediation **plan** rather than the single token:
 ```
 recommendedAction          → prompt emits
 -------------------------    -----------------------------------------------------------
-CREATE_NEW_RUN             → experiments_create (clone) → apply the blocked change → experiments_start → flags_test_eval
+CREATE_NEW_RUN             → require flagId → flags_get (retain Flag key) → experiments_create (clone) → apply the blocked change → experiments_start → flags_test_eval (require the new Run id)
 END_RUNNING_RUN_FIRST      → runs_end <runningRunId> → retry the original op
 START_A_RUN                → experiments_start (or experiments_create then start) → retry
 EDIT_DRAFT_THEN_START      → apply a draft change → experiments_start

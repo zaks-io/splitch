@@ -82,7 +82,14 @@ export const PROMPT_DEFINITIONS: readonly McpPromptDefinition[] = [
     name: "end_a_run",
     description:
       "Plan: capture current resolution with flags_test_eval, End the Run, and confirm RUN_NOT_RUNNING.",
-    arguments: [{ name: "runId", description: "Run id to End.", required: true }],
+    arguments: [
+      { name: "runId", description: "Run id to End.", required: true },
+      {
+        name: "experimentId",
+        description: "Experiment id that owns the Run.",
+        required: true,
+      },
+    ],
   },
   {
     name: "recover_from_error",
@@ -99,19 +106,30 @@ export const PROMPT_DEFINITIONS: readonly McpPromptDefinition[] = [
         description: "ErrorResponse.details object or JSON string; must include recommendedAction.",
         required: true,
       },
+      {
+        name: "flagId",
+        description: "Affected Flag id; required when recommendedAction is CREATE_NEW_RUN.",
+        required: false,
+      },
     ],
   },
   {
     name: "diagnose_setup",
     description:
       "Plan: resolve active context, fetch the Client Key, and confirm wiring with flags_test_eval.",
-    arguments: [],
+    arguments: [
+      {
+        name: "flagKey",
+        description: "Known Flag key to test in the active context.",
+        required: true,
+      },
+    ],
   },
 ];
 
 /** Remediation sequences keyed by recommendedAction (mcp-discovery.md Recovery). */
 export const RECOVERY_OPERATION_IDS: Readonly<Record<RecommendedAction, readonly string[]>> = {
-  CREATE_NEW_RUN: ["experiments_create", "experiments_start", "flags_test_eval"],
+  CREATE_NEW_RUN: ["flags_get", "experiments_create", "experiments_start", "flags_test_eval"],
   END_RUNNING_RUN_FIRST: ["runs_end"],
   START_A_RUN: ["experiments_start"],
   EDIT_DRAFT_THEN_START: ["experiments_start"],
@@ -170,6 +188,15 @@ export function requireString(args: Record<string, unknown>, name: string): stri
   const value = args[name];
   if (typeof value !== "string" || value.length === 0) {
     throw new PromptArgumentError(`Prompt argument "${name}" is required.`);
+  }
+  return value;
+}
+
+export function optionalString(args: Record<string, unknown>, name: string): string | undefined {
+  const value = args[name];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new PromptArgumentError(`Prompt argument "${name}" must be a non-empty string.`);
   }
   return value;
 }

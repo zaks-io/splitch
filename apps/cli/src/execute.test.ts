@@ -44,7 +44,16 @@ describe("executeInvocation", () => {
     });
 
     expect(result.exitCode).toBe(EXIT_OK);
-    expect(transport.requests[0]?.method).toBe("POST");
+    const appRequest = transport.requests.find((request) =>
+      request.url.includes("/orgs/org_1/apps"),
+    );
+    expect(appRequest).toMatchObject({
+      method: "POST",
+      body: {
+        name: "New App",
+        idempotency_key: expect.stringMatching(/^cli_/),
+      },
+    });
   });
 
   it("refreshes before an authorized call when the stored principal still has unknown email", async () => {

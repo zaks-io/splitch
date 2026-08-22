@@ -175,13 +175,23 @@ const promptPlans = [
       allocation: "50,50",
     }),
   },
-  { name: "end_a_run", plan: getPromptPlan("end_a_run", { runId: "run_example" }) },
-  { name: "diagnose_setup", plan: getPromptPlan("diagnose_setup") },
+  {
+    name: "end_a_run",
+    plan: getPromptPlan("end_a_run", {
+      runId: "run_example",
+      experimentId: "exp_example",
+    }),
+  },
+  {
+    name: "diagnose_setup",
+    plan: getPromptPlan("diagnose_setup", { flagKey: "checkout" }),
+  },
   ...recommendedActions.map((action) => ({
     name: `recover_from_error:${action}`,
     plan: getPromptPlan("recover_from_error", {
       errorCode: "FIXTURE",
       details: { recommendedAction: action },
+      ...(action === "CREATE_NEW_RUN" ? { flagId: "flag_example" } : {}),
     }),
   })),
 ];

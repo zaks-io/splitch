@@ -16,7 +16,7 @@ Environment's Flag Configuration; results read _that_ Environment's Exposures.
 
 ## Test-evaluation endpoint (dry-run)
 
-### `POST /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/test-eval`
+### `POST /apps/{app_id}/envs/{environment_id}/flags/{flag_key}/test-eval`
 
 Resolves the Flag **in this Environment** for a given Evaluation Context without firing an Exposure or
 writing the Assignment Store. It may read holdover state to report `holdover_replay`. Lives behind the

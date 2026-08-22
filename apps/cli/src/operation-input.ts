@@ -32,10 +32,9 @@ export function buildOperationInput(
   applyPositionalFields(command, invocation, input);
   applyNamedFlags(command, invocation.flags, input);
   // The Idempotency Key is minted before the command-specific step because that
-  // step validates the assembled input against the contract, and a required-key
-  // route carries `idempotency_key` as a contract field.
+  // step validates the assembled input against the contract.
   applyExplicitIdempotencyKey(invocation.flags, input);
-  applyRequiredIdempotencyKey(command, input);
+  applyDefaultIdempotencyKey(command, input);
   applyCommandSpecificFields(command, invocation, input);
   return input;
 }
@@ -44,7 +43,7 @@ function applyExplicitIdempotencyKey(
   flags: ParsedGlobalFlags,
   input: Record<string, unknown>,
 ): void {
-  if (flags.idempotencyKey) {
+  if (flags.idempotencyKey !== undefined) {
     input.idempotency_key = flags.idempotencyKey;
   }
 }
@@ -146,12 +145,12 @@ function supportsDeleteMode(operationId: string): boolean {
   return operationId === "apps_delete";
 }
 
-function applyRequiredIdempotencyKey(
+function applyDefaultIdempotencyKey(
   command: CliCommandDefinition,
   input: Record<string, unknown>,
 ): void {
   const route = getRoute(command.operationId);
-  if (route?.idempotency === "required" && typeof input.idempotency_key !== "string") {
+  if (route && route.idempotency !== "none" && !Object.hasOwn(input, "idempotency_key")) {
     input.idempotency_key = `cli_${randomUUID()}`;
   }
 }

@@ -10,6 +10,44 @@ function requireCommand(path: string[]): CliCommandDefinition {
 }
 
 describe("buildOperationInput", () => {
+  it("generates the advertised retry key for optional-idempotency creates", () => {
+    const command = requireCommand(["apps", "create"]);
+    const invocation = parseInvocation([
+      "apps",
+      "create",
+      "--org",
+      "org_cli",
+      "--name",
+      "Retryable App",
+    ]);
+
+    const input = buildOperationInput(command, invocation, {});
+
+    expect(input).toMatchObject({
+      orgId: "org_cli",
+      name: "Retryable App",
+      idempotency_key: expect.stringMatching(/^cli_/),
+    });
+  });
+
+  it("preserves an invalid body retry key for contract validation", () => {
+    const command = requireCommand(["apps", "create"]);
+    const invocation = parseInvocation([
+      "apps",
+      "create",
+      "--org",
+      "org_cli",
+      "--body-json",
+      JSON.stringify({ name: "Invalid Retry Key", idempotency_key: 42 }),
+    ]);
+
+    const input = buildOperationInput(command, invocation, {});
+
+    expect(input.idempotency_key).toBe(42);
+  });
+});
+
+describe("buildOperationInput", () => {
   it("flags update keeps context appId and positional flagId over --body-json appId", () => {
     const command = requireCommand(["flags", "update"]);
     const invocation = parseInvocation([

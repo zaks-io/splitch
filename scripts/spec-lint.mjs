@@ -47,6 +47,11 @@ export const bannedPhraseRules = [
     pattern: /p_value\s*=\s*1\s*-\s*alpha/,
     hint: "Do not encode alpha-derived p-values as the aCS contract.",
   },
+  {
+    name: "Test-evaluation Flag ID route",
+    pattern: /\/flags\/(?::flagId|\{flag_id\}|<flag_id>)\/test-eval/,
+    hint: "The test-evaluation route resolves by flagKey.",
+  },
 ];
 
 const decisionMarkers = ["in_bh_family", "is_significant", "is_breached", "exploratory"];

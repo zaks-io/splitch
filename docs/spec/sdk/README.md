@@ -17,25 +17,25 @@ deferred; the `ResolutionDetails` _shape_ is not.
 
 ## Files
 
-| File                                                                         | One-line purpose                                                                                                                       |
-| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| [credentials.md](./credentials.md)                                           | Client Key vs API Key: which credential, what it can do, lifecycle                                                                     |
-| [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)                 | `POST /api/sdk/evaluate` contract: request/response shapes, safety invariants, edge binding                                            |
-| [exposure-accessor.md](./exposure-accessor.md#peek-endpoint-shape)           | `POST /api/sdk/peek` contract: API-Key-only non-exposing Variant resolution                                                            |
-| [verify-endpoint.md](./verify-endpoint.md)                                   | `POST /api/sdk/verify` contract: non-exposing setup confirmation, reason tiered by credential (ADR-0037)                               |
-| [evaluate-all-endpoint.md](./evaluate-all-endpoint.md)                       | `POST /api/sdk/evaluate-all` contract: Precomputed Evaluations, non-exposing, Exposure Tickets, ETag (ADR-0048)                        |
-| [exposures-endpoint.md](./exposures-endpoint.md)                             | `POST /api/sdk/exposures` contract: batched Exposure Ticket redemption, forgery-proof, deferred Assignment Store write                 |
-| [browser-client.md](./browser-client.md)                                     | Static-context browser client: sync reads, exposure-on-first-read queue, SSR bootstrap, ETag revalidation                              |
-| [react-bindings.md](./react-bindings.md)                                     | `@splitch/sdk/react`: provider + `useFlag`/`useFlagDetails` hooks, `useSyncExternalStore` seam, fail-loud render semantics             |
-| [exposure-accessor.md](./exposure-accessor.md)                               | `evaluate` (fires Exposure), `peekVariant` + `verify` (no Exposure)                                                                    |
-| [seen-set.md](./seen-set.md)                                                 | SDK-local per-instance exposure dedup cache (hot-path optimization only)                                                               |
-| [assignment-store-integration.md](./assignment-store-integration.md)         | How the SDK consumes the Assignment Store (holdover pre-load, evaluate-path ordering)                                                  |
-| [five-runtimes.md](./five-runtimes.md)                                       | SDK invariants across five Cloudflare edge runtimes                                                                                    |
-| [test-evaluation-endpoint.md](./test-evaluation-endpoint.md)                 | Control-plane dry-run: `POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval` — resolves without Exposure (per-Env, ADR-0027) |
-| [../pipeline/metric-event-contract.md](../pipeline/metric-event-contract.md) | `track()` and `POST /api/sdk/events`: strict Metric Event validation, identity, version stamping, and idempotency                      |
-| [../pipeline/web-event-identity.md](../pipeline/web-event-identity.md)       | Browser Web Session generation and persistence, optional explicit Entity identity, and Experiment exclusion                            |
-| [web-analytics-capture.md](./web-analytics-capture.md)                       | Manual `web.track()`, automatic `web.instrument()`, batch-only ingest, memory-only queue, and bounded browser collection               |
-| [openfeature-deferred.md](./openfeature-deferred.md)                         | Explicitly deferred full OpenFeature provider surface                                                                                  |
+| File                                                                         | One-line purpose                                                                                                                        |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| [credentials.md](./credentials.md)                                           | Client Key vs API Key: which credential, what it can do, lifecycle                                                                      |
+| [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)                 | `POST /api/sdk/evaluate` contract: request/response shapes, safety invariants, edge binding                                             |
+| [exposure-accessor.md](./exposure-accessor.md#peek-endpoint-shape)           | `POST /api/sdk/peek` contract: API-Key-only non-exposing Variant resolution                                                             |
+| [verify-endpoint.md](./verify-endpoint.md)                                   | `POST /api/sdk/verify` contract: non-exposing setup confirmation, reason tiered by credential (ADR-0037)                                |
+| [evaluate-all-endpoint.md](./evaluate-all-endpoint.md)                       | `POST /api/sdk/evaluate-all` contract: Precomputed Evaluations, non-exposing, Exposure Tickets, ETag (ADR-0048)                         |
+| [exposures-endpoint.md](./exposures-endpoint.md)                             | `POST /api/sdk/exposures` contract: batched Exposure Ticket redemption, forgery-proof, deferred Assignment Store write                  |
+| [browser-client.md](./browser-client.md)                                     | Static-context browser client: sync reads, exposure-on-first-read queue, SSR bootstrap, ETag revalidation                               |
+| [react-bindings.md](./react-bindings.md)                                     | `@splitch/sdk/react`: provider + `useFlag`/`useFlagDetails` hooks, `useSyncExternalStore` seam, fail-loud render semantics              |
+| [exposure-accessor.md](./exposure-accessor.md)                               | `evaluate` (fires Exposure), `peekVariant` + `verify` (no Exposure)                                                                     |
+| [seen-set.md](./seen-set.md)                                                 | SDK-local per-instance exposure dedup cache (hot-path optimization only)                                                                |
+| [assignment-store-integration.md](./assignment-store-integration.md)         | How the SDK consumes the Assignment Store (holdover pre-load, evaluate-path ordering)                                                   |
+| [five-runtimes.md](./five-runtimes.md)                                       | SDK invariants across five Cloudflare edge runtimes                                                                                     |
+| [test-evaluation-endpoint.md](./test-evaluation-endpoint.md)                 | Control-plane dry-run: `POST /apps/:appId/envs/:environmentId/flags/:flagKey/test-eval` — resolves without Exposure (per-Env, ADR-0027) |
+| [../pipeline/metric-event-contract.md](../pipeline/metric-event-contract.md) | `track()` and `POST /api/sdk/events`: strict Metric Event validation, identity, version stamping, and idempotency                       |
+| [../pipeline/web-event-identity.md](../pipeline/web-event-identity.md)       | Browser Web Session generation and persistence, optional explicit Entity identity, and Experiment exclusion                             |
+| [web-analytics-capture.md](./web-analytics-capture.md)                       | Manual `web.track()`, automatic `web.instrument()`, batch-only ingest, memory-only queue, and bounded browser collection                |
+| [openfeature-deferred.md](./openfeature-deferred.md)                         | Explicitly deferred full OpenFeature provider surface                                                                                   |
 
 ## Sources
 

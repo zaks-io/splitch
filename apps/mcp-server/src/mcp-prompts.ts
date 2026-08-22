@@ -19,6 +19,7 @@ import {
   type McpPromptDefinition,
   type McpPromptPlan,
   type McpPromptResult,
+  optionalString,
   PROMPT_DEFINITIONS,
   PromptArgumentError,
   PromptNotFoundError,
@@ -50,11 +51,15 @@ export function getPromptPlan(name: string, args: Record<string, unknown> = {}):
         requireString(args, "allocation"),
       );
     case "end_a_run":
-      return endARunPlan(requireString(args, "runId"));
+      return endARunPlan(requireString(args, "runId"), requireString(args, "experimentId"));
     case "recover_from_error":
-      return recoverFromErrorPlan(requireString(args, "errorCode"), args.details);
+      return recoverFromErrorPlan(
+        requireString(args, "errorCode"),
+        args.details,
+        optionalString(args, "flagId"),
+      );
     case "diagnose_setup":
-      return diagnoseSetupPlan();
+      return diagnoseSetupPlan(requireString(args, "flagKey"));
     default:
       throw new PromptNotFoundError(name);
   }
@@ -75,14 +80,15 @@ export function allPromptPlans(): readonly McpPromptPlan[] {
       variants: "control,treatment",
       allocation: "50,50",
     }),
-    getPromptPlan("end_a_run", { runId: "run_example" }),
+    getPromptPlan("end_a_run", { runId: "run_example", experimentId: "exp_example" }),
     ...recommendedActions.map((action) =>
       getPromptPlan("recover_from_error", {
         errorCode: "EXPERIMENT_RUNNING",
         details: { recommendedAction: action, retryAfterMs: 1000, runningRunId: "run_example" },
+        ...(action === "CREATE_NEW_RUN" ? { flagId: "flag_example" } : {}),
       }),
     ),
-    getPromptPlan("diagnose_setup"),
+    getPromptPlan("diagnose_setup", { flagKey: "checkout" }),
   ];
 }
 

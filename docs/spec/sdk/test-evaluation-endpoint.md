@@ -1,4 +1,4 @@
-# Test-evaluation endpoint: `POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval` (control-plane dry-run)
+# Test-evaluation endpoint: `POST /apps/:appId/envs/:environmentId/flags/:flagKey/test-eval` (control-plane dry-run)
 
 Resolves a Variant and its reason without firing an Exposure. Used by CLI/MCP/agent for
 pre-deploy verification and by humans for debugging. Categorically NOT the data-plane
@@ -33,7 +33,7 @@ There is no "suppress Exposure" flag a caller could accidentally omit (ADR-0026)
 ## Endpoint
 
 ```
-POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval
+POST /apps/:appId/envs/:environmentId/flags/:flagKey/test-eval
 Authorization: Bearer <controlPlaneToken>   -- ADR-0022, NOT a Client/API Key
 Content-Type: application/json
 ```
@@ -53,7 +53,7 @@ TestEvaluationRequest {
 }
 ```
 
-The Flag is identified by `flagId` in the path.
+The Flag is identified by `flagKey` in the path.
 
 ## Response shape
 
@@ -132,7 +132,7 @@ Same `ErrorResponse` shape as all endpoints (ADR-0025):
 This endpoint is exposed as:
 
 - One MCP tool: `flags_test_eval` with schema derived from the Zod request shape
-- One CLI command: `splitch flags test-eval --app <app_id> --env <environment_id> <flag_id> --targeting-key <key> [--context-json <json>]`
+- One CLI command: `splitch flags test-eval --app <app_id> --env <environment_id> <flag_key> --targeting-key <key> [--context-json <json>]`
 
 Both are thin skins over the same endpoint (ADR-0023). The agent's verify step calls this
 endpoint immediately after configuring or promoting a Flag, or after starting an Experiment Run, to confirm the rule set
@@ -140,7 +140,7 @@ resolves as expected.
 
 ## Seam boundary
 
-- **Port:** `testEvaluate(appId, environmentId, controlPlaneToken, flagId, evaluationContext) -> { variantName, value, reason, liveRunId }`
+- **Port:** `testEvaluate(appId, environmentId, controlPlaneToken, flagKey, evaluationContext) -> { variantName, value, reason, liveRunId }`
 - **Left side:** CLI / MCP / agent calling the verify step; control-plane token required
 - **Right side:** Worker that reads live config from the same KV-backed Provider path the data-plane `evaluate` endpoint uses (not D1 directly), may read holdover, computes Assignment or reports holdover replay, returns reason; wired to NO write path
 - **Failure contract:** no writes on error; 404 → flag not found; 401/403 → auth failure

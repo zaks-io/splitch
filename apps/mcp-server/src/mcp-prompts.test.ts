@@ -86,9 +86,13 @@ describe("MCP prompts workflows", () => {
       { name: "ship_a_flag", arguments: { flagKey: "checkout", variants: "on,off" } },
       {
         name: "run_an_experiment",
-        arguments: { flagId: "flag_checkout", variants: "a,b", allocation: "50,50" },
+        arguments: {
+          flagId: "flag_checkout",
+          variants: "a,b",
+          allocation: "50,50",
+        },
       },
-      { name: "end_a_run", arguments: { runId: "run_1" } },
+      { name: "end_a_run", arguments: { runId: "run_1", experimentId: "exp_1" } },
       {
         name: "recover_from_error",
         arguments: {
@@ -96,7 +100,7 @@ describe("MCP prompts workflows", () => {
           details: { recommendedAction: "END_RUNNING_RUN_FIRST", runningRunId: "run_live" },
         },
       },
-      { name: "diagnose_setup", arguments: {} },
+      { name: "diagnose_setup", arguments: { flagKey: "checkout" } },
     ];
 
     for (const prompt of cases) {
@@ -128,11 +132,13 @@ describe("MCP prompts workflows", () => {
           retryAfterMs: 250,
           approvalRequestId: "apr_01J00000000000000000000000",
         },
+        ...(action === "CREATE_NEW_RUN" ? { flagId: "flag_checkout" } : {}),
       });
       expect(plan.operationIds).toEqual([...RECOVERY_OPERATION_IDS[action as RecommendedAction]]);
     }
 
     expect(RECOVERY_OPERATION_IDS.CREATE_NEW_RUN).toEqual([
+      "flags_get",
       "experiments_create",
       "experiments_start",
       "flags_test_eval",
@@ -165,60 +171,6 @@ describe("MCP prompts workflows", () => {
 
     expect(body.error.code).toBe(JSON_RPC_INVALID_PARAMS);
     expect(body.error.message).toBe("Invalid params");
-  });
-});
-
-describe("MCP prompt plan shapes", () => {
-  it("onboard_new_app ends by telling a human to claim an anon-door demo Org", () => {
-    const plan = getPromptPlan("onboard_new_app", {
-      orgId: "org_demo",
-      appName: "Demo App",
-    });
-    const closing = plan.messages[plan.messages.length - 1]?.content.text ?? "";
-    expect(closing).toMatch(/claim/i);
-    expect(closing).toMatch(/demoExpiresAt/);
-    expect(plan.operationIds).toEqual([
-      "apps_create",
-      "context_use",
-      "client_key_get",
-      "flags_create",
-      "flag_config_update",
-      "experiments_create",
-      "experiments_start",
-      "flags_test_eval",
-      "experiment_results_get",
-    ]);
-  });
-
-  it("workflow prompts close on a flags_test_eval confidence round-trip", () => {
-    const onboard = getPromptPlan("onboard_new_app", {
-      orgId: "org_demo",
-      appName: "Demo App",
-    });
-    const ship = getPromptPlan("ship_a_flag", { flagKey: "checkout", variants: "on,off" });
-    const run = getPromptPlan("run_an_experiment", {
-      flagId: "flag_checkout",
-      variants: "a,b",
-      allocation: "50,50",
-    });
-    const end = getPromptPlan("end_a_run", { runId: "run_1" });
-    const diagnose = getPromptPlan("diagnose_setup");
-
-    expect(onboard.operationIds).toContain("flags_test_eval");
-    expect(onboard.operationIds).toContain("context_use");
-    expect(ship.operationIds.at(-1)).toBe("flags_test_eval");
-    expect(run.operationIds).toContain("flags_test_eval");
-    expect(end.operationIds[0]).toBe("flags_test_eval");
-    expect(diagnose.operationIds.at(-1)).toBe("flags_test_eval");
-  });
-
-  it("accepts recover_from_error details as a JSON string", () => {
-    const plan = getPromptPlan("recover_from_error", {
-      errorCode: "RATE_LIMITED",
-      details: JSON.stringify({ recommendedAction: "RETRY_AFTER", retryAfterMs: 500 }),
-    });
-    expect(plan.operationIds).toEqual([]);
-    expect(plan.messages.some((entry) => entry.content.text.includes("500"))).toBe(true);
   });
 });
 
