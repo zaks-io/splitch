@@ -28,34 +28,26 @@ test.describe("Org shell and App list", () => {
     await captureThemeScreenshots(page, testInfo, "org-app-list");
   });
 
-  test("the App card is the Environment picker, and nothing links to a bare App", async ({
-    page,
-  }) => {
+  test("the App card links to the App home and explicit Environments", async ({ page }) => {
     await page.goto("/acme-labs");
 
     const card = page.locator("[data-app-card='checkout-api']");
     await expect(card).toBeVisible();
-    // The App name is a label. Selecting it is not a destination, because a
-    // destination would have to invent an Environment.
     await expect(card.getByRole("heading", { name: "checkout-api" })).toBeVisible();
-    await expect(card.getByRole("link", { name: "checkout-api" })).toHaveCount(0);
+    await expect(card.getByRole("link", { name: "checkout-api" })).toHaveAttribute(
+      "href",
+      "/acme-labs/checkout-api",
+    );
     await expect(card.locator("a[href='/acme-labs/checkout-api/dev']")).toBeVisible();
     await expect(card.locator("a[href='/acme-labs/checkout-api/prod']")).toBeVisible();
 
-    const hrefs = await page
-      .locator("a[href]")
-      .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href") ?? ""));
-    // An Org section (`/{orgSlug}/billing`) has the same shape as a bare-App
-    // href without being one, so it is named rather than loosening the pattern.
-    const orgSections = new Set(["/acme-labs/billing", "/acme-labs/members"]);
-    expect(
-      hrefs.filter((href) => /^\/acme-labs\/[^/?#]+$/.test(href) && !orgSections.has(href)),
-    ).toEqual([]);
-
-    await page.locator("a[href='/acme-labs/checkout-api/prod']").click();
+    await card.getByRole("link", { name: "checkout-api" }).click();
     await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute(
+      "data-app-id",
+      "app_checkout_e2e",
+    );
+    await expect(page.locator("[data-app-shell='ready']")).not.toHaveAttribute(
       "data-environment-id",
-      "env_checkout_prod_e2e",
     );
   });
 

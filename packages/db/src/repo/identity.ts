@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
   apps,
   deviceRefreshSessions,
@@ -56,8 +56,16 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
     deleteAppCascade,
     ...appDeletionSagaRepo,
 
+    // Creation order is the order operators think in (dev before prod), and every
+    // Panel surface that lists Environments renders straight from this read, so the
+    // order is fixed here rather than re-sorted per caller. Key breaks a timestamp
+    // tie because ids are random: two Environments stamped in the same millisecond
+    // would otherwise swap between reads.
     listEnvironments(scope: TenantScope, options?: ReadOptions) {
-      return environmentsTable.findMany(scope, undefined, options);
+      return environmentsTable.findMany(scope, undefined, {
+        ...options,
+        orderBy: options?.orderBy ?? [asc(environments.createdAt), asc(environments.key)],
+      });
     },
 
     countEnvironments(scope: TenantScope) {

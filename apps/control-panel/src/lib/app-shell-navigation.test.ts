@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   appSectionRegistry,
+  appHomeHref,
   deferredDestinationAt,
   environmentSwitchHref,
   type NavigationDestination,
@@ -178,6 +179,7 @@ describe("Deferred destination deep links", () => {
 
 describe("App shell navigation", () => {
   it("builds explicit App and Environment destinations", () => {
+    expect(appHomeHref(scope)).toBe("/acme-labs/checkout-api");
     expect(scopedHref(scope)).toBe("/acme-labs/checkout-api/dev");
     expect(scopedHref({ ...scope, appSlug: "billing" })).toBe("/acme-labs/billing/dev");
   });

@@ -16,9 +16,7 @@ export function PanelSidebar({ app, navigation, org, userId }: PanelSidebarProps
   if (!currentOrg) {
     throw new Error("Panel sidebar Organization is missing from navigation");
   }
-  const activeApp: ActiveSidebarApp | undefined = app?.env
-    ? { appId: app.appId, appSlug: app.appSlug, env: app.env }
-    : undefined;
+  const activeApp: ActiveSidebarApp | undefined = app;
   const avatarLabel = userId.at(0);
   if (!avatarLabel) {
     throw new Error("Panel sidebar User ID is empty");
@@ -30,7 +28,9 @@ export function PanelSidebar({ app, navigation, org, userId }: PanelSidebarProps
       data-panel-sidebar
     >
       <PanelSidebarAppBlock app={activeApp} currentOrg={currentOrg} orgSlug={org.orgSlug} />
-      {activeApp ? <PanelSidebarSections app={activeApp} orgSlug={org.orgSlug} /> : null}
+      {activeApp?.env ? (
+        <PanelSidebarSections app={{ ...activeApp, env: activeApp.env }} orgSlug={org.orgSlug} />
+      ) : null}
       <PanelSidebarOrganization navigation={navigation} org={org} />
       <div className="grid gap-2 p-3">
         <div className="flex min-w-0 items-center gap-2">

@@ -5,6 +5,10 @@ import { getRequest } from "@tanstack/react-start/server";
 import { type ControlPanelBindings, controlPanelBindings } from "./bindings";
 import {
   AccessDeniedError,
+  type AppScopedLoaderContext,
+  type AppScopeParams,
+  type EnvironmentResolver,
+  resolveAppLoaderContext,
   resolveNavigation,
   resolveScopedLoaderContext,
   ScopedNotFoundError,
@@ -27,6 +31,12 @@ export type ScopedSessionResult =
       kind: "ok";
       context: Awaited<ReturnType<typeof resolveScopedLoaderContext>>;
     }
+  | { kind: "unauthenticated" }
+  | { kind: "forbidden" }
+  | { kind: "notFound" };
+
+export type AppScopedSessionResult =
+  | { kind: "ok"; context: AppScopedLoaderContext }
   | { kind: "unauthenticated" }
   | { kind: "forbidden" }
   | { kind: "notFound" };
@@ -144,36 +154,47 @@ export const loadPanelNavigation = createServerFn({ method: "GET" }).handler(() 
 
 export const loadScopedSession = createServerFn({ method: "GET" })
   .validator((data: ScopeParams) => data)
-  .handler(async ({ data }): Promise<ScopedSessionResult> => {
-    const bindings = controlPanelBindings(workerEnv);
-    const loaded = await loadSessionFromRequest(bindings, getRequest());
-    if (!loaded.ok) {
-      return { kind: "unauthenticated" };
-    }
+  .handler(
+    ({ data }): Promise<ScopedSessionResult> =>
+      loadScopedContextForRequest(
+        controlPanelBindings(workerEnv),
+        getRequest(),
+        (session, resolver) => resolveScopedLoaderContext(session, data, resolver),
+      ),
+  );
 
-    const repo = createRepository(bindings.DB);
-    const session = await rehydrateLegacySession(
-      repo,
-      bindings.SESSION_STORE,
-      loaded.tokenHash,
-      loaded.session,
-    );
-    try {
-      return {
-        kind: "ok",
-        context: await resolveScopedLoaderContext(
-          publicSession(session),
-          data,
-          createEnvironmentResolver(repo),
-        ),
-      };
-    } catch (error) {
-      if (error instanceof AccessDeniedError) {
-        return { kind: "forbidden" };
-      }
-      if (error instanceof ScopedNotFoundError) {
-        return { kind: "notFound" };
-      }
-      throw error;
-    }
-  });
+export const loadAppScopedSession = createServerFn({ method: "GET" })
+  .validator((data: AppScopeParams) => data)
+  .handler(
+    ({ data }): Promise<AppScopedSessionResult> =>
+      loadScopedContextForRequest(
+        controlPanelBindings(workerEnv),
+        getRequest(),
+        (session, resolver) => resolveAppLoaderContext(session, data, resolver),
+      ),
+  );
+
+type AnyScopedSessionResult<T> =
+  | { kind: "ok"; context: T }
+  | { kind: "unauthenticated" }
+  | { kind: "forbidden" }
+  | { kind: "notFound" };
+
+export async function loadScopedContextForRequest<T>(
+  bindings: ControlPanelBindings,
+  request: Request,
+  resolve: (session: SessionPrincipal, resolver: EnvironmentResolver) => Promise<T>,
+): Promise<AnyScopedSessionResult<T>> {
+  const healed = await loadHealedSession(bindings, request);
+  if (healed.kind === "unauthenticated") return healed;
+  try {
+    return {
+      kind: "ok",
+      context: await resolve(publicSession(healed.session), createEnvironmentResolver(healed.repo)),
+    };
+  } catch (error) {
+    if (error instanceof AccessDeniedError) return { kind: "forbidden" };
+    if (error instanceof ScopedNotFoundError) return { kind: "notFound" };
+    throw error;
+  }
+}

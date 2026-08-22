@@ -33,8 +33,8 @@ export function OrgAppListPage({ view }: { view: OrgAppListView }) {
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <p className="max-w-2xl text-muted-foreground text-sm leading-6">
-          Each card is an Environment picker. Pick the Environment you mean to work in — there is no
-          default, so production is never where you land by accident.
+          Open an App to see Flags across every Environment, or pick the Environment you mean to
+          work in. Production is never chosen for you.
         </p>
         {hasApps ? <CreateAppDialog orgId={view.orgId} orgRole={view.orgRole} /> : null}
       </div>

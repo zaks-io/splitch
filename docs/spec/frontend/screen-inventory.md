@@ -40,8 +40,8 @@ inline as **CLI/MCP parity**.
 
 One persistent sidebar wraps every authenticated Organization and App screen. The App switcher and
 Environment pills live at the top, App sections follow when an App is active, and the Organization
-block plus user row stay at the bottom. Everything below the App root remains scoped to
-`(appId, environmentId)` resolved from the URL. The shipped hierarchy and slice boundaries are
+block plus user row stay at the bottom. The App home resolves `appId` and shows every Environment;
+everything below it remains scoped to `(appId, environmentId)` resolved from the URL. The shipped hierarchy and slice boundaries are
 pinned in [navigation-redesign.md](./navigation-redesign.md).
 
 ## Org-level screens
@@ -54,11 +54,10 @@ the panel renders locked affordances, the Worker is the guardian (ADR-0023).
 ### App list — `/{orgSlug}` (org landing)
 
 The org's Apps for the current org only (never merged across orgs — `navigation-and-ia.md`). Each App
-is a **card**, and the card _is_ the Environment picker:
+is a **card** with its App home and Environment destinations:
 
-- **App name** — a **label, not a link.** There is no app-without-an-env destination (everything below
-  the App root is `(appId, environmentId)`-scoped), so a bare app link would have to pick an env and
-  reintroduce a hidden default. The Environment links are the only way in.
+- **App name:** links to `/{orgSlug}/{appSlug}`, the App home showing Flags across every
+  Environment without choosing one.
 - **One link per Environment** (`dev`, `prod`, custom) → that env's App Overview
   (`/{orgSlug}/{appSlug}/{env}`). No implicit default; you land where you mean to, and prod is never
   the silent destination.
@@ -109,7 +108,15 @@ organization-and-membership.md).
   coming soon" state backed by the present-but-unwired `stripe_*` seam. Stubbed visibly, never faked.
 - **Role gate:** "Manage billing/plan" is **owner only**; admin/member see usage read-only.
 
-## App landing — the Overview
+## App home: `/{orgSlug}/{appSlug}`
+
+The one Environment-less App URL shows the App-level Flag catalog as a matrix across every
+Environment. Each Environment cell shows its Flag Configuration, supports the existing gated
+enable switch, and links to that Environment's Flag detail. The final column compares the first
+Environment with the last and links into Promotion when the source is configured. Creating a Flag
+delegates through the first non-guarded Environment, or the first Environment when all are guarded.
+
+## Environment landing: the Overview
 
 Navigating to a bare `/{orgSlug}/{appSlug}/{env}` (no section) lands on the **App Overview**, a
 purpose-built "what needs my attention" dashboard — **not** a redirect to Flags and **not** a

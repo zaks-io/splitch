@@ -1,4 +1,5 @@
 import type { ControlPlaneOperationResult, FlagsClient } from "@splitch/control-plane-sdk";
+import { type FlagConfigSummary, flagConfigSummary } from "./flag-config-summary";
 
 export type FlagsPageItem = {
   definition: {
@@ -6,11 +7,7 @@ export type FlagsPageItem = {
     key: string;
     variantCount: number;
   };
-  configuration: {
-    enabled: boolean;
-    availableVariantCount: number;
-    rolloutPercentages: number[];
-  } | null;
+  configuration: FlagConfigSummary | null;
 };
 
 export type FlagsPageData = {
@@ -61,15 +58,7 @@ export async function readFlagsPage(
             key: definition.key,
             variantCount: definition.variants.length,
           },
-          configuration: configuration?.ok
-            ? {
-                enabled: configuration.data.enabled,
-                availableVariantCount: configuration.data.availableVariantNames.length,
-                rolloutPercentages: configuration.data.targetingRules.flatMap((rule) =>
-                  rule.percentageRollout ? [rule.percentageRollout.percentage] : [],
-                ),
-              }
-            : null,
+          configuration: configuration?.ok ? flagConfigSummary(configuration.data) : null,
         };
       }),
     },

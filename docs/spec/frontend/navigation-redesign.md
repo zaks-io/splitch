@@ -63,8 +63,9 @@ key)`, `packages/db/src/schema/flags.ts:41`); keys can collide across Apps, so a
     the same Control Plane operation the CLI and MCP call, surfaced as a shortcut, never a fourth
     write path.
 11. **Create a Flag is two clicks from Home**: App name, New Flag. The created definition lands as
-    a new row on the App home with every Environment cell "Not configured" and a Configure action
-    per cell, so the first time prod is touched is a deliberate click on a cell labeled prod. The
+    a new row on the App home with a disabled Switch in every Environment cell (the Control Plane
+    initializes a disabled Flag Configuration per Environment at creation), so the first time prod
+    is touched is a deliberate click on a cell labeled prod. The
     CLI equivalent (`splitch flags config set <key> --env dev --enabled`) is shown inline for
     parity.
 12. **Promote is reachable from the source.** The App home matrix carries a per-row "Promote
@@ -162,17 +163,25 @@ section · n minutes ago`) with a Resume button. Rendered only when known. Sourc
 - Matrix: Flag key (link to the detail page in the first non-prod Environment; the cell's own
   link goes to that Environment's detail), one cell per Environment (Switch + rollout summary +
   Experiment badge, or "Not configured" + Configure link to that Environment's detail page), and a
-  last column "{source} → {target}" with a drift badge (Rollout differs / Enabled differs /
+  last column "{source} → {target}" with a drift badge (Rollout differs / Enabled differs / Availability differs /
   Missing in {target} / In sync) and the Promote link. Source and target follow
   `promotionSources`: target is the last Environment, source the first that is not the target. Apps
   with one Environment render no last column. Apps with three or more Environments show drift
   against the last Environment only (staging → prod), stated in the column header.
-- Switch writes use `useFlagEditing` per row with that cell's `environmentId`; one
-  `GatedWriteOutcome` region at the top of the matrix, same as the detail screen.
+- Switch writes use `useFlagEditing` per cell with that cell's `environmentId`; each cell renders
+  its own `GatedWriteOutcome` because each cell is a distinct Environment-pinned write path.
 - Create Flag reuses `CreateFlagDialog`. `createControlPanelFlag` takes an `environmentId` only to
-  mint the delegation; pass the first non-prod Environment. On success the dialog closes, the
+  mint the delegation; pass the first non-guarded Environment, or the first Environment when all
+  are guarded. On success the dialog closes, the
   loader is invalidated, the new row is highlighted (`?created=<key>`) and a success notice says
-  the definition serves nowhere until an Environment is configured, with the CLI line inline.
+  the Flag is disabled in every Environment until switched on, with the CLI line inline. The
+  empty-state dialog routes through the same created-row state.
+- Environments list in creation order everywhere (sidebar pills, segmented control, matrix columns,
+  promotion pair): `listEnvironments` orders by `createdAt, key` at the repo seam. The promotion
+  target is therefore the newest Environment; an App that adds an Environment after prod gets that
+  Environment as the target until a per-App promotion target exists (Phase 2).
+- `loadControlPanelFlagsMatrix` refuses Environment ids outside the App before reading, because an
+  App with zero Flags sends no per-column read that would otherwise catch a foreign column.
 - Empty state: the existing `FlagsEmptyState` teaching copy, New Flag primary.
 - `readTruncated` is carried and rendered with `FlagsTruncatedNotice`, as today.
 
@@ -227,17 +236,20 @@ merged before the next starts unless marked parallel.
 
 ### Slice 2: App home (Flags across all Environments)
 
-- `loadAppScopedSession` + `resolveAppLoaderContext` (no env), route `$orgSlug.$appSlug.index.tsx`
-  with `notFound`/`AccessDenied` handling mirroring `$orgSlug.$appSlug.$env.tsx`.
-- `loadControlPanelFlagsMatrix` server fn + `flags-matrix-data.ts` view model + unit tests
-  (drift classification, source/target selection, `readTruncated` carry).
-- `FlagsMatrixPage`, `FlagsMatrixTable`, `FlagsMatrixRow`, `FlagsMatrixCell` components (each under
-  300 lines). Segmented Environment control component shared with slice 3b.
-- App name links on Home (slice 1 table) and the sidebar App block link here.
-- Create Flag from here with the created-row state.
-- Done: Home → App name → New Flag → created row is two clicks and one dialog; toggling a prod
-  cell raises the Policy gate and the confirmed write re-reads; Promote link opens the Promotion
-  screen with `?from=`; `flags.spec.ts` extended with a matrix spec; screenshots attached.
+- [x] `loadAppScopedSession` + `resolveAppLoaderContext` (no env), route `$orgSlug.$appSlug.index.tsx`
+      with `notFound`/`AccessDenied` handling mirroring `$orgSlug.$appSlug.$env.tsx`.
+- [x] `loadControlPanelFlagsMatrix` server fn + `flags-matrix-data.ts` view model + unit tests
+      (drift classification, source/target selection, `readTruncated` carry).
+- [x] `FlagsMatrixPage`, `FlagsMatrixTable`, `FlagsMatrixRow`, `FlagsMatrixCell` components (each under
+      300 lines). Segmented Environment control component shared with slice 3b.
+- [x] App name links on Home (slice 1 table) and the sidebar App block link here.
+- [x] Create Flag from here with the created-row state.
+- Done:
+  - [x] Home → App name → New Flag → created row is two clicks and one dialog.
+  - [x] Toggling a prod cell raises the Policy gate and the confirmed write re-reads.
+  - [x] Promote opens the Promotion screen with `?from=`.
+  - [x] `flags.spec.ts` includes the matrix flow.
+  - [ ] Screenshots attached to the PR.
 
 ### Slice 3a: Home (parallel with 3b)
 

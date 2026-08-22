@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { scopedHref } from "./app-shell-navigation";
+import { appHomeHref, scopedHref } from "./app-shell-navigation";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
 
@@ -16,13 +16,12 @@ function sourceFiles(dir: string): string[] {
 }
 
 /**
- * Everything below an App is scoped to `(appId, environmentId)`, so a link that
- * stops at the App would have to invent an Environment — and the invented one is
- * always the dangerous one. This is the grep half of that proof; the Playwright
- * spec is the rendered half.
+ * The App home is the one sanctioned Environment-less App destination because
+ * it shows every Environment instead of inventing one. Every other App-scoped
+ * destination must carry its Environment.
  */
-describe("no link targets an App without an Environment", () => {
-  it("has no route matching /$orgSlug/$appSlug", () => {
+describe("App-scoped links name an Environment except for the App home", () => {
+  it("allows exactly the App home alongside Environment-scoped routes", () => {
     const routes = readdirSync(join(SRC, "routes")).filter(
       (name) =>
         name.startsWith("$orgSlug.$appSlug.") && name.endsWith(".tsx") && !name.includes(".test."),
@@ -30,21 +29,25 @@ describe("no link targets an App without an Environment", () => {
 
     expect(routes.length).toBeGreaterThan(0);
     for (const route of routes) {
-      expect(route).toMatch(/^\$orgSlug\.\$appSlug\.\$env[.\w$]*\.tsx$/);
+      expect(route).toMatch(
+        /^(?:\$orgSlug\.\$appSlug\.index|\$orgSlug\.\$appSlug\.\$env[.\w$]*)\.tsx$/,
+      );
     }
     expect(routes).not.toContain("$orgSlug.$appSlug.tsx");
-    expect(routes).not.toContain("$orgSlug.$appSlug.index.tsx");
+    expect(routes.filter((route) => !route.includes(".$env"))).toEqual([
+      "$orgSlug.$appSlug.index.tsx",
+    ]);
   });
 
   it("names no App-scoped destination that omits the Environment", () => {
     const offenders: string[] = [];
-    // Any navigation target naming an App: a router `to` path, or a string or
-    // template literal that composes one. Each must also carry the Environment.
-    const target = /(?:to=|href=|`|")[^\n`"]*(?:\$appSlug|\$\{[^}]*appSlug)[^\n`"]*/g;
+    // Any router `to` or `href` target naming an App must carry the Environment
+    // or use the sanctioned App-home builder.
+    const target = /(?:\bto\s*[:=]|\bhref\s*[:=])[^\n]*(?:\$appSlug|\$\{[^}]*appSlug)[^\n]*/g;
 
     for (const file of sourceFiles(SRC)) {
       for (const match of readFileSync(file, "utf8").matchAll(target)) {
-        if (!/\$env|\$\{[^}]*env|environment/i.test(match[0])) {
+        if (!/appHomeHref\(|\$env|\$\{[^}]*env|environment/i.test(match[0])) {
           offenders.push(`${file.slice(SRC.length)}: ${match[0].trim()}`);
         }
       }
@@ -53,14 +56,18 @@ describe("no link targets an App without an Environment", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("cannot build an App href without an Environment", () => {
-    // The only URL builder for App scope requires all three segments, so there
-    // is no partial-scope escape hatch for a caller to reach for.
+  it("builds only the three-segment App home or four-segment Environment scope", () => {
     expect(scopedHref({ orgSlug: "acme-labs", appSlug: "checkout-api", env: "prod" })).toBe(
       "/acme-labs/checkout-api/prod",
     );
     expect(
       scopedHref({ orgSlug: "acme-labs", appSlug: "checkout-api", env: "prod" }).split("/").length,
     ).toBe(4);
+    expect(appHomeHref({ orgSlug: "acme-labs", appSlug: "checkout-api" })).toBe(
+      "/acme-labs/checkout-api",
+    );
+    expect(appHomeHref({ orgSlug: "acme-labs", appSlug: "checkout-api" }).split("/")).toHaveLength(
+      3,
+    );
   });
 });

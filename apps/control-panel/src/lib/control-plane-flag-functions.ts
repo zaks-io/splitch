@@ -1,13 +1,23 @@
+import { env as workerEnv } from "cloudflare:workers";
+import { createRepository } from "@splitch/db";
 import type { ControlPlaneOperationResult } from "@splitch/control-plane-sdk";
 import { createServerFn } from "@tanstack/react-start";
+import { controlPanelBindings } from "./bindings";
 import { z } from "zod";
 import { draftIssues, FlagDraftSchema, flagCreateInput } from "./create-flag-model";
 import { type FlagDetailNotFound, isFlagDetailNotFound, readFlagDetail } from "./flag-detail-data";
 import { type FlagDetailView, flagDetailView } from "./flag-detail-view";
 import { type FlagsPageData, readFlagsPage } from "./flags-page-data";
+import {
+  assertMatrixEnvironments,
+  type FlagsMatrixData,
+  readFlagsMatrix,
+} from "./flags-matrix-data";
+import { createEnvironmentResolver } from "./membership";
 import { authorizedFlagsClient, authorizedSegmentsClient } from "./panel-authorized-clients";
 
 type FlagsPageScope = { appId: string; environmentId: string };
+type FlagsMatrixScope = { appId: string; environmentIds: string[] };
 type CreateFlagResult = ControlPlaneOperationResult<{ key: string }>;
 
 const CreateFlagInputSchema = z.object({
@@ -28,6 +38,33 @@ export const loadControlPanelFlags = createServerFn({ method: "GET" })
     const authorized = await authorizedFlagsClient(data.environmentId);
     if (!authorized.ok) return authorized.result;
     return readFlagsPage(authorized.client, data);
+  });
+
+export const loadControlPanelFlagsMatrix = createServerFn({ method: "GET" })
+  .validator((data: FlagsMatrixScope) => data)
+  .handler(async ({ data }): Promise<ControlPlaneOperationResult<FlagsMatrixData>> => {
+    const authorized = await Promise.all(
+      data.environmentIds.map(async (environmentId) => ({
+        environmentId,
+        authorized: await authorizedFlagsClient(environmentId),
+      })),
+    );
+    const refused = authorized.find((column) => !column.authorized.ok);
+    if (refused && !refused.authorized.ok) return refused.authorized.result;
+
+    const repo = createRepository(controlPanelBindings(workerEnv).DB);
+    assertMatrixEnvironments(
+      data.environmentIds,
+      await createEnvironmentResolver(repo).listEnvironments(data.appId),
+    );
+
+    return readFlagsMatrix(
+      authorized.map((column) => {
+        if (!column.authorized.ok) throw new Error("Flags client authorization was inconsistent");
+        return { environmentId: column.environmentId, flags: column.authorized.client };
+      }),
+      data.appId,
+    );
   });
 
 /**
