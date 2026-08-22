@@ -35,7 +35,12 @@ import {
   readMetricRows,
   readPrePeriodRows,
 } from "./results-metric-query";
-import { scopedPipeParams, TinybirdReadError, type TinybirdReadTransport } from "./tinybird";
+import {
+  scopedPipeParams,
+  tinybirdDateTime64,
+  TinybirdReadError,
+  type TinybirdReadTransport,
+} from "./tinybird";
 
 const RUN_INPUTS_PIPE = "analysis_run_inputs";
 const EXPOSURES_PIPE = "analysis_deduped_exposures";
@@ -127,7 +132,7 @@ export async function readStatsInputFromTinybird(
     run.decision_family.length > 0 || (run.guardrail_decisions?.length ?? 0) > 0;
   if (hasAnalyzedMetrics) assertMetricQueryCoverage(run, metricQueryConfig);
   const startedAt = stringField(rowObject(runInput), "started_at");
-  const toTs = tinybirdTimestamp(new Date());
+  const toTs = tinybirdDateTime64(new Date().toISOString());
   const [metricRows, prePeriodRows, activationRows] = hasAnalyzedMetrics
     ? await Promise.all([
         readMetricRows(tinybird, params, metricQueryConfig, startedAt, toTs),
@@ -157,13 +162,6 @@ export async function readStatsInputFromTinybird(
   });
 
   return input;
-}
-
-function tinybirdTimestamp(value: Date): string {
-  if (!Number.isFinite(value.getTime())) {
-    throw new ResultsInputError("analysis_run_inputs.started_at is not a timestamp");
-  }
-  return value.toISOString().replace("T", " ").replace("Z", "");
 }
 
 async function pipeRows(

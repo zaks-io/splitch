@@ -1,6 +1,6 @@
 import type { MetricQueryConfig, StatsInput } from "@splitch/contracts";
 import { ResultsInputError } from "./results-errors";
-import type { TinybirdReadTransport } from "./tinybird";
+import { tinybirdDateTime64, type TinybirdReadTransport } from "./tinybird";
 
 const METRIC_VALUES_PIPE = "analysis_metric_values";
 const PRE_PERIOD_PIPE = "analysis_pre_period_covariates";
@@ -20,7 +20,7 @@ export async function readMetricRows(
         metric_id: config.metric_id,
         event_definition_id: config.event_definition_id,
         window_duration_ms: String(config.window_duration_ms),
-        from_ts: tinybirdTimestamp(new Date(startedAt)),
+        from_ts: tinybirdDateTime64(startedAt),
         to_ts: toTs,
       });
     }),
@@ -47,7 +47,7 @@ export async function readPrePeriodRows(
         metric_id: config.metric_id,
         event_definition_id: config.event_definition_id,
         lookback_ms: String(config.cuped_lookback_ms),
-        from_ts: tinybirdTimestamp(new Date(startedAtMs - config.cuped_lookback_ms)),
+        from_ts: tinybirdDateTime64(new Date(startedAtMs - config.cuped_lookback_ms).toISOString()),
         to_ts: toTs,
       });
     }),
@@ -84,11 +84,4 @@ function assertBinomialQuery(config: MetricQueryConfig): void {
       `analysis materialization for ${config.metric_type} Metric ${config.metric_id} is unavailable`,
     );
   }
-}
-
-function tinybirdTimestamp(value: Date): string {
-  if (!Number.isFinite(value.getTime())) {
-    throw new ResultsInputError("analysis_run_inputs.started_at is not a timestamp");
-  }
-  return value.toISOString().replace("T", " ").replace("Z", "");
 }

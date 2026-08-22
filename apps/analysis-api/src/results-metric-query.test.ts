@@ -3,7 +3,7 @@ import { makeResultsHarness, RESULTS_PATH, resultsAuthInit } from "./results-tes
 import { RUN_ID, rowsByPipe } from "./results-test-support";
 
 describe("GET experiment results Metric query contract", () => {
-  it("uses the frozen source binding and a bounded time range", async () => {
+  it("uses the Run snapshot source binding and a bounded time range", async () => {
     const { app, tinybird } = makeResultsHarness(rowsByPipe());
 
     const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
