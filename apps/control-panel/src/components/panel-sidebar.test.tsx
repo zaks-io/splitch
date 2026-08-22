@@ -132,6 +132,7 @@ function renderSidebar(props: Partial<ComponentProps<typeof PanelSidebar>> = {})
   return renderToStaticMarkup(
     <PanelSidebar
       navigation={navigation()}
+      onOpenPalette={() => undefined}
       org={{ orgId: "org_1", orgSlug: "acme-labs" }}
       userId="user_1"
       {...props}

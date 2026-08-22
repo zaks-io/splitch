@@ -4,8 +4,9 @@ import handler from "@tanstack/react-start/server-entry";
 import { controlPanelLiveUpdateBindings } from "#lib/bindings";
 import { createControlPanelApp } from "#lib/control-plane-app-functions";
 import { createControlPanelFlag, loadControlPanelFlags } from "#lib/control-plane-flag-functions";
-import { authorizeLiveUpdateUpgrade } from "#lib/live-update-authorization";
+import { loadControlPanelPaletteIndex } from "#lib/control-plane-palette-functions";
 import { recordLastVisitedScope } from "#lib/last-visited-scope-functions";
+import { authorizeLiveUpdateUpgrade } from "#lib/live-update-authorization";
 import { handleLiveUpdateUpgrade } from "#lib/live-update-upgrade";
 import { loadOrgAppList } from "#lib/org-app-list-functions";
 import { setControlPanelSentryClient } from "#lib/panel-observability";
@@ -16,6 +17,7 @@ import { setControlPanelSentryClient } from "#lib/panel-observability";
 void createControlPanelApp;
 void createControlPanelFlag;
 void loadControlPanelFlags;
+void loadControlPanelPaletteIndex;
 void loadOrgAppList;
 void recordLastVisitedScope;
 

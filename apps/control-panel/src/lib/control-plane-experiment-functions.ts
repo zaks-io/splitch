@@ -16,6 +16,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelExperimentsClient } from "./control-plane-experiments";
+import { authorizedExperimentsClient } from "./panel-authorized-clients";
 import { loadSessionFromRequest } from "./session-refresh";
 
 export const loadControlPanelExperiments = createServerFn({ method: "GET" })
@@ -174,33 +175,6 @@ export const stageAndStartControlPanelExperimentRun = createServerFn({ method: "
         }
       : result;
   });
-
-async function authorizedExperimentsClient() {
-  const bindings = controlPanelMutationBindings(workerEnv);
-  const loaded = await loadSessionFromRequest(bindings, getRequest());
-  if (!loaded.ok) {
-    return {
-      ok: false as const,
-      result: {
-        ok: false as const,
-        status: 401,
-        error: {
-          code: "UNAUTHORIZED" as const,
-          message: "authentication required",
-          details: {},
-        },
-      },
-    };
-  }
-  return {
-    ok: true as const,
-    client: createControlPanelExperimentsClient(
-      bindings.CONTROL_PLANE_API,
-      { actorId: loaded.session.userId, sessionExpiresAt: loaded.session.expiresAt },
-      bindings.CONTROL_PANEL_DELEGATION_SECRET,
-    ),
-  };
-}
 
 function validationError(message: string): ControlPlaneOperationResult<never> {
   return {

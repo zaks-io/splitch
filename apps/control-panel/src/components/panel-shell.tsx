@@ -1,16 +1,18 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
+import { CommandPalette } from "#components/command-palette";
 import { PanelSidebar, type PanelSidebarProps } from "#components/panel-sidebar";
 import { useHydrated } from "#lib/use-hydrated";
 
 export type PanelShellProps = {
   children: ReactNode;
-  sidebar: PanelSidebarProps;
+  sidebar: Omit<PanelSidebarProps, "onOpenPalette">;
   markers: Record<`data-${string}`, string>;
   rootKey?: string;
 };
 
 export function PanelShell({ children, markers, rootKey, sidebar }: PanelShellProps) {
   const isHydrated = useHydrated();
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   return (
     <div
@@ -20,10 +22,17 @@ export function PanelShell({ children, markers, rootKey, sidebar }: PanelShellPr
       key={rootKey}
       {...markers}
     >
-      <PanelSidebar {...sidebar} />
+      <PanelSidebar {...sidebar} onOpenPalette={() => setPaletteOpen(true)} />
       <main className="min-w-0 flex-1" data-panel-main>
         {children}
       </main>
+      <CommandPalette
+        app={sidebar.app}
+        navigation={sidebar.navigation}
+        onOpenChange={setPaletteOpen}
+        open={paletteOpen}
+        org={sidebar.org}
+      />
     </div>
   );
 }

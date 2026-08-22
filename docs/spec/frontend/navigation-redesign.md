@@ -1,6 +1,6 @@
 # Control Panel navigation redesign
 
-Status: agreed 2026-08-21; Slice 1 shipped 2026-08-21 (#393); Slice 2 shipped; Slices 3a and 3b implemented; Slice 4 not started. Clickable mocks
+Status: agreed 2026-08-21; Slice 1 shipped 2026-08-21 (#393); Slices 2 to 4 implemented. Clickable mocks
 that this doc describes live outside the repo (`~/.t3/userdata/attachments/splitch-nav-mocks`, served
 locally); this doc is the durable record. When it disagrees with `navigation-and-ia.md` or
 `screen-inventory.md`, this doc wins and those two are amended as each slice ships.
@@ -205,6 +205,8 @@ from the shell's navigation data; Flags and Experiments of the current App fetch
 server fn), Actions (New Flag in the current App, Go to Flags/Experiments/Overview/Settings for the
 active scope, Members, Billing). Results navigate with the router; no writes happen inside the
 palette other than opening the existing Create Flag dialog.
+The index is fetched when the palette opens and cleared when it closes, and New Flag opens the
+existing `CreateFlagDialog` in controlled mode.
 
 ## Slices
 
@@ -291,10 +293,13 @@ merged before the next starts unless marked parallel.
 
 ### Slice 4: Command palette
 
-- `CommandDialog` mounted in `PanelShell`; ⌘K; groups as specified; `loadControlPanelPaletteIndex`
-  server fn returning Flag keys and Experiment names for the current App.
-- Done: ⌘K from any screen; typing a Flag key and pressing Enter lands on its detail in the active
-  Environment; "New Flag" opens the dialog; keyboard-only operation proven in an e2e spec.
+- [x] `CommandDialog` mounted in `PanelShell`; ⌘K; groups as specified; `loadControlPanelPaletteIndex`
+      server fn returning Flag keys and Experiment names for the current App.
+- Done:
+  - [x] ⌘K from any screen.
+  - [x] Typing a Flag key and pressing Enter lands on its detail in the active Environment.
+  - [x] "New Flag" opens the dialog.
+  - [x] Keyboard-only operation proven in `e2e/control-panel/command-palette.spec.ts`.
 
 ### Phase 2 (not started, in priority order)
 

@@ -4,6 +4,7 @@ import type { PanelExposureStatusClient } from "@splitch/control-plane-sdk/panel
 import { getRequest } from "@tanstack/react-start/server";
 import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelAppSettingsClient } from "./control-plane-app-settings";
+import { createControlPanelExperimentsClient } from "./control-plane-experiments";
 import {
   createControlPanelApprovalsClient,
   createControlPanelFlagsClient,
@@ -97,6 +98,26 @@ export async function authorizedExposureStatusClient(
       bindings.CONTROL_PLANE_API,
       actor,
       environmentId,
+      bindings.CONTROL_PANEL_DELEGATION_SECRET,
+    ),
+  };
+}
+
+/**
+ * No Environment: an Experiment's Runs each pin their own Environment, so the
+ * client is App-scoped and the Environment travels in each call.
+ */
+export async function authorizedExperimentsClient(): Promise<
+  AuthorizedClient<ReturnType<typeof createControlPanelExperimentsClient>>
+> {
+  const authorized = await panelBindingContext();
+  if (!authorized.ok) return authorized;
+  const { bindings, actor } = authorized;
+  return {
+    ok: true,
+    client: createControlPanelExperimentsClient(
+      bindings.CONTROL_PLANE_API,
+      actor,
       bindings.CONTROL_PANEL_DELEGATION_SECRET,
     ),
   };
