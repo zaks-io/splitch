@@ -17,7 +17,7 @@ test.describe("per-Environment Flags", () => {
     await waitForHydration(page);
 
     const row = page.locator("[data-flag-key='new-checkout']");
-    await expect(row).toContainText("Enabled");
+    await expect(row.locator("[data-kill-switch-input='true']")).toBeChecked();
     await expect(row).toContainText("2 of 2");
     await expect(row).toContainText("No percentage rollout");
     await expect(row.getByRole("link", { name: "new-checkout" })).toHaveCount(1);
@@ -25,7 +25,7 @@ test.describe("per-Environment Flags", () => {
 
     await chooseEnvironment(page, "/acme-labs/checkout-api/prod/flags");
     await expect(page).toHaveURL("/acme-labs/checkout-api/prod/flags");
-    await expect(row).toContainText("Disabled");
+    await expect(row.locator("[data-kill-switch-input='true']")).not.toBeChecked();
     await expect(row).toContainText("1 of 2");
     await captureThemeScreenshots(page, testInfo, "flags-list-prod");
   });
@@ -42,7 +42,6 @@ test.describe("per-Environment Flags", () => {
   test("creates the boolean Flag through the Worker", async ({ page }, testInfo) => {
     const flagKey = `billing-refresh-${testInfo.retry}`;
     await page.goto("/acme-labs/billing-api/prod/flags");
-
     await waitForHydration(page);
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
@@ -69,8 +68,9 @@ test.describe("per-Environment Flags", () => {
       .locator("[data-slot='dialog-footer']")
       .getByRole("button", { name: "Close" })
       .click();
-    await expect(page.locator(`[data-flag-key='${flagKey}']`)).toContainText("Disabled");
-    await expect(page.locator(`[data-flag-key='${flagKey}']`)).toContainText("All 2, not narrowed");
+    const createdRow = page.locator(`[data-flag-key='${flagKey}']`);
+    await expect(createdRow.locator("[data-kill-switch-input='true']")).not.toBeChecked();
+    await expect(createdRow).toContainText("All 2, not narrowed");
     await captureThemeScreenshots(page, testInfo, "flags-list");
 
     await page.getByRole("button", { name: "Create Flag" }).click();
@@ -83,7 +83,6 @@ test.describe("per-Environment Flags", () => {
   test("creates a three-Variant string Flag through the Worker", async ({ page }, testInfo) => {
     const flagKey = `checkout-copy-${testInfo.retry}`;
     await page.goto("/acme-labs/billing-api/prod/flags");
-
     await waitForHydration(page);
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");

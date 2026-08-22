@@ -12,6 +12,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/settings/environme
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/settings/environment");
   },
+  // The settings layout above owns the body inset, so these render bare.
   errorComponent: () => <SectionErrorPage title="Settings unavailable" />,
   pendingComponent: PanelSkeleton,
   component: EnvironmentSettingsRoute,

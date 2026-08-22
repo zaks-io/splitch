@@ -1,6 +1,7 @@
-import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
-import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
 import { createFileRoute, notFound } from "@tanstack/react-router";
+import { PanelPageBody } from "#components/panel-page-body";
+import { SectionPending } from "#components/section-pending";
+import { SectionUnavailable } from "#components/section-unavailable";
 import { SegmentsPage } from "#components/segments-page";
 import { loadControlPanelSegments } from "#lib/control-plane-segment-functions";
 import { AccessDeniedError } from "#lib/loader-context";
@@ -28,19 +29,21 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/segments")({
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/segments");
   },
-  errorComponent: () => <SectionErrorPage title="Segments unavailable" />,
-  pendingComponent: TableSkeleton,
+  errorComponent: () => <SectionUnavailable title="Segments unavailable" />,
+  pendingComponent: SectionPending,
   component: SegmentsSectionRoute,
 });
 
 function SegmentsSectionRoute() {
   const { segments, unparseable, scope } = Route.useLoaderData();
   return (
-    <SegmentsPage
-      appId={scope.appId}
-      environmentId={scope.environmentId}
-      segments={segments}
-      unparseable={unparseable}
-    />
+    <PanelPageBody>
+      <SegmentsPage
+        appId={scope.appId}
+        environmentId={scope.environmentId}
+        segments={segments}
+        unparseable={unparseable}
+      />
+    </PanelPageBody>
   );
 }

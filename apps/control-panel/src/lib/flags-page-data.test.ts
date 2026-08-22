@@ -19,7 +19,12 @@ describe("Flags route data", () => {
       data: {
         items: [
           {
-            definition: { id: "flag_checkout", key: "new-checkout", variantCount: 2 },
+            definition: {
+              id: "flag_checkout",
+              key: "new-checkout",
+              variantCount: 2,
+              variantLabels: { var_disabled: "disabled", var_enabled: "enabled" },
+            },
             configuration: {
               enabled: true,
               availableVariantCount: 2,

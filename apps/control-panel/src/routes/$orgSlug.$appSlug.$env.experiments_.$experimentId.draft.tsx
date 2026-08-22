@@ -1,8 +1,9 @@
-import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
-import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
 import { ExperimentDraftWizard } from "#components/experiment-draft-wizard";
+import { PanelPageBody } from "#components/panel-page-body";
+import { SectionPending } from "#components/section-pending";
+import { SectionUnavailable } from "#components/section-unavailable";
 import { scopedHref } from "#lib/app-shell-navigation";
 import { isExperimentDraftStep } from "#lib/experiment-draft-model";
 import { experimentDetailQuery } from "#lib/experiments-query";
@@ -23,8 +24,8 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments_/$expe
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/experiments/$experimentId/draft");
   },
-  errorComponent: () => <SectionErrorPage title="Experiment draft unavailable" />,
-  pendingComponent: TableSkeleton,
+  errorComponent: () => <SectionUnavailable title="Experiment draft unavailable" />,
+  pendingComponent: SectionPending,
   component: ExperimentDraftRoute,
 });
 
@@ -40,11 +41,13 @@ function ExperimentDraftRoute() {
     }),
   );
   return (
-    <ExperimentDraftWizard
-      data={data}
-      scope={context.scope}
-      scopeHref={scopedHref(context.scope)}
-      step={step}
-    />
+    <PanelPageBody>
+      <ExperimentDraftWizard
+        data={data}
+        scope={context.scope}
+        scopeHref={scopedHref(context.scope)}
+        step={step}
+      />
+    </PanelPageBody>
   );
 }

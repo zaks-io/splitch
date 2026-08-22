@@ -1,7 +1,7 @@
-import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
-import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { FlagsPage } from "#components/flags-page";
+import { SectionPending } from "#components/section-pending";
+import { SectionUnavailable } from "#components/section-unavailable";
 import { scopedHref } from "#lib/app-shell-navigation";
 import { loadControlPanelFlags } from "#lib/control-plane-flag-functions";
 import { AccessDeniedError } from "#lib/loader-context";
@@ -24,8 +24,15 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/")({
       .find((org) => org.orgId === scoped.context.scope.orgId)
       ?.apps.find((app) => app.appId === scoped.context.scope.appId)?.environments;
     if (!environments) throw new Error("Flags navigation is missing the current App");
+    const currentEnvironment = environments.find(
+      (environment) => environment.env === scoped.context.scope.env,
+    );
+    if (!currentEnvironment) {
+      throw new Error("Flags navigation is missing the current Environment");
+    }
     return {
       environments,
+      guarded: currentEnvironment.guarded,
       items: result.data.items,
       readLimit: result.data.readLimit,
       readTruncated: result.data.readTruncated,
@@ -35,13 +42,13 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/")({
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/flags/");
   },
-  errorComponent: () => <SectionErrorPage title="Flags unavailable" />,
-  pendingComponent: TableSkeleton,
+  errorComponent: () => <SectionUnavailable title="Flags unavailable" />,
+  pendingComponent: SectionPending,
   component: FlagsSectionRoute,
 });
 
 function FlagsSectionRoute() {
-  const { environments, items, readLimit, readTruncated, scope } = Route.useLoaderData();
+  const { environments, guarded, items, readLimit, readTruncated, scope } = Route.useLoaderData();
 
   return (
     <FlagsPage
@@ -50,6 +57,7 @@ function FlagsSectionRoute() {
       env={scope.env}
       environments={environments}
       environmentId={scope.environmentId}
+      guarded={guarded}
       items={items}
       readLimit={readLimit}
       readTruncated={readTruncated}

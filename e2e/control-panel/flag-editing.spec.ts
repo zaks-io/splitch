@@ -9,7 +9,10 @@ import {
   editingFlags as flags,
   killSwitch,
   killSwitchState,
+  listKillSwitch,
+  listRow,
   openFlag,
+  openFlagsList,
   signIn,
 } from "./flag-editing-actions";
 import { captureThemeScreenshots } from "./screenshot";
@@ -42,6 +45,21 @@ test.describe("Flag editing under an allowing Policy", () => {
       before === "enabled" ? "disabled" : "enabled",
     );
     await captureThemeScreenshots(page, testInfo, "flag-editing-allow-applied");
+  });
+
+  test("flips the kill switch from the Flags list with no gate", async ({ page }, testInfo) => {
+    await openFlagsList(page, allowEnv);
+    const row = listRow(page, flags.enabledState);
+    const before = await row.getAttribute("data-flag-enabled");
+    if (before !== "true" && before !== "false") {
+      throw new Error("The allowing-Policy list Flag must have a Configuration");
+    }
+
+    await listKillSwitch(page, flags.enabledState).click();
+
+    await expectUngated(page);
+    await expect(row).toHaveAttribute("data-flag-enabled", before === "true" ? "false" : "true");
+    await captureThemeScreenshots(page, testInfo, "flag-editing-list-allow-applied");
   });
 
   test("changes Variant availability with no gate", async ({ page }) => {
@@ -124,6 +142,29 @@ test.describe("Flag editing under a confirming Policy", () => {
       "enabled",
     );
     await captureThemeScreenshots(page, testInfo, "flag-editing-confirm-applied");
+  });
+
+  test("gates a kill-switch flip from the Flags list", async ({ page }) => {
+    await openFlagsList(page, confirmEnv);
+    const row = listRow(page, flags.enabledState);
+    const toggle = listKillSwitch(page, flags.enabledState);
+    const before = await row.getAttribute("data-flag-enabled");
+    if (before !== "true" && before !== "false") {
+      throw new Error("The confirming-Policy list Flag must have a Configuration");
+    }
+    if (before === "true") {
+      await toggle.click();
+      await expectUngated(page);
+      await expect(row).toHaveAttribute("data-flag-enabled", "false");
+    }
+
+    await toggle.click();
+
+    const gate = approvalGate(page);
+    await expect(gate).toBeVisible();
+    await gate.locator("[data-approval-confirm='true']").click();
+    await expectApprovalRecord(page);
+    await expect(row).toHaveAttribute("data-flag-enabled", "true");
   });
 
   test("gates a Variant availability change", async ({ page }) => {

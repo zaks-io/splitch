@@ -37,28 +37,29 @@ export function FlagsMatrixPage({
   }
 
   return (
-    <section>
+    <section aria-labelledby="flags-title">
       <PanelPageHeader
+        environmentControl={
+          <EnvironmentSegmentedControl
+            active="all"
+            appSlug={appSlug}
+            environments={environments}
+            orgSlug={orgSlug}
+            section="flags"
+          />
+        }
         actions={
-          <>
-            <EnvironmentSegmentedControl
-              active="all"
-              appSlug={appSlug}
-              environments={environments}
-              orgSlug={orgSlug}
-              section="flags"
+          matrix.rows.length > 0 ? (
+            <CreateFlagDialog
+              appId={appId}
+              environmentId={delegation.environmentId}
+              onClosedAfterCreate={showCreatedFlag}
+              settingsHref={settingsHref}
             />
-            {matrix.rows.length > 0 ? (
-              <CreateFlagDialog
-                appId={appId}
-                environmentId={delegation.environmentId}
-                onClosedAfterCreate={showCreatedFlag}
-                settingsHref={settingsHref}
-              />
-            ) : null}
-          </>
+          ) : null
         }
         crumb={appSlug}
+        id="flags-title"
         title="Flags"
       />
       <div className="grid gap-6 px-8 py-6">

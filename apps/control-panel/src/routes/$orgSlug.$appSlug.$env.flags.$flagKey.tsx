@@ -1,8 +1,9 @@
 import { NotFoundPage } from "@splitch/ui/state/not-found-page";
-import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
-import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { FlagDetailPage } from "#components/flag-detail-page";
+import { PanelPageBody } from "#components/panel-page-body";
+import { SectionPending } from "#components/section-pending";
+import { SectionUnavailable } from "#components/section-unavailable";
 import { scopedHref } from "#lib/app-shell-navigation";
 import { loadControlPanelFlagDetail } from "#lib/control-plane-flag-functions";
 import { isFlagDetailNotFound } from "#lib/flag-detail-data";
@@ -46,8 +47,8 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey")({
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/flags/$flagKey");
   },
-  errorComponent: () => <SectionErrorPage title="Flag unavailable" />,
-  pendingComponent: TableSkeleton,
+  errorComponent: () => <SectionUnavailable title="Flag unavailable" />,
+  pendingComponent: SectionPending,
   component: FlagDetailRoute,
 });
 
@@ -58,20 +59,24 @@ function FlagDetailRoute() {
     // Keyed flags_get is exact within the App, so a miss is absence — not an
     // artifact of the bounded catalog list page.
     return (
-      <NotFoundPage
-        description="No Flag with this key exists in this App."
-        title="Flag not found"
-      />
+      <PanelPageBody>
+        <NotFoundPage
+          description="No Flag with this key exists in this App."
+          title="Flag not found"
+        />
+      </PanelPageBody>
     );
   }
 
   return (
-    <FlagDetailPage
-      appId={scope.appId}
-      environmentId={scope.environmentId}
-      promotionSourceEnv={promotionSourceEnv}
-      scopeHref={scopedHref(scope)}
-      view={detail}
-    />
+    <PanelPageBody>
+      <FlagDetailPage
+        appId={scope.appId}
+        environmentId={scope.environmentId}
+        promotionSourceEnv={promotionSourceEnv}
+        scopeHref={scopedHref(scope)}
+        view={detail}
+      />
+    </PanelPageBody>
   );
 }

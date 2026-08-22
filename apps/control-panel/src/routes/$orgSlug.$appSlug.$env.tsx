@@ -5,6 +5,7 @@ import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { createFileRoute, notFound, Outlet } from "@tanstack/react-router";
 import { LiveUpdatesClient } from "#components/live-updates-client";
+import { PanelPageBody } from "#components/panel-page-body";
 import { PanelShell } from "#components/panel-shell";
 import { deferredDestinationAt } from "#lib/app-shell-navigation";
 import {
@@ -56,25 +57,37 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
   errorComponent: ({ error }) => {
     if (isAccessDeniedError(error)) {
       return (
-        <AccessDeniedPage
-          action={<Button render={<a href="/">Home</a>} variant="outline" />}
-          description="You do not have access to this scope."
-          title="Access denied"
-        />
+        <PanelPageBody>
+          <AccessDeniedPage
+            action={<Button render={<a href="/">Home</a>} variant="outline" />}
+            description="You do not have access to this scope."
+            title="Access denied"
+          />
+        </PanelPageBody>
       );
     }
-    return <SectionErrorPage description="Refresh this section or try again later." />;
+    return (
+      <PanelPageBody>
+        <SectionErrorPage description="Refresh this section or try again later." />
+      </PanelPageBody>
+    );
   },
   notFoundComponent: ({ data }) => (
-    <NotFoundPage
-      description={
-        (data as { deferred?: boolean } | undefined)?.deferred
-          ? "This destination is not available yet."
-          : "The requested App or Environment was not found."
-      }
-    />
+    <PanelPageBody>
+      <NotFoundPage
+        description={
+          (data as { deferred?: boolean } | undefined)?.deferred
+            ? "This destination is not available yet."
+            : "The requested App or Environment was not found."
+        }
+      />
+    </PanelPageBody>
   ),
-  pendingComponent: PanelSkeleton,
+  pendingComponent: () => (
+    <PanelPageBody>
+      <PanelSkeleton />
+    </PanelPageBody>
+  ),
   component: AppScopeRoute,
 });
 
@@ -101,9 +114,7 @@ function AppScopeRoute() {
       }}
     >
       <LiveUpdatesClient queryClient={queryClient} scope={context.scope} />
-      <div className="px-8 py-6">
-        <Outlet />
-      </div>
+      <Outlet />
     </PanelShell>
   );
 }

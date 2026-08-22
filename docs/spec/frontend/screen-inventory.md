@@ -146,9 +146,10 @@ pointer to create the App's first Experiment or Flag — not an error or a blank
 ## Flags
 
 `/{orgSlug}/{appSlug}/{env}/flags` — the per-Environment Flags list. Every Flag's row shows its
-key plus **this Environment's** Flag Configuration at a glance: enabled state, the rollout, how
-many Variants of the catalog are available here. The list is env-scoped (it hangs off `/{env}`),
-so it shows the slice of each App-level Flag that applies to the active Environment.
+key plus **this Environment's** Flag Configuration at a glance: an inline enable Switch, the
+rollout, and how many Variants of the catalog are available here. Configured rows use the Switch,
+not an enabled-state badge. The list is env-scoped (it hangs off `/{env}`), so it shows the slice
+of each App-level Flag that applies to the active Environment.
 
 ### Flag detail — env-scoped, with a "Definition" sub-area
 

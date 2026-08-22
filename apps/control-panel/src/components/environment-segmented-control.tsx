@@ -17,9 +17,9 @@ export function EnvironmentSegmentedControl({
   section: string;
 }) {
   return (
-    <nav aria-label="Environment" data-environment-segmented>
+    <nav aria-label="Environment" className="min-w-0" data-environment-segmented>
       <Tabs value={active}>
-        <TabsList>
+        <TabsList className="max-w-full overflow-x-auto">
           <TabsTrigger
             data-environment-segment="all"
             render={<Link to={appHomeHref({ orgSlug, appSlug })} />}

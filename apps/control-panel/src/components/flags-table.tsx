@@ -4,11 +4,15 @@ import type { FlagsPageItem } from "#lib/flags-page-data";
 import { FlagsTableRow } from "./flags-table-row";
 
 export function FlagsTable({
+  appId,
   env,
+  environmentId,
   items,
   scopeHref,
 }: {
+  appId: string;
   env: string;
+  environmentId: string;
   items: FlagsPageItem[];
   scopeHref: string;
 }) {
@@ -31,7 +35,14 @@ export function FlagsTable({
           </TableHeader>
           <TableBody>
             {items.map((item) => (
-              <FlagsTableRow item={item} key={item.definition.id} scopeHref={scopeHref} />
+              <FlagsTableRow
+                appId={appId}
+                env={env}
+                environmentId={environmentId}
+                item={item}
+                key={item.definition.id}
+                scopeHref={scopeHref}
+              />
             ))}
           </TableBody>
         </Table>

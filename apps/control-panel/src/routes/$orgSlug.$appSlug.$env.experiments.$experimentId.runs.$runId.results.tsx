@@ -9,6 +9,7 @@ export const Route = createFileRoute(
 )({
   // A Results read that fails must say so. Rendering nothing would read as an
   // Experiment with no numbers rather than as a read that did not complete.
+  // The Experiment detail layout above owns the body inset, so these render bare.
   errorComponent: () => <SectionErrorPage title="Results unavailable" />,
   pendingComponent: TableSkeleton,
   component: PinnedRunResultsTab,
