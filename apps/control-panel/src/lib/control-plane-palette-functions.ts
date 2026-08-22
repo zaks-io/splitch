@@ -1,7 +1,6 @@
 import type { ControlPlaneOperationResult } from "@splitch/control-plane-sdk";
 import { createServerFn } from "@tanstack/react-start";
-import { authorizedExperimentsClient } from "./control-plane-experiment-functions";
-import { authorizedFlagsClient } from "./panel-authorized-clients";
+import { authorizedExperimentsClient, authorizedFlagsClient } from "./panel-authorized-clients";
 import { readPaletteIndex, type PaletteIndex } from "./palette-index";
 
 export const loadControlPanelPaletteIndex = createServerFn({ method: "GET" })
