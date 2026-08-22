@@ -16,12 +16,16 @@ export function HomeAppsTableRow({ app, orgSlug }: { app: OrgAppListApp; orgSlug
   return (
     <TableRow data-app-row={app.appSlug}>
       <TableCell>
-        <a
-          className="font-mono font-medium text-foreground underline underline-offset-4 hover:no-underline"
-          href={appHomeHref({ orgSlug, appSlug: app.appSlug })}
-        >
-          {app.appSlug}
-        </a>
+        {app.environments.length > 0 ? (
+          <a
+            className="font-mono font-medium text-foreground underline underline-offset-4 hover:no-underline"
+            href={appHomeHref({ orgSlug, appSlug: app.appSlug })}
+          >
+            {app.appSlug}
+          </a>
+        ) : (
+          <span className="font-mono font-medium text-foreground">{app.appSlug}</span>
+        )}
       </TableCell>
       <TableCell>
         {app.environments.length > 0 ? (

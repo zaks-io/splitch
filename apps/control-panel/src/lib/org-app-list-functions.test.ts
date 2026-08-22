@@ -72,6 +72,23 @@ function requestWithSessionCookie(): Request {
   });
 }
 
+const lastVisitedHint = (actor: string) =>
+  encodeURIComponent(
+    JSON.stringify({
+      v: 1,
+      actor,
+      orgs: {
+        org_000: {
+          path: "/org-000/checkout-api/dev/flags",
+          appSlug: "checkout-api",
+          env: "dev",
+          section: "flags",
+          at: 1_000,
+        },
+      },
+    }),
+  );
+
 describe("loadOrgAppListForRequest", () => {
   it("re-attempts a pending App resync on load, returning the previously-missing App and clearing the marker", async () => {
     await seedOrganization(bindings.DB, "org_000", "org-000");
@@ -200,23 +217,9 @@ describe("loadOrgAppListForRequest", () => {
         data: { items: [{ id: "flag_1" }], readTruncated: true, readLimit: 1 },
       }),
     });
-    const hint = encodeURIComponent(
-      JSON.stringify({
-        v: 1,
-        orgs: {
-          org_000: {
-            path: "/org-000/checkout-api/dev/flags",
-            appSlug: "checkout-api",
-            env: "dev",
-            section: "flags",
-            at: 1_000,
-          },
-        },
-      }),
-    );
     const request = new Request("https://control-panel.example.test/org-000", {
       headers: {
-        cookie: `${SESSION_COOKIE_NAME}=${TOKEN}; __last_visited=${hint}`,
+        cookie: `${SESSION_COOKIE_NAME}=${TOKEN}; __last_visited=${lastVisitedHint("user_cap")}`,
       },
     });
 

@@ -142,11 +142,11 @@ test.describe("Control Panel local full-stack harness", () => {
     await expect(page.getByText("orbit-tools")).toHaveCount(0);
 
     await page.goto("/acme-labs");
-    await expect(page.getByRole("link", { name: "Development" })).toHaveAttribute(
+    await expect(page.getByRole("link", { name: "Development", exact: true })).toHaveAttribute(
       "href",
       "/acme-labs/checkout-api/dev",
     );
-    await expect(page.getByRole("link", { name: "Production" })).toHaveAttribute(
+    await expect(page.getByRole("link", { name: "Production", exact: true })).toHaveAttribute(
       "href",
       "/acme-labs/checkout-api/prod",
     );
@@ -236,7 +236,7 @@ test.describe("Control Panel local full-stack harness", () => {
     await chooseScope(page, "Organization", "/orbit-tools");
     await expect(page).toHaveURL("/orbit-tools");
     await expect(page.getByRole("heading", { name: "orbit-tools" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Production" })).toHaveAttribute(
+    await expect(page.getByRole("link", { name: "Production", exact: true })).toHaveAttribute(
       "href",
       "/orbit-tools/agent-console/prod",
     );

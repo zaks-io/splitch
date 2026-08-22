@@ -32,7 +32,7 @@ describe("HomePage", () => {
     expect(html).not.toContain("session-stale");
     expect(html).toContain("Create your first App");
     expect(html).toContain("Experiment health across Apps");
-    expect(html).toContain("Nothing needs you. Experiment health is clear in every Environment.");
+    expect(html).toContain("Nothing needs you yet. This Organization has no Apps.");
   });
 
   it("labels App home and stale section hints without inventing a destination", () => {
@@ -197,6 +197,8 @@ describe("HomePage pending resync", () => {
 
     expect(html).toContain('data-testid="app-session-stale"');
     expect(html).toContain('data-app-row="billing-api"');
+    expect(html).not.toContain('href="/org-1/billing-api"');
+    expect(html).toContain("Nothing needs you yet. No App has an Environment to watch.");
     expect(html).not.toContain("Create your first App");
   });
 });

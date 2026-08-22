@@ -6,8 +6,10 @@ export const LAST_VISITED_COOKIE_NAME = "__last_visited";
 const LAST_VISITED_ORG_LIMIT = 8;
 const THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60;
 
+// A same-origin pathname: one leading slash, never protocol-relative, and no
+// backslash (browsers rewrite `/\host` to `//host`, which leaves the origin).
 const LastVisitedEntrySchema = z.object({
-  path: z.string().regex(/^\/(?!\/)/),
+  path: z.string().regex(/^\/(?!\/)[^\\?#\s]*$/),
   appSlug: z.string().min(1),
   env: z.string().min(1).nullable(),
   section: z.string(),
@@ -16,11 +18,22 @@ const LastVisitedEntrySchema = z.object({
 
 const LastVisitedScopeSchema = z.object({
   v: z.literal(1),
-  orgs: z.record(z.string(), LastVisitedEntrySchema),
+  actor: z.string().min(1),
+  orgs: z
+    .record(z.string(), LastVisitedEntrySchema)
+    .refine((orgs) => Object.keys(orgs).length <= LAST_VISITED_ORG_LIMIT),
 });
 
 export type LastVisitedEntry = z.infer<typeof LastVisitedEntrySchema>;
 export type LastVisitedScope = z.infer<typeof LastVisitedScopeSchema>;
+
+export interface LastVisitedAuthority {
+  readonly orgSlug: string;
+  readonly apps: ReadonlyArray<{
+    readonly appSlug: string;
+    readonly environments: ReadonlyArray<{ readonly env: string }>;
+  }>;
+}
 
 export function lastVisitedEntry(
   appSlug: string,
@@ -37,13 +50,20 @@ export function lastVisitedEntry(
   };
 }
 
-export function parseLastVisitedCookie(cookieHeader: string | null): LastVisitedScope | null {
+/**
+ * The hint belongs to one signed-in user: a cookie another user left on this
+ * browser (or one forged for a different actor) reads as absent.
+ */
+export function parseLastVisitedCookie(
+  cookieHeader: string | null,
+  actorId: string,
+): LastVisitedScope | null {
   const raw = parseCookie(cookieHeader).get(LAST_VISITED_COOKIE_NAME);
   if (!raw) return null;
 
   try {
     const parsed = LastVisitedScopeSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : null;
+    return parsed.success && parsed.data.actor === actorId ? parsed.data : null;
   } catch {
     // This client-controlled cookie is only a navigation hint, not data the
     // screen claims to know, so unreadable input removes the card safely.
@@ -53,20 +73,59 @@ export function parseLastVisitedCookie(cookieHeader: string | null): LastVisited
 
 export function recordVisit(
   existing: LastVisitedScope | null,
+  actorId: string,
   orgId: string,
   entry: LastVisitedEntry,
 ): LastVisitedScope {
-  const orgs = existing ? existing.orgs : {};
+  const orgs = existing && existing.actor === actorId ? existing.orgs : {};
   const entries = Object.entries({ ...orgs, [orgId]: entry })
     .sort(([leftId, left], [rightId, right]) => right.at - left.at || leftId.localeCompare(rightId))
     .slice(0, LAST_VISITED_ORG_LIMIT);
-  return { v: 1, orgs: Object.fromEntries(entries) };
+  return { v: 1, actor: actorId, orgs: Object.fromEntries(entries) };
 }
 
 export function entryFor(value: LastVisitedScope | null, orgId: string): LastVisitedEntry | null {
   if (!value) return null;
   const entry = value.orgs[orgId];
   return entry ? entry : null;
+}
+
+/**
+ * Home re-checks the hint against what the session can reach now: the App must
+ * still be one of this Organization's, the Environment must still exist, and
+ * the stored path must sit under that scope. A stale or forged entry yields no
+ * Continue card rather than a dead or foreign link.
+ */
+export function authorizedEntry(
+  entry: LastVisitedEntry | null,
+  authority: LastVisitedAuthority,
+): LastVisitedEntry | null {
+  if (!entry) return null;
+  const app = authority.apps.find((candidate) => candidate.appSlug === entry.appSlug);
+  if (!app) return null;
+  if (entry.env !== null && !app.environments.some((candidate) => candidate.env === entry.env)) {
+    return null;
+  }
+
+  const segments = decodedSegments(entry.path);
+  if (!segments) return null;
+  const scope =
+    entry.env === null
+      ? [authority.orgSlug, entry.appSlug]
+      : [authority.orgSlug, entry.appSlug, entry.env];
+  if (entry.env === null && segments.length !== scope.length) return null;
+  return scope.every((part, index) => segments[index] === part) ? entry : null;
+}
+
+function decodedSegments(path: string): string[] | null {
+  try {
+    return path
+      .split("/")
+      .filter((segment) => segment !== "")
+      .map((segment) => decodeURIComponent(segment));
+  } catch {
+    return null;
+  }
 }
 
 export function serializeLastVisitedCookie(value: LastVisitedScope) {

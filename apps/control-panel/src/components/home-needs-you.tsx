@@ -8,7 +8,13 @@ import {
 } from "@splitch/ui/components/card";
 import type { NeedsYouItem } from "#lib/home-needs-you";
 
-export function HomeNeedsYou({ items }: { items: readonly NeedsYouItem[] }) {
+export function HomeNeedsYou({
+  emptyCopy,
+  items,
+}: {
+  emptyCopy: string;
+  items: readonly NeedsYouItem[];
+}) {
   return (
     <Card>
       <CardHeader>
@@ -47,9 +53,7 @@ export function HomeNeedsYou({ items }: { items: readonly NeedsYouItem[] }) {
             ))}
           </div>
         ) : (
-          <p className="text-muted-foreground text-sm leading-6">
-            Nothing needs you. Experiment health is clear in every Environment.
-          </p>
+          <p className="text-muted-foreground text-sm leading-6">{emptyCopy}</p>
         )}
       </CardContent>
     </Card>

@@ -224,7 +224,7 @@ describe("panel cookie attributes", () => {
     const kv = new MemoryKv();
     const session = await createSession(kv.namespace(), sessionPrincipal(), NOW);
     const oauth = await createOAuthState(kv.namespace(), "/", NOW);
-    const lastVisited = serializeLastVisitedCookie({ v: 1, orgs: {} });
+    const lastVisited = serializeLastVisitedCookie({ v: 1, actor: "user_1", orgs: {} });
 
     assertCookieAttributes(session.cookie, SESSION_COOKIE_NAME);
     assertCookieAttributes(oauth.cookie, OAUTH_STATE_COOKIE_NAME);

@@ -4,8 +4,10 @@ import {
   isIdentifier,
   isImportDeclaration,
   isNamedImports,
+  isNamespaceImport,
   isNoSubstitutionTemplateLiteral,
   isStringLiteral,
+  type NamedImportBindings,
   type Node,
   type SourceFile,
 } from "typescript";
@@ -25,19 +27,34 @@ export interface SetterHeaderWrite {
   method: "setResponseHeader";
 }
 
-export function responseHeaderSetterBindings(sourceFile: SourceFile): ReadonlySet<string> {
+export function responseHeaderSetterBindings(
+  sourceFile: SourceFile,
+  fileName: string,
+): ReadonlySet<string> {
   return new Set(
     sourceFile.statements.flatMap((statement) => {
       if (!isImportDeclaration(statement) || !isStringLiteral(statement.moduleSpecifier)) return [];
       if (statement.moduleSpecifier.text !== RESPONSE_HEADER_SETTER_MODULE) return [];
-      const namedBindings = statement.importClause?.namedBindings;
-      if (!namedBindings || !isNamedImports(namedBindings)) return [];
-      return namedBindings.elements.flatMap((element) =>
-        (element.propertyName?.text ?? element.name.text) === RESPONSE_HEADER_SETTER
-          ? [element.name.text]
-          : [],
-      );
+      return setterImportNames(statement.importClause?.namedBindings, fileName);
     }),
+  );
+}
+
+function setterImportNames(
+  namedBindings: NamedImportBindings | undefined,
+  fileName: string,
+): string[] {
+  if (!namedBindings) return [];
+  if (isNamespaceImport(namedBindings)) {
+    throw new Error(
+      `${fileName}: namespace import of ${RESPONSE_HEADER_SETTER_MODULE} hides ${RESPONSE_HEADER_SETTER}() calls from the Set-Cookie sweep; import it by name`,
+    );
+  }
+  if (!isNamedImports(namedBindings)) return [];
+  return namedBindings.elements.flatMap((element) =>
+    (element.propertyName?.text ?? element.name.text) === RESPONSE_HEADER_SETTER
+      ? [element.name.text]
+      : [],
   );
 }
 

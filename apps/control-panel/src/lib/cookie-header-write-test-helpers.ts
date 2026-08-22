@@ -71,7 +71,7 @@ export function createCookieHeaderWriteDiscovery(
         sourceFile,
         discoveryOptions.headerNameModules ?? [],
       );
-      const setterBindings = responseHeaderSetterBindings(sourceFile);
+      const setterBindings = responseHeaderSetterBindings(sourceFile, displayName);
 
       const writes: SetCookieHeaderWrite[] = [];
       visitNodes(sourceFile, (node) => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  authorizedEntry,
   entryFor,
   formatRelativeTime,
   lastVisitedEntry,
@@ -19,48 +20,71 @@ const entry = {
 } as const;
 
 describe("last-visited scope cookie", () => {
-  it("parses a valid cookie and ignores missing, malformed, or wrong-version hints", () => {
-    const value: LastVisitedScope = { v: 1, orgs: { org_1: entry } };
-    const encoded = encodeURIComponent(JSON.stringify(value));
+  const encoded = (value: unknown) =>
+    `${LAST_VISITED_COOKIE_NAME}=${encodeURIComponent(JSON.stringify(value))}`;
 
-    expect(parseLastVisitedCookie(`${LAST_VISITED_COOKIE_NAME}=${encoded}`)).toEqual(value);
-    expect(parseLastVisitedCookie(null)).toBeNull();
-    expect(parseLastVisitedCookie(`${LAST_VISITED_COOKIE_NAME}=not-json`)).toBeNull();
+  it("parses a valid cookie and ignores missing, malformed, or wrong-version hints", () => {
+    const value: LastVisitedScope = { v: 1, actor: "user_1", orgs: { org_1: entry } };
+
+    expect(parseLastVisitedCookie(encoded(value), "user_1")).toEqual(value);
+    expect(parseLastVisitedCookie(null, "user_1")).toBeNull();
+    expect(parseLastVisitedCookie(`${LAST_VISITED_COOKIE_NAME}=not-json`, "user_1")).toBeNull();
     expect(
       parseLastVisitedCookie(
-        `${LAST_VISITED_COOKIE_NAME}=${encodeURIComponent(
-          JSON.stringify({
-            v: 1,
-            orgs: { org_1: { ...entry, path: "//outside.example" } },
-          }),
-        )}`,
+        encoded({
+          v: 1,
+          actor: "user_1",
+          orgs: { org_1: { ...entry, path: "//outside.example" } },
+        }),
+        "user_1",
       ),
     ).toBeNull();
     expect(
       parseLastVisitedCookie(
-        `${LAST_VISITED_COOKIE_NAME}=${encodeURIComponent(JSON.stringify({ v: 2, orgs: {} }))}`,
+        encoded({
+          v: 1,
+          actor: "user_1",
+          orgs: { org_1: { ...entry, path: "/\\outside.example" } },
+        }),
+        "user_1",
       ),
     ).toBeNull();
+    expect(
+      parseLastVisitedCookie(encoded({ v: 2, actor: "user_1", orgs: {} }), "user_1"),
+    ).toBeNull();
+  });
+
+  it("reads as absent for another user and when it names more than eight Organizations", () => {
+    const value: LastVisitedScope = { v: 1, actor: "user_1", orgs: { org_1: entry } };
+    expect(parseLastVisitedCookie(encoded(value), "user_2")).toBeNull();
+
+    const orgs = Object.fromEntries(
+      Array.from({ length: 9 }, (_, index) => [`org_${index}`, { ...entry, at: index }]),
+    );
+    expect(parseLastVisitedCookie(encoded({ v: 1, actor: "user_1", orgs }), "user_1")).toBeNull();
   });
 
   it("records one entry per Organization and drops the oldest beyond eight", () => {
     let value: LastVisitedScope | null = null;
     for (let index = 0; index < 9; index += 1) {
-      value = recordVisit(value, `org_${index}`, { ...entry, at: index });
+      value = recordVisit(value, "user_1", `org_${index}`, { ...entry, at: index });
     }
 
     if (!value) throw new Error("expected recorded visits");
+    expect(value.actor).toBe("user_1");
     expect(Object.keys(value.orgs)).toHaveLength(8);
     expect(entryFor(value, "org_0")).toBeNull();
     expect(entryFor(value, "org_8")?.at).toBe(8);
   });
 
-  it("replaces the current Organization entry", () => {
-    const first = recordVisit(null, "org_1", entry);
-    const next = recordVisit(first, "org_1", { ...entry, path: "/next", at: 2_000 });
-
+  it("replaces the current Organization entry and discards another user's history", () => {
+    const first = recordVisit(null, "user_1", "org_1", entry);
+    const next = recordVisit(first, "user_1", "org_1", { ...entry, path: "/next", at: 2_000 });
     expect(Object.keys(next.orgs)).toEqual(["org_1"]);
     expect(entryFor(next, "org_1")?.path).toBe("/next");
+
+    const other = recordVisit(next, "user_2", "org_2", entry);
+    expect(other).toEqual({ v: 1, actor: "user_2", orgs: { org_2: entry } });
   });
 
   it("derives registry sections from Environment paths and Flags for App home", () => {
@@ -77,11 +101,47 @@ describe("last-visited scope cookie", () => {
   });
 
   it("serializes with the shared HttpOnly cookie attributes and a 30-day lifetime", () => {
-    const cookie = serializeLastVisitedCookie({ v: 1, orgs: { org_1: entry } });
+    const cookie = serializeLastVisitedCookie({ v: 1, actor: "user_1", orgs: { org_1: entry } });
 
     expect(cookie).toContain(`${LAST_VISITED_COOKIE_NAME}=`);
     expect(cookie).toContain("HttpOnly; Secure; SameSite=Lax; Path=/");
     expect(cookie).toContain("Max-Age=2592000");
+  });
+});
+
+describe("authorized Continue entry", () => {
+  const authority = {
+    orgSlug: "acme-labs",
+    apps: [{ appSlug: "checkout-api", environments: [{ env: "dev" }] }],
+  };
+
+  it("keeps an entry whose App, Environment, and path are still reachable", () => {
+    expect(authorizedEntry(entry, authority)).toEqual(entry);
+    expect(
+      authorizedEntry({ ...entry, env: null, path: "/acme-labs/checkout-api" }, authority),
+    ).not.toBeNull();
+    expect(
+      authorizedEntry(
+        { ...entry, path: "/acme-labs/checkout-api/dev/experiments/exp_1" },
+        authority,
+      ),
+    ).not.toBeNull();
+  });
+
+  it("drops a missing, stale, or out-of-scope entry", () => {
+    expect(authorizedEntry(null, authority)).toBeNull();
+    expect(authorizedEntry({ ...entry, appSlug: "other-api" }, authority)).toBeNull();
+    expect(authorizedEntry({ ...entry, env: "prod" }, authority)).toBeNull();
+    expect(
+      authorizedEntry({ ...entry, path: "/acme-labs/other-api/dev/flags" }, authority),
+    ).toBeNull();
+    expect(
+      authorizedEntry({ ...entry, path: "/evil-org/checkout-api/dev/flags" }, authority),
+    ).toBeNull();
+    expect(
+      authorizedEntry({ ...entry, env: null, path: "/acme-labs/checkout-api/dev" }, authority),
+    ).toBeNull();
+    expect(authorizedEntry({ ...entry, path: "/acme-labs/%E0%A4%A" }, authority)).toBeNull();
   });
 });
 

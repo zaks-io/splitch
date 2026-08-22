@@ -1,6 +1,6 @@
 # Control Panel navigation redesign
 
-Status: agreed 2026-08-21; Slice 1 shipped 2026-08-21 (#393); Slice 2 shipped; Slice 3a implemented; Slices 3b and 4 not started. Clickable mocks
+Status: agreed 2026-08-21; Slice 1 shipped 2026-08-21 (#393); Slice 2 shipped; Slices 3a and 3b implemented; Slice 4 not started. Clickable mocks
 that this doc describes live outside the repo (`~/.t3/userdata/attachments/splitch-nav-mocks`, served
 locally); this doc is the durable record. When it disagrees with `navigation-and-ia.md` or
 `screen-inventory.md`, this doc wins and those two are amended as each slice ships.
@@ -134,8 +134,10 @@ the header without them so it carries no dead branch.
 
 - **Continue where you left off**: the last scope this user visited in this Org (`app / env ·
 section · n minutes ago`) with a Resume button. Rendered only when known. Source: the httpOnly
-  `__last_visited` cookie, bounded to the eight most recently visited Organizations. The
-  Environment layout and App home loaders write its per-Organization path and timestamp. It is
+  `__last_visited` cookie, bounded to the eight most recently visited Organizations and bound to
+  the signed-in user (cleared on sign-out; another user's cookie reads as absent). The
+  Environment layout and App home loaders write its per-Organization path and timestamp; Home
+  re-checks the entry against the session's Apps and Environments before linking to it. It is
   a hint for a card, never a redirect, so it does not violate the no-hidden-scope rule: the URL
   still names the scope you are in.
 - **Apps table** (left, 3/5): App (link to App home), Environments (pills linking to the

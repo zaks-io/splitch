@@ -4,7 +4,7 @@ import { HomeContinueCard } from "#components/home-continue-card";
 import { HomeNeedsYou } from "#components/home-needs-you";
 import { ProvisionalOrgBanner } from "#components/provisional-org-banner";
 import { StaleSessionNotice } from "#components/stale-session-notice";
-import { needsYouItems } from "#lib/home-needs-you";
+import { needsYouEmptyCopy, needsYouItems } from "#lib/home-needs-you";
 import type { OrgAppListView } from "#lib/org-app-list";
 
 /** The Organization Home: Continue, Apps, and Experiment health requiring attention. */
@@ -41,7 +41,7 @@ export function HomePage({ view }: { view: OrgAppListView }) {
           )}
         </div>
         <div className="lg:col-span-2">
-          <HomeNeedsYou items={needsYou} />
+          <HomeNeedsYou emptyCopy={needsYouEmptyCopy(view)} items={needsYou} />
         </div>
       </div>
     </div>

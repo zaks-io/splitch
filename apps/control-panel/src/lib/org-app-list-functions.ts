@@ -5,7 +5,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { type ControlPanelBindings, controlPanelBindings } from "./bindings";
 import { createControlPanelAppsClient, createControlPanelFlagsClient } from "./control-plane-apps";
 import { createDelegationEnvironment } from "./flags-matrix-data";
-import { entryFor, parseLastVisitedCookie } from "./last-visited-scope";
+import { authorizedEntry, entryFor, parseLastVisitedCookie } from "./last-visited-scope";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
 import type {
   AppAttention,
@@ -78,6 +78,16 @@ export async function loadOrgAppListForRequest(
   const resolver = createEnvironmentResolver(repo);
   const actor = { actorId: session.userId, sessionExpiresAt: loaded.session.expiresAt };
 
+  const apps = await Promise.all(
+    organization.apps.map(async (app): Promise<OrgAppListApp> => {
+      const environments = await resolver.listEnvironments(app.appId);
+      const [attention, flags] = await Promise.all([
+        readAttention(bindings, actor, app.appId),
+        readFlags(bindings, actor, app.appId, environments),
+      ]);
+      return { appId: app.appId, appSlug: app.appSlug, environments, attention, flags };
+    }),
+  );
   return {
     kind: "ok",
     view: {
@@ -86,22 +96,16 @@ export async function loadOrgAppListForRequest(
       orgRole: organization.orgRole,
       isProvisional: organization.isProvisional,
       demoExpiresAt: organization.demoExpiresAt,
-      apps: await Promise.all(
-        organization.apps.map(async (app): Promise<OrgAppListApp> => {
-          const environments = await resolver.listEnvironments(app.appId);
-          const [attention, flags] = await Promise.all([
-            readAttention(bindings, actor, app.appId),
-            readFlags(bindings, actor, app.appId, environments),
-          ]);
-          return { appId: app.appId, appSlug: app.appSlug, environments, attention, flags };
-        }),
-      ),
+      apps,
       // Scoped to this Organization only: a pending App create in a
       // different Organization must not surface a notice here.
       pendingAppResync: toPendingAppResync(pendingAfter, organization.orgId),
-      lastVisited: entryFor(
-        parseLastVisitedCookie(request.headers.get("cookie")),
-        organization.orgId,
+      lastVisited: authorizedEntry(
+        entryFor(
+          parseLastVisitedCookie(request.headers.get("cookie"), session.userId),
+          organization.orgId,
+        ),
+        { orgSlug: organization.orgSlug, apps },
       ),
       now,
     },

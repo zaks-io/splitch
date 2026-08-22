@@ -16,6 +16,15 @@ export interface NeedsYouItem {
   readonly href: string;
 }
 
+/** The empty state says what was checked, so "clear" is never claimed over nothing. */
+export function needsYouEmptyCopy(view: OrgAppListView): string {
+  if (view.apps.length === 0) return "Nothing needs you yet. This Organization has no Apps.";
+  if (view.apps.every((app) => app.environments.length === 0)) {
+    return "Nothing needs you yet. No App has an Environment to watch.";
+  }
+  return "Nothing needs you. Experiment health is clear in every Environment.";
+}
+
 export function needsYouItems(view: OrgAppListView): NeedsYouItem[] {
   const attention: NeedsYouItem[] = [];
   const unknown: NeedsYouItem[] = [];

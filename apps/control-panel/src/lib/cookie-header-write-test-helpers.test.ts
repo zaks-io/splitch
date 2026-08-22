@@ -113,6 +113,26 @@ h.append(["set", "cookie"].join("-"), raw(token));
     );
   });
 
+  it("finds the Start response-header setter imported by name", () => {
+    const source = `
+import { setResponseHeader as setHeader } from "@tanstack/react-start/server";
+setHeader("set-cookie", raw(token));
+`;
+
+    expect(discover(source)).toEqual([{ argument: "raw(token)", method: "setResponseHeader" }]);
+  });
+
+  it("refuses a namespace import of the Start response-header setter", () => {
+    const source = `
+import * as start from "@tanstack/react-start/server";
+start.setResponseHeader("set-cookie", raw(token));
+`;
+
+    expect(() => discover(source)).toThrowError(
+      "routes/probe.ts: namespace import of @tanstack/react-start/server hides setResponseHeader() calls from the Set-Cookie sweep; import it by name",
+    );
+  });
+
   it("refuses a header-mutating receiver whose type is unresolved", () => {
     const source = `declare const jar: any; jar.append("set-cookie", raw(token));`;
 

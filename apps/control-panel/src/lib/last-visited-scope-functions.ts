@@ -24,10 +24,11 @@ export const recordLastVisitedScope = createServerFn({ method: "GET" })
   .validator((data: unknown) => RecordLastVisitedScopeSchema.parse(data))
   .handler(async ({ data }) => {
     const request = getRequest();
-    await assertAuthorizedVisit(request, data);
-    const existing = parseLastVisitedCookie(request.headers.get("cookie"));
+    const { actorId } = await assertAuthorizedVisit(request, data);
+    const existing = parseLastVisitedCookie(request.headers.get("cookie"), actorId);
     const next = recordVisit(
       existing,
+      actorId,
       data.orgId,
       lastVisitedEntry(data.appSlug, data.env, data.path, Date.now()),
     );
@@ -37,7 +38,7 @@ export const recordLastVisitedScope = createServerFn({ method: "GET" })
 async function assertAuthorizedVisit(
   request: Request,
   data: z.infer<typeof RecordLastVisitedScopeSchema>,
-): Promise<void> {
+): Promise<{ actorId: string }> {
   const bindings = controlPanelBindings(workerEnv);
   const loaded = await loadSessionFromRequest(bindings, request);
   if (!loaded.ok) throw new Error("Cannot record an unauthenticated App visit");
@@ -57,10 +58,11 @@ async function assertAuthorizedVisit(
 
   const app = organization.apps.find((candidate) => candidate.appSlug === data.appSlug);
   if (!app) throw new Error("Cannot record a visit to an unauthorized App");
-  if (data.env === null) return;
+  if (data.env === null) return { actorId: session.userId };
 
   const environments = await createEnvironmentResolver(repo).listEnvironments(app.appId);
   if (!environments.some((candidate) => candidate.env === data.env)) {
     throw new Error("Cannot record a visit to an unauthorized Environment");
   }
+  return { actorId: session.userId };
 }
