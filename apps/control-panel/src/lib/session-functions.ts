@@ -46,10 +46,23 @@ export type PanelNavigationResult =
  * behaves correctly through the framework's build-time transform, which
  * plain vitest does not apply.
  */
-export async function loadCurrentSessionForRequest(
+type HealedSession =
+  | {
+      kind: "authenticated";
+      repo: ReturnType<typeof createRepository>;
+      session: Awaited<ReturnType<typeof rehydrateLegacySession>>;
+      pendingOrgResync: StaleSession | null;
+    }
+  | { kind: "unauthenticated" };
+
+/**
+ * Every authenticated Panel load goes through here so the pending-Organization
+ * self-heal runs on each of them, not only on the `/` chooser.
+ */
+async function loadHealedSession(
   bindings: ControlPanelBindings,
   request: Request,
-): Promise<CurrentSessionResult> {
+): Promise<HealedSession> {
   const loaded = await loadSessionFromRequest(bindings, request);
   if (!loaded.ok) {
     return { kind: "unauthenticated" };
@@ -86,10 +99,24 @@ export async function loadCurrentSessionForRequest(
 
   return {
     kind: "authenticated",
-    session: publicSession(session),
+    repo,
+    session,
     pendingOrgResync: pendingAfter
       ? { slug: pendingAfter.slug, reason: pendingAfter.reason, remedy: pendingAfter.remedy }
       : null,
+  };
+}
+
+export async function loadCurrentSessionForRequest(
+  bindings: ControlPanelBindings,
+  request: Request,
+): Promise<CurrentSessionResult> {
+  const healed = await loadHealedSession(bindings, request);
+  if (healed.kind === "unauthenticated") return healed;
+  return {
+    kind: "authenticated",
+    session: publicSession(healed.session),
+    pendingOrgResync: healed.pendingOrgResync,
   };
 }
 
@@ -97,28 +124,22 @@ export const loadCurrentSession = createServerFn({ method: "GET" }).handler(() =
   loadCurrentSessionForRequest(controlPanelBindings(workerEnv), getRequest()),
 );
 
-export const loadPanelNavigation = createServerFn({ method: "GET" }).handler(
-  async (): Promise<PanelNavigationResult> => {
-    const bindings = controlPanelBindings(workerEnv);
-    const loaded = await loadSessionFromRequest(bindings, getRequest());
-    if (!loaded.ok) {
-      return { kind: "unauthenticated" };
-    }
+export async function loadPanelNavigationForRequest(
+  bindings: ControlPanelBindings,
+  request: Request,
+): Promise<PanelNavigationResult> {
+  const healed = await loadHealedSession(bindings, request);
+  if (healed.kind === "unauthenticated") return healed;
+  const principal = publicSession(healed.session);
+  return {
+    kind: "authenticated",
+    session: principal,
+    navigation: await resolveNavigation(principal, createEnvironmentResolver(healed.repo)),
+  };
+}
 
-    const repo = createRepository(bindings.DB);
-    const session = await rehydrateLegacySession(
-      repo,
-      bindings.SESSION_STORE,
-      loaded.tokenHash,
-      loaded.session,
-    );
-    const principal = publicSession(session);
-    return {
-      kind: "authenticated",
-      session: principal,
-      navigation: await resolveNavigation(principal, createEnvironmentResolver(repo)),
-    };
-  },
+export const loadPanelNavigation = createServerFn({ method: "GET" }).handler(() =>
+  loadPanelNavigationForRequest(controlPanelBindings(workerEnv), getRequest()),
 );
 
 export const loadScopedSession = createServerFn({ method: "GET" })

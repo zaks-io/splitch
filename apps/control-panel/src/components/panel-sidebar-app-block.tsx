@@ -57,7 +57,7 @@ export function PanelSidebarAppBlock({ app, currentOrg, orgSlug }: PanelSidebarA
       {scope && currentApp ? (
         <div className="flex flex-wrap items-center gap-1 px-1.5">
           <span className="mr-1 font-mono text-[10px] text-muted-foreground uppercase tracking-[0.14em]">
-            Env
+            Environment
           </span>
           {currentApp.environments.map((environment) => {
             const active = environment.env === scope.env;

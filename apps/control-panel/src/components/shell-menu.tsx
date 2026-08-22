@@ -64,18 +64,21 @@ export function ShellMenuGroup({ children, label }: { children: ReactNode; label
 export function RouterAnchor({
   href,
   onClick,
+  target,
   ...props
 }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) {
   const router = useRouter();
   const navigate = (event: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(event);
+    if (event.defaultPrevented) return;
+    if (target && target !== "_self") return;
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
       return;
     event.preventDefault();
     router.history.push(href);
   };
 
-  return <a {...props} href={href} onClick={navigate} />;
+  return <a {...props} href={href} target={target} onClick={navigate} />;
 }
 
 export function ShellMenuLink({ children, href }: { children: ReactNode; href: string }) {

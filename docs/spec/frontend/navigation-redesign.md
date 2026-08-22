@@ -1,6 +1,6 @@
 # Control Panel navigation redesign
 
-Status: agreed 2026-08-21; Slice 1 shipped 2026-08-21 (#TBD); Slices 2–4 not started. Clickable mocks
+Status: agreed 2026-08-21; Slice 1 shipped 2026-08-21 (#393); Slices 2–4 not started. Clickable mocks
 that this doc describes live outside the repo (`~/.t3/userdata/attachments/splitch-nav-mocks`, served
 locally); this doc is the durable record. When it disagrees with `navigation-and-ia.md` or
 `screen-inventory.md`, this doc wins and those two are amended as each slice ships.
@@ -79,7 +79,7 @@ resolve at the loader; the Worker is the guardian; hydration gates interactive S
 
 ## The new IA
 
-```
+```text
 /                               chooser (0 or 2+ Orgs) or redirect to /{org} (exactly 1)
 /{org}                          Home: Continue, Apps table, Needs-you
 /{org}/members                  Members (same shell)
@@ -269,7 +269,7 @@ merged before the next starts unless marked parallel.
 ### Phase 2 (not started, in priority order)
 
 - Flags master-detail on the Environment page (Direction D).
-- Experiments list: inline Start / Stop / Decide / Results on rows; Environment segmented control;
+- Experiments list: inline Start / End / Conclude / Results on rows; Environment segmented control;
   "All environments" view for Experiments.
 - Needs-you additions: decision-ready Runs, promotion drift, pending Approval Requests (each needs a
   new Org-wide read in the Control Plane and the SDK; each is a parity operation, so CLI and MCP
