@@ -43,9 +43,9 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 | Tool                          | Method | Path                           |
 | ----------------------------- | ------ | ------------------------------ |
 | `organizations_list`          | GET    | `/orgs`                        |
+| `organizations_create`        | POST   | `/orgs`                        |
 | `organizations_get`           | GET    | `/orgs/:orgId`                 |
 | `organizations_update`        | PATCH  | `/orgs/:orgId`                 |
-| `organizations_delete`        | DELETE | `/orgs/:orgId`                 |
 | `organization_members_list`   | GET    | `/orgs/:orgId/members`         |
 | `organization_members_add`    | POST   | `/orgs/:orgId/members`         |
 | `organization_members_update` | PATCH  | `/orgs/:orgId/members/:userId` |
@@ -61,6 +61,15 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 | `app_attention_rollup_get` | GET    | `/apps/:appId/attention-rollup` |
 | `apps_update`              | PATCH  | `/apps/:appId`                  |
 | `apps_delete`              | DELETE | `/apps/:appId`                  |
+
+### App members
+
+| Tool                 | Method | Path                           |
+| -------------------- | ------ | ------------------------------ |
+| `app_members_list`   | GET    | `/apps/:appId/members`         |
+| `app_members_add`    | POST   | `/apps/:appId/members`         |
+| `app_members_update` | PATCH  | `/apps/:appId/members/:userId` |
+| `app_members_remove` | DELETE | `/apps/:appId/members/:userId` |
 
 ### Environments
 
@@ -153,13 +162,11 @@ Targeting Rule CRUD is intentionally not exposed until there is a separate endpo
 
 ### Experiment Runs (Experiment sub-resource, per-Environment)
 
-| Tool                                   | Method | Path                                                                                                                  | Note                                             |
-| -------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `runs_list`                            | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs`                                                     | —                                                |
-| `runs_get`                             | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId`                                              | —                                                |
-| `runs_end`                             | POST   | `/apps/:appId/envs/:environmentId/runs/:runId/end`                                                                    | Standalone End; no conclusion or winner          |
-| `runs_conclude`                        | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId/conclusions`                                  | Ends, records evidence, creates Approval Request |
-| `conclusion_promotion_requests_create` | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId/conclusions/:conclusionId/promotion-requests` | Re-proposes only after stale target drift        |
+| Tool        | Method | Path                                                                     | Note                                    |
+| ----------- | ------ | ------------------------------------------------------------------------ | --------------------------------------- |
+| `runs_list` | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs`        | —                                       |
+| `runs_get`  | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId` | —                                       |
+| `runs_end`  | POST   | `/apps/:appId/envs/:environmentId/runs/:runId/end`                       | Standalone End; no conclusion or winner |
 
 ### Metrics
 
@@ -212,28 +219,17 @@ the credential their code holds.
 
 ### Analytics
 
-| Tool                                   | Method | Path                                                                                          |
-| -------------------------------------- | ------ | --------------------------------------------------------------------------------------------- |
-| `organization_usage_get`               | GET    | `/orgs/:orgId/usage`                                                                          |
-| `experiment_results_get`               | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results`                          |
-| `experiment_results_post`              | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results`                          |
-| `experiment_decision_diagnostics_post` | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId/decision-diagnostics` |
-| `web_analytics_overview_get`           | GET    | `/apps/:appId/envs/:environmentId/web-analytics/overview`                                     |
-| `web_analytics_sessions_list`          | GET    | `/apps/:appId/envs/:environmentId/web-analytics/sessions`                                     |
-| `web_analytics_session_events_list`    | GET    | `/apps/:appId/envs/:environmentId/web-analytics/sessions/:sessionIdHash/events`               |
-| `web_analytics_vitals_get`             | GET    | `/apps/:appId/envs/:environmentId/web-analytics/vitals`                                       |
+| Tool                              | Method | Path                                                                 |
+| --------------------------------- | ------ | -------------------------------------------------------------------- |
+| `organization_usage_get`          | GET    | `/orgs/:orgId/usage`                                                 |
+| `experiment_results_get`          | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results` |
+| `experiment_results_post`         | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results` |
+| `environment_exposure_status_get` | GET    | `/apps/:appId/envs/:environmentId/exposure-status`                   |
 
-### Privacy data
-
-| Tool                          | Method | Path                                   |
-| ----------------------------- | ------ | -------------------------------------- |
-| `current_user_privacy_export` | POST   | `/users/me/privacy/export`             |
-| `current_user_delete`         | DELETE | `/users/me`                            |
-| `organization_privacy_export` | POST   | `/orgs/:orgId/privacy/export`          |
-| `app_privacy_export`          | POST   | `/apps/:appId/privacy/export`          |
-| `entity_privacy_export`       | POST   | `/apps/:appId/privacy/entities/export` |
-| `entity_privacy_delete`       | POST   | `/apps/:appId/privacy/entities/delete` |
-| `privacy_requests_get`        | GET    | `/privacy/requests/:requestId`         |
+Control-plane HTTP routes that are not implemented end to end are not advertised as MCP tools or
+CLI commands. This currently excludes Organization deletion and the privacy export/deletion routes;
+the route contracts remain typed so direct HTTP callers receive a stable unavailable response rather
+than discovering a tool that cannot complete.
 
 ## Error handling in MCP tools
 
@@ -279,16 +275,19 @@ Tinybird-backed lists. Canonical contract in
 
 ## Idempotency on retried creates
 
-Non-idempotent control-plane creates (`apps_create`, `experiments_create`,
-`flag_variants_create`, `metrics_create`, `segments_create`, `api_keys_create`) accept an optional
-`idempotency_key` (caller-supplied, derived from the route body schema). The Worker records the key
-and returns the **same** resource on a retry with the same key, so an agent retrying after a network
-timeout never double-creates. Omitting the key preserves at-most-once-per-call semantics only; agents
-that retry should always supply one. (Mirrors the auth-claim idempotency key, auth-doors.md.)
+Retryable control-plane creates (`apps_create`, `event_definitions_create`,
+`event_definition_versions_create`, `experiments_create`, `metrics_create`, `segments_create`, and
+`api_keys_create`) accept an optional `idempotency_key` (caller-supplied, derived from the route body
+schema). The Worker records the key and returns the **same** resource on an exact retry, so an agent
+retrying after a network timeout never double-creates. Omitting the key preserves
+at-most-once-per-call semantics only; agents that retry should always supply one. `segments_update`
+also accepts an optional key because a Policy-gated Conditions edit may create an Approval Request.
+(Mirrors the auth-claim idempotency key, auth-doors.md.)
 
 Approval-controlled mutations (`experiments_start`, `flag_config_update`,
-`flag_targeting_rules_replace`, `flags_promote`, and App-level Variant value updates) require
-`idempotency_key`, as do the catalog deletes `flags_delete` and `flag_variants_delete`. It owns
+`flag_targeting_rules_replace`, `flags_promote`, and App-level Variant creates and updates) require
+`idempotency_key`, as do `flags_create` and the catalog deletes `flags_delete` and
+`flag_variants_delete`. It owns
 durable Approval Request creation and any inline Review. Review calls also require their own key.
 Exact retries return the stored result; a key reused with a different payload fails with
 `IDEMPOTENCY_KEY_CONFLICT`.

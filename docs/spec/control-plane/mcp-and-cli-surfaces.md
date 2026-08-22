@@ -131,27 +131,22 @@ splitch orgs get <org_id>
 splitch apps list --org <org_id>
 splitch apps create --org <org_id> --name <name>   # provisions dev + prod Environments (DX default)
 splitch envs list [--app <app_id>]                  # [ctx]
-splitch envs create [--app <app_id>] --name <name>  # [ctx]
+splitch envs create [--app <app_id>] --key <key> [--name <name>]  # [ctx]
 splitch flags list [--app <app_id>]                 # [ctx]
 splitch flags create [--app <app_id>] --key <key> ...                       # [ctx] App-level definition
 splitch flags promote [--app <app_id>] [--env <environment_id>] <flag_id>   # [ctx] move Flag Configuration into an Env (ADR-0028)
 splitch event-definitions list [--app <app_id>]                              # [ctx] App-level
-splitch event-definitions create [--app <app_id>] --name <event_name> ...    # [ctx]
-splitch event-definitions versions create [--app <app_id>] <event_definition_id> --schema <file> # [ctx] immutable publish
-splitch event-definitions versions create [--app <app_id>] <event_definition_id> --web-adapter <page_view|web_vital|browser_error> --entity-type <type|none> # [ctx] expand canonical template, immutable publish
+splitch event-definitions create [--app <app_id>] --body-json '{"name":"checkout","family":"metric","displayName":"Checkout"}' # [ctx]
+splitch event-definition-versions create [--app <app_id>] <event_definition_id> --body-json '{"entityType":"user","fields":[],"dimensions":[]}' # [ctx] immutable publish
 splitch metrics list [--app <app_id>]                                        # [ctx]
-splitch metrics create [--app <app_id>] --event-definition <id> [--field <name>] ... # [ctx]
+splitch metrics create [--app <app_id>] --body-json '{"name":"Conversion","key":"conversion","kind":"binomial","eventDefinitionId":"<id>"}' # [ctx]
 splitch env-policy get [--app <app_id>] [--env <environment_id>]            # [ctx]
 splitch env-policy set [--app <app_id>] [--env <environment_id>] ...        # [ctx] per-change-type confirm gates (ADR-0029)
 splitch experiments create [--app <app_id>] [--env <environment_id>] ...    # [ctx]
 splitch experiments start [--app <app_id>] [--env <environment_id>] <experiment_id>  # [ctx]
 splitch runs end [--app <app_id>] [--env <environment_id>] <run_id>         # [ctx]
 splitch flags test-eval [--app <app_id>] [--env <environment_id>] <flag_id> --targeting-key <key> [--context-json <json>]  # [ctx] control-plane, full reason
-splitch flags verify [--app <app_id>] [--env <environment_id>] <flag_id> --targeting-key <key> [--context-json <json>]     # [ctx] setup confirmation (ADR-0037)
-splitch web-analytics overview [--app <app_id>] [--env <environment_id>] --from <timestamp> --to <timestamp> --interval <hour|day> # [ctx]
-splitch web-analytics sessions list [--app <app_id>] [--env <environment_id>] --from <timestamp> --to <timestamp> [--event-name <name>] [--association <anonymous|associated|ambiguous>] # [ctx]
-splitch web-analytics sessions events [--app <app_id>] [--env <environment_id>] <session_id_hash> --from <timestamp> --to <timestamp> # [ctx]
-splitch web-analytics vitals [--app <app_id>] [--env <environment_id>] --from <timestamp> --to <timestamp>        # [ctx]
+splitch flags verify [--app <app_id>] [--env <environment_id>] <flag_key> --targeting-key <key> [--context-json <json>]     # [ctx] setup confirmation (ADR-0037)
 splitch client-key get [--app <app_id>] [--env <environment_id>]            # [ctx]
 splitch api-keys create [--app <app_id>] [--env <environment_id>]           # [ctx]
 splitch api-keys revoke [--app <app_id>] [--env <environment_id>] <key_id>  # [ctx]
