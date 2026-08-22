@@ -12,7 +12,9 @@ import { tokenHash as hashOpaqueToken } from "./session-cookie";
 // by `loadCurrentSessionForRequest`, the function under test here.
 vi.mock("cloudflare:workers", () => ({ env: {} }));
 
-const { loadCurrentSessionForRequest } = await import("./session-functions");
+const { loadCurrentSessionForRequest, loadPanelNavigationForRequest } = await import(
+  "./session-functions"
+);
 
 /**
  * The loader-level proof for SPL-203's self-heal (round 2, Blocker 2),
@@ -65,6 +67,36 @@ function requestWithSessionCookie(): Request {
     headers: { cookie: `${SESSION_COOKIE_NAME}=${TOKEN}` },
   });
 }
+
+describe("loadPanelNavigationForRequest", () => {
+  it("re-attempts a pending Organization resync before resolving navigation, so Organization screens do not render stale navigation forever", async () => {
+    await seedOrganization(bindings.DB, "org_000", "org-000");
+    const stale: StoredSession = {
+      version: 2,
+      userId: "user_cap",
+      workosSessionId: "session_cap",
+      expiresAt: Math.floor(Date.now() / 1000) + 3_600,
+      orgs: [],
+    };
+    await refreshSession(bindings.SESSION_STORE, tokenHash, stale);
+    await markPendingResync(bindings.SESSION_STORE, tokenHash, {
+      resource: "organization",
+      slug: "org-000",
+      reason: "unknown Organization role in session materialization",
+      remedy: "retry",
+    });
+
+    const result = await loadPanelNavigationForRequest(bindings, requestWithSessionCookie());
+
+    if (result.kind !== "authenticated") {
+      throw new Error(`expected kind "authenticated", got "${result.kind}"`);
+    }
+    // Mutation target: route `loadPanelNavigationForRequest` around
+    // `loadHealedSession` (rehydrate only) and both assertions fail.
+    expect(result.navigation.orgs.map((org) => org.orgSlug)).toContain("org-000");
+    expect(await readPendingResync(bindings.SESSION_STORE, tokenHash, "organization")).toBeNull();
+  }, 20_000);
+});
 
 describe("loadCurrentSessionForRequest", () => {
   it("re-attempts a pending Organization resync on load, returning the previously-missing Organization and clearing the marker", async () => {

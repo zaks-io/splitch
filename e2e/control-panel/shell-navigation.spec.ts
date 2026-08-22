@@ -60,7 +60,7 @@ test.describe("Honest Control Panel shell navigation", () => {
         page.locator("[data-slot='error-page']"),
         `${destination.label} (${destination.href}) renders product UI, not an error surface`,
       ).toHaveCount(0);
-      const main = page.locator("[data-app-shell='ready'] > div > main");
+      const main = page.locator("[data-panel-main]");
       await expect(
         main,
         `${destination.label} (${destination.href}) renders the App shell`,
@@ -79,23 +79,43 @@ test.describe("Honest Control Panel shell navigation", () => {
     await captureThemeScreenshots(page, testInfo, "honest-shell-navigation");
   });
 
-  test("keeps development-only surfaces out of the hosted product header", async ({ page }) => {
-    for (const path of ["/", "/acme-labs/checkout-api/dev"]) {
-      await page.goto(path);
-      const header = page.locator("body > div > header").first();
-      await expect(header).toBeVisible();
-      await expect(header.getByRole("link", { name: /kitchen/i })).toHaveCount(0);
-      await expect(header.locator("a[href='/kitchen-sink']")).toHaveCount(0);
-      expect(
-        await header
-          .getByRole("link")
-          .evaluateAll((links) => links.map((link) => link.getAttribute("href"))),
-      ).toEqual(["/"]);
-      // Sign out is a POST submit, never a link: a link is prefetchable and a
-      // prefetch would sign the operator out (SPL-227).
-      await expect(header.locator("form[action='/auth/logout'][method='post']")).toHaveCount(1);
-      await expect(header.locator("a[href='/auth/logout']")).toHaveCount(0);
-    }
+  test("keeps development-only surfaces out of the hosted product shell", async ({ page }) => {
+    await page.goto("/");
+    const chooserMain = page.locator("main").first();
+    await expect(chooserMain).toBeVisible();
+    await expect(chooserMain.getByRole("link", { name: /kitchen/i })).toHaveCount(0);
+    await expect(chooserMain.locator("a[href='/kitchen-sink']")).toHaveCount(0);
+    // Sign out is a POST submit, never a link: a link is prefetchable and a
+    // prefetch would sign the operator out (SPL-227).
+    await expect(chooserMain.locator("form[action='/auth/logout'][method='post']")).toHaveCount(1);
+
+    await page.goto("/acme-labs/checkout-api/dev");
+    const sidebar = page.locator("[data-panel-sidebar]");
+    await expect(sidebar).toBeVisible();
+    await expect(sidebar.getByRole("link", { name: /kitchen/i })).toHaveCount(0);
+    await expect(sidebar.locator("a[href='/kitchen-sink']")).toHaveCount(0);
+    await expect(sidebar.locator("a[href='/auth/logout']")).toHaveCount(0);
+    await expect(sidebar.locator("form[action='/auth/logout'][method='post']")).toHaveCount(1);
+    const organizationMenu = sidebar
+      .locator("details")
+      .filter({ has: page.getByText("Organization", { exact: true }) });
+    const organizationHrefs = new Set(
+      await organizationMenu
+        .locator("a[href]")
+        .evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? "")),
+    );
+    const sidebarHrefs = await sidebar
+      .locator("a[href]")
+      .evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""));
+    expect(sidebarHrefs.length).toBeGreaterThan(0);
+    // App and Organization-section destinations stay in the active Organization.
+    // The Organization switcher is the deliberate exception because changing
+    // Organizations is its entire job.
+    expect(
+      sidebarHrefs
+        .filter((href) => !organizationHrefs.has(href))
+        .every((href) => href.startsWith("/acme-labs")),
+    ).toBe(true);
 
     // Hiding the link is a UI decision only: the development surface itself is
     // untouched and the Worker still answers it exactly as before.
@@ -149,9 +169,13 @@ test.describe("Honest Control Panel shell navigation", () => {
     await page.goto("/acme-labs/checkout-api/dev");
     await waitForHydration(page);
 
+    await page.locator("[data-panel-sidebar] details").evaluateAll((menus) => {
+      for (const menu of menus) menu.setAttribute("open", "");
+    });
+
     const expected = new Set(
       await page
-        .locator("body > div > header a, [aria-label='App sections'] a")
+        .locator("[data-panel-sidebar] a")
         .evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? "")),
     );
     expect(expected.size).toBeGreaterThan(0);

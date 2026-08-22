@@ -16,9 +16,9 @@ export type NavigationDestination = {
 };
 
 export const appSectionRegistry = [
-  { label: "Overview", to: "/$orgSlug/$appSlug/$env", status: "shipped" },
   { label: "Flags", to: "/$orgSlug/$appSlug/$env/flags", status: "shipped" },
   { label: "Experiments", to: "/$orgSlug/$appSlug/$env/experiments", status: "shipped" },
+  { label: "Overview", to: "/$orgSlug/$appSlug/$env", status: "shipped" },
   {
     label: "Segments",
     to: "/$orgSlug/$appSlug/$env/segments",
@@ -62,7 +62,7 @@ const APP_SCOPE_PREFIX = "/$orgSlug/$appSlug/$env";
  * treated as shipped — the disguised-default shape ADR-0036 bans. Fail loud
  * instead of shipping that gap quietly.
  */
-function destinationSection(to: string): string {
+export function destinationSection(to: string): string {
   if (!to.startsWith(APP_SCOPE_PREFIX)) {
     throw new Error(
       `appSectionRegistry entry "${to}" is outside the App scope (${APP_SCOPE_PREFIX}); ` +

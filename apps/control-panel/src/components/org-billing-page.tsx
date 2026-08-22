@@ -7,15 +7,10 @@ import type { OrgBillingView } from "#lib/org-billing";
 export function OrgBillingPage({ view }: { view: OrgBillingView }) {
   return (
     <div className="grid gap-6" data-billing-page="ready">
-      <div className="grid gap-2">
-        {/* The Org shell frame owns the `h1` (the Organization); this screen is
-            the Billing section within it. */}
-        <h2 className="font-semibold text-3xl text-foreground tracking-tight">Billing & Usage</h2>
-        <p className="max-w-2xl text-muted-foreground text-sm leading-6">
-          Every Flag Evaluation this Organization served this month, across all of its Apps and
-          Environments.
-        </p>
-      </div>
+      <p className="max-w-2xl text-muted-foreground text-sm leading-6">
+        Every Flag Evaluation this Organization served this month, across all of its Apps and
+        Environments.
+      </p>
 
       <OrgUsageCard usage={view.usage} />
 

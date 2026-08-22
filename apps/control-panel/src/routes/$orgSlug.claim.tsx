@@ -28,45 +28,53 @@ function ClaimRoute() {
 
   if (!organization) {
     return (
-      <main className="mx-auto grid max-w-xl gap-6">
-        <Alert variant="destructive">
-          <AlertTitle>access_denied</AlertTitle>
-          <AlertDescription>You are not a member of this Organization.</AlertDescription>
-        </Alert>
-      </main>
+      <div className="mx-auto w-full max-w-6xl px-6 py-8">
+        <main className="mx-auto grid max-w-xl gap-6">
+          <Alert variant="destructive">
+            <AlertTitle>access_denied</AlertTitle>
+            <AlertDescription>You are not a member of this Organization.</AlertDescription>
+          </Alert>
+        </main>
+      </div>
     );
   }
 
   if (!organization.isProvisional) {
     return (
-      <main className="mx-auto grid max-w-xl gap-6">
-        <Alert>
-          <AlertTitle>Organization already claimed</AlertTitle>
-          <AlertDescription>This Organization no longer needs the claim ceremony.</AlertDescription>
-        </Alert>
-      </main>
+      <div className="mx-auto w-full max-w-6xl px-6 py-8">
+        <main className="mx-auto grid max-w-xl gap-6">
+          <Alert>
+            <AlertTitle>Organization already claimed</AlertTitle>
+            <AlertDescription>
+              This Organization no longer needs the claim ceremony.
+            </AlertDescription>
+          </Alert>
+        </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto grid max-w-xl gap-6">
-      <section className="grid gap-2">
-        <h1 className="font-semibold text-3xl text-foreground">Claim Organization</h1>
-        <p className="text-muted-foreground">
-          Verify your email before this demo workspace expires {organization.demoExpiresAt}.
-        </p>
-      </section>
-      <Card>
-        <CardHeader>
-          <CardTitle>Keep your work</CardTitle>
-          <CardDescription>
-            The claim ceremony converts this provisional Organization in place.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ClaimCeremony orgSlug={organization.orgSlug} />
-        </CardContent>
-      </Card>
-    </main>
+    <div className="mx-auto w-full max-w-6xl px-6 py-8">
+      <main className="mx-auto grid max-w-xl gap-6">
+        <section className="grid gap-2">
+          <h1 className="font-semibold text-3xl text-foreground">Claim Organization</h1>
+          <p className="text-muted-foreground">
+            Verify your email before this demo workspace expires {organization.demoExpiresAt}.
+          </p>
+        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Keep your work</CardTitle>
+            <CardDescription>
+              The claim ceremony converts this provisional Organization in place.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ClaimCeremony orgSlug={organization.orgSlug} />
+          </CardContent>
+        </Card>
+      </main>
+    </div>
   );
 }

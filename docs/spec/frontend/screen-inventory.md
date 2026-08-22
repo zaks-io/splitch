@@ -36,17 +36,13 @@ error; the MCP server returns the same structured refusal. The safety lives in t
 cannot be skinned away. Where a flow below has a notable terminal/agent shape, it is called out
 inline as **CLI/MCP parity**.
 
-## Two shells
+## One shell
 
-The panel has two nested shells, matching the two URL scope roots:
-
-- **Org shell** — `/{orgSlug}/...`. The App list, org members, billing. **No environment switcher**
-  (environments live under an App). The org switcher (present only for multi-org users) and the
-  user menu live in its top bar.
-- **App shell** — `/{orgSlug}/{appSlug}/{env}/...`. The persistent left sidebar (Flags, Experiments,
-  Web Analytics, Segments, Metrics, Settings) and a top bar carrying all **three switchers** (org,
-  app, environment). Everything below the App root is scoped to `(appId, environmentId)` resolved
-  from the URL.
+One persistent sidebar wraps every authenticated Organization and App screen. The App switcher and
+Environment pills live at the top, App sections follow when an App is active, and the Organization
+block plus user row stay at the bottom. Everything below the App root remains scoped to
+`(appId, environmentId)` resolved from the URL. The shipped hierarchy and slice boundaries are
+pinned in [navigation-redesign.md](./navigation-redesign.md).
 
 ## Org-level screens
 
@@ -599,7 +595,7 @@ result live in the Worker; every skin inherits them.
 
 ## Sources
 
-- [navigation-and-ia.md](./navigation-and-ia.md) — URL spine, sidebar sections, the three switchers
+- [navigation-and-ia.md](./navigation-and-ia.md) — URL spine, sidebar sections, and sidebar controls
 - [ADR-0029](../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md) — Environment Policy, Confirmation/approval levels
 - [ADR-0023](../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md) — three parity skins, invariants in the Worker
 - [ADR-0028](../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md) — catalog App-level, availability per-Environment

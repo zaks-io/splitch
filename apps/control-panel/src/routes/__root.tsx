@@ -2,9 +2,8 @@ import { Toaster } from "@splitch/ui/components/sonner";
 import { TooltipProvider } from "@splitch/ui/components/tooltip";
 import { AppErrorPage } from "@splitch/ui/state/app-error-page";
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
-import { createRootRouteWithContext, HeadContent, Link, Scripts } from "@tanstack/react-router";
+import { createRootRouteWithContext, HeadContent, Scripts } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
-import { SignOutForm } from "#components/sign-out-form";
 import { reportRouteError } from "#lib/panel-observability";
 import { initControlPanelClientSentry } from "#lib/panel-sentry-client";
 import type { ControlPanelRouterContext } from "#lib/router-context";
@@ -43,33 +42,7 @@ function RootDocument({ children }: { children: ReactNode }) {
       </head>
       <body className="min-h-screen bg-background text-foreground antialiased">
         <TooltipProvider>
-          <div className="flex min-h-screen flex-col">
-            <header className="border-border border-b bg-card">
-              <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-                <Link
-                  to="/"
-                  activeOptions={{ exact: true }}
-                  activeProps={{ className: "text-primary" }}
-                  className="rounded-md font-semibold text-lg focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
-                >
-                  splitch
-                </Link>
-                {/* Product destinations only. The Kitchen Sink is a local
-                    visual-development surface, never a hosted destination. */}
-                <div className="flex items-center gap-2">
-                  <SignOutForm>
-                    <button
-                      className="rounded-md border border-border px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
-                      type="submit"
-                    >
-                      sign out
-                    </button>
-                  </SignOutForm>
-                </div>
-              </nav>
-            </header>
-            <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">{children}</div>
-          </div>
+          <div className="min-h-screen">{children}</div>
           <Toaster />
         </TooltipProvider>
         <Scripts />

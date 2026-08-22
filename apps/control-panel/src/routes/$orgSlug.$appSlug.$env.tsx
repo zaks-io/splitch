@@ -3,8 +3,9 @@ import { AccessDeniedPage } from "@splitch/ui/state/access-denied-page";
 import { NotFoundPage } from "@splitch/ui/state/not-found-page";
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
-import { createFileRoute, notFound } from "@tanstack/react-router";
-import { AppShell } from "#components/app-shell";
+import { createFileRoute, notFound, Outlet } from "@tanstack/react-router";
+import { LiveUpdatesClient } from "#components/live-updates-client";
+import { PanelShell } from "#components/panel-shell";
 import { deferredDestinationAt } from "#lib/app-shell-navigation";
 import {
   AccessDeniedError,
@@ -80,5 +81,29 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
 function AppScopeRoute() {
   const context = Route.useLoaderData();
   const { queryClient } = Route.useRouteContext();
-  return <AppShell context={context} queryClient={queryClient} />;
+  return (
+    <PanelShell
+      markers={{
+        "data-app-shell": "ready",
+        "data-app-id": context.scope.appId,
+        "data-environment-id": context.scope.environmentId,
+      }}
+      rootKey={`${context.scope.appId}:${context.scope.environmentId}`}
+      sidebar={{
+        navigation: context.navigation,
+        org: { orgId: context.scope.orgId, orgSlug: context.scope.orgSlug },
+        app: {
+          appId: context.scope.appId,
+          appSlug: context.scope.appSlug,
+          env: context.scope.env,
+        },
+        userId: context.session.userId,
+      }}
+    >
+      <LiveUpdatesClient queryClient={queryClient} scope={context.scope} />
+      <div className="px-8 py-6">
+        <Outlet />
+      </div>
+    </PanelShell>
+  );
 }

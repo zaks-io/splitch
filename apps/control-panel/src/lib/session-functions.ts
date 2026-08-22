@@ -5,8 +5,10 @@ import { getRequest } from "@tanstack/react-start/server";
 import { type ControlPanelBindings, controlPanelBindings } from "./bindings";
 import {
   AccessDeniedError,
+  resolveNavigation,
   resolveScopedLoaderContext,
   ScopedNotFoundError,
+  type ScopeNavigation,
   type ScopeParams,
 } from "./loader-context";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
@@ -29,6 +31,14 @@ export type ScopedSessionResult =
   | { kind: "forbidden" }
   | { kind: "notFound" };
 
+export type PanelNavigationResult =
+  | {
+      kind: "authenticated";
+      session: SessionPrincipal;
+      navigation: ScopeNavigation;
+    }
+  | { kind: "unauthenticated" };
+
 /**
  * `bindings`/`request` are explicit parameters (rather than read internally
  * from `workerEnv`/`getRequest()`) so this can be called directly in a test
@@ -36,10 +46,23 @@ export type ScopedSessionResult =
  * behaves correctly through the framework's build-time transform, which
  * plain vitest does not apply.
  */
-export async function loadCurrentSessionForRequest(
+type HealedSession =
+  | {
+      kind: "authenticated";
+      repo: ReturnType<typeof createRepository>;
+      session: Awaited<ReturnType<typeof rehydrateLegacySession>>;
+      pendingOrgResync: StaleSession | null;
+    }
+  | { kind: "unauthenticated" };
+
+/**
+ * Every authenticated Panel load goes through here so the pending-Organization
+ * self-heal runs on each of them, not only on the `/` chooser.
+ */
+async function loadHealedSession(
   bindings: ControlPanelBindings,
   request: Request,
-): Promise<CurrentSessionResult> {
+): Promise<HealedSession> {
   const loaded = await loadSessionFromRequest(bindings, request);
   if (!loaded.ok) {
     return { kind: "unauthenticated" };
@@ -76,15 +99,47 @@ export async function loadCurrentSessionForRequest(
 
   return {
     kind: "authenticated",
-    session: publicSession(session),
+    repo,
+    session,
     pendingOrgResync: pendingAfter
       ? { slug: pendingAfter.slug, reason: pendingAfter.reason, remedy: pendingAfter.remedy }
       : null,
   };
 }
 
+export async function loadCurrentSessionForRequest(
+  bindings: ControlPanelBindings,
+  request: Request,
+): Promise<CurrentSessionResult> {
+  const healed = await loadHealedSession(bindings, request);
+  if (healed.kind === "unauthenticated") return healed;
+  return {
+    kind: "authenticated",
+    session: publicSession(healed.session),
+    pendingOrgResync: healed.pendingOrgResync,
+  };
+}
+
 export const loadCurrentSession = createServerFn({ method: "GET" }).handler(() =>
   loadCurrentSessionForRequest(controlPanelBindings(workerEnv), getRequest()),
+);
+
+export async function loadPanelNavigationForRequest(
+  bindings: ControlPanelBindings,
+  request: Request,
+): Promise<PanelNavigationResult> {
+  const healed = await loadHealedSession(bindings, request);
+  if (healed.kind === "unauthenticated") return healed;
+  const principal = publicSession(healed.session);
+  return {
+    kind: "authenticated",
+    session: principal,
+    navigation: await resolveNavigation(principal, createEnvironmentResolver(healed.repo)),
+  };
+}
+
+export const loadPanelNavigation = createServerFn({ method: "GET" }).handler(() =>
+  loadPanelNavigationForRequest(controlPanelBindings(workerEnv), getRequest()),
 );
 
 export const loadScopedSession = createServerFn({ method: "GET" })

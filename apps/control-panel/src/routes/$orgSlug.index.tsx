@@ -1,46 +1,64 @@
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { createFileRoute } from "@tanstack/react-router";
 import { OrgAppListPage } from "#components/org-app-list-page";
-import { OrgShell } from "#components/org-shell";
+import { PanelPageHeader } from "#components/panel-page-header";
+import { PanelShell } from "#components/panel-shell";
 import { loginRedirect } from "#lib/login-redirect";
 import { loadOrgAppList } from "#lib/org-app-list-functions";
-import { loadCurrentSession } from "#lib/session-functions";
+import { loadPanelNavigation } from "#lib/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/")({
   loader: async ({ location, params }) => {
-    const [appList, session] = await Promise.all([
+    const [appList, panel] = await Promise.all([
       loadOrgAppList({ data: params.orgSlug }),
-      loadCurrentSession(),
+      loadPanelNavigation(),
     ]);
-    if (appList.kind === "unauthenticated" || session.kind === "unauthenticated") {
+    if (appList.kind === "unauthenticated" || panel.kind === "unauthenticated") {
       throw loginRedirect(location.href);
     }
     return {
       view: appList.kind === "ok" ? appList.view : null,
-      // The switcher lists every Organization the user is in, which is a session
-      // fact rather than a property of the Organization being viewed.
-      orgs: session.session.orgs.map((org) => ({ orgId: org.orgId, orgSlug: org.orgSlug })),
-      userId: session.session.userId,
+      panel,
     };
   },
   component: OrganizationRoute,
 });
 
 function OrganizationRoute() {
-  const { orgs, userId, view } = Route.useLoaderData();
+  const { panel, view } = Route.useLoaderData();
 
   if (!view) {
     return (
-      <Alert className="mx-auto max-w-xl" variant="destructive">
-        <AlertTitle>Access denied</AlertTitle>
-        <AlertDescription>You are not a member of this Organization.</AlertDescription>
-      </Alert>
+      <div className="mx-auto w-full max-w-6xl px-6 py-8">
+        <Alert className="mx-auto max-w-xl" variant="destructive">
+          <AlertTitle>Access denied</AlertTitle>
+          <AlertDescription>You are not a member of this Organization.</AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
   return (
-    <OrgShell orgRole={view.orgRole} orgSlug={view.orgSlug} orgs={orgs} userId={userId}>
-      <OrgAppListPage view={view} />
-    </OrgShell>
+    <PanelShell
+      markers={{ "data-org-shell": "ready", "data-org": view.orgSlug }}
+      sidebar={{
+        navigation: panel.navigation,
+        org: { orgId: view.orgId, orgSlug: view.orgSlug },
+        userId: panel.session.userId,
+      }}
+    >
+      <PanelPageHeader
+        actions={
+          <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.14em]">
+            {view.orgRole}
+          </span>
+        }
+        crumb="Organization"
+        title={view.orgSlug}
+      />
+      <div className="px-8 py-6">
+        <OrgAppListPage view={view} />
+      </div>
+    </PanelShell>
   );
 }

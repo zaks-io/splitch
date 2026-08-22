@@ -89,6 +89,17 @@ describe("Visible navigation destinations", () => {
     );
   });
 
+  it("orders App sections by operator use", () => {
+    expect(visibleAppSections.map((section) => section.label)).toEqual([
+      "Flags",
+      "Experiments",
+      "Overview",
+      "Segments",
+      "Metrics",
+      "Settings",
+    ]);
+  });
+
   it("keeps the Kitchen Sink a local surface, never a hosted product destination", () => {
     // The route stays for visual development; only the hosted header link goes.
     expect(existsSync(`${routesDirectory}kitchen-sink.tsx`)).toBe(true);

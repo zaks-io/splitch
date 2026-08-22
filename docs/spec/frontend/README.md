@@ -11,6 +11,7 @@ both share one `ui` package and the `contracts` package.
 | file                                                                                   | one-line purpose                                                                            |
 | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | [screen-inventory.md](./screen-inventory.md)                                           | The complete UX map: every screen/route, what it shows, the prod-change safety model        |
+| [navigation-redesign.md](./navigation-redesign.md)                                     | One shell, App home as Flags across Environments, Home with Continue and Needs-you, palette |
 | [appid-is-the-spine.md](./appid-is-the-spine.md)                                       | The spine concept: four jobs driven by one URL param, and why not session state             |
 | [session-loader-isolation.md](./session-loader-isolation.md)                           | Cookie format, KV validation, loader context shape, membership check, 403 contract          |
 | [query-key-factory.md](./query-key-factory.md)                                         | Deterministic cache-key hierarchy, factory interface, nudge-to-invalidation mapping         |

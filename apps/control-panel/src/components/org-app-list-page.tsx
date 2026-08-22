@@ -31,16 +31,11 @@ export function OrgAppListPage({ view }: { view: OrgAppListView }) {
         />
       ) : null}
 
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="grid gap-2">
-          {/* The Org shell frame owns the `h1` (the Organization); this screen is
-              the Apps section within it. */}
-          <h2 className="font-semibold text-3xl text-foreground tracking-tight">Apps</h2>
-          <p className="max-w-2xl text-muted-foreground text-sm leading-6">
-            Each card is an Environment picker. Pick the Environment you mean to work in — there is
-            no default, so production is never where you land by accident.
-          </p>
-        </div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <p className="max-w-2xl text-muted-foreground text-sm leading-6">
+          Each card is an Environment picker. Pick the Environment you mean to work in — there is no
+          default, so production is never where you land by accident.
+        </p>
         {hasApps ? <CreateAppDialog orgId={view.orgId} orgRole={view.orgRole} /> : null}
       </div>
 
