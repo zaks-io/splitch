@@ -28,6 +28,7 @@ describe("FlagsMatrixRow", () => {
     ["in-sync", "In sync"],
     ["enabled-differs", "Enabled differs"],
     ["rollout-differs", "Rollout differs"],
+    ["availability-differs", "Availability differs"],
     ["missing-in-target", "Missing in prod"],
     ["missing-in-source", "Missing in dev"],
   ] as const)("renders the %s drift badge", (kind, copy) => {
@@ -80,9 +81,20 @@ function driftCells(kind: DriftKind): [FlagsMatrixCell | null, FlagsMatrixCell |
   if (kind === "missing-in-source") return [null, enabled];
   if (kind === "enabled-differs") return [enabled, cell(false, [25])];
   if (kind === "rollout-differs") return [enabled, cell(true, [50])];
+  if (kind === "availability-differs") return [enabled, cell(true, [25], ["control"])];
   return [enabled, cell(true, [25])];
 }
 
-function cell(enabled: boolean, rolloutPercentages: number[]): FlagsMatrixCell {
-  return { enabled, availableVariantCount: 2, rolloutPercentages, controllingExperiment: null };
+function cell(
+  enabled: boolean,
+  rolloutPercentages: number[],
+  availableVariantNames: string[] = ["control", "treatment"],
+): FlagsMatrixCell {
+  return {
+    enabled,
+    availableVariantCount: availableVariantNames.length,
+    availableVariantNames,
+    rolloutPercentages,
+    controllingExperiment: null,
+  };
 }

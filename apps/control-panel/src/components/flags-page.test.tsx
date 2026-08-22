@@ -19,6 +19,7 @@ describe("Flags page", () => {
             configuration: {
               enabled: true,
               availableVariantCount: 2,
+              availableVariantNames: ["control", "treatment"],
               rolloutPercentages: [25],
               controllingExperiment: null,
             },

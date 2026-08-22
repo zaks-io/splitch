@@ -46,6 +46,7 @@ describe("FlagsMatrixCell", () => {
         cell={{
           enabled: false,
           availableVariantCount: 2,
+          availableVariantNames: ["control", "treatment"],
           rolloutPercentages: [25],
           controllingExperiment: { id: "exp_1", name: "Checkout" },
         }}

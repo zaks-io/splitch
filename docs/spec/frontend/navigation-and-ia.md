@@ -5,7 +5,7 @@
 The App home has two scope segments; every Environment-scoped destination has three. All scope is
 in the URL, never in hidden session state:
 
-```
+```text
 /{orgSlug}/{appSlug}                         App home: Flags across all Environments
 /{orgSlug}/{appSlug}/{env}/{section}/{...}
 ```

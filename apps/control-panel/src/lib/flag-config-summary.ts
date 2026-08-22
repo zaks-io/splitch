@@ -3,6 +3,7 @@ import type { FlagConfigGetOutput } from "@splitch/control-plane-sdk";
 export type FlagConfigSummary = {
   enabled: boolean;
   availableVariantCount: number;
+  availableVariantNames: string[];
   rolloutPercentages: number[];
   controllingExperiment: { id: string; name: string } | null;
 };
@@ -11,6 +12,7 @@ export function flagConfigSummary(config: FlagConfigGetOutput): FlagConfigSummar
   return {
     enabled: config.enabled,
     availableVariantCount: config.availableVariantNames.length,
+    availableVariantNames: [...config.availableVariantNames].sort(),
     rolloutPercentages: config.targetingRules.flatMap((rule) =>
       rule.percentageRollout ? [rule.percentageRollout.percentage] : [],
     ),

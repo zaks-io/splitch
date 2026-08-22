@@ -1,5 +1,5 @@
 import type { ControlPlaneOperationResult, FlagsClient } from "@splitch/control-plane-sdk";
-import { flagConfigSummary, type FlagConfigSummary } from "./flag-config-summary";
+import { type FlagConfigSummary, flagConfigSummary } from "./flag-config-summary";
 
 export type FlagsMatrixCell = FlagConfigSummary;
 
@@ -113,6 +113,7 @@ function configurationCell(
 export type DriftKind =
   | "in-sync"
   | "enabled-differs"
+  | "availability-differs"
   | "rollout-differs"
   | "missing-in-target"
   | "missing-in-source"
@@ -126,7 +127,10 @@ export function classifyDrift(
   if (target === null) return "missing-in-target";
   if (source === null) return "missing-in-source";
   if (source.enabled !== target.enabled) return "enabled-differs";
-  if (!sameNumbers(source.rolloutPercentages, target.rolloutPercentages)) {
+  if (!sameValues(source.availableVariantNames, target.availableVariantNames)) {
+    return "availability-differs";
+  }
+  if (!sameValues(source.rolloutPercentages, target.rolloutPercentages)) {
     return "rollout-differs";
   }
   return "in-sync";
@@ -140,6 +144,6 @@ export function createDelegationEnvironment<T extends { guarded: boolean }>(
   return environment;
 }
 
-function sameNumbers(left: number[], right: number[]): boolean {
+function sameValues<T extends string | number>(left: readonly T[], right: readonly T[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }

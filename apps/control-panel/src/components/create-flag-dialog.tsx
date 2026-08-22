@@ -25,9 +25,12 @@ export function CreateFlagDialog({
     if (nextOpen || !createdKey) return;
 
     const key = createdKey;
-    await router.invalidate();
-    onClosedAfterCreate?.(key);
-    setCreatedKey(undefined);
+    try {
+      await router.invalidate();
+      onClosedAfterCreate?.(key);
+    } finally {
+      setCreatedKey(undefined);
+    }
   }
 
   return (

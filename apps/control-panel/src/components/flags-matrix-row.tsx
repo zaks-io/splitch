@@ -131,6 +131,7 @@ function driftBadge(kind: DriftKind, source: string, target: string) {
   if (kind === "in-sync") return <Badge variant="secondary">In sync</Badge>;
   const copy = {
     "enabled-differs": "Enabled differs",
+    "availability-differs": "Availability differs",
     "rollout-differs": "Rollout differs",
     "missing-in-target": `Missing in ${target}`,
     "missing-in-source": `Missing in ${source}`,

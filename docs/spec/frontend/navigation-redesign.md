@@ -163,7 +163,7 @@ section · n minutes ago`) with a Resume button. Rendered only when known. Sourc
 - Matrix: Flag key (link to the detail page in the first non-prod Environment; the cell's own
   link goes to that Environment's detail), one cell per Environment (Switch + rollout summary +
   Experiment badge, or "Not configured" + Configure link to that Environment's detail page), and a
-  last column "{source} → {target}" with a drift badge (Rollout differs / Enabled differs /
+  last column "{source} → {target}" with a drift badge (Rollout differs / Enabled differs / Availability differs /
   Missing in {target} / In sync) and the Promote link. Source and target follow
   `promotionSources`: target is the last Environment, source the first that is not the target. Apps
   with one Environment render no last column. Apps with three or more Environments show drift

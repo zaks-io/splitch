@@ -4,8 +4,8 @@ import {
   assertMatrixEnvironments,
   classifyDrift,
   createDelegationEnvironment,
-  readFlagsMatrix,
   type FlagsMatrixCell,
+  readFlagsMatrix,
 } from "./flags-matrix-data";
 
 describe("Flags matrix data", () => {
@@ -128,6 +128,9 @@ describe("Flag drift", () => {
     [enabled, disabled, "enabled-differs"],
     [enabled, cell(true, [50]), "rollout-differs"],
     [enabled, cell(true, [25, 50]), "rollout-differs"],
+    [enabled, cell(true, [25], ["control", "holdout"]), "availability-differs"],
+    [enabled, cell(true, [25], ["control"]), "availability-differs"],
+    [enabled, cell(true, [25], ["treatment", "control"]), "in-sync"],
     [enabled, cell(true, [25]), "in-sync"],
   ] as const)("classifies %s and %s as %s", (source, target, expected) => {
     expect(classifyDrift(source, target)).toBe(expected);
@@ -147,10 +150,15 @@ describe("Flag creation delegation", () => {
   });
 });
 
-function cell(enabled: boolean, rolloutPercentages: number[]): FlagsMatrixCell {
+function cell(
+  enabled: boolean,
+  rolloutPercentages: number[],
+  availableVariantNames: string[] = ["control", "treatment"],
+): FlagsMatrixCell {
   return {
     enabled,
-    availableVariantCount: 2,
+    availableVariantCount: availableVariantNames.length,
+    availableVariantNames: [...availableVariantNames].sort(),
     rolloutPercentages,
     controllingExperiment: null,
   };
