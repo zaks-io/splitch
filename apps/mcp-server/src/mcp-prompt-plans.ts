@@ -50,7 +50,7 @@ export function onboardNewAppPlan(orgId: string, appName: string): McpPromptPlan
       ),
       toolMessage(
         "flags_test_eval",
-        "Run a test evaluation to confirm the live Run resolves. A test evaluation records no Exposure. Customer code then evaluates once through the SDK and retries with the same idempotency key.",
+        "Use the Flag key returned by flags_create to confirm the live Run resolves. A test evaluation records no Exposure. Customer code then evaluates once through the SDK and retries with the same idempotency key.",
       ),
       toolMessage(
         "experiment_results_get",
@@ -81,7 +81,7 @@ export function shipAFlagPlan(flagKey: string, variants: string): McpPromptPlan 
       toolMessage("flags_promote", "Promote Variant availability into the active Environment."),
       toolMessage(
         "flags_test_eval",
-        "Confirm the rule set resolves in the active Environment (one-call confidence, no Exposure).",
+        `Use flagKey=${JSON.stringify(flagKey)} to confirm the rule set resolves in the active Environment (one-call confidence, no Exposure).`,
       ),
     ],
   };
@@ -89,6 +89,7 @@ export function shipAFlagPlan(flagKey: string, variants: string): McpPromptPlan 
 
 export function runAnExperimentPlan(
   flagId: string,
+  flagKey: string,
   variants: string,
   allocation: string,
 ): McpPromptPlan {
@@ -104,7 +105,7 @@ export function runAnExperimentPlan(
     messages: [
       message(
         "user",
-        `Run an Experiment on flagId=${flagId} with variants=${JSON.stringify(variants)} and allocation=${JSON.stringify(allocation)}. Execute only the tools named below, in order.`,
+        `Run an Experiment on flagId=${flagId} with flagKey=${JSON.stringify(flagKey)}, variants=${JSON.stringify(variants)}, and allocation=${JSON.stringify(allocation)}. Execute only the tools named below, in order.`,
       ),
       toolMessage(
         "experiments_create",
@@ -116,21 +117,27 @@ export function runAnExperimentPlan(
       ),
       toolMessage(
         "flags_test_eval",
-        "Confirm the live Run resolves before treating the Experiment as live.",
+        `Use flagKey=${JSON.stringify(flagKey)} to confirm the live Run resolves before treating the Experiment as live.`,
       ),
       toolMessage("experiment_results_get", "Poll results for the running Experiment."),
     ],
   };
 }
 
-export function endARunPlan(runId: string): McpPromptPlan {
+export function endARunPlan(runId: string, flagKey: string): McpPromptPlan {
   const operationIds = ["flags_test_eval", "runs_end"] as const;
   return {
     description: promptDescription("end_a_run"),
     operationIds,
     messages: [
-      message("user", `End Run runId=${runId}. Execute only the tools named below, in order.`),
-      toolMessage("flags_test_eval", "Capture the current resolution before Ending the Run."),
+      message(
+        "user",
+        `End Run runId=${runId} for flagKey=${JSON.stringify(flagKey)}. Execute only the tools named below, in order.`,
+      ),
+      toolMessage(
+        "flags_test_eval",
+        `Use flagKey=${JSON.stringify(flagKey)} to capture the current resolution before Ending the Run.`,
+      ),
       toolMessage("runs_end", `End the Run runId=${runId}.`),
       message(
         "assistant",
@@ -140,7 +147,7 @@ export function endARunPlan(runId: string): McpPromptPlan {
   };
 }
 
-export function diagnoseSetupPlan(): McpPromptPlan {
+export function diagnoseSetupPlan(flagKey: string): McpPromptPlan {
   const operationIds = ["client_key_get", "flags_test_eval"] as const;
   return {
     description: promptDescription("diagnose_setup"),
@@ -157,7 +164,7 @@ export function diagnoseSetupPlan(): McpPromptPlan {
       toolMessage("client_key_get", "Fetch the Client Key for the active App."),
       toolMessage(
         "flags_test_eval",
-        "Confirm a known Flag resolves in the active Environment. Report what is and is not wired.",
+        `Use flagKey=${JSON.stringify(flagKey)} to confirm the known Flag resolves in the active Environment. Report what is and is not wired.`,
       ),
     ],
   };

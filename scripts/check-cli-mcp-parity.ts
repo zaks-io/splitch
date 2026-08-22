@@ -171,12 +171,19 @@ const promptPlans = [
     name: "run_an_experiment",
     plan: getPromptPlan("run_an_experiment", {
       flagId: "flag_example",
+      flagKey: "checkout",
       variants: "control,treatment",
       allocation: "50,50",
     }),
   },
-  { name: "end_a_run", plan: getPromptPlan("end_a_run", { runId: "run_example" }) },
-  { name: "diagnose_setup", plan: getPromptPlan("diagnose_setup") },
+  {
+    name: "end_a_run",
+    plan: getPromptPlan("end_a_run", { runId: "run_example", flagKey: "checkout" }),
+  },
+  {
+    name: "diagnose_setup",
+    plan: getPromptPlan("diagnose_setup", { flagKey: "checkout" }),
+  },
   ...recommendedActions.map((action) => ({
     name: `recover_from_error:${action}`,
     plan: getPromptPlan("recover_from_error", {

@@ -90,6 +90,10 @@ function recoverySteps(
     case "CREATE_NEW_RUN":
       return [
         toolMessage(
+          "flags_list",
+          "Find the affected Flag and retain its key for the final test evaluation.",
+        ),
+        toolMessage(
           "experiments_create",
           "Clone into a new draft Run (the change is frozen on the current Run).",
         ),
@@ -100,7 +104,7 @@ function recoverySteps(
         toolMessage("experiments_start", "Start the new draft Run."),
         toolMessage(
           "flags_test_eval",
-          "Confirm the new Run resolves without recording an Exposure.",
+          "Use the Flag key returned by flags_list to confirm the new Run resolves without recording an Exposure.",
         ),
       ];
     case "END_RUNNING_RUN_FIRST": {

@@ -86,9 +86,14 @@ describe("MCP prompts workflows", () => {
       { name: "ship_a_flag", arguments: { flagKey: "checkout", variants: "on,off" } },
       {
         name: "run_an_experiment",
-        arguments: { flagId: "flag_checkout", variants: "a,b", allocation: "50,50" },
+        arguments: {
+          flagId: "flag_checkout",
+          flagKey: "checkout",
+          variants: "a,b",
+          allocation: "50,50",
+        },
       },
-      { name: "end_a_run", arguments: { runId: "run_1" } },
+      { name: "end_a_run", arguments: { runId: "run_1", flagKey: "checkout" } },
       {
         name: "recover_from_error",
         arguments: {
@@ -96,7 +101,7 @@ describe("MCP prompts workflows", () => {
           details: { recommendedAction: "END_RUNNING_RUN_FIRST", runningRunId: "run_live" },
         },
       },
-      { name: "diagnose_setup", arguments: {} },
+      { name: "diagnose_setup", arguments: { flagKey: "checkout" } },
     ];
 
     for (const prompt of cases) {
@@ -133,6 +138,7 @@ describe("MCP prompts workflows", () => {
     }
 
     expect(RECOVERY_OPERATION_IDS.CREATE_NEW_RUN).toEqual([
+      "flags_list",
       "experiments_create",
       "experiments_start",
       "flags_test_eval",
@@ -198,11 +204,12 @@ describe("MCP prompt plan shapes", () => {
     const ship = getPromptPlan("ship_a_flag", { flagKey: "checkout", variants: "on,off" });
     const run = getPromptPlan("run_an_experiment", {
       flagId: "flag_checkout",
+      flagKey: "checkout",
       variants: "a,b",
       allocation: "50,50",
     });
-    const end = getPromptPlan("end_a_run", { runId: "run_1" });
-    const diagnose = getPromptPlan("diagnose_setup");
+    const end = getPromptPlan("end_a_run", { runId: "run_1", flagKey: "checkout" });
+    const diagnose = getPromptPlan("diagnose_setup", { flagKey: "checkout" });
 
     expect(onboard.operationIds).toContain("flags_test_eval");
     expect(onboard.operationIds).toContain("context_use");
@@ -210,6 +217,17 @@ describe("MCP prompt plan shapes", () => {
     expect(run.operationIds).toContain("flags_test_eval");
     expect(end.operationIds[0]).toBe("flags_test_eval");
     expect(diagnose.operationIds.at(-1)).toBe("flags_test_eval");
+  });
+
+  it("gives every flags_test_eval step a usable Flag key source", () => {
+    for (const plan of allPromptPlans()) {
+      const testEvaluationSteps = plan.messages.filter((entry) =>
+        entry.content.text.startsWith("Call `flags_test_eval`:"),
+      );
+      for (const step of testEvaluationSteps) {
+        expect(step.content.text).toMatch(/flagKey=|Flag key returned by/i);
+      }
+    }
   });
 
   it("accepts recover_from_error details as a JSON string", () => {

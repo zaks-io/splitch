@@ -70,6 +70,7 @@ export const PROMPT_DEFINITIONS: readonly McpPromptDefinition[] = [
       "Plan: create an Experiment, Start a Run, confirm resolution with flags_test_eval, then poll experiment_results_get.",
     arguments: [
       { name: "flagId", description: "Flag id the Experiment targets.", required: true },
+      { name: "flagKey", description: "Flag key used for test evaluation.", required: true },
       {
         name: "variants",
         description: "Variant set for the Experiment allocation.",
@@ -82,7 +83,10 @@ export const PROMPT_DEFINITIONS: readonly McpPromptDefinition[] = [
     name: "end_a_run",
     description:
       "Plan: capture current resolution with flags_test_eval, End the Run, and confirm RUN_NOT_RUNNING.",
-    arguments: [{ name: "runId", description: "Run id to End.", required: true }],
+    arguments: [
+      { name: "runId", description: "Run id to End.", required: true },
+      { name: "flagKey", description: "Flag key used for test evaluation.", required: true },
+    ],
   },
   {
     name: "recover_from_error",
@@ -105,13 +109,19 @@ export const PROMPT_DEFINITIONS: readonly McpPromptDefinition[] = [
     name: "diagnose_setup",
     description:
       "Plan: resolve active context, fetch the Client Key, and confirm wiring with flags_test_eval.",
-    arguments: [],
+    arguments: [
+      {
+        name: "flagKey",
+        description: "Known Flag key to test in the active context.",
+        required: true,
+      },
+    ],
   },
 ];
 
 /** Remediation sequences keyed by recommendedAction (mcp-discovery.md Recovery). */
 export const RECOVERY_OPERATION_IDS: Readonly<Record<RecommendedAction, readonly string[]>> = {
-  CREATE_NEW_RUN: ["experiments_create", "experiments_start", "flags_test_eval"],
+  CREATE_NEW_RUN: ["flags_list", "experiments_create", "experiments_start", "flags_test_eval"],
   END_RUNNING_RUN_FIRST: ["runs_end"],
   START_A_RUN: ["experiments_start"],
   EDIT_DRAFT_THEN_START: ["experiments_start"],

@@ -46,15 +46,16 @@ export function getPromptPlan(name: string, args: Record<string, unknown> = {}):
     case "run_an_experiment":
       return runAnExperimentPlan(
         requireString(args, "flagId"),
+        requireString(args, "flagKey"),
         requireString(args, "variants"),
         requireString(args, "allocation"),
       );
     case "end_a_run":
-      return endARunPlan(requireString(args, "runId"));
+      return endARunPlan(requireString(args, "runId"), requireString(args, "flagKey"));
     case "recover_from_error":
       return recoverFromErrorPlan(requireString(args, "errorCode"), args.details);
     case "diagnose_setup":
-      return diagnoseSetupPlan();
+      return diagnoseSetupPlan(requireString(args, "flagKey"));
     default:
       throw new PromptNotFoundError(name);
   }
@@ -72,17 +73,18 @@ export function allPromptPlans(): readonly McpPromptPlan[] {
     getPromptPlan("ship_a_flag", { flagKey: "checkout", variants: "on,off" }),
     getPromptPlan("run_an_experiment", {
       flagId: "flag_example",
+      flagKey: "checkout",
       variants: "control,treatment",
       allocation: "50,50",
     }),
-    getPromptPlan("end_a_run", { runId: "run_example" }),
+    getPromptPlan("end_a_run", { runId: "run_example", flagKey: "checkout" }),
     ...recommendedActions.map((action) =>
       getPromptPlan("recover_from_error", {
         errorCode: "EXPERIMENT_RUNNING",
         details: { recommendedAction: action, retryAfterMs: 1000, runningRunId: "run_example" },
       }),
     ),
-    getPromptPlan("diagnose_setup"),
+    getPromptPlan("diagnose_setup", { flagKey: "checkout" }),
   ];
 }
 

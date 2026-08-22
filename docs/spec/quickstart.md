@@ -157,7 +157,7 @@ Confirm the Flag actually resolves for a Targeting Key **without firing an Expos
 
 ```
 splitch flags verify new-checkout --targeting-key test-user-1 --json     # CLI (data-plane, your SDK credential)
-flags_test_eval { flagKey: "new-checkout", evaluationContext: { targetingKey, idType: "user" } }   # MCP (control-plane, full reason)
+flags_test_eval { flagKey: "new-checkout", evaluationContext: { targetingKey: "test-user-1", idType: "user", attributes: {} } }   # MCP (control-plane, full reason)
 ```
 
 Before step 7, verify returns an inert result that looks like success if you only check the exit code:
