@@ -25,17 +25,20 @@ import {
   rowObject,
   stringField,
 } from "./results-row-fields";
-import { assertAnalysisInputsPresent, materializeRunInput } from "./results-run-input";
+import {
+  assertAnalysisInputsPresent,
+  materializeMetricQueryConfig,
+  materializeRunInput,
+} from "./results-run-input";
+import {
+  assertMetricQueryCoverage,
+  readMetricRows,
+  readPrePeriodRows,
+} from "./results-metric-query";
 import { scopedPipeParams, TinybirdReadError, type TinybirdReadTransport } from "./tinybird";
 
 const RUN_INPUTS_PIPE = "analysis_run_inputs";
 const EXPOSURES_PIPE = "analysis_deduped_exposures";
-// Metric Event ingest is not deployed yet; these pipes are empty scoped stubs
-// (infra/tinybird/pipes/analysis_metric_values.pipe and
-// analysis_pre_period_covariates.pipe). Calling missing pipes returned HTTP 404
-// → SERVICE_UNAVAILABLE and hid valid Exposure-only early-Run results (SPL-290).
-const METRIC_VALUES_PIPE = "analysis_metric_values";
-const PRE_PERIOD_PIPE = "analysis_pre_period_covariates";
 const ACTIVATION_PIPE = "analysis_activation_rows";
 
 interface ResultsDeps {
@@ -100,6 +103,7 @@ export async function readStatsInputFromTinybird(
     throw new ResultsNotFoundError("RUN_NOT_FOUND");
   }
   const run = materializeRunInput(runInput);
+  const metricQueryConfig = materializeMetricQueryConfig(runInput);
   // Every downstream read is keyed on the Run the inputs pipe returned. If that
   // is not the Run the caller asked for, the response would carry one Run's
   // Exposures under another Run's identity, and no pooling guarantee upstream
@@ -121,10 +125,13 @@ export async function readStatsInputFromTinybird(
 
   const hasAnalyzedMetrics =
     run.decision_family.length > 0 || (run.guardrail_decisions?.length ?? 0) > 0;
+  if (hasAnalyzedMetrics) assertMetricQueryCoverage(run, metricQueryConfig);
+  const startedAt = stringField(rowObject(runInput), "started_at");
+  const toTs = tinybirdTimestamp(new Date());
   const [metricRows, prePeriodRows, activationRows] = hasAnalyzedMetrics
     ? await Promise.all([
-        pipeRows(tinybird, METRIC_VALUES_PIPE, params),
-        pipeRows(tinybird, PRE_PERIOD_PIPE, params),
+        readMetricRows(tinybird, params, metricQueryConfig, startedAt, toTs),
+        readPrePeriodRows(tinybird, params, metricQueryConfig, startedAt, toTs),
         pipeRows(tinybird, ACTIVATION_PIPE, params),
       ])
     : [[], [], await pipeRows(tinybird, ACTIVATION_PIPE, params)];
@@ -150,6 +157,13 @@ export async function readStatsInputFromTinybird(
   });
 
   return input;
+}
+
+function tinybirdTimestamp(value: Date): string {
+  if (!Number.isFinite(value.getTime())) {
+    throw new ResultsInputError("analysis_run_inputs.started_at is not a timestamp");
+  }
+  return value.toISOString().replace("T", " ").replace("Z", "");
 }
 
 async function pipeRows(

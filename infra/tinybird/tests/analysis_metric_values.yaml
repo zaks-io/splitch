@@ -5,6 +5,14 @@
   expected_result: |
     {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"in_window":1}
     {"targeting_key_hash":"tk_treatment_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"in_window":1}
+- name: zero_window_is_unbounded
+  description: The documented zero Conversion Window includes a Metric Event after the ordinary three-day boundary.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=0&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"in_window":1}
+    {"targeting_key_hash":"tk_tail","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"in_window":1}
+    {"targeting_key_hash":"tk_treatment_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"in_window":1}
 - name: another_tenant_sees_only_its_own_metric_events
   description: Distinguishable App and Metric Event identities prove that identical Experiment, Run, Environment, and Event Definition values cannot cross the App boundary.
   parameters: "app_id=app_2&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup_app_2&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"

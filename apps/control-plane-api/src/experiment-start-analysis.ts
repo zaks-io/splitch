@@ -1,10 +1,13 @@
 import {
   DEFAULT_CUPED,
   DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT,
+  DEFAULT_CUPED_LOOKBACK_MS,
   DEFAULT_WINSORIZE,
   DEFAULT_WINSORIZE_PCT,
   type GuardrailDecision,
   type MetricRef,
+  type MetricQueryConfig,
+  MetricKindSchema,
   type MetricVarianceConfig,
 } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
@@ -15,6 +18,7 @@ type Result<T> = { ok: true; value: T } | { ok: false; response: Response };
 
 export interface FrozenAnalysisConfig {
   guardrailDecisions: GuardrailDecision[];
+  metricQueryConfig: MetricQueryConfig[];
   metricVarianceConfig: MetricVarianceConfig[];
 }
 
@@ -34,6 +38,7 @@ export async function frozenAnalysisConfig(
   appId: string,
   refs: { metrics: MetricRef[]; guardrailMetrics: MetricRef[] },
   treatments: string[],
+  conversionWindowMs: number,
   requestId: string,
 ): Promise<Result<FrozenAnalysisConfig>> {
   const guardrailIds = uniqueIds(refs.guardrailMetrics);
@@ -87,9 +92,36 @@ export async function frozenAnalysisConfig(
           threshold_locked_at_run_start: true,
         })),
       ),
+      metricQueryConfig: analyzedIds.flatMap((metricId) =>
+        queryConfig(rows, metricId, conversionWindowMs),
+      ),
       metricVarianceConfig: analyzedIds.map((metricId) => varianceConfig(rows, metricId)),
     },
   };
+}
+
+function queryConfig(
+  rows: Map<string, MetricRow>,
+  metricId: string,
+  conversionWindowMs: number,
+): MetricQueryConfig[] {
+  const row = rows.get(metricId);
+  if (!row) throw new Error(`prepareStart: Metric ${metricId} was not loaded`);
+  // Ratio Metrics have no direct Event Definition. Their operand materializer
+  // is a separate query contract; do not invent a source binding for it here.
+  if (row.kind === "ratio") return [];
+  if (!row.eventDefinitionId) {
+    throw new Error(`prepareStart: Metric ${metricId} has no Event Definition`);
+  }
+  return [
+    {
+      metric_id: metricId,
+      metric_type: MetricKindSchema.parse(row.kind),
+      event_definition_id: row.eventDefinitionId,
+      window_duration_ms: conversionWindowMs,
+      cuped_lookback_ms: DEFAULT_CUPED_LOOKBACK_MS,
+    },
+  ];
 }
 
 async function loadMetrics(

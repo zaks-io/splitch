@@ -125,6 +125,23 @@ export const DEFAULT_WINSORIZE = true;
 export const DEFAULT_WINSORIZE_PCT = 99.9;
 export const DEFAULT_CUPED = true;
 export const DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT = 70;
+export const DEFAULT_CUPED_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The immutable source binding used to materialize one Metric for a Run.
+ * Metric rows remain editable after Start, so analysis must never recover these
+ * values from the current Metric or Experiment.
+ */
+export const MetricQueryConfigSchema = z
+  .object({
+    metric_id: MetricIdSchema,
+    metric_type: MetricKindSchema,
+    event_definition_id: z.string(),
+    window_duration_ms: z.number().int().nonnegative(),
+    cuped_lookback_ms: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MetricQueryConfig = z.infer<typeof MetricQueryConfigSchema>;
 
 /**
  * The variance-reduction rule frozen at Run Start for one Metric

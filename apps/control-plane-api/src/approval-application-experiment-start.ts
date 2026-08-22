@@ -64,6 +64,7 @@ export async function applyExperimentStart(
       sampleSizeLocked: decisionSpec.sampleSizeLocked,
       decisionFamily: json(prepared.value.decisionFamily),
       guardrailDecisions: json(prepared.value.guardrailDecisions),
+      metricQueryConfig: json(prepared.value.metricQueryConfig),
       metricVarianceConfig: json(prepared.value.metricVarianceConfig),
       configHash: prepared.value.configHash,
       startedAt: commit.reviewedAt,

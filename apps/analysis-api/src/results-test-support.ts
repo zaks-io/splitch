@@ -28,8 +28,18 @@ export function rowsByPipe(): RowsByPipe {
         horizon: "sequential",
         allocation: JSON.stringify({ control: 50, treatment: 50 }),
         control_variant: "control",
+        started_at: "2026-07-01T00:00:00.000Z",
         decision_family: JSON.stringify([{ metric_id: "conversion", variant: "treatment" }]),
         guardrail_decisions: JSON.stringify([]),
+        metric_query_config: JSON.stringify([
+          {
+            metric_id: "conversion",
+            metric_type: "binomial",
+            event_definition_id: "event_definition_conversion",
+            window_duration_ms: 259_200_000,
+            cuped_lookback_ms: 604_800_000,
+          },
+        ]),
       },
     ],
     analysis_deduped_exposures: [

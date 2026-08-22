@@ -88,7 +88,9 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
       "analysis_activation_rows",
     ]);
   });
+});
 
+describe("GET experiment results production-shaped Run inputs", () => {
   it("expands production MetricRef decision_family and returns ready when Metric rows exist", async () => {
     const { app } = makeResultsHarness(productionShapedRows());
 

@@ -114,6 +114,7 @@ function startInput(approval: ApprovalCommit, startedAt: string) {
       horizon: "sequential",
       decisionFamily: "[]",
       guardrailDecisions: "[]",
+      metricQueryConfig: "[]",
       metricVarianceConfig: "[]",
       configHash: "hash_start",
       startedAt,

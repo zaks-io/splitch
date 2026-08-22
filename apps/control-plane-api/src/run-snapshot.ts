@@ -30,6 +30,7 @@ export interface RunSnapshotRow {
   control_variant_id: string;
   decision_family: string;
   guardrail_decisions: string;
+  metric_query_config: string;
   metric_variance_config: string;
   dimensions: string;
   config_hash: string;
@@ -71,6 +72,7 @@ export function runSnapshotRow(run: RunRow, scope: EnvScope, snapshotAt: string)
     // Start freezes GuardrailDecision[] directly (thresholds and all), so this
     // only has to reject the pre-freeze MetricRef shape rather than convert it.
     guardrail_decisions: analysisGuardrailDecisions(run.guardrailDecisions),
+    metric_query_config: run.metricQueryConfig,
     metric_variance_config: run.metricVarianceConfig,
     // Dimension config has no backing data until SPL-183 lands.
     dimensions: "[]",

@@ -34,7 +34,7 @@ export type StartRunInput = {
     // them optional here and let a caller register a stopping rule or a
     // variance-reduction rule it never chose. The Run is the only home for both
     // (ADR-0014, variance-reduction.md), so Start must state them (ADR-0036).
-    Required<Pick<RunInsert, "horizon" | "metricVarianceConfig">>;
+    Required<Pick<RunInsert, "horizon" | "metricQueryConfig" | "metricVarianceConfig">>;
   endedAt: string;
   updatedAt: string;
   updatedBy?: string | null;

@@ -2,6 +2,7 @@ import type {
   Condition,
   GuardrailDecision,
   MetricRef,
+  MetricQueryConfig,
   MetricVarianceConfig,
   ResolvedTargetingRule,
   TargetingRule,
@@ -44,6 +45,7 @@ export async function prepareStart(
     configHash: string;
     decisionFamily: MetricRef[];
     guardrailDecisions: GuardrailDecision[];
+    metricQueryConfig: MetricQueryConfig[];
     metricVarianceConfig: MetricVarianceConfig[];
   }>
 > {
@@ -73,6 +75,7 @@ export async function prepareStart(
     scope.appId,
     metricsReady.value,
     treatmentVariants(allocation, variants.value),
+    experiment.conversionWindowMs,
     requestId,
   );
   if (!analysis.ok) return analysis;
@@ -95,6 +98,7 @@ export async function prepareStart(
       configHash,
       decisionFamily: metricsReady.value.metrics,
       guardrailDecisions: analysis.value.guardrailDecisions,
+      metricQueryConfig: analysis.value.metricQueryConfig,
       metricVarianceConfig: analysis.value.metricVarianceConfig,
     },
   };

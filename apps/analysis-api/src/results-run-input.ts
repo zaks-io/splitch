@@ -12,7 +12,12 @@
  * and a Run that froze MetricRefs is refused rather than analyzed with no bound.
  */
 
-import type { MetricVarianceConfig, StatsInput } from "@splitch/contracts";
+import {
+  MetricQueryConfigSchema,
+  type MetricVarianceConfig,
+  type MetricQueryConfig,
+  type StatsInput,
+} from "@splitch/contracts";
 import { ResultsInputError, ResultsInsufficientDataError } from "./results-errors";
 import {
   compact,
@@ -53,6 +58,22 @@ export function materializeRunInput(row: unknown): RunFields {
     ),
     dimensions: jsonField(source, "dimensions"),
   }) as RunFields;
+}
+
+export function materializeMetricQueryConfig(row: unknown): MetricQueryConfig[] {
+  const raw = jsonField(rowObject(row), "metric_query_config") ?? [];
+  if (!Array.isArray(raw)) {
+    throw new ResultsInputError("metric_query_config must be a JSON array");
+  }
+  return raw.map((config, index) => {
+    const parsed = MetricQueryConfigSchema.safeParse(config);
+    if (!parsed.success) {
+      throw new ResultsInputError(
+        `metric_query_config[${index}] is invalid: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
+      );
+    }
+    return parsed.data;
+  });
 }
 
 /**
