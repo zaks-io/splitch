@@ -5,6 +5,7 @@ import {
   createDarkLaunchFlag,
   deleteFlag,
   replaceTargetingRules,
+  testLiveRunVariant,
   updateFlagConfig,
 } from "./dark-launch/control-plane.mjs";
 import {
@@ -130,4 +131,46 @@ test("dark-launch App creation uses HTTP idempotency without duplicating orgId",
   assert.equal(requests[0].init.headers["idempotency-key"], "app-key");
   assert.equal(requests[0].body.organizationId, "org-123");
   assert.equal("orgId" in requests[0].body, false);
+});
+
+test("dark-launch test evaluation uses the Flag key in tool mode", async () => {
+  const calls = [];
+  const deps = {
+    callTool: async (name, args) => {
+      calls.push({ name, args });
+      return { variantName: LAUNCH_VARIANT };
+    },
+  };
+  await testLiveRunVariant(
+    deps,
+    { appId: "app-123", environmentId: "env-123", flagId: "flag-123" },
+    { flagKey: "checkout", targetedKey: "user-123" },
+  );
+
+  assert.equal(calls[0].name, "flags_test_eval");
+  assert.equal(calls[0].args.flagKey, "checkout");
+  assert.equal("flagId" in calls[0].args, false);
+});
+
+test("dark-launch test evaluation uses the Flag key in HTTP mode", async () => {
+  const requests = [];
+  const deps = {
+    accessToken: "test-access-token",
+    controlPlaneBaseUrl: "https://control-plane.example.test",
+    fetch: async (url, init) => {
+      requests.push({ url, init });
+      return Response.json({ variantName: LAUNCH_VARIANT });
+    },
+  };
+  await testLiveRunVariant(
+    deps,
+    { appId: "app-123", environmentId: "env-123", flagId: "flag-123" },
+    { flagKey: "checkout", targetedKey: "user-123" },
+  );
+
+  assert.equal(
+    requests[0].url,
+    "https://control-plane.example.test/apps/app-123/envs/env-123/flags/checkout/test-eval",
+  );
+  assert.equal(requests[0].init.method, "POST");
 });

@@ -196,14 +196,14 @@ export async function testLiveRunVariant(deps, resources, keys) {
   const args = {
     appId: resources.appId,
     environmentId: resources.environmentId,
-    flagId: resources.flagId,
+    flagKey: keys.flagKey,
     ...body,
   };
   return operation(deps, "flags_test_eval", args, () =>
     controlPlaneCall(
       deps,
       "POST",
-      `/apps/${resources.appId}/envs/${resources.environmentId}/flags/${resources.flagId}/test-eval`,
+      `/apps/${resources.appId}/envs/${resources.environmentId}/flags/${keys.flagKey}/test-eval`,
       body,
     ),
   );
