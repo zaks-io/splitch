@@ -6,6 +6,7 @@ import { type ControlPanelBindings, controlPanelBindings } from "./bindings";
 import { createControlPanelAppsClient, createControlPanelFlagsClient } from "./control-plane-apps";
 import { createDelegationEnvironment } from "./flags-matrix-data";
 import { authorizedEntry, entryFor, parseLastVisitedCookie } from "./last-visited-scope";
+import { rememberOrganizationVisit } from "./last-visited-scope-functions";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
 import type {
   AppAttention,
@@ -20,7 +21,7 @@ import { loadSessionFromRequest } from "./session-refresh";
 import { retryPendingResync } from "./session-resync";
 
 export type OrgAppListResult =
-  | { kind: "ok"; view: OrgAppListView }
+  | { kind: "ok"; view: OrgAppListView; actorId: string }
   | { kind: "unauthenticated" }
   | { kind: "forbidden" };
 
@@ -90,6 +91,7 @@ export async function loadOrgAppListForRequest(
   );
   return {
     kind: "ok",
+    actorId: session.userId,
     view: {
       orgId: organization.orgId,
       orgSlug: organization.orgSlug,
@@ -151,9 +153,18 @@ async function readFlags(
 
 export const loadOrgAppList = createServerFn({ method: "GET" })
   .validator((orgSlug: string) => orgSlug)
-  .handler(({ data: orgSlug }) =>
-    loadOrgAppListForRequest(controlPanelBindings(workerEnv), getRequest(), orgSlug),
-  );
+  .handler(async ({ data: orgSlug }) => {
+    const request = getRequest();
+    const result = await loadOrgAppListForRequest(
+      controlPanelBindings(workerEnv),
+      request,
+      orgSlug,
+    );
+    // Home is where the sidebar switcher lands, so this is the org-level
+    // "last used" write; App routes record their own visits.
+    if (result.kind === "ok") rememberOrganizationVisit(request, result.actorId, result.view.orgId);
+    return result;
+  });
 
 function toPendingAppResync(
   pending: Extract<PendingResync, { resource: "app" }> | null,

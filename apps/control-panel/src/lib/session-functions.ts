@@ -3,6 +3,7 @@ import { createRepository } from "@splitch/db";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { type ControlPanelBindings, controlPanelBindings } from "./bindings";
+import { lastVisitedOrgId, parseLastVisitedCookie } from "./last-visited-scope";
 import {
   AccessDeniedError,
   type AppScopedLoaderContext,
@@ -23,7 +24,13 @@ import { retryPendingResync } from "./session-resync";
 import type { StaleSession } from "./stale-session";
 
 export type CurrentSessionResult =
-  | { kind: "authenticated"; session: SessionPrincipal; pendingOrgResync: StaleSession | null }
+  | {
+      kind: "authenticated";
+      session: SessionPrincipal;
+      pendingOrgResync: StaleSession | null;
+      /** The `__last_visited` hint, unverified against the session: `/` checks membership before redirecting. */
+      lastVisitedOrgId: string | null;
+    }
   | { kind: "unauthenticated" };
 
 export type ScopedSessionResult =
@@ -127,6 +134,9 @@ export async function loadCurrentSessionForRequest(
     kind: "authenticated",
     session: publicSession(healed.session),
     pendingOrgResync: healed.pendingOrgResync,
+    lastVisitedOrgId: lastVisitedOrgId(
+      parseLastVisitedCookie(request.headers.get("cookie"), healed.session.userId),
+    ),
   };
 }
 

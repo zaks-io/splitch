@@ -22,6 +22,10 @@ const LastVisitedScopeSchema = z.object({
   orgs: z
     .record(z.string(), LastVisitedEntrySchema)
     .refine((orgs) => Object.keys(orgs).length <= LAST_VISITED_ORG_LIMIT),
+  // The Organization the user was in most recently, whether or not they opened
+  // an App there; `/` lands on it. Optional so hints written before it existed
+  // still parse.
+  lastOrgId: z.string().min(1).optional(),
 });
 
 export type LastVisitedEntry = z.infer<typeof LastVisitedEntrySchema>;
@@ -81,7 +85,21 @@ export function recordVisit(
   const entries = Object.entries({ ...orgs, [orgId]: entry })
     .sort(([leftId, left], [rightId, right]) => right.at - left.at || leftId.localeCompare(rightId))
     .slice(0, LAST_VISITED_ORG_LIMIT);
-  return { v: 1, actor: actorId, orgs: Object.fromEntries(entries) };
+  return { v: 1, actor: actorId, orgs: Object.fromEntries(entries), lastOrgId: orgId };
+}
+
+/** An Organization-level visit (Home) with no App to remember. */
+export function recordOrgVisit(
+  existing: LastVisitedScope | null,
+  actorId: string,
+  orgId: string,
+): LastVisitedScope {
+  const orgs = existing && existing.actor === actorId ? existing.orgs : {};
+  return { v: 1, actor: actorId, orgs, lastOrgId: orgId };
+}
+
+export function lastVisitedOrgId(value: LastVisitedScope | null): string | null {
+  return value?.lastOrgId ?? null;
 }
 
 export function entryFor(value: LastVisitedScope | null, orgId: string): LastVisitedEntry | null {

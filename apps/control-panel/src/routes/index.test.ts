@@ -35,7 +35,22 @@ function authenticated(overrides: Record<string, unknown> = {}) {
       orgsTruncated: false,
     },
     pendingOrgResync: null,
+    lastVisitedOrgId: null,
     ...overrides,
+  };
+}
+
+function twoOrganizations(overrides: Record<string, unknown> = {}) {
+  const result = authenticated(overrides);
+  return {
+    ...result,
+    session: {
+      ...result.session,
+      orgs: [
+        ...result.session.orgs,
+        { ...result.session.orgs[0], orgId: "org_2", orgSlug: "orbit-tools" },
+      ],
+    },
   };
 }
 
@@ -51,20 +66,32 @@ describe("root loader", () => {
     await expect(runLoader()).rejects.toMatchObject({ options: { href: "/acme%20labs" } });
   });
 
-  it("keeps the chooser for two Organizations", async () => {
+  it("redirects to the first Organization when nothing was visited yet", async () => {
+    loadCurrentSessionMock.mockResolvedValue(twoOrganizations());
+
+    await expect(runLoader()).rejects.toMatchObject({ options: { href: "/acme%20labs" } });
+  });
+
+  it("redirects to the last-visited Organization", async () => {
+    loadCurrentSessionMock.mockResolvedValue(twoOrganizations({ lastVisitedOrgId: "org_2" }));
+
+    await expect(runLoader()).rejects.toMatchObject({ options: { href: "/orbit-tools" } });
+  });
+
+  it("falls back to the first Organization when the last-visited one is no longer a membership", async () => {
+    loadCurrentSessionMock.mockResolvedValue(twoOrganizations({ lastVisitedOrgId: "org_gone" }));
+
+    await expect(runLoader()).rejects.toMatchObject({ options: { href: "/acme%20labs" } });
+  });
+
+  it("keeps the chooser with zero Organizations", async () => {
     const result = authenticated();
     loadCurrentSessionMock.mockResolvedValue({
       ...result,
-      session: {
-        ...result.session,
-        orgs: [
-          ...result.session.orgs,
-          { ...result.session.orgs[0], orgId: "org_2", orgSlug: "orbit-tools" },
-        ],
-      },
+      session: { ...result.session, orgs: [] },
     });
 
-    await expect(runLoader()).resolves.toMatchObject({ session: { orgs: [{}, {}] } });
+    await expect(runLoader()).resolves.toMatchObject({ session: { orgs: [] } });
   });
 
   it("keeps the chooser while Organization resync is pending", async () => {

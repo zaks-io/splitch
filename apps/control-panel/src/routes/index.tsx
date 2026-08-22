@@ -3,8 +3,8 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { OrganizationChooser } from "#components/organization-chooser";
 import { SignOutForm } from "#components/sign-out-form";
 import { loginRedirect } from "#lib/login-redirect";
-import type { SessionPrincipal } from "#lib/session";
-import { loadCurrentSession } from "#lib/session-functions";
+import type { OrgMembership, SessionPrincipal } from "#lib/session";
+import { type CurrentSessionResult, loadCurrentSession } from "#lib/session-functions";
 import type { StaleSession } from "#lib/stale-session";
 
 export interface IndexLoaderData {
@@ -18,14 +18,26 @@ export const Route = createFileRoute("/")({
     if (result.kind === "unauthenticated") {
       throw loginRedirect(location.href);
     }
-    const singleOrg = result.session.orgs.length === 1 ? result.session.orgs[0] : undefined;
-    if (singleOrg && result.pendingOrgResync === null && !result.session.orgsTruncated) {
-      throw redirect({ href: `/${encodeURIComponent(singleOrg.orgSlug)}` });
+    // `/` is not a destination: land in the Organization the user was in last,
+    // else the first one. The chooser remains only where there is nothing to
+    // land in (zero Organizations) or something to report (a failed resync,
+    // a truncated list).
+    const landing = landingOrganization(result);
+    if (landing) {
+      throw redirect({ href: `/${encodeURIComponent(landing.orgSlug)}` });
     }
     return { session: result.session, pendingOrgResync: result.pendingOrgResync };
   },
   component: IndexRoute,
 });
+
+function landingOrganization(
+  result: Extract<CurrentSessionResult, { kind: "authenticated" }>,
+): OrgMembership | undefined {
+  if (result.pendingOrgResync !== null || result.session.orgsTruncated) return undefined;
+  const orgs = result.session.orgs;
+  return orgs.find((org) => org.orgId === result.lastVisitedOrgId) ?? orgs[0];
+}
 
 function IndexRoute() {
   const { session, pendingOrgResync } = Route.useLoaderData();

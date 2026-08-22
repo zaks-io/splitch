@@ -54,10 +54,10 @@ key)`, `packages/db/src/schema/flags.ts:41`); keys can collide across Apps, so a
 8. **`/{org}` is the home.** Continue-where-you-left-off card (never an automatic redirect), the
    Apps table (App name links to the App home, Environment pills link to that Environment's
    Overview), and a Needs-you column aggregated across the Org's Apps.
-9. **Single-Organization users skip the `/` chooser.** `/` redirects to `/{org}` when the session
-   holds exactly one Organization. Zero or many still render the chooser. This narrows the
-   "chooser, not a redirect" rule in `organization-chooser.tsx` to the cases where there is a
-   choice.
+9. **`/` is not a destination.** It redirects to the last-visited Organization's Home (the
+   `__last_visited` hint's `lastOrgId`, written on Home and App visits), else the first
+   Organization in the session. Zero Organizations, a pending Organization resync, or a truncated
+   list still render the chooser, because there is nothing to land in or something to report.
 10. **Command palette (cmdk).** Jump to any App, Environment, Flag, or Experiment in the current
     Organization; run the common actions (New Flag, section shortcuts). Every palette action is
     the same Control Plane operation the CLI and MCP call, surfaced as a shortcut, never a fourth
@@ -81,7 +81,7 @@ resolve at the loader; the Worker is the guardian; hydration gates interactive S
 ## The new IA
 
 ```text
-/                               chooser (0 or 2+ Orgs) or redirect to /{org} (exactly 1)
+/                               redirect to last-visited or first /{org}; chooser only for 0 Orgs
 /{org}                          Home: Continue, Apps table, Needs-you
 /{org}/members                  Members (same shell)
 /{org}/billing                  Billing & Usage (same shell)

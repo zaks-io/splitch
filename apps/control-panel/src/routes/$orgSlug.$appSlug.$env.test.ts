@@ -22,6 +22,10 @@ vi.mock("#lib/last-visited-scope-functions", () => ({
   recordLastVisitedScope: (...args: unknown[]) => recordLastVisitedScopeMock(...args),
 }));
 vi.mock("#components/command-palette", () => ({ CommandPalette: () => null }));
+// The sidebar's Create Organization dialog reaches the create server function.
+vi.mock("#lib/control-plane-organization-functions", () => ({
+  createControlPanelOrganization: vi.fn(),
+}));
 
 vi.mock("#lib/app-shell-navigation", async (importOriginal) => {
   const actual = await importOriginal<typeof import("#lib/app-shell-navigation")>();

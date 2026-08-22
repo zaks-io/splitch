@@ -5,8 +5,10 @@ import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { controlPanelBindings } from "./bindings";
 import {
+  type LastVisitedScope,
   lastVisitedEntry,
   parseLastVisitedCookie,
+  recordOrgVisit,
   recordVisit,
   serializeLastVisitedCookie,
 } from "./last-visited-scope";
@@ -26,14 +28,28 @@ export const recordLastVisitedScope = createServerFn({ method: "GET" })
     const request = getRequest();
     const { actorId } = await assertAuthorizedVisit(request, data);
     const existing = parseLastVisitedCookie(request.headers.get("cookie"), actorId);
-    const next = recordVisit(
-      existing,
-      actorId,
-      data.orgId,
-      lastVisitedEntry(data.appSlug, data.env, data.path, Date.now()),
+    writeLastVisitedCookie(
+      recordVisit(
+        existing,
+        actorId,
+        data.orgId,
+        lastVisitedEntry(data.appSlug, data.env, data.path, Date.now()),
+      ),
     );
-    setResponseHeader("set-cookie", serializeLastVisitedCookie(next));
   });
+
+/**
+ * Called from a server function that has already authorized `actorId`'s
+ * membership in `orgId`; it only writes the hint cookie.
+ */
+export function rememberOrganizationVisit(request: Request, actorId: string, orgId: string) {
+  const existing = parseLastVisitedCookie(request.headers.get("cookie"), actorId);
+  writeLastVisitedCookie(recordOrgVisit(existing, actorId, orgId));
+}
+
+function writeLastVisitedCookie(value: LastVisitedScope) {
+  setResponseHeader("set-cookie", serializeLastVisitedCookie(value));
+}
 
 async function assertAuthorizedVisit(
   request: Request,

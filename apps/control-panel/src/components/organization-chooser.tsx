@@ -9,8 +9,9 @@ import type { StaleSession } from "#lib/stale-session";
 import { useHydrated } from "#lib/use-hydrated";
 
 /**
- * The root chooser for zero, multiple, pending-resync, or truncated Organization
- * sessions. A complete one-Organization session redirects straight to Home.
+ * The root chooser for zero, pending-resync, or truncated Organization
+ * sessions. Otherwise `/` redirects straight to the last-visited (or first)
+ * Organization's Home.
  *
  * With zero memberships it is the sign-up surface rather than a dead end: a User
  * who just signed in has nothing to be a member of yet, so the only useful thing

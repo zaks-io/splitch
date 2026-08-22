@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { waitForHydration } from "./hydration";
 import {
   LOCAL_E2E_NEWCOMER_SESSION_TOKEN,
   LOCAL_E2E_SESSION_TOKEN,
 } from "../../scripts/local-e2e-fixtures.mjs";
+import { waitForHydration } from "./hydration";
 import { captureThemeScreenshots } from "./screenshot";
 
 const origin = "http://127.0.0.1:18793";
@@ -67,6 +67,8 @@ test.describe("Create Organization", () => {
     page,
   }, testInfo) => {
     await context.addCookies([{ name: "__session", value: LOCAL_E2E_SESSION_TOKEN, url: origin }]);
+    // An existing member lands on an Organization Home; Create Organization
+    // lives in the sidebar there.
     await page.goto("/");
     await waitForHydration(page);
 
