@@ -93,7 +93,7 @@ display and may be `null`; the `cursor` is the authoritative end-of-list signal 
 
 See also [mcp-tool-derivation.md](./mcp-tool-derivation.md) for the tool contract.
 
-Route: `POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval`
+Route: `POST /apps/:appId/envs/:environmentId/flags/:flagKey/test-eval`
 MCP tool: `flags_test_eval`
 
 ### TestEvaluationRequest
@@ -102,7 +102,7 @@ MCP tool: `flags_test_eval`
 | ------------------- | -------- | -------------------------------------------------------------------- |
 | `evaluationContext` | yes      | `EvaluationContext` leaf: `targetingKey`, `idType`, and `attributes` |
 
-The Flag is identified by `flagId` in the path. `EvaluationContext.targetingKey` is the Entity
+The Flag is identified by `flagKey` in the path. `EvaluationContext.targetingKey` is the Entity
 identifier; `EvaluationContext.idType` must match the Experiment's configured Entity type.
 
 ### TestEvaluationResponse

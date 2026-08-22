@@ -96,7 +96,7 @@ All domain invariants live in the Worker — both skins (MCP, CLI) inherit corre
 
 ## Test-evaluation endpoint: structurally write-free
 
-The test-evaluation endpoint (`POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval`) runs the full Provider
+The test-evaluation endpoint (`POST /apps/:appId/envs/:environmentId/flags/:flagKey/test-eval`) runs the full Provider
 resolution + rule-matching, may read Assignment Store holdover state, but is wired to **no write
 path**. There is no code path from it to:
 
