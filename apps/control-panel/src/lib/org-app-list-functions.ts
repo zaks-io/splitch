@@ -6,7 +6,7 @@ import { type ControlPanelBindings, controlPanelBindings } from "./bindings";
 import { createControlPanelAppsClient, createControlPanelFlagsClient } from "./control-plane-apps";
 import { createDelegationEnvironment } from "./flags-matrix-data";
 import { authorizedEntry, entryFor, parseLastVisitedCookie } from "./last-visited-scope";
-import { rememberOrganizationVisit } from "./last-visited-scope-functions";
+import { rememberOrganizationVisit } from "./last-visited-scope-cookie";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
 import type {
   AppAttention,

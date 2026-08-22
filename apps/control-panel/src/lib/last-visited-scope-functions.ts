@@ -1,17 +1,11 @@
 import { env as workerEnv } from "cloudflare:workers";
 import { createRepository } from "@splitch/db";
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
+import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { controlPanelBindings } from "./bindings";
-import {
-  type LastVisitedScope,
-  lastVisitedEntry,
-  parseLastVisitedCookie,
-  recordOrgVisit,
-  recordVisit,
-  serializeLastVisitedCookie,
-} from "./last-visited-scope";
+import { lastVisitedEntry, parseLastVisitedCookie, recordVisit } from "./last-visited-scope";
+import { writeLastVisitedCookie } from "./last-visited-scope-cookie";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
 import { loadSessionFromRequest } from "./session-refresh";
 
@@ -37,19 +31,6 @@ export const recordLastVisitedScope = createServerFn({ method: "GET" })
       ),
     );
   });
-
-/**
- * Called from a server function that has already authorized `actorId`'s
- * membership in `orgId`; it only writes the hint cookie.
- */
-export function rememberOrganizationVisit(request: Request, actorId: string, orgId: string) {
-  const existing = parseLastVisitedCookie(request.headers.get("cookie"), actorId);
-  writeLastVisitedCookie(recordOrgVisit(existing, actorId, orgId));
-}
-
-function writeLastVisitedCookie(value: LastVisitedScope) {
-  setResponseHeader("set-cookie", serializeLastVisitedCookie(value));
-}
 
 async function assertAuthorizedVisit(
   request: Request,
