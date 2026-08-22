@@ -44,6 +44,10 @@ block plus user row stay at the bottom. The App home resolves `appId` and shows 
 everything below it remains scoped to `(appId, environmentId)` resolved from the URL. The shipped hierarchy and slice boundaries are
 pinned in [navigation-redesign.md](./navigation-redesign.md).
 
+**Command palette:** the sidebar trigger and ⌘K or Ctrl+K shortcut open Jump to and Actions groups.
+Every row navigates to an App, Environment, Flag, Experiment, section, or Organization screen except
+New Flag, which opens the existing Create Flag dialog.
+
 ## Org-level screens
 
 The Organization level hangs three screens off `/{orgSlug}`: **Home**, **Members**, and

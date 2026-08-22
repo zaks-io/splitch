@@ -16,6 +16,7 @@ vi.mock("#lib/last-visited-scope-functions", () => ({
   recordLastVisitedScope: (...args: unknown[]) => recordLastVisitedScopeMock(...args),
 }));
 vi.mock("#components/flags-matrix-page", () => ({ FlagsMatrixPage: () => null }));
+vi.mock("#components/command-palette", () => ({ CommandPalette: () => null }));
 
 const { Route } = await import("./$orgSlug.$appSlug.index");
 const params = { appSlug: "checkout-api", orgSlug: "acme-labs" };

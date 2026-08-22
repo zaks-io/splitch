@@ -1,5 +1,6 @@
 import { PanelSidebarAppBlock, type ActiveSidebarApp } from "#components/panel-sidebar-app-block";
 import { PanelSidebarOrganization } from "#components/panel-sidebar-organization";
+import { PanelSidebarPaletteTrigger } from "#components/panel-sidebar-palette-trigger";
 import { PanelSidebarSections } from "#components/panel-sidebar-sections";
 import { ShellMenuSignOut } from "#components/shell-menu";
 import type { ScopeNavigation } from "#lib/loader-context";
@@ -9,9 +10,10 @@ export type PanelSidebarProps = {
   org: { orgId: string; orgSlug: string };
   app?: { appId: string; appSlug: string; env?: string };
   userId: string;
+  onOpenPalette: () => void;
 };
 
-export function PanelSidebar({ app, navigation, org, userId }: PanelSidebarProps) {
+export function PanelSidebar({ app, navigation, onOpenPalette, org, userId }: PanelSidebarProps) {
   const currentOrg = navigation.orgs.find((candidate) => candidate.orgId === org.orgId);
   if (!currentOrg) {
     throw new Error("Panel sidebar Organization is missing from navigation");
@@ -33,6 +35,7 @@ export function PanelSidebar({ app, navigation, org, userId }: PanelSidebarProps
       ) : null}
       <PanelSidebarOrganization navigation={navigation} org={org} />
       <div className="grid gap-2 p-3">
+        <PanelSidebarPaletteTrigger onOpen={onOpenPalette} />
         <div className="flex min-w-0 items-center gap-2">
           <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-xs">
             {avatarLabel}

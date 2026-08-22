@@ -175,7 +175,7 @@ export const stageAndStartControlPanelExperimentRun = createServerFn({ method: "
       : result;
   });
 
-async function authorizedExperimentsClient() {
+export async function authorizedExperimentsClient() {
   const bindings = controlPanelMutationBindings(workerEnv);
   const loaded = await loadSessionFromRequest(bindings, getRequest());
   if (!loaded.ok) {
