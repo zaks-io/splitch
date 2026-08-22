@@ -8,6 +8,7 @@ import { FlagCreatedNotice } from "./flag-created-notice";
 import { FlagsEmptyState } from "./flags-empty-state";
 import { FlagsMatrixTable } from "./flags-matrix-table";
 import { FlagsTruncatedNotice } from "./flags-truncated-notice";
+import { PanelPageBody } from "./panel-page-body";
 import { PanelPageHeader } from "./panel-page-header";
 
 export function FlagsMatrixPage({
@@ -62,7 +63,7 @@ export function FlagsMatrixPage({
         id="flags-title"
         title="Flags"
       />
-      <div className="grid gap-6 px-8 py-6">
+      <PanelPageBody className="grid gap-6">
         {matrix.readTruncated ? (
           <FlagsTruncatedNotice readLimit={matrix.readLimit} shownCount={matrix.rows.length} />
         ) : null}
@@ -92,7 +93,7 @@ export function FlagsMatrixPage({
             orgSlug={orgSlug}
           />
         )}
-      </div>
+      </PanelPageBody>
     </section>
   );
 }

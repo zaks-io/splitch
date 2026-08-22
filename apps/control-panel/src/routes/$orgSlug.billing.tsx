@@ -1,6 +1,7 @@
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { createFileRoute } from "@tanstack/react-router";
 import { OrgBillingPage } from "#components/org-billing-page";
+import { PanelPageBody } from "#components/panel-page-body";
 import { PanelPageHeader } from "#components/panel-page-header";
 import { PanelShell } from "#components/panel-shell";
 import { loginRedirect } from "#lib/login-redirect";
@@ -53,9 +54,9 @@ function BillingRoute() {
       }}
     >
       <PanelPageHeader crumb={view.orgSlug} title="Billing & Usage" />
-      <div className="px-8 py-6">
+      <PanelPageBody>
         <OrgBillingPage view={view} />
-      </div>
+      </PanelPageBody>
     </PanelShell>
   );
 }
