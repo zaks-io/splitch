@@ -6,9 +6,8 @@ import {
 } from "#lib/org-app-list";
 
 /**
- * The only way into an App. The App name above it is a label, so this link
- * carries the whole destination: Organization, App, and Environment. There is no
- * bare-App href to fall back to and no implicit default Environment.
+ * The App name links to App home. This pill is the explicit Environment entry
+ * and carries that Environment's Experiment-health marker.
  *
  * The health marker is `aria-hidden` and described through `aria-describedby`
  * rather than nested text, so the link's accessible name stays the Environment

@@ -5,6 +5,7 @@ import { controlPanelLiveUpdateBindings } from "#lib/bindings";
 import { createControlPanelApp } from "#lib/control-plane-app-functions";
 import { createControlPanelFlag, loadControlPanelFlags } from "#lib/control-plane-flag-functions";
 import { authorizeLiveUpdateUpgrade } from "#lib/live-update-authorization";
+import { recordLastVisitedScope } from "#lib/last-visited-scope-functions";
 import { handleLiveUpdateUpgrade } from "#lib/live-update-upgrade";
 import { loadOrgAppList } from "#lib/org-app-list-functions";
 import { setControlPanelSentryClient } from "#lib/panel-observability";
@@ -16,6 +17,7 @@ void createControlPanelApp;
 void createControlPanelFlag;
 void loadControlPanelFlags;
 void loadOrgAppList;
+void recordLastVisitedScope;
 
 type ControlPanelWorkerEnv = {
   DB: D1Database;

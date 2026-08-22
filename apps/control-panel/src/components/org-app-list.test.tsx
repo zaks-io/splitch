@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { AppAttention, OrgAppListApp } from "#lib/org-app-list";
-import { AppListCard } from "./app-list-card";
+import { HomeAppsTableRow } from "./home-apps-table-row";
 
 vi.mock("@tanstack/react-router", () => ({
   useRouter: () => ({ invalidate: () => {} }),
@@ -17,18 +17,19 @@ const { CreateAppDialog } = await import("./create-app-dialog");
 const { OrganizationChooser } = await import("./organization-chooser");
 
 const environments = [
-  { environmentId: "env_dev", env: "dev", name: "Development" },
-  { environmentId: "env_prod", env: "prod", name: "Production" },
+  { environmentId: "env_dev", env: "dev", name: "Development", guarded: false },
+  { environmentId: "env_prod", env: "prod", name: "Production", guarded: true },
 ];
 
-function card(attention: AppAttention) {
+function row(attention: AppAttention) {
   const app: OrgAppListApp = {
     appId: "app_checkout",
     appSlug: "checkout-api",
     environments,
     attention,
+    flags: { kind: "ready", count: 4, truncated: false },
   };
-  return renderToStaticMarkup(<AppListCard app={app} orgSlug="acme-labs" />);
+  return renderToStaticMarkup(<HomeAppsTableRow app={app} orgSlug="acme-labs" />);
 }
 
 const ready: AppAttention = {
@@ -39,29 +40,30 @@ const ready: AppAttention = {
   ],
 };
 
-describe("App card", () => {
+describe("Home Apps table row", () => {
   it("links the App home and each Environment", () => {
-    const html = card(ready);
+    const html = row(ready);
 
     expect(html).toContain('href="/acme-labs/checkout-api/dev"');
     expect(html).toContain('href="/acme-labs/checkout-api/prod"');
-    expect(html).toContain("<h3");
     expect(html).toContain('href="/acme-labs/checkout-api"');
+    expect(html).toContain(">4</span>");
   });
 
   it("marks only the Environment that needs attention", () => {
-    const html = card(ready);
+    const html = row(ready);
 
     expect(html).toContain('data-attention-environment-id="env_prod"');
     expect(html).toContain('data-attention-state="attention"');
     expect(html).not.toContain('data-attention-environment-id="env_dev"');
     expect(html).toContain("Needs attention in prod");
+    expect(html).toContain("bg-destructive/10");
   });
 
   it("keeps the marker out of the link's accessible name", () => {
     // A dot nested in the link would rename it; describedby never contributes to
     // the accessible name, so the link stays "Production".
-    const html = card(ready);
+    const html = row(ready);
 
     expect(html).toContain('aria-describedby="attention-env_prod"');
     expect(html).toContain('aria-hidden="true"');
@@ -69,11 +71,12 @@ describe("App card", () => {
   });
 
   it("states why health is missing rather than rendering a calm card", () => {
-    const html = card({ kind: "unavailable", message: "the Control Plane could not be reached" });
+    const html = row({ kind: "unavailable", message: "the Control Plane could not be reached" });
 
     expect(html).toContain("Experiment health unavailable");
     expect(html).toContain("the Control Plane could not be reached");
     expect(html).toContain('data-attention-state="unknown"');
+    expect(html).toContain("text-amber-600");
   });
 
   it("never renders the calm headline when an Environment is missing from the rollup", () => {
@@ -81,7 +84,7 @@ describe("App card", () => {
     // succeeded for env_dev only; env_prod is silently absent. This must not
     // read as "No Experiment needs attention" — that sentence asserts health
     // that was never measured (ADR-0036).
-    const html = card({
+    const html = row({
       kind: "ready",
       items: [{ environmentId: "env_dev", state: "clear", srm: false, guardrail: false }],
     });
@@ -92,7 +95,7 @@ describe("App card", () => {
   });
 
   it("keeps a confirmed problem visible even when another Environment in the App is unknown", () => {
-    const html = card({
+    const html = row({
       kind: "ready",
       items: [{ environmentId: "env_prod", state: "attention", srm: true, guardrail: false }],
     });
@@ -102,16 +105,69 @@ describe("App card", () => {
     expect(html).toContain('data-app-attention-severity="attention"');
   });
 
+  it("uses the secondary badge for a fully clear App", () => {
+    const html = row({
+      kind: "ready",
+      items: environments.map(({ environmentId }) => ({
+        environmentId,
+        state: "clear",
+        srm: false,
+        guardrail: false,
+      })),
+    });
+
+    expect(html).toContain('data-app-attention-severity="clear"');
+    expect(html).toContain("bg-secondary");
+  });
+
   it("calls out an App with no Environments as broken, not empty", () => {
     const html = renderToStaticMarkup(
-      <AppListCard
-        app={{ appId: "app_x", appSlug: "x", environments: [], attention: ready }}
+      <HomeAppsTableRow
+        app={{
+          appId: "app_x",
+          appSlug: "x",
+          environments: [],
+          attention: ready,
+          flags: { kind: "unavailable", message: "This App has no Environments" },
+        }}
         orgSlug="acme-labs"
       />,
     );
 
     expect(html).toContain('role="alert"');
     expect(html).toContain("This App has no Environments.");
+  });
+
+  it("marks a truncated Flag count and states unavailable reads", () => {
+    const truncated = renderToStaticMarkup(
+      <HomeAppsTableRow
+        app={{
+          appId: "app_x",
+          appSlug: "x",
+          environments,
+          attention: ready,
+          flags: { kind: "ready", count: 200, truncated: true },
+        }}
+        orgSlug="acme-labs"
+      />,
+    );
+    const unavailable = renderToStaticMarkup(
+      <HomeAppsTableRow
+        app={{
+          appId: "app_x",
+          appSlug: "x",
+          environments,
+          attention: ready,
+          flags: { kind: "unavailable", message: "catalog read refused" },
+        }}
+        orgSlug="acme-labs"
+      />,
+    );
+
+    expect(truncated).toContain('title="More Flags than one read returns"');
+    expect(truncated).toContain("200+");
+    expect(unavailable).toContain('data-app-flags-state="unavailable"');
+    expect(unavailable).toContain('title="catalog read refused"');
   });
 });
 

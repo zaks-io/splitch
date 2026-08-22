@@ -4,12 +4,16 @@ import { AccessDeniedError } from "#lib/loader-context";
 
 const loadAppScopedSessionMock = vi.fn();
 const loadControlPanelFlagsMatrixMock = vi.fn();
+const recordLastVisitedScopeMock = vi.fn();
 
 vi.mock("#lib/session-functions", () => ({
   loadAppScopedSession: (...args: unknown[]) => loadAppScopedSessionMock(...args),
 }));
 vi.mock("#lib/control-plane-flag-functions", () => ({
   loadControlPanelFlagsMatrix: (...args: unknown[]) => loadControlPanelFlagsMatrixMock(...args),
+}));
+vi.mock("#lib/last-visited-scope-functions", () => ({
+  recordLastVisitedScope: (...args: unknown[]) => recordLastVisitedScopeMock(...args),
 }));
 vi.mock("#components/flags-matrix-page", () => ({ FlagsMatrixPage: () => null }));
 
@@ -34,6 +38,8 @@ describe("$orgSlug/$appSlug loader", () => {
   beforeEach(() => {
     loadAppScopedSessionMock.mockReset();
     loadControlPanelFlagsMatrixMock.mockReset();
+    recordLastVisitedScopeMock.mockReset();
+    recordLastVisitedScopeMock.mockResolvedValue(undefined);
   });
 
   it("redirects unauthenticated requests to login", async () => {
@@ -79,6 +85,14 @@ describe("$orgSlug/$appSlug loader", () => {
     await expect(runLoader()).resolves.toMatchObject({ matrix: { rows: [] } });
     expect(loadControlPanelFlagsMatrixMock).toHaveBeenCalledWith({
       data: { appId: "app_1", environmentIds: ["env_dev", "env_prod"] },
+    });
+    expect(recordLastVisitedScopeMock).toHaveBeenCalledWith({
+      data: {
+        orgId: "org_1",
+        appSlug: "checkout-api",
+        env: null,
+        path: "/acme-labs/checkout-api",
+      },
     });
   });
 });

@@ -1,6 +1,6 @@
 # Control Panel navigation redesign
 
-Status: agreed 2026-08-21; Slice 1 shipped 2026-08-21 (#393); Slices 2–4 not started. Clickable mocks
+Status: agreed 2026-08-21; Slice 1 shipped 2026-08-21 (#393); Slice 2 shipped; Slice 3a implemented; Slices 3b and 4 not started. Clickable mocks
 that this doc describes live outside the repo (`~/.t3/userdata/attachments/splitch-nav-mocks`, served
 locally); this doc is the durable record. When it disagrees with `navigation-and-ia.md` or
 `screen-inventory.md`, this doc wins and those two are amended as each slice ships.
@@ -132,16 +132,19 @@ the header without them so it carries no dead branch.
 
 ### Home `/{org}`
 
-- **Continue where you left off**: the last scope this user visited in this Org (`org / app / env ·
-section · n minutes ago`) with a Resume button. Rendered only when known. Source: a cookie
-  written by the App-scope loader (`lastVisitedScope`, httpOnly, per Org, path + timestamp). It is
+- **Continue where you left off**: the last scope this user visited in this Org (`app / env ·
+section · n minutes ago`) with a Resume button. Rendered only when known. Source: the httpOnly
+  `__last_visited` cookie, bounded to the eight most recently visited Organizations. The
+  Environment layout and App home loaders write its per-Organization path and timestamp. It is
   a hint for a card, never a redirect, so it does not violate the no-hidden-scope rule: the URL
   still names the scope you are in.
 - **Apps table** (left, 3/5): App (link to App home), Environments (pills linking to the
-  Environment Overview), Flags (`n · k running`), Attention (the existing
+  Environment Overview), Flags (count only), Attention (the existing
   `appAttentionSeverity`/`appAttentionSummary` rollup as a badge). Create App top-right of the
-  table. Replaces the card grid (`org-app-list-page.tsx`, `app-list-card.tsx`).
-- **Needs you** (right, 2/5): one card per attention item across the Org's Apps, worst first.
+  table. The running Experiments count needs a per-Environment read per App and moves to Phase 2
+  with the other Needs-you additions. Replaces the card grid (`org-app-list-page.tsx`,
+  `app-list-card.tsx`).
+- **Needs you** (right, 2/5): one entry per attention item across the Org's Apps, worst first.
   v1 renders what `OrgAppListView.apps[].attention` already carries (SRM firing, Guardrail
   breached, health unknown/unavailable) with an Open link into the Environment's Overview.
   Decision-ready, promotion drift, and pending Approval Requests need a new Org-wide read each
@@ -254,16 +257,21 @@ merged before the next starts unless marked parallel.
 
 ### Slice 3a: Home (parallel with 3b)
 
-- `lastVisitedScope` cookie written by the App-scope loader (path, section, timestamp, per Org);
-  read by the Home loader; Continue card.
-- Apps table replaces the card grid; Needs-you column from the existing attention rollup; Create
-  App top-right of the table.
-- `/` redirects to `/{org}` for exactly-one-Org sessions (`routes/index.tsx` loader).
-- Tests: `org-app-list-page.test.tsx` rewritten for the table; e2e `onboarding.spec.ts` and
-  `create-organization.spec.ts` checked against the redirect (a fresh user has zero Orgs and still
-  sees the chooser/sign-up surface).
-- Done: a single-Org user lands on Home; Continue card appears after visiting an App; every App
-  name and Environment pill is a link; screenshots attached.
+- [x] `__last_visited` cookie written by the Environment layout and App home loaders (path, section,
+      timestamp, per Organization, bounded to eight Organizations); read by the Home loader; Continue
+      card.
+- [x] Apps table replaces the card grid; Needs-you column from the existing attention rollup; Create
+      App top-right of the table.
+- [x] `/` redirects to `/{org}` for an exact one-Organization session only when no resync is pending
+      and the session Organization list is complete (`routes/index.tsx` loader).
+- [x] Tests: Home component and loader unit coverage; e2e `org-shell.spec.ts`, `shell.spec.ts`, and
+      `create-organization.spec.ts` updated for Home and the redirect. A fresh user has zero
+      Organizations and still sees the chooser/sign-up surface.
+- Done:
+  - [x] A single-Organization user lands on Home.
+  - [x] Continue appears after visiting an App.
+  - [x] Every App name and Environment pill is a link.
+  - [ ] Screenshots attached to the PR.
 
 ### Slice 3b: Flags in one Environment gets the segmented control and inline switches (parallel with 3a)
 

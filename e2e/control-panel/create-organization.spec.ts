@@ -19,7 +19,7 @@ const newcomerSlug = `e2e-newcomer-org-${Date.now().toString(36)}`;
 const correctedSlug = `e2e-corrected-org-${Date.now().toString(36)}`;
 
 test.describe("Create Organization", () => {
-  test("a User with zero memberships creates an Organization and lands in its App list", async ({
+  test("a User with zero memberships creates an Organization and lands on Home", async ({
     context,
     page,
   }, testInfo) => {
@@ -44,7 +44,7 @@ test.describe("Create Organization", () => {
     await captureThemeScreenshots(page, testInfo, "create-organization-form");
     await page.getByTestId("create-organization-submit").click();
 
-    // Landing in the App list is the whole point: the Organization is real, the
+    // Landing in Home is the whole point: the Organization is real, the
     // session knows about it, and the next thing to make is an App.
     await expect(page).toHaveURL(`/${newcomerSlug}`);
     await expect(page.locator("[data-org-shell='ready']")).toHaveAttribute(
@@ -55,7 +55,11 @@ test.describe("Create Organization", () => {
 
     // The membership snapshot really was refreshed, not just navigated past.
     await page.goto("/");
-    await expect(page.locator(`[data-org-slug='${newcomerSlug}']`)).toBeVisible();
+    await expect(page).toHaveURL(`/${newcomerSlug}`);
+    await expect(page.locator("[data-org-shell='ready']")).toHaveAttribute(
+      "data-org",
+      newcomerSlug,
+    );
   });
 
   test("a taken handle is refused in the Worker's words, and the User can correct it", async ({

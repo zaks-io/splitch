@@ -10,12 +10,18 @@ import {
 } from "./org-app-list";
 
 const environments = [
-  { environmentId: "env_dev", env: "dev", name: "Development" },
-  { environmentId: "env_prod", env: "prod", name: "Production" },
+  { environmentId: "env_dev", env: "dev", name: "Development", guarded: false },
+  { environmentId: "env_prod", env: "prod", name: "Production", guarded: true },
 ];
 
 function app(attention: AppAttention): OrgAppListApp {
-  return { appId: "app_checkout", appSlug: "checkout-api", environments, attention };
+  return {
+    appId: "app_checkout",
+    appSlug: "checkout-api",
+    environments,
+    attention,
+    flags: { kind: "ready", count: 4, truncated: false },
+  };
 }
 
 const ready: AppAttention = {

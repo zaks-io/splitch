@@ -12,7 +12,7 @@ in the URL, never in hidden session state:
 
 - **`orgSlug`** — the org you are currently logged into. You see only this org's Apps.
   Switching orgs is an explicit navigation via the **org switcher**, which changes `orgSlug`
-  and lands you on that org's App list. Apps are **never merged across orgs** in any list.
+  and lands you on that Organization's Home. Apps are **never merged across orgs** in any list.
 - **`appSlug`** — the active App, the spine (see [appid-is-the-spine.md](./appid-is-the-spine.md)).
 - **`env`** — the active Environment (dev, prod, …), changed via the **environment switcher**
   (ADR-0027). It is absent only on the App home, which shows every Environment. Per-Environment
@@ -41,13 +41,16 @@ not exist _under this org_), rather than switching the user's org out from under
   path, query, and hash when `env` changes. They also render on the App home with no active pill;
   from there each opens that Environment's Flags list.
 - **Organization switcher, bottom** — present only for users in more than one Organization. It
-  changes `orgSlug` and lands on that Organization's App list. A single-Organization user sees the
-  Organization name without a switcher.
+  changes `orgSlug` and lands on that Organization's Home. A single-Organization user sees the
+  Organization name without a switcher, and `/` redirects directly to that Organization's Home
+  when no resync is pending and the session Organization list is complete.
 
 ## Sidebar: scoped to the active App + Environment
 
-A persistent left sidebar wraps both Organization and App screens. When an App and Environment are
-active, its sections map 1:1 to the App's first-class children plus settings, in this order:
+A persistent left sidebar wraps both Organization and App screens. The App home keeps an App active
+without choosing an Environment. Organization screens keep the Organization block active without
+inventing App or Environment scope. When an App and Environment are active, its sections map 1:1 to
+the App's first-class children plus settings, in this order:
 
 - **Flags** — definition (App-level catalog) + the active Environment's Flag Configuration
 - **Experiments** — scoped to the active Environment
@@ -65,7 +68,7 @@ pills.
 Org-level concerns live at the org root, one level up from any App, as three screens (detailed in
 [screen-inventory.md](./screen-inventory.md)):
 
-- `/{orgSlug}` — the **App list** (org landing); each App name links to the App home and each
+- `/{orgSlug}` — **Home**; each App name in the Apps table links to the App home and each
   Environment links to its Overview.
 - `/{orgSlug}/{appSlug}` — **Flags across all Environments**, the one Environment-less App URL.
 - `/{orgSlug}/members` — **Org Members** (distinct from per-App membership, which lives under App

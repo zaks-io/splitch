@@ -4,8 +4,17 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { type ControlPanelBindings, controlPanelBindings } from "./bindings";
 import { createControlPanelAppsClient } from "./control-plane-apps";
+import { createDelegationEnvironment } from "./flags-matrix-data";
+import { entryFor, parseLastVisitedCookie } from "./last-visited-scope";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
-import type { AppAttention, OrgAppListView, PendingAppResync } from "./org-app-list";
+import type {
+  AppAttention,
+  OrgAppListApp,
+  OrgAppListEnvironment,
+  OrgAppListView,
+  PendingAppResync,
+} from "./org-app-list";
+import { authorizedFlagsClient } from "./panel-authorized-clients";
 import { type PendingResync, readPendingResync } from "./pending-resync";
 import type { StoredSession } from "./session";
 import { loadSessionFromRequest } from "./session-refresh";
@@ -17,9 +26,9 @@ export type OrgAppListResult =
   | { kind: "forbidden" };
 
 /**
- * The Org landing read: the current Org's own Apps (never merged across Orgs),
+ * The Home read: the current Org's own Apps (never merged across Orgs),
  * each App's Environments, and each App's per-Environment attention rollup.
- * The rollup is read here rather than in the browser so the card renders in one
+ * The rollup is read here rather than in the browser so Home renders in one
  * pass, and a failed rollup travels as a stated reason instead of an empty list.
  *
  * `bindings`/`request` are explicit parameters (rather than read internally
@@ -33,6 +42,7 @@ export async function loadOrgAppListForRequest(
   request: Request,
   orgSlug: string,
 ): Promise<OrgAppListResult> {
+  const now = Date.now();
   const loaded = await loadSessionFromRequest(bindings, request);
   if (!loaded.ok) return { kind: "unauthenticated" };
 
@@ -78,18 +88,55 @@ export async function loadOrgAppListForRequest(
       isProvisional: organization.isProvisional,
       demoExpiresAt: organization.demoExpiresAt,
       apps: await Promise.all(
-        organization.apps.map(async (app) => ({
-          appId: app.appId,
-          appSlug: app.appSlug,
-          environments: await resolver.listEnvironments(app.appId),
-          attention: await readAttention(bindings, actor, app.appId),
-        })),
+        organization.apps.map(async (app): Promise<OrgAppListApp> => {
+          const environments = await resolver.listEnvironments(app.appId);
+          const [attention, flags] = await Promise.all([
+            readAttention(bindings, actor, app.appId),
+            readFlags(app.appId, environments),
+          ]);
+          return { appId: app.appId, appSlug: app.appSlug, environments, attention, flags };
+        }),
       ),
       // Scoped to this Organization only: a pending App create in a
       // different Organization must not surface a notice here.
       pendingAppResync: toPendingAppResync(pendingAfter, organization.orgId),
+      lastVisited: entryFor(
+        parseLastVisitedCookie(request.headers.get("cookie")),
+        organization.orgId,
+      ),
+      now,
     },
   };
+}
+
+async function readFlags(
+  appId: string,
+  environments: readonly OrgAppListEnvironment[],
+): Promise<OrgAppListApp["flags"]> {
+  if (environments.length === 0) {
+    return { kind: "unavailable", message: "This App has no Environments" };
+  }
+
+  try {
+    const environment = createDelegationEnvironment(environments);
+    const authorized = await authorizedFlagsClient(environment.environmentId);
+    if (!authorized.ok) {
+      return { kind: "unavailable", message: authorized.result.error.message };
+    }
+    const result = await authorized.client.list({ appId });
+    return result.ok
+      ? {
+          kind: "ready",
+          count: result.data.items.length,
+          truncated: result.data.readTruncated,
+        }
+      : { kind: "unavailable", message: result.error.message };
+  } catch (cause) {
+    return {
+      kind: "unavailable",
+      message: cause instanceof Error ? cause.message : "the Control Plane could not be reached",
+    };
+  }
 }
 
 export const loadOrgAppList = createServerFn({ method: "GET" })

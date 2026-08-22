@@ -69,7 +69,7 @@ const APP_SCOPE_PREFIX = "/$orgSlug/$appSlug/$env";
  * treated as shipped — the disguised-default shape ADR-0036 bans. Fail loud
  * instead of shipping that gap quietly.
  */
-function destinationSection(to: string): string {
+export function destinationSection(to: string): string {
   if (!to.startsWith(APP_SCOPE_PREFIX)) {
     throw new Error(
       `appSectionRegistry entry "${to}" is outside the App scope (${APP_SCOPE_PREFIX}); ` +
@@ -77,6 +77,36 @@ function destinationSection(to: string): string {
     );
   }
   return to.slice(APP_SCOPE_PREFIX.length).replace(/^\/+/, "");
+}
+
+/**
+ * Resolves the registry section carried by an authorized App-scope pathname.
+ * App home is the all-Environment Flags surface, while Environment Overview
+ * intentionally uses the empty section id.
+ */
+export function appSectionAtPathname(
+  pathname: string,
+  scope: { appSlug: string; env: string | null },
+): string {
+  const segments = pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  if (segments[1] !== scope.appSlug) {
+    throw new Error("Last-visited pathname does not match its resolved App scope");
+  }
+  if (scope.env === null) {
+    if (segments.length !== 2) {
+      throw new Error("Last-visited App home pathname contains an Environment or section");
+    }
+    return "flags";
+  }
+  if (segments[2] !== scope.env) {
+    throw new Error("Last-visited pathname does not match its resolved Environment scope");
+  }
+
+  const requestedSection = segments[3] ?? "";
+  const destination = appSectionRegistry.find(
+    (candidate) => destinationSection(candidate.to) === requestedSection,
+  );
+  return destination ? destinationSection(destination.to) : requestedSection;
 }
 
 /**

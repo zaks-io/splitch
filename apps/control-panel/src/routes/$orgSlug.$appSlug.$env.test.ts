@@ -13,9 +13,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadScopedSessionMock = vi.fn();
 const deferredDestinationAtMock = vi.fn();
+const recordLastVisitedScopeMock = vi.fn();
 
 vi.mock("#lib/session-functions", () => ({
   loadScopedSession: (...args: unknown[]) => loadScopedSessionMock(...args),
+}));
+vi.mock("#lib/last-visited-scope-functions", () => ({
+  recordLastVisitedScope: (...args: unknown[]) => recordLastVisitedScopeMock(...args),
 }));
 
 vi.mock("#lib/app-shell-navigation", async (importOriginal) => {
@@ -57,6 +61,8 @@ describe("$orgSlug/$appSlug/$env loader — deferred deep link enforcement", () 
     loadScopedSessionMock.mockReset();
     deferredDestinationAtMock.mockReset();
     deferredDestinationAtMock.mockReturnValue(undefined);
+    recordLastVisitedScopeMock.mockReset();
+    recordLastVisitedScopeMock.mockResolvedValue(undefined);
   });
 
   it("404s a direct request for a deferred destination once membership resolves", async () => {
@@ -87,11 +93,20 @@ describe("$orgSlug/$appSlug/$env loader — deferred deep link enforcement", () 
     loadScopedSessionMock.mockResolvedValue(okResult);
     await expect(runLoader("/acme-labs/checkout-api/dev/flags")).resolves.toBe(okResult.context);
     await expect(runLoader("/acme-labs/checkout-api/dev/segments")).resolves.toBe(okResult.context);
+    expect(recordLastVisitedScopeMock).toHaveBeenLastCalledWith({
+      data: {
+        orgId: "org_1",
+        appSlug: "checkout-api",
+        env: "dev",
+        path: "/acme-labs/checkout-api/dev/segments",
+      },
+    });
   });
 
   it("still redirects an unauthenticated request instead of checking deferred status", async () => {
     loadScopedSessionMock.mockResolvedValue({ kind: "unauthenticated" });
     await expect(runLoader("/acme-labs/checkout-api/dev/segments")).rejects.toSatisfy(isRedirect);
     expect(deferredDestinationAtMock).not.toHaveBeenCalled();
+    expect(recordLastVisitedScopeMock).not.toHaveBeenCalled();
   });
 });

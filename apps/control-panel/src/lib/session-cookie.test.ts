@@ -8,6 +8,7 @@ import {
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { createCookieHeaderWriteDiscovery } from "./cookie-header-write-test-helpers";
 import { createFormPostSurfaceDiscovery } from "./form-post-surface-test-helpers";
+import { LAST_VISITED_COOKIE_NAME, serializeLastVisitedCookie } from "./last-visited-scope";
 import { createOAuthState, OAUTH_STATE_COOKIE_NAME } from "./oauth-state";
 import { createServerFnSurfaceDiscovery } from "./server-fn-surface-test-helpers";
 import { createSession, SESSION_COOKIE_NAME } from "./session";
@@ -223,9 +224,11 @@ describe("panel cookie attributes", () => {
     const kv = new MemoryKv();
     const session = await createSession(kv.namespace(), sessionPrincipal(), NOW);
     const oauth = await createOAuthState(kv.namespace(), "/", NOW);
+    const lastVisited = serializeLastVisitedCookie({ v: 1, orgs: {} });
 
     assertCookieAttributes(session.cookie, SESSION_COOKIE_NAME);
     assertCookieAttributes(oauth.cookie, OAUTH_STATE_COOKIE_NAME);
+    assertCookieAttributes(lastVisited, LAST_VISITED_COOKIE_NAME);
   });
 
   it("builds every cookie value through serializeHttpOnlyCookie", {
@@ -236,7 +239,10 @@ describe("panel cookie attributes", () => {
     const headerWrites = files.flatMap(cookieHeaderWrites);
 
     expect(offenders).toEqual([]);
-    expect(headerWrites.sort()).toEqual(["lib/session-cookie.ts: append"]);
+    expect(headerWrites.sort()).toEqual([
+      "lib/last-visited-scope-functions.ts: setResponseHeader",
+      "lib/session-cookie.ts: append",
+    ]);
     expectTypeOf<string>().not.toExtend<SerializedHttpOnlyCookie>();
     expectTypeOf(serializeHttpOnlyCookie).returns.toEqualTypeOf<SerializedHttpOnlyCookie>();
   });
