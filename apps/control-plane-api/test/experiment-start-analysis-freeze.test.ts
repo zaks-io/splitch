@@ -132,16 +132,6 @@ describe("Experiment Start freezes the analysis config", () => {
       cuped: true,
       cuped_coverage_threshold_pct: 70,
     });
-    const queryConfig = JSON.parse(run?.metricQueryConfig ?? "[]") as Array<
-      Record<string, unknown>
-    >;
-    expect(queryConfig).toContainEqual({
-      metric_id: fx.metricId,
-      metric_type: "binomial",
-      event_definition_id: "event_definition_signed_up",
-      window_duration_ms: 0,
-      cuped_lookback_ms: 604_800_000,
-    });
   });
 
   it("freezes CUPED off for a Metric that opted out and for every Ratio Metric", async () => {

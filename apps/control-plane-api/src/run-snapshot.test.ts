@@ -3,10 +3,19 @@ import type { RunRow } from "./experiment-model";
 import { runSnapshotRow, shipCommittedRunSnapshot } from "./run-snapshot";
 
 const scope = { appId: "app_1", environmentId: "env_prod" };
+const metricQueryConfig = [
+  {
+    metric_id: "metric_1",
+    metric_type: "binomial" as const,
+    event_definition_id: "event_definition_1",
+    window_duration_ms: 0,
+    cuped_lookback_ms: 604_800_000,
+  },
+];
 
 describe("runSnapshotRow", () => {
   it("maps frozen Run values and resolves the Control Variant name", () => {
-    expect(runSnapshotRow(run(), scope, "2026-08-03T12:00:00.100Z")).toEqual({
+    expect(runSnapshotRow(run(), scope, metricQueryConfig, "2026-08-03T12:00:00.100Z")).toEqual({
       app_id: "app_1",
       environment_id: "env_prod",
       experiment_id: "exp_1",
@@ -22,7 +31,7 @@ describe("runSnapshotRow", () => {
       control_variant_id: "variant_control",
       decision_family: '[{"metric_id":"metric_1","variant":"treatment"}]',
       guardrail_decisions: "[]",
-      metric_query_config: "[]",
+      metric_query_config: JSON.stringify(metricQueryConfig),
       metric_variance_config: "[]",
       dimensions: "[]",
       config_hash: "sha256:run-1",
@@ -31,7 +40,7 @@ describe("runSnapshotRow", () => {
 
   it("throws when the frozen Control Variant is absent", () => {
     expect(() =>
-      runSnapshotRow(run({ controlVariantId: "variant_missing" }), scope, "now"),
+      runSnapshotRow(run({ controlVariantId: "variant_missing" }), scope, [], "now"),
     ).toThrow("is absent from variantSet");
   });
 
@@ -39,6 +48,7 @@ describe("runSnapshotRow", () => {
     const row = runSnapshotRow(
       run({ decisionFamily: '[{"metricId":"metric_a"},{"metricId":"metric_b"}]' }),
       scope,
+      [],
       "now",
     );
     expect(JSON.parse(row.decision_family)).toEqual([
@@ -51,7 +61,12 @@ describe("runSnapshotRow", () => {
     // Before thresholds were frozen at Start these degraded to "[]", which reads
     // downstream as "this Run declared no guardrails" and passes every check.
     expect(() =>
-      runSnapshotRow(run({ guardrailDecisions: '[{"metricId":"metric_guard"}]' }), scope, "now"),
+      runSnapshotRow(
+        run({ guardrailDecisions: '[{"metricId":"metric_guard"}]' }),
+        scope,
+        [],
+        "now",
+      ),
     ).toThrow("must be re-Started");
   });
 
@@ -65,12 +80,17 @@ describe("runSnapshotRow", () => {
         threshold_locked_at_run_start: true,
       },
     ];
-    const row = runSnapshotRow(run({ guardrailDecisions: JSON.stringify(frozen) }), scope, "now");
+    const row = runSnapshotRow(
+      run({ guardrailDecisions: JSON.stringify(frozen) }),
+      scope,
+      [],
+      "now",
+    );
     expect(JSON.parse(row.guardrail_decisions)).toEqual(frozen);
   });
 
   it("throws when variantSet is unparseable", () => {
-    expect(() => runSnapshotRow(run({ variantSet: "not-json" }), scope, "now")).toThrow(
+    expect(() => runSnapshotRow(run({ variantSet: "not-json" }), scope, [], "now")).toThrow(
       "variantSet is unparseable",
     );
   });
@@ -89,6 +109,7 @@ describe("shipCommittedRunSnapshot faults", () => {
       delivery({ fetch: () => Promise.reject(new Error("boom")), onFault }),
       run(),
       scope,
+      [],
       "now",
     );
     expect(shipped).toBe(false);
@@ -111,6 +132,7 @@ describe("shipCommittedRunSnapshot faults", () => {
       }),
       run(),
       scope,
+      [],
       "now",
     );
     expect(shipped).toBe(true);
@@ -126,6 +148,7 @@ describe("shipCommittedRunSnapshot faults", () => {
       }),
       run(),
       scope,
+      [],
       "now",
     );
     expect(shipped).toBe(false);
@@ -144,6 +167,7 @@ describe("shipCommittedRunSnapshot faults", () => {
       }),
       run(),
       scope,
+      [],
       "now",
     );
     expect(shipped).toBe(false);
@@ -173,7 +197,6 @@ function run(overrides: Partial<RunRow> = {}): RunRow {
     sampleSizeLocked: 2000,
     decisionFamily: '[{"metricId":"metric_1"}]',
     guardrailDecisions: "[]",
-    metricQueryConfig: "[]",
     metricVarianceConfig: "[]",
     configHash: "sha256:run-1",
     startedAt: "2026-08-03T12:00:00.000Z",

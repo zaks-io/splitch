@@ -149,7 +149,6 @@ describe("scope is required by type (compile-time proof)", () => {
             horizon: "sequential",
             decisionFamily: "[]",
             guardrailDecisions: "[]",
-            metricQueryConfig: "[]",
             metricVarianceConfig: "[]",
             configHash: "hash_forged_control",
             startedAt: "2026-07-30T00:00:00.000Z",

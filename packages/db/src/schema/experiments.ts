@@ -117,9 +117,6 @@ export const runs = sqliteTable(
     decisionFamily: text("decision_family").notNull(), // locked at Start
     // JSON: locked thresholds/directions.
     guardrailDecisions: text("guardrail_decisions").notNull(), // locked at Start
-    // JSON MetricQueryConfig[]: immutable Event Definition and window bindings
-    // used by Tinybird to materialize each analyzed Metric.
-    metricQueryConfig: text("metric_query_config").notNull().default("[]"), // locked at Start
     // JSON MetricVarianceConfig[]: the winsorization and CUPED-coverage rule per
     // Metric, resolved from the Metric rows at Start so a re-analysis reproduces
     // the original numbers even after the Metric is edited.

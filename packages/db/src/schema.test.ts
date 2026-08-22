@@ -88,7 +88,6 @@ describe("runs storage-only decision columns", () => {
     "`target_n`",
     "`sample_size_locked`",
     "`guardrail_decisions`",
-    "`metric_query_config`",
     "`start_reason`",
     "`end_reason`",
     "`confidence_level`",

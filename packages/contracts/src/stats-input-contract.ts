@@ -128,9 +128,8 @@ export const DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT = 70;
 export const DEFAULT_CUPED_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * The immutable source binding used to materialize one Metric for a Run.
- * Metric rows remain editable after Start, so analysis must never recover these
- * values from the current Metric or Experiment.
+ * The source binding used to materialize one Metric for a Run snapshot.
+ * Measurement edits can replace this payload without changing the Run id.
  */
 export const MetricQueryConfigSchema = z
   .object({

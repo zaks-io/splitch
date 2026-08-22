@@ -131,7 +131,6 @@ export async function startExperiment(
       sampleSizeLocked: decisionSpec.value.sampleSizeLocked,
       decisionFamily: json(prepared.value.decisionFamily),
       guardrailDecisions: json(prepared.value.guardrailDecisions),
-      metricQueryConfig: json(prepared.value.metricQueryConfig),
       metricVarianceConfig: json(prepared.value.metricVarianceConfig),
       configHash: prepared.value.configHash,
       startedAt: now,
@@ -161,6 +160,7 @@ export async function startExperiment(
     deps.runSnapshotDelivery,
     committed.run,
     scope,
+    prepared.value.metricQueryConfig,
     nowIso(deps),
   );
 

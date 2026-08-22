@@ -18,6 +18,8 @@ type Result<T> = { ok: true; value: T } | { ok: false; response: Response };
 
 export interface FrozenAnalysisConfig {
   guardrailDecisions: GuardrailDecision[];
+  // Query inputs travel with the replaceable Tinybird snapshot. They are not
+  // persisted on the Run because measurement edits keep the same Run id.
   metricQueryConfig: MetricQueryConfig[];
   metricVarianceConfig: MetricVarianceConfig[];
 }

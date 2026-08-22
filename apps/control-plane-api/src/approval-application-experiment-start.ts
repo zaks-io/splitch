@@ -64,7 +64,6 @@ export async function applyExperimentStart(
       sampleSizeLocked: decisionSpec.sampleSizeLocked,
       decisionFamily: json(prepared.value.decisionFamily),
       guardrailDecisions: json(prepared.value.guardrailDecisions),
-      metricQueryConfig: json(prepared.value.metricQueryConfig),
       metricVarianceConfig: json(prepared.value.metricVarianceConfig),
       configHash: prepared.value.configHash,
       startedAt: commit.reviewedAt,
@@ -82,7 +81,13 @@ export async function applyExperimentStart(
   });
   if (!committed.ok) return startRunFailure(committed.reason, experiment);
   await syncExperimentConfigFromD1(deps.configStore, scope, experiment.id);
-  await shipCommittedRunSnapshot(deps.runSnapshotDelivery, committed.run, scope, nowIso(deps));
+  await shipCommittedRunSnapshot(
+    deps.runSnapshotDelivery,
+    committed.run,
+    scope,
+    prepared.value.metricQueryConfig,
+    nowIso(deps),
+  );
   return { ok: true as const };
 }
 

@@ -65,37 +65,36 @@ For pre-existing Runs, the `control_variant_id` migration uses the Experiment's 
 was not previously stored. New Runs copy and validate the Control against their frozen Variant set
 at Start.
 
-| Column                   | Type        | Constraints                                                                                                 |
-| ------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------- |
-| `id`                     | text        | PK                                                                                                          |
-| `app_id`                 | text        | FK → apps, not null                                                                                         |
-| `environment_id`         | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027)                                             |
-| `experiment_id`          | text        | FK → experiments, not null                                                                                  |
-| `run_number`             | integer     | not null; 1-based ordinal within the Experiment; **immutable** (the "Run N" label)                          |
-| `status`                 | text        | not null, default `'running'`                                                                               |
-| `targeting_key_field`    | text        | not null; EC field name frozen from the Experiment at Start; **immutable**                                  |
-| `targeting_key_type`     | text        | not null; Entity type label frozen from the Experiment at Start (the Run's `id_type`); **immutable**        |
-| `salt`                   | text        | not null; **immutable**                                                                                     |
-| `allocation`             | text        | not null (JSON `{ [variantName]: number }`, keyed by Variant name); **immutable**                           |
-| `variant_set`            | text        | not null (JSON); **immutable**                                                                              |
-| `control_variant_id`     | text        | not null; Control identity copied from the Experiment at Start; **immutable**                               |
-| `targeting_rules`        | text        | not null (JSON `TargetingRule[]`; `[]` = all eligible); resolved snapshot frozen at Start; **immutable**    |
-| `activation_metric_id`   | text        | nullable; Activation Metric frozen at Start; **immutable**                                                  |
-| `confidence_level`       | real        | not null; locked at Run Start                                                                               |
-| `horizon`                | text        | not null, default `'sequential'`; locked at Run Start                                                       |
-| `target_n`               | integer     | nullable; sequential tuning                                                                                 |
-| `sample_size_locked`     | integer     | nullable; required for fixed horizon                                                                        |
-| `decision_family`        | text        | not null (JSON); locked goal Metric × Variant × Primary Dimension members                                   |
-| `guardrail_decisions`    | text        | not null (JSON `GuardrailDecision[]`, one per (Metric, treatment Variant)); locked thresholds               |
-| `metric_query_config`    | text        | not null (JSON `MetricQueryConfig[]`), default `'[]'`; Event Definition and window bindings frozen at Start |
-| `metric_variance_config` | text        | not null (JSON `MetricVarianceConfig[]`), default `'[]'`; every knob resolved and stated at Start           |
-| `config_hash`            | text        | not null; computed SHA-256; **immutable**                                                                   |
-| `started_at`             | timestamptz | not null                                                                                                    |
-| `ended_at`               | timestamptz | nullable                                                                                                    |
-| `start_reason`           | text        | nullable; optional human intent note given at Start; **immutable**                                          |
-| `end_reason`             | text        | nullable; optional human note given at `/end`                                                               |
-| `created_at`             | timestamptz | not null                                                                                                    |
-| `created_by`             | text        | WorkOS user ID or deleted-user tombstone                                                                    |
+| Column                   | Type        | Constraints                                                                                              |
+| ------------------------ | ----------- | -------------------------------------------------------------------------------------------------------- |
+| `id`                     | text        | PK                                                                                                       |
+| `app_id`                 | text        | FK → apps, not null                                                                                      |
+| `environment_id`         | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027)                                          |
+| `experiment_id`          | text        | FK → experiments, not null                                                                               |
+| `run_number`             | integer     | not null; 1-based ordinal within the Experiment; **immutable** (the "Run N" label)                       |
+| `status`                 | text        | not null, default `'running'`                                                                            |
+| `targeting_key_field`    | text        | not null; EC field name frozen from the Experiment at Start; **immutable**                               |
+| `targeting_key_type`     | text        | not null; Entity type label frozen from the Experiment at Start (the Run's `id_type`); **immutable**     |
+| `salt`                   | text        | not null; **immutable**                                                                                  |
+| `allocation`             | text        | not null (JSON `{ [variantName]: number }`, keyed by Variant name); **immutable**                        |
+| `variant_set`            | text        | not null (JSON); **immutable**                                                                           |
+| `control_variant_id`     | text        | not null; Control identity copied from the Experiment at Start; **immutable**                            |
+| `targeting_rules`        | text        | not null (JSON `TargetingRule[]`; `[]` = all eligible); resolved snapshot frozen at Start; **immutable** |
+| `activation_metric_id`   | text        | nullable; Activation Metric frozen at Start; **immutable**                                               |
+| `confidence_level`       | real        | not null; locked at Run Start                                                                            |
+| `horizon`                | text        | not null, default `'sequential'`; locked at Run Start                                                    |
+| `target_n`               | integer     | nullable; sequential tuning                                                                              |
+| `sample_size_locked`     | integer     | nullable; required for fixed horizon                                                                     |
+| `decision_family`        | text        | not null (JSON); locked goal Metric × Variant × Primary Dimension members                                |
+| `guardrail_decisions`    | text        | not null (JSON `GuardrailDecision[]`, one per (Metric, treatment Variant)); locked thresholds            |
+| `metric_variance_config` | text        | not null (JSON `MetricVarianceConfig[]`), default `'[]'`; every knob resolved and stated at Start        |
+| `config_hash`            | text        | not null; computed SHA-256; **immutable**                                                                |
+| `started_at`             | timestamptz | not null                                                                                                 |
+| `ended_at`               | timestamptz | nullable                                                                                                 |
+| `start_reason`           | text        | nullable; optional human intent note given at Start; **immutable**                                       |
+| `end_reason`             | text        | nullable; optional human note given at `/end`                                                            |
+| `created_at`             | timestamptz | not null                                                                                                 |
+| `created_by`             | text        | WorkOS user ID or deleted-user tombstone                                                                 |
 
 UNIQUE constraint: `(experiment_id, salt)` — salt unique per Experiment.
 UNIQUE constraint: `(experiment_id, run_number)` — run numbers are dense and unique per Experiment.
