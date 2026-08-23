@@ -6,14 +6,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@splitch/ui/components/card";
+import { ATTENTION_DOT_CLASSES } from "#components/environment-link";
 import type { NeedsYouItem } from "#lib/home-needs-you";
 
 export function HomeNeedsYou({
   emptyCopy,
   items,
+  measuredClear,
 }: {
   emptyCopy: string;
   items: readonly NeedsYouItem[];
+  measuredClear: boolean;
 }) {
   return (
     <Card>
@@ -31,7 +34,11 @@ export function HomeNeedsYou({
                 data-severity={item.severity}
                 key={`${item.appSlug}:${item.env}`}
               >
-                <p className="font-mono font-medium text-foreground text-sm">
+                <p className="flex items-center gap-2 font-mono font-medium text-foreground text-sm">
+                  <span
+                    aria-hidden="true"
+                    className={`size-2 shrink-0 rounded-full ${ATTENTION_DOT_CLASSES[item.severity]}`}
+                  />
                   {item.appSlug} / {item.env}
                 </p>
                 <p className="text-muted-foreground text-sm leading-5">{item.reason}</p>
@@ -52,6 +59,13 @@ export function HomeNeedsYou({
               </article>
             ))}
           </div>
+        ) : measuredClear ? (
+          <p
+            className="rounded-lg border border-border bg-success-muted p-3 text-sm text-success-foreground leading-6"
+            data-needs-you-clear
+          >
+            {emptyCopy}
+          </p>
         ) : (
           <p className="text-muted-foreground text-sm leading-6">{emptyCopy}</p>
         )}

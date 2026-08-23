@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { needsYouEmptyCopy, needsYouItems, needsYouMeasuredClear } from "./home-needs-you";
 import type { AppAttention, OrgAppListApp, OrgAppListView } from "./org-app-list";
-import { needsYouItems } from "./home-needs-you";
 
 const environments = [
   { environmentId: "env_dev", env: "dev", name: "Development", guarded: false },
@@ -30,6 +30,78 @@ function view(apps: readonly OrgAppListApp[]): OrgAppListView {
     now: 10_000,
   };
 }
+
+function rollup(states: readonly ["env_dev" | "env_prod", "clear" | "no_data"][]): AppAttention {
+  return {
+    kind: "ready",
+    items: states.map(([environmentId, state]) => ({
+      environmentId,
+      state,
+      srm: false,
+      guardrail: false,
+    })),
+  };
+}
+
+describe("needsYouMeasuredClear", () => {
+  it("never claims clear over Environments that only have no_data rollups", () => {
+    // ADR-0036: a fresh Environment with no traffic was read, not measured.
+    const noData = view([
+      app(
+        "checkout-api",
+        rollup([
+          ["env_dev", "no_data"],
+          ["env_prod", "no_data"],
+        ]),
+      ),
+    ]);
+
+    expect(needsYouMeasuredClear(noData)).toBe(false);
+    expect(needsYouEmptyCopy(noData)).toBe(
+      "Nothing needs you yet. No Experiment has produced data in any Environment.",
+    );
+  });
+
+  it("claims clear only over the measured Environments when the rest have no data", () => {
+    const mixed = view([
+      app(
+        "checkout-api",
+        rollup([
+          ["env_dev", "no_data"],
+          ["env_prod", "clear"],
+        ]),
+      ),
+    ]);
+
+    expect(needsYouMeasuredClear(mixed)).toBe(true);
+    expect(needsYouEmptyCopy(mixed)).toBe(
+      "Nothing needs you. Every Environment with Experiment data is clear.",
+    );
+  });
+
+  it("claims every Environment only when every Environment measured clear", () => {
+    const allClear = view([
+      app(
+        "checkout-api",
+        rollup([
+          ["env_dev", "clear"],
+          ["env_prod", "clear"],
+        ]),
+      ),
+    ]);
+
+    expect(needsYouMeasuredClear(allClear)).toBe(true);
+    expect(needsYouEmptyCopy(allClear)).toBe(
+      "Nothing needs you. Experiment health is clear in every Environment.",
+    );
+  });
+
+  it("stays neutral when there is nothing to measure at all", () => {
+    const noApps = view([]);
+    expect(needsYouMeasuredClear(noApps)).toBe(false);
+    expect(needsYouEmptyCopy(noApps)).toBe("Nothing needs you yet. This Organization has no Apps.");
+  });
+});
 
 describe("needsYouItems", () => {
   it("returns nothing when every Environment is clear", () => {

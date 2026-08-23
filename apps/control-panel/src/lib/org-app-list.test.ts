@@ -86,6 +86,33 @@ describe("Org App list attention", () => {
     ).toBe("No Experiment needs attention");
   });
 
+  it("keeps an all-no_data App out of the measured-clear state", () => {
+    // ADR-0036: a rollup that read successfully but measured nothing must not
+    // claim a clear result; `no_data` is its own severity with its own copy.
+    const allNoData: AppAttention = {
+      kind: "ready",
+      items: [
+        { environmentId: "env_dev", state: "no_data", srm: false, guardrail: false },
+        { environmentId: "env_prod", state: "no_data", srm: false, guardrail: false },
+      ],
+    };
+
+    expect(appAttentionSeverity(app(allNoData))).toBe("no_data");
+    expect(appAttentionSummary(app(allNoData))).toBe("No Experiment data yet");
+  });
+
+  it("grants measured-clear when at least one Environment measured clear and the rest have no data", () => {
+    const mixedClear: AppAttention = {
+      kind: "ready",
+      items: [
+        { environmentId: "env_dev", state: "no_data", srm: false, guardrail: false },
+        { environmentId: "env_prod", state: "clear", srm: false, guardrail: false },
+      ],
+    };
+
+    expect(appAttentionSeverity(app(mixedClear))).toBe("clear");
+  });
+
   it("reports unknown, never healthy, when an Environment is missing from an otherwise-ok rollup", () => {
     // SPL-202: the exact SPL-103 review scenario — the rollup succeeds for
     // env_dev only, but the App also has env_prod. The per-Environment dot

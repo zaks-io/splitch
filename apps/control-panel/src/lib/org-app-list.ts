@@ -120,10 +120,11 @@ function attentionReasons(state: Extract<EnvironmentAttentionState, { kind: "att
  * `appAttentionSummary`'s severity, ranked worst-first: a known-unhealthy
  * Environment always outranks an unknown one, because "fix this" is more
  * urgent than "we couldn't check this" and an unknown must never bury a
- * confirmed problem. `clear` only applies when every Environment was actually
- * read and came back calm.
+ * confirmed problem. `clear` requires at least one Environment measured clear;
+ * an App whose Environments are all `no_data` was read but never measured, so
+ * it stays `no_data` rather than claiming a clear result (ADR-0036).
  */
-export type AppAttentionSeverity = "unavailable" | "attention" | "unknown" | "clear";
+export type AppAttentionSeverity = "unavailable" | "attention" | "unknown" | "clear" | "no_data";
 
 function environmentStates(app: OrgAppListApp) {
   return app.environments.map((environment) => ({
@@ -143,7 +144,7 @@ export function appAttentionSeverity(app: OrgAppListApp): AppAttentionSeverity {
   const states = environmentStates(app).map(({ state }) => state.kind);
   if (states.includes("attention")) return "attention";
   if (states.includes("unknown")) return "unknown";
-  return "clear";
+  return states.includes("clear") ? "clear" : "no_data";
 }
 
 /** The one-line summary shown in the Home table's Attention badge. */
@@ -151,6 +152,7 @@ export function appAttentionSummary(app: OrgAppListApp): string {
   const severity = appAttentionSeverity(app);
   if (severity === "unavailable") return "Experiment health unavailable";
   if (severity === "clear") return "No Experiment needs attention";
+  if (severity === "no_data") return "No Experiment data yet";
 
   const states = environmentStates(app);
   // `attention` ranks above `unknown` (see AppAttentionSeverity): a

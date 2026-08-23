@@ -16,13 +16,36 @@ export interface NeedsYouItem {
   readonly href: string;
 }
 
+/**
+ * True only when at least one Environment came back with a measured `clear`
+ * rollup. `no_data` is a successful read of nothing, so it never earns the
+ * success state — green is never claimed over nothing (ADR-0036).
+ */
+export function needsYouMeasuredClear(view: OrgAppListView): boolean {
+  return environmentStateKinds(view).includes("clear");
+}
+
 /** The empty state says what was checked, so "clear" is never claimed over nothing. */
 export function needsYouEmptyCopy(view: OrgAppListView): string {
   if (view.apps.length === 0) return "Nothing needs you yet. This Organization has no Apps.";
   if (view.apps.every((app) => app.environments.length === 0)) {
     return "Nothing needs you yet. No App has an Environment to watch.";
   }
-  return "Nothing needs you. Experiment health is clear in every Environment.";
+  const kinds = environmentStateKinds(view);
+  if (!kinds.includes("clear")) {
+    return "Nothing needs you yet. No Experiment has produced data in any Environment.";
+  }
+  return kinds.every((kind) => kind === "clear")
+    ? "Nothing needs you. Experiment health is clear in every Environment."
+    : "Nothing needs you. Every Environment with Experiment data is clear.";
+}
+
+function environmentStateKinds(view: OrgAppListView): string[] {
+  return view.apps.flatMap((app) =>
+    app.environments.map(
+      (environment) => environmentAttention(app.attention, environment.environmentId).kind,
+    ),
+  );
 }
 
 export function needsYouItems(view: OrgAppListView): NeedsYouItem[] {

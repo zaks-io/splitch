@@ -1,13 +1,28 @@
 import { Badge } from "@splitch/ui/components/badge";
 import { TableCell, TableRow } from "@splitch/ui/components/table";
+import { AppSplitMark } from "#components/app-split-mark";
 import { EnvironmentLink } from "#components/environment-link";
 import { appHomeHref } from "#lib/app-shell-navigation";
 import {
+  type AppAttentionSeverity,
   appAttentionSeverity,
   appAttentionSummary,
   environmentAttention,
   type OrgAppListApp,
 } from "#lib/org-app-list";
+
+/**
+ * Absolute severity tones: measured-clear green, unknown amber, attention via
+ * the destructive variant. `no_data` stays the neutral secondary badge: those
+ * Environments were read but nothing was measured, so no color is claimed.
+ */
+const BADGE_TONE_CLASSES: Record<AppAttentionSeverity, string | undefined> = {
+  clear: "bg-success-muted text-success-foreground",
+  attention: undefined,
+  no_data: undefined,
+  unknown: "bg-warning-muted text-warning-foreground",
+  unavailable: "bg-warning-muted text-warning-foreground",
+};
 
 export function HomeAppsTableRow({ app, orgSlug }: { app: OrgAppListApp; orgSlug: string }) {
   const severity = appAttentionSeverity(app);
@@ -18,13 +33,19 @@ export function HomeAppsTableRow({ app, orgSlug }: { app: OrgAppListApp; orgSlug
       <TableCell>
         {app.environments.length > 0 ? (
           <a
-            className="font-mono font-medium text-foreground underline underline-offset-4 hover:no-underline"
+            className="group inline-flex min-w-0 items-center gap-2 font-mono font-medium text-foreground"
             href={appHomeHref({ orgSlug, appSlug: app.appSlug })}
           >
-            {app.appSlug}
+            <AppSplitMark />
+            <span className="truncate underline underline-offset-4 group-hover:no-underline">
+              {app.appSlug}
+            </span>
           </a>
         ) : (
-          <span className="font-mono font-medium text-foreground">{app.appSlug}</span>
+          <span className="inline-flex min-w-0 items-center gap-2 font-mono font-medium text-foreground">
+            <AppSplitMark />
+            <span className="truncate">{app.appSlug}</span>
+          </span>
         )}
       </TableCell>
       <TableCell>
@@ -49,18 +70,10 @@ export function HomeAppsTableRow({ app, orgSlug }: { app: OrgAppListApp; orgSlug
       <TableCell>{flagsCell(app)}</TableCell>
       <TableCell>
         <Badge
-          className={
-            severity === "unknown" || unavailable ? "text-amber-600 dark:text-amber-400" : undefined
-          }
+          className={BADGE_TONE_CLASSES[severity]}
           data-app-attention-severity={severity}
           data-app-attention-summary={app.appSlug}
-          variant={
-            severity === "attention"
-              ? "destructive"
-              : severity === "clear"
-                ? "secondary"
-                : "outline"
-          }
+          variant={severity === "attention" ? "destructive" : "secondary"}
         >
           {appAttentionSummary(app)}
           {unavailable && app.attention.kind === "unavailable" ? `: ${app.attention.message}` : ""}
@@ -74,7 +87,7 @@ function flagsCell(app: OrgAppListApp) {
   if (app.flags.kind === "unavailable") {
     return (
       <span
-        className="text-amber-600 dark:text-amber-400"
+        className="text-warning-foreground"
         data-app-flags-state="unavailable"
         title={app.flags.message}
       >

@@ -1,4 +1,6 @@
 import { useRouterState } from "@tanstack/react-router";
+import { AppSplitMark } from "#components/app-split-mark";
+import { panelSidebarLinkClassName } from "#components/panel-sidebar-link-styles";
 import { RouterAnchor, ShellMenu, ShellMenuGroup, ShellMenuLink } from "#components/shell-menu";
 import { appHomeHref, environmentSwitchHref, scopedHref } from "#lib/app-shell-navigation";
 import type { ScopeNavigation } from "#lib/loader-context";
@@ -26,9 +28,14 @@ export function PanelSidebarAppBlock({ app, currentOrg, orgSlug }: PanelSidebarA
   if (app && !currentApp) {
     throw new Error("Panel sidebar App is missing from navigation");
   }
+
+  if (!app) {
+    return <PanelSidebarAppList currentOrg={currentOrg} orgSlug={orgSlug} />;
+  }
+
   return (
     <div className="grid gap-2 px-3 pt-3">
-      <ShellMenu summary={appSummary(app?.appSlug)}>
+      <ShellMenu summary={appSummary(app.appSlug)}>
         <ShellMenuGroup label="Apps">
           {currentOrg.apps.map((candidate) => (
             <ShellMenuLink
@@ -41,7 +48,7 @@ export function PanelSidebarAppBlock({ app, currentOrg, orgSlug }: PanelSidebarA
         </ShellMenuGroup>
       </ShellMenu>
 
-      {app && currentApp ? (
+      {currentApp ? (
         <div className="flex flex-wrap items-center gap-1 px-1.5">
           <span className="mr-1 font-mono text-[10px] text-muted-foreground uppercase tracking-[0.14em]">
             Environment
@@ -73,6 +80,41 @@ export function PanelSidebarAppBlock({ app, currentOrg, orgSlug }: PanelSidebarA
 }
 
 /**
+ * Org screens have no active App, so instead of a chooser over dead space the
+ * sidebar lists every App as a direct link to its home.
+ */
+function PanelSidebarAppList({
+  currentOrg,
+  orgSlug,
+}: {
+  currentOrg: NavigationOrg;
+  orgSlug: string;
+}) {
+  return (
+    <nav aria-label="Apps" className="grid gap-1 px-3 pt-5">
+      <p className="px-2.5 pb-1 font-mono text-[10px] text-muted-foreground uppercase tracking-[0.14em]">
+        Apps
+      </p>
+      {currentOrg.apps.map((candidate) => (
+        <RouterAnchor
+          className={panelSidebarLinkClassName}
+          href={appHomeHref({ orgSlug, appSlug: candidate.appSlug })}
+          key={candidate.appId}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <AppSplitMark />
+            <span className="truncate font-mono">{candidate.appSlug}</span>
+          </span>
+        </RouterAnchor>
+      ))}
+      {currentOrg.apps.length === 0 ? (
+        <p className="px-2.5 py-1.5 text-muted-foreground text-sm">No Apps yet</p>
+      ) : null}
+    </nav>
+  );
+}
+
+/**
  * From an Environment-scoped page the pill keeps the section, search, and hash;
  * from App home (no Environment) it opens that Environment's Flags.
  */
@@ -87,20 +129,15 @@ function environmentPillHref(
     : scopedHref({ orgSlug, appSlug: app.appSlug, env: nextEnv }, "flags");
 }
 
-function appSummary(appSlug: string | undefined) {
+function appSummary(appSlug: string) {
   return (
     <span className="flex min-w-0 items-center gap-2">
-      <span aria-hidden="true" className="flex shrink-0">
-        <span className="h-3.5 w-2 rounded-l bg-arm-control" />
-        <span className="h-3.5 w-2 rounded-r bg-arm-treatment" />
-      </span>
+      <AppSplitMark />
       <span className="grid min-w-0 flex-1 gap-0.5 text-left">
         <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.14em]">
           App
         </span>
-        <span className="truncate text-base font-semibold tracking-tight">
-          {appSlug ?? "Choose an App"}
-        </span>
+        <span className="truncate text-base font-semibold tracking-tight">{appSlug}</span>
       </span>
       <span aria-hidden="true" className="text-muted-foreground group-open:rotate-180">
         ▾

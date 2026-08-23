@@ -1,6 +1,13 @@
-export function BrandMark() {
+import { cn } from "#lib/utils";
+
+export function BrandMark({ className }: { className?: string }) {
   return (
-    <span className="inline-flex items-center font-display font-bold text-2xl tracking-tight">
+    <span
+      className={cn(
+        "inline-flex items-center font-display font-bold text-2xl tracking-tight",
+        className,
+      )}
+    >
       split
       <span
         aria-hidden="true"
