@@ -1,6 +1,6 @@
+import type { ComponentProps, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { ComponentProps, ReactNode } from "react";
 import type { ScopeNavigation } from "#lib/loader-context";
 
 let currentHref = "/acme-labs/checkout-api/dev/flags";
@@ -179,21 +179,36 @@ describe("PanelSidebar", () => {
     expect(html).toContain('href="/acme-labs/checkout-api/prod/flags?state=active#rule"');
   });
 
-  it("opens the Organization menu upward from the sidebar foot", () => {
-    const html = renderSidebar({ navigation: navigation(true) });
+  it("opens the Organization menu upward from the sidebar foot on App screens", () => {
+    currentHref = "/acme-labs/checkout-api/dev/flags";
+    const html = renderSidebar({
+      app: { appId: "app_checkout", appSlug: "checkout-api", env: "dev" },
+      navigation: navigation(true),
+    });
 
     expect(html).toMatch(
       /<details[^>]*>(?:(?!<\/details>).)*Organization(?:(?!<\/details>).)*bottom-full/su,
     );
   });
 
-  it("renders an App chooser without App sections or Environment pills on Org screens", () => {
+  it("opens the Organization menu downward from the sidebar top on Org screens", () => {
+    currentHref = "/acme-labs/members";
+    const html = renderSidebar({ navigation: navigation(true) });
+
+    expect(html).toMatch(
+      /<details[^>]*>(?:(?!<\/details>).)*Organization(?:(?!<\/details>).)*top-full/su,
+    );
+  });
+
+  it("lists every App as a direct link without sections or Environment pills on Org screens", () => {
     currentHref = "/acme-labs/members";
     const html = renderSidebar();
 
-    expect(html).toContain("Choose an App");
-    expect(html).toContain("checkout-api");
-    expect(html).toContain("billing-api");
+    expect(html).toContain('aria-label="Apps"');
+    expect(html).toContain('href="/acme-labs/checkout-api"');
+    expect(html).toContain('href="/acme-labs/billing-api"');
+    expect(html).toContain('href="/acme-labs/agent-console"');
+    expect(html).not.toContain("Choose an App");
     expect(html).not.toContain('aria-label="App sections"');
     expect(html).not.toContain("data-environment-pill");
   });
@@ -206,6 +221,12 @@ describe("PanelSidebar", () => {
     expect(html).toContain('href="/acme-labs/checkout-api/prod/flags"');
     expect(html).not.toContain('aria-label="App sections"');
     expect(html.match(/data-environment-pill="dev"[^>]*bg-primary/u)).toBeNull();
+  });
+
+  it("links the brand mark home from the sidebar top", () => {
+    const html = renderSidebar();
+
+    expect(html).toMatch(/<a aria-label="splitch home"[^>]*href="\/"/u);
   });
 
   it("renders exactly one POST sign-out form", () => {
@@ -226,8 +247,8 @@ describe("PanelSidebar", () => {
     const singleOrg = renderSidebar();
     const multiOrg = renderSidebar({ navigation: navigation(true) });
 
-    expect(singleOrg.match(/<details/gu)).toHaveLength(1);
-    expect(multiOrg.match(/<details/gu)).toHaveLength(2);
+    expect(singleOrg.match(/<details/gu)).toBeNull();
+    expect(multiOrg.match(/<details/gu)).toHaveLength(1);
     expect(multiOrg).toContain("orbit-tools");
   });
 });

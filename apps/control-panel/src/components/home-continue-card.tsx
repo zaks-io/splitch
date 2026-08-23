@@ -1,27 +1,25 @@
 import { Button } from "@splitch/ui/components/button";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@splitch/ui/components/card";
+import { Card } from "@splitch/ui/components/card";
+import { AppSplitMark } from "#components/app-split-mark";
 import { appSectionRegistry, destinationSection } from "#lib/app-shell-navigation";
 import { formatRelativeTime, type LastVisitedEntry } from "#lib/last-visited-scope";
 
 export function HomeContinueCard({ entry, now }: { entry: LastVisitedEntry; now: number }) {
   return (
-    <Card data-continue-card>
-      <CardHeader>
-        <CardTitle>Continue where you left off</CardTitle>
-        <CardAction>
-          <Button render={<a data-continue-path href={entry.path} />} variant="outline">
-            Resume
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="grid gap-1">
-        <p className="font-mono text-foreground text-sm">
+    <Card className="flex-row items-center px-(--card-spacing) max-sm:flex-wrap" data-continue-card>
+      <AppSplitMark />
+      <div className="grid min-w-0 flex-1 gap-0.5">
+        <p className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.14em]">
+          Continue where you left off
+        </p>
+        <p className="truncate font-mono text-foreground text-sm">
           {entry.env === null
             ? `${entry.appSlug} · Flags across Environments`
             : `${entry.appSlug} / ${entry.env} · ${sectionLabel(entry.section)}`}
         </p>
-        <p className="text-muted-foreground text-sm">{formatRelativeTime(now, entry.at)}</p>
-      </CardContent>
+      </div>
+      <p className="shrink-0 text-muted-foreground text-sm">{formatRelativeTime(now, entry.at)}</p>
+      <Button render={<a data-continue-path href={entry.path} />}>Resume</Button>
     </Card>
   );
 }

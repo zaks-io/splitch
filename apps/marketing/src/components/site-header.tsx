@@ -1,3 +1,4 @@
+import { BrandMark } from "@splitch/ui/components/brand-mark";
 import { Button } from "@splitch/ui/components/button";
 import {
   Sheet,
@@ -8,7 +9,6 @@ import {
 } from "@splitch/ui/components/sheet";
 import { ThemeToggle } from "@splitch/ui/components/theme-toggle";
 import { MenuIcon } from "lucide-react";
-import { BrandMark } from "./brand-mark";
 
 const links = [
   ["/#product", "Product"],

@@ -21,17 +21,25 @@ function reportStaleSession() {
 export function PanelSidebarOrganization({
   navigation,
   org,
+  pinned = true,
 }: {
   navigation: ScopeNavigation;
   org: { orgId: string; orgSlug: string };
+  /**
+   * App screens pin this section to the sidebar foot as the step-out
+   * affordance; Org screens place it at the top as the primary nav.
+   */
+  pinned?: boolean;
 }) {
   return (
     <nav
       aria-label="Organization sections"
-      className="mt-auto grid gap-1 border-t border-border px-3 pt-3"
+      className={
+        pinned ? "mt-auto grid gap-1 border-t border-border px-3 pt-3" : "grid gap-1 px-3 pt-3"
+      }
     >
       {navigation.orgs.length > 1 ? (
-        <ShellMenu direction="up" label="Organization" value={org.orgSlug}>
+        <ShellMenu direction={pinned ? "up" : "down"} label="Organization" value={org.orgSlug}>
           {navigation.orgs.map((candidate) => (
             <ShellMenuLink href={`/${encodeURIComponent(candidate.orgSlug)}`} key={candidate.orgId}>
               {candidate.orgSlug}

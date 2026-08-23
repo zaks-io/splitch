@@ -47,9 +47,13 @@ export function EnvironmentLink({
   );
 }
 
-const MARKER_CLASSES = {
+/**
+ * The one severity-to-color source for attention dots, shared with the
+ * Needs-you card so the two markers can never disagree.
+ */
+export const ATTENTION_DOT_CLASSES = {
   attention: "bg-destructive",
-  unknown: "bg-amber-500 dark:bg-amber-400",
+  unknown: "bg-warning",
 } as const;
 
 function AttentionMarker({
@@ -63,7 +67,7 @@ function AttentionMarker({
   return (
     <span
       aria-hidden="true"
-      className={`-top-1 -right-1 absolute size-2.5 rounded-full ring-2 ring-card ${MARKER_CLASSES[attention.kind]}`}
+      className={`-top-1 -right-1 absolute size-2.5 rounded-full ring-2 ring-card ${ATTENTION_DOT_CLASSES[attention.kind]}`}
       data-attention-environment-id={environmentId}
       data-attention-state={attention.kind}
     />

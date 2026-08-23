@@ -76,7 +76,7 @@ describe("Home Apps table row", () => {
     expect(html).toContain("Experiment health unavailable");
     expect(html).toContain("the Control Plane could not be reached");
     expect(html).toContain('data-attention-state="unknown"');
-    expect(html).toContain("text-amber-600");
+    expect(html).toContain("bg-warning-muted");
   });
 
   it("never renders the calm headline when an Environment is missing from the rollup", () => {
@@ -105,7 +105,7 @@ describe("Home Apps table row", () => {
     expect(html).toContain('data-app-attention-severity="attention"');
   });
 
-  it("uses the secondary badge for a fully clear App", () => {
+  it("uses the success badge for a fully clear App", () => {
     const html = row({
       kind: "ready",
       items: environments.map(({ environmentId }) => ({
@@ -117,7 +117,7 @@ describe("Home Apps table row", () => {
     });
 
     expect(html).toContain('data-app-attention-severity="clear"');
-    expect(html).toContain("bg-secondary");
+    expect(html).toContain("bg-success-muted");
   });
 
   it("calls out an App with no Environments as broken, not empty", () => {

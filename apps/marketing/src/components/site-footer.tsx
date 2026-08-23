@@ -1,4 +1,4 @@
-import { BrandMark } from "./brand-mark";
+import { BrandMark } from "@splitch/ui/components/brand-mark";
 
 const columns = [
   {
