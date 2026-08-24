@@ -37,7 +37,10 @@ export async function listFlags(
   const appId = pathParam(input, "appId");
   if (!(await deps.repo.identity.getApp(appId))) return appNotFound(requestId);
   const environmentId = optionalQueryParam(input, "environmentId");
-  if (environmentId && !(await deps.repo.identity.getEnvironment(appScope(appId), environmentId))) {
+  if (
+    environmentId !== undefined &&
+    !(await deps.repo.identity.getEnvironment(appScope(appId), environmentId))
+  ) {
     return appNotFound(requestId);
   }
 
@@ -55,9 +58,10 @@ export async function listFlags(
     scope,
     rows.map((row) => row.id),
   );
-  const items = environmentId
-    ? withEnvironmentConfigurations(deps, appId, environmentId, rows, catalogs)
-    : Promise.resolve(rows.map((row) => flagFrom(row, catalogs.get(row.id) ?? [])));
+  const items =
+    environmentId === undefined
+      ? Promise.resolve(rows.map((row) => flagFrom(row, catalogs.get(row.id) ?? [])))
+      : withEnvironmentConfigurations(deps, appId, environmentId, rows, catalogs);
   return Response.json({
     items: await items,
     readTruncated,

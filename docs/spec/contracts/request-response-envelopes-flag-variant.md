@@ -48,6 +48,32 @@ Variants and TargetingRules are managed via sub-resource endpoints (`/variants`,
 Returns the App-level Flag definition. No per-Environment fields (`enabled`, availability, targeting) and
 no storage internals (`version`, `createdBy`).
 
+### FlagListResponse
+
+`flags_list` accepts an optional, non-empty `environmentId`. Omission requests the App-level catalog
+alone. Supplying an Environment ID requests the same bounded catalog with a
+`flagConfiguration` summary on every item:
+
+```
+{
+  items: Array<FlagResponse & {
+    flagConfiguration?: {
+      enabled: boolean,
+      rollout: number | null,
+      defaultVariant: string
+    }
+  }>,
+  readTruncated: boolean,
+  readLimit: positive integer
+}
+```
+
+The summary is exact and intentionally smaller than `FlagConfigResponse`: `rollout` is the baseline
+percentage or `null`, `defaultVariant` is the Variant name, and availability and Targeting Rules are
+absent. `flagConfiguration` is absent from every item when `environmentId` is omitted and required
+on every item when it is supplied. An empty `environmentId` is invalid rather than equivalent to
+omission.
+
 ---
 
 ## Flag Configuration endpoint

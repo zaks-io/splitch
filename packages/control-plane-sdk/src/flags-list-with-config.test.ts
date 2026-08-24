@@ -45,4 +45,22 @@ describe("flags.list with Environment configuration", () => {
     expect(new URL(requestedUrl).searchParams.get("environmentId")).toBe("env_prod");
     expect(result).toEqual({ ok: true, status: 200, data: withConfiguration });
   });
+
+  it("sends an empty Environment ID instead of treating it as omitted", async () => {
+    let requestedUrl = "";
+    const bareList = { items: [], readTruncated: false, readLimit: 200 };
+    const sdk = createControlPlaneSdk({
+      baseUrl: "https://control-plane.test",
+      fetch: async (input) => {
+        requestedUrl = String(input);
+        return Response.json(bareList);
+      },
+    });
+
+    await sdk.flags.list({ appId: "app_local", environmentId: "" });
+
+    const url = new URL(requestedUrl);
+    expect(url.searchParams.has("environmentId")).toBe(true);
+    expect(url.searchParams.get("environmentId")).toBe("");
+  });
 });

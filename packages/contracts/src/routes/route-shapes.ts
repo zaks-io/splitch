@@ -33,7 +33,7 @@ export const OrgMemberParams = z.object({ orgId: z.string(), userId: z.string() 
 export const AppParams = z.object({ appId: z.string() });
 export const FlagListQuerySchema = z
   .object({
-    environmentId: z.string().optional(),
+    environmentId: z.string().min(1).optional(),
   })
   .strict();
 export const AppMemberParams = z.object({ appId: z.string(), userId: z.string() });

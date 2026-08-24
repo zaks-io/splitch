@@ -132,7 +132,7 @@ splitch apps list --org <org_id>
 splitch apps create --org <org_id> --name <name>   # provisions dev + prod Environments (DX default)
 splitch envs list [--app <app_id>]                  # [ctx]
 splitch envs create [--app <app_id>] --key <key> [--name <name>]  # [ctx]
-splitch flags list [--app <app_id>]                 # [ctx]
+splitch flags list [--app <app_id>] [--with-config --env <environment_id>]  # [ctx]
 splitch flags create [--app <app_id>] --key <key> ...                       # [ctx] App-level definition
 splitch flags promote [--app <app_id>] [--env <environment_id>] <flag_id>   # [ctx] move Flag Configuration into an Env (ADR-0028)
 splitch event-definitions list [--app <app_id>]                              # [ctx] App-level
@@ -162,6 +162,13 @@ need an Environment (from `[ctx]` or `--env`); Flag definition, Environment CRUD
 are App/Env scoped accordingly. Environment-level writes that the Environment Policy gates may
 require a `--confirm` affordance (ADR-0029); it submits the canonical
 `review.action = "approve_and_apply"` and never creates a separate confirmation pipeline.
+
+`splitch flags list` is an App-level catalog read by default. `--with-config` adds each Flag's exact
+Configuration summary (`enabled`, baseline `rollout`, and `defaultVariant`) for one Environment and
+therefore requires a non-empty Environment resolved from `--env`, `SPLITCH_ENV`, or active config.
+The CLI passes that Environment as `flags_list.environmentId`; it fails before the request when
+`--with-config` has no resolved Environment. `--env` without `--with-config` does not change the
+App-level response.
 
 **Output and scripting:** every command accepts `--json` for machine-readable output (the same
 shape the MCP tool returns), so the CLI is pipe-able and an agent shelling out to the CLI parses one

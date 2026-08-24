@@ -245,12 +245,13 @@ function flagsList(
   input: FlagsListInput,
   callOptions?: ControlPlaneOperationOptions,
 ) {
-  const request = input.environmentId
-    ? {
-        param: { appId: input.appId },
-        query: { environmentId: input.environmentId },
-      }
-    : { param: { appId: input.appId } };
+  const request =
+    input.environmentId === undefined
+      ? { param: { appId: input.appId } }
+      : {
+          param: { appId: input.appId },
+          query: { environmentId: input.environmentId },
+        };
   return invokeHcRoute<FlagsListOutput>("flags_list", () =>
     hcClient.apps[":appId"].flags.$get(
       request as never,

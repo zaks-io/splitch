@@ -152,6 +152,21 @@ describe("control-plane Flag definition CRUD", () => {
     ).toBe(true);
   });
 
+  it("rejects an empty Environment ID on the Flag list", async () => {
+    const createdApp = await createDefaultApp(h);
+    const jwt = await appToken(h, createdApp.app.id);
+
+    const response = await request(
+      h,
+      "GET",
+      `/apps/${createdApp.app.id}/flags?environmentId=`,
+      jwt,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
   it("resumes the Flag when catalog Variant insertion fails", async () => {
     const createdApp = await createDefaultApp(h);
     const jwt = await appToken(h, createdApp.app.id);
