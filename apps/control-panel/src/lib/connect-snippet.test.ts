@@ -8,13 +8,13 @@ import {
 } from "./connect-snippet";
 
 const snippet = renderConnectSnippet({
-  clientKey: "ck_example",
+  clientKey: "pk_example",
   flagKey: "new-checkout",
 });
 
 describe("renderConnectSnippet", () => {
   it("substitutes the real Client Key and Flag Key", () => {
-    expect(snippet).toContain('createSplitchClient({ clientKey: "ck_example" })');
+    expect(snippet).toContain('createSplitchClient({ clientKey: "pk_example" })');
     expect(snippet).toContain('await splitch.evaluate("new-checkout"');
     expect(snippet).not.toContain("...");
   });
@@ -40,7 +40,7 @@ describe("renderConnectSnippet", () => {
   });
 
   it("escapes a Flag Key containing quotes rather than breaking the snippet", () => {
-    const risky = renderConnectSnippet({ clientKey: "ck", flagKey: 'we"ird' });
+    const risky = renderConnectSnippet({ clientKey: "pk_test", flagKey: 'we"ird' });
     expect(risky).toContain('await splitch.evaluate("we\\"ird"');
   });
 });
@@ -64,7 +64,7 @@ describe("screen-inventory.md", () => {
       .join("\n")
       .trimEnd();
 
-    expect(documented).toBe(renderConnectSnippet({ clientKey: "ck_…", flagKey: "your-flag-key" }));
+    expect(documented).toBe(renderConnectSnippet({ clientKey: "pk_…", flagKey: "your-flag-key" }));
   });
 });
 
