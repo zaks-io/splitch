@@ -78,19 +78,19 @@ entry equality or re-arms an already-read Exposure.
 [contracts/leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md); the server emits only
 `SPLIT | DEFAULT | DISABLED | ERROR` here (`CACHED`/`STALE` are SDK-local states). Unlike
 single-flag `evaluate` — whose wire body omits `reason` because the SDK synthesizes it from HTTP
-status — a bulk response must carry `reason` per entry; the `verify` endpoint already returns this
+status and the non-revealing `x-reason` response header — a bulk response must carry `reason` per entry; the `verify` endpoint already returns this
 set under a Client Key, so no new disclosure is introduced.
 
 ### Per-entry outcomes
 
-| Resolution outcome                    | `reason`   | `exposureIdentity` | `exposureTicket` | Assignment Store                  |
-| ------------------------------------- | ---------- | ------------------ | ---------------- | --------------------------------- |
-| Fresh assignment under a live Run     | `SPLIT`    | identity           | ticket           | no write (deferred to redemption) |
-| Holdover replay (prior Run, ADR-0006) | `SPLIT`    | `null`             | `null`           | read-only replay                  |
-| Rule/rollout resolution, no live Run  | `SPLIT`    | `null`             | `null`           | —                                 |
-| No rule matched → Default Variant     | `DEFAULT`  | `null`             | `null`           | —                                 |
-| Flag disabled / no Environment config | `DISABLED` | `null`             | `null`           | —                                 |
-| Per-Flag resolution failure           | `ERROR`    | `null`             | `null`           | —                                 |
+| Resolution outcome                    | `reason`   | `exposureIdentity`   | `exposureTicket`   | Assignment Store                  |
+| ------------------------------------- | ---------- | -------------------- | ------------------ | --------------------------------- |
+| Fresh assignment under a live Run     | `SPLIT`    | identity             | ticket             | no write (deferred to redemption) |
+| Holdover replay (prior Run, ADR-0006) | `SPLIT`    | `null`               | `null`             | read-only replay                  |
+| Rule/rollout resolution, no live Run  | `SPLIT`    | `null`               | `null`             | —                                 |
+| No rule matched → Default Variant     | `DEFAULT`  | identity if live Run | ticket if live Run | no write (deferred if live Run)   |
+| Flag disabled / no Environment config | `DISABLED` | `null`               | `null`             | —                                 |
+| Per-Flag resolution failure           | `ERROR`    | `null`               | `null`             | —                                 |
 
 A Flag that fails resolution **appears** in `evaluations` with `reason: ERROR` + `errorCode`; it is
 never silently omitted (ADR-0036). A ticket's presence discloses only "reading this would create a

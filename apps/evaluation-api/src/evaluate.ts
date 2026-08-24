@@ -8,12 +8,13 @@ import { evaluate } from "./evaluate/accessor-paths";
 import type { EvaluateResult } from "./evaluate/evaluate-path";
 import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
 import type { AssembledExposure, ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
-import { errorResponse } from "./evaluation-error-response";
+import { responseBody, sdkRuntime } from "./evaluate-response";
 import type { EvaluationCommitSink } from "./evaluation-commit-sink";
 import { EvaluationCommitSinkError } from "./evaluation-commit-sink";
+import { errorResponse } from "./evaluation-error-response";
 import type { EvaluationUsageScope } from "./evaluation-usage";
-import { responseBody, sdkRuntime } from "./evaluate-response";
 import type { FlagConfig, Provider } from "./provider/provider";
+import { reasonForResolution } from "./resolution-reason";
 
 type EvaluateInput = {
   body: DataPlaneEvaluateRequest;
@@ -152,6 +153,7 @@ async function evaluateResponse(
     // keeps this channel ASCII-safe for every name the contract admits.
     response.headers.set("x-variant-name", encodeURIComponent(body.variantName));
   }
+  response.headers.set("x-reason", reasonForResolution(output.result));
   return response;
 }
 
