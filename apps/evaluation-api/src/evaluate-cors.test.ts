@@ -4,7 +4,7 @@ import { CLIENT_KEY, makeSdkRouteHarness, sdkRouteInit } from "./sdk-route-test-
 const PATH = "/api/sdk/evaluate";
 
 describe("Evaluation Worker browser CORS", () => {
-  it("serves preflight and exposes x-run-id to browser SDKs", async () => {
+  it("serves preflight and exposes evaluation metadata to browser SDKs", async () => {
     const { app } = await makeSdkRouteHarness({ liveRun: true });
     const preflight = await app.request(PATH, {
       method: "OPTIONS",
@@ -21,5 +21,6 @@ describe("Evaluation Worker browser CORS", () => {
     expect(preflight.headers.get("access-control-allow-methods")).toContain("POST");
     expect(preflight.headers.get("access-control-allow-headers")).toContain("idempotency-key");
     expect(evaluation.headers.get("access-control-expose-headers")).toContain("x-run-id");
+    expect(evaluation.headers.get("access-control-expose-headers")).toContain("x-reason");
   });
 });

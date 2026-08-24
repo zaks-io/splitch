@@ -251,11 +251,11 @@ function assertEvaluateAllEntryRefinements(entry: EvaluateAllEntry, path: string
   if (entry.reason === "ERROR" ? entry.errorCode === null : entry.errorCode !== null) {
     fail(`${path}: errorCode is present iff reason === 'ERROR'`);
   }
-  if (entry.reason !== "SPLIT" && entry.exposureTicket !== null) {
-    fail(`${path}: exposureTicket is only allowed when reason === 'SPLIT'`);
+  if (entry.reason !== "SPLIT" && entry.reason !== "DEFAULT" && entry.exposureTicket !== null) {
+    fail(`${path}: exposureTicket is only allowed when reason is 'SPLIT' or 'DEFAULT'`);
   }
-  if (entry.reason !== "SPLIT" && entry.exposureIdentity !== null) {
-    fail(`${path}: exposureIdentity is only allowed when reason === 'SPLIT'`);
+  if (entry.reason !== "SPLIT" && entry.reason !== "DEFAULT" && entry.exposureIdentity !== null) {
+    fail(`${path}: exposureIdentity is only allowed when reason is 'SPLIT' or 'DEFAULT'`);
   }
   if ((entry.exposureTicket === null) !== (entry.exposureIdentity === null)) {
     fail(`${path}: exposureIdentity is present iff exposureTicket is present`);

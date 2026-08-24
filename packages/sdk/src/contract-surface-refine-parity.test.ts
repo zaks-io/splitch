@@ -53,15 +53,15 @@ const parityFixtures: readonly ParityFixture[] = [
     },
   },
   {
-    name: "Evaluate All limits Exposure fields to SPLIT",
+    name: "Evaluate All limits Exposure fields to SPLIT and DEFAULT",
     schemaName: "EvaluateAllResponseSchema",
-    input: { evaluations: { flag: { ...evaluateAllEntry, reason: "DEFAULT" } } },
+    input: { evaluations: { flag: { ...evaluateAllEntry, reason: "DISABLED" } } },
   },
   {
     name: "Evaluate All rejects an unpaired Exposure Identity",
     schemaName: "EvaluateAllResponseSchema",
     input: {
-      evaluations: { flag: { ...evaluateAllEntry, reason: "DEFAULT", exposureTicket: null } },
+      evaluations: { flag: { ...evaluateAllEntry, reason: "DISABLED", exposureTicket: null } },
     },
   },
   {

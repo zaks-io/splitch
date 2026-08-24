@@ -1,10 +1,11 @@
-import type { EvaluateAllEntry, EvaluateAllReason, Variant } from "@splitch/contracts";
+import type { EvaluateAllEntry, Variant } from "@splitch/contracts";
 import type { EvaluateResult } from "./evaluate/evaluate-path-types";
 import {
   type MintExposureTicketDeps,
   mintExposureTicketWithIdentity,
 } from "./evaluate/exposure-ticket";
 import type { FlagConfig } from "./provider/provider";
+import { reasonForResolution } from "./resolution-reason";
 
 export async function entryFor(
   result: EvaluateResult,
@@ -22,7 +23,7 @@ export async function entryFor(
     };
   }
 
-  const reason = reasonFor(result);
+  const reason = reasonForResolution(result);
   const minted =
     result.exposure === null
       ? { exposureIdentity: null, exposureTicket: null }
@@ -35,15 +36,6 @@ export async function entryFor(
     errorCode: null,
     ...minted,
   };
-}
-
-function reasonFor(result: Exclude<EvaluateResult, { kind: "error" }>): EvaluateAllReason {
-  // Ticket-bearing resolutions are always SPLIT: ADR-0048 mints a ticket exactly
-  // when evaluate would seal an Exposure (including live Experiment Run no-match defaults).
-  if (result.exposure !== null) return "SPLIT";
-  if (result.kind === "disabled") return "DISABLED";
-  if (result.kind === "no_match_default" || result.kind === "null_experiment") return "DEFAULT";
-  return "SPLIT";
 }
 
 function valueForVariantName(
