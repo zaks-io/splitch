@@ -53,7 +53,10 @@ function evaluateAllResponse(): Response {
   });
 }
 
-function evaluateResponse(): Response {
+function evaluateResponse(status: number): Response {
+  if (status !== 200) {
+    return new Response("", { status });
+  }
   return new Response(EVALUATE_BODY, {
     status: 200,
     headers: {
@@ -64,17 +67,17 @@ function evaluateResponse(): Response {
   });
 }
 
-function stubbedEdgeResponse(url: string): Response {
+function stubbedEdgeResponse(url: string, evaluateStatus: number): Response {
   if (url.includes("/api/sdk/evaluate-all")) {
     return evaluateAllResponse();
   }
   if (url.includes("/api/sdk/evaluate")) {
-    return evaluateResponse();
+    return evaluateResponse(evaluateStatus);
   }
   return new Response(JSON.stringify({ error: "unexpected path" }), { status: 404 });
 }
 
-export function stubSplitchEdgeFetch(): {
+export function stubSplitchEdgeFetch(options: { evaluateStatus?: number } = {}): {
   calls: FetchCall[];
   restore: () => void;
 } {
@@ -99,7 +102,7 @@ export function stubSplitchEdgeFetch(): {
       method: requestMethod(input, init),
       authorization: requestHeaders(input, init).get("authorization"),
     });
-    return stubbedEdgeResponse(url);
+    return stubbedEdgeResponse(url, options.evaluateStatus ?? 200);
   };
 
   globalThis.fetch = windowLikeFetch as typeof fetch;

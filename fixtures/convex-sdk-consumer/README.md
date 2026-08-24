@@ -24,8 +24,9 @@ From the repo root (after `@splitch/sdk` is built):
 pnpm --filter @splitch/sdk test:consumer-smoke
 ```
 
-That packs the SDK, installs this fixture into a temp consumer with the
-tarball, and runs `vitest` under `convex-test`
+That extracts the README's query/mutation example into this fixture, packs the
+SDK, installs the fixture into a temp consumer with the tarball, typechecks it
+against generated-shape Convex API types, and runs `vitest` under `convex-test`
 ([convex-test](https://docs.convex.dev/testing/convex-test)).
 
 ## Transport seam
