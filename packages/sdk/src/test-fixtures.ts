@@ -28,7 +28,7 @@ export function stubFetch(response: Response | (() => Promise<Response>)): typeo
 /** The real wire adapter over a stub `fetch`, so response parsing is under test. */
 export function fetchTransport(fetchImpl: typeof fetch, timeoutMs = 1000) {
   return createFetchTransport({
-    credential: "ck_test",
+    credential: "pk_test",
     endpoint: "https://edge.test",
     timeoutMs,
     fetchImpl,

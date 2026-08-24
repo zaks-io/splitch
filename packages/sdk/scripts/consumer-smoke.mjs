@@ -118,7 +118,7 @@ try {
     join(consumerRoot, "runtime.mjs"),
     `import { createSplitchClient } from "@splitch/sdk";
 
-const client = createSplitchClient({ clientKey: "ck_smoke" });
+const client = createSplitchClient({ clientKey: "pk_smoke" });
 if (typeof client.evaluate !== "function") {
   throw new Error("createSplitchClient did not return an evaluate accessor");
 }

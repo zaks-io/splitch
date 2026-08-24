@@ -150,7 +150,7 @@ await client.flush();
 `;
   }
   return `import { createSplitchClient } from ${JSON.stringify(entry.importSpecifier)};
-const client = createSplitchClient({ clientKey: "ck_size" });
+const client = createSplitchClient({ clientKey: "pk_size" });
 await client.evaluateDetails("flag", { targetingKey: "u", idempotencyKey: "k", defaultValue: false });
 await client.verify("flag", { targetingKey: "u", defaultValue: false });
 `;

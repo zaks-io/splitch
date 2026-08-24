@@ -3,6 +3,7 @@ import { DEFAULT_ID_TYPE, type EvaluateContext, type Logger } from "../evaluate"
 import type { PrecomputedEvaluations } from "../evaluate-all";
 import { EvaluateAllResponseSchema } from "../generated/contract-surface.js";
 import type { AttributeValue } from "../transport";
+import { requireCredentialPrefix } from "../credential";
 import { canonicalEqual, type HeldPayload, type ListenerFailure } from "./payload-store";
 
 export function resolveBrowserClientKey(clientKey: string): string {
@@ -13,23 +14,7 @@ export function resolveBrowserClientKey(clientKey: string): string {
       remediation: "Pass the pk_… key material from `splitch client-key get`",
     });
   }
-  // Secrets must never reach a browser bundle. Prefix check is the construction gate.
-  if (clientKey.startsWith("sk_") || clientKey.startsWith("ak_")) {
-    throw new SplitchSdkError({
-      code: "SDK_CREDENTIAL_CONFIGURATION_INVALID",
-      causeSummary: "A secret API Key was passed to the browser client",
-      remediation: "Pass a public Client Key (pk_…); keep sk_/ak_ secrets on the server",
-    });
-  }
-  // ck_ is the Client Key *id*, not the key material — the top pasting mistake.
-  if (clientKey.startsWith("ck_")) {
-    throw new SplitchSdkError({
-      code: "SDK_CREDENTIAL_CONFIGURATION_INVALID",
-      causeSummary: "A Client Key id (ck_…) was passed where key material is required",
-      remediation: "Pass the pk_… keyMaterial from `splitch client-key get`, not the ck_… keyId",
-    });
-  }
-  return clientKey;
+  return requireCredentialPrefix(clientKey, "clientKey");
 }
 
 export function resolveContext(context: EvaluateContext): {

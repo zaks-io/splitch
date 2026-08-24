@@ -54,7 +54,7 @@ const PAGE_HTML = `<!doctype html>
         // No fetch override — this is the broken path in browsers when the
         // unbound Window.fetch is stored on a config object and called as a method.
         const client = createSplitchClient({
-          clientKey: "ck_browser_smoke",
+          clientKey: "pk_browser_smoke",
           endpoint: window.location.origin,
         });
         const details = await client.verify("browser-smoke-flag", {
