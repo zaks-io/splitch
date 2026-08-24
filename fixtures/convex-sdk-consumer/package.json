@@ -9,10 +9,12 @@
   },
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@edge-runtime/vm": "5.0.0",
+    "@types/node": "26.1.1",
     "convex": "1.43.0",
     "convex-test": "0.0.55",
     "typescript": "6.0.3",

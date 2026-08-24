@@ -46,6 +46,59 @@ describe("Convex action evaluate round-trip (fetch stubbed at fixture seam)", ()
     }
   });
 
+  it("threads an action-resolved boolean and Variant into a mutation", async () => {
+    process.env.SPLITCH_CLIENT_KEY = "pk_convex_fixture";
+    process.env.SPLITCH_ENDPOINT = "https://edge.test";
+    const edge = stubSplitchEdgeFetch();
+    const t = convexTest(schema, modules);
+
+    try {
+      const result = await t.action(api.checkout.checkout, {
+        targetingKey: "user-boundary",
+        idempotencyKey: "eval-boundary",
+      });
+
+      expect(result).toEqual({
+        experience: "new",
+        variantName: "treatment",
+      });
+      expect(edge.calls).toHaveLength(1);
+      await expect(
+        t.query(api.checkoutProbe.getCheckoutRequest, {
+          targetingKey: "user-boundary",
+        }),
+      ).resolves.toMatchObject(result);
+    } finally {
+      edge.restore();
+    }
+  });
+
+  it("does not call the mutation when Evaluation returns ERROR", async () => {
+    process.env.SPLITCH_CLIENT_KEY = "pk_convex_fixture";
+    process.env.SPLITCH_ENDPOINT = "https://edge.test";
+    const edge = stubSplitchEdgeFetch({ evaluateStatus: 503 });
+    const t = convexTest(schema, modules);
+
+    try {
+      await expect(
+        t.action(api.checkout.checkout, {
+          targetingKey: "user-error",
+          idempotencyKey: "eval-error",
+        }),
+      ).rejects.toMatchObject({
+        name: "FlagEvaluationError",
+        errorCode: "SERVICE_UNAVAILABLE",
+      });
+      await expect(
+        t.query(api.checkoutProbe.getCheckoutRequest, {
+          targetingKey: "user-error",
+        }),
+      ).resolves.toBeNull();
+    } finally {
+      edge.restore();
+    }
+  });
+
   it("evaluateAndStore persists the resolution for query consumers", async () => {
     process.env.SPLITCH_CLIENT_KEY = "pk_convex_fixture";
     process.env.SPLITCH_ENDPOINT = "https://edge.test";

@@ -6,6 +6,11 @@ import { v } from "convex/values";
  * Queries and mutations never call the SDK (no `fetch` in those function types).
  */
 export default defineSchema({
+  checkoutRequests: defineTable({
+    targetingKey: v.string(),
+    experience: v.union(v.literal("new"), v.literal("current")),
+    variantName: v.union(v.string(), v.null()),
+  }).index("by_targeting_key", ["targetingKey"]),
   evaluations: defineTable({
     flagKey: v.string(),
     targetingKey: v.string(),
