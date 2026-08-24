@@ -26,14 +26,15 @@ const repoRoot = resolve(packageRoot, "../..");
 
 /**
  * Minified consumer+SDK budget per published entry.
- * Measured 18_024 bytes for `.` at SPL-325; that figure is toolchain-dependent
+ * Measured 22_828 bytes after the SPL-398/SPL-399 public-surface fixes; that
+ * figure is toolchain-dependent
  * (it moves with the bundle contents and the esbuild version).
- * `size-check.test.mjs` documents the floor (`ENTRY_MAX_BYTES > 18_024`) rather
- * than gating on the exact measurement. Ceiling is 22 KiB (~25% headroom over
+ * `size-check.test.mjs` documents the floor (`ENTRY_MAX_BYTES > 22_828`) rather
+ * than gating on the exact measurement. Ceiling is 28 KiB (~25% headroom over
  * that figure) for intentional SDK growth (new accessors / wire fields) short
  * of re-vendoring zod (~300 KiB), which this budget alone is meant to reject.
  */
-export const ENTRY_MAX_BYTES = 22 * 1024;
+export const ENTRY_MAX_BYTES = 28 * 1024;
 /** Measured 32_233 bytes after adding held evaluations and revalidation; 40 KiB keeps ~27% headroom. */
 export const BROWSER_ENTRY_MAX_BYTES = 40 * 1024;
 /** Measured 9_718 bytes at SPL-334; 12 KiB keeps roughly 25% growth headroom. */
