@@ -1,6 +1,7 @@
 import type { SplitchSdkErrorCode } from "./errors";
 import type {
   EvaluateAllEntry,
+  EvaluateAllReason,
   ResolutionDetails,
   VariantValue,
 } from "./generated/contract-surface.js";
@@ -24,8 +25,8 @@ export type AttributeValue = boolean | string | number | readonly unknown[];
  * failures carry a distinct `SDK_TRANSPORT_*` code — never the server's
  * `SERVICE_UNAVAILABLE` — and preserve the underlying `cause` for loud logging.
  *
- * `runId` identifies the live experiment Run. It arrives as response metadata
- * (a header in the real adapter), never inside the wire body, and is present
+ * `runId` and the non-revealing resolution reason arrive as response metadata
+ * (headers in the real adapter), never inside the wire body. `runId` is present
  * only on a successful (`status: 200`) resolution; the client keys its
  * Exposure-dedup cache on it so a Run boundary fires a fresh Exposure.
  */
@@ -62,6 +63,8 @@ export interface TransportResult extends TransportFailure {
   readonly variantName: string | null;
   /** Live Run id from response metadata; present only on a 200 resolution. */
   readonly runId: string | null;
+  /** Non-revealing resolution reason from response metadata. Absent on older adapters. */
+  readonly reason?: Exclude<EvaluateAllReason, "ERROR">;
 }
 
 export interface VerifyTransportResult extends TransportFailure {

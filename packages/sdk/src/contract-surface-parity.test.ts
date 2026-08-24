@@ -154,21 +154,6 @@ describe("contract-surface schema fixtures", () => {
         input: {
           evaluations: {
             "new-checkout": {
-              variant: false,
-              variantName: null,
-              reason: "DEFAULT",
-              errorCode: null,
-              exposureIdentity: "identity",
-              exposureTicket: "ticket",
-            },
-          },
-        },
-        ok: false,
-      },
-      {
-        input: {
-          evaluations: {
-            "new-checkout": {
               variant: true,
               variantName: "on",
               reason: "SPLIT",

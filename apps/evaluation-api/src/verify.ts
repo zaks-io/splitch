@@ -5,11 +5,12 @@ import {
   type ResolutionReason,
   type Variant,
 } from "@splitch/contracts";
-import { renderError, type HandlerArgs, type Principal } from "@splitch/worker-runtime";
+import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
 import { verify } from "./evaluate/accessor-paths";
-import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
 import type { EvaluateResult } from "./evaluate/evaluate-path";
+import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
 import type { FlagConfig, Provider } from "./provider/provider";
+import { reasonForResolution } from "./resolution-reason";
 
 type VerifyInput = {
   body: {
@@ -156,12 +157,10 @@ function reasonFor(
   result: Exclude<EvaluateResult, { kind: "error" }>,
   trusted: boolean,
 ): ResolutionReason {
-  if (result.kind === "disabled") return "DISABLED";
-  if (result.kind === "no_match_default" || result.kind === "null_experiment") return "DEFAULT";
   if (result.kind === "rule_match_direct" || result.kind === "rule_match_percentage") {
     return trusted ? "TARGETING_MATCH" : "SPLIT";
   }
-  return "SPLIT";
+  return reasonForResolution(result);
 }
 
 function record(value: unknown): Record<string, unknown> {
