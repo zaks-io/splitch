@@ -38,7 +38,7 @@ const EVALUATIONS: Record<string, EvaluateAllEntry> = {
 };
 
 function clientWith(fake: FakeTransport, logger = new FakeLogger()) {
-  return { logger, client: createSplitchClient({ apiKey: "ak_test", transport: fake, logger }) };
+  return { logger, client: createSplitchClient({ apiKey: "sk_test", transport: fake, logger }) };
 }
 
 describe("evaluateAll: Precomputed Evaluations payload", () => {

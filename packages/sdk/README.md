@@ -414,6 +414,103 @@ export const evaluateFlag = action({
 });
 ```
 
+### Flags in queries and mutations
+
+Queries and mutations cannot call `@splitch/sdk` because they cannot use
+`fetch`. Evaluate at the calling action or HTTP-action boundary, then pass the
+resolved boolean or Variant name through the query or mutation's validated
+arguments:
+
+```ts
+// convex/checkout.ts
+import { createSplitchClient } from "@splitch/sdk";
+import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import { action, internalMutation } from "./_generated/server";
+
+type CheckoutDecision = {
+  experience: "new" | "current";
+  variantName: string | null;
+};
+
+const checkoutDecisionValidator = v.object({
+  experience: v.union(v.literal("new"), v.literal("current")),
+  variantName: v.union(v.string(), v.null()),
+});
+
+class FlagEvaluationError extends Error {
+  constructor(readonly errorCode: string) {
+    super(`new-checkout evaluation failed: ${errorCode}`);
+    this.name = "FlagEvaluationError";
+  }
+}
+
+export const applyCheckoutFlag = internalMutation({
+  args: {
+    targetingKey: v.string(),
+    useNewCheckout: v.boolean(),
+    checkoutVariant: v.union(v.string(), v.null()),
+  },
+  returns: checkoutDecisionValidator,
+  handler: async (ctx, args): Promise<CheckoutDecision> => {
+    const decision: CheckoutDecision = {
+      experience: args.useNewCheckout ? "new" : "current",
+      variantName: args.checkoutVariant,
+    };
+    await ctx.db.insert("checkoutRequests", {
+      targetingKey: args.targetingKey,
+      ...decision,
+    });
+    return decision;
+  },
+});
+
+export const checkout = action({
+  args: {
+    targetingKey: v.string(),
+    idempotencyKey: v.string(),
+  },
+  returns: checkoutDecisionValidator,
+  handler: async (ctx, args): Promise<CheckoutDecision> => {
+    const clientKey = process.env.SPLITCH_CLIENT_KEY;
+    if (!clientKey) throw new Error("SPLITCH_CLIENT_KEY is required");
+
+    const splitch = createSplitchClient({ clientKey });
+    const details = await splitch.evaluateDetails("new-checkout", {
+      targetingKey: args.targetingKey,
+      idempotencyKey: args.idempotencyKey,
+      defaultValue: false,
+    });
+    if (details.reason === "ERROR") {
+      if (!details.errorCode) {
+        throw new Error("new-checkout ERROR result is missing errorCode");
+      }
+      throw new FlagEvaluationError(details.errorCode);
+    }
+    if (typeof details.value !== "boolean") {
+      throw new Error("new-checkout must resolve to a boolean");
+    }
+
+    return await ctx.runMutation(internal.checkout.applyCheckoutFlag, {
+      targetingKey: args.targetingKey,
+      useNewCheckout: details.value,
+      checkoutVariant: details.variantName ?? null,
+    });
+  },
+});
+```
+
+Prefer evaluating once at the boundary when one request runs several queries or
+mutations, or when multiple operations must use the same decision. Pass that
+same resolved value to each operation instead of creating extra Evaluations and
+Exposures.
+
+There is no Splitch synced-store component for Convex today. A query or mutation
+cannot read locally synchronized Splitch state; its caller must supply resolved
+values, or the work must move behind an action or HTTP action. The
+`fixtures/convex-sdk-consumer/` test compiles and exercises this
+action-to-mutation boundary against the packed SDK.
+
 ### Bootstrap for the browser client
 
 An [HTTP action](https://docs.convex.dev/functions/http-actions) is the natural

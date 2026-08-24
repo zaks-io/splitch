@@ -493,7 +493,7 @@ Each step names the CLI/MCP parity it mirrors. No step is panel-only.
    ```ts
    import { createSplitchClient } from "@splitch/sdk";
 
-   const splitch = createSplitchClient({ clientKey: "ck_…" });
+   const splitch = createSplitchClient({ clientKey: "pk_…" });
 
    // Whoever you are deciding for. Swap in your own user id.
    const userId = "user-1";

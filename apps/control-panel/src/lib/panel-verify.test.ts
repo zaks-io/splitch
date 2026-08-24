@@ -18,7 +18,7 @@ describe("verifyFlagWithClientKey", () => {
     });
 
     const details = await verifyFlagWithClientKey({
-      clientKey: "ck_live_abc",
+      clientKey: "pk_live_abc",
       endpoint: "https://edge.example.test",
       flagKey: "new-checkout",
       targetingKey: "user-1",
@@ -29,7 +29,7 @@ describe("verifyFlagWithClientKey", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe("https://edge.example.test/api/sdk/verify");
     const headers = new Headers(calls[0]?.init?.headers);
-    expect(headers.get("authorization")).toBe("Bearer ck_live_abc");
+    expect(headers.get("authorization")).toBe("Bearer pk_live_abc");
     expect(JSON.parse(String(calls[0]?.init?.body))).toMatchObject({
       flagKey: "new-checkout",
       targetingKey: "user-1",
@@ -44,7 +44,7 @@ describe("verifyFlagWithClientKey", () => {
     });
 
     await verifyFlagWithClientKey({
-      clientKey: "ck",
+      clientKey: "pk_test",
       endpoint: "https://edge.example.test",
       flagKey: "f",
       targetingKey: "u",
@@ -58,7 +58,7 @@ describe("verifyFlagWithClientKey", () => {
 
   it("fails loud when the Evaluation API is unreachable", async () => {
     const details = await verifyFlagWithClientKey({
-      clientKey: "ck",
+      clientKey: "pk_test",
       endpoint: "https://edge.example.test",
       flagKey: "f",
       targetingKey: "u",

@@ -36,13 +36,13 @@ describe("createSplitchBrowserClient: construction", () => {
   it("throws when a secret sk_ key is passed", () => {
     expect(() =>
       createSplitchBrowserClient({ clientKey: "sk_secret", context: { targetingKey: "u1" } }),
-    ).toThrow(/SDK_CREDENTIAL_CONFIGURATION_INVALID/);
+    ).toThrow(/SDK_CREDENTIAL_CONFIGURATION_INVALID.*pk_/);
   });
 
   it("throws when an ak_ secret is passed", () => {
     expect(() =>
       createSplitchBrowserClient({ clientKey: "ak_secret", context: { targetingKey: "u1" } }),
-    ).toThrow(/SDK_CREDENTIAL_CONFIGURATION_INVALID/);
+    ).toThrow(/SDK_CREDENTIAL_CONFIGURATION_INVALID.*pk_/);
   });
 
   it("throws when a ck_ Client Key id is passed", () => {
