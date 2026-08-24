@@ -163,6 +163,15 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
     flags.push(
       flag("--env <environment>", "string", "SPLITCH_ENV or config", "Environment ID or slug."),
     );
+  } else if (command.operationId === "flags_list") {
+    flags.push(
+      flag(
+        "--env <environment>",
+        "string",
+        "SPLITCH_ENV or config",
+        "Environment ID or slug used with --with-config.",
+      ),
+    );
   } else if (fields.has("environmentId")) {
     flags.push(
       flag(
@@ -185,6 +194,15 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
 
 function operationFlags(command: CliCommandDefinition): HelpFlag[] {
   switch (command.operationId) {
+    case "flags_list":
+      return [
+        flag(
+          "--with-config",
+          "boolean",
+          "false",
+          "Include enabled, rollout, and Default Variant for one Environment.",
+        ),
+      ];
     case "flags_create":
       return [
         flag("--variants <names>", "comma-separated strings", "none", "Boolean Variant names."),

@@ -17,7 +17,31 @@ conventions are described in [control-plane-endpoint-inventory.md](control-plane
 
 ### `GET /apps/{app_id}/flags`
 
-Returns: list of Flag definitions.
+The optional query `?environmentId={environment_id}` requests one Environment's Configuration
+summary inline. When present, `environmentId` must be a non-empty Environment ID in the App; an
+empty value is `VALIDATION_ERROR`. When omitted, the endpoint remains an App-level catalog read and
+does not return per-Environment data.
+
+Returns exactly:
+
+```
+{
+  items: Array<FlagResponse & {
+    flagConfiguration?: {
+      enabled: boolean,
+      rollout: number | null,
+      defaultVariant: string
+    }
+  }>,
+  readTruncated: boolean,
+  readLimit: positive integer
+}
+```
+
+`flagConfiguration` is absent from every item when `environmentId` is omitted and present on every
+item when it is supplied. `rollout` is the baseline percentage only, or `null`; full availability
+and Targeting Rules remain on `flag_config_get`. `readTruncated` reports whether the bounded read
+omitted additional Flags, and `readLimit` reports that bound.
 
 ### `POST /apps/{app_id}/flags`
 

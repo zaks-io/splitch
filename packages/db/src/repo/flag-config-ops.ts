@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { flagConfigs, targetingRules } from "../schema/index";
 import {
   appliedRequestUpdate,
@@ -10,6 +10,7 @@ import {
 } from "./approval-atomic";
 import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
+import { idBatches } from "./id-batches";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
 import type { ScopedTable } from "./scoped-table";
@@ -33,6 +34,21 @@ export function makeFlagConfigOps(
 
     getFlagConfigById(scope: EnvScope, configId: string) {
       return flagConfigsTable.findOne(scope, eq(flagConfigs.id, configId));
+    },
+
+    /**
+     * One Environment's Flag Configurations for an already-bounded Flag page.
+     * The EnvScope supplies both app_id and environment_id at the repository
+     * boundary; batching only works around D1's bound-parameter ceiling.
+     */
+    async listFlagConfigsByFlagIds(scope: EnvScope, flagIds: readonly string[]) {
+      if (flagIds.length === 0) return [] as (typeof flagConfigs.$inferSelect)[];
+      const pages = await Promise.all(
+        idBatches(flagIds).map((batch) =>
+          flagConfigsTable.findMany(scope, inArray(flagConfigs.flagId, [...batch])),
+        ),
+      );
+      return pages.flat();
     },
 
     /**

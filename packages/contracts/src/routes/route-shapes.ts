@@ -31,6 +31,11 @@ import {
 export const OrgParams = z.object({ orgId: z.string() });
 export const OrgMemberParams = z.object({ orgId: z.string(), userId: z.string() });
 export const AppParams = z.object({ appId: z.string() });
+export const FlagListQuerySchema = z
+  .object({
+    environmentId: z.string().min(1).optional(),
+  })
+  .strict();
 export const AppMemberParams = z.object({ appId: z.string(), userId: z.string() });
 export const OrgAppsParams = z.object({ orgId: z.string() });
 export const EnvParams = z.object({ appId: z.string(), environmentId: z.string() });

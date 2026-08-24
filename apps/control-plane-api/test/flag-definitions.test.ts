@@ -76,6 +76,97 @@ describe("control-plane Flag definition CRUD", () => {
     ).toEqual([]);
   });
 
+  it("lists multiple Flags with one Environment's configuration inline", async () => {
+    const createdApp = await createDefaultApp(h);
+    const jwt = await appToken(h, createdApp.app.id);
+    const first = await createFlag(h, createdApp.app.id, jwt);
+    const second = await createFlag(h, createdApp.app.id, jwt, {
+      ...baseFlag(createdApp.app.id),
+      idempotency_key: `idem-create-flag-${crypto.randomUUID()}`,
+      key: "recommendations",
+      name: "Recommendations",
+    });
+    const dev = createdApp.environments.find((environment) => environment.key === "dev");
+    const prod = createdApp.environments.find((environment) => environment.key === "prod");
+    if (!dev || !prod) throw new Error("fixture App is missing dev or prod Environment");
+
+    await h.bindings.d1
+      .prepare(
+        "UPDATE flag_configs SET enabled = 1, rollout = ? WHERE app_id = ? AND environment_id = ? AND flag_id = ?",
+      )
+      .bind(
+        JSON.stringify({ percentage: 35, salt: "prod-rollout" }),
+        createdApp.app.id,
+        prod.id,
+        first.id,
+      )
+      .run();
+
+    const prodList = await request(
+      h,
+      "GET",
+      `/apps/${createdApp.app.id}/flags?environmentId=${prod.id}`,
+      jwt,
+    );
+    expect(prodList.status).toBe(200);
+    const prodItems = (await prodList.json()) as {
+      items: Array<{
+        id: string;
+        flagConfiguration?: {
+          enabled: boolean;
+          rollout: number | null;
+          defaultVariant: string;
+        };
+      }>;
+    };
+    expect(prodItems.items).toHaveLength(2);
+    expect(prodItems.items.find((flag) => flag.id === first.id)?.flagConfiguration).toEqual({
+      enabled: true,
+      rollout: 35,
+      defaultVariant: "control",
+    });
+    expect(prodItems.items.find((flag) => flag.id === second.id)?.flagConfiguration).toEqual({
+      enabled: false,
+      rollout: null,
+      defaultVariant: "control",
+    });
+
+    const devList = await request(
+      h,
+      "GET",
+      `/apps/${createdApp.app.id}/flags?environmentId=${dev.id}`,
+      jwt,
+    );
+    expect(devList.status).toBe(200);
+    expect(
+      ((await devList.json()) as typeof prodItems).items.find((flag) => flag.id === first.id)
+        ?.flagConfiguration,
+    ).toMatchObject({ enabled: false, rollout: null });
+
+    const bareList = await request(h, "GET", `/apps/${createdApp.app.id}/flags`, jwt);
+    expect(bareList.status).toBe(200);
+    expect(
+      ((await bareList.json()) as { items: Array<Record<string, unknown>> }).items.every(
+        (flag) => !("flagConfiguration" in flag),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects an empty Environment ID on the Flag list", async () => {
+    const createdApp = await createDefaultApp(h);
+    const jwt = await appToken(h, createdApp.app.id);
+
+    const response = await request(
+      h,
+      "GET",
+      `/apps/${createdApp.app.id}/flags?environmentId=`,
+      jwt,
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
   it("resumes the Flag when catalog Variant insertion fails", async () => {
     const createdApp = await createDefaultApp(h);
     const jwt = await appToken(h, createdApp.app.id);

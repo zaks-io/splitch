@@ -15,6 +15,16 @@ export function objectBody(input: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+export function optionalQueryParam(input: unknown, key: string): string | undefined {
+  const query = (input as { query?: Record<string, unknown> } | null)?.query;
+  const value = query?.[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") {
+    throw new Error(`control-plane-api: validated input has invalid query param "${key}"`);
+  }
+  return value;
+}
+
 /**
  * Read optional boolean query flags after Zod has coerced query/MCP input.
  * Absent flags are false.
