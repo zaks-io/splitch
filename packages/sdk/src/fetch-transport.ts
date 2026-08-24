@@ -25,6 +25,9 @@ const RUN_ID_HEADER = "x-run-id";
 // value). It rides a header rather than the body because published SDKs parse
 // that body strictly and would reject an added key; absent means no arm matched.
 const VARIANT_NAME_HEADER = "x-variant-name";
+// The non-revealing resolution kind lets the SDK distinguish a served Default
+// Variant from a rollout result without changing the frozen response body.
+const REASON_HEADER = "x-reason";
 // The strong validator over the Precomputed Evaluations body. The edge marks it
 // CORS-readable (`Access-Control-Expose-Headers`) so a browser client can
 // revalidate with it.
@@ -253,6 +256,7 @@ async function readEvaluateResponse(response: Response): Promise<TransportResult
   try {
     const body = DataPlaneEvaluateResponseSchema.parse(await response.json());
     const encodedVariantName = response.headers.get(VARIANT_NAME_HEADER);
+    const reason = readReason(response);
     return {
       status: response.status,
       variant: body.variant,
@@ -261,6 +265,7 @@ async function readEvaluateResponse(response: Response): Promise<TransportResult
       // into the parse-failure path below rather than being guessed at.
       variantName: encodedVariantName === null ? null : decodeURIComponent(encodedVariantName),
       runId,
+      ...(reason === undefined ? {} : { reason }),
     };
   } catch (error) {
     // Abort during the body read is a timeout (timer still armed); anything else
@@ -268,6 +273,15 @@ async function readEvaluateResponse(response: Response): Promise<TransportResult
     // that would label a genuine parse error as SDK_TRANSPORT_NETWORK.
     return { ...classifyBodyReadError(error), variant: null, variantName: null, runId: null };
   }
+}
+
+function readReason(response: Response): TransportResult["reason"] {
+  const value = response.headers.get(REASON_HEADER);
+  if (value === null) return undefined;
+  if (value === "SPLIT" || value === "DEFAULT" || value === "DISABLED") {
+    return value;
+  }
+  throw new Error(`evaluate response has invalid ${REASON_HEADER} header`);
 }
 
 async function readPeekResponse(response: Response): Promise<TransportResult> {

@@ -4,8 +4,8 @@ import { Hono } from "hono";
 import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import { DirectHoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import {
-  makeHoldoverWriteOutboxCleanupHandler,
   type HoldoverWriteOutboxCleanupDeps,
+  makeHoldoverWriteOutboxCleanupHandler,
 } from "./assignment/holdover-write-outbox-cleanup";
 import { makeCachedEvaluationTelemetryHandler } from "./cached-evaluation-telemetry";
 import { makeApiKeyOnlyAuthResolver, makeClientKeyOnlyAuthResolver } from "./data-plane-auth";
@@ -130,6 +130,6 @@ function evaluationCorsHeaders(): Headers {
     "access-control-allow-methods": "POST, OPTIONS",
     "access-control-allow-headers":
       "authorization, content-type, idempotency-key, if-none-match, x-splitch-sdk-runtime",
-    "access-control-expose-headers": "etag, x-request-id, x-run-id, x-variant-name",
+    "access-control-expose-headers": "etag, x-request-id, x-reason, x-run-id, x-variant-name",
   });
 }
