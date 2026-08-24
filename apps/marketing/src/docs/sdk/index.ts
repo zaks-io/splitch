@@ -1,3 +1,7 @@
+import { browserTopic } from "./browser";
+import { convexTopic } from "./convex";
+import { evaluateAllTopic } from "./evaluate-all";
+import { reactTopic } from "./react";
 import { dedupTopic, failuresTopic, idempotencyTopic, methodsTopic } from "./semantics";
 import { credentialsTopic, installTopic, optionsTopic } from "./setup";
 import type { SdkTopic } from "./types";
@@ -9,6 +13,10 @@ export const sdkTopics: readonly SdkTopic[] = [
   installTopic,
   credentialsTopic,
   methodsTopic,
+  evaluateAllTopic,
+  browserTopic,
+  reactTopic,
+  convexTopic,
   idempotencyTopic,
   failuresTopic,
   dedupTopic,
