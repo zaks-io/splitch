@@ -8,7 +8,11 @@ export const installTopic: SdkTopic = {
     { kind: "code", lang: "bash", code: "npm install @splitch/sdk" },
     {
       kind: "prose",
-      text: "ESM only. Node 20 or newer, browsers, and edge runtimes. `zod` is the sole dependency.",
+      text: "The published `@splitch/sdk@0.3.0` package is ESM only and supports Node 20 or newer, browsers, and edge runtimes. It has zero runtime dependencies.",
+    },
+    {
+      kind: "prose",
+      text: "The package exports `.` as `@splitch/sdk`, `./browser` as `@splitch/sdk/browser`, and `./react` as `@splitch/sdk/react`. React is an optional peer used only by the React bindings.",
     },
     { kind: "heading", text: "Hello world" },
     {
