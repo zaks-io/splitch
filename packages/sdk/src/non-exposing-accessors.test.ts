@@ -48,7 +48,7 @@ const VERIFY_ERROR: ResolutionDetails = {
 };
 
 function apiClient(fake: FakeTransport, logger = new FakeLogger()) {
-  return { logger, client: createSplitchClient({ apiKey: "ak_test", transport: fake, logger }) };
+  return { logger, client: createSplitchClient({ apiKey: "sk_test", transport: fake, logger }) };
 }
 
 describe("peekVariant / verify: non-exposing accessors", () => {
@@ -138,7 +138,7 @@ describe("peekVariant: fail-loud errors without Default Variant fallback", () =>
       peek: [httpError(403, "INSUFFICIENT_SCOPES", "API Key required for this route")],
     });
     const client = createSplitchClient({
-      clientKey: "ck_test",
+      clientKey: "pk_test",
       transport: fake,
       logger: new FakeLogger(),
     });
@@ -159,7 +159,7 @@ describe("public SDK surface guard", () => {
     const publicSdk = await import("./index");
     const fake = new FakeTransport([]);
     const client = createSplitchClient({
-      apiKey: "ak_test",
+      apiKey: "sk_test",
       transport: fake,
       logger: new FakeLogger(),
     });

@@ -16,7 +16,7 @@ import type { Transport } from "./transport";
 function clientWith(transport: Transport, logger = new FakeLogger()) {
   return {
     logger,
-    client: createSplitchClient({ clientKey: "ck_test", transport, logger }),
+    client: createSplitchClient({ clientKey: "pk_test", transport, logger }),
   };
 }
 
@@ -32,7 +32,7 @@ describe("createSplitchClient: construction", () => {
       }
     }
     expect(() =>
-      createSplitchClient({ apiKey: "ak", transport: new FakeTransport([]) }),
+      createSplitchClient({ apiKey: "sk_valid", transport: new FakeTransport([]) }),
     ).not.toThrow();
   });
 
@@ -49,7 +49,7 @@ describe("createSplitchClient: construction", () => {
     vi.useFakeTimers();
     try {
       const client = createSplitchClient({
-        clientKey: "ck_test",
+        clientKey: "pk_test",
         fetch: ((_url: unknown, init?: RequestInit) =>
           new Promise<Response>((resolve, reject) => {
             init?.signal?.addEventListener("abort", () =>
@@ -79,11 +79,11 @@ describe("createSplitchClient: construction", () => {
   });
 
   it("rejects a non-zero retries (never retry the Exposure-bearing call)", () => {
-    expect(() => createSplitchClient({ clientKey: "ck", retries: 1 })).toThrowError(
+    expect(() => createSplitchClient({ clientKey: "pk_valid", retries: 1 })).toThrowError(
       expect.objectContaining({ code: "SDK_RETRIES_INVALID" }),
     );
     expect(() =>
-      createSplitchClient({ clientKey: "ck", retries: 0, transport: new FakeTransport([]) }),
+      createSplitchClient({ clientKey: "pk_valid", retries: 0, transport: new FakeTransport([]) }),
     ).not.toThrow();
   });
 });
@@ -202,7 +202,7 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
   it("sends cache telemetry with the same Idempotency-Key in its header and body", async () => {
     const requests: { path: string; headers: Headers; body: unknown }[] = [];
     const client = createSplitchClient({
-      clientKey: "ck_test",
+      clientKey: "pk_test",
       fetch: ((url: URL | RequestInfo, init?: RequestInit) => {
         const request = {
           path: new URL(String(url)).pathname,
@@ -290,7 +290,7 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
   it("end-to-end through createSplitchClient with an injected fetch fails loud on a 503", async () => {
     const logger = new FakeLogger();
     const client = createSplitchClient({
-      clientKey: "ck_test",
+      clientKey: "pk_test",
       fetch: stubFetch(new Response("", { status: 503 })),
       logger,
     });

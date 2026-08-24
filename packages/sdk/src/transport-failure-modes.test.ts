@@ -12,7 +12,7 @@ describe("transport failure modes: distinct codes + preserved cause (SPL-323)", 
     const thrown = new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
     const logger = new FakeLogger();
     const client = createSplitchClient({
-      clientKey: "ck_test",
+      clientKey: "pk_test",
       fetch: stubFetch(() => Promise.reject(thrown)),
       logger,
     });
@@ -45,7 +45,7 @@ describe("transport failure modes: distinct codes + preserved cause (SPL-323)", 
       })) as typeof fetch;
 
     const client = createSplitchClient({
-      clientKey: "ck_test",
+      clientKey: "pk_test",
       fetch: aborting,
       timeoutMs: 5,
       logger,
@@ -69,7 +69,7 @@ describe("transport failure modes: distinct codes + preserved cause (SPL-323)", 
   it("unparseable body -> SDK_TRANSPORT_PARSE and logger.error receives the parse error", async () => {
     const logger = new FakeLogger();
     const client = createSplitchClient({
-      clientKey: "ck_test",
+      clientKey: "pk_test",
       fetch: stubFetch(new Response("not json", { status: 200 })),
       logger,
     });
@@ -92,7 +92,7 @@ describe("transport failure modes: distinct codes + preserved cause (SPL-323)", 
   it("HTTP 503 from the server remains SERVICE_UNAVAILABLE (server said so)", async () => {
     const logger = new FakeLogger();
     const client = createSplitchClient({
-      clientKey: "ck_test",
+      clientKey: "pk_test",
       fetch: stubFetch(new Response("", { status: 503 })),
       logger,
     });
@@ -123,7 +123,7 @@ describe("transport failure modes: body-read abort and peek/verify parity (SPL-3
     const aborted = new DOMException("The operation was aborted.", "AbortError");
     const logger = new FakeLogger();
     const client = createSplitchClient({
-      clientKey: "ck_test",
+      clientKey: "pk_test",
       fetch: stubFetch(stalledBody(200, aborted)),
       logger,
     });
@@ -146,7 +146,7 @@ describe("transport failure modes: body-read abort and peek/verify parity (SPL-3
     const aborted = new DOMException("The operation was aborted.", "AbortError");
     const logger = new FakeLogger();
     const client = createSplitchClient({
-      clientKey: "ck_test",
+      clientKey: "pk_test",
       fetch: stubFetch(stalledBody(503, aborted)),
       logger,
     });
@@ -198,7 +198,7 @@ describe("transport failure modes: body-read abort and peek/verify parity (SPL-3
     const dropped = new TypeError("terminated: body stream failed mid-read");
     const logger = new FakeLogger();
     const client = createSplitchClient({
-      clientKey: "ck_test",
+      clientKey: "pk_test",
       fetch: stubFetch(stalledBody(503, dropped)),
       logger,
     });

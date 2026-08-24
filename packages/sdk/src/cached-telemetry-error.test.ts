@@ -6,7 +6,7 @@ describe("cached Evaluation telemetry errors", () => {
   it("logs a stable client code and remediation", async () => {
     const logger = new FakeLogger();
     const client = createSplitchClient({
-      clientKey: "ck_test",
+      clientKey: "pk_test",
       logger,
       fetch: ((url: URL | RequestInfo) =>
         Promise.resolve(

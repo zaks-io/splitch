@@ -33,7 +33,7 @@ describe("createSplitchClient: default fetch receiver (browser Window.fetch)", (
 
     try {
       const client = createSplitchClient({
-        clientKey: "ck_test",
+        clientKey: "pk_test",
         endpoint: "https://edge.test",
         logger,
         // Intentionally omit `fetch` — exercise the default seam.

@@ -31,7 +31,7 @@ const { renderConnectSnippet, renderServerConnectSnippet, SDK_INSTALL_COMMAND } 
 );
 
 const clientSnippet = renderConnectSnippet({
-  clientKey: "ck_live_snippet_guard",
+  clientKey: "pk_live_snippet_guard",
   flagKey: "new-checkout",
 });
 const serverSnippet = renderServerConnectSnippet({ flagKey: "new-checkout" });

@@ -4,6 +4,7 @@ import { runEvaluate, runPeekVariant, runVerify } from "./evaluate";
 import type { PrecomputedEvaluations } from "./evaluate-all";
 import { runEvaluateAll } from "./evaluate-all";
 import { createFetchTransport } from "./fetch-transport";
+import { requireCredentialPrefix } from "./credential";
 import type { VariantValue } from "./generated/contract-surface.js";
 import type { SdkResolutionDetails } from "./resolution";
 import { SeenSet } from "./seen-set";
@@ -226,5 +227,7 @@ function resolveCredential(options: SplitchClientOptions): string {
       remediation: "Provide one credential and remove the other credential option",
     });
   }
-  return (options.clientKey ?? options.apiKey) as string;
+  return hasClient
+    ? requireCredentialPrefix(options.clientKey as string, "clientKey")
+    : requireCredentialPrefix(options.apiKey as string, "apiKey");
 }

@@ -22,7 +22,7 @@ function client(fetchImpl: typeof fetch, timeoutMs = 1000) {
   return {
     logger,
     client: createSplitchClient({
-      apiKey: "ak_test",
+      apiKey: "sk_test",
       endpoint: "https://edge.test",
       fetch: fetchImpl,
       timeoutMs,
@@ -47,7 +47,7 @@ describe("evaluateAll over the real fetch adapter", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe("https://edge.test/api/sdk/evaluate-all");
     const headers = calls[0]?.init.headers as Record<string, string>;
-    expect(headers.authorization).toBe("Bearer ak_test");
+    expect(headers.authorization).toBe("Bearer sk_test");
     expect(headers["idempotency-key"]).toEqual(expect.any(String));
     expect(headers["x-splitch-sdk-runtime"]).toBe("javascript");
     expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
