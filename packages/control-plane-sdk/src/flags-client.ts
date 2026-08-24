@@ -98,13 +98,7 @@ export function createFlagsClient(
   const hcClient = client ?? createFlagsHcClient(hcOptions);
 
   return {
-    list: (input, callOptions) =>
-      invokeHcRoute<FlagsListOutput>("flags_list", () =>
-        hcClient.apps[":appId"].flags.$get(
-          { param: { appId: input.appId } },
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
-        ),
-      ),
+    list: (input, callOptions) => flagsList(hcClient, hcOptions, input, callOptions),
     create: (input, callOptions) =>
       invokeHcRoute<FlagsCreateOutput>("flags_create", () =>
         hcClient.apps[":appId"].flags.$post(
@@ -243,6 +237,26 @@ export function createFlagsClient(
       );
     },
   };
+}
+
+function flagsList(
+  hcClient: FlagsHcClient,
+  hcOptions: ControlPlaneHcOptions,
+  input: FlagsListInput,
+  callOptions?: ControlPlaneOperationOptions,
+) {
+  const request = input.environmentId
+    ? {
+        param: { appId: input.appId },
+        query: { environmentId: input.environmentId },
+      }
+    : { param: { appId: input.appId } };
+  return invokeHcRoute<FlagsListOutput>("flags_list", () =>
+    hcClient.apps[":appId"].flags.$get(
+      request as never,
+      hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+    ),
+  );
 }
 
 function flagsGet(

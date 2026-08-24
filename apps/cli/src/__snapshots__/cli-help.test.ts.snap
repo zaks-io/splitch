@@ -948,12 +948,14 @@ Usage:
   splitch flags list [flags]
 
 Flags:
-  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help   [type: boolean; default: false] Show help and exit.
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug used with --with-config.
+  --with-config        [type: boolean; default: false] Include enabled, rollout, and Default Variant for one Environment.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch flags list --json",
+  splitch flags list --with-config --env prod --json",
     "flags promote": "Promote selected Flag Configuration field-groups between Environments.
 
 Usage:

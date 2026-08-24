@@ -8,6 +8,7 @@ export interface ParsedGlobalFlags {
   readonly confirm: boolean;
   readonly dryRun: boolean;
   readonly force: boolean;
+  readonly withConfig: boolean;
   readonly endpoint?: string;
   readonly name?: string;
   readonly key?: string;
@@ -30,7 +31,7 @@ export interface ParsedInvocation {
 
 const META_COMMANDS = new Set(["login", "logout", "use", "context", "health"]);
 
-const BOOLEAN_FLAGS = new Set(["json", "confirm", "help", "dryRun", "force"]);
+const BOOLEAN_FLAGS = new Set(["json", "confirm", "help", "dryRun", "force", "withConfig"]);
 
 /**
  * Every flag the CLI reads, keyed as it appears after `toCamel`.
@@ -155,6 +156,7 @@ function toParsedFlags(flags: Record<string, string | boolean>): ParsedGlobalFla
     confirm: Boolean(flags.confirm),
     dryRun: Boolean(flags.dryRun),
     force: Boolean(flags.force),
+    withConfig: Boolean(flags.withConfig),
     app: stringFlag(flags.app),
     env: stringFlag(flags.env),
     org: stringFlag(flags.org),

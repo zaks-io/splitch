@@ -1,9 +1,10 @@
-import { type Flag, FlagSchema, type Variant } from "@splitch/contracts";
+import { type Flag, FlagSchema, PercentageRolloutSchema, type Variant } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import { type ValidationIssue, validateJsonSchema } from "./flag-definition-schema";
 
 type FlagRow = NonNullable<Awaited<ReturnType<Repository["flags"]["getFlag"]>>>;
 type VariantRow = Awaited<ReturnType<Repository["flags"]["listVariants"]>>[number];
+type FlagConfigRow = NonNullable<Awaited<ReturnType<Repository["flags"]["getFlagConfig"]>>>;
 
 export interface CreateVariantInput {
   name: string;
@@ -36,6 +37,33 @@ export function flagFrom(flag: FlagRow, variants: readonly VariantRow[]): Flag {
     createdAt: flag.createdAt,
     updatedAt: flag.updatedAt,
   });
+}
+
+export function flagWithConfigurationFrom(
+  flag: FlagRow,
+  variants: readonly VariantRow[],
+  config: FlagConfigRow,
+) {
+  const definition = flagFrom(flag, variants);
+  const defaultVariant = variants.find((variant) => variant.id === config.defaultVariantId);
+  if (!defaultVariant) {
+    throw new Error(
+      `flag list: Flag Configuration ${config.id} references missing Default Variant ${String(config.defaultVariantId)}`,
+    );
+  }
+  return {
+    ...definition,
+    flagConfiguration: {
+      enabled: config.enabled,
+      rollout: storedRolloutPercentage(config.rollout),
+      defaultVariant: defaultVariant.name,
+    },
+  };
+}
+
+function storedRolloutPercentage(value: string | null): number | null {
+  if (value === null) return null;
+  return PercentageRolloutSchema.parse(JSON.parse(value)).percentage;
 }
 
 function toVariant(row: VariantRow): Variant {

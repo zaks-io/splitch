@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CreateFlagRequestSchema,
   CreateVariantRequestSchema,
+  FlagListResponseSchema,
   FlagResponseSchema,
   PatchFlagRequestSchema,
   PatchVariantRequestSchema,
@@ -112,6 +113,44 @@ describe("FlagResponseSchema", () => {
 
   it("rejects a response missing audit timestamps", () => {
     expect(FlagResponseSchema.safeParse(validCreateFlag).success).toBe(false);
+  });
+});
+
+describe("FlagListResponseSchema", () => {
+  const flag = {
+    id: "flag_1",
+    appId: "app_1",
+    key: "feature-x",
+    name: "Feature X",
+    schema: null,
+    variants: [{ id: "var_1", name: "control", value: false }],
+    defaultVariantId: "var_1",
+    createdAt: "2026-06-28T00:00:00.000Z",
+    updatedAt: "2026-06-28T00:00:00.000Z",
+  };
+
+  it("keeps the bare Flag list shape unchanged", () => {
+    const response = { items: [flag], readTruncated: false, readLimit: 200 };
+    expect(FlagListResponseSchema.parse(response)).toEqual(response);
+  });
+
+  it("accepts the bounded per-Environment summary without Targeting Rule detail", () => {
+    const response = {
+      items: [
+        {
+          ...flag,
+          flagConfiguration: {
+            enabled: true,
+            rollout: 25,
+            defaultVariant: "control",
+          },
+        },
+      ],
+      readTruncated: false,
+      readLimit: 200,
+    };
+    expect(FlagListResponseSchema.parse(response)).toEqual(response);
+    expect(response.items[0]?.flagConfiguration).not.toHaveProperty("targetingRules");
   });
 });
 

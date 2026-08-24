@@ -73,6 +73,9 @@ function applyContextFields(
     }
     return;
   }
+  if (command.operationId === "flags_list") {
+    return;
+  }
   // Optional Environment filters (e.g. approval_requests_list) are opt-in via
   // `--env` only. Config / SPLITCH_ENV must not silently narrow an App-scoped
   // list — unfiltered means the full App set (SPL-294).

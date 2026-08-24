@@ -119,6 +119,7 @@ async function executeCommand(
   deps: CliDeps,
   io: CliIo,
 ): Promise<CliResult> {
+  const scopedCommand = commandForInvocation(command, invocation);
   // Positionals before scope / SDK so misuse never reaches control-plane-sdk
   // path building (and never needs credentials to learn the argument is required).
   const positionalError = validateRequiredPositionals(command, invocation, io);
@@ -132,7 +133,7 @@ async function executeCommand(
     cwd: deps.cwd,
   });
 
-  const scopeError = validateCommandScope(command, context, io);
+  const scopeError = validateCommandScope(scopedCommand, context, io);
   if (scopeError) {
     return scopeError;
   }
@@ -145,7 +146,7 @@ async function executeCommand(
   }
 
   try {
-    context = await resolveContextSelectors(deps, context, command);
+    context = await resolveContextSelectors(deps, context, scopedCommand);
   } catch (error) {
     return handleExecutionError(error, io);
   }
@@ -162,13 +163,23 @@ async function executeCommand(
 
   let input: Record<string, unknown>;
   try {
-    input = buildOperationInput(command, invocation, context);
+    input = buildOperationInput(scopedCommand, invocation, context);
     assertPathParamsPresent(command, input);
     input = await resolveFlagIdInInput(deps, command, context, input);
   } catch (error) {
     return handleInputError(error, invocation, io);
   }
   return executeApiOperation(command.operationId, input, invocation, deps, io);
+}
+
+function commandForInvocation(
+  command: CliCommandDefinition,
+  invocation: ParsedInvocation,
+): CliCommandDefinition {
+  if (command.operationId !== "flags_list" || !invocation.flags.withConfig) {
+    return command;
+  }
+  return { ...command, needsEnvironment: true };
 }
 
 function validateRequiredPositionals(

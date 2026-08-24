@@ -1,5 +1,5 @@
 import type { Variant } from "@splitch/contracts";
-import { appScope } from "@splitch/db";
+import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
 import { flagNotFound, validationErrors } from "./flag-definition-errors";
@@ -15,11 +15,12 @@ import {
 import {
   flagFrom,
   flagResponse,
+  flagWithConfigurationFrom,
   schemaFromBody,
   variantSchemaIssues,
 } from "./flag-definition-model";
 import { schemaDefinitionIssues } from "./flag-definition-schema";
-import { objectBody, pathParam } from "./handler-input";
+import { objectBody, optionalQueryParam, pathParam } from "./handler-input";
 import { FLAG_LIST_READ_LIMIT } from "./overview-thresholds";
 
 /**
@@ -35,6 +36,10 @@ export async function listFlags(
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
   if (!(await deps.repo.identity.getApp(appId))) return appNotFound(requestId);
+  const environmentId = optionalQueryParam(input, "environmentId");
+  if (environmentId && !(await deps.repo.identity.getEnvironment(appScope(appId), environmentId))) {
+    return appNotFound(requestId);
+  }
 
   const scope = appScope(appId);
   // One row past the ceiling, so truncation is OBSERVED rather than inferred
@@ -50,8 +55,37 @@ export async function listFlags(
     scope,
     rows.map((row) => row.id),
   );
-  const items = rows.map((row) => flagFrom(row, catalogs.get(row.id) ?? []));
-  return Response.json({ items, readTruncated, readLimit: FLAG_LIST_READ_LIMIT });
+  const items = environmentId
+    ? withEnvironmentConfigurations(deps, appId, environmentId, rows, catalogs)
+    : Promise.resolve(rows.map((row) => flagFrom(row, catalogs.get(row.id) ?? [])));
+  return Response.json({
+    items: await items,
+    readTruncated,
+    readLimit: FLAG_LIST_READ_LIMIT,
+  });
+}
+
+async function withEnvironmentConfigurations(
+  deps: FlagDefinitionDeps,
+  appId: string,
+  environmentId: string,
+  rows: Awaited<ReturnType<FlagDefinitionDeps["repo"]["flags"]["listFlagPage"]>>,
+  catalogs: Awaited<ReturnType<FlagDefinitionDeps["repo"]["flags"]["listVariantsForFlags"]>>,
+) {
+  const configs = await deps.repo.flags.listFlagConfigsByFlagIds(
+    envScope(appId, environmentId),
+    rows.map((row) => row.id),
+  );
+  const configByFlagId = new Map(configs.map((config) => [config.flagId, config]));
+  return rows.map((row) => {
+    const config = configByFlagId.get(row.id);
+    if (!config) {
+      throw new Error(
+        `flag list: Flag ${row.id} has no Configuration in Environment ${environmentId}`,
+      );
+    }
+    return flagWithConfigurationFrom(row, catalogs.get(row.id) ?? [], config);
+  });
 }
 
 export async function getFlag(

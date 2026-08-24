@@ -78,6 +78,24 @@ export type PatchFlagRequest = z.infer<typeof PatchFlagRequestSchema>;
 export const FlagResponseSchema = FlagSchema;
 export type FlagResponse = z.infer<typeof FlagResponseSchema>;
 
+/**
+ * The intentionally small per-Environment projection used by the Flag catalog.
+ * Full availability and Targeting Rule detail stays on `flag_config_get`.
+ */
+export const FlagConfigurationSummarySchema = z
+  .object({
+    enabled: z.boolean(),
+    rollout: z.number().min(0).max(100).nullable(),
+    defaultVariant: z.string().min(1),
+  })
+  .strict();
+export type FlagConfigurationSummary = z.infer<typeof FlagConfigurationSummarySchema>;
+
+export const FlagListItemSchema = FlagResponseSchema.extend({
+  flagConfiguration: FlagConfigurationSummarySchema.optional(),
+});
+export type FlagListItem = z.infer<typeof FlagListItemSchema>;
+
 // ---------------------------------------------------------------------------
 // FlagListResponse
 //
@@ -93,7 +111,7 @@ export type FlagResponse = z.infer<typeof FlagResponseSchema>;
 // ---------------------------------------------------------------------------
 
 export const FlagListResponseSchema = z.object({
-  items: z.array(FlagResponseSchema),
+  items: z.array(FlagListItemSchema),
   readTruncated: z.boolean(),
   readLimit: z.number().int().positive(),
 });
