@@ -414,6 +414,72 @@ export const evaluateFlag = action({
 });
 ```
 
+### Flags in queries and mutations
+
+Queries and mutations cannot call `@splitch/sdk` because they cannot use
+`fetch`. Evaluate at the calling action or HTTP-action boundary, then pass the
+resolved boolean or Variant name through the query or mutation's validated
+arguments:
+
+```ts
+// convex/checkout.ts
+import { createSplitchClient } from "@splitch/sdk";
+import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import { action, internalMutation } from "./_generated/server";
+
+export const applyCheckoutFlag = internalMutation({
+  args: {
+    useNewCheckout: v.boolean(),
+    checkoutVariant: v.union(v.string(), v.null()),
+  },
+  handler: async (_ctx, args) => {
+    // Do the mutation's database work from these resolved values.
+    return {
+      experience: args.useNewCheckout ? "new" : "current",
+      variantName: args.checkoutVariant,
+    };
+  },
+});
+
+export const checkout = action({
+  args: {
+    targetingKey: v.string(),
+    idempotencyKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const clientKey = process.env.SPLITCH_CLIENT_KEY;
+    if (!clientKey) throw new Error("SPLITCH_CLIENT_KEY is required");
+
+    const splitch = createSplitchClient({ clientKey });
+    const details = await splitch.evaluateDetails("new-checkout", {
+      targetingKey: args.targetingKey,
+      idempotencyKey: args.idempotencyKey,
+      defaultValue: false,
+    });
+    if (typeof details.value !== "boolean") {
+      throw new Error("new-checkout must resolve to a boolean");
+    }
+
+    return await ctx.runMutation(internal.checkout.applyCheckoutFlag, {
+      useNewCheckout: details.value,
+      checkoutVariant: details.variantName ?? null,
+    });
+  },
+});
+```
+
+Prefer evaluating once at the boundary when one request runs several queries or
+mutations, or when multiple operations must use the same decision. Pass that
+same resolved value to each operation instead of creating extra Evaluations and
+Exposures.
+
+There is no Splitch synced-store component for Convex today. A query or mutation
+cannot read locally synchronized Splitch state; its caller must supply resolved
+values, or the work must move behind an action or HTTP action. The
+`fixtures/convex-sdk-consumer/` test compiles and exercises this
+action-to-mutation boundary against the packed SDK.
+
 ### Bootstrap for the browser client
 
 An [HTTP action](https://docs.convex.dev/functions/http-actions) is the natural

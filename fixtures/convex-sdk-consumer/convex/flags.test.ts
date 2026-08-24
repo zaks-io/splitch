@@ -46,6 +46,28 @@ describe("Convex action evaluate round-trip (fetch stubbed at fixture seam)", ()
     }
   });
 
+  it("threads an action-resolved boolean and Variant into a mutation", async () => {
+    process.env.SPLITCH_CLIENT_KEY = "pk_convex_fixture";
+    process.env.SPLITCH_ENDPOINT = "https://edge.test";
+    const edge = stubSplitchEdgeFetch();
+    const t = convexTest(schema, modules);
+
+    try {
+      const result = await t.action(api.flags.evaluateThenMutate, {
+        targetingKey: "user-boundary",
+        idempotencyKey: "eval-boundary",
+      });
+
+      expect(result).toEqual({
+        experience: "new",
+        variantName: "treatment",
+      });
+      expect(edge.calls).toHaveLength(1);
+    } finally {
+      edge.restore();
+    }
+  });
+
   it("evaluateAndStore persists the resolution for query consumers", async () => {
     process.env.SPLITCH_CLIENT_KEY = "pk_convex_fixture";
     process.env.SPLITCH_ENDPOINT = "https://edge.test";

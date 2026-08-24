@@ -12,6 +12,48 @@ const storedResolutionValidator = v.object({
   errorCode: v.union(v.string(), v.null()),
 });
 
+const checkoutDecisionValidator = v.object({
+  experience: v.union(v.literal("new"), v.literal("current")),
+  variantName: v.union(v.string(), v.null()),
+});
+
+/** Consume action-resolved values without calling the SDK from the mutation. */
+export const applyCheckoutFlag = internalMutation({
+  args: {
+    useNewCheckout: v.boolean(),
+    checkoutVariant: v.union(v.string(), v.null()),
+  },
+  returns: checkoutDecisionValidator,
+  handler: async (_ctx, args) => ({
+    experience: args.useNewCheckout ? "new" : "current",
+    variantName: args.checkoutVariant,
+  }),
+});
+
+/** Evaluate once at the action boundary and thread the result through args. */
+export const evaluateThenMutate = action({
+  args: {
+    targetingKey: v.string(),
+    idempotencyKey: v.string(),
+  },
+  returns: checkoutDecisionValidator,
+  handler: async (ctx, args) => {
+    const client = createExposureClient();
+    const details = await client.evaluateDetails("new-checkout", {
+      targetingKey: args.targetingKey,
+      idempotencyKey: args.idempotencyKey,
+      defaultValue: false,
+    });
+    if (typeof details.value !== "boolean") {
+      throw new Error("new-checkout must resolve to a boolean");
+    }
+    return await ctx.runMutation(internal.flags.applyCheckoutFlag, {
+      useNewCheckout: details.value,
+      checkoutVariant: details.variantName ?? null,
+    });
+  },
+});
+
 /**
  * Persist a resolution as data (upsert by targetingKey+flagKey). Mutations
  * cannot call `@splitch/sdk` (`fetch` is actions-only:

@@ -7,6 +7,8 @@ Proves `@splitch/sdk` inside Convex's isolate (SPL-336):
   and [Runtimes](https://docs.convex.dev/functions/runtimes)).
 - A **mutation** stores the result; a **query** reads it as data (queries and
   mutations cannot `fetch`).
+- An **action** resolves a Flag once and passes its boolean plus Variant name
+  through validated args to an internal mutation.
 - An **HTTP action** calls `evaluateAll` and returns the Precomputed Evaluations
   payload for browser bootstrap
   ([HTTP actions](https://docs.convex.dev/functions/http-actions)).
