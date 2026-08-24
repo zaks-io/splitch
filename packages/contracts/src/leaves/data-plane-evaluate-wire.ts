@@ -9,8 +9,8 @@ import { VariantValueSchema } from "./variant-value";
  * degraded response. Current SDK mirrors strip unrecognized keys (SPL-325), but
  * the freeze still holds while any supported published client parses strictly.
  *
- * New evaluation metadata therefore rides a response header (see `x-run-id` and
- * `x-variant-name` in apps/evaluation-api), which old clients ignore. A field
+ * New evaluation metadata therefore rides a response header (see `x-run-id`,
+ * `x-variant-name`, and `x-reason` in apps/evaluation-api), which old clients ignore. A field
  * may only move into the body once no supported SDK parses it strictly.
  */
 export const DataPlaneEvaluateResponseSchema = z

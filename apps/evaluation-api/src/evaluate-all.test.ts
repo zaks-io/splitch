@@ -218,7 +218,7 @@ describe("POST /api/sdk/evaluate-all: ETag and tickets", () => {
 });
 
 describe("POST /api/sdk/evaluate-all: ticket-bearing outcomes", () => {
-  it("emits SPLIT + ticket for live Experiment Run no-match defaults (evaluate would expose)", async () => {
+  it("emits DEFAULT + ticket for live Experiment Run no-match defaults (evaluate would expose)", async () => {
     const { app } = await makeSdkRouteHarness({
       liveRun: true,
       runOverrides: {
@@ -240,7 +240,7 @@ describe("POST /api/sdk/evaluate-all: ticket-bearing outcomes", () => {
 
     expect(res.status).toBe(200);
     expect(body.evaluations[FLAG_KEY]).toMatchObject({
-      reason: "SPLIT",
+      reason: "DEFAULT",
       exposureTicket: expect.any(String),
       errorCode: null,
     });

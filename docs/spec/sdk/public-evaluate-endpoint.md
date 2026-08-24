@@ -84,7 +84,8 @@ This is the **SDK-synthesized** return shape, not the HTTP wire body. The wire r
 `{ variant: VariantValue | null, variantName: string | null }` (see [contracts/request-response-envelopes-conventions.md](../contracts/request-response-envelopes-conventions.md));
 `variantName` rides the wire because it is not derivable client-side (two arms may share a value),
 while the SDK synthesizes the rest of `ResolutionDetails` (`reason`, `errorCode`, …) from that wire
-body plus the HTTP status (see [contracts/leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md)). `Reason` is the
+body, HTTP status, and non-revealing response metadata. The `x-reason` header carries the resolution
+kind without changing the frozen body (see [contracts/leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md)). `Reason` is the
 `ResolutionReason` enum from `contracts/leaf-schemas-runtime.md` — do not redefine it.
 
 `evaluate` (value accessor) unwraps this to `variant`; `evaluateDetails` returns the whole
@@ -122,7 +123,7 @@ not the value (the value can change; the name is the immutable experimental arm 
 - The salt used for Fractional Evaluation
 - Other Entities' Variants or assignments
 - The full Flag config / Variant set
-- Resolution reason or which rule matched (that is the test-evaluation endpoint — different auth)
+- Revealing resolution detail or which rule matched (that is the test-evaluation endpoint — different auth)
 - Debug metadata
 
 Exposing any of these under a public Client Key would allow reverse-engineering the experiment

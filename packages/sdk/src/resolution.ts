@@ -19,7 +19,8 @@ export type SdkResolutionDetails = Omit<ContractResolutionDetails, "errorCode"> 
  * Synthesize the OpenFeature `ResolutionDetails` from the `{ variant, variantName }`
  * wire body plus the HTTP status. The wire response is intentionally non-revealing
  * — the resolved arm and nothing about how it was chosen (ADR-0018) — so
- * `reason`/`errorCode` are derived here, never sent by the server. This is the
+ * `reason`/`errorCode` are derived here from HTTP status and non-revealing
+ * response metadata. This is the
  * contract that makes fail-loud usable: every transport outcome becomes one
  * structured result the caller branches on via `reason`.
  *
@@ -37,8 +38,8 @@ export type SdkResolutionDetails = Omit<ContractResolutionDetails, "errorCode"> 
  * `SDK_TRANSPORT_*` codes from `sdkClientErrorCodes` — never the server's
  * `SERVICE_UNAVAILABLE`.
  *
- *   200 + variant present  -> SPLIT    (resolved Variant,  Exposure fires)
- *   200 + variant null     -> DEFAULT  (Default Variant,   Exposure fires)
+ *   200 + reason metadata  -> that non-revealing resolution reason
+ *   200 from older adapter -> SPLIT when variant is present, DEFAULT when absent
  *   401                    -> ERROR    UNAUTHORIZED
  *   403                    -> ERROR    FORBIDDEN
  *   404                    -> ERROR    FLAG_NOT_FOUND
@@ -49,10 +50,9 @@ export type SdkResolutionDetails = Omit<ContractResolutionDetails, "errorCode"> 
  *   timeout / abort        -> ERROR    SDK_TRANSPORT_TIMEOUT
  *   unparseable body       -> ERROR    SDK_TRANSPORT_PARSE
  *
- * DISABLED, CACHED, and STALE are not synthesizable from the bare data-plane body
- * (DISABLED is indistinguishable from DEFAULT on the wire; CACHED is produced by
- * the seen-set path in evaluate.ts, never the transport). A 200 with no variant is
- * therefore reported as DEFAULT, the conservative non-error reading.
+ * CACHED and STALE are SDK-local states and are never carried by response
+ * metadata. Older adapters without reason metadata cannot distinguish DISABLED
+ * from DEFAULT, so a 200 with no variant falls back to DEFAULT.
  */
 
 const ERROR_CODE_BY_STATUS: Readonly<Record<number, ErrorCode>> = {
@@ -102,13 +102,14 @@ function errorMessageForStatus(
 }
 
 /**
- * Build a successful (non-error) `ResolutionDetails` for a 200 outcome. A present
- * variant is SPLIT; an absent one is DEFAULT. The caller supplies the Default
- * Variant value used when the wire `variant` is null.
+ * Build a successful (non-error) `ResolutionDetails` for a 200 outcome. Current
+ * adapters carry the non-revealing resolution kind; older adapters fall back to
+ * variant presence. The caller supplies the Default Variant value used when the
+ * wire `variant` is null.
  */
 function resolveSuccess(result: TransportResult, defaultValue: VariantValue): SdkResolutionDetails {
   const matched = result.variant !== null;
-  const reason: ResolutionReason = matched ? "SPLIT" : "DEFAULT";
+  const reason: ResolutionReason = result.reason ?? (matched ? "SPLIT" : "DEFAULT");
   return {
     // The arm label comes off the wire; on a no-match there is no arm, and the
     // value is the caller's Default Variant, which no Variant name describes.
