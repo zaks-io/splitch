@@ -71,10 +71,10 @@ test("control-panel deploy scripts use the Vite-aware deploy wrapper", () => {
       `${name} must participate in the Control Panel build cache key`,
     );
   }
-  assert.deepEqual(turbo.tasks["@splitch/marketing#build"].env, [
-    "CLOUDFLARE_ENV",
-    "SPLITCH_GENERATED_WRANGLER_ENV",
-  ]);
+  assert.deepEqual(
+    turbo.tasks["@splitch/marketing#build"].env,
+    turbo.tasks["@splitch/control-panel#build"].env,
+  );
   for (const environment of ["production", "shared-preview"]) {
     assert.match(
       rootPackageJson.scripts[`deploy:dry-run:${environment}`],
