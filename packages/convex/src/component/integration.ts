@@ -1,22 +1,26 @@
 import { ConvexConfigSnapshotSchema, ConvexInstallationSchema } from "@splitch/contracts";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import {
-  action,
-  env,
-  internalAction,
-  internalMutation,
-  internalQuery,
-  type QueryCtx,
-} from "./_generated/server";
+import { action, env, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { randomSecret } from "./crypto";
 import { purgeBatchHandler, revokeLocalHandler, uninstallHandler } from "./integration_cleanup";
+import {
+  ensureTrailingSlash,
+  normalizedEndpoint,
+  requestHeaders,
+  responseJson,
+  syncHandler,
+} from "./integration_remote";
+import { requiredIntegration } from "./integration_state";
+import schema from "./schema";
+import { installationResultValidator } from "./validators";
 
 const CURRENT_KEY = "current" as const;
 const DEFAULT_ENDPOINT = "https://edge.splitch.dev";
 
 export const get = internalQuery({
   args: {},
+  returns: v.union(schema.doc("integrations"), v.null()),
   handler: async (ctx) =>
     ctx.db
       .query("integrations")
@@ -32,6 +36,7 @@ export const initialize = internalMutation({
     callbackUrl: v.string(),
     endpoint: v.string(),
   },
+  returns: v.union(schema.doc("integrations"), v.null()),
   handler: async (ctx, args) => {
     const existing = await ctx.db
       .query("integrations")
@@ -53,6 +58,7 @@ export const initialize = internalMutation({
 
 export const activate = internalMutation({
   args: { appId: v.string(), environmentId: v.string(), environmentVersion: v.number() },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const integration = await requiredIntegration(ctx);
     await ctx.db.patch(integration._id, {
@@ -66,6 +72,7 @@ export const activate = internalMutation({
 
 export const install = action({
   args: {},
+  returns: installationResultValidator,
   handler: async (
     ctx,
   ): Promise<{
@@ -78,6 +85,7 @@ export const install = action({
     const siteUrl = process.env.CONVEX_SITE_URL;
     if (!siteUrl) throw new Error("CONVEX_SITE_URL is required to install @splitch/convex");
     const endpoint = normalizedEndpoint(env.SPLITCH_ENDPOINT ?? DEFAULT_ENDPOINT);
+    const headers = requestHeaders();
     const callbackUrl = new URL("configuration", ensureTrailingSlash(siteUrl)).toString();
     const initialized = await ctx.runMutation(internal.integration.initialize, {
       installationId: crypto.randomUUID(),
@@ -90,7 +98,7 @@ export const install = action({
       throw new Error("@splitch/convex failed to initialize local installation state");
     const response = await fetch(`${endpoint}/api/integrations/convex/installations`, {
       method: "POST",
-      headers: requestHeaders(),
+      headers,
       body: JSON.stringify({
         installationId: initialized.installationId,
         callbackUrl: initialized.callbackUrl,
@@ -105,43 +113,41 @@ export const install = action({
       environmentId: parsed.environmentId,
       environmentVersion: parsed.environmentVersion,
     });
-    await ctx.runAction(internal.integration.sync, {});
+    await syncHandler(ctx);
     return parsed;
   },
 });
 
 export const sync = internalAction({
   args: {},
-  handler: async (ctx): Promise<number> => {
-    const integration = await ctx.runQuery(internal.integration.get, {});
-    if (!integration || integration.state === "revoked")
-      throw new Error("@splitch/convex is not installed");
-    const response = await fetch(`${integration.endpoint}/api/integrations/convex/snapshot`, {
-      headers: {
-        ...requestHeaders(),
-        ...(integration.snapshotVersion === undefined
-          ? {}
-          : { "if-none-match": `"${integration.snapshotVersion}"` }),
-      },
-      redirect: "error",
-    });
-    if (response.status === 304) return integration.snapshotVersion ?? 0;
-    const payload = await responseJson(response, "sync Convex configuration");
-    const snapshot = ConvexConfigSnapshotSchema.parse(payload);
-    await ctx.runMutation(internal.integration.commitSnapshot, {
-      payload: JSON.stringify(snapshot),
-    });
-    return snapshot.environmentVersion;
-  },
+  returns: v.number(),
+  handler: syncHandler,
 });
 
 export const syncNow = action({
   args: {},
-  handler: async (ctx): Promise<number> => ctx.runAction(internal.integration.sync, {}),
+  returns: v.number(),
+  handler: syncHandler,
+});
+
+export const recoverSync = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx): Promise<void> => {
+    const integration = await ctx.runQuery(internal.integration.get, {});
+    if (
+      integration?.state === "active" &&
+      (integration.snapshotVersion === undefined ||
+        integration.snapshotVersion < integration.announcedVersion)
+    ) {
+      await syncHandler(ctx);
+    }
+  },
 });
 
 export const commitSnapshot = internalMutation({
   args: { payload: v.string() },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const snapshot = ConvexConfigSnapshotSchema.parse(JSON.parse(args.payload));
     const integration = await requiredIntegration(ctx);
@@ -186,6 +192,7 @@ export const announce = internalMutation({
     environmentId: v.string(),
     environmentVersion: v.number(),
   },
+  returns: v.union(v.literal("scheduled"), v.literal("duplicate")),
   handler: async (ctx, args): Promise<"scheduled" | "duplicate"> => {
     const integration = await requiredIntegration(ctx);
     if (
@@ -209,9 +216,17 @@ export const announce = internalMutation({
 
 export const stageRotation = internalMutation({
   args: { rotationId: v.string(), webhookSecret: v.string() },
+  returns: v.object({
+    installationId: v.string(),
+    endpoint: v.string(),
+    rotationId: v.string(),
+    webhookSecret: v.string(),
+  }),
   handler: async (ctx, args) => {
     const integration = await requiredIntegration(ctx);
     if (integration.previousWebhookSecret) {
+      if (!integration.pendingRotationId)
+        throw new Error("Convex webhook rotation state is missing its retry ID");
       return {
         installationId: integration.installationId,
         endpoint: integration.endpoint,
@@ -235,6 +250,7 @@ export const stageRotation = internalMutation({
 
 export const finishRotation = internalMutation({
   args: {},
+  returns: v.null(),
   handler: async (ctx) => {
     const integration = await requiredIntegration(ctx);
     await ctx.db.patch(integration._id, {
@@ -246,6 +262,7 @@ export const finishRotation = internalMutation({
 
 export const rotateSecret = action({
   args: {},
+  returns: v.null(),
   handler: async (ctx): Promise<void> => {
     const webhookSecret = randomSecret();
     const rotationId = crypto.randomUUID();
@@ -273,46 +290,18 @@ export const rotateSecret = action({
 
 export const revokeLocal = internalMutation({
   args: {},
+  returns: v.null(),
   handler: revokeLocalHandler,
 });
 
 export const purgeBatch = internalMutation({
   args: {},
+  returns: v.number(),
   handler: purgeBatchHandler,
 });
 
 export const uninstall = action({
   args: {},
+  returns: v.null(),
   handler: uninstallHandler,
 });
-
-function requestHeaders(): Record<string, string> {
-  if (!env.SPLITCH_API_KEY) throw new Error("SPLITCH_API_KEY is required for @splitch/convex");
-  return { authorization: `Bearer ${env.SPLITCH_API_KEY}`, "content-type": "application/json" };
-}
-
-async function responseJson(response: Response, operation: string): Promise<unknown> {
-  if (!response.ok)
-    throw new Error(`${operation} failed with HTTP ${response.status}: ${await response.text()}`);
-  return response.status === 204 ? null : response.json();
-}
-
-function normalizedEndpoint(value: string): string {
-  const url = new URL(value);
-  if (url.protocol !== "https:" && url.hostname !== "localhost")
-    throw new Error("SPLITCH_ENDPOINT must use HTTPS");
-  return url.toString().replace(/\/$/, "");
-}
-
-function ensureTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value : `${value}/`;
-}
-
-async function requiredIntegration(ctx: Pick<QueryCtx, "db">) {
-  const integration = await ctx.db
-    .query("integrations")
-    .withIndex("by_key", (q) => q.eq("key", CURRENT_KEY))
-    .unique();
-  if (!integration) throw new Error("@splitch/convex is not initialized");
-  return integration;
-}

@@ -1,3 +1,5 @@
+"use client";
+
 import type { FunctionReference } from "convex/server";
 import { useQuery } from "convex/react";
 import type { Value } from "convex/values";

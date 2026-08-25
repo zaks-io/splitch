@@ -32,6 +32,17 @@ function pkg(packagePath: string, manifest: PackageManifest): WorkspacePackage {
 
 const validSdkManifest = loadFixture("sdk-valid.package.json");
 const validCliManifest = loadFixture("cli-valid.package.json");
+const validConvexManifest = {
+  ...validSdkManifest,
+  name: "@splitch/convex",
+  exports: {
+    ".": {
+      types: "./dist/index.d.ts",
+      import: "./dist/index.js",
+      default: "./dist/index.js",
+    },
+  },
+};
 
 describe("lintWorkspacePublishability", () => {
   it("passes when only the declared public packages are publishable", () => {
@@ -107,6 +118,29 @@ describe("lintWorkspaceDependencyPolicy", () => {
 describe("lintReleaseMetadata", () => {
   it("accepts the valid SDK fixture", () => {
     expect(lintReleaseMetadata(pkg("packages/sdk/package.json", validSdkManifest))).toEqual([]);
+  });
+
+  it("accepts the Convex default export condition required by component tooling", () => {
+    expect(lintReleaseMetadata(pkg("packages/convex/package.json", validConvexManifest))).toEqual(
+      [],
+    );
+  });
+
+  it("requires the Convex default export to match its ESM import", () => {
+    const violations = lintReleaseMetadata(
+      pkg("packages/convex/package.json", {
+        ...validConvexManifest,
+        exports: {
+          ".": {
+            ...validConvexManifest.exports["."],
+            default: "./dist/other.js",
+          },
+        },
+      }),
+    );
+    expect(violations.some((violation) => violation.message.includes("for Convex tooling"))).toBe(
+      true,
+    );
   });
 
   it("fails when SDK depends on a private workspace package", () => {

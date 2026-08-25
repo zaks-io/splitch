@@ -35,12 +35,14 @@ const flags = new Splitch(components.splitch);
 
 export const checkoutEnabled = query({
   args: { targetingKey: v.string() },
+  returns: v.boolean(),
   handler: (ctx, args) =>
     flags.peekVariant(ctx, "new-checkout", { targetingKey: args.targetingKey }, false),
 });
 
 export const completeCheckout = mutation({
   args: { targetingKey: v.string(), idempotencyKey: v.string() },
+  returns: v.boolean(),
   handler: async (ctx, args) => {
     const enabled = await flags.evaluate(
       ctx,
@@ -78,6 +80,7 @@ const flags = new Splitch(components.splitch);
 
 export const resolve = query({
   args: { flagKey: v.string(), defaultValue: v.any() },
+  returns: v.any(),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Authentication is required to evaluate Flags");

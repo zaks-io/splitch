@@ -1,39 +1,37 @@
-import type {
-  ConvexConfigSnapshot,
-  EvaluationContext,
-  ResolutionDetails,
-  VariantValue,
-} from "@splitch/contracts";
+import type { ConvexConfigSnapshot, ResolutionDetails, VariantValue } from "@splitch/contracts";
 import { type EvaluateResult, evaluatePath } from "@splitch/evaluation-core";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { internalAction, internalMutation, mutation, query } from "./_generated/server";
+import { canonicalJson, sha256Hex } from "./crypto";
 import {
-  internalAction,
-  internalMutation,
-  internalQuery,
-  mutation,
-  query,
-  type MutationCtx,
-  type QueryCtx,
-} from "./_generated/server";
-import { canonicalJson, hmacHex, sha256Hex, stableUuid } from "./crypto";
-import { deliverHandler, deliveryPayloadHandler, finishDeliveryHandler } from "./exposure_delivery";
-import { parseSnapshot, snapshotProvider } from "./snapshot";
-
-const contextValidator = v.object({
-  targetingKey: v.string(),
-  idType: v.string(),
-  attributes: v.record(v.string(), v.any()),
-});
+  claimDeliveryHandler,
+  deliverHandler,
+  finishDeliveryHandler,
+  recoverDeliveriesHandler,
+} from "./exposure_delivery";
+import {
+  localTargetingKeyHash,
+  persistExposure,
+  purgeEntityBatch,
+  runtimeState,
+} from "./evaluation_state";
+import { snapshotProvider } from "./snapshot";
+import {
+  deliveryClaimValidator,
+  evaluationContextValidator,
+  resolutionDetailsValidator,
+  variantValueValidator,
+} from "./validators";
 
 const evaluateArgs = {
   flagKey: v.string(),
-  context: contextValidator,
-  defaultValue: v.any(),
+  context: evaluationContextValidator,
+  defaultValue: variantValueValidator,
 };
 
 export const peek = query({
   args: evaluateArgs,
+  returns: resolutionDetailsValidator,
   handler: async (ctx, args): Promise<ResolutionDetails> => {
     const runtime = await runtimeState(ctx, args.context);
     const result = await evaluatePath(
@@ -54,6 +52,7 @@ export const peek = query({
 
 export const evaluate = mutation({
   args: { ...evaluateArgs, idempotencyKey: v.string() },
+  returns: resolutionDetailsValidator,
   handler: async (ctx, args): Promise<ResolutionDetails> => {
     if (!args.idempotencyKey)
       throw new Error("idempotencyKey is required for Exposure-bearing Convex evaluation");
@@ -90,84 +89,37 @@ export const evaluate = mutation({
       },
     );
     const details = detailsFor(runtime.snapshot, args.flagKey, result, args.defaultValue);
-    if (result.exposure) {
-      const integration = runtime.integration;
-      const run = runtime.snapshot.runs.find(
-        (candidate) => candidate.id === result.exposure?.liveRunId,
-      );
-      if (!run)
-        throw new Error(
-          `Live Run "${result.exposure.liveRunId}" is absent from the Convex snapshot`,
-        );
-      const targetingKeyHash = await localTargetingKeyHash(
-        integration.componentIdentityKey,
-        args.context,
-      );
-      const existing = await ctx.db
-        .query("assignments")
-        .withIndex("by_entity_experiment", (q) =>
-          q
-            .eq("idType", args.context.idType)
-            .eq("targetingKeyHash", targetingKeyHash)
-            .eq("experimentId", result.exposure?.experimentId ?? ""),
-        )
-        .unique();
-      if (!existing) {
-        await ctx.db.insert("assignments", {
-          experimentId: result.exposure.experimentId,
-          idType: args.context.idType,
-          targetingKeyHash,
-          runId: result.exposure.liveRunId,
-          variant: result.exposure.variant,
-        });
-      }
-      const exposureId = await stableUuid(`${integration.installationId}:${args.idempotencyKey}`);
-      await ctx.db.insert("exposureOutbox", {
-        exposureId,
-        installationId: integration.installationId,
-        evaluationFingerprint: fingerprint,
-        flagKey: args.flagKey,
-        experimentId: result.exposure.experimentId,
-        runId: result.exposure.liveRunId,
-        runConfigHash: run.configHash,
-        idType: args.context.idType,
-        targetingKeyHash,
-        targetingKey: args.context.targetingKey,
-        attributesJson: JSON.stringify(args.context.attributes),
-        variantName: result.exposure.variant,
-        exposedAtCommitTs: ctx.db.vars.commitTs,
-        createdAt: Date.now(),
-        state: "pending",
-        attemptCount: 0,
-        nextAttemptAt: Date.now(),
-      });
-      await ctx.scheduler.runAfter(0, internal.evaluation.deliver, { exposureId });
-    }
+    if (result.exposure) await persistExposure(ctx, args, runtime, result.exposure, fingerprint);
     await ctx.db.insert("evaluationClaims", {
       idempotencyKey: args.idempotencyKey,
       fingerprint,
       result: JSON.stringify(details),
+      createdAt: Date.now(),
     });
     return details;
   },
 });
 
-export const deliveryPayload = internalQuery({
+export const claimDelivery = internalMutation({
   args: { exposureId: v.string() },
-  handler: deliveryPayloadHandler,
+  returns: deliveryClaimValidator,
+  handler: claimDeliveryHandler,
 });
 
 export const finishDelivery = internalMutation({
   args: {
     exposureId: v.string(),
     outcome: v.union(v.literal("accepted"), v.literal("retry"), v.literal("terminal")),
+    leaseExpiresAt: v.number(),
     error: v.optional(v.string()),
   },
+  returns: v.null(),
   handler: finishDeliveryHandler,
 });
 
 export const deleteEntity = mutation({
   args: { targetingKey: v.string(), idType: v.string() },
+  returns: v.null(),
   handler: async (ctx, args): Promise<void> => {
     const integration = await ctx.db
       .query("integrations")
@@ -179,57 +131,37 @@ export const deleteEntity = mutation({
       idType: args.idType,
       attributes: {},
     });
-    const assignments = await ctx.db
-      .query("assignments")
-      .withIndex("by_entity_experiment", (q) =>
+    const existing = await ctx.db
+      .query("entityDeletions")
+      .withIndex("by_entity", (q) =>
         q.eq("idType", args.idType).eq("targetingKeyHash", targetingKeyHash),
       )
-      .collect();
-    const outbox = await ctx.db
-      .query("exposureOutbox")
-      .withIndex("by_entity_state", (q) =>
-        q.eq("idType", args.idType).eq("targetingKeyHash", targetingKeyHash),
-      )
-      .collect();
-    for (const row of outbox) await ctx.db.delete(row._id);
-    for (const row of assignments) await ctx.db.delete(row._id);
+      .unique();
+    if (!existing)
+      await ctx.db.insert("entityDeletions", { idType: args.idType, targetingKeyHash });
+    await purgeEntityBatch(ctx, args.idType, targetingKeyHash);
   },
+});
+
+export const continueDeleteEntity = internalMutation({
+  args: { idType: v.string(), targetingKeyHash: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<void> => {
+    await purgeEntityBatch(ctx, args.idType, args.targetingKeyHash);
+  },
+});
+
+export const recoverDeliveries = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: recoverDeliveriesHandler,
 });
 
 export const deliver = internalAction({
   args: { exposureId: v.string() },
+  returns: v.null(),
   handler: deliverHandler,
 });
-
-async function runtimeState(ctx: QueryCtx | MutationCtx, context: EvaluationContext) {
-  const integration = await ctx.db
-    .query("integrations")
-    .withIndex("by_key", (q) => q.eq("key", "current"))
-    .unique();
-  if (integration?.state !== "active" || !integration.appId || !integration.environmentId)
-    throw new Error("@splitch/convex is not installed");
-  const stored = await ctx.db
-    .query("snapshots")
-    .withIndex("by_key", (q) => q.eq("key", "current"))
-    .unique();
-  if (!stored) throw new Error("PROVIDER_NOT_READY: @splitch/convex has no configuration snapshot");
-  if (stored.environmentVersion < integration.announcedVersion)
-    throw new Error(
-      `STALE: snapshot ${stored.environmentVersion} is behind announced version ${integration.announcedVersion}`,
-    );
-  const snapshot = parseSnapshot(stored.payload);
-  const targetingKeyHash = await localTargetingKeyHash(integration.componentIdentityKey, context);
-  const rows = await ctx.db
-    .query("assignments")
-    .withIndex("by_entity_experiment", (q) =>
-      q.eq("idType", context.idType).eq("targetingKeyHash", targetingKeyHash),
-    )
-    .collect();
-  const assignments = new Map<string, { runId: string; variant: string }>(
-    rows.map((row) => [row.experimentId, { runId: row.runId, variant: row.variant }]),
-  );
-  return { integration, snapshot, assignments };
-}
 
 function readOnlyAssignmentStore(assignments: Map<string, { runId: string; variant: string }>) {
   const noWrite = async () => {
@@ -296,8 +228,4 @@ function resolutionReason(kind: EvaluateResult["kind"]): ResolutionDetails["reas
   if (kind === "no_match_default" || kind === "no_live_run" || kind === "null_experiment")
     return "DEFAULT";
   return "SPLIT";
-}
-
-async function localTargetingKeyHash(key: string, context: EvaluationContext): Promise<string> {
-  return hmacHex(key, `${context.idType}:${context.targetingKey}`);
 }
