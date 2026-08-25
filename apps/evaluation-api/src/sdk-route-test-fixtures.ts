@@ -66,9 +66,7 @@ interface SdkRouteHarnessOptions {
   /** Override Exposure Ticket issued_at for ETag-stability tests. */
   readonly ticketNow?: () => Date;
   readonly previousTicketKey?: string;
-  readonly eventIngest?: {
-    fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
-  };
+  readonly delegationBindings?: Parameters<typeof createApp>[0]["delegationBindings"];
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -209,7 +207,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     authResolver: options.authResolver ?? controlPlaneAuthResolver,
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(credentialKv),
     rateLimiter: allowLimiter,
-    delegationBindings: { "event-ingest-api": options.eventIngest },
+    delegationBindings: options.delegationBindings,
     provider: new KvProvider(configKv),
     assignmentStore,
     holdoverWrite: options.holdoverWrite,

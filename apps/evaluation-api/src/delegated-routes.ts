@@ -37,16 +37,29 @@ function delegatingHandler(route: ApiRouteContract, binding: DelegationFetcher |
       );
     }
 
+    const parts = inputParts(input);
     return binding.fetch(
-      delegatedRequest(route, delegatedIdentityFrom(route, principal, {}), {
-        body: inputBody(input),
+      delegatedRequest(route, delegatedIdentityFrom(route, principal, parts.params ?? {}), {
+        ...parts,
         requestId,
       }),
     );
   };
 }
 
-function inputBody(input: unknown): unknown {
-  if (typeof input !== "object" || input === null || !("body" in input)) return undefined;
-  return (input as { body: unknown }).body;
+function inputParts(input: unknown): {
+  params?: Record<string, string>;
+  query?: Record<string, unknown>;
+  body?: unknown;
+} {
+  if (!isRecord(input)) return {};
+  return {
+    ...(isRecord(input.params) ? { params: input.params as Record<string, string> } : {}),
+    ...(isRecord(input.query) ? { query: input.query } : {}),
+    ...("body" in input ? { body: input.body } : {}),
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

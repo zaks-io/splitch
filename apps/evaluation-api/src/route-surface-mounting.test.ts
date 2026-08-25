@@ -1,7 +1,7 @@
 import { mountedOperationIds, routesMountedBy, routesSurfacedBy } from "@splitch/contracts";
 import type { AuthResolver } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
-import { APP_ID, makeSdkRouteHarness } from "./sdk-route-test-fixtures";
+import { API_KEY, APP_ID, makeSdkRouteHarness } from "./sdk-route-test-fixtures";
 
 const internalAuth: AuthResolver = () => ({
   ok: true,
@@ -63,5 +63,40 @@ describe("evaluation-api mounts each door's routes and no others", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ deleted: true });
+  });
+
+  it("preserves path params and body when the public edge delegates a route", async () => {
+    let delegated: Request | undefined;
+    const { app } = await makeSdkRouteHarness({
+      delegationBindings: {
+        "control-plane-api": {
+          fetch: async (input, init) => {
+            delegated = new Request(input, init);
+            return Response.json({ ok: true });
+          },
+        },
+      },
+    });
+    const installationId = "00000000-0000-4000-8000-000000000001";
+    const rotationId = "00000000-0000-4000-8000-000000000002";
+
+    const response = await app.request(
+      `/api/integrations/convex/installations/${installationId}/secret-rotations`,
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${API_KEY}`, "content-type": "application/json" },
+        body: JSON.stringify({ rotationId, webhookSecret: "A".repeat(43) }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    if (!delegated) throw new Error("Control Plane delegation was not called");
+    expect(new URL(delegated.url).pathname).toBe(
+      `/api/integrations/convex/installations/${installationId}/secret-rotations`,
+    );
+    await expect(delegated.json()).resolves.toEqual({
+      rotationId,
+      webhookSecret: "A".repeat(43),
+    });
   });
 });

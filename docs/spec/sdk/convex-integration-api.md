@@ -10,14 +10,14 @@ The component generates a UUID `installationId` and 32 random bytes of `webhookS
 in its private component tables, then calls:
 
 ```text
-POST /api/sdk/convex/installations
+POST /api/integrations/convex/installations
 Authorization: Bearer <apiKey>
 
 { installationId, callbackUrl, webhookSecret }
 ```
 
 `callbackUrl` must be the HTTPS `CONVEX_SITE_URL` host under `*.convex.site` plus the component's
-mounted `/splitch/config-changed` path. IP literals, credentials, query strings, fragments,
+mounted `/integrations/splitch/configuration` path. IP literals, credentials, query strings, fragments,
 nonstandard ports, redirects, and other hosts fail validation. Splitch excludes the request body
 from logs, encrypts the secret under the Control Plane Worker's required 32-byte base64
 `CONVEX_WEBHOOK_KEK`, and never returns it.
@@ -35,7 +35,7 @@ validated and committed.
 ## Configuration snapshot
 
 ```text
-GET /api/sdk/config-snapshot
+GET /api/integrations/convex/snapshot
 Authorization: Bearer <apiKey>
 If-None-Match: "<environmentVersion>"  // optional
 ```
@@ -50,7 +50,7 @@ version. The request has no App, Environment, field-selection, or public-cache p
 The component creates and temporarily accepts a second secret, then calls:
 
 ```text
-POST /api/sdk/convex/installations/:installationId/rotate-secret
+POST /api/integrations/convex/installations/:installationId/secret-rotations
 
 { rotationId, webhookSecret }
 ```
@@ -62,11 +62,11 @@ rotation. The old secret is never sent back or recoverable from either API.
 
 ## Status and uninstall
 
-`GET /api/sdk/convex/installations/:installationId` returns status, callback URL, current
+`GET /api/integrations/convex/installations/:installationId` returns status, callback URL, current
 Environment version, last delivered version/time, pending count, oldest pending age, terminal count,
 and the complete latest bounded `DeliveryErrorEnvelope`. It returns no secret or config payload.
 
-`DELETE /api/sdk/convex/installations/:installationId` first marks the installation revoked and
+`DELETE /api/integrations/convex/installations/:installationId` first marks the installation revoked and
 suppresses every undelivered row, then returns `204`. It is idempotent. The component deletes local
 state only after revocation is acknowledged; App deletion uses the terminal-nudge flow in
 [convex-component.md](./convex-component.md#deletion-and-uninstall).

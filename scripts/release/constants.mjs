@@ -6,6 +6,13 @@ export const RELEASE_TARGETS = Object.freeze({
     tagPrefix: "sdk-v",
     githubLatest: false,
   }),
+  convex: Object.freeze({
+    packageName: "@splitch/convex",
+    packagePath: "packages/convex/package.json",
+    packageDir: "packages/convex",
+    tagPrefix: "convex-v",
+    githubLatest: false,
+  }),
   cli: Object.freeze({
     packageName: "@splitch/cli",
     packagePath: "apps/cli/package.json",

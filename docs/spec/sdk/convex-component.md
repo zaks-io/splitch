@@ -11,12 +11,13 @@ The released package exposes:
 
 - `@splitch/convex/convex.config.js`, installed with `app.use(splitch, { httpPrefix })`
 - `@splitch/convex`, an ergonomic `Splitch` wrapper over the generated Component API
-- `@splitch/convex/test`, which registers the component with `convex-test`
+- `@splitch/convex/react`, reactive hooks bound to an app-owned public Query
 
 It versions independently from `@splitch/sdk`, starts at `0.1.0`, and uses `convex-v*` GitHub
 Releases. Token-free trusted package release runs from dedicated `convex-release` and
 `convex-publish` workflows. Candidate validation installs the packed tarball into a clean Convex
-fixture, runs component codegen, typecheck, tests, and rejects workspace-only dependency leakage.
+fixture, typechecks the mounted component API, imports the runtime package, and rejects
+workspace-only dependency leakage. Component codegen remains a live-deployment verification step.
 
 The component declares one required secret environment value, `SPLITCH_API_KEY`. It obtains the
 mounted callback URL from `CONVEX_SITE_URL`. `install()` generates and privately stores the
@@ -30,7 +31,7 @@ tables or credential.
 
 ## Configuration snapshot
 
-`GET /api/sdk/config-snapshot` requires an API Key and returns the complete, server-only Provider
+`GET /api/integrations/convex/snapshot` requires an API Key and returns the complete, server-only Provider
 snapshot for that credential's App and Environment:
 
 ```text
@@ -83,10 +84,10 @@ before scheduling work. A valid nudge first raises the stored `announcedVersion`
 schedules an immediate sync Action and returns `202`. Duplicate or older versions return `202`
 without another pull.
 
-The Config Store DO inserts the D1 webhook outbox in the same D1 transaction as the configuration
-commit. After commit it projects KV, broadcasts internal nudges, and starts external delivery. A
-lease scanner retries with bounded exponential backoff. Delivery failure never rolls back durable
-config and is visible on the integration status surface.
+D1 triggers insert the webhook outbox in the same transaction as the authoritative Flag Configuration
+commit and increment the Environment configuration version. A lease scanner dispatches immediately
+due rows every minute and retries with bounded exponential backoff. Delivery failure never rolls back
+durable config and is visible on the integration status surface.
 
 ## Evaluation surface
 
@@ -107,6 +108,17 @@ atomically creates the local holdover and Exposure outbox row described in
 [convex-exposure-delivery.md](./convex-exposure-delivery.md). A query that needs an Exposure must
 perform an explicit mutation when the Variant is actually encountered, or use the browser SDK's
 Exposure Ticket flow.
+
+## React bindings
+
+`createSplitchReact(api.flags.resolve)` binds `useFlag` and `useFlagDetails` to an app-owned public
+Query. The app Query is the authentication boundary and calls `peekDetails` with an Evaluation
+Context derived server-side. Component functions and the API Key remain private. The hooks use the
+native Convex React subscription and return `undefined` while the first Query result is loading.
+
+React hooks are non-exposing because Convex Queries cannot write. An app records an Exposure through
+an explicit Mutation that calls `evaluate` when the Variant is encountered. Domain writes and their
+Exposure stay in that same Mutation so they commit or roll back together.
 
 ## Local holdover and freshness
 
@@ -142,8 +154,10 @@ so the component can perform the same purge.
 
 ## Done
 
-- A packed package installs into a clean Convex fixture and passes component codegen and typecheck.
-- `convex-test` proves query peeks do not write, mutation Evaluation rolls back with the caller,
+- A packed package installs into a clean Convex fixture and passes mounted-component typecheck;
+  its React export typechecks from the packed tarball; component codegen passes against a live
+  preview deployment.
+- Package tests prove query peeks do not write, mutation Evaluation rolls back with the caller,
   duplicate mutation retries do not duplicate Exposures, and concurrent first use creates one local
   holdover.
 - A live preview journey changes a Flag, receives the signed nudge, syncs at least the announced

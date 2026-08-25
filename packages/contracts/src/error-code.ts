@@ -46,6 +46,7 @@ export const errorCodes = [
   "SEGMENT_NOT_FOUND",
   "PRIVACY_JOB_NOT_FOUND",
   "APPROVAL_REQUEST_NOT_FOUND",
+  "CONVEX_INSTALLATION_NOT_FOUND",
 
   // Auth / authz
   "UNAUTHORIZED",

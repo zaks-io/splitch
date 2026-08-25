@@ -1,4 +1,4 @@
-import type { RouteContract } from "@splitch/contracts";
+import type { AuthKind, RouteContract } from "@splitch/contracts";
 import type { AuthResolver, Principal } from "./principal";
 import { resolveRequestId } from "./request-id";
 import { emptyError, renderError } from "./respond";
@@ -31,6 +31,8 @@ export interface DelegatedIdentity {
   /** The registry operationId the surface Worker authorized. */
   operation: string;
   actorId: string;
+  authKind?: AuthKind;
+  scopes?: readonly string[];
   /**
    * The tenant scope the surface Worker AUTHORIZED, never what the request asked
    * for. Minting these from the path instead of from the resolved principal would
@@ -60,6 +62,8 @@ export function delegatedIdentityFrom(
   return {
     operation: route.id,
     actorId: principal.id,
+    authKind: principal.kind,
+    scopes: [...principal.scopes],
     orgId: principal.orgId,
     appId: principal.appId,
     environmentId: principal.environmentId ?? params.environmentId ?? null,
@@ -152,17 +156,16 @@ export function notDelegatedResponse(request: Request): Response {
 }
 
 /**
- * The Principal a delegated request resolves to. Scopes are empty because the
- * surface Worker already enforced the route's scope list; what travels is the
- * tenant binding the receiving Worker's own co-scope and handler checks re-apply.
+ * The Principal a delegated request resolves to. The binding carries the exact
+ * already-authorized auth kind and scopes so the owner can re-run the same guard.
  */
 export function delegatedAuthResolver(identity: DelegatedIdentity): AuthResolver {
   return () => ({
     ok: true as const,
     principal: {
-      kind: "control-plane-token" as const,
+      kind: identity.authKind ?? "control-plane-token",
       id: identity.actorId,
-      scopes: [],
+      scopes: identity.scopes ?? [],
       orgId: identity.orgId,
       appId: identity.appId,
       environmentId: identity.environmentId,
@@ -177,15 +180,22 @@ function parseDelegatedIdentity(value: string | null): DelegatedIdentity | null 
   if (!value) return null;
   try {
     const candidate = JSON.parse(value) as Record<string, unknown>;
-    if (!isNonEmptyString(candidate.operation) || !isNonEmptyString(candidate.actorId)) {
-      return null;
-    }
-    if (!isScopeAxis(candidate.orgId) || !isScopeAxis(candidate.appId)) return null;
-    if (!isScopeAxis(candidate.environmentId)) return null;
-    return candidate as unknown as DelegatedIdentity;
+    return isDelegatedIdentity(candidate) ? (candidate as unknown as DelegatedIdentity) : null;
   } catch {
     return null;
   }
+}
+
+function isDelegatedIdentity(candidate: Record<string, unknown>): boolean {
+  return (
+    isNonEmptyString(candidate.operation) &&
+    isNonEmptyString(candidate.actorId) &&
+    isScopeAxis(candidate.orgId) &&
+    isScopeAxis(candidate.appId) &&
+    isScopeAxis(candidate.environmentId) &&
+    (candidate.authKind === undefined || isAuthKind(candidate.authKind)) &&
+    (candidate.scopes === undefined || isStringArray(candidate.scopes))
+  );
 }
 
 function substitutePath(template: string, params: Readonly<Record<string, string>>): string {
@@ -248,4 +258,19 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isScopeAxis(value: unknown): value is string | null {
   return value === null || isNonEmptyString(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isAuthKind(value: unknown): value is AuthKind {
+  return [
+    "public",
+    "control-plane-token",
+    "client-key",
+    "api-key",
+    "internal-worker",
+    "data-plane-key",
+  ].includes(String(value));
 }

@@ -1,5 +1,6 @@
 packages:
   - "apps/*"
+  - "examples/*"
   - "packages/*"
 # Supply-chain install gates PARKED until the dep tree is final (move-fast phase).
 # These reject installs on things unrelated to the work in flight — a freshly

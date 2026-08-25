@@ -3,12 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ALLOWED_PUBLISHABLE_PACKAGES } from "./policy/constants.mjs";
-import { lintPublishingPolicy, lintPublishingPolicyFromRepo } from "./policy/run.mjs";
 import {
   lintWorkspaceDependencyPolicy,
   lintWorkspacePublishability,
 } from "./policy/publishability.mjs";
 import { lintReleaseMetadata } from "./policy/release-metadata.mjs";
+import { lintPublishingPolicy, lintPublishingPolicyFromRepo } from "./policy/run.mjs";
 
 type PackageManifest = Record<string, unknown> & {
   name?: string;
@@ -34,7 +34,7 @@ const validSdkManifest = loadFixture("sdk-valid.package.json");
 const validCliManifest = loadFixture("cli-valid.package.json");
 
 describe("lintWorkspacePublishability", () => {
-  it("passes when only @splitch/sdk and @splitch/cli are publishable", () => {
+  it("passes when only the declared public packages are publishable", () => {
     const violations = lintWorkspacePublishability([
       pkg("packages/sdk/package.json", { ...validSdkManifest, private: undefined }),
       pkg("apps/cli/package.json", { ...validCliManifest, private: undefined }),
@@ -52,7 +52,9 @@ describe("lintWorkspacePublishability", () => {
       pkg("packages/ui/package.json", { name: "@splitch/ui" }),
     ]);
     expect(violations).toHaveLength(1);
-    expect(violations[0]?.message).toContain("only @splitch/sdk, @splitch/cli may be published");
+    expect(violations[0]?.message).toContain(
+      "only @splitch/sdk, @splitch/cli, @splitch/convex may be published",
+    );
   });
 
   it("fails when @splitch/contracts is publishable", () => {
@@ -207,6 +209,8 @@ describe("repo publishing policy against the live monorepo", () => {
       violation.message.includes("may be published"),
     );
     expect(unexpectedPublishable).toEqual([]);
-    expect(ALLOWED_PUBLISHABLE_PACKAGES).toEqual(new Set(["@splitch/sdk", "@splitch/cli"]));
+    expect(ALLOWED_PUBLISHABLE_PACKAGES).toEqual(
+      new Set(["@splitch/sdk", "@splitch/cli", "@splitch/convex"]),
+    );
   });
 });

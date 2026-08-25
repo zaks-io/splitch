@@ -7,6 +7,7 @@ import {
   kvEnvelope,
 } from "@splitch/contracts";
 import { computeTargetingKeyHash, type SaltStore } from "@splitch/privacy";
+import { AssignmentStoreError } from "@splitch/evaluation-core";
 
 export type { AssignmentStoreEntry } from "@splitch/contracts";
 
@@ -58,14 +59,8 @@ export interface AssignmentStoreLogger {
   error(message: string, detail: unknown): void;
 }
 
-export class AssignmentStoreError extends Error {
-  readonly errorCode = "INTERNAL_SERVER_ERROR";
-
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = "AssignmentStoreError";
-  }
-}
+// biome-ignore lint/performance/noBarrelFile: compatibility export preserves existing Worker imports during evaluator extraction.
+export { AssignmentStoreError } from "@splitch/evaluation-core";
 
 type SafeParse<T> =
   | { success: true; data: { data: T } }

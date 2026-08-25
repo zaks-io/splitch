@@ -62,7 +62,7 @@ function baselineCandidates(
  * Whether a Flag Configuration would be left with a baseline it cannot resolve.
  *
  * A baseline needs exactly one candidate to roll into. With two-plus the
- * destination is unknowable and evaluation throws (baseline-rollout.ts).
+ * destination is unknowable and the shared evaluator throws.
  *
  * This takes the RESULTING state, not the patch, because a Configuration can be
  * stranded from either side: setting a baseline under an already-wide available

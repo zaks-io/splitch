@@ -559,19 +559,19 @@ under an API Key `verify` returns the full reason (ADR-0037). The mapping from H
 - `FLAG_NOT_FOUND` / `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `INSUFFICIENT_SCOPES` / `APP_MISMATCH` / `VALIDATION_ERROR` / `RATE_LIMITED` / `SERVICE_UNAVAILABLE`
   — Note: never fires an Exposure and never writes the Assignment Store. A valid Client Key is rejected with `INSUFFICIENT_SCOPES`; missing or invalid credentials are `UNAUTHORIZED`. A Default Variant fallback (`disabled`, no live Run, null Experiment, or no Targeting Rule match) is `VALIDATION_ERROR`, never `200 { variant: <default> }`.
 
-**GET /api/sdk/config-snapshot** (Convex configuration sync, API Key only)
+**GET /api/integrations/convex/snapshot** (Convex configuration sync, API Key only)
 
 - `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `INSUFFICIENT_SCOPES` / `RATE_LIMITED` / `SERVICE_UNAVAILABLE`
 - `INTERNAL_SERVER_ERROR` for an internally inconsistent snapshot. No partial response is returned.
 
-**/api/sdk/convex/installations routes** (Convex webhook lifecycle, API Key only)
+**/api/integrations/convex/installations routes** (Convex webhook lifecycle, API Key only)
 
 - `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `INSUFFICIENT_SCOPES` / `RATE_LIMITED`
 - `VALIDATION_ERROR` for an invalid callback, secret, installation ID, or rotation body
 - `IDEMPOTENCY_KEY_CONFLICT` for installation or rotation identity reused with different content
 - `CONVEX_INSTALLATION_NOT_FOUND` when the credential does not own the named installation
 
-**POST /api/sdk/server-exposures** (verified trusted-adapter batch, API Key only)
+**POST /api/integrations/convex/exposures** (verified trusted-adapter batch, API Key only)
 
 - Batch failures: `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `INSUFFICIENT_SCOPES` / `RATE_LIMITED` /
   `VALIDATION_ERROR`. These reject the whole request before claims.

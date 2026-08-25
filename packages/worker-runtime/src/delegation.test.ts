@@ -23,6 +23,8 @@ const allowed = [results, usage];
 const identity: DelegatedIdentity = {
   operation: "experiment_results_post",
   actorId: "user_1",
+  authKind: "control-plane-token",
+  scopes: [],
   orgId: null,
   appId: "app_1",
   environmentId: "env_1",
@@ -182,6 +184,8 @@ describe("identity minted from the authorized principal", () => {
       {
         operation: "organization_usage_get",
         actorId: "user_1",
+        authKind: "control-plane-token",
+        scopes: [],
         orgId: "org_1",
         appId: null,
         environmentId: null,

@@ -46,6 +46,8 @@ export {
   approvalReviews,
   apps,
   clientKeys,
+  configWebhookDeliveries,
+  convexInstallations,
   deviceRefreshSessions,
   entityDeletions,
   environments,

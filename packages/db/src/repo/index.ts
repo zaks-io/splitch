@@ -2,6 +2,7 @@ import { makeApprovalRepo } from "./approvals";
 import { makeClaimStateRepo } from "./claim-state";
 import { createDb } from "./client";
 import { makeCredentialRepo } from "./credentials";
+import { makeConvexIntegrationRepo } from "./convex-integrations";
 import { makeEventDefinitionRepo } from "./event-definitions";
 import { makeExperimentRepo } from "./experiments";
 import { makeFlagRepo } from "./flags";
@@ -29,6 +30,7 @@ export function createRepository(d1: D1Database) {
     experiments: makeExperimentRepo(db, d1),
     eventDefinitions: makeEventDefinitionRepo(db, d1),
     credentials: makeCredentialRepo(db),
+    convex: makeConvexIntegrationRepo(d1),
     claim: makeClaimStateRepo(d1),
     identity: makeIdentityRepo(db, d1),
     privacy: makePrivacyRepo(db),

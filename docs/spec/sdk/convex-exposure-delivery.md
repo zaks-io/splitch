@@ -64,7 +64,7 @@ envelope for 30 days.
 ## Server Exposure endpoint
 
 ```text
-POST /api/sdk/server-exposures
+POST /api/integrations/convex/exposures
 Authorization: Bearer <apiKey>
 Content-Type: application/json
 

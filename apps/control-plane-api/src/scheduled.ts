@@ -6,6 +6,7 @@ import {
 } from "@splitch/observability/worker";
 import { runApprovalRequestArchival } from "./approval-archive";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
+import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
 import type { ControlPlaneApiEnv } from "./env";
 import { runCredentialCacheBackfill } from "./internal-routes";
 
@@ -16,9 +17,28 @@ export function runControlPlaneScheduled(
   env: ControlPlaneApiEnv,
   ctx: ExecutionContext,
 ): void {
+  ctx.waitUntil(runConvexWebhookDispatch(env, event, ctx));
+  if (event.cron !== "0 8 * * *") return;
   ctx.waitUntil(runDemoReaper(env, event, ctx));
   ctx.waitUntil(runCredentialCacheBackfill(env));
   ctx.waitUntil(runApprovalArchive(env, event, ctx));
+}
+
+async function runConvexWebhookDispatch(
+  env: ControlPlaneApiEnv,
+  event: ScheduledController,
+  ctx: Pick<ExecutionContext, "waitUntil">,
+): Promise<void> {
+  const dispatched = await dispatchConvexWebhooks({
+    repo: createRepository(env.DB),
+    webhookKek: env.CONVEX_WEBHOOK_KEK,
+    now: () => new Date(event.scheduledTime),
+  });
+  workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
+    "info",
+    "convex-webhook-dispatch",
+    { service, job: "convex-webhook-dispatch", cron: event.cron, dispatched },
+  );
 }
 
 async function runDemoReaper(

@@ -5,3 +5,7 @@ coverage/
 .wrangler/
 .tinyb/
 pnpm-lock.yaml
+examples/convex/.agents/
+examples/convex/.claude/
+examples/convex/convex/_generated/
+examples/convex/convex/README.md

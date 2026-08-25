@@ -13,12 +13,12 @@ const publishDraftRelease = readFileSync(
 );
 
 interface ReleaseContractOptions {
-  targetKey: "sdk" | "cli";
-  label: "SDK" | "CLI";
-  packageName: "@splitch/sdk" | "@splitch/cli";
-  packageDir: "packages/sdk" | "apps/cli";
-  tagPrefix: "sdk-v" | "cli-v";
-  workflowName: "sdk-release.yml" | "cli-release.yml";
+  targetKey: "sdk" | "cli" | "convex";
+  label: "SDK" | "CLI" | "CONVEX";
+  packageName: "@splitch/sdk" | "@splitch/cli" | "@splitch/convex";
+  packageDir: "packages/sdk" | "apps/cli" | "packages/convex";
+  tagPrefix: "sdk-v" | "cli-v" | "convex-v";
+  workflowName: "sdk-release.yml" | "cli-release.yml" | "convex-release.yml";
 }
 
 export function registerReleaseWorkflowContract(options: ReleaseContractOptions): void {

@@ -71,6 +71,7 @@ beforeEach(async () => {
   const signer = await makeFixtureSigner();
   h = {
     app: createApp({
+      door: "binding",
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
           fetchJwks: async () => signer.jwks,
@@ -81,6 +82,7 @@ beforeEach(async () => {
       }),
       rateLimiter: allowLimiter,
       repo: createRepository(bindings.d1),
+      convex: {},
     }),
     bindings,
     signer,

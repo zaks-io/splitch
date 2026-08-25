@@ -8,6 +8,8 @@ export * from "./barrels/parity-skins";
 export * from "./barrels/route-registry";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped stats input/result API
 export * from "./barrels/stats-contracts";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped storage API
+export * from "./barrels/storage-contracts";
 // biome-ignore lint/performance/noReExportAll: curated wire envelopes live in barrels/wire-envelopes.ts
 export * from "./barrels/wire-envelopes";
 export { type CanonicalJsonSha256, CanonicalJsonSha256Schema } from "./canonical-hash";
@@ -18,11 +20,12 @@ export {
   OriginAllowlistSchema,
 } from "./client-origin";
 export { CONTROL_PANEL_DELEGATION_HEADER, PANEL_API_KEY_SCOPES } from "./control-panel-binding";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped Convex integration contract
+export * from "./convex-integration";
 export { CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION } from "./credential-cache-backfill";
 export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
 export { DeltaNudgeEntitySchema, DeltaNudgeSchema, deltaNudgeEntities } from "./delta-nudge";
 export { errorStatusByCode, httpStatusForError } from "./error-status";
-export { SegmentListResponseSchema } from "./routes/routes-segments";
 export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
 export {
   ErrorCodeSchema,
@@ -42,8 +45,8 @@ export {
   DecisionFailureSchema,
   DecisionResultStaleDetailsSchema,
   DecisionResultUnavailableDetailsSchema,
-  TargetConfigurationStaleDetailsSchema,
   decisionFailureCodeByCheckId,
+  TargetConfigurationStaleDetailsSchema,
 } from "./experiment-conclusion-errors";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped rigor API
 export * from "./experiment-rigor";
@@ -100,49 +103,49 @@ export {
 } from "./leaf-schemas-flag";
 export {
   type APIKey,
+  APIKeySchema,
   type App,
   type AppMember,
+  AppMemberSchema,
   type ApprovalPolicyLevel,
+  ApprovalPolicyLevelSchema,
+  AppSchema,
+  approvalPolicyLevels,
   type ClientKey,
+  ClientKeySchema,
   type Environment,
   type EnvironmentPolicy,
   type EnvironmentPolicyLevel,
-  type EvaluationContext,
-  type ExposureEvent,
-  type ExposureType,
-  type Organization,
-  type OrganizationMember,
-  type OrgPlan,
-  type ResolutionDetails,
-  type ResolutionReason,
-  type User,
-  type UserRole,
-  type VariantValue,
-  APIKeySchema,
-  ApprovalPolicyLevelSchema,
-  AppMemberSchema,
-  AppSchema,
-  approvalPolicyLevels,
-  ClientKeySchema,
   EnvironmentPolicyLevelSchema,
   EnvironmentPolicySchema,
   EnvironmentSchema,
+  type EvaluationContext,
   EvaluationContextSchema,
+  type ExposureEvent,
   ExposureEventSchema,
+  type ExposureType,
   ExposureTypeSchema,
   environmentPolicyLevels,
   exposureTypes,
-  OrganizationSchema,
+  type Organization,
+  type OrganizationMember,
   OrganizationMemberSchema,
+  OrganizationSchema,
+  type OrgPlan,
   OrgPlanSchema,
   orgPlans,
+  type ResolutionDetails,
   ResolutionDetailsSchema,
+  type ResolutionReason,
   ResolutionReasonSchema,
   reservedEnvironmentPolicyLevels,
   resolutionReasons,
+  type User,
+  type UserRole,
   UserRoleSchema,
   UserSchema,
   userRoles,
+  type VariantValue,
   VariantValueSchema,
 } from "./leaf-schemas-runtime";
 export type {
@@ -265,48 +268,9 @@ export {
   approvalReviewOutcomes,
   approvalTargetTypes,
 } from "./routes/route-shapes-approvals";
+export { SegmentListResponseSchema } from "./routes/routes-segments";
 export { deriveSlug, SLUG_MAX_LENGTH, SLUG_MIN_LENGTH, SLUG_PATTERN, SlugSchema } from "./slug";
 // `./experiment-rigor` exports a different DecisionFamilyMember; naming this one
 // explicitly keeps the stats-input shape as the package's, as it was before the
 // stats exports moved into a sub-barrel.
 export type { DecisionFamilyMember } from "./stats-input-contract";
-export {
-  apiKeyCacheKey,
-  assignmentKey,
-  clientKeyCacheKey,
-  credentialRevocationCacheKey,
-  eventDefinitionConfigKey,
-  experimentConfigKey,
-  flagConfigKey,
-  liveRunKey,
-  memberProfileCacheKey,
-  runConfigKey,
-  TERMINAL_CREDENTIAL_REVOCATION_MARKER,
-} from "./storage-keys-kv";
-export type {
-  AssignmentStoreEntry,
-  AssignmentStoreValue,
-  CredentialCacheKV,
-  CredentialKind,
-  ExperimentConfigKV,
-  FlagConfigKV,
-  LiveRunKV,
-  MemberProfileCache,
-  RunConfigKV,
-} from "./storage-schemas-kv";
-export {
-  AssignmentStoreEntrySchema,
-  AssignmentStoreValueSchema,
-  CredentialCacheKVSchema,
-  CredentialCacheKVSchemaV1,
-  CredentialKindSchema,
-  CURRENT_KV_SCHEMA_VERSION,
-  credentialKinds,
-  ExperimentConfigKVSchema,
-  FlagConfigKVSchema,
-  kvEnvelope,
-  LiveRunKVSchema,
-  MemberProfileCacheSchema,
-  RunConfigKVSchema,
-  rememberMemberProfile,
-} from "./storage-schemas-kv";

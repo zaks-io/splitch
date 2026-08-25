@@ -11,10 +11,15 @@ const targets = [
 ] as const;
 
 describe("Evaluation Worker service bindings", () => {
-  it.each(targets)("hands Event Ingest exactly one binding for %s", (_target, target) => {
+  it.each(targets)("hands dependencies their narrow service bindings for %s", (_target, target) => {
     expect(target?.services).toEqual([
       {
         binding: "EVENT_INGEST",
+        service: expect.any(String),
+        entrypoint: "EvaluationEntrypoint",
+      },
+      {
+        binding: "CONTROL_PLANE_API",
         service: expect.any(String),
         entrypoint: "EvaluationEntrypoint",
       },

@@ -8,11 +8,13 @@
   "files": {
     "includes": [
       "**",
-      "!**/.claude/worktrees/**",
+      "!**/.claude/worktrees",
       "!**/worker-configuration.d.ts",
       "!**/*.gen.ts",
-      "!packages/sdk/scripts/generated/**",
-      "!packages/sdk/src/generated/**",
+      "!packages/sdk/scripts/generated",
+      "!packages/sdk/src/generated",
+      "!packages/convex/src/component/_generated",
+      "!examples/convex/convex/_generated",
       "!pnpm-lock.yaml",
       "!**/*.md"
     ],

@@ -1,5 +1,6 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import {
+  type ConvexServerExposureItem,
   createHealthResponse,
   getRoute,
   parsePlatformTarget,
@@ -18,6 +19,7 @@ import {
   delegatedIdentityFor,
   McpDelegationReplayDurableObject,
   notDelegatedResponse,
+  type Principal,
   type RateLimiter,
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
@@ -37,7 +39,7 @@ import {
   makeSessionStore,
 } from "./control-plane-auth";
 import { makeDataPlaneAuthResolver } from "./data-plane-auth";
-import type { EvaluationApiEnv } from "./env";
+import type { ConvexControlPlaneBinding, EvaluationApiEnv } from "./env";
 import { makeHttpEvaluationCommitSink } from "./evaluation-commit-sink";
 import { makeHttpEvaluationUsageSink } from "./evaluation-usage-sink";
 import { makeHttpExposureIngestSink } from "./exposure-redemption";
@@ -132,7 +134,10 @@ async function handleRequest(
     authResolver: requestAuthResolver(env, url, authority),
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(env.CREDENTIAL_STORE),
     rateLimiter: allowLimiter,
-    delegationBindings: { "event-ingest-api": env.EVENT_INGEST },
+    delegationBindings: {
+      "event-ingest-api": env.EVENT_INGEST,
+      "control-plane-api": env.CONTROL_PLANE_API,
+    },
     provider: runtimeKvProvider(
       env,
       (breach) => reportPropagationBreach("flag_config_propagation_breach", { ...breach }),
@@ -175,6 +180,7 @@ async function handleRequest(
       token: env.SPLITCH_EVENT_INGEST_TOKEN,
     }),
     waitUntil: (promise) => ctx.waitUntil(promise),
+    convexConfigurationResolver: makeConvexConfigurationResolver(env.CONTROL_PLANE_API),
     logger: console,
     observability: createWorkerObservability(
       env,
@@ -182,6 +188,24 @@ async function handleRequest(
     ),
   });
   return app.fetch(request, env);
+}
+
+function makeConvexConfigurationResolver(binding: ConvexControlPlaneBinding) {
+  return {
+    async resolve(principal: Principal, item: ConvexServerExposureItem) {
+      if (!principal.appId || !principal.environmentId) {
+        throw new Error("evaluation-api: Convex Exposure principal has no Environment scope");
+      }
+      return binding.loadConvexExposureVerificationConfig({
+        appId: principal.appId,
+        environmentId: principal.environmentId,
+        installationId: item.installationId,
+        flagKey: item.flagKey,
+        experimentId: item.experimentId,
+        runId: item.runId,
+      });
+    },
+  };
 }
 
 /**

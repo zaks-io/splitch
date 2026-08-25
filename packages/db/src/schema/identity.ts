@@ -135,6 +135,7 @@ export const environments = sqliteTable(
     key: text("key").notNull(),
     name: text("name").notNull(),
     policy: text("policy").notNull().default(DEFAULT_ENVIRONMENT_POLICY),
+    configVersion: integer("config_version").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     createdBy: userRef("created_by"),

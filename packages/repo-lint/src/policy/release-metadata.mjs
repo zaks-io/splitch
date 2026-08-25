@@ -3,9 +3,9 @@ import {
   DEPENDENCY_FIELDS,
   SEMVER_PATTERN,
   SPDX_LICENSE_PATTERN,
+  violation,
   WORKSPACE_PROTOCOL,
   WORKSPACE_SCOPE,
-  violation,
 } from "./constants.mjs";
 
 const CLI_RUNTIME_DEPENDENCY_FIELDS = ["dependencies", "peerDependencies", "optionalDependencies"];

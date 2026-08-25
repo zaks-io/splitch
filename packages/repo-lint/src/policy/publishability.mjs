@@ -1,12 +1,12 @@
-import { violation } from "./constants.mjs";
 import {
   ALLOWED_PUBLISHABLE_PACKAGES,
   DEPENDENCY_FIELDS,
   FORBIDDEN_PUBLISHABLE_PACKAGES,
+  isPublishable,
+  violation,
   WORKSPACE_PROTOCOL,
   WORKSPACE_SCOPE,
 } from "./constants.mjs";
-import { isPublishable } from "./constants.mjs";
 
 /**
  * @param {import("./constants.mjs").WorkspacePackage[]} packages
