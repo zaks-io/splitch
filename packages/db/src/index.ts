@@ -46,6 +46,8 @@ export {
   approvalReviews,
   apps,
   clientKeys,
+  cloudflareConfigDeliveries,
+  cloudflareInstallations,
   configWebhookDeliveries,
   convexInstallations,
   deviceRefreshSessions,

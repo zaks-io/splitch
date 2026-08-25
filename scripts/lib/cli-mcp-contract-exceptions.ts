@@ -1,0 +1,174 @@
+// These routes intentionally do not have equal CLI and MCP exposure. Keeping
+// the list explicit makes every new exception a reviewed contract decision.
+export const CLI_MCP_CONTRACT_EXCEPTIONS = [
+  {
+    operationId: "organizations_delete",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing deletion workflow",
+  },
+  {
+    operationId: "current_user_privacy_export",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing privacy workflow",
+  },
+  {
+    operationId: "current_user_delete",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing deletion workflow",
+  },
+  {
+    operationId: "organization_privacy_export",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing privacy workflow",
+  },
+  {
+    operationId: "app_privacy_export",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing privacy workflow",
+  },
+  {
+    operationId: "entity_privacy_export",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing privacy workflow",
+  },
+  {
+    operationId: "entity_privacy_delete",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing deletion workflow",
+  },
+  {
+    operationId: "privacy_requests_get",
+    cli: false,
+    mcp: false,
+    reason: "registered HTTP placeholder with no backing privacy workflow",
+  },
+  {
+    operationId: "environment_exposure_status_delete",
+    cli: false,
+    mcp: false,
+    reason:
+      "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
+  },
+  {
+    operationId: "holdover_write_outbox_delete",
+    cli: false,
+    mcp: false,
+    reason:
+      "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
+  },
+  {
+    operationId: "openapi_document_get",
+    cli: false,
+    mcp: false,
+    reason: "public discovery route, not an authenticated operation",
+  },
+  {
+    operationId: "sdk_evaluate",
+    cli: false,
+    mcp: false,
+    reason: "SDK data-plane operation",
+  },
+  {
+    operationId: "sdk_evaluate_all",
+    cli: false,
+    mcp: false,
+    reason: "SDK data-plane operation",
+  },
+  {
+    operationId: "sdk_exposures",
+    cli: false,
+    mcp: false,
+    reason: "SDK data-plane operation",
+  },
+  {
+    operationId: "sdk_track",
+    cli: false,
+    mcp: false,
+    reason: "SDK Metric Event data-plane operation",
+  },
+  {
+    operationId: "sdk_cached_evaluation_telemetry",
+    cli: false,
+    mcp: false,
+    reason: "SDK data-plane telemetry operation",
+  },
+  {
+    operationId: "sdk_peek",
+    cli: false,
+    mcp: false,
+    reason: "SDK data-plane diagnostic operation",
+  },
+  {
+    operationId: "sdk_verify",
+    cli: true,
+    mcp: false,
+    reason: "CLI setup check using an SDK credential; agents use flags_test_eval",
+  },
+  {
+    operationId: "convex_installations_create",
+    cli: false,
+    mcp: false,
+    reason: "Convex Component installation data-plane operation",
+  },
+  {
+    operationId: "convex_installations_get",
+    cli: false,
+    mcp: false,
+    reason: "Convex Component installation data-plane operation",
+  },
+  {
+    operationId: "convex_installations_delete",
+    cli: false,
+    mcp: false,
+    reason: "Convex Component installation data-plane operation",
+  },
+  {
+    operationId: "convex_secret_rotations_create",
+    cli: false,
+    mcp: false,
+    reason: "Convex Component secret-rotation data-plane operation",
+  },
+  {
+    operationId: "convex_snapshot_get",
+    cli: false,
+    mcp: false,
+    reason: "Convex Component configuration-sync data-plane operation",
+  },
+  {
+    operationId: "convex_exposures_create",
+    cli: false,
+    mcp: false,
+    reason: "Convex Component Exposure delivery data-plane operation",
+  },
+  {
+    operationId: "cloudflare_installations_create",
+    cli: false,
+    mcp: false,
+    reason: "Cloudflare Worker installation data-plane operation",
+  },
+  {
+    operationId: "cloudflare_installations_get",
+    cli: false,
+    mcp: false,
+    reason: "Cloudflare Worker installation data-plane operation",
+  },
+  {
+    operationId: "cloudflare_installations_delete",
+    cli: false,
+    mcp: false,
+    reason: "Cloudflare Worker installation data-plane operation",
+  },
+  {
+    operationId: "cloudflare_exposures_create",
+    cli: false,
+    mcp: false,
+    reason: "Cloudflare Worker Exposure delivery data-plane operation",
+  },
+] as const;

@@ -181,6 +181,7 @@ async function handleRequest(
     }),
     waitUntil: (promise) => ctx.waitUntil(promise),
     convexConfigurationResolver: makeConvexConfigurationResolver(env.CONTROL_PLANE_API),
+    cloudflareConfigurationResolver: makeCloudflareConfigurationResolver(env.CONTROL_PLANE_API),
     logger: console,
     observability: createWorkerObservability(
       env,
@@ -188,6 +189,23 @@ async function handleRequest(
     ),
   });
   return app.fetch(request, env);
+}
+
+function makeCloudflareConfigurationResolver(binding: ConvexControlPlaneBinding) {
+  return {
+    async resolve(principal: Principal, item: ConvexServerExposureItem) {
+      if (!principal.appId || !principal.environmentId)
+        throw new Error("evaluation-api: Cloudflare Exposure principal has no Environment scope");
+      return binding.loadCloudflareExposureVerificationConfig({
+        appId: principal.appId,
+        environmentId: principal.environmentId,
+        installationId: item.installationId,
+        flagKey: item.flagKey,
+        experimentId: item.experimentId,
+        runId: item.runId,
+      });
+    },
+  };
 }
 
 function makeConvexConfigurationResolver(binding: ConvexControlPlaneBinding) {

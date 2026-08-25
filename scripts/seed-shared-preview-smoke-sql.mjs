@@ -42,6 +42,8 @@ export const TRANSIENT_APP_KEY_PREFIXES = [
  * checked against the Drizzle schema by shared-preview-panel-smoke.test.mjs.
  */
 const TRANSIENT_APP_SCOPED_TABLES = [
+  "cloudflare_config_deliveries",
+  "cloudflare_installations",
   "config_webhook_deliveries",
   "convex_installations",
   "approval_reviews",

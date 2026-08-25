@@ -8,6 +8,7 @@ export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/repo/approval-disposition-isolation.test.ts",
   "src/repo/approval-variant-version-race.test.ts",
   "src/repo/claim-retention.test.ts",
+  "src/repo/cloudflare-integrations.test.ts",
   "src/repo/experiment-start-approval-landing.test.ts",
   "src/repo/flag-key-uniqueness.test.ts",
   "src/repo/flag-variant-run-freeze.test.ts",

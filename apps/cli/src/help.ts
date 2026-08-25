@@ -1,8 +1,8 @@
-import { deriveMcpTools } from "@splitch/contracts";
 import { commandUsageLine } from "./command-positionals.js";
 import { CLI_COMMANDS, type CliCommandDefinition, META_COMMANDS } from "./command-registry.js";
 import { operationBehaviorNotes } from "./help-behavior-notes.js";
 import { commandHasBodyJson, renderBodyJsonSection } from "./help-body-json.js";
+import { commandDescription, toolByOperation } from "./help-command-description.js";
 import { commandExample } from "./help-command-example.js";
 import { deleteModeHelpFlags } from "./help-delete-flags.js";
 import { META_DESCRIPTIONS, META_EXAMPLES } from "./help-meta.js";
@@ -13,8 +13,6 @@ interface HelpFlag {
   readonly defaultValue: string;
   readonly description: string;
 }
-
-const TOOL_BY_OPERATION = new Map(deriveMcpTools().map((tool) => [tool.name, tool]));
 
 export function renderHelp(args: readonly string[]): string | undefined {
   if (!args.some((arg) => arg === "--help" || arg === "-h")) return undefined;
@@ -117,15 +115,6 @@ function renderGroupHelp(group: string): string {
 
 function commandGroups(): Set<string> {
   return new Set(CLI_COMMANDS.map((command) => command.path[0]).filter(Boolean) as string[]);
-}
-
-function commandDescription(command: CliCommandDefinition): string {
-  if (command.kind === "flags_verify") {
-    return "Verify a Flag KEY through the data plane without firing an Exposure.";
-  }
-  if (command.kind === "env_policy_get") return "Get the selected Environment Policy.";
-  if (command.kind === "env_policy_set") return "Update the selected Environment Policy.";
-  return TOOL_BY_OPERATION.get(command.operationId)?.description ?? `Run ${command.operationId}.`;
 }
 
 function commandFlags(command: CliCommandDefinition): HelpFlag[] {
@@ -289,7 +278,7 @@ function credentialNotes(command: CliCommandDefinition): string[] {
 }
 
 function inputFields(operationId: string): Set<string> {
-  const schema = TOOL_BY_OPERATION.get(operationId)?.inputSchema;
+  const schema = toolByOperation.get(operationId)?.inputSchema;
   if (!schema || !("shape" in schema)) return new Set();
   return new Set(Object.keys(schema.shape as Record<string, unknown>));
 }

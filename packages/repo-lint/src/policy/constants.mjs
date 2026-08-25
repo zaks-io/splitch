@@ -24,6 +24,7 @@ export const ALLOWED_PUBLISHABLE_PACKAGES = new Set([
   "@splitch/sdk",
   "@splitch/cli",
   "@splitch/convex",
+  "@splitch/cloudflare",
 ]);
 export const FORBIDDEN_PUBLISHABLE_PACKAGES = new Set(["@splitch/contracts"]);
 export const WORKSPACE_SCOPE = "@splitch/";

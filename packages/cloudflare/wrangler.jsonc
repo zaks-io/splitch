@@ -1,0 +1,20 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "splitch-cloudflare-package-test",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "SPLITCH_INSTALLATION_ID": "00000000-0000-4000-8000-000000000000",
+    "SPLITCH_ENDPOINT": "https://edge.splitch.dev"
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "SPLITCH_STATE", "class_name": "SplitchState" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SplitchState"] }],
+  "observability": {
+    "enabled": true,
+    "logs": { "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 }
+  }
+}

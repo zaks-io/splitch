@@ -6,10 +6,26 @@ export interface CliIo {
   readonly error: (line: string) => void;
 }
 
+interface CliCommandResult {
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+export interface CliCommandRunner {
+  run(
+    command: string,
+    args: readonly string[],
+    options: { readonly cwd: string; readonly input?: string },
+  ): Promise<CliCommandResult>;
+}
+
 export interface CliDeps extends AuthDeps, SdkFactoryOptions {
   readonly cwd?: string;
   readonly env?: Record<string, string | undefined>;
   readonly io?: CliIo;
+  readonly commandRunner?: CliCommandRunner;
+  readonly sleep?: (milliseconds: number) => Promise<void>;
 }
 
 export interface CliResult {

@@ -28,6 +28,7 @@ import { CliInputError } from "./flag-create-input.js";
 import { buildOperationInput } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { resolveContextSelectors, resolveFlagSelector } from "./scope-resolve.js";
+import { executeCloudflareCommand } from "./cloudflare.js";
 
 export type { CliDeps, CliResult } from "./execute-types.js";
 
@@ -138,11 +139,11 @@ async function executeCommand(
     return scopeError;
   }
 
-  if (command.kind === "flags_verify") {
-    const usageError = validateFlagsVerifyUsage(invocation, io);
-    if (usageError) {
-      return usageError;
-    }
+  const specializedUsageError = validateSpecializedUsage(command, invocation, io);
+  if (specializedUsageError) return specializedUsageError;
+
+  if (isCloudflareCommand(command)) {
+    return executeCloudflareCommand(command.kind, invocation, deps, io, context);
   }
 
   try {
@@ -170,6 +171,20 @@ async function executeCommand(
     return handleInputError(error, invocation, io);
   }
   return executeApiOperation(command.operationId, input, invocation, deps, io);
+}
+
+function validateSpecializedUsage(
+  command: CliCommandDefinition,
+  invocation: ParsedInvocation,
+  io: CliIo,
+): CliResult | null {
+  return command.kind === "flags_verify" ? validateFlagsVerifyUsage(invocation, io) : null;
+}
+
+function isCloudflareCommand(command: CliCommandDefinition): command is CliCommandDefinition & {
+  kind: "cloudflare_setup" | "cloudflare_status" | "cloudflare_remove";
+} {
+  return command.kind.startsWith("cloudflare_");
 }
 
 function commandForInvocation(

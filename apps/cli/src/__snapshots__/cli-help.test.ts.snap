@@ -323,6 +323,42 @@ Credential semantics:
 
 Example:
   splitch client-key update --body-json '{"originAllowlist":["https://app.example.com"]}' --json",
+    "cloudflare remove": "Revoke configuration delivery, unbind the service, and delete the integration Worker.
+
+Usage:
+  splitch cloudflare remove [flags]
+
+Flags:
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch cloudflare remove --env production --json",
+    "cloudflare setup": "Deploy and bind a durable local-evaluation Worker for the selected Environment.
+
+Usage:
+  splitch cloudflare setup [flags]
+
+Flags:
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch cloudflare setup --env production --json",
+    "cloudflare status": "Read Cloudflare configuration delivery and local Worker status.
+
+Usage:
+  splitch cloudflare status [flags]
+
+Flags:
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch cloudflare status --env production --json",
     "env-policy get": "Get the selected Environment Policy.
 
 Usage:
@@ -1510,6 +1546,21 @@ Flags:
 
 Example:
   splitch client-key get --help",
+    "cloudflare": "Manage cloudflare resources.
+
+Usage:
+  splitch cloudflare <action> [arguments] [flags]
+
+Commands:
+  setup           Deploy and bind a durable local-evaluation Worker for the selected Environment.
+  status          Read Cloudflare configuration delivery and local Worker status.
+  remove          Revoke configuration delivery, unbind the service, and delete the integration Worker.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch cloudflare setup --help",
     "env-policy": "Manage env-policy resources.
 
 Usage:
@@ -1858,6 +1909,7 @@ Resource groups:
   approval-requests
   apps
   client-key
+  cloudflare
   env-policy
   environment-exposure-status
   envs

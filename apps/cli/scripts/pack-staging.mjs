@@ -6,7 +6,14 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findRepoInternalReference } from "./published-agent-surface.mjs";
 
-const EXPECTED_DEPENDENCIES = ["@hono/zod-openapi", "@sentry/node", "hono", "open", "zod"];
+const EXPECTED_DEPENDENCIES = [
+  "@hono/zod-openapi",
+  "@sentry/node",
+  "hono",
+  "jsonc-parser",
+  "open",
+  "zod",
+];
 const REQUIRED_FILES = [
   "package/LICENSE.md",
   "package/README.md",

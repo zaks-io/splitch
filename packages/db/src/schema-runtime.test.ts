@@ -128,7 +128,7 @@ describe("remaining applied D1 schema", () => {
     }
   });
 
-  it("contains the 29 named live D1 tables", async () => {
+  it("contains the 31 named live D1 tables", async () => {
     const local = await createLocalD1();
     try {
       const tables = await local.d1
@@ -148,6 +148,8 @@ describe("remaining applied D1 schema", () => {
         "claim_idempotency",
         "claim_verifications",
         "client_keys",
+        "cloudflare_config_deliveries",
+        "cloudflare_installations",
         "config_webhook_deliveries",
         "convex_installations",
         "device_refresh_sessions",

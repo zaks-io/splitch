@@ -1,5 +1,6 @@
 // biome-ignore lint/performance/noBarrelFile: Runtime-neutral evaluator consumers need one explicit package entry point.
 export { assign, fractionalEval, type Rollout } from "./assignment";
+export { configSnapshotProvider, parseConfigSnapshot } from "./config-snapshot";
 export { type ConditionMatchOptions, matchesConditions } from "./conditions";
 export {
   AssignmentStoreError,
