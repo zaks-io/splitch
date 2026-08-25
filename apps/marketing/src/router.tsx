@@ -19,7 +19,7 @@ export async function getRouter() {
         dsn: secrets.sentryDsn,
         environment: secrets.environment,
         release: import.meta.env.VITE_SENTRY_RELEASE,
-        tracesSampleRate: secrets.environment === "production" ? 0.1 : 1,
+        tracesSampleRate: 1,
         integrations: [Sentry.tanstackRouterBrowserTracingIntegration(router)],
         beforeSend: createSentryBeforeSend({ surface: "marketing" }),
       } as unknown as Parameters<typeof Sentry.init>[0]);

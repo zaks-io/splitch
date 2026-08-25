@@ -278,7 +278,7 @@ describe("workerSentryOptions", () => {
       environment: "production",
       release: "splitch-auth-api@abc123",
       enableRpcTracePropagation: true,
-      tracesSampleRate: 0.1,
+      tracesSampleRate: 1,
     });
   });
 
