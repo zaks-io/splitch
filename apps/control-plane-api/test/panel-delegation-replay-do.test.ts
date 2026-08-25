@@ -3,9 +3,12 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 describe("PanelDelegationReplayDurableObject", () => {
-  it("atomically consumes a nonce once and remains reusable after cleanup", async () => {
+  it("atomically consumes a nonce once and remains reusable after alarm cleanup", async () => {
     const stub = env.PANEL_DELEGATION_REPLAY.getByName("shard_concurrent_1234567890");
-    const nowSeconds = Math.floor(Date.now() / 1_000);
+    // A window entirely in the wall-clock past: the alarm's Date.now() sweep sees
+    // the row as expired, while every consume's own sweep (bounded by nowSeconds)
+    // cannot remove it. A post-alarm redemption therefore proves the alarm ran.
+    const nowSeconds = Math.floor(Date.now() / 1_000) - 100;
 
     await expect(
       Promise.all([
@@ -14,9 +17,11 @@ describe("PanelDelegationReplayDurableObject", () => {
       ]),
     ).resolves.toEqual(expect.arrayContaining([true, false]));
 
-    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    // The redemption's alarm is already due, so workerd may have auto-fired it;
+    // this flushes it if it is still pending. Either way it has run afterwards.
+    await runDurableObjectAlarm(stub);
     await expect(
-      stub.consume("nonce_concurrent_abcdef", nowSeconds + 60, nowSeconds + 30),
+      stub.consume("nonce_concurrent_abcdef", nowSeconds + 40, nowSeconds),
     ).resolves.toBe(true);
   });
 
