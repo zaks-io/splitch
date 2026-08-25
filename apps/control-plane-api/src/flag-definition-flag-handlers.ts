@@ -100,11 +100,7 @@ async function withEnvironmentConfigurations(
   }
   return rows.map((row) => {
     const config = configByFlagId.get(row.id);
-    if (!config) {
-      throw new Error(
-        `flag list: Flag ${row.id} has no Configuration in Environment ${environmentId}`,
-      );
-    }
+    if (!config) return flagFrom(row, catalogs.get(row.id) ?? []);
     return flagWithConfigurationFrom(
       row,
       catalogs.get(row.id) ?? [],

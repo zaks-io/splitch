@@ -152,6 +152,26 @@ describe("control-plane Flag definition CRUD", () => {
         ?.flagConfiguration,
     ).toMatchObject({ enabled: false, rollout: null });
 
+    await h.bindings.d1
+      .prepare("DELETE FROM flag_configs WHERE app_id = ? AND environment_id = ? AND flag_id = ?")
+      .bind(createdApp.app.id, prod.id, second.id)
+      .run();
+
+    const unconfiguredList = await request(
+      h,
+      "GET",
+      `/apps/${createdApp.app.id}/flags?environmentId=${prod.id}`,
+      jwt,
+    );
+    expect(unconfiguredList.status).toBe(200);
+    const unconfiguredItems = (await unconfiguredList.json()) as typeof prodItems;
+    expect(unconfiguredItems.items.find((flag) => flag.id === first.id)?.flagConfiguration).toEqual(
+      prodItems.items.find((flag) => flag.id === first.id)?.flagConfiguration,
+    );
+    expect(unconfiguredItems.items.find((flag) => flag.id === second.id)).not.toHaveProperty(
+      "flagConfiguration",
+    );
+
     const bareList = await request(h, "GET", `/apps/${createdApp.app.id}/flags`, jwt);
     expect(bareList.status).toBe(200);
     expect(

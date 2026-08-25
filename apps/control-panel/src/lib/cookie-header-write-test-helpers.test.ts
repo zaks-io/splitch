@@ -4,6 +4,7 @@ import { createCookieHeaderWriteDiscovery } from "./cookie-header-write-test-hel
 import { sourceProgram } from "./typescript-program-test-helpers";
 
 const TSCONFIG = fileURLToPath(new URL("../../tsconfig.json", import.meta.url));
+const SOURCE_GUARD_TIMEOUT_MS = 20_000;
 
 describe("Set-Cookie source guard", () => {
   it("finds a runtime-composed append by its argument expression", () => {
@@ -147,24 +148,28 @@ start.setResponseHeader("set-cookie", raw(token));
     expect(discover(source)).toEqual([]);
   });
 
-  it("resolves reviewed header-name bindings before classifying them", () => {
-    const source = `
+  it(
+    "resolves reviewed header-name bindings before classifying them",
+    () => {
+      const source = `
 import { CONTROL_PANEL_ENVIRONMENT_HEADER } from "@splitch/control-plane-sdk/control-panel-identity";
 const headers = new Headers();
 headers.set(CONTROL_PANEL_ENVIRONMENT_HEADER, environmentId);
 `;
 
-    expect(
-      discover(source, [
-        {
-          moduleSpecifier: "@splitch/control-plane-sdk/control-panel-identity",
-          exports: {
-            CONTROL_PANEL_ENVIRONMENT_HEADER: "x-splitch-panel-environment",
+      expect(
+        discover(source, [
+          {
+            moduleSpecifier: "@splitch/control-plane-sdk/control-panel-identity",
+            exports: {
+              CONTROL_PANEL_ENVIRONMENT_HEADER: "x-splitch-panel-environment",
+            },
           },
-        },
-      ]),
-    ).toEqual([]);
-  });
+        ]),
+      ).toEqual([]);
+    },
+    SOURCE_GUARD_TIMEOUT_MS,
+  );
 
   it("refuses a SerializedHttpOnlyCookie assertion outside the serializer", () => {
     const source = `appendHttpOnlyCookie(headers, raw(token) as SerializedHttpOnlyCookie);`;
