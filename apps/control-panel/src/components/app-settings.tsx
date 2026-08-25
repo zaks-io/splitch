@@ -4,6 +4,7 @@ import { AppCatalogCard } from "./app-catalog-card";
 import { AppDangerZone } from "./app-danger-zone";
 import { AppIdentityCard } from "./app-identity-card";
 import { AppMembersCard } from "./app-members-card";
+import { AppSetupCard } from "./app-setup-card";
 
 /**
  * The App half of Settings. Everything here is App-level and stays the same in
@@ -15,11 +16,13 @@ import { AppMembersCard } from "./app-members-card";
  */
 export function AppSettings({
   env,
+  environmentId,
   environmentNames,
   orgSlug,
   settings,
 }: {
   env: string;
+  environmentId: string;
   environmentNames: readonly string[];
   orgSlug: string;
   settings: PanelAppSettings;
@@ -36,6 +39,14 @@ export function AppSettings({
           Identity, access, and Flag catalog for this App. These apply in every Environment.
         </p>
       </header>
+      <AppSetupCard
+        appHomeHref={`/${orgSlug}/${settings.app.key}`}
+        appId={settings.app.id}
+        env={env}
+        environmentId={environmentId}
+        environmentSettingsHref={`${scopeHref}/settings/environment`}
+        firstFlagKey={settings.flags.items[0]?.key}
+      />
       <AppIdentityCard
         app={settings.app}
         canRename={capabilities.canRename}
