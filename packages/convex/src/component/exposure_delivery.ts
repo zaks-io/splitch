@@ -1,5 +1,6 @@
 import type { CommitTsPlaceholder } from "convex/values";
 import { internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import type { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
 import { env } from "./_generated/server";
 
@@ -140,7 +141,7 @@ function commitTimestampIso(value: bigint | CommitTsPlaceholder): string {
 
 async function makeTerminal(
   ctx: MutationCtx,
-  row: { _id: Parameters<MutationCtx["db"]["patch"]>[0] },
+  row: Doc<"exposureOutbox">,
   error: string | undefined,
 ): Promise<void> {
   await ctx.db.patch(row._id, {

@@ -51,7 +51,7 @@ export default defineSchema({
     runId: v.string(),
     runConfigHash: v.string(),
     idType: v.string(),
-    targetingKeyHash: v.string(),
+    targetingKeyHash: v.optional(v.string()),
     targetingKey: v.optional(v.string()),
     attributesJson: v.optional(v.string()),
     variantName: v.string(),
