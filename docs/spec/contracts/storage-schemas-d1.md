@@ -2,7 +2,8 @@
 
 D1 column shapes for identity references, Flag definitions, and Event Definitions
 (Drizzle-migrated; structurally trusted, not Zod-re-parsed). Experiment-side tables are in
-[storage-schemas-d1-experiment.md](./storage-schemas-d1-experiment.md).
+[storage-schemas-d1-experiment.md](./storage-schemas-d1-experiment.md); Convex integration and
+delivery tables are in [storage-schemas-d1-integrations.md](./storage-schemas-d1-integrations.md).
 
 Storage shapes carry internals (timestamps, audit, immutability markers) that wire shapes must not
 expose. D1 columns are trusted without re-parsing. (ADR-0025 "reuse at the leaf, not the envelope".)

@@ -33,6 +33,7 @@ try {
   const tokens = await generateTinybirdLocalTokens(projectDir);
   await resetTinybirdLocal(projectDir, tokens);
   await run("tb", ["--no-version-warning", "build"], projectDir);
+  await proveExposureAtCompatibility(projectDir);
   await proveAnalysisScopePredicates(
     tinybirdRoot,
     (sql) => output("tb", ["--no-version-warning", "--output", "json", "sql", sql], projectDir),
@@ -53,9 +54,10 @@ function validateSplitchDatasourceContracts(root) {
 
   requireColumns(rawEvents, [
     "`dedup_key`",
+    "`exposure_at` DateTime64(3) `json:$.exposure_at` DEFAULT server_received_at",
     "`server_received_at`",
-    "`ingest_ts`",
-    "`client_timestamp`",
+    "`ingest_ts` DateTime64(3) `json:$.ingest_ts` DEFAULT now64(3)",
+    "`client_timestamp` Nullable(DateTime64(3))",
     "`activation_ts` Nullable(DateTime64(3))",
     "`variant` Nullable(String)",
     "`sdk_version` Nullable(String)",
@@ -129,6 +131,59 @@ function validateSplitchDatasourceContracts(root) {
   // pipe-header comment alone would let Results keep reporting zero-event
   // Metrics forever after real ingest ships.
   assertMetricStubsRetiredWhenMetricEventsExist(root, fail);
+}
+
+async function proveExposureAtCompatibility(cwd) {
+  const raw = await output(
+    "tb",
+    [
+      "--no-version-warning",
+      "--output",
+      "json",
+      "sql",
+      `SELECT
+        dedup_key,
+        toUnixTimestamp64Milli(exposure_at) AS exposure_at_ms,
+        toUnixTimestamp64Milli(server_received_at) AS server_received_at_ms,
+        toUnixTimestamp64Milli(ingest_ts) AS ingest_ts_ms,
+        isNull(client_timestamp) AS client_timestamp_is_null
+      FROM raw_events
+      WHERE dedup_key IN ('compat-new-exposure-at', 'compat-old-exposure-at')
+      ORDER BY dedup_key`,
+    ],
+    cwd,
+  );
+  let rows;
+  try {
+    rows = JSON.parse(raw).data;
+  } catch {
+    fail("raw_events exposure_at compatibility query returned invalid JSON");
+  }
+  const newRow = rows?.find((row) => row.dedup_key === "compat-new-exposure-at");
+  const oldRow = rows?.find((row) => row.dedup_key === "compat-old-exposure-at");
+  if (newRow?.exposure_at_ms !== 1_783_641_540_000) {
+    fail("raw_events did not preserve an explicit exposure_at");
+  }
+  if (
+    oldRow?.exposure_at_ms !== oldRow?.server_received_at_ms ||
+    oldRow?.server_received_at_ms !== 1_783_641_600_000
+  ) {
+    fail("raw_events did not project a retained row's exposure_at from server_received_at");
+  }
+  if (
+    typeof newRow?.ingest_ts_ms !== "number" ||
+    typeof oldRow?.ingest_ts_ms !== "number" ||
+    newRow.ingest_ts_ms < newRow.server_received_at_ms ||
+    oldRow.ingest_ts_ms < oldRow.server_received_at_ms
+  ) {
+    fail("raw_events did not assign ingest_ts when producers omitted it");
+  }
+  if (oldRow?.client_timestamp_is_null !== 1) {
+    fail("raw_events did not accept an omitted diagnostic client_timestamp");
+  }
+  console.log(
+    "✓ raw_events: mixed old/new rows preserve exposure_at and Tinybird-owned ingest metadata",
+  );
 }
 
 // The snapshot Copy Pipe and the real-time tail are separate files that must agree

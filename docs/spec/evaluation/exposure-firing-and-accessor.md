@@ -58,22 +58,24 @@ The side effect **must be documented prominently** in the SDK reference.
 | `idType`           | string   | yes      | Entity type; matches Assignment Store key (guards cross-type collisions)                   |
 | `variant`          | string   | yes      | The resolved Variant name                                                                  |
 | `sourceId`         | string   | yes      | Edge POP identifier                                                                        |
-| `serverReceivedAt` | ISO 8601 | yes      | Canonical first-touch ordering; monotonic; no client clock skew                            |
-| `clientFiredAt`    | ISO 8601 | yes      | Wall-clock at fire time; diagnostics only                                                  |
+| `exposureAt`       | ISO 8601 | yes      | Canonical encounter time; remote receive time or verified trusted server commit            |
+| `serverReceivedAt` | ISO 8601 | yes      | Splitch durable-acceptance time; delivery diagnostics and retention                        |
+| `clientTimestamp`  | ISO 8601 | no       | Optional client wall-clock; maps to physical `client_timestamp`; diagnostics only          |
 
 `runId` is stamped from `EvaluateResult.liveRunId` at fire time — set by the evaluate path,
 not the pipeline.
 
-Both `serverReceivedAt` and `clientFiredAt` are logged. `MIN(serverReceivedAt)` is the
-canonical first-touch anchor.
+`exposureAt` and `serverReceivedAt` are logged. `clientTimestamp`, when present, is diagnostic only.
+`MIN(exposureAt)` is the canonical first-touch anchor; unverified client time is never ordering
+authority.
 `ingestTs` is not part of the producer or durable outbox shape. Tinybird assigns physical
 `ingest_ts` with `DEFAULT now64(3)` when it inserts the row.
 
 ## First-touch identity
 
 `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)` — six components, no Variant (the query-time pipeline tuple; canonical in [pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md)). Resolved by
-`MIN(server_received_at)` at query time: many raw Exposures for the same Entity/Run share this identity and
-the earliest `server_received_at` is the first-touch winner. Variant is excluded so that two Exposures with
+`MIN(exposure_at)` at query time: many raw Exposures for the same Entity/Run share this identity and
+the earliest encounter is the first-touch winner. Variant is excluded so that two Exposures with
 **different** Variants for the same Entity/Run are a conflict caught by the `__multiple__`
 quarantine (a separate GROUP BY step), not silently collapsed.
 

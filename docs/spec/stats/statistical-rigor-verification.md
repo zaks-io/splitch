@@ -26,10 +26,10 @@ type-checked on every CI run, so a contract change breaks it loudly rather than 
 
 ### Ingest and dedup
 
-- Exposure and Activation intake rejects missing `event_id`, `source_id`, `dedup_key`, or
-  `server_received_at`; Activation intake additionally rejects a missing or null `activation_ts`.
-  The producer must omit `ingest_ts`, and the stored Tinybird row must contain datasource-assigned
-  `ingest_ts`.
+- Exposure and Activation intake rejects missing `event_id`, `source_id`, `dedup_key`,
+  `exposure_at`, or `server_received_at`; Activation intake additionally rejects a missing or null
+  `activation_ts`. For Activation, `exposure_at` equals `server_received_at`. The producer must omit
+  `ingest_ts`, and the stored Tinybird row must contain datasource-assigned `ingest_ts`.
 - A fresh Evaluation returns its Variant only after the retry-stable Exposure and payload are sealed
   in the durable `raw_events` outbox. Seal failure returns an error and begins no Assignment Store
   write; Queue publication failure after the seal is recovered from the outbox without SDK re-fire.
@@ -79,7 +79,8 @@ activation_ts)` or its exact types fails contract tests.
 - Raw and state fixtures at the beginning, middle, and end of a UTC day expire at the same exact
   timestamp under matching retention.
 - Activation raw/state fixtures expire at the same exact `activation_ts`-derived retention boundary.
-- `server_received_at` controls first-touch ordering.
+- `exposure_at` controls Exposure first-touch ordering. A delayed Convex delivery fixture proves
+  receipt order cannot replace encounter order.
 - For Exposure and Activation rows, Tinybird stamps `ingest_ts` at physical insertion with
   `DEFAULT now64(3)`. A delayed Queue delivery after a completed snapshot remains in the tail, and an
   empty snapshot falls back to the Unix epoch rather than hiding all tail rows.

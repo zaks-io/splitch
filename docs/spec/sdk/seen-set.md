@@ -14,7 +14,7 @@ The seen-set is:
 
 - **Per SDK instance** — not shared across Workers, POPs, or processes
 - **In-memory** — does not survive a Worker restart or cold start
-- **Not a dedup authority** — the pipeline dedup query (`MIN(server_received_at)` per `(entity, run)`)
+- **Not a dedup authority** — the pipeline dedup query (`MIN(exposure_at)` per `(entity, run)`)
   is always correct regardless of what the seen-set contains
 
 ## Seen-set key
@@ -140,7 +140,7 @@ The seen-set suppresses within a single SDK instance. It does NOT prevent:
 
 If two concurrent `evaluate(sameFlag, sameContext)` calls race within one SDK instance,
 both may miss the seen-set (it is updated after the HTTP response) and both fire Exposures.
-The pipeline dedup collapses them correctly (`MIN(server_received_at)` picks first-touch). This is
+The pipeline dedup collapses them correctly (`MIN(exposure_at)` picks first-touch). This is
 an acknowledged inherent tension in the expose-on-read model, not a correctness bug. The
 SDK documentation must note that calling `evaluate` in parallel for the same flag in the
 same request context produces extra raw Exposure rows that are safely deduplicated.
@@ -163,7 +163,7 @@ from "SDK failed to fire" when debugging low Exposure counts (seam-finding from 
 SDK seen-set (per-instance)          Pipeline dedup (authoritative)
          |                                        |
   blocks HTTP call if hit             collapses all raw Exposures to first-touch
-  (wire optimization)                 per (entity, run) via MIN(server_received_at)
+  (wire optimization)                 per (entity, run) via MIN(exposure_at)
          |                                        |
   NOT the source of truth             IS the source of truth
 ```

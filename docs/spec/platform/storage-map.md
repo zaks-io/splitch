@@ -11,6 +11,7 @@ must not move data between stores without a new ADR.
 | SDK credentials (API Key hash/scopes/revoked; Client Key record)                                                  | D1                                      | Relational, per-`(app_id, environment_id)` record (ADR-0027)                                                             |
 | Billing (plan, Stripe subscription linkage)                                                                       | D1                                      | Relational, bounded                                                                                                      |
 | Privacy request ledger and Entity deletion tombstones                                                             | D1                                      | Bounded control-plane workflow state; immediate analysis exclusion                                                       |
+| Convex installations, encrypted webhook secrets, and pending config nudges                                        | D1                                      | Same-transaction config commit outbox, bounded retries, and integration lifecycle                                        |
 | Flag definition (App-level) + Flag Configuration + live Experiment config per Environment (including `liveRunId`) | D1 (authoritative) + KV (read cache)    | D1 = truth, KV = edge-local ~10ms reads                                                                                  |
 | Session validity cache                                                                                            | KV                                      | Hot-path per-request, write-through from D1 on revoke                                                                    |
 | API Key validation cache (hash → `{app_id, environment_id}`/scopes/validity)                                      | KV                                      | Hot-path per-SDK-call; `environment_id` resolves which Env's config to serve (ADR-0027); write-through from D1 on revoke |
@@ -38,12 +39,17 @@ must not move data between stores without a new ADR.
 - **Raw Targeting Keys never live in durable Entity stores.** KV keys, DO names, Tinybird rows, and
   logs use `targeting_key_hash` as defined in [privacy-data-lifecycle.md](./privacy-data-lifecycle.md).
 
-## No separate config-copy seam
+## No internal config-copy seam
 
-Editing and serving share KV/D1 directly. A config write goes:
-`Worker validates → per-App DO commits KV/D1 → DO broadcasts delta-nudge to subscribers`.
-There is no cross-system copy step. Rejecting Convex as a reactive layer specifically deleted this
-class of seam (ADR-0017).
+Editing and serving use one ordered D1-to-KV path. A config write goes:
+`Worker validates → per-App DO commits authoritative D1 state → DO projects the committed version to KV → DO broadcasts delta-nudge to subscribers`.
+D1 remains committed if the KV projection fails, and reads rebuild that projection from D1. There is
+no separate Convex configuration copy inside Splitch. Rejecting Convex as Splitch's reactive serving
+layer specifically deleted that second configuration source (ADR-0017).
+
+The customer-installed Convex Component is an external data-plane adapter, not Splitch's serving
+store. It pulls a validated snapshot after a signed nudge. D1 and KV remain authoritative, and the
+component never writes configuration back to Splitch.
 
 ## D1 size ceiling
 

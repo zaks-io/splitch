@@ -62,8 +62,8 @@ export async function assembleEvaluateExposures(
       counterfactual: false,
       isHoldover: false,
       clientTimestamp: timestamp,
+      exposureAt: timestamp,
       serverReceivedAt: timestamp,
-      ingestTs: timestamp,
     },
   ];
 }
@@ -111,8 +111,8 @@ export async function assembleExposureFromTicket(input: {
     counterfactual: false,
     isHoldover: false,
     clientTimestamp: input.clientTimestamp,
+    exposureAt: serverReceivedAt,
     serverReceivedAt,
-    ingestTs: serverReceivedAt,
   };
 }
 

@@ -28,27 +28,30 @@ result.
 ## First-touch definition (identical in both layers)
 
 ```sql
--- snapshot (Copy Pipe):
-QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash ORDER BY server_received_at) = 1
-
--- real-time tail (inline dedup on fresh rows):
-WHERE ingest_ts >= coalesce(
-  {last_snapshot_watermark_ts},
-  toDateTime64('1970-01-01 00:00:00', 3, 'UTC')
-)
-QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash ORDER BY server_received_at) = 1
+SELECT
+  app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
+  MIN(exposure_at) AS first_exposure_ts,
+  CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
+       ELSE MAX(variant) END AS variant
+FROM raw_events
+WHERE type = 'exposure'
+  AND ingest_ts <= {snapshot_watermark_ts}
+GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
 ```
 
-Both use `ROW_NUMBER()` equivalent to `MIN(server_received_at)` for first-touch. The snapshot reads
-`ingest_ts <= watermark`, while the tail reads `ingest_ts >= watermark`; these ranges deliberately
-overlap at the exact watermark instant so a concurrent insertion cannot fall between the layers, and
-the final UNION re-dedups that boundary overlap. The final UNION also re-dedups later physical rows
-for an Entity already in the snapshot. The tail boundary uses `ingest_ts`, not `server_received_at`,
-because late-arriving rows can have an event timestamp older than the snapshot. Both are generated
-from one shared definition, never hand-copied (ADR-0005 "one dedup, centralized" at the physical
-layer).
+Both layers use `MIN(exposure_at)` for first-touch and the same conflict-aware aggregate that emits
+`__multiple__` when an Entity has more than one Variant in a Run. The snapshot uses the predicate
+shown above. The tail applies the same selection with
+`ingest_ts >= coalesce(last_snapshot_watermark_ts, epoch)`. These ranges deliberately overlap at the
+exact watermark instant so a concurrent insertion cannot fall between the layers, and the final
+UNION re-dedups that boundary overlap. The final UNION also re-dedups later physical rows for an
+Entity already in the snapshot. The tail boundary uses `ingest_ts`, not `server_received_at`, because
+late-arriving rows can have an event timestamp older than the snapshot. Both are generated from the
+canonical definition in
+[pipeline/dedup-query-contract.md](../pipeline/dedup-query-contract.md), never hand-copied
+(ADR-0005 "one dedup, centralized" at the physical layer).
 When the latest snapshot contains no rows, its row-carried watermark is null. The tail uses the Unix
-epoch fallback above and scans all retained raw rows until the first nonempty snapshot, preserving
+epoch fallback and scans all retained raw rows until the first nonempty snapshot, preserving
 correctness.
 
 ## Snapshot datasource shape
@@ -62,7 +65,7 @@ ExposureSnapshot {
   targeting_key_hash:    string    // required, HMAC-derived Entity identity
   id_type:          string    // required
   variant:          string    // required — '__multiple__' if conflict
-  first_exposure_ts: datetime  // required — MIN(server_received_at) from raw log
+  first_exposure_ts: datetime  // required — MIN(exposure_at) from raw log
   watermark_ts:     datetime  // required — inclusive ingest boundary captured at snapshot start
 }
 ```
@@ -101,7 +104,7 @@ WHERE type = 'exposure'
   AND app_id = {{String(app_id)}}
   AND environment_id = {{String(environment_id)}}
 GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
--- MIN(server_received_at), __multiple__ quarantine, etc.
+-- MIN(exposure_at), __multiple__ quarantine, etc.
 
 -- production query (tenant-scoped snapshot + derived watermark + tail + final dedup):
 WITH
@@ -127,7 +130,7 @@ tail AS (
     app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
     CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
          ELSE MAX(variant) END AS variant,
-    MIN(server_received_at) AS first_exposure_ts
+    MIN(exposure_at) AS first_exposure_ts
   FROM raw_events
   CROSS JOIN watermark
   WHERE type = 'exposure'

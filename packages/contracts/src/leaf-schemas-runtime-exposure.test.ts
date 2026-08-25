@@ -6,8 +6,7 @@ import {
   exposureTypes,
 } from "./leaf-schemas-runtime";
 
-// A full Exposure row with EVERY required field, incl. the three
-// canonically-named timestamps and the `type` discriminator.
+// A full Exposure row with every required field and the `type` discriminator.
 const validExposure = {
   dedupKey: "sha256:abc123",
   eventId: "evt_1",
@@ -22,8 +21,8 @@ const validExposure = {
   sourceId: "pop-sjc",
   counterfactual: false,
   clientTimestamp: "2024-01-01T00:00:00Z",
+  exposureAt: "2024-01-01T00:00:01Z",
   serverReceivedAt: "2024-01-01T00:00:01Z",
-  ingestTs: "2024-01-01T00:00:02Z",
 };
 
 describe("EvaluationContextSchema", () => {
@@ -87,9 +86,15 @@ describe("ExposureEventSchema", () => {
     expect(e.dedupKey).toBe("sha256:abc123");
     expect(e.type).toBe("exposure");
     expect(e.counterfactual).toBe(false);
+    expect(e.exposureAt).toBe("2024-01-01T00:00:01Z");
     expect(e.serverReceivedAt).toBe("2024-01-01T00:00:01Z");
-    expect(e.ingestTs).toBe("2024-01-01T00:00:02Z");
     expect(e.clientTimestamp).toBe("2024-01-01T00:00:00Z");
+  });
+
+  it("accepts an omitted diagnostic client timestamp", () => {
+    const { clientTimestamp: _, ...withoutClientTimestamp } = validExposure;
+    const exposure = ExposureEventSchema.parse(withoutClientTimestamp);
+    expect(exposure.clientTimestamp).toBeUndefined();
   });
 
   it("parses an activation row against the one Exposure leaf", () => {
@@ -128,9 +133,8 @@ describe("ExposureEventSchema", () => {
     "variantName",
     "type",
     "sourceId",
-    "clientTimestamp",
+    "exposureAt",
     "serverReceivedAt",
-    "ingestTs",
   ] as const;
 
   for (const field of requiredFields) {

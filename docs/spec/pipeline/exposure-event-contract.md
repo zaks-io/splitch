@@ -22,7 +22,8 @@ datasource and contract; Web Events use another separate family. A peek or test-
 | `targeting_key_hash` | `string`        | yes      | HMAC-derived Entity identifier; computed from the Targeting Key, never client-supplied                                                                                            |
 | `variant`            | `string`        | yes      | The Variant name (string, never the value/metadata) assigned to this Entity                                                                                                       |
 | `event_id`           | `string`        | yes      | Retry-stable physical event id generated once when the Worker creates this raw row                                                                                                |
-| `server_received_at` | `DateTime64(3)` | yes      | Server-received-at timestamp (millisecond precision, UTC); canonical for `MIN(ts)` first-touch ordering — monotonic, no clock skew                                                |
+| `exposure_at`        | `DateTime64(3)` | yes      | Canonical encounter time. Remote Evaluation uses `server_received_at`; a verified trusted adapter may supply a bounded durable commit timestamp (ADR-0049)                        |
+| `server_received_at` | `DateTime64(3)` | yes      | Timestamp when Splitch durably accepts the Exposure request; delivery diagnostics and retention, not encounter ordering                                                           |
 | `ingest_ts`          | `DateTime64(3)` | yes      | Tinybird-assigned physical insertion timestamp; used only for snapshot/tail watermarks, never for analysis ordering                                                               |
 | `client_timestamp`   | `DateTime64(3)` | no       | Client-fired timestamp; carried for diagnostics only, never used for ordering                                                                                                     |
 | `dedup_key`          | `string`        | yes      | Idempotent at-least-once key; see Dedup Key section below                                                                                                                         |
@@ -39,14 +40,14 @@ dedup_key = sha256(type + ':' + app_id + ':' + experiment_id + ':' + run_id + ':
 - `type` is part of the key so an Exposure and Activation for the same Entity in the same millisecond cannot collide in the unified log.
 - `event_id` is generated once when the raw row is created and reused on retry, so at-least-once delivery is idempotent even if a retry happens later.
 - `source_id` (POP hostname) makes same-Entity, same-ms events from different POPs distinct.
-- `server_received_at` is not part of the key; it is for first-touch ordering, not wire-level idempotency.
+- `exposure_at` and `server_received_at` are not part of the key; timestamps do not define wire-level idempotency.
 - New fields do NOT change this key — schema-stable by construction.
 - The datasource carries a Splitch `DEDUP_KEY` contract marker for repository validation. Tinybird
   does not interpret that comment or enforce uniqueness; the serving dedup layer remains authoritative.
 
 ### Idempotency invariant
 
-The dedup key is for wire-level ingest deduplication only. The first-touch dedup (query-time `GROUP BY` over the first-touch identity tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)` + `MIN(server_received_at)`) is the **authoritative** first-touch definition and supersedes it. `environment_id`, `experiment_id`, and `id_type` are functionally determined by `run_id` (a Run belongs to exactly one Experiment in exactly one Environment with one declared Entity type); they are carried through the grouping, not independent keys. `environment_id` is intentionally **not** part of the wire `dedup_key` for the same reason — it adds nothing to per-row idempotency. Two rows with different `dedup_key` values for the same `(targeting_key_hash, run_id)` are expected — the query picks `MIN(server_received_at)` among them.
+The dedup key is for wire-level ingest deduplication only. The first-touch dedup (query-time `GROUP BY` over the first-touch identity tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)` + `MIN(exposure_at)`) is the **authoritative** first-touch definition and supersedes it. `environment_id`, `experiment_id`, and `id_type` are functionally determined by `run_id` (a Run belongs to exactly one Experiment in exactly one Environment with one declared Entity type); they are carried through the grouping, not independent keys. `environment_id` is intentionally **not** part of the wire `dedup_key` for the same reason — it adds nothing to per-row idempotency. Two rows with different `dedup_key` values for the same `(targeting_key_hash, run_id)` are expected — the query picks `MIN(exposure_at)` among them.
 
 ## Activation row (`type = 'activation'`)
 
@@ -60,6 +61,7 @@ The dedup key is for wire-level ingest deduplication only. The first-touch dedup
 | `id_type`            | `string`        | yes      | Must match the Run's declared `id_type`                                                                |
 | `targeting_key_hash` | `string`        | yes      | HMAC-derived Entity identifier                                                                         |
 | `event_id`           | `string`        | yes      | Retry-stable physical event id generated once when the Worker creates this raw row                     |
+| `exposure_at`        | `DateTime64(3)` | yes      | Canonical encounter time; equals `server_received_at` for server-received Activations                  |
 | `server_received_at` | `DateTime64(3)` | yes      | Server-received-at timestamp; equals `activation_ts` for server-received activations                   |
 | `ingest_ts`          | `DateTime64(3)` | yes      | Tinybird-assigned physical insertion timestamp; used only for snapshot/tail watermarks                 |
 | `activation_ts`      | `DateTime64(3)` | yes      | When the activation event occurred (server-received-at)                                                |
@@ -78,6 +80,8 @@ watermark instead of a stale pre-publication timestamp.
 | ----------------------------------------------- | ------------------------------------ |
 | `sdk.getVariant(...)` (standard evaluate)       | YES                                  |
 | `sdk.peekVariant(...)` (distinct peek accessor) | NO — never touches ingest            |
+| Convex component `evaluate` in a mutation       | YES — transactionally queued         |
+| Convex component `peekVariant` in a query       | NO — component query cannot write    |
 | Control-plane test-evaluation endpoint          | NO — never touches ingest (ADR-0026) |
 
 The peek and test-evaluation paths are structurally separate from the ingest endpoint. There is no flag or parameter that suppresses logging on a shared path — the non-exposing paths simply do not call the ingest endpoint.
@@ -89,5 +93,6 @@ The peek and test-evaluation paths are structurally separate from the ingest end
 - [ADR-0013](../../adr/0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md) — activation as first-class row type, `counterfactual` marker
 - [ADR-0024](../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md) — Tinybird physical ingest
 - [ADR-0026](../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md) — test-evaluation non-exposing
+- [ADR-0049](../../adr/0049-convex-local-evaluation-uses-nudge-pull-sync-and-transactional-exposure-delivery.md) — trusted local encounter time
 - [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)
 - [metric-event-contract.md](./metric-event-contract.md)

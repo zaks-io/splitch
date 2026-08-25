@@ -336,6 +336,9 @@ or any Durable Object migration.
   endpoint. It cannot be a hand-created static token: the production workspace rejects out-of-band
   resource-scoped tokens ("can only be done via deployments"). Neither value is a workspace admin
   token.
+- Control Plane declares `CONVEX_WEBHOOK_KEK` as a required 32-byte base64 secret. It encrypts Convex
+  webhook HMAC secrets at rest and must differ between preview and production. Rotation rewraps
+  stored webhook secrets before the prior value is removed.
 - Secret rotation is its own release. Do not hide secret changes inside an unrelated code deploy.
 
 ### Sentry source maps

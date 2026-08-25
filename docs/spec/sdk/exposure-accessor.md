@@ -163,21 +163,22 @@ canonical payload for Event Ingest.
 **The SDK does not own this schema** — it is owned by the [pipeline area spec](../pipeline/).
 This table is a cross-reference only; do not duplicate the authoritative definition.
 
-| Field                | Type                       | Source                                                             |
-| -------------------- | -------------------------- | ------------------------------------------------------------------ |
-| `event_id`           | string                     | generated once by the Worker when it creates the raw row           |
-| `dedup_key`          | string                     | sha256 over row type, identity fields, source id, and event id     |
-| `app_id`             | string                     | from auth context (not from client)                                |
-| `environment_id`     | string                     | from the SDK key's Environment (co-scoped with `app_id`, ADR-0027) |
-| `experiment_id`      | string                     | resolved from Flag's controlling Experiment                        |
-| `run_id`             | string                     | live Run at evaluation time (stamped at server-received time)      |
-| `targeting_key_hash` | string                     | derived server-side from request Targeting Key                     |
-| `id_type`            | string                     | validated request `idType`; must match the Run config              |
-| `variant`            | string                     | Variant name (not value) — immutable experimental arm label        |
-| `source_id`          | string                     | edge POP identifier                                                |
-| `server_received_at` | timestamp                  | server-received-at (canonical for MIN(ts) first-touch)             |
-| `client_timestamp`   | timestamp                  | client-fired time (diagnostics only; may have clock skew)          |
-| `type`               | 'exposure' \| 'activation' | always 'exposure' here                                             |
+| Field                | Type                       | Source                                                              |
+| -------------------- | -------------------------- | ------------------------------------------------------------------- |
+| `event_id`           | string                     | generated once by the Worker when it creates the raw row            |
+| `dedup_key`          | string                     | sha256 over row type, identity fields, source id, and event id      |
+| `app_id`             | string                     | from auth context (not from client)                                 |
+| `environment_id`     | string                     | from the SDK key's Environment (co-scoped with `app_id`, ADR-0027)  |
+| `experiment_id`      | string                     | resolved from Flag's controlling Experiment                         |
+| `run_id`             | string                     | live Run at evaluation time (stamped at server-received time)       |
+| `targeting_key_hash` | string                     | derived server-side from request Targeting Key                      |
+| `id_type`            | string                     | validated request `idType`; must match the Run config               |
+| `variant`            | string                     | Variant name (not value), an immutable experimental Variant label   |
+| `source_id`          | string                     | edge POP identifier                                                 |
+| `exposure_at`        | timestamp                  | canonical encounter time for MIN(ts) first-touch                    |
+| `server_received_at` | timestamp                  | Splitch durable-acceptance time; delivery diagnostics and retention |
+| `client_timestamp`   | timestamp                  | client-fired time (diagnostics only; may have clock skew)           |
+| `type`               | 'exposure' \| 'activation' | always 'exposure' here                                              |
 
 `run_id` is stamped **server-side at request time** (not at dedup time) to avoid race
 conditions with Run closure. `variant` is the Variant name;
@@ -189,8 +190,8 @@ Queue consumer inserts the row.
 
 The pipeline's first-touch identity is the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`
 (`environment_id` co-scoped with `app_id`; Exposures are per-Environment, ADR-0027),
-resolved by `MIN(server_received_at)` at query time. Multiple raw Exposures for the same Entity/Run share this
-identity; the earliest `server_received_at` is the authoritative first-touch row. The tuple deliberately excludes
+resolved by `MIN(exposure_at)` at query time. Multiple raw Exposures for the same Entity/Run share this
+identity; the earliest encounter is the authoritative first-touch row. The tuple deliberately excludes
 `variant` — variant conflicts are caught by the `__multiple__` quarantine path (ADR-0011).
 
 This is distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency key for

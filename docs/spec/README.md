@@ -29,6 +29,9 @@ scale to millions of events. Two planes:
   ([ADR-0043](../adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md));
   the current implemented `raw_events` and `raw_evaluations` paths still post one row per request
   and have no Queue or Admission Gate binding.
+- **Convex local path:** the first-party Convex Component pulls signed-nudge-triggered server config,
+  evaluates locally in queries and mutations, and transactionally records an Exposure outbox only
+  when an exposing application mutation commits. Splitch verifies and ingests the delayed Exposure.
 - **Control plane:** authoring (Org/App/Flag/Experiment/Run/Metric/Segment), auth (WorkOS +
   OAuth PRM + auth.md), and the MCP/CLI surfaces — all thin skins over one Zod-first typed contract. The
   analytics/stats engine reads deduped Tinybird serving layers backed by append-only raw logs.
@@ -68,6 +71,10 @@ The [vision](../vision.md) says _what_ to build; these are the non-negotiable ru
                                                        ▼
                                           per-key DO ──write-through──▶ KV
 
+  Convex Component ◀──signed nudge / authenticated config pull── Splitch
+       │ local peek in query
+       └ local evaluate in mutation ──transactional outbox──▶ verified server Exposure ingest
+
   Event Ingest data ──▶ first-touch dedup / activation gate ──▶ Analysis Worker
                                                                Stats: variance → CUPED → aCS → FDR
 
@@ -91,7 +98,7 @@ The [vision](../vision.md) says _what_ to build; these are the non-negotiable ru
 | [pipeline/](./pipeline/)           | edge ingest, exposure/activation event schema, first-touch dedup query, activation gate query, holdover write, physical Tinybird layer                | the **Exposure pipeline** + event row schemas      |
 | [stats/](./stats/)                 | the one CI object, variance + delta method, sequential aCS, CUPED/winsorization, SRM, FDR, dimension slicing, result shapes                           | the **statistics engine**                          |
 | [control-plane/](./control-plane/) | Organization tier, auth (doors + access matrix), Run state machine, the full endpoint inventory, MCP/CLI, credentials                                 | the **control-plane API** + auth                   |
-| [sdk/](./sdk/)                     | the public data-plane SDK surface, evaluate/peek accessors, Client-Key-safe endpoint, seen-set, five runtimes                                         | the **public SDK contract**                        |
+| [sdk/](./sdk/)                     | public SDK accessors and runtimes, plus the trusted Convex Component's local evaluation, config sync, and Exposure delivery                           | the **SDK and first-party adapter contracts**      |
 | [frontend/](./frontend/)           | appId-is-the-spine, session/loader isolation, query-key factory, WebSocket lifecycle, mutations, error tiers, observability                           | the **panel + marketing** frontend                 |
 
 ### Where overlapping concerns live (canonical home)
@@ -105,6 +112,10 @@ Some topics are touched by more than one area, each from its own angle. The cano
 - **Assignment Store** → [`evaluation/assignment-store-port.md`](./evaluation/assignment-store-port.md)
   for the _interface_; [`platform/assignment-store-substrate.md`](./platform/assignment-store-substrate.md) for the _KV/DO substrate_.
 - **Exposure event row** → [`pipeline/exposure-event-contract.md`](./pipeline/exposure-event-contract.md) (the one canonical row schema; do not redefine it elsewhere).
+- **Convex local evaluation and Exposure delivery** →
+  [`sdk/convex-component.md`](./sdk/convex-component.md) owns installation, config sync, and
+  accessors; [`sdk/convex-exposure-delivery.md`](./sdk/convex-exposure-delivery.md) owns the
+  transactional outbox, verified server intake, and canonical encounter timestamp.
 - **Two keys (first-touch identity vs wire `dedup_key`)** → defined once in
   [`pipeline/exposure-event-contract.md`](./pipeline/exposure-event-contract.md).
 - **Test-evaluation (dry-run)** → canonical envelope:
