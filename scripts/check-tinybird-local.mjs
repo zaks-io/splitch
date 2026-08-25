@@ -112,6 +112,11 @@ function validateSplitchDatasourceContracts(root) {
     /^# DEDUP_KEY=dedup_key$/m,
     "raw_events must declare splitch DEDUP_KEY=dedup_key",
   );
+  requireInstruction(
+    rawEvents,
+    /FORWARD_QUERY >[\s\S]*CAST\(client_timestamp, 'Nullable\(DateTime64\(3\)\)'\) AS client_timestamp[\s\S]*server_received_at AS exposure_at/,
+    "raw_events must migrate retained rows to nullable client timestamps and canonical exposure_at",
+  );
 
   requireColumns(dedupedExposures, [
     "`app_id`",
