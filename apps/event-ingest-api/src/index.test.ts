@@ -38,6 +38,7 @@ describe("Event Ingest Worker", () => {
       run_id: liveRunId,
       id_type: "user",
       event_id: "evt_retry_1",
+      exposure_at: fixedNow,
       server_received_at: fixedNow,
       ingest_ts: fixedNow,
       client_timestamp: "2026-07-01T12:00:00.000Z",
@@ -255,6 +256,28 @@ describe("Exposure ingest", () => {
 
     expect(row.app_id).toBe(appId);
     expect(row.environment_id).toBe(environmentId);
+  });
+
+  it("uses the server receipt clock for Exposure and Activation encounter time", async () => {
+    const exposure = await postExposure({ payload: { exposureAt: "2000-01-01T00:00:00.000Z" } });
+    const activation = await postExposure({
+      payload: {
+        type: "activation",
+        exposureAt: "2000-01-01T00:00:00.000Z",
+      },
+    });
+
+    expect(expectRow(exposure.rows)).toMatchObject({
+      type: "exposure",
+      exposure_at: fixedNow,
+      server_received_at: fixedNow,
+    });
+    expect(expectRow(activation.rows)).toMatchObject({
+      type: "activation",
+      exposure_at: fixedNow,
+      server_received_at: fixedNow,
+      activation_ts: fixedNow,
+    });
   });
 
   it("keeps event_id and dedup_key stable across retries", async () => {

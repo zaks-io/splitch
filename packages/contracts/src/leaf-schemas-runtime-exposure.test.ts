@@ -22,6 +22,7 @@ const validExposure = {
   sourceId: "pop-sjc",
   counterfactual: false,
   clientTimestamp: "2024-01-01T00:00:00Z",
+  exposureAt: "2024-01-01T00:00:01Z",
   serverReceivedAt: "2024-01-01T00:00:01Z",
   ingestTs: "2024-01-01T00:00:02Z",
 };
@@ -87,6 +88,7 @@ describe("ExposureEventSchema", () => {
     expect(e.dedupKey).toBe("sha256:abc123");
     expect(e.type).toBe("exposure");
     expect(e.counterfactual).toBe(false);
+    expect(e.exposureAt).toBe("2024-01-01T00:00:01Z");
     expect(e.serverReceivedAt).toBe("2024-01-01T00:00:01Z");
     expect(e.ingestTs).toBe("2024-01-01T00:00:02Z");
     expect(e.clientTimestamp).toBe("2024-01-01T00:00:00Z");
@@ -129,6 +131,7 @@ describe("ExposureEventSchema", () => {
     "type",
     "sourceId",
     "clientTimestamp",
+    "exposureAt",
     "serverReceivedAt",
     "ingestTs",
   ] as const;

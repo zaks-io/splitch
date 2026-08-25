@@ -66,6 +66,7 @@ export type EvaluationContext = z.infer<typeof EvaluationContextSchema>;
 //
 // Tinybird physical aliases map to these canonical names; no downstream slice
 // should re-alias them:
+//   exposureAt       → exposure_at
 //   serverReceivedAt → server_received_at
 //   ingestTs         → ingest_ts
 //   clientTimestamp  → client_timestamp
@@ -92,6 +93,7 @@ export const ExposureEventSchema = z.object({
   // `counterfactual` parses as `false`, never null.
   counterfactual: z.boolean().default(false),
   clientTimestamp: z.string(),
+  exposureAt: z.string(),
   serverReceivedAt: z.string(),
   ingestTs: z.string(),
 });

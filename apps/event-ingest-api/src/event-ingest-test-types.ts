@@ -8,10 +8,11 @@ export interface ExposurePayload {
   idType: string;
   targetingKeyHash: string;
   variantName: string;
-  type: "exposure";
+  type: "exposure" | "activation";
   sourceId: string;
   counterfactual: boolean;
   clientTimestamp: string;
+  exposureAt: string;
   serverReceivedAt: string;
   ingestTs: string;
   sdkVersion: string;

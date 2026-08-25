@@ -44,6 +44,7 @@ export async function exposureEvent(
     runId: runScope.runId,
     idType: runScope.idType,
     sourceId,
+    exposureAt: now,
     serverReceivedAt: now,
     ingestTs: now,
     dedupKey: await exposureDedupKey(
@@ -91,6 +92,7 @@ export function toTinybirdRow(event: ExposureEvent, payload: Payload): Record<st
     counterfactual: event.counterfactual ? 1 : 0,
     source_id: event.sourceId,
     client_timestamp: event.clientTimestamp,
+    exposure_at: event.exposureAt,
     server_received_at: event.serverReceivedAt,
     ingest_ts: event.ingestTs,
     activation_ts: event.type === "activation" ? event.serverReceivedAt : null,

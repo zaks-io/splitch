@@ -3,7 +3,11 @@ import { computeTargetingKeyHash } from "@splitch/privacy";
 import { describe, expect, it } from "vitest";
 import { StaticSaltStore } from "../assignment/assignment-store-test-fixtures";
 import { evaluate, peekVariant, verify, evaluateAllFlag } from "./accessor-paths";
-import { assembleEvaluateExposures, type ExposureAssemblyDeps } from "./exposure-assembly";
+import {
+  assembleEvaluateExposures,
+  assembleExposureFromTicket,
+  type ExposureAssemblyDeps,
+} from "./exposure-assembly";
 import type { FreshAssignmentEvaluateResult } from "./evaluate-path-types";
 import {
   APP_ID,
@@ -84,6 +88,7 @@ describe("evaluate Exposure assembly", () => {
       counterfactual: false,
       isHoldover: false,
       clientTimestamp: NOW,
+      exposureAt: NOW,
       serverReceivedAt: NOW,
       ingestTs: NOW,
     });
@@ -102,6 +107,32 @@ describe("evaluate Exposure assembly", () => {
       counterfactual: false,
     });
     expect(store.putCalls).toEqual([]);
+  });
+
+  it("stamps ticket redemption exposureAt from the server receipt clock", async () => {
+    const exposure = await assembleExposureFromTicket({
+      ticket: {
+        app_id: APP_ID,
+        environment_id: ENVIRONMENT_ID,
+        experiment_id: EXPERIMENT_ID,
+        run_id: LIVE_RUN_ID,
+        flag_key: FLAG_KEY,
+        variant: "treatment",
+        id_type: "user",
+        targeting_key_hash: "hmac:ticket-entity",
+        issued_at: "2026-07-02T02:00:00.000Z",
+      },
+      appId: APP_ID,
+      environmentId: ENVIRONMENT_ID,
+      exposureId: "550e8400-e29b-41d4-a716-446655440000",
+      clientTimestamp: "2026-07-02T02:59:59.000Z",
+      sourceId: "pop-test",
+      now: () => new Date(NOW),
+    });
+
+    expect(exposure.exposureAt).toBe(NOW);
+    expect(exposure.serverReceivedAt).toBe(NOW);
+    expect(exposure.clientTimestamp).toBe("2026-07-02T02:59:59.000Z");
   });
 
   it("holdover replay assembles zero Exposures and writes no Assignment Store record", async () => {

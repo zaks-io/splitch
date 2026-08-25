@@ -219,6 +219,7 @@ export function baseExposure(): ExposurePayload {
     sourceId: "pop-sjc",
     counterfactual: false,
     clientTimestamp: "2026-07-01T12:00:00.000Z",
+    exposureAt: "2000-01-01T00:00:00.000Z",
     serverReceivedAt: "2000-01-01T00:00:00.000Z",
     ingestTs: "2000-01-01T00:00:00.000Z",
     sdkVersion: "sdk-test",
