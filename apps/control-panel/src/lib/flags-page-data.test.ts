@@ -3,13 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { readFlagsPage } from "./flags-page-data";
 
 describe("Flags route data", () => {
-  it("reads each App-level definition through the active Environment config endpoint", async () => {
-    const getConfig = vi.fn<FlagsClient["getConfig"]>(async (input) => ({
-      ok: true,
-      status: 200,
-      data: input.environmentId === "env_dev" ? devConfig() : prodConfig(),
-    }));
-    const flags = flagsClient(getConfig);
+  it("reads definitions and active Environment summaries in one list request", async () => {
+    const flags = flagsClient((environmentId) =>
+      environmentId === "env_dev" ? devConfig() : prodConfig(),
+    );
 
     const dev = await readFlagsPage(flags, { appId: "app_checkout", environmentId: "env_dev" });
     const prod = await readFlagsPage(flags, { appId: "app_checkout", environmentId: "env_prod" });
@@ -48,26 +45,18 @@ describe("Flags route data", () => {
         ],
       },
     });
-    expect(getConfig).toHaveBeenNthCalledWith(1, {
+    expect(flags.list).toHaveBeenNthCalledWith(1, {
       appId: "app_checkout",
       environmentId: "env_dev",
-      flagId: "flag_checkout",
     });
-    expect(getConfig).toHaveBeenNthCalledWith(2, {
+    expect(flags.list).toHaveBeenNthCalledWith(2, {
       appId: "app_checkout",
       environmentId: "env_prod",
-      flagId: "flag_checkout",
     });
   });
 
   it("shows a definition without masquerading it as configured in this Environment", async () => {
-    const flags = flagsClient(
-      vi.fn<FlagsClient["getConfig"]>(async () => ({
-        ok: false,
-        status: 404,
-        error: { code: "FLAG_NOT_FOUND", message: "Flag Configuration not found", details: {} },
-      })),
-    );
+    const flags = flagsClient(() => null);
 
     const result = await readFlagsPage(flags, {
       appId: "app_checkout",
@@ -84,10 +73,7 @@ describe("Flags route data", () => {
     // The endpoint OBSERVES truncation one row past its ceiling. Nothing on this
     // side can reconstruct that from a page, so the page data must pass it
     // through unchanged — including the case where the two disagree.
-    const flags = flagsClient(
-      vi.fn<FlagsClient["getConfig"]>(async () => ({ ok: true, status: 200, data: prodConfig() })),
-      { readTruncated: true, readLimit: 200 },
-    );
+    const flags = flagsClient(() => prodConfig(), { readTruncated: true, readLimit: 200 });
 
     const result = await readFlagsPage(flags, {
       appId: "app_checkout",
@@ -106,12 +92,11 @@ describe("Flags route data", () => {
 });
 
 function flagsClient(
-  getConfig: FlagsClient["getConfig"],
+  config: (environmentId: string | undefined) => FlagConfigGetOutput | null,
   bound: { readTruncated: boolean; readLimit: number } = { readTruncated: false, readLimit: 200 },
-): Pick<FlagsClient, "list" | "getConfig"> {
+): Pick<FlagsClient, "list"> {
   return {
-    getConfig,
-    list: vi.fn(async () => ({
+    list: vi.fn(async (input) => ({
       ok: true as const,
       status: 200,
       data: {
@@ -130,10 +115,28 @@ function flagsClient(
             defaultVariantId: "var_disabled",
             createdAt: "2026-07-18T00:00:00.000Z",
             updatedAt: "2026-07-18T00:00:00.000Z",
+            ...(config(input.environmentId)
+              ? {
+                  flagConfiguration: listConfig(config(input.environmentId) as FlagConfigGetOutput),
+                }
+              : {}),
           },
         ],
       },
     })),
+  };
+}
+
+function listConfig(config: FlagConfigGetOutput) {
+  return {
+    enabled: config.enabled,
+    rollout: config.rollout?.percentage ?? null,
+    defaultVariant: "disabled",
+    availableVariantNames: config.availableVariantNames,
+    targetingRuleRolloutPercentages: config.targetingRules.flatMap((rule) =>
+      rule.percentageRollout ? [rule.percentageRollout.percentage] : [],
+    ),
+    experiment: config.experiment,
   };
 }
 

@@ -111,9 +111,8 @@ async function liveTicket(
 }
 
 /**
- * Pure claim state machine. Callers must serialize concurrent mutations
- * (Durable Object `blockConcurrencyWhile` or equivalent). Never throws —
- * conflict outcomes are returned so workerd does not abort the DO.
+ * Pure claim state machine. Callers must run concurrent mutations in a storage
+ * transaction. Conflict outcomes are returned instead of thrown.
  */
 export async function applyExposureRedemptionClaim(
   storage: ExposureRedemptionClaimStorage,

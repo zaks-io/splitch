@@ -1,4 +1,5 @@
 import { type AuthDoor, AuthDoorSchema } from "@splitch/contracts";
+import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
 
 /**
  * Control-plane JWT verification against a JWKS (RS256, Web Crypto).
@@ -69,6 +70,21 @@ export interface JwksVerifier {
    * (e.g. JWKS unreachable) is allowed to throw — the guard maps it to 500.
    */
   verify(token: string, nowSeconds: number): Promise<VerifiedToken | null>;
+}
+
+/** Production verifier backed by jose's process-local remote JWKS cache. */
+export function makeCachedJwksVerifier(options: {
+  jwksUri: string;
+  controlPlaneAudience: string;
+}): JwksVerifier {
+  const signatures = remoteJwksSignatureVerifier(options.jwksUri);
+  return {
+    async verify(token, nowSeconds) {
+      const parsed = parseJwt(token);
+      if (!parsed || !(await signatures.verify(token))) return null;
+      return actorFromClaims(parsed.payload, options.controlPlaneAudience, nowSeconds);
+    },
+  };
 }
 
 function base64UrlToBytes(input: string): Uint8Array {

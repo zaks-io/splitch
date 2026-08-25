@@ -49,6 +49,8 @@ export function flagWithConfigurationFrom(
   flag: FlagRow,
   variants: readonly VariantRow[],
   config: FlagConfigRow,
+  targetingRuleRolloutPercentages: readonly number[],
+  experiment: { id: string; name: string } | null,
 ) {
   const definition = flagFrom(flag, variants);
   const defaultVariant = variants.find((variant) => variant.id === config.defaultVariantId);
@@ -63,6 +65,9 @@ export function flagWithConfigurationFrom(
       enabled: config.enabled,
       rollout: storedRolloutPercentage(config.rollout),
       defaultVariant: defaultVariant.name,
+      availableVariantNames: JSON.parse(config.availableVariantNames) as string[],
+      targetingRuleRolloutPercentages,
+      experiment,
     },
   };
 }

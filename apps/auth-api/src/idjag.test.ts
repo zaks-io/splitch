@@ -1,5 +1,5 @@
 import { createRepository } from "@splitch/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 import { makeFixtureDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
@@ -118,6 +118,26 @@ afterAll(async () => {
 });
 
 describe("Dormant ID-JAG verifier: happy path", () => {
+  it("uses the remote signature adapter with the trusted IdP JWKS URI", async () => {
+    const idJag = await signIdJag(keys.privateKey, validClaims());
+    const verifyRemoteSignature = vi.fn(async () => true);
+
+    await expect(
+      verifyIdJag(
+        {
+          repo: createRepository(local.d1),
+          jtiCache: makeJtiCache(local.kv),
+          workos: makeFixtureWorkOs(),
+          verifyRemoteSignature,
+          authApiOrigin: ORIGIN,
+          now: () => NOW_MS,
+        },
+        idJag,
+      ),
+    ).resolves.toMatchObject({ issuer: ISSUER });
+    expect(verifyRemoteSignature).toHaveBeenCalledWith("https://idp.anthropic.test/jwks", idJag);
+  });
+
   it("verifies a fixture ID-JAG before assertion and control-plane token minting", async () => {
     const deps = buildVerifierDeps();
     const idJag = await signIdJag(keys.privateKey, validClaims());

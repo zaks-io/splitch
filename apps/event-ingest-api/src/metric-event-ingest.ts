@@ -20,8 +20,8 @@ export async function handleAuthorizedMetricEvent(
   env: Env,
   credential: MetricEventCredentialScope,
 ): Promise<Response> {
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > MAX_BODY_BYTES) {
+  const text = await readMetricEventBody(request);
+  if (text === null) {
     return renderError(validation("Metric Event body exceeds 32768 bytes", []));
   }
   let candidate: unknown;
@@ -147,6 +147,41 @@ export async function handleAuthorizedMetricEvent(
   } catch {
     return renderError(serviceUnavailable("Metric Event outbox is unavailable"));
   }
+}
+
+async function readMetricEventBody(request: Request): Promise<string | null> {
+  if (bodyTooLargeFromHeader(request.headers.get("content-length"))) return null;
+  if (request.body === null) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      if (next.value.byteLength > MAX_BODY_BYTES - byteLength) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(next.value);
+      byteLength += next.value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+function bodyTooLargeFromHeader(contentLength: string | null): boolean {
+  return /^\d+$/u.test(contentLength ?? "") && Number(contentLength) > MAX_BODY_BYTES;
 }
 
 async function loadDefinition(env: Env, appId: string, eventName: string) {

@@ -15,12 +15,13 @@ import { APP_ID, ENVIRONMENT_ID } from "./sdk-route-test-fixtures";
 const claimBody = { exposureId: "e1", ticketFingerprint: "fp", nowMs: 1_000 };
 
 describe("handleExposureRedemptionClaimFetch (production handler)", () => {
-  it("runs claim/release/markSealed/acknowledge inside blockConcurrencyWhile", async () => {
+  it("runs claim/release/markSealed/acknowledge in storage transactions", async () => {
     const ctx = claimMemoryCtx();
-    let gated = 0;
-    ctx.blockConcurrencyWhile = async <T>(fn: () => Promise<T>) => {
-      gated += 1;
-      return fn();
+    let transactions = 0;
+    const transaction = ctx.storage.transaction.bind(ctx.storage);
+    ctx.storage.transaction = async <T>(fn: (txn: DurableObjectTransaction) => Promise<T>) => {
+      transactions += 1;
+      return transaction(fn);
     };
     expect(
       await (await handleExposureRedemptionClaimFetch(ctx, claimPost("/claim", claimBody))).json(),
@@ -36,7 +37,7 @@ describe("handleExposureRedemptionClaimFetch (production handler)", () => {
         await handleExposureRedemptionClaimFetch(ctx, claimPost("/acknowledge", claimBody))
       ).json(),
     ).toEqual({ status: "accepted" });
-    expect(gated).toBeGreaterThanOrEqual(4);
+    expect(transactions).toBeGreaterThanOrEqual(4);
   });
 
   it("rejects non-POST, unknown paths, malformed bodies, and non-finite nowMs", async () => {

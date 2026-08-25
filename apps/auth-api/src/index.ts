@@ -5,6 +5,7 @@ import {
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
+import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
 import {
   assertAccessTokenSecretCanSign,
   makeEphemeralAccessTokenPrivateJwk,
@@ -14,7 +15,6 @@ import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import type { AuthApiEnv } from "./env";
 import { makeJtiCache } from "./jti-cache";
-import { fetchJwks } from "./jwks";
 import type { SmokeClientCredentials } from "./oauth-routes";
 import { makeFixtureOtp, makeIdempotencyStore } from "./otp";
 import { makeRateLimiter } from "./rate-limit";
@@ -107,7 +107,8 @@ const handler = {
         repo,
         jtiCache: makeJtiCache(env.JTI_CACHE),
         workos,
-        fetchJwks,
+        verifyRemoteSignature: (jwksUri, compactJws) =>
+          remoteJwksSignatureVerifier(jwksUri).verify(compactJws),
         authApiOrigin: origin,
       },
       register: { repo, turnstile, rateLimiter, workos, tokenSigner, now },

@@ -56,3 +56,4 @@ export {
 } from "../exposure-retry-codes";
 export type { EnvironmentExposureStatusResponse } from "../environment-exposure-status";
 export { EnvironmentExposureStatusResponseSchema } from "../environment-exposure-status";
+export type { FlagConfigurationSummary } from "../resource-envelopes-flag";

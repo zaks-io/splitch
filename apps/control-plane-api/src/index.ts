@@ -33,7 +33,7 @@ import {
 import type { ControlPlaneApiEnv } from "./env";
 import { createHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
 import { handleCredentialCacheBackfillGate, handleLiveUpdateTestControl } from "./internal-routes";
-import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
+import { makeCachedJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { panelAppSettingsRead } from "./panel-app-settings";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
@@ -140,8 +140,8 @@ async function handleRequest(
 
   const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? url.origin;
   const jwksUri = authJwksUri(env);
-  const verifier = makeJwksVerifier({
-    fetchJwks: makeHttpJwksFetcher(jwksUri),
+  const verifier = makeCachedJwksVerifier({
+    jwksUri,
     controlPlaneAudience,
   });
 

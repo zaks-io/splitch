@@ -164,6 +164,16 @@ export function makeFlagConfigOps(
       return targetingRulesTable.findMany(scope, eq(targetingRules.flagId, flagId));
     },
 
+    async listTargetingRulesByFlagIds(scope: EnvScope, flagIds: readonly string[]) {
+      if (flagIds.length === 0) return [] as (typeof targetingRules.$inferSelect)[];
+      const pages = await Promise.all(
+        idBatches(flagIds).map((batch) =>
+          targetingRulesTable.findMany(scope, inArray(targetingRules.flagId, [...batch])),
+        ),
+      );
+      return pages.flat();
+    },
+
     async replaceTargetingRules(
       scope: EnvScope,
       flagId: string,

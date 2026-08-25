@@ -38,17 +38,8 @@ export interface Jwks {
   keys: Jwk[];
 }
 
-/** Port for fetching a JWKS document by URL (real = fetch; tests inject a fake). */
+/** Test seam for verifying fixture JWKS documents without network access. */
 export type JwksFetcher = (jwksUri: string) => Promise<Jwks>;
-
-/** The production fetcher: GET the JWKS URI and parse it as JSON. */
-export const fetchJwks: JwksFetcher = async (jwksUri) => {
-  const res = await fetch(jwksUri);
-  if (!res.ok) {
-    throw new OAuthError("invalid_token", `JWKS fetch failed (${res.status}) for ${jwksUri}`);
-  }
-  return (await res.json()) as Jwks;
-};
 
 function base64UrlToBytes(input: string): Uint8Array {
   const padded = input

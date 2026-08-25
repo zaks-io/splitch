@@ -37,7 +37,6 @@ type SweepCursor = {
 /** Minimal DO context the claim handler needs — keeps tests free of cloudflare:workers. */
 export interface ExposureRedemptionClaimDoContext {
   readonly storage: DurableObjectStorage;
-  blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T>;
 }
 
 type ClaimBody = {
@@ -48,9 +47,8 @@ type ClaimBody = {
 
 /**
  * Request handler for ExposureRedemptionClaimDurableObject. Extracted so unit
- * and Miniflare tests exercise the real routes. Mutations never throw inside
- * `blockConcurrencyWhile` — workerd aborts the DO on throw across that boundary,
- * which would kill every concurrent claim for the App+Environment.
+ * and Miniflare tests exercise the real routes. Each mutation uses a storage
+ * transaction so unrelated requests are not held behind `blockConcurrencyWhile`.
  */
 export async function handleExposureRedemptionClaimFetch(
   ctx: ExposureRedemptionClaimDoContext,
@@ -64,32 +62,34 @@ export async function handleExposureRedemptionClaimFetch(
     return Response.json({ error: "invalid claim payload" }, { status: 400 });
   }
   const path = new URL(request.url).pathname;
-  const storage = new DurableClaimStorage(ctx.storage);
   const args = {
     exposureId: body.exposureId,
     ticketFingerprint: body.ticketFingerprint,
     nowMs: body.nowMs,
   };
-  return dispatchClaimRoute(ctx, storage, path, args);
+  return dispatchClaimRoute(ctx.storage, path, args);
 }
 
 async function dispatchClaimRoute(
-  ctx: ExposureRedemptionClaimDoContext,
-  storage: DurableClaimStorage,
+  storageApi: DurableObjectStorage,
   path: string,
   args: { exposureId: string; ticketFingerprint: string; nowMs: number },
 ): Promise<Response> {
   if (path === "/claim") {
     return Response.json(
-      await ctx.blockConcurrencyWhile(() => applyExposureRedemptionClaim(storage, args)),
+      await withClaimTransaction(storageApi, (storage) =>
+        applyExposureRedemptionClaim(storage, args),
+      ),
     );
   }
   if (path === "/release") {
-    await ctx.blockConcurrencyWhile(() => applyExposureRedemptionRelease(storage, args));
+    await withClaimTransaction(storageApi, (storage) =>
+      applyExposureRedemptionRelease(storage, args),
+    );
     return Response.json({ ok: true });
   }
   if (path === "/markSealed") {
-    const result = await ctx.blockConcurrencyWhile(() =>
+    const result = await withClaimTransaction(storageApi, (storage) =>
       applyExposureRedemptionMarkSealed(storage, args),
     );
     return result.ok
@@ -97,7 +97,7 @@ async function dispatchClaimRoute(
       : Response.json({ error: result.error }, { status: 409 });
   }
   if (path === "/acknowledge") {
-    const result = await ctx.blockConcurrencyWhile(() =>
+    const result = await withClaimTransaction(storageApi, (storage) =>
       applyExposureRedemptionAcknowledge(storage, args),
     );
     return result.ok
@@ -105,6 +105,13 @@ async function dispatchClaimRoute(
       : Response.json({ error: result.error }, { status: 409 });
   }
   return Response.json({ error: "not found" }, { status: 404 });
+}
+
+function withClaimTransaction<T>(
+  storage: DurableObjectStorage,
+  callback: (storage: DurableClaimStorage) => Promise<T>,
+): Promise<T> {
+  return storage.transaction((transaction) => callback(new DurableClaimStorage(transaction)));
 }
 
 export async function runExposureRedemptionClaimAlarm(
@@ -122,7 +129,7 @@ export async function runExposureRedemptionClaimAlarm(
 }
 
 class DurableClaimStorage implements ExposureRedemptionClaimStorage {
-  constructor(private readonly storage: DurableObjectStorage) {}
+  constructor(private readonly storage: DurableObjectStorage | DurableObjectTransaction) {}
 
   async getExposure(exposureId: string): Promise<ExposureBindingRecord | undefined> {
     return this.storage.get<ExposureBindingRecord>(`${EXPOSURE_KEY_PREFIX}${exposureId}`);
