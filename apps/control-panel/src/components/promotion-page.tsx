@@ -210,7 +210,7 @@ function groupLabel(kind: PromotionRow["kind"]): string {
   if (kind === "availability") return "Variant availability";
   if (kind === "targeting") return "Targeting Rules";
   if (kind === "rollout") return "baseline rollout";
-  return "kill switch";
+  return "serving state";
 }
 
 /**

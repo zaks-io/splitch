@@ -1,4 +1,4 @@
-import type { Variant } from "@splitch/contracts";
+import { schemaDefinitionIssues, type Variant } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
@@ -19,7 +19,6 @@ import {
   schemaFromBody,
   variantSchemaIssues,
 } from "./flag-definition-model";
-import { schemaDefinitionIssues } from "./flag-definition-schema";
 import { objectBody, optionalQueryParam, pathParam } from "./handler-input";
 import { FLAG_LIST_READ_LIMIT } from "./overview-thresholds";
 

@@ -75,6 +75,7 @@ export async function createFlag(
   await page.getByRole("button", { name: "Create Flag" }).click();
 
   const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Flag name").fill("Panel Smoke Flag");
   await dialog.getByLabel("Flag key").fill(flagKey);
   const catalog = dialog.getByTestId("variant-catalog");
   await catalog.locator("#variant-name-0").fill("control");

@@ -6,7 +6,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@splitch/ui/components/dialog";
-import { Input } from "@splitch/ui/components/input";
 import { type FormEvent, useRef, useState } from "react";
 import { type MutationErrorSurface, mutationErrorSurface } from "#lib/api";
 import { createControlPanelFlag } from "#lib/control-plane-flag-functions";
@@ -14,15 +13,23 @@ import {
   booleanPresetDraft,
   draftIssues,
   emptyVariantDraft,
+  type FlagDraft,
   flagFieldError,
   issueFor,
   moveVariant,
   removeVariant,
+  suggestFlagKey,
   switchValueType,
+  typeSwitchClearsSchema,
   typeSwitchClearsValues,
-  VARIANT_VALUE_TYPES,
   type VariantValueType,
 } from "#lib/create-flag-model";
+import {
+  FlagKeyField,
+  FlagNameField,
+  FlagSchemaField,
+  FlagValueTypeField,
+} from "./create-flag-fields";
 import { VariantRowEditor } from "./variant-row-editor";
 
 export function CreateFlagForm({
@@ -35,6 +42,7 @@ export function CreateFlagForm({
   onCreated: (key: string) => void;
 }) {
   const [draft, setDraft] = useState(booleanPresetDraft);
+  const [keyEdited, setKeyEdited] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [mutationError, setMutationError] = useState<MutationErrorSurface | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,7 +53,9 @@ export function CreateFlagForm({
 
   const issues = draftIssues(draft);
   const shown = submitted ? issues : [];
+  const nameError = issueFor(shown, "name") ?? flagFieldError(mutationError, "name");
   const keyError = issueFor(shown, "key") ?? flagFieldError(mutationError, "key");
+  const schemaError = issueFor(shown, "schema") ?? flagFieldError(mutationError, "schema");
   const defaultError = issueFor(shown, "defaultIndex");
 
   function edit(next: typeof draft) {
@@ -55,14 +65,7 @@ export function CreateFlagForm({
   }
 
   function changeValueType(valueType: VariantValueType) {
-    if (
-      typeSwitchClearsValues(draft.variants, valueType) &&
-      // Values that cannot survive the switch are discarded, so confirm first.
-      !window.confirm(`Switching to ${valueType} clears the Variant values you entered. Continue?`)
-    ) {
-      return;
-    }
-    edit(switchValueType(draft, valueType));
+    if (confirmedValueTypeSwitch(draft, valueType)) edit(switchValueType(draft, valueType));
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -102,48 +105,32 @@ export function CreateFlagForm({
         </DialogDescription>
       </DialogHeader>
 
-      <div className="grid gap-2">
-        <label className="font-medium text-sm" htmlFor="flag-key">
-          Flag key
-        </label>
-        <Input
-          aria-describedby={keyError ? "flag-key-error" : "flag-key-help"}
-          aria-invalid={Boolean(keyError)}
-          autoComplete="off"
-          id="flag-key"
-          name="key"
-          onChange={(event) => edit({ ...draft, key: event.target.value })}
-          placeholder="new-checkout"
-          value={draft.key}
-        />
-        <p
-          className={keyError ? "text-destructive text-xs" : "text-muted-foreground text-xs"}
-          id={keyError ? "flag-key-error" : "flag-key-help"}
-        >
-          {keyError ?? "Unique within this App."}
-        </p>
-      </div>
+      <FlagNameField
+        error={nameError}
+        onChange={(name) =>
+          edit({ ...draft, name, key: keyEdited ? draft.key : suggestFlagKey(name) })
+        }
+        value={draft.name}
+      />
 
-      <div className="grid gap-2">
-        <label className="font-medium text-sm" htmlFor="flag-value-type">
-          Variant value type
-        </label>
-        <select
-          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-          id="flag-value-type"
-          onChange={(event) => changeValueType(event.target.value as VariantValueType)}
-          value={draft.valueType}
-        >
-          {VARIANT_VALUE_TYPES.map((valueType) => (
-            <option key={valueType} value={valueType}>
-              {valueType}
-            </option>
-          ))}
-        </select>
-        <p className="text-muted-foreground text-xs">
-          Every Variant in this Flag carries a {draft.valueType} value.
-        </p>
-      </div>
+      <FlagKeyField
+        error={keyError}
+        onChange={(key) => {
+          setKeyEdited(true);
+          edit({ ...draft, key });
+        }}
+        value={draft.key}
+      />
+
+      <FlagValueTypeField onChange={changeValueType} value={draft.valueType} />
+
+      {draft.valueType === "object" ? (
+        <FlagSchemaField
+          error={schemaError}
+          onChange={(schemaText) => edit({ ...draft, schemaText })}
+          value={draft.schemaText}
+        />
+      ) : null}
 
       <section aria-labelledby="variant-catalog-title" className="grid gap-2">
         <h3 className="font-medium text-sm" id="variant-catalog-title">
@@ -190,7 +177,7 @@ export function CreateFlagForm({
         </Button>
       </section>
 
-      {mutationError && !keyError ? (
+      {mutationError && !nameError && !keyError && !schemaError ? (
         <Alert variant="destructive">
           <AlertTitle>Flag not created</AlertTitle>
           <AlertDescription>{mutationError.message}</AlertDescription>
@@ -204,4 +191,21 @@ export function CreateFlagForm({
       </DialogFooter>
     </form>
   );
+}
+
+/** A type switch discards drafted work, so each discard is confirmed first. */
+function confirmedValueTypeSwitch(draft: FlagDraft, valueType: VariantValueType): boolean {
+  if (
+    typeSwitchClearsValues(draft.variants, valueType) &&
+    !window.confirm(`Switching to ${valueType} clears the Variant values you entered. Continue?`)
+  ) {
+    return false;
+  }
+  if (
+    typeSwitchClearsSchema(draft, valueType) &&
+    !window.confirm(`Switching to ${valueType} discards the JSON Schema you entered. Continue?`)
+  ) {
+    return false;
+  }
+  return true;
 }

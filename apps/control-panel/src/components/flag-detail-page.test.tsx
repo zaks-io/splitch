@@ -76,7 +76,7 @@ describe("Flag detail page", () => {
     expect(html).toContain("owned by Experiment Checkout Copy Dev while it runs");
     // The kill switch section must carry no lock marker: an operator has to be able
     // to turn the Flag off during an incident.
-    const killSwitch = section(html, "Kill switch");
+    const killSwitch = section(html, "Serving");
     expect(killSwitch).not.toContain('data-flag-lock="true"');
     expect(killSwitch).toContain("Never locked");
   });

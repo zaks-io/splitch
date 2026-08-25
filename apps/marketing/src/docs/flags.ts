@@ -42,7 +42,7 @@ export const flagsDoc = {
     {
       kind: "list",
       items: [
-        "`--enabled true` — the Flag is live; `false` is the kill switch and always returns the Default Variant with `DISABLED`.",
+        "`--enabled true` — the Flag is serving; `false` stops serving and always returns the Default Variant with `DISABLED`.",
         '`--rollout 100` — baseline percentage for traffic that matches no Targeting Rule. `100` serves the non-default candidate for everyone; omit or leave `null` to keep the Default Variant after enable (`reason: "DEFAULT"`).',
         "Pass `--rollout none` to clear the baseline. The server owns the bucketing salt; you never set it.",
       ],

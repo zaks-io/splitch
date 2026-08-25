@@ -1,3 +1,11 @@
+/**
+ * The supported JSON Schema subset for a Flag's value schema, and the one
+ * validator both sides run against it: the Control Plane Worker when a Flag or
+ * Variant is written, and the Control Panel while the draft is still on screen.
+ * Living here keeps the two verdicts identical — a schema the panel accepts is
+ * a schema the Worker accepts.
+ */
+
 export interface ValidationIssue {
   path: string[];
   message: string;

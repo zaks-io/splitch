@@ -1,4 +1,4 @@
-import { FlagResponseSchema } from "@splitch/contracts";
+import { FlagResponseSchema, schemaDefinitionIssues } from "@splitch/contracts";
 import { appScope, type CreateFlagResult, type TenantScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { nowIso } from "./app-environment-model";
@@ -27,7 +27,6 @@ import {
   schemaFromBody,
   variantSchemaIssues,
 } from "./flag-definition-model";
-import { schemaDefinitionIssues } from "./flag-definition-schema";
 import { objectBody, pathParam } from "./handler-input";
 
 export async function createFlag(

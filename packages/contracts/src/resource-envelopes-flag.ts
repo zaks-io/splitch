@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FlagSchema, VariantSchema } from "./leaf-schemas-flag";
+import { SlugSchema } from "./slug";
 import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
@@ -42,8 +43,10 @@ export const CreateFlagRequestSchema = z
   .object({
     appId: z.string(),
     name: z.string(),
-    // Immutable after create (DEFINITION audit boundary).
-    key: z.string(),
+    // Immutable after create (DEFINITION audit boundary). A Flag key is a
+    // caller-chosen handle that appears in selectors and URLs, so it takes the
+    // system's one slug shape — the same rule App keys and Org slugs follow.
+    key: SlugSchema,
     schema: FlagSchema.shape.schema,
     variants: z.array(CreateVariantCatalogEntrySchema).min(1),
     description: z.string().optional(),

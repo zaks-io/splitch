@@ -11,13 +11,15 @@ import {
   issueFor,
   moveVariant,
   removeVariant,
+  suggestFlagKey,
   switchValueType,
+  typeSwitchClearsSchema,
   typeSwitchClearsValues,
   type VariantValueType,
 } from "./create-flag-model";
 
 function draft(overrides: Partial<FlagDraft> = {}): FlagDraft {
-  return { ...booleanPresetDraft(), key: "new-checkout", ...overrides };
+  return { ...booleanPresetDraft(), name: "New Checkout", key: "new-checkout", ...overrides };
 }
 
 function rows(valueType: VariantValueType, ...values: string[]) {
@@ -159,6 +161,85 @@ describe("Create Flag catalog invariants", () => {
     expect(() => flagCreateInput("app_checkout", draft({ key: "  " }), "idem-1")).toThrow(
       "refusing to build an invalid Flag",
     );
+  });
+});
+
+describe("Create Flag name and key", () => {
+  it("requires a display name", () => {
+    expect(issueFor(draftIssues(draft({ name: " " })), "name")).toBe("Give the Flag a name.");
+  });
+
+  it("suggests a key from the name using the shared slug derivation", () => {
+    expect(suggestFlagKey("New Checkout!")).toBe("new-checkout");
+    expect(suggestFlagKey("???")).toBe("");
+  });
+
+  const badKeys: Array<[string, string]> = [
+    ["new checkout", "Use lowercase letters, digits, and single hyphens, e.g. new-checkout."],
+    ["New-Checkout", "Use lowercase letters, digits, and single hyphens, e.g. new-checkout."],
+    ["-checkout", "Use lowercase letters, digits, and single hyphens, e.g. new-checkout."],
+    ["x", "Use at least 2 characters."],
+    ["a".repeat(64), "Use at most 63 characters."],
+  ];
+  for (const [key, message] of badKeys) {
+    it(`refuses the key ${JSON.stringify(key)}`, () => {
+      expect(issueFor(draftIssues(draft({ key })), "key")).toBe(message);
+    });
+  }
+});
+
+describe("Create Flag JSON Schema", () => {
+  const schemaText = '{"properties":{"limit":{"type":"number"}},"required":["limit"]}';
+
+  it("sends the drafted schema with the object type stamped on", () => {
+    const input = flagCreateInput(
+      "app_checkout",
+      draft({ ...rows("object", '{"limit":1}', '{"limit":10}'), schemaText }),
+      "idem-1",
+    );
+
+    expect(input.schema).toEqual({
+      type: "object",
+      properties: { limit: { type: "number" } },
+      required: ["limit"],
+    });
+    expect(CreateFlagRequestSchema.safeParse(input).success).toBe(true);
+  });
+
+  it("reports schema text that is not a JSON object", () => {
+    const issues = draftIssues(draft({ valueType: "object", schemaText: "[1]" }));
+    expect(issueFor(issues, "schema")).toBe("Enter the schema as a JSON object.");
+  });
+
+  it("refuses a schema whose type contradicts object Variant values", () => {
+    const issues = draftIssues(draft({ valueType: "object", schemaText: '{"type":"string"}' }));
+    expect(issueFor(issues, "schema")).toBe(
+      'Variant values are JSON objects, so the schema "type" must be "object".',
+    );
+  });
+
+  it("surfaces validator rejections of the schema definition itself", () => {
+    const issues = draftIssues(
+      draft({ valueType: "object", schemaText: '{"properties":{"a":{"type":"iso-date"}}}' }),
+    );
+    expect(issueFor(issues, "schema")).toBeDefined();
+  });
+
+  it("flags a Variant value that fails the drafted schema", () => {
+    const issues = draftIssues(
+      draft({ ...rows("object", '{"limit":1}', '{"limit":"ten"}'), schemaText }),
+    );
+
+    expect(issueFor(issues, "variants.0.value")).toBeUndefined();
+    expect(issueFor(issues, "variants.1.value")).toContain("Fails the Flag schema at limit");
+  });
+
+  it("clears the schema when switching away from object, after warning", () => {
+    const objectDraft = draft({ ...rows("object", "{}", "{}"), schemaText });
+
+    expect(typeSwitchClearsSchema(objectDraft, "boolean")).toBe(true);
+    expect(switchValueType(objectDraft, "boolean").schemaText).toBe("");
+    expect(typeSwitchClearsSchema(draft(), "object")).toBe(false);
   });
 });
 

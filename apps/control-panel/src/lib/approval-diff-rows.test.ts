@@ -12,7 +12,7 @@ describe("Approval diff rows", () => {
       diff([{ path: "/enabled", operation: "replace", current: true, proposed: false }]),
     );
 
-    expect(row?.group).toBe("Kill switch");
+    expect(row?.group).toBe("Serving");
     expect(row?.before).toEqual(["Enabled"]);
     expect(row?.after).toEqual(["Disabled"]);
   });
@@ -103,6 +103,6 @@ describe("Approval diff rows", () => {
       ]),
     );
 
-    expect(approvalDiffGroups(rows)).toEqual(["Kill switch", "Baseline rollout"]);
+    expect(approvalDiffGroups(rows)).toEqual(["Serving", "Baseline rollout"]);
   });
 });

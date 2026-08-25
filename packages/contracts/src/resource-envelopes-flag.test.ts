@@ -54,6 +54,14 @@ describe("CreateFlagRequestSchema", () => {
     void key;
     expect(CreateFlagRequestSchema.safeParse(noKey).success).toBe(false);
   });
+
+  // The key is the system's one slug shape (SlugSchema), same as App keys and
+  // Org slugs: a spaced or cased key would be unusable in selectors and URLs.
+  it("rejects a key that is not a slug", () => {
+    for (const key of ["feature x", "Feature-X", "feature_x", "-feature", "x"]) {
+      expect(CreateFlagRequestSchema.safeParse({ ...validCreateFlag, key }).success).toBe(false);
+    }
+  });
 });
 
 describe("PatchFlagRequestSchema (immutable key/appId boundary)", () => {

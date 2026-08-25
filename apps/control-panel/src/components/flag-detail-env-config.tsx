@@ -32,8 +32,8 @@ export function FlagDetailEnvConfig({
         </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-8 pt-6">
-        <section className="grid gap-2" aria-label="Kill switch">
-          <FieldLabel>Kill switch</FieldLabel>
+        <section className="grid gap-2" aria-label="Serving">
+          <FieldLabel>Serving</FieldLabel>
           <FlagKillSwitch editing={editing} view={view} />
         </section>
 

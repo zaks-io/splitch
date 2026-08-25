@@ -123,7 +123,7 @@ describe("Promotion dependency nudge", () => {
 describe("Promotion summary", () => {
   it("names the ticked field groups by the labels the rows carry", () => {
     expect(promotionSummary(rows, "staging", "prod")).toBe(
-      "Promote availability for beta, all Targeting Rules, the baseline rollout and the kill switch from staging into prod",
+      "Promote availability for beta, all Targeting Rules, the baseline rollout and the serving state from staging into prod",
     );
   });
 });
