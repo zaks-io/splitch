@@ -28,6 +28,8 @@ D1 holds bounded mutable relational state. Not on the per-request hot path — h
 | `event_definitions`         | App-level Event Definition identity and current published version pointer                           |
 | `event_definition_versions` | Immutable published Event Definition schemas shared across Environments                             |
 | `metrics`                   | Metric definitions referencing Event Definitions and named typed fields                             |
+| `convex_installations`      | Environment-scoped callback and encrypted webhook-secret metadata                                   |
+| `config_webhook_deliveries` | Durable config-change nudges inserted atomically with the owning config commit                      |
 
 **What does NOT live in D1:**
 

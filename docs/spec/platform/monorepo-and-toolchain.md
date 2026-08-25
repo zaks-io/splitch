@@ -81,9 +81,9 @@ signed cache entries — a stale or wrong entry survives at most one day. Workfl
 tasks must (a) route builds through `turbo run` (never `pnpm --filter <pkg> build`, which bypasses
 the cache) and (b) set `SPLITCH_PLATFORM_TARGET: pr-ci` to match the `ci` Verify hash-space, unless
 they intentionally build for another platform target. The npm publish workflows (`sdk-publish`,
-`cli-publish`) are the deliberate exception: they rebuild hermetically from the tagged source on
-GitHub-hosted runners because npm provenance should attest a from-source build, not a cache
-restore.
+`cli-publish`, and `convex-publish`) are the deliberate exception: they rebuild hermetically from
+the tagged source on GitHub-hosted runners because npm provenance should attest a from-source build,
+not a cache restore.
 
 Local hook policy lives in [local-quality-gates.md](./local-quality-gates.md). Commit hooks block
 format, lint, type, Knip, and Gitleaks failures before code is committed. The pre-push hook runs the
@@ -98,6 +98,7 @@ packages/
   worker-runtime/      @splitch/worker-runtime      Contract-mounted Hono request guard and shared error/status helpers
   control-plane-sdk/   @splitch/control-plane-sdk   Hono hc transport SDK for control-plane consumers
   sdk/                 @splitch/sdk                 Public JS/TS data-plane SDK package
+  convex/              @splitch/convex              First-party Convex Component for synced local evaluation
   repo-lint/           @splitch/repo-lint           Private repo policy gates (package publishing)
   ui/                  @splitch/ui                  Design system tokens and primitives
 
@@ -126,8 +127,8 @@ Use the Turborepo convention directly:
 - `packages/*` are libraries or tooling packages. They can be internal-only or publishable.
 - `infra/*` holds provider resource projects that are source-controlled but not JS workspaces.
 - App-owned code stays inside the owning `apps/*` workspace unless it is a real library boundary.
-- Publishability is not a directory rule. `@splitch/sdk` lives in `packages/sdk` because it is a JS/TS
-  library installed by customer applications.
+- Publishability is not a directory rule. `@splitch/sdk` and `@splitch/convex` live in `packages/`
+  because they are JS/TS libraries installed by customer applications.
 
 ## Worker topology contract
 

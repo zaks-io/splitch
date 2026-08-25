@@ -100,7 +100,7 @@ For each accepted item, in order:
 1. Verify MAC (current or previous ticketKey) and TTL      -> EXPOSURE_TICKET_INVALID / _EXPIRED
 2. Verify ticket tenant == credential tenant               -> EXPOSURE_TICKET_INVALID
 3. Seal the canonical Exposure payload in the Event Ingest raw_events outbox
-   (field-for-field the table in exposure-accessor.md; server_received_at = now;
+   (field-for-field the table in exposure-accessor.md; exposure_at = server_received_at = now;
     event_id / dedup_key generated per row as for evaluate)
 4. Await Assignment Store holdover-write ownership on the Evaluation Worker:
    seal durable outbox ownership for the ticket, then attempt putIfAbsent → KV

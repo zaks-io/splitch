@@ -37,8 +37,10 @@ Activation Metric). The live Run's config remains unchanged at the edge until St
 
 1. Ends the current live Run (sets `ended_at`).
 2. Creates Run N+1 carrying all batched draft changes.
-3. Writes the new `liveRunId` into `AppFlagConfig` in both D1 and KV.
-4. Broadcasts a delta-nudge from the per-App DO.
+3. Writes the new `liveRunId` into `AppFlagConfig` and creates active Convex installation delivery
+   rows in the same D1 transaction.
+4. Projects `AppFlagConfig` into KV.
+5. Broadcasts a delta-nudge from the per-App DO and starts Convex webhook dispatch.
 
 N draft edits = **one** sample reset (one new Run), never N.
 
@@ -60,27 +62,31 @@ per Run.
 Worker validates input
   → calls DO(appId).write(configDelta)
     → DO validates invariants (Run immutability, schema shape)
-    → DO commits to D1 (authoritative relational record)
+    → DO commits config plus active Convex delivery rows to D1 in one transaction
     → DO writes through to KV (read replica)
-    → DO broadcasts a version-carrying delta-nudge to subscribed clients
+    → DO broadcasts the internal version-carrying delta-nudge and starts external webhook dispatch
   → Worker returns 200 with new version to caller
 ```
 
-**Persisted-before-announced:** the DO commits before broadcasting. A broadcast can never describe
-unpersisted state. If D1 commit fails, the DO returns an error and no KV write or broadcast occurs.
+**Persisted-before-announced:** the DO commits config and its external delivery rows before any
+internal broadcast or external dispatch. A nudge can never describe unpersisted state. If D1 commit
+fails, the DO returns an error and no KV write, broadcast, or webhook delivery occurs.
 
 ## Config write failure contract
 
 D1 is the authoritative source. KV is a read-replica cache.
 
-- **D1 write fails:** DO returns error to the Worker; Worker returns 4xx/5xx to caller. No KV
-  write, no broadcast. No partial state. Caller retries.
+- **D1 write fails:** DO returns error to the Worker; Worker returns 4xx/5xx to caller. No KV write,
+  broadcast, or webhook delivery. No partial state. Caller retries.
 - **D1 succeeds, KV write fails:** Config is durable in D1. The Evaluation Worker reads the current
   snapshot through the Config Store DO and never treats a stale or malformed KV payload as current.
   Control-plane reads rebuild the KV projection from D1.
 - **D1 succeeds, broadcast fails:** Evaluation fails loud while live updates are unavailable.
   Reconnect invalidates the Environment cache and obtains the current committed version before
   serving. Panel clients retain their full invalidate-refetch reconnect behavior (ADR-0019).
+- **D1 succeeds, Convex delivery fails:** config remains committed. The durable delivery row retries
+  independently; installation health shows the complete latest error. The component keeps its last
+  validated snapshot until a newer version is announced, then fails loud until pull catches up.
 
 Flag Configuration reads **always** obtain an authoritative D1 snapshot through the Config Store DO
 on cold start, cache miss, or reconnect. A version below the latest nudge fails with `STALE`; it is
@@ -104,3 +110,4 @@ window because a miss deterministically recomputes the same assignment (ADR-0009
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md](../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../sdk/convex-integration-api.md](../sdk/convex-integration-api.md)

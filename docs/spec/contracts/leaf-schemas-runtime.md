@@ -42,10 +42,11 @@ The only event on the Assignment/Exposure seam. Appended to Tinybird. Every fiel
 | `sourceId`         | `string`                     | yes      | Edge POP identifier; component of `dedupKey`                                                                                                                                            |
 | `counterfactual`   | `boolean`                    | yes      | `false` for real Exposures; reserved for future counterfactual triggering                                                                                                               |
 | `clientTimestamp`  | `string` (ISO 8601)          | no       | When the SDK fired the event (diagnostic only; subject to clock skew)                                                                                                                   |
-| `serverReceivedAt` | `string` (ISO 8601)          | yes      | Server-received event timestamp; used for `MIN(ts)` first-touch ordering                                                                                                                |
+| `exposureAt`       | `string` (ISO 8601)          | yes      | Canonical encounter time; remote receive time or verified trusted server commit                                                                                                         |
+| `serverReceivedAt` | `string` (ISO 8601)          | yes      | When Splitch durably accepted the row; delivery diagnostics and retention                                                                                                               |
 
 First-touch identity: the tuple `(appId, environmentId, experimentId, runId, idType, targetingKeyHash)`
-resolved by `MIN(serverReceivedAt)` — the earliest wins. Distinct from the wire `dedup_key` above.
+resolved by `MIN(exposureAt)` — the earliest encounter wins. Distinct from the wire `dedup_key` above.
 `ingestTs` is not a producer field. The Tinybird `raw_events` projection assigns physical
 `ingest_ts` with `DEFAULT now64(3)` at insertion.
 

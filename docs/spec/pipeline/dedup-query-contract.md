@@ -21,7 +21,7 @@ SELECT
   run_id,
   id_type,
   targeting_key_hash,
-  MIN(server_received_at)                                        AS first_exposure_ts,
+  MIN(exposure_at)                                               AS first_exposure_ts,
   CASE
     WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
     ELSE MAX(variant)
@@ -42,8 +42,8 @@ which rows collapse. `environment_id` is in the tuple because Exposures are per-
 
 ### Invariants
 
-1. `server_received_at` is the canonical timestamp for ordering (monotonic, no client clock skew). `client_timestamp` is never used in the dedup.
-2. `MIN(server_received_at)` per `(targeting_key_hash, run_id)` determines first-touch. Late-arriving events with earlier `server_received_at` are incorporated on the next query run — this is correct per ADR-0010 (replayability).
+1. `exposure_at` is the canonical encounter timestamp. Remote producers set it from Splitch receive time; verified trusted adapters may use a bounded durable commit timestamp (ADR-0049). `client_timestamp` is never used in the dedup.
+2. `MIN(exposure_at)` per `(targeting_key_hash, run_id)` determines first-touch. Late delivery with an earlier encounter time is incorporated on the next query run — this is correct per ADR-0010 (replayability).
 3. `COUNT(DISTINCT variant) > 1` within one `(targeting_key_hash, run_id)` produces `variant = '__multiple__'`. Given pure `assign()` + authoritative holdover DO + material-edit-opens-new-Run, a variant conflict within one Run is always a defect (config race, SDK bug, or ADR-0003 violation) and must be surfaced loudly, not silently resolved.
 4. The query is fully replayable over the complete raw log. Changing the dedup rule (e.g., adding a filter) means rerunning the query — no migration of raw data.
 
@@ -100,4 +100,5 @@ For Ratio Metrics the stats engine also needs the per-Entity numerator/denominat
 - [ADR-0010](../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md) — first-touch query, MIN(ts), replayability
 - [ADR-0011](../../adr/0011-conflicting-variant-entities-quarantined-to-multiple.md) — `__multiple__` quarantine rule
 - [ADR-0024](../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md) — lambda architecture, shared dedup definition
+- [ADR-0049](../../adr/0049-convex-local-evaluation-uses-nudge-pull-sync-and-transactional-exposure-delivery.md) — trusted local encounter time
 - [exposure-pipeline-seam.md](../../architecture/exposure-pipeline-seam.md) — dedup query centralization

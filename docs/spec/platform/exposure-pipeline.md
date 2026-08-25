@@ -21,13 +21,16 @@ current Event Ingest Worker posts one implemented row per Tinybird request.
   consume zero capacity. Gate failure returns `429 RATE_LIMITED` before durable acceptance; valid
   rows are never sampled or silently dropped.
 - **First-touch identity** = the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`,
-  resolved by `MIN(server_received_at)` at query time. Many raw Exposure rows for the same Entity/Run share
-  this identity; the query picks the earliest `server_received_at` as the first-touch winner. The tuple is
+  resolved by `MIN(exposure_at)` at query time. Many raw Exposure rows for the same Entity/Run share
+  this identity; the query picks the earliest `exposure_at` as the first-touch winner. The tuple is
   schema-stable — new fields do not change it. This is distinct from the wire-level `dedup_key`
   (a per-physical-row idempotency key); see the pipeline contract for the `dedup_key` construction.
-- **Two timestamps per Exposure row:**
-  - `server_received_at` (canonical): server-received-at. Monotonic, no client clock skew. Used for
-    `MIN(ts)` first-touch ordering and Conversion Window anchor.
+- **Three timestamps per Exposure row:**
+  - `exposure_at` (canonical): when the Entity durably encountered the Variant. Remote Evaluation
+    uses Splitch receive time; a verified trusted adapter may use a bounded server commit timestamp
+    (ADR-0049). Used for `MIN(ts)` first-touch ordering and the Conversion Window anchor.
+  - `server_received_at`: when Splitch durably accepted the row. Used for delivery diagnostics and
+    retention, not encounter ordering.
   - `ingest_ts` (watermark only): Tinybird insertion time, assigned by datasource
     `DEFAULT now64(3)` and omitted by producers. Used for snapshot/tail freshness boundaries, never
     for first-touch or Metric windows.
@@ -40,7 +43,7 @@ The canonical raw-row shape (all fields, both `type = 'exposure'` and `type = 'a
 Tinybird form in [contracts/storage-schemas-tinybird.md](../../spec/contracts/storage-schemas-tinybird.md).
 **Do not redefine the row here.** What matters at this layer:
 
-- **First-touch identity components** (resolved by `MIN(server_received_at)` at query time):
+- **First-touch identity components** (resolved by `MIN(exposure_at)` at query time):
   `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`. `environment_id`
   is co-scoped with `app_id` — Exposures are per-Environment (ADR-0027). `environment_id`,
   `experiment_id`, and `id_type` are functionally determined by `run_id`; the determinant is
@@ -88,12 +91,12 @@ The two can momentarily disagree (the eager DO write guesses first-touch; the ba
 This is accepted and the failure contract is identical to the Assignment Store: DO governs
 experience, log governs analysis.
 
-## Accepted integrity gap: DO winner vs. MIN(server_received_at) winner may differ
+## Accepted integrity gap: DO winner vs. MIN(exposure_at) winner may differ
 
 In a POP race, two Exposures for the same Entity in the same Run arrive at their respective POPs
 nearly simultaneously. The first POP to call `DO.putIfAbsent` wins and becomes the experience
 winner — the Entity will replay that Variant. But if the second POP's Exposure has an earlier
-`server_received_at`, the batch dedup (`MIN(server_received_at)`) counts the second POP's Exposure as first-touch
+`exposure_at`, the batch dedup (`MIN(exposure_at)`) counts the second POP's Exposure as first-touch
 for analysis — counting a Variant the Entity did not actually see.
 
 This is an accepted, bounded gap:
@@ -103,7 +106,7 @@ This is an accepted, bounded gap:
 - The Entity is still deduplicated to a single row (not double-counted).
 - SRM and analysis denominators are correct (one Entity, one Run, one counted Exposure).
 - The discrepancy is cosmetic (experience showed Variant A, analysis attributes Variant A or B
-  depending on which `server_received_at` was earlier) and self-consistent within each plane.
+  depending on which `exposure_at` was earlier) and self-consistent within each plane.
 
 This is explicitly **not** a dataset corruption: the Run's dataset is sound; only a single
 Entity's experience-vs-counted-variant may momentarily disagree. Accepted over the alternative
@@ -126,5 +129,6 @@ output at analysis time.
 - [../../adr/0011-conflicting-variant-entities-quarantined-to-multiple.md](../../adr/0011-conflicting-variant-entities-quarantined-to-multiple.md)
 - [../../adr/0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md](../../adr/0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../../adr/0049-convex-local-evaluation-uses-nudge-pull-sync-and-transactional-exposure-delivery.md](../../adr/0049-convex-local-evaluation-uses-nudge-pull-sync-and-transactional-exposure-delivery.md)
 - [../../adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md](../../adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md)
 - [../../architecture/exposure-pipeline-seam.md](../../architecture/exposure-pipeline-seam.md)

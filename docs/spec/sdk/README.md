@@ -25,6 +25,9 @@ deferred; the `ResolutionDetails` _shape_ is not.
 | [verify-endpoint.md](./verify-endpoint.md)                                   | `POST /api/sdk/verify` contract: non-exposing setup confirmation, reason tiered by credential (ADR-0037)                                |
 | [evaluate-all-endpoint.md](./evaluate-all-endpoint.md)                       | `POST /api/sdk/evaluate-all` contract: Precomputed Evaluations, non-exposing, Exposure Tickets, ETag (ADR-0048)                         |
 | [exposures-endpoint.md](./exposures-endpoint.md)                             | `POST /api/sdk/exposures` contract: batched Exposure Ticket redemption, forgery-proof, deferred Assignment Store write                  |
+| [convex-integration-api.md](./convex-integration-api.md)                     | API-Key installation, config snapshot, signed webhook lifecycle, status, and uninstall                                                  |
+| [convex-component.md](./convex-component.md)                                 | `@splitch/convex`: signed nudge/pull sync and local query/mutation evaluation                                                           |
+| [convex-exposure-delivery.md](./convex-exposure-delivery.md)                 | Convex mutation Exposure outbox, verified server ingest, retry, and commit-time ordering                                                |
 | [browser-client.md](./browser-client.md)                                     | Static-context browser client: sync reads, exposure-on-first-read queue, SSR bootstrap, ETag revalidation                               |
 | [react-bindings.md](./react-bindings.md)                                     | `@splitch/sdk/react`: provider + `useFlag`/`useFlagDetails` hooks, `useSyncExternalStore` seam, fail-loud render semantics              |
 | [exposure-accessor.md](./exposure-accessor.md)                               | `evaluate` (fires Exposure), `peekVariant` + `verify` (no Exposure)                                                                     |
@@ -44,3 +47,4 @@ deferred; the `ResolutionDetails` _shape_ is not.
 - [ADR-0018](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [ADR-0025](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [ADR-0026](../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md)
+- [ADR-0049](../../adr/0049-convex-local-evaluation-uses-nudge-pull-sync-and-transactional-exposure-delivery.md)

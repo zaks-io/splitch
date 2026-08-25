@@ -44,7 +44,7 @@ the complete batch with `RATE_LIMITED` before any claim or row is written.
 **At-least-once, never exactly-once.** The same physical Exposure (one Entity, one Variant, one moment) may produce multiple rows in `raw_events` — this is intentional (ADR-0004, ADR-0010). The dedup query is authoritative; the raw log is the system of record.
 
 Each POP emits independently. There is no global ordering requirement and no global edge dedup
-store. Late-arriving events with an earlier `server_received_at` than previously seen rows are handled
+store. Late-arriving events with an earlier `exposure_at` than previously seen rows are handled
 correctly on the next dedup query run (replayability, ADR-0010).
 
 ## SDK seen-set is not authoritative
@@ -55,12 +55,16 @@ The SDK maintains a per-`(experiment_id, run_id)` seen-set as a **hot-path optim
 
 | Field                | Source                                                   | Use                                                             |
 | -------------------- | -------------------------------------------------------- | --------------------------------------------------------------- |
-| `server_received_at` | Evaluation Worker's `Date.now()` when the Exposure fires | Canonical for `MIN(ts)` first-touch ordering in the dedup query |
+| `exposure_at`        | Splitch receive time, or verified trusted adapter commit | Canonical encounter time for first-touch and Conversion Windows |
+| `server_received_at` | Evaluation Worker's durable-acceptance time              | Delivery diagnostics and retention                              |
 | `ingest_ts`          | Tinybird insertion time (`DEFAULT now64(3)`)             | Snapshot/tail watermark only; never used for analysis ordering  |
 | `client_timestamp`   | SDK payload from the client runtime                      | Diagnostics only; never used for ordering                       |
 
-`server_received_at` is sealed in the canonical payload. The producer omits `ingest_ts`; Tinybird
-populates it when the Events API inserts the physical row. `client_timestamp` is optional; if absent,
+`exposure_at` and `server_received_at` are sealed in the canonical payload. Ordinary Evaluation and
+ticket redemption set them to the same Splitch timestamp. The API-Key-only trusted-adapter endpoint
+may set `exposure_at` from a bounded, recomputed server commit while Splitch stamps
+`server_received_at`. The producer omits `ingest_ts`; Tinybird populates it when the Events API
+inserts the physical row. `client_timestamp` is optional; if absent,
 diagnostics degrade gracefully. Never use `client_timestamp` for first-touch ordering (clock skew
 vulnerability). Never use `ingest_ts` for first-touch ordering either; it exists only so the physical
 snapshot/tail layer can safely catch late Queue delivery and manual replay.
@@ -91,9 +95,9 @@ or API Key binding). Never sourced from the client payload. This is the data-iso
 
 ## Cross-POP duplication
 
-Multiple POPs may fire an Exposure for the same Entity in the same Run within a short window (e.g., CDN routing change). This produces multiple `raw_events` rows with different `source_id` values and potentially slightly different `server_received_at` values. The dedup query picks `MIN(server_received_at)` — the earliest server-received-at row wins as first-touch. The DO's `putIfAbsent` is called by whichever POP fires the Exposure, and the first DO writer wins (ADR-0009).
+Multiple POPs may fire an Exposure for the same Entity in the same Run within a short window (e.g., CDN routing change). This produces multiple `raw_events` rows with different `source_id` values and potentially slightly different `exposure_at` values. The dedup query picks `MIN(exposure_at)` — the earliest encounter wins as first-touch. The DO's `putIfAbsent` is called by whichever POP fires the Exposure, and the first DO writer wins (ADR-0009).
 
-**Note on experience/analysis divergence:** The DO first-touch winner (experience) and the dedup query first-touch winner (analysis) may not be the same POP if their `server_received_at` values differ by milliseconds. This is accepted — the divergence is cosmetic and self-healing, bounded to the ~60s KV propagation window. Variant assignment is deterministic, so any two POPs assign the same Variant to the same `(run_id, Targeting Key)` pair (ADR-0001).
+**Note on experience/analysis divergence:** The DO first-touch winner (experience) and the dedup query first-touch winner (analysis) may not be the same POP if their `exposure_at` values differ by milliseconds. This is accepted — the divergence is cosmetic and self-healing, bounded to the ~60s KV propagation window. Variant assignment is deterministic, so any two POPs assign the same Variant to the same `(run_id, Targeting Key)` pair (ADR-0001).
 
 ## Holdover write trigger
 

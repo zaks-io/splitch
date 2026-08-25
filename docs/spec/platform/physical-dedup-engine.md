@@ -29,17 +29,17 @@ result.
 
 ```sql
 -- snapshot (Copy Pipe):
-QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash ORDER BY server_received_at) = 1
+QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash ORDER BY exposure_at) = 1
 
 -- real-time tail (inline dedup on fresh rows):
 WHERE ingest_ts >= coalesce(
   {last_snapshot_watermark_ts},
   toDateTime64('1970-01-01 00:00:00', 3, 'UTC')
 )
-QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash ORDER BY server_received_at) = 1
+QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash ORDER BY exposure_at) = 1
 ```
 
-Both use `ROW_NUMBER()` equivalent to `MIN(server_received_at)` for first-touch. The snapshot reads
+Both use `ROW_NUMBER()` equivalent to `MIN(exposure_at)` for first-touch. The snapshot reads
 `ingest_ts <= watermark`, while the tail reads `ingest_ts >= watermark`; these ranges deliberately
 overlap at the exact watermark instant so a concurrent insertion cannot fall between the layers, and
 the final UNION re-dedups that boundary overlap. The final UNION also re-dedups later physical rows
@@ -62,7 +62,7 @@ ExposureSnapshot {
   targeting_key_hash:    string    // required, HMAC-derived Entity identity
   id_type:          string    // required
   variant:          string    // required — '__multiple__' if conflict
-  first_exposure_ts: datetime  // required — MIN(server_received_at) from raw log
+  first_exposure_ts: datetime  // required — MIN(exposure_at) from raw log
   watermark_ts:     datetime  // required — inclusive ingest boundary captured at snapshot start
 }
 ```
@@ -101,7 +101,7 @@ WHERE type = 'exposure'
   AND app_id = {{String(app_id)}}
   AND environment_id = {{String(environment_id)}}
 GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
--- MIN(server_received_at), __multiple__ quarantine, etc.
+-- MIN(exposure_at), __multiple__ quarantine, etc.
 
 -- production query (tenant-scoped snapshot + derived watermark + tail + final dedup):
 WITH
@@ -127,7 +127,7 @@ tail AS (
     app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
     CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
          ELSE MAX(variant) END AS variant,
-    MIN(server_received_at) AS first_exposure_ts
+    MIN(exposure_at) AS first_exposure_ts
   FROM raw_events
   CROSS JOIN watermark
   WHERE type = 'exposure'

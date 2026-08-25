@@ -1,6 +1,6 @@
 # Package release runbook
 
-This runbook is the operating contract for publishing `@splitch/sdk` and `@splitch/cli`. It
+This runbook is the operating contract for publishing `@splitch/sdk`, `@splitch/cli`, and `@splitch/convex`. It
 documents the implemented workflow path and the human-owned provider setup it depends on. It does
 not grant permission to publish, change repository visibility, configure providers, or change
 tag/release rules.
@@ -21,10 +21,11 @@ and the published release/tag are immutable. Never re-run its failed `cli-publis
 consume npm version `0.1.0` with a binary-less package. The CLI's first stable version is
 `0.1.1`.
 
-| Target | Manifest                    | Tag              | Draft workflow                                              | Trusted-publish workflow                                    |
-| ------ | --------------------------- | ---------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
-| `sdk`  | `packages/sdk/package.json` | `sdk-v<version>` | [`sdk-release`](../../../.github/workflows/sdk-release.yml) | [`sdk-publish`](../../../.github/workflows/sdk-publish.yml) |
-| `cli`  | `apps/cli/package.json`     | `cli-v<version>` | [`cli-release`](../../../.github/workflows/cli-release.yml) | [`cli-publish`](../../../.github/workflows/cli-publish.yml) |
+| Target   | Manifest                       | Tag                 | Draft workflow                                              | Trusted-publish workflow                                    |
+| -------- | ------------------------------ | ------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
+| `sdk`    | `packages/sdk/package.json`    | `sdk-v<version>`    | [`sdk-release`](../../../.github/workflows/sdk-release.yml) | [`sdk-publish`](../../../.github/workflows/sdk-publish.yml) |
+| `cli`    | `apps/cli/package.json`        | `cli-v<version>`    | [`cli-release`](../../../.github/workflows/cli-release.yml) | [`cli-publish`](../../../.github/workflows/cli-publish.yml) |
+| `convex` | `packages/convex/package.json` | `convex-v<version>` | `convex-release`                                            | `convex-publish`                                            |
 
 The release workflows are manual `workflow_dispatch` jobs on Blacksmith. They validate the
 repo-wide candidate, prepare artifacts, and create or update a draft GitHub Release. They never
@@ -36,7 +37,7 @@ dedicated Linear release pipeline. The SDK pipeline reads `SDK_LINEAR_ACCESS_KEY
 reads `CLI_LINEAR_ACCESS_KEY`. The platform deploy continues to use `LINEAR_ACCESS_KEY`.
 
 Pushing a namespaced tag alone does not publish. The publish workflows accept only a
-`release: published` event and filter their own `sdk-v*` or `cli-v*` namespace.
+`release: published` event and filter their own `sdk-v*`, `cli-v*`, or `convex-v*` namespace.
 
 The SDK derives its public declaration surface from private contracts. Its manifest and
 declarations must not require `@splitch/contracts`. The CLI bundles all `@splitch/*` runtime code,
@@ -56,13 +57,14 @@ credentials, tokens, signed URLs, or private logs.
    update, and deletion. The dedicated release GitHub App is the sole bypass actor for both. It
    uses repository variable `SDK_RELEASE_APP_ID` and secret `SDK_RELEASE_APP_PRIVATE_KEY`, has only
    repository `contents: write`, and is installed on `zaks-io/splitch` alone.
-4. Confirm the `@splitch` npm scope and both packages are controlled by the intended organization.
+4. Confirm the `@splitch` npm scope and all three packages are controlled by the intended organization.
 5. Configure one trusted publisher per package:
 
-   | Package        | Repository        | Workflow filename | Allowed action |
-   | -------------- | ----------------- | ----------------- | -------------- |
-   | `@splitch/sdk` | `zaks-io/splitch` | `sdk-publish.yml` | `npm publish`  |
-   | `@splitch/cli` | `zaks-io/splitch` | `cli-publish.yml` | `npm publish`  |
+   | Package           | Repository        | Workflow filename    | Allowed action |
+   | ----------------- | ----------------- | -------------------- | -------------- |
+   | `@splitch/sdk`    | `zaks-io/splitch` | `sdk-publish.yml`    | `npm publish`  |
+   | `@splitch/cli`    | `zaks-io/splitch` | `cli-publish.yml`    | `npm publish`  |
+   | `@splitch/convex` | `zaks-io/splitch` | `convex-publish.yml` | `npm publish`  |
 
    Do not configure an environment unless the workflow is changed to use that exact environment.
 
@@ -79,6 +81,7 @@ and 2FA manually publishes only the disposable prerelease for the package being 
 
 - `@splitch/sdk@0.1.0-bootstrap.0` with dist-tag `bootstrap`
 - `@splitch/cli@0.1.0-bootstrap.0` with dist-tag `bootstrap`
+- `@splitch/convex@0.1.0-bootstrap.0` with dist-tag `bootstrap`
 
 The prerelease must not consume `0.1.0` or a stable release tag. npm may force `latest` onto the
 first-ever version until the stable publish repoints it. Record that state instead of working
@@ -100,6 +103,7 @@ Use this only after a human approves the package release.
 - [ ] CLI only: `dist/cli.js` has the Node shebang; workspace packages are bundled; packed
       dependencies are exactly the external runtime set; no workspace range or dev dependency
       ships.
+- [ ] Convex only: a clean tarball install passes component codegen, typecheck, tests, and both public subpath imports.
 - [ ] Candidate validation passes as one shared Turbo graph covering format, lint, typecheck,
       tests, builds, Knip, secret scanning, Tinybird and D1 checks, pack checks, and consumer smoke.
 
@@ -115,7 +119,7 @@ Use this only after a human approves the package release.
 
 ### 3. Prepare the draft
 
-1. Dispatch `sdk-release` or `cli-release` from the approved commit.
+1. Dispatch the target's `sdk-release`, `cli-release`, or `convex-release` from the approved commit.
 2. Inspect both `<target>-release-validation-<tag>` and `<target>-release-package-<tag>` artifacts.
    They contain validation evidence, the tarball, checksum, tarball listing, dependency inventory,
    and release manifest.

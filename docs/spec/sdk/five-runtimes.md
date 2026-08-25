@@ -48,16 +48,16 @@ at most a duplicate raw Exposure (the pipeline dedup collapses it).
 
 Each POP maintains its own per-instance seen-set (see [seen-set.md](./seen-set.md)). The
 same Entity evaluated at two POPs in the same request window will fire two raw Exposures
-(the respective seen-sets have no shared state). The pipeline dedup (`MIN(server_received_at)` per
+(the respective seen-sets have no shared state). The pipeline dedup (`MIN(exposure_at)` per
 `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`) collapses them to first-touch.
 This is the documented design (ADR-0005): cross-POP seen-sets cannot be the authority.
 
 ### No global ordering required
 
-Exposure rows from five POPs arrive at Tinybird without a global ordering guarantee.
-The dedup query operates on wall-clock `server_received_at` (server-received-at timestamp, not
-client-fired), which is monotonic per POP and good enough for first-touch semantics.
-Clock skew between POPs is small relative to typical Conversion Windows.
+Exposure rows from five POPs arrive at Tinybird without a global ordering guarantee. Remote
+Evaluation sets `exposure_at` from Splitch receive time; verified trusted adapters may use a bounded
+server commit timestamp (ADR-0049). The dedup query orders on `exposure_at`, never an unverified
+client timestamp.
 
 ## `assign()` is pure and deterministic
 

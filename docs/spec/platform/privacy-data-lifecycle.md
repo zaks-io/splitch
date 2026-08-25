@@ -17,15 +17,15 @@ cross-version identity joins and idempotent retries are not claimed.
 
 ## Privacy roles
 
-| Data class              | Examples                                                                                 | Role                                                       | Durable stores                                                                  |
-| ----------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Control-plane User data | WorkOS user ID, email in WorkOS, memberships, sessions, device-flow tokens               | Splitch-controlled                                         | WorkOS, D1 IDs, KV sessions, keychain/CLI                                       |
-| Organization/App config | Orgs, Apps, Environments, Flags, Experiments, Metrics, Segments, credential metadata     | Customer-controlled                                        | D1, KV config cache, per-App DO                                                 |
-| Entity data             | Targeting Key, idType, Exposures, Activations, Metric Events, Assignment Store holdovers | Customer-controlled; Splitch is processor/service provider | Tinybird raw/derived data, KV, Assignment Store DO, ingest recovery/queues/DLQs |
-| Browser analytics data  | Web Events, Web Sessions, optional Entity identity                                       | Customer-controlled; Splitch is processor/service provider | Tinybird `web_events` plus retry state, ingest recovery/queues/DLQ              |
-| Audit/security data     | control-plane mutation audit, auth door, actor ID, request logs                          | shared legal/security record                               | Tinybird audit log, D1 privacy request log                                      |
-| Observability data      | errors, traces, structured logs                                                          | Splitch-controlled operations data                         | Sentry, Axiom, Cloudflare logs                                                  |
-| Billing data            | plan, Stripe customer/subscription IDs, invoices                                         | Splitch-controlled billing data                            | D1, Stripe when enabled                                                         |
+| Data class              | Examples                                                                                 | Role                                                       | Durable stores                                                                                                    |
+| ----------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Control-plane User data | WorkOS user ID, email in WorkOS, memberships, sessions, device-flow tokens               | Splitch-controlled                                         | WorkOS, D1 IDs, KV sessions, keychain/CLI                                                                         |
+| Organization/App config | Orgs, Apps, Environments, Flags, Experiments, Metrics, Segments, credential metadata     | Customer-controlled                                        | D1, KV config cache, per-App DO                                                                                   |
+| Entity data             | Targeting Key, idType, Exposures, Activations, Metric Events, Assignment Store holdovers | Customer-controlled; Splitch is processor/service provider | Tinybird raw/derived data, KV, Assignment Store DO, customer Convex component outbox, ingest recovery/queues/DLQs |
+| Browser analytics data  | Web Events, Web Sessions, optional Entity identity                                       | Customer-controlled; Splitch is processor/service provider | Tinybird `web_events` plus retry state, ingest recovery/queues/DLQ                                                |
+| Audit/security data     | control-plane mutation audit, auth door, actor ID, request logs                          | shared legal/security record                               | Tinybird audit log, D1 privacy request log                                                                        |
+| Observability data      | errors, traces, structured logs                                                          | Splitch-controlled operations data                         | Sentry, Axiom, Cloudflare logs                                                                                    |
+| Billing data            | plan, Stripe customer/subscription IDs, invoices                                         | Splitch-controlled billing data                            | D1, Stripe when enabled                                                                                           |
 
 ## Browser analytics identity
 
@@ -112,6 +112,10 @@ Rules:
   mandatory App-wide purge rather than by retaining old keys.
 - The raw Targeting Key is used in memory for `assign()`, Condition matching, or Metric/Web Event
   HMAC derivation, then discarded.
+- A customer-installed Convex Component may retain the raw Targeting Key and Evaluation Context only
+  in its isolated pending Exposure outbox. Acceptance deletes the payload immediately; terminal
+  delivery deletes raw identity/context within 24 hours and retains non-identifying failure metadata
+  for 30 days. Local holdovers use a component-local HMAC and never store the raw Targeting Key.
 - KV keys, DO names, Tinybird rows, Axiom fields, Sentry payloads, and audit details never contain the
   raw Targeting Key or raw Evaluation Context attributes.
 - Data subject requests take `{ app_id, id_type, targetingKey }`; the Control Plane API Worker computes
@@ -211,6 +215,8 @@ Every delete job must record per-store status for:
 - Durable Objects: per-App live-update state, Assignment Store writer rows, ingest claims/outbox
   payloads, Admission Gate state, write-ahead Tinybird attempts, indeterminate records, and
   `poison_pending`/`poison_transferred` records.
+- Customer Convex Component: synced configuration, integration token, local holdovers, pending
+  Exposure outbox payloads, terminal delivery metadata, and component deletion checkpoints.
 - Cloudflare Queues: all four primary ingest queues and all four DLQs, including manual replay
   inventory and bounded retention evidence.
 - Tinybird: raw events, Metric Events, Web Events, the deduped Exposure snapshot,

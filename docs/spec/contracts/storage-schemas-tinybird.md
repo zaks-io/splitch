@@ -13,7 +13,7 @@ leaf, not the envelope".)
 ### `raw_events` (raw log)
 
 Primary engine partition key: `toYYYYMM(ingest_ts)`. Sorting key:
-`(app_id, environment_id, ingest_ts, experiment_id, run_id, server_received_at,
+`(app_id, environment_id, ingest_ts, experiment_id, run_id, exposure_at,
 targeting_key_hash)`. The tenant and insertion-time prefix prunes the real-time tail; event-time
 columns remain available for first-touch, replay, and retention.
 
@@ -32,14 +32,15 @@ columns remain available for first-touch, replay, and retention.
 | `counterfactual`     | UInt8                   | 0/1; reserved for future counterfactual triggering                                                                                                                                                                        |
 | `source_id`          | String                  | Edge POP identifier; component of the wire `dedup_key`                                                                                                                                                                    |
 | `client_timestamp`   | Nullable(DateTime64(3)) | Optional SDK fire time; diagnostic only                                                                                                                                                                                   |
-| `server_received_at` | DateTime64(3)           | Server-received event timestamp; used for `MIN` first-touch                                                                                                                                                               |
+| `exposure_at`        | DateTime64(3)           | Canonical encounter timestamp; used for `MIN` first-touch and Conversion Window anchoring                                                                                                                                 |
+| `server_received_at` | DateTime64(3)           | Splitch durable-acceptance timestamp; delivery diagnostics and retention                                                                                                                                                  |
 | `ingest_ts`          | DateTime64(3)           | Tinybird insertion watermark; `DEFAULT now64(3)` and omitted from NDJSON                                                                                                                                                  |
 | `activation_ts`      | Nullable(DateTime64(3)) | Activation timestamp; equals `server_received_at` for server-received activations                                                                                                                                         |
 | `is_holdover`        | UInt8                   | Exposure rows only; 0 on Activation rows                                                                                                                                                                                  |
 | `sdk_version`        | Nullable(String)        | SDK version; diagnostics only                                                                                                                                                                                             |
 
 First-touch identity (query-time): the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`
-resolved by `MIN(server_received_at)` — the earliest determines the first-touch winner. This is
+resolved by `MIN(exposure_at)` — the earliest encounter determines the first-touch winner. This is
 distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency key). Wire
 `dedup_key` construction lives in [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md).
 
