@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { panelServerFnCsrfMiddleware, startInstance } from "./start";
+
+vi.mock("@sentry/react", () => ({
+  startSpan: () => {
+    throw new Error("browser tracing must not run during SSR");
+  },
+}));
 
 type CsrfMiddleware = typeof panelServerFnCsrfMiddleware;
 
@@ -132,5 +138,20 @@ describe("panel server-function tracing middleware", () => {
 
     expect(options.functionMiddleware).toHaveLength(1);
     expect(options.requestMiddleware).toContain(panelServerFnCsrfMiddleware);
+  });
+
+  it("does not create a browser span while rendering on the server", async () => {
+    const options = await startInstance.getOptions();
+    const client = options.functionMiddleware?.[0]?.options.client;
+    if (!client) throw new Error("expected function tracing client middleware");
+
+    const expected = { context: { rendered: true } };
+    // biome-ignore lint/suspicious/noExplicitAny: the SSR probe only needs method + next
+    const result = await (client as any)({
+      method: "GET",
+      next: async () => expected,
+    });
+
+    expect(result).toBe(expected);
   });
 });

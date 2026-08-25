@@ -15,6 +15,9 @@ export const panelServerFnCsrfMiddleware = createCsrfMiddleware({
 
 const serverFunctionTracing = createMiddleware({ type: "function" })
   .client(async ({ method, next }) => {
+    if (typeof window === "undefined") {
+      return next();
+    }
     const Sentry = await import("@sentry/react");
     return Sentry.startSpan(
       {
