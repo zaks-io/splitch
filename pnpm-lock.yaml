@@ -307,9 +307,15 @@ importers:
 
   apps/marketing:
     dependencies:
+      '@sentry/react':
+        specifier: ^10.68.0
+        version: 10.68.0(react@19.2.8)
       '@splitch/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@splitch/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@splitch/ui':
         specifier: workspace:*
         version: link:../../packages/ui

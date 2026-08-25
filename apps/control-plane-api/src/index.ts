@@ -59,38 +59,59 @@ const handler = {
 
 export default wrapWorkerHandler(handler, { surface: "control-plane-api" });
 
+const boundedPanelHandler = bindingHandler("bounded-session");
+const mcpHandler = bindingHandler("mcp");
+const signedPanelHandler = bindingHandler("signed");
+
 /** Bounded bridge for the predecessor Panel's session-handle binding protocol. */
 export class ControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    if (!boundedPanelSessionEnabled(this.env)) {
-      return new Response("not found", { status: 404 });
-    }
-    if (!parseControlPanelBindingOperation(request)) {
-      return new Response("not found", { status: 404 });
-    }
-    return handleRequest(request, this.env, this.ctx, "bounded-session");
+    return boundedPanelHandler.fetch(
+      request as Parameters<typeof boundedPanelHandler.fetch>[0],
+      this.env,
+      this.ctx,
+    );
   }
 }
 
 /** Binding-only entrypoint for one-operation MCP delegations. */
 export class McpEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    return handleRequest(request, this.env, this.ctx, "mcp");
+    return mcpHandler.fetch(request as Parameters<typeof mcpHandler.fetch>[0], this.env, this.ctx);
   }
 }
 
 /** Binding-only V2 entrypoint used by the Control Panel for signed least-privilege delegation. */
 export class SignedControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    if (!parseControlPanelBindingOperation(request)) {
-      return new Response("not found", { status: 404 });
-    }
-    return handleRequest(request, this.env, this.ctx, "signed");
+    return signedPanelHandler.fetch(
+      request as Parameters<typeof signedPanelHandler.fetch>[0],
+      this.env,
+      this.ctx,
+    );
   }
 }
 
 type PanelProtocol = "none" | "signed" | "bounded-session";
 type AuthMode = PanelProtocol | "mcp";
+
+function bindingHandler(authMode: Exclude<AuthMode, "none">) {
+  return wrapWorkerHandler(
+    {
+      async fetch(request, env, ctx): Promise<Response> {
+        if (authMode === "bounded-session" && !boundedPanelSessionEnabled(env)) {
+          return new Response("not found", { status: 404 });
+        }
+        if (authMode !== "mcp" && !parseControlPanelBindingOperation(request)) {
+          return new Response("not found", { status: 404 });
+        }
+        return handleRequest(request, env, ctx, authMode);
+      },
+    } satisfies ExportedHandler<ControlPlaneApiEnv>,
+    { surface: "control-plane-api" },
+  );
+}
+
 async function handleRequest(
   request: Request,
   env: ControlPlaneApiEnv,

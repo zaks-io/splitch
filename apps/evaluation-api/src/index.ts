@@ -71,6 +71,17 @@ export const evaluationApiHandler = handler;
 
 export default wrapWorkerHandler(handler, { surface: "evaluation-api" });
 
+const controlPlaneHandler = wrapWorkerHandler(
+  {
+    async fetch(request, env, ctx): Promise<Response> {
+      const identity = delegatedIdentityFor(request, bindingRoutes);
+      if (!identity) return notDelegatedResponse(request);
+      return handleRequest(request, env, ctx, { kind: "control-plane", identity });
+    },
+  } satisfies ExportedHandler<EvaluationApiEnv>,
+  { surface: "evaluation-api" },
+);
+
 /**
  * Binding-only entrypoint for `flags_test_eval`. The operation takes a
  * control-plane token, so it is addressed at `api.splitch.dev` even though this
@@ -79,9 +90,11 @@ export default wrapWorkerHandler(handler, { surface: "evaluation-api" });
  */
 export class ControlPlaneEntrypoint extends WorkerEntrypoint<EvaluationApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    const identity = delegatedIdentityFor(request, bindingRoutes);
-    if (!identity) return notDelegatedResponse(request);
-    return handleRequest(request, this.env, this.ctx, { kind: "control-plane", identity });
+    return controlPlaneHandler.fetch(
+      request as Parameters<typeof controlPlaneHandler.fetch>[0],
+      this.env,
+      this.ctx,
+    );
   }
 }
 

@@ -23,7 +23,10 @@ export async function initControlPanelClientSentry(): Promise<void> {
       Sentry.captureException(error, context);
     },
     init: (options) => {
-      Sentry.init(options as unknown as Parameters<typeof Sentry.init>[0]);
+      Sentry.init({
+        ...options,
+        integrations: [Sentry.browserTracingIntegration()],
+      } as unknown as Parameters<typeof Sentry.init>[0]);
     },
     setTag: (key, value) => {
       Sentry.setTag(key, value);

@@ -3,9 +3,8 @@ import { TooltipProvider } from "@splitch/ui/components/tooltip";
 import { AppErrorPage } from "@splitch/ui/state/app-error-page";
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { createRootRouteWithContext, HeadContent, Scripts } from "@tanstack/react-router";
-import { type ReactNode, useEffect } from "react";
+import type { ReactNode } from "react";
 import { reportRouteError } from "#lib/panel-observability";
-import { initControlPanelClientSentry } from "#lib/panel-sentry-client";
 import type { ControlPanelRouterContext } from "#lib/router-context";
 import appCss from "../styles/app.css?url";
 
@@ -31,10 +30,6 @@ export const Route = createRootRouteWithContext<ControlPanelRouterContext>()({
 });
 
 function RootDocument({ children }: { children: ReactNode }) {
-  useEffect(() => {
-    void initControlPanelClientSentry();
-  }, []);
-
   return (
     <html lang="en">
       <head>

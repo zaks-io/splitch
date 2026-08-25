@@ -1,14 +1,18 @@
-import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react from "@vitejs/plugin-react";
-import { parseConfigFileTextToJson } from "typescript";
 import { defineConfig } from "vite";
+import {
+  readViteWorkerConfig,
+  resolveViteSentryRelease,
+} from "../../scripts/lib/vite-worker-sentry-config";
 
-const wranglerConfig = readWranglerConfig();
+const wranglerConfig = readViteWorkerConfig(
+  resolve(import.meta.dirname, "wrangler.jsonc"),
+  "splitch-control-panel",
+);
 const localE2eRunId = process.env.SPLITCH_LOCAL_E2E_RUN_ID;
 const cloudflareEnvironment =
   process.env.CLOUDFLARE_ENV ?? process.env.SPLITCH_GENERATED_WRANGLER_ENV;
@@ -62,56 +66,14 @@ export default defineConfig(({ mode }) => ({
     "import.meta.env.VITE_SENTRY_RELEASE": JSON.stringify(
       process.env.VITE_SENTRY_RELEASE ??
         process.env.SENTRY_RELEASE ??
-        resolveClientSentryRelease(wranglerConfig.name),
+        resolveViteSentryRelease(wranglerConfig.name),
     ),
     "import.meta.env.VITE_SPLITCH_PLATFORM_TARGET": JSON.stringify(
       process.env.VITE_SPLITCH_PLATFORM_TARGET ??
         process.env.SPLITCH_PLATFORM_TARGET ??
+        cloudflareEnvironment ??
         wranglerConfig.vars.SPLITCH_PLATFORM_TARGET ??
         mode,
     ),
   },
 }));
-
-type WranglerConfig = {
-  name: string;
-  vars: Record<string, string>;
-};
-
-function readWranglerConfig(): WranglerConfig {
-  const configPath = resolve(import.meta.dirname, "wrangler.jsonc");
-  const parsed = parseConfigFileTextToJson(configPath, readFileSync(configPath, "utf8"));
-  if (parsed.error || typeof parsed.config !== "object" || parsed.config === null) {
-    return { name: "splitch-control-panel", vars: {} };
-  }
-  const name = (parsed.config as { name?: unknown }).name;
-  const vars = (parsed.config as { vars?: unknown }).vars;
-  if (typeof vars !== "object" || vars === null) {
-    return { name: typeof name === "string" ? name : "splitch-control-panel", vars: {} };
-  }
-  return {
-    name: typeof name === "string" ? name : "splitch-control-panel",
-    vars: Object.fromEntries(
-      Object.entries(vars).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string",
-      ),
-    ),
-  };
-}
-
-function resolveClientSentryRelease(workerName: string): string {
-  const baseRelease =
-    process.env.SENTRY_RELEASE_BASE ?? commandOutput("git", ["rev-parse", "HEAD"]);
-  return baseRelease ? `${workerName}@${baseRelease}` : "";
-}
-
-function commandOutput(command: string, commandArgs: string[]): string | undefined {
-  const result = spawnSync(command, commandArgs, {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
-  if (result.status !== 0) {
-    return undefined;
-  }
-  return result.stdout.trim() || undefined;
-}

@@ -23,8 +23,8 @@ import {
 import { createApp } from "./app";
 import type { AnalysisApiEnv } from "./env";
 import { runScheduledSnapshot } from "./scheduled";
-import { createTinybirdDeleteTransport } from "./tinybird-delete";
 import { createTinybirdCopyTransport, createTinybirdReadTransport } from "./tinybird";
+import { createTinybirdDeleteTransport } from "./tinybird-delete";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
 /** The operations `api.splitch.dev` may hand this Worker over the binding (ADR-0046). */
@@ -46,12 +46,25 @@ const handler = {
 
 export default wrapWorkerHandler(handler, { surface: "analysis-api" });
 
+const controlPlaneHandler = wrapWorkerHandler(
+  {
+    async fetch(request, env, ctx): Promise<Response> {
+      const identity = delegatedIdentityFor(request, bindingRoutes);
+      if (!identity) return notDelegatedResponse(request);
+      return handleRequest(request, env, ctx, { kind: "control-plane", identity });
+    },
+  } satisfies ExportedHandler<AnalysisApiEnv>,
+  { surface: "analysis-api" },
+);
+
 /** Binding-only entrypoint for reads the Control Plane Worker already authorized. */
 export class ControlPlaneEntrypoint extends WorkerEntrypoint<AnalysisApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    const identity = delegatedIdentityFor(request, bindingRoutes);
-    if (!identity) return notDelegatedResponse(request);
-    return handleRequest(request, this.env, this.ctx, { kind: "control-plane", identity });
+    return controlPlaneHandler.fetch(
+      request as Parameters<typeof controlPlaneHandler.fetch>[0],
+      this.env,
+      this.ctx,
+    );
   }
 }
 

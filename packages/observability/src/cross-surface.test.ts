@@ -18,6 +18,7 @@ const WORKER_APP_ENTRYPOINTS: Record<string, string> = {
   "analysis-api": "apps/analysis-api/src/index.ts",
   "auth-api": "apps/auth-api/src/index.ts",
   "control-panel": "apps/control-panel/src/server.ts",
+  marketing: "apps/marketing/src/server.ts",
   "mcp-server": "apps/mcp-server/src/index.ts",
 };
 
@@ -30,6 +31,7 @@ describe("cross-surface observability wiring", () => {
       "analysis-api",
       "auth-api",
       "control-panel",
+      "marketing",
       "mcp-server",
       "cli",
       "sdk-harness",
