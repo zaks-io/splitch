@@ -30,5 +30,11 @@ function stubDeps() {
     reason: "UNAUTHORIZED" as const,
   });
   const rateLimiter: RateLimiter = () => ({ limited: false });
-  return { authResolver, rateLimiter, repo: {} as Repository };
+  return {
+    door: "binding" as const,
+    authResolver,
+    rateLimiter,
+    repo: {} as Repository,
+    convex: {},
+  };
 }

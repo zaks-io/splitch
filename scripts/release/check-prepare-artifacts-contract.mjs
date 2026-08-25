@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFileSync, spawnSync } from "node:child_process";
 // Proves the prepare-artifacts contract hermetically, without building:
 //  1. fail-loud: a checkout without a stamped dist is refused with the
 //     build remediation (prepare never rebuilds);
@@ -9,7 +10,6 @@
 // The scratch tree holds real source files plus a synthetic dist, so this
 // never reads another package's live build output.
 import { createHash } from "node:crypto";
-import { execFileSync, spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
@@ -51,6 +51,12 @@ const FAKE_DIST = {
     "index.js": "export {};\n",
     "index.d.ts": "export {};\n",
   },
+  convex: {
+    "index.js": "export {};\n",
+    "index.d.ts": "export {};\n",
+    "component/convex.config.js": "export {};\n",
+    "component/_generated/component.d.ts": "export {};\n",
+  },
 };
 
 const FIXTURE_DIGEST = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -91,7 +97,9 @@ try {
 
   mkdirSync(join(packageRoot, "dist"), { recursive: true });
   for (const [fileName, contents] of Object.entries(FAKE_DIST[targetKey])) {
-    writeFileSync(join(packageRoot, "dist", fileName), contents);
+    const targetPath = join(packageRoot, "dist", fileName);
+    mkdirSync(dirname(targetPath), { recursive: true });
+    writeFileSync(targetPath, contents);
   }
 
   // Scratch has no turbo.json. Production computeSourceDigest throws; hermetic

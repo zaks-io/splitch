@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@splitch/contracts": "workspace:*",
+    "@splitch/evaluation-core": "workspace:*",
     "@splitch/observability": "workspace:*",
     "@splitch/privacy": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",

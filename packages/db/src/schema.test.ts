@@ -48,6 +48,8 @@ const tenantTables = [
   "client_keys",
   "api_keys",
   "entity_deletions",
+  "convex_installations",
+  "config_webhook_deliveries",
 ];
 
 // Per-Environment tables additionally co-scope on environment_id (ADR-0027).
@@ -58,6 +60,8 @@ const perEnvironmentTables = [
   "runs",
   "client_keys",
   "api_keys",
+  "convex_installations",
+  "config_webhook_deliveries",
 ];
 
 describe("D1 co-scoping columns", () => {

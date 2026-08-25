@@ -7,11 +7,11 @@ import { createApp } from "./app";
 import { ALLOW_POLICY } from "./app-environment-model";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import type { ConfigStoreAccess } from "./config-store-do";
+import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import type { RunSnapshotDelivery } from "./run-snapshot";
 import { makeSessionStore } from "./session-store";
-import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import type { LocalBindings } from "./test-fixtures";
 import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "./test-seeds";
 
@@ -163,7 +163,7 @@ export async function createDefaultApp(h: FlagDefinitionHarness) {
     name: "Checkout",
     key: "checkout",
   });
-  expect(res.status).toBe(200);
+  expect(res.status, await res.clone().text()).toBe(200);
   return (await res.json()) as {
     app: { id: string };
     environments: Array<{ id: string; key: string }>;

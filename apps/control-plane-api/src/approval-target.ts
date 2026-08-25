@@ -35,7 +35,7 @@ export function environmentPolicyContexts(
  * The single authority on "can this Environment serve this Variant". An EMPTY
  * `available_variant_names` means the Configuration was never narrowed, not that
  * nothing is servable, so the Flag's whole catalog is servable there — the same
- * rule the evaluation path applies (evaluation-api baseline-rollout.ts). Every
+ * rule the shared evaluator applies (`@splitch/evaluation-core`). Every
  * Approval gate that asks about servability must ask through here; a second,
  * subtly different reading of the same column is what let a delete-then-recreate
  * chain launder a gated Variant value change.

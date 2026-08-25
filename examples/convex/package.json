@@ -1,0 +1,20 @@
+{
+  "name": "convex",
+  "version": "1.0.0",
+  "description": "Live dogfood harness for @splitch/convex",
+  "private": true,
+  "scripts": {
+    "codegen": "convex codegen",
+    "deploy": "convex deploy",
+    "dev": "convex dev",
+    "typecheck": "tsc -p convex/tsconfig.json --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@splitch/convex": "file:../../packages/convex",
+    "convex": "^1.45.0"
+  }
+}

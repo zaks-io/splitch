@@ -68,6 +68,10 @@ export const lookupErrorDocs = {
     "credential",
     "Confirm the key id. An API Key's secret is shown once at creation and is not recoverable; mint a new key rather than looking the old one up.",
   ),
+  CONVEX_INSTALLATION_NOT_FOUND: notFound(
+    "Convex installation",
+    "Confirm the installation id and that the API Key addresses the App and Environment that own it. Reinstall the component if the installation was revoked.",
+  ),
   SEGMENT_NOT_FOUND: notFound(
     "Segment",
     "Confirm the Segment id and the Environment it was defined in.",

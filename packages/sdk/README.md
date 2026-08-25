@@ -377,10 +377,14 @@ imperative reads. Hooks outside `SplitchProvider` throw
 
 ## Convex
 
-Convex's default runtime is a custom V8 isolate (no Node built-ins). `fetch` is
-available in **actions** and **HTTP actions** only — not in queries or
-mutations
-([Runtimes](https://docs.convex.dev/functions/runtimes),
+Use `@splitch/convex` when a query or mutation needs local Flag evaluation. The
+component syncs server configuration into component-private tables, evaluates
+queries without network access, and commits mutation Exposures to a transactional
+outbox. See the package README for mounting and installation.
+
+Use `@splitch/sdk` directly when an action or HTTP action should make an explicit
+request-time evaluation. Convex exposes `fetch` in those runtimes, but not in
+queries or mutations ([Runtimes](https://docs.convex.dev/functions/runtimes),
 [Actions](https://docs.convex.dev/functions/actions),
 [Query functions](https://docs.convex.dev/functions/query-functions)).
 
@@ -505,11 +509,9 @@ mutations, or when multiple operations must use the same decision. Pass that
 same resolved value to each operation instead of creating extra Evaluations and
 Exposures.
 
-There is no Splitch synced-store component for Convex today. A query or mutation
-cannot read locally synchronized Splitch state; its caller must supply resolved
-values, or the work must move behind an action or HTTP action. The
-`fixtures/convex-sdk-consumer/` test compiles and exercises this
-action-to-mutation boundary against the packed SDK.
+The `@splitch/sdk` action-to-mutation pattern remains useful when a request-time
+decision is intentional. For local query reads and Exposure-bearing mutation
+decisions, use `@splitch/convex` instead.
 
 ### Bootstrap for the browser client
 

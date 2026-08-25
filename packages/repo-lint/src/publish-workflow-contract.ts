@@ -15,11 +15,11 @@ const { validateLivePublishState } = await import(
 );
 
 interface PublishContractOptions {
-  targetKey: "sdk" | "cli";
-  label: "SDK" | "CLI";
-  packageName: "@splitch/sdk" | "@splitch/cli";
-  packageDir: "packages/sdk" | "apps/cli";
-  workflowName: "sdk-publish.yml" | "cli-publish.yml";
+  targetKey: "sdk" | "cli" | "convex";
+  label: "SDK" | "CLI" | "CONVEX";
+  packageName: "@splitch/sdk" | "@splitch/cli" | "@splitch/convex";
+  packageDir: "packages/sdk" | "apps/cli" | "packages/convex";
+  workflowName: "sdk-publish.yml" | "cli-publish.yml" | "convex-publish.yml";
 }
 
 export function registerPublishWorkflowContract(options: PublishContractOptions): void {

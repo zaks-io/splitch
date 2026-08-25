@@ -35,7 +35,7 @@ describe("Control Plane API Wrangler runtime config", () => {
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
   ])("carries the daily demo-reaper cron for %s", (_target, target) => {
-    expect(effectiveCrons(target)).toEqual(["0 8 * * *"]);
+    expect(effectiveCrons(target)).toEqual(["* * * * *", "0 8 * * *"]);
   });
 
   it.each([

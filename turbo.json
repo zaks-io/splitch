@@ -54,6 +54,11 @@
         "VITE_SPLITCH_PLATFORM_TARGET"
       ]
     },
+    "@splitch/convex#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/release/**"]
+    },
     "@splitch/cli#test": {
       "dependsOn": ["^build"],
       "inputs": [
@@ -69,6 +74,7 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/.github/workflows/cli-*.yml",
+        "$TURBO_ROOT$/.github/workflows/convex-*.yml",
         "$TURBO_ROOT$/.github/workflows/sdk-*.yml",
         "$TURBO_ROOT$/apps/cli/LICENSE.md",
         "$TURBO_ROOT$/apps/cli/package.json",
@@ -79,6 +85,12 @@
         "$TURBO_ROOT$/apps/*/package.json",
         "$TURBO_ROOT$/packages/contracts/package.json",
         "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/packages/convex/LICENSE.md",
+        "$TURBO_ROOT$/packages/convex/package.json",
+        "$TURBO_ROOT$/packages/convex/scripts/**",
+        "$TURBO_ROOT$/packages/convex/src/**",
+        "$TURBO_ROOT$/packages/convex/tsconfig*.json",
+        "$TURBO_ROOT$/packages/convex/tsup*.ts",
         "$TURBO_ROOT$/packages/sdk/LICENSE.md",
         "$TURBO_ROOT$/packages/sdk/package.json",
         "$TURBO_ROOT$/packages/sdk/scripts/**",
@@ -224,6 +236,7 @@
         "ACCESS_TOKEN_SECRET",
         "ASSERTION_SIGNING_SECRET",
         "CONTROL_PANEL_DELEGATION_SECRET",
+        "CONVEX_WEBHOOK_KEK",
         "EVALUATION_PRIVACY_SALT",
         "EXPOSURE_TICKET_KEY",
         "SPLITCH_DEPLOY_GATE_TOKEN",
@@ -264,6 +277,7 @@
         "ACCESS_TOKEN_SECRET",
         "ASSERTION_SIGNING_SECRET",
         "CONTROL_PANEL_DELEGATION_SECRET",
+        "CONVEX_WEBHOOK_KEK",
         "EVALUATION_PRIVACY_SALT",
         "EXPOSURE_TICKET_KEY",
         "SPLITCH_DEPLOY_GATE_TOKEN",
@@ -304,6 +318,7 @@
         "ACCESS_TOKEN_SECRET",
         "ASSERTION_SIGNING_SECRET",
         "CONTROL_PANEL_DELEGATION_SECRET",
+        "CONVEX_WEBHOOK_KEK",
         "EVALUATION_PRIVACY_SALT",
         "EXPOSURE_TICKET_KEY",
         "SPLITCH_DEPLOY_GATE_TOKEN",
@@ -344,6 +359,7 @@
         "ACCESS_TOKEN_SECRET",
         "ASSERTION_SIGNING_SECRET",
         "CONTROL_PANEL_DELEGATION_SECRET",
+        "CONVEX_WEBHOOK_KEK",
         "EVALUATION_PRIVACY_SALT",
         "EXPOSURE_TICKET_KEY",
         "SPLITCH_DEPLOY_GATE_TOKEN",

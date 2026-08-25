@@ -3,45 +3,34 @@ import type { SdkTopic } from "./types";
 export const convexTopic: SdkTopic = {
   slug: "convex",
   title: "Convex",
-  summary: "Evaluate in actions and create browser bootstrap in HTTP actions.",
+  summary: "Sync Flags for local query and mutation evaluation with @splitch/convex.",
   blocks: [
     {
       kind: "prose",
-      text: "Convex's default runtime is a custom V8 isolate with no Node built-ins. `fetch` is available in [actions](https://docs.convex.dev/functions/actions) and [HTTP actions](https://docs.convex.dev/functions/http-actions), not in queries or mutations.",
+      text: "Install `@splitch/convex` when queries and mutations need local Flag evaluation. The component syncs configuration into private Convex tables and queues mutation Exposures transactionally.",
     },
     {
       kind: "prose",
-      text: "Call `@splitch/sdk` from an action, then hand the result to queries or mutations as ordinary data.",
+      text: "Mount one named component instance per Splitch Environment, then install it once from a Convex Action.",
     },
     {
       kind: "code",
       lang: "ts",
-      code: `import { createSplitchClient } from "@splitch/sdk";
-import { action } from "./_generated/server";
+      code: `import splitch from "@splitch/convex/convex.config.js";
+import { defineApp } from "convex/server";
 import { v } from "convex/values";
 
-export const evaluateFlag = action({
-  args: {
-    flagKey: v.string(),
-    targetingKey: v.string(),
-    idempotencyKey: v.string(),
-  },
-  handler: async (_ctx, args) => {
-    const splitch = createSplitchClient({
-      clientKey: process.env.SPLITCH_CLIENT_KEY!,
-      endpoint: process.env.SPLITCH_ENDPOINT,
-    });
-    return await splitch.evaluate(args.flagKey, {
-      targetingKey: args.targetingKey,
-      idempotencyKey: args.idempotencyKey,
-      defaultValue: false,
-    });
-  },
-});`,
+const app = defineApp({ env: { SPLITCH_API_KEY: v.string() } });
+app.use(splitch, {
+  httpPrefix: "/integrations/splitch/",
+  env: { SPLITCH_API_KEY: app.env.SPLITCH_API_KEY },
+});
+
+export default app;`,
     },
     {
       kind: "prose",
-      text: "This server-side action uses a Client Key because `evaluate` fires an Exposure. Keep the credential in [Convex environment variables](https://docs.convex.dev/production/environment-variables).",
+      text: "Keep the API Key in [Convex environment variables](https://docs.convex.dev/production/environment-variables). `peekVariant` is query-safe and never exposes. `evaluate` is mutation-only and queues an Exposure only when the caller transaction commits.",
     },
     { kind: "heading", text: "Bootstrap in an HTTP action" },
     {

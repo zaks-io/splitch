@@ -39,6 +39,8 @@ describe("delegated control-plane routes", () => {
     expect(JSON.parse(sent?.headers.get(DELEGATED_IDENTITY_HEADER) ?? "{}")).toEqual({
       operation: "experiment_results_get",
       actorId: "user_1",
+      authKind: "control-plane-token",
+      scopes: [],
       orgId: null,
       appId: "app_1",
       environmentId: "env_1",

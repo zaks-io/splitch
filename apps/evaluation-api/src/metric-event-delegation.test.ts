@@ -39,6 +39,8 @@ describe("Metric Event delegation", () => {
     expect(JSON.parse(request?.headers.get(DELEGATED_IDENTITY_HEADER) ?? "{}")).toEqual({
       operation: "sdk_track",
       actorId: `client_key:${await sha256Hex(CLIENT_KEY)}`,
+      authKind: "client-key",
+      scopes: ["data-plane:evaluate", "data-plane:write"],
       orgId: "org_verify",
       appId: APP_ID,
       environmentId: ENVIRONMENT_ID,

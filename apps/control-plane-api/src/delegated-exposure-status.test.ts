@@ -33,6 +33,8 @@ describe("delegated Environment Exposure status", () => {
     expect(JSON.parse(forwarded[0]?.headers.get(DELEGATED_IDENTITY_HEADER) ?? "{}")).toEqual({
       operation: "environment_exposure_status_get",
       actorId: "user_1",
+      authKind: "control-plane-token",
+      scopes: ["app:app_1:member"],
       orgId: "org_1",
       appId: "app_1",
       environmentId: "env_1",

@@ -135,6 +135,42 @@ const CONTRACT_EXCEPTIONS = [
     mcp: false,
     reason: "CLI setup check using an SDK credential; agents use flags_test_eval",
   },
+  {
+    operationId: "convex_installations_create",
+    cli: false,
+    mcp: false,
+    reason: "Convex Component installation data-plane operation",
+  },
+  {
+    operationId: "convex_installations_get",
+    cli: false,
+    mcp: false,
+    reason: "Convex Component installation data-plane operation",
+  },
+  {
+    operationId: "convex_installations_delete",
+    cli: false,
+    mcp: false,
+    reason: "Convex Component installation data-plane operation",
+  },
+  {
+    operationId: "convex_secret_rotations_create",
+    cli: false,
+    mcp: false,
+    reason: "Convex Component secret-rotation data-plane operation",
+  },
+  {
+    operationId: "convex_snapshot_get",
+    cli: false,
+    mcp: false,
+    reason: "Convex Component configuration-sync data-plane operation",
+  },
+  {
+    operationId: "convex_exposures_create",
+    cli: false,
+    mcp: false,
+    reason: "Convex Component Exposure delivery data-plane operation",
+  },
 ] as const;
 
 const cliOperationIds = [...new Set(CLI_COMMANDS.map((command) => command.operationId))];

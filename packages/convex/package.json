@@ -1,0 +1,68 @@
+{
+  "name": "@splitch/convex",
+  "version": "0.1.0",
+  "description": "First-party Convex Component for synced local Splitch evaluation",
+  "license": "Apache-2.0",
+  "homepage": "https://splitch.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zaks-io/splitch.git",
+    "directory": "packages/convex"
+  },
+  "type": "module",
+  "sideEffects": [
+    "./dist/chunk-*.js"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./_generated/component.js": {
+      "types": "./dist/component/_generated/component.d.ts"
+    },
+    "./_generated/component": {
+      "types": "./dist/component/_generated/component.d.ts"
+    },
+    "./convex.config.js": {
+      "types": "./dist/component/convex.config.d.ts",
+      "import": "./dist/component/convex.config.js"
+    },
+    "./convex.config": {
+      "types": "./dist/component/convex.config.d.ts",
+      "import": "./dist/component/convex.config.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "module": "./dist/index.js",
+  "scripts": {
+    "codegen": "convex codegen --component-dir ./src/component --dry-run",
+    "build": "tsup && node scripts/write-build-stamp.mjs",
+    "clean": "rm -rf dist coverage",
+    "lint": "biome lint src scripts",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pack:check": "node scripts/pack-check.mjs",
+    "pack:dry-run": "node scripts/pack-dry-run.mjs",
+    "test:consumer-smoke": "node scripts/consumer-smoke.mjs",
+    "prepack": "node scripts/prepack-guard.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "convex": "^1.43.0"
+  },
+  "devDependencies": {
+    "@splitch/contracts": "workspace:*",
+    "@splitch/evaluation-core": "workspace:*",
+    "convex": "^1.45.0"
+  }
+}

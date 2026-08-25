@@ -116,6 +116,13 @@ const CANONICAL_OPERATION_IDS = [
   "api_keys_list",
   "api_keys_create",
   "api_keys_revoke",
+  // Convex integration (API Key only, not MCP tools)
+  "convex_installations_create",
+  "convex_installations_get",
+  "convex_installations_delete",
+  "convex_secret_rotations_create",
+  "convex_snapshot_get",
+  "convex_exposures_create",
   // Test-eval + analytics + discovery
   "flags_test_eval",
   "experiment_results_get",
