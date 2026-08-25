@@ -114,8 +114,8 @@ function validateSplitchDatasourceContracts(root) {
   );
   requireInstruction(
     rawEvents,
-    /FORWARD_QUERY >[\s\S]*CAST\(client_timestamp, 'Nullable\(DateTime64\(3\)\)'\) AS client_timestamp[\s\S]*server_received_at AS exposure_at/,
-    "raw_events must migrate retained rows to nullable client timestamps and canonical exposure_at",
+    /^(?![\s\S]*FORWARD_QUERY)/,
+    "raw_events must not retain the one-shot exposure_at migration query",
   );
 
   requireColumns(dedupedExposures, [
