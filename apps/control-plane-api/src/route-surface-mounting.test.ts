@@ -36,5 +36,6 @@ function stubDeps() {
     rateLimiter,
     repo: {} as Repository,
     convex: {},
+    cloudflare: {},
   };
 }

@@ -17,6 +17,8 @@ import type { AnalysisResultsReader } from "./attention-analysis-reader";
 import { unavailableAnalysisResults } from "./attention-analysis-reader";
 import { makeAttentionRollupHandler } from "./attention-rollup";
 import type { ConfigStoreAccess } from "./config-store-do";
+import type { CloudflareHandlerDeps } from "./cloudflare-handlers";
+import { mountCloudflareRoutes } from "./cloudflare-route-mounting";
 import type { ConvexHandlerDeps } from "./convex-handlers";
 import { mountConvexRoutes } from "./convex-route-mounting";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
@@ -72,6 +74,7 @@ export interface AppDeps {
   exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
   holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
   convex?: Omit<ConvexHandlerDeps, "repo">;
+  cloudflare?: Omit<CloudflareHandlerDeps, "repo">;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
@@ -79,7 +82,9 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
   const registrarDeps: RegistrarDeps = {
     authResolvers: {
       "control-plane-token": deps.authResolver,
-      ...(deps.door === "binding" && deps.convex ? { "api-key": deps.authResolver } : {}),
+      ...(deps.door === "binding" && (deps.convex || deps.cloudflare)
+        ? { "api-key": deps.authResolver }
+        : {}),
     },
     rateLimiter: deps.rateLimiter,
     defaultHeaders: deps.defaultHeaders,
@@ -136,6 +141,12 @@ export function createApp(deps: AppDeps): Hono {
   });
   const registrar = controlPlaneRegistrar(deps);
   mountConvexRoutes(app, registrar, deps.repo, deps.door === "binding" ? deps.convex : undefined);
+  mountCloudflareRoutes(
+    app,
+    registrar,
+    deps.repo,
+    deps.door === "binding" ? deps.cloudflare : undefined,
+  );
   const approvalHandlers = diagnosableHandlers(
     makeApprovalHandlers({
       repo: deps.repo,

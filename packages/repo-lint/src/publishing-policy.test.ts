@@ -64,7 +64,7 @@ describe("lintWorkspacePublishability", () => {
     ]);
     expect(violations).toHaveLength(1);
     expect(violations[0]?.message).toContain(
-      "only @splitch/sdk, @splitch/cli, @splitch/convex may be published",
+      "only @splitch/sdk, @splitch/cli, @splitch/convex, @splitch/cloudflare may be published",
     );
   });
 
@@ -244,7 +244,7 @@ describe("repo publishing policy against the live monorepo", () => {
     );
     expect(unexpectedPublishable).toEqual([]);
     expect(ALLOWED_PUBLISHABLE_PACKAGES).toEqual(
-      new Set(["@splitch/sdk", "@splitch/cli", "@splitch/convex"]),
+      new Set(["@splitch/sdk", "@splitch/cli", "@splitch/convex", "@splitch/cloudflare"]),
     );
   });
 });

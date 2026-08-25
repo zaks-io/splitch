@@ -1,0 +1,105 @@
+import type { Repository } from "@splitch/db";
+import { describe, expect, it, vi } from "vitest";
+import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
+import { encryptIntegrationSecret, signIntegrationPayload } from "./integration-secret";
+
+const KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+const NOW = new Date("2026-08-25T12:00:00.000Z");
+const DELIVERY_ID = "00000000-0000-4000-8000-000000000001";
+
+describe("Cloudflare configuration push dispatch", () => {
+  it("builds and signs the exact snapshot body before recording the applied version", async () => {
+    const { repo, finishes } = await fixture();
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = String(init?.body);
+      const headers = new Headers(init?.headers);
+      const timestamp = Math.floor(NOW.getTime() / 1_000).toString();
+      expect(JSON.parse(body)).toEqual({
+        schemaVersion: 1,
+        environmentVersion: 2,
+        appId: "app_1",
+        environmentId: "env_1",
+        flags: [],
+        experiments: [],
+        runs: [],
+      });
+      expect(headers.get("splitch-delivery-id")).toBe(DELIVERY_ID);
+      expect(headers.get("splitch-timestamp")).toBe(timestamp);
+      expect(headers.get("splitch-signature")).toBe(
+        `v1=${await signIntegrationPayload("push-secret", `${timestamp}.${DELIVERY_ID}.${body}`)}`,
+      );
+      expect(init?.redirect).toBe("manual");
+      return new Response(null, {
+        status: 204,
+        headers: { "splitch-environment-version": "2" },
+      });
+    });
+
+    await expect(
+      dispatchCloudflarePushes({ repo, secretKek: KEY, fetcher, now: () => NOW }),
+    ).resolves.toBe(1);
+    expect(finishes).toEqual([
+      expect.objectContaining({ state: "delivered", appliedVersion: 2, now: NOW.toISOString() }),
+    ]);
+  });
+
+  it("retries a success response that does not prove the target version was applied", async () => {
+    const { repo, finishes } = await fixture();
+    await dispatchCloudflarePushes({
+      repo,
+      secretKek: KEY,
+      fetcher: async () => new Response(null, { status: 204 }),
+      now: () => NOW,
+    });
+    expect(finishes[0]).toMatchObject({ state: "pending" });
+  });
+
+  it("retries 5xx and makes deterministic 4xx terminal", async () => {
+    for (const [status, state] of [
+      [503, "pending"],
+      [400, "terminal"],
+    ] as const) {
+      const { repo, finishes } = await fixture();
+      await dispatchCloudflarePushes({
+        repo,
+        secretKek: KEY,
+        fetcher: async () => new Response(null, { status }),
+        now: () => NOW,
+      });
+      expect(finishes[0]).toMatchObject({ state });
+    }
+  });
+});
+
+async function fixture() {
+  const encrypted = await encryptIntegrationSecret("push-secret", KEY, "v1", "test key");
+  const finishes: Array<Record<string, unknown>> = [];
+  const cloudflare = {
+    claimDueDeliveries: async () => [
+      {
+        deliveryId: DELIVERY_ID,
+        installationId: "00000000-0000-4000-8000-000000000002",
+        appId: "app_1",
+        environmentId: "env_1",
+        endpoint: "https://splitch-config.customer.workers.dev/integrations/splitch/configuration",
+        secretCiphertext: encrypted.ciphertext,
+        secretKeyVersion: encrypted.keyVersion,
+        environmentVersion: 2,
+        attemptCount: 0,
+      },
+    ],
+    environmentVersion: async () => 2,
+    finishDelivery: async (
+      _deliveryId: string,
+      _leaseOwner: string,
+      input: Record<string, unknown>,
+    ) => {
+      finishes.push(input);
+    },
+  };
+  const repo = {
+    cloudflare,
+    flags: { flags: { findMany: async () => [] } },
+  } as unknown as Repository;
+  return { repo, finishes };
+}

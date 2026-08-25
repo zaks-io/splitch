@@ -13,12 +13,16 @@ const publishDraftRelease = readFileSync(
 );
 
 interface ReleaseContractOptions {
-  targetKey: "sdk" | "cli" | "convex";
-  label: "SDK" | "CLI" | "CONVEX";
-  packageName: "@splitch/sdk" | "@splitch/cli" | "@splitch/convex";
-  packageDir: "packages/sdk" | "apps/cli" | "packages/convex";
-  tagPrefix: "sdk-v" | "cli-v" | "convex-v";
-  workflowName: "sdk-release.yml" | "cli-release.yml" | "convex-release.yml";
+  targetKey: "sdk" | "cli" | "convex" | "cloudflare";
+  label: "SDK" | "CLI" | "CONVEX" | "CLOUDFLARE";
+  packageName: "@splitch/sdk" | "@splitch/cli" | "@splitch/convex" | "@splitch/cloudflare";
+  packageDir: "packages/sdk" | "apps/cli" | "packages/convex" | "packages/cloudflare";
+  tagPrefix: "sdk-v" | "cli-v" | "convex-v" | "cloudflare-v";
+  workflowName:
+    | "sdk-release.yml"
+    | "cli-release.yml"
+    | "convex-release.yml"
+    | "cloudflare-release.yml";
 }
 
 export function registerReleaseWorkflowContract(options: ReleaseContractOptions): void {

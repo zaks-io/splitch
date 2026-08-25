@@ -28,9 +28,8 @@ const MCP_WRANGLER_CONFIG = "apps/mcp-server/wrangler.jsonc";
 const wranglerConfig = readWranglerConfig(MCP_WRANGLER_CONFIG);
 
 /**
- * Every Worker config in the checkout. Named rather than counted: a tenth Worker
- * has to be added here on purpose, and it fails saying which config is new
- * instead of "expected length 10 to be 9".
+ * Every Worker config in the checkout. Named rather than counted so a new Worker
+ * has to be added here on purpose and the failure names the unexpected config.
  */
 const WRANGLER_CONFIGS = [
   "apps/analysis-api/wrangler.jsonc",
@@ -41,6 +40,7 @@ const WRANGLER_CONFIGS = [
   "apps/event-ingest-api/wrangler.jsonc",
   "apps/marketing/wrangler.jsonc",
   MCP_WRANGLER_CONFIG,
+  "packages/cloudflare/wrangler.jsonc",
   "packages/db/wrangler.jsonc",
 ];
 

@@ -6,6 +6,7 @@ import { analysisRoutes } from "./routes/routes-analysis";
 import { approvalRoutes } from "./routes/routes-approvals";
 import { attentionRoutes } from "./routes/routes-attention";
 import { credentialRoutes } from "./routes/routes-credentials";
+import { cloudflareRoutes } from "./routes/routes-cloudflare";
 import { convexRoutes } from "./routes/routes-convex";
 import { dataPlaneRoutes } from "./routes/routes-data-plane";
 import { eventDefinitionRoutes } from "./routes/routes-event-definitions";
@@ -80,6 +81,7 @@ export const routeRegistry = assertRegistry([
   ...eventDefinitionRoutes,
   ...experimentRoutes,
   ...credentialRoutes,
+  ...cloudflareRoutes,
   ...convexRoutes,
   ...analysisRoutes,
   ...privacyRoutes,

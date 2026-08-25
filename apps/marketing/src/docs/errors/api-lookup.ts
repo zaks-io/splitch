@@ -72,6 +72,10 @@ export const lookupErrorDocs = {
     "Convex installation",
     "Confirm the installation id and that the API Key addresses the App and Environment that own it. Reinstall the component if the installation was revoked.",
   ),
+  CLOUDFLARE_INSTALLATION_NOT_FOUND: notFound(
+    "Cloudflare installation",
+    "Confirm the installation id and that the API Key addresses the App and Environment that own it. Run `splitch cloudflare setup` again if the installation was removed.",
+  ),
   SEGMENT_NOT_FOUND: notFound(
     "Segment",
     "Confirm the Segment id and the Environment it was defined in.",

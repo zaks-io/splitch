@@ -1,12 +1,13 @@
 import { z } from "zod";
-import { EvaluationContextSchema } from "./leaf-schemas-runtime";
 import {
-  ExperimentConfigKVSchema,
-  FlagConfigKVSchema,
-  RunConfigKVSchema,
-} from "./storage-schemas-kv";
+  CONFIG_SNAPSHOT_SCHEMA_VERSION,
+  type ConfigSnapshot,
+  ConfigSnapshotSchema,
+} from "./config-snapshot";
+import { EvaluationContextSchema } from "./leaf-schemas-runtime";
+import { FlagConfigKVSchema, RunConfigKVSchema } from "./storage-schemas-kv";
 
-export const CONVEX_CONFIG_SCHEMA_VERSION = 1;
+export const CONVEX_CONFIG_SCHEMA_VERSION = CONFIG_SNAPSHOT_SCHEMA_VERSION;
 export const CONVEX_SERVER_EXPOSURE_MAX_ITEMS = 25;
 export const CONVEX_SERVER_EXPOSURE_MAX_BODY_BYTES = 32 * 1024;
 
@@ -58,17 +59,7 @@ export const ConvexSecretRotationResponseSchema = z
   .object({ installationId: UuidSchema, rotationId: UuidSchema, status: z.literal("active") })
   .strict();
 
-export const ConvexConfigSnapshotSchema = z
-  .object({
-    schemaVersion: z.literal(CONVEX_CONFIG_SCHEMA_VERSION),
-    environmentVersion: EnvironmentVersionSchema,
-    appId: z.string(),
-    environmentId: z.string(),
-    flags: z.array(FlagConfigKVSchema),
-    experiments: z.array(ExperimentConfigKVSchema),
-    runs: z.array(RunConfigKVSchema),
-  })
-  .strict();
+export const ConvexConfigSnapshotSchema = ConfigSnapshotSchema;
 
 export const ConvexConfigChangedSchema = z
   .object({
@@ -157,7 +148,7 @@ export const ConvexServerExposureResponseSchema = z
   .strict();
 
 export type ConvexConfigChanged = z.infer<typeof ConvexConfigChangedSchema>;
-export type ConvexConfigSnapshot = z.infer<typeof ConvexConfigSnapshotSchema>;
+export type ConvexConfigSnapshot = ConfigSnapshot;
 export type ConvexExposureVerificationConfig = z.infer<
   typeof ConvexExposureVerificationConfigSchema
 >;

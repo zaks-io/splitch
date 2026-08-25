@@ -51,6 +51,8 @@ export interface ControlPlaneApiEnv {
   CONTROL_PANEL_LEGACY_SESSION_MODE?: string;
   CONVEX_WEBHOOK_KEK?: string;
   CONVEX_WEBHOOK_KEY_VERSION?: string;
+  INTEGRATION_SECRET_KEK?: string;
+  INTEGRATION_SECRET_KEY_VERSION?: string;
   /** Verifies signed one-call credentials accepted only by McpEntrypoint. */
   MCP_CONTROL_PLANE_DELEGATION_SECRET?: string;
   SPLITCH_LOCAL_E2E_RUN_ID?: string;

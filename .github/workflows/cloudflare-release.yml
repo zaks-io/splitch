@@ -1,0 +1,262 @@
+name: cloudflare-release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cloudflare-release
+  cancel-in-progress: false
+
+env:
+  CI: "true"
+
+jobs:
+  validate:
+    name: Validate CLOUDFLARE Candidate
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 30
+    outputs:
+      cloudflare_version: ${{ steps.resolve.outputs.cloudflare_version }}
+      cloudflare_tag: ${{ steps.resolve.outputs.cloudflare_tag }}
+      commit_sha: ${{ steps.resolve.outputs.commit_sha }}
+      already_released: ${{ steps.release-state.outputs.already_released }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
+      # Matches the ci Verify job so env-hashed tasks (control-panel#build and
+      # its dependents) replay from the remote cache instead of rebuilding.
+      SPLITCH_PLATFORM_TARGET: pr-ci
+      GITLEAKS_VERSION: 8.30.1
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Turbo remote cache inputs
+        run: node scripts/check-turbo-remote-cache-env.mjs
+
+      - name: Install Tinybird CLI
+        timeout-minutes: 5
+        uses: ./.github/actions/setup-tinybird-cli
+
+      - name: Install gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          checksums="gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+
+          curl -fsSLO "${base}/${asset}"
+          curl -fsSLO "${base}/${checksums}"
+          grep " ${asset}$" "${checksums}" > checksums.txt
+          sha256sum -c checksums.txt
+          tar -xzf "${asset}" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+
+      - name: Resolve CLOUDFLARE release target
+        id: resolve
+        run: |
+          set -euo pipefail
+          target="$(node scripts/release/resolve-version.mjs cloudflare "$GITHUB_WORKSPACE")"
+          cloudflare_version="$(printf '%s' "$target" | jq -r '.version')"
+          cloudflare_tag="$(printf '%s' "$target" | jq -r '.tag')"
+          {
+            echo "cloudflare_version=$cloudflare_version"
+            echo "cloudflare_tag=$cloudflare_tag"
+            echo "commit_sha=$GITHUB_SHA"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## CLOUDFLARE release target"
+            echo
+            echo "- Package: \`@splitch/cloudflare\`"
+            echo "- Version: \`$cloudflare_version\`"
+            echo "- Tag: \`$cloudflare_tag\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      # A version whose tag already has a published (non-draft) release is a
+      # deliberate no-op, not a failure: bump the manifest to cut a release.
+      - name: Check whether this version is already released
+        id: release-state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_TAG: ${{ steps.resolve.outputs.cloudflare_tag }}
+        run: |
+          set -euo pipefail
+          already_released="$(node scripts/release/check-release-published.mjs cloudflare "$GITHUB_WORKSPACE")"
+          echo "already_released=$already_released" >> "$GITHUB_OUTPUT"
+          if [ "$already_released" = "true" ]; then
+            echo "::notice::$CLOUDFLARE_TAG already has a published release; bump packages/cloudflare/package.json to cut a new release. Nothing was validated or drafted."
+            {
+              echo "## CLOUDFLARE release skipped"
+              echo
+              echo "\`$CLOUDFLARE_TAG\` already has a published release. Bump the version in"
+              echo "\`packages/cloudflare/package.json\` to cut a new release. Nothing was validated or drafted."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Validate CLOUDFLARE candidate
+        if: steps.release-state.outputs.already_released != 'true'
+        run: node scripts/release/validate-candidate.mjs cloudflare "$GITHUB_WORKSPACE" "$RUNNER_TEMP/cloudflare-release-artifacts"
+
+      - name: Upload validation artifacts
+        if: steps.release-state.outputs.already_released != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cloudflare-release-validation-${{ steps.resolve.outputs.cloudflare_tag }}
+          path: ${{ runner.temp }}/cloudflare-release-artifacts/
+          retention-days: 30
+
+  prepare:
+    name: Prepare CLOUDFLARE Release Artifacts
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 20
+    needs: validate
+    if: needs.validate.outputs.already_released != 'true'
+    outputs:
+      cloudflare_tag: ${{ needs.validate.outputs.cloudflare_tag }}
+      commit_sha: ${{ needs.validate.outputs.commit_sha }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Turbo remote cache inputs
+        run: node scripts/check-turbo-remote-cache-env.mjs
+
+      - name: Download validation artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cloudflare-release-validation-${{ needs.validate.outputs.cloudflare_tag }}
+          path: ${{ runner.temp }}/cloudflare-release-artifacts
+
+      - name: Build @splitch/cloudflare for release packaging
+        run: pnpm exec turbo run build --filter=@splitch/cloudflare
+
+      - name: Prepare release artifacts
+        id: prepare
+        env:
+          CLOUDFLARE_TAG: ${{ needs.validate.outputs.cloudflare_tag }}
+          COMMIT_SHA: ${{ needs.validate.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          manifest="$(node scripts/release/prepare-artifacts.mjs cloudflare "$GITHUB_WORKSPACE" "$RUNNER_TEMP/cloudflare-release-artifacts" "$COMMIT_SHA")"
+          echo "$manifest" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cloudflare-release-package-${{ needs.validate.outputs.cloudflare_tag }}
+          path: ${{ runner.temp }}/cloudflare-release-artifacts/
+          retention-days: 90
+
+  draft-release:
+    name: Create Or Update Draft Release
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    needs: [validate, prepare]
+    if: needs.validate.outputs.already_released != 'true'
+    env:
+      CLOUDFLARE_TAG: ${{ needs.validate.outputs.cloudflare_tag }}
+      CLOUDFLARE_VERSION: ${{ needs.validate.outputs.cloudflare_version }}
+      COMMIT_SHA: ${{ needs.validate.outputs.commit_sha }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      # The cloudflare-v* tag ruleset restricts creation/update/deletion, and the
+      # standard Actions token cannot be a ruleset bypass actor. This dedicated
+      # App (contents:write only, installed on this repo) is the sole bypass
+      # actor; the step fails loudly if its credentials are absent.
+      - name: Mint CLOUDFLARE release App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.SDK_RELEASE_APP_ID }}
+          private-key: ${{ secrets.SDK_RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.validate.outputs.commit_sha }}
+          persist-credentials: true
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cloudflare-release-package-${{ needs.validate.outputs.cloudflare_tag }}
+          path: ${{ runner.temp }}/cloudflare-release-artifacts
+
+      - name: Create or update draft GitHub Release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_SHA: ${{ needs.validate.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          result="$(node scripts/release/publish-draft-release.mjs cloudflare "$GITHUB_WORKSPACE" "$RUNNER_TEMP/cloudflare-release-artifacts" "$COMMIT_SHA")"
+          release_url="$(printf '%s' "$result" | jq -r '.url')"
+          {
+            echo "## Draft CLOUDFLARE release"
+            echo
+            echo "- Tag: \`$CLOUDFLARE_TAG\`"
+            echo "- Version: \`$CLOUDFLARE_VERSION\`"
+            echo "- Commit: \`$COMMIT_SHA\`"
+            echo "- Release: $release_url"
+            echo
+            echo "This workflow does not publish to npm."
+          } >> "$GITHUB_STEP_SUMMARY"

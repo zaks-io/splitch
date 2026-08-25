@@ -123,6 +123,11 @@ const CANONICAL_OPERATION_IDS = [
   "convex_secret_rotations_create",
   "convex_snapshot_get",
   "convex_exposures_create",
+  // Cloudflare integration (API Key only, not MCP tools)
+  "cloudflare_installations_create",
+  "cloudflare_installations_get",
+  "cloudflare_installations_delete",
+  "cloudflare_exposures_create",
   // Test-eval + analytics + discovery
   "flags_test_eval",
   "experiment_results_get",

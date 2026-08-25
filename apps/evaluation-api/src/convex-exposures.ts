@@ -39,6 +39,8 @@ export interface ConvexExposureConfigurationResolver {
 
 interface ConvexExposureDeps extends EvaluatePathDeps {
   convexConfigurationResolver?: ConvexExposureConfigurationResolver;
+  configurationResolver?: ConvexExposureConfigurationResolver;
+  integrationKind?: "convex" | "cloudflare";
   exposureIngestSink: ExposureIngestSink;
   exposureRedemptionClaims: ExposureRedemptionClaimStore;
   holdoverWrite: HoldoverWriteCoordinator;
@@ -60,11 +62,13 @@ async function handleBatch(
       { status: 503 },
     );
   }
-  if (!deps.convexConfigurationResolver) {
+  const resolver = deps.configurationResolver ?? deps.convexConfigurationResolver;
+  const sourceKind = deps.integrationKind ?? "convex";
+  if (!resolver) {
     return Response.json(
       {
         code: "SERVICE_UNAVAILABLE",
-        message: "Convex installation verification is unavailable",
+        message: `${sourceKind} installation verification is unavailable`,
         details: {},
       },
       { status: 503 },
@@ -73,16 +77,25 @@ async function handleBatch(
   const body = ConvexServerExposureRequestSchema.parse(inputBody(input));
   const results: ConvexServerExposureResponse["results"] = [];
   for (const item of body.exposures) {
-    const verification = await deps.convexConfigurationResolver.resolve(principal, item, requestId);
-    results.push(
-      verification.status === "installation_not_found"
-        ? rejected(item.exposureId, "CONVEX_INSTALLATION_NOT_FOUND", false)
-        : verification.status === "configuration_not_found"
-          ? rejected(item.exposureId, "STALE_CONFIGURATION", false)
-          : await ingestOne(item, verification.config, deps),
-    );
+    results.push(await verifyAndIngest(resolver, sourceKind, principal, item, requestId, deps));
   }
   return Response.json(ConvexServerExposureResponseSchema.parse({ results }), { status: 202 });
+}
+
+async function verifyAndIngest(
+  resolver: ConvexExposureConfigurationResolver,
+  sourceKind: "convex" | "cloudflare",
+  principal: Principal,
+  item: ConvexServerExposureItem,
+  requestId: string,
+  deps: ConvexExposureDeps,
+): Promise<ConvexServerExposureResponse["results"][number]> {
+  const verification = await resolver.resolve(principal, item, requestId);
+  if (verification.status === "installation_not_found")
+    return rejected(item.exposureId, installationNotFoundCode(sourceKind), false);
+  if (verification.status === "configuration_not_found")
+    return rejected(item.exposureId, "STALE_CONFIGURATION", false);
+  return ingestOne(item, verification.config, deps);
 }
 
 async function ingestOne(
@@ -111,7 +124,10 @@ async function ingestOne(
     return rejected(item.exposureId, "STALE_CONFIGURATION", false);
   }
 
-  const exposure = await makeConvexExposureEvent(item, config.appId, config.environmentId, deps);
+  const exposure = await makeConvexExposureEvent(item, config.appId, config.environmentId, {
+    ...deps,
+    sourceKind: deps.integrationKind,
+  });
   const fingerprint = await sha256Hex(JSON.stringify(item));
   const claimInput = {
     appId: config.appId,
@@ -187,7 +203,7 @@ async function ensureConvexHoldover(
   item: ConvexServerExposureItem,
   targetingKeyHash: string,
   config: ConvexExposureVerificationConfig,
-  deps: Pick<ConvexExposureDeps, "holdoverWrite" | "logger">,
+  deps: Pick<ConvexExposureDeps, "holdoverWrite" | "logger" | "integrationKind">,
 ): Promise<ConvexServerExposureResponse["results"][number] | null> {
   try {
     const result = await deps.holdoverWrite.ensure(
@@ -205,7 +221,11 @@ async function ensureConvexHoldover(
       return rejected(item.exposureId, "INTERNAL_SERVER_ERROR", false);
     }
     if (result.status === "suppressed") {
-      return rejected(item.exposureId, "CONVEX_INSTALLATION_NOT_FOUND", false);
+      return rejected(
+        item.exposureId,
+        installationNotFoundCode(deps.integrationKind ?? "convex"),
+        false,
+      );
     }
     return null;
   } catch (cause) {
@@ -225,4 +245,10 @@ function inputBody(input: unknown): unknown {
 
 function rejected(exposureId: string, code: string, retryable: boolean) {
   return { exposureId, status: "rejected" as const, code, message: code, retryable };
+}
+
+function installationNotFoundCode(kind: "convex" | "cloudflare"): string {
+  return kind === "cloudflare"
+    ? "CLOUDFLARE_INSTALLATION_NOT_FOUND"
+    : "CONVEX_INSTALLATION_NOT_FOUND";
 }

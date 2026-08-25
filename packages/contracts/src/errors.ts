@@ -208,6 +208,7 @@ const errorMembers = [
   member("PRIVACY_JOB_NOT_FOUND", EmptyDetails),
   member("APPROVAL_REQUEST_NOT_FOUND", EmptyDetails),
   member("CONVEX_INSTALLATION_NOT_FOUND", EmptyDetails),
+  member("CLOUDFLARE_INSTALLATION_NOT_FOUND", EmptyDetails),
 
   member("UNAUTHORIZED", EmptyDetails),
   member("CREDENTIAL_REVOKED", EmptyDetails),
@@ -282,6 +283,7 @@ const errorMembers = [
         "convex_installation",
         "convex_secret_rotation",
         "convex_evaluation",
+        "cloudflare_installation",
       ]),
       idempotencyKey: z.string().min(1),
     }),

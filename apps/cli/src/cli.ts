@@ -8,6 +8,7 @@ import { consoleIo } from "./execute-io.js";
 import { EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
 import { renderHelp, renderRootHelp } from "./help.js";
 import type { ParsedInvocation } from "./parse-args.js";
+import type { CliCommandRunner } from "./execute-types.js";
 import { longestMatchingCommandPath, parseInvocation } from "./parse-args.js";
 
 const cliObservability = initCliObservability();
@@ -21,6 +22,8 @@ export interface RunCliOptions {
   readonly controlPlaneBaseUrl?: string;
   readonly evaluationBaseUrl?: string;
   readonly authBaseUrl?: string;
+  readonly commandRunner?: CliCommandRunner;
+  readonly sleep?: (milliseconds: number) => Promise<void>;
 }
 
 // The published binary receives no programmatic options; the environment
@@ -111,6 +114,8 @@ async function executeParsedInvocation(
       controlPlaneBaseUrl: options.controlPlaneBaseUrl,
       evaluationBaseUrl: options.evaluationBaseUrl,
       authBaseUrl: options.authBaseUrl,
+      commandRunner: options.commandRunner,
+      sleep: options.sleep,
     });
     return result.exitCode;
   } catch (error) {

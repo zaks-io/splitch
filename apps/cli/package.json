@@ -53,6 +53,7 @@
     "@hono/zod-openapi": "^1.5.1",
     "@sentry/node": "^10.68.0",
     "hono": "^4.12.32",
+    "jsonc-parser": "^3.3.1",
     "open": "^11.0.0",
     "zod": "^4.4.3"
   },

@@ -5,6 +5,7 @@ import {
   workerObservabilityWithWaitUntil,
 } from "@splitch/observability/worker";
 import { runApprovalRequestArchival } from "./approval-archive";
+import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
 import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
 import type { ControlPlaneApiEnv } from "./env";
@@ -18,10 +19,28 @@ export function runControlPlaneScheduled(
   ctx: ExecutionContext,
 ): void {
   ctx.waitUntil(runConvexWebhookDispatch(env, event, ctx));
+  ctx.waitUntil(runCloudflarePushDispatch(env, event, ctx));
   if (event.cron !== "0 8 * * *") return;
   ctx.waitUntil(runDemoReaper(env, event, ctx));
   ctx.waitUntil(runCredentialCacheBackfill(env));
   ctx.waitUntil(runApprovalArchive(env, event, ctx));
+}
+
+async function runCloudflarePushDispatch(
+  env: ControlPlaneApiEnv,
+  event: ScheduledController,
+  ctx: Pick<ExecutionContext, "waitUntil">,
+): Promise<void> {
+  const dispatched = await dispatchCloudflarePushes({
+    repo: createRepository(env.DB),
+    secretKek: env.INTEGRATION_SECRET_KEK,
+    now: () => new Date(event.scheduledTime),
+  });
+  workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
+    "info",
+    "cloudflare-push-dispatch",
+    { service, job: "cloudflare-push-dispatch", cron: event.cron, dispatched },
+  );
 }
 
 async function runConvexWebhookDispatch(
