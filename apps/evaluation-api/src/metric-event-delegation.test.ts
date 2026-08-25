@@ -20,7 +20,9 @@ describe("Metric Event delegation", () => {
         return Response.json({ accepted: true }, { status: 202 });
       },
     };
-    const { app } = await makeSdkRouteHarness({ eventIngest });
+    const { app } = await makeSdkRouteHarness({
+      delegationBindings: { "event-ingest-api": eventIngest },
+    });
 
     const response = await app.request("/api/sdk/events", {
       method: "POST",
@@ -58,7 +60,9 @@ describe("Metric Event delegation", () => {
         return Response.json({ accepted: true }, { status: 202 });
       },
     };
-    const { app } = await makeSdkRouteHarness({ eventIngest });
+    const { app } = await makeSdkRouteHarness({
+      delegationBindings: { "event-ingest-api": eventIngest },
+    });
 
     const response = await app.request("/api/sdk/events", {
       method: "POST",

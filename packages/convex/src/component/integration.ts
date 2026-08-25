@@ -100,7 +100,11 @@ export const install = action({
     });
     const payload = await responseJson(response, "install Convex integration");
     const parsed = ConvexInstallationSchema.parse(payload);
-    await ctx.runMutation(internal.integration.activate, parsed);
+    await ctx.runMutation(internal.integration.activate, {
+      appId: parsed.appId,
+      environmentId: parsed.environmentId,
+      environmentVersion: parsed.environmentVersion,
+    });
     await ctx.runAction(internal.integration.sync, {});
     return parsed;
   },

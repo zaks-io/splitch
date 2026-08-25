@@ -11,6 +11,8 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
+  mutation,
+  query,
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
@@ -30,7 +32,7 @@ const evaluateArgs = {
   defaultValue: v.any(),
 };
 
-export const peek = internalQuery({
+export const peek = query({
   args: evaluateArgs,
   handler: async (ctx, args): Promise<ResolutionDetails> => {
     const runtime = await runtimeState(ctx, args.context);
@@ -50,7 +52,7 @@ export const peek = internalQuery({
   },
 });
 
-export const evaluate = internalMutation({
+export const evaluate = mutation({
   args: { ...evaluateArgs, idempotencyKey: v.string() },
   handler: async (ctx, args): Promise<ResolutionDetails> => {
     if (!args.idempotencyKey)
@@ -164,7 +166,7 @@ export const finishDelivery = internalMutation({
   handler: finishDeliveryHandler,
 });
 
-export const deleteEntity = internalMutation({
+export const deleteEntity = mutation({
   args: { targetingKey: v.string(), idType: v.string() },
   handler: async (ctx, args): Promise<void> => {
     const integration = await ctx.db

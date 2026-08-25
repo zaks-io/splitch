@@ -49,9 +49,17 @@ async function deliverOne(
         "splitch-timestamp": timestamp,
       },
       body: delivery.bodyJson,
-      redirect: "error",
+      redirect: "manual",
     });
-  } catch {
+  } catch (cause) {
+    console.error("convex_webhook_delivery_transport_failed", {
+      deliveryId: delivery.deliveryId,
+      callbackUrl: delivery.callbackUrl,
+      cause:
+        cause instanceof Error
+          ? { name: cause.name, message: cause.message, stack: cause.stack }
+          : String(cause),
+    });
     await finishFailure(deps, delivery, leaseOwner, now, true, {
       kind: "transport",
       code: "CONNECT_TIMEOUT",

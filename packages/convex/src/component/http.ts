@@ -37,7 +37,12 @@ http.route({
     if (!changed.success) return new Response("invalid body", { status: 400 });
     if (request.headers.get("splitch-delivery-id") !== changed.data.deliveryId)
       return new Response("delivery ID mismatch", { status: 400 });
-    await ctx.runMutation(internal.integration.announce, changed.data);
+    await ctx.runMutation(internal.integration.announce, {
+      deliveryId: changed.data.deliveryId,
+      appId: changed.data.appId,
+      environmentId: changed.data.environmentId,
+      environmentVersion: changed.data.environmentVersion,
+    });
     return new Response(null, { status: 202 });
   }),
 });

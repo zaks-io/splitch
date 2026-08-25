@@ -18,7 +18,7 @@ describe("Convex config webhook dispatch", () => {
       expect(headers.get("splitch-signature")).toBe(
         `v1=${await signConvexWebhook("webhook-secret", timestamp, bodyJson)}`,
       );
-      expect(init?.redirect).toBe("error");
+      expect(init?.redirect).toBe("manual");
       return new Response(null, { status: 202 });
     });
 
