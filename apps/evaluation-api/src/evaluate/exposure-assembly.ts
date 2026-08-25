@@ -64,7 +64,6 @@ export async function assembleEvaluateExposures(
       clientTimestamp: timestamp,
       exposureAt: timestamp,
       serverReceivedAt: timestamp,
-      ingestTs: timestamp,
     },
   ];
 }
@@ -114,7 +113,6 @@ export async function assembleExposureFromTicket(input: {
     clientTimestamp: input.clientTimestamp,
     exposureAt: serverReceivedAt,
     serverReceivedAt,
-    ingestTs: serverReceivedAt,
   };
 }
 

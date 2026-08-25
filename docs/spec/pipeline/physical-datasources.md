@@ -11,8 +11,8 @@ aggregate-state retry dedup for Metric and Web Events.
 ```
 datasource: raw_events
 ENGINE: MergeTree
-ENGINE_PARTITION_KEY: toYYYYMM(ingest_ts)
-ENGINE_SORTING_KEY: app_id, environment_id, ingest_ts, experiment_id, run_id, exposure_at, targeting_key_hash
+ENGINE_PARTITION_KEY: toYYYYMM(server_received_at)
+ENGINE_SORTING_KEY: app_id, environment_id, experiment_id, run_id, server_received_at, targeting_key_hash
 
 SCHEMA:
   type                 String                  -- 'exposure' | 'activation'
@@ -38,11 +38,10 @@ SCHEMA:
 # DEDUP_KEY=dedup_key                         -- Splitch contract marker; ignored by Tinybird
 ```
 
-Partitioning by insertion month and sorting by `(app_id, environment_id, ingest_ts, ...)` make the
-tenant-scoped real-time tail prune to post-snapshot parts and primary-key ranges. This is the normal
-raw serving access path. `exposure_at` is the Exposure analysis clock; `server_received_at` remains the TTL column;
-replay and repair are bounded offline paths, not a reason to make every live tail scan retained
-event-time partitions.
+Partitioning by receipt month and sorting by `(app_id, environment_id, experiment_id, run_id,
+server_received_at, ...)` preserve the deployed raw layout through the additive compatibility
+release. `ingest_ts` remains the snapshot/tail insertion watermark, `exposure_at` is the Exposure
+analysis clock after consumer cutover, and `server_received_at` remains the TTL column.
 
 The `type` discriminator on a single datasource (not two tables) keeps the activation JOIN query simple and avoids coordination overhead. Both row types share `app_id`, `environment_id`, `experiment_id`, `run_id`, `id_type`, `targeting_key_hash` — the fields the dedup and gate queries join on.
 

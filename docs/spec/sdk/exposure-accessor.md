@@ -173,7 +173,7 @@ This table is a cross-reference only; do not duplicate the authoritative definit
 | `run_id`             | string                     | live Run at evaluation time (stamped at server-received time)       |
 | `targeting_key_hash` | string                     | derived server-side from request Targeting Key                      |
 | `id_type`            | string                     | validated request `idType`; must match the Run config               |
-| `variant`            | string                     | Variant name (not value) — immutable experimental arm label         |
+| `variant`            | string                     | Variant name (not value), an immutable experimental Variant label   |
 | `source_id`          | string                     | edge POP identifier                                                 |
 | `exposure_at`        | timestamp                  | canonical encounter time for MIN(ts) first-touch                    |
 | `server_received_at` | timestamp                  | Splitch durable-acceptance time; delivery diagnostics and retention |

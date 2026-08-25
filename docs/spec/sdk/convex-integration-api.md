@@ -64,7 +64,7 @@ rotation. The old secret is never sent back or recoverable from either API.
 
 `GET /api/sdk/convex/installations/:installationId` returns status, callback URL, current
 Environment version, last delivered version/time, pending count, oldest pending age, terminal count,
-and the complete latest delivery error. It returns no secret or config payload.
+and the complete latest bounded `DeliveryErrorEnvelope`. It returns no secret or config payload.
 
 `DELETE /api/sdk/convex/installations/:installationId` first marks the installation revoked and
 suppresses every undelivered row, then returns `204`. It is idempotent. The component deletes local
@@ -97,7 +97,7 @@ transport failure enters durable retry; only `2xx` completes the delivery.
 - Contract and local Worker smoke tests cover every route, credential tier, scope injection, retry,
   conflict, callback validation, redaction, ETag, revocation, and missing installation.
 - Webhook fixtures prove exact-byte signing, constant-time verification, timestamp bounds, replay
-  rejection, no redirects, and full untruncated error retention.
+  rejection, no redirects, and complete retention of the bounded allowlisted error envelope.
 - A live preview component installs, pulls, rotates, reports status, receives a change, and uninstalls.
 
 ## Sources

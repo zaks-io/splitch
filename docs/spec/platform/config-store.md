@@ -83,10 +83,12 @@ D1 is the authoritative source. KV is a read-replica cache.
   Control-plane reads rebuild the KV projection from D1.
 - **D1 succeeds, broadcast fails:** Evaluation fails loud while live updates are unavailable.
   Reconnect invalidates the Environment cache and obtains the current committed version before
-  serving. Panel clients retain their full invalidate-refetch reconnect behavior (ADR-0019).
+  serving. Panel clients retain their full reconnect behavior, which invalidates and refetches
+  (ADR-0019).
 - **D1 succeeds, Convex delivery fails:** config remains committed. The durable delivery row retries
-  independently; installation health shows the complete latest error. The component keeps its last
-  validated snapshot until a newer version is announced, then fails loud until pull catches up.
+  independently; installation health shows the complete latest bounded `DeliveryErrorEnvelope`.
+  The component keeps its last validated snapshot until a newer version is announced, then fails
+  loud until pull catches up.
 
 Flag Configuration reads **always** obtain an authoritative D1 snapshot through the Config Store DO
 on cold start, cache miss, or reconnect. A version below the latest nudge fails with `STALE`; it is

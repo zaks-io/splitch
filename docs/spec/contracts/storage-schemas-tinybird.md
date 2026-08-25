@@ -12,10 +12,11 @@ leaf, not the envelope".)
 
 ### `raw_events` (raw log)
 
-Primary engine partition key: `toYYYYMM(ingest_ts)`. Sorting key:
-`(app_id, environment_id, ingest_ts, experiment_id, run_id, exposure_at,
-targeting_key_hash)`. The tenant and insertion-time prefix prunes the real-time tail; event-time
-columns remain available for first-touch, replay, and retention.
+Primary engine partition key: `toYYYYMM(server_received_at)`. Sorting key:
+`(app_id, environment_id, experiment_id, run_id, server_received_at,
+targeting_key_hash)`. This preserves the deployed receipt-time layout during the additive
+`exposure_at` rollout. `ingest_ts` remains the insertion watermark for snapshot/tail boundaries,
+while `exposure_at` is available for the later consumer cutover.
 
 | Column               | Type                    | Notes                                                                                                                                                                                                                     |
 | -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -91,26 +91,21 @@ The two can momentarily disagree (the eager DO write guesses first-touch; the ba
 This is accepted and the failure contract is identical to the Assignment Store: DO governs
 experience, log governs analysis.
 
-## Accepted integrity gap: DO winner vs. MIN(exposure_at) winner may differ
+## POP race behavior: experience winner, analysis quarantine
 
 In a POP race, two Exposures for the same Entity in the same Run arrive at their respective POPs
 nearly simultaneously. The first POP to call `DO.putIfAbsent` wins and becomes the experience
-winner — the Entity will replay that Variant. But if the second POP's Exposure has an earlier
-`exposure_at`, the batch dedup (`MIN(exposure_at)`) counts the second POP's Exposure as first-touch
-for analysis — counting a Variant the Entity did not actually see.
+winner, and the Entity replays that Variant. Analysis preserves every raw Exposure and applies the
+canonical conflict rule:
 
-This is an accepted, bounded gap:
+- If both rows contain the same Variant, the Entity remains in that Variant and
+  `MIN(exposure_at)` supplies its first-touch timestamp.
+- If the rows contain different Variants, the Entity becomes `__multiple__`, is excluded from SRM
+  and all analysis arms, and increments `variant_conflict_rate`.
 
-- It can only occur during a narrow race window at first-touch.
-- Both Variants assigned must be from the same Run's valid allocation.
-- The Entity is still deduplicated to a single row (not double-counted).
-- SRM and analysis denominators are correct (one Entity, one Run, one counted Exposure).
-- The discrepancy is cosmetic (experience showed Variant A, analysis attributes Variant A or B
-  depending on which `exposure_at` was earlier) and self-consistent within each plane.
-
-This is explicitly **not** a dataset corruption: the Run's dataset is sound; only a single
-Entity's experience-vs-counted-variant may momentarily disagree. Accepted over the alternative
-(making DO writes synchronously confirm the batch dedup `MIN(ts)` winner — impractical at edge).
+The DO winner remains authoritative for experience. The analysis plane does not guess which
+Variant the Entity saw and does not hide the race by awarding the earlier timestamp's Variant.
+This is a loud integrity signal, not an accepted attribution discrepancy.
 
 ## Activation events
 

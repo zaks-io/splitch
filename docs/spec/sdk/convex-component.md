@@ -7,14 +7,14 @@ Convex-specific copy.
 
 ## Package and installation
 
-The published package exposes:
+The released package exposes:
 
 - `@splitch/convex/convex.config.js`, installed with `app.use(splitch, { httpPrefix })`
 - `@splitch/convex`, an ergonomic `Splitch` wrapper over the generated Component API
 - `@splitch/convex/test`, which registers the component with `convex-test`
 
 It versions independently from `@splitch/sdk`, starts at `0.1.0`, and uses `convex-v*` GitHub
-Releases. Token-free npm trusted publishing runs from dedicated `convex-release` and
+Releases. Token-free trusted package release runs from dedicated `convex-release` and
 `convex-publish` workflows. Candidate validation installs the packed tarball into a clean Convex
 fixture, runs component codegen, typecheck, tests, and rejects workspace-only dependency leakage.
 
@@ -124,9 +124,12 @@ state with a partial or older snapshot.
 ## Deletion and uninstall
 
 The package exposes bounded mutations for deleting one Entity's local holdovers and pending outbox
-rows and for uninstalling an instance. Uninstall revokes the Splitch integration, stops new delivery,
-and batch-purges config, tokens, claims, holdovers, and outbox rows. App deletion sends a terminal
-signed nudge before credential revocation so the component can perform the same purge.
+rows and for uninstalling an instance. The Entity mutation derives the component-local
+`targetingKeyHash` from `idType` and the supplied Targeting Key, suppresses only matching rows before
+purge, and makes every already scheduled delivery recheck suppression before sending. Uninstall
+revokes the Splitch integration, stops new delivery, and batch-purges config, tokens, claims,
+holdovers, and outbox rows. App deletion sends a terminal signed nudge before credential revocation
+so the component can perform the same purge.
 
 ## Non-goals
 

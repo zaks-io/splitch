@@ -98,9 +98,9 @@ because a later physical retry or Exposure for an Entity already in the snapshot
 The boundary uses `ingest_ts`, not `exposure_at`, so events that arrive after the snapshot ran
 but carry an earlier `exposure_at` still appear in the tail. `MIN(exposure_at)` then
 chooses the first-touch row. This is the correct behavior per ADR-0010.
-`raw_events` partitions by insertion month and sorts by App, Environment, then `ingest_ts`, so these
-predicates prune the tail before first-touch aggregation instead of scanning retained event-time
-history.
+`raw_events` partitions by receipt month and keeps an App/Environment sorting prefix. The
+`ingest_ts` predicate is still the correctness boundary for late Queue delivery and replay; the
+consumer-cutover performance gate must prove this deployed layout remains within its scan budget.
 An empty snapshot has no row-carried watermark, so the tail explicitly falls back to the Unix epoch
 and scans all retained raw rows. This preserves correctness until the first nonempty snapshot; it
 cannot turn a null aggregate into an empty result.

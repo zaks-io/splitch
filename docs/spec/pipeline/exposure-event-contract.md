@@ -61,6 +61,7 @@ The dedup key is for wire-level ingest deduplication only. The first-touch dedup
 | `id_type`            | `string`        | yes      | Must match the Run's declared `id_type`                                                                |
 | `targeting_key_hash` | `string`        | yes      | HMAC-derived Entity identifier                                                                         |
 | `event_id`           | `string`        | yes      | Retry-stable physical event id generated once when the Worker creates this raw row                     |
+| `exposure_at`        | `DateTime64(3)` | yes      | Canonical encounter time; equals `server_received_at` for server-received Activations                  |
 | `server_received_at` | `DateTime64(3)` | yes      | Server-received-at timestamp; equals `activation_ts` for server-received activations                   |
 | `ingest_ts`          | `DateTime64(3)` | yes      | Tinybird-assigned physical insertion timestamp; used only for snapshot/tail watermarks                 |
 | `activation_ts`      | `DateTime64(3)` | yes      | When the activation event occurred (server-received-at)                                                |

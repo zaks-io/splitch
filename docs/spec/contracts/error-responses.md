@@ -575,9 +575,15 @@ under an API Key `verify` returns the full reason (ADR-0037). The mapping from H
 
 - Batch failures: `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `INSUFFICIENT_SCOPES` / `RATE_LIMITED` /
   `VALIDATION_ERROR`. These reject the whole request before claims.
-- Item failures: `SERVER_EXPOSURE_INVALID`, `ENTITY_TYPE_MISMATCH`, `FLAG_NOT_FOUND`,
-  `EXPERIMENT_NOT_FOUND`, `RUN_NOT_FOUND`, `EVENT_ID_CONFLICT`, or `SERVICE_UNAVAILABLE`.
-  Invalid siblings do not block valid items, and every rejected item seals nothing.
+- Item failures: `SERVER_EXPOSURE_INVALID`, `CONVEX_INSTALLATION_NOT_FOUND`,
+  `ENTITY_TYPE_MISMATCH`, `FLAG_NOT_FOUND`, `EXPERIMENT_NOT_FOUND`, `RUN_NOT_FOUND`,
+  `EVENT_ID_CONFLICT`, or `SERVICE_UNAVAILABLE`. Invalid siblings do not block valid items, and
+  every rejected item seals nothing.
+- `SERVICE_UNAVAILABLE` is retryable even inside a successful batch response. Its item result is
+  `{ exposureId, status: "rejected", retryable: true, error }`; the component must reschedule the
+  unchanged item and must not terminalize or delete its outbox payload. Every other item failure is
+  deterministic and returns `retryable: false`. In particular, no active installation returns
+  terminal `CONVEX_INSTALLATION_NOT_FOUND` rather than a generic availability failure.
 
 **POST /api/sdk/verify** (data-plane setup confirmation, Client Key or API Key — ADR-0037)
 

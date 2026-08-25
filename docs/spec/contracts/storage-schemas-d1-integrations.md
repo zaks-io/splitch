@@ -17,7 +17,7 @@ create its webhook deliveries in the same D1 transaction. They contain no raw AP
 | `status`                     | TEXT    | yes      | `active` or `revoked`                                      |
 | `last_delivered_version`     | INTEGER | no       | Most recent acknowledged Environment version               |
 | `last_delivered_at`          | TEXT    | no       | ISO 8601 acknowledgement time                              |
-| `latest_delivery_error_json` | TEXT    | no       | Complete structured error, with no secret/config payload   |
+| `latest_delivery_error_json` | TEXT    | no       | Latest bounded `DeliveryErrorEnvelope`                     |
 | `created_at`                 | TEXT    | yes      | ISO 8601                                                   |
 | `updated_at`                 | TEXT    | yes      | ISO 8601                                                   |
 | `revoked_at`                 | TEXT    | no       | ISO 8601                                                   |
@@ -31,27 +31,44 @@ rotation rewraps ciphertext without changing the underlying secret. No read path
 
 ## `config_webhook_deliveries`
 
-| Column                | Type    | Required | Meaning                                                            |
-| --------------------- | ------- | -------- | ------------------------------------------------------------------ |
-| `delivery_id`         | TEXT PK | yes      | Retry-stable UUID                                                  |
-| `installation_id`     | TEXT FK | yes      | Destination installation                                           |
-| `app_id`              | TEXT FK | yes      | Denormalized deletion and lease scope                              |
-| `environment_id`      | TEXT FK | yes      | Denormalized config scope                                          |
-| `environment_version` | INTEGER | yes      | Monotonic committed version                                        |
-| `body_json`           | TEXT    | yes      | Exact strict `ConfigChanged` JSON body, with no config values      |
-| `state`               | TEXT    | yes      | `pending`, `leased`, `delivered`, `terminal`, or `suppressed`      |
-| `attempt_count`       | INTEGER | yes      | Starts at zero                                                     |
-| `next_attempt_at`     | TEXT    | yes      | ISO 8601 retry eligibility                                         |
-| `lease_owner`         | TEXT    | no       | Current dispatcher owner                                           |
-| `lease_expires_at`    | TEXT    | no       | Expired leases are reclaimable                                     |
-| `last_error_json`     | TEXT    | no       | Complete structured transport/HTTP error, never response-truncated |
-| `created_at`          | TEXT    | yes      | ISO 8601 config commit time                                        |
-| `delivered_at`        | TEXT    | no       | ISO 8601 successful acknowledgement time                           |
+| Column                | Type    | Required | Meaning                                                       |
+| --------------------- | ------- | -------- | ------------------------------------------------------------- |
+| `delivery_id`         | TEXT PK | yes      | Retry-stable UUID                                             |
+| `installation_id`     | TEXT FK | yes      | Destination installation                                      |
+| `app_id`              | TEXT FK | yes      | Denormalized deletion and lease scope                         |
+| `environment_id`      | TEXT FK | yes      | Denormalized config scope                                     |
+| `environment_version` | INTEGER | yes      | Monotonic committed version                                   |
+| `body_json`           | TEXT    | yes      | Exact strict `ConfigChanged` JSON body, with no config values |
+| `state`               | TEXT    | yes      | `pending`, `leased`, `delivered`, `terminal`, or `suppressed` |
+| `attempt_count`       | INTEGER | yes      | Starts at zero                                                |
+| `next_attempt_at`     | TEXT    | yes      | ISO 8601 retry eligibility                                    |
+| `lease_owner`         | TEXT    | no       | Current dispatcher owner                                      |
+| `lease_expires_at`    | TEXT    | no       | Expired leases are reclaimable                                |
+| `last_error_json`     | TEXT    | no       | Latest bounded `DeliveryErrorEnvelope`                        |
+| `created_at`          | TEXT    | yes      | ISO 8601 config commit time                                   |
+| `delivered_at`        | TEXT    | no       | ISO 8601 successful acknowledgement time                      |
 
 Unique `(installation_id, environment_version)` prevents one committed version from creating two
 logical nudges for one installation. The serialized body is immutable after insert. The signature
 is computed at each attempt with the installation's current secret, so rotation does not strand
 pending rows.
+
+`DeliveryErrorEnvelope` is the complete persisted diagnostic shape:
+
+```text
+{
+  kind: "transport" | "http"
+  code: "DNS_ERROR" | "CONNECT_TIMEOUT" | "TLS_ERROR" | "HTTP_STATUS"
+  httpStatus?: integer
+  retryAfterMs?: integer
+  occurredAt: ISO 8601
+}
+```
+
+It is an allowlisted, at-most-1-KiB UTF-8 JSON value. The dispatcher never captures a response body,
+request body, callback query string, arbitrary header, stack, secret, configuration value, or Entity
+data. Enum and numeric validation makes the envelope bounded before serialization, so fields are
+stored completely rather than truncated.
 
 ## Commit and delivery rules
 
@@ -67,8 +84,8 @@ pending rows.
 - Delivery never holds the config transaction open and never rolls back committed config.
 - App deletion suppresses pending or leased rows before integration revocation. Retried workers
   re-check suppression after acquiring a lease and before sending.
-- Delivered rows retain for 30 days. Terminal and suppressed rows retain complete non-secret
-  diagnostics for 30 days. A pending or leased row is never expired.
+- Delivered rows retain for 30 days. Terminal and suppressed rows retain the complete bounded
+  non-secret diagnostic envelope for 30 days. A pending or leased row is never expired.
 
 ## Done
 

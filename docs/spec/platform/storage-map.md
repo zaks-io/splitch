@@ -41,10 +41,11 @@ must not move data between stores without a new ADR.
 
 ## No internal config-copy seam
 
-Editing and serving share KV/D1 directly. A config write goes:
-`Worker validates → per-App DO commits KV/D1 → DO broadcasts delta-nudge to subscribers`.
-There is no cross-system copy step. Rejecting Convex as a reactive layer specifically deleted this
-class of seam (ADR-0017).
+Editing and serving use one ordered D1-to-KV path. A config write goes:
+`Worker validates → per-App DO commits authoritative D1 state → DO projects the committed version to KV → DO broadcasts delta-nudge to subscribers`.
+D1 remains committed if the KV projection fails, and reads rebuild that projection from D1. There is
+no separate Convex configuration copy inside Splitch. Rejecting Convex as Splitch's reactive serving
+layer specifically deleted that second configuration source (ADR-0017).
 
 The customer-installed Convex Component is an external data-plane adapter, not Splitch's serving
 store. It pulls a validated snapshot after a signed nudge. D1 and KV remain authoritative, and the

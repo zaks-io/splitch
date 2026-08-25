@@ -115,7 +115,12 @@ Rules:
 - A customer-installed Convex Component may retain the raw Targeting Key and Evaluation Context only
   in its isolated pending Exposure outbox. Acceptance deletes the payload immediately; terminal
   delivery deletes raw identity/context within 24 hours and retains non-identifying failure metadata
-  for 30 days. Local holdovers use a component-local HMAC and never store the raw Targeting Key.
+  for 30 days. Local holdovers and pending outbox rows use
+  `HMAC(componentIdentityKey, idType + ":" + targetingKey)` as their component-local deletion
+  selector and never store the raw Targeting Key outside the pending payload. The component's Entity
+  deletion mutation derives that selector from the request, suppresses matching delivery before
+  purge, and rechecks state immediately before every send. This hash never leaves the component and
+  is distinct from the App-scoped server `targeting_key_hash`.
 - KV keys, DO names, Tinybird rows, Axiom fields, Sentry payloads, and audit details never contain the
   raw Targeting Key or raw Evaluation Context attributes.
 - Data subject requests take `{ app_id, id_type, targetingKey }`; the Control Plane API Worker computes

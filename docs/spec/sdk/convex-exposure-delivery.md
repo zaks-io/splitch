@@ -34,22 +34,32 @@ ConvexExposureOutbox {
   runId
   runConfigHash
   idType
+  targetingKeyHash
   targetingKey
   attributes
   variantName
   exposedAtCommitTs
-  state: pending | delivering | accepted | terminal
+  state: pending | delivering | accepted | terminal | suppressed
   attemptCount
   nextAttemptAt
   lastError
 }
 ```
 
+`targetingKeyHash` is the component-local
+`HMAC(componentIdentityKey, idType + ":" + targetingKey)` used by the local holdover store. The named
+component instance supplies App scope, so an index on `(idType, targetingKeyHash, state)` is the
+targeted deletion selector. It is never sent as the server's `targeting_key_hash` and never crosses
+the trust boundary. One-Entity deletion derives the same selector, marks only matching pending or
+delivering rows `suppressed`, and then purges them in bounded batches. A scheduled Action must
+re-read state before sending, so an already claimed row cannot escape suppression.
+
 The raw Targeting Key and attributes exist only in the customer's isolated component outbox while
 delivery can still succeed. They never enter logs. Acceptance deletes the payload row immediately.
 A permanent rejection or 24 hours without acceptance moves the row to `terminal`, emits a loud
-integration-health failure, deletes raw identity/context, and retains only the non-identifying
-fingerprint, code, timestamps, and complete error detail for 30 days.
+integration-health failure, deletes raw identity/context and the local hash, and retains only the
+non-identifying evaluation fingerprint, typed error code, timestamps, and bounded allowlisted error
+envelope for 30 days.
 
 ## Server Exposure endpoint
 
@@ -72,6 +82,11 @@ Whole-batch authentication, shape, body-size, item-cap, and abuse failures rejec
 any claim. Item claims use `exposureId`: an exact retry is `deduplicated`, while reuse with a
 different canonical fingerprint is `EVENT_ID_CONFLICT`.
 
+A rejected item includes `retryable`. `SERVICE_UNAVAILABLE` sets it to `true`, keeps the unchanged
+outbox payload pending, and follows the retry schedule below even when the outer response is `2xx`.
+All deterministic item failures set it to `false` and become terminal. Missing or revoked
+installation state is terminal `CONVEX_INSTALLATION_NOT_FOUND`; it is not availability failure.
+
 ## Verification before acceptance
 
 For each new item the Evaluation Worker:
@@ -79,7 +94,7 @@ For each new item the Evaluation Worker:
 1. Verifies the active installation and loads the immutable Run, then verifies App, Environment,
    Experiment, and Flag ownership.
 2. Requires the submitted `runConfigHash` to equal the frozen Run `configHash`.
-3. Requires `exposure_at` to fall inside the Run's live interval and the endpoint's bounded clock
+3. Requires `exposureAt` to fall inside the Run's live interval and the endpoint's bounded clock
    and delivery window.
 4. Validates `idType` and the complete Evaluation Context against the frozen Run.
 5. Recomputes the Variant with the shared evaluator, using the Run's frozen Control Variant when no
@@ -90,7 +105,7 @@ For each new item the Evaluation Worker:
 9. Starts the normal Assignment Store holdover write after durable acceptance.
 
 The endpoint does not trust the component to mint Exposure Tickets and does not expose the ticket
-HMAC key. A bounded `exposure_at` window accepts delayed outbox delivery but rejects a future time or
+HMAC key. A bounded `exposureAt` window accepts delayed outbox delivery but rejects a future time or
 an encounter older than 24 hours.
 
 ## Canonical time and pipeline behavior
@@ -114,12 +129,15 @@ The scheduled Action claims one pending row, posts with the API Key, and acknowl
 follow-up mutation. Transient transport, `429`, and `5xx` failures reschedule with the same
 `exposureId` after `1s`, `5s`, `30s`, `2m`, `10m`, then `30m` with up to 20% jitter on every capped
 retry. Convex does not automatically retry failed Actions, so the outbox state is the authority.
-Deterministic rejection becomes terminal immediately; transient retries stop at the 24-hour privacy
-deadline and become terminal after raw identity/context is removed.
+Deterministic rejection becomes terminal immediately. Transport errors, `429`, `5xx`, and a
+successful batch item carrying retryable `SERVICE_UNAVAILABLE` reschedule unchanged. Transient
+retries stop at the 24-hour privacy deadline and become terminal after raw identity/context is
+removed.
 
 Integration health exposes oldest pending age, pending count, terminal count, last accepted time,
-and the complete latest error without Targeting Key or attribute values. App/Entity deletion and
-component uninstall suppress delivery first, then purge matching pending rows and local holdovers.
+and the complete latest bounded allowlisted error envelope without Targeting Key or attribute
+values. App/Entity deletion and component uninstall suppress delivery first, then purge matching
+pending rows and local holdovers.
 
 ## Non-goals
 

@@ -53,8 +53,9 @@ credentials, tokens, signed URLs, or private logs.
    public.
 2. Enable immutable releases. A publish workflow requires a published, non-prerelease, immutable
    GitHub Release tied to one matching tag, target commit, checked-out commit, and `GITHUB_SHA`.
-3. Maintain separate tag rulesets for `sdk-v*` and `cli-v*`. Each ruleset restricts tag creation,
-   update, and deletion. The dedicated release GitHub App is the sole bypass actor for both. It
+3. Maintain separate tag rulesets for `sdk-v*`, `cli-v*`, and `convex-v*`. Each ruleset restricts
+   tag creation, update, and deletion. The dedicated release GitHub App is the sole bypass actor for
+   all three. It
    uses repository variable `SDK_RELEASE_APP_ID` and secret `SDK_RELEASE_APP_PRIVATE_KEY`, has only
    repository `contents: write`, and is installed on `zaks-io/splitch` alone.
 4. Confirm the `@splitch` npm scope and all three packages are controlled by the intended organization.
@@ -71,7 +72,7 @@ credentials, tokens, signed URLs, or private logs.
 6. After bootstrap, revoke every temporary publishing token and grant. Set each npm package's
    Publishing Access to disallow token-based publishing. The normal workflows remain OIDC-only.
 
-Do not activate either tag ruleset before the shared App credentials and matching release workflow
+Do not activate any tag ruleset before the shared App credentials and matching release workflow
 are proven able to create and update a draft tag.
 
 ### One-time npm bootstrap

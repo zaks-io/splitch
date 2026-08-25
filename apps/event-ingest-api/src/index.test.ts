@@ -40,7 +40,6 @@ describe("Event Ingest Worker", () => {
       event_id: "evt_retry_1",
       exposure_at: fixedNow,
       server_received_at: fixedNow,
-      ingest_ts: fixedNow,
       client_timestamp: "2026-07-01T12:00:00.000Z",
       variant: "treatment",
       is_holdover: 0,
@@ -272,12 +271,19 @@ describe("Exposure ingest", () => {
       exposure_at: fixedNow,
       server_received_at: fixedNow,
     });
+    expect(expectRow(exposure.rows)).not.toHaveProperty("ingest_ts");
     expect(expectRow(activation.rows)).toMatchObject({
       type: "activation",
       exposure_at: fixedNow,
       server_received_at: fixedNow,
       activation_ts: fixedNow,
     });
+    expect(expectRow(activation.rows)).not.toHaveProperty("ingest_ts");
+  });
+
+  it("stores a missing diagnostic client timestamp as null", async () => {
+    const calls = await postExposure({ payload: { clientTimestamp: undefined } });
+    expect(expectRow(calls.rows)).toHaveProperty("client_timestamp", null);
   });
 
   it("keeps event_id and dedup_key stable across retries", async () => {

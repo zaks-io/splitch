@@ -68,8 +68,9 @@ export type EvaluationContext = z.infer<typeof EvaluationContextSchema>;
 // should re-alias them:
 //   exposureAt       → exposure_at
 //   serverReceivedAt → server_received_at
-//   ingestTs         → ingest_ts
 //   clientTimestamp  → client_timestamp
+// `ingest_ts` is physical insertion metadata assigned by Tinybird, so it is
+// intentionally absent from the canonical producer contract.
 // ---------------------------------------------------------------------------
 
 export const exposureTypes = ["exposure", "activation"] as const;
@@ -92,10 +93,9 @@ export const ExposureEventSchema = z.object({
   // Spec-mandated default (NOT a silent fallback): a row that omits
   // `counterfactual` parses as `false`, never null.
   counterfactual: z.boolean().default(false),
-  clientTimestamp: z.string(),
+  clientTimestamp: z.string().optional(),
   exposureAt: z.string(),
   serverReceivedAt: z.string(),
-  ingestTs: z.string(),
 });
 export type ExposureEvent = z.infer<typeof ExposureEventSchema>;
 

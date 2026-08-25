@@ -90,7 +90,6 @@ describe("evaluate Exposure assembly", () => {
       clientTimestamp: NOW,
       exposureAt: NOW,
       serverReceivedAt: NOW,
-      ingestTs: NOW,
     });
     expect(exposure.targetingKeyHash).toBe(
       await computeTargetingKeyHash(new StaticSaltStore(), {

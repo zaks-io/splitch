@@ -11,10 +11,10 @@ SCHEMA >
     `event_id` String `json:$.event_id`,
     `counterfactual` UInt8 `json:$.counterfactual`,
     `source_id` String `json:$.source_id`,
-    `client_timestamp` DateTime64(3) `json:$.client_timestamp`,
+    `client_timestamp` Nullable(DateTime64(3)) `json:$.client_timestamp`,
     `server_received_at` DateTime64(3) `json:$.server_received_at`,
     `exposure_at` DateTime64(3) `json:$.exposure_at` DEFAULT server_received_at,
-    `ingest_ts` DateTime64(3) `json:$.ingest_ts`,
+    `ingest_ts` DateTime64(3) `json:$.ingest_ts` DEFAULT now64(3),
     `activation_ts` Nullable(DateTime64(3)) `json:$.activation_ts`,
     `is_holdover` UInt8 `json:$.is_holdover`,
     `sdk_version` Nullable(String) `json:$.sdk_version`
