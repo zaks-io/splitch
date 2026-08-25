@@ -111,10 +111,10 @@ Exposure Ticket flow.
 ## Local holdover and freshness
 
 The component's private Assignment Store keys by
-`(experimentId, idType, HMAC(componentIdentityKey, targetingKey))` and stores only the original
-`runId` and Variant name. The raw Targeting Key is absent. A fresh Exposure and its holdover commit
-together; concurrent first use is serialized by the Convex transaction. Later Runs replay the held
-Variant and create no new Exposure.
+`(experimentId, idType, HMAC(componentIdentityKey, idType + ":" + targetingKey))` and stores only
+the original `runId` and Variant name. The raw Targeting Key is absent. A fresh Exposure and its
+holdover commit together; concurrent first use is serialized by the Convex transaction. Later Runs
+replay the held Variant and create no new Exposure.
 
 No installed snapshot, invalid stored data, or `snapshot.environmentVersion < announcedVersion`
 returns `reason: ERROR` with an actionable code. If no newer version has been announced, the last
