@@ -1,15 +1,15 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppErrorPage } from "@splitch/ui/state/app-error-page";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { WidgetErrorState } from "@splitch/ui/state/widget-error-state";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccessDeniedError } from "./loader-context";
 import {
   boundaryLevel,
   configureControlPanelSentryScope,
-  createNudgeRefetchFailureHandler,
   createControlPanelSentryOptions,
+  createNudgeRefetchFailureHandler,
   reportBackgroundRefetchFailure,
   reportRouteError,
   setControlPanelSentryClientForTests,
@@ -183,6 +183,18 @@ describe("control-panel observability tiers", () => {
 });
 
 describe("control-panel Sentry PII scrubbing", () => {
+  it("samples every operator journey and propagates only to server functions", () => {
+    const options = createControlPanelSentryOptions({
+      SENTRY_DSN: "https://example@sentry.io/1",
+      SPLITCH_PLATFORM_TARGET: "production",
+    });
+
+    expect(options.tracesSampleRate).toBe(1);
+    expect(options.tracePropagationTargets).toHaveLength(1);
+    expect(options.tracePropagationTargets[0]?.test("/_serverFn/function-id")).toBe(true);
+    expect(options.tracePropagationTargets[0]?.test("https://api.example.com/data")).toBe(false);
+  });
+
   it("removes session cookies and Targeting Key payloads before the outgoing event", () => {
     const outgoingEvents: Record<string, unknown>[] = [];
     const token = "spl_super-secret-session-token-000000";

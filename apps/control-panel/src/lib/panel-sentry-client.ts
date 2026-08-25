@@ -1,3 +1,4 @@
+import type { AnyRouter } from "@tanstack/react-router";
 import { initControlPanelSentry } from "./panel-observability";
 
 type ClientSentryImportEnv = {
@@ -9,7 +10,7 @@ type ClientSentryImportEnv = {
 
 let started = false;
 
-export async function initControlPanelClientSentry(): Promise<void> {
+export async function initControlPanelClientSentry(router: AnyRouter): Promise<void> {
   if (started || typeof window === "undefined") {
     return;
   }
@@ -25,7 +26,7 @@ export async function initControlPanelClientSentry(): Promise<void> {
     init: (options) => {
       Sentry.init({
         ...options,
-        integrations: [Sentry.browserTracingIntegration()],
+        integrations: [Sentry.tanstackRouterBrowserTracingIntegration(router)],
       } as unknown as Parameters<typeof Sentry.init>[0]);
     },
     setTag: (key, value) => {

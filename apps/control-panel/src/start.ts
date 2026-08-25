@@ -1,25 +1,60 @@
-import { createCsrfMiddleware, createStart } from "@tanstack/react-start";
+import { createCsrfMiddleware, createMiddleware, createStart } from "@tanstack/react-start";
 
 /**
  * Explicit CSRF for `createServerFn` POSTs.
  *
  * TanStack Start installs a default CSRF middleware only when this file is
  * absent (`hasStartInstance ? startOptions.requestMiddleware : [default]`).
- * Adding a `src/start.ts` without `createCsrfMiddleware` here silently removes
- * Origin / Sec-Fetch-Site checks from every panel write (`revokeControlPanelApiKey`,
- * Flag mutations, …). Pin the middleware in `requestMiddleware` and prove it
- * with a cross-site POST that must return 403 (see `start.test.ts`).
- *
- * Do not set `allowRequestsWithoutOriginCheck`. When Sec-Fetch-Site, Origin, and
- * Referer are all absent, the default is refuse (403) — pinned in `start.test.ts`.
- *
- * Form POSTs (`/auth/logout`, `/claim/consent/$attemptId`) are not covered by
- * this middleware — they use `rejectCrossOriginWrite` in `panel-csrf.ts`.
+ * Adding a `src/start.ts` without this middleware silently removes Origin and
+ * Sec-Fetch-Site checks from every panel write. Do not set
+ * `allowRequestsWithoutOriginCheck`; `start.test.ts` pins the fail-closed path.
  */
 export const panelServerFnCsrfMiddleware = createCsrfMiddleware({
-  filter: (ctx) => ctx.handlerType === "serverFn",
+  filter: (context) => context.handlerType === "serverFn",
 });
+
+const serverFunctionTracing = createMiddleware({ type: "function" })
+  .client(async ({ method, next }) => {
+    if (typeof window === "undefined") {
+      return next();
+    }
+    const Sentry = await import("@sentry/react");
+    return Sentry.startSpan(
+      {
+        name: `${method} server function`,
+        op: "function.client",
+        attributes: { "rpc.system": "tanstack.start" },
+      },
+      () => next(),
+    );
+  })
+  .server(async ({ method, next, serverFnMeta }) => {
+    const Sentry = await import("@sentry/cloudflare");
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const activeSpan = Sentry.getActiveSpan();
+    const rootSpan = activeSpan ? Sentry.getRootSpan(activeSpan) : undefined;
+    if (rootSpan && getRequest().headers.get("x-tsr-serverFn") === "true") {
+      Sentry.updateSpanName(rootSpan, `${method} ${serverFnMeta.name}`);
+      rootSpan.setAttributes({
+        "code.function.name": serverFnMeta.name,
+        "rpc.system": "tanstack.start",
+      });
+    }
+    return Sentry.startSpan(
+      {
+        name: serverFnMeta.name,
+        op: "function.server",
+        attributes: {
+          "code.file.path": serverFnMeta.filename,
+          "code.function.name": serverFnMeta.name,
+          "rpc.system": "tanstack.start",
+        },
+      },
+      () => next(),
+    );
+  });
 
 export const startInstance = createStart(() => ({
   requestMiddleware: [panelServerFnCsrfMiddleware],
+  functionMiddleware: [serverFunctionTracing],
 }));
