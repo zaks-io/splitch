@@ -35,6 +35,7 @@ function AppSettingsRoute() {
   return (
     <AppSettings
       env={scope.env}
+      environmentId={scope.environmentId}
       environmentNames={environmentNames}
       orgSlug={scope.orgSlug}
       settings={data}

@@ -1,3 +1,4 @@
+import { Button } from "@splitch/ui/components/button";
 import { useRouter } from "@tanstack/react-router";
 import { appHomeHref, scopedHref } from "#lib/app-shell-navigation";
 import { createDelegationEnvironment, type FlagsMatrixData } from "#lib/flags-matrix-data";
@@ -10,6 +11,7 @@ import { FlagsMatrixTable } from "./flags-matrix-table";
 import { FlagsTruncatedNotice } from "./flags-truncated-notice";
 import { PanelPageBody } from "./panel-page-body";
 import { PanelPageHeader } from "./panel-page-header";
+import { RouterAnchor } from "./shell-menu";
 
 export function FlagsMatrixPage({
   appId,
@@ -50,18 +52,24 @@ export function FlagsMatrixPage({
           />
         }
         actions={
-          matrix.rows.length > 0 ? (
-            <CreateFlagDialog
-              appId={appId}
-              environmentId={delegation.environmentId}
-              onClosedAfterCreate={showCreatedFlag}
-              settingsHref={settingsHref}
+          <>
+            <Button
+              render={<RouterAnchor href={settingsHref}>Settings</RouterAnchor>}
+              variant="outline"
             />
-          ) : null
+            {matrix.rows.length > 0 ? (
+              <CreateFlagDialog
+                appId={appId}
+                environmentId={delegation.environmentId}
+                onClosedAfterCreate={showCreatedFlag}
+                settingsHref={settingsHref}
+              />
+            ) : null}
+          </>
         }
-        crumb={appSlug}
+        crumb="App"
         id="flags-title"
-        title="Flags"
+        title={appSlug}
       />
       <PanelPageBody className="grid gap-6">
         {matrix.readTruncated ? (

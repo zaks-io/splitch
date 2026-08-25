@@ -14,6 +14,18 @@ vi.mock("#lib/control-plane-app-settings-functions", () => ({
   updateControlPanelAppMember: vi.fn(),
 }));
 
+vi.mock("#lib/control-plane-settings-functions", () => ({
+  loadControlPanelSettings: vi.fn(),
+  lockControlPanelClientKey: vi.fn(),
+  provisionControlPanelApiKey: vi.fn(),
+  revokeControlPanelApiKey: vi.fn(),
+  updateControlPanelEnvironmentPolicy: vi.fn(),
+}));
+
+vi.mock("#lib/control-plane-exposure-status-functions", () => ({
+  loadEnvironmentExposureStatus: vi.fn(),
+}));
+
 const { AppSettings } = await import("./app-settings");
 const { AppMemberGrantForm, labelAppAccessCandidates } = await import("./app-member-grant-form");
 
@@ -22,6 +34,7 @@ function render(viewerRole: UserRole, overrides: Partial<PanelAppSettings> = {})
     <QueryClientProvider client={new QueryClient()}>
       <AppSettings
         env="prod"
+        environmentId="environment_prod"
         environmentNames={["Dev", "Prod"]}
         orgSlug="acme"
         settings={{ ...settings, viewerRole, ...overrides }}
@@ -79,6 +92,15 @@ describe("AppSettings", () => {
 
     expect(html).toContain('id="app-settings-key"');
     expect(html).not.toContain('data-testid="app-danger-zone"');
+  });
+
+  it("offers setup instructions while the Environment awaits its first data", () => {
+    const html = render("owner");
+
+    // Queries never resolve in a static render, so the card shows its loading
+    // shape; the point here is that Settings surfaces setup at all.
+    expect(html).toContain('data-testid="app-setup-card"');
+    expect(html).toContain("Loading your Client Key");
   });
 
   it("shows the App-level Variant catalog read-only, with values as written", () => {

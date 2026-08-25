@@ -46,6 +46,21 @@ describe("FlagsMatrixPage", () => {
     expect(html).toContain("data-matrix-table");
   });
 
+  it("titles the page with the App and links to Settings", () => {
+    const html = renderToStaticMarkup(
+      <FlagsMatrixPage
+        appId="app_1"
+        appSlug="checkout-api"
+        environments={environments}
+        matrix={matrixWithRow()}
+        orgSlug="acme-labs"
+      />,
+    );
+    expect(html).toContain(">checkout-api</h1>");
+    expect(html).toContain('href="/acme-labs/checkout-api/dev/settings"');
+    expect(html).toContain(">Settings</a>");
+  });
+
   it("keeps the create action in the empty state", () => {
     const html = renderToStaticMarkup(
       <FlagsMatrixPage
