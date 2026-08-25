@@ -54,6 +54,8 @@ export function assertPackedTarball(tarballPath) {
     "package/dist/build-stamp.json",
     "package/dist/index.js",
     "package/dist/index.d.ts",
+    "package/dist/react/index.js",
+    "package/dist/react/index.d.ts",
     "package/dist/component/convex.config.js",
     "package/dist/component/_generated/component.d.ts",
   ]) {
@@ -71,4 +73,8 @@ export function assertPackedTarball(tarballPath) {
     throw new Error("packed @splitch/convex leaks a workspace dependency");
   if (manifest.devDependencies)
     throw new Error("packed @splitch/convex must not ship devDependencies");
+  if (manifest.exports?.["./react"]?.import !== "./dist/react/index.js")
+    throw new Error("packed @splitch/convex is missing its React export");
+  if (manifest.peerDependenciesMeta?.react?.optional !== true)
+    throw new Error("packed @splitch/convex must keep React optional for server-only consumers");
 }

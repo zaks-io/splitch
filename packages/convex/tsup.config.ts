@@ -3,6 +3,7 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: {
     index: "src/index.ts",
+    "react/index": "src/react/index.ts",
     "component/convex.config": "src/component/convex.config.ts",
     "component/schema": "src/component/schema.ts",
     "component/evaluation": "src/component/evaluation.ts",
@@ -19,5 +20,5 @@ export default defineConfig({
   splitting: true,
   clean: true,
   sourcemap: false,
-  external: ["convex", "convex/server", "convex/values"],
+  external: ["convex", "convex/react", "convex/server", "convex/values", "react"],
 });

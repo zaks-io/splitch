@@ -21,16 +21,29 @@ try {
     join(consumer, "package.json"),
     JSON.stringify({ name: "convex-consumer", private: true, type: "module" }),
   );
-  execFileSync("npm", ["install", join(consumer, name), "convex@1.45.0", "typescript@6.0.3"], {
-    cwd: consumer,
-    stdio: "inherit",
-    env: { ...process.env, npm_config_cache: join(consumer, ".npm-cache") },
-  });
+  execFileSync(
+    "npm",
+    [
+      "install",
+      join(consumer, name),
+      "convex@1.45.0",
+      "react@19.2.8",
+      "react-dom@19.2.8",
+      "@types/react@19.2.17",
+      "typescript@6.0.3",
+    ],
+    {
+      cwd: consumer,
+      stdio: "inherit",
+      env: { ...process.env, npm_config_cache: join(consumer, ".npm-cache") },
+    },
+  );
   writeFileSync(
     join(consumer, "index.ts"),
     `import { Splitch } from "@splitch/convex";
 import type { ComponentApi } from "@splitch/convex/_generated/component";
 import splitch from "@splitch/convex/convex.config.js";
+import { createSplitchReact } from "@splitch/convex/react";
 import {
   type DataModelFromSchemaDefinition,
   defineApp,
@@ -39,6 +52,7 @@ import {
   type GenericActionCtx,
   type GenericMutationCtx,
   type GenericQueryCtx,
+  makeFunctionReference,
 } from "convex/server";
 import { v } from "convex/values";
 
@@ -54,6 +68,10 @@ declare const queryCtx: GenericQueryCtx<DataModel>;
 void flags.install(actionCtx);
 void flags.peekVariant(queryCtx, "flag", { targetingKey: "entity" }, false);
 void flags.evaluate(mutationCtx, "flag", { targetingKey: "entity", idempotencyKey: "once" }, false);
+const reactQuery = makeFunctionReference<"query", { flagKey: string; defaultValue: boolean }, Awaited<ReturnType<typeof flags.peekDetails>>>("flags:resolve");
+const { useFlag, useFlagDetails } = createSplitchReact(reactQuery);
+void useFlag;
+void useFlagDetails;
 export default app;
 `,
   );

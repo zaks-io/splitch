@@ -10,7 +10,13 @@ verifyBuildStamp("convex", repoRoot);
 const staging = createStagingDirectory();
 try {
   const listing = pack(staging, undefined, true);
-  for (const required of ["dist/index.js", "dist/index.d.ts", "dist/component/convex.config.js"]) {
+  for (const required of [
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/react/index.js",
+    "dist/react/index.d.ts",
+    "dist/component/convex.config.js",
+  ]) {
     if (!listing.includes(required)) throw new Error(`pack --dry-run is missing ${required}`);
   }
 } finally {

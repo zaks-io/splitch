@@ -31,6 +31,12 @@ export const peek = query({
     flags.peekDetails(ctx, "shared-preview-smoke", { targetingKey: args.targetingKey }, false),
 });
 
+export const reactFlag = query({
+  args: { flagKey: v.string(), defaultValue: v.any() },
+  handler: (ctx, args) =>
+    flags.peekDetails(ctx, args.flagKey, { targetingKey: "react-dogfood-user" }, args.defaultValue),
+});
+
 export const evaluate = mutation({
   args: { targetingKey: v.string(), idempotencyKey: v.string() },
   handler: async (ctx, args) => {

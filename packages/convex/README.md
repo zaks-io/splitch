@@ -61,3 +61,53 @@ and must never be sent to browser code.
 Use `flags.deleteEntity(ctx, { targetingKey, idType })` inside a Mutation to remove one Entity's
 local holdovers and queued Exposures. `flags.uninstall(ctx)` revokes the remote installation before
 purging the component's private state.
+
+## React
+
+Component functions are private to the Convex backend, so expose an app-owned public Query that
+performs your authentication and derives the Evaluation Context server-side:
+
+```ts
+// convex/flags.ts
+import { Splitch } from "@splitch/convex";
+import { v } from "convex/values";
+import { components } from "./_generated/api";
+import { query } from "./_generated/server";
+
+const flags = new Splitch(components.splitch);
+
+export const resolve = query({
+  args: { flagKey: v.string(), defaultValue: v.any() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication is required to evaluate Flags");
+    return flags.peekDetails(
+      ctx,
+      args.flagKey,
+      { targetingKey: identity.tokenIdentifier },
+      args.defaultValue,
+    );
+  },
+});
+```
+
+Bind the generated public Query once, then use the hooks under Convex's existing provider:
+
+```tsx
+import { createSplitchReact } from "@splitch/convex/react";
+import { api } from "../convex/_generated/api";
+
+const { useFlag, useFlagDetails } = createSplitchReact(api.flags.resolve);
+
+export function Checkout() {
+  const enabled = useFlag("new-checkout", false);
+  const details = useFlagDetails("new-checkout", false);
+  if (enabled === undefined || details === undefined) return <p>Loading…</p>;
+  return enabled ? <NewCheckout /> : <CurrentCheckout />;
+}
+```
+
+Both hooks preserve Convex's `undefined` loading state and reactively update when the component
+snapshot changes. They are non-exposing Query reads. Record an Exposure by calling
+`flags.evaluate()` inside the Mutation where the Variant is actually encountered or alongside the
+application write it controls.

@@ -25,6 +25,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
     "./_generated/component.js": {
       "types": "./dist/component/_generated/component.d.ts"
     },
@@ -58,11 +62,21 @@
     "access": "public"
   },
   "peerDependencies": {
-    "convex": "^1.43.0"
+    "convex": "^1.43.0",
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@splitch/contracts": "workspace:*",
     "@splitch/evaluation-core": "workspace:*",
-    "convex": "^1.45.0"
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "convex": "^1.45.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   }
 }

@@ -11,6 +11,7 @@ The released package exposes:
 
 - `@splitch/convex/convex.config.js`, installed with `app.use(splitch, { httpPrefix })`
 - `@splitch/convex`, an ergonomic `Splitch` wrapper over the generated Component API
+- `@splitch/convex/react`, reactive hooks bound to an app-owned public Query
 
 It versions independently from `@splitch/sdk`, starts at `0.1.0`, and uses `convex-v*` GitHub
 Releases. Token-free trusted package release runs from dedicated `convex-release` and
@@ -108,6 +109,17 @@ atomically creates the local holdover and Exposure outbox row described in
 perform an explicit mutation when the Variant is actually encountered, or use the browser SDK's
 Exposure Ticket flow.
 
+## React bindings
+
+`createSplitchReact(api.flags.resolve)` binds `useFlag` and `useFlagDetails` to an app-owned public
+Query. The app Query is the authentication boundary and calls `peekDetails` with an Evaluation
+Context derived server-side. Component functions and the API Key remain private. The hooks use the
+native Convex React subscription and return `undefined` while the first Query result is loading.
+
+React hooks are non-exposing because Convex Queries cannot write. An app records an Exposure through
+an explicit Mutation that calls `evaluate` when the Variant is encountered. Domain writes and their
+Exposure stay in that same Mutation so they commit or roll back together.
+
 ## Local holdover and freshness
 
 The component's private Assignment Store keys by
@@ -143,7 +155,8 @@ so the component can perform the same purge.
 ## Done
 
 - A packed package installs into a clean Convex fixture and passes mounted-component typecheck;
-  component codegen passes against a live preview deployment.
+  its React export typechecks from the packed tarball; component codegen passes against a live
+  preview deployment.
 - Package tests prove query peeks do not write, mutation Evaluation rolls back with the caller,
   duplicate mutation retries do not duplicate Exposures, and concurrent first use creates one local
   holdover.

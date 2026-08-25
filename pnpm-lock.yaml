@@ -426,9 +426,21 @@ importers:
       '@splitch/evaluation-core':
         specifier: workspace:*
         version: link:../evaluation-core
+      '@types/react':
+        specifier: ^19.2.17
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.17)
       convex:
         specifier: ^1.45.0
         version: 1.45.0(react@19.2.8)
+      react:
+        specifier: ^19.2.8
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.2.8
+        version: 19.2.8(react@19.2.8)
 
   packages/db:
     dependencies:

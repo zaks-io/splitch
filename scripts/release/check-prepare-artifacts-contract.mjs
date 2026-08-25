@@ -54,6 +54,8 @@ const FAKE_DIST = {
   convex: {
     "index.js": "export {};\n",
     "index.d.ts": "export {};\n",
+    "react/index.js": "export {};\n",
+    "react/index.d.ts": "export {};\n",
     "component/convex.config.js": "export {};\n",
     "component/_generated/component.d.ts": "export {};\n",
   },

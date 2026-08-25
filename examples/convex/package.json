@@ -4,10 +4,12 @@
   "description": "Live dogfood harness for @splitch/convex",
   "private": true,
   "scripts": {
+    "build": "vite build",
     "codegen": "convex codegen",
     "deploy": "convex deploy",
-    "dev": "convex dev",
-    "typecheck": "tsc -p convex/tsconfig.json --noEmit"
+    "dev": "vite",
+    "dev:convex": "convex dev",
+    "typecheck": "tsc -p convex/tsconfig.json --noEmit && tsc -p tsconfig.json --noEmit"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +17,15 @@
   "type": "module",
   "dependencies": {
     "@splitch/convex": "file:../../packages/convex",
-    "convex": "^1.45.0"
+    "convex": "^1.45.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.1.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.2.2"
   }
 }
