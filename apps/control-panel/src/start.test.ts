@@ -125,3 +125,12 @@ describe("panel server-fn CSRF middleware", () => {
     expect(result).toEqual({ context: { ok: true } });
   });
 });
+
+describe("panel server-function tracing middleware", () => {
+  it("is installed globally alongside CSRF", async () => {
+    const options = await startInstance.getOptions();
+
+    expect(options.functionMiddleware).toHaveLength(1);
+    expect(options.requestMiddleware).toContain(panelServerFnCsrfMiddleware);
+  });
+});

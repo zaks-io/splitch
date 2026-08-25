@@ -80,7 +80,8 @@ export function createControlPanelSentryOptions(
     dsn: secrets.sentryDsn,
     environment: secrets.environment,
     release: env.SENTRY_RELEASE,
-    tracesSampleRate: secrets.environment === "production" ? 0.1 : 1,
+    tracesSampleRate: 1,
+    tracePropagationTargets: [/^\/_serverFn\//],
     beforeSend,
   };
 }

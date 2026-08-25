@@ -277,6 +277,8 @@ describe("workerSentryOptions", () => {
     ).toMatchObject({
       environment: "production",
       release: "splitch-auth-api@abc123",
+      enableRpcTracePropagation: true,
+      tracesSampleRate: 0.1,
     });
   });
 

@@ -90,6 +90,7 @@ export function workerSentryOptions(
     environment: secrets.environment,
     release: env.SENTRY_RELEASE,
     tracesSampleRate: secrets.environment === "production" ? 0.1 : 1,
+    enableRpcTracePropagation: true,
     /**
      * `@sentry/cloudflare` enables `consoleIntegration()` by default, which would
      * capture our own fault row (emitToWorkersLogs) as a breadcrumb and attach it
