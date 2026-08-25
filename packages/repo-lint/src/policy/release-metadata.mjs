@@ -120,11 +120,19 @@ function lintRootExport(packagePath, packageName, rootExport) {
       violation(packagePath, `${packageName} exports["."].types must be "./dist/index.d.ts"`),
     );
   }
-  if ("require" in root || "default" in root) {
+  if ("require" in root || ("default" in root && packageName !== "@splitch/convex")) {
     violations.push(
       violation(
         packagePath,
         `${packageName} exports["."] must be ESM-only (no require/default conditions)`,
+      ),
+    );
+  }
+  if (packageName === "@splitch/convex" && root.default !== "./dist/index.js") {
+    violations.push(
+      violation(
+        packagePath,
+        '@splitch/convex exports["."].default must be "./dist/index.js" for Convex tooling',
       ),
     );
   }

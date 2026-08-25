@@ -23,11 +23,13 @@
     "./package.json": "./package.json",
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./react": {
       "types": "./dist/react/index.d.ts",
-      "import": "./dist/react/index.js"
+      "import": "./dist/react/index.js",
+      "default": "./dist/react/index.js"
     },
     "./_generated/component.js": {
       "types": "./dist/component/_generated/component.d.ts"
@@ -37,17 +39,19 @@
     },
     "./convex.config.js": {
       "types": "./dist/component/convex.config.d.ts",
-      "import": "./dist/component/convex.config.js"
+      "import": "./dist/component/convex.config.js",
+      "default": "./dist/component/convex.config.js"
     },
     "./convex.config": {
       "types": "./dist/component/convex.config.d.ts",
-      "import": "./dist/component/convex.config.js"
+      "import": "./dist/component/convex.config.js",
+      "default": "./dist/component/convex.config.js"
     }
   },
   "types": "./dist/index.d.ts",
   "module": "./dist/index.js",
   "scripts": {
-    "codegen": "convex codegen --component-dir ./src/component --dry-run",
+    "codegen": "convex codegen --component-dir ./src/component --typecheck enable",
     "build": "tsup && node scripts/write-build-stamp.mjs",
     "clean": "rm -rf dist coverage",
     "lint": "biome lint src scripts",
@@ -77,6 +81,7 @@
     "@types/react-dom": "^19.2.3",
     "convex": "^1.45.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "typescript": "^6.0.3"
   }
 }

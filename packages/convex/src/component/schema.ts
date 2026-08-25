@@ -41,7 +41,14 @@ export default defineSchema({
     idempotencyKey: v.string(),
     fingerprint: v.string(),
     result: v.string(),
-  }).index("by_key", ["idempotencyKey"]),
+    createdAt: v.optional(v.number()),
+  })
+    .index("by_key", ["idempotencyKey"])
+    .index("by_created_at", ["createdAt"]),
+  entityDeletions: defineTable({
+    idType: v.string(),
+    targetingKeyHash: v.string(),
+  }).index("by_entity", ["idType", "targetingKeyHash"]),
   exposureOutbox: defineTable({
     exposureId: v.string(),
     installationId: v.string(),
@@ -60,13 +67,17 @@ export default defineSchema({
     state: deliveryState,
     attemptCount: v.number(),
     nextAttemptAt: v.number(),
+    terminalAt: v.optional(v.number()),
     lastError: v.optional(v.string()),
   })
     .index("by_exposure", ["exposureId"])
     .index("by_state_next_attempt", ["state", "nextAttemptAt"])
+    .index("by_state_terminal_at", ["state", "terminalAt"])
     .index("by_entity_state", ["idType", "targetingKeyHash", "state"]),
   webhookClaims: defineTable({
     deliveryId: v.string(),
     claimedAt: v.number(),
-  }).index("by_delivery", ["deliveryId"]),
+  })
+    .index("by_delivery", ["deliveryId"])
+    .index("by_claimed_at", ["claimedAt"]),
 });

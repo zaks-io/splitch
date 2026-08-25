@@ -9,15 +9,6 @@ export async function revokeLocalHandler(ctx: MutationCtx): Promise<void> {
     .unique();
   if (!integration) throw new Error("@splitch/convex is not initialized");
   await ctx.db.patch(integration._id, { state: "revoked" });
-  const pending = await ctx.db.query("exposureOutbox").collect();
-  for (const row of pending) {
-    if (row.state === "pending" || row.state === "delivering")
-      await ctx.db.patch(row._id, {
-        state: "suppressed",
-        targetingKey: undefined,
-        attributesJson: undefined,
-      });
-  }
 }
 
 export async function purgeBatchHandler(ctx: MutationCtx): Promise<number> {
@@ -25,6 +16,7 @@ export async function purgeBatchHandler(ctx: MutationCtx): Promise<number> {
     "exposureOutbox",
     "assignments",
     "evaluationClaims",
+    "entityDeletions",
     "webhookClaims",
     "snapshots",
     "integrations",

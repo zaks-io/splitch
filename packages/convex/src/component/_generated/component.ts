@@ -1,20 +1,112 @@
 /* eslint-disable */
-import type { DefaultFunctionArgs, FunctionReference } from "convex/server";
-import type { ResolutionDetails, VariantValue } from "../../public-types";
+/**
+ * Generated `ComponentApi` utility.
+ *
+ * THIS CODE IS AUTOMATICALLY GENERATED.
+ *
+ * To regenerate, run `npx convex dev`.
+ * @module
+ */
 
-type Context = { targetingKey: string; idType: string; attributes: Record<string, unknown> };
-type Ref<Kind extends "query" | "mutation" | "action", Args extends DefaultFunctionArgs, Result> = FunctionReference<Kind, "internal" | "public", Args, Result>;
+import type { FunctionReference } from "convex/server";
 
-export type ComponentApi<Name extends string | undefined = string | undefined> = {
-  evaluation: {
-    peek: Ref<"query", { flagKey: string; context: Context; defaultValue: VariantValue }, ResolutionDetails>;
-    evaluate: Ref<"mutation", { flagKey: string; context: Context; defaultValue: VariantValue; idempotencyKey: string }, ResolutionDetails>;
-    deleteEntity: Ref<"mutation", { targetingKey: string; idType: string }, void>;
+/**
+ * A utility for referencing a Convex component's exposed API.
+ *
+ * Useful when expecting a parameter like `components.myComponent`.
+ * Usage:
+ * ```ts
+ * async function myFunction(ctx: QueryCtx, component: ComponentApi) {
+ *   return ctx.runQuery(component.someFile.someQuery, { ...args });
+ * }
+ * ```
+ */
+export type ComponentApi<Name extends string | undefined = string | undefined> =
+  {
+    evaluation: {
+      deleteEntity: FunctionReference<
+        "mutation",
+        "internal",
+        { idType: string; targetingKey: string },
+        null,
+        Name
+      >;
+      evaluate: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          context: {
+            attributes: Record<string, any>;
+            idType: string;
+            targetingKey: string;
+          };
+          defaultValue: boolean | string | number | Record<string, any>;
+          flagKey: string;
+          idempotencyKey: string;
+        },
+        {
+          errorCode?: string;
+          errorMessage?: string;
+          reason:
+            | "SPLIT"
+            | "TARGETING_MATCH"
+            | "DEFAULT"
+            | "DISABLED"
+            | "CACHED"
+            | "STALE"
+            | "ERROR";
+          ruleId?: string;
+          value: boolean | string | number | Record<string, any>;
+          variantName: string | null;
+        },
+        Name
+      >;
+      peek: FunctionReference<
+        "query",
+        "internal",
+        {
+          context: {
+            attributes: Record<string, any>;
+            idType: string;
+            targetingKey: string;
+          };
+          defaultValue: boolean | string | number | Record<string, any>;
+          flagKey: string;
+        },
+        {
+          errorCode?: string;
+          errorMessage?: string;
+          reason:
+            | "SPLIT"
+            | "TARGETING_MATCH"
+            | "DEFAULT"
+            | "DISABLED"
+            | "CACHED"
+            | "STALE"
+            | "ERROR";
+          ruleId?: string;
+          value: boolean | string | number | Record<string, any>;
+          variantName: string | null;
+        },
+        Name
+      >;
+    };
+    integration: {
+      install: FunctionReference<
+        "action",
+        "internal",
+        {},
+        {
+          appId: string;
+          environmentId: string;
+          environmentVersion: number;
+          installationId: string;
+          status: "active" | "revoked";
+        },
+        Name
+      >;
+      rotateSecret: FunctionReference<"action", "internal", {}, null, Name>;
+      syncNow: FunctionReference<"action", "internal", {}, number, Name>;
+      uninstall: FunctionReference<"action", "internal", {}, null, Name>;
+    };
   };
-  integration: {
-    install: Ref<"action", {}, { installationId: string; appId: string; environmentId: string; environmentVersion: number; status: "active" | "revoked" }>;
-    syncNow: Ref<"action", {}, number>;
-    rotateSecret: Ref<"action", {}, void>;
-    uninstall: Ref<"action", {}, void>;
-  };
-};

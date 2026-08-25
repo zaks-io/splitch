@@ -75,6 +75,14 @@ export function assertPackedTarball(tarballPath) {
     throw new Error("packed @splitch/convex must not ship devDependencies");
   if (manifest.exports?.["./react"]?.import !== "./dist/react/index.js")
     throw new Error("packed @splitch/convex is missing its React export");
+  assertDefaultExports(manifest);
   if (manifest.peerDependenciesMeta?.react?.optional !== true)
     throw new Error("packed @splitch/convex must keep React optional for server-only consumers");
+}
+
+function assertDefaultExports(manifest) {
+  for (const entry of [".", "./react", "./convex.config.js", "./convex.config"]) {
+    if (manifest.exports?.[entry]?.default !== manifest.exports?.[entry]?.import)
+      throw new Error(`packed @splitch/convex export ${entry} must support default resolution`);
+  }
 }
