@@ -37,13 +37,10 @@ type ControlPanelWorkerEnv = {
   SPLITCH_PLATFORM_TARGET?: string;
 };
 
-const sentryHandler = wrapWorkerHandler(
-  handler as ExportedHandler<ControlPanelWorkerEnv> &
-    Required<Pick<ExportedHandler<ControlPanelWorkerEnv>, "fetch">>,
-  { surface: "control-panel" },
-);
+const startHandler = handler as unknown as ExportedHandler<ControlPanelWorkerEnv> &
+  Required<Pick<ExportedHandler<ControlPanelWorkerEnv>, "fetch">>;
 
-export default {
+const controlPanelHandler = {
   async fetch(request, env, ctx) {
     setControlPanelSentryClient({
       addBreadcrumb: (breadcrumb) => {
@@ -68,6 +65,8 @@ export default {
           .CONFIG_STORE_WRITER.getByName(`${scope.appId}:${scope.environmentId}`)
           .fetch(upgradeRequest),
     });
-    return liveUpdateResponse ?? sentryHandler.fetch(request, env, ctx);
+    return liveUpdateResponse ?? startHandler.fetch(request, env, ctx);
   },
 } satisfies ExportedHandler<ControlPanelWorkerEnv>;
+
+export default wrapWorkerHandler(controlPanelHandler, { surface: "control-panel" });

@@ -4,6 +4,7 @@ import {
   createWorkerObservability,
   workerEmitter,
   workerSentryOptions,
+  wrapWorkerHandler,
 } from "./worker.js";
 
 const captureMessage = vi.fn();
@@ -268,5 +269,39 @@ describe("workerSentryOptions", () => {
     const kept = options.integrations([{ name: "Console" }, { name: "Dedupe" }]);
 
     expect(kept.map((i) => i.name)).toEqual(["Dedupe"]);
+  });
+});
+
+describe("wrapWorkerHandler", () => {
+  it("routes queue deliveries through the Sentry wrapper", async () => {
+    const sentryQueue = vi.fn();
+    __setSentryModuleForTests({
+      ...mockSentryModule(),
+      withSentry: (_options, handler) => ({ ...handler, queue: sentryQueue }),
+    } as SentryCloudflare);
+    const rawQueue = vi.fn();
+    const wrapped = wrapWorkerHandler(
+      {
+        fetch: async () => new Response("ok"),
+        queue: rawQueue,
+      },
+      { surface: "event-ingest-api" },
+    );
+
+    await wrapped.queue?.(
+      {
+        messages: [],
+        queue: "metric-events",
+        metadata: { metrics: { backlogBytes: 0, backlogCount: 0 } },
+        ackAll: vi.fn(),
+        retryAll: vi.fn(),
+      },
+      { SENTRY_DSN: "https://example@sentry.io/1" },
+      {} as ExecutionContext,
+    );
+
+    expect(sentryQueue).toHaveBeenCalledOnce();
+    expect(rawQueue).not.toHaveBeenCalled();
+    __setSentryModuleForTests(undefined);
   });
 });

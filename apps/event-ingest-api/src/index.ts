@@ -112,12 +112,7 @@ export class EvaluationEntrypoint extends WorkerEntrypoint<Env> {
   }
 }
 
-const wrappedHandler = wrapWorkerHandler({ fetch: handler.fetch }, { surface: "event-ingest-api" });
-
-export default {
-  fetch: wrappedHandler.fetch,
-  queue: handler.queue,
-} satisfies ExportedHandler<Env, Record<string, unknown>>;
+export default wrapWorkerHandler(handler, { surface: "event-ingest-api" });
 
 function healthResponse(env: Env): Response {
   return Response.json(

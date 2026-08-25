@@ -15,7 +15,7 @@ describe("Metric Event queue delivery", () => {
     const second = queueMessage("message-2", metricEvent("event-2"));
     const batch = messageBatch([first, second]);
 
-    await worker.queue(batch, deliveryEnv());
+    await deliver(batch, deliveryEnv());
 
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(first.ack).toHaveBeenCalledOnce();
@@ -38,7 +38,7 @@ describe("Metric Event queue delivery", () => {
     const third = queueMessage("message-3", metricEvent("event-good-2"));
     const batch = messageBatch([first, failed, third]);
 
-    await worker.queue(batch, deliveryEnv());
+    await deliver(batch, deliveryEnv());
 
     expect(first.ack).toHaveBeenCalledOnce();
     expect(first.retry).not.toHaveBeenCalled();
@@ -62,7 +62,7 @@ describe("Metric Event queue delivery", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const failed = queueMessage("message-final-attempt", metricEvent("event-discarded"), 8);
 
-    await worker.queue(messageBatch([failed]), deliveryEnv());
+    await deliver(messageBatch([failed]), deliveryEnv());
 
     expect(failed.ack).not.toHaveBeenCalled();
     expect(failed.retry).toHaveBeenCalledOnce();
@@ -88,7 +88,7 @@ describe("Metric Event queue delivery", () => {
     delete malformed.dedup_key;
     const failed = queueMessage("message-malformed", malformed, 8);
 
-    await worker.queue(messageBatch([failed]), deliveryEnv());
+    await deliver(messageBatch([failed]), deliveryEnv());
 
     expect(error).toHaveBeenCalledWith(
       "event-ingest-api Metric Event discarded after final delivery attempt",
@@ -113,7 +113,7 @@ describe("Metric Event queue delivery", () => {
     const second = queueMessage("message-2", metricEvent("event-2"));
     const batch = messageBatch([first, second]);
 
-    await worker.queue(batch, {});
+    await deliver(batch, {});
 
     expect(fetch).not.toHaveBeenCalled();
     expect(first.ack).not.toHaveBeenCalled();
@@ -193,4 +193,12 @@ function deliveryEnv(): Env {
     TINYBIRD_API_URL: "https://tinybird.test",
     TINYBIRD_INGEST_TOKEN: "test-token",
   };
+}
+
+async function deliver(batch: MessageBatch<Record<string, unknown>>, env: Env): Promise<void> {
+  if (!worker.queue) {
+    throw new Error("Event ingest queue handler is not configured");
+  }
+
+  await worker.queue(batch, env, {} as ExecutionContext);
 }

@@ -22,9 +22,13 @@
       ]
     },
     "apps/control-panel": {
+      "entry": ["src/client.tsx"],
       "vite": false,
       "ignore": ["vite.config.ts"],
       "ignoreDependencies": ["@cloudflare/vite-plugin", "@tailwindcss/vite", "@vitejs/plugin-react"]
+    },
+    "apps/marketing": {
+      "entry": ["src/client.tsx"]
     },
     "packages/stats": {
       "vitest": {

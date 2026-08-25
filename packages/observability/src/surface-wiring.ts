@@ -1,11 +1,11 @@
 import { cliEmitter } from "./cli.js";
 import { sdkHarnessEmitter } from "./sdk-harness.js";
-import { workerEmitter } from "./worker.js";
 import {
   OBSERVABILITY_SURFACES,
   type ObservabilitySurfaceId,
   type ObservabilitySurfaceKind,
 } from "./surfaces.js";
+import { workerEmitter } from "./worker.js";
 
 const TEST_ENV = {
   SENTRY_DSN: "https://example@o0.ingest.sentry.io/0",
@@ -38,6 +38,7 @@ const SURFACE_EMITTERS: Record<ObservabilitySurfaceId, SurfaceEmitterFactory> = 
   "analysis-api": (hooks) => workerEmitter(WORKER_TEST_ENV, { surface: "analysis-api" }, hooks),
   "auth-api": (hooks) => workerEmitter(WORKER_TEST_ENV, { surface: "auth-api" }, hooks),
   "control-panel": (hooks) => workerEmitter(WORKER_TEST_ENV, { surface: "control-panel" }, hooks),
+  marketing: (hooks) => workerEmitter(WORKER_TEST_ENV, { surface: "marketing" }, hooks),
   "mcp-server": (hooks) => workerEmitter(WORKER_TEST_ENV, { surface: "mcp-server" }, hooks),
   cli: (hooks) => cliEmitter(TEST_ENV, hooks),
   "sdk-harness": (hooks) => sdkHarnessEmitter(TEST_ENV, hooks),

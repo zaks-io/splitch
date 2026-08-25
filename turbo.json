@@ -43,7 +43,16 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
       "inputs": ["$TURBO_DEFAULT$"],
-      "env": ["CLOUDFLARE_ENV", "SPLITCH_GENERATED_WRANGLER_ENV"]
+      "env": [
+        "SPLITCH_PLATFORM_TARGET",
+        "CLOUDFLARE_ENV",
+        "SPLITCH_GENERATED_WRANGLER_ENV",
+        "SENTRY_RELEASE",
+        "SENTRY_RELEASE_BASE",
+        "VITE_SENTRY_DSN",
+        "VITE_SENTRY_RELEASE",
+        "VITE_SPLITCH_PLATFORM_TARGET"
+      ]
     },
     "@splitch/cli#test": {
       "dependsOn": ["^build"],

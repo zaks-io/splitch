@@ -1,16 +1,16 @@
-import type { Observability } from "@splitch/worker-runtime";
 import type { SentryEventLike } from "@splitch/privacy";
+import type { Observability } from "@splitch/worker-runtime";
 import {
   createScrubbedEmitter,
   createSentryBeforeSend,
-  secretsFromEnv,
   type ScrubbedEmitter,
+  secretsFromEnv,
 } from "./emitter.js";
 import {
-  reduceRequestError,
-  shouldReportRequestErrorToSentry,
   type RequestErrorContext,
   type RequestErrorReport,
+  reduceRequestError,
+  shouldReportRequestErrorToSentry,
 } from "./request-error-sentry.js";
 import type { ObservabilitySurfaceId } from "./surfaces.js";
 
@@ -55,17 +55,17 @@ async function loadSentry(): Promise<SentryCloudflare> {
   return sentryModule;
 }
 
-function getSentryWrappedHandler<E extends WorkerEnv>(
-  handler: ExportedHandler<E>,
+function getSentryWrappedHandler<E extends WorkerEnv, QueueMessage = unknown>(
+  handler: ExportedHandler<E, QueueMessage>,
   options: WorkerObservabilityOptions,
   Sentry: SentryCloudflare,
-): ExportedHandler<E> {
+): ExportedHandler<E, QueueMessage> {
   const cacheKey = handler as object;
   const cached = sentryHandlers.get(cacheKey);
   if (cached) {
-    return cached as ExportedHandler<E>;
+    return cached as ExportedHandler<E, QueueMessage>;
   }
-  const wrapped = Sentry.withSentry<E, unknown, unknown, ExportedHandler<E>>(
+  const wrapped = Sentry.withSentry<E, QueueMessage, unknown, ExportedHandler<E, QueueMessage>>(
     (env) => workerSentryOptions(env, options, Sentry),
     handler,
   );
@@ -107,12 +107,14 @@ export function workerSentryOptions(
  * `beforeSend` hook. When `SENTRY_DSN` is absent (local tests/dev), the raw
  * handler is used so waitUntil semantics stay unchanged.
  */
-export function wrapWorkerHandler<E extends WorkerEnv>(
-  handler: ExportedHandler<E> & Required<Pick<ExportedHandler<E>, "fetch">>,
+export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
+  handler: ExportedHandler<E, QueueMessage> &
+    Required<Pick<ExportedHandler<E, QueueMessage>, "fetch">>,
   options: WorkerObservabilityOptions,
-): ExportedHandler<E> & Required<Pick<ExportedHandler<E>, "fetch">> {
+): ExportedHandler<E, QueueMessage> & Required<Pick<ExportedHandler<E, QueueMessage>, "fetch">> {
   const innerFetch = handler.fetch;
-  const wrapped: ExportedHandler<E> & Required<Pick<ExportedHandler<E>, "fetch">> = {
+  const wrapped: ExportedHandler<E, QueueMessage> &
+    Required<Pick<ExportedHandler<E, QueueMessage>, "fetch">> = {
     async fetch(
       request: Parameters<NonNullable<ExportedHandler<E>["fetch"]>>[0],
       env: E,
@@ -140,6 +142,22 @@ export function wrapWorkerHandler<E extends WorkerEnv>(
       const Sentry = await loadSentry();
       const sentryScheduled = getSentryWrappedHandler(handler, options, Sentry).scheduled;
       sentryScheduled?.(event, env, ctx);
+    };
+  }
+
+  if (handler.queue) {
+    const innerQueue = handler.queue;
+    wrapped.queue = async (batch: MessageBatch<QueueMessage>, env: E, ctx: ExecutionContext) => {
+      if (!env.SENTRY_DSN) {
+        await innerQueue(batch, env, ctx);
+        return;
+      }
+      const Sentry = await loadSentry();
+      const sentryQueue = getSentryWrappedHandler(handler, options, Sentry).queue;
+      if (!sentryQueue) {
+        throw new Error("observability: Sentry-wrapped handler is missing queue");
+      }
+      await sentryQueue(batch, env, ctx);
     };
   }
 

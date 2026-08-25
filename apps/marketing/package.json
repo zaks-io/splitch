@@ -16,7 +16,9 @@
     "wrangler:types": "wrangler types src/worker-configuration.d.ts"
   },
   "dependencies": {
+    "@sentry/react": "^10.68.0",
     "@splitch/contracts": "workspace:*",
+    "@splitch/observability": "workspace:*",
     "@splitch/ui": "workspace:*",
     "@tanstack/react-router": "^1.170.18",
     "@tanstack/react-start": "^1.168.32",
