@@ -94,7 +94,11 @@ describe("Control Panel Flags transport", () => {
     );
 
     const result = await flags.create(
-      flagCreateInput("app_checkout", { ...booleanPresetDraft(), key: "new-checkout" }, "idem-1"),
+      flagCreateInput(
+        "app_checkout",
+        { ...booleanPresetDraft(), name: "New Checkout", key: "new-checkout" },
+        "idem-1",
+      ),
     );
     const request = capturedRequest;
 

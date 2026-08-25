@@ -50,6 +50,16 @@ describe("Create Flag form", () => {
     expect(html).not.toContain('id="variant-value-2"');
   });
 
+  it("leads with the Flag name, then the key it suggests", () => {
+    const html = renderForm();
+
+    expect(html).toContain('id="flag-name"');
+    expect(html).toContain('id="flag-key"');
+    expect(html.indexOf('id="flag-name"')).toBeLessThan(html.indexOf('id="flag-key"'));
+    // The JSON Schema editor only appears for object-valued Flags.
+    expect(html).not.toContain('id="flag-schema"');
+  });
+
   it("offers every contract-supported value type", () => {
     const html = renderForm();
 

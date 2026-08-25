@@ -84,7 +84,7 @@ export function promotionDiff(source: FlagDetailView, target: FlagDetailView): P
       id: "enabled",
       kind: "enabled",
       variantName: null,
-      label: "Kill switch",
+      label: "Serving",
       effect: "replace",
       target: [enabledLine(target.enabled)],
       source: [enabledLine(source.enabled)],

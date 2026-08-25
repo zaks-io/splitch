@@ -15,7 +15,7 @@ import {
   type Result,
 } from "./flag-definition-handler-utils";
 import { parseStoredSchema, pathBodyMismatch } from "./flag-definition-model";
-import { validateJsonSchema } from "./flag-definition-schema";
+import { validateJsonSchema } from "@splitch/contracts";
 
 export type VariantRow = NonNullable<Awaited<ReturnType<Repository["flags"]["getVariantByName"]>>>;
 export type VariantPatch = Parameters<Repository["flags"]["updateVariant"]>[3];

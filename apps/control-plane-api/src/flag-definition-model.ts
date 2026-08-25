@@ -1,6 +1,12 @@
-import { type Flag, FlagSchema, PercentageRolloutSchema, type Variant } from "@splitch/contracts";
+import {
+  type Flag,
+  FlagSchema,
+  PercentageRolloutSchema,
+  type ValidationIssue,
+  type Variant,
+  validateJsonSchema,
+} from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
-import { type ValidationIssue, validateJsonSchema } from "./flag-definition-schema";
 
 type FlagRow = NonNullable<Awaited<ReturnType<Repository["flags"]["getFlag"]>>>;
 type VariantRow = Awaited<ReturnType<Repository["flags"]["listVariants"]>>[number];

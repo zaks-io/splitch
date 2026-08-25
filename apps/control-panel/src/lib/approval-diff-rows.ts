@@ -30,7 +30,7 @@ export type ApprovalDiffRow = {
 export type ApprovalDiffLabels = Readonly<Record<string, string>>;
 
 const GROUP_ORDER = [
-  "Kill switch",
+  "Serving",
   "Available Variants",
   "Targeting Rules",
   "Baseline rollout",
@@ -40,7 +40,7 @@ const GROUP_ORDER = [
 type FieldMapping = { readonly group: string; readonly field: string };
 
 const FIELD_MAPPINGS: ReadonlyArray<readonly [RegExp, FieldMapping]> = [
-  [/^\/enabled$/, { group: "Kill switch", field: "Serving state" }],
+  [/^\/enabled$/, { group: "Serving", field: "Serving state" }],
   [
     /^\/availableVariantNames$/,
     { group: "Available Variants", field: "Available in this Environment" },

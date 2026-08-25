@@ -1,7 +1,7 @@
 import type { UpdateVariantResult, VariantFrozenChange, VariantRunFreeze } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import type { RunningBlocker } from "./flag-definition-guards";
-import type { ValidationIssue } from "./flag-definition-schema";
+import type { ValidationIssue } from "@splitch/contracts";
 
 export interface VariantFreezeRefusal {
   freeze: VariantRunFreeze;

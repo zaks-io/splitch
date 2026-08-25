@@ -56,6 +56,9 @@ test.describe("per-Environment Flags", () => {
     await expect(catalog.locator("#variant-name-1")).toHaveValue("enabled");
     await expect(catalog.locator("#variant-value-1")).toHaveValue("true");
 
+    // The name suggests the key until the key is edited directly.
+    await dialog.getByLabel("Flag name").fill("Billing Refresh");
+    await expect(dialog.getByLabel("Flag key")).toHaveValue("billing-refresh");
     await dialog.getByLabel("Flag key").fill(flagKey);
     await dialog.getByRole("button", { name: "Create Flag" }).click();
     await expect(dialog.getByRole("heading", { name: "Connect your code" })).toBeVisible();
@@ -74,6 +77,7 @@ test.describe("per-Environment Flags", () => {
     await captureThemeScreenshots(page, testInfo, "flags-list");
 
     await page.getByRole("button", { name: "Create Flag" }).click();
+    await page.getByRole("dialog").getByLabel("Flag name").fill("Billing Refresh");
     await page.getByRole("dialog").getByLabel("Flag key").fill(flagKey);
     await page.getByRole("dialog").getByRole("button", { name: "Create Flag" }).click();
     await expect(page.getByText("flag key already exists in this App")).toBeVisible();
@@ -88,6 +92,7 @@ test.describe("per-Environment Flags", () => {
     const dialog = page.getByRole("dialog");
     const catalog = dialog.getByTestId("variant-catalog");
 
+    await dialog.getByLabel("Flag name").fill("Checkout Copy");
     await dialog.getByLabel("Flag key").fill(flagKey);
     // No confirm here: "false"/"true" are valid strings, so the switch preserves
     // them and the fills below just overwrite. Only a switch to number or object
@@ -154,6 +159,7 @@ test.describe("App home", () => {
     await waitForHydration(page);
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Flag name").fill("Billing App Home");
     await dialog.getByLabel("Flag key").fill(flagKey);
     await dialog.getByRole("button", { name: "Create Flag" }).click();
     await expect(dialog.getByRole("heading", { name: "Connect your code" })).toBeVisible();
@@ -263,6 +269,7 @@ test.describe("Flag detail", () => {
 
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Flag name").fill("Detail Honest");
     await dialog.getByLabel("Flag key").fill(flagKey);
     await dialog.getByRole("button", { name: "Create Flag" }).click();
     await expect(dialog.getByRole("heading", { name: "Connect your code" })).toBeVisible();

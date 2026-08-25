@@ -60,6 +60,7 @@ test.describe("onboarding: connect your code", () => {
 
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Flag name").fill("Onboarding Flag");
     await dialog.getByLabel("Flag key").fill(flagKey);
     await dialog.getByRole("button", { name: "Create Flag" }).click();
 
@@ -101,6 +102,7 @@ test.describe("onboarding: connect your code", () => {
 
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Flag name").fill("Onboarding Flag");
     await dialog.getByLabel("Flag key").fill(flagKey);
     await dialog.getByRole("button", { name: "Create Flag" }).click();
 
@@ -129,6 +131,7 @@ test.describe("onboarding: connect your code", () => {
 
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Flag name").fill("Onboarding Flag");
     await dialog.getByLabel("Flag key").fill(flagKey);
     await dialog.getByRole("button", { name: "Create Flag" }).click();
 

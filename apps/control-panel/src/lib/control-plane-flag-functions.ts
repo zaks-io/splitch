@@ -123,8 +123,13 @@ export const createControlPanelFlag = createServerFn({ method: "POST" })
     }
     const data = parsed.data;
 
+    const authorized = await authorizedFlagsClient(data.environmentId);
+    if (!authorized.ok) return authorized.result;
+
     // The client validates to render inline errors; the server revalidates
-    // because the draft arrives over the wire and is not trusted.
+    // because the draft arrives over the wire and is not trusted. This runs
+    // after authorization: schema conformance compiles caller-supplied
+    // regexes, and that CPU must not be spendable by an unauthenticated body.
     const issues = draftIssues(data.draft);
     if (issues.length > 0) {
       return validationError(
@@ -132,9 +137,6 @@ export const createControlPanelFlag = createServerFn({ method: "POST" })
         issues.map((issue) => ({ path: issue.path.split("."), message: issue.message })),
       );
     }
-
-    const authorized = await authorizedFlagsClient(data.environmentId);
-    if (!authorized.ok) return authorized.result;
     const result = await authorized.client.create(
       flagCreateInput(data.appId, data.draft, data.idempotencyKey),
     );

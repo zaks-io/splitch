@@ -166,7 +166,7 @@ export function promotionSummary(
   }
   if (rows.some((row) => row.kind === "targeting")) parts.push("all Targeting Rules");
   if (rows.some((row) => row.kind === "rollout")) parts.push("the baseline rollout");
-  if (rows.some((row) => row.kind === "enabled")) parts.push("the kill switch");
+  if (rows.some((row) => row.kind === "enabled")) parts.push("the serving state");
 
   return `Promote ${listed(parts)} from ${sourceEnv} into ${targetEnv}`;
 }

@@ -23,7 +23,7 @@ export function FlagDetailExperimentBanner(props: {
       </AlertTitle>
       <AlertDescription className="text-muted-foreground text-sm leading-6">
         The Variant set and Targeting Rules it owns are read-only. To change them, end the
-        Experiment. The kill switch below stays available.
+        Experiment. The Serving toggle below stays available.
       </AlertDescription>
     </Alert>
   );
