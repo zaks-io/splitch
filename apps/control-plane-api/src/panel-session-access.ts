@@ -26,18 +26,22 @@ export interface PanelSessionAccess {
 /** Resolve current panel authority from D1 instead of trusting cached session roles. */
 export function makePanelSessionAccess(repo: Pick<Repository, "identity">): PanelSessionAccess {
   return {
+    /**
+     * All four reads issue CONCURRENTLY. Loading the App first to learn its Org
+     * put a serial D1 round trip in front of every authorized App request, and
+     * D1's round trip dominates the query itself; `getOrgMembershipForApp`
+     * resolves the same Org from the App id so nothing has to wait for it.
+     */
     async authorizeApp(actorId, appId, environmentId) {
-      const app = await repo.identity.getApp(appId);
-      if (!app) return null;
-
-      const [orgMembership, appMembership, environment] = await Promise.all([
-        repo.identity.getOrgMembership(app.organizationId, actorId),
+      const [app, orgMembership, appMembership, environment] = await Promise.all([
+        repo.identity.getApp(appId),
+        repo.identity.getOrgMembershipForApp(appId, actorId),
         repo.identity.getAppMembership(appScope(appId), actorId),
         environmentId
           ? repo.identity.getEnvironment(appScope(appId), environmentId)
           : Promise.resolve(true),
       ]);
-      if (!orgMembership || !appMembership || !environment) return null;
+      if (!(app && orgMembership && appMembership && environment)) return null;
 
       return {
         appId,

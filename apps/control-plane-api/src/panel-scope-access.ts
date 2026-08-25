@@ -23,18 +23,25 @@ export type PanelAppScopeAccess =
  * for this exact call, never from the delegation claim. Both live roles are
  * handed back so the caller renders the viewer's real capabilities instead of
  * a stale session claim.
+ *
+ * All three reads issue CONCURRENTLY. Loading the App first only to learn which
+ * Org to check membership in put a serial D1 round trip in front of every Panel
+ * App call, and the round trip is what these endpoints pay for;
+ * `getOrgMembershipForApp` reaches the same Org from the App id. The checks
+ * themselves are unchanged: every one still has to pass, and a missing App is
+ * still answered before either membership is consulted.
  */
 export async function panelAppScopeAccess(
   repo: Repository,
   scope: { actorId: string; appId: string },
   requestId: string,
 ): Promise<PanelAppScopeAccess> {
-  const app = await repo.identity.getApp(scope.appId);
-  if (!app) return { ok: false, response: notFound("App not found", requestId) };
-  const [orgMembership, appMembership] = await Promise.all([
-    repo.identity.getOrgMembership(app.organizationId, scope.actorId),
+  const [app, orgMembership, appMembership] = await Promise.all([
+    repo.identity.getApp(scope.appId),
+    repo.identity.getOrgMembershipForApp(scope.appId, scope.actorId),
     repo.identity.getAppMembership(appScope(scope.appId), scope.actorId),
   ]);
+  if (!app) return { ok: false, response: notFound("App not found", requestId) };
   if (!orgMembership || !appMembership) return { ok: false, response: forbidden(requestId) };
   return {
     ok: true,
@@ -52,19 +59,25 @@ export async function panelAppScopeAccess(
  *
  * The rows it already had to read to authorize are handed back, so callers do
  * not re-read them under a scope this function has not checked.
+ *
+ * All four reads issue CONCURRENTLY, for the reason given on
+ * `panelAppScopeAccess`. Concurrency does not widen the boundary: every check
+ * below still has to pass, and reading a membership for an App that turns out
+ * not to exist cannot grant anything, because the missing App is answered
+ * first.
  */
 export async function panelScopeAccess(
   repo: Repository,
   scope: PanelScope,
   requestId: string,
 ): Promise<PanelScopeAccess> {
-  const app = await repo.identity.getApp(scope.appId);
-  if (!app) return { ok: false, response: notFound("App not found", requestId) };
-  const [orgMembership, appMembership, environment] = await Promise.all([
-    repo.identity.getOrgMembership(app.organizationId, scope.actorId),
+  const [app, orgMembership, appMembership, environment] = await Promise.all([
+    repo.identity.getApp(scope.appId),
+    repo.identity.getOrgMembershipForApp(scope.appId, scope.actorId),
     repo.identity.getAppMembership(appScope(scope.appId), scope.actorId),
     repo.identity.getEnvironment(appScope(scope.appId), scope.environmentId),
   ]);
+  if (!app) return { ok: false, response: notFound("App not found", requestId) };
   if (!orgMembership || !appMembership) return { ok: false, response: forbidden(requestId) };
   if (!environment) {
     return { ok: false, response: notFound("Environment not found", requestId) };
