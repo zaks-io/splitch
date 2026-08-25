@@ -1,7 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreBinaries": ["gitleaks", "tb"],
-  "ignoreDependencies": ["cloudflare"],
+  "ignoreDependencies": ["cloudflare", "esbuild"],
   "stryker": {
     "config": ["stryker.base.mjs", "packages/*/stryker.config.mjs"]
   },
@@ -40,6 +40,12 @@
     },
     "packages/sdk": {
       "entry": ["src/contract-surface-assignability.ts"]
+    },
+    "packages/convex": {
+      "entry": ["src/component/_generated/*.ts"]
+    },
+    "examples/convex": {
+      "entry": ["convex/*.ts", "convex/_generated/*.{js,ts}"]
     },
     "apps/cli": {
       "ignoreDependencies": ["@hono/zod-openapi", "@sentry/node", "tsx"]

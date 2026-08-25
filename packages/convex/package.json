@@ -1,0 +1,87 @@
+{
+  "name": "@splitch/convex",
+  "version": "0.1.0",
+  "description": "First-party Convex Component for synced local Splitch evaluation",
+  "license": "Apache-2.0",
+  "homepage": "https://splitch.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zaks-io/splitch.git",
+    "directory": "packages/convex"
+  },
+  "type": "module",
+  "sideEffects": [
+    "./dist/chunk-*.js"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js",
+      "default": "./dist/react/index.js"
+    },
+    "./_generated/component.js": {
+      "types": "./dist/component/_generated/component.d.ts"
+    },
+    "./_generated/component": {
+      "types": "./dist/component/_generated/component.d.ts"
+    },
+    "./convex.config.js": {
+      "types": "./dist/component/convex.config.d.ts",
+      "import": "./dist/component/convex.config.js",
+      "default": "./dist/component/convex.config.js"
+    },
+    "./convex.config": {
+      "types": "./dist/component/convex.config.d.ts",
+      "import": "./dist/component/convex.config.js",
+      "default": "./dist/component/convex.config.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "module": "./dist/index.js",
+  "scripts": {
+    "codegen": "convex codegen --component-dir ./src/component --typecheck enable",
+    "build": "tsup && node scripts/write-build-stamp.mjs",
+    "clean": "rm -rf dist coverage",
+    "lint": "biome lint src scripts",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pack:check": "node scripts/pack-check.mjs",
+    "pack:dry-run": "node scripts/pack-dry-run.mjs",
+    "test:consumer-smoke": "node scripts/consumer-smoke.mjs",
+    "prepack": "node scripts/prepack-guard.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "convex": "^1.43.0",
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@splitch/contracts": "workspace:*",
+    "@splitch/evaluation-core": "workspace:*",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "convex": "^1.45.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "^6.0.3"
+  }
+}

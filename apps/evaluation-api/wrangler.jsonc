@@ -30,6 +30,11 @@
       "binding": "EVENT_INGEST",
       "service": "splitch-event-ingest-api",
       "entrypoint": "EvaluationEntrypoint"
+    },
+    {
+      "binding": "CONTROL_PLANE_API",
+      "service": "splitch-control-plane-api",
+      "entrypoint": "EvaluationEntrypoint"
     }
   ],
   "kv_namespaces": [
@@ -199,6 +204,11 @@
           "binding": "EVENT_INGEST",
           "service": "splitch-event-ingest-api-shared-preview",
           "entrypoint": "EvaluationEntrypoint"
+        },
+        {
+          "binding": "CONTROL_PLANE_API",
+          "service": "splitch-control-plane-api-shared-preview",
+          "entrypoint": "EvaluationEntrypoint"
         }
       ]
     },
@@ -294,6 +304,11 @@
         {
           "binding": "EVENT_INGEST",
           "service": "splitch-event-ingest-api",
+          "entrypoint": "EvaluationEntrypoint"
+        },
+        {
+          "binding": "CONTROL_PLANE_API",
+          "service": "splitch-control-plane-api",
           "entrypoint": "EvaluationEntrypoint"
         }
       ]

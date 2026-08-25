@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 
 export const RESET_TABLES = [
+  "config_webhook_deliveries",
+  "convex_installations",
   "event_definition_versions",
   "event_definitions",
   "approval_reviews",

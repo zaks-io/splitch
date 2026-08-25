@@ -1,16 +1,25 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
+import {
+  type ConvexExposureVerificationRequest,
+  type ConvexExposureVerificationResult,
+  createHealthResponse,
+  parsePlatformTarget,
+  routesDelegatedTo,
+} from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import {
-  createWorkerFaultReporter,
   createWorkerObservability,
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
 import {
+  type DelegatedIdentity,
+  delegatedAuthResolver,
+  delegatedIdentityFor,
   McpDelegationReplayDurableObject,
   makeDurableMcpDelegationReplayGuard,
   makeMcpDelegationAuthResolver,
+  notDelegatedResponse,
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
@@ -25,6 +34,7 @@ import {
   requiredMcpDelegationSecret,
   requiredMcpReplayBinding,
 } from "./control-plane-runtime-config";
+import { loadConvexExposureVerificationConfig } from "./convex-exposure-verification";
 import { CredentialCacheBackfillDurableObject } from "./credential-cache-backfill-do";
 import {
   CredentialCacheWriterDurableObject,
@@ -42,6 +52,7 @@ import { panelOverviewRead } from "./panel-overview";
 import { panelSettingsRead } from "./panel-settings";
 import { rateLimiterForTarget } from "./rate-limit";
 import { runSnapshotDeliveryFromEnv } from "./run-snapshot";
+import { reportRunSnapshotFault } from "./run-snapshot-fault";
 import { runControlPlaneScheduled } from "./scheduled";
 import { makeSessionStore } from "./session-store";
 import { unauthorized } from "./unauthorized";
@@ -92,6 +103,25 @@ export class SignedControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneA
   }
 }
 
+const evaluationDelegatedRoutes = routesDelegatedTo("control-plane-api").filter(
+  (route) => route.auth === "api-key",
+);
+
+/** Binding-only entrypoint for API-Key Convex routes surfaced by Evaluation. */
+export class EvaluationEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
+  override async fetch(request: Request): Promise<Response> {
+    const identity = delegatedIdentityFor(request, evaluationDelegatedRoutes);
+    if (!identity) return notDelegatedResponse(request);
+    return handleRequest(request, this.env, this.ctx, { kind: "evaluation", identity });
+  }
+
+  async loadConvexExposureVerificationConfig(
+    input: ConvexExposureVerificationRequest,
+  ): Promise<ConvexExposureVerificationResult> {
+    return loadConvexExposureVerificationConfig(createRepository(this.env.DB), input);
+  }
+}
+
 type PanelProtocol = "none" | "signed" | "bounded-session";
 type AuthMode = PanelProtocol | "mcp";
 
@@ -112,11 +142,13 @@ function bindingHandler(authMode: Exclude<AuthMode, "none">) {
   );
 }
 
+type BindingAuthority = { kind: "evaluation"; identity: DelegatedIdentity };
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: This is the single Worker door switch and keeps each binding authority visible.
 async function handleRequest(
   request: Request,
   env: ControlPlaneApiEnv,
   ctx: ExecutionContext,
-  authMode: AuthMode = "none",
+  authMode: AuthMode | BindingAuthority = "none",
 ): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/health" || url.pathname === "/") {
@@ -146,7 +178,8 @@ async function handleRequest(
   });
 
   const repo = createRepository(env.DB);
-  const panelProtocol = authMode === "mcp" ? "none" : authMode;
+  const panelProtocol: PanelProtocol =
+    typeof authMode === "object" || authMode === "mcp" ? "none" : authMode;
   const panelAuthResolver = makeControlPlaneAuthResolver(
     {
       verifier,
@@ -155,15 +188,17 @@ async function handleRequest(
     controlPanelAuthOptions(env, repo, panelProtocol),
   );
   const authResolver =
-    authMode === "mcp"
-      ? makeMcpDelegationAuthResolver({
-          surface: "control-plane-api",
-          secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
-          replayGuard: makeDurableMcpDelegationReplayGuard(
-            requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
-          ),
-        })
-      : panelAuthResolver;
+    typeof authMode === "object"
+      ? delegatedAuthResolver(authMode.identity)
+      : authMode === "mcp"
+        ? makeMcpDelegationAuthResolver({
+            surface: "control-plane-api",
+            secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
+            replayGuard: makeDurableMcpDelegationReplayGuard(
+              requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
+            ),
+          })
+        : panelAuthResolver;
   const panelResponse = await handleSignedControlPanelRequest(
     request,
     env,
@@ -175,6 +210,7 @@ async function handleRequest(
   // When authMode === "mcp", this same app mounts every Control Plane route under the MCP
   // resolver; operationId, method, target, and bodySha256 credential pins confine each call.
   const app = createApp({
+    door: typeof authMode === "object" ? "binding" : "public",
     authResolver,
     rateLimiter: rateLimiterForTarget(
       env.SPLITCH_PLATFORM_TARGET,
@@ -202,6 +238,14 @@ async function handleRequest(
     },
     approvalArchiveStore: approvalArchiveStoreFromEnv(env),
     holdoverWriteOutboxCleanup: createHoldoverWriteOutboxCleanup(env.EVALUATION_API),
+    ...(typeof authMode === "object"
+      ? {
+          convex: {
+            webhookKek: env.CONVEX_WEBHOOK_KEK,
+            webhookKeyVersion: env.CONVEX_WEBHOOK_KEY_VERSION,
+          },
+        }
+      : {}),
   });
 
   return app.fetch(request, env);
@@ -285,17 +329,6 @@ async function handleSignedPanelSettings(
     },
     operation,
     auth.principal,
-  );
-}
-
-function reportRunSnapshotFault(
-  env: ControlPlaneApiEnv,
-  ctx: Pick<ExecutionContext, "waitUntil">,
-  detail: Record<string, unknown>,
-): void {
-  createWorkerFaultReporter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx))(
-    "run_snapshot_unshipped",
-    detail,
   );
 }
 

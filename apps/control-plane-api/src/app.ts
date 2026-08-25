@@ -8,6 +8,7 @@ import {
   type RegistrarDeps,
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
+import { appEnvironmentCleanupDeps } from "./app-environment-cleanup-deps";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
 import { makeAppMemberHandlers } from "./app-member-handlers";
 import { makeOtherApprovalApplication } from "./approval-application";
@@ -16,17 +17,18 @@ import type { AnalysisResultsReader } from "./attention-analysis-reader";
 import { unavailableAnalysisResults } from "./attention-analysis-reader";
 import { makeAttentionRollupHandler } from "./attention-rollup";
 import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConvexHandlerDeps } from "./convex-handlers";
+import { mountConvexRoutes } from "./convex-route-mounting";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
+import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import { registerEventDefinitionRoutes } from "./event-definition-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
-import { appEnvironmentCleanupDeps } from "./app-environment-cleanup-deps";
-import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
-import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
 import { diagnosableHandlers } from "./flag-config-policy";
 import { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
 import { makeHandlers } from "./handlers";
+import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
 import { mountLiveUpdateRoute } from "./live-updates";
 import { makeMetricSegmentHandlers } from "./metric-segment-handlers";
 import type { MemberProfileResolver } from "./org-handlers";
@@ -50,6 +52,7 @@ import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
  */
 
 export interface AppDeps {
+  door?: "public" | "binding";
   authResolver: AuthResolver;
   rateLimiter: RateLimiter;
   repo: Repository;
@@ -68,12 +71,16 @@ export interface AppDeps {
   approvalArchiveStore?: import("./approval-archive").ApprovalArchiveStore;
   exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
   holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
+  convex?: Omit<ConvexHandlerDeps, "repo">;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
 export function controlPlaneRegistrar(deps: AppDeps): Registrar {
   const registrarDeps: RegistrarDeps = {
-    authResolvers: { "control-plane-token": deps.authResolver },
+    authResolvers: {
+      "control-plane-token": deps.authResolver,
+      ...(deps.door === "binding" && deps.convex ? { "api-key": deps.authResolver } : {}),
+    },
     rateLimiter: deps.rateLimiter,
     defaultHeaders: deps.defaultHeaders,
     observability: deps.observability,
@@ -128,6 +135,7 @@ export function createApp(deps: AppDeps): Hono {
     nowIso: deps.nowIso,
   });
   const registrar = controlPlaneRegistrar(deps);
+  mountConvexRoutes(app, registrar, deps.repo, deps.door === "binding" ? deps.convex : undefined);
   const approvalHandlers = diagnosableHandlers(
     makeApprovalHandlers({
       repo: deps.repo,

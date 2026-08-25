@@ -1,0 +1,200 @@
+name: convex-publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: convex-publish-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+env:
+  CI: "true"
+
+jobs:
+  publish:
+    name: Publish @splitch/convex
+    if: startsWith(github.event.release.tag_name, 'convex-v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      convex_version: ${{ steps.target.outputs.convex_version }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node for npm trusted publishing
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.17.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Resolve CONVEX release target
+        id: target
+        run: |
+          set -euo pipefail
+          target="$(node scripts/release/resolve-version.mjs convex "$GITHUB_WORKSPACE")"
+          {
+            echo "convex_version=$(printf '%s' "$target" | jq -r '.version')"
+            echo "convex_tag=$(printf '%s' "$target" | jq -r '.tag')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate release source and commit
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TARGET_COMMITISH: ${{ github.event.release.target_commitish }}
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+        run: node scripts/release/validate-publish-context.mjs convex "$GITHUB_WORKSPACE"
+
+      - name: Refresh live release state before npm version check
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/release/validate-live-publish-state.mjs convex "$GITHUB_WORKSPACE"
+
+      - name: Check whether CONVEX version is already published
+        id: npm-version
+        env:
+          CONVEX_VERSION: ${{ steps.target.outputs.convex_version }}
+        working-directory: packages/convex
+        run: |
+          set -euo pipefail
+          already_published="$(node "$GITHUB_WORKSPACE/scripts/release/check-published-version.mjs" convex "$CONVEX_VERSION")"
+          echo "already_published=$already_published" >> "$GITHUB_OUTPUT"
+          if [ "$already_published" = "true" ]; then
+            echo "Skipping immutable npm version @splitch/convex@$CONVEX_VERSION: it already exists"
+          else
+            echo "@splitch/convex@$CONVEX_VERSION is not published; publish may proceed"
+          fi
+
+      - name: Install release dependencies
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build @splitch/convex
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: pnpm --filter @splitch/convex build
+
+      - name: Check release package contents
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: |
+          pnpm --filter @splitch/convex run pack:dry-run
+          pnpm --filter @splitch/convex run pack:check
+
+      # Publish the staged tarball: the same bytes pack:check validated and
+      # the draft release attached. The live tree is never packed in place.
+      - name: Pack release tarball
+        if: steps.npm-version.outputs.already_published != 'true'
+        id: pack
+        working-directory: packages/convex
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/npm-publish"
+          tarball="$(node scripts/pack-release.mjs "$RUNNER_TEMP/npm-publish" | tail -n 1)"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Publish @splitch/convex with provenance
+        if: steps.npm-version.outputs.already_published != 'true'
+        working-directory: packages/convex
+        env:
+          RELEASE_TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: npm publish "$RUNNER_TEMP/npm-publish/$RELEASE_TARBALL" --provenance --access public --tag latest
+
+      - name: Publish summary
+        if: always()
+        env:
+          ALREADY_PUBLISHED: ${{ steps.npm-version.outputs.already_published }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TARGET_COMMITISH: ${{ github.event.release.target_commitish }}
+          CONVEX_VERSION: ${{ steps.target.outputs.convex_version }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$ALREADY_PUBLISHED" in
+            true) decision="skip-already-published" ;;
+            false) decision="publish" ;;
+            *) decision="not-evaluated" ;;
+          esac
+          {
+            echo '## CONVEX publish'
+            echo
+            echo '- Package: @splitch/convex'
+            echo "- Version: $CONVEX_VERSION"
+            echo "- Release tag: $RELEASE_TAG"
+            echo "- Release target commit: $RELEASE_TARGET_COMMITISH"
+            echo "- Commit: $GITHUB_SHA"
+            echo '- Runner: ubuntu-24.04 (GitHub-hosted)'
+            echo '- Provenance: npm trusted publishing/OIDC with npm publish --provenance'
+            echo '- npm dist-tag: latest'
+            echo "- Decision: $decision"
+          } >> "$GITHUB_STEP_SUMMARY"
+  linear-release:
+    name: Track @splitch/convex Linear Release
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    needs: publish
+    environment: production
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check Linear release credential
+        env:
+          CONVEX_LINEAR_ACCESS_KEY: ${{ secrets.CONVEX_LINEAR_ACCESS_KEY }}
+        run: |
+          if [ -z "$CONVEX_LINEAR_ACCESS_KEY" ]; then
+            echo "::error::CONVEX_LINEAR_ACCESS_KEY is required to track @splitch/convex releases"
+            exit 1
+          fi
+
+      - name: Sync Linear release
+        id: linear-release
+        uses: linear/linear-release-action@3858a5d7892435dc63302ac76b0cdb587435caa9 # v0.14.6
+        with:
+          access_key: ${{ secrets.CONVEX_LINEAR_ACCESS_KEY }}
+          name: "@splitch/convex ${{ needs.publish.outputs.convex_version }}"
+          version: ${{ needs.publish.outputs.convex_version }}
+          include_paths: packages/convex/**,packages/contracts/**
+          links: |
+            GitHub Release=${{ github.event.release.html_url }}
+            npm=https://www.npmjs.com/package/@splitch/convex/v/${{ needs.publish.outputs.convex_version }}
+            GitHub Actions=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Summary
+        env:
+          LINEAR_RELEASE_URL: ${{ steps.linear-release.outputs.release-url }}
+          CONVEX_VERSION: ${{ needs.publish.outputs.convex_version }}
+        run: |
+          if [ -z "$LINEAR_RELEASE_URL" ]; then
+            echo "::error::Linear did not return an @splitch/convex release URL"
+            exit 1
+          fi
+          {
+            echo "## @splitch/convex Linear release"
+            echo
+            echo "- Version: \`$CONVEX_VERSION\`"
+            echo "- Linear: $LINEAR_RELEASE_URL"
+          } >> "$GITHUB_STEP_SUMMARY"

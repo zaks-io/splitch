@@ -8,6 +8,10 @@ import {
   makeHoldoverWriteOutboxCleanupHandler,
 } from "./assignment/holdover-write-outbox-cleanup";
 import { makeCachedEvaluationTelemetryHandler } from "./cached-evaluation-telemetry";
+import {
+  type ConvexExposureConfigurationResolver,
+  makeConvexExposuresHandler,
+} from "./convex-exposures";
 import { makeApiKeyOnlyAuthResolver, makeClientKeyOnlyAuthResolver } from "./data-plane-auth";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
 import { makeEvaluateHandler } from "./evaluate";
@@ -60,6 +64,7 @@ export interface AppDeps extends EvaluatePathDeps {
   observability?: RegistrarDeps["observability"];
   /** `ctx.waitUntil` seam for the fire-and-forget Assignment Store write on evaluate. */
   waitUntil?: (promise: Promise<unknown>) => void;
+  convexConfigurationResolver?: ConvexExposureConfigurationResolver;
 }
 
 export function createApp(deps: AppDeps): Hono {
@@ -98,6 +103,17 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, evaluationRoute("sdk_peek"), makePeekHandler(deps));
   registrar.mount(app, evaluationRoute("sdk_verify"), makeVerifyHandler(deps));
   registrar.mount(app, evaluationRoute("sdk_evaluate_all"), makeEvaluateAllHandler(deps));
+  registrar.mount(
+    app,
+    evaluationRoute("convex_exposures_create"),
+    makeConvexExposuresHandler({
+      ...deps,
+      convexConfigurationResolver: deps.convexConfigurationResolver,
+      holdoverWrite:
+        deps.holdoverWrite ?? new DirectHoldoverWriteCoordinator(deps.assignmentStore, deps.logger),
+      saltStore: deps.exposureAssembly.saltStore,
+    }),
+  );
   registrar.mount(
     app,
     evaluationRoute("sdk_exposures"),

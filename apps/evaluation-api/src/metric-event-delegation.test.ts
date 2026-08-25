@@ -20,7 +20,9 @@ describe("Metric Event delegation", () => {
         return Response.json({ accepted: true }, { status: 202 });
       },
     };
-    const { app } = await makeSdkRouteHarness({ eventIngest });
+    const { app } = await makeSdkRouteHarness({
+      delegationBindings: { "event-ingest-api": eventIngest },
+    });
 
     const response = await app.request("/api/sdk/events", {
       method: "POST",
@@ -39,6 +41,8 @@ describe("Metric Event delegation", () => {
     expect(JSON.parse(request?.headers.get(DELEGATED_IDENTITY_HEADER) ?? "{}")).toEqual({
       operation: "sdk_track",
       actorId: `client_key:${await sha256Hex(CLIENT_KEY)}`,
+      authKind: "client-key",
+      scopes: ["data-plane:evaluate", "data-plane:write"],
       orgId: "org_verify",
       appId: APP_ID,
       environmentId: ENVIRONMENT_ID,
@@ -56,7 +60,9 @@ describe("Metric Event delegation", () => {
         return Response.json({ accepted: true }, { status: 202 });
       },
     };
-    const { app } = await makeSdkRouteHarness({ eventIngest });
+    const { app } = await makeSdkRouteHarness({
+      delegationBindings: { "event-ingest-api": eventIngest },
+    });
 
     const response = await app.request("/api/sdk/events", {
       method: "POST",

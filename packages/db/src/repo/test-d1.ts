@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Miniflare } from "miniflare";
@@ -46,13 +46,20 @@ export function migrationFileStatements(fileName: string): string[] {
     sql
       .split(/-->\s*statement-breakpoint/)
       .map(stripLineComments)
-      .flatMap((chunk) => chunk.split(";"))
+      .flatMap(splitMigrationChunk)
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
       // `d1.exec` treats each line as its own statement, so a multi-line one must
       // be flattened before it is handed over.
       .map((s) => s.replace(/\n/g, " "))
   );
+}
+
+function splitMigrationChunk(chunk: string): string[] {
+  if (/^\s*CREATE\s+TRIGGER\b/i.test(chunk)) {
+    return [chunk.replace(/;\s*$/, "")];
+  }
+  return chunk.split(";");
 }
 
 function migrationFiles(): string[] {

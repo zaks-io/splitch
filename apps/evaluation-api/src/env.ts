@@ -1,4 +1,8 @@
 import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
+import type {
+  ConvexExposureVerificationRequest,
+  ConvexExposureVerificationResult,
+} from "@splitch/contracts";
 import type { HoldoverWriteAppInventoryNamespace } from "./assignment/holdover-write-app-inventory";
 import type { HoldoverWriteOutboxNamespace } from "./assignment/holdover-write-outbox";
 import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store";
@@ -9,6 +13,12 @@ interface ExposureIngestFetcher {
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
 }
 
+export interface ConvexControlPlaneBinding extends ExposureIngestFetcher {
+  loadConvexExposureVerificationConfig(
+    input: ConvexExposureVerificationRequest,
+  ): Promise<ConvexExposureVerificationResult>;
+}
+
 export interface EvaluationApiEnv {
   ASSIGNMENTS_KV: KVNamespace;
   ASSIGNMENT_STORE_WRITER: AssignmentWriterNamespace;
@@ -16,6 +26,7 @@ export interface EvaluationApiEnv {
   CONFIG_STORE_WRITER?: ConfigStoreNamespace;
   CREDENTIAL_STORE: KVNamespace;
   EVENT_INGEST?: ExposureIngestFetcher;
+  CONTROL_PLANE_API: ConvexControlPlaneBinding;
   EVENT_INGEST_URL?: string;
   SESSION_STORE: KVNamespace;
   AUTH_JWKS_URI?: string;

@@ -207,6 +207,7 @@ const errorMembers = [
   member("SEGMENT_NOT_FOUND", SegmentNotFoundDetailsSchema),
   member("PRIVACY_JOB_NOT_FOUND", EmptyDetails),
   member("APPROVAL_REQUEST_NOT_FOUND", EmptyDetails),
+  member("CONVEX_INSTALLATION_NOT_FOUND", EmptyDetails),
 
   member("UNAUTHORIZED", EmptyDetails),
   member("CREDENTIAL_REVOKED", EmptyDetails),
@@ -272,7 +273,16 @@ const errorMembers = [
   member(
     "IDEMPOTENCY_KEY_CONFLICT",
     z.object({
-      scope: z.enum(["approval_request", "review", "conclusion", "app_create", "flag_create"]),
+      scope: z.enum([
+        "approval_request",
+        "review",
+        "conclusion",
+        "app_create",
+        "flag_create",
+        "convex_installation",
+        "convex_secret_rotation",
+        "convex_evaluation",
+      ]),
       idempotencyKey: z.string().min(1),
     }),
   ),

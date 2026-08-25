@@ -3,12 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ALLOWED_PUBLISHABLE_PACKAGES } from "./policy/constants.mjs";
-import { lintPublishingPolicy, lintPublishingPolicyFromRepo } from "./policy/run.mjs";
 import {
   lintWorkspaceDependencyPolicy,
   lintWorkspacePublishability,
 } from "./policy/publishability.mjs";
 import { lintReleaseMetadata } from "./policy/release-metadata.mjs";
+import { lintPublishingPolicy, lintPublishingPolicyFromRepo } from "./policy/run.mjs";
 
 type PackageManifest = Record<string, unknown> & {
   name?: string;
@@ -32,9 +32,20 @@ function pkg(packagePath: string, manifest: PackageManifest): WorkspacePackage {
 
 const validSdkManifest = loadFixture("sdk-valid.package.json");
 const validCliManifest = loadFixture("cli-valid.package.json");
+const validConvexManifest = {
+  ...validSdkManifest,
+  name: "@splitch/convex",
+  exports: {
+    ".": {
+      types: "./dist/index.d.ts",
+      import: "./dist/index.js",
+      default: "./dist/index.js",
+    },
+  },
+};
 
 describe("lintWorkspacePublishability", () => {
-  it("passes when only @splitch/sdk and @splitch/cli are publishable", () => {
+  it("passes when only the declared public packages are publishable", () => {
     const violations = lintWorkspacePublishability([
       pkg("packages/sdk/package.json", { ...validSdkManifest, private: undefined }),
       pkg("apps/cli/package.json", { ...validCliManifest, private: undefined }),
@@ -52,7 +63,9 @@ describe("lintWorkspacePublishability", () => {
       pkg("packages/ui/package.json", { name: "@splitch/ui" }),
     ]);
     expect(violations).toHaveLength(1);
-    expect(violations[0]?.message).toContain("only @splitch/sdk, @splitch/cli may be published");
+    expect(violations[0]?.message).toContain(
+      "only @splitch/sdk, @splitch/cli, @splitch/convex may be published",
+    );
   });
 
   it("fails when @splitch/contracts is publishable", () => {
@@ -105,6 +118,29 @@ describe("lintWorkspaceDependencyPolicy", () => {
 describe("lintReleaseMetadata", () => {
   it("accepts the valid SDK fixture", () => {
     expect(lintReleaseMetadata(pkg("packages/sdk/package.json", validSdkManifest))).toEqual([]);
+  });
+
+  it("accepts the Convex default export condition required by component tooling", () => {
+    expect(lintReleaseMetadata(pkg("packages/convex/package.json", validConvexManifest))).toEqual(
+      [],
+    );
+  });
+
+  it("requires the Convex default export to match its ESM import", () => {
+    const violations = lintReleaseMetadata(
+      pkg("packages/convex/package.json", {
+        ...validConvexManifest,
+        exports: {
+          ".": {
+            ...validConvexManifest.exports["."],
+            default: "./dist/other.js",
+          },
+        },
+      }),
+    );
+    expect(violations.some((violation) => violation.message.includes("for Convex tooling"))).toBe(
+      true,
+    );
   });
 
   it("fails when SDK depends on a private workspace package", () => {
@@ -207,6 +243,8 @@ describe("repo publishing policy against the live monorepo", () => {
       violation.message.includes("may be published"),
     );
     expect(unexpectedPublishable).toEqual([]);
-    expect(ALLOWED_PUBLISHABLE_PACKAGES).toEqual(new Set(["@splitch/sdk", "@splitch/cli"]));
+    expect(ALLOWED_PUBLISHABLE_PACKAGES).toEqual(
+      new Set(["@splitch/sdk", "@splitch/cli", "@splitch/convex"]),
+    );
   });
 });
