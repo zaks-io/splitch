@@ -19,6 +19,12 @@ export function assertEnvironmentExposureStatusContract(root, fail) {
     "Environment Exposure status sorting key must be App/Environment scoped",
     fail,
   );
+  requireInstruction(
+    datasource,
+    /^FORWARD_QUERY >\s+SELECT \*$/m,
+    "Environment Exposure status must preserve live history when its retained source is rebuilt",
+    fail,
+  );
   requireIdentityFree(datasource, "Environment Exposure status", fail);
 
   requireColumns(deletions, ["`app_id`", "`environment_id`"], fail);
