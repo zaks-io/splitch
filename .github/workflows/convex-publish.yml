@@ -20,6 +20,7 @@ jobs:
     name: Publish @splitch/convex
     if: startsWith(github.event.release.tag_name, 'convex-v')
     runs-on: ubuntu-24.04
+    environment: production
     timeout-minutes: 30
     outputs:
       convex_version: ${{ steps.target.outputs.convex_version }}
