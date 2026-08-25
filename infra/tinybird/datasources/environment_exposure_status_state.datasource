@@ -5,8 +5,5 @@ SCHEMA >
     `environment_id` String `json:$.environment_id`,
     `first_exposure_state` AggregateFunction(min, DateTime64(3)) `json:$.first_exposure_state`
 
-FORWARD_QUERY >
-    SELECT *
-
 ENGINE "AggregatingMergeTree"
 ENGINE_SORTING_KEY "app_id, environment_id"

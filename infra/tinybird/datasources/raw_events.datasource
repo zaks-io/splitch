@@ -19,28 +19,6 @@ SCHEMA >
     `is_holdover` UInt8 `json:$.is_holdover`,
     `sdk_version` Nullable(String) `json:$.sdk_version`
 
-FORWARD_QUERY >
-    SELECT
-        dedup_key,
-        app_id,
-        environment_id,
-        experiment_id,
-        run_id,
-        id_type,
-        targeting_key_hash,
-        variant,
-        type,
-        event_id,
-        counterfactual,
-        source_id,
-        CAST(client_timestamp, 'Nullable(DateTime64(3))') AS client_timestamp,
-        server_received_at,
-        server_received_at AS exposure_at,
-        ingest_ts,
-        activation_ts,
-        is_holdover,
-        sdk_version
-
 ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(server_received_at)"
 ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, run_id, server_received_at, targeting_key_hash"
