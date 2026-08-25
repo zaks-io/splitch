@@ -1,5 +1,6 @@
+import type { FlagConfigurationSummary } from "@splitch/contracts";
 import type { ControlPlaneOperationResult, FlagsClient } from "@splitch/control-plane-sdk";
-import { type FlagConfigSummary, flagConfigSummary } from "./flag-config-summary";
+import { type FlagConfigSummary, flagListConfigSummary } from "./flag-config-summary";
 
 export type FlagsMatrixCell = FlagConfigSummary;
 
@@ -21,14 +22,12 @@ export type FlagsMatrixData = {
 
 type MatrixColumn = {
   environmentId: string;
-  flags: Pick<FlagsClient, "list" | "getConfig">;
+  flags: Pick<FlagsClient, "list">;
 };
 
 /**
- * The matrix columns arrive from the browser, and the Worker only authorizes an
- * Environment when a read is actually sent through its client. An App with no
- * Flags sends nothing per column, so a column outside the App would otherwise
- * come back as an empty, successful matrix. Refusing here keeps that failure loud.
+ * The matrix columns arrive from the browser. Refuse a foreign Environment
+ * before starting the parallel list reads so the failure names the invalid scope.
  */
 export function assertMatrixEnvironments(
   requested: readonly string[],
@@ -50,38 +49,32 @@ export async function readFlagsMatrix(
   const catalogClient = columns[0];
   if (!catalogClient) throw new Error("Flags matrix requires at least one Environment");
 
-  const listed = await catalogClient.flags.list({ appId });
-  if (!listed.ok) return listed;
-
-  const configurations = await Promise.all(
+  const listed = await Promise.all(
     columns.map(async (column) => ({
       environmentId: column.environmentId,
-      results: await Promise.all(
-        listed.data.items.map((definition) =>
-          column.flags.getConfig({
-            appId,
-            environmentId: column.environmentId,
-            flagId: definition.id,
-          }),
-        ),
-      ),
+      result: await column.flags.list({ appId, environmentId: column.environmentId }),
     })),
   );
-
-  for (const column of configurations) {
-    const failed = column.results.find(
-      (result) => !result.ok && result.error.code !== "FLAG_NOT_FOUND",
-    );
-    if (failed && !failed.ok) return failed;
+  for (const column of listed) {
+    if (!column.result.ok) return column.result;
   }
+  const catalog = listed[0]?.result;
+  if (!catalog?.ok) throw new Error("Flags matrix catalog result is missing");
+  const configurations = listed.map((column) => {
+    if (!column.result.ok) throw new Error("Flags matrix Environment result is missing");
+    return {
+      environmentId: column.environmentId,
+      items: new Map(column.result.data.items.map((item) => [item.id, item])),
+    };
+  });
 
   return {
     ok: true,
     status: 200,
     data: {
-      readTruncated: listed.data.readTruncated,
-      readLimit: listed.data.readLimit,
-      rows: listed.data.items.map((definition, definitionIndex) => ({
+      readTruncated: catalog.data.readTruncated,
+      readLimit: catalog.data.readLimit,
+      rows: catalog.data.items.map((definition) => ({
         definition: {
           id: definition.id,
           key: definition.key,
@@ -93,7 +86,7 @@ export async function readFlagsMatrix(
         cells: Object.fromEntries(
           configurations.map((column) => [
             column.environmentId,
-            configurationCell(column.results, definitionIndex),
+            configurationCell(column.items, definition.id),
           ]),
         ),
       })),
@@ -102,12 +95,11 @@ export async function readFlagsMatrix(
 }
 
 function configurationCell(
-  results: Awaited<ReturnType<FlagsClient["getConfig"]>>[],
-  index: number,
+  items: Map<string, { flagConfiguration?: FlagConfigurationSummary }>,
+  flagId: string,
 ): FlagsMatrixCell | null {
-  const result = results[index];
-  if (!result) throw new Error(`Flags matrix Configuration result ${index} is missing`);
-  return result.ok ? flagConfigSummary(result.data) : null;
+  const configuration = items.get(flagId)?.flagConfiguration;
+  return configuration ? flagListConfigSummary(configuration) : null;
 }
 
 export type DriftKind =

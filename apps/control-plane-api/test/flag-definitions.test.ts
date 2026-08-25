@@ -116,6 +116,9 @@ describe("control-plane Flag definition CRUD", () => {
           enabled: boolean;
           rollout: number | null;
           defaultVariant: string;
+          availableVariantNames: string[];
+          targetingRuleRolloutPercentages: number[];
+          experiment: { id: string; name: string } | null;
         };
       }>;
     };
@@ -124,11 +127,17 @@ describe("control-plane Flag definition CRUD", () => {
       enabled: true,
       rollout: 35,
       defaultVariant: "control",
+      availableVariantNames: [],
+      targetingRuleRolloutPercentages: [],
+      experiment: null,
     });
     expect(prodItems.items.find((flag) => flag.id === second.id)?.flagConfiguration).toEqual({
       enabled: false,
       rollout: null,
       defaultVariant: "control",
+      availableVariantNames: [],
+      targetingRuleRolloutPercentages: [],
+      experiment: null,
     });
 
     const devList = await request(

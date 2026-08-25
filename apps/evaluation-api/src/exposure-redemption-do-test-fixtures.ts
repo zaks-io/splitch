@@ -17,44 +17,44 @@ export function claimMemoryCtx(): ClaimMemoryCtx {
   const map = new Map<string, unknown>();
   let alarm: number | null = null;
   const listCalls: ClaimListCall[] = [];
+  const storage = {
+    get: async <T>(key: string) => map.get(key) as T | undefined,
+    put: async (key: string, value: unknown) => {
+      map.set(key, value);
+    },
+    delete: async (key: string | string[]) => {
+      if (Array.isArray(key)) for (const k of key) map.delete(k);
+      else map.delete(key);
+    },
+    list: async <T>(options?: { limit?: number; startAfter?: string }) => {
+      // Byte order (code-unit), matching real DO storage — not localeCompare.
+      let entries = Array.from(map.entries()).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+      if (options?.startAfter !== undefined) {
+        const after = options.startAfter;
+        entries = entries.filter(([key]) => key > after);
+      }
+      if (options?.limit !== undefined) entries = entries.slice(0, options.limit);
+      listCalls.push({
+        limit: options?.limit,
+        startAfter: options?.startAfter,
+        size: entries.length,
+        keys: entries.map(([key]) => key),
+      });
+      return new Map(entries as Array<[string, T]>);
+    },
+    getAlarm: async () => alarm,
+    setAlarm: async (scheduledTime: number) => {
+      alarm = scheduledTime;
+    },
+    deleteAlarm: async () => {
+      alarm = null;
+    },
+    transaction: async <T>(fn: (txn: DurableObjectTransaction) => Promise<T>) =>
+      fn(storage as unknown as DurableObjectTransaction),
+  } as unknown as DurableObjectStorage;
   return {
     listCalls,
-    storage: {
-      get: async <T>(key: string) => map.get(key) as T | undefined,
-      put: async (key: string, value: unknown) => {
-        map.set(key, value);
-      },
-      delete: async (key: string | string[]) => {
-        if (Array.isArray(key)) for (const k of key) map.delete(k);
-        else map.delete(key);
-      },
-      list: async <T>(options?: { limit?: number; startAfter?: string }) => {
-        // Byte order (code-unit), matching real DO storage — not localeCompare.
-        let entries = Array.from(map.entries()).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-        if (options?.startAfter !== undefined) {
-          const after = options.startAfter;
-          entries = entries.filter(([key]) => key > after);
-        }
-        if (options?.limit !== undefined) entries = entries.slice(0, options.limit);
-        listCalls.push({
-          limit: options?.limit,
-          startAfter: options?.startAfter,
-          size: entries.length,
-          keys: entries.map(([key]) => key),
-        });
-        return new Map(entries as Array<[string, T]>);
-      },
-      getAlarm: async () => alarm,
-      setAlarm: async (scheduledTime: number) => {
-        alarm = scheduledTime;
-      },
-      deleteAlarm: async () => {
-        alarm = null;
-      },
-    } as unknown as DurableObjectStorage,
-    // Unit harness: serialize by running the callback. Real DO concurrency is
-    // covered in exposure-redemption-do-miniflare.test.ts.
-    blockConcurrencyWhile: async <T>(fn: () => Promise<T>) => fn(),
+    storage,
   };
 }
 

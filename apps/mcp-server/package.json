@@ -16,9 +16,10 @@
     "wrangler:types": "wrangler types src/worker-configuration.d.ts"
   },
   "dependencies": {
-    "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/contracts": "workspace:*",
-    "@splitch/observability": "workspace:*"
+    "@splitch/control-plane-sdk": "workspace:*",
+    "@splitch/observability": "workspace:*",
+    "@splitch/worker-runtime": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.18.8"

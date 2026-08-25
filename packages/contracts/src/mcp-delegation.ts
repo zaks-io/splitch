@@ -8,6 +8,7 @@ import { getRoute } from "./route-registry";
 
 export const MCP_DELEGATION_HEADER = "x-splitch-mcp-delegation";
 const VERSION = 1;
+type McpDelegationReplayVersion = 1 | 2;
 const MAX_TTL_SECONDS = 30;
 const MAX_CLOCK_SKEW_SECONDS = 5;
 const MIN_SECRET_LENGTH = 32;
@@ -25,7 +26,12 @@ export interface McpDelegationActor {
 }
 
 export interface McpDelegationReplayGuard {
-  claim(jti: string, expiresAt: number, nowSeconds: number): Promise<boolean>;
+  claim(
+    jti: string,
+    expiresAt: number,
+    nowSeconds: number,
+    replayVersion?: McpDelegationReplayVersion,
+  ): Promise<boolean>;
 }
 
 export type McpDelegationFreshnessFailure =
@@ -36,6 +42,8 @@ export type McpDelegationFreshnessFailure =
 
 interface McpDelegationCredential {
   version: typeof VERSION;
+  /** Marker-less credentials predate the bounded replay shards. */
+  replayVersion?: 2;
   issuer: "splitch-mcp-server";
   /**
    * The PUBLIC SURFACE the credential is addressed to, never the Worker that
@@ -72,6 +80,7 @@ export async function createMcpDelegationHeader(options: {
   const nowSeconds = options.nowSeconds ?? Math.floor(Date.now() / 1000);
   const credential: McpDelegationCredential = {
     version: VERSION,
+    replayVersion: 2,
     issuer: "splitch-mcp-server",
     audience: requirePublicSurface(options.operationId, route),
     operationId: options.operationId,
@@ -126,7 +135,14 @@ export async function parseMcpDelegation(options: {
   ) {
     return null;
   }
-  if (!(await options.replayGuard.claim(credential.jti, credential.expiresAt, nowSeconds))) {
+  if (
+    !(await options.replayGuard.claim(
+      credential.jti,
+      credential.expiresAt,
+      nowSeconds,
+      credential.replayVersion ?? 1,
+    ))
+  ) {
     return null;
   }
   return {
@@ -196,6 +212,7 @@ function decodeCredential(encoded: string): McpDelegationCredential | null {
     >;
     if (
       value.version !== VERSION ||
+      (value.replayVersion !== undefined && value.replayVersion !== 2) ||
       value.issuer !== "splitch-mcp-server" ||
       typeof value.audience !== "string" ||
       typeof value.operationId !== "string" ||

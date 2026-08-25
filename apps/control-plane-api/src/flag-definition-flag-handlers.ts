@@ -1,4 +1,4 @@
-import { schemaDefinitionIssues, type Variant } from "@splitch/contracts";
+import { PercentageRolloutSchema, schemaDefinitionIssues, type Variant } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
@@ -75,11 +75,29 @@ async function withEnvironmentConfigurations(
   rows: Awaited<ReturnType<FlagDefinitionDeps["repo"]["flags"]["listFlagPage"]>>,
   catalogs: Awaited<ReturnType<FlagDefinitionDeps["repo"]["flags"]["listVariantsForFlags"]>>,
 ) {
-  const configs = await deps.repo.flags.listFlagConfigsByFlagIds(
-    envScope(appId, environmentId),
-    rows.map((row) => row.id),
-  );
+  const scope = envScope(appId, environmentId);
+  const flagIds = rows.map((row) => row.id);
+  const [configs, targetingRules, experiments] = await Promise.all([
+    deps.repo.flags.listFlagConfigsByFlagIds(scope, flagIds),
+    deps.repo.flags.listTargetingRulesByFlagIds(scope, flagIds),
+    deps.repo.experiments.listRunningExperimentsForFlags(scope, flagIds),
+  ]);
   const configByFlagId = new Map(configs.map((config) => [config.flagId, config]));
+  const rolloutPercentagesByFlagId = new Map<string, number[]>();
+  for (const rule of targetingRules) {
+    if (rule.percentageRollout === null) continue;
+    const percentage = PercentageRolloutSchema.parse(JSON.parse(rule.percentageRollout)).percentage;
+    const percentages = rolloutPercentagesByFlagId.get(rule.flagId) ?? [];
+    percentages.push(percentage);
+    rolloutPercentagesByFlagId.set(rule.flagId, percentages);
+  }
+  const experimentByFlagId = new Map<string, { id: string; name: string }>();
+  for (const experiment of experiments) {
+    if (experimentByFlagId.has(experiment.flagId)) {
+      throw new Error(`flag list: multiple running Experiments control Flag ${experiment.flagId}`);
+    }
+    experimentByFlagId.set(experiment.flagId, { id: experiment.id, name: experiment.name });
+  }
   return rows.map((row) => {
     const config = configByFlagId.get(row.id);
     if (!config) {
@@ -87,7 +105,13 @@ async function withEnvironmentConfigurations(
         `flag list: Flag ${row.id} has no Configuration in Environment ${environmentId}`,
       );
     }
-    return flagWithConfigurationFrom(row, catalogs.get(row.id) ?? [], config);
+    return flagWithConfigurationFrom(
+      row,
+      catalogs.get(row.id) ?? [],
+      config,
+      rolloutPercentagesByFlagId.get(row.id) ?? [],
+      experimentByFlagId.get(row.id) ?? null,
+    );
   });
 }
 

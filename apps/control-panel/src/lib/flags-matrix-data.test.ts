@@ -1,4 +1,4 @@
-import type { FlagConfigGetOutput, FlagsClient } from "@splitch/control-plane-sdk";
+import type { FlagsClient } from "@splitch/control-plane-sdk";
 import { describe, expect, it, vi } from "vitest";
 import {
   assertMatrixEnvironments,
@@ -9,24 +9,14 @@ import {
 } from "./flags-matrix-data";
 
 describe("Flags matrix data", () => {
-  it("reads the catalog once and maps Configuration per Environment", async () => {
-    const list = vi.fn(async () => catalog());
-    const devGet = vi.fn<FlagsClient["getConfig"]>(async ({ flagId }) => ({
-      ok: true,
-      status: 200,
-      data: config("env_dev", flagId, flagId === "flag_checkout"),
-    }));
-    const prodGet = vi.fn<FlagsClient["getConfig"]>(async ({ flagId }) =>
-      flagId === "flag_checkout"
-        ? { ok: true, status: 200, data: config("env_prod", flagId, false) }
-        : notFound(),
-    );
-    const prodList = vi.fn<FlagsClient["list"]>();
+  it("reads each Environment once and maps its Configuration summaries", async () => {
+    const devList = vi.fn<FlagsClient["list"]>(async () => catalog("env_dev"));
+    const prodList = vi.fn<FlagsClient["list"]>(async () => catalog("env_prod"));
 
     const result = await readFlagsMatrix(
       [
-        { environmentId: "env_dev", flags: { list, getConfig: devGet } },
-        { environmentId: "env_prod", flags: { list: prodList, getConfig: prodGet } },
+        { environmentId: "env_dev", flags: { list: devList } },
+        { environmentId: "env_prod", flags: { list: prodList } },
       ],
       "app_checkout",
     );
@@ -57,13 +47,11 @@ describe("Flags matrix data", () => {
         ],
       },
     });
-    expect(list).toHaveBeenCalledOnce();
-    expect(prodList).not.toHaveBeenCalled();
-    expect(devGet).toHaveBeenCalledTimes(2);
-    expect(prodGet).toHaveBeenCalledTimes(2);
+    expect(devList).toHaveBeenCalledOnce();
+    expect(prodList).toHaveBeenCalledOnce();
   });
 
-  it("propagates a Configuration failure other than FLAG_NOT_FOUND", async () => {
+  it("propagates an Environment list failure", async () => {
     const failure = {
       ok: false as const,
       status: 503,
@@ -73,7 +61,7 @@ describe("Flags matrix data", () => {
       [
         {
           environmentId: "env_dev",
-          flags: { list: vi.fn(async () => catalog()), getConfig: vi.fn(async () => failure) },
+          flags: { list: vi.fn(async () => failure) },
         },
       ],
       "app_checkout",
@@ -81,19 +69,17 @@ describe("Flags matrix data", () => {
     expect(result).toBe(failure);
   });
 
-  it("propagates the catalog failure without reading Configurations", async () => {
+  it("propagates the catalog Environment failure", async () => {
     const failure = {
       ok: false as const,
       status: 503,
       error: { code: "INTERNAL_SERVER_ERROR" as const, message: "down", details: {} },
     };
-    const getConfig = vi.fn<FlagsClient["getConfig"]>();
     const result = await readFlagsMatrix(
-      [{ environmentId: "env_dev", flags: { list: vi.fn(async () => failure), getConfig } }],
+      [{ environmentId: "env_dev", flags: { list: vi.fn(async () => failure) } }],
       "app_checkout",
     );
     expect(result).toBe(failure);
-    expect(getConfig).not.toHaveBeenCalled();
   });
 
   it("rejects an empty Environment list", async () => {
@@ -164,49 +150,44 @@ function cell(
   };
 }
 
-function config(environmentId: string, flagId: string, enabled: boolean): FlagConfigGetOutput {
+function config(environmentId: string, flagId: string, enabled: boolean) {
   return {
-    flagId,
-    environmentId,
-    version: 1,
     enabled,
     availableVariantNames: ["disabled", "enabled"],
-    targetingRules: [
-      {
-        id: `rule_${environmentId}`,
-        flagId,
-        priority: 0,
-        conditions: [],
-        variantId: "var_enabled",
-        percentageRollout: { percentage: 25, salt: environmentId },
-      },
-    ],
     rollout: null,
-    experiment: flagId === "flag_checkout" ? { id: "exp_1", name: "Checkout" } : null,
+    defaultVariant: "disabled",
+    targetingRuleRolloutPercentages: [25],
+    experiment:
+      environmentId === "env_dev" && flagId === "flag_checkout"
+        ? { id: "exp_1", name: "Checkout" }
+        : null,
   };
 }
 
-function notFound() {
-  return {
-    ok: false as const,
-    status: 404,
-    error: { code: "FLAG_NOT_FOUND" as const, message: "not found", details: {} },
-  };
-}
-
-function catalog() {
+function catalog(environmentId: string) {
   return {
     ok: true as const,
     status: 200,
     data: {
       readTruncated: true,
       readLimit: 200,
-      items: [definition("flag_checkout", "new-checkout"), definition("flag_banner", "banner")],
+      items: [
+        definition(
+          "flag_checkout",
+          "new-checkout",
+          config(environmentId, "flag_checkout", environmentId === "env_dev"),
+        ),
+        definition(
+          "flag_banner",
+          "banner",
+          environmentId === "env_dev" ? config(environmentId, "flag_banner", false) : null,
+        ),
+      ],
     },
   };
 }
 
-function definition(id: string, key: string) {
+function definition(id: string, key: string, flagConfiguration: ReturnType<typeof config> | null) {
   return {
     id,
     appId: "app_checkout",
@@ -220,5 +201,6 @@ function definition(id: string, key: string) {
     defaultVariantId: "var_disabled",
     createdAt: "2026-08-21T00:00:00.000Z",
     updatedAt: "2026-08-21T00:00:00.000Z",
+    ...(flagConfiguration ? { flagConfiguration } : {}),
   };
 }

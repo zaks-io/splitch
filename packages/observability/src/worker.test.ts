@@ -3,6 +3,7 @@ import {
   __setSentryModuleForTests,
   createWorkerObservability,
   workerEmitter,
+  workerObservabilityWithWaitUntil,
   workerSentryOptions,
   wrapWorkerHandler,
 } from "./worker.js";
@@ -98,6 +99,29 @@ describe("createWorkerObservability onError", () => {
       }),
     );
     expect(addBreadcrumb).not.toHaveBeenCalled();
+  });
+
+  it("keeps Sentry work alive through the request execution context", async () => {
+    const pending: Promise<unknown>[] = [];
+    const options = workerObservabilityWithWaitUntil("auth-api", {
+      waitUntil(promise) {
+        pending.push(promise);
+      },
+    });
+    const observability = createWorkerObservability(
+      { SENTRY_DSN: "https://example@sentry.io/1" },
+      options,
+    );
+
+    observability.onError?.({
+      requestId: "req-fault",
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+    });
+
+    expect(pending).toHaveLength(1);
+    await Promise.all(pending);
+    expect(captureMessage).toHaveBeenCalled();
   });
 
   /**

@@ -1,4 +1,5 @@
 import { type AuthDoor, AuthDoorSchema } from "@splitch/contracts";
+import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
 
 export interface McpAccessTokenActor {
   subject: string;
@@ -29,15 +30,7 @@ export function makeHttpMcpAccessTokenVerifier(options: {
   fetchJwks?: () => Promise<Jwks>;
 }): McpAccessTokenVerifier {
   const issuer = new URL(options.issuer).origin;
-  const fetchJwks =
-    options.fetchJwks ??
-    (async () => {
-      const response = await fetch(`${issuer}/.well-known/jwks.json`);
-      if (!response.ok) {
-        throw new Error(`mcp-server: JWKS fetch failed (${response.status})`);
-      }
-      return (await response.json()) as Jwks;
-    });
+  const signatureValid = makeSignatureVerifier(issuer, options.fetchJwks);
 
   return {
     async verify(authorization, expectedAudience, nowSeconds) {
@@ -45,13 +38,23 @@ export function makeHttpMcpAccessTokenVerifier(options: {
       if (!token) return null;
       const parsed = parseJwt(token);
       if (parsed?.header.alg !== "RS256") return null;
-      const key = selectKey(
-        await fetchJwks(),
-        typeof parsed.header.kid === "string" ? parsed.header.kid : undefined,
-      );
-      if (!key || !(await safeSignatureValid(parsed, key))) return null;
+      if (!(await signatureValid(token, parsed))) return null;
       return actorFromClaims(parsed.payload, { issuer, expectedAudience, nowSeconds });
     },
+  };
+}
+
+type SignatureVerifier = (token: string, parsed: ParsedJwt) => Promise<boolean>;
+
+function makeSignatureVerifier(issuer: string, fetchJwks?: () => Promise<Jwks>): SignatureVerifier {
+  if (!fetchJwks) {
+    const remote = remoteJwksSignatureVerifier(`${issuer}/.well-known/jwks.json`);
+    return (token) => remote.verify(token);
+  }
+  return async (_token, parsed) => {
+    const kid = typeof parsed.header.kid === "string" ? parsed.header.kid : undefined;
+    const key = selectKey(await fetchJwks(), kid);
+    return key ? safeSignatureValid(parsed, key) : false;
   };
 }
 

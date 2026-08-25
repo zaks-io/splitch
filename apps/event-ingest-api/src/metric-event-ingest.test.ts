@@ -1,5 +1,5 @@
 import { eventDefinitionConfigKey } from "@splitch/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import worker from "./index";
 import {
   hotConfig,
@@ -11,6 +11,7 @@ import {
   sendMetricEvent,
 } from "./metric-event.test-fixture";
 import { TestExecutionContext } from "./test-fixtures";
+import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 
 describe("Metric Event ingest", () => {
   it("accepts the Evaluation-authorized caller only through the binding entrypoint", async () => {
@@ -72,6 +73,26 @@ describe("Metric Event ingest", () => {
     expect(response.status).toBe(400);
     expect(await responseCode(response)).toBe("EVENT_SCHEMA_MISMATCH");
     expect(fixture.claims.size).toBe(0);
+  });
+
+  it("rejects an oversized body from Content-Length before reading its stream", async () => {
+    const fixture = await makeMetricEventFixture();
+    const request = new Request("https://ingest.test/metric-events", {
+      method: "POST",
+      headers: { "content-length": "32769" },
+      body: "{}",
+    });
+    const getReader = vi.spyOn(request.body as ReadableStream<Uint8Array>, "getReader");
+
+    const response = await handleAuthorizedMetricEvent(request, fixture.env, {
+      credentialHash: fixture.hash,
+      appId: METRIC_APP_ID,
+      environmentId: "env_prod",
+      rateLimitRps: null,
+    });
+
+    expect(response.status).toBe(400);
+    expect(getReader).not.toHaveBeenCalled();
   });
 });
 

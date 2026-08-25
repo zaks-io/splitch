@@ -1,4 +1,4 @@
-import type { FlagConfigGetOutput } from "@splitch/control-plane-sdk";
+import type { FlagConfigurationSummary } from "@splitch/contracts";
 
 export type FlagConfigSummary = {
   enabled: boolean;
@@ -8,14 +8,12 @@ export type FlagConfigSummary = {
   controllingExperiment: { id: string; name: string } | null;
 };
 
-export function flagConfigSummary(config: FlagConfigGetOutput): FlagConfigSummary {
+export function flagListConfigSummary(config: FlagConfigurationSummary): FlagConfigSummary {
   return {
     enabled: config.enabled,
     availableVariantCount: config.availableVariantNames.length,
     availableVariantNames: [...config.availableVariantNames].sort(),
-    rolloutPercentages: config.targetingRules.flatMap((rule) =>
-      rule.percentageRollout ? [rule.percentageRollout.percentage] : [],
-    ),
+    rolloutPercentages: config.targetingRuleRolloutPercentages,
     controllingExperiment: config.experiment,
   };
 }

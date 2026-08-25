@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createMcpDelegationHeader, parseMcpDelegation } from "./index";
 import {
   base64UrlToBytes,
@@ -56,6 +56,31 @@ describe("MCP delegated credential", () => {
         }),
       ).resolves.toBeNull();
     }
+  });
+
+  it("accepts marker-less credentials long enough to preserve replay state during migration", async () => {
+    const request = new Request("https://control-plane.internal/apps/app_one/flags");
+    const current = await createMcpDelegationHeader({
+      operationId: "flags_list",
+      actor: { subject: "user_one", scopes: ["app:app_one:admin"], authDoor: "id_jag" },
+      request,
+      secret: SECRET,
+      nowSeconds: 100,
+      jti: "legacy-delegation-id",
+    });
+    const credential = await resignCredential(current, { replayVersion: undefined });
+    const claim = vi.fn(async () => true);
+
+    await expect(
+      parseMcpDelegation({
+        request: withCredential(request, credential),
+        surface: "control-plane-api",
+        secret: SECRET,
+        replayGuard: { claim },
+        nowSeconds: 100,
+      }),
+    ).resolves.not.toBeNull();
+    expect(claim).toHaveBeenCalledWith("legacy-delegation-id", 130, 100, 1);
   });
 });
 

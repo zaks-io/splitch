@@ -33,8 +33,7 @@ import { HoldoverWriteOutboxDurableObject } from "./assignment/holdover-write-ou
 import { KvAssignmentStore } from "./assignment/kv-assignment-store";
 import {
   makeControlPlaneAuthResolver,
-  makeHttpJwksFetcher,
-  makeJwksVerifier,
+  makeCachedJwksVerifier,
   makeSessionStore,
 } from "./control-plane-auth";
 import { makeDataPlaneAuthResolver } from "./data-plane-auth";
@@ -202,8 +201,8 @@ function requestAuthResolver(
   const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? url.origin;
   const jwksUri = env.AUTH_JWKS_URI ?? `${controlPlaneAudience}/.well-known/jwks.json`;
   return makeControlPlaneAuthResolver({
-    verifier: makeJwksVerifier({
-      fetchJwks: makeHttpJwksFetcher(jwksUri),
+    verifier: makeCachedJwksVerifier({
+      jwksUri,
       controlPlaneAudience,
     }),
     sessions: makeSessionStore(env.SESSION_STORE),

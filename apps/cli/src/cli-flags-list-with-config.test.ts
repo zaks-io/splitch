@@ -22,17 +22,28 @@ const configuredPage = {
   items: [
     {
       ...flagListPage.items[0],
-      flagConfiguration: { enabled: true, rollout: 25, defaultVariant: "on" },
+      flagConfiguration: configuredFlag(true, 25),
     },
     {
       ...flagListPage.items[0],
       id: "flag_search",
       key: "search",
       name: "Search",
-      flagConfiguration: { enabled: false, rollout: null, defaultVariant: "on" },
+      flagConfiguration: configuredFlag(false, null),
     },
   ],
 };
+
+function configuredFlag(enabled: boolean, rollout: number | null) {
+  return {
+    enabled,
+    rollout,
+    defaultVariant: "on",
+    availableVariantNames: ["on"],
+    targetingRuleRolloutPercentages: rollout === null ? [] : [rollout],
+    experiment: null,
+  };
+}
 
 async function selectedScope(environmentId = "env_dev") {
   const { dir, credentialPath } = await makeTempHome();

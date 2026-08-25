@@ -1,5 +1,5 @@
 import type { ControlPlaneOperationResult, FlagsClient } from "@splitch/control-plane-sdk";
-import { type FlagConfigSummary, flagConfigSummary } from "./flag-config-summary";
+import { type FlagConfigSummary, flagListConfigSummary } from "./flag-config-summary";
 
 export type FlagsPageItem = {
   definition: {
@@ -24,26 +24,11 @@ export type FlagsPageData = {
 };
 
 export async function readFlagsPage(
-  flags: Pick<FlagsClient, "list" | "getConfig">,
+  flags: Pick<FlagsClient, "list">,
   scope: { appId: string; environmentId: string },
 ): Promise<ControlPlaneOperationResult<FlagsPageData>> {
-  const listed = await flags.list({ appId: scope.appId });
+  const listed = await flags.list(scope);
   if (!listed.ok) return listed;
-
-  const configurations = await Promise.all(
-    listed.data.items.map((definition) =>
-      flags.getConfig({
-        appId: scope.appId,
-        environmentId: scope.environmentId,
-        flagId: definition.id,
-      }),
-    ),
-  );
-
-  const failed = configurations.find(
-    (result) => !result.ok && result.error.code !== "FLAG_NOT_FOUND",
-  );
-  if (failed && !failed.ok) return failed;
 
   return {
     ok: true,
@@ -51,8 +36,7 @@ export async function readFlagsPage(
     data: {
       readTruncated: listed.data.readTruncated,
       readLimit: listed.data.readLimit,
-      items: listed.data.items.map((definition, index) => {
-        const configuration = configurations[index];
+      items: listed.data.items.map((definition) => {
         return {
           definition: {
             id: definition.id,
@@ -62,7 +46,9 @@ export async function readFlagsPage(
               definition.variants.map((variant) => [variant.id, variant.name]),
             ),
           },
-          configuration: configuration?.ok ? flagConfigSummary(configuration.data) : null,
+          configuration: definition.flagConfiguration
+            ? flagListConfigSummary(definition.flagConfiguration)
+            : null,
         };
       }),
     },

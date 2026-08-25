@@ -14,7 +14,7 @@ describe("WorkOS consent access-token verification", () => {
       vi.fn(async () => Response.json(keypair.jwks)),
     );
     const verifier = makeWorkOsAccessTokenVerifier({
-      jwksUri: "https://workos.test/jwks",
+      jwksUri: uniqueJwksUri(),
       issuer: "https://workos.test",
       clientId: "client_123",
     });
@@ -40,7 +40,7 @@ describe("WorkOS consent access-token verification", () => {
       vi.fn(async () => Response.json(keypair.jwks)),
     );
     const verifier = makeWorkOsAccessTokenVerifier({
-      jwksUri: "https://workos.test/jwks",
+      jwksUri: uniqueJwksUri(),
       issuer: "https://workos.test",
       clientId: "client_123",
     });
@@ -63,7 +63,7 @@ describe("WorkOS consent access-token verification", () => {
       vi.fn(async () => Response.json(keypair.jwks)),
     );
     const verifier = makeWorkOsAccessTokenVerifier({
-      jwksUri: "https://workos.test/jwks",
+      jwksUri: uniqueJwksUri(),
       issuer: "https://workos.test",
       clientId: "client_123",
     });
@@ -77,3 +77,7 @@ describe("WorkOS consent access-token verification", () => {
     await expect(verifier.verify(token, NOW)).rejects.toMatchObject({ code: "invalid_token" });
   });
 });
+
+function uniqueJwksUri(): string {
+  return `https://workos.test/${crypto.randomUUID()}/jwks`;
+}

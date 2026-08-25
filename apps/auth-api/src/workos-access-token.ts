@@ -1,4 +1,5 @@
-import { decodeJwt, fetchJwks, verifySignature } from "./jwks";
+import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
+import { decodeJwt } from "./jwks";
 import { OAuthError } from "./oauth-errors";
 
 export interface WorkOsAccessTokenVerifier {
@@ -10,10 +11,13 @@ export function makeWorkOsAccessTokenVerifier(input: {
   issuer: string;
   clientId: string;
 }): WorkOsAccessTokenVerifier {
+  const signatures = remoteJwksSignatureVerifier(input.jwksUri);
   return {
     async verify(token, nowSeconds) {
       const decoded = decodeJwt(token);
-      await verifySignature(decoded, await fetchJwks(input.jwksUri));
+      if (!(await signatures.verify(token))) {
+        throw new OAuthError("invalid_token", "WorkOS access token signature is invalid");
+      }
       const { sub, iss, client_id: clientId, exp } = decoded.payload;
       if (
         typeof sub !== "string" ||

@@ -18,6 +18,7 @@
     "@splitch/contracts": "workspace:*",
     "@splitch/db": "workspace:*",
     "@splitch/observability": "workspace:*",
+    "@splitch/worker-runtime": "workspace:*",
     "hono": "^4.12.32",
     "zod": "^4.4.3"
   },

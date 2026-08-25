@@ -90,6 +90,9 @@ export const FlagConfigurationSummarySchema = z
     enabled: z.boolean(),
     rollout: z.number().min(0).max(100).nullable(),
     defaultVariant: z.string().min(1),
+    availableVariantNames: z.array(z.string().min(1)),
+    targetingRuleRolloutPercentages: z.array(z.number().min(0).max(100)),
+    experiment: z.object({ id: z.string().min(1), name: z.string().min(1) }).nullable(),
   })
   .strict();
 export type FlagConfigurationSummary = z.infer<typeof FlagConfigurationSummarySchema>;

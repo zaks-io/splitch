@@ -14,16 +14,24 @@ import type { WorkOsPort } from "./workos";
 const DEFAULT_AUTH_TIME_FRESHNESS_SECONDS = 300; // 5 min (auth-doors.md step 5)
 const MAX_AUTH_TIME_FORWARD_SKEW_SECONDS = 60; // tolerate minor clock skew, no more
 
-interface IdJagDeps {
+interface IdJagCommonDeps {
   repo: Repository;
   jtiCache: JtiCache;
   workos: WorkOsPort;
-  fetchJwks: JwksFetcher;
   /** This auth-api origin; the ID-JAG `aud` must point here. */
   authApiOrigin: string;
   /** Clock seam so tests pin "now"; defaults to wall clock. */
   now?: () => number;
 }
+
+type IdJagDeps = IdJagCommonDeps &
+  (
+    | {
+        verifyRemoteSignature(jwksUri: string, compactJws: string): Promise<boolean>;
+        fetchJwks?: never;
+      }
+    | { fetchJwks: JwksFetcher; verifyRemoteSignature?: never }
+  );
 
 interface IdJagResult {
   userId: string;
@@ -89,6 +97,7 @@ async function verifyAgainstTrustedIdp(
   deps: IdJagDeps,
   decoded: DecodedJwt,
   issuer: string,
+  compactJws: string,
 ): Promise<string[]> {
   const idp = await deps.repo.privacy.getTrustedIdpByIssuer(issuer);
   if (!idp) {
@@ -97,8 +106,14 @@ async function verifyAgainstTrustedIdp(
   if (!idp.enabled) {
     throw new OAuthError("issuer_disabled", `trusted IdP "${issuer}" is disabled`);
   }
-  const jwks = await deps.fetchJwks(idp.jwksUri);
-  await verifySignature(decoded, jwks);
+  if (deps.verifyRemoteSignature !== undefined) {
+    if (!(await deps.verifyRemoteSignature(idp.jwksUri, compactJws))) {
+      throw new OAuthError("invalid_token", "ID-JAG signature is invalid");
+    }
+  } else {
+    const jwks = await deps.fetchJwks(idp.jwksUri);
+    await verifySignature(decoded, jwks);
+  }
   return JSON.parse(idp.clientIds) as string[];
 }
 
@@ -111,7 +126,7 @@ export async function verifyIdJag(deps: IdJagDeps, idJag: string): Promise<IdJag
   const issuer = requireString(decoded.payload, "iss");
 
   // Steps 2-3: trusted-IdP lookup (unknown/disabled fail loud) + signature verify.
-  const clientIds = await verifyAgainstTrustedIdp(deps, decoded, issuer);
+  const clientIds = await verifyAgainstTrustedIdp(deps, decoded, issuer, idJag);
 
   // Steps 4-6: audience, expiry/freshness, verified contact.
   assertAudience(decoded.payload, clientIds, deps.authApiOrigin);

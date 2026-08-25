@@ -25,15 +25,17 @@ type SentryErrorEvent = import("@sentry/cloudflare").ErrorEvent;
 
 export interface WorkerObservabilityOptions {
   readonly surface: ObservabilitySurfaceId;
+  readonly waitUntil?: (promise: Promise<unknown>) => void;
 }
 
 /** Build Worker observability options from request context. */
 export function workerObservabilityWithWaitUntil(
   surface: ObservabilitySurfaceId,
-  _ctx: Pick<ExecutionContext, "waitUntil">,
+  ctx: Pick<ExecutionContext, "waitUntil">,
 ): WorkerObservabilityOptions {
   return {
     surface,
+    waitUntil: (promise) => ctx.waitUntil(promise),
   };
 }
 
@@ -136,12 +138,12 @@ export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
     const innerScheduled = handler.scheduled;
     wrapped.scheduled = async (event: ScheduledController, env: E, ctx: ExecutionContext) => {
       if (!env.SENTRY_DSN) {
-        innerScheduled(event, env, ctx);
+        await innerScheduled(event, env, ctx);
         return;
       }
       const Sentry = await loadSentry();
       const sentryScheduled = getSentryWrappedHandler(handler, options, Sentry).scheduled;
-      sentryScheduled?.(event, env, ctx);
+      await sentryScheduled?.(event, env, ctx);
     };
   }
 
@@ -183,14 +185,14 @@ export function createWorkerObservability(
       if (shouldReportRequestErrorToSentry(ctx)) {
         emitter.log("error", "request_fault", { ...enriched });
         if (env.SENTRY_DSN) {
-          void captureSentryMessage(options, enriched);
+          keepWorkerAlive(options, captureSentryMessage(options, enriched));
         }
         return;
       }
 
       emitter.log("warn", "request_error", { ...enriched });
       if (env.SENTRY_DSN) {
-        void addSentryBreadcrumb(options, enriched);
+        keepWorkerAlive(options, addSentryBreadcrumb(options, enriched));
       }
     },
   };
@@ -211,9 +213,17 @@ export function createWorkerFaultReporter(
   return (code, detail) => {
     emitter.log("error", code, detail);
     if (env.SENTRY_DSN) {
-      void captureSentryMessage(options, { code, ...detail });
+      keepWorkerAlive(options, captureSentryMessage(options, { code, ...detail }));
     }
   };
+}
+
+function keepWorkerAlive(options: WorkerObservabilityOptions, promise: Promise<unknown>): void {
+  if (options.waitUntil) {
+    options.waitUntil(promise);
+    return;
+  }
+  void promise;
 }
 
 /**
