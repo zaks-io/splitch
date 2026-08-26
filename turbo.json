@@ -149,6 +149,17 @@
       ],
       "outputs": []
     },
+    "//#depcruise": {
+      "inputs": [
+        ".dependency-cruiser.cjs",
+        "apps/**",
+        "packages/**",
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml"
+      ],
+      "outputs": []
+    },
     "@splitch/control-panel#test:connect-snippet": {
       "dependsOn": ["@splitch/sdk#build"],
       "inputs": ["scripts/connect-snippet-compile.mjs", "src/lib/connect-snippet.ts"],

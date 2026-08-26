@@ -125,7 +125,7 @@ The architecture is enforced at the import graph, not by convention. The root
 The gate runs as:
 
 ```sh
-pnpm depcruise --config .dependency-cruiser.cjs "apps/**/*.{ts,tsx}" "packages/**/*.{ts,tsx}"
+pnpm depcruise
 ```
 
 CI should fail on any dependency-cruiser `error`. A rule exception needs an architecture update first,

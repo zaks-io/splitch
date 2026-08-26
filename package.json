@@ -8,7 +8,7 @@
     "build": "turbo run build",
     "check:cli-mcp-parity": "pnpm --filter @splitch/cli exec tsx ../../scripts/check-cli-mcp-parity.ts",
     "clean": "turbo run clean && rm -rf node_modules .turbo coverage",
-    "depcruise": "dependency-cruiser --config .dependency-cruiser.cjs \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\"",
+    "depcruise": "dependency-cruiser --config .dependency-cruiser.cjs apps packages",
     "d1:migrate:local": "node scripts/check-d1-local.mjs",
     "d1:migrate:populated": "node scripts/check-d1-populated.mjs",
     "dev": "turbo run dev --parallel",
@@ -86,7 +86,7 @@
     "workers:secrets:production": "node scripts/sync-worker-secrets.mjs production",
     "workers:secrets:shared-preview": "node scripts/sync-worker-secrets.mjs shared-preview",
     "typecheck": "turbo run typecheck",
-    "verify:ci": "turbo run //#knip //#format:check //#spec:lint //#check:cli-mcp-parity //#test:scripts lint typecheck test test:connect-snippet stats:golden stats:property build",
+    "verify:ci": "turbo run //#depcruise //#knip //#format:check //#spec:lint //#check:cli-mcp-parity //#test:scripts lint typecheck test test:connect-snippet stats:golden stats:property build",
     "verify:commit": "turbo run //#knip //#format:check //#secrets:staged lint typecheck",
     "verify:push": "turbo run //#knip //#format:check //#secrets:range //#tinybird:local //#d1:migrate:local //#d1:migrate:populated lint typecheck"
   },

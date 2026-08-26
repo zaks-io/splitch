@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 // @splitch/sdk#test:consumer-smoke is cache:false (it packs and installs the
 // real tarball), so it re-billed every PR run. It lives in nightly-verify now.
 const expectedVerifyCi =
-  "turbo run //#knip //#format:check //#spec:lint //#check:cli-mcp-parity //#test:scripts lint typecheck test test:connect-snippet stats:golden stats:property build";
+  "turbo run //#depcruise //#knip //#format:check //#spec:lint //#check:cli-mcp-parity //#test:scripts lint typecheck test test:connect-snippet stats:golden stats:property build";
 
 const packageJsonUrl = new URL("../../../package.json", import.meta.url);
 const statsPackageJsonUrl = new URL("../package.json", import.meta.url);

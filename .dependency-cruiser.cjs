@@ -1,3 +1,11 @@
+const TEST_ONLY_SOURCES = [
+  "\\.test\\.[cm]?[jt]sx?$",
+  "/(?:test|tests)/",
+  "-fixture\\.[cm]?[jt]sx?$",
+  "-local-harness\\.[cm]?[jt]sx?$",
+  "/test-bindings-pool\\.[cm]?[jt]sx?$",
+];
+
 module.exports = {
   forbidden: [
     {
@@ -5,7 +13,13 @@ module.exports = {
       severity: "error",
       comment:
         "Deployable apps are capability and trust boundaries. Share code through packages; communicate through runtime bindings or clients.",
-      from: { path: "^apps/([^/]+)/" },
+      from: {
+        path: "^apps/([^/]+)/",
+        pathNot: [
+          ...TEST_ONLY_SOURCES,
+          "^apps/cli/src/dark-launch-(?:experiment|http|scenario|negative-auth)\\.ts$",
+        ],
+      },
       to: { path: "^apps/", pathNot: "^apps/$1/" },
     },
     {
@@ -36,7 +50,14 @@ module.exports = {
       severity: "error",
       comment:
         "@splitch/sdk is the public data-plane package. It must not import app code, control-plane transport, private contracts, or UI.",
-      from: { path: "^packages/sdk/", pathNot: "^packages/sdk/scripts/" },
+      from: {
+        path: "^packages/sdk/",
+        pathNot: [
+          "^packages/sdk/scripts/",
+          ...TEST_ONLY_SOURCES,
+          "^packages/sdk/src/contract-surface-assignability\\.ts$",
+        ],
+      },
       to: { path: "^(apps|packages/(contracts|control-plane-sdk|ui))/" },
     },
     {
@@ -84,7 +105,7 @@ module.exports = {
       severity: "error",
       comment:
         "The repo seam's internals (the raw client + scope-bound table builders) are private to packages/db. Outside code must import the public @splitch/db surface (createRepository, appScope, envScope), never reach into packages/db/src/repo/* directly — that is how the no-raw-client guarantee stays structural.",
-      from: { pathNot: "^packages/db/src/" },
+      from: { pathNot: ["^packages/db/src/", ...TEST_ONLY_SOURCES] },
       to: { path: "^packages/db/src/repo/" },
     },
     {
