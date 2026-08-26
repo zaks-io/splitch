@@ -105,7 +105,7 @@ export const cloudflareRoutes = [
     errors: [...commonErrors, "CLOUDFLARE_INSTALLATION_NOT_FOUND", "EVENT_ID_CONFLICT"],
   }),
   defineApiRoute({
-    operationId: "cloudflare_panel_installations_list",
+    operationId: "cloudflare_installations_list",
     owner: OWNER,
     method: "GET",
     path: PANEL_BASE,
@@ -118,7 +118,7 @@ export const cloudflareRoutes = [
     errors: panelErrors,
   }),
   defineApiRoute({
-    operationId: "cloudflare_panel_installations_delete",
+    operationId: "cloudflare_installations_revoke",
     owner: OWNER,
     method: "DELETE",
     path: `${PANEL_BASE}/:installationId`,

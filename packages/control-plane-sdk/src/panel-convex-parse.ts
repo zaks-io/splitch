@@ -26,9 +26,7 @@ function parseInstallationCollection(
   const match = pathname.match(INSTALLATIONS_PATH);
   const appId = decodeMatch(match, 1);
   const environmentId = decodeMatch(match, 2);
-  return appId && environmentId
-    ? { id: "convex_panel_installations_list", appId, environmentId }
-    : null;
+  return appId && environmentId ? { id: "convex_installations_list", appId, environmentId } : null;
 }
 
 function parseInstallationResource(method: string, pathname: string): ControlPanelOperation | null {
@@ -38,7 +36,7 @@ function parseInstallationResource(method: string, pathname: string): ControlPan
   const environmentId = decodeMatch(match, 2);
   const installationId = decodeMatch(match, 3);
   return appId && environmentId && installationId
-    ? { id: "convex_panel_installations_delete", appId, environmentId, installationId }
+    ? { id: "convex_installations_revoke", appId, environmentId, installationId }
     : null;
 }
 

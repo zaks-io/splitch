@@ -198,12 +198,12 @@ export type ControlPanelOperation =
    * claim for one installation from authorizing a different installation.
    */
   | {
-      id: "convex_panel_installations_list" | "cloudflare_panel_installations_list";
+      id: "convex_installations_list" | "cloudflare_installations_list";
       appId: string;
       environmentId: string;
     }
   | {
-      id: "convex_panel_installations_delete" | "cloudflare_panel_installations_delete";
+      id: "convex_installations_revoke" | "cloudflare_installations_revoke";
       appId: string;
       environmentId: string;
       installationId: string;

@@ -28,8 +28,8 @@ const SCOPED_OPERATION_IDS = [
   "environment_exposure_status_get",
   "sentry_installations_list",
   "sentry_installations_create",
-  "convex_panel_installations_list",
-  "cloudflare_panel_installations_list",
+  "convex_installations_list",
+  "cloudflare_installations_list",
 ] as const;
 
 /** Operations that name no resource, so their claims carry only the id. */
@@ -88,8 +88,8 @@ const ORG_MEMBER_RESOURCE_OPERATION_IDS = [
 const INSTALLATION_OPERATION_IDS = [
   "sentry_installations_delete",
   "sentry_secret_rotations_create",
-  "convex_panel_installations_delete",
-  "cloudflare_panel_installations_delete",
+  "convex_installations_revoke",
+  "cloudflare_installations_revoke",
 ] as const;
 
 const SEGMENT_RESOURCE_OPERATION_IDS = [

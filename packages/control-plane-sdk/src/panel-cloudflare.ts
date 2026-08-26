@@ -40,7 +40,7 @@ export function createPanelCloudflareClient(options: {
   return {
     async list(input) {
       const response = await options.fetch(installationsUrl(input));
-      return parseControlPlaneResponse(response, "cloudflare_panel_installations_list", {
+      return parseControlPlaneResponse(response, "cloudflare_installations_list", {
         safeParse: (body) => CloudflareInstallationListResponseSchema.safeParse(body),
       });
     },
@@ -49,7 +49,7 @@ export function createPanelCloudflareClient(options: {
         installationsUrl({ appId, environmentId }, `/${encodeURIComponent(installationId)}`),
         { method: "DELETE" },
       );
-      return parseControlPlaneResponse(response, "cloudflare_panel_installations_delete", {
+      return parseControlPlaneResponse(response, "cloudflare_installations_revoke", {
         safeParse: parseRevoked,
       });
     },

@@ -27,7 +27,7 @@ function parseInstallationCollection(
   const appId = decodeMatch(match, 1);
   const environmentId = decodeMatch(match, 2);
   return appId && environmentId
-    ? { id: "cloudflare_panel_installations_list", appId, environmentId }
+    ? { id: "cloudflare_installations_list", appId, environmentId }
     : null;
 }
 
@@ -38,7 +38,7 @@ function parseInstallationResource(method: string, pathname: string): ControlPan
   const environmentId = decodeMatch(match, 2);
   const installationId = decodeMatch(match, 3);
   return appId && environmentId && installationId
-    ? { id: "cloudflare_panel_installations_delete", appId, environmentId, installationId }
+    ? { id: "cloudflare_installations_revoke", appId, environmentId, installationId }
     : null;
 }
 

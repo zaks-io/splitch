@@ -40,7 +40,7 @@ export function createPanelConvexClient(options: {
   return {
     async list(input) {
       const response = await options.fetch(installationsUrl(input));
-      return parseControlPlaneResponse(response, "convex_panel_installations_list", {
+      return parseControlPlaneResponse(response, "convex_installations_list", {
         safeParse: (body) => ConvexInstallationListResponseSchema.safeParse(body),
       });
     },
@@ -49,7 +49,7 @@ export function createPanelConvexClient(options: {
         installationsUrl({ appId, environmentId }, `/${encodeURIComponent(installationId)}`),
         { method: "DELETE" },
       );
-      return parseControlPlaneResponse(response, "convex_panel_installations_delete", {
+      return parseControlPlaneResponse(response, "convex_installations_revoke", {
         safeParse: parseRevoked,
       });
     },

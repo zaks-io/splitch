@@ -1,4 +1,4 @@
-import type { CloudflareInstallationStatus } from "@splitch/contracts";
+import { type CloudflareInstallationStatus, cliPresentationAliasString } from "@splitch/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import {
   Card,
@@ -16,6 +16,9 @@ import {
 } from "#lib/cloudflare-query";
 import { CopyableCode } from "./copyable-code";
 import { PushInstallationsTable, type PushInstallationRow } from "./push-installations-table";
+
+/** Derived, never typed: the CLI registers this exact path from the same map. */
+const CLOUDFLARE_SETUP_COMMAND = cliPresentationAliasString("cloudflare_installations_create");
 
 const CLOUDFLARE_LABELS = {
   provider: "cloudflare",
@@ -134,7 +137,7 @@ function CloudflareSetupSteps({ environmentKey }: { environmentKey: string }) {
       <CopyableCode
         label="Set up Cloudflare"
         testId="cloudflare-setup-command"
-        value={`splitch cloudflare setup --env ${environmentKey}`}
+        value={`${CLOUDFLARE_SETUP_COMMAND} --env ${environmentKey}`}
       />
     </div>
   );

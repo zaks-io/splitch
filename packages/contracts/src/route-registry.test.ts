@@ -124,16 +124,16 @@ const CANONICAL_OPERATION_IDS = [
   "convex_snapshot_get",
   "convex_exposures_create",
   // Convex operator door (MCP tools)
-  "convex_panel_installations_list",
-  "convex_panel_installations_delete",
+  "convex_installations_list",
+  "convex_installations_revoke",
   // Cloudflare integration data plane (API Key only, not MCP tools)
   "cloudflare_installations_create",
   "cloudflare_installations_get",
   "cloudflare_installations_delete",
   "cloudflare_exposures_create",
   // Cloudflare operator door (MCP tools)
-  "cloudflare_panel_installations_list",
-  "cloudflare_panel_installations_delete",
+  "cloudflare_installations_list",
+  "cloudflare_installations_revoke",
   // Sentry change tracking: operator door, so these are MCP tools
   "sentry_installations_list",
   "sentry_installations_create",

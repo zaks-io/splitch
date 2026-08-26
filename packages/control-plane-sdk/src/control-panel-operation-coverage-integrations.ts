@@ -18,10 +18,10 @@ export const INTEGRATION_ROUTES: Pick<
   | "sentry_installations_create"
   | "sentry_installations_delete"
   | "sentry_secret_rotations_create"
-  | "convex_panel_installations_list"
-  | "convex_panel_installations_delete"
-  | "cloudflare_panel_installations_list"
-  | "cloudflare_panel_installations_delete"
+  | "convex_installations_list"
+  | "convex_installations_revoke"
+  | "cloudflare_installations_list"
+  | "cloudflare_installations_revoke"
 > = {
   sentry_installations_list: {
     route: { method: "GET", pathname: `${SENTRY}` },
@@ -49,27 +49,27 @@ export const INTEGRATION_ROUTES: Pick<
       installationId: "inst_1",
     },
   },
-  convex_panel_installations_list: {
+  convex_installations_list: {
     route: { method: "GET", pathname: CONVEX },
-    operation: { id: "convex_panel_installations_list", appId: APP, environmentId: ENV },
+    operation: { id: "convex_installations_list", appId: APP, environmentId: ENV },
   },
-  convex_panel_installations_delete: {
+  convex_installations_revoke: {
     route: { method: "DELETE", pathname: `${CONVEX}/inst_1` },
     operation: {
-      id: "convex_panel_installations_delete",
+      id: "convex_installations_revoke",
       appId: APP,
       environmentId: ENV,
       installationId: "inst_1",
     },
   },
-  cloudflare_panel_installations_list: {
+  cloudflare_installations_list: {
     route: { method: "GET", pathname: CLOUDFLARE },
-    operation: { id: "cloudflare_panel_installations_list", appId: APP, environmentId: ENV },
+    operation: { id: "cloudflare_installations_list", appId: APP, environmentId: ENV },
   },
-  cloudflare_panel_installations_delete: {
+  cloudflare_installations_revoke: {
     route: { method: "DELETE", pathname: `${CLOUDFLARE}/inst_1` },
     operation: {
-      id: "cloudflare_panel_installations_delete",
+      id: "cloudflare_installations_revoke",
       appId: APP,
       environmentId: ENV,
       installationId: "inst_1",

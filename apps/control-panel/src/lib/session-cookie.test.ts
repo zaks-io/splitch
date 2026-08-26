@@ -79,6 +79,8 @@ const CREATE_SERVER_FN_POST_WRITES = [
   "lib/control-plane-app-settings-functions.ts#removeControlPanelAppMember",
   "lib/control-plane-app-settings-functions.ts#updateControlPanelApp",
   "lib/control-plane-app-settings-functions.ts#updateControlPanelAppMember",
+  "lib/control-plane-cloudflare-functions.ts#revokeControlPanelCloudflareInstallation",
+  "lib/control-plane-convex-functions.ts#revokeControlPanelConvexInstallation",
   "lib/control-plane-experiment-functions.ts#createControlPanelExperiment",
   "lib/control-plane-experiment-functions.ts#stageAndStartControlPanelExperimentRun",
   "lib/control-plane-experiment-functions.ts#updateControlPanelExperiment",

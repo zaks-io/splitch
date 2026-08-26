@@ -15,12 +15,12 @@ export function mountConvexRoutes(
   // routes stay available when the data-plane KEK is not configured.
   registrar.mount(
     app,
-    controlPlaneRoute("convex_panel_installations_list"),
+    controlPlaneRoute("convex_installations_list"),
     panelHandlers.panelList as RouteHandler<unknown>,
   );
   registrar.mount(
     app,
-    controlPlaneRoute("convex_panel_installations_delete"),
+    controlPlaneRoute("convex_installations_revoke"),
     panelHandlers.panelRemove as RouteHandler<unknown>,
   );
   if (!deps) return;

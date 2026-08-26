@@ -139,7 +139,7 @@ export const convexRoutes = [
     errors: [...commonErrors, "CONVEX_INSTALLATION_NOT_FOUND", "EVENT_ID_CONFLICT"],
   }),
   defineApiRoute({
-    operationId: "convex_panel_installations_list",
+    operationId: "convex_installations_list",
     owner: OWNER,
     method: "GET",
     path: PANEL_BASE,
@@ -152,7 +152,7 @@ export const convexRoutes = [
     errors: panelErrors,
   }),
   defineApiRoute({
-    operationId: "convex_panel_installations_delete",
+    operationId: "convex_installations_revoke",
     owner: OWNER,
     method: "DELETE",
     path: `${PANEL_BASE}/:installationId`,

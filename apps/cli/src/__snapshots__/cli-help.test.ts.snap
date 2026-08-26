@@ -359,6 +359,58 @@ Flags:
 
 Example:
   splitch cloudflare status --env production --json",
+    "cloudflare-installations list": "List Cloudflare installations and their delivery health for this Environment.
+
+Usage:
+  splitch cloudflare-installations list [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch cloudflare-installations list --json",
+    "cloudflare-installations revoke": "Revoke a Cloudflare integration and suppress pending deliveries.
+
+Usage:
+  splitch cloudflare-installations revoke <installation-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch cloudflare-installations revoke <installation-id> --json",
+    "convex-installations list": "List Convex installations and their delivery health for this Environment.
+
+Usage:
+  splitch convex-installations list [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch convex-installations list --json",
+    "convex-installations revoke": "Revoke a Convex integration and suppress pending deliveries.
+
+Usage:
+  splitch convex-installations revoke <installation-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch convex-installations revoke <installation-id> --json",
     "env-policy get": "Get the selected Environment Policy.
 
 Usage:
@@ -1641,6 +1693,34 @@ Flags:
 
 Example:
   splitch cloudflare setup --help",
+    "cloudflare-installations": "Manage cloudflare-installations resources.
+
+Usage:
+  splitch cloudflare-installations <action> [arguments] [flags]
+
+Commands:
+  list            List Cloudflare installations and their delivery health for this Environment.
+  revoke          Revoke a Cloudflare integration and suppress pending deliveries.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch cloudflare-installations list --help",
+    "convex-installations": "Manage convex-installations resources.
+
+Usage:
+  splitch convex-installations <action> [arguments] [flags]
+
+Commands:
+  list            List Convex installations and their delivery health for this Environment.
+  revoke          Revoke a Convex integration and suppress pending deliveries.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch convex-installations list --help",
     "env-policy": "Manage env-policy resources.
 
 Usage:
@@ -2019,6 +2099,8 @@ Resource groups:
   apps
   client-key
   cloudflare
+  cloudflare-installations
+  convex-installations
   env-policy
   environment-exposure-status
   envs

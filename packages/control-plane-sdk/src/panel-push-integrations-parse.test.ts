@@ -4,13 +4,13 @@ import { parseControlPanelOperation } from "./control-panel-operation";
 const PROVIDERS = [
   {
     provider: "convex",
-    listId: "convex_panel_installations_list",
-    deleteId: "convex_panel_installations_delete",
+    listId: "convex_installations_list",
+    deleteId: "convex_installations_revoke",
   },
   {
     provider: "cloudflare",
-    listId: "cloudflare_panel_installations_list",
-    deleteId: "cloudflare_panel_installations_delete",
+    listId: "cloudflare_installations_list",
+    deleteId: "cloudflare_installations_revoke",
   },
 ] as const;
 
