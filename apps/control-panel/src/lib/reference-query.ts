@@ -60,10 +60,11 @@ export async function updateReferenceFlagConfig(
   await queryClient.invalidateQueries({
     queryKey: queryKeys.flag.prefix(scope.appId, scope.environmentId),
   });
+  const { approvalRequest, ...config } = result.data;
   return {
     ok: true,
-    data: result.data.config,
-    approvalRequest: result.data.approvalRequest,
+    data: config,
+    approvalRequest,
   };
 }
 

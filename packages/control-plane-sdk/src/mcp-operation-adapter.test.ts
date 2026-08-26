@@ -98,7 +98,7 @@ describe("mcp operation adapter", () => {
       baseUrl: "https://control-plane.test",
       fetch: async (request) => {
         forwardedRequest = request instanceof Request ? request : new Request(request);
-        return Response.json({ config: flagConfig, approvalRequest: null });
+        return Response.json({ ...flagConfig, approvalRequest: null });
       },
     });
 

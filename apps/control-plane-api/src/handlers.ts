@@ -106,7 +106,7 @@ export function makeHandlers(deps: HandlerDeps) {
           .readFlagConfig({ appId, environmentId, flagId });
         return applied.ok
           ? Response.json({
-              config: applied.config,
+              ...applied.config,
               approvalRequest: replay.approvalRequest,
             })
           : renderFlagConfigReadFailure(applied, requestId);
@@ -173,7 +173,7 @@ export function makeHandlers(deps: HandlerDeps) {
           .readFlagConfig({ appId, environmentId, flagId });
         if (!applied.ok) return renderFlagConfigReadFailure(applied, requestId);
         return Response.json({
-          config: applied.config,
+          ...applied.config,
           approvalRequest: approval.approvalRequest,
         });
       }
@@ -222,7 +222,7 @@ export function makeHandlers(deps: HandlerDeps) {
           .readFlagConfig({ appId, environmentId, flagId });
         return applied.ok
           ? Response.json({
-              config: applied.config,
+              ...applied.config,
               approvalRequest: replay.approvalRequest,
             })
           : renderFlagConfigReadFailure(applied, requestId);
@@ -279,7 +279,7 @@ export function makeHandlers(deps: HandlerDeps) {
         const applied = await writer.readFlagConfig({ appId, environmentId, flagId });
         if (!applied.ok) return renderFlagConfigReadFailure(applied, requestId);
         return Response.json({
-          config: applied.config,
+          ...applied.config,
           approvalRequest: approval.approvalRequest,
         });
       }

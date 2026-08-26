@@ -87,7 +87,7 @@ describe("mcp operation adapter body path stripping (SPL-296)", () => {
       baseUrl: "https://control-plane.test",
       fetch: async (request) => {
         forwardedRequest = request instanceof Request ? request : new Request(request);
-        return Response.json({ config: flagConfig, approvalRequest: null });
+        return Response.json({ ...flagConfig, approvalRequest: null });
       },
     });
 

@@ -53,12 +53,10 @@ describe("config store write path", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       approvalRequest: null,
-      config: {
-        flagId: ids.flagId,
-        environmentId: ids.environmentId,
-        version: 2,
-        enabled: true,
-      },
+      flagId: ids.flagId,
+      environmentId: ids.environmentId,
+      version: 2,
+      enabled: true,
     });
 
     expect(h.events.slice(0, 2)).toEqual(["d1-before-kv:true", "kv:flag"]);

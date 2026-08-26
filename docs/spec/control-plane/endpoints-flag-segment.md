@@ -160,9 +160,8 @@ Blocked while a running Experiment owns this Flag in this Environment: `availabl
 "END_RUNNING_RUN_FIRST"`, naming the Run in `current_run_id`. `enabled` is exempt — the kill switch is
 never frozen. The freeze is checked **before** the Policy gate, so a change the Run forbids never
 becomes a pending Approval Request.
-Returns:
-`{ config: FlagConfiguration, approval_request: ApprovalRequest | null }`. The request is null under
-`allow` and applied under `confirm`.
+Returns the Flag Configuration fields plus `approvalRequest: ApprovalRequest | null` alongside
+(not wrapped in `config`). The request is null under `allow` and applied under `confirm`.
 
 ### `PUT /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/targeting-rules`
 
@@ -173,9 +172,8 @@ Rules may only reference Variants in this Environment's available set. Subject t
 Environment, with the same `RUN_FROZEN` refusal and the same ordering ahead of the Policy gate.
 An optional `segmentId` must name a Segment in the same App. Publication AND-merges that Segment's
 Conditions with the rule's direct Conditions and writes only resolved Conditions to KV.
-Returns:
-`{ config: FlagConfiguration, approval_request: ApprovalRequest | null }`. The request is null under
-`allow` and applied under `confirm`.
+Returns the Flag Configuration fields plus `approvalRequest: ApprovalRequest | null` alongside
+(not wrapped in `config`). The request is null under `allow` and applied under `confirm`.
 
 ## Promotion endpoints
 
@@ -215,9 +213,9 @@ had no baseline. Adopting the source's salt would reshuffle every already-bucket
 
 Promotion preserves each authoring `segmentId` in D1 and republishes a resolved KV projection.
 
-Returns: the updated target Flag Configuration + the immutable Approval diff +
-`approval_request: ApprovalRequest | null`. The request is null under `allow` and applied under
-`confirm`.
+Returns the updated target Flag Configuration fields at the same paths as `flag_config_get`, plus
+the immutable Approval `diff` and `approvalRequest: ApprovalRequest | null` alongside. The request
+is null under `allow` and applied under `confirm`.
 
 **Validation (Worker-enforced, fail-loud — ADR-0036):**
 

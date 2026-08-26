@@ -72,15 +72,13 @@ describe("flag configuration and promotion routes", () => {
     expect(approved.status).toBe(200);
     expect(await approved.json()).toMatchObject({
       approvalRequest: { status: "applied" },
-      config: {
-        version: 2,
-        targetingRules: [
-          expect.objectContaining({
-            id: "rule_prod_treatment",
-            variantId: ids.treatmentVariantId,
-          }),
-        ],
-      },
+      version: 2,
+      targetingRules: [
+        expect.objectContaining({
+          id: "rule_prod_treatment",
+          variantId: ids.treatmentVariantId,
+        }),
+      ],
     });
     expect(h.events.slice(0, 2)).toEqual(["d1-before-kv:false", "kv:flag"]);
     expect(h.events.at(-1)).toBe("broadcast");
@@ -126,7 +124,7 @@ describe("flag configuration and promotion routes", () => {
     expect(disable.status).toBe(200);
     expect(await disable.json()).toMatchObject({
       approvalRequest: null,
-      config: { enabled: false },
+      enabled: false,
     });
   });
 
@@ -138,16 +136,14 @@ describe("flag configuration and promotion routes", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
-      config: {
-        flagId: ids.flagId,
-        environmentId: ids.environmentId,
-        enabled: true,
-        targetingRules: [
-          expect.objectContaining({
-            variantId: ids.treatmentVariantId,
-          }),
-        ],
-      },
+      flagId: ids.flagId,
+      environmentId: ids.environmentId,
+      enabled: true,
+      targetingRules: [
+        expect.objectContaining({
+          variantId: ids.treatmentVariantId,
+        }),
+      ],
       diff: {
         before: { enabled: false, targetingRules: [] },
         after: {

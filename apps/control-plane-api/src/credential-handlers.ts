@@ -28,6 +28,12 @@ interface CredentialHandlerDeps {
 
 type ApiKeyRow = Awaited<ReturnType<Repository["credentials"]["listApiKeys"]>>[number];
 
+/**
+ * Same ceiling as the Flag catalog: one request's cost must not track how many
+ * keys an Environment has accumulated, and the bound rides on the wire (SPL-451).
+ */
+const API_KEY_LIST_READ_LIMIT = 200;
+
 export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
   return {
     async getClientKey({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
@@ -100,7 +106,12 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       if (ctx instanceof Response) return ctx;
 
       const rows = await deps.repo.credentials.listApiKeys(ctx.scope);
-      return Response.json({ items: rows.map(apiKeyResponse) });
+      const readTruncated = rows.length > API_KEY_LIST_READ_LIMIT;
+      return Response.json({
+        items: rows.slice(0, API_KEY_LIST_READ_LIMIT).map(apiKeyResponse),
+        readLimit: API_KEY_LIST_READ_LIMIT,
+        readTruncated,
+      });
     },
 
     async createApiKey({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {

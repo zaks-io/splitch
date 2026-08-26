@@ -218,8 +218,16 @@ describe("Credential responses", () => {
   it("ListCredentialsResponse parses a mix of API and Client keys", () => {
     const res = ListCredentialsResponseSchema.parse({
       items: [apiKeyLeaf, clientKeyLeaf],
+      readTruncated: false,
+      readLimit: 200,
     });
     expect(res.items).toHaveLength(2);
+  });
+
+  it("ListCredentialsResponse rejects a list that omits its own bound", () => {
+    expect(
+      ListCredentialsResponseSchema.safeParse({ items: [apiKeyLeaf, clientKeyLeaf] }).success,
+    ).toBe(false);
   });
 
   it("CredentialSchema REJECTS a secret-bearing API-key-shaped object (no leak)", () => {
@@ -228,7 +236,11 @@ describe("Credential responses", () => {
 
   it("ListCredentialsResponse REJECTS a secret-bearing API-key-shaped item (no leak)", () => {
     expect(
-      ListCredentialsResponseSchema.safeParse({ items: [secretBearingApiKeyShape] }).success,
+      ListCredentialsResponseSchema.safeParse({
+        items: [secretBearingApiKeyShape],
+        readTruncated: false,
+        readLimit: 200,
+      }).success,
     ).toBe(false);
   });
 
@@ -236,6 +248,8 @@ describe("Credential responses", () => {
     expect(
       ListCredentialsResponseSchema.safeParse({
         items: [{ appId: "app_1", environmentId: "env_dev" }],
+        readTruncated: false,
+        readLimit: 200,
       }).success,
     ).toBe(false);
   });

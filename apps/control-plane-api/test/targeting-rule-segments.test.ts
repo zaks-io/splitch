@@ -113,7 +113,7 @@ describe("Targeting Rule Segment lifecycle", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      config: { targetingRules: [expect.objectContaining({ segmentId: "segment_paid" })] },
+      targetingRules: [expect.objectContaining({ segmentId: "segment_paid" })],
     });
     expect(
       (await h.repo.flags.listTargetingRules(envScope(ids.appId, ids.environmentId), ids.flagId))[0]

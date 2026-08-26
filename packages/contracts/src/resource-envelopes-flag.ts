@@ -165,10 +165,11 @@ export const PatchVariantRequestSchema = z
   .strict();
 export type PatchVariantRequest = z.infer<typeof PatchVariantRequestSchema>;
 
-export const FlagMutationResponseSchema = z
-  .object({
-    flag: FlagResponseSchema,
-    approvalRequest: ApprovalRequestSchema.nullable(),
-  })
-  .strict();
+/**
+ * Variant writes return the same Flag fields `flags_get` does, with
+ * `approvalRequest` alongside rather than wrapping the Flag (SPL-451).
+ */
+export const FlagMutationResponseSchema = FlagResponseSchema.extend({
+  approvalRequest: ApprovalRequestSchema.nullable(),
+}).strict();
 export type FlagMutationResponse = z.infer<typeof FlagMutationResponseSchema>;

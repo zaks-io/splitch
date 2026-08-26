@@ -78,7 +78,7 @@ export function makePromotionHandlers(deps: PromotionHandlerDeps) {
           .readFlagConfig({ appId, environmentId: targetEnvironmentId, flagId });
         if (!applied.ok) return renderFlagConfigReadFailure(applied, requestId);
         return Response.json({
-          config: applied.config,
+          ...applied.config,
           diff: {
             before: replay.approvalRequest.diff.current,
             after: replay.approvalRequest.diff.proposed,
@@ -156,7 +156,7 @@ export function makePromotionHandlers(deps: PromotionHandlerDeps) {
         if (!applied.ok) return renderFlagConfigReadFailure(applied, requestId);
         const approvalDiff = approval.approvalRequest.diff;
         return Response.json({
-          config: applied.config,
+          ...applied.config,
           diff: {
             before: approvalDiff.current,
             after: approvalDiff.proposed,

@@ -115,7 +115,8 @@ describe("control plane sdk Client Key operations", () => {
 
 describe("control plane sdk API Key operations", () => {
   it("lists API Key metadata", async () => {
-    const { sdk, requests } = sdkWith(() => Response.json({ items: [apiKeyMetadata] }));
+    const listed = { items: [apiKeyMetadata], readLimit: 200, readTruncated: false };
+    const { sdk, requests } = sdkWith(() => Response.json(listed));
 
     const result = await sdk.credentials.apiKeys.list({
       appId: "app_checkout",
@@ -125,7 +126,7 @@ describe("control plane sdk API Key operations", () => {
     expect(requests[0]?.url).toBe(
       "https://control-plane.test/apps/app_checkout/envs/env_staging/api-keys",
     );
-    expect(result).toEqual({ ok: true, status: 200, data: { items: [apiKeyMetadata] } });
+    expect(result).toEqual({ ok: true, status: 200, data: listed });
   });
 
   it("mints an API Key and returns the once-only secret", async () => {

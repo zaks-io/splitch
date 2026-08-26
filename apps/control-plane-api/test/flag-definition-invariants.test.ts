@@ -160,10 +160,10 @@ describe("control-plane Flag Variant updates", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       approvalRequest: { status: string };
-      flag: { variants: Array<{ name: string; value: unknown; description?: string }> };
+      variants: Array<{ name: string; value: unknown; description?: string }>;
     };
     expect(body.approvalRequest.status).toBe("applied");
-    const updated = body.flag;
+    const updated = body;
     expect("enabled" in updated).toBe(false);
     expect(updated.variants).toContainEqual(
       expect.objectContaining({

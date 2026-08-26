@@ -1,5 +1,6 @@
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import { paginatedResponse } from "../wire-envelopes-core";
+import { z } from "zod";
 import { AppParams, ApprovalRequestParams } from "./route-shapes";
 import {
   ApprovalRequestListQuerySchema,
@@ -17,7 +18,12 @@ const OWNER = "control-plane-api" as const;
 const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
-const ApprovalRequestListResponseSchema = paginatedResponse(ApprovalRequestSchema);
+const ApprovalRequestListResponseSchema = paginatedResponse(ApprovalRequestSchema).extend({
+  // Cursor pagination already has `limit`/`cursor`; `readLimit`/`readTruncated`
+  // are the same bound, named so every list command shares one envelope (SPL-451).
+  readTruncated: z.boolean(),
+  readLimit: z.number().int().positive(),
+});
 
 export const approvalRoutes = [
   defineApiRoute({
@@ -25,7 +31,7 @@ export const approvalRoutes = [
     owner: OWNER,
     method: "GET",
     path: "/apps/:appId/approval-requests",
-    summary: "List Approval Requests in an App.",
+    summary: "List Approval Requests in an App (bounded; reports its own truncation).",
     request: { params: AppParams, query: ApprovalRequestListQuerySchema },
     response: ApprovalRequestListResponseSchema,
     auth: AUTH,

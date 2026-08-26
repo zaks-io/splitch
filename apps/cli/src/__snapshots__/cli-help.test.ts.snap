@@ -27,7 +27,7 @@ Credential semantics:
 
 Example:
   splitch api-keys create --body-json '{"scopes":[]}' --json",
-    "api-keys list": "List API Key metadata (no secrets).
+    "api-keys list": "List API Key metadata (no secrets; bounded; reports its own truncation).
 
 Usage:
   splitch api-keys list [flags]
@@ -171,7 +171,7 @@ Flags:
 
 Example:
   splitch approval-requests get <id> --json",
-    "approval-requests list": "List Approval Requests in an App.
+    "approval-requests list": "List Approval Requests in an App (bounded; reports its own truncation).
 
 Usage:
   splitch approval-requests list [flags]
@@ -1581,7 +1581,7 @@ Usage:
   splitch api-keys <action> [arguments] [flags]
 
 Commands:
-  list            List API Key metadata (no secrets).
+  list            List API Key metadata (no secrets; bounded; reports its own truncation).
   create          Mint an API Key (raw secret surfaced once only).
   revoke          Revoke an API Key.
 
@@ -1638,7 +1638,7 @@ Usage:
   splitch approval-requests <action> [arguments] [flags]
 
 Commands:
-  list            List Approval Requests in an App.
+  list            List Approval Requests in an App (bounded; reports its own truncation).
   get             Get one full Approval Request projection.
 
 Flags:

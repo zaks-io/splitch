@@ -40,6 +40,7 @@ function detailSuffix(details: Record<string, unknown>): string {
 function approvalRequestsFromPayload(payload: unknown): StaleCandidate[] {
   if (!isRecord(payload)) return [];
   if (isApprovalRequest(payload)) return [payload];
+  if (isApprovalRequest(payload.approvalRequest)) return [payload.approvalRequest];
   if (Array.isArray(payload.items)) {
     return payload.items.filter(isApprovalRequest);
   }
