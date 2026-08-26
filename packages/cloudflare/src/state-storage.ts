@@ -14,6 +14,7 @@ export interface IntegrationRow {
   appId: string;
   environmentId: string;
   identityKey: string;
+  announcedVersion: number;
   snapshotVersion: number;
 }
 
@@ -26,6 +27,20 @@ export class StateStorage {
 
   initialize(schema: string): void {
     this.storage.sql.exec(schema);
+    const columns = this.storage.sql
+      .exec<{ name: string }>("PRAGMA table_info(integration)")
+      .toArray();
+    if (columns.some(({ name }) => name === "announced_version")) {
+      this.storage.sql.exec("INSERT OR IGNORE INTO _sql_schema_migrations (id) VALUES (2)");
+      return;
+    }
+    this.storage.transactionSync(() => {
+      this.storage.sql.exec(
+        "ALTER TABLE integration ADD COLUMN announced_version INTEGER NOT NULL DEFAULT 0",
+      );
+      this.storage.sql.exec("UPDATE integration SET announced_version = snapshot_version");
+      this.storage.sql.exec("INSERT INTO _sql_schema_migrations (id) VALUES (2)");
+    });
   }
 
   integration(): IntegrationRow | null {
@@ -33,8 +48,16 @@ export class StateStorage {
       this.storage.sql
         .exec<IntegrationRow>(`SELECT installation_id AS installationId, app_id AS appId,
           environment_id AS environmentId, identity_key AS identityKey,
-          snapshot_version AS snapshotVersion FROM integration WHERE singleton = 1`)
+          announced_version AS announcedVersion, snapshot_version AS snapshotVersion
+          FROM integration WHERE singleton = 1`)
         .toArray()[0] ?? null
+    );
+  }
+
+  announceVersion(version: number): void {
+    this.storage.sql.exec(
+      "UPDATE integration SET announced_version = MAX(announced_version, ?) WHERE singleton = 1",
+      version,
     );
   }
 

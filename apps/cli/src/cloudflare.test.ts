@@ -53,8 +53,8 @@ describe("cloudflare setup", () => {
     );
 
     expect(result.exitCode).toBe(0);
-    expect(requests.map(({ method }) => method)).toEqual(["POST", "GET"]);
-    expect(requests[0]?.url).toBe(
+    expect(requests.map(({ method }) => method)).toEqual(["GET", "POST", "GET"]);
+    expect(requests[1]?.url).toBe(
       "https://edge.example.test/api/integrations/cloudflare/installations",
     );
     const applicationConfig = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
@@ -102,6 +102,28 @@ describe("cloudflare setup", () => {
       }),
     ).rejects.toThrow(/SPLITCH is already bound to "customer-owned-worker"/);
     expect(runner.calls.some((call) => call.args.includes("deploy"))).toBe(false);
+  });
+
+  it("fails before deploy when the API Key is rejected", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "splitch-cloudflare-cli-api-key-"));
+    await installFakeCloudflarePackage(cwd);
+    await writeFile(join(cwd, "wrangler.jsonc"), JSON.stringify({ name: "customer-app" }));
+    const runner = new RecordingRunner();
+
+    await expect(
+      executeInvocation(parseInvocation(["cloudflare", "setup", "--env", "production"]), {
+        cwd,
+        env: { SPLITCH_API_KEY: "invalid-api-key" },
+        evaluationBaseUrl: "https://edge.example.test",
+        fetch: async () => Response.json({}, { status: 401 }),
+        commandRunner: runner,
+        io: { log: () => {}, error: () => {} },
+      }),
+    ).rejects.toThrow(/HTTP 401/);
+    expect(runner.calls.some((call) => call.args.includes("deploy"))).toBe(false);
+    await expect(
+      readFile(join(cwd, ".splitch", "cloudflare", "production", "wrangler.jsonc"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("fails instead of silently binding the root config for an unknown Wrangler Environment", async () => {

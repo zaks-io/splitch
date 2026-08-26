@@ -22,6 +22,16 @@ export async function handleConfigurationPush(request: Request, env: Env): Promi
   const deliveryId = request.headers.get("splitch-delivery-id");
   if (!deliveryId) throw new Error("authenticated configuration push has no delivery ID");
   const state = env.SPLITCH_STATE.getByName(env.SPLITCH_INSTALLATION_ID);
+  const announced = await state.announceSnapshot(
+    parsed.appId,
+    parsed.environmentId,
+    parsed.environmentVersion,
+  );
+  if (!announced.ok)
+    return Response.json(
+      { code: "FORBIDDEN", message: "snapshot crosses the installed Environment scope" },
+      { status: 403 },
+    );
   try {
     const applied = await state.applySnapshot(body, deliveryId);
     if (!applied.ok)
@@ -49,19 +59,47 @@ export async function handleConfigurationPush(request: Request, env: Env): Promi
 }
 
 async function readBoundedBody(request: Request): Promise<string | Response> {
-  const declaredLength = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > CLOUDFLARE_SNAPSHOT_MAX_BODY_BYTES)
-    return Response.json(
-      { code: "VALIDATION_ERROR", message: "snapshot body is too large" },
-      { status: 413 },
-    );
-  const body = await request.text();
-  if (new TextEncoder().encode(body).byteLength > CLOUDFLARE_SNAPSHOT_MAX_BODY_BYTES)
-    return Response.json(
-      { code: "VALIDATION_ERROR", message: "snapshot body is too large" },
-      { status: 413 },
-    );
-  return body;
+  const declaredLength = request.headers.get("content-length");
+  if (
+    declaredLength !== null &&
+    Number.isFinite(Number(declaredLength)) &&
+    Number(declaredLength) > CLOUDFLARE_SNAPSHOT_MAX_BODY_BYTES
+  )
+    return bodyTooLarge();
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > CLOUDFLARE_SNAPSHOT_MAX_BODY_BYTES) {
+        await reader.cancel();
+        return bodyTooLarge();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+function bodyTooLarge(): Response {
+  return Response.json(
+    { code: "VALIDATION_ERROR", message: "snapshot body is too large" },
+    { status: 413 },
+  );
 }
 
 async function authenticatePush(

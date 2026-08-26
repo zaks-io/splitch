@@ -75,6 +75,7 @@ async function setup(
   await assertCloudflarePackage(cwd);
   const appConfigPath = existing?.appConfigPath ?? (await findApplicationConfig(cwd));
   await requireWrangler4(runner, cwd);
+  await validateApiKey(apiKey, deps);
   const state: CloudflareState =
     existing && !existing.removedAt
       ? existing
@@ -225,6 +226,20 @@ async function integrationRequest(
   );
   if (!response.ok) throw usage(`Cloudflare integration API returned HTTP ${response.status}`);
   return response;
+}
+
+async function validateApiKey(apiKey: string, deps: CliDeps): Promise<void> {
+  const baseUrl = resolveDataPlaneBaseUrl(deps).replace(/\/$/, "");
+  const response = await (deps.fetch ?? fetch)(
+    `${baseUrl}/api/integrations/cloudflare/installations/${randomUUID()}`,
+    {
+      method: "GET",
+      redirect: "error",
+      headers: { authorization: `Bearer ${apiKey}` },
+    },
+  );
+  if (!response.ok && response.status !== 404)
+    throw usage(`Cloudflare integration API returned HTTP ${response.status}`);
 }
 
 function workersDevOrigin(...outputs: string[]): string {

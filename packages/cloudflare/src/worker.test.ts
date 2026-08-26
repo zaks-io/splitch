@@ -1,33 +1,8 @@
 import { env, runDurableObjectAlarm, runInDurableObject, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { hmacHex } from "./crypto";
+import { baseSnapshot, configurationPushFixture } from "./worker-test-fixtures";
 
-const baseSnapshot = {
-  schemaVersion: 1 as const,
-  environmentVersion: 1,
-  appId: "app_1",
-  environmentId: "env_1",
-  flags: [
-    {
-      id: "flag_1",
-      key: "checkout",
-      environmentId: "env_1",
-      experimentId: null,
-      enabled: true,
-      defaultVariantId: "control",
-      variants: [
-        { id: "control", name: "control", value: false },
-        { id: "treatment", name: "treatment", value: true },
-      ],
-      availableVariantNames: ["control", "treatment"],
-      targetingRules: [],
-      rollout: null,
-      updatedAt: "2026-08-25T00:00:00.000Z",
-    },
-  ],
-  experiments: [],
-  runs: [],
-};
+const { push, signedHeaders } = configurationPushFixture(env.SPLITCH_PUSH_SECRET, SELF.fetch);
 
 const experimentSnapshot = {
   ...baseSnapshot,
@@ -141,6 +116,11 @@ describe("Splitch Cloudflare Worker", () => {
       env.SPLITCH_STATE.getByName(env.SPLITCH_INSTALLATION_ID).status(),
     ).resolves.toMatchObject({ appliedEnvironmentVersion: 2 });
   });
+});
+
+describe("Splitch Cloudflare Worker failure behavior", () => {
+  beforeEach(() => vi.useRealTimers());
+  afterEach(() => vi.unstubAllGlobals());
 
   it("replays identical evaluations and fails loud on idempotency conflicts", async () => {
     await push(experimentSnapshot, "00000000-0000-4000-8000-000000000009");
@@ -256,25 +236,4 @@ async function makePendingExposuresDue(state: DurableObjectStub): Promise<void> 
       "UPDATE exposure_outbox SET next_attempt_at = 0 WHERE state = 'pending'",
     );
   });
-}
-
-async function push(snapshot: unknown, deliveryId: string): Promise<Response> {
-  const body = JSON.stringify(snapshot);
-  return SELF.fetch(`https://worker.test/integrations/splitch/configuration`, {
-    method: "POST",
-    headers: await signedHeaders(body, deliveryId),
-    body,
-  });
-}
-
-async function signedHeaders(body: string, deliveryId: string, signature?: string) {
-  const timestamp = String(Math.floor(Date.now() / 1_000));
-  const digest =
-    signature ?? (await hmacHex(env.SPLITCH_PUSH_SECRET, `${timestamp}.${deliveryId}.${body}`));
-  return {
-    "content-type": "application/json",
-    "splitch-delivery-id": deliveryId,
-    "splitch-timestamp": timestamp,
-    "splitch-signature": `v1=${digest}`,
-  };
 }

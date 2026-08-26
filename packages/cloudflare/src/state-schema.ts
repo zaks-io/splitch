@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS integration (
   app_id TEXT NOT NULL,
   environment_id TEXT NOT NULL,
   identity_key TEXT NOT NULL,
+  announced_version INTEGER NOT NULL,
   snapshot_version INTEGER NOT NULL,
   applied_at TEXT NOT NULL
 );

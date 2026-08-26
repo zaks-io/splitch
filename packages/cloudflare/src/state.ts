@@ -49,14 +49,17 @@ export class SplitchState extends DurableObject<Env> {
       const identityKey = existing?.identityKey ?? randomSecret();
       this.ctx.storage.sql.exec(
         `INSERT INTO integration (
-          singleton, installation_id, app_id, environment_id, identity_key, snapshot_version, applied_at
-        ) VALUES (1, ?, ?, ?, ?, ?, ?)
+          singleton, installation_id, app_id, environment_id, identity_key,
+          announced_version, snapshot_version, applied_at
+        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(singleton) DO UPDATE SET
+          announced_version = MAX(integration.announced_version, excluded.announced_version),
           snapshot_version = excluded.snapshot_version, applied_at = excluded.applied_at`,
         this.env.SPLITCH_INSTALLATION_ID,
         snapshot.appId,
         snapshot.environmentId,
         identityKey,
+        snapshot.environmentVersion,
         snapshot.environmentVersion,
         now,
       );
@@ -71,6 +74,19 @@ export class SplitchState extends DurableObject<Env> {
     this.state.invalidateConfiguration();
     await this.state.ensureAlarm();
     return result;
+  }
+
+  announceSnapshot(
+    appId: string,
+    environmentId: string,
+    environmentVersion: number,
+  ): { ok: true } | { ok: false; reason: "scope_mismatch" } {
+    const integration = this.state.integration();
+    if (!integration) return { ok: true };
+    if (integration.appId !== appId || integration.environmentId !== environmentId)
+      return { ok: false, reason: "scope_mismatch" };
+    this.state.announceVersion(environmentVersion);
+    return { ok: true };
   }
 
   async evaluateDetails(
@@ -100,6 +116,13 @@ export class SplitchState extends DurableObject<Env> {
         "ERROR",
         "PROVIDER_NOT_READY",
         "@splitch/cloudflare has no applied configuration snapshot",
+      );
+    if (integration.snapshotVersion < integration.announcedVersion)
+      return failureDetails(
+        defaultValue,
+        "STALE",
+        "PROVIDER_NOT_READY",
+        `@splitch/cloudflare snapshot ${integration.snapshotVersion} is behind announced version ${integration.announcedVersion}`,
       );
     const { snapshot, provider } = configuration;
     const fingerprint = await sha256Hex(canonicalJson({ flagKey, context, defaultValue }));

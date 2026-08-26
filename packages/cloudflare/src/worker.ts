@@ -1,11 +1,12 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import type { VariantValue } from "@splitch/contracts";
-import { handleConfigurationPush } from "./push";
 import type {
   CloudflareEvaluationContext,
   CloudflareResolutionDetails,
   CloudflareRuntimeStatus,
 } from "./public-types";
+import { handleConfigurationPush } from "./push";
+
 // biome-ignore lint/performance/noBarrelFile: Wrangler requires the Durable Object class exported from the Worker entrypoint.
 export { SplitchState } from "./state";
 
