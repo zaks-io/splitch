@@ -1,3 +1,4 @@
+import { ConvexInstallationListResponseSchema } from "@splitch/contracts";
 import { createRepository, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -40,9 +41,7 @@ describe("Convex Panel installations", () => {
   it("lists active and revoked installations with delivery health", async () => {
     await seedInstallations();
     const response = await handlers.panelList(panelArgs(USER_ADMIN, ALPHA.appId, ALPHA_ENV));
-    const body = (await response.json()) as {
-      installations: Array<{ installationId: string; status: string; pendingCount: number }>;
-    };
+    const body = ConvexInstallationListResponseSchema.parse(await response.json());
 
     expect(response.status).toBe(200);
     expect(body.installations).toEqual([

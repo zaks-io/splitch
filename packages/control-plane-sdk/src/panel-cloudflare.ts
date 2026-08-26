@@ -1,4 +1,4 @@
-import type { CloudflareInstallationStatus } from "@splitch/contracts";
+import type { CloudflareInstallationListResponse } from "@splitch/contracts";
 import { CloudflareInstallationListResponseSchema } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
@@ -19,7 +19,7 @@ export interface PanelCloudflareRevokeOutput {
 export interface PanelCloudflareClient {
   list(
     input: PanelCloudflareScope,
-  ): Promise<ControlPlaneOperationResult<{ installations: CloudflareInstallationStatus[] }>>;
+  ): Promise<ControlPlaneOperationResult<CloudflareInstallationListResponse>>;
   revoke(
     input: PanelCloudflareInstallationInput,
   ): Promise<ControlPlaneOperationResult<PanelCloudflareRevokeOutput>>;

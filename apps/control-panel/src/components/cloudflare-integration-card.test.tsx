@@ -27,7 +27,7 @@ describe("CloudflareIntegrationCard", () => {
     const html = render(seeded([]));
     expect(html).toContain("splitch cloudflare setup --env production");
     expect(html).toContain("Wrangler 4");
-    expect(html).toContain("current project");
+    expect(html).toContain("project directory");
   });
 
   it("shows an active installation and hides CLI setup", () => {

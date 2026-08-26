@@ -40,7 +40,7 @@ export function CloudflareIntegrationCard({
   const scope = { appId, environmentId };
   const installations = useQuery(cloudflareInstallationsQuery(scope));
   const [error, setError] = useState<string>();
-  const [busyInstallationId, setBusyInstallationId] = useState<string>();
+  const [busyInstallationIds, setBusyInstallationIds] = useState<ReadonlySet<string>>(new Set());
   const hasActiveInstallation = (installations.data ?? []).some((row) => row.status === "active");
 
   async function revoke(installationId: string) {
@@ -52,7 +52,7 @@ export function CloudflareIntegrationCard({
       return;
     }
     setError(undefined);
-    setBusyInstallationId(installationId);
+    setBusyInstallationIds((busy) => new Set(busy).add(installationId));
     try {
       const outcome = await revokeCloudflareInstallation({ ...scope, installationId });
       if (outcome.kind === "refused") {
@@ -67,7 +67,11 @@ export function CloudflareIntegrationCard({
     } catch {
       setError("Cloudflare could not be disconnected. It may still be receiving configuration.");
     } finally {
-      setBusyInstallationId(undefined);
+      setBusyInstallationIds((busy) => {
+        const next = new Set(busy);
+        next.delete(installationId);
+        return next;
+      });
     }
   }
 
@@ -83,7 +87,7 @@ export function CloudflareIntegrationCard({
       <CardContent className="grid gap-4">
         {error ? (
           <Alert variant="destructive">
-            <AlertTitle>Cloudflare operation failed loud</AlertTitle>
+            <AlertTitle>Cloudflare operation failed</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
@@ -98,7 +102,7 @@ export function CloudflareIntegrationCard({
         ) : (
           <>
             <PushInstallationsTable
-              busyInstallationId={busyInstallationId}
+              busyInstallationIds={busyInstallationIds}
               labels={CLOUDFLARE_LABELS}
               onRevoke={revoke}
               rows={installations.data.map(cloudflareRow)}
@@ -131,8 +135,8 @@ function CloudflareSetupSteps({ environmentKey }: { environmentKey: string }) {
   return (
     <div className="grid gap-5" data-testid="cloudflare-setup-steps">
       <p className="text-muted-foreground text-sm leading-6">
-        Run setup against the current project. It requires Wrangler 4 and uses the project's
-        authenticated Cloudflare account.
+        Run setup from the Worker's project directory. It requires Wrangler 4 and uses that
+        project's authenticated Cloudflare account.
       </p>
       <CopyableCode
         label="Set up Cloudflare"

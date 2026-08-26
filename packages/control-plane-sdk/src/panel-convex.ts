@@ -1,4 +1,4 @@
-import type { ConvexInstallationStatus } from "@splitch/contracts";
+import type { ConvexInstallationListResponse } from "@splitch/contracts";
 import { ConvexInstallationListResponseSchema } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
@@ -19,7 +19,7 @@ export interface PanelConvexRevokeOutput {
 export interface PanelConvexClient {
   list(
     input: PanelConvexScope,
-  ): Promise<ControlPlaneOperationResult<{ installations: ConvexInstallationStatus[] }>>;
+  ): Promise<ControlPlaneOperationResult<ConvexInstallationListResponse>>;
   revoke(
     input: PanelConvexInstallationInput,
   ): Promise<ControlPlaneOperationResult<PanelConvexRevokeOutput>>;

@@ -12,7 +12,7 @@ import { appScope, createRepository, envScope } from "../index";
 
 const NOW = "2026-06-28T00:00:00.000Z";
 
-export type Tenant = {
+type Tenant = {
   orgId: string;
   appId: string;
   environmentId: string;
@@ -152,7 +152,7 @@ export type SeededTenants = { a: Tenant; b: Tenant };
  */
 export async function seedSiblingEnvironment(
   d1: D1Database,
-  tenant: Tenant,
+  tenant: { appId: string; envKey: string },
   environmentId: string,
 ): Promise<void> {
   await createRepository(d1).identity.environments.insert(appScope(tenant.appId), {

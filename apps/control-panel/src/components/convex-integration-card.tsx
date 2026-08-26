@@ -32,7 +32,7 @@ export function ConvexIntegrationCard({
   const scope = { appId, environmentId };
   const installations = useQuery(convexInstallationsQuery(scope));
   const [error, setError] = useState<string>();
-  const [busyInstallationId, setBusyInstallationId] = useState<string>();
+  const [busyInstallationIds, setBusyInstallationIds] = useState<ReadonlySet<string>>(new Set());
   const hasActiveInstallation = (installations.data ?? []).some((row) => row.status === "active");
 
   async function revoke(installationId: string) {
@@ -44,7 +44,7 @@ export function ConvexIntegrationCard({
       return;
     }
     setError(undefined);
-    setBusyInstallationId(installationId);
+    setBusyInstallationIds((busy) => new Set(busy).add(installationId));
     try {
       const outcome = await revokeConvexInstallation({ ...scope, installationId });
       if (outcome.kind === "refused") {
@@ -59,7 +59,11 @@ export function ConvexIntegrationCard({
     } catch {
       setError("Convex could not be disconnected. It may still be receiving configuration.");
     } finally {
-      setBusyInstallationId(undefined);
+      setBusyInstallationIds((busy) => {
+        const next = new Set(busy);
+        next.delete(installationId);
+        return next;
+      });
     }
   }
 
@@ -75,7 +79,7 @@ export function ConvexIntegrationCard({
       <CardContent className="grid gap-4">
         {error ? (
           <Alert variant="destructive">
-            <AlertTitle>Convex operation failed loud</AlertTitle>
+            <AlertTitle>Convex operation failed</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
@@ -90,7 +94,7 @@ export function ConvexIntegrationCard({
         ) : (
           <>
             <PushInstallationsTable
-              busyInstallationId={busyInstallationId}
+              busyInstallationIds={busyInstallationIds}
               labels={CONVEX_LABELS}
               onRevoke={revoke}
               rows={installations.data.map(convexRow)}
@@ -121,8 +125,8 @@ function ConvexSetupSteps() {
   return (
     <div className="grid gap-5" data-testid="convex-setup-steps">
       <p className="text-muted-foreground text-sm leading-6">
-        The Convex Component registers itself from your deployment. Set it up in the project that
-        owns these functions.
+        The Convex Component registers itself from your deployment. Set it up in the Convex project
+        that owns these functions.
       </p>
       <CopyableCode
         label="Install the component"

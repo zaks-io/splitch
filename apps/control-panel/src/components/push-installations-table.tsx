@@ -39,12 +39,12 @@ interface PushInstallationLabels {
  */
 export function PushInstallationsTable({
   rows,
-  busyInstallationId,
+  busyInstallationIds,
   labels,
   onRevoke,
 }: {
   rows: PushInstallationRow[];
-  busyInstallationId?: string;
+  busyInstallationIds: ReadonlySet<string>;
   labels: PushInstallationLabels;
   onRevoke: (installationId: string) => void;
 }) {
@@ -84,7 +84,7 @@ export function PushInstallationsTable({
               </TableCell>
               <TableCell className="text-right">
                 <Button
-                  disabled={row.status !== "active" || busyInstallationId === row.installationId}
+                  disabled={row.status !== "active" || busyInstallationIds.has(row.installationId)}
                   onClick={() => onRevoke(row.installationId)}
                   size="sm"
                   type="button"

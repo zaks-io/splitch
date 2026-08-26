@@ -58,13 +58,59 @@ describe("PushInstallationsTable", () => {
 
   it("renders the provider's empty message with no Disconnect action", () => {
     const html = renderToStaticMarkup(
-      <PushInstallationsTable labels={LABELS} onRevoke={() => {}} rows={[]} />,
+      <PushInstallationsTable
+        busyInstallationIds={new Set()}
+        labels={LABELS}
+        onRevoke={() => {}}
+        rows={[]}
+      />,
     );
 
     expect(html).toContain(LABELS.emptyMessage);
     expect(html).not.toContain("Disconnect");
   });
+
+  it("disables only the rows whose revoke is in flight", () => {
+    // An operator who clicks Disconnect on two Workers in a row must not get the
+    // first button back while its request is still open; that is a double submit.
+    const html = renderToStaticMarkup(
+      <PushInstallationsTable
+        busyInstallationIds={new Set(["cfi_1"])}
+        labels={LABELS}
+        onRevoke={() => {}}
+        rows={[activeRow("cfi_1"), activeRow("cfi_2")]}
+      />,
+    );
+
+    // Each row carries its installation id, so splitting on the second one puts
+    // each row's Disconnect button on its own side of the boundary.
+    const [busyRow, idleRow] = html.split("cfi_2");
+    expect(busyRow).toMatch(/\sdisabled=""/);
+    expect(idleRow).not.toMatch(/\sdisabled=""/);
+  });
 });
+
+function activeRow(
+  installationId: string,
+  health?: Pick<
+    PushInstallationRow,
+    "pendingCount" | "oldestPendingAgeMs" | "terminalCount" | "latestDeliveryError"
+  >,
+): PushInstallationRow {
+  return {
+    installationId,
+    destinationUrl:
+      "https://splitch-config.customer.workers.dev/integrations/splitch/configuration",
+    environmentVersion: 12,
+    syncedVersion: 9,
+    status: "active",
+    pendingCount: 0,
+    oldestPendingAgeMs: null,
+    terminalCount: 0,
+    latestDeliveryError: null,
+    ...health,
+  };
+}
 
 function render(
   health: Pick<
@@ -72,16 +118,12 @@ function render(
     "pendingCount" | "oldestPendingAgeMs" | "terminalCount" | "latestDeliveryError"
   >,
 ) {
-  const row: PushInstallationRow = {
-    installationId: "cfi_1",
-    destinationUrl:
-      "https://splitch-config.customer.workers.dev/integrations/splitch/configuration",
-    environmentVersion: 12,
-    syncedVersion: 9,
-    status: "active",
-    ...health,
-  };
   return renderToStaticMarkup(
-    <PushInstallationsTable labels={LABELS} onRevoke={() => {}} rows={[row]} />,
+    <PushInstallationsTable
+      busyInstallationIds={new Set()}
+      labels={LABELS}
+      onRevoke={() => {}}
+      rows={[activeRow("cfi_1", health)]}
+    />,
   );
 }
