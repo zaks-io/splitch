@@ -1,4 +1,11 @@
-import { integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import { createdAt, updatedAt, userRef } from "./columns";
 
 /**
@@ -156,29 +163,37 @@ export const deviceRefreshSessions = sqliteTable("device_refresh_sessions", {
  * Bounded Door B workflow state. Identifiers are SHA-256 digests, never raw
  * email addresses, WorkOS user ids, OTPs, or session tokens.
  */
-export const claimVerifications = sqliteTable("claim_verifications", {
-  id: text("id").primaryKey(),
-  provisionalUserHash: text("provisional_user_hash").notNull(),
-  emailHash: text("email_hash").notNull(),
-  selectedResource: text("selected_resource"),
-  expiresAt: text("expires_at").notNull(),
-  attempts: integer("attempts").notNull().default(0),
-  verifiedAt: text("verified_at"),
-  consumedAt: text("consumed_at"),
-  createdAt: createdAt(),
-});
+export const claimVerifications = sqliteTable(
+  "claim_verifications",
+  {
+    id: text("id").primaryKey(),
+    provisionalUserHash: text("provisional_user_hash").notNull(),
+    emailHash: text("email_hash").notNull(),
+    selectedResource: text("selected_resource"),
+    expiresAt: text("expires_at").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    verifiedAt: text("verified_at"),
+    consumedAt: text("consumed_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("claim_verifications_subject_email_idx").on(t.provisionalUserHash, t.emailHash)],
+);
 
-export const claimConsentAttempts = sqliteTable("claim_consent_attempts", {
-  id: text("id").primaryKey(),
-  verificationId: text("verification_id")
-    .notNull()
-    .references(() => claimVerifications.id),
-  existingUserHash: text("existing_user_hash").notNull(),
-  expiresAt: text("expires_at").notNull(),
-  approvedAt: text("approved_at"),
-  consumedAt: text("consumed_at"),
-  createdAt: createdAt(),
-});
+export const claimConsentAttempts = sqliteTable(
+  "claim_consent_attempts",
+  {
+    id: text("id").primaryKey(),
+    verificationId: text("verification_id")
+      .notNull()
+      .references(() => claimVerifications.id),
+    existingUserHash: text("existing_user_hash").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    approvedAt: text("approved_at"),
+    consumedAt: text("consumed_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("claim_consent_attempts_verification_idx").on(t.verificationId)],
+);
 
 export const claimIdempotency = sqliteTable(
   "claim_idempotency",
@@ -211,6 +226,7 @@ export const claimIdempotency = sqliteTable(
         t.verifiedUserHash,
       ],
     }),
+    index("claim_idempotency_expires_at_idx").on(t.expiresAt),
   ],
 );
 

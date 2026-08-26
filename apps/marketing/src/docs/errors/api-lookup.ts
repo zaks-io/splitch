@@ -37,6 +37,14 @@ export const lookupErrorDocs = {
     recommendedAction: "CHOOSE_DIFFERENT_KEY",
     related: ["EXPERIMENT_NOT_FOUND", "SLUG_CONFLICT"],
   },
+  SENTRY_INSTALLATION_CONFLICT: {
+    cause:
+      "The Environment already publishes its Flag changes to a Sentry organization. Sentry's change-tracking payload carries no environment, so a second installation would interleave two Environments' toggles into one audit log.",
+    fix: "Revoke the active installation named in `details.activeInstallationId`, then install the new one. Sending the same `installationId` again is a replay and returns the existing installation instead.",
+    details: '{ activeInstallationId: string, recommendedAction: "REVOKE_ACTIVE_INSTALLATION" }',
+    recommendedAction: "REVOKE_ACTIVE_INSTALLATION",
+    related: ["SENTRY_INSTALLATION_NOT_FOUND", "IDEMPOTENCY_KEY_CONFLICT"],
+  },
 
   EXPERIMENT_NOT_FOUND: notFound(
     "Experiment",
@@ -78,7 +86,7 @@ export const lookupErrorDocs = {
   ),
   SENTRY_INSTALLATION_NOT_FOUND: notFound(
     "Sentry installation",
-    "Confirm the installation id and that the API Key addresses the App and Environment that own it. Install the Sentry integration again if it was revoked.",
+    "Confirm the installation id and that the operator token addresses the App and Environment that own it. Install the Sentry integration again if it was revoked.",
   ),
   SEGMENT_NOT_FOUND: notFound(
     "Segment",

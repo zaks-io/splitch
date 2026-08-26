@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { createdAt, updatedAt } from "./columns";
 import { apps, environments } from "./identity";
@@ -92,6 +93,13 @@ export const sentryInstallations = sqliteTable(
       table.environmentId,
       table.installationId,
     ),
+    /**
+     * The one-active-Sentry-org-per-Environment rule. Partial so revoked rows
+     * accumulate as history without blocking a reinstall.
+     */
+    uniqueIndex("sentry_installations_active_scope_unique")
+      .on(table.appId, table.environmentId)
+      .where(sql`${table.status} = 'active'`),
   ],
 );
 

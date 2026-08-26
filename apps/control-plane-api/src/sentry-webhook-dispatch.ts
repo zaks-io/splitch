@@ -34,9 +34,39 @@ export async function dispatchSentryWebhooks(deps: SentryWebhookDispatchDeps): P
     INSTALLATION_BATCH,
   );
   const delivered = await Promise.all(
-    installations.map((installation) => deliverOne(deps, installation, now)),
+    installations.map((installation) => deliverIsolated(deps, installation, now)),
   );
   return delivered.reduce((total, count) => total + count, 0);
+}
+
+/**
+ * One installation's fault must not take the batch with it. A KEK-version
+ * mismatch or a malformed stored row throws out of `deliverOne`, and an
+ * unguarded `Promise.all` would reject the whole tick: every other
+ * installation's cursor stays put, no failure is recorded anywhere, and the
+ * same throw repeats every minute with nothing to see it. Recording the fault
+ * against the offending installation puts it in `attempt_count` and
+ * `latest_delivery_error_json`, where an operator reads it.
+ */
+async function deliverIsolated(
+  deps: SentryWebhookDispatchDeps,
+  installation: SentryInstallationRow,
+  now: Date,
+): Promise<number> {
+  try {
+    return await deliverOne(deps, installation, now);
+  } catch (cause) {
+    console.error("sentry_webhook_delivery_failed", {
+      installationId: installation.installationId,
+      cause: describeCause(cause),
+    });
+    await recordFailure(deps, installation, now, {
+      kind: "internal",
+      code: "DISPATCH_FAILED",
+      cause: describeCause(cause),
+    });
+    return 0;
+  }
 }
 
 async function deliverOne(

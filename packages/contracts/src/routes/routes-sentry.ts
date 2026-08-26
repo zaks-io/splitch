@@ -50,7 +50,12 @@ export const sentryRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: [...commonErrors, "VALIDATION_ERROR", "IDEMPOTENCY_KEY_CONFLICT"],
+    errors: [
+      ...commonErrors,
+      "VALIDATION_ERROR",
+      "IDEMPOTENCY_KEY_CONFLICT",
+      "SENTRY_INSTALLATION_CONFLICT",
+    ],
   }),
   defineApiRoute({
     operationId: "sentry_installations_get",

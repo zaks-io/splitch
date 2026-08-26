@@ -135,4 +135,19 @@ describe("SplitchClientOptions.onResolution", () => {
     await client.evaluate("missing", CONTEXT);
     expect(reported).toHaveLength(1);
   });
+
+  it("lets a throwing reporter throw out of the evaluation it observed", async () => {
+    const client = createSplitchClient({
+      clientKey: "pk_test",
+      transport: new FakeTransport([ok(true, "run-1", "treatment")]),
+      onResolution: () => {
+        throw new Error("reporter is down");
+      },
+    });
+    // Pinned deliberately, both directions. An observability sink that fails
+    // must fail where it fails; swallowing it here would leave a host app
+    // reporting flags to nowhere with nothing to say so. A future try/catch
+    // around the reporter is a behavior change, not a cleanup.
+    await expect(client.evaluate("checkout-v2", CONTEXT)).rejects.toThrow("reporter is down");
+  });
 });

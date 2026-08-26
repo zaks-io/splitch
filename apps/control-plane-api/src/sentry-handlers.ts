@@ -106,14 +106,22 @@ async function createInstallation(
     if (changed) return reusedInstallationId(input.body.installationId, requestId);
     return Response.json(installationResponse(existing));
   }
-  const row = await deps.repo.sentry.createInstallation(scope, {
-    installationId: input.body.installationId,
-    webhookUrl: input.body.webhookUrl,
-    secretCiphertext: sealed.ciphertext,
-    secretKeyVersion: sealed.keyVersion,
-    secretFingerprint: sealed.fingerprint,
-    now: now().toISOString(),
-  });
+  let row: Awaited<ReturnType<typeof deps.repo.sentry.createInstallation>>;
+  try {
+    row = await deps.repo.sentry.createInstallation(scope, {
+      installationId: input.body.installationId,
+      webhookUrl: input.body.webhookUrl,
+      secretCiphertext: sealed.ciphertext,
+      secretKeyVersion: sealed.keyVersion,
+      secretFingerprint: sealed.fingerprint,
+      now: now().toISOString(),
+    });
+  } catch (cause) {
+    // The unique index is the enforcement point, so it is also the detector:
+    // reading first would leave a race that reports a 500 for the same
+    // misconfiguration this branch explains.
+    return await activeScopeConflict(deps, scope, requestId, cause);
+  }
   return Response.json({
     ...installationResponse(row),
     ...(sealed.minted === null ? {} : { webhookSecret: sealed.minted }),
@@ -178,6 +186,40 @@ function installationResponse(row: {
     webhookUrl: row.webhookUrl,
     status: row.status,
   };
+}
+
+/**
+ * An Environment publishes to one Sentry organization, enforced by
+ * `sentry_installations_active_scope_unique`. D1 reports a unique violation by
+ * column list, not by index name ("UNIQUE constraint failed:
+ * sentry_installations.app_id, sentry_installations.environment_id"), so the
+ * index name is not matchable here; pairing the generic violation with a live
+ * lookup of the row holding the Environment identifies it without parsing that
+ * column list. Anything else rethrows.
+ */
+async function activeScopeConflict(
+  deps: SentryHandlerDeps,
+  scope: ReturnType<typeof sentryScope>,
+  requestId: string,
+  cause: unknown,
+): Promise<Response> {
+  const violated = cause instanceof Error && cause.message.includes("UNIQUE constraint failed");
+  if (!violated) throw cause;
+  const active = (await deps.repo.sentry.listInstallations(scope)).find(
+    (installation) => installation.status === "active",
+  );
+  if (!active) throw cause;
+  return renderError(
+    {
+      code: "SENTRY_INSTALLATION_CONFLICT",
+      message: "this Environment already publishes Flag changes to a Sentry organization",
+      details: {
+        activeInstallationId: active.installationId,
+        recommendedAction: "REVOKE_ACTIVE_INSTALLATION",
+      },
+    },
+    { requestId },
+  );
 }
 
 function reusedInstallationId(installationId: string, requestId: string): Response {

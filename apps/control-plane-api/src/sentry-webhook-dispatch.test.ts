@@ -43,7 +43,13 @@ describe("Sentry change-tracking dispatch", () => {
     await expect(
       dispatchSentryWebhooks({ repo, secretKek: KEK, fetcher, now: () => NOW }),
     ).resolves.toBe(2);
-    expect(successes).toEqual([{ deliveredSeq: 12, now: NOW.toISOString() }]);
+    expect(successes).toEqual([
+      {
+        installationId: "00000000-0000-4000-8000-000000000001",
+        deliveredSeq: 12,
+        now: NOW.toISOString(),
+      },
+    ]);
   });
 
   it("leaves the cursor where it is when Sentry rejects the batch", async () => {
@@ -99,6 +105,33 @@ describe("Sentry change-tracking dispatch", () => {
     });
     expect(seen).toEqual([11]);
   });
+
+  it("records a broken installation's fault instead of taking the batch down with it", async () => {
+    const { repo, successes, failures } = await fixture({
+      // A KEK-version mismatch throws out of the decrypt, the one failure mode
+      // that is not an HTTP or transport outcome.
+      installations: [
+        { installationId: "broken", secretKeyVersion: "v0" },
+        { installationId: "healthy" },
+      ],
+    });
+    await expect(
+      dispatchSentryWebhooks({
+        repo,
+        secretKek: KEK,
+        fetcher: async () => new Response(null, { status: 201 }),
+        now: () => NOW,
+      }),
+      // The whole tick rejecting would leave every other installation's cursor
+      // unadvanced and its failure unrecorded, repeating silently every minute.
+    ).resolves.toBe(2);
+    expect(successes).toEqual([
+      { installationId: "healthy", deliveredSeq: 12, now: NOW.toISOString() },
+    ]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]?.installationId).toBe("broken");
+    expect(JSON.parse(String(failures[0]?.errorJson))).toMatchObject({ code: "DISPATCH_FAILED" });
+  });
 });
 
 function event(overrides: Partial<FlagChangeEventRow>): FlagChangeEventRow {
@@ -119,6 +152,7 @@ function event(overrides: Partial<FlagChangeEventRow>): FlagChangeEventRow {
 async function fixture(
   options: {
     installation?: Partial<SentryInstallationRow>;
+    installations?: Array<Partial<SentryInstallationRow>>;
     events?: FlagChangeEventRow[];
     onPending?: (afterSeq: number) => void;
   } = {},
@@ -131,27 +165,30 @@ async function fixture(
     event({ seq: 12, action: "deleted", changedAt: "2026-08-25T11:30:00.000Z" }),
   ];
 
+  const overrides = options.installations ?? [options.installation ?? {}];
   const sentry = {
-    dueInstallations: async () => [
-      {
-        installationId: "00000000-0000-4000-8000-000000000001",
-        appId: "app_a",
-        environmentId: "env_a",
-        webhookUrl: URL_OK,
-        secretCiphertext: encrypted.ciphertext,
-        secretKeyVersion: encrypted.keyVersion,
-        secretFingerprint: encrypted.fingerprint,
-        status: "active",
-        lastDeliveredSeq: null,
-        attemptCount: 0,
-        ...options.installation,
-      } as SentryInstallationRow,
-    ],
-    recordSuccess: async (_id: string, deliveredSeq: number, now: string) => {
-      successes.push({ deliveredSeq, now });
+    dueInstallations: async () =>
+      overrides.map(
+        (override) =>
+          ({
+            installationId: "00000000-0000-4000-8000-000000000001",
+            appId: "app_a",
+            environmentId: "env_a",
+            webhookUrl: URL_OK,
+            secretCiphertext: encrypted.ciphertext,
+            secretKeyVersion: encrypted.keyVersion,
+            secretFingerprint: encrypted.fingerprint,
+            status: "active",
+            lastDeliveredSeq: null,
+            attemptCount: 0,
+            ...override,
+          }) as SentryInstallationRow,
+      ),
+    recordSuccess: async (installationId: string, deliveredSeq: number, now: string) => {
+      successes.push({ installationId, deliveredSeq, now });
     },
-    recordFailure: async (_id: string, input: Record<string, unknown>) => {
-      failures.push(input);
+    recordFailure: async (installationId: string, input: Record<string, unknown>) => {
+      failures.push({ installationId, ...input });
     },
   };
   const flagChangeEvents = {

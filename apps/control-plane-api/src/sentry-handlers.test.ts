@@ -105,6 +105,31 @@ describe("sentry installations: minting the signing secret", () => {
     );
     expect(await errorCode(replay)).toBe("IDEMPOTENCY_KEY_CONFLICT");
   });
+
+  it("refuses a second Sentry organization on an Environment that already has one", async () => {
+    const second = await handlers.create(
+      install(USER_ADMIN, ALPHA.appId, ALPHA_ENV, {
+        installationId: "44444444-4444-4444-8444-444444444444",
+        webhookUrl: "https://sentry.io/api/0/organizations/second/flags/hooks/provider/generic/",
+      }),
+    );
+    expect(second.status).toBe(409);
+    expect(await errorCode(second)).toBe("SENTRY_INSTALLATION_CONFLICT");
+  });
+
+  it("names the installation holding the Environment so the operator can revoke it", async () => {
+    const second = await handlers.create(
+      install(USER_ADMIN, ALPHA.appId, ALPHA_ENV, {
+        installationId: "55555555-5555-4555-8555-555555555555",
+        webhookUrl: "https://sentry.io/api/0/organizations/third/flags/hooks/provider/generic/",
+      }),
+    );
+    const body = (await second.json()) as { details: Record<string, unknown> };
+    expect(body.details).toEqual({
+      activeInstallationId: INSTALL_ID,
+      recommendedAction: "REVOKE_ACTIVE_INSTALLATION",
+    });
+  });
 });
 
 describe("sentry installations: authority and tenant scope", () => {
@@ -188,5 +213,17 @@ describe("sentry installations: rotation and revocation", () => {
     );
     const body = (await list.json()) as { installations: { status: string }[] };
     expect(body.installations.map((row) => row.status)).toEqual(["revoked"]);
+  });
+
+  it("accepts a new Sentry organization once the previous one is revoked", async () => {
+    const reinstalled = await handlers.create(
+      install(USER_ADMIN, ALPHA.appId, ALPHA_ENV, {
+        installationId: "66666666-6666-4666-8666-666666666666",
+        webhookUrl: "https://sentry.io/api/0/organizations/next/flags/hooks/provider/generic/",
+      }),
+    );
+    // The one-org rule is scoped to active rows: revoked history must not
+    // permanently lock an Environment out of Sentry.
+    expect(reinstalled.status).toBe(200);
   });
 });

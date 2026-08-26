@@ -19,10 +19,16 @@ export function runControlPlaneScheduled(
   env: ControlPlaneApiEnv,
   ctx: ExecutionContext,
 ): void {
-  ctx.waitUntil(runConvexWebhookDispatch(env, event, ctx));
-  ctx.waitUntil(runCloudflarePushDispatch(env, event, ctx));
-  ctx.waitUntil(runSentryWebhookDispatch(env, event, ctx));
-  if (event.cron !== "0 8 * * *") return;
+  // Integration delivery belongs to the minute cron alone. Running it on every
+  // tick would fire a second concurrent dispatch at 08:00, when both crons
+  // land: the Convex and Cloudflare paths lease their deliveries and would
+  // survive it, but the Sentry cursor has no lease to protect it.
+  if (event.cron !== "0 8 * * *") {
+    ctx.waitUntil(runConvexWebhookDispatch(env, event, ctx));
+    ctx.waitUntil(runCloudflarePushDispatch(env, event, ctx));
+    ctx.waitUntil(runSentryWebhookDispatch(env, event, ctx));
+    return;
+  }
   ctx.waitUntil(runDemoReaper(env, event, ctx));
   ctx.waitUntil(runCredentialCacheBackfill(env));
   ctx.waitUntil(runApprovalArchive(env, event, ctx));
@@ -65,18 +71,31 @@ async function runSentryWebhookDispatch(
   event: ScheduledController,
   ctx: Pick<ExecutionContext, "waitUntil">,
 ): Promise<void> {
-  const dispatched = await dispatchSentryWebhooks({
-    repo: createRepository(env.DB),
-    secretKek: env.INTEGRATION_SECRET_KEK,
-    secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,
-    allowedHosts: env.SENTRY_WEBHOOK_ALLOWED_HOSTS,
-    now: () => new Date(event.scheduledTime),
-  });
-  workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
-    "info",
-    "sentry-webhook-dispatch",
-    { service, job: "sentry-webhook-dispatch", cron: event.cron, dispatched },
-  );
+  try {
+    const dispatched = await dispatchSentryWebhooks({
+      repo: createRepository(env.DB),
+      secretKek: env.INTEGRATION_SECRET_KEK,
+      secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,
+      allowedHosts: env.SENTRY_WEBHOOK_ALLOWED_HOSTS,
+      now: () => new Date(event.scheduledTime),
+    });
+    workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
+      "info",
+      "sentry-webhook-dispatch",
+      { service, job: "sentry-webhook-dispatch", cron: event.cron, dispatched },
+    );
+  } catch (error) {
+    createWorkerFaultReporter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx))(
+      "sentry_webhook_dispatch_failed",
+      {
+        service,
+        job: "sentry-webhook-dispatch",
+        cron: event.cron,
+        fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+      },
+    );
+    throw error;
+  }
 }
 
 /**

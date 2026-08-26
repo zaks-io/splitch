@@ -104,6 +104,10 @@ export function SentryIntegrationCard({
       return;
     }
     setError(undefined);
+    // The reveal says "this is the only time splitch will show it". Leaving it
+    // on screen next to a row that now reads Revoked presents a dead secret as
+    // a live one.
+    setSecret(undefined);
     setBusyInstallationId(installationId);
     try {
       const outcome = await revokeSentryInstallation({ ...scope, installationId });
@@ -145,17 +149,20 @@ export function SentryIntegrationCard({
             <AlertTitle>Sentry status unavailable</AlertTitle>
             <AlertDescription>{installations.error.message}</AlertDescription>
           </Alert>
+        ) : installations.isPending ? (
+          <p className="text-muted-foreground text-sm">Loading Sentry status…</p>
         ) : (
-          <SentryInstallationsTable
-            busyInstallationId={busyInstallationId}
-            installations={installations.data ?? []}
-            onRevoke={revoke}
-            onRotate={rotate}
-          />
-        )}
-
-        {hasActiveInstallation ? null : (
-          <SentryInstallForm isSubmitting={isInstalling} onSubmit={install} />
+          <>
+            <SentryInstallationsTable
+              busyInstallationId={busyInstallationId}
+              installations={installations.data}
+              onRevoke={revoke}
+              onRotate={rotate}
+            />
+            {hasActiveInstallation ? null : (
+              <SentryInstallForm isSubmitting={isInstalling} onSubmit={install} />
+            )}
+          </>
         )}
       </CardContent>
     </Card>

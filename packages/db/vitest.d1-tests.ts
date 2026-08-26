@@ -27,5 +27,6 @@ export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/repo/type-safety.test.ts",
   "src/repo/variant-rename-run-freeze.test.ts",
   "src/repo/write-isolation.test.ts",
+  "src/schema-migration-parity.test.ts",
   "src/schema-runtime.test.ts",
 ]);
