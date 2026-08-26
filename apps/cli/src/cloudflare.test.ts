@@ -21,6 +21,15 @@ describe("cloudflare setup", () => {
       const method = init?.method ?? "GET";
       requests.push({ url, method });
       if (method === "POST") return Response.json({ registered: true });
+      if (requests.length === 1)
+        return Response.json(
+          {
+            code: "CLOUDFLARE_INSTALLATION_NOT_FOUND",
+            message: "Cloudflare installation not found",
+            details: {},
+          },
+          { status: 404 },
+        );
       return Response.json({
         installationId: "00000000-0000-4000-8000-000000000000",
         appId: "app_1",
@@ -120,6 +129,30 @@ describe("cloudflare setup", () => {
         io: { log: () => {}, error: () => {} },
       }),
     ).rejects.toThrow(/HTTP 401/);
+    expect(runner.calls.some((call) => call.args.includes("deploy"))).toBe(false);
+    await expect(
+      readFile(join(cwd, ".splitch", "cloudflare", "production", "wrangler.jsonc"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+describe("cloudflare setup preflight", () => {
+  it("fails before deploy when an unrelated endpoint returns 404", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "splitch-cloudflare-cli-route-"));
+    await installFakeCloudflarePackage(cwd);
+    await writeFile(join(cwd, "wrangler.jsonc"), JSON.stringify({ name: "customer-app" }));
+    const runner = new RecordingRunner();
+
+    await expect(
+      executeInvocation(parseInvocation(["cloudflare", "setup", "--env", "production"]), {
+        cwd,
+        env: { SPLITCH_API_KEY: "api-key" },
+        evaluationBaseUrl: "https://wrong.example.test",
+        fetch: async () => Response.json({}, { status: 404 }),
+        commandRunner: runner,
+        io: { log: () => {}, error: () => {} },
+      }),
+    ).rejects.toThrow(/expected authenticated contract/);
     expect(runner.calls.some((call) => call.args.includes("deploy"))).toBe(false);
     await expect(
       readFile(join(cwd, ".splitch", "cloudflare", "production", "wrangler.jsonc"), "utf8"),

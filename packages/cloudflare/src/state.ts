@@ -117,6 +117,13 @@ export class SplitchState extends DurableObject<Env> {
         "PROVIDER_NOT_READY",
         "@splitch/cloudflare has no applied configuration snapshot",
       );
+    const fingerprint = await sha256Hex(canonicalJson({ flagKey, context, defaultValue }));
+    const prior = this.state.claim(rawContext.idempotencyKey);
+    if (prior) {
+      const replayed = this.replayClaim(prior, fingerprint, rawContext.idempotencyKey);
+      await this.state.ensureAlarm();
+      return replayed;
+    }
     if (integration.snapshotVersion < integration.announcedVersion)
       return failureDetails(
         defaultValue,
@@ -125,13 +132,6 @@ export class SplitchState extends DurableObject<Env> {
         `@splitch/cloudflare snapshot ${integration.snapshotVersion} is behind announced version ${integration.announcedVersion}`,
       );
     const { snapshot, provider } = configuration;
-    const fingerprint = await sha256Hex(canonicalJson({ flagKey, context, defaultValue }));
-    const prior = this.state.claim(rawContext.idempotencyKey);
-    if (prior) {
-      const replayed = this.replayClaim(prior, fingerprint, rawContext.idempotencyKey);
-      await this.state.ensureAlarm();
-      return replayed;
-    }
     const targetingKeyHash = await hmacHex(
       integration.identityKey,
       `${context.idType}:${context.targetingKey}`,

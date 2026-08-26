@@ -35,7 +35,17 @@ describe("Splitch Cloudflare configuration push", () => {
         idempotencyKey: "cross-scope-announcement",
       }),
     ).resolves.toMatchObject({ value: false, variantName: "control" });
+    const completed = await state.evaluateDetails("checkout", {
+      targetingKey: "person_1",
+      idempotencyKey: "completed-before-stale",
+    });
     await expect(state.announceSnapshot("app_1", "env_1", 101)).resolves.toEqual({ ok: true });
+    await expect(
+      state.evaluateDetails("checkout", {
+        targetingKey: "person_1",
+        idempotencyKey: "completed-before-stale",
+      }),
+    ).resolves.toEqual(completed);
     await expect(
       state.evaluateDetails("checkout", {
         targetingKey: "person_1",

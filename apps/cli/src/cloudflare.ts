@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { CloudflareInstallationStatusSchema } from "@splitch/contracts";
+import { CloudflareInstallationStatusSchema, ErrorResponseSchema } from "@splitch/contracts";
 import { cloudflareUsage as usage } from "./cloudflare-error.js";
 import {
   assertCloudflarePackage,
@@ -75,7 +75,6 @@ async function setup(
   await assertCloudflarePackage(cwd);
   const appConfigPath = existing?.appConfigPath ?? (await findApplicationConfig(cwd));
   await requireWrangler4(runner, cwd);
-  await validateApiKey(apiKey, deps);
   const state: CloudflareState =
     existing && !existing.removedAt
       ? existing
@@ -91,6 +90,7 @@ async function setup(
         };
   assertStateEnvironment(state, environment);
   await assertServiceBindingAvailable(state);
+  await validateApiKey(apiKey, deps);
   await ensureCloudflareStateIgnored(cwd);
   await writeIntegrationFiles(generated, state, deps);
 
@@ -238,8 +238,11 @@ async function validateApiKey(apiKey: string, deps: CliDeps): Promise<void> {
       headers: { authorization: `Bearer ${apiKey}` },
     },
   );
-  if (!response.ok && response.status !== 404)
+  if (response.status !== 404)
     throw usage(`Cloudflare integration API returned HTTP ${response.status}`);
+  const error = ErrorResponseSchema.safeParse(await response.json().catch(() => null));
+  if (!error.success || error.data.code !== "CLOUDFLARE_INSTALLATION_NOT_FOUND")
+    throw usage("Cloudflare integration API did not return the expected authenticated contract");
 }
 
 function workersDevOrigin(...outputs: string[]): string {
