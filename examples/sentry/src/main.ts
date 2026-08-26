@@ -16,6 +16,8 @@ Sentry.init({
 
 const splitch = createSplitchClient({
   clientKey: required("SPLITCH_CLIENT_KEY"),
+  // Unset points at splitch's own edge; set it for a preview or self-hosted one.
+  endpoint: process.env.SPLITCH_ENDPOINT,
   onResolution: sentryResolutionReporter(),
 });
 

@@ -5,26 +5,33 @@ Runnable wiring for both halves of Sentry's feature-flag support. Full contract:
 
 ## 1. Change tracking (splitch → Sentry)
 
-In Sentry: **Settings → Feature Flags → Change Tracking → Add provider → Generic**. Keep the signing
-secret and the webhook URL it gives you.
+In Sentry: **Settings → Feature Flags → Change Tracking → Add provider → Generic**. Copy the webhook
+URL it shows you; leave the Secret field for later, because splitch mints that side.
 
-Then bind one splitch Environment to that Sentry organization. The Environment comes from the API
-Key, so use the key for the Environment whose changes that Sentry organization should hear about.
+The fastest path is the Control Panel: open the Environment whose changes that Sentry organization
+should hear about, go to **Settings**, and use the **Sentry change tracking** card. Paste the webhook
+URL, press Connect Sentry, and paste the secret it returns back into Sentry's Secret field. The
+secret is shown once.
+
+The same install over the API, for an agent or a script:
 
 ```bash
-curl -X POST https://api.splitch.dev/api/integrations/sentry/installations \
-  -H "Authorization: Bearer $SPLITCH_API_KEY" \
+curl -X POST "https://api.splitch.dev/apps/$SPLITCH_APP_ID/envs/$SPLITCH_ENVIRONMENT_ID/integrations/sentry/installations" \
+  -H "Authorization: Bearer $SPLITCH_CONTROL_PLANE_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
         "installationId": "'"$(uuidgen | tr A-Z a-z)"'",
-        "webhookUrl": "https://sentry.io/api/0/organizations/<org>/flags/hooks/provider/generic/",
-        "webhookSecret": "<the signing secret Sentry gave you>"
+        "webhookUrl": "https://sentry.io/api/0/organizations/<org>/flags/hooks/provider/generic/"
       }'
 ```
 
+The Environment is in the path, so one installation binds one Environment to one Sentry
+organization. Omitting `webhookSecret` is what makes the server mint one and return it once on the
+response; supply your own instead if you are rotating out of your own keystore.
+
 Toggle a Flag and it shows up in Sentry's flag audit log within a minute. Check delivery health with
-`GET /api/integrations/sentry/installations/<installationId>`; it returns `lastDeliveredSeq`,
-`attemptCount`, and `latestDeliveryError`, never the secret.
+`GET /apps/<appId>/envs/<environmentId>/integrations/sentry/installations`; it returns
+`lastDeliveredSeq`, `attemptCount`, and `latestDeliveryError`, never the secret.
 
 ## 2. Evaluation tracking (app → Sentry)
 

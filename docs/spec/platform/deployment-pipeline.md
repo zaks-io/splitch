@@ -321,10 +321,12 @@ or any Durable Object migration.
   GitHub environment variable, not a repository-committed Wrangler value.
 - Event Ingest declares `SPLITCH_EVENT_INGEST_TOKEN` and the least-privilege
   `TINYBIRD_INGEST_TOKEN` as required Worker secrets. Tinybird manages the latter as the
-  deployment-defined `raw_events_ingest` token. The current token has APPEND access to the two
-  implemented datasources, `raw_events` and `raw_evaluations`. Before Metric Event or Web Event
-  intake ships, the Event Ingest token must have APPEND access to exactly all four owned
-  datasources: `raw_events`, `raw_evaluations`, `metric_events`, and `web_events`.
+  deployment-defined `raw_events_ingest` token. It has APPEND access to the three implemented
+  datasources, `raw_events`, `raw_evaluations`, and `metric_events`, each of which declares
+  `TOKEN raw_events_ingest APPEND` in its datafile. Every datasource Event Ingest appends to must
+  declare that same token: the Worker carries one ingest secret, and Tinybird rejects out-of-band
+  scope grants, so a datasource naming a different token is unreachable at runtime. `web_events`
+  joins the list when Web Event intake ships.
   `TINYBIRD_API_URL` is non-secret Worker config and points at the Tinybird region API.
 - Control Plane declares two separate Approval Request archive secrets. The
   `TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN` value is Tinybird's deployment-defined
