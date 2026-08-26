@@ -39,10 +39,15 @@ reads `CLI_LINEAR_ACCESS_KEY`. The platform deploy continues to use `LINEAR_ACCE
 Pushing a namespaced tag alone does not publish. The publish workflows accept only a
 `release: published` event and filter their own `sdk-v*`, `cli-v*`, or `convex-v*` namespace.
 
-The SDK derives its public declaration surface from private contracts. Its manifest and
-declarations must not require `@splitch/contracts`. The CLI bundles all `@splitch/*` runtime code,
-including `@splitch/sdk`, while keeping third-party runtime packages external. Its packed manifest
-must contain no workspace dependency or `workspace:` range.
+The SDK derives its public declaration surface from private contracts and implementation packages.
+Its manifest and declarations must not require a private `@splitch/*` package. The CLI and Convex
+packages keep `@splitch/sdk` external and publish a caret dependency resolved from `workspace:^`.
+Candidate smoke tests install both local tarballs. Trusted publish fails unless the referenced SDK
+version already exists on npm.
+
+Release a shared change in dependency order: SDK first, then CLI and Convex. A CLI or Convex GitHub
+Release may be drafted before the SDK publish finishes, but its trusted publish job must not proceed
+until the exact checked-in SDK version is available.
 
 ## Provider setup before a first stable release
 
@@ -99,12 +104,14 @@ Use this only after a human approves the package release.
 - [ ] Description, Apache-2.0 SPDX license, repository directory, ESM export, Node engine, public
       access, and dist-only files whitelist are correct.
 - [ ] The consumer README and license appear in the actual package tarball.
-- [ ] SDK only: declarations and packed manifest contain no `@splitch/contracts`;
-      packed manifest has zero runtime dependencies (no zod).
-- [ ] CLI only: `dist/cli.js` has the Node shebang; workspace packages are bundled; packed
-      dependencies are exactly the external runtime set; no workspace range or dev dependency
-      ships.
-- [ ] Convex only: a clean tarball install passes component codegen, typecheck, tests, and both public subpath imports.
+- [ ] SDK only: declarations contain no private workspace imports; packed runtime dependencies are
+      exactly Hono/Zod; root/browser entries remain zod-free; every public subpath passes its size
+      and clean-consumer checks.
+- [ ] CLI only: `dist/cli.js` has the Node shebang; private workspace packages are bundled; SDK
+      imports remain external; the packed manifest resolves `workspace:^` to the checked-in SDK
+      caret range and ships no dev dependency.
+- [ ] Convex only: the packed manifest resolves the same SDK caret range; a clean install of both
+      tarballs passes typecheck and all public subpath imports.
 - [ ] Candidate validation passes as one shared Turbo graph covering format, lint, typecheck,
       tests, builds, Knip, secret scanning, Tinybird and D1 checks, pack checks, and consumer smoke.
 

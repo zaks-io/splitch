@@ -49,7 +49,8 @@ in this config; refresh them from Linear during each workflow run.
 ## Repo
 
 - Name: `splitch-monorepo` (workspace packages use `@splitch/*`; package-specific publish
-  workflows are the token-free trusted-publish paths for `@splitch/sdk` and `@splitch/cli`)
+  workflows are the token-free trusted-publish paths for `@splitch/sdk`, `@splitch/cli`, and
+  `@splitch/convex`)
 - Default branch: `main`
 - Branch prefix: `codex/` for Codex-created branches unless the user asks for
   another prefix
@@ -89,13 +90,13 @@ in this config; refresh them from Linear during each workflow run.
   coverage, `.turbo/`, and `.wrangler/` are ignored.
 - PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci` plus
   a range-scoped Gitleaks secret scan.
-- npm package publish: the OIDC `.github/workflows/sdk-publish.yml` and
-  `.github/workflows/cli-publish.yml` workflows are explicit Blacksmith exceptions. Each runs only
-  after its namespaced GitHub Release is published, on GitHub-hosted `ubuntu-24.04` because npm
-  trusted publishing does not support Blacksmith, and carries no long-lived npm token. After npm
-  publication succeeds, a separate Blacksmith job bound to the GitHub `production` environment
-  syncs the package's dedicated Linear release using `SDK_LINEAR_ACCESS_KEY` or
-  `CLI_LINEAR_ACCESS_KEY`. CLI
+- npm package publish: the OIDC `.github/workflows/sdk-publish.yml`,
+  `.github/workflows/cli-publish.yml`, and `.github/workflows/convex-publish.yml` workflows are
+  explicit Blacksmith exceptions. Each runs only after its namespaced GitHub Release is published,
+  on GitHub-hosted `ubuntu-24.04` because npm trusted publishing does not support Blacksmith, and
+  carries no long-lived npm token. After npm publication succeeds, a separate Blacksmith job bound
+  to the GitHub `production` environment syncs the package's dedicated Linear release using
+  `SDK_LINEAR_ACCESS_KEY`, `CLI_LINEAR_ACCESS_KEY`, or `CONVEX_LINEAR_ACCESS_KEY`. CLI
   bootstrap, trusted-publisher configuration, and provider-side verification remain human-owned
   and unverified.
 - Shared preview deploy: workflow and hosted smoke wired, Cloudflare D1/KV resources are provisioned, the Tinybird
@@ -145,14 +146,15 @@ real package API boundary.
 | `apps/auth-api`              | `@splitch/auth-api`          | Auth API Worker scaffold                    |
 | `packages/contracts`         | `@splitch/contracts`         | shared Zod/platform contracts scaffold      |
 | `packages/control-plane-sdk` | `@splitch/control-plane-sdk` | shared Control Plane SDK transport scaffold |
+| `packages/convex`            | `@splitch/convex`            | public Convex Component package             |
 | `packages/repo-lint`         | `@splitch/repo-lint`         | private workspace publishing policy gates   |
 | `packages/sdk`               | `@splitch/sdk`               | public JS/TS data-plane SDK scaffold        |
 | `packages/ui`                | `@splitch/ui`                | shared UI primitive scaffold                |
 | `infra/tinybird`             | (not a pnpm workspace)       | Tinybird analytics project files            |
 
-- Internal workspace packages remain `version: 0.0.0`; `@splitch/sdk` and `@splitch/cli` are
-  versioned public packages at `version: 0.1.0`.
-- Other Apps and internal packages are private. Both public packages set
+- Internal workspace packages remain `version: 0.0.0`; `@splitch/sdk`, `@splitch/cli`, and
+  `@splitch/convex` are independently versioned public packages.
+- Other Apps and internal packages are private. All three public packages set
   `publishConfig.access = public` and use package-specific OIDC publish workflows.
 
 ## Issue Tracker

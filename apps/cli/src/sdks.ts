@@ -1,12 +1,12 @@
-import { createMcpOperationAdapter } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 import {
+  createMcpOperationAdapter,
   type PlatformTarget,
   PlatformTargetSchema,
   platformTargets,
   type PublicSurface,
   publicSurfaceFor,
   type RouteContract,
-} from "@splitch/contracts";
+} from "@splitch/sdk/control-plane";
 import { SplitchCliError } from "./errors.js";
 
 const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";

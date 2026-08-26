@@ -4,7 +4,7 @@ import {
   isMcpToolRoute,
   requestBodySchemaForOperation,
   routeRegistry,
-} from "@splitch/contracts";
+} from "@splitch/sdk/control-plane";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { CLI_COMMANDS, type CliCommandDefinition } from "./command-registry.js";

@@ -1,4 +1,4 @@
-import { ErrorCodeSchema, type ErrorResponse, getRoute } from "@splitch/contracts";
+import { ErrorCodeSchema, type ErrorResponse, getRoute } from "@splitch/sdk/control-plane";
 import { createSplitchClient } from "@splitch/sdk";
 import { remediationForServerError, warnStaleApprovalDiscard } from "./approval-stale-warn.js";
 import { withAuthorizationRetry } from "./auth.js";

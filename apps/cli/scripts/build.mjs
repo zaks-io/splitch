@@ -7,11 +7,15 @@ import { writeBuildStamp } from "../../../scripts/release/build-stamp.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-// The bundle inlines @splitch/sdk from its built dist (the same artifact npm
-// consumers get). The sdk build owns packages/sdk generated/dist artifacts;
-// turbo's ^build edge guarantees it ran first, so fail loud instead of
-// regenerating another package's outputs here.
-for (const artifact of ["dist/index.js", "dist/index.d.ts"]) {
+// The published CLI imports @splitch/sdk at runtime. Its declaration build still
+// resolves the same SDK artifacts npm consumers get, so fail loud when a caller
+// builds only this package instead of its dependency closure.
+for (const artifact of [
+  "dist/index.js",
+  "dist/index.d.ts",
+  "dist/control-plane/index.js",
+  "dist/control-plane/index.d.ts",
+]) {
   const sdkArtifact = resolve(packageRoot, "../../packages/sdk", artifact);
   if (!existsSync(sdkArtifact)) {
     throw new Error(

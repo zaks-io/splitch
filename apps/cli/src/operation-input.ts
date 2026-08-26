@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { deriveMcpTools, getRoute } from "@splitch/contracts";
 import type { EvaluateContext } from "@splitch/sdk";
+import { deriveMcpTools, getRoute } from "@splitch/sdk/control-plane";
 import { excessPositionalError, requiredPositionalSpecs } from "./command-positionals.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";

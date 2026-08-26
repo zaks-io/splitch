@@ -2,6 +2,25 @@
 
 **Status:** accepted
 
+## 2026-08-26 amendment: one published SDK dependency spine
+
+The internal authoring split remains accepted: `@splitch/contracts` owns Zod schemas and
+`@splitch/control-plane-sdk` owns typed transport. Neither package is published independently.
+Their consumer-ready interface is now bundled and declared at `@splitch/sdk/control-plane`.
+Published CLI code imports only that interface, so an npm consumer sees
+`@splitch/cli -> @splitch/sdk` instead of an implementation bundle with erased workspace edges.
+
+The same rule applies to runtime-neutral local evaluation. `@splitch/evaluation-core` remains a
+private implementation package, while `@splitch/sdk/local-evaluation` publishes its evaluator and
+the contract-derived types needed by first-party integrations. `@splitch/convex` depends on that
+SDK interface and no longer carries a duplicate Resolution Details type.
+
+This amends the earlier "no external/published Control Plane SDK" decision only at the package
+interface. There is still no separately versioned `@splitch/control-plane-sdk`, no generated client,
+and no second authored contract. The public SDK owns the release compatibility promise and declares
+the Hono/Zod runtime dependencies required by its platform subpaths. Its root and browser entries
+remain isolated, zod-free data-plane bundles.
+
 ADR-0017 committed "contracts-first OpenAPI/Zod" and ADR-0023 committed a "shared typed client
 generated from the contract," but both left the mechanism open: is the _contract_ the OpenAPI doc
 (spec-first) or the _Zod schemas_ (code-first)? Is the client codegen'd or type-inferred? Are the

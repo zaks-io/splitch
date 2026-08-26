@@ -1,4 +1,4 @@
-import type { ErrorResponse } from "@splitch/contracts";
+import type { ErrorResponse } from "@splitch/sdk/control-plane";
 import { recordFetchRequest } from "./fetch-recording.js";
 
 export interface RecordedRequest {

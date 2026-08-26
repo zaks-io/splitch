@@ -1,5 +1,8 @@
-import type { EvaluationContext, VariantValue } from "@splitch/contracts";
-import type { EvaluateResult } from "@splitch/evaluation-core";
+import type {
+  EvaluateResult,
+  EvaluationContext,
+  VariantValue,
+} from "@splitch/sdk/local-evaluation";
 import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { hmacHex, stableUuid } from "./crypto";

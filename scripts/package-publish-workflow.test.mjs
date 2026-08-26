@@ -9,14 +9,20 @@ const targets = [
     name: "cli",
     packageName: "@splitch/cli",
     secret: "CLI_LINEAR_ACCESS_KEY",
-    includePaths:
-      "apps/cli/**,packages/contracts/**,packages/control-plane-sdk/**,packages/observability/**,packages/privacy/**,packages/sdk/**,packages/worker-runtime/**",
+    includePaths: "apps/cli/**",
+  },
+  {
+    name: "convex",
+    packageName: "@splitch/convex",
+    secret: "CONVEX_LINEAR_ACCESS_KEY",
+    includePaths: "packages/convex/**",
   },
   {
     name: "sdk",
     packageName: "@splitch/sdk",
     secret: "SDK_LINEAR_ACCESS_KEY",
-    includePaths: "packages/sdk/**,packages/contracts/**",
+    includePaths:
+      "packages/sdk/**,packages/contracts/**,packages/control-plane-sdk/**,packages/evaluation-core/**",
   },
 ];
 

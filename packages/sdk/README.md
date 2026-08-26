@@ -16,9 +16,13 @@ always observable, never a silently disguised default.
 npm install @splitch/sdk
 ```
 
-ESM only. Node >= 20, browsers, and edge runtimes. Zero runtime dependencies —
-response validation is a hand-maintained zod-free mirror bundled at build time
-(parity-tested against contracts Zod; not codegen).
+ESM only. Node >= 20, browsers, and edge runtimes. The root and browser entries
+remain zod-free and never load the schema/transport dependencies used by the
+named `control-plane` and `local-evaluation` entries.
+
+`@splitch/cli` consumes `@splitch/sdk/control-plane`. `@splitch/convex` consumes
+`@splitch/sdk/local-evaluation`. Those package interfaces keep published Splitch
+packages on one dependency spine while the internal authoring modules remain private.
 
 ## Hello world
 

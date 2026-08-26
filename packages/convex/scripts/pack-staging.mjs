@@ -3,13 +3,14 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolvePublishedWorkspaceDependencies } from "../../../scripts/release/workspace-dependencies.mjs";
 
 export const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 function releaseManifest() {
   const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
   const { devDependencies: _devDependencies, scripts: _scripts, ...release } = manifest;
-  return release;
+  return resolvePublishedWorkspaceDependencies(release, resolve(packageRoot, "../.."));
 }
 
 export function createStagingDirectory() {
@@ -73,6 +74,14 @@ export function assertPackedTarball(tarballPath) {
     throw new Error("packed @splitch/convex leaks a workspace dependency");
   if (manifest.devDependencies)
     throw new Error("packed @splitch/convex must not ship devDependencies");
+  const sdkVersion = JSON.parse(
+    readFileSync(resolve(packageRoot, "../sdk/package.json"), "utf8"),
+  ).version;
+  if (
+    JSON.stringify(manifest.dependencies) !== JSON.stringify({ "@splitch/sdk": `^${sdkVersion}` })
+  ) {
+    throw new Error(`packed @splitch/convex must depend only on @splitch/sdk@^${sdkVersion}`);
+  }
   if (manifest.exports?.["./react"]?.import !== "./dist/react/index.js")
     throw new Error("packed @splitch/convex is missing its React export");
   assertDefaultExports(manifest);

@@ -1,4 +1,4 @@
-import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/contracts";
+import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/sdk/control-plane";
 import { describe, expect, it } from "vitest";
 import { formatEnvironmentPolicy, isEnvironmentPolicy } from "./format-environment-policy.js";
 

@@ -1,4 +1,4 @@
-import { getRoute } from "@splitch/contracts";
+import { getRoute } from "@splitch/sdk/control-plane";
 import type { CliCommandDefinition } from "./command-registry.js";
 import { SplitchCliError } from "./errors.js";
 import type { ParsedInvocation } from "./parse-args.js";

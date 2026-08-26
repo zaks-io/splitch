@@ -1,6 +1,5 @@
 import {
   ALLOWED_PUBLISHABLE_PACKAGES,
-  DEPENDENCY_FIELDS,
   SEMVER_PATTERN,
   SPDX_LICENSE_PATTERN,
   violation,
@@ -9,6 +8,10 @@ import {
 } from "./constants.mjs";
 
 const CLI_RUNTIME_DEPENDENCY_FIELDS = ["dependencies", "peerDependencies", "optionalDependencies"];
+const PUBLIC_WORKSPACE_DEPENDENCIES = Object.freeze({
+  "@splitch/cli": new Set(["@splitch/sdk"]),
+  "@splitch/convex": new Set(["@splitch/sdk"]),
+});
 
 function collectExportTargets(exportsField) {
   const targets = [];
@@ -139,17 +142,24 @@ function lintRootExport(packagePath, packageName, rootExport) {
   return violations;
 }
 
+function isForbiddenWorkspaceDependency(packageName, field, dependencyName, versionRange) {
+  const isPublishedSdkDependency =
+    field === "dependencies" &&
+    PUBLIC_WORKSPACE_DEPENDENCIES[packageName]?.has(dependencyName) === true;
+  return (
+    !isPublishedSdkDependency &&
+    (dependencyName.startsWith(WORKSPACE_SCOPE) || versionRange.startsWith(WORKSPACE_PROTOCOL))
+  );
+}
+
 function lintDependencyLeaks(packagePath, packageName, manifest) {
-  const fields = packageName === "@splitch/sdk" ? DEPENDENCY_FIELDS : CLI_RUNTIME_DEPENDENCY_FIELDS;
+  const fields = CLI_RUNTIME_DEPENDENCY_FIELDS;
   const violations = [];
   for (const field of fields) {
     const deps = manifest[field];
     if (!deps) continue;
     for (const [dependencyName, versionRange] of Object.entries(deps)) {
-      if (
-        dependencyName.startsWith(WORKSPACE_SCOPE) ||
-        versionRange.startsWith(WORKSPACE_PROTOCOL)
-      ) {
+      if (isForbiddenWorkspaceDependency(packageName, field, dependencyName, versionRange)) {
         violations.push(
           violation(
             packagePath,

@@ -1,5 +1,10 @@
-import type { ConvexConfigSnapshot, ResolutionDetails, VariantValue } from "@splitch/contracts";
-import { type EvaluateResult, evaluatePath } from "@splitch/evaluation-core";
+import {
+  type ConvexConfigSnapshot,
+  type EvaluateResult,
+  evaluatePath,
+  type LocalResolutionDetails as ResolutionDetails,
+  type VariantValue,
+} from "@splitch/sdk/local-evaluation";
 import { v } from "convex/values";
 import { internalAction, internalMutation, mutation, query } from "./_generated/server";
 import { canonicalJson, sha256Hex } from "./crypto";

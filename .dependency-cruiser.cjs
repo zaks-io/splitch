@@ -46,19 +46,31 @@ module.exports = {
       to: { path: "^apps/" },
     },
     {
-      name: "public-sdk-does-not-import-internal-surfaces",
+      name: "sdk-client-entries-do-not-import-platform-surfaces",
       severity: "error",
       comment:
-        "@splitch/sdk is the public data-plane package. It must not import app code, control-plane transport, private contracts, or UI.",
+        "The @splitch/sdk root, browser, React, and Sentry entries stay data-plane-only; platform implementation packages are bundled only behind their named subpaths.",
       from: {
         path: "^packages/sdk/",
         pathNot: [
           "^packages/sdk/scripts/",
+          "^packages/sdk/src/control-plane/",
+          "^packages/sdk/src/local-evaluation/",
           ...TEST_ONLY_SOURCES,
           "^packages/sdk/src/contract-surface-assignability\\.ts$",
         ],
       },
-      to: { path: "^(apps|packages/(contracts|control-plane-sdk|ui))/" },
+      to: { path: "^(apps|packages/(contracts|control-plane-sdk|evaluation-core|ui))/" },
+    },
+    {
+      name: "published-cli-and-convex-use-sdk-interface",
+      severity: "error",
+      comment:
+        "Published CLI and Convex code import the public @splitch/sdk interface, never its private implementation packages.",
+      from: { path: "^(apps/cli|packages/convex)/src/" },
+      to: {
+        path: "^(packages/(contracts|control-plane-sdk|evaluation-core)/|@splitch/(contracts|control-plane-sdk|evaluation-core)(/|$))",
+      },
     },
     {
       name: "ui-stays-domain-free",

@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/contracts";
+import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/sdk/control-plane";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK, EXIT_SCOPE } from "./exit-codes.js";

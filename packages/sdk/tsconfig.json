@@ -13,6 +13,8 @@
   "exclude": [
     "src/**/*.test.ts",
     "src/test-fixtures.ts",
+    "src/control-plane/**",
+    "src/local-evaluation/**",
     "src/contract-surface-assignability.ts",
     "src/contract-surface-schema-describe.ts"
   ]

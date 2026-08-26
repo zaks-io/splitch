@@ -117,10 +117,18 @@ try {
   writeFileSync(
     join(consumerRoot, "runtime.mjs"),
     `import { createSplitchClient } from "@splitch/sdk";
+import { createControlPlaneSdk, getRoute } from "@splitch/sdk/control-plane";
+import { ConvexConfigSnapshotSchema, evaluatePath } from "@splitch/sdk/local-evaluation";
 
 const client = createSplitchClient({ clientKey: "pk_smoke" });
 if (typeof client.evaluate !== "function") {
   throw new Error("createSplitchClient did not return an evaluate accessor");
+}
+if (typeof createControlPlaneSdk !== "function" || !getRoute("flags_list")) {
+  throw new Error("control-plane entry did not expose its typed client and route contract");
+}
+if (typeof ConvexConfigSnapshotSchema.safeParse !== "function" || typeof evaluatePath !== "function") {
+  throw new Error("local-evaluation entry did not expose its schema and evaluator");
 }
 console.log("runtime import ok");
 `,
@@ -142,7 +150,16 @@ const client = createSplitchBrowserClient({
 client.evaluate("checkout", false);
 `,
   );
-  writeConsumerTsconfig(["quickstart-snippet.ts", "browser-import.ts"]);
+  writeFileSync(
+    join(consumerRoot, "platform-import.ts"),
+    `import { createControlPlaneSdk, type ErrorResponse } from "@splitch/sdk/control-plane";
+import { type EvaluateResult, evaluatePath } from "@splitch/sdk/local-evaluation";
+void createControlPlaneSdk;
+void (null as ErrorResponse | EvaluateResult | null);
+void evaluatePath;
+`,
+  );
+  writeConsumerTsconfig(["quickstart-snippet.ts", "browser-import.ts", "platform-import.ts"]);
 
   run("node", ["runtime.mjs"]);
   runTypecheck();
@@ -177,8 +194,12 @@ client.evaluate("checkout", false);
   if (packedManifest.peerDependenciesMeta?.react?.optional !== true) {
     throw new Error("packed manifest must mark the React peer optional");
   }
-  if (packedManifest.dependencies?.["@splitch/contracts"]) {
-    throw new Error("packed manifest still depends on @splitch/contracts");
+  const dependencyNames = Object.keys(packedManifest.dependencies ?? {}).sort();
+  const expectedDependencyNames = ["@hono/zod-openapi", "hono", "zod"];
+  if (JSON.stringify(dependencyNames) !== JSON.stringify(expectedDependencyNames)) {
+    throw new Error(
+      `packed manifest dependencies must be exactly ${expectedDependencyNames.join(", ")}`,
+    );
   }
   if (packedManifest.devDependencies?.["@splitch/contracts"]) {
     throw new Error("packed manifest still lists @splitch/contracts in devDependencies");
@@ -189,6 +210,12 @@ client.evaluate("checkout", false);
   );
   if (declaration.includes("@splitch/contracts")) {
     throw new Error("packed declarations still import @splitch/contracts");
+  }
+  for (const entry of ["control-plane/index.d.ts", "local-evaluation/index.d.ts"]) {
+    const text = readFileSync(join(consumerRoot, "node_modules/@splitch/sdk/dist", entry), "utf8");
+    if (/from ["']@splitch\/(contracts|control-plane-sdk|evaluation-core)/.test(text)) {
+      throw new Error(`packed ${entry} still imports a private workspace package`);
+    }
   }
   if (packedManifest.devDependencies && Object.keys(packedManifest.devDependencies).length > 0) {
     throw new Error(

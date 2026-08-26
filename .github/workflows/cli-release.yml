@@ -181,8 +181,8 @@ jobs:
           name: cli-release-validation-${{ needs.validate.outputs.cli_tag }}
           path: ${{ runner.temp }}/cli-release-artifacts
 
-      # The CLI bundle inlines @splitch/sdk from its built dist; turbo's
-      # ^build edge builds (or cache-restores) the SDK first.
+      # Turbo builds the SDK dependency first so CLI declarations resolve the
+      # exact public artifact consumers install.
       - name: Build @splitch/cli for release packaging
         run: pnpm exec turbo run build --filter=@splitch/cli
 

@@ -1,4 +1,4 @@
-import { ConvexConfigSnapshotSchema } from "@splitch/contracts";
+import { ConvexConfigSnapshotSchema } from "@splitch/sdk/local-evaluation";
 import { internal } from "./_generated/api";
 import { type ActionCtx, env } from "./_generated/server";
 

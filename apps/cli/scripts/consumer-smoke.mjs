@@ -20,6 +20,16 @@ try {
   // Consumer smoke consumes the stamped build; it never rebuilds.
   const { verifyBuildStamp } = await import("../../../scripts/release/build-stamp.mjs");
   verifyBuildStamp("cli", resolve(packageRoot, "../.."));
+  verifyBuildStamp("sdk", resolve(packageRoot, "../.."));
+  const sdkPackOutput = execFileSync(
+    "node",
+    ["../../packages/sdk/scripts/pack-release.mjs", consumerRoot],
+    { cwd: packageRoot, encoding: "utf8" },
+  );
+  const sdkTarballName = sdkPackOutput.trim().split("\n").at(-1);
+  if (!sdkTarballName?.endsWith(".tgz")) {
+    throw new Error(`SDK pack-release did not report a tarball path:\n${sdkPackOutput}`);
+  }
   const packOutput = execFileSync("node", ["scripts/pack-release.mjs", consumerRoot], {
     cwd: packageRoot,
     encoding: "utf8",
@@ -34,7 +44,7 @@ try {
     join(consumerRoot, "package.json"),
     `${JSON.stringify({ name: "splitch-cli-consumer-smoke", private: true }, null, 2)}\n`,
   );
-  execFileSync("npm", ["install", tarballPath], {
+  execFileSync("npm", ["install", resolve(consumerRoot, sdkTarballName), tarballPath], {
     cwd: consumerRoot,
     stdio: "inherit",
     env: { ...process.env, npm_config_cache: join(consumerRoot, ".npm-cache") },
@@ -57,6 +67,13 @@ try {
     "utf8",
   );
   assertNoResolutionErrors(installedManifest);
+  const parsedManifest = JSON.parse(installedManifest);
+  const sdkVersion = JSON.parse(
+    readFileSync(resolve(packageRoot, "../../packages/sdk/package.json"), "utf8"),
+  ).version;
+  if (parsedManifest.dependencies?.["@splitch/sdk"] !== `^${sdkVersion}`) {
+    throw new Error(`installed CLI must depend on @splitch/sdk@^${sdkVersion}`);
+  }
   console.log("consumer smoke passed");
 } finally {
   rmSync(consumerRoot, { recursive: true, force: true });

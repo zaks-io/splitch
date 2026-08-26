@@ -1,8 +1,9 @@
-# Two-package topology: @splitch/contracts and @splitch/control-plane-sdk
+# Internal contract topology and the published SDK interface
 
-How the contracts package and the Control Plane SDK package are split, what each depends on, and which
-consumers import from where. Splitting keeps schema-only consumers (marketing site, Tinybird docs)
-free of transport code. (ADR-0025 "two packages".)
+How the private contracts and Control Plane SDK implementation packages are split, how the published
+SDK exposes them, and which consumers import from where. The internal split keeps schema-only
+consumers free of transport code. The published SDK gives independently released packages one
+versioned dependency spine. (ADR-0025 and its 2026-08-26 amendment.)
 
 ---
 
@@ -53,9 +54,19 @@ for non-browser environments. No other transport frameworks.
 
 **Consumers:**
 
-- CLI — calls the control-plane API via the typed client.
+- Published SDK control-plane entry — bundles the typed client for CLI consumers.
 - MCP server — calls the control-plane API via the typed client; never imports Worker code directly.
 - Control panel (TanStack Start) — uses the typed client for SSR/RSC data fetching.
+
+### `@splitch/sdk/control-plane`
+
+This is the published package interface over the two private modules above. Its JavaScript and
+declarations are built into the `@splitch/sdk` tarball, so they contain no imports of private
+workspace packages. It declares the Hono/Zod packages its schema interface requires.
+
+Published CLI code imports contracts, route discovery, and typed transport only through this
+subpath. Monorepo-only consumers may continue importing the private authoring modules directly when
+they need narrower build graphs.
 
 ---
 
@@ -66,7 +77,7 @@ for non-browser environments. No other transport frameworks.
 | Control Plane API Worker | yes (route defs + Zod schemas)        | no (or rarely, self-call) | —                       |
 | Worker runtime           | yes (route defs + guard metadata)     | no                        | no                      |
 | MCP server               | yes (Zod schemas for tool derivation) | yes (API calls)           | no                      |
-| CLI                      | yes (types + error schema)            | yes (API calls)           | no                      |
+| CLI                      | through `@splitch/sdk/control-plane`  | through the same subpath  | no                      |
 | Control panel            | yes (types for forms/display)         | yes (data fetching)       | no                      |
 | Marketing site           | yes (types for examples)              | no                        | no                      |
 
@@ -87,7 +98,8 @@ a committed file that agents or humans would edit.
 
 ## What is NOT built
 
-- No external/published npm package. Every consumer is in the monorepo.
+- No independently published contracts or Control Plane SDK implementation package. The supported
+  npm interface is the versioned `@splitch/sdk/control-plane` subpath.
 - No OpenAPI → codegen client. The deletion test found no external consumer that would need it.
   Building it would be speculative indirection. (ADR-0025.)
 - No shared MCP tool definition file committed to the repo. MCP schemas derive at startup from

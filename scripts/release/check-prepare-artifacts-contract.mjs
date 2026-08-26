@@ -77,6 +77,12 @@ try {
   cpSync(containedPath(sourceRepoRoot, "scripts/release"), join(repoRoot, "scripts/release"), {
     recursive: true,
   });
+  const sdkManifest = containedPath(sourceRepoRoot, "packages/sdk/package.json");
+  if (targetKey !== "sdk" && existsSync(sdkManifest)) {
+    const scratchSdkManifest = join(repoRoot, "packages/sdk/package.json");
+    mkdirSync(dirname(scratchSdkManifest), { recursive: true });
+    cpSync(sdkManifest, scratchSdkManifest);
+  }
   const rootLicense = containedPath(sourceRepoRoot, "LICENSE.md");
   if (existsSync(rootLicense)) {
     cpSync(rootLicense, join(repoRoot, "LICENSE.md"));

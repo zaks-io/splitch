@@ -1,4 +1,4 @@
-import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/contracts";
+import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/sdk/control-plane";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { CLI_COMMANDS, META_COMMANDS } from "./command-registry.js";

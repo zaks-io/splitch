@@ -1,4 +1,4 @@
-import { type EnvironmentPolicy, KILL_SWITCH_OFF_EXEMPTION } from "@splitch/contracts";
+import { type EnvironmentPolicy, KILL_SWITCH_OFF_EXEMPTION } from "@splitch/sdk/control-plane";
 
 /**
  * Human-readable Environment Policy for CLI `env-policy get` / `set` when

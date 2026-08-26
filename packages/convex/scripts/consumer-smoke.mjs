@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,14 @@ const repoRoot = resolve(packageRoot, "../..");
 const consumer = mkdtempSync(join(tmpdir(), "splitch-convex-consumer-"));
 try {
   verifyBuildStamp("convex", repoRoot);
+  verifyBuildStamp("sdk", repoRoot);
+  const sdkOutput = execFileSync("node", ["../sdk/scripts/pack-release.mjs", consumer], {
+    cwd: packageRoot,
+    encoding: "utf8",
+  });
+  const sdkName = sdkOutput.trim().split("\n").at(-1);
+  if (!sdkName?.endsWith(".tgz"))
+    throw new Error(`SDK pack-release did not report a tarball:\n${sdkOutput}`);
   const output = execFileSync("node", ["scripts/pack-release.mjs", consumer], {
     cwd: packageRoot,
     encoding: "utf8",
@@ -25,6 +33,7 @@ try {
     "npm",
     [
       "install",
+      join(consumer, sdkName),
       join(consumer, name),
       "convex@1.45.0",
       "react@19.2.8",
@@ -96,6 +105,15 @@ export default app;
       stdio: "inherit",
     },
   );
+  const installedManifest = JSON.parse(
+    readFileSync(join(consumer, "node_modules/@splitch/convex/package.json"), "utf8"),
+  );
+  const sdkVersion = JSON.parse(
+    readFileSync(join(repoRoot, "packages/sdk/package.json"), "utf8"),
+  ).version;
+  if (installedManifest.dependencies?.["@splitch/sdk"] !== `^${sdkVersion}`) {
+    throw new Error(`installed @splitch/convex must depend on @splitch/sdk@^${sdkVersion}`);
+  }
   console.log("@splitch/convex clean consumer smoke passed");
 } finally {
   rmSync(consumer, { recursive: true, force: true });

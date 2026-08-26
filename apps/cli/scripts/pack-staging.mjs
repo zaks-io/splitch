@@ -4,16 +4,10 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolvePublishedWorkspaceDependencies } from "../../../scripts/release/workspace-dependencies.mjs";
 import { findRepoInternalReference } from "./published-agent-surface.mjs";
 
-const EXPECTED_DEPENDENCIES = [
-  "@hono/zod-openapi",
-  "@sentry/node",
-  "hono",
-  "jsonc-parser",
-  "open",
-  "zod",
-];
+const EXPECTED_DEPENDENCIES = ["@sentry/node", "@splitch/sdk", "jsonc-parser", "open"];
 const REQUIRED_FILES = [
   "package/LICENSE.md",
   "package/README.md",
@@ -36,7 +30,7 @@ function readReleaseManifest(packageRoot) {
     postpublish: _postpublish,
     ...release
   } = manifest;
-  return release;
+  return resolvePublishedWorkspaceDependencies(release, resolve(packageRoot, "../.."));
 }
 
 export function createPackStagingDir(packageRoot) {
@@ -127,14 +121,11 @@ export function assertReleaseTarballContents({ listing, manifestText, cliJs, rea
   if (manifest.devDependencies !== undefined) {
     throw new Error("release manifest must not ship devDependencies");
   }
-  for (const field of [
-    "dependencies",
-    "devDependencies",
-    "peerDependencies",
-    "optionalDependencies",
-  ]) {
+  for (const field of ["dependencies", "peerDependencies", "optionalDependencies"]) {
     const names = Object.keys(manifest[field] ?? {});
-    const workspaceName = names.find((name) => name.startsWith("@splitch/"));
+    const workspaceName = names.find(
+      (name) => name.startsWith("@splitch/") && name !== "@splitch/sdk",
+    );
     if (workspaceName) {
       throw new Error(`release manifest leaks ${workspaceName} in ${field}`);
     }
@@ -147,6 +138,12 @@ export function assertReleaseTarballContents({ listing, manifestText, cliJs, rea
     throw new Error(
       `release manifest dependencies must be exactly ${EXPECTED_DEPENDENCIES.join(", ")}; got: ${dependencyKeys.join(", ") || "(none)"}`,
     );
+  }
+  const sdkVersion = JSON.parse(
+    readFileSync(resolve(getPackageRoot(), "../../packages/sdk/package.json"), "utf8"),
+  ).version;
+  if (manifest.dependencies?.["@splitch/sdk"] !== `^${sdkVersion}`) {
+    throw new Error(`release manifest must depend on @splitch/sdk@^${sdkVersion}`);
   }
   if (
     JSON.stringify(manifest.bin) !==

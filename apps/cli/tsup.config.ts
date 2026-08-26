@@ -14,6 +14,6 @@ export default defineConfig({
   splitting: false,
   clean: true,
   sourcemap: false,
-  noExternal: [/^@splitch\//],
-  external: ["@hono/zod-openapi", "@sentry/node", "hono", "open", "zod"],
+  noExternal: [/^@splitch\/(?!sdk(?:\/|$))/],
+  external: ["@splitch/sdk", /^@splitch\/sdk\//, "@sentry/node", "open"],
 });

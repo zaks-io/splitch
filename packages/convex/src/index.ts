@@ -4,10 +4,17 @@ import type {
   GenericMutationCtx,
   GenericQueryCtx,
 } from "convex/server";
+import type {
+  EvaluationContext,
+  LocalResolutionDetails as ResolutionDetails,
+  VariantValue,
+} from "@splitch/sdk/local-evaluation";
 import type { ComponentApi } from "./component/_generated/component";
-import type { EvaluationContext, ResolutionDetails, VariantValue } from "./public-types";
 
-export type { ResolutionDetails, VariantValue } from "./public-types";
+export type {
+  LocalResolutionDetails as ResolutionDetails,
+  VariantValue,
+} from "@splitch/sdk/local-evaluation";
 
 export interface ConvexEvaluationContext {
   readonly targetingKey: string;
@@ -94,7 +101,7 @@ export class Splitch {
   }
 }
 
-function normalizedContext(context: ConvexEvaluationContext): EvaluationContext {
+function normalizedContext(context: ConvexEvaluationContext) {
   return {
     targetingKey: context.targetingKey,
     idType: context.idType ?? "user",

@@ -136,11 +136,10 @@ export function assertReleaseBundleJs(bundleJs) {
 }
 
 function assertNoZodInBundle(bundleJs) {
-  // With `external: []` a reintroduced zod is inlined into dist, not imported.
-  // The load-bearing guard is assertZeroRuntimeDependencies on the packed
-  // manifest (zero runtime deps). Inlined zod source is caught by the
-  // size:check byte budget, not by a metafile or source scan — these regexes
-  // only catch accidental re-externalization of an import/require.
+  // Root and browser entries stay zod-free even though the named platform
+  // subpaths declare zod for their schema interfaces. These regexes catch an
+  // accidental runtime import from a client entry; the size gate catches an
+  // accidental inline bundle.
   if (
     /\bfrom\s*["']zod(?:\/[^"']*)?["']/.test(bundleJs) ||
     /\brequire\s*\(\s*["']zod/.test(bundleJs)
@@ -152,16 +151,33 @@ function assertNoZodInBundle(bundleJs) {
   }
 }
 
-function assertZeroRuntimeDependencies(manifest) {
-  const dependencyKeys = Object.keys(manifest.dependencies ?? {});
-  if (dependencyKeys.length !== 0) {
+function assertRuntimeDependencies(manifest) {
+  const dependencyKeys = Object.keys(manifest.dependencies ?? {}).sort();
+  const expected = ["@hono/zod-openapi", "hono", "zod"];
+  if (JSON.stringify(dependencyKeys) !== JSON.stringify(expected)) {
     throw new Error(
-      `release manifest must ship zero runtime dependencies; got: ${dependencyKeys.join(", ")}`,
+      `release manifest dependencies must be exactly ${expected.join(", ")}; got: ${dependencyKeys.join(", ") || "(none)"}`,
     );
   }
 }
 
 function assertNoInternalPlumbingInDeclaration(file, declarationText) {
+  if (
+    /(?:from\s*|import\s*)["']@splitch\/(?:contracts|control-plane-sdk|evaluation-core)(?:\/[^"']*)?["']/.test(
+      declarationText,
+    )
+  ) {
+    throw new Error(
+      `release declaration ${packageRelativePath(file)} imports a private workspace package`,
+    );
+  }
+  if (
+    file.includes("/control-plane/") ||
+    file.includes("/local-evaluation/") ||
+    file.includes("/leaf-schemas-runtime-")
+  ) {
+    return;
+  }
   const normalizedDeclarationText = declarationText.toLowerCase().replace(/\s*\n\s*\*\s*/g, " ");
   for (const marker of FORBIDDEN_PUBLIC_DECLARATION_MARKERS) {
     if (normalizedDeclarationText.includes(marker.toLowerCase())) {
@@ -208,7 +224,7 @@ export function assertReleaseTarballContents({
   if (manifest.devDependencies?.["@splitch/contracts"]) {
     throw new Error("release manifest still lists @splitch/contracts in devDependencies");
   }
-  assertZeroRuntimeDependencies(manifest);
+  assertRuntimeDependencies(manifest);
   assertNoInternalPlumbingInDeclarations(listing, declarationTexts);
 
   if (manifest.devDependencies && Object.keys(manifest.devDependencies).length > 0) {

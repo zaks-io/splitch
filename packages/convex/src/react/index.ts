@@ -3,7 +3,10 @@
 import type { FunctionReference } from "convex/server";
 import { useQuery } from "convex/react";
 import type { Value } from "convex/values";
-import type { ResolutionDetails, VariantValue } from "../public-types";
+import type {
+  LocalResolutionDetails as ResolutionDetails,
+  VariantValue,
+} from "@splitch/sdk/local-evaluation";
 
 export type ConvexVariantValue = VariantValue & Value;
 

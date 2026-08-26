@@ -4,7 +4,7 @@ import {
   deriveMcpTools,
   getRoute,
   type McpToolDefinition,
-} from "@splitch/contracts";
+} from "@splitch/sdk/control-plane";
 
 export interface CliCommandDefinition {
   /** Stable operation identity (MCP tool name for API commands). */

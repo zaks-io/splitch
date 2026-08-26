@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import { CreateFlagRequestSchema } from "@splitch/contracts";
+import { CreateFlagRequestSchema } from "@splitch/sdk/control-plane";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
