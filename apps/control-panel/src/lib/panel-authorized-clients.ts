@@ -199,8 +199,9 @@ export async function authorizedAppSettingsClient(): Promise<AuthorizedAppSettin
 }
 
 /**
- * No Environment pinned: the Sentry paths name the Environment themselves, so a
- * header-carried one would be a second source of truth for the same axis.
+ * No Environment pinned: Sentry keeps one signing secret per provider for a whole
+ * Sentry organization, so an installation wires up a splitch Organization and the
+ * Sentry paths name that Organization themselves.
  */
 export async function authorizedSentryClient(): Promise<AuthorizedClient<PanelSentryClient>> {
   const authorized = await panelBindingContext();

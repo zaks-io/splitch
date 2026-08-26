@@ -17,8 +17,7 @@ export type SentryOutcome =
   | { kind: "refused"; message: string };
 
 export async function installSentry(input: {
-  appId: string;
-  environmentId: string;
+  orgId: string;
   installationId: string;
   webhookUrl: string;
 }): Promise<SentryOutcome> {
@@ -28,8 +27,7 @@ export async function installSentry(input: {
 }
 
 export async function rotateSentrySecret(input: {
-  appId: string;
-  environmentId: string;
+  orgId: string;
   installationId: string;
   rotationId: string;
 }): Promise<SentryOutcome> {
@@ -39,8 +37,7 @@ export async function rotateSentrySecret(input: {
 }
 
 export async function revokeSentryInstallation(input: {
-  appId: string;
-  environmentId: string;
+  orgId: string;
   installationId: string;
 }): Promise<SentryOutcome> {
   const result = await revokeControlPanelSentryInstallation({ data: input });

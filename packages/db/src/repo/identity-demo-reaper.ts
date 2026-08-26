@@ -38,21 +38,9 @@ async function deleteExpiredProvisionalOrg(
   orgId: string,
   nowIso: string,
 ): Promise<boolean> {
-  const statements = [
-    ...APP_CHILD_DELETE_ORDER.map((spec) => deleteAppScopedRowsForOrg(d1, spec, orgId, nowIso)),
-    deleteVariantsForOrg(d1, orgId, nowIso),
-    deleteAppScopedRowsForOrg(d1, { table: "flags", returning: "id" }, orgId, nowIso),
-    deleteAppScopedRowsForOrg(d1, { table: "environments", returning: "id" }, orgId, nowIso),
-    deleteAppScopedRowsForOrg(d1, { table: "app_memberships", returning: "app_id" }, orgId, nowIso),
-    deletePrivacyRequestsForOrg(d1, orgId, nowIso),
-    deleteAppsForOrg(d1, orgId, nowIso),
-    deleteOrgMembershipsForOrg(d1, orgId, nowIso),
-    deleteTrustedIdpsForOrg(d1, orgId, nowIso),
-    deleteExpiredOrgRoot(d1, orgId, nowIso),
-  ];
   // D1 batch is the transaction boundary; each statement repeats the expiry
   // guard so a claimed or unexpired Organization becomes a 0-row no-op.
-  const results = await d1.batch(statements);
+  const results = await d1.batch(REAP_PLAN.map(([, build]) => build(d1, orgId, nowIso)));
   return (results[results.length - 1]?.results ?? []).length === 1;
 }
 
@@ -68,23 +56,45 @@ const EXPIRED_ORG_EXISTS_SQL = `
 const APP_IDS_FOR_ORG_SQL = "SELECT id FROM apps WHERE organization_id = ?";
 
 interface AppScopedDeleteSpec {
-  table:
-    | "runs"
-    | "flag_configs"
-    | "targeting_rules"
-    | "experiments"
-    | "api_keys"
-    | "client_keys"
-    | "entity_deletions"
-    | "segments"
-    | "metrics"
-    | "flags"
-    | "environments"
-    | "app_memberships";
-  returning: "id" | "key_id" | "app_id";
+  table: AppScopedTable;
+  returning: "id" | "key_id" | "app_id" | "installation_id" | "delivery_id";
 }
 
+type AppScopedTable =
+  | "cloudflare_config_deliveries"
+  | "cloudflare_installations"
+  | "config_webhook_deliveries"
+  | "convex_installations"
+  | "event_definition_versions"
+  | "event_definitions"
+  | "approval_reviews"
+  | "approval_requests"
+  | "runs"
+  | "flag_configs"
+  | "targeting_rules"
+  | "experiments"
+  | "api_keys"
+  | "client_keys"
+  | "entity_deletions"
+  | "segments"
+  | "metrics"
+  | "app_deletion_sagas"
+  | "flags"
+  | "environments"
+  | "app_memberships";
+
 const APP_CHILD_DELETE_ORDER: readonly AppScopedDeleteSpec[] = [
+  // Integration installations FK both the App and its Environments, and their
+  // delivery logs FK the installation, so the whole integration subtree clears
+  // before anything it points at.
+  { table: "cloudflare_config_deliveries", returning: "delivery_id" },
+  { table: "cloudflare_installations", returning: "installation_id" },
+  { table: "config_webhook_deliveries", returning: "delivery_id" },
+  { table: "convex_installations", returning: "installation_id" },
+  { table: "event_definition_versions", returning: "id" },
+  { table: "event_definitions", returning: "id" },
+  { table: "approval_reviews", returning: "id" },
+  { table: "approval_requests", returning: "id" },
   { table: "runs", returning: "id" },
   { table: "flag_configs", returning: "id" },
   { table: "targeting_rules", returning: "id" },
@@ -94,7 +104,52 @@ const APP_CHILD_DELETE_ORDER: readonly AppScopedDeleteSpec[] = [
   { table: "entity_deletions", returning: "app_id" },
   { table: "segments", returning: "id" },
   { table: "metrics", returning: "id" },
+  // No foreign key of its own, but the App it recovers is about to vanish and
+  // would leave the recovery row pointing at nothing.
+  { table: "app_deletion_sagas", returning: "app_id" },
 ];
+
+type ReapStep = readonly [table: string, build: DeleteBuilder];
+type DeleteBuilder = (d1: D1Database, orgId: string, nowIso: string) => D1PreparedStatement;
+
+/**
+ * Every table the reap clears, in the order it clears them, and the sole source
+ * for both the batch above and the coverage test that pins this list against the
+ * applied D1 schema. A table carrying `app_id` that is missing here either
+ * outlives the Organization or fails its foreign key when the App goes.
+ */
+const REAP_PLAN: readonly ReapStep[] = [
+  ...appScopedSteps(APP_CHILD_DELETE_ORDER),
+  ["variants", deleteVariantsForOrg],
+  ...appScopedSteps([
+    { table: "flags", returning: "id" },
+    { table: "environments", returning: "id" },
+    { table: "app_memberships", returning: "app_id" },
+  ]),
+  ["privacy_requests", deletePrivacyRequestsForOrg],
+  // Written by triggers on every statement above, so it is cleared after them
+  // and before the Apps whose history it is.
+  ["flag_change_events", deleteFlagChangeEventsForOrg],
+  ["apps", deleteAppsForOrg],
+  // FKs the Organization row itself, so it must clear before the root delete.
+  ["sentry_installations", deleteSentryInstallationsForOrg],
+  ["org_memberships", deleteOrgMembershipsForOrg],
+  ["trusted_idps", deleteTrustedIdpsForOrg],
+  ["organizations", deleteExpiredOrgRoot],
+];
+
+export const DEMO_REAP_DELETE_ORDER: readonly string[] = REAP_PLAN.map(([table]) => table);
+
+function appScopedSteps(specs: readonly AppScopedDeleteSpec[]): readonly ReapStep[] {
+  return specs.map(
+    (spec) =>
+      [
+        spec.table,
+        (d1: D1Database, orgId: string, nowIso: string) =>
+          deleteAppScopedRowsForOrg(d1, spec, orgId, nowIso),
+      ] as const,
+  );
+}
 
 function deleteAppScopedRowsForOrg(
   d1: D1Database,
@@ -141,6 +196,32 @@ function deletePrivacyRequestsForOrg(d1: D1Database, orgId: string, nowIso: stri
     `,
     )
     .bind(orgId, orgId, orgId, nowIso);
+}
+
+function deleteFlagChangeEventsForOrg(d1: D1Database, orgId: string, nowIso: string) {
+  return d1
+    .prepare(
+      `
+      DELETE FROM flag_change_events
+      WHERE app_id IN (${APP_IDS_FOR_ORG_SQL})
+        AND EXISTS (${EXPIRED_ORG_EXISTS_SQL})
+      RETURNING seq
+    `,
+    )
+    .bind(orgId, orgId, nowIso);
+}
+
+function deleteSentryInstallationsForOrg(d1: D1Database, orgId: string, nowIso: string) {
+  return d1
+    .prepare(
+      `
+      DELETE FROM sentry_installations
+      WHERE org_id = ?
+        AND EXISTS (${EXPIRED_ORG_EXISTS_SQL})
+      RETURNING installation_id
+    `,
+    )
+    .bind(orgId, orgId, nowIso);
 }
 
 function deleteAppsForOrg(d1: D1Database, orgId: string, nowIso: string) {

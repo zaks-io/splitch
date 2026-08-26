@@ -46,7 +46,6 @@ const TRANSIENT_APP_SCOPED_TABLES = [
   "cloudflare_installations",
   "config_webhook_deliveries",
   "convex_installations",
-  "sentry_installations",
   "approval_reviews",
   "approval_requests",
   "runs",
@@ -69,6 +68,10 @@ export function buildCleanupSql(ids = SMOKE_IDS) {
   const scope = transientAppScope(ids.org);
   const statements = [
     `DELETE FROM app_deletion_sagas WHERE organization_scope_hash = '${organizationScopeHash(ids.org)}' OR organization_id = '${ids.org}';`,
+    // Sentry wires up a whole Organization, not an App, so a transient App's
+    // disappearance would leave the installation behind and the next smoke run
+    // would hit the one-active-installation-per-Organization index.
+    `DELETE FROM sentry_installations WHERE org_id = '${ids.org}';`,
     ...TRANSIENT_APP_SCOPED_TABLES.map(
       (table) => `DELETE FROM ${table} WHERE app_id IN (${scope});`,
     ),

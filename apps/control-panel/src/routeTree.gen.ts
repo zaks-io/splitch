@@ -15,6 +15,7 @@ import { Route as KitchenSinkRouteImport } from './routes/kitchen-sink'
 import { Route as OrgSlugIndexRouteImport } from './routes/$orgSlug.index'
 import { Route as OrgSlugBillingRouteImport } from './routes/$orgSlug.billing'
 import { Route as OrgSlugClaimRouteImport } from './routes/$orgSlug.claim'
+import { Route as OrgSlugIntegrationsRouteImport } from './routes/$orgSlug.integrations'
 import { Route as OrgSlugMembersRouteImport } from './routes/$orgSlug.members'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
@@ -72,6 +73,11 @@ const OrgSlugBillingRoute = OrgSlugBillingRouteImport.update({
 const OrgSlugClaimRoute = OrgSlugClaimRouteImport.update({
   id: '/$orgSlug/claim',
   path: '/$orgSlug/claim',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrgSlugIntegrationsRoute = OrgSlugIntegrationsRouteImport.update({
+  id: '/$orgSlug/integrations',
+  path: '/$orgSlug/integrations',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrgSlugMembersRoute = OrgSlugMembersRouteImport.update({
@@ -244,6 +250,7 @@ export interface FileRoutesByFullPath {
   '/kitchen-sink': typeof KitchenSinkRoute
   '/$orgSlug/billing': typeof OrgSlugBillingRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
+  '/$orgSlug/integrations': typeof OrgSlugIntegrationsRoute
   '/$orgSlug/members': typeof OrgSlugMembersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
@@ -280,6 +287,7 @@ export interface FileRoutesByTo {
   '/kitchen-sink': typeof KitchenSinkRoute
   '/$orgSlug/billing': typeof OrgSlugBillingRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
+  '/$orgSlug/integrations': typeof OrgSlugIntegrationsRoute
   '/$orgSlug/members': typeof OrgSlugMembersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
@@ -312,6 +320,7 @@ export interface FileRoutesById {
   '/kitchen-sink': typeof KitchenSinkRoute
   '/$orgSlug/billing': typeof OrgSlugBillingRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
+  '/$orgSlug/integrations': typeof OrgSlugIntegrationsRoute
   '/$orgSlug/members': typeof OrgSlugMembersRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
@@ -350,6 +359,7 @@ export interface FileRouteTypes {
     | '/kitchen-sink'
     | '/$orgSlug/billing'
     | '/$orgSlug/claim'
+    | '/$orgSlug/integrations'
     | '/$orgSlug/members'
     | '/auth/callback'
     | '/auth/login'
@@ -386,6 +396,7 @@ export interface FileRouteTypes {
     | '/kitchen-sink'
     | '/$orgSlug/billing'
     | '/$orgSlug/claim'
+    | '/$orgSlug/integrations'
     | '/$orgSlug/members'
     | '/auth/callback'
     | '/auth/login'
@@ -417,6 +428,7 @@ export interface FileRouteTypes {
     | '/kitchen-sink'
     | '/$orgSlug/billing'
     | '/$orgSlug/claim'
+    | '/$orgSlug/integrations'
     | '/$orgSlug/members'
     | '/auth/callback'
     | '/auth/login'
@@ -454,6 +466,7 @@ export interface RootRouteChildren {
   KitchenSinkRoute: typeof KitchenSinkRoute
   OrgSlugBillingRoute: typeof OrgSlugBillingRoute
   OrgSlugClaimRoute: typeof OrgSlugClaimRoute
+  OrgSlugIntegrationsRoute: typeof OrgSlugIntegrationsRoute
   OrgSlugMembersRoute: typeof OrgSlugMembersRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthLoginRoute: typeof AuthLoginRoute
@@ -506,6 +519,13 @@ declare module '@tanstack/react-router' {
       path: '/$orgSlug/claim'
       fullPath: '/$orgSlug/claim'
       preLoaderRoute: typeof OrgSlugClaimRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$orgSlug/integrations': {
+      id: '/$orgSlug/integrations'
+      path: '/$orgSlug/integrations'
+      fullPath: '/$orgSlug/integrations'
+      preLoaderRoute: typeof OrgSlugIntegrationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$orgSlug/members': {
@@ -825,6 +845,7 @@ const rootRouteChildren: RootRouteChildren = {
   KitchenSinkRoute: KitchenSinkRoute,
   OrgSlugBillingRoute: OrgSlugBillingRoute,
   OrgSlugClaimRoute: OrgSlugClaimRoute,
+  OrgSlugIntegrationsRoute: OrgSlugIntegrationsRoute,
   OrgSlugMembersRoute: OrgSlugMembersRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   AuthLoginRoute: AuthLoginRoute,

@@ -109,7 +109,6 @@ export function makeDeleteAppCascade(d1: D1Database) {
       d1.prepare(`DELETE FROM convex_installations WHERE app_id = ?`).bind(appId),
       d1.prepare(`DELETE FROM cloudflare_config_deliveries WHERE app_id = ?`).bind(appId),
       d1.prepare(`DELETE FROM cloudflare_installations WHERE app_id = ?`).bind(appId),
-      d1.prepare(`DELETE FROM sentry_installations WHERE app_id = ?`).bind(appId),
       // The flag-change log carries no FKs (an audit row outlives its subject),
       // so nothing forces this delete. The App's history is still the App's data
       // and a hard delete must take it. Placed after every statement above whose

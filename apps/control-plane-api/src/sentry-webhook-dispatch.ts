@@ -89,9 +89,8 @@ async function deliverOne(
     return 0;
   }
 
-  const events = await deps.repo.flagChangeEvents.pendingForScope(
-    installation.appId,
-    installation.environmentId,
+  const events = await deps.repo.flagChangeEvents.pendingForOrg(
+    installation.orgId,
     installation.lastDeliveredSeq ?? 0,
     EVENT_BATCH,
   );

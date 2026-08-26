@@ -3,23 +3,20 @@ import type { ControlPanelOperation } from "./control-panel-operation.js";
 /**
  * The Sentry change-tracking half of the Panel vocabulary.
  *
- * Every path names both the App and the Environment, so the claim binds to the
- * exact Environment being wired into a Sentry organization. That matters more
- * here than for most resources: Sentry's payload carries no environment field,
- * so a delegation minted against a dev Environment must never resolve against
- * the installation that publishes production toggles.
+ * Every path names the Organization and nothing below it. Sentry stores one
+ * signing secret per provider per organization and its flag log has no project
+ * or environment axis, so an installation is an Organization-wide wiring and the
+ * claim binds exactly that.
  *
  * Reading an installation and rotating its signing secret are separate
  * operations for the same reason the Flag config read and write are: rendering
  * delivery health must not carry the authority to replace the secret.
  */
 
-const INSTALLATIONS_PATH =
-  /^\/apps\/([^/]+)\/envs\/([^/]+)\/integrations\/sentry\/installations\/?$/;
-const INSTALLATION_PATH =
-  /^\/apps\/([^/]+)\/envs\/([^/]+)\/integrations\/sentry\/installations\/([^/]+)\/?$/;
+const INSTALLATIONS_PATH = /^\/orgs\/([^/]+)\/integrations\/sentry\/installations\/?$/;
+const INSTALLATION_PATH = /^\/orgs\/([^/]+)\/integrations\/sentry\/installations\/([^/]+)\/?$/;
 const SECRET_ROTATIONS_PATH =
-  /^\/apps\/([^/]+)\/envs\/([^/]+)\/integrations\/sentry\/installations\/([^/]+)\/secret-rotations\/?$/;
+  /^\/orgs\/([^/]+)\/integrations\/sentry\/installations\/([^/]+)\/secret-rotations\/?$/;
 
 const COLLECTION_METHODS = {
   GET: "sentry_installations_list",
@@ -43,30 +40,27 @@ function parseInstallationCollection(
 ): ControlPanelOperation | null {
   const id = COLLECTION_METHODS[method as keyof typeof COLLECTION_METHODS];
   const match = pathname.match(INSTALLATIONS_PATH);
-  const appId = decodeMatch(match, 1);
-  const environmentId = decodeMatch(match, 2);
-  return id && appId && environmentId ? { id, appId, environmentId } : null;
+  const orgId = decodeMatch(match, 1);
+  return id && orgId ? { id, orgId } : null;
 }
 
 function parseInstallationResource(method: string, pathname: string): ControlPanelOperation | null {
   if (method !== "DELETE") return null;
   const match = pathname.match(INSTALLATION_PATH);
-  const appId = decodeMatch(match, 1);
-  const environmentId = decodeMatch(match, 2);
-  const installationId = decodeMatch(match, 3);
-  return appId && environmentId && installationId
-    ? { id: "sentry_installations_delete", appId, environmentId, installationId }
+  const orgId = decodeMatch(match, 1);
+  const installationId = decodeMatch(match, 2);
+  return orgId && installationId
+    ? { id: "sentry_installations_delete", orgId, installationId }
     : null;
 }
 
 function parseSecretRotation(method: string, pathname: string): ControlPanelOperation | null {
   if (method !== "POST") return null;
   const match = pathname.match(SECRET_ROTATIONS_PATH);
-  const appId = decodeMatch(match, 1);
-  const environmentId = decodeMatch(match, 2);
-  const installationId = decodeMatch(match, 3);
-  return appId && environmentId && installationId
-    ? { id: "sentry_secret_rotations_create", appId, environmentId, installationId }
+  const orgId = decodeMatch(match, 1);
+  const installationId = decodeMatch(match, 2);
+  return orgId && installationId
+    ? { id: "sentry_secret_rotations_create", orgId, installationId }
     : null;
 }
 

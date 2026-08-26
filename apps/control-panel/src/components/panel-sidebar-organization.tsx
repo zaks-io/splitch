@@ -75,6 +75,14 @@ export function PanelSidebarOrganization({
         activeProps={{ className: panelSidebarActiveLinkClassName }}
         className={panelSidebarLinkClassName}
         params={{ orgSlug: org.orgSlug }}
+        to="/$orgSlug/integrations"
+      >
+        Integrations
+      </Link>
+      <Link
+        activeProps={{ className: panelSidebarActiveLinkClassName }}
+        className={panelSidebarLinkClassName}
+        params={{ orgSlug: org.orgSlug }}
         to="/$orgSlug/billing"
       >
         Billing &amp; Usage

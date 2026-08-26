@@ -95,6 +95,20 @@ owner/admin; `Manage trusted IdPs`: owner). Parity: the same membership operatio
 > specific App's config (`app_memberships`, its own role matrix) is managed under that App's Settings,
 > not here — the two scopes are distinct (organization-and-membership.md).
 
+### Integrations — `/{orgSlug}/integrations`
+
+Where this Organization's Flag activity is published. **Sentry change tracking** is the one connector
+here: Sentry keeps a single signing secret per provider type per Sentry organization and its flag log
+has no project or environment axis, so one splitch Organization maps to one Sentry organization and
+every App and Environment under it publishes to the same log (ADR-0051). The card holds the two-way
+exchange (Sentry's webhook URL in, a once-shown minted secret out), delivery health, **Rotate
+secret**, and **Disconnect**. Owner/admin only, matching the Control Plane's own gate; a `member`
+sees the role they are missing, not a connector they cannot use. Parity: the same operations over
+CLI/MCP.
+
+> Integrations that act on a single Environment's credentials or data — Convex, Cloudflare — stay
+> under that Environment's Settings. The axis is the connector's own, not a house style.
+
 ### Billing & Usage — `/{orgSlug}/billing` (usage-complete, payment-stubbed)
 
 V1 billing is one Org-scoped **Evaluation** quota (ADR-0033). The screen ships the **usage half now**

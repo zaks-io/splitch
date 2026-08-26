@@ -17,6 +17,7 @@ export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/repo/flag-key-uniqueness.test.ts",
   "src/repo/flag-variant-run-freeze.test.ts",
   "src/repo/id-batches.test.ts",
+  "src/repo/identity-demo-reaper-integrations.test.ts",
   "src/repo/identity-demo-reaper.test.ts",
   "src/repo/identity-environment-order.test.ts",
   "src/repo/identity-session-reads.test.ts",
