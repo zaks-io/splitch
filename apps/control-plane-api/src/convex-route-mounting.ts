@@ -10,7 +10,7 @@ export function mountConvexRoutes(
   repo: Repository,
   deps: Omit<ConvexHandlerDeps, "repo"> | undefined,
 ): void {
-  const panelHandlers = makeConvexHandlers({ repo });
+  const panelHandlers = makeConvexHandlers({ repo, now: deps?.now });
   // Operator reads and revokes never decrypt the webhook secret, so the Panel
   // routes stay available when the data-plane KEK is not configured.
   registrar.mount(

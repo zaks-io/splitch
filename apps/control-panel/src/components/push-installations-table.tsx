@@ -110,10 +110,10 @@ function SyncState({ row, labels }: { row: PushInstallationRow; labels: PushInst
           : `${labels.syncedVersionLabel} version ${row.syncedVersion} of ${row.environmentVersion}`}
       </span>
       <span>
-        {count(row.pendingCount, "pending delivery")} · Oldest pending:{" "}
+        {count(row.pendingCount, "pending delivery", "pending deliveries")} · Oldest pending:{" "}
         {pendingAge(row.oldestPendingAgeMs)}
       </span>
-      <span>{count(row.terminalCount, "terminal delivery")}</span>
+      <span>{count(row.terminalCount, "terminal delivery", "terminal deliveries")}</span>
       {row.latestDeliveryError ? (
         <span className="text-destructive">
           Latest error: {row.latestDeliveryError.code} ({row.latestDeliveryError.kind}
@@ -127,8 +127,8 @@ function SyncState({ row, labels }: { row: PushInstallationRow; labels: PushInst
   );
 }
 
-function count(value: number, noun: string) {
-  return `${value} ${noun}${value === 1 ? "" : "s"}`;
+function count(value: number, singular: string, plural = `${singular}s`) {
+  return `${value} ${value === 1 ? singular : plural}`;
 }
 
 function pendingAge(milliseconds: number | null) {

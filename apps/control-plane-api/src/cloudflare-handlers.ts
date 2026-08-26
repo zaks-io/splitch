@@ -42,10 +42,14 @@ export function makeCloudflareHandlers(deps: CloudflareHandlerDeps) {
       );
       if (denied) return denied;
       const scope = cloudflareScope(args.input.params);
-      const [rows, environmentVersion] = await Promise.all([
-        deps.repo.cloudflare.listInstallations(scope),
-        deps.repo.cloudflare.environmentVersion(scope),
-      ]);
+      const rows = await deps.repo.cloudflare.listInstallations(scope);
+      // The Environment version only decorates rows, and `environmentVersion`
+      // throws when the Environment is not in scope. Reading it up front turns a
+      // mistyped environmentId (free input on the MCP tool and the CLI command)
+      // into an undeclared 500 instead of the empty list the Sentry card returns
+      // for the same case.
+      if (rows.length === 0) return Response.json({ installations: [] });
+      const environmentVersion = await deps.repo.cloudflare.environmentVersion(scope);
       return Response.json({
         installations: rows.map((row) =>
           cloudflareInstallationStatusResponse(row, environmentVersion),

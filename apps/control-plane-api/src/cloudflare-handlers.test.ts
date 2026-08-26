@@ -98,6 +98,31 @@ describe("Cloudflare Panel installations", () => {
       repo.cloudflare.getInstallation(envScope(ALPHA.appId, ALPHA_ENV), ACTIVE_ID),
     ).resolves.toMatchObject({ status: "active" });
   });
+
+  it("never puts the encrypted push secret on the wire", async () => {
+    await seedInstallations();
+    const raw = await (
+      await handlers.panelList(panelArgs(USER_ADMIN, ALPHA.appId, ALPHA_ENV))
+    ).text();
+
+    // `INSTALLATION_SELECT` carries the KEK ciphertext, its key version, and its
+    // fingerprint into the handler because the delivery path shares the query.
+    // The response shaper's field list is the only thing keeping them off the
+    // wire, so assert their absence rather than the presence of the good fields.
+    expect(raw).toContain(ACTIVE_ID);
+    expect(raw).not.toContain("cipher_");
+    expect(raw).not.toContain("fingerprint_");
+    expect(raw).not.toContain("secretKeyVersion");
+  });
+
+  it("returns an empty list for an Environment that is not in this App", async () => {
+    const response = await handlers.panelList(
+      panelArgs(USER_ADMIN, ALPHA.appId, "env_does_not_exist"),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ installations: [] });
+  });
 });
 
 async function seedInstallations() {

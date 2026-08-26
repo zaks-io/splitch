@@ -58,10 +58,23 @@ const EMPTY_DELIVERY_HEALTH: DeliveryHealth = {
 };
 
 function toDeliveryHealth(row: DeliveryHealthAggregateRow, nowMs: number): DeliveryHealth {
-  const oldestMs = row.oldestPendingAt ? Date.parse(row.oldestPendingAt) : Number.NaN;
   return {
     pendingCount: row.pendingCount ?? 0,
     terminalCount: row.terminalCount ?? 0,
-    oldestPendingAgeMs: Number.isFinite(oldestMs) ? Math.max(0, nowMs - oldestMs) : null,
+    // A null timestamp means nothing is pending. An unparseable one means the
+    // stored row is corrupt, and mapping it to the same null would render a
+    // stalled backlog as a healthy Environment.
+    oldestPendingAgeMs:
+      row.oldestPendingAt === null ? null : pendingAgeMs(row.oldestPendingAt, nowMs),
   };
+}
+
+function pendingAgeMs(oldestPendingAt: string, nowMs: number): number {
+  const oldestMs = Date.parse(oldestPendingAt);
+  if (!Number.isFinite(oldestMs)) {
+    throw new Error(
+      `push installation list: unparseable oldest pending timestamp ${oldestPendingAt}`,
+    );
+  }
+  return Math.max(0, nowMs - oldestMs);
 }

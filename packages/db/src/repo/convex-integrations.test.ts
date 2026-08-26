@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRepository, envScope } from "../index";
 import { createLocalD1, type LocalD1 } from "./test-d1-pool";
-import { type SeededTenants, seedTwoTenants } from "./test-seed";
+import { type SeededTenants, seedSiblingEnvironment, seedTwoTenants } from "./test-seed";
 
 const NOW = "2026-08-25T00:00:00.000Z";
 const LATER = "2026-08-25T00:05:00.000Z";
@@ -9,6 +9,8 @@ const FIRST_INSTALLATION_ID = "00000000-0000-4000-8000-000000000011";
 const ACTIVE_INSTALLATION_ID = "00000000-0000-4000-8000-000000000012";
 const FOREIGN_INSTALLATION_ID = "00000000-0000-4000-8000-000000000013";
 const CALLBACK_URL = "https://example.convex.site/splitch/configuration";
+const SIBLING_ENVIRONMENT_ID = "env_a_sibling";
+const SIBLING_INSTALLATION_ID = "00000000-0000-4000-8000-000000000014";
 
 let local: LocalD1;
 let repo: ReturnType<typeof createRepository>;
@@ -93,5 +95,32 @@ describe("Convex integration repository", () => {
       oldestPendingAgeMs: null,
     });
     expect(rows.some((row) => row.installationId === FOREIGN_INSTALLATION_ID)).toBe(false);
+  });
+
+  it("scopes the list on the App and on the Environment independently", async () => {
+    await seedSiblingEnvironment(local.d1, seed.a, SIBLING_ENVIRONMENT_ID);
+    await install("a", FIRST_INSTALLATION_ID);
+    await repo.convex.createInstallation(envScope(seed.a.appId, SIBLING_ENVIRONMENT_ID), {
+      installationId: SIBLING_INSTALLATION_ID,
+      callbackUrl: CALLBACK_URL,
+      secretCiphertext: "ciphertext",
+      secretKeyVersion: "v1",
+      secretFingerprint: "fingerprint",
+      now: NOW,
+    });
+    await install("b", FOREIGN_INSTALLATION_ID);
+
+    // Same App, different Environment. Only the `environment_id` predicate
+    // excludes this row; the foreign-tenant row below cannot prove that
+    // predicate, because it differs on both columns.
+    const own = await repo.convex.listInstallations(envScope(seed.a.appId, seed.a.environmentId));
+    expect(own.map((row) => row.installationId)).toEqual([FIRST_INSTALLATION_ID]);
+
+    // Tenant B's Environment named under tenant A's App: the scope a confused
+    // deputy mints. Only the `app_id` predicate excludes it.
+    const mismatched = await repo.convex.listInstallations(
+      envScope(seed.a.appId, seed.b.environmentId),
+    );
+    expect(mismatched).toEqual([]);
   });
 });

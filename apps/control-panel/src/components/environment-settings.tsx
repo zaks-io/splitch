@@ -7,11 +7,7 @@ import { EnvironmentPolicyEditor } from "./environment-policy-editor";
 import { SentryIntegrationCard } from "./sentry-integration-card";
 
 export function EnvironmentSettings({ settings }: { settings: PanelEnvironmentSettings }) {
-  const scope = {
-    appId: settings.environment.appId,
-    environmentId: settings.environment.id,
-    environmentKey: settings.environment.key,
-  };
+  const scope = { appId: settings.environment.appId, environmentId: settings.environment.id };
   return (
     <div className="grid gap-6" data-environment-settings={settings.environment.id}>
       <header>
@@ -29,7 +25,7 @@ export function EnvironmentSettings({ settings }: { settings: PanelEnvironmentSe
       <EnvironmentPolicyEditor {...scope} initialPolicy={settings.environment.policy} />
       <SentryIntegrationCard {...scope} />
       <ConvexIntegrationCard {...scope} />
-      <CloudflareIntegrationCard {...scope} />
+      <CloudflareIntegrationCard {...scope} environmentKey={settings.environment.key} />
     </div>
   );
 }

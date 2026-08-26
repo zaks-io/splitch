@@ -10,7 +10,7 @@ export function mountCloudflareRoutes(
   repo: Repository,
   deps: Omit<CloudflareHandlerDeps, "repo"> | undefined,
 ): void {
-  const panelHandlers = makeCloudflareHandlers({ repo });
+  const panelHandlers = makeCloudflareHandlers({ repo, now: deps?.now });
   // Operator reads and revokes never decrypt the push secret, so the Panel
   // routes stay available when the data-plane KEK is not configured.
   registrar.mount(
