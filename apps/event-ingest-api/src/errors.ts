@@ -27,5 +27,20 @@ export function emptyError(code: EmptyDetailCode, message: string): ErrorRespons
 }
 
 export function renderError(error: ErrorResponse): Response {
-  return Response.json(error, { status: httpStatusForError(error.code) });
+  const headers = new Headers({ "content-type": "application/json" });
+  const retryAfterMs = retryAfterMsFor(error);
+  if (retryAfterMs !== null) {
+    headers.set("retry-after", String(Math.ceil(retryAfterMs / 1_000)));
+  }
+  return new Response(JSON.stringify(error), {
+    status: httpStatusForError(error.code),
+    headers,
+  });
+}
+
+function retryAfterMsFor(error: ErrorResponse): number | null {
+  if (error.code === "RATE_LIMITED" || error.code === "SERVICE_UNAVAILABLE") {
+    return error.details.retryAfterMs;
+  }
+  return null;
 }

@@ -26,6 +26,24 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
+  ])("binds the SQLite Ingest Admission Gate for %s", (_target, target) => {
+    expect(target?.durable_objects?.bindings).toContainEqual({
+      name: "INGEST_ADMISSION_GATE",
+      class_name: "IngestAdmissionGateDurableObject",
+    });
+    expect(
+      target?.migrations?.some(
+        (migration) =>
+          migration.tag === "v4_ingest_admission_gate" &&
+          migration.new_sqlite_classes?.includes("IngestAdmissionGateDurableObject"),
+      ),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
   ])("retries Metric Event delivery as many times as the handler counts for %s", (target, env) => {
     const consumers = env?.queues?.consumers ?? [];
 
@@ -40,16 +58,29 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
 });
 
 interface WranglerConfig {
+  durable_objects?: DurableObjectsConfig;
   env?: Record<string, WranglerTarget | undefined>;
+  migrations?: Migration[];
   queues?: { consumers?: Array<{ max_retries?: number }> };
   secrets?: { required?: string[] };
   vars?: Record<string, unknown>;
 }
 
 interface WranglerTarget {
+  durable_objects?: DurableObjectsConfig;
+  migrations?: Migration[];
   queues?: { consumers?: Array<{ max_retries?: number }> };
   secrets?: { required?: string[] };
   vars?: Record<string, unknown>;
+}
+
+interface DurableObjectsConfig {
+  bindings?: Array<{ name?: string; class_name?: string }>;
+}
+
+interface Migration {
+  tag?: string;
+  new_sqlite_classes?: string[];
 }
 
 function readWranglerConfig(): WranglerConfig {

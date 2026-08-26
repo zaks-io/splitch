@@ -11,7 +11,7 @@ import { TestExecutionContext } from "./test-fixtures";
 import type { Env } from "./types";
 
 export const METRIC_APP_ID = "app_shop";
-const METRIC_ENVIRONMENT_ID = "env_prod";
+export const METRIC_ENVIRONMENT_ID = "env_prod";
 const METRIC_ORGANIZATION_ID = "org_1";
 export const METRIC_CLIENT_KEY = "pk_metric_events";
 export const METRIC_EVENT_NAME = "signed_up";
@@ -22,10 +22,17 @@ interface Claim {
   eventDefinitionVersionId: string;
 }
 
+interface AdmissionCharge {
+  readonly scope: string;
+  readonly rowCost: number;
+  readonly byteCost: number;
+}
+
 export interface MetricEventFixture {
   readonly env: Env;
   readonly config: Map<string, string>;
   readonly claims: Map<string, Claim>;
+  readonly admissionCharges: AdmissionCharge[];
   readonly hash: string;
   readonly credentialKind: "api_key" | "client_key";
 }
@@ -34,6 +41,9 @@ export interface MetricEventFixture {
 export async function makeMetricEventFixture(
   base: Partial<Env> = {},
   credentialKind: "api_key" | "client_key" = "client_key",
+  options: {
+    admission?: false | "throw" | { allowed: boolean; retryAfterMs: number };
+  } = {},
 ): Promise<MetricEventFixture> {
   const hash = await sha256Hex(METRIC_CLIENT_KEY);
   const key = credentialKind === "client_key" ? clientKeyCacheKey(hash) : apiKeyCacheKey(hash);
@@ -42,14 +52,26 @@ export async function makeMetricEventFixture(
     [eventDefinitionConfigKey(METRIC_APP_ID, METRIC_EVENT_NAME), hotConfig("edv_1", 1)],
   ]);
   const claims = new Map<string, Claim>();
+  const admissionCharges: AdmissionCharge[] = [];
   const env = {
     SPLITCH_PLATFORM_TARGET: "local",
     ...base,
     CREDENTIAL_STORE: kv(credential),
     CONFIG_STORE: mergedConfigStore(base.CONFIG_STORE, config),
     METRIC_EVENT_OUTBOX: outboxStub(claims),
+    ...(options.admission === false
+      ? { INGEST_ADMISSION_GATE: undefined }
+      : {
+          INGEST_ADMISSION_GATE:
+            options.admission === "throw"
+              ? throwingAdmissionStub()
+              : admissionStub(
+                  admissionCharges,
+                  options.admission ?? { allowed: true, retryAfterMs: 0 },
+                ),
+        }),
   } as unknown as Env;
-  return { env, config, claims, hash, credentialKind };
+  return { env, config, claims, admissionCharges, hash, credentialKind };
 }
 
 /** The live path: what the Evaluation Worker hands over the EVENT_INGEST binding. */
@@ -159,20 +181,79 @@ function outboxStub(claims: Map<string, Claim>) {
     },
     get(id: DurableObjectId) {
       return {
-        async fetch(_input: RequestInfo | URL, init?: RequestInit) {
-          const body = JSON.parse(String(init?.body)) as Claim;
-          const key = String(id);
-          const existing = claims.get(key);
-          if (existing && existing.fingerprint !== body.fingerprint) {
-            return Response.json({ outcome: "conflict", ...existing });
-          }
-          if (existing) return Response.json({ outcome: "duplicate", ...existing });
-          claims.set(key, body);
-          return Response.json({ outcome: "accepted", ...body });
+        fetch(input: RequestInfo | URL, init?: RequestInit) {
+          return requestMethod(input, init) === "GET"
+            ? lookupClaim(claims, String(id))
+            : claimOrConflict(claims, String(id), JSON.parse(String(init?.body)) as Claim);
         },
       };
     },
   };
+}
+
+function admissionStub(
+  charges: AdmissionCharge[],
+  decision: { allowed: boolean; retryAfterMs: number },
+) {
+  return {
+    idFromName(name: string) {
+      return name as unknown as DurableObjectId;
+    },
+    get(id: DurableObjectId) {
+      return {
+        async fetch(_input: RequestInfo | URL, init?: RequestInit) {
+          const body = JSON.parse(String(init?.body)) as {
+            rowCost: number;
+            byteCost: number;
+          };
+          charges.push({
+            scope: String(id),
+            rowCost: body.rowCost,
+            byteCost: body.byteCost,
+          });
+          return Response.json(decision);
+        },
+      };
+    },
+  };
+}
+
+function throwingAdmissionStub() {
+  return {
+    idFromName(_name: string) {
+      return _name as unknown as DurableObjectId;
+    },
+    get() {
+      return {
+        async fetch(): Promise<Response> {
+          throw new Error("Ingest Admission Gate is unavailable");
+        },
+      };
+    },
+  };
+}
+
+function lookupClaim(claims: Map<string, Claim>, key: string): Promise<Response> {
+  const existing = claims.get(key);
+  return Promise.resolve(
+    existing ? Response.json(existing) : new Response("not found", { status: 404 }),
+  );
+}
+
+function claimOrConflict(claims: Map<string, Claim>, key: string, body: Claim): Promise<Response> {
+  const existing = claims.get(key);
+  if (existing && existing.fingerprint !== body.fingerprint) {
+    return Promise.resolve(Response.json({ outcome: "conflict", ...existing }));
+  }
+  if (existing) return Promise.resolve(Response.json({ outcome: "duplicate", ...existing }));
+  claims.set(key, body);
+  return Promise.resolve(Response.json({ outcome: "accepted", ...body }));
+}
+
+function requestMethod(input: RequestInfo | URL, init?: RequestInit): string {
+  if (init?.method !== undefined) return init.method;
+  if (input instanceof Request) return input.method;
+  return "GET";
 }
 
 function kv(values: Map<string, string>) {

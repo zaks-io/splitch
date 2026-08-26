@@ -47,6 +47,30 @@ describe("Metric Event outbox Durable Object", () => {
     expect(outbox.send).not.toHaveBeenCalled();
   });
 
+  it("looks up an existing claim without publishing", async () => {
+    const outbox = makeOutbox();
+    outbox.seed({ ...row("entity-7"), queued: true });
+
+    const lookup = await outbox.lookup();
+
+    expect(lookup.status).toBe(200);
+    expect(await lookup.json()).toEqual({
+      fingerprint: "fp_entity-7",
+      eventDefinitionId: "ed_signed_up",
+      eventDefinitionVersionId: "edv_1",
+    });
+    expect(outbox.send).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when no claim exists yet", async () => {
+    const outbox = makeOutbox();
+
+    const lookup = await outbox.lookup();
+
+    expect(lookup.status).toBe(404);
+    expect(outbox.send).not.toHaveBeenCalled();
+  });
+
   it("rejects a different event reusing the same dedup key", async () => {
     const outbox = makeOutbox();
     const first = { ...row("entity-7"), queued: true };
@@ -111,6 +135,11 @@ function makeOutbox() {
       );
       expect(response.status).toBe(200);
       return (await response.json()) as { outcome: string };
+    },
+    lookup() {
+      return object.fetch(
+        new Request("https://metric-event-outbox.local/lookup", { method: "GET" }),
+      );
     },
   };
 }
