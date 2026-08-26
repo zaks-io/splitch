@@ -33,7 +33,7 @@ export function MetricForm({
     onDeleted,
     onSaved,
   });
-  const { busyAction, denominatorMetrics, draft, edit, mutationError, remove, shown, submit } =
+  const { busyAction, ratioOperandMetrics, draft, edit, mutationError, remove, shown, submit } =
     form;
 
   return (
@@ -75,7 +75,7 @@ export function MetricForm({
           />
         </Field>
         <MetricFactFields
-          denominatorMetrics={denominatorMetrics}
+          ratioOperandMetrics={ratioOperandMetrics}
           draft={draft}
           edit={edit}
           editing={Boolean(metric)}

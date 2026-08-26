@@ -51,7 +51,7 @@ export function MetricsTable({
                 <Badge variant="outline">{kindLabel(metric.kind)}</Badge>
               </TableCell>
               <TableCell>
-                <code className="font-mono text-sm">{metric.eventDefinitionId}</code>
+                <code className="font-mono text-sm">{fact(metric, names)}</code>
               </TableCell>
               <TableCell className="text-muted-foreground text-sm">
                 {aggregationField(metric, names)}
@@ -77,9 +77,16 @@ export function MetricsTable({
 function aggregationField(metric: Metric, names: Map<string, string>): string {
   if (metric.kind === "binomial") return "Event occurrence";
   if (metric.kind === "ratio") {
-    return names.get(metric.denominator?.metricId ?? "") ?? "Missing denominator";
+    const numerator = names.get(metric.numerator?.metricId ?? "") ?? "Missing numerator";
+    const denominator = names.get(metric.denominator?.metricId ?? "") ?? "Missing denominator";
+    return `${numerator} / ${denominator}`;
   }
   return metric.eventFieldName ?? "Missing value field";
+}
+
+function fact(metric: Metric, names: Map<string, string>): string {
+  if (metric.kind !== "ratio") return metric.eventDefinitionId ?? "Missing Event Definition";
+  return names.get(metric.numerator?.metricId ?? "") ?? "Missing numerator";
 }
 
 function kindLabel(kind: MetricKind): string {

@@ -133,7 +133,10 @@ selects only rows with the same App, Environment, `id_type`,
 applies that Event Definition match independently to the numerator and denominator component Metrics
 before forming the per-Entity pair. `id_type` must equal the Run's `targeting_key_type`;
 incompatible configuration fails loud. Field values for Count and Revenue resolve from each row's
-accepting Event Definition Version using `event_field_name`.
+accepting Event Definition Version using `event_field_name`. When that declared number field is
+optional and absent from an accepted event, that event contributes no value to the sum. The
+pipeline does not substitute zero for the missing field; the complete Exposure population still
+supplies the Entity's zero aggregate when no matching value exists.
 
 ## Measurement edits (no new Run)
 

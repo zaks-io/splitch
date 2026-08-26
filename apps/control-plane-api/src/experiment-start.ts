@@ -76,6 +76,7 @@ export async function prepareStart(
     metricsReady.value,
     treatmentVariants(allocation, variants.value),
     experiment.conversionWindowMs,
+    experiment.targetingKeyType,
     requestId,
   );
   if (!analysis.ok) return analysis;

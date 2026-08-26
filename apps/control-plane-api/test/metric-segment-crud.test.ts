@@ -46,11 +46,16 @@ describe("control-plane Metric and Segment CRUD", () => {
       eventDefinitionId: "purchase_completed",
       eventFieldName: "amount",
     });
+    const denominator = await createMetric(appId, jwt, {
+      key: "sessions",
+      kind: "binomial",
+      eventDefinitionId: "session_started",
+    });
     const ratio = await createMetric(appId, jwt, {
       key: "signup-rate",
       kind: "ratio",
-      eventDefinitionId: "signed_up",
-      denominator: { metricId: binomial.id },
+      numerator: { metricId: binomial.id },
+      denominator: { metricId: denominator.id },
     });
 
     const metrics = await request(h, "GET", `/apps/${appId}/metrics`, jwt);
@@ -59,7 +64,7 @@ describe("control-plane Metric and Segment CRUD", () => {
       ((await metrics.json()) as { items: Array<{ kind: string }> }).items
         .map((m) => m.kind)
         .sort(),
-    ).toEqual(["binomial", "count", "ratio", "revenue"]);
+    ).toEqual(["binomial", "binomial", "count", "ratio", "revenue"]);
 
     const metricPatch = await request(h, "PATCH", `/apps/${appId}/metrics/${binomial.id}`, jwt, {
       name: "Signup completed",
@@ -140,7 +145,7 @@ describe("control-plane Metric and Segment invariants", () => {
       name: "Bad ratio",
       key: "bad-ratio",
       kind: "ratio",
-      eventDefinitionId: "signed_up",
+      numerator: { metricId: metric.id },
       denominator: { metricId: otherMetric.id },
     });
     expect(crossAppRatio.status).toBe(400);
@@ -208,24 +213,27 @@ describe("control-plane Metric and Segment MCP derivation", () => {
 type MetricBody = {
   key: string;
   kind: string;
-  eventDefinitionId: string;
+  eventDefinitionId?: string;
   eventFieldName?: string;
+  numerator?: { metricId: string };
   denominator?: { metricId: string };
 };
 
 async function createMetric(appId: string, jwt: string, body: MetricBody) {
-  const eventDefinitionId = await ensureMetricEventDefinition(
-    h.bindings.d1,
-    appId,
-    body.eventDefinitionId,
-    NOW_ISO,
-    body.eventFieldName,
-  );
+  const eventDefinitionId = body.eventDefinitionId
+    ? await ensureMetricEventDefinition(
+        h.bindings.d1,
+        appId,
+        body.eventDefinitionId,
+        NOW_ISO,
+        body.eventFieldName,
+      )
+    : undefined;
   const res = await request(h, "POST", `/apps/${appId}/metrics`, jwt, {
     appId,
     name: body.key,
     ...body,
-    eventDefinitionId,
+    ...(eventDefinitionId ? { eventDefinitionId } : {}),
   });
   if (res.status !== 200) {
     throw new Error(`create metric failed ${res.status}: ${await res.text()}`);

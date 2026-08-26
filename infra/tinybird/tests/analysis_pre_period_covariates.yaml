@@ -1,51 +1,64 @@
 - name: binomial_pre_period_uses_real_metric_events
   description: A logical Metric Event inside the declared lookback and before first Exposure becomes one pre-period covariate.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 200
   expected_result: |
     {"targeting_key_hash":"tk_control_snapshot","metric_id":"metric_signup","pre_period_value":1,"covariate_source":"pre_period"}
 - name: missing_app_id_is_rejected
   description: A missing app_id fails loudly rather than reading another tenant's Metric Events.
-  parameters: "environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "app_id is required"
 - name: missing_environment_id_is_rejected
   description: A missing environment_id fails loudly rather than mixing Environments into one analysis.
-  parameters: "app_id=app_1&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "environment_id is required"
 - name: missing_experiment_id_is_rejected
   description: A missing experiment_id fails loudly rather than reading Exposures from another Experiment.
-  parameters: "app_id=app_1&environment_id=env_prod&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "experiment_id is required"
 - name: missing_run_id_is_rejected
   description: A missing run_id fails loudly rather than mixing Runs of the same Experiment into one analysis.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&metric_id=metric_signup&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "run_id is required"
 - name: missing_metric_id_is_rejected
   description: A missing metric_id fails loudly rather than assigning Metric Events to an inferred Metric.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_type=binomial&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "metric_id is required"
 - name: missing_event_definition_id_is_rejected
   description: A missing event_definition_id fails loudly rather than reading every Metric Event in the App.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "event_definition_id is required"
 - name: missing_lookback_ms_is_rejected
   description: A missing lookback_ms fails loudly rather than assuming a pre-period lookback the Run never declared.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "lookback_ms is required"
 - name: missing_from_ts_is_rejected
   description: A missing from_ts fails loudly rather than scanning an unbounded history.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&lookback_ms=86400000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&lookback_ms=86400000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "from_ts is required"
 - name: missing_to_ts_is_rejected
   description: A missing to_ts fails loudly rather than scanning past the requested boundary.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "to_ts is required"
+
+- name: count_pre_period_sums_the_frozen_numeric_field
+  description: Count Metric CUPED input uses present optional values from the same frozen numeric source binding before first Exposure.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_duration&metric_type=count&event_definition_id=event_definition_llm&event_field_name=duration_ms&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_control_snapshot","metric_id":"metric_duration","pre_period_value":800,"covariate_source":"pre_period"}
+- name: revenue_pre_period_sums_the_frozen_numeric_field
+  description: Revenue Metric CUPED input preserves decimal values before first Exposure.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_cost&metric_type=revenue&event_definition_id=event_definition_llm&event_field_name=cost_usd&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_control_snapshot","metric_id":"metric_cost","pre_period_value":0.008,"covariate_source":"pre_period"}

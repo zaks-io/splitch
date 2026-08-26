@@ -10,29 +10,36 @@ import {
 } from "@splitch/ui/components/select";
 import { type MetricDraft, type metricDraftIssues, metricIssueFor } from "#lib/metric-form-model";
 
-export function MetricDenominatorField({
+type OperandPath = "numeratorMetricId" | "denominatorMetricId";
+
+export function MetricOperandField({
   draft,
+  label,
   metrics,
   onEdit,
+  path,
   shown,
   workerError,
 }: {
   draft: MetricDraft;
+  label: string;
   metrics: Metric[];
   onEdit: (patch: Partial<MetricDraft>) => void;
+  path: OperandPath;
   shown: ReturnType<typeof metricDraftIssues>;
   workerError?: string;
 }) {
-  const error = metricIssueFor(shown, "denominatorMetricId") ?? workerError;
+  const error = metricIssueFor(shown, path) ?? workerError;
+  const inputId = `metric-${path === "numeratorMetricId" ? "numerator" : "denominator"}`;
   return (
     <Field data-disabled={metrics.length === 0} data-invalid={Boolean(error)}>
-      <FieldLabel htmlFor="metric-denominator">Denominator Metric</FieldLabel>
+      <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
       <Select
         disabled={metrics.length === 0}
-        onValueChange={(value) => onEdit({ denominatorMetricId: value ?? "" })}
-        value={draft.denominatorMetricId || null}
+        onValueChange={(value) => onEdit({ [path]: value ?? "" })}
+        value={draft[path] || null}
       >
-        <SelectTrigger aria-invalid={Boolean(error)} className="w-full" id="metric-denominator">
+        <SelectTrigger aria-invalid={Boolean(error)} className="w-full" id={inputId}>
           <SelectValue placeholder="Choose a Metric" />
         </SelectTrigger>
         <SelectContent>
@@ -48,9 +55,9 @@ export function MetricDenominatorField({
       {error ? <FieldError>{error}</FieldError> : null}
       {!error ? (
         <FieldDescription>
-          {metrics.length > 0
-            ? "The numerator event total is divided by this App-level Metric."
-            : "Create another Metric before defining a Ratio."}
+          {metrics.length >= 2
+            ? "Ratio operands use each Metric's frozen per-Entity values."
+            : "Create two non-Ratio Metrics before defining a Ratio."}
         </FieldDescription>
       ) : null}
     </Field>

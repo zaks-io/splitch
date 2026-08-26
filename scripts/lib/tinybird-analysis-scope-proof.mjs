@@ -149,14 +149,24 @@ function pipeNode(pipe, name) {
 }
 
 function predicate(node, source, params = {}) {
-  const occurrences = node.split(source).length - 1;
+  const normalizedNode = normalizeSql(node);
+  const normalizedSource = normalizeSql(source);
+  const occurrences = normalizedNode.split(normalizedSource).length - 1;
   if (occurrences === 0) return "1";
   if (occurrences > 1) throw new Error(`analysis scope predicate is duplicated: ${source}`);
-  let sql = source.replace(/^(?:WHERE|AND|ON)\s+/, "");
+  let sql = normalizedSource.replace(/^(?:WHERE|AND|ON)\s+/, "");
   for (const [name, value] of Object.entries(params)) {
     sql = sql.replace(`{{String(${name})}}`, `'${value}'`);
   }
   return sql;
+}
+
+function normalizeSql(sql) {
+  return sql
+    .replace(/\{\{\s*/gu, "{{")
+    .replace(/\s*\}\}/gu, "}}")
+    .replace(/\s+/gu, " ")
+    .trim();
 }
 
 /** One predicate held against the raw Metric Events it alone is meant to exclude. */

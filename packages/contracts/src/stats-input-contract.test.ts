@@ -2,10 +2,57 @@ import { describe, expect, it } from "vitest";
 import {
   ActivationRowSchema,
   DedupeExposureRowSchema,
+  MetricQueryConfigSchema,
   PerEntityMetricRowSchema,
   PrePeriodRowSchema,
   StatsInputSchema,
 } from "./stats-input-contract";
+
+describe("MetricQueryConfigSchema", () => {
+  const window = { window_duration_ms: 1_000, cuped_lookback_ms: 2_000 };
+
+  it("freezes Count and Revenue numeric fields", () => {
+    expect(
+      MetricQueryConfigSchema.parse({
+        ...window,
+        metric_id: "metric_cost",
+        metric_type: "revenue",
+        event_definition_id: "event_llm_call",
+        event_field_name: "cost",
+      }),
+    ).toMatchObject({ event_field_name: "cost" });
+    expect(
+      MetricQueryConfigSchema.safeParse({
+        ...window,
+        metric_id: "metric_cost",
+        metric_type: "revenue",
+        event_definition_id: "event_llm_call",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("freezes distinct non-Ratio source bindings as one Ratio config", () => {
+    expect(
+      MetricQueryConfigSchema.safeParse({
+        ...window,
+        metric_id: "metric_cost_per_token",
+        metric_type: "ratio",
+        numerator: {
+          metric_id: "metric_cost",
+          metric_type: "revenue",
+          event_definition_id: "event_llm_call",
+          event_field_name: "cost",
+        },
+        denominator: {
+          metric_id: "metric_tokens",
+          metric_type: "count",
+          event_definition_id: "event_llm_call",
+          event_field_name: "tokens",
+        },
+      }).success,
+    ).toBe(true);
+  });
+});
 
 const exposureRow = {
   app_id: "app_1",

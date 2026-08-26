@@ -84,7 +84,7 @@ export function useMetricForm({
 
   return {
     busyAction,
-    denominatorMetrics: metrics.filter(({ id }) => id !== metric?.id),
+    ratioOperandMetrics: metrics.filter(({ id, kind }) => id !== metric?.id && kind !== "ratio"),
     draft,
     edit,
     mutationError,

@@ -78,9 +78,11 @@ const BaseMetricSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   kind: MetricKindSchema,
-  eventDefinitionId: z.string(),
+  eventDefinitionId: z.string().nullable().optional(),
   eventFieldName: z.string().nullable().optional(),
+  numerator: MetricRefSchema.nullable().optional(),
   denominator: MetricRefSchema.nullable().optional(),
+  configurationStatus: z.enum(["ready", "needs_configuration"]).optional(),
   downsideThresholdPct: z.number().nullable().optional(),
   winsorize: z.boolean().nullable().optional(),
   winsorizePct: z.number().gt(0).max(100).nullable().optional(),
@@ -97,16 +99,50 @@ export const MetricSchema = BaseMetricSchema.refine(
     return true;
   },
   { message: "metric kind 'count' / 'revenue' requires eventFieldName" },
-).refine(
-  (m) => {
-    if (m.kind === "ratio") {
-      return m.denominator != null;
-    }
-    return true;
-  },
-  { message: "metric kind 'ratio' requires denominator" },
-);
+)
+  .refine((m) => m.kind === "ratio" || typeof m.eventDefinitionId === "string", {
+    message: "non-ratio metric requires eventDefinitionId",
+  })
+  .refine((m) => m.kind === "count" || m.kind === "revenue" || m.eventFieldName == null, {
+    message: "binomial and ratio metrics cannot carry eventFieldName",
+  })
+  .refine(
+    (m) =>
+      m.kind !== "ratio" ||
+      (m.eventDefinitionId == null && m.eventFieldName == null) ||
+      isLegacyRatioMetric(m),
+    { message: "ratio metric cannot carry a direct Event Definition binding" },
+  )
+  .refine(
+    (m) => {
+      if (m.kind === "ratio") {
+        return (m.numerator != null && m.denominator != null) || isLegacyRatioMetric(m);
+      }
+      return true;
+    },
+    { message: "metric kind 'ratio' requires numerator and denominator" },
+  )
+  .refine((m) => m.kind !== "ratio" || m.numerator?.metricId !== m.denominator?.metricId, {
+    message: "ratio numerator and denominator must be distinct Metrics",
+  })
+  .refine((m) => m.kind === "ratio" || (m.numerator == null && m.denominator == null), {
+    message: "non-ratio metrics cannot carry ratio operands",
+  })
+  .refine((m) => m.configurationStatus !== "needs_configuration" || isLegacyRatioMetric(m), {
+    message: "only an incomplete legacy ratio metric can need configuration",
+  });
 export type Metric = z.infer<typeof MetricSchema>;
+
+function isLegacyRatioMetric(metric: z.infer<typeof BaseMetricSchema>): boolean {
+  return (
+    metric.kind === "ratio" &&
+    metric.configurationStatus === "needs_configuration" &&
+    typeof metric.eventDefinitionId === "string" &&
+    metric.eventFieldName == null &&
+    metric.numerator == null &&
+    metric.denominator != null
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Experiment
