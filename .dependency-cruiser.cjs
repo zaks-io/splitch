@@ -1,3 +1,11 @@
+const TEST_ONLY_SOURCES = [
+  "\\.test\\.[cm]?[jt]sx?$",
+  "/(?:test|tests)/",
+  "-fixture\\.[cm]?[jt]sx?$",
+  "-local-harness\\.[cm]?[jt]sx?$",
+  "/test-bindings-pool\\.[cm]?[jt]sx?$",
+];
+
 module.exports = {
   forbidden: [
     {
@@ -8,8 +16,8 @@ module.exports = {
       from: {
         path: "^apps/([^/]+)/",
         pathNot: [
-          "\\.test\\.[cm]?[jt]sx?$",
-          "^apps/cli/src/(quickstart-local-harness|dark-launch-(experiment|http|scenario|negative-auth))\\.ts$",
+          ...TEST_ONLY_SOURCES,
+          "^apps/cli/src/dark-launch-(?:experiment|http|scenario|negative-auth)\\.ts$",
         ],
       },
       to: { path: "^apps/", pathNot: "^apps/$1/" },
@@ -48,7 +56,7 @@ module.exports = {
           "^packages/sdk/scripts/",
           "^packages/sdk/src/control-plane/",
           "^packages/sdk/src/local-evaluation/",
-          "\\.test\\.[cm]?[jt]sx?$",
+          ...TEST_ONLY_SOURCES,
           "^packages/sdk/src/contract-surface-assignability\\.ts$",
         ],
       },
@@ -109,11 +117,8 @@ module.exports = {
       severity: "error",
       comment:
         "The repo seam's internals (the raw client + scope-bound table builders) are private to packages/db. Outside code must import the public @splitch/db surface (createRepository, appScope, envScope), never reach into packages/db/src/repo/* directly — that is how the no-raw-client guarantee stays structural.",
-      from: { pathNot: "^packages/db/src/" },
-      to: {
-        path: "^packages/db/src/repo/",
-        pathNot: "^packages/db/src/repo/test-d1(?:-pool)?\\.ts$",
-      },
+      from: { pathNot: ["^packages/db/src/", ...TEST_ONLY_SOURCES] },
+      to: { path: "^packages/db/src/repo/" },
     },
     {
       name: "worker-runtime-does-not-own-storage",

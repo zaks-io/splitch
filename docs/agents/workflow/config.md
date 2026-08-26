@@ -65,7 +65,7 @@ in this config; refresh them from Linear during each workflow run.
   `tinybird:local`, `d1:migrate:local`, `d1:migrate:populated`).
 - CI gate: `.github/workflows/ci.yml` job `Verify` runs `pnpm secrets:range` and
   then affected `pnpm verify:ci` (`format:check`, `lint`, `typecheck`, `knip`,
-  `spec:lint`, `test:scripts`, `test`, `stats:golden`, `stats:property`,
+  `depcruise`, `spec:lint`, `test:scripts`, `test`, `stats:golden`, `stats:property`,
   `build`). The Tinybird and D1 validators are conditional steps inside the same
   job, each gated on `scripts/plan-ci-verification.mjs` outputs so it no-ops
   unless its inputs changed. A lockfile bump revalidates D1 (it shells out to

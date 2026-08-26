@@ -28,6 +28,8 @@ Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 >
 > The `security:full` script still runs the SAST + pin + audit + secret battery on demand. The rest of
 > this file describes the **target** gates; treat the table above as the current reality where they differ.
+> Dependency-cruiser is enforced in CI; its pre-push invocation remains parked with the other
+> heavier local gates.
 
 ## Decision
 
@@ -122,7 +124,8 @@ run the matching root script locally, fix the failure, and rerun `verify:push` b
 
 ## CI policy
 
-The required CI check runs on Blacksmith and executes the affected `verify:ci` graph. The workflow
+The required CI check runs on Blacksmith and executes the affected `verify:ci` graph, including
+dependency-cruiser over the repository's app and package sources. The workflow
 adds `tinybird:local`, `d1:migrate:local`, and `d1:migrate:populated` when their inputs change;
 missing comparison evidence fails closed to all three validators and the full, still cache-first,
 graph (only `nightly-verify` runs uncached). Hosted
