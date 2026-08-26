@@ -156,6 +156,8 @@ function writeFailure(
         reason: failure.reason,
         availableVariantNames: failure.availableVariantNames,
       };
+    case "TARGETING_RULE_ID_CONFLICT":
+      return { ...identity, reason: failure.reason, targetingRules: failure.targetingRules };
     default:
       return { ...identity, reason: failure.reason };
   }

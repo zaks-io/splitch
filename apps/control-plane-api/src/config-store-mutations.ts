@@ -16,6 +16,7 @@ import {
   targetingRuleRows,
   writeSnapshotAndBroadcast,
 } from "./config-store-shared";
+import { targetingRulePersistFailure } from "./config-store-targeting-rules";
 import { randomHex } from "./credential-cache";
 import { baselineIsUnresolvable, mintSalt } from "./flag-config-rollout";
 import { SegmentNotFoundError } from "./targeting-rule-resolution";
@@ -286,7 +287,9 @@ async function commitPromotion(
       configPatch,
       input.approval,
     );
-    if (!replaced) return { ok: false, reason: "FLAG_NOT_FOUND" };
+    if (!replaced.ok) {
+      return targetingRulePersistFailure(replaced, prepared.targetingRules, "FLAG_NOT_FOUND");
+    }
   } else if (
     !(await deps.repo.flags.updateFlagConfig(
       targetScope,

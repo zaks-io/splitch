@@ -172,6 +172,12 @@ Rules may only reference Variants in this Environment's available set. Subject t
 Environment, with the same `RUN_FROZEN` refusal and the same ordering ahead of the Policy gate.
 An optional `segmentId` must name a Segment in the same App. Publication AND-merges that Segment's
 Conditions with the rule's direct Conditions and writes only resolved Conditions to KV.
+Rule `id` identity is scoped to this Flag Configuration
+(`app_id`, `environment_id`, `flag_id`, `id`). The same `id` may be reused on another Flag or
+Environment. A repeated `id` inside the submitted `targetingRules` list is `VALIDATION_ERROR` at
+`["body", "targetingRules", N, "id"]`, checked at the request schema before Policy evaluation and
+before an Approval Request is created. A persist uniqueness race on that same composite key is the
+same typed `VALIDATION_ERROR`, never `INTERNAL_SERVER_ERROR`.
 Returns the Flag Configuration fields plus `approvalRequest: ApprovalRequest | null` alongside
 (not wrapped in `config`). The request is null under `allow` and applied under `confirm`.
 
@@ -205,8 +211,9 @@ availability"** sends `{ availability: ["variant_name"] }`. There is no separate
 nothing else. A Targeting Rule's own `percentage_rollout` is part of that rule and moves only under
 `select.targeting`, which moves each rule whole (conditions and percentage together). The two never
 overlap: a rule's percentage is the split of that one rule's matched traffic and is meaningless apart
-from its conditions, and rules have no cross-Environment identity to match on anyway (`priority` is a
-sort key, and source and target rule lists routinely differ — that is what Promotion is for).
+from its conditions. A rule `id` is scoped to one Flag Configuration, so Promotion may preserve the
+same `id` in the target Environment; `priority` remains a sort key, and source and target rule lists
+routinely differ.
 
 The baseline moves as a **percentage only**: the target keeps its own salt, or mints a fresh one if it
 had no baseline. Adopting the source's salt would reshuffle every already-bucketed Entity in the target.

@@ -12,6 +12,7 @@ import {
   targetingRuleRows,
   writeSnapshotAndBroadcast,
 } from "./config-store-shared";
+import { targetingRulePersistFailure } from "./config-store-targeting-rules";
 import { baselineIsUnresolvable } from "./flag-config-rollout";
 import { diffEntriesTouch } from "./flag-config-run-freeze-proposal";
 import { resolveTargetingRules } from "./targeting-rule-resolution";
@@ -53,19 +54,26 @@ export async function applyApprovedFlagConfig(
   if (!rulesChanged && !approvedPatchMovesConfig(patch)) {
     return { ok: false, reason: "APPROVAL_EMPTY_CHANGE" };
   }
-  const updated = rulesChanged
-    ? await deps.repo.flags.replaceTargetingRules(
-        scope,
-        input.flagId,
-        targetingRuleRows(input.proposed.targetingRules, new Date(input.approval.reviewedAt)),
-        patch,
-        input.approval,
-      )
-    : await deps.repo.flags.updateFlagConfig(scope, input.flagId, patch, input.approval);
-  // The Configuration was read above, so null here is the guarded write saying
-  // it landed nothing, not a missing Flag. Returning before the KV write keeps
-  // the edge from publishing a snapshot for a change that never applied.
-  if (!updated) return { ok: false, reason: "APPROVAL_NOT_APPLIED" };
+  if (rulesChanged) {
+    const replaced = await deps.repo.flags.replaceTargetingRules(
+      scope,
+      input.flagId,
+      targetingRuleRows(input.proposed.targetingRules, new Date(input.approval.reviewedAt)),
+      patch,
+      input.approval,
+    );
+    if (!replaced.ok) {
+      return targetingRulePersistFailure(
+        replaced,
+        input.proposed.targetingRules,
+        "APPROVAL_NOT_APPLIED",
+      );
+    }
+  } else if (
+    !(await deps.repo.flags.updateFlagConfig(scope, input.flagId, patch, input.approval))
+  ) {
+    return { ok: false, reason: "APPROVAL_NOT_APPLIED" };
+  }
   const committed = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
   if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
   return writeSnapshotAndBroadcast(deps, scope, input.flagId, committed);

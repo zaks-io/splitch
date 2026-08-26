@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapApprovedFlagConfigFailure } from "./approval-review-application";
+import { mapApprovedFlagConfigFailure } from "./map-approved-flag-config-failure";
 
 /**
  * SPL-304. Deleting the terminal CHANGED_FIELDS_UNDETERMINED branch would fall
@@ -40,6 +40,44 @@ describe("mapApprovedFlagConfigFailure", () => {
     expect(outcome).toMatchObject({
       ok: false,
       unapplicable: { code: "RUN_FROZEN" },
+    });
+  });
+
+  it("maps a Targeting Rule id conflict to VALIDATION_ERROR, not 500", () => {
+    expect(
+      mapApprovedFlagConfigFailure(
+        {
+          ok: false,
+          reason: "TARGETING_RULE_ID_CONFLICT",
+          targetingRules: [
+            {
+              id: "rule-admin",
+              flagId: "flag_1",
+              priority: 0,
+              conditions: [{ attribute: "plan", operator: "eq", value: "pro" }],
+              variantId: "var_1",
+            },
+            {
+              id: "rule-admin",
+              flagId: "flag_1",
+              priority: 1,
+              conditions: [{ attribute: "plan", operator: "eq", value: "pro" }],
+              variantId: "var_1",
+            },
+          ],
+        },
+        "flag_1",
+        "env_1",
+      ),
+    ).toMatchObject({
+      ok: false,
+      targetState: "rolled_back",
+      error: {
+        code: "VALIDATION_ERROR",
+        details: {
+          issues: [{ path: ["body", "targetingRules", "1", "id"] }],
+        },
+      },
     });
   });
 

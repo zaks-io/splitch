@@ -118,7 +118,10 @@ export const segments = sqliteTable(
 export const targetingRules = sqliteTable(
   "targeting_rules",
   {
-    id: text("id").primaryKey(),
+    // Identity is (app_id, environment_id, flag_id, id): the same rule id may
+    // exist on another Flag or Environment. It must stay unique inside one
+    // Flag Configuration (SPL-450).
+    id: text("id").notNull(),
     appId: text("app_id")
       .notNull()
       .references(() => apps.id),
@@ -140,6 +143,7 @@ export const targetingRules = sqliteTable(
     updatedAt: updatedAt(),
   },
   (t) => [
+    uniqueIndex("targeting_rules_scope_id_unique").on(t.appId, t.environmentId, t.flagId, t.id),
     foreignKey({
       columns: [t.appId, t.segmentId],
       foreignColumns: [segments.appId, segments.id],

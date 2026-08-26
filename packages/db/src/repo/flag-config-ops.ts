@@ -14,6 +14,21 @@ import { idBatches } from "./id-batches";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
 import type { ScopedTable } from "./scoped-table";
+import { hasUniqueViolationMessage, uniqueViolationMessage } from "./unique-violation";
+
+export type ReplaceTargetingRulesResult =
+  | { ok: true; config: typeof flagConfigs.$inferSelect }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "id_conflict" };
+
+/**
+ * SQLite reports a composite unique-index violation by COLUMN LIST, not by
+ * index name. Matching the whole constraint string keeps this from swallowing
+ * a different fault on the same columns.
+ */
+const TARGETING_RULE_ID_UNIQUE_VIOLATION =
+  "UNIQUE constraint failed: targeting_rules.app_id, targeting_rules.environment_id, targeting_rules.flag_id, targeting_rules.id";
+const TARGETING_RULE_ID_UNIQUE_MESSAGE = uniqueViolationMessage(TARGETING_RULE_ID_UNIQUE_VIOLATION);
 
 /**
  * Per-Environment Flag CONFIGURATION reads and writes (ADR-0027), split out of
@@ -21,7 +36,6 @@ import type { ScopedTable } from "./scoped-table";
  * Every operation takes an `EnvScope`, so the tenant boundary is the same one
  * `scopedTable` enforces for the rest of the domain.
  */
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: these operations share the same scoped config and targeting-rule tables
 export function makeFlagConfigOps(
   db: Db,
   flagConfigsTable: ScopedTable<typeof flagConfigs>,
@@ -183,96 +197,149 @@ export function makeFlagConfigOps(
     async replaceTargetingRules(
       scope: EnvScope,
       flagId: string,
-      rows: Array<Omit<typeof targetingRules.$inferInsert, "appId" | "environmentId" | "flagId">>,
-      configPatch: Partial<
-        Pick<
-          typeof flagConfigs.$inferInsert,
-          "enabled" | "availableVariantNames" | "rollout" | "updatedAt" | "updatedBy" | "updatedVia"
-        >
-      >,
+      rows: TargetingRuleWrite[],
+      configPatch: FlagConfigWritePatch,
       approval?: ApprovalCommit,
-    ): Promise<typeof flagConfigs.$inferSelect | null> {
+    ): Promise<ReplaceTargetingRulesResult> {
       assertMintedScope(scope);
       const current = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
-      if (!current) return null;
-
-      if (approval) {
-        // The Review row is this attempt's unique evidence: the rule writes ride
-        // along with it, and it is itself bound to the config bump by changes().
-        const evidence = reviewRecorded(db, scope, approval);
-        const guardedDelete = db
-          .delete(targetingRules)
-          .where(and(scopedTargetingRule(scope, flagId), evidence))
-          .returning();
-        const guardedInserts = rows.map((row) =>
-          db.insert(targetingRules).select(
-            db
-              .select({
-                id: sql<string>`${row.id}`.as("id"),
-                appId: sql<string>`${scope.appId}`.as("app_id"),
-                environmentId: sql<string>`${scope.environmentId}`.as("environment_id"),
-                flagId: sql<string>`${flagId}`.as("flag_id"),
-                priority: sql<number>`${row.priority}`.as("priority"),
-                conditions: sql<string>`${row.conditions}`.as("conditions"),
-                segmentId: sql<string | null>`${row.segmentId ?? null}`.as("segment_id"),
-                variantId: sql<string | null>`${row.variantId ?? null}`.as("variant_id"),
-                percentageRollout: sql<string | null>`${row.percentageRollout ?? null}`.as(
-                  "percentage_rollout",
-                ),
-                createdAt: sql<string>`${row.createdAt}`.as("created_at"),
-                updatedAt: sql<string>`${row.updatedAt}`.as("updated_at"),
-              })
-              .from(flagConfigs)
-              .where(and(scopedFlagConfig(scope, flagId), evidence))
-              .limit(1),
-          ),
-        );
-        const guardedUpdate = db
-          .update(flagConfigs)
-          .set({ ...configPatch, version: current.version + 1 })
-          .where(
-            and(
-              scopedFlagConfig(scope, flagId),
-              eq(flagConfigs.version, current.version),
-              approvalPendingCondition(db, scope, approval),
-            ),
+      if (!current) return { ok: false, reason: "not_found" };
+      return approval
+        ? replaceApprovedTargetingRules(
+            db,
+            flagConfigsTable,
+            scope,
+            flagId,
+            current.version,
+            rows,
+            configPatch,
+            approval,
           )
-          .returning();
-        await db.batch([
-          guardedUpdate,
-          appliedReviewInsert(db, scope, approval),
-          guardedDelete,
-          ...guardedInserts,
-          appliedRequestUpdate(db, scope, approval),
-        ] as unknown as Parameters<Db["batch"]>[0]);
-        if (!(await approvalReviewLanded(db, scope, approval))) return null;
-        return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
-      }
-
-      const batch = [
-        db.delete(targetingRules).where(scopedTargetingRule(scope, flagId)).returning(),
-        ...rows.map((row) =>
-          db
-            .insert(targetingRules)
-            .values({
-              ...row,
-              appId: scope.appId,
-              environmentId: scope.environmentId,
-              flagId,
-            })
-            .returning(),
-        ),
-        db
-          .update(flagConfigs)
-          .set({ ...configPatch, version: sql`${flagConfigs.version} + 1` })
-          .where(scopedFlagConfig(scope, flagId))
-          .returning(),
-      ];
-      const results = await db.batch(batch as unknown as Parameters<Db["batch"]>[0]);
-      const updated = results.at(-1) as (typeof flagConfigs.$inferSelect)[] | undefined;
-      return updated?.[0] ?? null;
+        : replaceDirectTargetingRules(db, scope, flagId, rows, configPatch);
     },
   };
+}
+
+type TargetingRuleWrite = Omit<
+  typeof targetingRules.$inferInsert,
+  "appId" | "environmentId" | "flagId"
+>;
+type FlagConfigWritePatch = Partial<
+  Pick<
+    typeof flagConfigs.$inferInsert,
+    "enabled" | "availableVariantNames" | "rollout" | "updatedAt" | "updatedBy" | "updatedVia"
+  >
+>;
+
+async function replaceApprovedTargetingRules(
+  db: Db,
+  flagConfigsTable: ScopedTable<typeof flagConfigs>,
+  scope: EnvScope,
+  flagId: string,
+  currentVersion: number,
+  rows: TargetingRuleWrite[],
+  configPatch: FlagConfigWritePatch,
+  approval: ApprovalCommit,
+): Promise<ReplaceTargetingRulesResult> {
+  // The Review row is this attempt's unique evidence: the rule writes ride
+  // along with it, and it is itself bound to the config bump by changes().
+  const evidence = reviewRecorded(db, scope, approval);
+  const guardedDelete = db
+    .delete(targetingRules)
+    .where(and(scopedTargetingRule(scope, flagId), evidence))
+    .returning();
+  const guardedInserts = rows.map((row) =>
+    db.insert(targetingRules).select(
+      db
+        .select({
+          id: sql<string>`${row.id}`.as("id"),
+          appId: sql<string>`${scope.appId}`.as("app_id"),
+          environmentId: sql<string>`${scope.environmentId}`.as("environment_id"),
+          flagId: sql<string>`${flagId}`.as("flag_id"),
+          priority: sql<number>`${row.priority}`.as("priority"),
+          conditions: sql<string>`${row.conditions}`.as("conditions"),
+          segmentId: sql<string | null>`${row.segmentId ?? null}`.as("segment_id"),
+          variantId: sql<string | null>`${row.variantId ?? null}`.as("variant_id"),
+          percentageRollout: sql<string | null>`${row.percentageRollout ?? null}`.as(
+            "percentage_rollout",
+          ),
+          createdAt: sql<string>`${row.createdAt}`.as("created_at"),
+          updatedAt: sql<string>`${row.updatedAt}`.as("updated_at"),
+        })
+        .from(flagConfigs)
+        .where(and(scopedFlagConfig(scope, flagId), evidence))
+        .limit(1),
+    ),
+  );
+  const guardedUpdate = db
+    .update(flagConfigs)
+    .set({ ...configPatch, version: currentVersion + 1 })
+    .where(
+      and(
+        scopedFlagConfig(scope, flagId),
+        eq(flagConfigs.version, currentVersion),
+        approvalPendingCondition(db, scope, approval),
+      ),
+    )
+    .returning();
+  try {
+    await db.batch([
+      guardedUpdate,
+      appliedReviewInsert(db, scope, approval),
+      guardedDelete,
+      ...guardedInserts,
+      appliedRequestUpdate(db, scope, approval),
+    ] as unknown as Parameters<Db["batch"]>[0]);
+  } catch (cause) {
+    return targetingRuleWriteFailure(cause);
+  }
+  if (!(await approvalReviewLanded(db, scope, approval))) {
+    return { ok: false, reason: "not_found" };
+  }
+  const approved = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
+  return approved ? { ok: true, config: approved } : { ok: false, reason: "not_found" };
+}
+
+async function replaceDirectTargetingRules(
+  db: Db,
+  scope: EnvScope,
+  flagId: string,
+  rows: TargetingRuleWrite[],
+  configPatch: FlagConfigWritePatch,
+): Promise<ReplaceTargetingRulesResult> {
+  const batch = [
+    db.delete(targetingRules).where(scopedTargetingRule(scope, flagId)).returning(),
+    ...rows.map((row) =>
+      db
+        .insert(targetingRules)
+        .values({
+          ...row,
+          appId: scope.appId,
+          environmentId: scope.environmentId,
+          flagId,
+        })
+        .returning(),
+    ),
+    db
+      .update(flagConfigs)
+      .set({ ...configPatch, version: sql`${flagConfigs.version} + 1` })
+      .where(scopedFlagConfig(scope, flagId))
+      .returning(),
+  ];
+  try {
+    const results = await db.batch(batch as unknown as Parameters<Db["batch"]>[0]);
+    const updated = results.at(-1) as (typeof flagConfigs.$inferSelect)[] | undefined;
+    return updated?.[0] ? { ok: true, config: updated[0] } : { ok: false, reason: "not_found" };
+  } catch (cause) {
+    return targetingRuleWriteFailure(cause);
+  }
+}
+
+function targetingRuleWriteFailure(cause: unknown): ReplaceTargetingRulesResult {
+  if (hasUniqueViolationMessage(cause, TARGETING_RULE_ID_UNIQUE_MESSAGE)) {
+    return { ok: false, reason: "id_conflict" };
+  }
+  throw cause;
 }
 
 export function scopedTargetingRule(scope: EnvScope, flagId: string) {
