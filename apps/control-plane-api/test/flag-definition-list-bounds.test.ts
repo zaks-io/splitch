@@ -7,7 +7,6 @@ import {
   makeAppForRepo,
   makeFlagDefinitionHarness,
   NOW_ISO,
-  request,
 } from "../src/flag-definition-test-harness";
 import { FLAG_LIST_READ_LIMIT } from "../src/overview-thresholds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
@@ -62,9 +61,14 @@ async function seedFlags(appId: string, count: number): Promise<void> {
   }
 }
 
-async function listFlags(appId: string, repo?: Repository): Promise<FlagListBody> {
+async function listFlags(
+  appId: string,
+  repo?: Repository,
+  environmentId?: string,
+): Promise<FlagListBody> {
   const app = repo ? makeAppForRepo(h, repo) : h.app;
-  const res = await app.request(`/apps/${appId}/flags`, {
+  const query = environmentId ? `?environmentId=${encodeURIComponent(environmentId)}` : "";
+  const res = await app.request(`/apps/${appId}/flags${query}`, {
     headers: { authorization: `Bearer ${await appToken(h, appId)}` },
   });
   if (res.status !== 200) throw new Error(`list flags failed ${res.status}: ${await res.text()}`);
@@ -154,3 +158,42 @@ describe("control-plane Flag list read bound", () => {
     expect(listed.items.every((item) => item.variants.length >= 1)).toBe(true);
   });
 });
+
+describe("control-plane Flag list read concurrency", () => {
+  it("starts Environment summaries while the Variant catalog is pending", async () => {
+    const createdApp = await createDefaultApp(h);
+    const environment = createdApp.environments[0];
+    if (!environment) throw new Error("created App has no Environment");
+    await seedFlags(createdApp.app.id, 1);
+    const repo = createRepository(h.bindings.d1);
+    const catalogStarted = deferred<void>();
+    const releaseCatalog = deferred<void>();
+    const originalCatalogRead = repo.flags.listVariantsForFlags.bind(repo.flags);
+    const listVariantsForFlags = vi.fn(async (...args) => {
+      catalogStarted.resolve();
+      await releaseCatalog.promise;
+      return originalCatalogRead(...args);
+    });
+    const listFlagConfigsByFlagIds = vi.fn(repo.flags.listFlagConfigsByFlagIds.bind(repo.flags));
+    const spied: Repository = {
+      ...repo,
+      flags: { ...repo.flags, listVariantsForFlags, listFlagConfigsByFlagIds },
+    };
+
+    const listed = listFlags(createdApp.app.id, spied, environment.id);
+    await catalogStarted.promise;
+
+    expect(listFlagConfigsByFlagIds).toHaveBeenCalledOnce();
+    releaseCatalog.resolve();
+    await expect(listed).resolves.toMatchObject({ items: [{ key: "bulk-flag-0000" }] });
+  });
+});
+
+function deferred<T>() {
+  let resolvePromise: ((value: T | PromiseLike<T>) => void) | undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  if (!resolvePromise) throw new Error("deferred promise was not initialized");
+  return { promise, resolve: resolvePromise };
+}

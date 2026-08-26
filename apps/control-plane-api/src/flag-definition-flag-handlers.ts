@@ -60,14 +60,16 @@ export async function listFlags(
   // ONE catalog read for the whole page. Resolving Variants per row made this
   // list cost a D1 query per Flag, on exactly the App large enough to be sent
   // here in the first place.
-  const catalogs = await deps.repo.flags.listVariantsForFlags(
+  const catalogsResult = deps.repo.flags.listVariantsForFlags(
     scope,
     rows.map((row) => row.id),
   );
   const items =
     environmentId === undefined
-      ? Promise.resolve(rows.map((row) => flagFrom(row, catalogs.get(row.id) ?? [])))
-      : withEnvironmentConfigurations(deps, appId, environmentId, rows, catalogs);
+      ? catalogsResult.then((catalogs) =>
+          rows.map((row) => flagFrom(row, catalogs.get(row.id) ?? [])),
+        )
+      : withEnvironmentConfigurations(deps, appId, environmentId, rows, catalogsResult);
   return Response.json({
     items: await items,
     readTruncated,
@@ -80,11 +82,12 @@ async function withEnvironmentConfigurations(
   appId: string,
   environmentId: string,
   rows: Awaited<ReturnType<FlagDefinitionDeps["repo"]["flags"]["listFlagPage"]>>,
-  catalogs: Awaited<ReturnType<FlagDefinitionDeps["repo"]["flags"]["listVariantsForFlags"]>>,
+  catalogsResult: ReturnType<FlagDefinitionDeps["repo"]["flags"]["listVariantsForFlags"]>,
 ) {
   const scope = envScope(appId, environmentId);
   const flagIds = rows.map((row) => row.id);
-  const [configs, targetingRules, experiments] = await Promise.all([
+  const [catalogs, configs, targetingRules, experiments] = await Promise.all([
+    catalogsResult,
     deps.repo.flags.listFlagConfigsByFlagIds(scope, flagIds),
     deps.repo.flags.listTargetingRulesByFlagIds(scope, flagIds),
     deps.repo.experiments.listRunningExperimentsForFlags(scope, flagIds),

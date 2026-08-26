@@ -100,4 +100,46 @@ describe("$orgSlug/$appSlug loader", () => {
       },
     });
   });
+
+  it("does not put visit bookkeeping in front of the matrix read", async () => {
+    loadAppScopedSessionMock.mockResolvedValue({
+      kind: "ok",
+      context: {
+        scope: {
+          appId: "app_1",
+          appRole: "member",
+          orgId: "org_1",
+          environments: [{ environmentId: "env_dev", env: "dev" }],
+        },
+        session: { userId: "user_1" },
+        navigation: { orgs: [] },
+      },
+    });
+    const visitStarted = deferred<void>();
+    const releaseVisit = deferred<void>();
+    recordLastVisitedScopeMock.mockImplementation(async () => {
+      visitStarted.resolve();
+      await releaseVisit.promise;
+    });
+    loadControlPanelFlagsMatrixMock.mockResolvedValue({
+      ok: true,
+      data: { rows: [], readLimit: 200, readTruncated: false },
+    });
+
+    const result = runLoader();
+    await visitStarted.promise;
+
+    expect(loadControlPanelFlagsMatrixMock).toHaveBeenCalledOnce();
+    releaseVisit.resolve();
+    await expect(result).resolves.toMatchObject({ matrix: { rows: [] } });
+  });
 });
+
+function deferred<T>() {
+  let resolvePromise: ((value: T | PromiseLike<T>) => void) | undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  if (!resolvePromise) throw new Error("deferred promise was not initialized");
+  return { promise, resolve: resolvePromise };
+}
