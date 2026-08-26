@@ -105,6 +105,33 @@ describe("MetricSchema — ratio requires two operand Metrics", () => {
     });
   });
 
+  it("parses a legacy ratio that also carries an event field", () => {
+    // Ratio writes before operands existed accepted eventFieldName, so rejecting
+    // it here would turn a list read into a 500 the caller cannot repair.
+    const m = MetricSchema.parse({
+      ...baseMetric,
+      kind: "ratio",
+      configurationStatus: "needs_configuration",
+      eventFieldName: "amount",
+      denominator: { metricId: "metric_denom" },
+    });
+
+    expect(m.eventFieldName).toBe("amount");
+  });
+
+  it("rejects a complete ratio that carries an event field", () => {
+    expect(
+      MetricSchema.safeParse({
+        ...baseMetric,
+        kind: "ratio",
+        eventDefinitionId: null,
+        eventFieldName: "amount",
+        numerator: { metricId: "metric_num" },
+        denominator: { metricId: "metric_denom" },
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects ratio without its operands", () => {
     expect(MetricSchema.safeParse({ ...baseMetric, kind: "ratio" }).success).toBe(false);
   });

@@ -65,9 +65,9 @@ test.describe("App-level Metrics", () => {
     await createMetric(page, {
       name: `Signup rate ${suffix}`,
       key: ratioKey,
-      eventDefinitionId: "signed_up",
       kind: "Ratio",
-      denominator: `Signups ${suffix}`,
+      numerator: `Signups ${suffix}`,
+      denominator: `Order items ${suffix}`,
     });
 
     for (const [key, kind] of [
@@ -79,7 +79,7 @@ test.describe("App-level Metrics", () => {
       await expect(page.locator(`[data-metric-key='${key}']`)).toContainText(kind);
     }
     await expect(page.locator(`[data-metric-key='${ratioKey}']`)).toContainText(
-      `Signups ${suffix}`,
+      `Signups ${suffix} / Order items ${suffix}`,
     );
     await captureThemeScreenshots(page, testInfo, "metrics-crud-list");
 
@@ -118,9 +118,11 @@ test.describe("App-level Metrics", () => {
 type MetricFormInput = {
   name: string;
   key: string;
-  eventDefinitionId: string;
   kind: "Binomial" | "Count" | "Revenue" | "Ratio";
+  /** Non-Ratio kinds only: a Ratio binds two Metrics, not an Event Definition. */
+  eventDefinitionId?: string;
   valueField?: string;
+  numerator?: string;
   denominator?: string;
 };
 
@@ -133,10 +135,14 @@ async function createMetric(page: import("@playwright/test").Page, input: Metric
     await dialog.getByLabel("Aggregation type").click();
     await page.getByRole("option", { name: input.kind }).click();
   }
-  await dialog
-    .getByLabel(input.kind === "Ratio" ? "Numerator event name" : "Event name")
-    .fill(input.eventDefinitionId);
+  if (input.eventDefinitionId) {
+    await dialog.getByLabel("Event name").fill(input.eventDefinitionId);
+  }
   if (input.valueField) await dialog.getByLabel("Event value field").fill(input.valueField);
+  if (input.numerator) {
+    await dialog.getByLabel("Numerator Metric").click();
+    await page.getByRole("option", { name: input.numerator }).click();
+  }
   if (input.denominator) {
     await dialog.getByLabel("Denominator Metric").click();
     await page.getByRole("option", { name: input.denominator }).click();

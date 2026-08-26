@@ -32,10 +32,10 @@ export function MetricOperandField({
   const error = metricIssueFor(shown, path) ?? workerError;
   const inputId = `metric-${path === "numeratorMetricId" ? "numerator" : "denominator"}`;
   return (
-    <Field data-disabled={metrics.length === 0} data-invalid={Boolean(error)}>
+    <Field data-disabled={metrics.length < 2} data-invalid={Boolean(error)}>
       <FieldLabel htmlFor={inputId}>{label}</FieldLabel>
       <Select
-        disabled={metrics.length === 0}
+        disabled={metrics.length < 2}
         onValueChange={(value) => onEdit({ [path]: value ?? "" })}
         value={draft[path] || null}
       >

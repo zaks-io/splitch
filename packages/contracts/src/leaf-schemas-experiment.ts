@@ -103,9 +103,14 @@ export const MetricSchema = BaseMetricSchema.refine(
   .refine((m) => m.kind === "ratio" || typeof m.eventDefinitionId === "string", {
     message: "non-ratio metric requires eventDefinitionId",
   })
-  .refine((m) => m.kind === "count" || m.kind === "revenue" || m.eventFieldName == null, {
-    message: "binomial and ratio metrics cannot carry eventFieldName",
-  })
+  .refine(
+    (m) =>
+      m.kind === "count" ||
+      m.kind === "revenue" ||
+      m.eventFieldName == null ||
+      isLegacyRatioMetric(m),
+    { message: "binomial and ratio metrics cannot carry eventFieldName" },
+  )
   .refine(
     (m) =>
       m.kind !== "ratio" ||
@@ -133,12 +138,18 @@ export const MetricSchema = BaseMetricSchema.refine(
   });
 export type Metric = z.infer<typeof MetricSchema>;
 
+/**
+ * A Ratio row written before operands existed: a direct Event Definition
+ * binding plus a denominator and no numerator. Such a row is readable but not
+ * analysable, which `configurationStatus` reports. Pre-operand writes accepted
+ * `eventFieldName` on a Ratio, so a legacy row may carry one; rejecting it here
+ * would turn a list read into a 500 with no API path to repair the row.
+ */
 function isLegacyRatioMetric(metric: z.infer<typeof BaseMetricSchema>): boolean {
   return (
     metric.kind === "ratio" &&
     metric.configurationStatus === "needs_configuration" &&
     typeof metric.eventDefinitionId === "string" &&
-    metric.eventFieldName == null &&
     metric.numerator == null &&
     metric.denominator != null
   );

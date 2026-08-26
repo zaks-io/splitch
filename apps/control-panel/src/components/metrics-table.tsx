@@ -51,7 +51,7 @@ export function MetricsTable({
                 <Badge variant="outline">{kindLabel(metric.kind)}</Badge>
               </TableCell>
               <TableCell>
-                <code className="font-mono text-sm">{fact(metric, names)}</code>
+                <code className="font-mono text-sm">{fact(metric)}</code>
               </TableCell>
               <TableCell className="text-muted-foreground text-sm">
                 {aggregationField(metric, names)}
@@ -84,9 +84,11 @@ function aggregationField(metric: Metric, names: Map<string, string>): string {
   return metric.eventFieldName ?? "Missing value field";
 }
 
-function fact(metric: Metric, names: Map<string, string>): string {
-  if (metric.kind !== "ratio") return metric.eventDefinitionId ?? "Missing Event Definition";
-  return names.get(metric.numerator?.metricId ?? "") ?? "Missing numerator";
+// A Ratio has no Event Definition of its own; its operands are the Aggregation
+// field. Repeating the numerator Metric name here read as a Fact identifier.
+function fact(metric: Metric): string {
+  if (metric.eventDefinitionId) return metric.eventDefinitionId;
+  return metric.kind === "ratio" ? "Derived" : "Missing Event Definition";
 }
 
 function kindLabel(kind: MetricKind): string {
