@@ -81,6 +81,7 @@ describe("the approved flag-configuration write distinguishes its failure reason
     if (!row) throw new Error("missing Approval Request");
 
     const result = await applyApprovedFlagConfig(deps(), {
+      actor: { ref: "user_not_a_member_at_all", via: "approval" },
       appId: ids.appId,
       environmentId: ids.environmentId,
       flagId: ids.flagId,
@@ -102,6 +103,7 @@ describe("the approved flag-configuration write distinguishes its failure reason
     if (!row) throw new Error("missing Approval Request");
 
     const result = await applyApprovedFlagConfig(deps(), {
+      actor: { ref: "user_not_a_member_at_all", via: "approval" },
       appId: ids.appId,
       environmentId: ids.environmentId,
       flagId: "flag_does_not_exist",
@@ -128,6 +130,7 @@ describe("the approved flag-configuration write distinguishes its failure reason
     // before this gate can prove the ADR-0036 harm (version bump + applied with
     // no field write). Assert version stays put after the empty-change refusal.
     const result = await applyApprovedFlagConfig(deps(), {
+      actor: { ref: USER_ID, via: "approval" },
       appId: ids.appId,
       environmentId: ids.environmentId,
       flagId: ids.flagId,

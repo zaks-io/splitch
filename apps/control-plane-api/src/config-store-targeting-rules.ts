@@ -1,4 +1,3 @@
-import type { TargetingRule } from "@splitch/contracts";
 import { type EnvScope, envScope } from "@splitch/db";
 import { targetingFreeze } from "./config-store-freeze";
 import {
@@ -42,22 +41,23 @@ export async function replaceTargetingRules(
     };
   }
 
-  return commitTargetingRules(deps, scope, input.flagId, input.targetingRules, input.approval);
+  return commitTargetingRules(deps, scope, input);
 }
 
 async function commitTargetingRules(
   deps: ConfigStoreDeps,
   scope: EnvScope,
-  flagId: string,
-  targetingRules: TargetingRule[],
-  approval?: ReplaceTargetingRulesInput["approval"],
+  input: ReplaceTargetingRulesInput,
 ): Promise<FlagConfigWriteResult> {
+  const { approval, flagId } = input;
   const now = approval ? new Date(approval.reviewedAt) : (deps.now?.() ?? new Date());
+  // The rule rewrite also bumps the owning Flag Configuration, so the actor lands
+  // on `flag_configs` and the audit trigger can attribute the targeting change.
   const replaced = await deps.repo.flags.replaceTargetingRules(
     scope,
     flagId,
-    targetingRuleRows(targetingRules, now),
-    { updatedAt: now.toISOString() },
+    targetingRuleRows(input.targetingRules, now),
+    { updatedAt: now.toISOString(), updatedBy: input.actor.ref, updatedVia: input.actor.via },
     approval,
   );
   if (!replaced) return { ok: false, reason: "FLAG_NOT_FOUND" };

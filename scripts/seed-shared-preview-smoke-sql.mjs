@@ -46,6 +46,7 @@ const TRANSIENT_APP_SCOPED_TABLES = [
   "cloudflare_installations",
   "config_webhook_deliveries",
   "convex_installations",
+  "sentry_installations",
   "approval_reviews",
   "approval_requests",
   "runs",
@@ -76,6 +77,11 @@ export function buildCleanupSql(ids = SMOKE_IDS) {
   statements.push(
     `DELETE FROM variants WHERE flag_id IN (\n  SELECT id FROM flags WHERE app_id IN (${scope})\n);`,
     `DELETE FROM flags WHERE app_id IN (${scope});`,
+    // After the Flag-domain deletes, not with the rest: every one of them fires an
+    // audit trigger that writes a fresh flag_change_events row, so clearing this
+    // table earlier would leave exactly the rows the deletes just created. Still
+    // before `apps`, because the App selector is what scopes it.
+    `DELETE FROM flag_change_events WHERE app_id IN (${scope});`,
     `DELETE FROM apps WHERE id IN (${scope});`,
   );
   return `\n${statements.join("\n")}\n`;

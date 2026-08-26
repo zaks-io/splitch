@@ -2,13 +2,15 @@ import { makeApprovalRepo } from "./approvals";
 import { makeClaimStateRepo } from "./claim-state";
 import { makeCloudflareIntegrationRepo } from "./cloudflare-integrations";
 import { createDb } from "./client";
-import { makeCredentialRepo } from "./credentials";
 import { makeConvexIntegrationRepo } from "./convex-integrations";
+import { makeCredentialRepo } from "./credentials";
 import { makeEventDefinitionRepo } from "./event-definitions";
 import { makeExperimentRepo } from "./experiments";
+import { makeFlagChangeEventRepo } from "./flag-change-events";
 import { makeFlagRepo } from "./flags";
 import { makeIdentityRepo } from "./identity";
 import { makePrivacyRepo } from "./privacy";
+import { makeSentryIntegrationRepo } from "./sentry-integrations";
 
 /**
  * The single tenant-isolation seam (ADR-0018).
@@ -33,6 +35,8 @@ export function createRepository(d1: D1Database) {
     credentials: makeCredentialRepo(db),
     convex: makeConvexIntegrationRepo(d1),
     cloudflare: makeCloudflareIntegrationRepo(d1),
+    sentry: makeSentryIntegrationRepo(d1),
+    flagChangeEvents: makeFlagChangeEventRepo(d1),
     claim: makeClaimStateRepo(d1),
     identity: makeIdentityRepo(db, d1),
     privacy: makePrivacyRepo(db),

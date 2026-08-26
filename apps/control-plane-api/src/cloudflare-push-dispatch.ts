@@ -2,10 +2,10 @@ import type { Repository } from "@splitch/db";
 import { envScope } from "@splitch/db";
 import { decryptIntegrationSecret, signIntegrationPayload } from "./integration-secret";
 import { buildIntegrationSnapshot } from "./integration-snapshot";
+import { postWebhook, retryDelayMs } from "./webhook-transport";
 
 const LEASE_MS = 30_000;
 const BATCH_SIZE = 25;
-const RETRY_DELAYS_MS = [1_000, 5_000, 30_000, 120_000, 600_000, 1_800_000] as const;
 
 export interface CloudflarePushDispatchDeps {
   repo: Repository;
@@ -94,29 +94,27 @@ async function deliverOne(
     secret,
     `${timestamp}.${delivery.deliveryId}.${body}`,
   );
-  let response: Response;
-  try {
-    response = await (deps.fetcher ?? fetch)(delivery.endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "splitch-delivery-id": delivery.deliveryId,
-        "splitch-signature": `v1=${signature}`,
-        "splitch-timestamp": timestamp,
-      },
-      body,
-      redirect: "manual",
-    });
-  } catch (cause) {
+  const result = await postWebhook({
+    url: delivery.endpoint,
+    body,
+    headers: {
+      "content-type": "application/json",
+      "splitch-delivery-id": delivery.deliveryId,
+      "splitch-signature": `v1=${signature}`,
+      "splitch-timestamp": timestamp,
+    },
+    fetcher: deps.fetcher,
+  });
+  if (result.outcome === "transport-failed") {
     await finishFailure(deps, delivery, leaseOwner, now, true, {
       kind: "transport",
-      code: cause instanceof Error ? cause.name : "UnknownError",
+      code: result.cause instanceof Error ? result.cause.name : "UnknownError",
       occurredAt: now.toISOString(),
     });
     return;
   }
-  if (response.ok) {
-    const appliedVersion = Number(response.headers.get("splitch-environment-version"));
+  if (result.outcome === "delivered") {
+    const appliedVersion = Number(result.response.headers.get("splitch-environment-version"));
     if (!Number.isInteger(appliedVersion) || appliedVersion < delivery.environmentVersion) {
       await finishFailure(deps, delivery, leaseOwner, now, true, {
         kind: "protocol",
@@ -132,11 +130,10 @@ async function deliverOne(
     });
     return;
   }
-  const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
-  await finishFailure(deps, delivery, leaseOwner, now, retryable, {
+  await finishFailure(deps, delivery, leaseOwner, now, result.retryable, {
     kind: "http",
     code: "HTTP_STATUS",
-    httpStatus: response.status,
+    httpStatus: result.status,
     occurredAt: now.toISOString(),
   });
 }
@@ -158,8 +155,7 @@ async function finishFailure(
   retryable: boolean,
   error: Record<string, unknown>,
 ): Promise<void> {
-  const delay =
-    RETRY_DELAYS_MS[Math.min(delivery.attemptCount, RETRY_DELAYS_MS.length - 1)] ?? 1_800_000;
+  const delay = retryDelayMs(delivery.attemptCount);
   await deps.repo.cloudflare.finishDelivery(delivery.deliveryId, leaseOwner, {
     state: retryable ? "pending" : "terminal",
     now: now.toISOString(),

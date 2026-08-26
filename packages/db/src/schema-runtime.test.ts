@@ -128,7 +128,7 @@ describe("remaining applied D1 schema", () => {
     }
   });
 
-  it("contains the 31 named live D1 tables", async () => {
+  it("contains the 33 named live D1 tables", async () => {
     const local = await createLocalD1();
     try {
       const tables = await local.d1
@@ -158,6 +158,7 @@ describe("remaining applied D1 schema", () => {
         "event_definition_versions",
         "event_definitions",
         "experiments",
+        "flag_change_events",
         "flag_configs",
         "flags",
         "metrics",
@@ -166,6 +167,7 @@ describe("remaining applied D1 schema", () => {
         "privacy_requests",
         "runs",
         "segments",
+        "sentry_installations",
         "targeting_rules",
         "trusted_idps",
         "variants",

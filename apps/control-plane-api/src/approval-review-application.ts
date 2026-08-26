@@ -218,6 +218,9 @@ async function applyFlagConfiguration(
   const result = await deps.configStore
     .writerFor(request.appId, environmentId)
     .applyApprovedFlagConfig({
+      // The reviewer owns an approved change, not whoever proposed it: the
+      // proposal was inert until this Review landed.
+      actor: { ref: commit.reviewedBy, via: "approval" },
       appId: request.appId,
       environmentId,
       flagId: proposed.flagId,

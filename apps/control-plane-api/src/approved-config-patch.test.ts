@@ -9,6 +9,9 @@ import type { ApplyApprovedFlagConfigInput } from "./config-store-types";
  */
 describe("approvedConfigPatch", () => {
   const base = {
+    // The reviewer is the actor on an approved write; the write itself is
+    // performed by the system on the Review, which no AuthKind names.
+    actor: { ref: "user_1", via: "approval" as const },
     appId: "app_1",
     environmentId: "env_1",
     flagId: "flag_1",
@@ -47,6 +50,8 @@ describe("approvedConfigPatch", () => {
       }),
     ).toEqual({
       updatedAt: base.approval.reviewedAt,
+      updatedBy: base.actor.ref,
+      updatedVia: base.actor.via,
       enabled: true,
     });
   });

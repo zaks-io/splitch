@@ -39,10 +39,22 @@ export const ENTRY_MAX_BYTES = 28 * 1024;
 export const BROWSER_ENTRY_MAX_BYTES = 40 * 1024;
 /** Measured 9_718 bytes at SPL-334; 12 KiB keeps roughly 25% growth headroom. */
 export const REACT_ENTRY_MAX_BYTES = 12 * 1024;
+/**
+ * The Sentry reporter is a value mapping over ResolutionDetails with `@sentry/core`
+ * external, so it should stay near-trivial. 8 KiB is the tripwire for it quietly
+ * growing a second bundled SDK.
+ */
+export const SENTRY_ENTRY_MAX_BYTES = 8 * 1024;
+
+/** Package entries whose optional peer must not be counted against the budget. */
+const EXTERNAL_PEERS = { "./react": ["react"], "./sentry": ["@sentry/core"] };
 
 function maxBytesForEntry(exportPath) {
   if (exportPath === "./browser") {
     return BROWSER_ENTRY_MAX_BYTES;
+  }
+  if (exportPath === "./sentry") {
+    return SENTRY_ENTRY_MAX_BYTES;
   }
   return exportPath === "./react" ? REACT_ENTRY_MAX_BYTES : ENTRY_MAX_BYTES;
 }
@@ -141,6 +153,11 @@ function consumerSource(entry) {
 console.log(SplitchProvider, useFlag, useFlagDetails, useSplitchClient);
 `;
   }
+  if (entry.exportPath === "./sentry") {
+    return `import { sentryResolutionReporter } from ${JSON.stringify(entry.importSpecifier)};
+console.log(sentryResolutionReporter());
+`;
+  }
   if (entry.exportPath === "./browser") {
     return `import { createSplitchBrowserClient } from ${JSON.stringify(entry.importSpecifier)};
 const client = createSplitchBrowserClient({ clientKey: "pk_size", context: { targetingKey: "u" } });
@@ -173,7 +190,7 @@ async function measureEntry(esbuild, entry) {
       minify: true,
       platform: "browser",
       target: ["es2022"],
-      external: entry.exportPath === "./react" ? ["react"] : [],
+      external: EXTERNAL_PEERS[entry.exportPath] ?? [],
       write: true,
       metafile: true,
       logLevel: "silent",

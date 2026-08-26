@@ -42,6 +42,20 @@ export interface SplitchClientOptions {
   readonly fetch?: typeof fetch;
   /** Injectable epoch-ms clock (defaults to `Date.now`). */
   readonly now?: () => number;
+  /**
+   * Called with every resolution the user path produced, for observability
+   * sinks that want to know which Flags were active. See
+   * `@splitch/sdk/sentry` for the Sentry binding.
+   *
+   * Never called for `peekVariant` or `verify`: those are diagnostics that fire
+   * no Exposure, and reporting them would claim a resolution the user never
+   * received.
+   *
+   * Called synchronously and never awaited. A throwing reporter is not caught:
+   * an observability sink that fails should fail where it fails, not be
+   * swallowed into a silently degraded evaluation.
+   */
+  readonly onResolution?: (flagKey: string, details: SdkResolutionDetails) => void;
 }
 
 export interface SplitchClient {
@@ -198,11 +212,11 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
       };
     },
     async evaluate(flagKey, context) {
-      const details = await runEvaluate(deps, flagKey, context);
+      const details = await report(flagKey, await runEvaluate(deps, flagKey, context));
       return details.value;
     },
-    evaluateDetails(flagKey, context) {
-      return runEvaluate(deps, flagKey, context);
+    async evaluateDetails(flagKey, context) {
+      return report(flagKey, await runEvaluate(deps, flagKey, context));
     },
     peekVariant(flagKey, context) {
       return runPeekVariant(deps, flagKey, context);
@@ -210,10 +224,37 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
     verify(flagKey, context) {
       return runVerify(deps, flagKey, context);
     },
-    evaluateAll(context) {
-      return runEvaluateAll(deps, context);
+    async evaluateAll(context) {
+      const precomputed = await runEvaluateAll(deps, context);
+      reportPrecomputed(options.onResolution, precomputed);
+      return precomputed;
     },
   };
+
+  function report(flagKey: string, details: SdkResolutionDetails): SdkResolutionDetails {
+    options.onResolution?.(flagKey, details);
+    return details;
+  }
+}
+
+/**
+ * A Precomputed Evaluations entry carries `variant`, not a caller-supplied
+ * Default Variant, so an entry that resolved to no arm has no value to report.
+ * Reporting one anyway would mean inventing it.
+ */
+function reportPrecomputed(
+  onResolution: SplitchClientOptions["onResolution"],
+  precomputed: PrecomputedEvaluations,
+): void {
+  if (!onResolution) return;
+  for (const [flagKey, entry] of Object.entries(precomputed.evaluations)) {
+    if (entry.variant === null) continue;
+    onResolution(flagKey, {
+      value: entry.variant,
+      variantName: entry.variantName,
+      reason: entry.reason,
+    });
+  }
 }
 
 function resolveCredential(options: SplitchClientOptions): string {

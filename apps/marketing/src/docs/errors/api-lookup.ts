@@ -76,6 +76,10 @@ export const lookupErrorDocs = {
     "Cloudflare installation",
     "Confirm the installation id and that the API Key addresses the App and Environment that own it. Run `splitch cloudflare setup` again if the installation was removed.",
   ),
+  SENTRY_INSTALLATION_NOT_FOUND: notFound(
+    "Sentry installation",
+    "Confirm the installation id and that the API Key addresses the App and Environment that own it. Install the Sentry integration again if it was revoked.",
+  ),
   SEGMENT_NOT_FOUND: notFound(
     "Segment",
     "Confirm the Segment id and the Environment it was defined in.",

@@ -276,6 +276,8 @@ export {
   approvalTargetTypes,
 } from "./routes/route-shapes-approvals";
 export { SegmentListResponseSchema } from "./routes/routes-segments";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped Sentry integration contract
+export * from "./sentry-integration";
 export { deriveSlug, SLUG_MAX_LENGTH, SLUG_MIN_LENGTH, SLUG_PATTERN, SlugSchema } from "./slug";
 // `./experiment-rigor` exports a different DecisionFamilyMember; naming this one
 // explicitly keeps the stats-input shape as the package's, as it was before the

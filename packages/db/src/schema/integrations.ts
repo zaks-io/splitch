@@ -40,6 +40,61 @@ export const convexInstallations = sqliteTable(
   ],
 );
 
+/**
+ * One Sentry organization bound to one splitch Environment.
+ *
+ * Environment-scoped because Sentry's change-tracking payload has no environment
+ * axis: a customer's production Sentry org must not be told about dev toggles.
+ *
+ * There is no companion delivery table. Sentry's `change_id` is an idempotency
+ * token by contract, so redelivering a batch is safe, and `last_delivered_seq`
+ * over the monotonic `flag_change_events.seq` is a sufficient cursor. Retry
+ * state (`attempt_count` / `next_attempt_at`) therefore lives on the
+ * installation rather than per-delivery.
+ */
+export const sentryInstallations = sqliteTable(
+  "sentry_installations",
+  {
+    installationId: text("installation_id").primaryKey(),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id),
+    environmentId: text("environment_id")
+      .notNull()
+      .references(() => environments.id),
+    /**
+     * The full webhook URL copied out of Sentry's provider settings, stored
+     * verbatim rather than rebuilt from an org slug so region hosts
+     * (us./de.sentry.io) and self-hosted installs work without special-casing.
+     * Host-validated on write AND on dispatch (SSRF).
+     */
+    webhookUrl: text("webhook_url").notNull(),
+    secretCiphertext: text("secret_ciphertext").notNull(),
+    secretKeyVersion: text("secret_key_version").notNull(),
+    secretFingerprint: text("secret_fingerprint").notNull(),
+    lastRotationId: text("last_rotation_id"),
+    lastRotationFingerprint: text("last_rotation_fingerprint"),
+    status: text("status").notNull(),
+    /** Cursor into flag_change_events.seq; NULL until the first delivery. */
+    lastDeliveredSeq: integer("last_delivered_seq"),
+    lastDeliveredAt: text("last_delivered_at"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: text("next_attempt_at").notNull(),
+    latestDeliveryErrorJson: text("latest_delivery_error_json"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    revokedAt: text("revoked_at"),
+  },
+  (table) => [
+    index("sentry_installations_due_idx").on(table.status, table.nextAttemptAt),
+    uniqueIndex("sentry_installations_scope_id_unique").on(
+      table.appId,
+      table.environmentId,
+      table.installationId,
+    ),
+  ],
+);
+
 export const configWebhookDeliveries = sqliteTable(
   "config_webhook_deliveries",
   {

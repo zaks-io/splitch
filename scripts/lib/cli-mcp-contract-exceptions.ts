@@ -171,4 +171,28 @@ export const CLI_MCP_CONTRACT_EXCEPTIONS = [
     mcp: false,
     reason: "Cloudflare Worker Exposure delivery data-plane operation",
   },
+  {
+    operationId: "sentry_installations_create",
+    cli: false,
+    mcp: false,
+    reason: "Sentry change-tracking installation, provisioned from the Sentry setup flow",
+  },
+  {
+    operationId: "sentry_installations_get",
+    cli: false,
+    mcp: false,
+    reason: "Sentry change-tracking installation, provisioned from the Sentry setup flow",
+  },
+  {
+    operationId: "sentry_installations_delete",
+    cli: false,
+    mcp: false,
+    reason: "Sentry change-tracking installation, provisioned from the Sentry setup flow",
+  },
+  {
+    operationId: "sentry_secret_rotations_create",
+    cli: false,
+    mcp: false,
+    reason: "Sentry change-tracking secret rotation, provisioned from the Sentry setup flow",
+  },
 ] as const;

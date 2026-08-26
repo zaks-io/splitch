@@ -102,6 +102,19 @@ export function makeDeleteAppCascade(d1: D1Database) {
       d1.prepare(`DELETE FROM event_definitions WHERE app_id = ?`).bind(appId),
       d1.prepare(`DELETE FROM api_keys WHERE app_id = ? AND revoked_at IS NOT NULL`).bind(appId),
       d1.prepare(`DELETE FROM client_keys WHERE app_id = ? AND revoked_at IS NOT NULL`).bind(appId),
+      // Integration installations FK to apps AND environments, so they must clear
+      // before either. Each delivery table FKs its own installations table, so
+      // deliveries go first.
+      d1.prepare(`DELETE FROM config_webhook_deliveries WHERE app_id = ?`).bind(appId),
+      d1.prepare(`DELETE FROM convex_installations WHERE app_id = ?`).bind(appId),
+      d1.prepare(`DELETE FROM cloudflare_config_deliveries WHERE app_id = ?`).bind(appId),
+      d1.prepare(`DELETE FROM cloudflare_installations WHERE app_id = ?`).bind(appId),
+      d1.prepare(`DELETE FROM sentry_installations WHERE app_id = ?`).bind(appId),
+      // The flag-change log carries no FKs (an audit row outlives its subject),
+      // so nothing forces this delete. The App's history is still the App's data
+      // and a hard delete must take it. Placed after every statement above whose
+      // deletion could fire an audit trigger and write fresh rows.
+      d1.prepare(`DELETE FROM flag_change_events WHERE app_id = ?`).bind(appId),
       d1.prepare(`DELETE FROM environments WHERE app_id = ?`).bind(appId),
       d1.prepare(`DELETE FROM app_memberships WHERE app_id = ?`).bind(appId),
       d1.prepare(`DELETE FROM apps WHERE id = ? RETURNING id`).bind(appId),

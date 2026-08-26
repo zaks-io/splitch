@@ -84,6 +84,7 @@ beforeEach(async () => {
       repo: createRepository(bindings.d1),
       convex: {},
       cloudflare: {},
+      sentry: {},
     }),
     bindings,
     signer,

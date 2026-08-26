@@ -8,6 +8,7 @@ import {
   ENTRY_MAX_BYTES,
   loadEsbuild,
   REACT_ENTRY_MAX_BYTES,
+  SENTRY_ENTRY_MAX_BYTES,
 } from "./size-check.mjs";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -28,6 +29,14 @@ test("the stateful browser entry has its own measured budget", () => {
   assert.equal(BROWSER_ENTRY_MAX_BYTES, 40 * 1024);
   assert.ok(BROWSER_ENTRY_MAX_BYTES > 32_233);
   assert.ok(BROWSER_ENTRY_MAX_BYTES < 50 * 1024);
+});
+
+test("the Sentry reporter's budget stays the smallest of the four", () => {
+  assert.equal(SENTRY_ENTRY_MAX_BYTES, 8 * 1024);
+  // Measured 868 bytes with @sentry/core external. Anything approaching this
+  // ceiling means the reporter stopped being a value mapping.
+  assert.ok(SENTRY_ENTRY_MAX_BYTES > 868);
+  assert.ok(SENTRY_ENTRY_MAX_BYTES < REACT_ENTRY_MAX_BYTES);
 });
 
 test("loadEsbuild resolves a usable esbuild via the workspace tsup nest", async () => {

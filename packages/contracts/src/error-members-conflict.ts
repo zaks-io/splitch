@@ -23,6 +23,25 @@ export const conflictErrorMembers = [
     }),
   ),
   member("MEMBERSHIP_CONFLICT", z.object({ existingRole: UserRoleSchema })),
+  member(
+    "IDEMPOTENCY_KEY_CONFLICT",
+    z.object({
+      scope: z.enum([
+        "approval_request",
+        "review",
+        "conclusion",
+        "app_create",
+        "flag_create",
+        "convex_installation",
+        "convex_secret_rotation",
+        "convex_evaluation",
+        "cloudflare_installation",
+        "sentry_installation",
+        "sentry_secret_rotation",
+      ]),
+      idempotencyKey: z.string().min(1),
+    }),
+  ),
   // An Experiment (live or archived) still holds `(app, env, key)`. Naming an
   // archived id is safe: the caller has Environment write scope and owned it.
   // Live holders omit archivedExperimentId and surface status instead.

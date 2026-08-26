@@ -21,6 +21,8 @@ import type { CloudflareHandlerDeps } from "./cloudflare-handlers";
 import { mountCloudflareRoutes } from "./cloudflare-route-mounting";
 import type { ConvexHandlerDeps } from "./convex-handlers";
 import { mountConvexRoutes } from "./convex-route-mounting";
+import type { SentryHandlerDeps } from "./sentry-handlers";
+import { mountSentryRoutes } from "./sentry-route-mounting";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
@@ -75,6 +77,7 @@ export interface AppDeps {
   holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
   convex?: Omit<ConvexHandlerDeps, "repo">;
   cloudflare?: Omit<CloudflareHandlerDeps, "repo">;
+  sentry?: Omit<SentryHandlerDeps, "repo">;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
@@ -82,7 +85,7 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
   const registrarDeps: RegistrarDeps = {
     authResolvers: {
       "control-plane-token": deps.authResolver,
-      ...(deps.door === "binding" && (deps.convex || deps.cloudflare)
+      ...(deps.door === "binding" && (deps.convex || deps.cloudflare || deps.sentry)
         ? { "api-key": deps.authResolver }
         : {}),
     },
@@ -147,6 +150,7 @@ export function createApp(deps: AppDeps): Hono {
     deps.repo,
     deps.door === "binding" ? deps.cloudflare : undefined,
   );
+  mountSentryRoutes(app, registrar, deps.repo, deps.door === "binding" ? deps.sentry : undefined);
   const approvalHandlers = diagnosableHandlers(
     makeApprovalHandlers({
       repo: deps.repo,

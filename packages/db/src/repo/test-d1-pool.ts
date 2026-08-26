@@ -5,6 +5,7 @@ export const RESET_TABLES = [
   "cloudflare_installations",
   "config_webhook_deliveries",
   "convex_installations",
+  "sentry_installations",
   "event_definition_versions",
   "event_definitions",
   "approval_reviews",
@@ -32,6 +33,11 @@ export const RESET_TABLES = [
   "org_memberships",
   "claim_verifications",
   "organizations",
+  // LAST on purpose: deleting flags/variants/targeting_rules/flag_configs above
+  // fires the audit triggers, which insert fresh rows into this table. Purging
+  // it earlier would leave the reset incomplete and leak one test's history into
+  // the next.
+  "flag_change_events",
 ] as const;
 
 export type LocalD1 = {

@@ -33,6 +33,7 @@ describe("live-update Durable Object broadcast", () => {
     });
 
     const result = await stub.writeFlagConfig({
+      actor: { ref: USER_ID, via: "id_jag" },
       appId: ids.appId,
       environmentId: ids.environmentId,
       flagId: ids.flagId,
@@ -60,6 +61,7 @@ describe("Evaluation Worker live-update subscription", () => {
   it("invalidates its cache and bypasses a stale KV POP", async () => {
     const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${ids.environmentId}`);
     await stub.writeFlagConfig({
+      actor: { ref: USER_ID, via: "id_jag" },
       appId: ids.appId,
       environmentId: ids.environmentId,
       flagId: ids.flagId,
@@ -85,6 +87,7 @@ describe("Evaluation Worker live-update subscription", () => {
     });
 
     await stub.writeFlagConfig({
+      actor: { ref: USER_ID, via: "id_jag" },
       appId: ids.appId,
       environmentId: ids.environmentId,
       flagId: ids.flagId,

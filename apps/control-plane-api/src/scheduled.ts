@@ -10,6 +10,7 @@ import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
 import type { ControlPlaneApiEnv } from "./env";
 import { runCredentialCacheBackfill } from "./internal-routes";
+import { dispatchSentryWebhooks } from "./sentry-webhook-dispatch";
 
 const service = "splitch-control-plane-api";
 
@@ -20,10 +21,12 @@ export function runControlPlaneScheduled(
 ): void {
   ctx.waitUntil(runConvexWebhookDispatch(env, event, ctx));
   ctx.waitUntil(runCloudflarePushDispatch(env, event, ctx));
+  ctx.waitUntil(runSentryWebhookDispatch(env, event, ctx));
   if (event.cron !== "0 8 * * *") return;
   ctx.waitUntil(runDemoReaper(env, event, ctx));
   ctx.waitUntil(runCredentialCacheBackfill(env));
   ctx.waitUntil(runApprovalArchive(env, event, ctx));
+  ctx.waitUntil(runFlagChangeLogRetention(env, event, ctx));
 }
 
 async function runCloudflarePushDispatch(
@@ -56,6 +59,57 @@ async function runCloudflarePushDispatch(
     throw error;
   }
 }
+
+async function runSentryWebhookDispatch(
+  env: ControlPlaneApiEnv,
+  event: ScheduledController,
+  ctx: Pick<ExecutionContext, "waitUntil">,
+): Promise<void> {
+  const dispatched = await dispatchSentryWebhooks({
+    repo: createRepository(env.DB),
+    secretKek: env.INTEGRATION_SECRET_KEK,
+    secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,
+    allowedHosts: env.SENTRY_WEBHOOK_ALLOWED_HOSTS,
+    now: () => new Date(event.scheduledTime),
+  });
+  workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
+    "info",
+    "sentry-webhook-dispatch",
+    { service, job: "sentry-webhook-dispatch", cron: event.cron, dispatched },
+  );
+}
+
+/**
+ * The flag-change log is unbounded by construction: triggers write, nothing
+ * deletes. Retention prunes rows older than 90 days that every active
+ * integration has already consumed.
+ *
+ * With no active installation the cursor floor is `Number.MAX_SAFE_INTEGER`, so
+ * age alone governs. `minUndeliveredSeq()` returning null means exactly that;
+ * passing 0 instead would be a silent no-op that let the table grow forever.
+ */
+async function runFlagChangeLogRetention(
+  env: ControlPlaneApiEnv,
+  event: ScheduledController,
+  ctx: Pick<ExecutionContext, "waitUntil">,
+): Promise<void> {
+  const repo = createRepository(env.DB);
+  const scheduled = new Date(event.scheduledTime);
+  const cursor = await repo.sentry.minUndeliveredSeq();
+  const pruned = await repo.flagChangeEvents.pruneBefore({
+    changedBefore: new Date(scheduled.getTime() - RETENTION_MS).toISOString(),
+    minUndeliveredSeq: cursor ?? Number.MAX_SAFE_INTEGER,
+    limit: RETENTION_BATCH,
+  });
+  workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
+    "info",
+    "flag-change-log-retention",
+    { service, job: "flag-change-log-retention", cron: event.cron, pruned, cursor },
+  );
+}
+
+const RETENTION_MS = 90 * 24 * 60 * 60 * 1_000;
+const RETENTION_BATCH = 1_000;
 
 async function runConvexWebhookDispatch(
   env: ControlPlaneApiEnv,

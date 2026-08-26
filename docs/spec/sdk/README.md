@@ -40,6 +40,7 @@ deferred; the `ResolutionDetails` _shape_ is not.
 | [../pipeline/metric-event-contract.md](../pipeline/metric-event-contract.md) | `track()` and `POST /api/sdk/events`: strict Metric Event validation, identity, version stamping, and idempotency                       |
 | [../pipeline/web-event-identity.md](../pipeline/web-event-identity.md)       | Browser Web Session generation and persistence, optional explicit Entity identity, and Experiment exclusion                             |
 | [web-analytics-capture.md](./web-analytics-capture.md)                       | Manual `web.track()`, automatic `web.instrument()`, batch-only ingest, memory-only queue, and bounded browser collection                |
+| [sentry-integration.md](./sentry-integration.md)                             | Sentry change tracking (Flag changes → Sentry) and `@splitch/sdk/sentry` evaluation tracking                                            |
 | [openfeature-deferred.md](./openfeature-deferred.md)                         | Explicitly deferred full OpenFeature provider surface                                                                                   |
 
 ## Sources
@@ -50,3 +51,4 @@ deferred; the `ResolutionDetails` _shape_ is not.
 - [ADR-0025](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [ADR-0026](../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md)
 - [ADR-0049](../../adr/0049-convex-local-evaluation-uses-nudge-pull-sync-and-transactional-exposure-delivery.md)
+- [ADR-0051](../../adr/0051-the-flag-change-log-is-both-the-audit-record-and-the-integration-outbox.md)
