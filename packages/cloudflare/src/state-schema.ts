@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS evaluation_claims (
   result_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS evaluation_claims_created_idx
+  ON evaluation_claims (created_at);
 CREATE TABLE IF NOT EXISTS exposure_outbox (
   exposure_id TEXT PRIMARY KEY,
   installation_id TEXT NOT NULL,
@@ -48,10 +50,14 @@ CREATE TABLE IF NOT EXISTS exposure_outbox (
 );
 CREATE INDEX IF NOT EXISTS exposure_outbox_due_idx
   ON exposure_outbox (state, next_attempt_at);
+CREATE INDEX IF NOT EXISTS exposure_outbox_terminal_created_idx
+  ON exposure_outbox (state, created_at);
 CREATE TABLE IF NOT EXISTS push_claims (
   delivery_id TEXT PRIMARY KEY,
   environment_version INTEGER NOT NULL,
   applied_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS push_claims_applied_idx
+  ON push_claims (applied_at);
 INSERT OR IGNORE INTO _sql_schema_migrations (id) VALUES (1);
 `;

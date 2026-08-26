@@ -5,6 +5,7 @@ import {
 } from "@splitch/contracts";
 
 const PRIVACY_DEADLINE_MS = 24 * 60 * 60 * 1_000;
+const DELIVERY_TIMEOUT_MS = 10_000;
 
 export interface ExposureRow {
   [key: string]: string | number | null | ArrayBuffer;
@@ -44,6 +45,7 @@ export async function deliverExposure(
       headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({ exposures: [item] }),
       redirect: "error",
+      signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
     });
   } catch {
     return "retry";

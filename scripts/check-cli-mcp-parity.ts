@@ -23,13 +23,7 @@ import {
 } from "./lib/cli-mcp-parity.mjs";
 import { assertSharedOperationParity } from "./lib/cli-mcp-shared-operation.js";
 
-const cliOperationIds = [
-  ...new Set(
-    CLI_COMMANDS.filter((command) => !command.kind.startsWith("cloudflare_")).map(
-      (command) => command.operationId,
-    ),
-  ),
-];
+const cliOperationIds = [...new Set(CLI_COMMANDS.map((command) => command.operationId))];
 const mcpOperationIds = MCP_TOOL_DEFINITIONS.filter((tool) => tool.name !== "context_use").map(
   (tool) => tool.name,
 );

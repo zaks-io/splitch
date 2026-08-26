@@ -1,5 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
-
 const encoder = new TextEncoder();
 
 export async function sha256Hex(value: string): Promise<string> {
@@ -22,7 +20,10 @@ export async function timingSafeHexEqual(left: string, right: string): Promise<b
     crypto.subtle.digest("SHA-256", encoder.encode(left)),
     crypto.subtle.digest("SHA-256", encoder.encode(right)),
   ]);
-  return timingSafeEqual(new Uint8Array(leftHash), new Uint8Array(rightHash));
+  const subtle = crypto.subtle as SubtleCrypto & {
+    timingSafeEqual(a: ArrayBuffer, b: ArrayBuffer): boolean;
+  };
+  return subtle.timingSafeEqual(leftHash, rightHash);
 }
 
 export function randomSecret(): string {

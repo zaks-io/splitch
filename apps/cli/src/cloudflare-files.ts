@@ -127,9 +127,11 @@ export async function serviceBindingPath(
   const raw = await readFile(configPath, "utf8");
   const document = parseJsonc(raw, configPath) as Record<string, unknown>;
   const environments = isRecord(document.env) ? document.env : undefined;
-  return environments && isRecord(environments[environment])
-    ? ["env", environment, "services"]
-    : ["services"];
+  if (!environments) return ["services"];
+  if (isRecord(environments[environment])) return ["env", environment, "services"];
+  throw cloudflareUsage(
+    `Wrangler Environment ${JSON.stringify(environment)} does not exist in ${configPath}`,
+  );
 }
 
 export async function findApplicationConfig(cwd: string): Promise<string> {
@@ -162,7 +164,7 @@ export async function assertCloudflarePackage(cwd: string): Promise<void> {
   try {
     createRequire(join(cwd, "package.json")).resolve("@splitch/cloudflare/worker");
   } catch (error) {
-    throw cloudflareUsage("@splitch/cloudflare is not installed in this project", error);
+    throw cloudflareUsage("@splitch/cloudflare is not installed in this App", error);
   }
 }
 

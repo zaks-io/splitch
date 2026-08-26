@@ -62,8 +62,10 @@ async function handleBatch(
       { status: 503 },
     );
   }
-  const resolver = deps.configurationResolver ?? deps.convexConfigurationResolver;
   const sourceKind = deps.integrationKind ?? "convex";
+  const resolver =
+    deps.configurationResolver ??
+    (sourceKind === "convex" ? deps.convexConfigurationResolver : undefined);
   if (!resolver) {
     return Response.json(
       {

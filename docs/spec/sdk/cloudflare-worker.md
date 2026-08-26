@@ -70,7 +70,9 @@ The `SplitchState` SQLite Durable Object owns these tables:
 
 The targeting key hash uses an installation-local HMAC key stored only in Durable Object storage.
 The raw Targeting Key exists in a pending Exposure row only until the row is accepted, terminal, or
-24 hours old. Terminal rows erase Entity data and retain the complete bounded error.
+24 hours old. Terminal rows erase Entity data and retain the complete bounded error. Evaluation
+claims, accepted push claims, and terminal Exposure metadata expire after 30 days, matching the
+Convex integration retention policy; pending Exposure rows are never removed by retention cleanup.
 
 An Evaluation transaction reads the current snapshot and local Assignments, resolves through
 `@splitch/evaluation-core`, writes a new holdover and Exposure row when required, records the

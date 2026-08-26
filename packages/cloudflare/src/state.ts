@@ -5,12 +5,7 @@ import {
   ResolutionDetailsSchema,
   VariantValueSchema,
 } from "@splitch/contracts";
-import {
-  configSnapshotProvider,
-  type EvaluateResult,
-  evaluatePath,
-  parseConfigSnapshot,
-} from "@splitch/evaluation-core";
+import { type EvaluateResult, evaluatePath, parseConfigSnapshot } from "@splitch/evaluation-core";
 import { canonicalJson } from "./canonical-json";
 import { hmacHex, randomSecret, sha256Hex } from "./crypto";
 import { deliverExposure, exceededPrivacyDeadline } from "./exposure-delivery";
@@ -39,7 +34,9 @@ export class SplitchState extends DurableObject<Env> {
   ): Promise<{ ok: true; environmentVersion: number } | { ok: false; reason: "scope_mismatch" }> {
     const snapshot = parseConfigSnapshot(payload, "Cloudflare");
     const now = new Date().toISOString();
-    return this.ctx.storage.transactionSync(() => {
+    const result:
+      | { ok: true; environmentVersion: number }
+      | { ok: false; reason: "scope_mismatch" } = this.ctx.storage.transactionSync(() => {
       const existing = this.state.integration();
       if (existing) {
         if (existing.appId !== snapshot.appId || existing.environmentId !== snapshot.environmentId)
@@ -71,6 +68,9 @@ export class SplitchState extends DurableObject<Env> {
       this.state.recordPushClaim(deliveryId, snapshot.environmentVersion, now);
       return { ok: true, environmentVersion: snapshot.environmentVersion };
     });
+    this.state.invalidateConfiguration();
+    await this.state.ensureAlarm();
+    return result;
   }
 
   async evaluateDetails(
@@ -91,14 +91,17 @@ export class SplitchState extends DurableObject<Env> {
       attributes: rawContext.attributes ?? {},
     });
     const integration = this.state.integration();
-    const snapshot = this.state.snapshot();
-    if (!integration || !snapshot)
+    const configuration = integration
+      ? this.state.configuration(integration.snapshotVersion)
+      : null;
+    if (!integration || !configuration)
       return failureDetails(
         defaultValue,
         "ERROR",
         "PROVIDER_NOT_READY",
         "@splitch/cloudflare has no applied configuration snapshot",
       );
+    const { snapshot, provider } = configuration;
     const fingerprint = await sha256Hex(canonicalJson({ flagKey, context, defaultValue }));
     const prior = this.state.claim(rawContext.idempotencyKey);
     if (prior) {
@@ -119,7 +122,7 @@ export class SplitchState extends DurableObject<Env> {
         evaluationContext: context,
       },
       {
-        provider: configSnapshotProvider(snapshot, "Cloudflare"),
+        provider,
         assignmentStore: readOnlyAssignmentStore(assignments),
         logger: console,
       },
@@ -163,6 +166,7 @@ export class SplitchState extends DurableObject<Env> {
 
   override async alarm(): Promise<void> {
     const now = Date.now();
+    this.state.pruneExpired(now);
     const due = this.state.dueExposures(now);
     for (const row of due) {
       const outcome = exceededPrivacyDeadline(row, now)
@@ -170,7 +174,8 @@ export class SplitchState extends DurableObject<Env> {
         : await deliverExposure(row, this.env.SPLITCH_ENDPOINT, this.env.SPLITCH_API_KEY);
       this.state.finishExposure(row, outcome, now);
     }
-    await this.state.ensureAlarm();
+    this.state.pruneExpired(now);
+    await this.state.ensureAlarm(now);
   }
 
   private commitEvaluation(input: CommitEvaluationInput): CloudflareResolutionDetails {

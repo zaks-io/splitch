@@ -1,7 +1,5 @@
-import {
-  CLOUDFLARE_SNAPSHOT_MAX_BODY_BYTES,
-  CloudflareConfigSnapshotSchema,
-} from "@splitch/contracts";
+import { CLOUDFLARE_SNAPSHOT_MAX_BODY_BYTES } from "@splitch/contracts";
+import { parseConfigSnapshot } from "@splitch/evaluation-core";
 import { hmacHex, timingSafeHexEqual } from "./crypto";
 
 const CONFIGURATION_PATH = "/integrations/splitch/configuration";
@@ -97,11 +95,9 @@ async function authenticatePush(
   return null;
 }
 
-function parseSnapshot(
-  body: string,
-): ReturnType<typeof CloudflareConfigSnapshotSchema.parse> | Response {
+function parseSnapshot(body: string): ReturnType<typeof parseConfigSnapshot> | Response {
   try {
-    return CloudflareConfigSnapshotSchema.parse(JSON.parse(body));
+    return parseConfigSnapshot(body, "Cloudflare");
   } catch {
     return Response.json(
       { code: "VALIDATION_ERROR", message: "snapshot body is invalid" },

@@ -1,5 +1,6 @@
 import type { Repository } from "@splitch/db";
 import {
+  createWorkerFaultReporter,
   createWorkerObservability,
   workerObservabilityWithWaitUntil,
 } from "@splitch/observability/worker";
@@ -71,7 +72,33 @@ export async function handleControlPlaneAppRequest(input: {
 
   const response = await app.fetch(request, env);
   if (response.ok && request.method !== "GET" && request.method !== "HEAD") {
-    ctx.waitUntil(dispatchCloudflarePushes({ repo, secretKek: env.INTEGRATION_SECRET_KEK }));
+    ctx.waitUntil(
+      dispatchCloudflarePushes({
+        repo,
+        secretKek: env.INTEGRATION_SECRET_KEK,
+        secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,
+      }).catch((error) => {
+        reportCloudflarePushFault(env, ctx, error, "mutation");
+        throw error;
+      }),
+    );
   }
   return response;
+}
+
+function reportCloudflarePushFault(
+  env: ControlPlaneApiEnv,
+  ctx: Pick<ExecutionContext, "waitUntil">,
+  error: unknown,
+  trigger: string,
+): void {
+  createWorkerFaultReporter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx))(
+    "cloudflare_push_dispatch_failed",
+    {
+      service: "splitch-control-plane-api",
+      job: "cloudflare-push-dispatch",
+      trigger,
+      fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+    },
+  );
 }

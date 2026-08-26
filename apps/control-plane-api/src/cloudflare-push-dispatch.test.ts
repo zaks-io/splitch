@@ -52,6 +52,60 @@ describe("Cloudflare configuration push dispatch", () => {
       now: () => NOW,
     });
     expect(finishes[0]).toMatchObject({ state: "pending" });
+    expect(JSON.parse(String(finishes[0]?.errorJson))).toMatchObject({
+      kind: "protocol",
+      code: "VERSION_NOT_CONFIRMED",
+    });
+  });
+
+  it("records the transport error name", async () => {
+    const { repo, finishes } = await fixture();
+    await dispatchCloudflarePushes({
+      repo,
+      secretKek: KEY,
+      fetcher: async () => {
+        throw new TypeError("connection failed");
+      },
+      now: () => NOW,
+    });
+    expect(JSON.parse(String(finishes[0]?.errorJson))).toMatchObject({
+      kind: "transport",
+      code: "TypeError",
+    });
+  });
+
+  it("isolates preparation failures and reuses one snapshot per Environment", async () => {
+    const { repo, finishes, deliveries, environmentVersion } = await fixture();
+    const second = {
+      ...deliveries[0],
+      deliveryId: "00000000-0000-4000-8000-000000000003",
+    };
+    deliveries.unshift({ ...deliveries[0], secretCiphertext: "invalid" });
+    deliveries[1] = second;
+    const fetcher = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 204,
+          headers: { "splitch-environment-version": "2" },
+        }),
+    );
+
+    await expect(
+      dispatchCloudflarePushes({ repo, secretKek: KEY, fetcher, now: () => NOW }),
+    ).resolves.toBe(2);
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(environmentVersion).toHaveBeenCalledTimes(2);
+    expect(finishes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          deliveryId: DELIVERY_ID,
+          state: "pending",
+          errorJson: expect.stringContaining("DELIVERY_PREPARATION_FAILED"),
+        }),
+        expect.objectContaining({ deliveryId: second.deliveryId, state: "delivered" }),
+      ]),
+    );
   });
 
   it("retries 5xx and makes deterministic 4xx terminal", async () => {
@@ -74,32 +128,34 @@ describe("Cloudflare configuration push dispatch", () => {
 async function fixture() {
   const encrypted = await encryptIntegrationSecret("push-secret", KEY, "v1", "test key");
   const finishes: Array<Record<string, unknown>> = [];
+  const deliveries = [
+    {
+      deliveryId: DELIVERY_ID,
+      installationId: "00000000-0000-4000-8000-000000000002",
+      appId: "app_1",
+      environmentId: "env_1",
+      endpoint: "https://splitch-config.customer.workers.dev/integrations/splitch/configuration",
+      secretCiphertext: encrypted.ciphertext,
+      secretKeyVersion: encrypted.keyVersion,
+      environmentVersion: 2,
+      attemptCount: 0,
+    },
+  ];
+  const environmentVersion = vi.fn(async () => 2);
   const cloudflare = {
-    claimDueDeliveries: async () => [
-      {
-        deliveryId: DELIVERY_ID,
-        installationId: "00000000-0000-4000-8000-000000000002",
-        appId: "app_1",
-        environmentId: "env_1",
-        endpoint: "https://splitch-config.customer.workers.dev/integrations/splitch/configuration",
-        secretCiphertext: encrypted.ciphertext,
-        secretKeyVersion: encrypted.keyVersion,
-        environmentVersion: 2,
-        attemptCount: 0,
-      },
-    ],
-    environmentVersion: async () => 2,
+    claimDueDeliveries: async () => deliveries,
+    environmentVersion,
     finishDelivery: async (
       _deliveryId: string,
       _leaseOwner: string,
       input: Record<string, unknown>,
     ) => {
-      finishes.push(input);
+      finishes.push({ deliveryId: _deliveryId, ...input });
     },
   };
   const repo = {
     cloudflare,
     flags: { flags: { findMany: async () => [] } },
   } as unknown as Repository;
-  return { repo, finishes };
+  return { repo, finishes, deliveries, environmentVersion };
 }

@@ -1,10 +1,10 @@
 import { z } from "zod";
+import { ConfigSnapshotSchema } from "./config-snapshot";
 import {
   ConvexExposureVerificationConfigSchema,
   ConvexServerExposureItemSchema,
   ConvexServerExposureResponseSchema,
 } from "./convex-integration";
-import { ConfigSnapshotSchema } from "./config-snapshot";
 
 const UuidSchema = z.uuid();
 const EnvironmentVersionSchema = z.number().int().nonnegative();
@@ -40,9 +40,10 @@ export const CloudflareInstallationStatusSchema = CloudflareInstallationSchema.e
   terminalCount: z.number().int().nonnegative(),
   latestDeliveryError: z
     .object({
-      kind: z.enum(["transport", "http"]),
-      code: z.enum(["CONNECT_TIMEOUT", "HTTP_STATUS"]),
+      kind: z.enum(["transport", "http", "protocol", "internal"]),
+      code: z.string().min(1),
       httpStatus: z.number().int().min(100).max(599).optional(),
+      causeName: z.string().min(1).optional(),
       occurredAt: z.iso.datetime(),
     })
     .strict()

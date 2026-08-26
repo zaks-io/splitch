@@ -1,6 +1,12 @@
 import type { CloudflareConfigSnapshot } from "@splitch/contracts";
-import { parseConfigSnapshot } from "@splitch/evaluation-core";
+import {
+  configSnapshotProvider,
+  type Provider,
+  parseConfigSnapshot,
+} from "@splitch/evaluation-core";
 import { type ExposureRow, nextExposureAttempt } from "./exposure-delivery";
+
+const RETENTION_MS = 30 * 86_400_000;
 
 export interface IntegrationRow {
   [key: string]: string | number | null | ArrayBuffer;
@@ -12,6 +18,10 @@ export interface IntegrationRow {
 }
 
 export class StateStorage {
+  private cachedConfiguration:
+    | { snapshotVersion: number; snapshot: CloudflareConfigSnapshot; provider: Provider }
+    | undefined;
+
   constructor(private readonly storage: DurableObjectStorage) {}
 
   initialize(schema: string): void {
@@ -28,11 +38,27 @@ export class StateStorage {
     );
   }
 
-  snapshot(): CloudflareConfigSnapshot | null {
+  configuration(
+    snapshotVersion: number,
+  ): { snapshot: CloudflareConfigSnapshot; provider: Provider } | null {
+    if (this.cachedConfiguration?.snapshotVersion === snapshotVersion)
+      return this.cachedConfiguration;
     const row = this.storage.sql
       .exec<{ payload: string }>("SELECT payload FROM snapshot WHERE singleton = 1")
       .toArray()[0];
-    return row ? parseConfigSnapshot(row.payload, "Cloudflare") : null;
+    if (!row) return null;
+    const snapshot = parseConfigSnapshot(row.payload, "Cloudflare");
+    const configuration = {
+      snapshotVersion,
+      snapshot,
+      provider: configSnapshotProvider(snapshot, "Cloudflare"),
+    };
+    this.cachedConfiguration = configuration;
+    return configuration;
+  }
+
+  invalidateConfiguration(): void {
+    this.cachedConfiguration = undefined;
   }
 
   claim(idempotencyKey: string): { fingerprint: string; resultJson: string } | null {
@@ -109,12 +135,53 @@ export class StateStorage {
     });
   }
 
-  async ensureAlarm(): Promise<void> {
-    const next = this.storage.sql
+  pruneExpired(now: number): void {
+    const cutoff = new Date(now - RETENTION_MS).toISOString();
+    const cutoffMs = now - RETENTION_MS;
+    this.storage.transactionSync(() => {
+      this.storage.sql.exec("DELETE FROM evaluation_claims WHERE created_at <= ?", cutoff);
+      this.storage.sql.exec(
+        "DELETE FROM exposure_outbox WHERE state = 'terminal' AND created_at <= ?",
+        cutoffMs,
+      );
+      this.storage.sql.exec("DELETE FROM push_claims WHERE applied_at <= ?", cutoff);
+    });
+  }
+
+  async ensureAlarm(now = Date.now()): Promise<void> {
+    const pending = this.storage.sql
       .exec<{ nextAttemptAt: number }>(
         "SELECT MIN(next_attempt_at) AS nextAttemptAt FROM exposure_outbox WHERE state = 'pending'",
       )
       .toArray()[0]?.nextAttemptAt;
-    if (typeof next === "number") await this.storage.setAlarm(next);
+    const retentionCandidates = [
+      this.oldestIso("evaluation_claims", "created_at"),
+      this.oldestTerminalExposure(),
+      this.oldestIso("push_claims", "applied_at"),
+    ]
+      .filter((value): value is number => typeof value === "number")
+      .map((value) => value + RETENTION_MS);
+    const candidates = [...(typeof pending === "number" ? [pending] : []), ...retentionCandidates];
+    if (candidates.length > 0) await this.storage.setAlarm(Math.max(now, Math.min(...candidates)));
+  }
+
+  private oldestIso(
+    table: "evaluation_claims" | "push_claims",
+    column: "created_at" | "applied_at",
+  ): number | null {
+    const row = this.storage.sql
+      .exec<{ oldest: string }>(`SELECT MIN(${column}) AS oldest FROM ${table}`)
+      .toArray()[0];
+    return row?.oldest ? Date.parse(row.oldest) : null;
+  }
+
+  private oldestTerminalExposure(): number | null {
+    return (
+      this.storage.sql
+        .exec<{ oldest: number }>(
+          "SELECT MIN(created_at) AS oldest FROM exposure_outbox WHERE state = 'terminal'",
+        )
+        .toArray()[0]?.oldest ?? null
+    );
   }
 }

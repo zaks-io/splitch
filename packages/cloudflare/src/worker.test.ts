@@ -121,6 +121,16 @@ describe("Splitch Cloudflare Worker", () => {
     });
     expect(malformed.status).toBe(400);
 
+    const dangling = await push(
+      {
+        ...baseSnapshot,
+        environmentVersion: 3,
+        flags: [{ ...baseSnapshot.flags[0], experimentId: "exp_missing" }],
+      },
+      "00000000-0000-4000-8000-000000000012",
+    );
+    expect(dangling.status).toBe(400);
+
     await expect(push(baseSnapshot, "00000000-0000-4000-8000-000000000008")).resolves.toMatchObject(
       { status: 204 },
     );
@@ -180,6 +190,63 @@ describe("Splitch Cloudflare Worker", () => {
     await expect(runDurableObjectAlarm(state)).resolves.toBe(true);
     expect(delivery).toHaveBeenCalledTimes(2);
     await expect(state.status()).resolves.toMatchObject({ pendingExposureCount: 0 });
+  });
+});
+
+describe("Splitch Cloudflare Worker retention", () => {
+  it("prunes 30-day claims and terminal metadata without deleting pending Exposures", async () => {
+    await push(baseSnapshot, "00000000-0000-4000-8000-000000000013");
+    const state = env.SPLITCH_STATE.getByName(env.SPLITCH_INSTALLATION_ID);
+    await state.evaluateDetails("checkout", {
+      targetingKey: "person_1",
+      idempotencyKey: "old-evaluation",
+    });
+    const counts = await runInDurableObject(state, async (_instance, durableState) => {
+      const oldIso = "2026-01-01T00:00:00.000Z";
+      const oldMs = Date.parse(oldIso);
+      durableState.storage.sql.exec("UPDATE evaluation_claims SET created_at = ?", oldIso);
+      durableState.storage.sql.exec("UPDATE push_claims SET applied_at = ?", oldIso);
+      for (const [exposureId, stateName] of [
+        ["terminal-old", "terminal"],
+        ["pending-old", "pending"],
+      ] as const) {
+        durableState.storage.sql.exec(
+          `INSERT INTO exposure_outbox (
+            exposure_id, installation_id, flag_key, experiment_id, run_id, run_config_hash,
+            context_json, variant_name, exposed_at, state, attempt_count, next_attempt_at, created_at
+          ) VALUES (?, ?, 'checkout', 'exp_1', 'run_1', 'sha256:run-1', ?, 'treatment', ?, ?, 0, ?, ?)`,
+          exposureId,
+          env.SPLITCH_INSTALLATION_ID,
+          stateName === "pending" ? "{}" : null,
+          oldIso,
+          stateName,
+          Date.now() + 60_000,
+          oldMs,
+        );
+      }
+      return null;
+    });
+    expect(counts).toBeNull();
+
+    await runInDurableObject(state, (instance) => instance.alarm());
+    const retained = await runInDurableObject(state, (_instance, durableState) => ({
+      evaluations: durableState.storage.sql
+        .exec<{ count: number }>("SELECT COUNT(*) AS count FROM evaluation_claims")
+        .one().count,
+      pushes: durableState.storage.sql
+        .exec<{ count: number }>("SELECT COUNT(*) AS count FROM push_claims")
+        .one().count,
+      exposures: durableState.storage.sql
+        .exec<{ exposureId: string; state: string }>(
+          "SELECT exposure_id AS exposureId, state FROM exposure_outbox ORDER BY exposure_id",
+        )
+        .toArray(),
+    }));
+    expect(retained).toEqual({
+      evaluations: 0,
+      pushes: 0,
+      exposures: [{ exposureId: "pending-old", state: "pending" }],
+    });
   });
 });
 

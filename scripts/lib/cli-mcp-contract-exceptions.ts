@@ -149,21 +149,21 @@ export const CLI_MCP_CONTRACT_EXCEPTIONS = [
   },
   {
     operationId: "cloudflare_installations_create",
-    cli: false,
+    cli: true,
     mcp: false,
-    reason: "Cloudflare Worker installation data-plane operation",
+    reason: "local Wrangler setup backed by an Environment-scoped API Key",
   },
   {
     operationId: "cloudflare_installations_get",
-    cli: false,
+    cli: true,
     mcp: false,
-    reason: "Cloudflare Worker installation data-plane operation",
+    reason: "local Wrangler status backed by an Environment-scoped API Key",
   },
   {
     operationId: "cloudflare_installations_delete",
-    cli: false,
+    cli: true,
     mcp: false,
-    reason: "Cloudflare Worker installation data-plane operation",
+    reason: "local Wrangler removal backed by an Environment-scoped API Key",
   },
   {
     operationId: "cloudflare_exposures_create",

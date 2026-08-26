@@ -14,8 +14,19 @@ export function encryptConvexSecret(
   return encryptIntegrationSecret(secret, base64Key, keyVersion, KEY_NAME);
 }
 
-export function decryptConvexSecret(ciphertext: string, base64Key: string | undefined) {
-  return decryptIntegrationSecret(ciphertext, base64Key, KEY_NAME);
+export function decryptConvexSecret(
+  ciphertext: string,
+  base64Key: string | undefined,
+  storedKeyVersion: string,
+  configuredKeyVersion: string | undefined,
+) {
+  return decryptIntegrationSecret(
+    ciphertext,
+    base64Key,
+    storedKeyVersion,
+    configuredKeyVersion,
+    KEY_NAME,
+  );
 }
 
 export function signConvexWebhook(secret: string, timestamp: string, body: string) {

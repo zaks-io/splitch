@@ -33,7 +33,7 @@ from other Flags would make the SDK surface fast but incorrect.
    successful mutations also start delivery immediately after commit. There is no polling.
 
 5. **Exposure delivery is durable and server-verified.** The Durable Object alarm sends pending
-   Exposures to an API-Key-only Splitch endpoint. Splitch reloads the immutable Run, recomputes the
+   Exposures to a Splitch endpoint that accepts server-side API Keys only. Splitch reloads the immutable Run, recomputes the
    resolution, and rejects a mismatched Variant or configuration hash. Accepted and deduplicated
    rows are deleted. Retryable failures remain in the outbox for bounded retry.
 

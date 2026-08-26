@@ -106,6 +106,7 @@ export function createApp(deps: AppDeps): Hono {
     evaluationRoute("cloudflare_exposures_create"),
     makeConvexExposuresHandler({
       ...deps,
+      convexConfigurationResolver: undefined,
       configurationResolver: deps.cloudflareConfigurationResolver,
       integrationKind: "cloudflare",
       holdoverWrite:

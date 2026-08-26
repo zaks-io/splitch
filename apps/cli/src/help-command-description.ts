@@ -11,7 +11,7 @@ export function commandDescription(command: CliCommandDefinition): string {
   if (command.kind === "cloudflare_remove")
     return "Revoke configuration delivery, unbind the service, and delete the integration Worker.";
   if (command.kind === "flags_verify") {
-    return "Verify a Flag KEY through the data plane without firing an Exposure.";
+    return "Verify a Flag Key through the data plane without firing an Exposure.";
   }
   if (command.kind === "env_policy_get") return "Get the selected Environment Policy.";
   if (command.kind === "env_policy_set") return "Update the selected Environment Policy.";

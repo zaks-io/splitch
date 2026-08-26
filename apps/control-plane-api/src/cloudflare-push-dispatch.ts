@@ -10,6 +10,7 @@ const RETRY_DELAYS_MS = [1_000, 5_000, 30_000, 120_000, 600_000, 1_800_000] as c
 export interface CloudflarePushDispatchDeps {
   repo: Repository;
   secretKek?: string;
+  secretKeyVersion?: string;
   fetcher?: typeof fetch;
   now?: () => Date;
   leaseOwner?: () => string;
@@ -24,24 +25,68 @@ export async function dispatchCloudflarePushes(deps: CloudflarePushDispatchDeps)
     new Date(now.getTime() + LEASE_MS).toISOString(),
     BATCH_SIZE,
   );
-  await Promise.all(deliveries.map((delivery) => deliverOne(deps, delivery, leaseOwner, now)));
+  const snapshots = new Map<string, ReturnType<typeof buildStableSnapshot>>();
+  const settled = await Promise.allSettled(
+    deliveries.map((delivery) => deliverSafely(deps, delivery, leaseOwner, now, snapshots)),
+  );
+  const rejected = settled.filter((result) => result.status === "rejected");
+  if (rejected.length > 0)
+    throw new AggregateError(
+      rejected.map((result) => result.reason),
+      `${rejected.length} Cloudflare delivery lease updates failed`,
+    );
   return deliveries.length;
 }
 
 type Delivery = Awaited<ReturnType<Repository["cloudflare"]["claimDueDeliveries"]>>[number];
+
+async function deliverSafely(
+  deps: CloudflarePushDispatchDeps,
+  delivery: Delivery,
+  leaseOwner: string,
+  now: Date,
+  snapshots: Map<string, ReturnType<typeof buildStableSnapshot>>,
+): Promise<void> {
+  try {
+    await deliverOne(deps, delivery, leaseOwner, now, snapshots);
+  } catch (cause) {
+    console.error("cloudflare_push_delivery_preparation_failed", {
+      deliveryId: delivery.deliveryId,
+      cause:
+        cause instanceof Error
+          ? { name: cause.name, message: cause.message, stack: cause.stack }
+          : String(cause),
+    });
+    await finishFailure(deps, delivery, leaseOwner, now, true, {
+      kind: "internal",
+      code: "DELIVERY_PREPARATION_FAILED",
+      causeName: cause instanceof Error ? cause.name : "UnknownError",
+      occurredAt: now.toISOString(),
+    });
+  }
+}
 
 async function deliverOne(
   deps: CloudflarePushDispatchDeps,
   delivery: Delivery,
   leaseOwner: string,
   now: Date,
+  snapshots: Map<string, ReturnType<typeof buildStableSnapshot>>,
 ): Promise<void> {
   const scope = envScope(delivery.appId, delivery.environmentId);
-  const snapshot = await buildStableSnapshot(deps.repo, scope);
+  const snapshotKey = `${delivery.appId}\0${delivery.environmentId}`;
+  let snapshotPromise = snapshots.get(snapshotKey);
+  if (!snapshotPromise) {
+    snapshotPromise = buildStableSnapshot(deps.repo, scope);
+    snapshots.set(snapshotKey, snapshotPromise);
+  }
+  const snapshot = await snapshotPromise;
   const body = JSON.stringify(snapshot);
   const secret = await decryptIntegrationSecret(
     delivery.secretCiphertext,
     deps.secretKek,
+    delivery.secretKeyVersion,
+    deps.secretKeyVersion,
     "INTEGRATION_SECRET_KEK",
   );
   const timestamp = Math.floor(now.getTime() / 1_000).toString();
@@ -62,10 +107,10 @@ async function deliverOne(
       body,
       redirect: "manual",
     });
-  } catch {
+  } catch (cause) {
     await finishFailure(deps, delivery, leaseOwner, now, true, {
       kind: "transport",
-      code: "CONNECT_TIMEOUT",
+      code: cause instanceof Error ? cause.name : "UnknownError",
       occurredAt: now.toISOString(),
     });
     return;
@@ -74,9 +119,8 @@ async function deliverOne(
     const appliedVersion = Number(response.headers.get("splitch-environment-version"));
     if (!Number.isInteger(appliedVersion) || appliedVersion < delivery.environmentVersion) {
       await finishFailure(deps, delivery, leaseOwner, now, true, {
-        kind: "http",
-        code: "HTTP_STATUS",
-        httpStatus: response.status,
+        kind: "protocol",
+        code: "VERSION_NOT_CONFIRMED",
         occurredAt: now.toISOString(),
       });
       return;

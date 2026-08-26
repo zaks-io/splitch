@@ -23,7 +23,7 @@ export async function requireWrangler4(runner: CliCommandRunner, cwd: string): P
   const major = /wrangler\s+(\d+)\./i.exec(`${result.stdout}\n${result.stderr}`)?.[1];
   if (result.exitCode !== 0 || major !== "4")
     throw cloudflareUsage(
-      "Wrangler 4 is required; install it in this project and authenticate with wrangler login",
+      "Wrangler 4 is required; install it in this App and authenticate with wrangler login",
     );
   await wrangler(runner, cwd, ["whoami"]);
 }

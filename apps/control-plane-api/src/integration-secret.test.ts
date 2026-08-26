@@ -19,8 +19,22 @@ describe("integration secrets", () => {
     expect(encrypted.ciphertext).not.toContain("push-secret");
     expect(encrypted.fingerprint).toMatch(/^[a-f0-9]{64}$/);
     await expect(
-      decryptIntegrationSecret(encrypted.ciphertext, kek, "INTEGRATION_SECRET_KEK"),
+      decryptIntegrationSecret(
+        encrypted.ciphertext,
+        kek,
+        encrypted.keyVersion,
+        "v1",
+        "INTEGRATION_SECRET_KEK",
+      ),
     ).resolves.toBe("push-secret");
+  });
+
+  it("fails with the stored and configured versions before attempting decryption", async () => {
+    const encrypted = await encryptIntegrationSecret("push-secret", kek, "v1", "test key");
+
+    await expect(
+      decryptIntegrationSecret(encrypted.ciphertext, kek, "v1", "v2", "test key"),
+    ).rejects.toThrow("test key version mismatch: stored v1, configured v2");
   });
 
   it("signs the exact timestamp, delivery ID, and body bytes", async () => {

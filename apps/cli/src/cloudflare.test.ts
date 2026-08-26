@@ -12,7 +12,7 @@ describe("cloudflare setup", () => {
     await installFakeCloudflarePackage(cwd);
     await writeFile(
       join(cwd, "wrangler.jsonc"),
-      '{\n  // customer configuration\n  "name": "customer-app"\n}\n',
+      '{\n  // customer configuration\n  "name": "customer-app",\n  "env": { "production": { "vars": { "MODE": "production" } } }\n}\n',
     );
     const runner = new RecordingRunner();
     const requests: Array<{ url: string; method: string }> = [];
@@ -61,6 +61,9 @@ describe("cloudflare setup", () => {
     expect(applicationConfig).toContain("// customer configuration");
     expect(applicationConfig).toContain('"binding": "SPLITCH"');
     expect(applicationConfig).toContain('"service": "splitch-config-production"');
+    expect(
+      JSON.parse(applicationConfig.replace("// customer configuration", "")),
+    ).not.toHaveProperty("services");
     await expect(readFile(join(cwd, ".gitignore"), "utf8")).resolves.toContain(
       ".splitch/cloudflare/*/state.json",
     );
@@ -98,6 +101,26 @@ describe("cloudflare setup", () => {
         io: { log: () => {}, error: () => {} },
       }),
     ).rejects.toThrow(/SPLITCH is already bound to "customer-owned-worker"/);
+    expect(runner.calls.some((call) => call.args.includes("deploy"))).toBe(false);
+  });
+
+  it("fails instead of silently binding the root config for an unknown Wrangler Environment", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "splitch-cloudflare-cli-environment-"));
+    await installFakeCloudflarePackage(cwd);
+    await writeFile(
+      join(cwd, "wrangler.jsonc"),
+      JSON.stringify({ name: "customer-app", env: { production: {} } }),
+    );
+    const runner = new RecordingRunner();
+
+    await expect(
+      executeInvocation(parseInvocation(["cloudflare", "setup", "--env", "env_1"]), {
+        cwd,
+        env: { SPLITCH_API_KEY: "api-key" },
+        commandRunner: runner,
+        io: { log: () => {}, error: () => {} },
+      }),
+    ).rejects.toThrow(/Wrangler Environment "env_1" does not exist/);
     expect(runner.calls.some((call) => call.args.includes("deploy"))).toBe(false);
   });
 });

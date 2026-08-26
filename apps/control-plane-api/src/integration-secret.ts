@@ -37,8 +37,15 @@ export async function encryptIntegrationSecret(
 export async function decryptIntegrationSecret(
   ciphertext: string,
   base64Key: string | undefined,
+  storedKeyVersion: string,
+  configuredKeyVersion: string | undefined,
   keyName: string,
 ): Promise<string> {
+  const activeKeyVersion = configuredKeyVersion ?? "v1";
+  if (storedKeyVersion !== activeKeyVersion)
+    throw new Error(
+      `${keyName} version mismatch: stored ${storedKeyVersion}, configured ${activeKeyVersion}`,
+    );
   const rawKey = requiredKey(base64Key, keyName);
   const [ivPart, encryptedPart] = ciphertext.split(".", 2);
   if (!ivPart || !encryptedPart) throw new Error("Integration secret ciphertext is malformed");

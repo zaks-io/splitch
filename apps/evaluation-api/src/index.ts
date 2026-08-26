@@ -34,8 +34,8 @@ import {
 import { HoldoverWriteOutboxDurableObject } from "./assignment/holdover-write-outbox-do";
 import { KvAssignmentStore } from "./assignment/kv-assignment-store";
 import {
-  makeControlPlaneAuthResolver,
   makeCachedJwksVerifier,
+  makeControlPlaneAuthResolver,
   makeSessionStore,
 } from "./control-plane-auth";
 import { makeDataPlaneAuthResolver } from "./data-plane-auth";
@@ -192,29 +192,28 @@ async function handleRequest(
 }
 
 function makeCloudflareConfigurationResolver(binding: ConvexControlPlaneBinding) {
-  return {
-    async resolve(principal: Principal, item: ConvexServerExposureItem) {
-      if (!principal.appId || !principal.environmentId)
-        throw new Error("evaluation-api: Cloudflare Exposure principal has no Environment scope");
-      return binding.loadCloudflareExposureVerificationConfig({
-        appId: principal.appId,
-        environmentId: principal.environmentId,
-        installationId: item.installationId,
-        flagKey: item.flagKey,
-        experimentId: item.experimentId,
-        runId: item.runId,
-      });
-    },
-  };
+  return makeIntegrationConfigurationResolver("Cloudflare", (input) =>
+    binding.loadCloudflareExposureVerificationConfig(input),
+  );
 }
 
 function makeConvexConfigurationResolver(binding: ConvexControlPlaneBinding) {
+  return makeIntegrationConfigurationResolver("Convex", (input) =>
+    binding.loadConvexExposureVerificationConfig(input),
+  );
+}
+
+function makeIntegrationConfigurationResolver(
+  kind: "Cloudflare" | "Convex",
+  load: (
+    input: Parameters<ConvexControlPlaneBinding["loadConvexExposureVerificationConfig"]>[0],
+  ) => ReturnType<ConvexControlPlaneBinding["loadConvexExposureVerificationConfig"]>,
+) {
   return {
     async resolve(principal: Principal, item: ConvexServerExposureItem) {
-      if (!principal.appId || !principal.environmentId) {
-        throw new Error("evaluation-api: Convex Exposure principal has no Environment scope");
-      }
-      return binding.loadConvexExposureVerificationConfig({
+      if (!principal.appId || !principal.environmentId)
+        throw new Error(`evaluation-api: ${kind} Exposure principal has no Environment scope`);
+      return load({
         appId: principal.appId,
         environmentId: principal.environmentId,
         installationId: item.installationId,
