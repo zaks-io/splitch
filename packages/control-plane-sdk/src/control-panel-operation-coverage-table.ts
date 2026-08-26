@@ -1,4 +1,8 @@
-import type { ControlPanelOperation } from "./control-panel-operation";
+import { INTEGRATION_ROUTES } from "./control-panel-operation-coverage-integrations";
+
+export type { Route } from "./control-panel-operation-coverage-types";
+
+import type { OperationCoverage } from "./control-panel-operation-coverage-types";
 
 /**
  * Wiring coverage for the whole operation vocabulary.
@@ -12,33 +16,6 @@ import type { ControlPanelOperation } from "./control-panel-operation";
  * member to the union without adding it here is a COMPILE error, and every
  * assertion below runs over the full table.
  */
-
-export interface Route {
-  method: string;
-  pathname: string;
-  environmentId?: string;
-  search?: string;
-}
-
-/**
- * `Extract<ControlPanelOperation, { id: Id }>` is wrong here: several members
- * declare `id` as a union of literals, and such a member is not assignable to
- * `{ id: OneOfThem }`, so Extract silently yields `never` and every row for
- * those ids becomes unwritable. Narrowing the discriminant on a distributive
- * type parameter keeps all of them reachable.
- */
-type NarrowById<Members, Id> = Members extends { id: infer Ids }
-  ? Id extends Ids
-    ? Omit<Members, "id"> & { id: Id }
-    : never
-  : never;
-
-type OperationCoverage = {
-  [Id in ControlPanelOperation["id"]]: {
-    route: Route;
-    operation: NarrowById<ControlPanelOperation, Id>;
-  };
-};
 
 const APP = "app_1";
 const ENV = "env_1";
@@ -318,4 +295,5 @@ export const OPERATION_ROUTES: OperationCoverage = {
     route: { method: "POST", pathname: `/apps/${APP}/envs/${ENV}/api-keys/key_1/revoke` },
     operation: { id: "api_key_revoke", appId: APP, environmentId: ENV, keyId: "key_1" },
   },
+  ...INTEGRATION_ROUTES,
 };

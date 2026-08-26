@@ -128,7 +128,8 @@ const CANONICAL_OPERATION_IDS = [
   "cloudflare_installations_get",
   "cloudflare_installations_delete",
   "cloudflare_exposures_create",
-  // Sentry change tracking (API Key only, not MCP tools)
+  // Sentry change tracking: operator door, so these are MCP tools
+  "sentry_installations_list",
   "sentry_installations_create",
   "sentry_installations_get",
   "sentry_installations_delete",

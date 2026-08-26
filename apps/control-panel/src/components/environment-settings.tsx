@@ -2,6 +2,7 @@ import type { PanelEnvironmentSettings } from "@splitch/control-plane-sdk/panel-
 import { ApiKeysCard } from "./api-keys-card";
 import { ClientKeyCard } from "./client-key-card";
 import { EnvironmentPolicyEditor } from "./environment-policy-editor";
+import { SentryIntegrationCard } from "./sentry-integration-card";
 
 export function EnvironmentSettings({ settings }: { settings: PanelEnvironmentSettings }) {
   const scope = {
@@ -23,6 +24,7 @@ export function EnvironmentSettings({ settings }: { settings: PanelEnvironmentSe
       <ClientKeyCard {...scope} initialClientKey={settings.clientKey} />
       <ApiKeysCard {...scope} initialApiKeys={settings.apiKeys} />
       <EnvironmentPolicyEditor {...scope} initialPolicy={settings.environment.policy} />
+      <SentryIntegrationCard {...scope} />
     </div>
   );
 }

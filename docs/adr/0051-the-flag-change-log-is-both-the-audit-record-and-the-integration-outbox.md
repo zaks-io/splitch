@@ -49,7 +49,15 @@ Sentry's generic feature-flag provider hook forced the question: change tracking
    wearing a right answer's clothes. They ship as `{"id": "unattributed", "type": "name"}`, and each
    batch logs the count and the affected `seq` values.
 
-8. **Retention is age plus every cursor.** The daily cron prunes rows older than 90 days that are
+8. **splitch mints the signing secret, and the installation routes live on the operator door.**
+   Sentry's Generic-provider form gives no secret; it asks the provider for one. So `webhookSecret`
+   is optional on write, the server generates one when it is absent, and the response carries it
+   exactly once, the same custody an API Key gets. The routes address the Environment in the path
+   (`/apps/:appId/envs/:environmentId/integrations/sentry/installations`) rather than reading it
+   from an edge credential, because a Control Panel delegation claim must name the resource it acts
+   on. That is what makes the Environment settings card possible without a second auth path.
+
+9. **Retention is age plus every cursor.** The daily cron prunes rows older than 90 days that are
    also behind the minimum undelivered `seq` across active installations. A backlog is never deleted
    out from under an installation, however old it is.
 
@@ -75,8 +83,10 @@ Sentry's generic feature-flag provider hook forced the question: change tracking
 - `flag_configs` gains `updated_by`/`updated_via`, and every write path that builds a config patch
   must stamp them. A path that forgets produces an unattributed audit row, which is visible, not
   silent.
-- The read surface is deliberately absent: no history endpoint, no `splitch flag history`, no panel
-  view. Having the data is the deliverable; exposing it is a later slice.
+- The read surface for the change log is deliberately absent: no history endpoint, no
+  `splitch flag history`, no panel view of the log itself. Having the data is the deliverable;
+  exposing it is a later slice. The Sentry installation is the exception the operator has to reach,
+  so it gets a Control Panel card and nothing else does.
 - `sentry_installations` reuses the AES-GCM envelope custody in `integration-secret.ts` and the
   existing `INTEGRATION_SECRET_KEK`, the same key the Cloudflare integration already uses. No new
   KEK name, so no ops step: a missing KEK still throws rather than falling back.

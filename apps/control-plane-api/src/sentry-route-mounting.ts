@@ -4,32 +4,25 @@ import type { Hono } from "hono";
 import { controlPlaneRoute } from "./routes";
 import { makeSentryHandlers, type SentryHandlerDeps } from "./sentry-handlers";
 
+/**
+ * Mounted unconditionally, unlike the Convex and Cloudflare integrations: these
+ * are operator routes on the same door as API Keys, and reads do not touch the
+ * KEK at all. A missing KEK throws inside `encryptIntegrationSecret` on the two
+ * routes that seal a secret, which is louder than a route that quietly 404s.
+ */
 export function mountSentryRoutes(
   app: Hono,
   registrar: Registrar,
   repo: Repository,
-  deps: Omit<SentryHandlerDeps, "repo"> | undefined,
+  deps: Omit<SentryHandlerDeps, "repo">,
 ): void {
-  if (!deps) return;
   const handlers = makeSentryHandlers({ repo, ...deps });
-  registrar.mount(
-    app,
-    controlPlaneRoute("sentry_installations_create"),
-    handlers.create as RouteHandler<unknown>,
-  );
-  registrar.mount(
-    app,
-    controlPlaneRoute("sentry_installations_get"),
-    handlers.get as RouteHandler<unknown>,
-  );
-  registrar.mount(
-    app,
-    controlPlaneRoute("sentry_installations_delete"),
-    handlers.remove as RouteHandler<unknown>,
-  );
-  registrar.mount(
-    app,
-    controlPlaneRoute("sentry_secret_rotations_create"),
-    handlers.rotate as RouteHandler<unknown>,
-  );
+  const mount = (operationId: Parameters<typeof controlPlaneRoute>[0], handler: unknown) => {
+    registrar.mount(app, controlPlaneRoute(operationId), handler as RouteHandler<unknown>);
+  };
+  mount("sentry_installations_list", handlers.list);
+  mount("sentry_installations_create", handlers.create);
+  mount("sentry_installations_get", handlers.get);
+  mount("sentry_installations_delete", handlers.remove);
+  mount("sentry_secret_rotations_create", handlers.rotate);
 }

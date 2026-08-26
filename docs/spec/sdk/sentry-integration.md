@@ -13,44 +13,69 @@ cannot correlate them with anything.
 
 ## Change tracking
 
-### Sentry side
+### Who mints the secret
 
-In Sentry, **Settings → Feature Flags → Change Tracking**, add a provider of type **Generic**.
-Sentry returns a signing secret (10-64 characters) and the webhook URL:
+Sentry's **Settings → Feature Flags → Change Tracking → Add New Provider** form shows a read-only
+webhook URL and an empty Secret field hinted "paste the signing secret given by your provider."
+splitch is the provider, so splitch mints the secret and the operator pastes it into Sentry. The
+exchange is two copy-pastes in this order:
+
+1. Copy the webhook URL out of Sentry's form.
+2. Paste it into splitch; splitch answers with a freshly minted signing secret, shown once.
+3. Paste that secret into Sentry's Secret field and save.
+
+The URL looks like this, and regional hosts (`https://us.sentry.io/...`, `https://de.sentry.io/...`)
+are accepted:
 
 ```text
 https://sentry.io/api/0/organizations/<organization_id_or_slug>/flags/hooks/provider/generic/
 ```
 
-Regional hosts (`https://us.sentry.io/...`, `https://de.sentry.io/...`) are accepted. Self-hosted
-Sentry requires its host in the Worker's `SENTRY_WEBHOOK_ALLOWED_HOSTS`.
+Self-hosted Sentry requires its host in the Worker's `SENTRY_WEBHOOK_ALLOWED_HOSTS`.
 
-### Install
+### Control Panel
+
+**Environment settings → Sentry change tracking** is the operator's door. Paste the webhook URL,
+press **Connect Sentry**, and the minted secret appears once in a copy-once panel, the same
+treatment an API Key gets. The table below the form carries delivery health, a **Rotate secret**
+button (mints a new secret, shown once, for when Sentry's copy is lost or compromised), and
+**Disconnect**, which revokes the installation and stops delivery.
+
+The card acts on the Environment you are looking at. One Environment, one Sentry organization.
+
+### Install (API)
 
 One installation binds **one Environment to one Sentry organization**. Sentry's payload carries no
-environment field, so a prod Sentry organization must not hear about dev toggles; the Environment
-comes from the API Key, never from the body.
+environment field, so a prod Sentry organization must not hear about dev toggles; the Environment is
+in the path, never in the body. These routes sit on the operator door beside API Keys and take App
+admin, not an edge credential.
 
 ```text
-POST /api/integrations/sentry/installations
-Authorization: Bearer <apiKey>
+POST /apps/:appId/envs/:environmentId/integrations/sentry/installations
 
-{ installationId, webhookUrl, webhookSecret }
+{ installationId, webhookUrl, webhookSecret? }
 ```
 
-`installationId` is a caller-generated UUID. An exact retry returns the existing installation;
-reusing the id with a different URL or secret fails `IDEMPOTENCY_KEY_CONFLICT`. The secret is
-encrypted under `INTEGRATION_SECRET_KEK` and never returned.
+`installationId` is a caller-generated UUID. Omit `webhookSecret` and the server mints one and
+returns it once in `webhookSecret` on the response; supply it and the caller's value is stored
+verbatim, which is what an agent rotating out of its own keystore needs. Either way the stored
+secret is encrypted under `INTEGRATION_SECRET_KEK` and no read ever returns it.
+
+An exact retry returns the existing installation. Reusing the id with a different URL, or with a
+different caller-supplied secret, fails `IDEMPOTENCY_KEY_CONFLICT`. A retry that omits the secret is
+never a conflict on the secret: a minted secret differs on every call by construction, so there is
+nothing to compare, and the replay answers without a secret rather than inventing a second one.
 
 `webhookUrl` must be HTTPS, on `sentry.io`/`*.sentry.io` or a configured self-hosted host, with no
 credentials, port, query string, or fragment, and its path must be the
 `/api/0/organizations/<org>/flags/hooks/provider/generic/` shape. This is an SSRF boundary and is
 re-checked at dispatch time, not only at install: the row outlives the request.
 
-`GET /api/integrations/sentry/installations/:installationId` returns delivery health
+`GET` on the collection, or on `.../installations/:installationId`, returns delivery health
 (`lastDeliveredSeq`, `lastDeliveredAt`, `attemptCount`, `nextAttemptAt`, `latestDeliveryError`) and
-never the secret. `DELETE` revokes and stops delivery.
-`POST .../secret-rotations` replaces the signing secret when Sentry issues a new one.
+never the secret. `DELETE` revokes and stops delivery. `POST .../installations/:installationId/
+secret-rotations` replaces the signing secret, minting one when the body omits it; paste the result
+back into Sentry, because Sentry keeps verifying against its own copy until you do.
 
 ### What splitch sends
 

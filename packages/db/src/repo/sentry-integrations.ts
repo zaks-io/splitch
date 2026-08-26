@@ -57,6 +57,23 @@ export function makeSentryIntegrationRepo(d1: D1Database) {
     },
 
     /**
+     * Every installation this Environment has ever had, newest first. Revoked
+     * rows are included: they are the record of where Flag changes used to be
+     * sent, and hiding them would make a revoked Sentry org indistinguishable
+     * from one that was never wired up.
+     */
+    async listInstallations(scope: EnvScope): Promise<SentryInstallationRow[]> {
+      assertMintedScope(scope);
+      const rows = await d1
+        .prepare(
+          `${INSTALLATION_SELECT} WHERE app_id = ? AND environment_id = ? ORDER BY created_at DESC`,
+        )
+        .bind(scope.appId, scope.environmentId)
+        .all<SentryInstallationRow>();
+      return rows.results;
+    },
+
+    /**
      * Fails loud on a duplicate rather than INSERT OR IGNORE: a second
      * installation against an Environment that already has one is a
      * misconfiguration the caller must see, not a silent no-op that would leave

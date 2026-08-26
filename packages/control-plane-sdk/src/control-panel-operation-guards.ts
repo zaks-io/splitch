@@ -26,6 +26,8 @@ const SCOPED_OPERATION_IDS = [
   "event_definitions_list",
   "event_definitions_create",
   "environment_exposure_status_get",
+  "sentry_installations_list",
+  "sentry_installations_create",
 ] as const;
 
 /** Operations that name no resource, so their claims carry only the id. */
@@ -76,6 +78,16 @@ const ORG_MEMBER_RESOURCE_OPERATION_IDS = [
   "organization_members_remove",
 ] as const;
 
+/**
+ * A Sentry installation claim names the App, the Environment, and the
+ * installation. The exact-length check is what keeps a claim minted to rotate
+ * one Environment's signing secret from being replayed against another's.
+ */
+const SENTRY_INSTALLATION_OPERATION_IDS = [
+  "sentry_installations_delete",
+  "sentry_secret_rotations_create",
+] as const;
+
 const SEGMENT_RESOURCE_OPERATION_IDS = [
   "segments_get",
   "segments_update",
@@ -111,6 +123,7 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ...family(ORG_MEMBER_COLLECTION_OPERATION_IDS, (value) => isResourceOperation(value, "orgId")),
   ...family(ORG_MEMBER_RESOURCE_OPERATION_IDS, isOrgMemberResourceOperation),
   ...family(SEGMENT_RESOURCE_OPERATION_IDS, isSegmentResourceOperation),
+  ...family(SENTRY_INSTALLATION_OPERATION_IDS, isSentryInstallationOperation),
 ]);
 
 function family(ids: readonly string[], guard: ClaimGuard): [string, ClaimGuard][] {
@@ -227,6 +240,14 @@ function isSegmentResourceOperation(value: Record<string, unknown>): boolean {
     hasKeys(value, ["id", "appId", "environmentId", "segmentId"]) &&
     hasAppEnvironment(value) &&
     isNonEmptyString(value.segmentId)
+  );
+}
+
+function isSentryInstallationOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "installationId"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.installationId)
   );
 }
 

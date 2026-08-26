@@ -49,6 +49,10 @@
       "types": "./src/panel-app-settings.ts",
       "default": "./src/panel-app-settings.ts"
     },
+    "./panel-sentry": {
+      "types": "./src/panel-sentry.ts",
+      "default": "./src/panel-sentry.ts"
+    },
     "./panel-settings": {
       "types": "./src/panel-settings.ts",
       "default": "./src/panel-settings.ts"

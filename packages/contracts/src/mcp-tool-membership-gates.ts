@@ -103,6 +103,14 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   api_keys_list: APP_ADMIN,
   api_keys_create: APP_ADMIN,
   api_keys_revoke: APP_ADMIN,
+  // Wiring an Environment into a Sentry organization is credential-shaped work:
+  // it decides where this Environment's Flag changes are sent and holds a
+  // signing secret. Same gate as the API Key routes, reads included.
+  sentry_installations_list: APP_ADMIN,
+  sentry_installations_create: APP_ADMIN,
+  sentry_installations_get: APP_ADMIN,
+  sentry_installations_delete: APP_ADMIN,
+  sentry_secret_rotations_create: APP_ADMIN,
   flags_test_eval: APP_MEMBER,
   experiment_results_get: APP_MEMBER,
   experiment_results_post: APP_MEMBER,

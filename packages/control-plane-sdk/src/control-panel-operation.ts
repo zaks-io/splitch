@@ -22,12 +22,13 @@ import { parseFlags } from "./control-panel-operation-flags";
 import { parseAppScoped } from "./panel-app-settings-parse.js";
 import { parseMetrics } from "./panel-metrics-parse.js";
 import {
-  parseOrganizationUsage,
   parseOrganizationsCreate,
+  parseOrganizationUsage,
   parseOrgMembers,
 } from "./panel-organizations-parse.js";
-import { decodeSegment, decodedSegments } from "./panel-path-segments.js";
+import { decodedSegments, decodeSegment } from "./panel-path-segments.js";
 import { parseSegments } from "./panel-segments-parse.js";
+import { parseSentryIntegration } from "./panel-sentry-parse.js";
 
 export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 
@@ -171,6 +172,23 @@ export type ControlPanelOperation =
       appId: string;
       environmentId: string;
       keyId: string;
+    }
+  /**
+   * Sentry change tracking. The installation binds this Environment to one
+   * Sentry organization, so the claim names both axes; the resource pair also
+   * names the installation, so a delegation minted to rotate one Environment's
+   * signing secret can never be replayed against another installation.
+   */
+  | {
+      id: "sentry_installations_list" | "sentry_installations_create";
+      appId: string;
+      environmentId: string;
+    }
+  | {
+      id: "sentry_installations_delete" | "sentry_secret_rotations_create";
+      appId: string;
+      environmentId: string;
+      installationId: string;
     };
 
 const APPS_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
@@ -216,7 +234,8 @@ export function parseControlPanelOperation(
     parseEnvironmentSettings(method, pathname) ??
     parseMetrics(method, pathname, panelEnvironmentId) ??
     parseSegments(method, pathname, panelEnvironmentId) ??
-    parseEventDefinitionOperation(method, pathname, panelEnvironmentId)
+    parseEventDefinitionOperation(method, pathname, panelEnvironmentId) ??
+    parseSentryIntegration(method, pathname)
   );
 }
 
