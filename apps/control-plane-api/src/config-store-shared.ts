@@ -66,8 +66,12 @@ export async function buildSnapshotFromD1(
   scope: EnvScope,
   flagId: string,
 ): Promise<Snapshot | null> {
-  const experiment = await repo.experiments.findRunningExperimentForFlag(scope, flagId);
-  return buildSnapshot(repo, scope, flagId, experiment);
+  return buildSnapshot(
+    repo,
+    scope,
+    flagId,
+    repo.experiments.findRunningExperimentForFlag(scope, flagId),
+  );
 }
 
 export async function buildExperimentSnapshotFromD1(
@@ -77,28 +81,31 @@ export async function buildExperimentSnapshotFromD1(
 ): Promise<Snapshot | null> {
   const experiment = await repo.experiments.getExperiment(scope, experimentId);
   if (!experiment) return null;
-  return buildSnapshot(repo, scope, experiment.flagId, experiment);
+  return buildSnapshot(repo, scope, experiment.flagId, Promise.resolve(experiment));
 }
 
 async function buildSnapshot(
   repo: Repository,
   scope: EnvScope,
   flagId: string,
-  experiment: Awaited<ReturnType<Repository["experiments"]["getExperiment"]>>,
+  experimentResult: Promise<Awaited<ReturnType<Repository["experiments"]["getExperiment"]>>>,
 ): Promise<Snapshot | null> {
-  const inputs = await loadFlagConfigWriteContext(repo, scope, flagId);
+  const [experiment, inputs, authoringRows] = await Promise.all([
+    experimentResult,
+    loadFlagConfigWriteContext(repo, scope, flagId),
+    repo.flags.listTargetingRules(scope, flagId),
+  ]);
   if (!inputs) return null;
   const { flag, config, variants } = inputs;
 
-  const authoringTargetingRules = (await repo.flags.listTargetingRules(scope, flagId)).map(
-    toTargetingRule,
-  );
-  const resolved = requireResolvedTargetingRules(
-    await resolveTargetingRules(repo, scope.appId, authoringTargetingRules),
-  );
-  const run = experiment?.liveRunId
-    ? await repo.experiments.getRun(scope, experiment.liveRunId)
-    : null;
+  const authoringTargetingRules = authoringRows.map(toTargetingRule);
+  const [resolution, run] = await Promise.all([
+    resolveTargetingRules(repo, scope.appId, authoringTargetingRules),
+    experiment?.liveRunId
+      ? repo.experiments.getRun(scope, experiment.liveRunId)
+      : Promise.resolve(null),
+  ]);
+  const resolved = requireResolvedTargetingRules(resolution);
   if (experiment?.liveRunId && !run) {
     throw new Error("config-store: experiment liveRunId points at no Run");
   }
@@ -131,12 +138,14 @@ export async function loadFlagConfigWriteContext(
   scope: EnvScope,
   flagId: string,
 ) {
-  const [flag, config] = await Promise.all([
+  const [flag, config, variantCatalogs] = await Promise.all([
     repo.flags.getFlag(appScope(scope.appId), flagId),
     repo.flags.getFlagConfig(scope, flagId),
+    repo.flags.listVariantsForFlags(appScope(scope.appId), [flagId]),
   ]);
   if (!flag || !config) return null;
-  const variants = (await repo.flags.listVariants(appScope(scope.appId), flagId)).map((v) => ({
+  const variantRows = variantCatalogs.get(flagId) ?? [];
+  const variants = variantRows.map((v) => ({
     id: v.id,
     name: v.name,
     value: JSON.parse(v.value) as Variant["value"],

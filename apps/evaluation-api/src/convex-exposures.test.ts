@@ -58,6 +58,7 @@ describe("Convex server Exposure verification", () => {
       exposureRedemptionClaims: new MemoryExposureRedemptionClaimStore(),
       holdoverWrite: completedHoldover(),
       saltStore: saltStore(),
+      now: () => new Date("2026-08-25T12:00:01.000Z"),
     });
     const args = requestArgs();
     const body = (args.input as { body: { exposures: Array<{ variantName: string }> } }).body;

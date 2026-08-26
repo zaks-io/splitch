@@ -4,11 +4,11 @@ import type { PanelExposureStatusClient } from "@splitch/control-plane-sdk/panel
 import { getRequest } from "@tanstack/react-start/server";
 import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelAppSettingsClient } from "./control-plane-app-settings";
-import { createControlPanelExperimentsClient } from "./control-plane-experiments";
 import {
   createControlPanelApprovalsClient,
   createControlPanelFlagsClient,
 } from "./control-plane-apps";
+import { createControlPanelExperimentsClient } from "./control-plane-experiments";
 import { createControlPanelExposureStatusClient } from "./control-plane-exposure-status";
 import { createControlPanelSegmentsClient } from "./control-plane-segments";
 import { loadSessionFromRequest } from "./session-refresh";
@@ -69,20 +69,48 @@ export async function authorizedFlagsClient(
   };
 }
 
-export async function authorizedSegmentsClient(
-  environmentId: string,
-): Promise<AuthorizedClient<PanelSegmentsClient>> {
+export async function authorizedFlagsClients(
+  environmentIds: readonly string[],
+): Promise<AuthorizedClient<ReadonlyArray<{ environmentId: string; flags: FlagsClient }>>> {
   const authorized = await panelBindingContext();
   if (!authorized.ok) return authorized;
   const { bindings, actor } = authorized;
   return {
     ok: true,
-    client: createControlPanelSegmentsClient(
-      bindings.CONTROL_PLANE_API,
-      actor,
+    client: environmentIds.map((environmentId) => ({
       environmentId,
-      bindings.CONTROL_PANEL_DELEGATION_SECRET,
-    ),
+      flags: createControlPanelFlagsClient(
+        bindings.CONTROL_PLANE_API,
+        actor,
+        environmentId,
+        bindings.CONTROL_PANEL_DELEGATION_SECRET,
+      ),
+    })),
+  };
+}
+
+export async function authorizedFlagDetailClients(
+  environmentId: string,
+): Promise<AuthorizedClient<{ flags: FlagsClient; segments: PanelSegmentsClient }>> {
+  const authorized = await panelBindingContext();
+  if (!authorized.ok) return authorized;
+  const { bindings, actor } = authorized;
+  return {
+    ok: true,
+    client: {
+      flags: createControlPanelFlagsClient(
+        bindings.CONTROL_PLANE_API,
+        actor,
+        environmentId,
+        bindings.CONTROL_PANEL_DELEGATION_SECRET,
+      ),
+      segments: createControlPanelSegmentsClient(
+        bindings.CONTROL_PLANE_API,
+        actor,
+        environmentId,
+        bindings.CONTROL_PANEL_DELEGATION_SECRET,
+      ),
+    },
   };
 }
 

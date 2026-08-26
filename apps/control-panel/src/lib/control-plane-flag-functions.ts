@@ -1,20 +1,24 @@
 import { env as workerEnv } from "cloudflare:workers";
-import { createRepository } from "@splitch/db";
 import type { ControlPlaneOperationResult } from "@splitch/control-plane-sdk";
+import { createRepository } from "@splitch/db";
 import { createServerFn } from "@tanstack/react-start";
-import { controlPanelBindings } from "./bindings";
 import { z } from "zod";
+import { controlPanelBindings } from "./bindings";
 import { draftIssues, FlagDraftSchema, flagCreateInput } from "./create-flag-model";
 import { type FlagDetailNotFound, isFlagDetailNotFound, readFlagDetail } from "./flag-detail-data";
 import { type FlagDetailView, flagDetailView } from "./flag-detail-view";
-import { type FlagsPageData, readFlagsPage } from "./flags-page-data";
 import {
   assertMatrixEnvironments,
   type FlagsMatrixData,
   readFlagsMatrix,
 } from "./flags-matrix-data";
+import { type FlagsPageData, readFlagsPage } from "./flags-page-data";
 import { createEnvironmentResolver } from "./membership";
-import { authorizedFlagsClient, authorizedSegmentsClient } from "./panel-authorized-clients";
+import {
+  authorizedFlagDetailClients,
+  authorizedFlagsClient,
+  authorizedFlagsClients,
+} from "./panel-authorized-clients";
 
 type FlagsPageScope = { appId: string; environmentId: string };
 type FlagsMatrixScope = { appId: string; environmentIds: string[] };
@@ -43,28 +47,13 @@ export const loadControlPanelFlags = createServerFn({ method: "GET" })
 export const loadControlPanelFlagsMatrix = createServerFn({ method: "GET" })
   .validator((data: FlagsMatrixScope) => data)
   .handler(async ({ data }): Promise<ControlPlaneOperationResult<FlagsMatrixData>> => {
-    const authorized = await Promise.all(
-      data.environmentIds.map(async (environmentId) => ({
-        environmentId,
-        authorized: await authorizedFlagsClient(environmentId),
-      })),
-    );
-    const refused = authorized.find((column) => !column.authorized.ok);
-    if (refused && !refused.authorized.ok) return refused.authorized.result;
-
+    const authorized = await authorizedFlagsClients(data.environmentIds);
+    if (!authorized.ok) return authorized.result;
     const repo = createRepository(controlPanelBindings(workerEnv).DB);
-    assertMatrixEnvironments(
-      data.environmentIds,
-      await createEnvironmentResolver(repo).listEnvironments(data.appId),
-    );
+    const environments = await createEnvironmentResolver(repo).listEnvironments(data.appId);
+    assertMatrixEnvironments(data.environmentIds, environments);
 
-    return readFlagsMatrix(
-      authorized.map((column) => {
-        if (!column.authorized.ok) throw new Error("Flags client authorization was inconsistent");
-        return { environmentId: column.environmentId, flags: column.authorized.client };
-      }),
-      data.appId,
-    );
+    return readFlagsMatrix(authorized.client, data.appId);
   });
 
 /**
@@ -77,9 +66,9 @@ export const loadControlPanelFlagDetail = createServerFn({ method: "GET" })
   .validator((data: FlagsPageScope & { env: string; flagKey: string }) => data)
   .handler(
     async ({ data }): Promise<ControlPlaneOperationResult<FlagDetailView | FlagDetailNotFound>> => {
-      const authorized = await authorizedFlagsClient(data.environmentId);
+      const authorized = await authorizedFlagDetailClients(data.environmentId);
       if (!authorized.ok) return authorized.result;
-      const detail = await readFlagDetail(authorized.client, data, data.flagKey);
+      const detail = await readFlagDetail(authorized.client.flags, data, data.flagKey);
       if (!detail.ok) return detail;
       if (isFlagDetailNotFound(detail.data)) {
         return { ok: true, status: detail.status, data: detail.data };
@@ -95,9 +84,7 @@ export const loadControlPanelFlagDetail = createServerFn({ method: "GET" })
           }),
         };
       }
-      const segments = await authorizedSegmentsClient(data.environmentId);
-      if (!segments.ok) return segments.result;
-      const segmentList = await segments.client.list({ appId: data.appId });
+      const segmentList = await authorized.client.segments.list({ appId: data.appId });
       if (!segmentList.ok) return segmentList;
       return {
         ok: true,

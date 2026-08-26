@@ -34,22 +34,24 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/")({
     }
 
     configureControlPanelSentryScope(result.context);
-    await recordLastVisitedScope({
-      data: {
-        orgId: result.context.scope.orgId,
-        appSlug: params.appSlug,
-        env: null,
-        path: location.pathname,
-      },
-    });
-    const matrix = await loadControlPanelFlagsMatrix({
-      data: {
-        appId: result.context.scope.appId,
-        environmentIds: result.context.scope.environments.map(
-          (environment) => environment.environmentId,
-        ),
-      },
-    });
+    const [, matrix] = await Promise.all([
+      recordLastVisitedScope({
+        data: {
+          orgId: result.context.scope.orgId,
+          appSlug: params.appSlug,
+          env: null,
+          path: location.pathname,
+        },
+      }),
+      loadControlPanelFlagsMatrix({
+        data: {
+          appId: result.context.scope.appId,
+          environmentIds: result.context.scope.environments.map(
+            (environment) => environment.environmentId,
+          ),
+        },
+      }),
+    ]);
     if (!matrix.ok) throw new Error(matrix.error.message);
     return {
       scope: result.context.scope,
