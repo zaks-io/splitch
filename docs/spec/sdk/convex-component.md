@@ -30,9 +30,9 @@ installation ID and webhook secret, registers them through the API-Key-only
 malformed credentials fail before any integration or config row is written.
 
 `install()` is an exact-retry-safe upgrade entrypoint as well as the initial installation call.
-After a package upgrade, rerunning it activates one versioned, bounded adoption chain that attaches
-recovery watches to pending work created by the prior component version, schedules retention for
-existing retained rows, and resumes stale configuration sync.
+After a package upgrade, rerunning it resumes stale configuration sync, schedules retention for
+existing retained rows, and activates one versioned, bounded adoption chain that attaches recovery
+watches to pending or delivering Exposure rows created by the prior component version.
 
 Each additional Splitch Environment uses another named component instance, API Key, HTTP prefix,
 configuration store, local Assignment Store, and outbox. No instance can read another instance's
@@ -99,7 +99,8 @@ There is no reconciliation cron. Configuration and Exposure recovery chains are 
 with the durable work they protect. Retained claims and terminal Exposure rows share one scheduled
 cleanup Mutation set for the earliest expiry; it schedules its successor only while retained data
 remains. An idempotent `install()` retry after an upgrade runs the finite adoption chain for durable
-work created before these scheduling fields existed.
+Exposure delivery work created before these scheduling fields existed. Activation separately seeds
+version-scoped recovery when configuration is stale.
 
 D1 triggers insert the webhook outbox in the same transaction as the authoritative Flag Configuration
 commit and increment the Environment configuration version. A lease scanner dispatches immediately

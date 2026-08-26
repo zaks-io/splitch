@@ -59,9 +59,10 @@ export const completeCheckout = mutation({
 
 Call `flags.install(ctx)` from an Action after mounting the component and again after upgrading
 `@splitch/convex`. The installation request is idempotent. On upgrade, it starts one bounded adoption
-chain for any configuration sync or Exposure delivery work created by the previous version. The
-callback is served at `/integrations/splitch/configuration`. `SPLITCH_API_KEY` stays in the Convex
-deployment environment and must never be sent to browser code.
+chain for Exposure delivery work created by the previous version, resumes stale configuration sync,
+and schedules retention for existing retained rows. The callback is served at
+`/integrations/splitch/configuration`. `SPLITCH_API_KEY` stays in the Convex deployment environment
+and must never be sent to browser code.
 
 Background recovery is activity-driven. Configuration nudges and new Exposure outbox rows schedule
 their own recovery mutations, which stop once the work is complete. Retained claims and terminal
