@@ -49,9 +49,9 @@ describe("Convex integration D1 transaction", () => {
 
       expect(await repo.convex.environmentVersion(envScope("app_1", "env_1"))).toBe(2);
       const deliveries = await repo.convex.claimDueDeliveries(
-        "2026-08-25T12:00:01.000Z",
+        "2099-01-01T00:00:00.000Z",
         "lease_1",
-        "2026-08-25T12:01:00.000Z",
+        "2099-01-01T00:01:00.000Z",
         10,
       );
       expect(deliveries).toHaveLength(1);
@@ -71,9 +71,9 @@ describe("Convex integration D1 transaction", () => {
 
       expect(await repo.convex.environmentVersion(envScope("app_1", "env_1"))).toBe(3);
       const variantDeliveries = await repo.convex.claimDueDeliveries(
-        "2026-08-25T12:00:02.000Z",
+        "2099-01-01T00:00:02.000Z",
         "lease_2",
-        "2026-08-25T12:01:00.000Z",
+        "2099-01-01T00:01:00.000Z",
         10,
       );
       expect(variantDeliveries).toHaveLength(1);
