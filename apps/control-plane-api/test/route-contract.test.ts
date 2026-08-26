@@ -83,6 +83,7 @@ beforeEach(async () => {
       rateLimiter: allowLimiter,
       repo: createRepository(bindings.d1),
       convex: {},
+      cloudflare: {},
     }),
     bindings,
     signer,

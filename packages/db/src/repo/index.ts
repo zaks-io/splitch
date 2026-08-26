@@ -1,5 +1,6 @@
 import { makeApprovalRepo } from "./approvals";
 import { makeClaimStateRepo } from "./claim-state";
+import { makeCloudflareIntegrationRepo } from "./cloudflare-integrations";
 import { createDb } from "./client";
 import { makeCredentialRepo } from "./credentials";
 import { makeConvexIntegrationRepo } from "./convex-integrations";
@@ -31,6 +32,7 @@ export function createRepository(d1: D1Database) {
     eventDefinitions: makeEventDefinitionRepo(db, d1),
     credentials: makeCredentialRepo(db),
     convex: makeConvexIntegrationRepo(d1),
+    cloudflare: makeCloudflareIntegrationRepo(d1),
     claim: makeClaimStateRepo(d1),
     identity: makeIdentityRepo(db, d1),
     privacy: makePrivacyRepo(db),

@@ -76,3 +76,75 @@ export const configWebhookDeliveries = sqliteTable(
     ),
   ],
 );
+
+export const cloudflareInstallations = sqliteTable(
+  "cloudflare_installations",
+  {
+    installationId: text("installation_id").primaryKey(),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id),
+    environmentId: text("environment_id")
+      .notNull()
+      .references(() => environments.id),
+    endpoint: text("endpoint").notNull(),
+    secretCiphertext: text("secret_ciphertext").notNull(),
+    secretKeyVersion: text("secret_key_version").notNull(),
+    secretFingerprint: text("secret_fingerprint").notNull(),
+    status: text("status").notNull(),
+    lastAppliedVersion: integer("last_applied_version"),
+    lastAppliedAt: text("last_applied_at"),
+    latestDeliveryErrorJson: text("latest_delivery_error_json"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    revokedAt: text("revoked_at"),
+  },
+  (table) => [
+    index("cloudflare_installations_scope_status_idx").on(
+      table.appId,
+      table.environmentId,
+      table.status,
+    ),
+    uniqueIndex("cloudflare_installations_scope_id_unique").on(
+      table.appId,
+      table.environmentId,
+      table.installationId,
+    ),
+  ],
+);
+
+export const cloudflareConfigDeliveries = sqliteTable(
+  "cloudflare_config_deliveries",
+  {
+    deliveryId: text("delivery_id").primaryKey(),
+    installationId: text("installation_id")
+      .notNull()
+      .references(() => cloudflareInstallations.installationId),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id),
+    environmentId: text("environment_id")
+      .notNull()
+      .references(() => environments.id),
+    environmentVersion: integer("environment_version").notNull(),
+    state: text("state").notNull(),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: text("next_attempt_at").notNull(),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: text("lease_expires_at"),
+    lastErrorJson: text("last_error_json"),
+    createdAt: createdAt(),
+    deliveredAt: text("delivered_at"),
+  },
+  (table) => [
+    uniqueIndex("cloudflare_config_delivery_installation_version_unique").on(
+      table.installationId,
+      table.environmentVersion,
+    ),
+    index("cloudflare_config_delivery_lease_idx").on(
+      table.state,
+      table.nextAttemptAt,
+      table.leaseExpiresAt,
+    ),
+  ],
+);

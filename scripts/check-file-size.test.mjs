@@ -30,6 +30,13 @@ test("allows an oversized generated .gen.ts file", (t) => {
   assert.equal(run(repo).status, 0);
 });
 
+test("allows an oversized Wrangler worker configuration declaration", (t) => {
+  const repo = newRepo(t);
+  stage(repo, "packages/cloudflare/src/worker-configuration.d.ts", source(301));
+
+  assert.equal(run(repo).status, 0);
+});
+
 test("rejects a new file that lands over the limit", (t) => {
   const repo = newRepo(t);
   stage(repo, "apps/control-panel/src/routes.ts", source(301));

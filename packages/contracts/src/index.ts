@@ -19,6 +19,13 @@ export {
   normalizeClientOrigins,
   OriginAllowlistSchema,
 } from "./client-origin";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped Cloudflare integration contract
+export * from "./cloudflare-integration";
+export {
+  CONFIG_SNAPSHOT_SCHEMA_VERSION,
+  type ConfigSnapshot,
+  ConfigSnapshotSchema,
+} from "./config-snapshot";
 export { CONTROL_PANEL_DELEGATION_HEADER, PANEL_API_KEY_SCOPES } from "./control-panel-binding";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped Convex integration contract
 export * from "./convex-integration";

@@ -59,6 +59,12 @@ const FAKE_DIST = {
     "component/convex.config.js": "export {};\n",
     "component/_generated/component.d.ts": "export {};\n",
   },
+  cloudflare: {
+    "index.js": "export {};\n",
+    "index.d.ts": "export {};\n",
+    "worker.js": "export {};\n",
+    "worker.d.ts": "export {};\n",
+  },
 };
 
 const FIXTURE_DIGEST = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -71,6 +77,10 @@ try {
   cpSync(containedPath(sourceRepoRoot, "scripts/release"), join(repoRoot, "scripts/release"), {
     recursive: true,
   });
+  const rootLicense = containedPath(sourceRepoRoot, "LICENSE.md");
+  if (existsSync(rootLicense)) {
+    cpSync(rootLicense, join(repoRoot, "LICENSE.md"));
+  }
   mkdirSync(packageRoot, { recursive: true });
   for (const entry of SCRATCH_SOURCES) {
     const source = containedPath(sourceRepoRoot, target.packageDir, entry);

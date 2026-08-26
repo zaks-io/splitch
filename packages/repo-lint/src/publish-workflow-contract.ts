@@ -15,11 +15,15 @@ const { validateLivePublishState } = await import(
 );
 
 interface PublishContractOptions {
-  targetKey: "sdk" | "cli" | "convex";
-  label: "SDK" | "CLI" | "CONVEX";
-  packageName: "@splitch/sdk" | "@splitch/cli" | "@splitch/convex";
-  packageDir: "packages/sdk" | "apps/cli" | "packages/convex";
-  workflowName: "sdk-publish.yml" | "cli-publish.yml" | "convex-publish.yml";
+  targetKey: "sdk" | "cli" | "convex" | "cloudflare";
+  label: "SDK" | "CLI" | "CONVEX" | "CLOUDFLARE";
+  packageName: "@splitch/sdk" | "@splitch/cli" | "@splitch/convex" | "@splitch/cloudflare";
+  packageDir: "packages/sdk" | "apps/cli" | "packages/convex" | "packages/cloudflare";
+  workflowName:
+    | "sdk-publish.yml"
+    | "cli-publish.yml"
+    | "convex-publish.yml"
+    | "cloudflare-publish.yml";
 }
 
 export function registerPublishWorkflowContract(options: PublishContractOptions): void {

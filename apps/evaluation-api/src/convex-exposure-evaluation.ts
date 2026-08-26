@@ -93,14 +93,14 @@ export async function makeConvexExposureEvent(
   item: ConvexServerExposureItem,
   appId: string,
   environmentId: string,
-  deps: { saltStore: SaltStore; now?: () => Date },
+  deps: { saltStore: SaltStore; now?: () => Date; sourceKind?: "convex" | "cloudflare" },
 ): Promise<ExposureEvent & { isHoldover: false }> {
   const targetingKeyHash = await computeTargetingKeyHash(deps.saltStore, {
     appId,
     idType: item.evaluationContext.idType,
     targetingKey: item.evaluationContext.targetingKey,
   });
-  const sourceId = `convex:${item.installationId}`;
+  const sourceId = `${deps.sourceKind ?? "convex"}:${item.installationId}`;
   const dedupKey = `sha256:${await sha256Hex(
     [
       "exposure",

@@ -23,6 +23,7 @@ export function requiredPositionalSpecs(
   if (command.kind === "flags_verify") {
     return [{ param: "flagKey", display: "flag-key" }];
   }
+  if (command.kind.startsWith("cloudflare_")) return [];
   const route = getRoute(command.operationId);
   if (!route) return [];
   const specs: RequiredPositionalSpec[] = [];

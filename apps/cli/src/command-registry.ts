@@ -14,7 +14,14 @@ export interface CliCommandDefinition {
   readonly needsApp: boolean;
   readonly needsEnvironment: boolean;
   readonly supportsConfirm: boolean;
-  readonly kind: "api" | "flags_verify" | "env_policy_get" | "env_policy_set";
+  readonly kind:
+    | "api"
+    | "flags_verify"
+    | "env_policy_get"
+    | "env_policy_set"
+    | "cloudflare_setup"
+    | "cloudflare_status"
+    | "cloudflare_remove";
 }
 
 function needsAppFromPath(path: string): boolean {
@@ -88,9 +95,37 @@ const PRESENTATION_ALIASES: readonly CliCommandDefinition[] = [
   },
 ];
 
+const CLOUDFLARE_COMMANDS: readonly CliCommandDefinition[] = [
+  {
+    operationId: "cloudflare_installations_create",
+    path: ["cloudflare", "setup"],
+    needsApp: false,
+    needsEnvironment: true,
+    supportsConfirm: false,
+    kind: "cloudflare_setup",
+  },
+  {
+    operationId: "cloudflare_installations_get",
+    path: ["cloudflare", "status"],
+    needsApp: false,
+    needsEnvironment: true,
+    supportsConfirm: false,
+    kind: "cloudflare_status",
+  },
+  {
+    operationId: "cloudflare_installations_delete",
+    path: ["cloudflare", "remove"],
+    needsApp: false,
+    needsEnvironment: true,
+    supportsConfirm: false,
+    kind: "cloudflare_remove",
+  },
+];
+
 export const CLI_COMMANDS: readonly CliCommandDefinition[] = [
   ...API_COMMANDS,
   ...PRESENTATION_ALIASES,
+  ...CLOUDFLARE_COMMANDS,
 ];
 
 export const META_COMMANDS = ["login", "logout", "use", "context", "health"] as const;

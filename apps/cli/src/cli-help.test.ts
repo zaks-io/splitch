@@ -42,14 +42,14 @@ describe("published CLI help", () => {
     }
   });
 
-  it("pins Flag KEY wording and the Client Key versus API Key boundary", () => {
+  it("pins Flag Key wording and the Client Key versus API Key boundary", () => {
     const verify = renderHelp(["flags", "verify", "--help"]);
     const flagsGet = renderHelp(["flags", "get", "--help"]);
     const clientKey = renderHelp(["client-key", "get", "--help"]);
     const apiKey = renderHelp(["api-keys", "create", "--help"]);
 
     expect(verify).toContain("Usage:\n  splitch flags verify <flag-key> [flags]");
-    expect(verify).toContain("Verify a Flag KEY");
+    expect(verify).toContain("Verify a Flag Key");
     expect(flagsGet).toContain("Usage:\n  splitch flags get <flag-id-or-key> [flags]");
     expect(verify).toContain("Client Key is public");
     expect(clientKey).toContain("Client Key is public");

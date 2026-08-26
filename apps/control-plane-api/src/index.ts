@@ -7,11 +7,7 @@ import {
   routesDelegatedTo,
 } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
-import {
-  createWorkerObservability,
-  workerObservabilityWithWaitUntil,
-  wrapWorkerHandler,
-} from "@splitch/observability/worker";
+import { wrapWorkerHandler } from "@splitch/observability/worker";
 import {
   type DelegatedIdentity,
   delegatedAuthResolver,
@@ -21,13 +17,13 @@ import {
   makeMcpDelegationAuthResolver,
   notDelegatedResponse,
 } from "@splitch/worker-runtime";
-import { createApp } from "./app";
-import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
 import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
-import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
+import { loadCloudflareExposureVerificationConfig } from "./cloudflare-exposure-verification";
+import { ConfigStoreDurableObject } from "./config-store-do";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
+import { handleControlPlaneAppRequest } from "./control-plane-app-request";
 import {
   boundedPanelSessionEnabled,
   controlPanelAuthOptions,
@@ -41,7 +37,6 @@ import {
   durableCredentialCacheWriterAccess,
 } from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
-import { createHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
 import { handleCredentialCacheBackfillGate, handleLiveUpdateTestControl } from "./internal-routes";
 import { makeCachedJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
@@ -50,9 +45,6 @@ import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do
 import { handleSignedPanelExperiments } from "./panel-experiments-route";
 import { panelOverviewRead } from "./panel-overview";
 import { panelSettingsRead } from "./panel-settings";
-import { rateLimiterForTarget } from "./rate-limit";
-import { runSnapshotDeliveryFromEnv } from "./run-snapshot";
-import { reportRunSnapshotFault } from "./run-snapshot-fault";
 import { runControlPlaneScheduled } from "./scheduled";
 import { makeSessionStore } from "./session-store";
 import { unauthorized } from "./unauthorized";
@@ -119,6 +111,12 @@ export class EvaluationEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
     input: ConvexExposureVerificationRequest,
   ): Promise<ConvexExposureVerificationResult> {
     return loadConvexExposureVerificationConfig(createRepository(this.env.DB), input);
+  }
+
+  async loadCloudflareExposureVerificationConfig(
+    input: ConvexExposureVerificationRequest,
+  ): Promise<ConvexExposureVerificationResult> {
+    return loadCloudflareExposureVerificationConfig(createRepository(this.env.DB), input);
   }
 }
 
@@ -209,46 +207,14 @@ async function handleRequest(
   if (panelResponse) return panelResponse;
   // When authMode === "mcp", this same app mounts every Control Plane route under the MCP
   // resolver; operationId, method, target, and bodySha256 credential pins confine each call.
-  const app = createApp({
-    door: typeof authMode === "object" ? "binding" : "public",
+  return handleControlPlaneAppRequest({
+    request,
+    env,
+    ctx,
     authResolver,
-    rateLimiter: rateLimiterForTarget(
-      env.SPLITCH_PLATFORM_TARGET,
-      env.CONTROL_PLANE_ACTOR_RATE_LIMITER,
-    ),
     repo,
-    credentialStore: env.CREDENTIAL_STORE,
-    credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
-    configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
-    eventDefinitionStore: env.CONFIG_STORE,
-    runSnapshotDelivery: {
-      ...runSnapshotDeliveryFromEnv(env),
-      onFault: (detail) => reportRunSnapshotFault(env, ctx, detail),
-    },
-    logger: console,
-    memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
-    observability: createWorkerObservability(
-      env,
-      workerObservabilityWithWaitUntil("control-plane-api", ctx),
-    ),
-    analysisResults: createAnalysisResultsReader(env.ANALYSIS_API),
-    delegationBindings: {
-      "analysis-api": env.ANALYSIS_API,
-      "evaluation-api": env.EVALUATION_API,
-    },
-    approvalArchiveStore: approvalArchiveStoreFromEnv(env),
-    holdoverWriteOutboxCleanup: createHoldoverWriteOutboxCleanup(env.EVALUATION_API),
-    ...(typeof authMode === "object"
-      ? {
-          convex: {
-            webhookKek: env.CONVEX_WEBHOOK_KEK,
-            webhookKeyVersion: env.CONVEX_WEBHOOK_KEY_VERSION,
-          },
-        }
-      : {}),
+    delegated: typeof authMode === "object",
   });
-
-  return app.fetch(request, env);
 }
 
 async function handleSignedControlPanelRequest(

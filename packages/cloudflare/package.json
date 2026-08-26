@@ -1,0 +1,49 @@
+{
+  "name": "@splitch/cloudflare",
+  "version": "0.1.0",
+  "description": "Customer-owned Cloudflare Worker for durable local Splitch evaluation",
+  "license": "Apache-2.0",
+  "homepage": "https://splitch.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zaks-io/splitch.git",
+    "directory": "packages/cloudflare"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "import": "./dist/worker.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup && node scripts/write-build-stamp.mjs",
+    "clean": "rm -rf dist coverage",
+    "lint": "biome lint src",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pack:check": "node scripts/pack-check.mjs",
+    "pack:dry-run": "node scripts/pack-dry-run.mjs",
+    "prepack": "node scripts/prepack-guard.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@splitch/contracts": "workspace:*",
+    "@splitch/evaluation-core": "workspace:*",
+    "vitest": "^4.1.10"
+  }
+}

@@ -339,6 +339,8 @@ or any Durable Object migration.
 - Control Plane declares `CONVEX_WEBHOOK_KEK` as a required 32-byte base64 secret. It encrypts Convex
   webhook HMAC secrets at rest and must differ between preview and production. Rotation rewraps
   stored webhook secrets before the prior value is removed.
+- Control Plane declares `INTEGRATION_SECRET_KEK` as a separate required 32-byte base64 secret. It
+  encrypts customer Cloudflare push secrets at rest and must differ between preview and production.
 - Secret rotation is its own release. Do not hide secret changes inside an unrelated code deploy.
 
 ### Sentry source maps

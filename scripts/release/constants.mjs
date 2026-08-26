@@ -13,6 +13,13 @@ export const RELEASE_TARGETS = Object.freeze({
     tagPrefix: "convex-v",
     githubLatest: false,
   }),
+  cloudflare: Object.freeze({
+    packageName: "@splitch/cloudflare",
+    packagePath: "packages/cloudflare/package.json",
+    packageDir: "packages/cloudflare",
+    tagPrefix: "cloudflare-v",
+    githubLatest: false,
+  }),
   cli: Object.freeze({
     packageName: "@splitch/cli",
     packagePath: "apps/cli/package.json",

@@ -65,6 +65,7 @@ export interface AppDeps extends EvaluatePathDeps {
   /** `ctx.waitUntil` seam for the fire-and-forget Assignment Store write on evaluate. */
   waitUntil?: (promise: Promise<unknown>) => void;
   convexConfigurationResolver?: ConvexExposureConfigurationResolver;
+  cloudflareConfigurationResolver?: ConvexExposureConfigurationResolver;
 }
 
 export function createApp(deps: AppDeps): Hono {
@@ -99,6 +100,19 @@ export function createApp(deps: AppDeps): Hono {
     app,
     evaluationRoute("sdk_cached_evaluation_telemetry"),
     makeCachedEvaluationTelemetryHandler(deps),
+  );
+  registrar.mount(
+    app,
+    evaluationRoute("cloudflare_exposures_create"),
+    makeConvexExposuresHandler({
+      ...deps,
+      convexConfigurationResolver: undefined,
+      configurationResolver: deps.cloudflareConfigurationResolver,
+      integrationKind: "cloudflare",
+      holdoverWrite:
+        deps.holdoverWrite ?? new DirectHoldoverWriteCoordinator(deps.assignmentStore, deps.logger),
+      saltStore: deps.exposureAssembly.saltStore,
+    }),
   );
   registrar.mount(app, evaluationRoute("sdk_peek"), makePeekHandler(deps));
   registrar.mount(app, evaluationRoute("sdk_verify"), makeVerifyHandler(deps));

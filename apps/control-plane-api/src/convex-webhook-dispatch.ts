@@ -8,6 +8,7 @@ const RETRY_DELAYS_MS = [1_000, 5_000, 30_000, 120_000, 600_000, 1_800_000] as c
 export interface ConvexWebhookDispatchDeps {
   repo: Repository;
   webhookKek?: string;
+  webhookKeyVersion?: string;
   fetcher?: typeof fetch;
   now?: () => Date;
   leaseOwner?: () => string;
@@ -35,7 +36,12 @@ async function deliverOne(
   leaseOwner: string,
   now: Date,
 ): Promise<void> {
-  const secret = await decryptConvexSecret(delivery.secretCiphertext, deps.webhookKek);
+  const secret = await decryptConvexSecret(
+    delivery.secretCiphertext,
+    deps.webhookKek,
+    delivery.secretKeyVersion,
+    deps.webhookKeyVersion,
+  );
   const timestamp = Math.floor(now.getTime() / 1_000).toString();
   const signature = await signConvexWebhook(secret, timestamp, delivery.bodyJson);
   let response: Response;

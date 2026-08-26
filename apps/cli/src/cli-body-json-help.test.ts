@@ -60,7 +60,13 @@ function assertOneHandWrittenCommand(
   kind: CliCommandDefinition["kind"],
   command: CliCommandDefinition,
 ): void {
-  if (kind === "flags_verify" || kind === "env_policy_get") {
+  if (
+    kind === "flags_verify" ||
+    kind === "env_policy_get" ||
+    kind === "cloudflare_setup" ||
+    kind === "cloudflare_status" ||
+    kind === "cloudflare_remove"
+  ) {
     expect(commandHasBodyJson(command)).toBe(false);
     expect(renderCommandHelp(command)).not.toContain("Request body (--body-json):");
     return;

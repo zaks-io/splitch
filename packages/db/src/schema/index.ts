@@ -11,7 +11,12 @@ export { apiKeys, clientKeys } from "./credentials";
 export { eventDefinitions, eventDefinitionVersions } from "./event-definitions";
 export { experiments, metrics, runs } from "./experiments";
 export { flagConfigs, flags, segments, targetingRules, variants } from "./flags";
-export { configWebhookDeliveries, convexInstallations } from "./integrations";
+export {
+  cloudflareConfigDeliveries,
+  cloudflareInstallations,
+  configWebhookDeliveries,
+  convexInstallations,
+} from "./integrations";
 export {
   appDeletionSagas,
   appMemberships,
