@@ -234,6 +234,8 @@ function promotionConfigPatch(
       ? { rollout: prepared.rollout === null ? null : json(prepared.rollout) }
       : {}),
     updatedAt: now.toISOString(),
+    updatedBy: input.actor.ref,
+    updatedVia: input.actor.via,
   };
 }
 

@@ -6,6 +6,7 @@ import type {
   RunConfigKV,
   TargetingRule,
 } from "@splitch/contracts";
+import type { AuthKind } from "@splitch/contracts";
 import type { ApprovalCommit, Repository } from "@splitch/db";
 import type { RunFrozenFailure } from "./flag-config-run-freeze";
 
@@ -28,7 +29,30 @@ export interface FlagConfigResult {
   experiment: { id: string; name: string } | null;
 }
 
+/**
+ * Who performed a Flag Configuration write, stamped onto `flag_configs` so the
+ * audit triggers can attribute the change (0026_flag_change_log.sql).
+ *
+ * Required on every write input rather than optional: an unattributed toggle is
+ * exactly the gap this exists to close, and an optional field would let a new
+ * call site reintroduce it silently.
+ *
+ * `ref` is the opaque credential/user identifier from the resolved Principal,
+ * never PII (ADR-0032). `via` is the Principal's own `AuthKind` on the direct
+ * write paths, so the surface vocabulary stays the one the auth layer already
+ * publishes, plus `"approval"` for the Approval application
+ * path, where the write is performed by the system on a Review and the actor is
+ * the reviewer, which no AuthKind describes.
+ */
+type FlagConfigActorVia = AuthKind | "approval";
+
+export interface FlagConfigActor {
+  ref: string;
+  via: FlagConfigActorVia;
+}
+
 export interface PatchFlagConfigInput {
+  actor: FlagConfigActor;
   appId: string;
   environmentId: string;
   flagId: string;
@@ -42,6 +66,7 @@ export interface PatchFlagConfigInput {
 }
 
 export interface ApplyApprovedFlagConfigInput {
+  actor: FlagConfigActor;
   appId: string;
   environmentId: string;
   flagId: string;
@@ -56,6 +81,7 @@ export interface ApplyApprovedFlagConfigInput {
 }
 
 export interface ReplaceTargetingRulesInput {
+  actor: FlagConfigActor;
   appId: string;
   environmentId: string;
   flagId: string;
@@ -64,6 +90,7 @@ export interface ReplaceTargetingRulesInput {
 }
 
 export interface PromoteFlagConfigInput {
+  actor: FlagConfigActor;
   appId: string;
   targetEnvironmentId: string;
   flagId: string;

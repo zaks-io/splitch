@@ -1,9 +1,9 @@
 import type { Repository } from "@splitch/db";
 import { decryptConvexSecret, signConvexWebhook } from "./convex-secret";
+import { describeCause, postWebhook, retryDelayMs } from "./webhook-transport";
 
 const LEASE_MS = 30_000;
 const BATCH_SIZE = 25;
-const RETRY_DELAYS_MS = [1_000, 5_000, 30_000, 120_000, 600_000, 1_800_000] as const;
 
 export interface ConvexWebhookDispatchDeps {
   repo: Repository;
@@ -44,27 +44,23 @@ async function deliverOne(
   );
   const timestamp = Math.floor(now.getTime() / 1_000).toString();
   const signature = await signConvexWebhook(secret, timestamp, delivery.bodyJson);
-  let response: Response;
-  try {
-    response = await (deps.fetcher ?? fetch)(delivery.callbackUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "splitch-delivery-id": delivery.deliveryId,
-        "splitch-signature": `v1=${signature}`,
-        "splitch-timestamp": timestamp,
-      },
-      body: delivery.bodyJson,
-      redirect: "manual",
-    });
-  } catch (cause) {
+  const result = await postWebhook({
+    url: delivery.callbackUrl,
+    body: delivery.bodyJson,
+    headers: {
+      "content-type": "application/json",
+      "splitch-delivery-id": delivery.deliveryId,
+      "splitch-signature": `v1=${signature}`,
+      "splitch-timestamp": timestamp,
+    },
+    fetcher: deps.fetcher,
+  });
+
+  if (result.outcome === "transport-failed") {
     console.error("convex_webhook_delivery_transport_failed", {
       deliveryId: delivery.deliveryId,
       callbackUrl: delivery.callbackUrl,
-      cause:
-        cause instanceof Error
-          ? { name: cause.name, message: cause.message, stack: cause.stack }
-          : String(cause),
+      cause: describeCause(result.cause),
     });
     await finishFailure(deps, delivery, leaseOwner, now, true, {
       kind: "transport",
@@ -74,7 +70,7 @@ async function deliverOne(
     return;
   }
 
-  if (response.ok) {
+  if (result.outcome === "delivered") {
     await deps.repo.convex.finishDelivery(delivery.deliveryId, leaseOwner, {
       state: "delivered",
       now: now.toISOString(),
@@ -82,11 +78,10 @@ async function deliverOne(
     return;
   }
 
-  const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
-  await finishFailure(deps, delivery, leaseOwner, now, retryable, {
+  await finishFailure(deps, delivery, leaseOwner, now, result.retryable, {
     kind: "http",
     code: "HTTP_STATUS",
-    httpStatus: response.status,
+    httpStatus: result.status,
     occurredAt: now.toISOString(),
   });
 }
@@ -99,8 +94,7 @@ async function finishFailure(
   retryable: boolean,
   error: Record<string, unknown>,
 ): Promise<void> {
-  const retryDelay =
-    RETRY_DELAYS_MS[Math.min(delivery.attemptCount, RETRY_DELAYS_MS.length - 1)] ?? 1_800_000;
+  const retryDelay = retryDelayMs(delivery.attemptCount);
   await deps.repo.convex.finishDelivery(delivery.deliveryId, leaseOwner, {
     state: retryable ? "pending" : "terminal",
     now: now.toISOString(),

@@ -1,6 +1,7 @@
 import { env as workerEnv } from "cloudflare:workers";
 import type { ApprovalsClient, FlagsClient, PanelSegmentsClient } from "@splitch/control-plane-sdk";
 import type { PanelExposureStatusClient } from "@splitch/control-plane-sdk/panel-exposure-status";
+import type { PanelSentryClient } from "@splitch/control-plane-sdk/panel-sentry";
 import { getRequest } from "@tanstack/react-start/server";
 import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelAppSettingsClient } from "./control-plane-app-settings";
@@ -11,6 +12,7 @@ import {
 import { createControlPanelExperimentsClient } from "./control-plane-experiments";
 import { createControlPanelExposureStatusClient } from "./control-plane-exposure-status";
 import { createControlPanelSegmentsClient } from "./control-plane-segments";
+import { createControlPanelSentryClient } from "./control-plane-sentry";
 import { loadSessionFromRequest } from "./session-refresh";
 import { resyncSessionMemberships } from "./session-resync";
 
@@ -189,6 +191,24 @@ export async function authorizedAppSettingsClient(): Promise<AuthorizedAppSettin
     resyncSession: async () => {
       await resyncSessionMemberships(bindings, loaded.tokenHash, loaded.session);
     },
+  };
+}
+
+/**
+ * No Environment pinned: the Sentry paths name the Environment themselves, so a
+ * header-carried one would be a second source of truth for the same axis.
+ */
+export async function authorizedSentryClient(): Promise<AuthorizedClient<PanelSentryClient>> {
+  const authorized = await panelBindingContext();
+  if (!authorized.ok) return authorized;
+  const { bindings, actor } = authorized;
+  return {
+    ok: true,
+    client: createControlPanelSentryClient(
+      bindings.CONTROL_PLANE_API,
+      actor,
+      bindings.CONTROL_PANEL_DELEGATION_SECRET,
+    ),
   };
 }
 

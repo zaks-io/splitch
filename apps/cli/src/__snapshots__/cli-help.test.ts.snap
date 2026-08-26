@@ -1441,6 +1441,86 @@ Request body (--body-json):
 
 Example:
   splitch segments update <segment-id> --body-json '{"name":"name"}' --json",
+    "sentry-installations create": "Send this Environment's Flag changes to a Sentry organization.
+
+Usage:
+  splitch sentry-installations create [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  installationId  required  string
+  webhookUrl      required  string
+  webhookSecret   optional  string
+  Example:
+    {"installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","webhookUrl":"https://app.example.com"}
+
+Example:
+  splitch sentry-installations create --body-json '{"installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","webhookUrl":"https://app.example.com"}' --json",
+    "sentry-installations delete": "Revoke a Sentry integration and stop change delivery.
+
+Usage:
+  splitch sentry-installations delete <installation-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch sentry-installations delete <installation-id> --json",
+    "sentry-installations get": "Read Sentry change-tracking delivery health without secrets.
+
+Usage:
+  splitch sentry-installations get <installation-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch sentry-installations get <installation-id> --json",
+    "sentry-installations list": "List Sentry change-tracking installations and their delivery health.
+
+Usage:
+  splitch sentry-installations list [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch sentry-installations list --json",
+    "sentry-secret-rotations create": "Rotate the Sentry webhook signing secret.
+
+Usage:
+  splitch sentry-secret-rotations create <installation-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  rotationId     required  string
+  webhookSecret  optional  string
+  Example:
+    {"rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}
+
+Example:
+  splitch sentry-secret-rotations create <installation-id> --body-json '{"rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}' --json",
   },
   "groups": {
     "api-keys": "Manage api-keys resources.
@@ -1824,6 +1904,35 @@ Flags:
 
 Example:
   splitch segments list --help",
+    "sentry-installations": "Manage sentry-installations resources.
+
+Usage:
+  splitch sentry-installations <action> [arguments] [flags]
+
+Commands:
+  list            List Sentry change-tracking installations and their delivery health.
+  create          Send this Environment's Flag changes to a Sentry organization.
+  get             Read Sentry change-tracking delivery health without secrets.
+  delete          Revoke a Sentry integration and stop change delivery.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch sentry-installations list --help",
+    "sentry-secret-rotations": "Manage sentry-secret-rotations resources.
+
+Usage:
+  splitch sentry-secret-rotations <action> [arguments] [flags]
+
+Commands:
+  create          Rotate the Sentry webhook signing secret.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch sentry-secret-rotations create --help",
   },
   "meta": {
     "context": "Show the logged-in principal and the resolved App and Environment.
@@ -1927,6 +2036,8 @@ Resource groups:
   orgs
   runs
   segments
+  sentry-installations
+  sentry-secret-rotations
 
 Flags:
   -v, --version  [type: boolean; default: false] Show the installed CLI version and exit.

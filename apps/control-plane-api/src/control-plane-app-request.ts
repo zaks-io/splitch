@@ -56,6 +56,11 @@ export async function handleControlPlaneAppRequest(input: {
     },
     approvalArchiveStore: approvalArchiveStoreFromEnv(env),
     holdoverWriteOutboxCleanup: createHoldoverWriteOutboxCleanup(env.EVALUATION_API),
+    sentry: {
+      secretKek: env.INTEGRATION_SECRET_KEK,
+      secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,
+      allowedHosts: env.SENTRY_WEBHOOK_ALLOWED_HOSTS,
+    },
     ...(delegated
       ? {
           convex: {

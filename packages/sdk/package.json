@@ -34,6 +34,10 @@
     "./react": {
       "types": "./dist/react/index.d.ts",
       "import": "./dist/react/index.js"
+    },
+    "./sentry": {
+      "types": "./dist/sentry/index.d.ts",
+      "import": "./dist/sentry/index.js"
     }
   },
   "files": [
@@ -42,7 +46,7 @@
   ],
   "scripts": {
     "generate": "node scripts/generate-contract-surface.mjs && npx tsup --config tsup.contract-surface.config.ts",
-    "build": "pnpm run generate && npx tsup --config tsup.config.ts && npx tsup --config tsup.browser.config.ts && node scripts/write-build-stamp.mjs",
+    "build": "pnpm run generate && npx tsup --config tsup.config.ts && npx tsup --config tsup.browser.config.ts && npx tsup --config tsup.sentry.config.ts && node scripts/write-build-stamp.mjs",
     "clean": "rm -rf dist coverage src/generated/contract-surface.js src/generated/contract-surface.d.ts scripts/generated/contract-surface-members.ts",
     "lint": "biome lint src scripts",
     "test": "vitest run --passWithNoTests && node --test scripts/size-check.test.mjs",
@@ -60,6 +64,7 @@
     "access": "public"
   },
   "devDependencies": {
+    "@sentry/core": "^10.68.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "happy-dom": "^20.0.11",
@@ -67,9 +72,13 @@
     "react-dom": "^19.2.8"
   },
   "peerDependencies": {
+    "@sentry/core": "^10.0.0",
     "react": "^18.0.0 || ^19.0.0"
   },
   "peerDependenciesMeta": {
+    "@sentry/core": {
+      "optional": true
+    },
     "react": {
       "optional": true
     }

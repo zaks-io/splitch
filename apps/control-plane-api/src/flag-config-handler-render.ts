@@ -1,5 +1,7 @@
 import type { ApprovalRequest } from "@splitch/contracts";
+import type { Principal } from "@splitch/worker-runtime";
 import type { ConfigStoreWriter } from "./config-store";
+import type { FlagConfigActor } from "./config-store-types";
 import { variantNotAvailable } from "./experiment-errors";
 import { flagConfigNotFound, flagSegmentNotFound, rolloutAmbiguous } from "./flag-config-errors";
 import { runFrozenResponse } from "./flag-config-run-freeze";
@@ -17,6 +19,16 @@ type FlagConfigWriteResult = Awaited<ReturnType<ConfigStoreWriter["writeFlagConf
 type PromotionResult = Awaited<ReturnType<ConfigStoreWriter["promoteFlagConfig"]>>;
 export type PromotionSelect = Parameters<ConfigStoreWriter["promoteFlagConfig"]>[0]["select"];
 
+/**
+ * The resolved caller, in the shape the Flag Configuration write path stamps
+ * onto `flag_configs` for the audit triggers. `principal.id` is already the
+ * opaque credential/user identifier the guard resolved, so nothing here reaches
+ * for a name or an email (ADR-0032).
+ */
+export function actorOf(principal: Principal): FlagConfigActor {
+  return { ref: principal.id, via: principal.kind };
+}
+
 export function renderFlagConfigReadFailure(
   result: Extract<Awaited<ReturnType<ConfigStoreWriter["readFlagConfig"]>>, { ok: false }>,
   requestId: string,
@@ -31,8 +43,10 @@ export function flagConfigPatchInput(
   environmentId: string,
   flagId: string,
   payload: Record<string, unknown>,
+  actor: FlagConfigActor,
 ): Parameters<ConfigStoreWriter["writeFlagConfig"]>[0] {
   return {
+    actor,
     appId,
     environmentId,
     flagId,

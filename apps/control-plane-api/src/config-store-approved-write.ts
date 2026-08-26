@@ -74,16 +74,24 @@ export async function applyApprovedFlagConfig(
 /** Patch keys whose JSON Pointer appears in `diff.entries` (plus `updatedAt`). */
 export function approvedConfigPatch(input: ApplyApprovedFlagConfigInput): {
   updatedAt: string;
+  updatedBy: string;
+  updatedVia: string;
   enabled?: boolean;
   availableVariantNames?: string;
   rollout?: string | null;
 } {
   const patch: {
     updatedAt: string;
+    updatedBy: string;
+    updatedVia: string;
     enabled?: boolean;
     availableVariantNames?: string;
     rollout?: string | null;
-  } = { updatedAt: input.approval.reviewedAt };
+  } = {
+    updatedAt: input.approval.reviewedAt,
+    updatedBy: input.actor.ref,
+    updatedVia: input.actor.via,
+  };
   if (diffEntriesTouch(input.diffEntries, "enabled")) {
     patch.enabled = input.proposed.enabled;
   }

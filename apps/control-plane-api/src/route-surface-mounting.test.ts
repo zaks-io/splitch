@@ -37,5 +37,6 @@ function stubDeps() {
     repo: {} as Repository,
     convex: {},
     cloudflare: {},
+    sentry: {},
   };
 }

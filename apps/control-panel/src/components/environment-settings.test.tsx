@@ -12,6 +12,13 @@ vi.mock("#lib/control-plane-settings-functions", () => ({
   updateControlPanelEnvironmentPolicy: vi.fn(),
 }));
 
+vi.mock("#lib/control-plane-sentry-functions", () => ({
+  loadControlPanelSentryInstallations: vi.fn(),
+  installControlPanelSentry: vi.fn(),
+  rotateControlPanelSentrySecret: vi.fn(),
+  revokeControlPanelSentryInstallation: vi.fn(),
+}));
+
 const { EnvironmentSettings } = await import("./environment-settings");
 
 describe("EnvironmentSettings", () => {
@@ -38,6 +45,11 @@ describe("EnvironmentSettings", () => {
     expect(html).toContain("Never gated");
     expect(html).toContain(KILL_SWITCH_OFF_EXEMPTION);
     expect(html).toContain('data-testid="kill-switch-policy"');
+    expect(html).toContain("Sentry change tracking");
+    // The install form is deliberately absent until the installation list has
+    // settled; sentry-integration-card.test.tsx covers the settled states.
+    expect(html).toContain("Loading Sentry status");
+    expect(html).not.toContain("Connect Sentry");
   });
 });
 

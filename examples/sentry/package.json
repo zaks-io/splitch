@@ -1,0 +1,19 @@
+{
+  "name": "@splitch/example-sentry",
+  "version": "1.0.0",
+  "description": "Reference wiring for splitch flags in Sentry: evaluation tracking plus change-tracking install",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "start": "node --experimental-strip-types src/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@sentry/node": "^10.68.0",
+    "@splitch/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

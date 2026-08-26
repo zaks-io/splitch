@@ -3,6 +3,7 @@ import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-iden
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
 import { conflictErrorMembers } from "./error-members-conflict";
+import { integrationErrorMembers } from "./error-members-integration";
 import {
   type PolicyChangeType,
   PolicyChangeTypeSchema,
@@ -207,8 +208,7 @@ const errorMembers = [
   member("SEGMENT_NOT_FOUND", SegmentNotFoundDetailsSchema),
   member("PRIVACY_JOB_NOT_FOUND", EmptyDetails),
   member("APPROVAL_REQUEST_NOT_FOUND", EmptyDetails),
-  member("CONVEX_INSTALLATION_NOT_FOUND", EmptyDetails),
-  member("CLOUDFLARE_INSTALLATION_NOT_FOUND", EmptyDetails),
+  ...integrationErrorMembers,
 
   member("UNAUTHORIZED", EmptyDetails),
   member("CREDENTIAL_REVOKED", EmptyDetails),
@@ -269,23 +269,6 @@ const errorMembers = [
         details: ErrorDetailsSchema,
       }),
       recommendedAction: z.literal("RETRY_REVIEW"),
-    }),
-  ),
-  member(
-    "IDEMPOTENCY_KEY_CONFLICT",
-    z.object({
-      scope: z.enum([
-        "approval_request",
-        "review",
-        "conclusion",
-        "app_create",
-        "flag_create",
-        "convex_installation",
-        "convex_secret_rotation",
-        "convex_evaluation",
-        "cloudflare_installation",
-      ]),
-      idempotencyKey: z.string().min(1),
     }),
   ),
   experimentConclusionErrorMembers.decisionResultStale,

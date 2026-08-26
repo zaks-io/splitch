@@ -53,6 +53,12 @@ export interface ControlPlaneApiEnv {
   CONVEX_WEBHOOK_KEY_VERSION?: string;
   INTEGRATION_SECRET_KEK?: string;
   INTEGRATION_SECRET_KEY_VERSION?: string;
+  /**
+   * Extra hosts the Sentry change-tracking webhook may target, comma-separated,
+   * for self-hosted Sentry. Empty means sentry.io and its regional subdomains
+   * only. Never a wildcard: this is the SSRF boundary on a customer-supplied URL.
+   */
+  SENTRY_WEBHOOK_ALLOWED_HOSTS?: string;
   /** Verifies signed one-call credentials accepted only by McpEntrypoint. */
   MCP_CONTROL_PLANE_DELEGATION_SECRET?: string;
   SPLITCH_LOCAL_E2E_RUN_ID?: string;

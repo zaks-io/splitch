@@ -58,6 +58,9 @@ describe("Convex server Exposure verification", () => {
       exposureRedemptionClaims: new MemoryExposureRedemptionClaimStore(),
       holdoverWrite: completedHoldover(),
       saltStore: saltStore(),
+      // Pinned like every sibling: the fixture's exposureAt is a fixed instant,
+      // so a real clock walks it out of the 24-hour delivery window and the
+      // rejection under test turns into a VALIDATION_ERROR a day later.
       now: () => new Date("2026-08-25T12:00:01.000Z"),
     });
     const args = requestArgs();

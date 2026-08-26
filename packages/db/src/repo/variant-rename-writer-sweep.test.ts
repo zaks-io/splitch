@@ -33,6 +33,8 @@ const AVAILABILITY_WRITERS: Record<string, string> = {
     "patch types for updateFlagConfig/applyApprovedFlagConfig; frozen at the config-store seam (SPL-118) and swept by apps/control-plane-api/test/flag-config-run-freeze-writer-sweep.test.ts",
   [WRITER_MODULE]: `${WRITER}, reachable only from updateVariant, which refuses a rename under a live Run`,
   "repo/flag-variant-run-freeze.ts": "the freeze lookup itself; names the column in prose only",
+  "repo/test-flag-change-fixtures.ts":
+    "test-only fixture; names the column because the initial Flag Configuration insert requires it, and never renames an arm",
   "schema/flags.ts": "the column definition",
 };
 

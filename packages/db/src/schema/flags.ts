@@ -87,6 +87,12 @@ export const flagConfigs = sqliteTable(
     rollout: text("rollout"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // Attribution for the per-Environment CONFIGURATION write, i.e. who flipped
+    // `enabled` or moved `rollout`. `flags` has carried this since the start;
+    // this table did not, so a toggle was unattributable. The flag-change log
+    // triggers read these columns (0026_flag_change_log.sql).
+    updatedBy: userRef("updated_by"),
+    updatedVia: text("updated_via"),
     version: integer("version").notNull().default(1),
   },
   (t) => [uniqueIndex("flag_configs_flag_env_unique").on(t.flagId, t.environmentId)],

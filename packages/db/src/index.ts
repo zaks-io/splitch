@@ -15,6 +15,7 @@
  * not a query handle.
  */
 
+export type { FlagChangeEventRow } from "./repo/flag-change-events";
 export type { UpdateVariantResult } from "./repo/flag-variant-approval";
 export type {
   VariantFrozenChange,
@@ -37,6 +38,10 @@ export { appDeletionRetryActorHash } from "./repo/app-deletion-sagas";
 export type { EnvScope, TenantScope } from "./repo/scope";
 export { appScope, envScope } from "./repo/scope";
 export type { ScopedTable } from "./repo/scoped-table";
+export type {
+  SentryInstallationRow,
+  SentryInstallationWrite,
+} from "./repo/sentry-integrations";
 
 export {
   apiKeys,

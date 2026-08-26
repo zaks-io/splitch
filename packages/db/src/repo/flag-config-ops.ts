@@ -118,7 +118,13 @@ export function makeFlagConfigOps(
       patch: Partial<
         Pick<
           typeof flagConfigs.$inferInsert,
-          "enabled" | "availableVariantNames" | "defaultVariantId" | "rollout" | "updatedAt"
+          | "enabled"
+          | "availableVariantNames"
+          | "defaultVariantId"
+          | "rollout"
+          | "updatedAt"
+          | "updatedBy"
+          | "updatedVia"
         >
       >,
       approval?: ApprovalCommit,
@@ -181,7 +187,7 @@ export function makeFlagConfigOps(
       configPatch: Partial<
         Pick<
           typeof flagConfigs.$inferInsert,
-          "enabled" | "availableVariantNames" | "rollout" | "updatedAt"
+          "enabled" | "availableVariantNames" | "rollout" | "updatedAt" | "updatedBy" | "updatedVia"
         >
       >,
       approval?: ApprovalCommit,

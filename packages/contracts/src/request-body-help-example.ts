@@ -60,7 +60,7 @@ function exampleValue(schema: z.ZodTypeAny, fieldName: string): unknown {
   const type = zodDefType(inner);
   switch (type) {
     case "string":
-      return exampleString(fieldName);
+      return exampleString(inner, fieldName);
     case "number":
     case "int":
       return exampleNumber(inner);
@@ -131,7 +131,19 @@ const EXAMPLE_STRINGS: Readonly<Record<string, string>> = {
   targetingKeyType: "user",
 };
 
-function exampleString(fieldName: string): string {
+/**
+ * A formatted string carries its own vocabulary, so the field name is not
+ * consulted: `installationId` under `z.uuid()` needs a UUID, and the `<name>_1`
+ * shape the name heuristic produces fails the schema it is meant to illustrate.
+ */
+const EXAMPLE_FORMATS: Readonly<Record<string, string>> = {
+  uuid: "018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b",
+};
+
+function exampleString(schema: z.ZodTypeAny, fieldName: string): string {
+  const format = zodDef(schema).format;
+  const formatted = typeof format === "string" ? EXAMPLE_FORMATS[format] : undefined;
+  if (formatted) return formatted;
   const known = EXAMPLE_STRINGS[fieldName];
   if (known) return known;
   const lower = fieldName.toLowerCase();

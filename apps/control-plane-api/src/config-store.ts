@@ -32,7 +32,7 @@ export type { ConfigStoreDeps } from "./config-store-shared";
 
 export interface ConfigStoreWriter {
   readFlagConfig(
-    input: Omit<PatchFlagConfigInput, "enabled" | "availableVariantNames">,
+    input: Omit<PatchFlagConfigInput, "actor" | "enabled" | "availableVariantNames">,
   ): Promise<
     | { ok: true; config: FlagConfigResult }
     | { ok: false; reason: "FLAG_NOT_FOUND" }
@@ -333,6 +333,8 @@ async function commitFlagConfigPatch(
         : {}),
       ...(rollout !== undefined ? { rollout: rollout === null ? null : json(rollout) } : {}),
       updatedAt: input.approval?.reviewedAt ?? (deps.now?.() ?? new Date()).toISOString(),
+      updatedBy: input.actor.ref,
+      updatedVia: input.actor.via,
     },
     input.approval,
   );
