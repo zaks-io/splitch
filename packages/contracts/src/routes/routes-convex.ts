@@ -3,6 +3,7 @@ import {
   CONVEX_SERVER_EXPOSURE_MAX_BODY_BYTES,
   ConvexConfigSnapshotSchema,
   ConvexInstallationCreateRequestSchema,
+  ConvexInstallationListResponseSchema,
   ConvexInstallationSchema,
   ConvexInstallationStatusSchema,
   ConvexSecretRotationRequestSchema,
@@ -11,6 +12,7 @@ import {
   ConvexServerExposureResponseSchema,
 } from "../convex-integration";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { EnvParams } from "./route-shapes";
 
 const OWNER = "control-plane-api" as const;
 const commonErrors = [
@@ -22,6 +24,15 @@ const commonErrors = [
   "SERVICE_UNAVAILABLE",
   "INTERNAL_SERVER_ERROR",
 ] as const;
+
+/**
+ * Reading and revoking an Environment's Convex installation is administration,
+ * so these routes sit on the operator door. The existing `/api/integrations`
+ * routes stay on the data plane for the Convex Component.
+ */
+const PANEL_BASE = "/apps/:appId/envs/:environmentId/integrations/convex/installations";
+const PanelInstallationParams = EnvParams.extend({ installationId: z.uuid() });
+const panelErrors = ["APP_NOT_FOUND", "FORBIDDEN", "INSUFFICIENT_SCOPES"] as const;
 
 export const convexRoutes = [
   defineApiRoute({
@@ -126,5 +137,31 @@ export const convexRoutes = [
       },
     },
     errors: [...commonErrors, "CONVEX_INSTALLATION_NOT_FOUND", "EVENT_ID_CONFLICT"],
+  }),
+  defineApiRoute({
+    operationId: "convex_panel_installations_list",
+    owner: OWNER,
+    method: "GET",
+    path: PANEL_BASE,
+    summary: "List Convex installations and their delivery health for this Environment.",
+    request: { params: EnvParams },
+    response: ConvexInstallationListResponseSchema,
+    auth: "control-plane-token",
+    rateLimit: "control-plane-actor",
+    idempotency: "none",
+    errors: panelErrors,
+  }),
+  defineApiRoute({
+    operationId: "convex_panel_installations_delete",
+    owner: OWNER,
+    method: "DELETE",
+    path: `${PANEL_BASE}/:installationId`,
+    summary: "Revoke a Convex integration and suppress pending deliveries.",
+    request: { params: PanelInstallationParams },
+    response: z.null(),
+    auth: "control-plane-token",
+    rateLimit: "control-plane-actor",
+    idempotency: "none",
+    errors: [...panelErrors, "CONVEX_INSTALLATION_NOT_FOUND"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

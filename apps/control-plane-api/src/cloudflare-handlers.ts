@@ -2,6 +2,12 @@ import type { Repository } from "@splitch/db";
 import { envScope } from "@splitch/db";
 import type { HandlerArgs, RouteHandler } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
+import { requireAppAdmin } from "./app-authz";
+import {
+  cloudflareInstallationStatusResponse,
+  cloudflareScope,
+} from "./cloudflare-installation-response";
+import { pathParam } from "./handler-input";
 import { encryptIntegrationSecret } from "./integration-secret";
 
 export interface CloudflareHandlerDeps {
@@ -17,10 +23,58 @@ interface CreateInput {
 interface InstallationInput {
   params: { installationId: string };
 }
+interface PanelScopeInput {
+  params: { appId: string; environmentId: string };
+}
+interface PanelInstallationInput extends PanelScopeInput {
+  params: { appId: string; environmentId: string; installationId: string };
+}
 
 export function makeCloudflareHandlers(deps: CloudflareHandlerDeps) {
   const now = deps.now ?? (() => new Date());
   return {
+    panelList: (async (args: HandlerArgs<PanelScopeInput>) => {
+      const denied = await requireAppAdmin(
+        deps,
+        pathParam(args.input, "appId"),
+        args.principal,
+        args.requestId,
+      );
+      if (denied) return denied;
+      const scope = cloudflareScope(args.input.params);
+      const [rows, environmentVersion] = await Promise.all([
+        deps.repo.cloudflare.listInstallations(scope),
+        deps.repo.cloudflare.environmentVersion(scope),
+      ]);
+      return Response.json({
+        installations: rows.map((row) =>
+          cloudflareInstallationStatusResponse(row, environmentVersion),
+        ),
+      });
+    }) satisfies RouteHandler<PanelScopeInput>,
+
+    panelRemove: (async (args: HandlerArgs<PanelInstallationInput>) => {
+      const denied = await requireAppAdmin(
+        deps,
+        pathParam(args.input, "appId"),
+        args.principal,
+        args.requestId,
+      );
+      if (denied) return denied;
+      const scope = cloudflareScope(args.input.params);
+      const existing = await deps.repo.cloudflare.getInstallation(
+        scope,
+        args.input.params.installationId,
+      );
+      if (!existing) return notFound(args.requestId);
+      await deps.repo.cloudflare.revokeInstallation(
+        scope,
+        args.input.params.installationId,
+        now().toISOString(),
+      );
+      return new Response(null, { status: 204 });
+    }) satisfies RouteHandler<PanelInstallationInput>,
+
     create: (async ({ input, principal, requestId }: HandlerArgs<CreateInput>) => {
       const scope = principalScope(principal, requestId);
       if (scope instanceof Response) return scope;
@@ -78,20 +132,9 @@ export function makeCloudflareHandlers(deps: CloudflareHandlerDeps) {
         deps.repo.cloudflare.deliveryHealth(scope, input.params.installationId, now().getTime()),
       ]);
       if (!row) return notFound(requestId);
-      return Response.json({
-        installationId: row.installationId,
-        appId: scope.appId,
-        environmentId: scope.environmentId,
-        environmentVersion,
-        status: row.status,
-        endpoint: row.endpoint,
-        lastAppliedVersion: row.lastAppliedVersion,
-        lastAppliedAt: row.lastAppliedAt,
-        ...health,
-        latestDeliveryError: row.latestDeliveryErrorJson
-          ? JSON.parse(row.latestDeliveryErrorJson)
-          : null,
-      });
+      return Response.json(
+        cloudflareInstallationStatusResponse({ ...row, ...health }, environmentVersion),
+      );
     }) satisfies RouteHandler<InstallationInput>,
 
     remove: (async ({ input, principal, requestId }: HandlerArgs<InstallationInput>) => {

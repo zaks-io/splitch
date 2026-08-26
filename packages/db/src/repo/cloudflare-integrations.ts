@@ -1,3 +1,4 @@
+import { listPushInstallations } from "./push-installation-list";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
 
@@ -71,6 +72,16 @@ export function makeCloudflareIntegrationRepo(d1: D1Database) {
         WHERE app_id = ? AND environment_id = ? AND installation_id = ?`)
         .bind(scope.appId, scope.environmentId, installationId)
         .first<CloudflareInstallationRow>();
+    },
+
+    async listInstallations(scope: EnvScope) {
+      assertMintedScope(scope);
+      return listPushInstallations<CloudflareInstallationRow>(
+        d1,
+        scope,
+        INSTALLATION_SELECT,
+        "cloudflare_config_deliveries",
+      );
     },
 
     async createInstallation(
