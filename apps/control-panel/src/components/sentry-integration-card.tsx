@@ -139,7 +139,7 @@ export function SentryIntegrationCard({
 
         {error ? (
           <Alert variant="destructive">
-            <AlertTitle>Sentry operation failed loud</AlertTitle>
+            <AlertTitle>Sentry operation failed</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}

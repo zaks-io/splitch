@@ -1,14 +1,13 @@
 import type { PanelEnvironmentSettings } from "@splitch/control-plane-sdk/panel-settings";
 import { ApiKeysCard } from "./api-keys-card";
 import { ClientKeyCard } from "./client-key-card";
+import { CloudflareIntegrationCard } from "./cloudflare-integration-card";
+import { ConvexIntegrationCard } from "./convex-integration-card";
 import { EnvironmentPolicyEditor } from "./environment-policy-editor";
 import { SentryIntegrationCard } from "./sentry-integration-card";
 
 export function EnvironmentSettings({ settings }: { settings: PanelEnvironmentSettings }) {
-  const scope = {
-    appId: settings.environment.appId,
-    environmentId: settings.environment.id,
-  };
+  const scope = { appId: settings.environment.appId, environmentId: settings.environment.id };
   return (
     <div className="grid gap-6" data-environment-settings={settings.environment.id}>
       <header>
@@ -25,6 +24,8 @@ export function EnvironmentSettings({ settings }: { settings: PanelEnvironmentSe
       <ApiKeysCard {...scope} initialApiKeys={settings.apiKeys} />
       <EnvironmentPolicyEditor {...scope} initialPolicy={settings.environment.policy} />
       <SentryIntegrationCard {...scope} />
+      <ConvexIntegrationCard {...scope} />
+      <CloudflareIntegrationCard {...scope} environmentKey={settings.environment.key} />
     </div>
   );
 }

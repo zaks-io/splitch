@@ -89,7 +89,9 @@ transport failure enters durable retry; only `2xx` completes the delivery.
 ## Non-goals
 
 - General outbound webhooks, custom destinations, or user-authored payload templates.
-- Managing an installation with a control-plane token or Client Key.
+- Creating or rotating an installation, or reading its configuration snapshot, with a control-plane
+  token. A control-plane token may list and revoke installations through the operator door.
+- Calling any Convex integration route with a Client Key.
 - Returning, recovering, or logging a stored webhook secret.
 
 ## Done

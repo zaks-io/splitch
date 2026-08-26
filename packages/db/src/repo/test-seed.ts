@@ -142,6 +142,29 @@ async function seedTenant(repo: ReturnType<typeof createRepository>, t: Tenant):
 
 export type SeededTenants = { a: Tenant; b: Tenant };
 
+/**
+ * A second Environment under an EXISTING tenant's App.
+ *
+ * `seedTwoTenants` alone cannot prove Environment scoping: tenant B differs on
+ * `app_id` AND `environment_id`, so a query filtering on only one of the two
+ * still excludes it and the other predicate is unproven. A sibling Environment
+ * differs on `environment_id` alone, so deleting that predicate leaks it.
+ */
+export async function seedSiblingEnvironment(
+  d1: D1Database,
+  tenant: { appId: string; envKey: string },
+  environmentId: string,
+): Promise<void> {
+  await createRepository(d1).identity.environments.insert(appScope(tenant.appId), {
+    id: environmentId,
+    appId: tenant.appId,
+    key: `${tenant.envKey}-sibling`,
+    name: "Staging",
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+}
+
 export async function seedTwoTenants(d1: D1Database): Promise<SeededTenants> {
   const repo = createRepository(d1);
   const a = ids("a");

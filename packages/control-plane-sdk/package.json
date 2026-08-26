@@ -53,6 +53,14 @@
       "types": "./src/panel-sentry.ts",
       "default": "./src/panel-sentry.ts"
     },
+    "./panel-convex": {
+      "types": "./src/panel-convex.ts",
+      "default": "./src/panel-convex.ts"
+    },
+    "./panel-cloudflare": {
+      "types": "./src/panel-cloudflare.ts",
+      "default": "./src/panel-cloudflare.ts"
+    },
     "./panel-settings": {
       "types": "./src/panel-settings.ts",
       "default": "./src/panel-settings.ts"

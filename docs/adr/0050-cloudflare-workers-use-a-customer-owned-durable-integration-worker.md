@@ -59,6 +59,8 @@ from other Flags would make the SDK surface fast but incorrect.
   migrations, and retry behavior as integration work.
 - **Splitch holding a broad Cloudflare API token** was rejected for V1. The customer deploys through
   Wrangler; Splitch receives only the narrow integration endpoint and generated signing secret.
+  The Control Panel only reads and revokes Splitch-side installation state, so it never calls
+  Cloudflare's API or changes this decision.
 
 ## Consequences
 

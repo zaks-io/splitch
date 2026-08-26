@@ -38,15 +38,25 @@ export function cliCommandPath(operationId: string): readonly string[] {
 }
 
 /**
- * Command paths the CLI registers IN ADDITION to the derived one, because the
- * derived name reads badly for humans (`splitch sdk verify` vs `splitch flags
- * verify`). The CLI builds its alias commands from this map and the panel
- * prints from it, so the alias has one definition and the two cannot diverge.
+ * Command paths the CLI registers under a name other than the derived one,
+ * because the derived name reads badly for humans (`splitch sdk verify` vs
+ * `splitch flags verify`). The CLI builds its alias commands from this map and
+ * the panel prints from it, so the alias has one definition and the two cannot
+ * diverge.
+ *
+ * The `cloudflare_*` entries are the CLI's SOLE paths, not additions: those
+ * routes are API-Key-authenticated, so they derive no MCP tool and therefore no
+ * derived command path. They belong here anyway — the Environment settings card
+ * teaches `splitch cloudflare setup` in its empty state, and a command the panel
+ * types by hand is exactly the divergence this map exists to prevent.
  */
 export const CLI_PRESENTATION_ALIAS_PATHS = {
   environments_get: ["env-policy", "get"],
   environments_update: ["env-policy", "set"],
   sdk_verify: ["flags", "verify"],
+  cloudflare_installations_create: ["cloudflare", "setup"],
+  cloudflare_installations_get: ["cloudflare", "status"],
+  cloudflare_installations_delete: ["cloudflare", "remove"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type CliPresentationAliasOperationId = keyof typeof CLI_PRESENTATION_ALIAS_PATHS;

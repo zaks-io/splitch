@@ -19,6 +19,16 @@ vi.mock("#lib/control-plane-sentry-functions", () => ({
   revokeControlPanelSentryInstallation: vi.fn(),
 }));
 
+vi.mock("#lib/control-plane-convex-functions", () => ({
+  loadControlPanelConvexInstallations: vi.fn(),
+  revokeControlPanelConvexInstallation: vi.fn(),
+}));
+
+vi.mock("#lib/control-plane-cloudflare-functions", () => ({
+  loadControlPanelCloudflareInstallations: vi.fn(),
+  revokeControlPanelCloudflareInstallation: vi.fn(),
+}));
+
 const { EnvironmentSettings } = await import("./environment-settings");
 
 describe("EnvironmentSettings", () => {

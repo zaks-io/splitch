@@ -1,7 +1,9 @@
 # Cloudflare integration API: registration, push health, and Exposure delivery
 
 Cloudflare integration routes require an API Key bound to exactly one App and Environment. Client
-Keys and control-plane sessions cannot call them. App and Environment never come from the body.
+Keys cannot call them. Control-plane sessions may list and revoke installations through the
+operator door described below, but cannot call these data-plane routes. App and Environment never
+come from the body.
 
 ## Registration
 
@@ -34,6 +36,20 @@ and the latest complete bounded delivery error. It returns no secret or configur
 
 `DELETE /api/integrations/cloudflare/installations/:installationId` revokes the installation and
 suppresses every pending delivery before returning `204`. It is idempotent.
+
+## Control Panel
+
+A control-plane token with a live App-admin role may use the operator door to inspect delivery
+health and disconnect the Splitch-side installation:
+
+```text
+GET /apps/:appId/envs/:environmentId/integrations/cloudflare/installations
+DELETE /apps/:appId/envs/:environmentId/integrations/cloudflare/installations/:installationId
+```
+
+The list includes active and revoked history with the same status shape as the API-Key read. The
+delete is idempotent and suppresses pending delivery. Neither route reads a secret, deploys a
+Worker, or calls Cloudflare's API. Registration and Exposure delivery remain API-Key-only.
 
 ## Snapshot delivery
 

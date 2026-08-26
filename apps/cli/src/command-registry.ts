@@ -98,7 +98,7 @@ const PRESENTATION_ALIASES: readonly CliCommandDefinition[] = [
 const CLOUDFLARE_COMMANDS: readonly CliCommandDefinition[] = [
   {
     operationId: "cloudflare_installations_create",
-    path: ["cloudflare", "setup"],
+    path: CLI_PRESENTATION_ALIAS_PATHS.cloudflare_installations_create,
     needsApp: false,
     needsEnvironment: true,
     supportsConfirm: false,
@@ -106,7 +106,7 @@ const CLOUDFLARE_COMMANDS: readonly CliCommandDefinition[] = [
   },
   {
     operationId: "cloudflare_installations_get",
-    path: ["cloudflare", "status"],
+    path: CLI_PRESENTATION_ALIAS_PATHS.cloudflare_installations_get,
     needsApp: false,
     needsEnvironment: true,
     supportsConfirm: false,
@@ -114,7 +114,7 @@ const CLOUDFLARE_COMMANDS: readonly CliCommandDefinition[] = [
   },
   {
     operationId: "cloudflare_installations_delete",
-    path: ["cloudflare", "remove"],
+    path: CLI_PRESENTATION_ALIAS_PATHS.cloudflare_installations_delete,
     needsApp: false,
     needsEnvironment: true,
     supportsConfirm: false,

@@ -2,12 +2,16 @@ import { z } from "zod";
 import {
   CLOUDFLARE_SERVER_EXPOSURE_MAX_BODY_BYTES,
   CloudflareInstallationCreateRequestSchema,
+  CloudflareInstallationListResponseSchema,
   CloudflareInstallationSchema,
   CloudflareInstallationStatusSchema,
   CloudflareServerExposureRequestSchema,
   CloudflareServerExposureResponseSchema,
 } from "../cloudflare-integration";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { EnvParams } from "./route-shapes";
+
+const OWNER = "control-plane-api" as const;
 
 const commonErrors = [
   "UNAUTHORIZED",
@@ -18,6 +22,15 @@ const commonErrors = [
   "SERVICE_UNAVAILABLE",
   "INTERNAL_SERVER_ERROR",
 ] as const;
+
+/**
+ * Reading and revoking an Environment's Cloudflare installation is
+ * administration, so these routes sit on the operator door. The existing
+ * `/api/integrations` routes stay on the data plane for the customer Worker.
+ */
+const PANEL_BASE = "/apps/:appId/envs/:environmentId/integrations/cloudflare/installations";
+const PanelInstallationParams = EnvParams.extend({ installationId: z.uuid() });
+const panelErrors = ["APP_NOT_FOUND", "FORBIDDEN", "INSUFFICIENT_SCOPES"] as const;
 
 export const cloudflareRoutes = [
   defineApiRoute({
@@ -90,5 +103,31 @@ export const cloudflareRoutes = [
       },
     },
     errors: [...commonErrors, "CLOUDFLARE_INSTALLATION_NOT_FOUND", "EVENT_ID_CONFLICT"],
+  }),
+  defineApiRoute({
+    operationId: "cloudflare_installations_list",
+    owner: OWNER,
+    method: "GET",
+    path: PANEL_BASE,
+    summary: "List Cloudflare installations and their delivery health for this Environment.",
+    request: { params: EnvParams },
+    response: CloudflareInstallationListResponseSchema,
+    auth: "control-plane-token",
+    rateLimit: "control-plane-actor",
+    idempotency: "none",
+    errors: panelErrors,
+  }),
+  defineApiRoute({
+    operationId: "cloudflare_installations_revoke",
+    owner: OWNER,
+    method: "DELETE",
+    path: `${PANEL_BASE}/:installationId`,
+    summary: "Revoke a Cloudflare integration and suppress pending deliveries.",
+    request: { params: PanelInstallationParams },
+    response: z.null(),
+    auth: "control-plane-token",
+    rateLimit: "control-plane-actor",
+    idempotency: "none",
+    errors: [...panelErrors, "CLOUDFLARE_INSTALLATION_NOT_FOUND"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

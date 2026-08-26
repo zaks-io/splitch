@@ -21,9 +21,12 @@ import { MemoryKv, NOW, sessionPrincipal } from "./session-test-harness";
 import { projectProgram } from "./typescript-program-test-helpers";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
-// The sweep tests walk every source file through the type checker; the walk
-// grows with the tree and already exceeds the 5s default under CI load.
-const SWEEP_TIMEOUT_MS = 30_000;
+// The sweep tests walk every source file through the type checker. That work is
+// CPU bound but the timeout is wall clock, and the walk shares a CI runner with
+// the rest of a 137-file suite: it took 2s alone and 17s under that contention,
+// then blew a 30s budget on the next commit. This is a runaway backstop, not a
+// performance budget. Tighten it only alongside a way to measure CPU time.
+const SWEEP_TIMEOUT_MS = 120_000;
 const HEADER_NAME_MODULES = [
   {
     moduleSpecifier: "@splitch/control-plane-sdk/control-panel-identity",
@@ -79,6 +82,8 @@ const CREATE_SERVER_FN_POST_WRITES = [
   "lib/control-plane-app-settings-functions.ts#removeControlPanelAppMember",
   "lib/control-plane-app-settings-functions.ts#updateControlPanelApp",
   "lib/control-plane-app-settings-functions.ts#updateControlPanelAppMember",
+  "lib/control-plane-cloudflare-functions.ts#revokeControlPanelCloudflareInstallation",
+  "lib/control-plane-convex-functions.ts#revokeControlPanelConvexInstallation",
   "lib/control-plane-experiment-functions.ts#createControlPanelExperiment",
   "lib/control-plane-experiment-functions.ts#stageAndStartControlPanelExperimentRun",
   "lib/control-plane-experiment-functions.ts#updateControlPanelExperiment",

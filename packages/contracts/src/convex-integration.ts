@@ -51,6 +51,10 @@ export const ConvexInstallationStatusSchema = ConvexInstallationSchema.extend({
     .nullable(),
 }).strict();
 
+export const ConvexInstallationListResponseSchema = z
+  .object({ installations: z.array(ConvexInstallationStatusSchema) })
+  .strict();
+
 export const ConvexSecretRotationRequestSchema = z
   .object({ rotationId: UuidSchema, webhookSecret: z.string().min(43).max(128) })
   .strict();
@@ -159,6 +163,7 @@ export type ConvexExposureVerificationResult = z.infer<
   typeof ConvexExposureVerificationResultSchema
 >;
 export type ConvexInstallation = z.infer<typeof ConvexInstallationSchema>;
+export type ConvexInstallationListResponse = z.infer<typeof ConvexInstallationListResponseSchema>;
 export type ConvexInstallationStatus = z.infer<typeof ConvexInstallationStatusSchema>;
 export type ConvexServerExposureItem = z.infer<typeof ConvexServerExposureItemSchema>;
 export type ConvexServerExposureResponse = z.infer<typeof ConvexServerExposureResponseSchema>;
