@@ -132,7 +132,9 @@ retry. Convex does not automatically retry failed Actions, so the outbox state i
 The outbox insert also schedules a recovery Mutation one lease interval later. That Mutation
 rearms itself only while the row remains pending or delivering, and reschedules the Action after a
 missed execution or expired lease. There is no reconciliation cron; the durable scheduled recovery
-chain is authoritative.
+chain is authoritative. After a component upgrade, an idempotent `install()` retry runs one bounded,
+versioned adoption chain that attaches watches to pending or delivering rows created by the previous
+version.
 Deterministic rejection becomes terminal immediately. Transport errors, `429`, `5xx`, and a
 successful batch item carrying retryable `SERVICE_UNAVAILABLE` reschedule unchanged. Transient
 retries stop at the 24-hour privacy deadline and become terminal after raw identity/context is

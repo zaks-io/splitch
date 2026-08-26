@@ -154,6 +154,7 @@ export async function persistExposure(
     state: "pending",
     attemptCount: 0,
     nextAttemptAt: Date.now(),
+    recoveryWatchGeneration: 1,
   });
   await ctx.scheduler.runAfter(0, internal.evaluation.deliver, { exposureId });
   await scheduleDeliveryWatch(ctx, exposureId, DELIVERY_LEASE_MS);

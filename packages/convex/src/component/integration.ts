@@ -8,19 +8,19 @@ import { action, env, internalAction, internalMutation, internalQuery } from "./
 import { randomSecret } from "./crypto";
 import { purgeBatchHandler, revokeLocalHandler, uninstallHandler } from "./integration_cleanup";
 import {
+  activateHandler,
+  cancelPendingSyncRecovery,
+  recoverSyncHandler,
+  SYNC_RECOVERY_DELAY_MS,
+  scheduleSyncRecovery,
+} from "./integration_recovery";
+import {
   ensureTrailingSlash,
   normalizedEndpoint,
   requestHeaders,
   responseJson,
   syncHandler,
 } from "./integration_remote";
-import {
-  activateHandler,
-  cancelPendingSyncRecovery,
-  recoverSyncHandler,
-  scheduleSyncRecovery,
-  SYNC_RECOVERY_DELAY_MS,
-} from "./integration_recovery";
 import { requiredIntegration } from "./integration_state";
 import { ensureRetentionScheduled } from "./retention";
 import schema from "./schema";

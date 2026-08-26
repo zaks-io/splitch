@@ -25,6 +25,8 @@ export default defineSchema({
     snapshotVersion: v.optional(v.number()),
     syncRecoveryJobId: v.optional(v.id("_scheduled_functions")),
     syncRecoveryVersion: v.optional(v.number()),
+    recoveryAdoptionJobId: v.optional(v.id("_scheduled_functions")),
+    recoveryGeneration: v.optional(v.number()),
     retentionJobId: v.optional(v.id("_scheduled_functions")),
     retentionDueAt: v.optional(v.number()),
     state: v.union(v.literal("pending"), v.literal("active"), v.literal("revoked")),
@@ -71,10 +73,12 @@ export default defineSchema({
     state: deliveryState,
     attemptCount: v.number(),
     nextAttemptAt: v.number(),
+    recoveryWatchGeneration: v.optional(v.number()),
     terminalAt: v.optional(v.number()),
     lastError: v.optional(v.string()),
   })
     .index("by_exposure", ["exposureId"])
+    .index("by_recovery_watch_state", ["recoveryWatchGeneration", "state"])
     .index("by_state_next_attempt", ["state", "nextAttemptAt"])
     .index("by_state_terminal_at", ["state", "terminalAt"])
     .index("by_entity_state", ["idType", "targetingKeyHash", "state"]),

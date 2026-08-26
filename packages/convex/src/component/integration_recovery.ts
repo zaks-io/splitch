@@ -1,10 +1,21 @@
+import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
+import { internalMutation, type MutationCtx } from "./_generated/server";
+import { scheduleDeliveryWatch } from "./exposure_delivery";
 import { requiredIntegration } from "./integration_state";
+import { ensureRetentionScheduled } from "./retention";
 
 const CURRENT_KEY = "current" as const;
+const ADOPTION_BATCH_SIZE = 25;
+export const RECOVERY_GENERATION = 1;
 export const SYNC_RECOVERY_DELAY_MS = 60_000;
+
+export const adoptExistingWork = internalMutation({
+  args: { generation: v.number() },
+  returns: v.null(),
+  handler: adoptExistingWorkHandler,
+});
 
 export async function activateHandler(
   ctx: MutationCtx,
@@ -23,6 +34,51 @@ export async function activateHandler(
     { ...integration, announcedVersion, state: "active" },
     SYNC_RECOVERY_DELAY_MS,
   );
+  await ensureRetentionScheduled(ctx);
+  await scheduleRecoveryAdoption(ctx, { ...integration, state: "active" });
+}
+
+export async function adoptExistingWorkHandler(
+  ctx: MutationCtx,
+  args: { generation: number },
+): Promise<void> {
+  const integration = await currentIntegration(ctx);
+  if (!integration || (integration.recoveryGeneration ?? 0) >= args.generation) return;
+
+  const [pending, delivering] = await Promise.all([
+    legacyDeliveries(ctx, "pending"),
+    legacyDeliveries(ctx, "delivering"),
+  ]);
+  const rows = [...pending, ...delivering];
+  for (const row of rows) {
+    await scheduleDeliveryWatch(ctx, row.exposureId, 0);
+    await ctx.db.patch(row._id, { recoveryWatchGeneration: args.generation });
+  }
+
+  if (pending.length === ADOPTION_BATCH_SIZE || delivering.length === ADOPTION_BATCH_SIZE) {
+    const jobId = await ctx.scheduler.runAfter(
+      0,
+      internal.integration_recovery.adoptExistingWork,
+      args,
+    );
+    await ctx.db.patch(integration._id, { recoveryAdoptionJobId: jobId });
+    return;
+  }
+
+  await ctx.db.patch(integration._id, {
+    recoveryAdoptionJobId: undefined,
+    recoveryGeneration: args.generation,
+  });
+  await ensureRetentionScheduled(ctx);
+}
+
+function legacyDeliveries(ctx: MutationCtx, state: "pending" | "delivering") {
+  return ctx.db
+    .query("exposureOutbox")
+    .withIndex("by_recovery_watch_state", (q) =>
+      q.eq("recoveryWatchGeneration", undefined).eq("state", state),
+    )
+    .take(ADOPTION_BATCH_SIZE);
 }
 
 export async function recoverSyncHandler(
@@ -76,6 +132,21 @@ export async function scheduleSyncRecovery(
     syncRecoveryJobId: jobId,
     syncRecoveryVersion: integration.announcedVersion,
   });
+}
+
+export async function scheduleRecoveryAdoption(
+  ctx: MutationCtx,
+  integration: Doc<"integrations">,
+): Promise<void> {
+  if ((integration.recoveryGeneration ?? 0) >= RECOVERY_GENERATION) return;
+  const existingJob = integration.recoveryAdoptionJobId
+    ? await ctx.db.system.get("_scheduled_functions", integration.recoveryAdoptionJobId)
+    : null;
+  if (existingJob?.state.kind === "pending" || existingJob?.state.kind === "inProgress") return;
+  const jobId = await ctx.scheduler.runAfter(0, internal.integration_recovery.adoptExistingWork, {
+    generation: RECOVERY_GENERATION,
+  });
+  await ctx.db.patch(integration._id, { recoveryAdoptionJobId: jobId });
 }
 
 export async function cancelPendingSyncRecovery(

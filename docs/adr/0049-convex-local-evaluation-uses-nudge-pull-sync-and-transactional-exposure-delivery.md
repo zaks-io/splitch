@@ -68,7 +68,9 @@ does not send evaluation events from queries.
   Exposure-outbox tables with bounded retention and deletion operations.
 - Configuration and Exposure recovery use activity-driven scheduled Mutations that stop when their
   durable state is current. Retention uses one scheduled cleanup at the earliest known expiry and
-  schedules its successor only while retained data remains. The component registers no cron jobs.
+  schedules its successor only while retained data remains. An idempotent install retry after a
+  component upgrade starts one finite adoption chain for work created by the prior version. The
+  component registers no cron jobs.
 - Splitch needs an API-Key installation/config-snapshot surface, encrypted webhook-secret custody,
   a durable webhook delivery outbox, and a server Exposure endpoint.
 - `raw_events` gains additive `exposure_at`; existing producers populate it from
