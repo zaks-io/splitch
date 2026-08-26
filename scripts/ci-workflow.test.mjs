@@ -20,6 +20,13 @@ function jobSection(name) {
 const verifyJob = jobSection("verify");
 const productionCall = jobSection("deploy-production");
 
+test("marking a draft PR ready triggers its required Verify check", () => {
+  assert.match(
+    workflow,
+    /pull_request:\n {4}types: \[opened, synchronize, reopened, ready_for_review\]/,
+  );
+});
+
 test("new main pushes cannot cancel or coalesce an in-flight production call", () => {
   assert.match(
     workflow,
