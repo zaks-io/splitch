@@ -12,7 +12,7 @@ import {
   claimDeliveryHandler,
   deliverHandler,
   finishDeliveryHandler,
-  recoverDeliveriesHandler,
+  watchDeliveryHandler,
 } from "./exposure_delivery";
 import {
   localTargetingKeyHash,
@@ -20,6 +20,7 @@ import {
   purgeEntityBatch,
   runtimeState,
 } from "./evaluation_state";
+import { ensureRetentionScheduled } from "./retention";
 import { snapshotProvider } from "./snapshot";
 import {
   deliveryClaimValidator,
@@ -79,6 +80,7 @@ export const evaluate = mutation({
         throw new Error(
           "IDEMPOTENCY_KEY_CONFLICT: idempotencyKey was reused for a different Convex Evaluation",
         );
+      await ensureRetentionScheduled(ctx);
       return JSON.parse(claim.result) as ResolutionDetails;
     }
     const result = await evaluatePath(
@@ -101,6 +103,7 @@ export const evaluate = mutation({
       result: JSON.stringify(details),
       createdAt: Date.now(),
     });
+    await ensureRetentionScheduled(ctx);
     return details;
   },
 });
@@ -156,10 +159,10 @@ export const continueDeleteEntity = internalMutation({
   },
 });
 
-export const recoverDeliveries = internalMutation({
-  args: {},
-  returns: v.number(),
-  handler: recoverDeliveriesHandler,
+export const watchDelivery = internalMutation({
+  args: { exposureId: v.string() },
+  returns: v.null(),
+  handler: watchDeliveryHandler,
 });
 
 export const deliver = internalAction({

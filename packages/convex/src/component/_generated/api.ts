@@ -8,7 +8,6 @@
  * @module
  */
 
-import type * as crons from "../crons.js";
 import type * as crypto from "../crypto.js";
 import type * as evaluation from "../evaluation.js";
 import type * as evaluation_state from "../evaluation_state.js";
@@ -30,7 +29,6 @@ import type {
 import { anyApi, componentsGeneric } from "convex/server";
 
 const fullApi: ApiFromModules<{
-  crons: typeof crons;
   crypto: typeof crypto;
   evaluation: typeof evaluation;
   evaluation_state: typeof evaluation_state;

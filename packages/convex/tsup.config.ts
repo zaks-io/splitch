@@ -9,7 +9,6 @@ export default defineConfig({
     "component/evaluation": "src/component/evaluation.ts",
     "component/integration": "src/component/integration.ts",
     "component/http": "src/component/http.ts",
-    "component/crons": "src/component/crons.ts",
     "component/retention": "src/component/retention.ts",
     "component/_generated/component": "src/component/_generated/component.ts",
   },

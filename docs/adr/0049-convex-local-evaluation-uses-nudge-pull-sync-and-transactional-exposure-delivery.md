@@ -66,6 +66,9 @@ does not send evaluation events from queries.
 
 - The local component needs private configuration, holdover, integration-token, delivery-claim, and
   Exposure-outbox tables with bounded retention and deletion operations.
+- Configuration and Exposure recovery use activity-driven scheduled Mutations that stop when their
+  durable state is current. Retention uses one scheduled cleanup at the earliest known expiry and
+  schedules its successor only while retained data remains. The component registers no cron jobs.
 - Splitch needs an API-Key installation/config-snapshot surface, encrypted webhook-secret custody,
   a durable webhook delivery outbox, and a server Exposure endpoint.
 - `raw_events` gains additive `exposure_at`; existing producers populate it from

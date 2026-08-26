@@ -3,10 +3,18 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "./_generated/server";
 import { env } from "./_generated/server";
+import { ensureRetentionScheduled } from "./retention";
 
 const EXPOSURE_PRIVACY_DEADLINE_MS = 86_400_000;
-const DELIVERY_LEASE_MS = 60_000;
-const RECOVERY_BATCH_SIZE = 25;
+export const DELIVERY_LEASE_MS = 60_000;
+
+export async function scheduleDeliveryWatch(
+  ctx: MutationCtx,
+  exposureId: string,
+  delayMs: number,
+): Promise<void> {
+  await ctx.scheduler.runAfter(delayMs, internal.evaluation.watchDelivery, { exposureId });
+}
 
 export async function claimDeliveryHandler(ctx: MutationCtx, args: { exposureId: string }) {
   const row = await ctx.db
@@ -166,22 +174,26 @@ async function finishFromResponse(
   });
 }
 
-export async function recoverDeliveriesHandler(ctx: MutationCtx): Promise<number> {
+export async function watchDeliveryHandler(
+  ctx: MutationCtx,
+  args: { exposureId: string },
+): Promise<void> {
+  const row = await ctx.db
+    .query("exposureOutbox")
+    .withIndex("by_exposure", (q) => q.eq("exposureId", args.exposureId))
+    .unique();
+  if (!row || row.state === "accepted" || row.state === "terminal" || row.state === "suppressed")
+    return;
+
   const now = Date.now();
-  const due = (
-    await Promise.all(
-      (["pending", "delivering"] as const).map((state) =>
-        ctx.db
-          .query("exposureOutbox")
-          .withIndex("by_state_next_attempt", (q) => q.eq("state", state).lte("nextAttemptAt", now))
-          .take(RECOVERY_BATCH_SIZE),
-      ),
-    )
-  ).flat();
-  for (const row of due) {
-    await ctx.scheduler.runAfter(0, internal.evaluation.deliver, { exposureId: row.exposureId });
+  if (row.nextAttemptAt <= now) {
+    await ctx.scheduler.runAfter(0, internal.evaluation.deliver, args);
+    await scheduleDeliveryWatch(ctx, args.exposureId, DELIVERY_LEASE_MS);
+    return;
   }
-  return due.length;
+
+  const grace = row.state === "pending" ? DELIVERY_LEASE_MS : 0;
+  await scheduleDeliveryWatch(ctx, args.exposureId, row.nextAttemptAt - now + grace);
 }
 
 function commitTimestampIso(value: bigint | CommitTsPlaceholder): string {
@@ -203,6 +215,7 @@ async function makeTerminal(
     terminalAt: Date.now(),
     lastError: error,
   });
+  await ensureRetentionScheduled(ctx);
 }
 
 function retryDelay(exposureId: string, attempt: number): number {

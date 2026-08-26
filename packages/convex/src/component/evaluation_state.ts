@@ -6,6 +6,7 @@ import type {
 import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { hmacHex, stableUuid } from "./crypto";
+import { DELIVERY_LEASE_MS, scheduleDeliveryWatch } from "./exposure_delivery";
 import { parseSnapshot } from "./snapshot";
 
 export async function purgeEntityBatch(
@@ -155,6 +156,7 @@ export async function persistExposure(
     nextAttemptAt: Date.now(),
   });
   await ctx.scheduler.runAfter(0, internal.evaluation.deliver, { exposureId });
+  await scheduleDeliveryWatch(ctx, exposureId, DELIVERY_LEASE_MS);
 }
 
 export async function localTargetingKeyHash(

@@ -14,7 +14,15 @@ import {
   responseJson,
   syncHandler,
 } from "./integration_remote";
+import {
+  activateHandler,
+  cancelPendingSyncRecovery,
+  recoverSyncHandler,
+  scheduleSyncRecovery,
+  SYNC_RECOVERY_DELAY_MS,
+} from "./integration_recovery";
 import { requiredIntegration } from "./integration_state";
+import { ensureRetentionScheduled } from "./retention";
 import schema from "./schema";
 import { installationResultValidator } from "./validators";
 
@@ -62,15 +70,7 @@ export const initialize = internalMutation({
 export const activate = internalMutation({
   args: { appId: v.string(), environmentId: v.string(), environmentVersion: v.number() },
   returns: v.null(),
-  handler: async (ctx, args) => {
-    const integration = await requiredIntegration(ctx);
-    await ctx.db.patch(integration._id, {
-      appId: args.appId,
-      environmentId: args.environmentId,
-      announcedVersion: Math.max(integration.announcedVersion, args.environmentVersion),
-      state: "active",
-    });
-  },
+  handler: activateHandler,
 });
 
 export const install = action({
@@ -133,19 +133,10 @@ export const syncNow = action({
   handler: syncHandler,
 });
 
-export const recoverSync = internalAction({
-  args: {},
+export const recoverSync = internalMutation({
+  args: { environmentVersion: v.number() },
   returns: v.null(),
-  handler: async (ctx): Promise<void> => {
-    const integration = await ctx.runQuery(internal.integration.get, {});
-    if (
-      integration?.state === "active" &&
-      (integration.snapshotVersion === undefined ||
-        integration.snapshotVersion < integration.announcedVersion)
-    ) {
-      await syncHandler(ctx);
-    }
-  },
+  handler: recoverSyncHandler,
 });
 
 export const commitSnapshot = internalMutation({
@@ -184,7 +175,12 @@ export const commitSnapshot = internalMutation({
         environmentVersion: snapshot.environmentVersion,
         payload: args.payload,
       });
-    await ctx.db.patch(integration._id, { snapshotVersion: snapshot.environmentVersion });
+    await cancelPendingSyncRecovery(ctx, integration);
+    await ctx.db.patch(integration._id, {
+      snapshotVersion: snapshot.environmentVersion,
+      syncRecoveryJobId: undefined,
+      syncRecoveryVersion: undefined,
+    });
   },
 });
 
@@ -211,8 +207,14 @@ export const announce = internalMutation({
       .unique();
     if (prior || args.environmentVersion <= integration.announcedVersion) return "duplicate";
     await ctx.db.insert("webhookClaims", { deliveryId: args.deliveryId, claimedAt: Date.now() });
+    await ensureRetentionScheduled(ctx);
     await ctx.db.patch(integration._id, { announcedVersion: args.environmentVersion });
     await ctx.scheduler.runAfter(0, internal.integration.sync, {});
+    await scheduleSyncRecovery(
+      ctx,
+      { ...integration, announcedVersion: args.environmentVersion },
+      SYNC_RECOVERY_DELAY_MS,
+    );
     return "scheduled";
   },
 });

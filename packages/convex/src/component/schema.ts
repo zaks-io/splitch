@@ -23,6 +23,10 @@ export default defineSchema({
     environmentId: v.optional(v.string()),
     announcedVersion: v.number(),
     snapshotVersion: v.optional(v.number()),
+    syncRecoveryJobId: v.optional(v.id("_scheduled_functions")),
+    syncRecoveryVersion: v.optional(v.number()),
+    retentionJobId: v.optional(v.id("_scheduled_functions")),
+    retentionDueAt: v.optional(v.number()),
     state: v.union(v.literal("pending"), v.literal("active"), v.literal("revoked")),
   }).index("by_key", ["key"]),
   snapshots: defineTable({

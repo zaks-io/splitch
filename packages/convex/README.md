@@ -61,6 +61,11 @@ Call `flags.install(ctx)` once from an Action after mounting the component. The 
 `/integrations/splitch/configuration`. `SPLITCH_API_KEY` stays in the Convex deployment environment
 and must never be sent to browser code.
 
+Background recovery is activity-driven. Configuration nudges and new Exposure outbox rows schedule
+their own recovery mutations, which stop once the work is complete. Retained claims and terminal
+Exposure rows share one scheduled cleanup job set for the earliest expiry. The component registers
+no cron jobs and invokes nothing periodically while idle.
+
 Use `flags.deleteEntity(ctx, { targetingKey, idType })` inside a Mutation to remove one Entity's
 local holdovers and queued Exposures. `flags.uninstall(ctx)` revokes the remote installation before
 purging the component's private state.
