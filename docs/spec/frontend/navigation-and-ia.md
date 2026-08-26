@@ -61,11 +61,11 @@ the App's first-class children plus settings, in this order:
   (Client/API), its **Environment Policy** (confirm gates), and Environment management
 
 The bottom Organization block remains visible from every authenticated screen. It contains the
-Organization name or multi-Organization switcher, then Apps, Members, Billing & Usage, and the user
-row with Sign out. Organization screens show the same shell without App sections or Environment
+Organization name or multi-Organization switcher, then Apps, Members, Integrations, Billing & Usage,
+and the user row with Sign out. Organization screens show the same shell without App sections or Environment
 pills.
 
-Org-level concerns live at the org root, one level up from any App, as three screens (detailed in
+Org-level concerns live at the org root, one level up from any App, as four screens (detailed in
 [screen-inventory.md](./screen-inventory.md)):
 
 - `/{orgSlug}` — **Home**; each App name in the Apps table links to the App home and each
@@ -73,6 +73,9 @@ Org-level concerns live at the org root, one level up from any App, as three scr
 - `/{orgSlug}/{appSlug}` — **Flags across all Environments**, the one Environment-less App URL.
 - `/{orgSlug}/members` — **Org Members** (distinct from per-App membership, which lives under App
   Settings).
+- `/{orgSlug}/integrations` — **Integrations**: the tools that receive the whole Organization's Flag
+  activity, currently Sentry change tracking. Integrations that act on one Environment's credentials
+  or data (Convex, Cloudflare) stay under that Environment's Settings.
 - `/{orgSlug}/billing` — **Billing & Usage** (Evaluation-quota usage is real v1; payment is the
   deferred stub, ADR-0033).
 

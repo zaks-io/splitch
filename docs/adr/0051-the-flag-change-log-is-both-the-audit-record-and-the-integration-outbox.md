@@ -37,10 +37,22 @@ Sentry's generic feature-flag provider hook forced the question: change tracking
    `change_id`. The cursor advances only on an accepted delivery, never past a rejection, even a
    terminal 4xx, because skipping the batch would silently drop real production changes.
 
-6. **The Environment is the installation axis.** Sentry's payload has no environment field, so one
-   Sentry organization must not hear about both prod and dev toggles. The unique index is
-   `(app_id, environment_id) WHERE status = 'active'`. App-level DEFINITION changes carry
-   `environment_id NULL` and reach every Environment's consumer (ADR-0027).
+6. **The Organization is the installation axis.** Sentry's flag log is organization-wide: one
+   signing secret per provider type per Sentry organization, and no project or environment field
+   anywhere in the generic webhook's payload. So one splitch Organization maps to one Sentry
+   organization and publishes every Flag change under it, across all its Apps and Environments. The
+   unique index is `(organization_id) WHERE status = 'active'`. Filtering the stream by App or
+   Environment was considered and rejected: with nowhere in the payload to say which one a change
+   came from, a filter would silently drop real production changes from the one log Sentry
+   correlates errors against (ADR-0027, ADR-0036). The cost is that a Flag key reused across Apps or
+   Environments appears in Sentry as several changes to the same name.
+
+   This reverses the Environment-scoped axis this ADR originally decided, and migration
+   `0027_sentry_org_scope.sql` rebuilds `sentry_installations` accordingly, revoking all but the
+   newest active row per Organization. The original reading, that a prod Sentry organization must
+   not hear about dev toggles, described a separation Sentry does not offer: two Environments wiring
+   up the same Sentry organization each minted a secret, and the second silently invalidated the
+   first.
 
 7. **An unattributable change is sent as unattributed, not dropped and not fabricated.** Sentry
    requires `created_by`. Variant and Targeting Rule writes have no actor on their own row, so those
@@ -52,10 +64,10 @@ Sentry's generic feature-flag provider hook forced the question: change tracking
 8. **splitch mints the signing secret, and the installation routes live on the operator door.**
    Sentry's Generic-provider form gives no secret; it asks the provider for one. So `webhookSecret`
    is optional on write, the server generates one when it is absent, and the response carries it
-   exactly once, the same custody an API Key gets. The routes address the Environment in the path
-   (`/apps/:appId/envs/:environmentId/integrations/sentry/installations`) rather than reading it
-   from an edge credential, because a Control Panel delegation claim must name the resource it acts
-   on. That is what makes the Environment settings card possible without a second auth path.
+   exactly once, the same custody an API Key gets. The routes address the Organization in the path
+   (`/orgs/:orgId/integrations/sentry/installations`) rather than reading it from an edge
+   credential, because a Control Panel delegation claim must name the resource it acts on. That is
+   what makes the Organization Integrations card possible without a second auth path.
 
 9. **Retention is age plus every cursor.** The daily cron prunes rows older than 90 days that are
    also behind the minimum undelivered `seq` across active installations. A backlog is never deleted

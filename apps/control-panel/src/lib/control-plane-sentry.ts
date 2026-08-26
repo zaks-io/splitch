@@ -8,9 +8,10 @@ import {
 /**
  * Server-only Sentry installation client over the signed Control Plane binding.
  *
- * No Environment is pinned on the delegation: every Sentry path already names
- * the Environment it acts on, so the claim binds to that segment rather than to
- * a header the operator's current Environment selection happens to carry.
+ * No Environment is pinned on the delegation: a Sentry installation belongs to
+ * an Organization, and every Sentry path already names it, so the claim binds to
+ * that segment rather than to a header the operator's current Environment
+ * selection happens to carry.
  */
 export function createControlPanelSentryClient(
   controlPlane: Fetcher,

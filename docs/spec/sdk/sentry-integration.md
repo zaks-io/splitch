@@ -35,23 +35,27 @@ Self-hosted Sentry requires its host in the Worker's `SENTRY_WEBHOOK_ALLOWED_HOS
 
 ### Control Panel
 
-**Environment settings → Sentry change tracking** is the operator's door. Paste the webhook URL,
-press **Connect Sentry**, and the minted secret appears once in a copy-once panel, the same
+**Organization → Integrations → Sentry change tracking** is the operator's door. Paste the webhook
+URL, press **Connect Sentry**, and the minted secret appears once in a copy-once panel, the same
 treatment an API Key gets. The table below the form carries delivery health, a **Rotate secret**
 button (mints a new secret, shown once, for when Sentry's copy is lost or compromised), and
 **Disconnect**, which revokes the installation and stops delivery.
 
-The card acts on the Environment you are looking at. One Environment, one Sentry organization.
+The card acts on the Organization you are looking at. One splitch Organization, one Sentry
+organization.
 
 ### Install (API)
 
-One installation binds **one Environment to one Sentry organization**. Sentry's payload carries no
-environment field, so a prod Sentry organization must not hear about dev toggles; the Environment is
-in the path, never in the body. These routes sit on the operator door beside API Keys and take App
-admin, not an edge credential.
+One installation binds **one splitch Organization to one Sentry organization**, and carries every
+App and Environment under it. That is Sentry's shape, not a simplification of ours: Sentry keeps a
+single signing secret per provider type per organization, and its flag log has no project or
+environment axis, so two Environments wiring up the same Sentry organization would each mint a
+secret and the second would silently invalidate the first. The Organization is in the path, never in
+the body. These routes sit on the operator door beside API Keys and take Org admin, not an edge
+credential.
 
 ```text
-POST /apps/:appId/envs/:environmentId/integrations/sentry/installations
+POST /orgs/:orgId/integrations/sentry/installations
 
 { installationId, webhookUrl, webhookSecret? }
 ```
@@ -116,9 +120,13 @@ Four details the contract turns on:
   rejected batch would silently drop real production changes; the backlog stays and the failure is
   visible in `attemptCount` and `latestDeliveryError`.
 
-App-level Flag DEFINITION changes (create, rename, delete, Variant edits) carry no Environment and
-reach every Environment's installation. Per-Environment CONFIGURATION changes (`enabled`, rollout,
-targeting) reach only their own (ADR-0027).
+Every Flag change under the Organization is published: App-level DEFINITION changes (create, rename,
+delete, Variant edits) and per-Environment CONFIGURATION changes (`enabled`, rollout, targeting)
+alike. Nothing is filtered by App or Environment, because there is nowhere in Sentry's payload to
+say which one a change came from: the generic webhook accepts only `action`, `change_id`, `created_at`,
+`created_by`, `flag`, and `meta.version`. A filter here would silently drop real production changes
+from the one log Sentry correlates errors against, so a Flag key that exists in several Apps or
+Environments shows up as several changes to the same name (ADR-0027, ADR-0036).
 
 ## Evaluation tracking
 

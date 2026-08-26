@@ -89,33 +89,23 @@ const CLAIMABLE: ReadonlyArray<[string, string, Record<string, string>]> = [
   ],
   [
     "GET",
-    "/apps/app_1/envs/env_1/integrations/sentry/installations",
-    { id: "sentry_installations_list", appId: "app_1", environmentId: "env_1" },
+    "/orgs/org_1/integrations/sentry/installations",
+    { id: "sentry_installations_list", orgId: "org_1" },
   ],
   [
     "POST",
-    "/apps/app_1/envs/env_1/integrations/sentry/installations",
-    { id: "sentry_installations_create", appId: "app_1", environmentId: "env_1" },
+    "/orgs/org_1/integrations/sentry/installations",
+    { id: "sentry_installations_create", orgId: "org_1" },
   ],
   [
     "DELETE",
-    "/apps/app_1/envs/env_1/integrations/sentry/installations/inst_1",
-    {
-      id: "sentry_installations_delete",
-      appId: "app_1",
-      environmentId: "env_1",
-      installationId: "inst_1",
-    },
+    "/orgs/org_1/integrations/sentry/installations/inst_1",
+    { id: "sentry_installations_delete", orgId: "org_1", installationId: "inst_1" },
   ],
   [
     "POST",
-    "/apps/app_1/envs/env_1/integrations/sentry/installations/inst_1/secret-rotations",
-    {
-      id: "sentry_secret_rotations_create",
-      appId: "app_1",
-      environmentId: "env_1",
-      installationId: "inst_1",
-    },
+    "/orgs/org_1/integrations/sentry/installations/inst_1/secret-rotations",
+    { id: "sentry_secret_rotations_create", orgId: "org_1", installationId: "inst_1" },
   ],
 ];
 
@@ -139,9 +129,12 @@ const UNCLAIMABLE: ReadonlyArray<[string, string]> = [
   ["POST", "/apps/app_1/envs/env_1/client-key/revoke"],
   // Reading one installation is an agent-only route: the Panel lists, so no
   // claim names a single installation for a read.
-  ["GET", "/apps/app_1/envs/env_1/integrations/sentry/installations/inst_1"],
-  ["PATCH", "/apps/app_1/envs/env_1/integrations/sentry/installations/inst_1"],
-  ["GET", "/apps/app_1/envs/env_1/integrations/sentry/installations/inst_1/secret-rotations"],
+  ["GET", "/orgs/org_1/integrations/sentry/installations/inst_1"],
+  ["PATCH", "/orgs/org_1/integrations/sentry/installations/inst_1"],
+  ["GET", "/orgs/org_1/integrations/sentry/installations/inst_1/secret-rotations"],
+  // The Environment-scoped path the installation used to live on is not a
+  // second address for it.
+  ["GET", "/apps/app_1/envs/env_1/integrations/sentry/installations"],
   ["GET", "/health"],
 ];
 

@@ -121,6 +121,32 @@ export function args(
   };
 }
 
+/**
+ * The Organization-scoped twin of `args`, for routes that name an Org and no
+ * App. The scopes are maximal for the same reason: any refusal has to come from
+ * the live `organization_members` read, not from the claim.
+ */
+export function orgArgs(
+  userId: string,
+  orgId: string,
+  input: { params?: Record<string, string>; body?: Record<string, unknown> },
+): HandlerArgs<unknown> {
+  return {
+    input: { params: { orgId, ...input.params }, ...(input.body ? { body: input.body } : {}) },
+    principal: {
+      kind: "control-plane-token",
+      id: userId,
+      scopes: [`org:${orgId}:owner`, `org:${orgId}:admin`, `org:${orgId}:member`],
+      orgId,
+      appId: null,
+      environmentId: null,
+      authDoor: null,
+    },
+    requestId: "req_test",
+    request: new Request("https://control-plane.test/binding"),
+  };
+}
+
 export interface SeedFlag {
   appId: string;
   flagId: string;

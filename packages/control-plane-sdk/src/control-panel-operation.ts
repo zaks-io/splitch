@@ -176,20 +176,20 @@ export type ControlPanelOperation =
       keyId: string;
     }
   /**
-   * Sentry change tracking. The installation binds this Environment to one
-   * Sentry organization, so the claim names both axes; the resource pair also
-   * names the installation, so a delegation minted to rotate one Environment's
-   * signing secret can never be replayed against another installation.
+   * Sentry change tracking. Sentry holds one signing secret per provider per
+   * organization and its flag log has no project or environment axis, so the
+   * installation binds an entire splitch Organization and the claim names only
+   * that; the resource pair also names the installation, so a delegation minted
+   * to rotate one signing secret can never be replayed against another
+   * installation.
    */
   | {
       id: "sentry_installations_list" | "sentry_installations_create";
-      appId: string;
-      environmentId: string;
+      orgId: string;
     }
   | {
       id: "sentry_installations_delete" | "sentry_secret_rotations_create";
-      appId: string;
-      environmentId: string;
+      orgId: string;
       installationId: string;
     }
   /**

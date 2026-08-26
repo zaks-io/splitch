@@ -10,7 +10,7 @@ import {
 import { type SeededTenants, seedTwoTenants } from "./test-seed";
 
 /**
- * The read side of the flag-change log: cursor semantics, Environment scoping,
+ * The read side of the flag-change log: cursor semantics, Organization scoping,
  * and retention. The triggers that produce these rows are proved separately in
  * `flag-change-triggers.test.ts`.
  */
@@ -30,36 +30,27 @@ afterEach(async () => {
 });
 
 describe("flagChangeEvents repo", () => {
-  it("returns App-level changes alongside the requested Environment's own", async () => {
+  it("returns every Environment's changes under the Organization", async () => {
     await insertSecondEnvironment(local.d1, seed);
     await insertConfig(local.d1, seed);
     await insertConfig(local.d1, seed, { id: "cfg_a2", environmentId: "env_a_two" });
     await toggleConfig(local.d1, seed);
     await toggleConfig(local.d1, seed, "env_a_two");
 
-    const pending = await repo.flagChangeEvents.pendingForScope(
-      seed.a.appId,
-      seed.a.environmentId,
-      0,
-      100,
-    );
+    const pending = await repo.flagChangeEvents.pendingForOrg(seed.a.orgId, 0, 100);
 
-    // App-level DEFINITION changes carry environment_id NULL and affect every
-    // Environment, so an Environment-scoped consumer must still receive them.
+    // Sentry's flag log has no environment axis, so a per-Environment filter
+    // here would silently drop real production changes. App-level DEFINITION
+    // changes carry environment_id NULL and belong in the same stream.
     expect(pending.some((row) => row.environmentId === null)).toBe(true);
     expect(pending.some((row) => row.environmentId === seed.a.environmentId)).toBe(true);
-    expect(pending.some((row) => row.environmentId === "env_a_two")).toBe(false);
+    expect(pending.some((row) => row.environmentId === "env_a_two")).toBe(true);
   });
 
   it("never returns another tenant's changes", async () => {
     await insertConfig(local.d1, seed);
     await toggleConfig(local.d1, seed);
-    const pending = await repo.flagChangeEvents.pendingForScope(
-      seed.b.appId,
-      seed.b.environmentId,
-      0,
-      100,
-    );
+    const pending = await repo.flagChangeEvents.pendingForOrg(seed.b.orgId, 0, 100);
     expect(pending.every((row) => row.appId === seed.b.appId)).toBe(true);
     expect(pending.some((row) => row.flagKey === seed.a.flagKey)).toBe(false);
   });
@@ -67,21 +58,11 @@ describe("flagChangeEvents repo", () => {
   it("resumes strictly after the cursor and honours the batch limit", async () => {
     await insertConfig(local.d1, seed);
     await toggleConfig(local.d1, seed);
-    const all = await repo.flagChangeEvents.pendingForScope(
-      seed.a.appId,
-      seed.a.environmentId,
-      0,
-      100,
-    );
+    const all = await repo.flagChangeEvents.pendingForOrg(seed.a.orgId, 0, 100);
     expect(all.length).toBeGreaterThan(2);
 
     const cursor = all[0]?.seq ?? 0;
-    const resumed = await repo.flagChangeEvents.pendingForScope(
-      seed.a.appId,
-      seed.a.environmentId,
-      cursor,
-      1,
-    );
+    const resumed = await repo.flagChangeEvents.pendingForOrg(seed.a.orgId, cursor, 1);
     // Strictly after: redelivering the row at the cursor would double-report a
     // change the consumer has already acknowledged.
     expect(resumed).toHaveLength(1);

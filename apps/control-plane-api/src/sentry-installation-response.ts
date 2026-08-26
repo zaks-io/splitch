@@ -1,23 +1,18 @@
 import type { SentryInstallationRow } from "@splitch/db";
-import { envScope } from "@splitch/db";
 
 /**
- * The wire shape of an installation, and the minted scope every Sentry handler
- * reads under. Kept apart from the handlers so the tenant scope is derived in
- * exactly one place: an installation names the Sentry organization a whole
- * Environment's Flag changes are published to, so a scope assembled ad hoc per
- * handler is the mistake worth making impossible.
+ * The wire shape of an installation.
+ *
+ * An installation names the Sentry organization a whole splitch Organization's
+ * Flag changes are published to, so `orgId` is the only scope on it: Sentry
+ * holds one signing secret per provider per organization and its flag log has no
+ * project or environment axis to narrow against.
  */
-
-export function sentryScope(params: { appId: string; environmentId: string }) {
-  return envScope(params.appId, params.environmentId);
-}
 
 export function installationStatusResponse(row: SentryInstallationRow) {
   return {
     installationId: row.installationId,
-    appId: row.appId,
-    environmentId: row.environmentId,
+    orgId: row.orgId,
     webhookUrl: row.webhookUrl,
     status: row.status,
     lastDeliveredSeq: row.lastDeliveredSeq,

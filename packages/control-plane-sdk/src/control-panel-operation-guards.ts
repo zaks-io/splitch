@@ -26,8 +26,6 @@ const SCOPED_OPERATION_IDS = [
   "event_definitions_list",
   "event_definitions_create",
   "environment_exposure_status_get",
-  "sentry_installations_list",
-  "sentry_installations_create",
   "convex_installations_list",
   "cloudflare_installations_list",
 ] as const;
@@ -86,10 +84,23 @@ const ORG_MEMBER_RESOURCE_OPERATION_IDS = [
  * installation from being replayed against another.
  */
 const INSTALLATION_OPERATION_IDS = [
-  "sentry_installations_delete",
-  "sentry_secret_rotations_create",
   "convex_installations_revoke",
   "cloudflare_installations_revoke",
+] as const;
+
+/**
+ * Sentry installations are Organization-wide, so their claims name the Org
+ * rather than an App and Environment. The resource pair also names the
+ * installation, for the same replay reason as the other integrations.
+ */
+const SENTRY_COLLECTION_OPERATION_IDS = [
+  "sentry_installations_list",
+  "sentry_installations_create",
+] as const;
+
+const SENTRY_INSTALLATION_OPERATION_IDS = [
+  "sentry_installations_delete",
+  "sentry_secret_rotations_create",
 ] as const;
 
 const SEGMENT_RESOURCE_OPERATION_IDS = [
@@ -128,6 +139,8 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ...family(ORG_MEMBER_RESOURCE_OPERATION_IDS, isOrgMemberResourceOperation),
   ...family(SEGMENT_RESOURCE_OPERATION_IDS, isSegmentResourceOperation),
   ...family(INSTALLATION_OPERATION_IDS, isInstallationOperation),
+  ...family(SENTRY_COLLECTION_OPERATION_IDS, (value) => isResourceOperation(value, "orgId")),
+  ...family(SENTRY_INSTALLATION_OPERATION_IDS, isSentryInstallationOperation),
 ]);
 
 function family(ids: readonly string[], guard: ClaimGuard): [string, ClaimGuard][] {
@@ -228,6 +241,14 @@ function isEventDefinitionVersionOperation(value: Record<string, unknown>): bool
     hasAppEnvironment(value) &&
     isNonEmptyString(value.eventDefinitionId) &&
     isNonEmptyString(value.versionId)
+  );
+}
+
+function isSentryInstallationOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "orgId", "installationId"]) &&
+    isNonEmptyString(value.orgId) &&
+    isNonEmptyString(value.installationId)
   );
 }
 

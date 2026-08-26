@@ -19,12 +19,15 @@ import { parseControlPlaneResponse } from "./operation-result";
  * operator's flow is two-way: paste Sentry's webhook URL in here, and paste the
  * secret this returns back into Sentry. `webhookSecret` is omitted on install
  * and rotate precisely so the server mints it, and the response carries it
- * ONCE — nothing can read it back afterwards.
+ * ONCE: nothing can read it back afterwards.
+ *
+ * The installation is Organization-wide, matching Sentry: it keeps one signing
+ * secret per provider per organization and its flag log has no project or
+ * environment axis.
  */
 
 export interface PanelSentryScope {
-  appId: string;
-  environmentId: string;
+  orgId: string;
 }
 
 export interface PanelSentryInstallInput extends PanelSentryScope {
@@ -64,10 +67,9 @@ export function createPanelSentryClient(options: {
   baseUrl?: string;
 }): PanelSentryClient {
   const baseUrl = options.baseUrl ?? "https://control-plane.internal";
-  const installationsUrl = ({ appId, environmentId }: PanelSentryScope, suffix = "") =>
+  const installationsUrl = ({ orgId }: PanelSentryScope, suffix = "") =>
     new URL(
-      `/apps/${encodeURIComponent(appId)}/envs/${encodeURIComponent(environmentId)}` +
-        `/integrations/sentry/installations${suffix}`,
+      `/orgs/${encodeURIComponent(orgId)}/integrations/sentry/installations${suffix}`,
       baseUrl,
     );
 
@@ -78,30 +80,24 @@ export function createPanelSentryClient(options: {
         safeParse: (body) => SentryInstallationListResponseSchema.safeParse(body),
       });
     },
-    async install({ appId, environmentId, ...body }) {
-      const response = await options.fetch(
-        installationsUrl({ appId, environmentId }),
-        jsonRequest("POST", body),
-      );
+    async install({ orgId, ...body }) {
+      const response = await options.fetch(installationsUrl({ orgId }), jsonRequest("POST", body));
       return parseControlPlaneResponse(response, "sentry_installations_create", {
         safeParse: (input) => SentryInstallationCreateResponseSchema.safeParse(input),
       });
     },
-    async rotateSecret({ appId, environmentId, installationId, rotationId }) {
+    async rotateSecret({ orgId, installationId, rotationId }) {
       const response = await options.fetch(
-        installationsUrl(
-          { appId, environmentId },
-          `/${encodeURIComponent(installationId)}/secret-rotations`,
-        ),
+        installationsUrl({ orgId }, `/${encodeURIComponent(installationId)}/secret-rotations`),
         jsonRequest("POST", { rotationId }),
       );
       return parseControlPlaneResponse(response, "sentry_secret_rotations_create", {
         safeParse: (input) => SentrySecretRotationResponseSchema.safeParse(input),
       });
     },
-    async revoke({ appId, environmentId, installationId }) {
+    async revoke({ orgId, installationId }) {
       const response = await options.fetch(
-        installationsUrl({ appId, environmentId }, `/${encodeURIComponent(installationId)}`),
+        installationsUrl({ orgId }, `/${encodeURIComponent(installationId)}`),
         { method: "DELETE" },
       );
       return parseControlPlaneResponse(response, "sentry_installations_delete", {

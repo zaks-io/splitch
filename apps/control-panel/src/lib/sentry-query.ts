@@ -6,7 +6,7 @@ import { queryKeys } from "./query-keys";
 
 export function sentryInstallationsQuery(input: PanelSentryScope) {
   return queryOptions({
-    queryKey: queryKeys.environment.sentryInstallations(input.appId, input.environmentId),
+    queryKey: queryKeys.org.sentryInstallations(input.orgId),
     queryFn: async () => {
       const result = await loadControlPanelSentryInstallations({ data: input });
       if (!result.ok) {
@@ -21,7 +21,7 @@ export async function refreshSentryInstallations(
   queryClient: QueryClient,
   input: PanelSentryScope,
 ): Promise<SentryInstallationStatus[]> {
-  const queryKey = queryKeys.environment.sentryInstallations(input.appId, input.environmentId);
+  const queryKey = queryKeys.org.sentryInstallations(input.orgId);
   await queryClient.invalidateQueries({ queryKey }, { throwOnError: true });
   const installations = queryClient.getQueryData<SentryInstallationStatus[]>(queryKey);
   if (!installations) {
