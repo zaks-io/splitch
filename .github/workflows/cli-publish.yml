@@ -90,7 +90,17 @@ jobs:
         if: steps.npm-version.outputs.already_published != 'true'
         run: pnpm install --frozen-lockfile
 
-      # The CLI bundle inlines @splitch/sdk from its built dist.
+      - name: Verify @splitch/sdk dependency is published
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: |
+          set -euo pipefail
+          sdk_version="$(node scripts/release/resolve-version.mjs sdk "$GITHUB_WORKSPACE" | jq -r '.version')"
+          if [ "$(node scripts/release/check-published-version.mjs sdk "$sdk_version")" != "true" ]; then
+            echo "::error::Publish @splitch/sdk@$sdk_version before @splitch/cli@$CLI_VERSION"
+            exit 1
+          fi
+
+      # The CLI declaration build resolves the exact SDK artifact consumers install.
       - name: Build @splitch/sdk dependency
         if: steps.npm-version.outputs.already_published != 'true'
         run: pnpm --filter @splitch/sdk build
@@ -183,7 +193,7 @@ jobs:
           access_key: ${{ secrets.CLI_LINEAR_ACCESS_KEY }}
           name: "@splitch/cli ${{ needs.publish.outputs.cli_version }}"
           version: ${{ needs.publish.outputs.cli_version }}
-          include_paths: apps/cli/**,packages/contracts/**,packages/control-plane-sdk/**,packages/observability/**,packages/privacy/**,packages/sdk/**,packages/worker-runtime/**
+          include_paths: apps/cli/**
           links: |
             GitHub Release=${{ github.event.release.html_url }}
             npm=https://www.npmjs.com/package/@splitch/cli/v/${{ needs.publish.outputs.cli_version }}

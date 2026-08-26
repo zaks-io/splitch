@@ -91,6 +91,20 @@ jobs:
         if: steps.npm-version.outputs.already_published != 'true'
         run: pnpm install --frozen-lockfile
 
+      - name: Verify @splitch/sdk dependency is published
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: |
+          set -euo pipefail
+          sdk_version="$(node scripts/release/resolve-version.mjs sdk "$GITHUB_WORKSPACE" | jq -r '.version')"
+          if [ "$(node scripts/release/check-published-version.mjs sdk "$sdk_version")" != "true" ]; then
+            echo "::error::Publish @splitch/sdk@$sdk_version before @splitch/convex@$CONVEX_VERSION"
+            exit 1
+          fi
+
+      - name: Build @splitch/sdk dependency
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: pnpm --filter @splitch/sdk build
+
       - name: Build @splitch/convex
         if: steps.npm-version.outputs.already_published != 'true'
         run: pnpm --filter @splitch/convex build
@@ -178,7 +192,7 @@ jobs:
           access_key: ${{ secrets.CONVEX_LINEAR_ACCESS_KEY }}
           name: "@splitch/convex ${{ needs.publish.outputs.convex_version }}"
           version: ${{ needs.publish.outputs.convex_version }}
-          include_paths: packages/convex/**,packages/contracts/**
+          include_paths: packages/convex/**
           links: |
             GitHub Release=${{ github.event.release.html_url }}
             npm=https://www.npmjs.com/package/@splitch/convex/v/${{ needs.publish.outputs.convex_version }}

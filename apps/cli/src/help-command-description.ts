@@ -1,4 +1,4 @@
-import { deriveMcpTools } from "@splitch/contracts";
+import { deriveMcpTools } from "@splitch/sdk/control-plane";
 import type { CliCommandDefinition } from "./command-registry.js";
 
 export const toolByOperation = new Map(deriveMcpTools().map((tool) => [tool.name, tool]));

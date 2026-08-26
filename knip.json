@@ -16,7 +16,6 @@
       "entry": [
         "scripts/check-cli-mcp-parity.ts",
         "scripts/lib/repo-file-sweep.d.mts",
-        "scripts/release/check-published-version.mjs",
         "scripts/release/constants.mjs",
         "fixtures/external-dark-launch-product/resolve.mjs"
       ]
@@ -39,7 +38,15 @@
       "entry": ["src/sdk-data-plane-surface.ts", "src/leaves/**/*.ts"]
     },
     "packages/sdk": {
-      "entry": ["src/contract-surface-assignability.ts"]
+      "entry": ["src/contract-surface-assignability.ts"],
+      "ignoreDependencies": [
+        "@hono/zod-openapi",
+        "@splitch/contracts",
+        "@splitch/control-plane-sdk",
+        "@splitch/evaluation-core",
+        "hono",
+        "zod"
+      ]
     },
     "packages/convex": {
       "entry": ["src/component/_generated/*.ts"]
@@ -48,7 +55,7 @@
       "entry": ["convex/*.ts", "convex/_generated/*.{js,ts}"]
     },
     "apps/cli": {
-      "ignoreDependencies": ["@hono/zod-openapi", "@sentry/node", "tsx"]
+      "ignoreDependencies": ["@sentry/node", "tsx"]
     }
   }
 }

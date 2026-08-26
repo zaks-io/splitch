@@ -1,6 +1,6 @@
 {
   "name": "@splitch/convex",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "First-party Convex Component for synced local Splitch evaluation",
   "license": "Apache-2.0",
   "homepage": "https://splitch.dev",
@@ -65,6 +65,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "dependencies": {
+    "@splitch/sdk": "workspace:^"
+  },
   "peerDependencies": {
     "convex": "^1.43.0",
     "react": "^18.0.0 || ^19.0.0"
@@ -75,8 +78,6 @@
     }
   },
   "devDependencies": {
-    "@splitch/contracts": "workspace:*",
-    "@splitch/evaluation-core": "workspace:*",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "convex": "^1.45.0",

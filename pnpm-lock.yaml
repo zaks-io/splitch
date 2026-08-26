@@ -114,43 +114,31 @@ importers:
 
   apps/cli:
     dependencies:
-      '@hono/zod-openapi':
-        specifier: ^1.5.1
-        version: 1.5.1(hono@4.12.32)(zod@4.4.3)
       '@sentry/node':
         specifier: ^10.68.0
         version: 10.68.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))
-      hono:
-        specifier: ^4.12.32
-        version: 4.12.32
+      '@splitch/sdk':
+        specifier: workspace:^
+        version: link:../../packages/sdk
       jsonc-parser:
         specifier: ^3.3.1
         version: 3.3.1
       open:
         specifier: ^11.0.0
         version: 11.0.0
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
     devDependencies:
-      '@splitch/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@splitch/control-plane-sdk':
-        specifier: workspace:*
-        version: link:../../packages/control-plane-sdk
       '@splitch/db':
         specifier: workspace:*
         version: link:../../packages/db
       '@splitch/observability':
         specifier: workspace:*
         version: link:../../packages/observability
-      '@splitch/sdk':
-        specifier: workspace:*
-        version: link:../../packages/sdk
       '@splitch/worker-runtime':
         specifier: workspace:*
         version: link:../../packages/worker-runtime
+      hono:
+        specifier: ^4.12.32
+        version: 4.12.32
       miniflare:
         specifier: ^4.20260722.0
         version: 4.20260722.0
@@ -160,6 +148,9 @@ importers:
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(happy-dom@20.11.2)(vite@8.2.2(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   apps/control-panel:
     dependencies:
@@ -481,13 +472,11 @@ importers:
         version: 4.4.3
 
   packages/convex:
+    dependencies:
+      '@splitch/sdk':
+        specifier: workspace:^
+        version: link:../sdk
     devDependencies:
-      '@splitch/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@splitch/evaluation-core':
-        specifier: workspace:*
-        version: link:../evaluation-core
       '@types/react':
         specifier: ^19.2.17
         version: 19.2.17
@@ -559,10 +548,29 @@ importers:
         version: 26.1.2
 
   packages/sdk:
+    dependencies:
+      '@hono/zod-openapi':
+        specifier: ^1.5.1
+        version: 1.5.1(hono@4.12.32)(zod@4.4.3)
+      hono:
+        specifier: ^4.12.32
+        version: 4.12.32
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@sentry/core':
         specifier: ^10.68.0
         version: 10.68.0
+      '@splitch/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@splitch/control-plane-sdk':
+        specifier: workspace:*
+        version: link:../control-plane-sdk
+      '@splitch/evaluation-core':
+        specifier: workspace:*
+        version: link:../evaluation-core
       '@types/react':
         specifier: ^19.2.17
         version: 19.2.17

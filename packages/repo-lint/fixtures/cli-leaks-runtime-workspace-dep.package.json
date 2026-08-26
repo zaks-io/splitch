@@ -21,6 +21,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@splitch/sdk": "workspace:*"
+    "@splitch/contracts": "workspace:*"
   }
 }

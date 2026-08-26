@@ -10,8 +10,9 @@ the validated path and auth context; callers never supply Tinybird scope or cred
 `web_events` ingest path and ADR-0043 queue transport.
 
 All four routes across the three surfaces are authored once as Zod-first contracts in
-`@splitch/contracts` and consumed through `@splitch/control-plane-sdk`. The panel, CLI, and MCP
-server are presentation skins over those same operations.
+`@splitch/contracts` and implemented through `@splitch/control-plane-sdk`. The panel and MCP import
+that private package directly; the CLI imports its bundled interface from
+`@splitch/sdk/control-plane`. All three are presentation skins over the same operations.
 
 All App roles, `owner`, `admin`, and `member`, may read these endpoints under the existing **View
 config/results** permission. They require a control-plane bearer or a least-privilege delegated

@@ -22,5 +22,12 @@ export default defineConfig({
   splitting: true,
   clean: true,
   sourcemap: false,
-  external: ["convex", "convex/react", "convex/server", "convex/values", "react"],
+  external: [
+    /^@splitch\/sdk(?:\/.*)?$/,
+    "convex",
+    "convex/react",
+    "convex/server",
+    "convex/values",
+    "react",
+  ],
 });

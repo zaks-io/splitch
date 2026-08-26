@@ -3,6 +3,7 @@
 The first-party Convex Component for local Splitch Flag evaluation. Configuration is synced into
 component-private tables. Queries can peek without network access. Mutations can evaluate and put
 the resulting Exposure into a transactional outbox alongside application writes.
+It installs `@splitch/sdk`, which owns the shared local evaluator and contract types.
 
 ```bash
 npm install @splitch/convex

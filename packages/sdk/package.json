@@ -1,7 +1,7 @@
 {
   "name": "@splitch/sdk",
-  "version": "0.3.1",
-  "description": "Public JavaScript/TypeScript SDK for splitch data-plane evaluation",
+  "version": "0.4.0",
+  "description": "Public JavaScript/TypeScript SDK for splitch evaluation and typed platform integrations",
   "license": "Apache-2.0",
   "homepage": "https://splitch.dev",
   "keywords": [
@@ -38,6 +38,14 @@
     "./sentry": {
       "types": "./dist/sentry/index.d.ts",
       "import": "./dist/sentry/index.js"
+    },
+    "./control-plane": {
+      "types": "./dist/control-plane/index.d.ts",
+      "import": "./dist/control-plane/index.js"
+    },
+    "./local-evaluation": {
+      "types": "./dist/local-evaluation/index.d.ts",
+      "import": "./dist/local-evaluation/index.js"
     }
   },
   "files": [
@@ -46,7 +54,7 @@
   ],
   "scripts": {
     "generate": "node scripts/generate-contract-surface.mjs && npx tsup --config tsup.contract-surface.config.ts",
-    "build": "pnpm run generate && npx tsup --config tsup.config.ts && npx tsup --config tsup.browser.config.ts && npx tsup --config tsup.sentry.config.ts && node scripts/write-build-stamp.mjs",
+    "build": "pnpm run generate && npx tsup --config tsup.config.ts && npx tsup --config tsup.browser.config.ts && npx tsup --config tsup.sentry.config.ts && npx tsup --config tsup.platform.config.ts && node scripts/write-build-stamp.mjs",
     "clean": "rm -rf dist coverage src/generated/contract-surface.js src/generated/contract-surface.d.ts scripts/generated/contract-surface-members.ts",
     "lint": "biome lint src scripts",
     "test": "vitest run --passWithNoTests && node --test scripts/size-check.test.mjs",
@@ -54,7 +62,7 @@
     "test:browser-pagehide": "node scripts/browser-pagehide-smoke.mjs",
     "test:consumer-smoke": "node scripts/consumer-smoke.mjs && node ../../fixtures/ssr-sdk-consumer/run-packed.mjs",
     "test:mutation": "stryker run",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.contract-assignability.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.platform.json --noEmit && tsc -p tsconfig.contract-assignability.json --noEmit",
     "pack:check": "node scripts/pack-check.mjs",
     "size:check": "node scripts/size-check.mjs",
     "pack:dry-run": "node scripts/pack-dry-run.mjs",
@@ -63,8 +71,16 @@
   "publishConfig": {
     "access": "public"
   },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.5.1",
+    "hono": "^4.12.32",
+    "zod": "^4.4.3"
+  },
   "devDependencies": {
     "@sentry/core": "^10.68.0",
+    "@splitch/contracts": "workspace:*",
+    "@splitch/control-plane-sdk": "workspace:*",
+    "@splitch/evaluation-core": "workspace:*",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "happy-dom": "^20.0.11",

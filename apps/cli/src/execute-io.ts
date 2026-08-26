@@ -1,4 +1,4 @@
-import type { EnvironmentPolicy } from "@splitch/contracts";
+import type { EnvironmentPolicy } from "@splitch/sdk/control-plane";
 import type { CliIo } from "./execute-types.js";
 import { formatEnvironmentPolicy, isEnvironmentPolicy } from "./format-environment-policy.js";
 

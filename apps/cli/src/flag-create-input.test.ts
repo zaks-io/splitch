@@ -1,4 +1,4 @@
-import { CreateFlagRequestSchema } from "@splitch/contracts";
+import { CreateFlagRequestSchema } from "@splitch/sdk/control-plane";
 import { describe, expect, it } from "vitest";
 import {
   applyFlagsCreateConvenienceFields,

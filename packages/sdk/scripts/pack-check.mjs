@@ -68,6 +68,23 @@ try {
     throw new Error("release React declarations do not reference the browser entry types");
   }
   assertReleaseBundleJs(reactJs);
+  const controlPlaneJs = readTarballFile(tarballPath, "package/dist/control-plane/index.js");
+  const controlPlaneDts = readTarballFile(tarballPath, "package/dist/control-plane/index.d.ts");
+  for (const symbol of ["createControlPlaneSdk", "createMcpOperationAdapter", "getRoute"]) {
+    if (!controlPlaneJs.includes(symbol) || !controlPlaneDts.includes(symbol)) {
+      throw new Error(`release control-plane entry is missing ${symbol}`);
+    }
+  }
+  const localEvaluationJs = readTarballFile(tarballPath, "package/dist/local-evaluation/index.js");
+  const localEvaluationDts = readTarballFile(
+    tarballPath,
+    "package/dist/local-evaluation/index.d.ts",
+  );
+  for (const symbol of ["ConvexConfigSnapshotSchema", "evaluatePath"]) {
+    if (!localEvaluationJs.includes(symbol) || !localEvaluationDts.includes(symbol)) {
+      throw new Error(`release local-evaluation entry is missing ${symbol}`);
+    }
+  }
 } finally {
   rmSync(staging, { recursive: true, force: true });
 }

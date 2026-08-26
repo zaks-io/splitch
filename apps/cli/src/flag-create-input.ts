@@ -1,4 +1,4 @@
-import { CreateFlagRequestSchema } from "@splitch/contracts";
+import { CreateFlagRequestSchema } from "@splitch/sdk/control-plane";
 import { SplitchCliError } from "./errors.js";
 
 const BOOLEAN_VARIANT_ALIASES: Readonly<Record<string, boolean>> = {

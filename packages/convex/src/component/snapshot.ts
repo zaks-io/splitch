@@ -1,9 +1,9 @@
-import type { ConvexConfigSnapshot } from "@splitch/contracts";
 import {
   configSnapshotProvider,
+  type ConvexConfigSnapshot,
   parseConfigSnapshot,
   type Provider,
-} from "@splitch/evaluation-core";
+} from "@splitch/sdk/local-evaluation";
 
 export function parseSnapshot(payload: string): ConvexConfigSnapshot {
   return parseConfigSnapshot(payload, "Convex");

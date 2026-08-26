@@ -3,7 +3,7 @@ import { renderToString } from "react-dom/server";
 import { makeFunctionReference } from "convex/server";
 import { useQuery } from "convex/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ResolutionDetails } from "../public-types";
+import type { LocalResolutionDetails as ResolutionDetails } from "@splitch/sdk/local-evaluation";
 import { createSplitchReact, type SplitchReactQueryArgs } from "./index";
 
 vi.mock("convex/react", () => ({ useQuery: vi.fn() }));

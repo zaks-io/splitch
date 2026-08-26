@@ -5,7 +5,13 @@ module.exports = {
       severity: "error",
       comment:
         "Deployable apps are capability and trust boundaries. Share code through packages; communicate through runtime bindings or clients.",
-      from: { path: "^apps/([^/]+)/" },
+      from: {
+        path: "^apps/([^/]+)/",
+        pathNot: [
+          "\\.test\\.[cm]?[jt]sx?$",
+          "^apps/cli/src/(quickstart-local-harness|dark-launch-(experiment|http|scenario|negative-auth))\\.ts$",
+        ],
+      },
       to: { path: "^apps/", pathNot: "^apps/$1/" },
     },
     {
@@ -32,12 +38,31 @@ module.exports = {
       to: { path: "^apps/" },
     },
     {
-      name: "public-sdk-does-not-import-internal-surfaces",
+      name: "sdk-client-entries-do-not-import-platform-surfaces",
       severity: "error",
       comment:
-        "@splitch/sdk is the public data-plane package. It must not import app code, control-plane transport, private contracts, or UI.",
-      from: { path: "^packages/sdk/", pathNot: "^packages/sdk/scripts/" },
-      to: { path: "^(apps|packages/(contracts|control-plane-sdk|ui))/" },
+        "The @splitch/sdk root, browser, React, and Sentry entries stay data-plane-only; platform implementation packages are bundled only behind their named subpaths.",
+      from: {
+        path: "^packages/sdk/",
+        pathNot: [
+          "^packages/sdk/scripts/",
+          "^packages/sdk/src/control-plane/",
+          "^packages/sdk/src/local-evaluation/",
+          "\\.test\\.[cm]?[jt]sx?$",
+          "^packages/sdk/src/contract-surface-assignability\\.ts$",
+        ],
+      },
+      to: { path: "^(apps|packages/(contracts|control-plane-sdk|evaluation-core|ui))/" },
+    },
+    {
+      name: "published-cli-and-convex-use-sdk-interface",
+      severity: "error",
+      comment:
+        "Published CLI and Convex code import the public @splitch/sdk interface, never its private implementation packages.",
+      from: { path: "^(apps/cli|packages/convex)/src/" },
+      to: {
+        path: "^(packages/(contracts|control-plane-sdk|evaluation-core)/|@splitch/(contracts|control-plane-sdk|evaluation-core)(/|$))",
+      },
     },
     {
       name: "ui-stays-domain-free",
@@ -85,7 +110,10 @@ module.exports = {
       comment:
         "The repo seam's internals (the raw client + scope-bound table builders) are private to packages/db. Outside code must import the public @splitch/db surface (createRepository, appScope, envScope), never reach into packages/db/src/repo/* directly — that is how the no-raw-client guarantee stays structural.",
       from: { pathNot: "^packages/db/src/" },
-      to: { path: "^packages/db/src/repo/" },
+      to: {
+        path: "^packages/db/src/repo/",
+        pathNot: "^packages/db/src/repo/test-d1(?:-pool)?\\.ts$",
+      },
     },
     {
       name: "worker-runtime-does-not-own-storage",

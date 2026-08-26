@@ -19,6 +19,10 @@ Releases. Token-free trusted package release runs from dedicated `convex-release
 fixture, typechecks the mounted component API, imports the runtime package, and rejects
 workspace-only dependency leakage. Component codegen remains a live-deployment verification step.
 
+The package depends on `@splitch/sdk` for its public evaluation types and the
+`@splitch/sdk/local-evaluation` evaluator interface. Private contracts and evaluation-core modules
+never appear in the published Convex dependency graph.
+
 The component declares one required secret environment value, `SPLITCH_API_KEY`. It obtains the
 mounted callback URL from `CONVEX_SITE_URL`. `install()` generates and privately stores the
 installation ID and webhook secret, registers them through the API-Key-only

@@ -5,8 +5,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   BROWSER_ENTRY_MAX_BYTES,
+  CONTROL_PLANE_ENTRY_MAX_BYTES,
   ENTRY_MAX_BYTES,
   loadEsbuild,
+  LOCAL_EVALUATION_ENTRY_MAX_BYTES,
   REACT_ENTRY_MAX_BYTES,
   SENTRY_ENTRY_MAX_BYTES,
 } from "./size-check.mjs";
@@ -31,12 +33,19 @@ test("the stateful browser entry has its own measured budget", () => {
   assert.ok(BROWSER_ENTRY_MAX_BYTES < 50 * 1024);
 });
 
-test("the Sentry reporter's budget stays the smallest of the four", () => {
+test("the Sentry reporter's budget stays smaller than the client entries", () => {
   assert.equal(SENTRY_ENTRY_MAX_BYTES, 8 * 1024);
   // Measured 868 bytes with @sentry/core external. Anything approaching this
   // ceiling means the reporter stopped being a value mapping.
   assert.ok(SENTRY_ENTRY_MAX_BYTES > 868);
   assert.ok(SENTRY_ENTRY_MAX_BYTES < REACT_ENTRY_MAX_BYTES);
+});
+
+test("platform subpaths keep separate measured budgets", () => {
+  assert.equal(CONTROL_PLANE_ENTRY_MAX_BYTES, 168 * 1024);
+  assert.ok(CONTROL_PLANE_ENTRY_MAX_BYTES > 128_996);
+  assert.equal(LOCAL_EVALUATION_ENTRY_MAX_BYTES, 24 * 1024);
+  assert.ok(LOCAL_EVALUATION_ENTRY_MAX_BYTES > 18_078);
 });
 
 test("loadEsbuild resolves a usable esbuild via the workspace tsup nest", async () => {

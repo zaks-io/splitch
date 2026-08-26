@@ -101,7 +101,7 @@ describe("lintWorkspacePublishability", () => {
 });
 
 describe("lintWorkspaceDependencyPolicy", () => {
-  it("requires workspace:* for @splitch dependencies", () => {
+  it("requires the workspace protocol for @splitch dependencies", () => {
     const violations = lintWorkspaceDependencyPolicy([
       pkg("apps/cli/package.json", {
         name: "@splitch/cli",
@@ -111,7 +111,7 @@ describe("lintWorkspaceDependencyPolicy", () => {
       }),
     ]);
     expect(violations).toHaveLength(1);
-    expect(violations[0]?.message).toContain("must use workspace:*");
+    expect(violations[0]?.message).toContain("must use the workspace: protocol");
   });
 });
 
@@ -143,13 +143,24 @@ describe("lintReleaseMetadata", () => {
     );
   });
 
-  it("fails when SDK depends on a private workspace package", () => {
+  it("fails when SDK has a runtime dependency on a private workspace package", () => {
     const violations = lintReleaseMetadata(
       pkg("packages/sdk/package.json", loadFixture("sdk-leaks-workspace-dependency.package.json")),
     );
     expect(violations.some((violation) => violation.message.includes("private workspace"))).toBe(
       true,
     );
+  });
+
+  it("accepts SDK private workspace devDependencies because they are bundled and stripped", () => {
+    expect(
+      lintReleaseMetadata(
+        pkg("packages/sdk/package.json", {
+          ...validSdkManifest,
+          devDependencies: { "@splitch/contracts": "workspace:*" },
+        }),
+      ),
+    ).toEqual([]);
   });
 
   it("fails when SDK exports reference source files", () => {
@@ -184,6 +195,25 @@ describe("lintReleaseMetadata", () => {
 
   it("accepts CLI workspace devDependencies because packing strips them", () => {
     expect(lintReleaseMetadata(pkg("apps/cli/package.json", validCliManifest))).toEqual([]);
+  });
+
+  it("accepts the CLI and Convex runtime dependency on the published SDK", () => {
+    expect(
+      lintReleaseMetadata(
+        pkg("apps/cli/package.json", {
+          ...validCliManifest,
+          dependencies: { "@splitch/sdk": "workspace:^" },
+        }),
+      ),
+    ).toEqual([]);
+    expect(
+      lintReleaseMetadata(
+        pkg("packages/convex/package.json", {
+          ...validConvexManifest,
+          dependencies: { "@splitch/sdk": "workspace:^" },
+        }),
+      ),
+    ).toEqual([]);
   });
 
   it("fails when CLI leaks a workspace dependency at runtime", () => {

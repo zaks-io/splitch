@@ -1,4 +1,4 @@
-import { ConvexConfigChangedSchema } from "@splitch/contracts";
+import { ConvexConfigChangedSchema } from "@splitch/sdk/local-evaluation";
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";

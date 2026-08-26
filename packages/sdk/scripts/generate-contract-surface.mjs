@@ -27,11 +27,9 @@
  * represented by either, so `contract-surface-proto-safe.test.ts` walks the live
  * contracts schema graph and checks guarded response paths behaviorally.
  *
- * Contracts is reached by relative path rather than by a manifest dependency.
- * `packages/sdk/package.json` must keep zero dependencies AND zero
- * devDependencies -- `scripts/pack-staging.mjs` fails the release pack on
- * either. The build-graph edge lives in `turbo.json`, which lists
- * `packages/contracts/src/**` in the SDK's build/typecheck/test inputs.
+ * Contracts is a build dependency, but the generated root data-plane entry
+ * stays zod-free. The named control-plane and local-evaluation entries declare
+ * their schema runtime dependencies separately; they never enter this bundle.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

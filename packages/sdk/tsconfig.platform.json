@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "noEmit": true,
+    "ignoreDeprecations": "6.0",
+    "rootDir": "..",
+    "paths": {
+      "@splitch/contracts": ["../contracts/src/index.ts"],
+      "@splitch/contracts/*": ["../contracts/src/*"],
+      "@splitch/control-plane-sdk": ["../control-plane-sdk/src/index.ts"],
+      "@splitch/control-plane-sdk/*": ["../control-plane-sdk/src/*"],
+      "@splitch/evaluation-core": ["../evaluation-core/src/index.ts"]
+    }
+  },
+  "include": [
+    "src/control-plane/**/*.ts",
+    "src/local-evaluation/**/*.ts",
+    "../contracts/src/**/*.ts",
+    "../control-plane-sdk/src/**/*.ts",
+    "../evaluation-core/src/**/*.ts"
+  ],
+  "exclude": ["../**/*.test.ts"]
+}

@@ -10,11 +10,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
  * Budgets are per entry so each subpath starts life inside the gate rather than
  * inheriting a package-wide allowance.
  *
- * A reintroduced zod that is inlined into dist (via `external: []`) will not
- * appear as a metafile `node_modules/zod` path — the packed-manifest zero-dep
- * check is the load-bearing zod guard; this budget is what catches inlined
- * source by size. The metafile scan below is only a secondary signal for
- * accidental re-externalization.
+ * Root/browser/react/sentry must remain zod-free. The platform subpaths declare
+ * schema dependencies and externalize them from these module-size measurements.
+ * The metafile scan is a secondary signal for accidental client-entry coupling.
  */
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -45,9 +43,18 @@ export const REACT_ENTRY_MAX_BYTES = 12 * 1024;
  * growing a second bundled SDK.
  */
 export const SENTRY_ENTRY_MAX_BYTES = 8 * 1024;
+/** Measured 128,996 bytes with schema/transport dependencies external; 168 KiB keeps ~33% headroom. */
+export const CONTROL_PLANE_ENTRY_MAX_BYTES = 168 * 1024;
+/** Measured 18,078 bytes with zod external; 24 KiB keeps ~36% headroom. */
+export const LOCAL_EVALUATION_ENTRY_MAX_BYTES = 24 * 1024;
 
-/** Package entries whose optional peer must not be counted against the budget. */
-const EXTERNAL_PEERS = { "./react": ["react"], "./sentry": ["@sentry/core"] };
+/** Package entries whose declared dependencies must not be counted against their module budget. */
+const EXTERNAL_PACKAGES = {
+  "./react": ["react"],
+  "./sentry": ["@sentry/core"],
+  "./control-plane": ["@hono/zod-openapi", "hono", "hono/*", "zod", "zod/*"],
+  "./local-evaluation": ["zod", "zod/*"],
+};
 
 function maxBytesForEntry(exportPath) {
   if (exportPath === "./browser") {
@@ -55,6 +62,12 @@ function maxBytesForEntry(exportPath) {
   }
   if (exportPath === "./sentry") {
     return SENTRY_ENTRY_MAX_BYTES;
+  }
+  if (exportPath === "./control-plane") {
+    return CONTROL_PLANE_ENTRY_MAX_BYTES;
+  }
+  if (exportPath === "./local-evaluation") {
+    return LOCAL_EVALUATION_ENTRY_MAX_BYTES;
   }
   return exportPath === "./react" ? REACT_ENTRY_MAX_BYTES : ENTRY_MAX_BYTES;
 }
@@ -133,8 +146,8 @@ function publishedEntries(manifest) {
 
 function assertNoZodInMetafile(metafile, exportPath) {
   // Secondary only: with external:[] zod is inlined into dist before this
-  // consumer bundle runs, so node_modules/zod paths never appear. Real guard
-  // is assertZeroRuntimeDependencies + ENTRY_MAX_BYTES.
+  // consumer bundle runs, so node_modules/zod paths never appear. The client
+  // entry budgets and packed-bundle scan are the load-bearing guards.
   const inputs = Object.keys(metafile.inputs ?? {});
   const zodInputs = inputs.filter(
     (path) =>
@@ -167,6 +180,16 @@ client.evaluateDetails("flag", false);
 await client.flush();
 `;
   }
+  if (entry.exportPath === "./control-plane") {
+    return `import { createControlPlaneSdk, createMcpOperationAdapter, getRoute } from ${JSON.stringify(entry.importSpecifier)};
+console.log(createControlPlaneSdk, createMcpOperationAdapter, getRoute("flags_list"));
+`;
+  }
+  if (entry.exportPath === "./local-evaluation") {
+    return `import { ConvexConfigSnapshotSchema, evaluatePath } from ${JSON.stringify(entry.importSpecifier)};
+console.log(ConvexConfigSnapshotSchema, evaluatePath);
+`;
+  }
   return `import { createSplitchClient } from ${JSON.stringify(entry.importSpecifier)};
 const client = createSplitchClient({ clientKey: "pk_size" });
 await client.evaluateDetails("flag", { targetingKey: "u", idempotencyKey: "k", defaultValue: false });
@@ -190,7 +213,7 @@ async function measureEntry(esbuild, entry) {
       minify: true,
       platform: "browser",
       target: ["es2022"],
-      external: EXTERNAL_PEERS[entry.exportPath] ?? [],
+      external: EXTERNAL_PACKAGES[entry.exportPath] ?? [],
       write: true,
       metafile: true,
       logLevel: "silent",
@@ -235,11 +258,12 @@ async function checkEntry(esbuild, entry) {
   );
 }
 
-function assertZeroRuntimeDependencies(manifest) {
-  const dependencies = Object.keys(manifest.dependencies ?? {});
-  if (dependencies.length > 0) {
+function assertRuntimeDependencies(manifest) {
+  const dependencies = Object.keys(manifest.dependencies ?? {}).sort();
+  const expected = ["@hono/zod-openapi", "hono", "zod"];
+  if (JSON.stringify(dependencies) !== JSON.stringify(expected)) {
     throw new Error(
-      `size:check: package.json must have zero dependencies; got ${dependencies.join(", ")}`,
+      `size:check: package.json dependencies must be exactly ${expected.join(", ")}; got ${dependencies.join(", ") || "(none)"}`,
     );
   }
 }
@@ -249,7 +273,7 @@ async function runSizeCheck({
   manifestPath = join(packageRoot, "package.json"),
 } = {}) {
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  assertZeroRuntimeDependencies(manifest);
+  assertRuntimeDependencies(manifest);
 
   const esbuild = await loadEsbuildFn();
   const entries = publishedEntries(manifest);

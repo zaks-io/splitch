@@ -1,4 +1,4 @@
-import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/contracts";
+import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/sdk/control-plane";
 import type { CliCommandDefinition } from "./command-registry.js";
 
 /**

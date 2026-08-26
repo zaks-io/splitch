@@ -4,7 +4,8 @@ Read this when touching `apps/cli` or user-facing CLI command text.
 
 ## Role
 
-The CLI is a control-plane skin over the shared typed client. It does not create new domain terms.
+The CLI is a control-plane skin over `@splitch/sdk/control-plane`. It does not create new domain
+terms or import the private contracts and Control Plane SDK implementation packages directly.
 Use the same names as the Control Plane API and contracts.
 
 ## Required language
@@ -33,5 +34,6 @@ Use the same names as the Control Plane API and contracts.
 ## Related context
 
 - Control-plane terms: [`../control-plane-api/CONTEXT.md`](../control-plane-api/CONTEXT.md)
-- Control Plane SDK: [`../../packages/control-plane-sdk/CONTEXT.md`](../../packages/control-plane-sdk/CONTEXT.md)
+- Published SDK interface: [`../../packages/sdk/CONTEXT.md`](../../packages/sdk/CONTEXT.md)
+- Control Plane SDK implementation: [`../../packages/control-plane-sdk/CONTEXT.md`](../../packages/control-plane-sdk/CONTEXT.md)
 - Contract names: [`../../packages/contracts/CONTEXT.md`](../../packages/contracts/CONTEXT.md)

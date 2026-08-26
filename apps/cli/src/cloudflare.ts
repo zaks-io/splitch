@@ -1,6 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { CloudflareInstallationStatusSchema, ErrorResponseSchema } from "@splitch/contracts";
+import {
+  CloudflareInstallationStatusSchema,
+  ErrorResponseSchema,
+} from "@splitch/sdk/control-plane";
 import { cloudflareUsage as usage } from "./cloudflare-error.js";
 import {
   assertCloudflarePackage,

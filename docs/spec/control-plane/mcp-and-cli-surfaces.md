@@ -266,9 +266,11 @@ Divergence only in presentation:
 
 ## Invariants live in the Worker, not the skins
 
-Neither CLI nor MCP contains any domain logic. Both call `@splitch/control-plane-sdk` methods which call the
-control-plane HTTP API. The Worker rejects invalid states (frozen Run edits, missing permissions,
-failed Zod parse). Both surfaces inherit correctness from one guardian. (ADR-0023)
+Neither CLI nor MCP contains any domain logic. The CLI calls those methods through the published
+`@splitch/sdk/control-plane` package interface; MCP imports the private authoring package
+`@splitch/control-plane-sdk` directly. Both reach the same control-plane HTTP API. The Worker
+rejects invalid states (frozen Run edits, missing permissions, failed Zod parse). Both surfaces
+inherit correctness from one guardian. (ADR-0023 and ADR-0025's 2026-08-26 amendment)
 
 ## Sources
 

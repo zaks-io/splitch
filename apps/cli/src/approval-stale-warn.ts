@@ -1,4 +1,4 @@
-import type { ErrorResponse } from "@splitch/contracts";
+import type { ErrorResponse } from "@splitch/sdk/control-plane";
 
 /**
  * An approved change that became unapplicable must not look like a quiet status

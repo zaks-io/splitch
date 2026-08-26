@@ -31,7 +31,8 @@ flowchart LR
   Tinybird --> Analysis["Analysis Worker"]
   Analysis --> Results["Results, SRM, Metric reads"]
 
-  Human["Human CLI"] --> Client["@splitch/control-plane-sdk"]
+  Human["Human CLI"] --> PublicControlPlane["@splitch/sdk/control-plane"]
+  PublicControlPlane --> Client["@splitch/control-plane-sdk"]
   Agent["Agent"] --> MCP["MCP Worker"]
   MCP --> Client
   Client --> CPA["Control Plane API Worker"]
@@ -85,15 +86,17 @@ flowchart LR
    users or agents.
 7. Analysis Worker injects `app_id` and `environment_id`; clients and agents never supply Tinybird
    scope directly.
-8. Panel, CLI, and MCP consume the same Zod-first Web Analytics routes through
-   `@splitch/control-plane-sdk`; no consumer receives Tinybird credentials or a direct query surface.
+8. Panel and MCP consume the same Zod-first Web Analytics routes through
+   `@splitch/control-plane-sdk`; the CLI consumes the bundled public interface at
+   `@splitch/sdk/control-plane`. No consumer receives Tinybird credentials or a direct query surface.
 
 The queue steps above are the ADR-0043 target. Until that refactor lands, the implemented
 `raw_events` and `raw_evaluations` paths use the known non-scalable direct transport.
 
 ### Control-plane flow
 
-1. Human CLI, Control Panel Worker, and MCP Worker call `@splitch/control-plane-sdk`.
+1. Human CLI calls `@splitch/sdk/control-plane`; Control Panel Worker and MCP Worker call the private
+   authoring package `@splitch/control-plane-sdk` directly.
 2. `@splitch/control-plane-sdk` calls the Control Plane API Worker.
 3. Control Plane API Worker enforces management invariants and writes D1/KV config.
 4. Live updates use the per-(App, Environment) fan-out DO (ADR-0019). UI clients receive nudges, then
@@ -112,20 +115,21 @@ The queue steps above are the ADR-0043 target. Until that refactor lands, the im
 The architecture is enforced at the import graph, not by convention. The root
 [`.dependency-cruiser.cjs`](../../.dependency-cruiser.cjs) defines these rules:
 
-| Rule                                           | Enforces                                                                                                                         |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `no-app-to-other-app-imports`                  | Deployable apps cannot import another app's code. Cross-app communication uses HTTP, queues, service bindings, or typed clients. |
-| `no-shared-package-to-app-imports`             | `packages/` stay reusable and cannot import apps.                                                                                |
-| `contracts-stays-schema-only`                  | `@splitch/contracts` cannot import runtime code, UI, or transport packages.                                                      |
-| `control-plane-sdk-does-not-import-apps`       | `@splitch/control-plane-sdk` cannot import apps.                                                                                 |
-| `public-sdk-does-not-import-internal-surfaces` | `@splitch/sdk` (public data-plane package) cannot import app code, control-plane transport, private contracts, or UI.            |
-| `ui-stays-domain-free`                         | `@splitch/ui` cannot import contracts, the Control Plane SDK, or apps.                                                           |
-| `marketing-does-not-import-control-plane-sdk`  | Marketing cannot import the Control Plane SDK.                                                                                   |
+| Rule                                                  | Enforces                                                                                                                                                                                              |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `no-app-to-other-app-imports`                         | Deployable apps cannot import another app's code. Cross-app communication uses HTTP, queues, service bindings, or typed clients.                                                                      |
+| `no-shared-package-to-app-imports`                    | `packages/` stay reusable and cannot import apps.                                                                                                                                                     |
+| `contracts-stays-schema-only`                         | `@splitch/contracts` cannot import runtime code, UI, or transport packages.                                                                                                                           |
+| `control-plane-sdk-does-not-import-apps`              | `@splitch/control-plane-sdk` cannot import apps.                                                                                                                                                      |
+| `public-sdk-client-does-not-import-internal-surfaces` | Client-safe `@splitch/sdk` entries cannot import app code, control-plane transport, private contracts, or UI. Named platform entries are the explicit package interfaces over shared private modules. |
+| `published-consumers-use-sdk-interfaces`              | CLI and Convex source cannot import private contracts, Control Plane SDK, or evaluation-core packages directly.                                                                                       |
+| `ui-stays-domain-free`                                | `@splitch/ui` cannot import contracts, the Control Plane SDK, or apps.                                                                                                                                |
+| `marketing-does-not-import-control-plane-sdk`         | Marketing cannot import the Control Plane SDK.                                                                                                                                                        |
 
 The gate runs as:
 
 ```sh
-pnpm depcruise --config .dependency-cruiser.cjs "apps/**/*.{ts,tsx}" "packages/**/*.{ts,tsx}"
+pnpm depcruise
 ```
 
 CI should fail on any dependency-cruiser `error`. A rule exception needs an architecture update first,

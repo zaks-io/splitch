@@ -47,7 +47,14 @@ source-of-truth discipline — the Zod source is the fix target.
 
 - Hono `hc<AppType>()` HTTP client (type-inferred, zero codegen)
 - Depends on `@splitch/contracts`
-- Consumers: control panel, CLI, MCP server
+- Consumers: control panel, MCP server, and the published SDK control-plane entry
+
+**`@splitch/sdk/control-plane`**
+
+- Published bundle and declaration interface over `@splitch/contracts` and
+  `@splitch/control-plane-sdk`
+- Consumer: `@splitch/cli`; the CLI has no direct private implementation-package imports
+- Declares Hono/Zod runtime packages, but no private `@splitch/*` dependency
 
 The split keeps schema-only consumers (marketing site, MCP schemas) free of transport code.
 

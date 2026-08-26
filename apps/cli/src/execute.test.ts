@@ -1,4 +1,4 @@
-import { getRoute } from "@splitch/contracts";
+import { getRoute } from "@splitch/sdk/control-plane";
 import { describe, expect, it } from "vitest";
 import { findCommand } from "./command-registry.js";
 import { parseInvocation } from "./parse-args.js";

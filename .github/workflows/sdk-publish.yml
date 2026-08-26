@@ -178,7 +178,7 @@ jobs:
           access_key: ${{ secrets.SDK_LINEAR_ACCESS_KEY }}
           name: "@splitch/sdk ${{ needs.publish.outputs.sdk_version }}"
           version: ${{ needs.publish.outputs.sdk_version }}
-          include_paths: packages/sdk/**,packages/contracts/**
+          include_paths: packages/sdk/**,packages/contracts/**,packages/control-plane-sdk/**,packages/evaluation-core/**
           links: |
             GitHub Release=${{ github.event.release.html_url }}
             npm=https://www.npmjs.com/package/@splitch/sdk/v/${{ needs.publish.outputs.sdk_version }}

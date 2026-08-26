@@ -7,6 +7,7 @@ JSON output for scripts and agents.
 ## Install
 
 `@splitch/cli` is published on npm and requires Node.js 20 or newer.
+It installs `@splitch/sdk` as its one Splitch runtime dependency.
 
 ```bash
 npm install --global @splitch/cli

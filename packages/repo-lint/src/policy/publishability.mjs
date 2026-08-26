@@ -83,7 +83,7 @@ function lintWorkspaceDependencyField(deps, field, packagePath) {
       violations.push(
         violation(
           packagePath,
-          `${field}.${dependencyName} must use ${WORKSPACE_PROTOCOL}* (got ${JSON.stringify(versionRange)})`,
+          `${field}.${dependencyName} must use the ${WORKSPACE_PROTOCOL} protocol (got ${JSON.stringify(versionRange)})`,
         ),
       );
     }

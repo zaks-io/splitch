@@ -1,4 +1,4 @@
-import { getRoute } from "@splitch/contracts";
+import { getRoute } from "@splitch/sdk/control-plane";
 import {
   assertPathParamsPresent,
   commandUsageLine,
@@ -61,7 +61,7 @@ async function executeMeta(
     case "health": {
       const { resolveControlPlaneBaseUrl } = await import("./sdks.js");
       const endpoint = invocation.flags.endpoint ?? resolveControlPlaneBaseUrl(deps);
-      const { createControlPlaneSdk } = await import("@splitch/control-plane-sdk");
+      const { createControlPlaneSdk } = await import("@splitch/sdk/control-plane");
       const health = await createControlPlaneSdk({ baseUrl: endpoint, fetch: deps.fetch }).health();
       emit(io, invocation.flags.json, health);
       return { exitCode: EXIT_OK, payload: health };

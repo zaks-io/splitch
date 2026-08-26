@@ -3,7 +3,7 @@ import {
   EnvironmentPolicySchema,
   type RequestBodyHelp,
   requestBodySchemaForOperation,
-} from "@splitch/contracts";
+} from "@splitch/sdk/control-plane";
 import type { CliCommandDefinition } from "./command-registry.js";
 
 /**

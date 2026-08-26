@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import { getRoute } from "@splitch/contracts";
+import { getRoute } from "@splitch/sdk/control-plane";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK } from "./exit-codes.js";

@@ -180,6 +180,7 @@ jobs:
           name: convex-release-validation-${{ needs.validate.outputs.convex_tag }}
           path: ${{ runner.temp }}/convex-release-artifacts
 
+      # Turbo builds the SDK dependency before the Convex package.
       - name: Build @splitch/convex for release packaging
         run: pnpm exec turbo run build --filter=@splitch/convex
 

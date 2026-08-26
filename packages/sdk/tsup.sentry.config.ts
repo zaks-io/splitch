@@ -2,8 +2,8 @@ import { defineConfig } from "tsup";
 
 /**
  * The Sentry reporter, built separately so `@sentry/core` stays external. The
- * base config bundles everything (`external: []`) to keep the SDK dependency
- * free; inlining Sentry here would ship a second copy of it into apps that
+ * root data-plane config bundles its implementation (`external: []`); inlining
+ * Sentry here would ship a second copy of it into apps that
  * already have one, and the two copies would not share a client.
  */
 export default defineConfig({
