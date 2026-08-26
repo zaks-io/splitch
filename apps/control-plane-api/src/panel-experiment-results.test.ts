@@ -43,7 +43,7 @@ function repository(overrides: Record<string, unknown> = {}): Repository {
   return {
     identity: {
       getApp: vi.fn(async () => ({ id: APP_ID, organizationId: ids.orgId })),
-      getOrgMembership: vi.fn(async () => orgMembership),
+      getOrgMembershipForApp: vi.fn(async () => orgMembership),
       getAppMembership: vi.fn(async () => appMembership),
       getEnvironment: vi.fn(async () => environment),
     },

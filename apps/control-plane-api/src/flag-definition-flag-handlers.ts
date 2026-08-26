@@ -34,20 +34,27 @@ export async function listFlags(
   { input, requestId }: HandlerArgs<unknown>,
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
-  if (!(await deps.repo.identity.getApp(appId))) return appNotFound(requestId);
   const environmentId = optionalQueryParam(input, "environmentId");
-  if (
-    environmentId !== undefined &&
-    !(await deps.repo.identity.getEnvironment(appScope(appId), environmentId))
-  ) {
-    return appNotFound(requestId);
-  }
-
   const scope = appScope(appId);
+  // The existence checks and the catalog read depend on nothing but the path, so
+  // they issue CONCURRENTLY: run in sequence they are three D1 round trips deep
+  // before the first useful row, and the round trip is what this endpoint costs.
+  // Reading the page for an App that turns out not to exist is scoped by app_id
+  // like every other read, so it can only ever come back empty.
+  //
   // One row past the ceiling, so truncation is OBSERVED rather than inferred
   // from a full page — a page of exactly `readLimit` rows is what a complete
   // catalog of that size also looks like.
-  const scanned = await deps.repo.flags.listFlagPage(scope, FLAG_LIST_READ_LIMIT + 1);
+  const [app, environment, scanned] = await Promise.all([
+    deps.repo.identity.getApp(appId),
+    environmentId === undefined
+      ? Promise.resolve(true)
+      : deps.repo.identity.getEnvironment(scope, environmentId),
+    deps.repo.flags.listFlagPage(scope, FLAG_LIST_READ_LIMIT + 1),
+  ]);
+  if (!app) return appNotFound(requestId);
+  if (!environment) return appNotFound(requestId);
+
   const readTruncated = scanned.length > FLAG_LIST_READ_LIMIT;
   const rows = readTruncated ? scanned.slice(0, FLAG_LIST_READ_LIMIT) : scanned;
   // ONE catalog read for the whole page. Resolving Variants per row made this

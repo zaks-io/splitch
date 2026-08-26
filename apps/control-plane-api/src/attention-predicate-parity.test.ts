@@ -116,7 +116,7 @@ function panelExperimentsRepo(): Repository {
   return {
     identity: {
       getApp: vi.fn(async () => ({ id: APP_ID, organizationId: ids.orgId })),
-      getOrgMembership: vi.fn(async () => ({ role: "member" })),
+      getOrgMembershipForApp: vi.fn(async () => ({ role: "member" })),
       getAppMembership: vi.fn(async () => ({ role: "member" })),
       getEnvironment: vi.fn(async () => ({ id: ENVIRONMENT_ID, appId: APP_ID })),
     },

@@ -65,6 +65,43 @@ describe("App A cannot read App B (and vice versa)", () => {
     expect(await repo.flags.listVariantsForFlags(aScope, [seed.b.flagId])).toEqual(new Map());
   });
 
+  it("getOrgMembershipForApp denies a member of App A's Org access to App B", async () => {
+    // The App-scoped preambles authorize on this one read, and it resolves the
+    // owning Org itself instead of being handed one the caller already proved.
+    // Drop the `apps` correlation and it degrades to "is this user a member of
+    // ANY Org", which grants every member authority over every App in the
+    // system — so the cross-Org denial is the assertion that has to hold.
+    const memberOfA = "user_org_a_member";
+    await repo.identity.createOrgMembership({
+      orgId: seed.a.orgId,
+      userId: memberOfA,
+      role: "admin",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(await repo.identity.getOrgMembershipForApp(seed.b.appId, memberOfA)).toBeNull();
+    expect(await repo.identity.getOrgMembershipForApp(seed.a.appId, memberOfA)).toMatchObject({
+      orgId: seed.a.orgId,
+      role: "admin",
+    });
+    // A missing App resolves no Org at all rather than matching the first row.
+    expect(await repo.identity.getOrgMembershipForApp("app_does_not_exist", memberOfA)).toBeNull();
+  });
+
+  it("idsInScope hands back an inert fragment, not a builder whose scope can be replaced", async () => {
+    // The seam's whole claim is that no method escapes without the scope
+    // predicate. A live query builder would defeat that twice over: Drizzle's
+    // `.where()` REPLACES the predicate rather than narrowing it, and the
+    // builder is thenable, so the caller could run the unscoped read directly.
+    const handle = repo.flags.flags.idsInScope(appScope(seed.a.appId)) as unknown as Record<
+      string,
+      unknown
+    >;
+
+    expect(typeof handle.where).toBe("undefined");
+    expect(typeof handle.then).toBe("undefined");
+  });
+
   it("getExperiment scoped to App A's env returns null for App B's experiment", async () => {
     const aEnv = envScope(seed.a.appId, seed.a.environmentId);
     expect(await repo.experiments.getExperiment(aEnv, seed.b.experimentId)).toBeNull();

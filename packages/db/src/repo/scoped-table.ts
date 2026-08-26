@@ -1,5 +1,5 @@
 import type { SQL } from "drizzle-orm";
-import { count, getTableColumns, getTableName } from "drizzle-orm";
+import { count, getTableColumns, getTableName, sql } from "drizzle-orm";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { Db } from "./client";
 import type { EnvScope, ScopeColumns, TenantScope } from "./scope";
@@ -65,6 +65,25 @@ export type ScopedTable<T extends AppScopedTable> = {
   countRows(scope: RequiredScope<T>, extra?: SQL): Promise<number>;
   /** First row in this scope matching the extra predicate, or null. */
   findOne(scope: RequiredScope<T>, extra?: SQL): Promise<Row<T> | null>;
+  /**
+   * The in-scope `id`s as a SUBQUERY instead of a resolved read, for the child
+   * tables that carry no `app_id` of their own and are reached transitively
+   * (`variants` -> `flags.id`). Proving those ids with a separate `findMany`
+   * costs a D1 round trip whose only output is the id list the child statement
+   * is about to filter on; nesting it spends one round trip instead of two.
+   *
+   * This does NOT relax the boundary: the predicate is still the mandatory one
+   * `scope.ts` emits, on the same scope columns, just in the same statement as
+   * the read it authorizes. Callers still cannot write their own `app_id`
+   * filter, which is the property ADR-0018 rests on.
+   *
+   * Returns INERT `SQL`, never the query builder that produced it. A builder
+   * would hand the caller a live `.where()` that replaces the scope predicate
+   * rather than narrowing it, and it is awaitable, so the facade would be
+   * handing out exactly the unscoped read this file exists to make
+   * unconstructible.
+   */
+  idsInScope(scope: RequiredScope<T>, extra?: SQL): SQL;
   /**
    * Insert a row, stamping the scope columns from `scope` so the persisted
    * `app_id` / `environment_id` always match the caller's scope — a row cannot
@@ -158,6 +177,23 @@ export function scopedTable<T extends AppScopedTable>(db: Db, table: T): ScopedT
         .where(withScope(columns, scope, extra))
         .limit(1)) as Row<T>[];
       return rows[0] ?? null;
+    },
+
+    idsInScope(scope, extra) {
+      const idColumn = (table as unknown as { id?: SQLiteColumn }).id;
+      if (!idColumn) {
+        throw new Error(
+          `scopedTable.idsInScope: ${getTableName(table)} has no id column to prove ids against`,
+        );
+      }
+      // `.getSQL()` freezes the statement: what leaves this method is a bare
+      // fragment with no builder methods and no `then`, so the scope predicate
+      // cannot be replaced or the subquery run on its own.
+      return sql`(${db
+        .select({ id: idColumn })
+        .from(table as SQLiteTable)
+        .where(withScope(columns, scope, extra))
+        .getSQL()})`;
     },
 
     async insert(scope, values) {

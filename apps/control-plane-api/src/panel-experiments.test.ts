@@ -234,7 +234,7 @@ function repository(
   return {
     identity: {
       getApp: vi.fn(async () => ({ id: APP_ID, organizationId: "org_panel_list" })),
-      getOrgMembership: vi.fn(async () => orgMembership),
+      getOrgMembershipForApp: vi.fn(async () => orgMembership),
       getAppMembership: vi.fn(async () => appMembership),
       getEnvironment: vi.fn(async () => environment),
     },

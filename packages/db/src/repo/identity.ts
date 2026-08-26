@@ -13,6 +13,7 @@ import { makeAppCreateIdempotencyRepo } from "./identity-app-create-idempotency"
 import { makeAppMembershipRepo } from "./identity-app-memberships";
 import { makeDemoReaper } from "./identity-demo-reaper";
 import { makeOrgMutations } from "./identity-org-mutations";
+import { makeOrgReads } from "./identity-org-reads";
 import { makeSessionReads } from "./identity-session-reads";
 import { makeCreateOrganization } from "./organization-create";
 import type { TenantScope } from "./scope";
@@ -49,6 +50,7 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
   const deleteAppCascade = makeDeleteAppCascade(d1);
   const appDeletionSagaRepo = makeAppDeletionSagaRepo(d1);
   const appCreateIdempotencyRepo = makeAppCreateIdempotencyRepo(db);
+  const orgReads = makeOrgReads(db);
 
   return {
     environments: environmentsTable,
@@ -94,36 +96,7 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
 
     // --- Org-or-identity scoped (NOT app-scoped) -------------------------------
 
-    async getOrg(orgId: string): Promise<typeof organizations.$inferSelect | null> {
-      const rows = await db
-        .select()
-        .from(organizations)
-        .where(eq(organizations.id, orgId))
-        .limit(1);
-      return rows[0] ?? null;
-    },
-
-    listOrgMemberships(orgId: string) {
-      return db.select().from(orgMemberships).where(eq(orgMemberships.orgId, orgId));
-    },
-
-    listOrgMembershipsForUser(userId: string) {
-      return db.select().from(orgMemberships).where(eq(orgMemberships.userId, userId));
-    },
-
-    getOrgMembership(orgId: string, userId: string) {
-      return db
-        .select()
-        .from(orgMemberships)
-        .where(and(eq(orgMemberships.orgId, orgId), eq(orgMemberships.userId, userId)))
-        .limit(1)
-        .then((rows) => rows[0] ?? null);
-    },
-
-    /** Apps for an Org. Scoped by org_id (the tier above App), never by app_id. */
-    listAppsForOrg(orgId: string) {
-      return db.select().from(apps).where(eq(apps.organizationId, orgId));
-    },
+    ...orgReads,
     ...appCreateIdempotencyRepo,
 
     ...orgMutations,
