@@ -21,9 +21,12 @@ import { MemoryKv, NOW, sessionPrincipal } from "./session-test-harness";
 import { projectProgram } from "./typescript-program-test-helpers";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
-// The sweep tests walk every source file through the type checker; the walk
-// grows with the tree and already exceeds the 5s default under CI load.
-const SWEEP_TIMEOUT_MS = 30_000;
+// The sweep tests walk every source file through the type checker. That work is
+// CPU bound but the timeout is wall clock, and the walk shares a CI runner with
+// the rest of a 137-file suite: it took 2s alone and 17s under that contention,
+// then blew a 30s budget on the next commit. This is a runaway backstop, not a
+// performance budget. Tighten it only alongside a way to measure CPU time.
+const SWEEP_TIMEOUT_MS = 120_000;
 const HEADER_NAME_MODULES = [
   {
     moduleSpecifier: "@splitch/control-plane-sdk/control-panel-identity",
