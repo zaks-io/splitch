@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { cloudflareUsage } from "./cloudflare-error.js";
 import type { CloudflareState } from "./cloudflare-files.js";
 import type { CliCommandRunner } from "./execute-types.js";
@@ -18,12 +21,54 @@ export const systemCommandRunner: CliCommandRunner = {
   },
 };
 
+const WRANGLER_MISSING =
+  "Wrangler 4 is required; install wrangler in this App or globally, and authenticate with wrangler login";
+
+/**
+ * The App's own wrangler wins, run under the current Node binary. Resolving the
+ * package beats shelling out to a package-manager `exec` shim: one code path
+ * serves npm, pnpm, yarn, and bun, and no shim has to be on PATH.
+ */
+async function localWranglerBin(cwd: string): Promise<string | null> {
+  let manifestPath: string;
+  try {
+    manifestPath = createRequire(join(cwd, "package.json")).resolve("wrangler/package.json");
+  } catch {
+    return null;
+  }
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    readonly bin?: string | Record<string, string>;
+  };
+  const entry = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.wrangler;
+  if (!entry) throw cloudflareUsage(`${manifestPath} declares no wrangler executable`);
+  return join(dirname(manifestPath), entry);
+}
+
+async function runWrangler(
+  runner: CliCommandRunner,
+  cwd: string,
+  args: readonly string[],
+  input?: string,
+) {
+  const local = await localWranglerBin(cwd);
+  if (local) return runner.run(process.execPath, [local, ...args], { cwd, input });
+  try {
+    return await runner.run("wrangler", args, { cwd, input });
+  } catch (error) {
+    // Only this branch resolves through PATH, so only here does ENOENT mean
+    // "no wrangler" rather than an unreadable cwd.
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    throw cloudflareUsage(WRANGLER_MISSING, error);
+  }
+}
+
 export async function requireWrangler4(runner: CliCommandRunner, cwd: string): Promise<void> {
-  const result = await runner.run("pnpm", ["exec", "wrangler", "--version"], { cwd });
-  const major = /wrangler\s+(\d+)\./i.exec(`${result.stdout}\n${result.stderr}`)?.[1];
+  const result = await runWrangler(runner, cwd, ["--version"]);
+  const reported = `${result.stdout}\n${result.stderr}`.trim();
+  const major = /wrangler\s+(\d+)\./i.exec(reported)?.[1];
   if (result.exitCode !== 0 || major !== "4")
     throw cloudflareUsage(
-      "Wrangler 4 is required; install it in this App and authenticate with wrangler login",
+      `Wrangler 4 is required, but \`wrangler --version\` exited ${result.exitCode} reporting: ${reported || "(no output)"}`,
     );
   await wrangler(runner, cwd, ["whoami"]);
 }
@@ -34,7 +79,7 @@ export async function wrangler(
   args: readonly string[],
   input?: string,
 ): Promise<{ readonly exitCode: number; readonly stdout: string; readonly stderr: string }> {
-  const result = await runner.run("pnpm", ["exec", "wrangler", ...args], { cwd, input });
+  const result = await runWrangler(runner, cwd, args, input);
   if (result.exitCode !== 0)
     throw cloudflareUsage(`Wrangler failed: ${result.stderr.trim() || result.stdout.trim()}`);
   return result;

@@ -10,8 +10,12 @@ The customer installs `@splitch/cli`, `@splitch/cloudflare`, and Wrangler 4, exp
 API Key under the exact `SPLITCH_API_KEY` name, authenticates Wrangler, and runs:
 
 ```bash
-pnpm exec splitch cloudflare setup --env production
+npx splitch cloudflare setup --env production
 ```
+
+Setup prefers the application's own `wrangler` package and runs it under the current Node binary,
+falling back to `wrangler` on `PATH`. It never shells out to a package-manager `exec` shim, so npm,
+pnpm, yarn, and bun behave identically, and a global Wrangler install still works.
 
 The command fails before mutation if the API Key, application `wrangler.jsonc`, Wrangler 4 session,
 or Cloudflare account is unavailable. It then:
