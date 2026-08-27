@@ -46,6 +46,24 @@ test("the install script still pins the whole toolchain", () => {
   }
 });
 
+test("the install script pins docker-ce for the Cloud Agent Ubuntu release", () => {
+  assert.match(
+    install,
+    /DOCKER_VERSION="28\.5\.2"/,
+    "docker client pin drifted from Cursor's documented noble version",
+  );
+  assert.match(install, /docker-ce=\$\{DOCKER_CE_PIN\}/);
+  assert.match(install, /docker-ce-cli=\$\{DOCKER_CE_PIN\}/);
+  assert.match(install, /fuse-overlayfs/);
+  assert.match(install, /iptables-legacy/);
+  assert.match(install, /storage-driver": "fuse-overlayfs/);
+  assert.match(
+    install,
+    /docker is not on PATH after installing docker-ce/,
+    "the fail-loud check after install is gone; a missing client would look like success",
+  );
+});
+
 test("the environment hooks exist and are executable", () => {
   const environment = JSON.parse(readFileSync(ENVIRONMENT_PATH, "utf8"));
 
