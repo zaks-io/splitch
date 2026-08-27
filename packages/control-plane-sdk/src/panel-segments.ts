@@ -4,7 +4,6 @@ import {
   type CreateSegmentRequest,
   type PatchSegmentRequest,
   type Segment,
-  SegmentListResponseSchema,
   SegmentSchema,
 } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
@@ -64,10 +63,6 @@ export interface PanelSegmentsClient {
     input: PanelSegmentDeleteInput,
   ): Promise<ControlPlaneOperationResult<PanelSegmentDeleteOutput>>;
 }
-
-const SegmentDependencyProjectionSchema = SegmentListResponseSchema.pick({
-  affectedEnvironmentIds: true,
-});
 
 export function createPanelSegmentsClient(options: {
   fetch: typeof fetch;
@@ -132,27 +127,66 @@ function jsonRequest(method: "POST" | "PATCH", body: unknown): RequestInit {
 function parseSegmentList(
   input: unknown,
 ): { success: true; data: PanelSegmentsListOutput } | { success: false } {
-  if (!isObject(input) || !Array.isArray(input.items)) return { success: false as const };
-  const projection = SegmentDependencyProjectionSchema.safeParse(input);
-  if (!projection.success) return { success: false as const };
+  if (!isListEnvelope(input)) return { success: false as const };
   const items: PanelSegment[] = [];
   const unparseable: UnparseablePanelSegment[] = [];
-  for (const item of input.items) {
-    const parsed = panelSegment(item);
+  const affectedEnvironmentIds: Record<string, string[]> = {};
+  for (const raw of input.items) {
+    const peeled = peelAffectedEnvironments(raw);
+    const parsed = panelSegment(peeled.segment);
     if (parsed) {
+      if (!peeled.affectedEnvironmentIds) return { success: false as const };
       items.push(parsed);
+      affectedEnvironmentIds[parsed.id] = peeled.affectedEnvironmentIds;
       continue;
     }
-    unparseable.push(unparseableSegment(item));
+    unparseable.push(unparseableSegment(raw));
+    const id = segmentIdOf(raw);
+    if (id) affectedEnvironmentIds[id] = peeled.affectedEnvironmentIds ?? [];
   }
   return {
     success: true,
     data: {
       items,
       unparseable,
-      affectedEnvironmentIds: projection.data.affectedEnvironmentIds,
+      affectedEnvironmentIds,
     },
   };
+}
+
+function isListEnvelope(
+  input: unknown,
+): input is { items: unknown[]; readLimit: number; readTruncated: boolean; cursor: string | null } {
+  return (
+    isObject(input) &&
+    Array.isArray(input.items) &&
+    typeof input.readLimit === "number" &&
+    typeof input.readTruncated === "boolean" &&
+    (input.cursor === null || typeof input.cursor === "string")
+  );
+}
+
+function peelAffectedEnvironments(raw: unknown): {
+  segment: unknown;
+  affectedEnvironmentIds: string[] | undefined;
+} {
+  if (!isObject(raw)) return { segment: raw, affectedEnvironmentIds: undefined };
+  const { affectedEnvironmentIds, ...segment } = raw;
+  return {
+    segment,
+    affectedEnvironmentIds: Array.isArray(affectedEnvironmentIds)
+      ? affectedEnvironmentIds.every((id) => typeof id === "string")
+        ? affectedEnvironmentIds
+        : undefined
+      : undefined,
+  };
+}
+
+function segmentIdOf(raw: unknown): string | undefined {
+  if (!isObject(raw)) return undefined;
+  if (typeof raw.id === "string") return raw.id;
+  if (typeof raw.id === "number") return String(raw.id);
+  return undefined;
 }
 
 function parseSegment(input: unknown): { success: true; data: PanelSegment } | { success: false } {

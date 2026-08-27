@@ -1,3 +1,4 @@
+import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
@@ -30,22 +31,32 @@ async function listSegments(
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
   if (!(await deps.repo.identity.getApp(appId))) return appNotFound(requestId);
-  const [rows, references] = await Promise.all([
-    deps.repo.flags.segments.findMany(appScope(appId)),
+  const [scanned, references] = await Promise.all([
+    deps.repo.flags.listSegments(appScope(appId), {
+      limit: LIST_READ_LIMIT + 1,
+    }),
     deps.repo.flags.listTargetingRuleEnvironmentReferences(appScope(appId)),
   ]);
+  const page = boundListRead(scanned);
   const affectedEnvironmentIds: Record<string, string[]> = Object.fromEntries(
-    rows.map((row) => [row.id, []]),
+    page.items.map((row) => [row.id, []]),
   );
   for (const reference of references) {
     if (!reference.segmentId) throw new Error("Segment reference query returned a null Segment");
     const environmentIds = affectedEnvironmentIds[reference.segmentId];
     if (!environmentIds) {
+      if (page.readTruncated) continue;
       throw new Error(`Targeting Rule references missing Segment ${reference.segmentId}`);
     }
     environmentIds.push(reference.environmentId);
   }
-  return Response.json({ items: rows.map(segmentResponse), affectedEnvironmentIds });
+  return Response.json({
+    ...page,
+    items: page.items.map((row) => ({
+      ...segmentResponse(row),
+      affectedEnvironmentIds: affectedEnvironmentIds[row.id] ?? [],
+    })),
+  });
 }
 
 async function createSegment(

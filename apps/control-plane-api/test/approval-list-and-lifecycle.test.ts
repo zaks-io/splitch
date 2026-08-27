@@ -79,8 +79,8 @@ async function list(query: string): Promise<{ status: number; body: ListBody }> 
 interface ListBody {
   items: Array<{ id: string; status: string }>;
   cursor: string | null;
-  limit: number;
-  total: number | null;
+  readLimit: number;
+  readTruncated: boolean;
 }
 
 /** Count the per-request projection reads the list handler performs. */
@@ -107,7 +107,8 @@ describe("Approval Request list paging", () => {
     expect(first.status).toBe(200);
     expect(first.body.items).toHaveLength(2);
     expect(first.body.cursor).toBe(first.body.items[1]?.id);
-    expect(first.body.total).toBeNull();
+    expect(first.body.readLimit).toBe(2);
+    expect(first.body.readTruncated).toBe(false);
 
     // Triple the table. The cost of the same page must not move: if the handler
     // materialized every request before slicing, this doubles or worse.
@@ -117,7 +118,8 @@ describe("Approval Request list paging", () => {
     const large = countProjectionReads();
     const again = await list("?limit=2");
     expect(again.body.items).toHaveLength(2);
-    expect(again.body.total).toBeNull();
+    expect(again.body.readLimit).toBe(2);
+    expect(again.body.readTruncated).toBe(false);
     expect(large()).toBe(readsWithFourRows);
   });
 
@@ -197,22 +199,22 @@ describe("Approval Request list paging", () => {
     const unfiltered = await list("");
     expect(unfiltered.status).toBe(200);
     expect(unfiltered.body.items.map((item) => item.id).sort()).toEqual([devId, prodId].sort());
-    expect(unfiltered.body.total).toBe(2);
+    expect(unfiltered.body.readTruncated).toBe(false);
 
     const prodOnly = await list(`?environmentId=${ids.environmentId}`);
     expect(prodOnly.status).toBe(200);
     expect(prodOnly.body.items.map((item) => item.id)).toEqual([prodId]);
-    expect(prodOnly.body.total).toBe(1);
+    expect(prodOnly.body.readTruncated).toBe(false);
 
     const devOnly = await list(`?environmentId=${ids.devEnvironmentId}`);
     expect(devOnly.status).toBe(200);
     expect(devOnly.body.items.map((item) => item.id)).toEqual([devId]);
-    expect(devOnly.body.total).toBe(1);
+    expect(devOnly.body.readTruncated).toBe(false);
 
     const foreign = await list("?environmentId=env_other_app");
     expect(foreign.status).toBe(200);
     expect(foreign.body.items).toEqual([]);
-    expect(foreign.body.total).toBe(0);
+    expect(foreign.body.readTruncated).toBe(false);
   });
 });
 

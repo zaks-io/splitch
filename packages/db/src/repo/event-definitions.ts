@@ -1,8 +1,8 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { eventDefinitions, eventDefinitionVersions } from "../schema/index";
 import type { Db } from "./client";
 import { assertMintedScope, type TenantScope } from "./scope";
-import { scopedTable } from "./scoped-table";
+import { type ReadOptions, scopedTable } from "./scoped-table";
 
 export function makeEventDefinitionRepo(db: Db, d1: D1Database) {
   const definitions = scopedTable(db, eventDefinitions);
@@ -10,6 +10,13 @@ export function makeEventDefinitionRepo(db: Db, d1: D1Database) {
   return {
     definitions,
     versions,
+
+    listDefinitions(scope: TenantScope, options?: ReadOptions) {
+      return definitions.findMany(scope, undefined, {
+        ...options,
+        orderBy: options?.orderBy ?? [desc(eventDefinitions.createdAt), desc(eventDefinitions.id)],
+      });
+    },
     get(scope: TenantScope, id: string) {
       return definitions.findOne(scope, eq(eventDefinitions.id, id));
     },
@@ -29,10 +36,17 @@ export function makeEventDefinitionRepo(db: Db, d1: D1Database) {
       const rows = await definitions.update(scope, patch, eq(eventDefinitions.id, id));
       return rows[0] ?? null;
     },
-    listVersions(scope: TenantScope, eventDefinitionId: string) {
+    listVersions(scope: TenantScope, eventDefinitionId: string, options?: ReadOptions) {
       return versions.findMany(
         scope,
         eq(eventDefinitionVersions.eventDefinitionId, eventDefinitionId),
+        {
+          ...options,
+          orderBy: options?.orderBy ?? [
+            desc(eventDefinitionVersions.version),
+            desc(eventDefinitionVersions.id),
+          ],
+        },
       );
     },
     getVersion(scope: TenantScope, eventDefinitionId: string, id: string) {

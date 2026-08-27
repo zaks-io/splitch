@@ -15,8 +15,10 @@ describe("Control Panel Segments transport", () => {
       if (request.method === "DELETE") return Response.json({ deleted: true });
       if (request.method === "GET" && request.url.endsWith("/segments")) {
         return Response.json({
-          items: [segment()],
-          affectedEnvironmentIds: { segment_1: ["env_1"] },
+          items: [{ ...segment(), affectedEnvironmentIds: ["env_1"] }],
+          readLimit: 200,
+          readTruncated: false,
+          cursor: null,
         });
       }
       return Response.json(segment());

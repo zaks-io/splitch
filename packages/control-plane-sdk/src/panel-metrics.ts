@@ -1,11 +1,14 @@
 import type { Metric } from "@splitch/contracts";
 import {
   type CreateMetricRequest,
+  listResponse,
   MetricSchema,
   type PatchMetricRequest,
 } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
+
+const MetricListResponseSchema = listResponse(MetricSchema);
 
 export interface PanelMetricsListInput {
   appId: string;
@@ -21,9 +24,12 @@ export interface PanelMetricGetInput {
 export type PanelMetricUpdateInput = PanelMetricGetInput & PatchMetricRequest;
 export type PanelMetricDeleteInput = PanelMetricGetInput;
 
-export interface PanelMetricsListOutput {
+export type PanelMetricsListOutput = {
   items: Metric[];
-}
+  readLimit: number;
+  readTruncated: boolean;
+  cursor: string | null;
+};
 
 export interface PanelMetricDeleteOutput {
   deleted: true;
@@ -54,7 +60,7 @@ export function createPanelMetricsClient(options: {
     async list(input) {
       const response = await options.fetch(metricUrl(input.appId));
       return parseControlPlaneResponse(response, "panel_metrics_list", {
-        safeParse: parseMetricList,
+        safeParse: (body) => MetricListResponseSchema.safeParse(body),
       });
     },
     async create(input) {
@@ -87,19 +93,6 @@ function jsonRequest(method: "POST" | "PATCH", body: unknown): RequestInit {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   };
-}
-
-function parseMetricList(
-  input: unknown,
-): { success: true; data: PanelMetricsListOutput } | { success: false } {
-  if (!isObject(input) || !Array.isArray(input.items)) return { success: false as const };
-  const items: Metric[] = [];
-  for (const item of input.items) {
-    const parsed = MetricSchema.safeParse(item);
-    if (!parsed.success) return { success: false };
-    items.push(parsed.data);
-  }
-  return { success: true, data: { items } };
 }
 
 function parseDeleted(

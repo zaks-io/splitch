@@ -64,7 +64,8 @@ alone. Supplying an Environment ID requests the same bounded catalog with a
     }
   }>,
   readTruncated: boolean,
-  readLimit: positive integer
+  readLimit: positive integer,
+  cursor: null
 }
 ```
 

@@ -1,3 +1,4 @@
+import { boundListRead } from "@splitch/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createControlPlaneSdk } from "./index";
 
@@ -48,13 +49,13 @@ function sdkWith(response: () => Response) {
 
 describe("control plane sdk Environments client", () => {
   it("lists Environments for an App", async () => {
-    const { sdk, requests } = sdkWith(() => Response.json({ items: [environment] }));
+    const { sdk, requests } = sdkWith(() => Response.json(boundListRead([environment])));
 
     const result = await sdk.environments.list({ appId: "app_checkout" });
 
     expect(requests[0]?.url).toBe("https://control-plane.test/apps/app_checkout/envs");
     expect(requests[0]?.method).toBe("GET");
-    expect(result).toEqual({ ok: true, status: 200, data: { items: [environment] } });
+    expect(result).toEqual({ ok: true, status: 200, data: boundListRead([environment]) });
   });
 
   it("creates an Environment and parses its auto-provisioned Client Key", async () => {

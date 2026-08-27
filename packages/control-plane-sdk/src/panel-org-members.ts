@@ -1,7 +1,9 @@
 import type { OrganizationMember, UserRole } from "@splitch/contracts";
-import { OrganizationMemberSchema } from "@splitch/contracts";
+import { listResponse, OrganizationMemberSchema } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
+
+const OrganizationMemberListResponseSchema = listResponse(OrganizationMemberSchema);
 
 /**
  * The Org membership surface the Control Panel reaches through its binding
@@ -30,9 +32,12 @@ export interface PanelOrgMemberRemoveInput {
   userId: string;
 }
 
-export interface PanelOrgMembersListOutput {
+export type PanelOrgMembersListOutput = {
   items: OrganizationMember[];
-}
+  readLimit: number;
+  readTruncated: boolean;
+  cursor: string | null;
+};
 
 export interface PanelOrgMemberRemoveOutput {
   deleted: true;
@@ -66,7 +71,7 @@ export function createPanelOrgMembersClient(options: {
     async list(input) {
       const response = await options.fetch(memberUrl(input.orgId));
       return parseControlPlaneResponse(response, "organization_members_list", {
-        safeParse: parseMemberList,
+        safeParse: (body) => OrganizationMemberListResponseSchema.safeParse(body),
       });
     },
     async add(input) {
@@ -102,19 +107,6 @@ export function createPanelOrgMembersClient(options: {
       });
     },
   };
-}
-
-function parseMemberList(
-  input: unknown,
-): { success: true; data: PanelOrgMembersListOutput } | { success: false } {
-  if (!isObject(input) || !Array.isArray(input.items)) return { success: false };
-  const items: OrganizationMember[] = [];
-  for (const item of input.items) {
-    const parsed = OrganizationMemberSchema.safeParse(item);
-    if (!parsed.success) return { success: false };
-    items.push(parsed.data);
-  }
-  return { success: true, data: { items } };
 }
 
 function parseDeleted(

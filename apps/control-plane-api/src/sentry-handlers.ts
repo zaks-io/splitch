@@ -1,3 +1,4 @@
+import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs, RouteHandler } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
@@ -45,8 +46,10 @@ export function makeSentryHandlers(deps: SentryHandlerDeps) {
       const denied = await admin(args as HandlerArgs<unknown>);
       if (denied) return denied;
       const scope = sentryScope(args.input.params);
-      const rows = await deps.repo.sentry.listInstallations(scope);
-      return Response.json({ installations: rows.map(installationStatusResponse) });
+      const scanned = await deps.repo.sentry.listInstallations(scope, {
+        limit: LIST_READ_LIMIT + 1,
+      });
+      return Response.json(boundListRead(scanned.map(installationStatusResponse)));
     }) satisfies RouteHandler<InstallationInput>,
 
     create: (async (args: HandlerArgs<CreateInput>) => {

@@ -61,6 +61,9 @@ beforeEach(async () => {
               createdAt: NOW,
             },
           ],
+          readLimit: 200,
+          readTruncated: false,
+          cursor: null,
         });
       },
     } as unknown as Fetcher,

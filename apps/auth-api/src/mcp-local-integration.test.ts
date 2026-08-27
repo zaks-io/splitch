@@ -128,7 +128,12 @@ describe("local Auth-to-MCP integration", () => {
       const scopes = decodeDelegationScopes(request);
       victimDelegations.push(scopes);
       if (scopes.includes(victimScope)) {
-        return Response.json({ items: [], cursor: null, limit: 50, total: null });
+        return Response.json({
+          items: [],
+          readLimit: 200,
+          readTruncated: false,
+          cursor: null,
+        });
       }
       return Response.json(
         { code: "FORBIDDEN", message: "credential is not scoped to this app", details: {} },

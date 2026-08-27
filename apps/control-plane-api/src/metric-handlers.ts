@@ -1,10 +1,11 @@
-import type { MetricKind, MetricRef } from "@splitch/contracts";
+import { type MetricKind, type MetricRef } from "@splitch/contracts";
 import { appScope, type Repository, type TenantScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { appNotFound, nowIso } from "./app-environment-model";
+import { nowIso } from "./app-environment-model";
 import { randomHex } from "./credential-cache";
 import { runningExperimentError, validationError } from "./flag-definition-errors";
 import { objectBody, pathParam } from "./handler-input";
+import { listMetrics } from "./metric-list-handler";
 import {
   type MetricAnalysisConfig,
   metricAnalysisConfig,
@@ -33,16 +34,6 @@ export function makeMetricHandlers(deps: MetricSegmentDeps) {
     updateMetric: (args: HandlerArgs<unknown>) => updateMetric(deps, args),
     deleteMetric: (args: HandlerArgs<unknown>) => deleteMetric(deps, args),
   };
-}
-
-async function listMetrics(
-  deps: MetricSegmentDeps,
-  { input, requestId }: HandlerArgs<unknown>,
-): Promise<Response> {
-  const appId = pathParam(input, "appId");
-  if (!(await deps.repo.identity.getApp(appId))) return appNotFound(requestId);
-  const rows = await deps.repo.experiments.metrics.findMany(appScope(appId));
-  return Response.json({ items: rows.map(metricResponse) });
 }
 
 async function createMetric(

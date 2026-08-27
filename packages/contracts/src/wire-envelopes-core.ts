@@ -73,27 +73,51 @@ export {
  */
 
 // ---------------------------------------------------------------------------
-// PaginatedResponse<T> (reused by every list endpoint)
+// ListResponse<T> (reused by every list endpoint)
 //
-// Cursor-based, never offset-based. `cursor` is present-with-null (null = last
-// page). `total` is present-with-null because Tinybird-backed lists cannot count
-// cheaply and return `total: null`; D1-backed lists return a number.
-// A factory keeps the wrapper generic while preserving the item schema's type.
+// Completeness and continuation are two fields and must not collapse. Pagination
+// is completable: loop until `cursor === null`. `readTruncated` is not: there is
+// no next page, the call is reporting that the answer is incomplete and the
+// query must be narrowed. A bounded-but-unpaginable list has `cursor: null`
+// forever and can still be truncated, so one boolean cannot carry both.
+//
+// `cursor: null` means "no continuation available from this call". Completeness
+// is read from `readTruncated` alone. `cursor: null` with `readTruncated: true`
+// is the honest encoding of "there is more and this call cannot get it for you".
 // ---------------------------------------------------------------------------
 
 export const PAGINATION_DEFAULT_LIMIT = 50;
 export const PAGINATION_MAX_LIMIT = 500;
+/** Cap actually applied to every list read. Requested `limit` may differ. */
+export const LIST_READ_LIMIT = 200;
 
-export function paginatedResponse<ItemSchema extends z.ZodTypeAny>(itemSchema: ItemSchema) {
+export function listResponse<ItemSchema extends z.ZodTypeAny>(itemSchema: ItemSchema) {
   return z.object({
     items: z.array(itemSchema),
-    // Opaque server-encoded token; null on the last page.
+    // Cap actually applied to this read (requested and applied can differ).
+    readLimit: z.number().int().positive(),
+    // Observed at limit+1, never inferred from items.length.
+    readTruncated: z.boolean(),
+    // null = no continuation available from this call.
     cursor: z.string().nullable(),
-    // The limit that was applied to produce this page.
-    limit: z.number().int().min(1).max(PAGINATION_MAX_LIMIT),
-    // null on Tinybird-backed lists (counting 100M+ rows is too costly).
-    total: z.number().int().min(0).nullable(),
   });
+}
+
+/**
+ * Slice a limit+1 scan into the shared list envelope. Unpaginable lists always
+ * return `cursor: null`; completeness is `readTruncated` alone.
+ */
+export function boundListRead<T>(
+  scanned: readonly T[],
+  readLimit: number = LIST_READ_LIMIT,
+): { items: T[]; readLimit: number; readTruncated: boolean; cursor: null } {
+  const readTruncated = scanned.length > readLimit;
+  return {
+    items: readTruncated ? scanned.slice(0, readLimit) : [...scanned],
+    readLimit,
+    readTruncated,
+    cursor: null,
+  };
 }
 
 // ---------------------------------------------------------------------------

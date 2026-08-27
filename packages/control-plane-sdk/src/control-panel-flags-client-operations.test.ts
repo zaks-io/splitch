@@ -241,7 +241,7 @@ function variantResponse(method: string): Response {
 function listOrCreateFlagsResponse(method: string): Response {
   return Response.json(
     method === "GET"
-      ? { items: [flagDefinition], readTruncated: false, readLimit: 200 }
+      ? { items: [flagDefinition], readTruncated: false, readLimit: 200, cursor: null }
       : flagDefinition,
   );
 }

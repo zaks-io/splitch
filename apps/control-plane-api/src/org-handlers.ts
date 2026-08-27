@@ -1,4 +1,10 @@
-import { type OrganizationMember, type UserRole, UserRoleSchema } from "@splitch/contracts";
+import {
+  boundListRead,
+  LIST_READ_LIMIT,
+  type OrganizationMember,
+  type UserRole,
+  UserRoleSchema,
+} from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
@@ -69,14 +75,17 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       const org = await deps.repo.identity.getOrg(orgId);
       if (!org) return organizationNotFound(requestId);
 
-      const rows = await deps.repo.identity.listOrgMemberships(orgId);
+      const scanned = await deps.repo.identity.listOrgMemberships(orgId, {
+        limit: LIST_READ_LIMIT + 1,
+      });
+      const page = boundListRead(scanned);
       const items: OrganizationMember[] = [];
-      for (const row of rows) {
+      for (const row of page.items) {
         const member = await listMemberResponse(deps, row, request, requestId);
         if (member instanceof Response) return member;
         items.push(member);
       }
-      return Response.json({ items });
+      return Response.json({ ...page, items });
     },
 
     async addMember({ input, request, principal, requestId }: HandlerArgs<unknown>) {

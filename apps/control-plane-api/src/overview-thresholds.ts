@@ -1,3 +1,5 @@
+import { LIST_READ_LIMIT } from "@splitch/contracts";
+
 /**
  * Every tunable the App Overview classifies against, in one place — plus the read
  * bound of the ONE surface the Overview escalates to, because a ceiling and the
@@ -64,7 +66,7 @@ export const FLAG_CHANGE_READ_LIMIT = 50;
  * same reason those are 200: a single request's cost must not track how much
  * data one App has accumulated.
  */
-export const FLAG_LIST_READ_LIMIT = 200;
+export const FLAG_LIST_READ_LIMIT = LIST_READ_LIMIT;
 
 /** Concurrent Analysis reads for one Overview request. */
 export const OVERVIEW_ANALYSIS_READ_CONCURRENCY = 8;

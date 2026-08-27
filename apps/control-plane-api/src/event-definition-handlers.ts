@@ -1,8 +1,10 @@
 import {
+  boundListRead,
   CURRENT_KV_SCHEMA_VERSION,
   type EventDefinition,
   type EventDefinitionVersion,
   eventDefinitionConfigKey,
+  LIST_READ_LIMIT,
 } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import type { HandlerArgs, Registrar } from "@splitch/worker-runtime";
@@ -53,8 +55,10 @@ function makeEventDefinitionHandlers(deps: EventDefinitionDeps) {
 async function list(deps: EventDefinitionDeps, args: HandlerArgs<unknown>): Promise<Response> {
   const appId = pathParam(args.input, "appId");
   if (!(await deps.repo.identity.getApp(appId))) return appNotFound(args.requestId);
-  const rows = await deps.repo.eventDefinitions.definitions.findMany(appScope(appId));
-  return Response.json({ items: rows.map(definitionResponse) });
+  const scanned = await deps.repo.eventDefinitions.listDefinitions(appScope(appId), {
+    limit: LIST_READ_LIMIT + 1,
+  });
+  return Response.json(boundListRead(scanned.map(definitionResponse)));
 }
 
 async function create(deps: EventDefinitionDeps, args: HandlerArgs<unknown>): Promise<Response> {
@@ -187,11 +191,12 @@ async function listVersions(
 ): Promise<Response> {
   const definition = await definitionFromPath(deps, args.input);
   if (!definition) return notFound(args.requestId);
-  const rows = await deps.repo.eventDefinitions.listVersions(
+  const scanned = await deps.repo.eventDefinitions.listVersions(
     appScope(definition.appId),
     definition.id,
+    { limit: LIST_READ_LIMIT + 1 },
   );
-  return Response.json({ items: rows.map(versionResponse) });
+  return Response.json(boundListRead(scanned.map(versionResponse)));
 }
 
 async function getVersion(

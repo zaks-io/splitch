@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPanelSegmentsClient } from "./panel-segments";
 
-describe("panel Segments binding transport", () => {
+describe("panel Segments list envelope", () => {
   it("reads Segment choices and their affected Environments from the canonical route", async () => {
     let request: Request | undefined;
     const client = createPanelSegmentsClient({
@@ -16,9 +16,12 @@ describe("panel Segments binding transport", () => {
               conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
               createdAt: "2026-08-07T00:00:00.000Z",
               updatedAt: "2026-08-07T00:00:00.000Z",
+              affectedEnvironmentIds: ["env_dev", "env_prod"],
             },
           ],
-          affectedEnvironmentIds: { segment_paid: ["env_dev", "env_prod"] },
+          readLimit: 200,
+          readTruncated: false,
+          cursor: null,
         });
       },
     });
@@ -35,16 +38,24 @@ describe("panel Segments binding transport", () => {
     });
   });
 
-  it("fails loud when the dependency projection is absent", async () => {
+  it("fails loud when a listed Segment omits affectedEnvironmentIds", async () => {
     const client = createPanelSegmentsClient({
-      fetch: async () => Response.json({ items: [] }),
+      fetch: async () =>
+        Response.json({
+          items: [segment()],
+          readLimit: 200,
+          readTruncated: false,
+          cursor: null,
+        }),
     });
 
     await expect(client.list({ appId: "app_1" })).rejects.toThrow(
       "panel_segments_list returned an invalid response body",
     );
   });
+});
 
+describe("panel Segments binding transport", () => {
   it("round-trips list, create, get, update, and delete with typed bodies", async () => {
     const requests: Array<{ method: string; url: string; body: string }> = [];
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -57,8 +68,10 @@ describe("panel Segments binding transport", () => {
       if (request.method === "DELETE") return Response.json({ deleted: true });
       if (request.method === "GET" && request.url.endsWith("/segments")) {
         return Response.json({
-          items: [segment()],
-          affectedEnvironmentIds: { segment_1: ["env_prod"] },
+          items: [{ ...segment(), affectedEnvironmentIds: ["env_prod"] }],
+          readLimit: 200,
+          readTruncated: false,
+          cursor: null,
         });
       }
       const body = request.method === "GET" ? {} : ((await request.json()) as object);
@@ -114,7 +127,7 @@ describe("panel Segments binding transport", () => {
       fetch: vi.fn(async () =>
         Response.json({
           items: [
-            segment(),
+            { ...segment(), affectedEnvironmentIds: ["env_prod"] },
             {
               id: "segment_poison",
               appId: "app_1",
@@ -122,6 +135,7 @@ describe("panel Segments binding transport", () => {
               conditions: [{ attribute: "plan", operator: "in", value: [null, "paid"] }],
               createdAt: "2026-07-29T00:00:00.000Z",
               updatedAt: "2026-07-29T00:00:00.000Z",
+              affectedEnvironmentIds: [],
             },
             {
               id: 42,
@@ -130,13 +144,12 @@ describe("panel Segments binding transport", () => {
               conditions: [{ attribute: "plan", operator: "in", value: [null] }],
               createdAt: "2026-07-29T00:00:00.000Z",
               updatedAt: "2026-07-29T00:00:00.000Z",
+              affectedEnvironmentIds: [],
             },
           ],
-          affectedEnvironmentIds: {
-            segment_1: ["env_prod"],
-            segment_poison: [],
-            "42": [],
-          },
+          readLimit: 200,
+          readTruncated: false,
+          cursor: null,
         }),
       ),
     });

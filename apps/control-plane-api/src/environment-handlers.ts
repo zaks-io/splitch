@@ -1,4 +1,4 @@
-import type { EnvironmentPolicy } from "@splitch/contracts";
+import { boundListRead, type EnvironmentPolicy, LIST_READ_LIMIT } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz";
@@ -33,8 +33,10 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       const app = await deps.repo.identity.getApp(appId);
       if (!app) return appNotFound(requestId);
 
-      const rows = await deps.repo.identity.listEnvironments(appScope(appId));
-      return Response.json({ items: rows.map(environmentResponse) });
+      const scanned = await deps.repo.identity.listEnvironments(appScope(appId), {
+        limit: LIST_READ_LIMIT + 1,
+      });
+      return Response.json(boundListRead(scanned.map(environmentResponse)));
     },
 
     async createEnvironment({

@@ -275,7 +275,7 @@ export {
   approvalReviewOutcomes,
   approvalTargetTypes,
 } from "./routes/route-shapes-approvals";
-export { SegmentListResponseSchema } from "./routes/routes-segments";
+export { SegmentListItemSchema, SegmentListResponseSchema } from "./routes/routes-segments";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped Sentry integration contract
 export * from "./sentry-integration";
 export { deriveSlug, SLUG_MAX_LENGTH, SLUG_MIN_LENGTH, SLUG_PATTERN, SlugSchema } from "./slug";

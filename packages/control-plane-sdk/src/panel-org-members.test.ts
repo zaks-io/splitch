@@ -1,3 +1,4 @@
+import { boundListRead } from "@splitch/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createPanelOrgMembersClient } from "./panel-org-members";
 
@@ -12,7 +13,7 @@ describe("panel Org membership binding transport", () => {
         body: await request.clone().text(),
       });
       if (request.method === "DELETE") return Response.json({ deleted: true });
-      if (request.method === "GET") return Response.json({ items: [member()] });
+      if (request.method === "GET") return Response.json(boundListRead([member()]));
       return Response.json({ ...member(), ...((await request.json()) as object) });
     });
     const client = createPanelOrgMembersClient({ fetch: fetcher });
@@ -67,7 +68,7 @@ describe("panel Org membership binding transport", () => {
 
   it("preserves a membership whose profile email is not cached yet", async () => {
     const client = createPanelOrgMembersClient({
-      fetch: vi.fn(async () => Response.json({ items: [{ ...member(), email: null }] })),
+      fetch: vi.fn(async () => Response.json(boundListRead([{ ...member(), email: null }]))),
     });
 
     await expect(client.list({ orgId: "org_1" })).resolves.toMatchObject({
@@ -78,7 +79,7 @@ describe("panel Org membership binding transport", () => {
 
   it("rejects invalid successful response bodies", async () => {
     const client = createPanelOrgMembersClient({
-      fetch: vi.fn(async () => Response.json({ items: [{ id: "user_1", role: "superuser" }] })),
+      fetch: vi.fn(async () => Response.json(boundListRead([{ id: "user_1", role: "superuser" }]))),
     });
 
     await expect(client.list({ orgId: "org_1" })).rejects.toThrow(
@@ -88,7 +89,7 @@ describe("panel Org membership binding transport", () => {
 
   it("preserves an absent profile on roster reads", async () => {
     const client = createPanelOrgMembersClient({
-      fetch: vi.fn(async () => Response.json({ items: [{ ...member(), email: null }] })),
+      fetch: vi.fn(async () => Response.json(boundListRead([{ ...member(), email: null }]))),
     });
 
     await expect(client.list({ orgId: "org_1" })).resolves.toMatchObject({

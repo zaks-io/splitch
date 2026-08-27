@@ -9,6 +9,7 @@ import {
 } from "./leaf-schemas-runtime";
 import { OrganizationSlugSchema } from "./organization-slug";
 import { SlugSchema } from "./slug";
+import { listResponse } from "./wire-envelopes-core";
 
 /**
  * Create/patch/response wire envelopes for the account-tier resources: Metric,
@@ -250,7 +251,5 @@ export const CreateCredentialResponseSchema = z.object({
 });
 export type CreateCredentialResponse = z.infer<typeof CreateCredentialResponseSchema>;
 
-export const ListCredentialsResponseSchema = z.object({
-  items: z.array(CredentialSchema),
-});
+export const ListCredentialsResponseSchema = listResponse(CredentialSchema);
 export type ListCredentialsResponse = z.infer<typeof ListCredentialsResponseSchema>;

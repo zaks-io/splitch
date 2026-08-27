@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { experiments, metrics, runs } from "../schema/index";
 import type { Db } from "./client";
 import { idBatches } from "./id-batches";
@@ -47,6 +47,13 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
     // methods below; callers cannot reach a generic snapshot UPDATE path.
     runs: runsWithoutUpdate,
     metrics: metricsTable,
+
+    listMetrics(scope: TenantScope, options?: ReadOptions) {
+      return metricsTable.findMany(scope, undefined, {
+        ...options,
+        orderBy: options?.orderBy ?? [desc(metrics.createdAt), desc(metrics.id)],
+      });
+    },
 
     ...lookups,
 
@@ -116,8 +123,11 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       return experimentsTable.countRows(scope, eq(experiments.status, "running"));
     },
 
-    listRunsForExperiment(scope: EnvScope, experimentId: string) {
-      return runsTable.findMany(scope, eq(runs.experimentId, experimentId));
+    listRunsForExperiment(scope: EnvScope, experimentId: string, options?: ReadOptions) {
+      return runsTable.findMany(scope, eq(runs.experimentId, experimentId), {
+        ...options,
+        orderBy: options?.orderBy ?? [desc(runs.runNumber), desc(runs.id)],
+      });
     },
 
     countRunsForExperiment(scope: EnvScope, experimentId: string): Promise<number> {
@@ -261,7 +271,11 @@ function makeExperimentLookups(table: ExperimentsTable) {
       table.findOne(scope, eq(experiments.id, experimentId)),
     findExperimentByKey: (scope: EnvScope, key: string) =>
       table.findOne(scope, eq(experiments.key, key)),
-    listExperiments: (scope: EnvScope) => table.findMany(scope, ne(experiments.status, ARCHIVED)),
+    listExperiments: (scope: EnvScope, options?: ReadOptions) =>
+      table.findMany(scope, ne(experiments.status, ARCHIVED), {
+        ...options,
+        orderBy: options?.orderBy ?? [desc(experiments.createdAt), desc(experiments.id)],
+      }),
   };
 }
 

@@ -35,7 +35,7 @@ describe("control plane sdk approvals client", () => {
     const { sdk, requests } = approvalsSdk((incoming) =>
       Response.json(
         incoming.url.includes("?")
-          ? { items: [request], cursor: null, limit: 10, total: 1 }
+          ? { items: [request], cursor: null, readLimit: 10, readTruncated: false }
           : request,
       ),
     );

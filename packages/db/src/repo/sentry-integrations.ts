@@ -62,14 +62,24 @@ export function makeSentryIntegrationRepo(d1: D1Database) {
      * sent, and hiding them would make a revoked Sentry org indistinguishable
      * from one that was never wired up.
      */
-    async listInstallations(scope: EnvScope): Promise<SentryInstallationRow[]> {
+    async listInstallations(
+      scope: EnvScope,
+      options?: { limit?: number },
+    ): Promise<SentryInstallationRow[]> {
       assertMintedScope(scope);
-      const rows = await d1
-        .prepare(
-          `${INSTALLATION_SELECT} WHERE app_id = ? AND environment_id = ? ORDER BY created_at DESC`,
-        )
-        .bind(scope.appId, scope.environmentId)
-        .all<SentryInstallationRow>();
+      const limit = options?.limit;
+      if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+        throw new Error(`listInstallations: limit must be a positive integer, got ${limit}`);
+      }
+      const sql =
+        limit === undefined
+          ? `${INSTALLATION_SELECT} WHERE app_id = ? AND environment_id = ? ORDER BY created_at DESC`
+          : `${INSTALLATION_SELECT} WHERE app_id = ? AND environment_id = ? ORDER BY created_at DESC LIMIT ?`;
+      const statement =
+        limit === undefined
+          ? d1.prepare(sql).bind(scope.appId, scope.environmentId)
+          : d1.prepare(sql).bind(scope.appId, scope.environmentId, limit);
+      const rows = await statement.all<SentryInstallationRow>();
       return rows.results;
     },
 

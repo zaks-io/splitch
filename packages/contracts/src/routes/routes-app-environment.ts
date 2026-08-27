@@ -21,6 +21,7 @@ import {
   PatchEnvironmentRequestSchema,
   UpdateAppMemberRequestSchema,
 } from "./route-shapes";
+import { listResponse } from "../wire-envelopes-core";
 
 /**
  * App and Environment management routes. Split out of routes-account.ts purely
@@ -33,9 +34,9 @@ const OWNER = "control-plane-api" as const;
 const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
-const AppListResponse = z.object({ items: z.array(AppSchema) });
-const AppMemberListResponse = z.object({ items: z.array(AppMemberSchema) });
-const EnvListResponse = z.object({ items: z.array(EnvironmentSchema) });
+const AppListResponse = listResponse(AppSchema);
+const AppMemberListResponse = listResponse(AppMemberSchema);
+const EnvListResponse = listResponse(EnvironmentSchema);
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 
 export const appEnvironmentRoutes = [

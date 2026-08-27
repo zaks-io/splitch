@@ -1,5 +1,5 @@
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
-import { paginatedResponse } from "../wire-envelopes-core";
+import { listResponse } from "../wire-envelopes-core";
 import { AppParams, ApprovalRequestParams } from "./route-shapes";
 import {
   ApprovalRequestListQuerySchema,
@@ -17,7 +17,7 @@ const OWNER = "control-plane-api" as const;
 const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
-const ApprovalRequestListResponseSchema = paginatedResponse(ApprovalRequestSchema);
+const ApprovalRequestListResponseSchema = listResponse(ApprovalRequestSchema);
 
 export const approvalRoutes = [
   defineApiRoute({

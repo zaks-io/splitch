@@ -1,67 +1,135 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
+  LIST_READ_LIMIT,
   PAGINATION_DEFAULT_LIMIT,
   PAGINATION_MAX_LIMIT,
   PaginationQuerySchema,
-  paginatedResponse,
+  boundListRead,
+  listResponse,
 } from "./wire-envelopes-core";
 
-const PageOfStrings = paginatedResponse(z.string());
+const PageOfStrings = listResponse(z.string());
 
-describe("paginatedResponse factory", () => {
-  it("parses a page with total as a number (D1-backed list)", () => {
+describe("listResponse factory", () => {
+  it("parses a complete unpaginable page", () => {
     const page = PageOfStrings.parse({
       items: ["a", "b"],
-      cursor: "opaque-next",
-      limit: 50,
-      total: 2,
+      readLimit: LIST_READ_LIMIT,
+      readTruncated: false,
+      cursor: null,
     });
     expect(page.items).toEqual(["a", "b"]);
-    expect(page.cursor).toBe("opaque-next");
-    expect(page.total).toBe(2);
-  });
-
-  it("parses a page with total: null (Tinybird-backed list)", () => {
-    const page = PageOfStrings.parse({
-      items: ["a"],
-      cursor: null,
-      limit: 50,
-      total: null,
-    });
-    expect(page.total).toBeNull();
+    expect(page.readLimit).toBe(LIST_READ_LIMIT);
+    expect(page.readTruncated).toBe(false);
     expect(page.cursor).toBeNull();
   });
 
+  it("parses cursor: null with readTruncated: true (more exists, no continuation)", () => {
+    const page = PageOfStrings.parse({
+      items: ["a"],
+      readLimit: 1,
+      readTruncated: true,
+      cursor: null,
+    });
+    expect(page.readTruncated).toBe(true);
+    expect(page.cursor).toBeNull();
+  });
+
+  it("parses a paginated page with a continuation cursor", () => {
+    const page = PageOfStrings.parse({
+      items: ["a"],
+      readLimit: 50,
+      readTruncated: false,
+      cursor: "opaque-next",
+    });
+    expect(page.cursor).toBe("opaque-next");
+    expect(page.readTruncated).toBe(false);
+  });
+
   it("preserves the item schema's parsed type", () => {
-    const PageOfObjects = paginatedResponse(z.object({ id: z.string() }));
+    const PageOfObjects = listResponse(z.object({ id: z.string() }));
     const page = PageOfObjects.parse({
       items: [{ id: "x" }],
+      readLimit: LIST_READ_LIMIT,
+      readTruncated: false,
       cursor: null,
-      limit: 50,
-      total: 1,
     });
     expect(page.items[0]?.id).toBe("x");
   });
 
   it("rejects an item that fails the item schema", () => {
-    expect(PageOfStrings.safeParse({ items: [1], cursor: null, limit: 50, total: 0 }).success).toBe(
-      false,
-    );
+    expect(
+      PageOfStrings.safeParse({
+        items: [1],
+        readLimit: LIST_READ_LIMIT,
+        readTruncated: false,
+        cursor: null,
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects an omitted cursor (present-with-null, never absent)", () => {
-    expect(PageOfStrings.safeParse({ items: [], limit: 50, total: 0 }).success).toBe(false);
+    expect(
+      PageOfStrings.safeParse({
+        items: [],
+        readLimit: LIST_READ_LIMIT,
+        readTruncated: false,
+      }).success,
+    ).toBe(false);
   });
 
-  it("rejects an omitted total (present-with-null, never absent)", () => {
-    expect(PageOfStrings.safeParse({ items: [], cursor: null, limit: 50 }).success).toBe(false);
+  it("rejects a missing readTruncated (never inferred)", () => {
+    expect(
+      PageOfStrings.safeParse({
+        items: [],
+        readLimit: LIST_READ_LIMIT,
+        cursor: null,
+      }).success,
+    ).toBe(false);
   });
 
-  it("rejects a negative total", () => {
-    expect(PageOfStrings.safeParse({ items: [], cursor: null, limit: 50, total: -1 }).success).toBe(
+  it("rejects a missing readLimit", () => {
+    expect(PageOfStrings.safeParse({ items: [], readTruncated: false, cursor: null }).success).toBe(
       false,
     );
+  });
+
+  it("rejects the deleted total field as an extra if the helper is strict about known keys", () => {
+    const parsed = PageOfStrings.parse({
+      items: [],
+      readLimit: LIST_READ_LIMIT,
+      readTruncated: false,
+      cursor: null,
+      total: 0,
+    });
+    expect(parsed).not.toHaveProperty("total");
+  });
+});
+
+describe("boundListRead", () => {
+  it("observes truncation at limit+1 and never infers it from a full page", () => {
+    expect(boundListRead(["a", "b"], 2)).toEqual({
+      items: ["a", "b"],
+      readLimit: 2,
+      readTruncated: false,
+      cursor: null,
+    });
+    expect(boundListRead(["a", "b", "c"], 2)).toEqual({
+      items: ["a", "b"],
+      readLimit: 2,
+      readTruncated: true,
+      cursor: null,
+    });
+  });
+
+  it("defaults the cap to LIST_READ_LIMIT", () => {
+    const scanned = Array.from({ length: LIST_READ_LIMIT + 1 }, (_, i) => i);
+    const page = boundListRead(scanned);
+    expect(page.readLimit).toBe(LIST_READ_LIMIT);
+    expect(page.readTruncated).toBe(true);
+    expect(page.items).toHaveLength(LIST_READ_LIMIT);
+    expect(page.cursor).toBeNull();
   });
 });
 

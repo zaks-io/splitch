@@ -1,5 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { validateNumericDomain, validatePropertyNames } from "./event-definition-validation";
+import { listResponse } from "./wire-envelopes-core";
 
 export const eventDefinitionFamilies = ["metric", "web"] as const;
 export const EventDefinitionFamilySchema = z.enum(eventDefinitionFamilies);
@@ -247,12 +248,8 @@ export const PublishEventDefinitionVersionRequestSchema = z
 export const EventDefinitionDetailSchema = EventDefinitionSchema.extend({
   versions: z.array(EventDefinitionVersionSchema),
 });
-export const EventDefinitionListResponseSchema = z.object({
-  items: z.array(EventDefinitionSchema),
-});
-export const EventDefinitionVersionListResponseSchema = z.object({
-  items: z.array(EventDefinitionVersionSchema),
-});
+export const EventDefinitionListResponseSchema = listResponse(EventDefinitionSchema);
+export const EventDefinitionVersionListResponseSchema = listResponse(EventDefinitionVersionSchema);
 
 export const EventDefinitionHotConfigSchema = z
   .object({

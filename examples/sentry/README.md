@@ -31,7 +31,8 @@ response; supply your own instead if you are rotating out of your own keystore.
 
 Toggle a Flag and it shows up in Sentry's flag audit log within a minute. Check delivery health with
 `GET /apps/<appId>/envs/<environmentId>/integrations/sentry/installations`; it returns
-`lastDeliveredSeq`, `attemptCount`, and `latestDeliveryError`, never the secret.
+`{ items, readLimit, readTruncated, cursor }`, and each item carries `lastDeliveredSeq`,
+`attemptCount`, and `latestDeliveryError`, never the secret.
 
 ## 2. Evaluation tracking (app → Sentry)
 

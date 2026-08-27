@@ -1,4 +1,9 @@
-import { type APIKey, normalizeClientOrigins } from "@splitch/contracts";
+import {
+  type APIKey,
+  boundListRead,
+  LIST_READ_LIMIT,
+  normalizeClientOrigins,
+} from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
@@ -99,8 +104,10 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       const ctx = await credentialContext(deps, input, requestId);
       if (ctx instanceof Response) return ctx;
 
-      const rows = await deps.repo.credentials.listApiKeys(ctx.scope);
-      return Response.json({ items: rows.map(apiKeyResponse) });
+      const scanned = await deps.repo.credentials.listApiKeys(ctx.scope, {
+        limit: LIST_READ_LIMIT + 1,
+      });
+      return Response.json(boundListRead(scanned.map(apiKeyResponse)));
     },
 
     async createApiKey({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {

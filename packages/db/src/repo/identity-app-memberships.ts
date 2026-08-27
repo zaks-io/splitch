@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { appMemberships } from "../schema/index";
 import type { Db } from "./client";
 import type { TenantScope } from "./scope";
-import { scopedTable } from "./scoped-table";
+import { type ReadOptions, scopedTable } from "./scoped-table";
 
 /**
  * The App's own access list (`app_memberships`), distinct from Organization
@@ -20,8 +20,11 @@ export function makeAppMembershipRepo(db: Db) {
   return {
     table,
 
-    listAppMembers(scope: TenantScope) {
-      return table.findMany(scope);
+    listAppMembers(scope: TenantScope, options?: ReadOptions) {
+      return table.findMany(scope, undefined, {
+        ...options,
+        orderBy: options?.orderBy ?? [asc(appMemberships.createdAt), asc(appMemberships.userId)],
+      });
     },
 
     getAppMembership(scope: TenantScope, userId: string) {

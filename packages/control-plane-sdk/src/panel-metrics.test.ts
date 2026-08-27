@@ -1,3 +1,4 @@
+import { boundListRead } from "@splitch/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createPanelMetricsClient } from "./panel-metrics";
 
@@ -13,7 +14,7 @@ describe("panel Metrics binding transport", () => {
       });
       if (request.method === "DELETE") return Response.json({ deleted: true });
       if (request.method === "GET" && request.url.endsWith("/metrics")) {
-        return Response.json({ items: [metric()] });
+        return Response.json(boundListRead([metric()]));
       }
       const body = request.method === "GET" ? {} : ((await request.json()) as object);
       return Response.json({ ...metric(), ...body });
@@ -69,7 +70,7 @@ describe("panel Metrics binding transport", () => {
 
   it("rejects invalid successful response bodies", async () => {
     const client = createPanelMetricsClient({
-      fetch: vi.fn(async () => Response.json({ items: [{ kind: "histogram" }] })),
+      fetch: vi.fn(async () => Response.json(boundListRead([{ kind: "histogram" }]))),
     });
 
     await expect(client.list({ appId: "app_1" })).rejects.toThrow(

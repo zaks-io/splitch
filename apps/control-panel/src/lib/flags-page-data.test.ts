@@ -73,7 +73,11 @@ describe("Flags route data", () => {
     // The endpoint OBSERVES truncation one row past its ceiling. Nothing on this
     // side can reconstruct that from a page, so the page data must pass it
     // through unchanged — including the case where the two disagree.
-    const flags = flagsClient(() => prodConfig(), { readTruncated: true, readLimit: 200 });
+    const flags = flagsClient(() => prodConfig(), {
+      readTruncated: true,
+      readLimit: 200,
+      cursor: null,
+    });
 
     const result = await readFlagsPage(flags, {
       appId: "app_checkout",
@@ -93,7 +97,11 @@ describe("Flags route data", () => {
 
 function flagsClient(
   config: (environmentId: string | undefined) => FlagConfigGetOutput | null,
-  bound: { readTruncated: boolean; readLimit: number } = { readTruncated: false, readLimit: 200 },
+  bound: { readTruncated: boolean; readLimit: number; cursor: string | null } = {
+    readTruncated: false,
+    readLimit: 200,
+    cursor: null,
+  },
 ): Pick<FlagsClient, "list"> {
   return {
     list: vi.fn(async (input) => ({

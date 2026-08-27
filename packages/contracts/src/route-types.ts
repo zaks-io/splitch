@@ -10,7 +10,7 @@ import type {
   PublishEventDefinitionVersionRequestSchema,
 } from "./event-definition";
 import {
-  type AppMemberSchema,
+  AppMemberSchema,
   AppSchema,
   type ClientKeySchema,
   EnvironmentSchema,
@@ -81,7 +81,7 @@ import {
   ApprovalRequestSchema,
   type ReviewApprovalRequestSchema,
 } from "./routes/route-shapes-approval-request";
-import { paginatedResponse } from "./wire-envelopes-core";
+import { listResponse } from "./wire-envelopes-core";
 
 /**
  * Typed flat inputs/outputs for representative Control Plane operations.
@@ -89,8 +89,8 @@ import { paginatedResponse } from "./wire-envelopes-core";
  * shapes in the SDK.
  */
 
-const ExperimentListResponseSchema = z.object({ items: z.array(ExperimentResponseSchema) });
-const ApprovalRequestListResponseSchema = paginatedResponse(ApprovalRequestSchema);
+const ExperimentListResponseSchema = listResponse(ExperimentResponseSchema);
+const ApprovalRequestListResponseSchema = listResponse(ApprovalRequestSchema);
 const DeletedResponseSchema = z.object({ deleted: z.literal(true) });
 
 type EventDefinitionPath = z.infer<typeof AppParams> & { eventDefinitionId: string };
@@ -173,8 +173,9 @@ export type FlagsPromoteInput = z.infer<typeof PromoteParams> &
   z.infer<typeof PromoteRequestSchema>;
 export type FlagsPromoteOutput = z.infer<typeof PromoteResponseSchema>;
 
-const AppListResponseSchema = z.object({ items: z.array(AppSchema) });
-const EnvironmentListResponseSchema = z.object({ items: z.array(EnvironmentSchema) });
+const AppListResponseSchema = listResponse(AppSchema);
+const EnvironmentListResponseSchema = listResponse(EnvironmentSchema);
+const AppMemberListResponseSchema = listResponse(AppMemberSchema);
 
 // No path params: the Org does not exist yet, so the body is the whole input.
 export type OrganizationsCreateInput = z.infer<typeof CreateOrganizationRequestSchema>;
@@ -193,7 +194,7 @@ export type AppsDeleteInput = z.infer<typeof AppParams> &
   z.infer<typeof ResourceDeleteModeQuerySchema>;
 export type AppsDeleteOutput = z.infer<typeof ResourceDeleteResponseSchema>;
 export type AppMembersListInput = z.infer<typeof AppParams>;
-export type AppMembersListOutput = { items: z.infer<typeof AppMemberSchema>[] };
+export type AppMembersListOutput = z.infer<typeof AppMemberListResponseSchema>;
 export type AppMembersAddInput = z.infer<typeof AppParams> &
   z.infer<typeof AddAppMemberRequestSchema>;
 export type AppMembersAddOutput = z.infer<typeof AppMemberSchema>;

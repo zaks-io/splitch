@@ -34,7 +34,8 @@ Returns exactly:
     }
   }>,
   readTruncated: boolean,
-  readLimit: positive integer
+  readLimit: positive integer,
+  cursor: null
 }
 ```
 
@@ -287,11 +288,9 @@ Lists full Approval Request wire projections in the App. `status` optionally fil
 `pending | applied | declined | stale`; `target_kind` optionally filters
 `flag | flag_configuration | flag_variant | experiment_draft`; `environmentId` optionally
 keeps only Requests whose Policy context targets that Environment (narrows within the App).
-The response uses the standard cursor page:
-`{ items: ApprovalRequest[], cursor: string | null, limit: number, total: number | null }`.
-Production always merges D1 with Tinybird archives, so `total` is always `null`. An exact total
-would require a second Tinybird round-trip on every list request; `null` is the honest result rather
-than a partial D1 count.
+The response is the shared `ListResponse<ApprovalRequest>`:
+`{ items, readLimit, readTruncated, cursor }`. `readLimit` is `min(requested limit, 200)`.
+`readTruncated` is false because pagination can continue via `cursor`. There is no `total`.
 
 ### `GET /apps/{app_id}/approval-requests/{id}`
 

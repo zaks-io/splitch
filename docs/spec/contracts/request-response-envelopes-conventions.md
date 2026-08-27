@@ -46,46 +46,45 @@ Resource envelope files:
 
 ---
 
-## Pagination wrapper (reused by all list endpoints)
+## ListResponse wrapper (every `*_list` operation)
 
 ```
-PaginatedResponse<T> = {
-  items:      T[]
-  cursor:     string | null  // opaque; pass back as ?cursor= to fetch next page; null on the last page
-  limit:      number         // the limit that was applied
-  total:      number | null  // see "total semantics" below
+ListResponse<T> = {
+  items:         T[]
+  readLimit:     positive integer  // cap actually applied to this read
+  readTruncated: boolean           // observed at limit+1, never inferred
+  cursor:        string | null     // null = no continuation available from this call
 }
 ```
 
-Pagination is **cursor-based, not offset-based**, on every list endpoint. Request a page with
-`?limit=<n>&cursor=<opaque>`; `limit` defaults to `50` and is capped at `500` (over-cap →
-`INVALID_PAGINATION { field: 'limit' }`). To iterate, keep calling with the returned `cursor` until
-`cursor === null`.
+Completeness and continuation are two fields and must not collapse. Pagination is completable: loop
+until `cursor === null`. `readTruncated` is not: there is no next page, the call is reporting that
+the answer is incomplete and the query must be narrowed. A bounded-but-unpaginable list has
+`cursor: null` forever and can still be truncated.
 
-**Cursor contract.** The `cursor` is an opaque, server-encoded string. Do not parse, construct, or
-mutate it. A cursor is valid for **15 minutes** and is scoped to the exact `(endpoint, filters, limit)`
-it was issued for — reusing it across a different filter set or after expiry returns
+`cursor: null` means "no continuation available from this call". Completeness is read from
+`readTruncated` alone. `cursor: null` with `readTruncated: true` is the honest encoding of "there is
+more and this call cannot get it for you".
+
+Every list array is under `items`. There is no `total` on a list response — an always-null count is
+the disguised shape ADR-0036 forbids. A real count, if wanted, is a `*_count` operation.
+
+The applied cap is `LIST_READ_LIMIT` (200). Requested `limit` may differ: a caller asking
+`limit=500` against the 200-cap sees `readLimit: 200`. Request `limit` stays a query param on
+paginated routes (`approval_requests_list`: default 50, schema-max 500, over-cap →
+`INVALID_PAGINATION { field: 'limit' }`). Other `*_list` routes are unpaginable: they always return
+`cursor: null` and report truncation when the scan hits the cap.
+
+**Cursor contract (paginated lists).** The `cursor` is an opaque, server-encoded string. Do not
+parse, construct, or mutate it. A cursor is valid for **15 minutes** and is scoped to the exact
+`(endpoint, filters, applied readLimit)` it was issued for — reusing it across a different filter
+set or after expiry returns
 `INVALID_PAGINATION { field: 'cursor', reason: 'cursor_expired' | 'cursor_invalid' }`. Never reuse a
 cursor across Environments.
 
-**`total` semantics.** Whether `total` is a number or `null` is determined by the backing store, and
-is stable per endpoint:
-
-- **D1-backed lists** (Flags, Experiments, Runs, Metrics, Segments, Members, credentials) always
-  return `total` as a number — the count is cheap.
-- **Tinybird-backed lists** (Exposures, analytics) return `total: null` — counting can be
-  100M+ rows. Consumers render "showing X (more available)", never "page N of M", when `total` is
-  `null`.
-
-Where a list is **projected after the store returns it** — a status the store does not persist and
-the API computes on read, such as an Approval Request rendering `stale` — `total` counts the rows
-the store matched, so a filter on a projected field narrows `items` without narrowing `total`. That
-is the one case where `items.length` and `total` disagree for reasons other than paging. Agents must
-still loop on `cursor`; a projection-filtered list can legitimately return an empty page with a
-non-null `cursor` and a non-zero `total`.
-
-**Agent iteration.** Loop on `cursor` (`while (cursor !== null)`), not on `total`. `total` is for UI
-display and may be `null`; the `cursor` is the authoritative end-of-list signal on every endpoint.
+**Agent iteration.** On a paginated list, loop on `cursor` (`while (cursor !== null)`). Then read
+`readTruncated`. On an unpaginable list, `cursor` is always null; if `readTruncated` is true, narrow
+the query rather than asking for a next page.
 
 ---
 

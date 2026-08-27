@@ -1,3 +1,4 @@
+import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs, Principal } from "@splitch/worker-runtime";
 import { organizationResponse } from "./org-response";
@@ -17,8 +18,11 @@ import { organizationIdsInScopes } from "./scope-binding";
  */
 export function makeListOrganizationsHandler(repo: Repository) {
   return async ({ principal }: HandlerArgs<unknown>): Promise<Response> => {
-    const memberships = await repo.identity.listOrgMembershipsForUser(principal.id);
-    const orgIds = reachableOrgIds(principal, memberships);
+    const memberships = await repo.identity.listOrgMembershipsForUser(principal.id, {
+      limit: LIST_READ_LIMIT + 1,
+    });
+    const page = boundListRead(memberships);
+    const orgIds = reachableOrgIds(principal, page.items);
     const items = await Promise.all(
       [...orgIds].map(async (orgId) => {
         const org = await repo.identity.getOrg(orgId);
@@ -26,7 +30,10 @@ export function makeListOrganizationsHandler(repo: Repository) {
       }),
     );
 
-    return Response.json({ items: items.filter((org) => org !== null) });
+    return Response.json({
+      ...page,
+      items: items.filter((org) => org !== null),
+    });
   };
 }
 

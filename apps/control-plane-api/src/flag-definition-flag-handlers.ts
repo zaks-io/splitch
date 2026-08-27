@@ -1,4 +1,9 @@
-import { PercentageRolloutSchema, schemaDefinitionIssues, type Variant } from "@splitch/contracts";
+import {
+  boundListRead,
+  PercentageRolloutSchema,
+  schemaDefinitionIssues,
+  type Variant,
+} from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
@@ -55,8 +60,12 @@ export async function listFlags(
   if (!app) return appNotFound(requestId);
   if (!environment) return appNotFound(requestId);
 
-  const readTruncated = scanned.length > FLAG_LIST_READ_LIMIT;
-  const rows = readTruncated ? scanned.slice(0, FLAG_LIST_READ_LIMIT) : scanned;
+  const {
+    items: rows,
+    readLimit,
+    readTruncated,
+    cursor,
+  } = boundListRead(scanned, FLAG_LIST_READ_LIMIT);
   // ONE catalog read for the whole page. Resolving Variants per row made this
   // list cost a D1 query per Flag, on exactly the App large enough to be sent
   // here in the first place.
@@ -73,7 +82,8 @@ export async function listFlags(
   return Response.json({
     items: await items,
     readTruncated,
-    readLimit: FLAG_LIST_READ_LIMIT,
+    readLimit,
+    cursor,
   });
 }
 

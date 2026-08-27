@@ -267,11 +267,13 @@ confirmation pipeline. Canonical shape in
 
 ## Pagination inputs
 
-Every `*_list` tool derives `limit?` and `cursor?` from its route query params (default `limit` 50,
-max 500). Responses are the `PaginatedResponse<T>` wrapper; an agent paginates by resending the tool
-with the returned `cursor` until `cursor === null`. Do not iterate on `total` — it is `null` on
-Tinybird-backed lists. Canonical contract in
-[request-response-envelopes-conventions.md](./request-response-envelopes-conventions.md#pagination-wrapper-reused-by-all-list-endpoints).
+Every `*_list` tool returns the shared `ListResponse<T>` wrapper
+(`items`, `readLimit`, `readTruncated`, `cursor`). Only paginated routes (today:
+`approval_requests_list`) accept `limit?` and `cursor?` query params (default `limit` 50, schema-max
+500). An agent paginates those by resending the returned `cursor` until `cursor === null`. On every
+other list, `cursor` is always null; if `readTruncated` is true the catalog is incomplete and the
+query must be narrowed. Canonical contract in
+[request-response-envelopes-conventions.md](./request-response-envelopes-conventions.md#listresponse-wrapper-every-_list-operation).
 
 ## Idempotency on retried creates
 

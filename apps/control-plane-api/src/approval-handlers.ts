@@ -1,4 +1,8 @@
-import type { ApprovalRequest } from "@splitch/contracts";
+import {
+  type ApprovalRequest,
+  LIST_READ_LIMIT,
+  PAGINATION_DEFAULT_LIMIT,
+} from "@splitch/contracts";
 import { type ApprovalCommit, appScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
@@ -81,8 +85,8 @@ async function listApprovalRequests(
   query: ApprovalListQuery,
   requestId: string,
 ): Promise<Response> {
-  const limit = query.limit ?? 50;
-  const scope = appScope(appId);
+  const requested = query.limit ?? PAGINATION_DEFAULT_LIMIT;
+  const limit = Math.min(requested, LIST_READ_LIMIT);
   const after = query.cursor
     ? await resolveCursor(deps, appId, query.cursor, archiveCanMatch(query.status))
     : undefined;
@@ -99,7 +103,6 @@ async function listApprovalRequests(
   // Effective staleness is derived per row, so only `pending` requests can
   // render as either `pending` or `stale`. Both filters therefore push the same
   // stored predicate down and reconcile against the projection afterwards.
-  const effectiveOnly = query.status === "pending" || query.status === "stale";
   const filters = {
     storedStatus: statusFilter(query.status),
     targetType: query.target_kind,
@@ -110,18 +113,10 @@ async function listApprovalRequests(
   return Response.json({
     items: page.items,
     cursor: page.cursor,
-    limit,
-    // Production lists merge D1 and Tinybird, so an exact count is not computed.
-    // Pending/stale filters additionally resolve effective status after projection.
-    // `index.ts` always passes an `archiveStore` (approvalArchiveStoreFromEnv
-    // never returns undefined), so in production `deps.archiveStore` is always
-    // truthy and this expression always takes the `null` branch. The
-    // `countRequests` call below only runs in tests whose harness omits the
-    // store — it is not reachable in production.
-    total:
-      effectiveOnly || deps.archiveStore
-        ? null
-        : await deps.repo.approvals.countRequests(scope, filters),
+    readLimit: limit,
+    // Pagination is completable via `cursor`. Completeness is `readTruncated`
+    // alone; a page that can continue is not a truncated unpaginable read.
+    readTruncated: false,
   });
 }
 
