@@ -18,6 +18,7 @@ import { type SeededTenants, seedTwoTenants } from "./test-seed";
 const NOW = "2026-08-27T20:00:00.000Z";
 const TREATMENT_ID = "var_a_treatment";
 const RULE_ID = "rule_a_treatment";
+const CONTROL_RULE_ID = "rule_a_control";
 const REVIEWER = "user_race_owner";
 
 let local: LocalD1;
@@ -54,15 +55,19 @@ function d1WithWriteBeforeFirstBatch(d1: D1Database, competing: () => Promise<un
   }) as D1Database;
 }
 
-async function insertTreatmentRule(): Promise<void> {
+async function insertRule(id: string, variantId: string): Promise<void> {
   await local.d1
     .prepare(
       `INSERT INTO targeting_rules (
          id, app_id, environment_id, flag_id, priority, conditions, variant_id, created_at, updated_at
        ) VALUES (?, ?, ?, ?, 0, '[]', ?, ?, ?)`,
     )
-    .bind(RULE_ID, seed.a.appId, seed.a.environmentId, seed.a.flagId, TREATMENT_ID, NOW, NOW)
+    .bind(id, seed.a.appId, seed.a.environmentId, seed.a.flagId, variantId, NOW, NOW)
     .run();
+}
+
+async function insertTreatmentRule(): Promise<void> {
+  await insertRule(RULE_ID, TREATMENT_ID);
 }
 
 async function seedFlagConfig(): Promise<void> {
@@ -209,7 +214,7 @@ describe("Variant delete refuses a Targeting Rule that lands in the write window
 describe("Targeting Rule replace refuses a Variant that vanished in the write window", () => {
   it("does not insert a rule after the referenced Variant is deleted", async () => {
     await seedFlagConfig();
-    await insertTreatmentRule();
+    await insertRule(CONTROL_RULE_ID, seed.a.variantId);
     const racy = createRepository(
       d1WithWriteBeforeFirstBatch(local.d1, () =>
         local.d1.prepare("DELETE FROM variants WHERE id = ?").bind(TREATMENT_ID).run(),
@@ -244,7 +249,7 @@ describe("Targeting Rule replace refuses a Variant that vanished in the write wi
       .prepare("SELECT id FROM targeting_rules WHERE app_id = ? AND flag_id = ?")
       .bind(seed.a.appId, seed.a.flagId)
       .all<{ id: string }>();
-    expect((leftover.results ?? []).map((row) => row.id)).toEqual([RULE_ID]);
+    expect((leftover.results ?? []).map((row) => row.id)).toEqual([CONTROL_RULE_ID]);
     expect(await danglingVariantIds()).toEqual([]);
   });
 });
