@@ -21,7 +21,8 @@ export interface CliCommandDefinition {
     | "env_policy_set"
     | "cloudflare_setup"
     | "cloudflare_status"
-    | "cloudflare_remove";
+    | "cloudflare_remove"
+    | "flag_targeting_rules_add";
 }
 
 function needsAppFromPath(path: string): boolean {
@@ -71,6 +72,14 @@ function getRoutePath(operationId: string): string {
 const API_COMMANDS = buildApiCommands();
 
 const PRESENTATION_ALIASES: readonly CliCommandDefinition[] = [
+  {
+    operationId: "flag_targeting_rules_replace",
+    path: ["flag-targeting-rules", "add"],
+    needsApp: true,
+    needsEnvironment: true,
+    supportsConfirm: true,
+    kind: "flag_targeting_rules_add",
+  },
   {
     operationId: "environments_get",
     path: CLI_PRESENTATION_ALIAS_PATHS.environments_get,

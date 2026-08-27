@@ -80,6 +80,17 @@ describe("cli command parity", () => {
     expect(findCommand(["flags", "verify"])?.kind).toBe("flags_verify");
   });
 
+  it("registers flag-targeting-rules add as sugar over replace (SPL-405)", () => {
+    expect(findCommand(["flag-targeting-rules", "add"])).toMatchObject({
+      operationId: "flag_targeting_rules_replace",
+      needsApp: true,
+      needsEnvironment: true,
+      supportsConfirm: true,
+      kind: "flag_targeting_rules_add",
+    });
+    expect(findCommand(["flag-targeting-rules", "replace"])?.kind).toBe("api");
+  });
+
   it("wires --confirm on every APPROVAL_REVIEW_REQUIRED operation except DELETE (SPL-455)", () => {
     const approvalReviewRequired = new Set(
       routeRegistry
