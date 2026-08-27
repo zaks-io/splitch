@@ -105,11 +105,8 @@ export function makeAppMemberHandlers(deps: AppMemberHandlerDeps) {
       if (!current) return userNotFound(requestId);
 
       const role = UserRoleSchema.parse(objectBody(input).role);
-      const lastOwner = await rejectLastOwnerLoss(deps, appId, current, role, requestId);
-      if (lastOwner) return lastOwner;
-
       const updated = await deps.repo.identity.updateAppMembership(scope, userId, { role });
-      if (!updated) return userNotFound(requestId);
+      if (!updated) return failedOwnerMutation(current, role, appId, requestId);
       return Response.json(await appMemberResponse(deps, updated, app.organizationId, request));
     },
 
@@ -126,11 +123,8 @@ export function makeAppMemberHandlers(deps: AppMemberHandlerDeps) {
       const current = await deps.repo.identity.getAppMembership(scope, userId);
       if (!current) return userNotFound(requestId);
 
-      const lastOwner = await rejectLastOwnerLoss(deps, appId, current, null, requestId);
-      if (lastOwner) return lastOwner;
-
       const deleted = await deps.repo.identity.deleteAppMembership(scope, userId);
-      if (deleted === 0) return userNotFound(requestId);
+      if (deleted === 0) return failedOwnerMutation(current, null, appId, requestId);
       return Response.json({ deleted: true });
     },
   };
@@ -197,18 +191,24 @@ async function grantRefusal(
   return orgMembership ? null : userNotInOrganization(requestId);
 }
 
-async function rejectLastOwnerLoss(
-  deps: AppMemberHandlerDeps,
-  appId: string,
-  membership: AppMembershipRow,
+/**
+ * A 0-row last-owner UPDATE/DELETE is the losing side of the atomic predicate
+ * in the repository. The pre-read told us this was an owner-loss attempt, so
+ * the refusal is LAST_OWNER_REQUIRED rather than a vanishing-row 404.
+ */
+function failedOwnerMutation(
+  current: AppMembershipRow,
   nextRole: UserRole | null,
+  appId: string,
   requestId: string,
-): Promise<Response | null> {
-  if (membership.role !== "owner" || nextRole === "owner") return null;
+): Response {
+  if (current.role === "owner" && nextRole !== "owner") {
+    return lastOwnerRequired(appId, requestId);
+  }
+  return userNotFound(requestId);
+}
 
-  const owners = await deps.repo.identity.countAppOwnerMemberships(appScope(appId));
-  if (owners > 1) return null;
-
+function lastOwnerRequired(appId: string, requestId: string): Response {
   return renderError(
     {
       code: "LAST_OWNER_REQUIRED",
