@@ -1,4 +1,4 @@
-import type { ClientKey } from "@splitch/contracts";
+import { type ClientKey, DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS } from "@splitch/contracts";
 import type { envScope, Repository } from "@splitch/db";
 import {
   type CredentialCacheWriterAccess,
@@ -70,7 +70,7 @@ export async function createClientKey(
     environmentId: ctx.environmentId,
     keyMaterial: `pk_${randomHex(32)}`,
     originAllowlist: null,
-    rateLimitRps: null,
+    rateLimitRps: DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS,
     createdAt: nowIso(deps),
   });
 }

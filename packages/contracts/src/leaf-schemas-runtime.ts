@@ -244,6 +244,24 @@ export type OrganizationMember = z.infer<typeof OrganizationMemberSchema>;
 // into the public ClientKey member. Fail loud, no secret leak (ADR-0018).
 // ---------------------------------------------------------------------------
 
+/** ADR-0034 default: new Client Keys start at 100 rps, never unlimited. */
+export const DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS = 100;
+
+/**
+ * Resolve a stored Client Key `rateLimitRps` to the enforced per-second cap.
+ * `null` / omitted means the ADR default. Invalid values fail loud so a corrupt
+ * cache cannot silently disable the limiter.
+ */
+export function resolveClientKeyRateLimitRps(rateLimitRps: number | null | undefined): number {
+  if (rateLimitRps === null || rateLimitRps === undefined) {
+    return DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS;
+  }
+  if (!Number.isInteger(rateLimitRps) || rateLimitRps <= 0) {
+    throw new Error("client key rateLimitRps must be a positive integer");
+  }
+  return rateLimitRps;
+}
+
 export const ClientKeySchema = z
   .object({
     keyId: z.string(),

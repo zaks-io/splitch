@@ -1,8 +1,8 @@
-import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
 import type {
   ConvexExposureVerificationRequest,
   ConvexExposureVerificationResult,
 } from "@splitch/contracts";
+import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
 import type { HoldoverWriteAppInventoryNamespace } from "./assignment/holdover-write-app-inventory";
 import type { HoldoverWriteOutboxNamespace } from "./assignment/holdover-write-outbox";
 import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store";
@@ -51,4 +51,6 @@ export interface EvaluationApiEnv {
   SPLITCH_PLATFORM_TARGET?: string;
   SPLITCH_SOURCE_ID?: string;
   SENTRY_DSN?: string;
+  /** Cloudflare Rate Limit binding for per-credential Evaluation traffic. */
+  EVALUATION_RATE_LIMITER?: RateLimit;
 }

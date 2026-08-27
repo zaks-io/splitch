@@ -20,7 +20,6 @@ import {
   McpDelegationReplayDurableObject,
   notDelegatedResponse,
   type Principal,
-  type RateLimiter,
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
 import { AssignmentStoreDurableObject } from "./assignment/assignment-store-do";
@@ -41,6 +40,7 @@ import {
 import { makeDataPlaneAuthResolver } from "./data-plane-auth";
 import type { ConvexControlPlaneBinding, EvaluationApiEnv } from "./env";
 import { makeHttpEvaluationCommitSink } from "./evaluation-commit-sink";
+import { makeEvaluationRateLimiter } from "./evaluation-rate-limit";
 import { makeHttpEvaluationUsageSink } from "./evaluation-usage-sink";
 import { makeHttpExposureIngestSink } from "./exposure-redemption";
 import { DurableExposureRedemptionClaimStore } from "./exposure-redemption-claim";
@@ -52,7 +52,6 @@ import { runtimeKvProvider } from "./provider/runtime-provider";
 
 const service = "splitch-evaluation-api";
 
-const allowLimiter: RateLimiter = () => ({ limited: false });
 /** The operations `api.splitch.dev` may hand this Worker over the binding (ADR-0046). */
 const delegatedRoutes = routesDelegatedTo("evaluation-api");
 const holdoverWriteOutboxCleanupRoute = getRoute("holdover_write_outbox_delete");
@@ -133,7 +132,7 @@ async function handleRequest(
     door: authority ? "binding" : "public",
     authResolver: requestAuthResolver(env, url, authority),
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(env.CREDENTIAL_STORE),
-    rateLimiter: allowLimiter,
+    rateLimiter: makeEvaluationRateLimiter(env.EVALUATION_RATE_LIMITER),
     delegationBindings: {
       "event-ingest-api": env.EVENT_INGEST,
       "control-plane-api": env.CONTROL_PLANE_API,
