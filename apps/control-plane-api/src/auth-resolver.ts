@@ -10,6 +10,11 @@ import type { PanelDelegationReplayStore } from "./panel-identity-replay";
 import type { PanelSessionAccess } from "./panel-session-access";
 import { deriveBinding } from "./scope-binding";
 import type { PanelSessionStore, SessionStore } from "./session-store";
+import {
+  authorizeBearerMembership,
+  requireTokenMembershipAccess,
+  type TokenMembershipAccess,
+} from "./token-membership";
 
 /**
  * Control-plane auth resolver (the `control-plane-token` AuthKind).
@@ -32,7 +37,13 @@ import type { PanelSessionStore, SessionStore } from "./session-store";
  *      500 — never a silent allow.)
  *   3. Session-validation hot read: a revoked session → CREDENTIAL_REVOKED. A KV
  *      fault throws (guard → 500), never a silent pass.
- *   4. Success → Principal: scopes pass through from the token, `id` = `sub`
+ *   4. Hot-validate every Organization and App membership axis the token carries.
+ *      A removed or role-incompatible membership is refused before route scope
+ *      checks. Tokens with no membership axes (service credentials whose
+ *      authority does not derive from membership) skip this read. A missing
+ *      membership port or a thrown D1 membership read fails loud (guard → 500)
+ *      and never produces a principal.
+ *   5. Success → Principal: scopes pass through from the token, `id` = `sub`
  *      (audit/user_id), Org/App/Env binding derived from the scopes.
  *
  * The resolver returns typed failures (it does NOT throw for the ordinary
@@ -59,6 +70,12 @@ const PANEL_AUTH_DOOR: AuthDoor = "id_jag";
 export interface ControlPlaneAuthDeps {
   verifier: JwksVerifier;
   sessions: SessionStore;
+  /**
+   * Live Org/App membership recheck for human/agent access tokens. Required on
+   * every resolver. Tokens with no membership axes skip the read; a missing
+   * port throws instead of minting a principal.
+   */
+  membershipAccess: TokenMembershipAccess;
   /** Clock seam (seconds since epoch); defaults to wall clock. */
   now?: () => number;
 }
@@ -128,6 +145,13 @@ async function resolveBearerPrincipal(
   if (await deps.sessions.isRevoked(verified.sub)) {
     return { ok: false as const, reason: "CREDENTIAL_REVOKED" as const };
   }
+
+  const membership = await authorizeBearerMembership(
+    requireTokenMembershipAccess(deps.membershipAccess),
+    verified.sub,
+    verified.scopes,
+  );
+  if (membership) return membership;
 
   const binding = deriveBinding(verified.scopes);
   return {

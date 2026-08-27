@@ -245,6 +245,7 @@ function createTestApp(
         return false;
       },
     },
+    membershipAccess: { authorize: async () => true },
   });
   const rateLimiter: RateLimiter = () => ({ limited: false });
   const repo = repoOverride ?? createRepository(bindings.d1);

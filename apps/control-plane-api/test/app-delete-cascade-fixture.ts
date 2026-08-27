@@ -229,6 +229,7 @@ export async function makeCascadeHarness(): Promise<CascadeHarness> {
     authResolver: makeControlPlaneAuthResolver({
       verifier,
       sessions: makeSessionStore(bindings.kv),
+      membershipAccess: { authorize: async () => true },
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,

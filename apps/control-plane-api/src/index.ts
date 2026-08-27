@@ -47,6 +47,7 @@ import { panelOverviewRead } from "./panel-overview";
 import { panelSettingsRead } from "./panel-settings";
 import { runControlPlaneScheduled } from "./scheduled";
 import { makeSessionStore } from "./session-store";
+import { makeTokenMembershipAccess, withBearerMembershipCheck } from "./token-membership";
 import { unauthorized } from "./unauthorized";
 
 const service = "splitch-control-plane-api";
@@ -176,12 +177,14 @@ async function handleRequest(
   });
 
   const repo = createRepository(env.DB);
+  const membershipAccess = makeTokenMembershipAccess(repo);
   const panelProtocol: PanelProtocol =
     typeof authMode === "object" || authMode === "mcp" ? "none" : authMode;
   const panelAuthResolver = makeControlPlaneAuthResolver(
     {
       verifier,
       sessions: makeSessionStore(env.SESSION_STORE),
+      membershipAccess,
     },
     controlPanelAuthOptions(env, repo, panelProtocol),
   );
@@ -189,13 +192,16 @@ async function handleRequest(
     typeof authMode === "object"
       ? delegatedAuthResolver(authMode.identity)
       : authMode === "mcp"
-        ? makeMcpDelegationAuthResolver({
-            surface: "control-plane-api",
-            secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
-            replayGuard: makeDurableMcpDelegationReplayGuard(
-              requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
-            ),
-          })
+        ? withBearerMembershipCheck(
+            makeMcpDelegationAuthResolver({
+              surface: "control-plane-api",
+              secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
+              replayGuard: makeDurableMcpDelegationReplayGuard(
+                requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
+              ),
+            }),
+            membershipAccess,
+          )
         : panelAuthResolver;
   const panelResponse = await handleSignedControlPanelRequest(
     request,

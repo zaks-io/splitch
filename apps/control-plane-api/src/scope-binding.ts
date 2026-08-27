@@ -28,6 +28,15 @@ export interface ScopeBinding {
   environmentId: string | null;
 }
 
+export type MembershipRole = "owner" | "admin" | "member";
+
+/** One Organization or App axis carried by a human/agent access token. */
+export interface MembershipClaim {
+  axis: "org" | "app";
+  id: string;
+  role: MembershipRole;
+}
+
 const APP_SCOPE = /^app:([^:]+):(owner|admin|member)$/;
 const ORG_SCOPE = /^org:([^:]+):(owner|admin|member)$/;
 
@@ -59,6 +68,31 @@ export function deriveBinding(scopes: readonly string[]): ScopeBinding {
 /** Return every Organization identifier named by a control-plane token. */
 export function organizationIdsInScopes(scopes: readonly string[]): Set<string> {
   return idsInScopes(scopes, ORG_SCOPE);
+}
+
+/** Membership axes a human/agent token claims. Other scopes are ignored. */
+export function membershipClaimsInScopes(scopes: readonly string[]): MembershipClaim[] {
+  const claims: MembershipClaim[] = [];
+  for (const scope of scopes) {
+    const org = ORG_SCOPE.exec(scope);
+    if (org) {
+      claims.push({
+        axis: "org",
+        id: org[1] as string,
+        role: org[2] as MembershipRole,
+      });
+      continue;
+    }
+    const app = APP_SCOPE.exec(scope);
+    if (app) {
+      claims.push({
+        axis: "app",
+        id: app[1] as string,
+        role: app[2] as MembershipRole,
+      });
+    }
+  }
+  return claims;
 }
 
 /** Build the exact App admin scope string used by admin-only route gates. */

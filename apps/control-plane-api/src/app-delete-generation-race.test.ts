@@ -217,6 +217,7 @@ function createTestApp(
         return false;
       },
     },
+    membershipAccess: { authorize: async () => true },
   });
   const rateLimiter: RateLimiter = () => ({ limited: false });
   return createApp({

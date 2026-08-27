@@ -128,6 +128,7 @@ function deps(verify = async () => null) {
     sessions: {
       isRevoked: async () => false,
     } as SessionStore,
+    membershipAccess: { authorize: async () => true },
     now: () => NOW * 1000,
   };
 }

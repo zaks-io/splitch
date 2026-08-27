@@ -59,8 +59,16 @@ Organization route co-scopes on `:orgId` as usual.
 1. Verify JWT signature as RS256 against the configured Auth API `AUTH_JWKS_URI`
 2. Assert `aud` exactly matches the protected resource handling the request
 3. Assert `exp` not passed
-4. Extract `scopes`; match against required scope for the requested operation
-5. Extract `sub` as `user_id` for audit logging
+4. Session-validation hot read: a revoked session is `CREDENTIAL_REVOKED`
+5. Hot-validate every Organization and App membership axis the token carries.
+   This runs on the public bearer path and again on the MCP Control Plane
+   door after the delegation is verified (delegation copies minted scopes;
+   live membership is still required). A removed or role-incompatible
+   membership is refused before route scope checks. Tokens whose authority
+   does not derive from membership (API Key, Client Key, and tokens with no
+   `org:`/`app:` axes) keep their existing path.
+6. Extract `scopes`; match against required scope for the requested operation
+7. Extract `sub` as `user_id` for audit logging
 
 ## Trusted IdP allow-list
 

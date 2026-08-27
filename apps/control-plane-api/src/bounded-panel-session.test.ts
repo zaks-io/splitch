@@ -94,6 +94,7 @@ function deps() {
   return {
     verifier: { verify: async () => null } as unknown as JwksVerifier,
     sessions: { isRevoked: async () => false },
+    membershipAccess: { authorize: async () => true },
     now: () => NOW * 1000,
   };
 }

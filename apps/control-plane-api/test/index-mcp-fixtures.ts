@@ -47,6 +47,7 @@ export async function setupMcpDoorTestEnv(): Promise<ControlPlaneApiEnv> {
     ...env,
     CONTROL_PLANE_ORIGIN: AUDIENCE,
     MCP_CONTROL_PLANE_DELEGATION_SECRET: MCP_DELEGATION_SECRET,
+    SPLITCH_PLATFORM_TARGET: "local",
   } as ControlPlaneApiEnv;
 }
 

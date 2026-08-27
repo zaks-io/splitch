@@ -65,6 +65,7 @@ beforeEach(async () => {
       authResolver: makeControlPlaneAuthResolver({
         verifier,
         sessions: makeSessionStore(bindings.kv),
+        membershipAccess: { authorize: async () => true },
         now: () => NOW_MS,
       }),
       rateLimiter: allowLimiter,

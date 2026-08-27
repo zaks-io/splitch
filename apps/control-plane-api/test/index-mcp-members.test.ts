@@ -39,11 +39,7 @@ describe("index.ts: MCP service-binding boundary", () => {
       tokenVerifier: {
         verify: async () => ({
           subject: OWNER,
-          scopes: [
-            `app:${TENANT_A.appId}:admin`,
-            "app:app_unrelated:owner",
-            "org:org_unrelated:owner",
-          ],
+          scopes: [`app:${TENANT_A.appId}:admin`],
           authDoor: "id_jag",
         }),
       },

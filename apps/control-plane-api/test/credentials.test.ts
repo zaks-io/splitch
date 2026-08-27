@@ -73,6 +73,7 @@ function makeApp(bindings: LocalBindings, signer: FixtureSigner, credentialStore
     authResolver: makeControlPlaneAuthResolver({
       verifier,
       sessions: makeSessionStore(bindings.kv),
+      membershipAccess: { authorize: async () => true },
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,
@@ -119,9 +120,7 @@ async function readCache(kv: KVNamespace, key: string) {
   return cacheEnvelope.parse(JSON.parse(raw));
 }
 
-async function bodyOf(res: Response): Promise<ErrorResponse> {
-  return (await res.json()) as ErrorResponse;
-}
+const bodyOf = async (res: Response): Promise<ErrorResponse> => (await res.json()) as ErrorResponse;
 
 describe("control-plane credential endpoints", () => {
   it("round-trips Client Key and API Key lifecycle with KV write-through", async () => {

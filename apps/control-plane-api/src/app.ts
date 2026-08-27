@@ -49,10 +49,13 @@ import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
  * control-plane-token resolver under its AuthKind and mounts the routes; the
  * guard does the rest.
  *
- * Authorization for App reads is the token's App co-scope binding: the guard
- * rejects a principal not bound to the path's App with FORBIDDEN BEFORE the
- * handler (and thus before any repository call). Org routes layer live D1
- * membership checks in their owning handler module (ADR-0022).
+ * Authorization for App reads is the token's App co-scope binding plus the
+ * resolver's live membership recheck: a removed or role-incompatible membership
+ * is refused before the guard, so a stale App-scoped token cannot reach the
+ * handler. The guard still rejects a principal not bound to the path's App with
+ * FORBIDDEN BEFORE the handler (and thus before any repository call). Org
+ * routes also layer live D1 membership checks in their owning handler module
+ * (ADR-0022).
  */
 
 export interface AppDeps {
