@@ -11,7 +11,8 @@ import { controlPlaneRoute, withRequiredScopes } from "../src/routes";
 import { appAdminScope } from "../src/scope-binding";
 import { makeSessionStore, revocationKey } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
-import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
+import { seedAppMember, seedOrgApp, seedOrgMember } from "../src/test-seeds";
+import { makeTokenMembershipAccess } from "../src/token-membership";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 /**
@@ -73,7 +74,11 @@ beforeAll(async () => {
   const bindings = await makeLocalBindings();
   await seedOrgApp(bindings.d1, PAYMENTS);
   await seedOrgApp(bindings.d1, ANALYTICS);
+  await seedOrgMember(bindings.d1, { orgId: PAYMENTS.orgId, userId: ALICE, role: "admin" });
+  await seedOrgMember(bindings.d1, { orgId: ANALYTICS.orgId, userId: BOB, role: "member" });
   await seedOrgMember(bindings.d1, { orgId: PAYMENTS.orgId, userId: CAROL, role: "member" });
+  await seedAppMember(bindings.d1, { appId: PAYMENTS.appId, userId: ALICE, role: "admin" });
+  await seedAppMember(bindings.d1, { appId: ANALYTICS.appId, userId: BOB, role: "member" });
 });
 
 beforeEach(async () => {
@@ -83,14 +88,16 @@ beforeEach(async () => {
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
+  const repo = createRepository(bindings.d1);
   const deps = {
     authResolver: makeControlPlaneAuthResolver({
       verifier,
       sessions: makeSessionStore(bindings.kv),
+      membershipAccess: makeTokenMembershipAccess(repo),
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,
-    repo: createRepository(bindings.d1),
+    repo,
   };
 
   const app = createApp(deps);
@@ -250,6 +257,7 @@ describe("control-plane auth middleware: fail-loud KV fault", () => {
       authResolver: makeControlPlaneAuthResolver({
         verifier,
         sessions: makeSessionStore(faultingKv),
+        membershipAccess: makeTokenMembershipAccess(createRepository(h.bindings.d1)),
         now: () => NOW_MS,
       }),
       rateLimiter: allowLimiter,

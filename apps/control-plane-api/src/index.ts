@@ -47,6 +47,7 @@ import { panelOverviewRead } from "./panel-overview";
 import { panelSettingsRead } from "./panel-settings";
 import { runControlPlaneScheduled } from "./scheduled";
 import { makeSessionStore } from "./session-store";
+import { makeTokenMembershipAccess } from "./token-membership";
 import { unauthorized } from "./unauthorized";
 
 const service = "splitch-control-plane-api";
@@ -182,6 +183,7 @@ async function handleRequest(
     {
       verifier,
       sessions: makeSessionStore(env.SESSION_STORE),
+      membershipAccess: makeTokenMembershipAccess(repo),
     },
     controlPanelAuthOptions(env, repo, panelProtocol),
   );

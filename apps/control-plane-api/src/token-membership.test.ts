@@ -1,0 +1,128 @@
+import { appScope } from "@splitch/db";
+import { describe, expect, it, vi } from "vitest";
+import { authorizeBearerMembership, makeTokenMembershipAccess } from "./token-membership";
+
+const USER = "user_membership_recheck";
+const ORG = "org_membership_recheck";
+const APP = "app_membership_recheck";
+
+describe("authorizeBearerMembership", () => {
+  it("skips tokens whose authority does not derive from membership", async () => {
+    const authorize = vi.fn();
+    const refused = await authorizeBearerMembership({ authorize }, USER, ["service:smoke"]);
+    expect(refused).toBeNull();
+    expect(authorize).not.toHaveBeenCalled();
+  });
+
+  it("skips the read when no membership port is wired and no axes are present", async () => {
+    await expect(authorizeBearerMembership(undefined, USER, [])).resolves.toBeNull();
+  });
+
+  it("refuses a claimed membership the port rejects", async () => {
+    const refused = await authorizeBearerMembership({ authorize: async () => false }, USER, [
+      `app:${APP}:admin`,
+    ]);
+    expect(refused).toEqual({
+      ok: false,
+      reason: "UNAUTHORIZED",
+      error: {
+        code: "FORBIDDEN",
+        message: "live membership is required",
+        details: {},
+      },
+    });
+  });
+
+  it("passes a claimed membership the port accepts", async () => {
+    await expect(
+      authorizeBearerMembership({ authorize: async () => true }, USER, [`org:${ORG}:member`]),
+    ).resolves.toBeNull();
+  });
+});
+
+describe("makeTokenMembershipAccess", () => {
+  it("accepts an App claim only when both App and owning-Org memberships hold", async () => {
+    const access = makeTokenMembershipAccess(
+      identity({
+        appRole: "admin",
+        orgForApp: { role: "member" },
+      }),
+    );
+    await expect(access.authorize(USER, [{ axis: "app", id: APP, role: "admin" }])).resolves.toBe(
+      true,
+    );
+  });
+
+  it("rejects an App claim after Org removal even if the App row remains", async () => {
+    const access = makeTokenMembershipAccess(
+      identity({
+        appRole: "admin",
+        orgForApp: null,
+      }),
+    );
+    await expect(access.authorize(USER, [{ axis: "app", id: APP, role: "admin" }])).resolves.toBe(
+      false,
+    );
+  });
+
+  it("rejects a role-incompatible App claim", async () => {
+    const access = makeTokenMembershipAccess(
+      identity({
+        appRole: "member",
+        orgForApp: { role: "member" },
+      }),
+    );
+    await expect(access.authorize(USER, [{ axis: "app", id: APP, role: "admin" }])).resolves.toBe(
+      false,
+    );
+  });
+
+  it("rejects a missing Org claim", async () => {
+    const access = makeTokenMembershipAccess(identity({ orgRole: null }));
+    await expect(access.authorize(USER, [{ axis: "org", id: ORG, role: "admin" }])).resolves.toBe(
+      false,
+    );
+  });
+
+  it("accepts an Org claim when live role still covers the minted role", async () => {
+    const access = makeTokenMembershipAccess(identity({ orgRole: "owner" }));
+    await expect(access.authorize(USER, [{ axis: "org", id: ORG, role: "admin" }])).resolves.toBe(
+      true,
+    );
+  });
+
+  it("looks up App membership through the tenant scope, never a bare app id", async () => {
+    const getAppMembership = vi.fn(async () => ({ role: "member" }));
+    const access = makeTokenMembershipAccess(
+      identity({
+        getAppMembership,
+        orgForApp: { role: "member" },
+      }),
+    );
+    await access.authorize(USER, [{ axis: "app", id: APP, role: "member" }]);
+    expect(getAppMembership).toHaveBeenCalledWith(appScope(APP), USER);
+  });
+});
+
+function identity(options: {
+  appRole?: string | null;
+  orgRole?: string | null;
+  orgForApp?: { role: string } | null;
+  getAppMembership?: (
+    scope: ReturnType<typeof appScope>,
+    userId: string,
+  ) => Promise<{ role: string } | null>;
+}) {
+  return {
+    identity: {
+      getOrgMembership: async () =>
+        options.orgRole === undefined || options.orgRole === null
+          ? null
+          : { role: options.orgRole },
+      getOrgMembershipForApp: async () => options.orgForApp ?? null,
+      getAppMembership:
+        options.getAppMembership ??
+        (async () => (options.appRole ? { role: options.appRole } : null)),
+    },
+  };
+}
