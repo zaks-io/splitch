@@ -12,6 +12,16 @@ export type DocumentedErrorCode = ErrorCode | SdkClientErrorCode | CliClientErro
 export type ErrorSurface = "api" | "sdk" | "cli";
 
 export interface ErrorDoc {
+  /**
+   * One imperative sentence, short enough to print on a terminal line and read
+   * aloud in an MCP result. Required on every wire `ErrorCode` and absent on the
+   * `SDK_`/`CLI_` families, whose remediation is written at the call site that
+   * raises them: that site can name the file, host, or flag involved, and a
+   * per-code string here would replace specific copy with a generic one.
+   * Surface-specific instructions (a CLI flag, an MCP argument) belong to the
+   * surface, not here.
+   */
+  readonly remediation?: string;
   /** The condition that produced the code, in one sentence. */
   readonly cause: string;
   /** The next action that clears it. */
