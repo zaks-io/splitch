@@ -19,9 +19,7 @@ npm install @splitch/cloudflare
 npm install --global @splitch/cli
 ```
 
-Node 24 or newer for the CLI that drives setup, and `pnpm` on your PATH: setup shells out to
-`pnpm exec wrangler`, so an npm- or yarn-only project needs pnpm installed before it can run.
-The package itself runs in the Workers runtime.
+Node 24 or newer for the CLI that drives setup. The package itself runs in the Workers runtime.
 
 ## Setup
 
@@ -30,7 +28,7 @@ Setup is one command. Before running it you need:
 | Requirement                                        | Why                                                                          |
 | -------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `SPLITCH_API_KEY` exported                         | The Environment's API Key. The name is exact; setup reads no other variable. |
-| Wrangler 4 in the app                              | Setup shells out to `pnpm exec wrangler`, so pnpm must resolve it.           |
+| Wrangler 4                                         | Setup runs the App's own Wrangler, or the `wrangler` on your PATH.           |
 | `wrangler login`                                   | Setup deploys the integration Worker into your account.                      |
 | An application `wrangler.jsonc` or `wrangler.json` | Setup adds the `SPLITCH` service binding to it.                              |
 
