@@ -203,7 +203,7 @@ export async function executeApiOperation(
   invocation: ParsedInvocation,
   deps: CliDeps,
   io: CliIo,
-  project?: (data: unknown) => unknown,
+  project?: (data: unknown) => unknown | Promise<unknown>,
 ): Promise<CliResult> {
   try {
     const payload = await withAuthorizationRetry(
@@ -225,11 +225,13 @@ export async function executeApiOperation(
       operationBinding(input),
     );
     if (!payload.ok) {
-      emit(io, invocation.flags.json, payload.error);
+      // `writeServerError` owns both channels: the enriched JSON on stdout and
+      // the prose on stderr. Emitting `payload.error` here too would put the
+      // raw wire shape and the enriched one on the same stream.
       writeServerError(io, payload.error, operationId);
       return { exitCode: EXIT_API, payload: payload.error };
     }
-    const projected = project ? project(payload.data) : payload.data;
+    const projected = project ? await project(payload.data) : payload.data;
     emit(io, invocation.flags.json, projected);
     // Keyed off payload shape, not operationId: any command that returns an
     // Approval Request (or list) must surface a recorded stale discard.
@@ -314,5 +316,9 @@ export function writeServerError(io: CliIo, error: ErrorResponse, operationId: s
     code: parsedCode.data,
     causeSummary: error.message,
     remediation: remediationForServerError(error, commandSupportsConfirm(operationId)),
+    // `details` carries the fields a caller has to act on (approvalRequestId,
+    // frozenFields, policyContexts). Prose can only name some of them, so the
+    // whole object travels and `--json` surfaces it verbatim.
+    details: error.details,
   });
 }

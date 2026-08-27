@@ -129,7 +129,7 @@ describe("CLI fatal stderr contract", () => {
     expect(error).toHaveBeenCalledWith(expect.stringContaining("CLI_NOT_AUTHENTICATED"));
   });
 
-  it("preserves JSON stdout while writing the server code to stderr", async () => {
+  it("enriches the server refusal on stdout while keeping the prose on stderr", async () => {
     const { dir, credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const serverError = jsonError("APPROVAL_REVIEW_REQUIRED", "approval review required");
@@ -151,9 +151,66 @@ describe("CLI fatal stderr contract", () => {
         fetch: transport.fetch,
       }),
     ).toBe(EXIT_API);
-    expect(log).toHaveBeenCalledWith(JSON.stringify(serverError));
+    // `message` is the server's text verbatim: the same refusal read over MCP
+    // must compare equal (scripts/lib/cli-mcp-shared-operation.ts).
+    expect(JSON.parse(log.mock.calls.join(""))).toEqual({
+      code: "APPROVAL_REVIEW_REQUIRED",
+      message: serverError.message,
+      remediation: expect.stringContaining("apr_01J00000000000000000000000"),
+      docsUrl: "https://splitch.dev/docs/error/APPROVAL_REVIEW_REQUIRED",
+      details: serverError.details,
+    });
     expect(error).toHaveBeenCalledWith(expect.stringContaining("APPROVAL_REVIEW_REQUIRED"));
     expect(error).toHaveBeenCalledWith(expect.stringContaining("Remediation:"));
+  });
+
+  it("gives a CLI-local refusal the same stdout shape as a server refusal", async () => {
+    const { dir, credentialPath } = await makeTempHome();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(
+      await runCli(["flags", "list", "--json", "--app", "app_1"], { cwd: dir, credentialPath }),
+    ).toBe(EXIT_AUTH);
+    expect(JSON.parse(log.mock.calls.join(""))).toEqual({
+      code: "CLI_NOT_AUTHENTICATED",
+      message: expect.any(String),
+      remediation: expect.stringContaining("splitch login"),
+      docsUrl: "https://splitch.dev/docs/error/CLI_NOT_AUTHENTICATED",
+      details: null,
+    });
+  });
+
+  /**
+   * `--json` is read from raw argv so the sites that run before (or instead of)
+   * a successful parse answer in the same shape. The human usage block would
+   * make stdout unparseable, so it is suppressed rather than appended.
+   */
+  it("answers the pre-parse error sites in JSON and drops the usage block", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await runCli(["nonsense", "list", "--json"])).toBe(EXIT_USAGE);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(log.mock.calls.join(""))).toEqual({
+      code: "CLI_USAGE_INVALID",
+      message: expect.stringContaining("nonsense"),
+      remediation: expect.any(String),
+      docsUrl: "https://splitch.dev/docs/error/CLI_USAGE_INVALID",
+      details: null,
+    });
+  });
+
+  it("leaves the human path byte-identical without --json", async () => {
+    const { dir, credentialPath } = await makeTempHome();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await runCli(["flags", "list", "--app", "app_1"], { cwd: dir, credentialPath })).toBe(
+      EXIT_AUTH,
+    );
+    expect(log).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("CLI_NOT_AUTHENTICATED"));
   });
 
   it("wraps credential-store failures with a stable code", async () => {

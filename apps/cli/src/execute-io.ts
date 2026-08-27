@@ -25,6 +25,14 @@ function isPolicyProjection(payload: unknown): payload is { policy: EnvironmentP
   );
 }
 
+/**
+ * `--json` is parsed per invocation but every error site writes through `CliIo`,
+ * so the mode rides on the io rather than being threaded through ~28 call sites.
+ */
+export function withJsonMode(io: CliIo, json: boolean): CliIo {
+  return { ...io, json };
+}
+
 export function consoleIo(): CliIo {
   return {
     log: (line) => {

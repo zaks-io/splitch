@@ -81,7 +81,8 @@ export const idempotencyTopic: SdkTopic = {
 export const failuresTopic: SdkTopic = {
   slug: "failures",
   title: "Failure behavior",
-  summary: "Evaluation never throws and never hides. Peek throws.",
+  summary:
+    "Server evaluation never throws and never hides. Peek throws, and so does a browser read before init().",
   blocks: [
     {
       kind: "prose",
@@ -90,11 +91,20 @@ export const failuresTopic: SdkTopic = {
     { kind: "heading", text: "evaluate, evaluateDetails, verify" },
     {
       kind: "prose",
-      text: 'These never throw and never retry. On any failure (HTTP error, timeout, network error, unparseable body) they return your `defaultValue` (or `false` when you gave none), log loudly through `logger.error`, and report `reason: "ERROR"` plus an `errorCode` in `ResolutionDetails`.',
+      text: 'On the server client these never throw and never retry. On any failure (HTTP error, timeout, network error, unparseable body) they return your `defaultValue` (or `false` when you gave none), log loudly through `logger.error`, and report `reason: "ERROR"` plus an `errorCode` in `ResolutionDetails`.',
     },
     {
       kind: "prose",
       text: "The default value is returned so your request path keeps serving, and the loud log plus the `ERROR` reason are what stop that from becoming a silent outage. If you only read the value, you cannot tell a resolved `false` from a fallback `false`: read `reason` when the difference matters.",
+    },
+    { kind: "heading", text: "The browser client has one throw" },
+    {
+      kind: "prose",
+      text: "The browser client resolves from a payload it fetched in `init()`, so there is nothing to fall back to until that payload exists. `evaluate`, `evaluateDetails`, and the `useFlag` / `useFlagDetails` hooks throw [SDK_NOT_INITIALIZED](/docs/error/SDK_NOT_INITIALIZED) when they are read before `init()` resolves, and `init()` itself throws on a failed fetch. Once it has resolved, reads follow the rule above and never throw: a revalidation failure marks the payload degraded rather than clearing it.",
+    },
+    {
+      kind: "prose",
+      text: "In React that throw surfaces during render, so await `init()` before mounting `SplitchProvider`, or render the tree behind an error boundary.",
     },
     { kind: "heading", text: "peekVariant" },
     {

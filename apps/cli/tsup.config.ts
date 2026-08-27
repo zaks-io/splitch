@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     cli: "src/bin.ts",
     index: "src/index.ts",
+    commands: "src/command-reference.ts",
   },
   outDir: "dist",
   format: ["esm"],

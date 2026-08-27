@@ -127,11 +127,18 @@ request so the platform can deduplicate the Exposure.
 
 ## Failure behavior
 
-- `evaluate` / `evaluateDetails` / `verify` never throw and never retry. On any
-  failure (HTTP error, timeout, network error, unparseable body) they return
-  your `defaultValue` (or `false` when you gave none), log loudly through
-  `logger.error`, and report `reason: "ERROR"` plus an `errorCode` in
-  `ResolutionDetails`. Branch on `reason` when you need to react.
+- `evaluate` / `evaluateDetails` / `verify` on the server client never throw and
+  never retry. On any failure (HTTP error, timeout, network error, unparseable
+  body) they return your `defaultValue` (or `false` when you gave none), log
+  loudly through `logger.error`, and report `reason: "ERROR"` plus an
+  `errorCode` in `ResolutionDetails`. Branch on `reason` when you need to react.
+- The browser client has one throw: it resolves from the payload `init()`
+  fetched, so `evaluate`, `evaluateDetails`, and the `useFlag` /
+  `useFlagDetails` hooks throw `SDK_NOT_INITIALIZED` when read before `init()`
+  resolves, and `init()` itself throws on a failed fetch. In React that surfaces
+  during render, so await `init()` before mounting `SplitchProvider`. After
+  init, reads never throw: a failed revalidation marks the payload degraded
+  rather than clearing it.
 - `peekVariant` and `evaluateAll` throw a `SplitchSdkError` carrying `code`,
   `status`, and `docsUrl`. Every code resolves to a page at
   `https://splitch.dev/docs/error/{code}`, and the error message prints it.
