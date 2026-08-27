@@ -9,7 +9,7 @@ import type { ParsedInvocation } from "./parse-args.js";
 export interface ParsedWhenCondition {
   readonly attribute: string;
   readonly operator: "eq";
-  readonly value: string | number | boolean;
+  readonly value: string;
 }
 
 export interface FlagTargetingRulesAddInput {
@@ -62,16 +62,7 @@ export function parseWhenCondition(token: string): ParsedWhenCondition {
   if (!attribute || !rawValue) {
     throw malformedWhen(token);
   }
-  return { attribute, operator: "eq", value: parseWhenValue(rawValue) };
-}
-
-export function parseWhenValue(raw: string): string | number | boolean {
-  if (raw === "true") return true;
-  if (raw === "false") return false;
-  if (/^-?\d+$/.test(raw) || /^-?\d+\.\d+$/.test(raw)) {
-    return Number(raw);
-  }
-  return raw;
+  return { attribute, operator: "eq", value: rawValue };
 }
 
 export function resolveVariantByName(
@@ -188,6 +179,6 @@ function malformedWhen(token: string): CliInputError {
     `--when must be attr=value, but received "${token}"`,
     "when",
     "malformed_when",
-    "Pass --when attr=value (equality). Repeat --when to AND Conditions. For other operators, use flag-targeting-rules replace",
+    "Pass --when attr=value (string equality). Repeat --when to AND Conditions. Number or boolean Condition values require flag-targeting-rules replace --body-json",
   );
 }

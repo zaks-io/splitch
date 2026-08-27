@@ -131,7 +131,7 @@ describe("flag-targeting-rules add (SPL-405)", () => {
           priority: 1,
           conditions: [
             { attribute: "plan", operator: "eq", value: "enterprise" },
-            { attribute: "beta", operator: "eq", value: true },
+            { attribute: "beta", operator: "eq", value: "true" },
           ],
           variantId: "var_on",
         },
@@ -206,6 +206,7 @@ describe("flag-targeting-rules add (SPL-405)", () => {
     expect(addHelp).toContain("--serve <variant>");
     expect(addHelp).toContain("flag-targeting-rules replace");
     expect(addHelp).toContain("last-write-wins");
+    expect(addHelp).toContain("Object.is");
     expect(addHelp).not.toContain("Request body (--body-json):");
 
     const replaceHelp = renderCommandHelp(replace);

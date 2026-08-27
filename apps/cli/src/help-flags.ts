@@ -92,7 +92,7 @@ function operationFlags(command: CliCommandDefinition): HelpFlag[] {
         "--when <attr=value>",
         "string (repeatable)",
         "none",
-        "Equality Condition. Repeat to AND more Conditions.",
+        "String equality Condition. Repeat to AND more. Number or boolean values require replace --body-json.",
       ),
       flag(
         "--serve <variant>",

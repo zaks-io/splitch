@@ -70,7 +70,7 @@ export const flagsDoc = {
     },
     {
       kind: "prose",
-      text: "Repeat `--when` to AND Conditions. `add` generates the rule id, resolves the Variant by name, and appends via replace (last-write-wins). For Segments, non-equality operators, OR groups, reordering, or removal, hand-author the full list with `flag-targeting-rules replace --body-json`.",
+      text: "Repeat `--when` to AND Conditions. `add` generates the rule id, resolves the Variant by name, and appends via replace (last-write-wins). `--when` values are strings (evaluation uses `Object.is`); number or boolean Conditions need `flag-targeting-rules replace --body-json`. For Segments, non-equality operators, OR groups, reordering, or removal, hand-author the full list the same way.",
     },
     {
       kind: "prose",

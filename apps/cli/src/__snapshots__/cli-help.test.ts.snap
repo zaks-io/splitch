@@ -895,7 +895,7 @@ Usage:
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
-  --when <attr=value>      [type: string (repeatable); default: none] Equality Condition. Repeat to AND more Conditions.
+  --when <attr=value>      [type: string (repeatable); default: none] String equality Condition. Repeat to AND more. Number or boolean values require replace --body-json.
   --serve <variant>        [type: string; default: none] Catalog Variant name to serve when the Conditions match.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
@@ -904,7 +904,8 @@ Flags:
 
 Behavior:
   Builds one equality Targeting Rule (id, Variant name, schema) and appends it via flag-targeting-rules replace.
-  Repeat --when to AND Conditions. For Segments, non-equality operators, OR groups, reordering, or removal, use flag-targeting-rules replace.
+  Repeat --when to AND Conditions. Each value is a string (evaluation uses Object.is); shell quoting cannot change the type. Number or boolean Conditions require flag-targeting-rules replace --body-json.
+  For Segments, non-equality operators, OR groups, reordering, or removal, use flag-targeting-rules replace.
   Read-modify-write is last-write-wins: a concurrent replace can overwrite this append. The replace endpoint has no version guard.
   While a Run is live on this Flag, the write is refused with RUN_FROZEN (end the Run first).
 

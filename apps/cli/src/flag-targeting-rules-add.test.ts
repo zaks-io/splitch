@@ -6,29 +6,9 @@ import {
   nextRulePriority,
   parseFlagTargetingRulesAddInput,
   parseWhenCondition,
-  parseWhenValue,
   resolveVariantByName,
 } from "./flag-targeting-rules-add-input.js";
 import { parseInvocation } from "./parse-args.js";
-
-describe("parseWhenValue", () => {
-  it("keeps ordinary strings", () => {
-    expect(parseWhenValue("enterprise")).toBe("enterprise");
-    expect(parseWhenValue("true-blue")).toBe("true-blue");
-    expect(parseWhenValue("18px")).toBe("18px");
-  });
-
-  it("coerces exact boolean literals", () => {
-    expect(parseWhenValue("true")).toBe(true);
-    expect(parseWhenValue("false")).toBe(false);
-  });
-
-  it("coerces integers and decimals", () => {
-    expect(parseWhenValue("18")).toBe(18);
-    expect(parseWhenValue("-2")).toBe(-2);
-    expect(parseWhenValue("1.5")).toBe(1.5);
-  });
-});
 
 describe("parseWhenCondition", () => {
   it("parses attr=value into an equality Condition", () => {
@@ -49,6 +29,24 @@ describe("parseWhenCondition", () => {
       attribute: "label",
       operator: "eq",
       value: "=x",
+    });
+  });
+
+  it("keeps numeric-looking and boolean-looking values as strings", () => {
+    expect(parseWhenCondition("postalCode=001")).toEqual({
+      attribute: "postalCode",
+      operator: "eq",
+      value: "001",
+    });
+    expect(parseWhenCondition("externalId=18")).toEqual({
+      attribute: "externalId",
+      operator: "eq",
+      value: "18",
+    });
+    expect(parseWhenCondition("label=true")).toEqual({
+      attribute: "label",
+      operator: "eq",
+      value: "true",
     });
   });
 
@@ -88,7 +86,7 @@ describe("parseFlagTargetingRulesAddInput", () => {
     expect(input.variantName).toBe("on");
     expect(input.conditions).toEqual([
       { attribute: "plan", operator: "eq", value: "enterprise" },
-      { attribute: "beta", operator: "eq", value: true },
+      { attribute: "beta", operator: "eq", value: "true" },
     ]);
   });
 
@@ -161,7 +159,7 @@ describe("buildAppendedTargetingRule", () => {
       existing,
       conditions: [
         { attribute: "plan", operator: "eq", value: "enterprise" },
-        { attribute: "beta", operator: "eq", value: true },
+        { attribute: "beta", operator: "eq", value: "true" },
       ],
       variantId: "var_on",
       id: "rule_new",
@@ -174,7 +172,7 @@ describe("buildAppendedTargetingRule", () => {
       percentageRollout: null,
       conditions: [
         { attribute: "plan", operator: "eq", value: "enterprise" },
-        { attribute: "beta", operator: "eq", value: true },
+        { attribute: "beta", operator: "eq", value: "true" },
       ],
     });
   });
