@@ -7,8 +7,9 @@ import type { Principal, RateLimitDecision, RateLimiter } from "@splitch/worker-
 
 /**
  * Cloudflare Rate Limit bindings only accept a 10s or 60s window. 1000 tokens
- * per 10s is the ADR-0034 100 rps default. Tighter per-key overrides consume
- * more tokens so they exhaust the same window sooner.
+ * per 10s is the ADR-0034 100 rps default. The published `limit()` contract is
+ * `{ key }` and each call spends one token, so tighter per-key overrides debit
+ * that many documented calls against the same window.
  */
 export const EVALUATION_RATE_LIMIT_PERIOD_SECONDS = 10;
 export const EVALUATION_RATE_LIMIT_BINDING_LIMIT = 1000;
@@ -21,9 +22,7 @@ const DATA_PLANE_RATE_LIMIT_CLASSES = new Set<Exclude<RateLimitClass, "none">>([
 
 const configuredRpsByRequest = new WeakMap<Request, number>();
 
-export interface EvaluationRateLimitBinding {
-  limit(options: { key: string; increment?: number }): Promise<{ success: boolean }>;
-}
+export type EvaluationRateLimitBinding = Pick<RateLimit, "limit">;
 
 /**
  * Remember the cached per-credential cap after auth. The guard calls the
@@ -59,9 +58,7 @@ export function makeEvaluationRateLimiter(
       // Control Plane already applied the actor limiter before the hop (SPL-449).
       return { limited: false };
     }
-    if (!DATA_PLANE_RATE_LIMIT_CLASSES.has(rateLimitClass)) {
-      throw new Error(`evaluation-api: unsupported rate-limit class ${rateLimitClass}`);
-    }
+    requireDataPlaneRateLimitClass(rateLimitClass);
     if (!binding) {
       throw new Error("evaluation-api: evaluation rate-limit binding is not configured");
     }
@@ -70,11 +67,34 @@ export function makeEvaluationRateLimiter(
     if (configuredRps === undefined) {
       throw new Error("evaluation-api: credential rate-limit state is missing");
     }
-    const increment = evaluationRateLimitIncrement(configuredRps);
-    const key = evaluationRateLimitKey(principal, rateLimitClass);
-    const { success } = await (binding as EvaluationRateLimitBinding).limit({ key, increment });
-    return success ? allowed() : limited();
+    return debitEvaluationRateLimit(
+      binding,
+      evaluationRateLimitKey(principal, rateLimitClass),
+      evaluationRateLimitIncrement(configuredRps),
+    );
   };
+}
+
+function requireDataPlaneRateLimitClass(
+  rateLimitClass: Exclude<RateLimitClass, "none">,
+): asserts rateLimitClass is "api-key" | "client-key" {
+  if (!DATA_PLANE_RATE_LIMIT_CLASSES.has(rateLimitClass)) {
+    throw new Error(`evaluation-api: unsupported rate-limit class ${rateLimitClass}`);
+  }
+}
+
+async function debitEvaluationRateLimit(
+  binding: EvaluationRateLimitBinding,
+  key: string,
+  debit: number,
+): Promise<RateLimitDecision> {
+  for (let spent = 0; spent < debit; spent += 1) {
+    const { success } = await binding.limit({ key });
+    if (!success) {
+      return limited();
+    }
+  }
+  return allowed();
 }
 
 function allowed(): RateLimitDecision {

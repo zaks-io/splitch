@@ -87,7 +87,7 @@ describe("makeEvaluationRateLimiter", () => {
       ),
     ).resolves.toEqual({ limited: false });
 
-    expect(limit).toHaveBeenCalledWith({ key: `${hash}:client-key`, increment: 1 });
+    expect(limit).toHaveBeenCalledWith({ key: `${hash}:client-key` });
     expect(JSON.stringify(limit.mock.calls)).not.toContain("pk_");
     expect(evaluationRateLimitKey(principal({ id: `client_key:${hash}` }), "client-key")).toBe(
       `${hash}:client-key`,
@@ -115,21 +115,34 @@ describe("makeEvaluationRateLimiter", () => {
       }),
     );
 
-    expect(limit).toHaveBeenNthCalledWith(1, { key: `${firstHash}:client-key`, increment: 1 });
-    expect(limit).toHaveBeenNthCalledWith(2, { key: `${secondHash}:api-key`, increment: 1 });
+    expect(limit).toHaveBeenNthCalledWith(1, { key: `${firstHash}:client-key` });
+    expect(limit).toHaveBeenNthCalledWith(2, { key: `${secondHash}:api-key` });
   });
 
-  it("honors an explicit tighter override via increment", async () => {
+  it("honors an explicit tighter override by debiting more official limit() calls", async () => {
     const request = new Request("https://edge.test/api/sdk/evaluate");
     rememberCredentialRateLimitRps(request, 25);
     const limit = vi.fn(async () => ({ success: true }));
 
     await makeEvaluationRateLimiter({ limit })(input({ request }));
 
-    expect(limit).toHaveBeenCalledWith({
-      key: `${"a".repeat(64)}:client-key`,
-      increment: 4,
+    expect(limit).toHaveBeenCalledTimes(4);
+    expect(limit).toHaveBeenCalledWith({ key: `${"a".repeat(64)}:client-key` });
+  });
+
+  it("fails closed when a later debit in a tighter override is denied", async () => {
+    const request = new Request("https://edge.test/api/sdk/evaluate");
+    rememberCredentialRateLimitRps(request, 25);
+    const limit = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: false });
+
+    await expect(makeEvaluationRateLimiter({ limit })(input({ request }))).resolves.toEqual({
+      limited: true,
+      retryAfterMs: EVALUATION_RATE_LIMIT_RETRY_AFTER_MS,
     });
+    expect(limit).toHaveBeenCalledTimes(2);
   });
 
   it("returns a bounded retry window when the credential is limited", async () => {
@@ -221,9 +234,9 @@ describe("evaluation rate limiter on the public evaluate route", () => {
     });
 
     expect((await app.request("/api/sdk/evaluate", sdkRouteInit(CLIENT_KEY))).status).toBe(200);
+    expect(limit).toHaveBeenCalledTimes(4);
     expect(limit).toHaveBeenCalledWith({
       key: `${await sha256Hex(CLIENT_KEY)}:client-key`,
-      increment: 4,
     });
   });
 
@@ -239,11 +252,9 @@ describe("evaluation rate limiter on the public evaluate route", () => {
 
     expect(limit).toHaveBeenCalledWith({
       key: `${await sha256Hex(CLIENT_KEY)}:client-key`,
-      increment: 1,
     });
     expect(limit).toHaveBeenCalledWith({
       key: `${await sha256Hex(API_KEY)}:api-key`,
-      increment: 1,
     });
   });
 
@@ -257,7 +268,7 @@ describe("evaluation rate limiter on the public evaluate route", () => {
 
     const response = await app.request("/api/sdk/evaluate", sdkRouteInit(CLIENT_KEY));
     expect(response.status).toBe(200);
-    expect(limit).toHaveBeenCalledWith({ key: `${hash}:client-key`, increment: 1 });
+    expect(limit).toHaveBeenCalledWith({ key: `${hash}:client-key` });
     expect(JSON.stringify(limit.mock.calls)).not.toContain(CLIENT_KEY);
   });
 });
