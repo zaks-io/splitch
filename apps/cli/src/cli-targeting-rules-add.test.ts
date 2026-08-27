@@ -5,7 +5,12 @@ import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { renderCommandHelp, renderHelp } from "./help.js";
 import { findCommand } from "./command-registry.js";
 import { flagsListStub, scopeResolutionStubs } from "./scope-resolution-fixtures.js";
-import { FakeCliTransport, flagConfigResponse, storedCredential } from "./test-fixtures.js";
+import {
+  FakeCliTransport,
+  flagConfigResponse,
+  jsonError,
+  storedCredential,
+} from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
 afterEach(async () => {
@@ -72,6 +77,44 @@ async function runAdd(args: readonly string[], transport: FakeCliTransport): Pro
   );
 }
 
+function replaceRequest(transport: FakeCliTransport) {
+  return transport.requests.find(
+    (request) => request.method === "PUT" && request.url.includes("/targeting-rules"),
+  );
+}
+
+function flagsGetByStub(selector: string, by: "id" | "key", status: number, body: unknown) {
+  return {
+    match: (request: { method: string; url: string }) => {
+      const url = new URL(request.url);
+      return (
+        request.method === "GET" &&
+        url.pathname === `/apps/app_1/flags/${selector}` &&
+        url.searchParams.get("by") === by
+      );
+    },
+    status,
+    body,
+  };
+}
+
+function pastCeilingFlagBody() {
+  return {
+    id: "flag_past_ceiling",
+    appId: "app_1",
+    key: "past-ceiling-banner",
+    name: "Past ceiling",
+    schema: { type: "boolean" },
+    variants: [
+      { id: "var_on", name: "on", value: true },
+      { id: "var_off", name: "off", value: false },
+    ],
+    defaultVariantId: "var_off",
+    createdAt: "2026-07-03T00:00:00.000Z",
+    updatedAt: "2026-07-03T00:00:00.000Z",
+  };
+}
+
 describe("flag-targeting-rules add (SPL-405)", () => {
   it("appends one equality rule on a clean Flag", async () => {
     const transport = new FakeCliTransport([
@@ -86,10 +129,7 @@ describe("flag-targeting-rules add (SPL-405)", () => {
       EXIT_OK,
     );
 
-    const replace = transport.requests.find(
-      (request) => request.method === "PUT" && request.url.includes("/targeting-rules"),
-    );
-    expect(replace?.body).toEqual({
+    expect(replaceRequest(transport)?.body).toEqual({
       targetingRules: [
         {
           id: expect.stringMatching(/^rule_[0-9a-f]{32}$/),
@@ -120,10 +160,7 @@ describe("flag-targeting-rules add (SPL-405)", () => {
       ),
     ).toBe(EXIT_OK);
 
-    const replace = transport.requests.find(
-      (request) => request.method === "PUT" && request.url.includes("/targeting-rules"),
-    );
-    expect(replace?.body).toMatchObject({
+    expect(replaceRequest(transport)?.body).toMatchObject({
       targetingRules: [
         EXISTING_RULE,
         {
@@ -138,7 +175,61 @@ describe("flag-targeting-rules add (SPL-405)", () => {
       ],
     });
   });
+});
 
+describe("flag-targeting-rules add past a truncated catalog", () => {
+  it("resolves a Flag key beyond the flags_list page to the canonical ID", async () => {
+    const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
+      flagsListStub({
+        flags: [{ id: "flag_other", key: "other-flag", name: "Other" }],
+        readTruncated: true,
+        readLimit: 200,
+      }),
+      flagsGetByStub(
+        "past-ceiling-banner",
+        "id",
+        404,
+        jsonError("FLAG_NOT_FOUND", "flag not found"),
+      ),
+      flagsGetByStub("past-ceiling-banner", "key", 200, pastCeilingFlagBody()),
+      {
+        match: (request) =>
+          request.method === "GET" && request.url.includes("/flags/flag_past_ceiling/config"),
+        status: 200,
+        body: { ...flagConfigResponse, flagId: "flag_past_ceiling", targetingRules: [] },
+      },
+      replaceOkStub(),
+    ]);
+
+    expect(
+      await runAdd(
+        ["past-ceiling-banner", "--when", "plan=enterprise", "--serve", "on"],
+        transport,
+      ),
+    ).toBe(EXIT_OK);
+
+    const replace = replaceRequest(transport);
+    expect(replace?.url).toContain("/flags/flag_past_ceiling/targeting-rules");
+    expect(replace?.body).toMatchObject({
+      targetingRules: [
+        {
+          flagId: "flag_past_ceiling",
+          conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
+          variantId: "var_on",
+        },
+      ],
+    });
+    expect(
+      transport.requests.some(
+        (request) =>
+          request.method === "PUT" && request.url.includes("/flags/past-ceiling-banner/"),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("flag-targeting-rules add validation", () => {
   it("fails loud on an unknown Variant before any replace write", async () => {
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),

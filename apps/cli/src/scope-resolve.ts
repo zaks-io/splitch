@@ -15,6 +15,18 @@ export interface NamedResource {
 }
 
 /**
+ * Flag selector resolution. `matched` is true when `flags_list` found the
+ * selector as an ID or key. When the catalog is truncated and the selector is
+ * absent, `matched` is false and `id` is the selector verbatim — write paths
+ * that need a canonical Flag ID must follow up with explicit `flags_get`
+ * `by=id` and `by=key` lookups.
+ */
+export interface FlagSelectorResolution extends NamedResource {
+  readonly readTruncated: boolean;
+  readonly matched: boolean;
+}
+
+/**
  * Resolve `--app` / `--env` (and SPLITCH_APP / SPLITCH_ENV) selectors to
  * canonical IDs before a command issues a request. Config values are already
  * IDs from `splitch use`; only flag/env sources need this pass. Uses the same
@@ -168,16 +180,18 @@ export async function resolveEnvironmentSelector(
  * (same pattern as App key collisions).
  *
  * `flags_list` is hard-bounded with no pagination. When the page is truncated
- * and the selector is absent, fall through and pass the selector verbatim so a
- * later wire call can still try. Only `flags_get` with `?by=key` accepts a key
- * on the server; other `:flagId` routes still require a canonical id past the
- * ceiling. An untruncated miss still fails with CLI_SCOPE_UNRESOLVED.
+ * and the selector is absent, fall through with `matched: false` and the
+ * selector verbatim, plus `readTruncated: true`, so a later wire call can still
+ * try. Only `flags_get` with `?by=key` accepts a key on the server; other
+ * `:flagId` routes still require a canonical id past the ceiling. Write paths
+ * that need that id must issue explicit `flags_get` `by=id` and `by=key`
+ * lookups. An untruncated miss still fails with CLI_SCOPE_UNRESOLVED.
  */
 export async function resolveFlagSelector(
   deps: CliDeps,
   appId: string,
   selector: string,
-): Promise<NamedResource> {
+): Promise<FlagSelectorResolution> {
   const listed = await listFlagsForResolution(deps, appId);
   const byId = listed.items.find((flag) => flag.id === selector);
   const byKey = listed.items.find((flag) => flag.key === selector);
@@ -189,12 +203,14 @@ export async function resolveFlagSelector(
     });
   }
   const match = byId ?? byKey;
-  if (match) return match;
+  if (match) {
+    return { ...match, readTruncated: listed.readTruncated, matched: true };
+  }
   if (listed.readTruncated) {
     // Catalog is incomplete — cannot prove absence locally. Pass the selector
-    // through. Only flags_get with ?by=key accepts a key server-side; other
-    // :flagId routes still need a canonical id past the ceiling.
-    return { id: selector };
+    // through and keep the truncated state so callers that need a canonical
+    // id can issue flags_get ?by=id and ?by=key.
+    return { id: selector, readTruncated: true, matched: false };
   }
   throw new SplitchCliError({
     code: "CLI_SCOPE_UNRESOLVED",

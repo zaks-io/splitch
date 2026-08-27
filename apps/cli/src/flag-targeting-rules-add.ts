@@ -24,7 +24,7 @@ import {
   type FlagTargetingRulesAddInput,
 } from "./flag-targeting-rules-add-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
-import { resolveFlagSelector } from "./scope-resolve.js";
+import { type FlagSelectorResolution, resolveFlagSelector } from "./scope-resolve.js";
 import { createOperationSdks } from "./sdks.js";
 
 export async function executeFlagTargetingRulesAdd(
@@ -92,9 +92,11 @@ async function assembleReplaceInput(options: {
   readonly scope: { flagSelector: string; appId: string; environmentId: string };
 }): Promise<{ body: Record<string, unknown> } | CliResult> {
   const { addInput, command, invocation, deps, io, scope } = options;
-  const flagId = (await resolveFlagSelector(deps, scope.appId, scope.flagSelector)).id;
-  const variant = await readVariantForAdd(deps, io, scope.appId, flagId, addInput.variantName);
-  if ("exitCode" in variant) return variant;
+  const listed = await resolveFlagSelector(deps, scope.appId, scope.flagSelector);
+  const catalog = await readFlagCatalogForAdd(deps, io, scope.appId, scope.flagSelector, listed);
+  if ("exitCode" in catalog) return catalog;
+  const flagId = catalog.flag.id;
+  const variant = resolveVariantByName(catalog.flag.variants, addInput.variantName);
   const existing = await readRulesForAdd(deps, io, scope, flagId);
   if ("exitCode" in existing) return existing;
   const appended = buildAppendedTargetingRule({
@@ -116,19 +118,81 @@ async function assembleReplaceInput(options: {
   return { body };
 }
 
-async function readVariantForAdd(
+async function readFlagCatalogForAdd(
+  deps: CliDeps,
+  io: CliIo,
+  appId: string,
+  selector: string,
+  listed: FlagSelectorResolution,
+): Promise<{ flag: Flag } | CliResult> {
+  if (listed.matched) {
+    return readFlagBySelector(deps, io, appId, listed.id, "id");
+  }
+  return readFlagPastCeiling(deps, io, appId, selector);
+}
+
+async function readFlagPastCeiling(
+  deps: CliDeps,
+  io: CliIo,
+  appId: string,
+  selector: string,
+): Promise<{ flag: Flag } | CliResult> {
+  const [byId, byKey] = await Promise.all([
+    readControlPlane(deps, "flags_get", { appId, flagId: selector, by: "id" }),
+    readControlPlane(deps, "flags_get", { appId, flagId: selector, by: "key" }),
+  ]);
+  const idFlag = byId.ok ? readFlagCatalog(byId.data) : null;
+  const keyFlag = byKey.ok ? readFlagCatalog(byKey.data) : null;
+  if (idFlag && keyFlag && idFlag.id !== keyFlag.id) {
+    throw new SplitchCliError({
+      code: "CLI_SCOPE_UNRESOLVED",
+      causeSummary: `Flag selector "${selector}" matches more than one Flag on App ${appId}: id ${idFlag.id} and key of ${keyFlag.id}`,
+      remediation: "Pass the canonical Flag ID of the Flag you intend to address",
+    });
+  }
+  const flag = idFlag ?? keyFlag;
+  if (flag) return { flag };
+  const error = preferFlagLookupError(
+    byId.ok ? undefined : byId.error,
+    byKey.ok ? undefined : byKey.error,
+  );
+  writeServerError(io, error, "flags_get");
+  return { exitCode: EXIT_API, payload: error };
+}
+
+async function readFlagBySelector(
   deps: CliDeps,
   io: CliIo,
   appId: string,
   flagId: string,
-  variantName: string,
-): Promise<{ id: string } | CliResult> {
-  const flagResult = await readControlPlane(deps, "flags_get", { appId, flagId });
+  by: "id" | "key",
+): Promise<{ flag: Flag } | CliResult> {
+  const flagResult = await readControlPlane(deps, "flags_get", { appId, flagId, by });
   if (!flagResult.ok) {
     writeServerError(io, flagResult.error, "flags_get");
     return { exitCode: EXIT_API, payload: flagResult.error };
   }
-  return resolveVariantByName(readFlagCatalog(flagResult.data).variants, variantName);
+  return { flag: readFlagCatalog(flagResult.data) };
+}
+
+function preferFlagLookupError(
+  byId: ErrorResponse | undefined,
+  byKey: ErrorResponse | undefined,
+): ErrorResponse {
+  if (!byId) {
+    if (!byKey) {
+      throw new SplitchCliError({
+        code: "CLI_UNEXPECTED_ERROR",
+        causeSummary: "flags_get ID and key lookups both succeeded without a Flag catalog",
+        remediation: "Retry the command and report the flags_get response shape if it persists",
+      });
+    }
+    return byKey;
+  }
+  if (!byKey || byId.code === "FLAG_NOT_FOUND") {
+    return byKey ?? byId;
+  }
+  return byId;
 }
 
 async function readRulesForAdd(
