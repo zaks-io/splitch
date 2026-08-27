@@ -71,12 +71,14 @@ export function makeSentryIntegrationRepo(d1: D1Database) {
       if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
         throw new Error(`listInstallations: limit must be a positive integer, got ${limit}`);
       }
-      const sql =
-        limit === undefined
-          ? `${INSTALLATION_SELECT} WHERE org_id = ? ORDER BY created_at DESC`
-          : `${INSTALLATION_SELECT} WHERE org_id = ? ORDER BY created_at DESC LIMIT ?`;
       const statement =
-        limit === undefined ? d1.prepare(sql).bind(orgId) : d1.prepare(sql).bind(orgId, limit);
+        limit === undefined
+          ? d1
+              .prepare(`${INSTALLATION_SELECT} WHERE org_id = ? ORDER BY created_at DESC`)
+              .bind(orgId)
+          : d1
+              .prepare(`${INSTALLATION_SELECT} WHERE org_id = ? ORDER BY created_at DESC LIMIT ?`)
+              .bind(orgId, limit);
       const rows = await statement.all<SentryInstallationRow>();
       return rows.results;
     },
