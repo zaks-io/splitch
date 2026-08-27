@@ -45,3 +45,36 @@ export function normalizedEndpoint(value: string): string {
 export function ensureTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
+
+/**
+ * `convex_installations_create` requires both data-plane scopes, because the
+ * mounted API Key is this component's only credential: it authenticates
+ * evaluation and Metric Event delivery alike. Delivery runs after the caller's
+ * Mutation has committed, so an evaluate-only Key would let `track()` return a
+ * receipt and then send every Metric Event terminal hours later, where nobody
+ * is looking. Turn that refusal into the sentence that names the fix.
+ */
+export function installRejected(status: number, body: string): Error {
+  if (missingWriteScope(body))
+    return new Error(
+      "@splitch/convex requires an API Key holding both the data-plane:evaluate and " +
+        "data-plane:write scopes; the mounted SPLITCH_API_KEY is missing data-plane:write, " +
+        "which delivers the Metric Events track() queues. Mint a Key with both scopes, set it " +
+        `as SPLITCH_API_KEY, and rerun install. Response: ${body}`,
+    );
+  return new Error(`install Convex integration failed with HTTP ${status}: ${body}`);
+}
+
+function missingWriteScope(body: string): boolean {
+  let parsed: { code?: unknown; details?: { heldScopes?: unknown } };
+  try {
+    parsed = JSON.parse(body) as typeof parsed;
+  } catch {
+    // Not a contract error body. Report the response verbatim rather than
+    // asserting a cause it never stated.
+    return false;
+  }
+  if (parsed.code !== "INSUFFICIENT_SCOPES") return false;
+  const held = parsed.details?.heldScopes;
+  return !Array.isArray(held) || !held.includes("data-plane:write");
+}
