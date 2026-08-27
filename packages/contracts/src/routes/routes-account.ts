@@ -6,6 +6,7 @@ import {
   OrganizationResponseSchema,
   PatchOrganizationRequestSchema,
 } from "../resource-envelopes-account";
+import { listResponse } from "../wire-envelopes-core";
 import { appEnvironmentRoutes } from "./routes-app-environment";
 import {
   AddMemberRequestSchema,
@@ -24,8 +25,8 @@ const OWNER = "control-plane-api" as const;
 const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
-const OrgListResponse = z.object({ items: z.array(OrganizationResponseSchema) });
-const MemberListResponse = z.object({ items: z.array(OrganizationMemberSchema) });
+const OrgListResponse = listResponse(OrganizationResponseSchema);
+const MemberListResponse = listResponse(OrganizationMemberSchema);
 const MemberResponse = OrganizationMemberSchema;
 const MemberUpdateResponse = OrganizationMemberSchema;
 const DeletedResponse = z.object({ deleted: z.literal(true) });

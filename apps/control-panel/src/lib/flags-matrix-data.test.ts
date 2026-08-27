@@ -171,6 +171,7 @@ function catalog(environmentId: string) {
     data: {
       readTruncated: true,
       readLimit: 200,
+      cursor: null,
       items: [
         definition(
           "flag_checkout",

@@ -1,3 +1,4 @@
+import { boundListRead } from "@splitch/contracts";
 import {
   CONTROL_PANEL_DELEGATION_HEADER,
   verifyControlPanelDelegation,
@@ -14,7 +15,7 @@ describe("Control Panel Metrics transport", () => {
       requests.push(request);
       if (request.method === "DELETE") return Response.json({ deleted: true });
       if (request.method === "GET" && request.url.endsWith("/metrics")) {
-        return Response.json({ items: [metric()] });
+        return Response.json(boundListRead([metric()]));
       }
       return Response.json(metric());
     });

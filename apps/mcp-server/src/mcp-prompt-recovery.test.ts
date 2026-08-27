@@ -53,7 +53,7 @@ describe("MCP recover_from_error attention fan-out", () => {
       throw new Error("experiments_list / experiment_results_get missing from derived tool set");
     }
 
-    // experiments_list's 200 body is `{ items: Experiment[] }`; the Experiment
+    // experiments_list's 200 body is ListResponse<Experiment>; the Experiment
     // element schema carries no srm/guardrail_results health fields.
     const listSchema = listTool.outputSchema as unknown as JsonSchemaLike;
     const experimentSchema = listSchema.properties?.items?.items;

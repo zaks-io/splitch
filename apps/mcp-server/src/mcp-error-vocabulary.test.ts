@@ -228,7 +228,10 @@ async function rpc(method: string, params: unknown, options: ProbeOptions = {}):
     ...(options.controlPlaneFetch
       ? { controlPlaneFetch: options.controlPlaneFetch }
       : options.withFetch
-        ? { controlPlaneFetch: async () => Response.json({ items: [] }) }
+        ? {
+            controlPlaneFetch: async () =>
+              Response.json({ items: [], readLimit: 200, readTruncated: false, cursor: null }),
+          }
         : {}),
     ...(options.sessionContextValidator
       ? { sessionContextValidator: options.sessionContextValidator }

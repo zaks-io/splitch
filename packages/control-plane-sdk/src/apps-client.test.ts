@@ -1,3 +1,4 @@
+import { boundListRead } from "@splitch/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createControlPlaneSdk } from "./index";
 
@@ -74,12 +75,12 @@ describe("control plane sdk Apps client", () => {
   });
 
   it("lists an Organization's Apps", async () => {
-    const { sdk, requests } = appsSdk(() => Response.json({ items: [createdApp.app] }));
+    const { sdk, requests } = appsSdk(() => Response.json(boundListRead([createdApp.app])));
 
     const result = await sdk.apps.list({ orgId: "org_acme" });
 
     expect(requests[0]?.url).toBe("https://control-plane.test/orgs/org_acme/apps");
-    expect(result).toEqual({ ok: true, status: 200, data: { items: [createdApp.app] } });
+    expect(result).toEqual({ ok: true, status: 200, data: boundListRead([createdApp.app]) });
   });
 
   it("gets one App", async () => {

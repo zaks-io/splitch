@@ -5,6 +5,7 @@ import {
   ConvexServerExposureItemSchema,
   ConvexServerExposureResponseSchema,
 } from "./convex-integration";
+import { listResponse } from "./wire-envelopes-core";
 
 const UuidSchema = z.uuid();
 const EnvironmentVersionSchema = z.number().int().nonnegative();
@@ -50,9 +51,9 @@ export const CloudflareInstallationStatusSchema = CloudflareInstallationSchema.e
     .nullable(),
 }).strict();
 
-export const CloudflareInstallationListResponseSchema = z
-  .object({ installations: z.array(CloudflareInstallationStatusSchema) })
-  .strict();
+export const CloudflareInstallationListResponseSchema = listResponse(
+  CloudflareInstallationStatusSchema,
+);
 
 export const CloudflareConfigSnapshotSchema = ConfigSnapshotSchema;
 export const CloudflareServerExposureItemSchema = ConvexServerExposureItemSchema;

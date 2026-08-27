@@ -8,6 +8,7 @@
 export const flagPage = {
   readTruncated: false,
   readLimit: 200,
+  cursor: null,
   items: [
     {
       id: "flag_checkout",

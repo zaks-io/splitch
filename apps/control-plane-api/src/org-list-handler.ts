@@ -1,3 +1,4 @@
+import { boundListRead } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs, Principal } from "@splitch/worker-runtime";
 import { organizationResponse } from "./org-response";
@@ -17,16 +18,22 @@ import { organizationIdsInScopes } from "./scope-binding";
  */
 export function makeListOrganizationsHandler(repo: Repository) {
   return async ({ principal }: HandlerArgs<unknown>): Promise<Response> => {
+    // Reachable set first, then bound. Cap-then-filter would attach
+    // `readTruncated` to the membership scan and drop an in-scope Org that
+    // sits past the first 200 memberships, with `cursor: null` forever.
     const memberships = await repo.identity.listOrgMembershipsForUser(principal.id);
-    const orgIds = reachableOrgIds(principal, memberships);
+    const page = boundListRead([...reachableOrgIds(principal, memberships)]);
     const items = await Promise.all(
-      [...orgIds].map(async (orgId) => {
+      page.items.map(async (orgId) => {
         const org = await repo.identity.getOrg(orgId);
         return org ? organizationResponse(org) : null;
       }),
     );
 
-    return Response.json({ items: items.filter((org) => org !== null) });
+    return Response.json({
+      ...page,
+      items: items.filter((org) => org !== null),
+    });
   };
 }
 

@@ -139,12 +139,17 @@ function useSelectionTransport(): FakeCliTransport {
     {
       match: (request) => request.url.endsWith("/orgs"),
       status: 200,
-      body: { items: [{ id: "org_1", name: "Acme", slug: "acme", plan: "free", ...STAMPS }] },
+      body: {
+        items: [{ id: "org_1", name: "Acme", slug: "acme", plan: "free", ...STAMPS }],
+        readLimit: 200,
+        readTruncated: false,
+        cursor: null,
+      },
     },
     {
       match: (request) => request.url.includes("/orgs/org_1/apps"),
       status: 200,
-      body: { items: USE_APPS },
+      body: { items: USE_APPS, readLimit: 200, readTruncated: false, cursor: null },
     },
   ]);
 }
@@ -177,12 +182,15 @@ describe("splitch use App selector mirrors the server rule", () => {
             { id: "org_attacker", name: "Attacker", slug: "attacker", plan: "free", ...STAMPS },
             { id: "org_victim", name: "Victim", slug: "victim", plan: "free", ...STAMPS },
           ],
+          readLimit: 200,
+          readTruncated: false,
+          cursor: null,
         },
       },
       {
         match: (request) => request.url.includes("/orgs/org_attacker/apps"),
         status: 200,
-        body: { items: secondOrgApps },
+        body: { items: secondOrgApps, readLimit: 200, readTruncated: false, cursor: null },
       },
       {
         match: (request) => request.url.includes("/orgs/org_victim/apps"),
@@ -197,6 +205,9 @@ describe("splitch use App selector mirrors the server rule", () => {
               ...STAMPS,
             },
           ],
+          readLimit: 200,
+          readTruncated: false,
+          cursor: null,
         },
       },
     ]);

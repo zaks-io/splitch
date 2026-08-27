@@ -18,9 +18,8 @@ import type { Db } from "./client";
 import { makeFlagConfigOps, scopedFlagConfig, scopedTargetingRule } from "./flag-config-ops";
 import { type FlagInScope, makeVariantOps } from "./flag-variant-ops";
 import { idBatches } from "./id-batches";
-import type { TenantScope } from "./scope";
-import { assertMintedScope, envScope } from "./scope";
-import { scopedTable } from "./scoped-table";
+import { assertMintedScope, envScope, type TenantScope } from "./scope";
+import { type ReadOptions, scopedTable } from "./scoped-table";
 
 /**
  * Flag-domain repository. App-scoped: flags, segments. Per-Environment:
@@ -51,6 +50,7 @@ export function makeFlagRepo(db: Db) {
     },
     targetingRules: targetingRulesTable,
     segments: segmentsTable,
+    listSegments: makeListSegments(segmentsTable),
 
     getFlag(scope: TenantScope, flagId: string) {
       return flagsTable.findOne(scope, eq(flags.id, flagId));
@@ -247,6 +247,14 @@ export function makeFlagRepo(db: Db) {
       return segmentsTable.remove(scope, eq(segments.id, segmentId));
     },
   };
+}
+
+function makeListSegments(table: ReturnType<typeof scopedTable<typeof segments>>) {
+  return (scope: TenantScope, options?: ReadOptions) =>
+    table.findMany(scope, undefined, {
+      ...options,
+      orderBy: options?.orderBy ?? [desc(segments.createdAt), desc(segments.id)],
+    });
 }
 
 export type CreateFlagResult =

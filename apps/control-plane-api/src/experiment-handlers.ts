@@ -1,3 +1,4 @@
+import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
 import { type EnvScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
@@ -46,8 +47,10 @@ async function listExperiments(
 ): Promise<Response> {
   const scope = envScope(pathParam(input, "appId"), pathParam(input, "environmentId"));
   if (!(await environmentExists(deps, scope))) return appNotFound(requestId);
-  const rows = await deps.repo.experiments.listExperiments(scope);
-  return Response.json({ items: rows.map(experimentResponse) });
+  const scanned = await deps.repo.experiments.listExperiments(scope, {
+    limit: LIST_READ_LIMIT + 1,
+  });
+  return Response.json(boundListRead(scanned.map(experimentResponse)));
 }
 
 async function createExperiment(

@@ -1,4 +1,9 @@
-import { type APIKey, normalizeClientOrigins } from "@splitch/contracts";
+import {
+  type APIKey,
+  boundListRead,
+  LIST_READ_LIMIT,
+  normalizeClientOrigins,
+} from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
@@ -27,12 +32,6 @@ interface CredentialHandlerDeps {
 }
 
 type ApiKeyRow = Awaited<ReturnType<Repository["credentials"]["listApiKeys"]>>[number];
-
-/**
- * Same ceiling as the Flag catalog: one request's cost must not track how many
- * keys an Environment has accumulated, and the bound rides on the wire (SPL-451).
- */
-const API_KEY_LIST_READ_LIMIT = 200;
 
 export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
   return {
@@ -105,13 +104,10 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       const ctx = await credentialContext(deps, input, requestId);
       if (ctx instanceof Response) return ctx;
 
-      const rows = await deps.repo.credentials.listApiKeys(ctx.scope);
-      const readTruncated = rows.length > API_KEY_LIST_READ_LIMIT;
-      return Response.json({
-        items: rows.slice(0, API_KEY_LIST_READ_LIMIT).map(apiKeyResponse),
-        readLimit: API_KEY_LIST_READ_LIMIT,
-        readTruncated,
+      const scanned = await deps.repo.credentials.listApiKeys(ctx.scope, {
+        limit: LIST_READ_LIMIT + 1,
       });
+      return Response.json(boundListRead(scanned.map(apiKeyResponse)));
     },
 
     async createApiKey({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {

@@ -1,3 +1,4 @@
+import { boundListRead } from "@splitch/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createControlPlaneSdk } from "./index";
 
@@ -115,8 +116,7 @@ describe("control plane sdk Client Key operations", () => {
 
 describe("control plane sdk API Key operations", () => {
   it("lists API Key metadata", async () => {
-    const listed = { items: [apiKeyMetadata], readLimit: 200, readTruncated: false };
-    const { sdk, requests } = sdkWith(() => Response.json(listed));
+    const { sdk, requests } = sdkWith(() => Response.json(boundListRead([apiKeyMetadata])));
 
     const result = await sdk.credentials.apiKeys.list({
       appId: "app_checkout",
@@ -126,7 +126,7 @@ describe("control plane sdk API Key operations", () => {
     expect(requests[0]?.url).toBe(
       "https://control-plane.test/apps/app_checkout/envs/env_staging/api-keys",
     );
-    expect(result).toEqual({ ok: true, status: 200, data: listed });
+    expect(result).toEqual({ ok: true, status: 200, data: boundListRead([apiKeyMetadata]) });
   });
 
   it("mints an API Key and returns the once-only secret", async () => {
@@ -192,7 +192,7 @@ describe("control plane sdk API Key operations", () => {
   it("refuses to parse a list response that leaks key material", async () => {
     const { sdk } = sdkWith(() =>
       Response.json({
-        items: [{ ...apiKeyMetadata, keyMaterial: "sk_leaked_by_a_worker_regression" }],
+        ...boundListRead([{ ...apiKeyMetadata, keyMaterial: "sk_leaked_by_a_worker_regression" }]),
       }),
     );
 

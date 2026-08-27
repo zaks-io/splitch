@@ -214,7 +214,7 @@ describe("loadOrgAppListForRequest", () => {
     createControlPanelFlagsClientMock.mockReturnValue({
       list: vi.fn().mockResolvedValue({
         ok: true,
-        data: { items: [{ id: "flag_1" }], readTruncated: true, readLimit: 1 },
+        data: { items: [{ id: "flag_1" }], readTruncated: true, readLimit: 1, cursor: null },
       }),
     });
     const request = new Request("https://control-panel.example.test/org-000", {

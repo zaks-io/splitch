@@ -50,9 +50,11 @@ describe("Targeting Rule Segment Approval", () => {
     );
     const listed = await request("GET", `/apps/${ids.appId}/segments`);
     expect(await listed.json()).toMatchObject({
-      affectedEnvironmentIds: {
-        segment_paid: [ids.devEnvironmentId, ids.environmentId],
-      },
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          affectedEnvironmentIds: expect.arrayContaining([ids.devEnvironmentId, ids.environmentId]),
+        }),
+      ]),
     });
     expect(await h.d1.prepare("SELECT COUNT(*) AS n FROM approval_requests").first()).toMatchObject(
       {

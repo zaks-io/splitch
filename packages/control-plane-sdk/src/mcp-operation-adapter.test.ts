@@ -9,6 +9,7 @@ import { createMcpOperationAdapter } from "./mcp-operation-adapter";
 const flagPage = {
   readTruncated: false,
   readLimit: 200,
+  cursor: null,
   items: [
     {
       id: "flag_checkout",
@@ -158,7 +159,7 @@ describe("mcp operation adapter", () => {
       delegationSecret: "d".repeat(32),
       fetch: async (request) => {
         forwardedRequest = request instanceof Request ? request : new Request(request);
-        return Response.json({ items: [] });
+        return Response.json({ items: [], readLimit: 200, readTruncated: false, cursor: null });
       },
     });
 

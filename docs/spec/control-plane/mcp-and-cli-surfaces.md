@@ -173,7 +173,7 @@ App-level response.
 `--json` envelopes are verb-class consistent: a get returns the resource bare, and the matching
 write returns those same fields at the same paths with `approvalRequest` alongside (never wrapped
 in `config` or `flag`). List commands — including `flags list`, `api-keys list`, and
-`approval-requests list` — return `{items, readLimit, readTruncated}` so a caller can tell a
+`approval-requests list` — return `{items, readLimit, readTruncated, cursor}` so a caller can tell a
 complete page from a truncated one.
 
 **Output and scripting:** every command accepts `--json` for machine-readable output (the same

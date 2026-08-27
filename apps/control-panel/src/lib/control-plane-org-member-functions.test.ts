@@ -55,7 +55,12 @@ beforeEach(async () => {
     CONTROL_PLANE_API: {
       fetch: async () => {
         controlPlaneCalls += 1;
-        return Response.json({ items: [] });
+        return Response.json({
+          items: [],
+          readLimit: 200,
+          readTruncated: false,
+          cursor: null,
+        });
       },
     } as unknown as Fetcher,
   };

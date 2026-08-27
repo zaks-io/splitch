@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { apps, organizations, orgMemberships } from "../schema/index";
 import type { Db } from "./client";
 
@@ -21,12 +21,22 @@ export function makeOrgReads(db: Db) {
       return rows[0] ?? null;
     },
 
-    listOrgMemberships(orgId: string) {
-      return db.select().from(orgMemberships).where(eq(orgMemberships.orgId, orgId));
+    listOrgMemberships(orgId: string, options?: { limit?: number }) {
+      const query = db
+        .select()
+        .from(orgMemberships)
+        .where(eq(orgMemberships.orgId, orgId))
+        .orderBy(asc(orgMemberships.createdAt), asc(orgMemberships.userId));
+      return options?.limit === undefined ? query : query.limit(options.limit);
     },
 
-    listOrgMembershipsForUser(userId: string) {
-      return db.select().from(orgMemberships).where(eq(orgMemberships.userId, userId));
+    listOrgMembershipsForUser(userId: string, options?: { limit?: number }) {
+      const query = db
+        .select()
+        .from(orgMemberships)
+        .where(eq(orgMemberships.userId, userId))
+        .orderBy(asc(orgMemberships.createdAt), asc(orgMemberships.orgId));
+      return options?.limit === undefined ? query : query.limit(options.limit);
     },
 
     getOrgMembership(orgId: string, userId: string) {
@@ -66,8 +76,13 @@ export function makeOrgReads(db: Db) {
     },
 
     /** Apps for an Org. Scoped by org_id (the tier above App), never by app_id. */
-    listAppsForOrg(orgId: string) {
-      return db.select().from(apps).where(eq(apps.organizationId, orgId));
+    listAppsForOrg(orgId: string, options?: { limit?: number }) {
+      const query = db
+        .select()
+        .from(apps)
+        .where(eq(apps.organizationId, orgId))
+        .orderBy(asc(apps.createdAt), asc(apps.id));
+      return options?.limit === undefined ? query : query.limit(options.limit);
     },
   };
 }

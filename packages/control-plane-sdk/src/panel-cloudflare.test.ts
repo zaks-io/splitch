@@ -32,7 +32,9 @@ const INSTALLATION = {
 
 describe("panel Cloudflare client", () => {
   it("lists installations from the Environment-scoped path", async () => {
-    const fetch = stubFetch(json({ installations: [INSTALLATION] }));
+    const fetch = stubFetch(
+      json({ items: [INSTALLATION], readLimit: 200, readTruncated: false, cursor: null }),
+    );
     const client = createPanelCloudflareClient({
       fetch: fetch as unknown as typeof globalThis.fetch,
     });
@@ -42,7 +44,7 @@ describe("panel Cloudflare client", () => {
     expect(String(fetch.mock.calls[0]?.[0])).toBe(
       "https://control-plane.internal/apps/app_1/envs/env_prod/integrations/cloudflare/installations",
     );
-    expect(result.ok && result.data.installations[0]?.lastAppliedVersion).toBe(41);
+    expect(result.ok && result.data.items[0]?.lastAppliedVersion).toBe(41);
   });
 
   it("reads a 204 revoke as the success it is", async () => {

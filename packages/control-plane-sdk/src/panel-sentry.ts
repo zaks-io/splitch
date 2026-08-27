@@ -1,6 +1,6 @@
 import type {
   SentryInstallationCreateResponse,
-  SentryInstallationStatus,
+  SentryInstallationListResponse,
   SentrySecretRotationResponse,
 } from "@splitch/contracts";
 import {
@@ -50,7 +50,7 @@ export interface PanelSentryRevokeOutput {
 export interface PanelSentryClient {
   list(
     input: PanelSentryScope,
-  ): Promise<ControlPlaneOperationResult<{ installations: SentryInstallationStatus[] }>>;
+  ): Promise<ControlPlaneOperationResult<SentryInstallationListResponse>>;
   install(
     input: PanelSentryInstallInput,
   ): Promise<ControlPlaneOperationResult<SentryInstallationCreateResponse>>;

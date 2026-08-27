@@ -210,7 +210,7 @@ async function mcp(
       options.controlPlaneFetch ??
       (async (request) => {
         options.seen?.push(request instanceof Request ? request : new Request(request));
-        return Response.json({ items: [] });
+        return Response.json({ items: [], readLimit: 200, readTruncated: false, cursor: null });
       }),
     ...(options.useControlPlaneValidation
       ? {}

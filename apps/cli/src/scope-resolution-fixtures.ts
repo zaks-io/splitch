@@ -82,25 +82,33 @@ export function scopeResolutionStubs(options?: {
             updatedAt: scopeStamp,
           },
         ],
+        readLimit: 200,
+        readTruncated: false,
+        cursor: null,
       },
     },
     {
       match: (request) =>
         request.method === "GET" && new URL(request.url).pathname === `/orgs/${orgId}/apps`,
       status: 200,
-      body: { items: apps },
+      body: { items: apps, readLimit: 200, readTruncated: false, cursor: null },
     },
     {
       match: (request) =>
         request.method === "GET" && new URL(request.url).pathname === `/apps/${appId}/envs`,
       status: 200,
-      body: { items: envItemsFor(appId) },
+      body: { items: envItemsFor(appId), readLimit: 200, readTruncated: false, cursor: null },
     },
     {
       match: (request) =>
         request.method === "GET" && new URL(request.url).pathname === "/apps/app_flag/envs",
       status: 200,
-      body: { items: envItemsFor("app_flag") },
+      body: {
+        items: envItemsFor("app_flag"),
+        readLimit: 200,
+        readTruncated: false,
+        cursor: null,
+      },
     },
   ];
 }
@@ -146,6 +154,7 @@ export function flagsListStub(options?: {
       })),
       readTruncated: options?.readTruncated ?? false,
       readLimit: options?.readLimit ?? 200,
+      cursor: null,
     },
   };
 }

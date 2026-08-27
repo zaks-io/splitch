@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { FlagSchema, VariantSchema } from "./leaf-schemas-flag";
 import { SlugSchema } from "./slug";
+import { listResponse } from "./wire-envelopes-core";
 import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
@@ -105,22 +106,15 @@ export type FlagListItem = z.infer<typeof FlagListItemSchema>;
 // ---------------------------------------------------------------------------
 // FlagListResponse
 //
-// The Flag catalog read is BOUNDED, and the bound rides on the wire.
-//
-// `readTruncated` says the App holds more Flags than `readLimit`, so `items` is
-// the newest page of the catalog and not the catalog. It is OBSERVED by the
-// Worker (one row past the ceiling), never inferred from `items.length` — at any
-// cap those two are indistinguishable, and a page rendered as a whole list is
-// the disguised-complete-result ADR-0036 forbids. `readLimit` travels with it so
-// a reader can state the ceiling without holding its own copy of a server
-// constant.
+// The Flag catalog read is BOUNDED, and the bound rides on the shared list
+// envelope. `readTruncated` says the App holds more Flags than `readLimit`, so
+// `items` is the newest page of the catalog and not the catalog. It is OBSERVED
+// by the Worker (one row past the ceiling), never inferred from `items.length`.
+// `cursor` is present-with-null: this catalog is not paginable, so it stays
+// null and completeness is read from `readTruncated` alone.
 // ---------------------------------------------------------------------------
 
-export const FlagListResponseSchema = z.object({
-  items: z.array(FlagListItemSchema),
-  readTruncated: z.boolean(),
-  readLimit: z.number().int().positive(),
-});
+export const FlagListResponseSchema = listResponse(FlagListItemSchema);
 export type FlagListResponse = z.infer<typeof FlagListResponseSchema>;
 
 // ---------------------------------------------------------------------------

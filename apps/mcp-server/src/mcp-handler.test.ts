@@ -16,9 +16,6 @@ const token = "Bearer local-test-token";
 
 const upstreamFlagPage = {
   ...flagPage,
-  cursor: null,
-  limit: 50,
-  total: null,
   unexpectedSecretLikeField: "must-not-escape",
 };
 
@@ -81,7 +78,6 @@ describe("mcp server Streamable HTTP transport", () => {
     ]);
     expect(body.result.structuredContent).toEqual(flagPage);
     expect(body.result.structuredContent).not.toHaveProperty("unexpectedSecretLikeField");
-    expect(body.result.structuredContent).not.toHaveProperty("cursor");
   });
 
   it("advertises and forwards flags_update with path params and body fields", async () => {
@@ -316,7 +312,10 @@ function controlPlaneResponse(request: IncomingMessage): { status: number; body:
     request.method === "GET" &&
     /^\/apps\/[^/]+\/envs\/[^/]+\/experiments$/.test(request.url ?? "")
   ) {
-    return { status: 200, body: { items: [] } };
+    return {
+      status: 200,
+      body: { items: [], readLimit: 200, readTruncated: false, cursor: null },
+    };
   }
   return { status: 404, body: { code: "FLAG_NOT_FOUND", message: "not found", details: {} } };
 }

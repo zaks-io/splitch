@@ -22,6 +22,8 @@ describe("SegmentsPage unparseable surface", () => {
       <SegmentsPage
         appId="app_billing"
         environmentId="env_prod"
+        readLimit={200}
+        readTruncated={false}
         segments={[]}
         unparseable={[
           {
@@ -63,5 +65,34 @@ describe("SegmentsPage unparseable surface", () => {
         segmentId: "segment_poison",
       },
     });
+  });
+
+  it("says the catalog is incomplete when the Control Plane list was truncated", () => {
+    const html = renderToStaticMarkup(
+      <SegmentsPage
+        appId="app_billing"
+        environmentId="env_prod"
+        readLimit={200}
+        readTruncated={true}
+        segments={[]}
+        unparseable={[]}
+      />,
+    );
+    expect(html).toContain('data-testid="segments-truncated"');
+    expect(html).toContain("More than 200 Segments in this App");
+  });
+
+  it("counts parsed and unparseable rows in the truncated notice", () => {
+    const html = renderToStaticMarkup(
+      <SegmentsPage
+        appId="app_billing"
+        environmentId="env_prod"
+        readLimit={200}
+        readTruncated={true}
+        segments={[]}
+        unparseable={[{ reason: "Segment entry is not an object" }]}
+      />,
+    );
+    expect(html).toContain("The 1 below are not all of them");
   });
 });

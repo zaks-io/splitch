@@ -61,6 +61,9 @@ describe("the Event Definition migration", () => {
           eventFieldName: "amount",
         }),
       ],
+      readLimit: 200,
+      readTruncated: false,
+      cursor: null,
     });
   });
 

@@ -134,7 +134,8 @@ The route composes the shared time window and pagination query with only these o
 logical event with that name inside the requested window. `association` selects the query-derived
 Web Session association state. Unknown query fields fail strict validation.
 
-The response is `PaginatedResponse<WebSessionSummary>` with `total: null`:
+The response is `ListResponse<WebSessionSummary>` (`cursor` continues the page; `readTruncated` is
+false while pagination can continue):
 
 ```typescript
 type WebSessionSummary = {
@@ -174,7 +175,8 @@ share one empty detail shape, so the endpoint never reveals whether the identifi
 the caller's scope or window.
 
 The query composes the shared time window with standard `limit` and `cursor` pagination. Its response
-is `PaginatedResponse<WebSessionEvent>` with `total: null`:
+is `ListResponse<WebSessionEvent>` (`cursor` continues the page; `readTruncated` is false while
+pagination can continue):
 
 ```typescript
 type WebSessionEvent = {

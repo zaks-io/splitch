@@ -1,8 +1,8 @@
-import { asc, eq, gt } from "drizzle-orm";
+import { asc, desc, eq, gt } from "drizzle-orm";
 import { apiKeys, apps, clientKeys } from "../schema/index";
 import type { Db } from "./client";
 import type { EnvScope } from "./scope";
-import { scopedTable } from "./scoped-table";
+import { type ReadOptions, scopedTable } from "./scoped-table";
 
 /**
  * Credential-domain repository. Both tables are per-Environment (ADR-0027): an
@@ -22,8 +22,11 @@ export function makeCredentialRepo(db: Db) {
     apiKeys: apiKeysTable,
     clientKeys: clientKeysTable,
 
-    listApiKeys(scope: EnvScope) {
-      return apiKeysTable.findMany(scope);
+    listApiKeys(scope: EnvScope, options?: ReadOptions) {
+      return apiKeysTable.findMany(scope, undefined, {
+        ...options,
+        orderBy: options?.orderBy ?? [desc(apiKeys.createdAt), desc(apiKeys.keyId)],
+      });
     },
 
     /** Global D1 authority used only by the schema-v1 credential cache backfill. */

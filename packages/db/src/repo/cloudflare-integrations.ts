@@ -74,13 +74,14 @@ export function makeCloudflareIntegrationRepo(d1: D1Database) {
         .first<CloudflareInstallationRow>();
     },
 
-    async listInstallations(scope: EnvScope) {
+    async listInstallations(scope: EnvScope, options?: { limit?: number }) {
       assertMintedScope(scope);
       return listPushInstallations<CloudflareInstallationRow>(
         d1,
         scope,
         INSTALLATION_SELECT,
         "cloudflare_config_deliveries",
+        options,
       );
     },
 

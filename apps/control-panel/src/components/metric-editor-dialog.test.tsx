@@ -12,7 +12,13 @@ vi.mock("#lib/control-plane-metric-functions", () => ({
 describe("Metric editor dialog", () => {
   it("does not expose an inert Create Metric button in server-rendered HTML", () => {
     const html = renderToStaticMarkup(
-      <MetricsPage appId="app_billing" environmentId="env_prod" metrics={[]} />,
+      <MetricsPage
+        appId="app_billing"
+        environmentId="env_prod"
+        metrics={[]}
+        readLimit={200}
+        readTruncated={false}
+      />,
     );
     const trigger = html.match(/<button[^>]*>Create Metric<\/button>/)?.[0];
 

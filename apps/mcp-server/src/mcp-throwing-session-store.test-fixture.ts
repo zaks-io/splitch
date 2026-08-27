@@ -56,7 +56,8 @@ export async function callWithThrowingSessionStore(): Promise<ThrowingSessionSto
     tokenVerifier: staticMcpTokenVerifier(),
     revocations: allowMcpRevocations(),
     controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
-    controlPlaneFetch: async () => Response.json({ items: [] }),
+    controlPlaneFetch: async () =>
+      Response.json({ items: [], readLimit: 200, readTruncated: false, cursor: null }),
     sessionStore: store,
   });
 

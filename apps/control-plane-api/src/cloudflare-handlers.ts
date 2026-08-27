@@ -1,3 +1,4 @@
+import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import { envScope } from "@splitch/db";
 import type { HandlerArgs, RouteHandler } from "@splitch/worker-runtime";
@@ -42,19 +43,21 @@ export function makeCloudflareHandlers(deps: CloudflareHandlerDeps) {
       );
       if (denied) return denied;
       const scope = cloudflareScope(args.input.params);
-      const rows = await deps.repo.cloudflare.listInstallations(scope);
+      const scanned = await deps.repo.cloudflare.listInstallations(scope, {
+        limit: LIST_READ_LIMIT + 1,
+      });
       // The Environment version only decorates rows, and `environmentVersion`
       // throws when the Environment is not in scope. Reading it up front turns a
       // mistyped environmentId (free input on the MCP tool and the CLI command)
       // into an undeclared 500 instead of the empty list the Sentry card returns
       // for the same case.
-      if (rows.length === 0) return Response.json({ installations: [] });
+      if (scanned.length === 0) return Response.json(boundListRead([]));
       const environmentVersion = await deps.repo.cloudflare.environmentVersion(scope);
-      return Response.json({
-        installations: rows.map((row) =>
-          cloudflareInstallationStatusResponse(row, environmentVersion),
+      return Response.json(
+        boundListRead(
+          scanned.map((row) => cloudflareInstallationStatusResponse(row, environmentVersion)),
         ),
-      });
+      );
     }) satisfies RouteHandler<PanelScopeInput>,
 
     panelRemove: (async (args: HandlerArgs<PanelInstallationInput>) => {

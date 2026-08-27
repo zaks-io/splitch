@@ -219,8 +219,9 @@ describe("Credential responses", () => {
   it("ListCredentialsResponse parses a mix of API and Client keys", () => {
     const res = ListCredentialsResponseSchema.parse({
       items: [apiKeyLeaf, clientKeyLeaf],
-      readTruncated: false,
       readLimit: 200,
+      readTruncated: false,
+      cursor: null,
     });
     expect(res.items).toHaveLength(2);
   });
@@ -239,8 +240,9 @@ describe("Credential responses", () => {
     expect(
       ListCredentialsResponseSchema.safeParse({
         items: [secretBearingApiKeyShape],
-        readTruncated: false,
         readLimit: 200,
+        readTruncated: false,
+        cursor: null,
       }).success,
     ).toBe(false);
   });
@@ -249,8 +251,9 @@ describe("Credential responses", () => {
     expect(
       ListCredentialsResponseSchema.safeParse({
         items: [{ appId: "app_1", environmentId: "env_dev" }],
-        readTruncated: false,
         readLimit: 200,
+        readTruncated: false,
+        cursor: null,
       }).success,
     ).toBe(false);
   });

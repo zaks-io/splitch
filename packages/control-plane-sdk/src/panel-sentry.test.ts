@@ -34,7 +34,7 @@ describe("panel Sentry client", () => {
   it("lists installations from the Organization-scoped path", async () => {
     const fetch = stubFetch(
       json({
-        installations: [
+        items: [
           {
             ...INSTALLATION,
             lastDeliveredSeq: 12,
@@ -44,6 +44,9 @@ describe("panel Sentry client", () => {
             latestDeliveryError: null,
           },
         ],
+        readLimit: 200,
+        readTruncated: false,
+        cursor: null,
       }),
     );
     const client = createPanelSentryClient({ fetch: fetch as unknown as typeof globalThis.fetch });
@@ -53,7 +56,7 @@ describe("panel Sentry client", () => {
     expect(String(fetch.mock.calls[0]?.[0])).toBe(
       "https://control-plane.internal/orgs/org_1/integrations/sentry/installations",
     );
-    expect(result.ok && result.data.installations[0]?.lastDeliveredSeq).toBe(12);
+    expect(result.ok && result.data.items[0]?.lastDeliveredSeq).toBe(12);
   });
 
   it("carries the minted signing secret back to the caller", async () => {

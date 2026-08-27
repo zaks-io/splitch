@@ -1,6 +1,7 @@
 import { z } from "@hono/zod-openapi";
 import { SegmentSchema } from "../leaf-schemas-flag";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { listResponse } from "../wire-envelopes-core";
 import {
   AppParams,
   CreateSegmentRequestSchema,
@@ -17,10 +18,10 @@ const OWNER = "control-plane-api" as const;
 const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
-export const SegmentListResponseSchema = z.object({
-  items: z.array(SegmentSchema),
-  affectedEnvironmentIds: z.record(z.string(), z.array(z.string())),
+export const SegmentListItemSchema = SegmentSchema.extend({
+  affectedEnvironmentIds: z.array(z.string()),
 });
+export const SegmentListResponseSchema = listResponse(SegmentListItemSchema);
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 
 export const segmentRoutes = [

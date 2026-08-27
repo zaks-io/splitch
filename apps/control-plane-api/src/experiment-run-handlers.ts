@@ -1,3 +1,4 @@
+import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { nowIso } from "./app-environment-model";
@@ -32,10 +33,10 @@ async function listRuns(
   const scope = envScope(pathParam(input, "appId"), pathParam(input, "environmentId"));
   const experiment = await experimentFromPath(deps, input);
   if (!experiment) return experimentNotFound(requestId);
-  const rows = await deps.repo.experiments.listRunsForExperiment(scope, experiment.id);
-  return Response.json({
-    items: rows.sort((a, b) => b.runNumber - a.runNumber).map((row) => runResponse(row)),
+  const scanned = await deps.repo.experiments.listRunsForExperiment(scope, experiment.id, {
+    limit: LIST_READ_LIMIT + 1,
   });
+  return Response.json(boundListRead(scanned.map((row) => runResponse(row))));
 }
 
 async function getRun(deps: ExperimentDeps, { input, requestId }: HandlerArgs<unknown>) {

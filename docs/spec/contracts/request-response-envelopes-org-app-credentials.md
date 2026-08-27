@@ -135,14 +135,15 @@ Keys are not auto-provisioned here; they are minted through the per-Environment 
 ```
 {
   items: (APIKey | ClientKey)[]
-  readTruncated: boolean
   readLimit: positive integer
+  readTruncated: boolean
+  cursor: string | null
 }
 ```
 
 API Key responses never include a raw secret value. Client Key responses include `keyMaterial`.
-`readTruncated` reports whether the bounded read omitted additional keys, and `readLimit` reports
-that bound — the same envelope `flags_list` already documents.
+`readTruncated` reports whether the bounded read omitted additional keys, `readLimit` reports
+that bound, and `cursor` is present-with-null because this list is not paginated.
 
 ## Sources
 

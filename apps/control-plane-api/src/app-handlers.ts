@@ -1,3 +1,4 @@
+import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz";
@@ -34,8 +35,10 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
       const org = await deps.repo.identity.getOrg(orgId);
       if (!org) return organizationNotFound(requestId);
 
-      const rows = await deps.repo.identity.listAppsForOrg(orgId);
-      return Response.json({ items: rows.map(appResponse) });
+      const scanned = await deps.repo.identity.listAppsForOrg(orgId, {
+        limit: LIST_READ_LIMIT + 1,
+      });
+      return Response.json(boundListRead(scanned.map(appResponse)));
     },
 
     async createApp(args: HandlerArgs<unknown>): Promise<Response> {

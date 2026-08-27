@@ -1,6 +1,7 @@
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { useRouter } from "@tanstack/react-router";
 import { AddOrgMemberDialog } from "#components/add-org-member-dialog";
+import { CatalogTruncatedNotice } from "#components/catalog-truncated-notice";
 import { OrgMembersTable } from "#components/org-members-table";
 import { ParityNote } from "#components/parity-note";
 import { SsoScimCard } from "#components/sso-scim-card";
@@ -30,6 +31,16 @@ export function OrgMembersPage({ view }: { view: OrgMembersView }) {
         </p>
         <AddOrgMemberDialog actorRole={view.orgRole} onAdded={reread} orgId={view.orgId} />
       </div>
+
+      {view.members.kind === "ready" && view.members.readTruncated ? (
+        <CatalogTruncatedNotice
+          nounPlural="members"
+          readLimit={view.members.readLimit}
+          scopeNoun="Organization"
+          shownCount={view.members.items.length}
+          testId="members-truncated"
+        />
+      ) : null}
 
       {view.members.kind === "ready" ? (
         <OrgMembersTable

@@ -134,7 +134,7 @@ describe("CLI --json envelopes (SPL-451)", () => {
     },
     {
       args: ["api-keys", "list", "--json", "--app", "app_1", "--env", "env_1"],
-      body: { items: [], readLimit: 200, readTruncated: false },
+      body: { items: [], readLimit: 200, readTruncated: false, cursor: null },
       match: (request: { url: string; method: string }) =>
         request.method === "GET" && request.url.includes("/api-keys"),
     },
@@ -143,8 +143,6 @@ describe("CLI --json envelopes (SPL-451)", () => {
       body: {
         items: [],
         cursor: null,
-        limit: 50,
-        total: null,
         readLimit: 50,
         readTruncated: false,
       },

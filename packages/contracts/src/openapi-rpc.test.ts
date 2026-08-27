@@ -17,7 +17,12 @@ function _validGetRouteIsTyped(): void {
   type FlagsListRequest = InferRequestType<RpcClient["apps"][":appId"]["flags"]["$get"]>;
   type FlagsListResponse = InferResponseType<RpcClient["apps"][":appId"]["flags"]["$get"]>;
   const _param: FlagsListRequest["param"] = { appId: "app_123" };
-  const _output: FlagsListResponse = { items: [] };
+  const _output: FlagsListResponse = {
+    items: [],
+    readLimit: 200,
+    readTruncated: false,
+    cursor: null,
+  };
   void _param;
   void _output;
   void client.apps[":appId"].flags.$get;

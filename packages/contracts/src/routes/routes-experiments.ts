@@ -22,6 +22,7 @@ import {
   RunEndParams,
   RunParams,
 } from "./route-shapes";
+import { listResponse } from "../wire-envelopes-core";
 
 /**
  * Experiment draft/start lifecycle, Experiment Run reads + end, and Metric CRUD.
@@ -33,9 +34,9 @@ const OWNER = "control-plane-api" as const;
 const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
-const ExperimentListResponse = z.object({ items: z.array(ExperimentResponseSchema) });
-const RunListResponse = z.object({ items: z.array(RunResponseSchema) });
-const MetricListResponse = z.object({ items: z.array(MetricResponseSchema) });
+const ExperimentListResponse = listResponse(ExperimentResponseSchema);
+const RunListResponse = listResponse(RunResponseSchema);
+const MetricListResponse = listResponse(MetricResponseSchema);
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 
 const APPROVAL_WRITE_ERRORS = [

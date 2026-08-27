@@ -4,6 +4,7 @@ import { createControlPlaneSdk } from "./index";
 const flagPage = {
   readTruncated: false,
   readLimit: 200,
+  cursor: null,
   items: [
     {
       id: "flag_checkout",
@@ -84,6 +85,9 @@ describe("control plane sdk typed route groups", () => {
           updatedAt: "2026-07-03T00:00:00.000Z",
         },
       ],
+      readLimit: 200,
+      readTruncated: false,
+      cursor: null,
     };
 
     const sdk = createControlPlaneSdk({

@@ -145,7 +145,11 @@ describe("ATTACK: cross-App approval writes", () => {
 
     const list = await get(h, `/apps/${ids.otherAppId}/approval-requests`, jwt);
     expect(list.status).toBe(200);
-    expect(await list.json()).toMatchObject({ items: [], total: 0 });
+    expect(await list.json()).toMatchObject({
+      items: [],
+      readTruncated: false,
+      cursor: null,
+    });
 
     const write = await reviewAs(
       h,

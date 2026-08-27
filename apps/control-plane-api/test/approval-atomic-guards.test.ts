@@ -96,7 +96,11 @@ describe("Approval Request runtime: atomic guards and tenant isolation", () => {
       headers,
     });
     expect(attackerList.status).toBe(200);
-    expect(await attackerList.json()).toMatchObject({ items: [], total: 0 });
+    expect(await attackerList.json()).toMatchObject({
+      items: [],
+      readTruncated: false,
+      cursor: null,
+    });
 
     const write = await h.app.request(
       `/apps/${attackerAppId}/approval-requests/${requestId}/reviews`,

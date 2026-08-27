@@ -12,7 +12,7 @@ export function cloudflareInstallationsQuery(input: PanelCloudflareScope) {
       if (!result.ok) {
         throw Object.assign(new Error(result.error.message), { status: result.status });
       }
-      return result.data.installations;
+      return result.data.items;
     },
   });
 }

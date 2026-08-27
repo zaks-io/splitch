@@ -44,7 +44,7 @@ describe("Convex Panel installations", () => {
     const body = ConvexInstallationListResponseSchema.parse(await response.json());
 
     expect(response.status).toBe(200);
-    expect(body.installations).toEqual([
+    expect(body.items).toEqual([
       expect.objectContaining({
         installationId: ACTIVE_ID,
         status: "active",
@@ -120,7 +120,12 @@ describe("Convex Panel installations", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ installations: [] });
+    await expect(response.json()).resolves.toEqual({
+      items: [],
+      readLimit: 200,
+      readTruncated: false,
+      cursor: null,
+    });
   });
 });
 

@@ -12,7 +12,7 @@ export function convexInstallationsQuery(input: PanelConvexScope) {
       if (!result.ok) {
         throw Object.assign(new Error(result.error.message), { status: result.status });
       }
-      return result.data.installations;
+      return result.data.items;
     },
   });
 }

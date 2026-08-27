@@ -20,14 +20,25 @@ export async function listPushInstallations<T extends { installationId: string }
   scope: EnvScope,
   installationSelect: string,
   deliveryTable: DeliveryTable,
+  options?: { limit?: number },
 ): Promise<Array<T & DeliveryHealth>> {
+  const limit = options?.limit;
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+    throw new Error(`listPushInstallations: limit must be a positive integer, got ${limit}`);
+  }
   const nowMs = Date.now();
   const [installations, deliveryHealth] = await d1.batch<T | DeliveryHealthAggregateRow>([
-    d1
-      .prepare(
-        `${installationSelect} WHERE app_id = ? AND environment_id = ? ORDER BY created_at DESC`,
-      )
-      .bind(scope.appId, scope.environmentId),
+    limit === undefined
+      ? d1
+          .prepare(
+            `${installationSelect} WHERE app_id = ? AND environment_id = ? ORDER BY created_at DESC, installation_id DESC`,
+          )
+          .bind(scope.appId, scope.environmentId)
+      : d1
+          .prepare(
+            `${installationSelect} WHERE app_id = ? AND environment_id = ? ORDER BY created_at DESC, installation_id DESC LIMIT ?`,
+          )
+          .bind(scope.appId, scope.environmentId, limit),
     d1
       .prepare(`SELECT installation_id AS installationId,
         SUM(CASE WHEN state IN ('pending', 'leased') THEN 1 ELSE 0 END) AS pendingCount,

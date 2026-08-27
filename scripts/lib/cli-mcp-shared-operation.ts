@@ -172,7 +172,12 @@ function controlPlaneFetch(scenario: Scenario, seen: OperationCall[]): typeof fe
       });
     }
     if (request.method === "GET" && url.pathname === `/apps/${APP_ID}/envs`) {
-      return Response.json({ items: environmentCatalog() });
+      return Response.json({
+        items: environmentCatalog(),
+        readLimit: 200,
+        readTruncated: false,
+        cursor: null,
+      });
     }
     const target = `${request.method} ${url.pathname}${url.search}`;
     if (request.method === "GET" && url.pathname === path) {

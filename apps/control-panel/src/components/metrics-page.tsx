@@ -2,6 +2,7 @@ import type { Metric } from "@splitch/contracts";
 import { EmptyState } from "@splitch/ui/state/empty-state";
 import { useRouter } from "@tanstack/react-router";
 import { parityHint } from "#lib/parity-hints";
+import { CatalogTruncatedNotice } from "./catalog-truncated-notice";
 import { MetricEditorDialog } from "./metric-editor-dialog";
 import { ParityNote } from "./parity-note";
 import { MetricsTable } from "./metrics-table";
@@ -10,10 +11,14 @@ export function MetricsPage({
   appId,
   environmentId,
   metrics,
+  readLimit,
+  readTruncated,
 }: {
   appId: string;
   environmentId: string;
   metrics: Metric[];
+  readLimit: number;
+  readTruncated: boolean;
 }) {
   const router = useRouter();
 
@@ -54,6 +59,16 @@ export function MetricsPage({
           />
         ) : null}
       </header>
+
+      {readTruncated ? (
+        <CatalogTruncatedNotice
+          nounPlural="Metrics"
+          readLimit={readLimit}
+          scopeNoun="App"
+          shownCount={metrics.length}
+          testId="metrics-truncated"
+        />
+      ) : null}
 
       {metrics.length > 0 ? (
         <MetricsTable

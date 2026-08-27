@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { listResponse } from "./wire-envelopes-core";
 
 /**
  * Sentry change-tracking installation surface.
@@ -74,9 +75,8 @@ export const SentryInstallationStatusSchema = SentryInstallationSchema.extend({
  * Sentry wired up here?" without already knowing an installation id, and
  * revoked rows remain readable as history.
  */
-export const SentryInstallationListResponseSchema = z
-  .object({ installations: z.array(SentryInstallationStatusSchema) })
-  .strict();
+export const SentryInstallationListResponseSchema = listResponse(SentryInstallationStatusSchema);
+export type SentryInstallationListResponse = z.infer<typeof SentryInstallationListResponseSchema>;
 
 export const SentrySecretRotationRequestSchema = z
   .object({ rotationId: UuidSchema, webhookSecret: SentryWebhookSecretSchema.optional() })

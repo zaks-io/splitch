@@ -9,6 +9,7 @@ import { useState } from "react";
 import { type MutationErrorSurface, mutationErrorSurface } from "#lib/api";
 import { deleteControlPanelSegment } from "#lib/control-plane-segment-functions";
 import { parityHint } from "#lib/parity-hints";
+import { CatalogTruncatedNotice } from "./catalog-truncated-notice";
 import { ParityNote } from "./parity-note";
 import { SegmentEditorDialog } from "./segment-editor-dialog";
 import { SegmentMutationError } from "./segment-mutation-error";
@@ -19,11 +20,15 @@ export function SegmentsPage({
   environmentId,
   segments,
   unparseable,
+  readLimit,
+  readTruncated,
 }: {
   appId: string;
   environmentId: string;
   segments: PanelSegment[];
   unparseable: UnparseablePanelSegment[];
+  readLimit: number;
+  readTruncated: boolean;
 }) {
   const router = useRouter();
 
@@ -65,6 +70,16 @@ export function SegmentsPage({
           />
         ) : null}
       </header>
+
+      {readTruncated ? (
+        <CatalogTruncatedNotice
+          nounPlural="Segments"
+          readLimit={readLimit}
+          scopeNoun="App"
+          shownCount={segments.length + unparseable.length}
+          testId="segments-truncated"
+        />
+      ) : null}
 
       {unparseable.length > 0 ? (
         <UnparseableSegments

@@ -78,16 +78,16 @@ describe("Approval Request runtime", () => {
     expect(await list.json()).toMatchObject({
       items: [{ id: requestId, status: "pending" }],
       cursor: null,
-      // Effective staleness is derived per row on read, so a `pending`/`stale`
-      // filter has no honest SQL count and the contract's `total: number | null`
-      // reports `null` rather than counting stored status and lying.
-      total: null,
+      readLimit: 50,
+      readTruncated: false,
     });
 
     const unfiltered = await getApprovalRequests(h, undefined, "?target_kind=flag_configuration");
     expect(await unfiltered.json()).toMatchObject({
       items: [{ id: requestId, status: "pending" }],
-      total: 1,
+      cursor: null,
+      readLimit: 50,
+      readTruncated: false,
     });
   });
 

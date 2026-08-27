@@ -14,7 +14,7 @@ are accepted only by the Event Ingest Worker route in
 
 ### `GET /apps/{app_id}/event-definitions`
 
-Returns App-scoped `PaginatedResponse<EventDefinition>`.
+Returns App-scoped `ListResponse<EventDefinition>`.
 
 ### `POST /apps/{app_id}/event-definitions`
 
@@ -156,7 +156,7 @@ historical accepted rows must remain traceable to their version.
 
 ### `GET /apps/{app_id}/metrics`
 
-Returns App-scoped `PaginatedResponse<Metric>`.
+Returns App-scoped `ListResponse<Metric>`.
 
 ### `POST /apps/{app_id}/metrics`
 

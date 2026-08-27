@@ -13,10 +13,10 @@ token unless noted. All requests/responses are `Content-Type: application/json`.
 Error shape for all endpoints: `{ code: string, message: string, details?: unknown }`.
 Zod parse failures and domain-invariant failures (e.g. `RUN_FROZEN`) share this shape.
 
-Pagination: cursor-based on all list endpoints — `?limit=50&cursor=<opaque>`. Response is the
-`PaginatedResponse<T>` wrapper `{ items, cursor, limit, total }`; iterate until `cursor === null`.
-Canonical contract (cursor TTL, `total` semantics, limit cap) in
-[../contracts/request-response-envelopes-conventions.md](../contracts/request-response-envelopes-conventions.md#pagination-wrapper-reused-by-all-list-endpoints).
+List responses: every `*_list` operation returns `ListResponse<T>` —
+`{ items, readLimit, readTruncated, cursor }`. Completeness is `readTruncated`; `cursor: null` means
+no continuation from this call. Canonical contract in
+[../contracts/request-response-envelopes-conventions.md](../contracts/request-response-envelopes-conventions.md#listresponse-wrapper-every-_list-operation).
 
 ## App-level vs Environment-level paths (ADR-0027)
 

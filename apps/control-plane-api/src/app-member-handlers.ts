@@ -1,4 +1,10 @@
-import { type AppMember, type UserRole, UserRoleSchema } from "@splitch/contracts";
+import {
+  type AppMember,
+  boundListRead,
+  LIST_READ_LIMIT,
+  type UserRole,
+  UserRoleSchema,
+} from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { requireAppAdmin, requireAppDelete, requireAppMember } from "./app-authz";
@@ -43,12 +49,15 @@ export function makeAppMemberHandlers(deps: AppMemberHandlerDeps) {
       const forbidden = await requireAppMember(deps, appId, principal, requestId);
       if (forbidden) return forbidden;
 
-      const rows = await deps.repo.identity.listAppMembers(appScope(appId));
+      const scanned = await deps.repo.identity.listAppMembers(appScope(appId), {
+        limit: LIST_READ_LIMIT + 1,
+      });
+      const page = boundListRead(scanned);
       const items: AppMember[] = [];
-      for (const row of rows) {
+      for (const row of page.items) {
         items.push(await appMemberResponse(deps, row, app.organizationId, request));
       }
-      return Response.json({ items });
+      return Response.json({ ...page, items });
     },
 
     async addAppMember({ input, request, principal, requestId }: HandlerArgs<unknown>) {

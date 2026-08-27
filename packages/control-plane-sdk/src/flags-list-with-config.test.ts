@@ -31,6 +31,7 @@ describe("flags.list with Environment configuration", () => {
       ],
       readTruncated: false,
       readLimit: 200,
+      cursor: null,
     };
     const sdk = createControlPlaneSdk({
       baseUrl: "https://control-plane.test",
@@ -51,7 +52,7 @@ describe("flags.list with Environment configuration", () => {
 
   it("sends an empty Environment ID instead of treating it as omitted", async () => {
     let requestedUrl = "";
-    const bareList = { items: [], readTruncated: false, readLimit: 200 };
+    const bareList = { items: [], readTruncated: false, readLimit: 200, cursor: null };
     const sdk = createControlPlaneSdk({
       baseUrl: "https://control-plane.test",
       fetch: async (input) => {

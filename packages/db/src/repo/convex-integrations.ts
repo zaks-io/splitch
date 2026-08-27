@@ -69,13 +69,14 @@ export function makeConvexIntegrationRepo(d1: D1Database) {
         .first<ConvexInstallationRow>();
     },
 
-    async listInstallations(scope: EnvScope) {
+    async listInstallations(scope: EnvScope, options?: { limit?: number }) {
       assertMintedScope(scope);
       return listPushInstallations<ConvexInstallationRow>(
         d1,
         scope,
         INSTALLATION_SELECT,
         "config_webhook_deliveries",
+        options,
       );
     },
 

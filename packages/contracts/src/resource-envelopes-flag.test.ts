@@ -138,7 +138,7 @@ describe("FlagListResponseSchema", () => {
   };
 
   it("keeps the bare Flag list shape unchanged", () => {
-    const response = { items: [flag], readTruncated: false, readLimit: 200 };
+    const response = { items: [flag], readTruncated: false, readLimit: 200, cursor: null };
     expect(FlagListResponseSchema.parse(response)).toEqual(response);
   });
 
@@ -159,6 +159,7 @@ describe("FlagListResponseSchema", () => {
       ],
       readTruncated: false,
       readLimit: 200,
+      cursor: null,
     };
     expect(FlagListResponseSchema.parse(response)).toEqual(response);
     expect(response.items[0]?.flagConfiguration).not.toHaveProperty("targetingRules");

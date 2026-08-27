@@ -87,7 +87,8 @@ export async function mcp(
     tokenVerifier: staticMcpTokenVerifier(options.actor ?? DEFAULT_ACTOR),
     revocations: allowMcpRevocations(),
     controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
-    controlPlaneFetch: async () => Response.json({ items: [] }),
+    controlPlaneFetch: async () =>
+      Response.json({ items: [], readLimit: 200, readTruncated: false, cursor: null }),
     sessionContextValidator: async () => ({ ok: true }),
     sessionStore: options.sessionStore ?? trackingSessionStore(),
     fetchAuthMarkdown: async () => authFixture,

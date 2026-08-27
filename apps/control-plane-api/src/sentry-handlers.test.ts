@@ -150,10 +150,10 @@ describe("sentry installations: authority and tenant scope", () => {
   it("lists only the installations of the Organization in the path", async () => {
     const alpha = await handlers.list(orgArgs(USER_ADMIN, ALPHA.orgId, {}));
     const beta = await handlers.list(orgArgs(USER_BETA_OWNER, BETA.orgId, {}));
-    const alphaBody = (await alpha.json()) as { installations: { installationId: string }[] };
-    const betaBody = (await beta.json()) as { installations: { installationId: string }[] };
-    expect(alphaBody.installations.map((row) => row.installationId)).toEqual([INSTALL_ID]);
-    expect(betaBody.installations.map((row) => row.installationId)).toEqual([
+    const alphaBody = (await alpha.json()) as { items: { installationId: string }[] };
+    const betaBody = (await beta.json()) as { items: { installationId: string }[] };
+    expect(alphaBody.items.map((row) => row.installationId)).toEqual([INSTALL_ID]);
+    expect(betaBody.items.map((row) => row.installationId)).toEqual([
       "22222222-2222-4222-8222-222222222222",
     ]);
   });
@@ -185,8 +185,8 @@ describe("sentry installations: rotation and revocation", () => {
     );
     expect(response.status).toBe(204);
     const list = await handlers.list(orgArgs(USER_ADMIN, ALPHA.orgId, {}));
-    const body = (await list.json()) as { installations: { status: string }[] };
-    expect(body.installations.map((row) => row.status)).toEqual(["revoked"]);
+    const body = (await list.json()) as { items: { status: string }[] };
+    expect(body.items.map((row) => row.status)).toEqual(["revoked"]);
   });
 
   it("accepts a new Sentry organization once the previous one is revoked", async () => {

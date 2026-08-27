@@ -62,6 +62,7 @@ function flagsClient(readTruncated: boolean): Pick<FlagsClient, "list"> {
       data: {
         readTruncated,
         readLimit: 200,
+        cursor: null,
         items: [
           {
             id: "flag_checkout",

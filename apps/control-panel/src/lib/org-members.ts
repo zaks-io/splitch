@@ -15,7 +15,12 @@ export interface OrgMember {
  * disguised failure ADR-0036 forbids.
  */
 export type OrgMemberList =
-  | { readonly kind: "ready"; readonly items: readonly OrgMember[] }
+  | {
+      readonly kind: "ready";
+      readonly items: readonly OrgMember[];
+      readonly readTruncated: boolean;
+      readonly readLimit: number;
+    }
   | { readonly kind: "locked"; readonly message: string }
   | { readonly kind: "unavailable"; readonly message: string };
 

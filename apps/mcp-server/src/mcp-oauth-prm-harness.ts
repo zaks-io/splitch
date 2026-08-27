@@ -195,7 +195,7 @@ export async function bootControlPlaneApi(seen: SeenDownstream[]): Promise<strin
       writeJson(response, 401, { code: "UNAUTHORIZED", message: "UNAUTHORIZED", details: {} });
       return;
     }
-    writeJson(response, 200, { ...flagPage, cursor: null, limit: 50, total: null });
+    writeJson(response, 200, flagPage);
   });
 }
 

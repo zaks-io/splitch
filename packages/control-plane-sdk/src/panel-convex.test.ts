@@ -32,7 +32,9 @@ const INSTALLATION = {
 
 describe("panel Convex client", () => {
   it("lists installations from the Environment-scoped path", async () => {
-    const fetch = stubFetch(json({ installations: [INSTALLATION] }));
+    const fetch = stubFetch(
+      json({ items: [INSTALLATION], readLimit: 200, readTruncated: false, cursor: null }),
+    );
     const client = createPanelConvexClient({ fetch: fetch as unknown as typeof globalThis.fetch });
 
     const result = await client.list(SCOPE);
@@ -40,7 +42,7 @@ describe("panel Convex client", () => {
     expect(String(fetch.mock.calls[0]?.[0])).toBe(
       "https://control-plane.internal/apps/app_1/envs/env_prod/integrations/convex/installations",
     );
-    expect(result.ok && result.data.installations[0]?.lastDeliveredVersion).toBe(41);
+    expect(result.ok && result.data.items[0]?.lastDeliveredVersion).toBe(41);
   });
 
   it("reads a 204 revoke as the success it is", async () => {
