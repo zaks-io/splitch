@@ -1,6 +1,6 @@
 import { type UserRole, UserRoleSchema } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
-import type { AuthResult } from "@splitch/worker-runtime";
+import type { AuthResolver, AuthResult } from "@splitch/worker-runtime";
 import {
   type MembershipClaim,
   type MembershipRole,
@@ -58,6 +58,25 @@ export async function authorizeBearerMembership(
   if (claims.length === 0) return null;
   if (!access) return null;
   return (await access.authorize(userId, claims)) ? null : MEMBERSHIP_REFUSED;
+}
+
+/**
+ * Recheck live membership after another resolver has accepted the request.
+ * Used by the MCP Control Plane door, which copies minted scopes from the
+ * delegation and would otherwise skip the public-bearer recheck.
+ */
+export function withBearerMembershipCheck(
+  resolver: AuthResolver,
+  access: TokenMembershipAccess,
+): AuthResolver {
+  return async (request) => {
+    const result = await resolver(request);
+    if (!result.ok) return result;
+    return (
+      (await authorizeBearerMembership(access, result.principal.id, result.principal.scopes)) ??
+      result
+    );
+  };
 }
 
 async function claimHolds(

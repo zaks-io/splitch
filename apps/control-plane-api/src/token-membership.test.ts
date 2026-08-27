@@ -1,6 +1,10 @@
 import { appScope } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
-import { authorizeBearerMembership, makeTokenMembershipAccess } from "./token-membership";
+import {
+  authorizeBearerMembership,
+  makeTokenMembershipAccess,
+  withBearerMembershipCheck,
+} from "./token-membership";
 
 const USER = "user_membership_recheck";
 const ORG = "org_membership_recheck";
@@ -37,6 +41,42 @@ describe("authorizeBearerMembership", () => {
     await expect(
       authorizeBearerMembership({ authorize: async () => true }, USER, [`org:${ORG}:member`]),
     ).resolves.toBeNull();
+  });
+});
+
+describe("withBearerMembershipCheck", () => {
+  it("leaves an already-refused resolver result alone", async () => {
+    const authorize = vi.fn(async () => false);
+    const wrapped = withBearerMembershipCheck(async () => ({ ok: false, reason: "UNAUTHORIZED" }), {
+      authorize,
+    });
+    await expect(wrapped(new Request("https://cp.test"))).resolves.toEqual({
+      ok: false,
+      reason: "UNAUTHORIZED",
+    });
+    expect(authorize).not.toHaveBeenCalled();
+  });
+
+  it("refuses a copied App scope after the inner resolver accepted it", async () => {
+    const wrapped = withBearerMembershipCheck(
+      async () => ({
+        ok: true,
+        principal: {
+          kind: "control-plane-token",
+          id: USER,
+          scopes: [`app:${APP}:admin`],
+          orgId: null,
+          appId: APP,
+          environmentId: null,
+          authDoor: "id_jag",
+        },
+      }),
+      { authorize: async () => false },
+    );
+    await expect(wrapped(new Request("https://cp.test"))).resolves.toMatchObject({
+      ok: false,
+      error: { code: "FORBIDDEN", message: "live membership is required" },
+    });
   });
 });
 
