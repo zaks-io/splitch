@@ -114,6 +114,46 @@ export interface RawBodyByteLimit {
 }
 
 /**
+ * Conservative UTF-8 byte cap for mutating JSON routes that omit an explicit
+ * `rawBodyByteLimit`. Matches the existing Exposure / Metric Event envelope
+ * (32 KiB). Routes may declare a smaller limit; they cannot silently opt into
+ * an unbounded buffer through the registrar.
+ */
+export const DEFAULT_MUTATING_JSON_BODY_MAX_BYTES = 32 * 1024;
+
+export const DEFAULT_MUTATING_JSON_BODY_LIMIT: RawBodyByteLimit = {
+  maxBytes: DEFAULT_MUTATING_JSON_BODY_MAX_BYTES,
+  error: {
+    code: "VALIDATION_ERROR",
+    message: `request body exceeds ${DEFAULT_MUTATING_JSON_BODY_MAX_BYTES} UTF-8 bytes`,
+    details: {
+      issues: [
+        {
+          path: ["body"],
+          message: `body must be at most ${DEFAULT_MUTATING_JSON_BODY_MAX_BYTES} UTF-8 bytes`,
+        },
+      ],
+    },
+  },
+};
+
+/**
+ * Effective raw-body cap the registrar must pass to parseInput.
+ *
+ * GET never buffers a body. Every other method is mutating JSON at this
+ * boundary: use the route's explicit limit when present (including a tighter
+ * cap), otherwise the conservative default. Absence is never unbounded.
+ */
+export function rawBodyByteLimitFor(
+  contract: Pick<RouteContract, "method" | "rawBodyByteLimit">,
+): RawBodyByteLimit | undefined {
+  if (contract.method === "GET") {
+    return contract.rawBodyByteLimit;
+  }
+  return contract.rawBodyByteLimit ?? DEFAULT_MUTATING_JSON_BODY_LIMIT;
+}
+
+/**
  * The runtime-enforcement metadata for one route. `input`/`output` are Zod
  * schemas; everything else is guard policy the registrar reads.
  */

@@ -1,4 +1,4 @@
-import type { RouteContract } from "@splitch/contracts";
+import { type RouteContract, rawBodyByteLimitFor } from "@splitch/contracts";
 import type { Context, Hono } from "hono";
 import type { z } from "zod";
 import { containObservability } from "./contained-observability";
@@ -84,12 +84,14 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
   };
 
   try {
-    // Step 2: parse params/query/headers/body with the route's Zod schema.
+    // Step 2: bound raw body bytes, then parse params/query/headers/body.
+    // Mutating JSON routes always receive a limit (route-declared or the
+    // registrar default). GET never buffers a body.
     const parsed = await parseInput(
       contract.input,
       request,
       c.req.param(),
-      contract.rawBodyByteLimit,
+      rawBodyByteLimitFor(contract),
     );
     if (!parsed.ok) {
       return fail(parsed.error);
