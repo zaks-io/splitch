@@ -160,6 +160,8 @@ export async function variantDeleteBlocker(
     );
   }
 
+  // Fail-fast only. `removeVariant` re-checks this predicate on the DELETE
+  // itself; reading it here is not permission to write.
   const targetingRules = await targetingRulesReferencingVariant(
     deps.repo,
     loaded.appId,

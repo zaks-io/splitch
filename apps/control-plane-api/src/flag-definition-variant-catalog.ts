@@ -5,7 +5,7 @@ import { makeOtherApprovalApplication } from "./approval-application";
 import { canonicalHash } from "./approval-canonical";
 import { createApproval, replayApprovalIfExists } from "./approval-service";
 import { requiresReview } from "./approval-target";
-import { flagNotFound, variantNotFound } from "./flag-definition-errors";
+import { flagNotFound, variantDeleteRefusal, variantNotFound } from "./flag-definition-errors";
 import {
   type FlagDefinitionDeps,
   type LoadedFlag,
@@ -184,8 +184,9 @@ export async function deleteVariant(
   );
   if (replay) return replay.ok ? flagJson(deps, loaded.value, args.requestId) : replay.response;
 
-  // `applyVariantDelete` re-runs the Targeting Rule half of this blocker so an
-  // Approval race cannot delete the Variant and leave `variant_id` dangling.
+  // Fail-fast only. `removeVariant` (and the Approval apply path) re-checks
+  // `targeting_rules.variant_id` on the DELETE itself so a concurrent rule
+  // replace cannot sneak a dangler past this read.
   const blocked = await variantDeleteBlocker(
     deps,
     loaded.value,
@@ -223,9 +224,19 @@ export async function deleteVariant(
     return flagJson(deps, loaded.value, args.requestId);
   }
 
-  await deps.repo.flags.removeVariant(loaded.value.scope, loaded.value.flag.id, variantName);
-  await resyncFlagSnapshots(deps, loaded.value.appId, loaded.value.flag.id);
-  return flagJson(deps, loaded.value, args.requestId);
+  return applyUngatedVariantDelete(deps, loaded.value, variantName, args.requestId);
+}
+
+async function applyUngatedVariantDelete(
+  deps: FlagDefinitionDeps,
+  loaded: LoadedFlag,
+  variantName: string,
+  requestId: string,
+): Promise<Response> {
+  const removed = await deps.repo.flags.removeVariant(loaded.scope, loaded.flag.id, variantName);
+  if (!removed.ok) return variantDeleteRefusal(removed, requestId);
+  await resyncFlagSnapshots(deps, loaded.appId, loaded.flag.id);
+  return flagJson(deps, loaded, requestId);
 }
 
 async function flagJson(

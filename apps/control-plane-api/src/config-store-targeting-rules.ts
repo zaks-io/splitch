@@ -23,9 +23,22 @@ export function targetingRulePersistFailure(
   targetingRules: TargetingRule[],
   missingReason: "FLAG_NOT_FOUND" | "APPROVAL_NOT_APPLIED",
 ): Extract<FlagConfigWriteResult, { ok: false }> {
-  return result.reason === "id_conflict"
-    ? { ok: false, reason: "TARGETING_RULE_ID_CONFLICT", targetingRules }
-    : { ok: false, reason: missingReason };
+  switch (result.reason) {
+    case "id_conflict":
+      return { ok: false, reason: "TARGETING_RULE_ID_CONFLICT", targetingRules };
+    case "missing_variant":
+      return {
+        ok: false,
+        reason: "VARIANT_NOT_AVAILABLE",
+        missingVariants: result.missingVariantIds,
+      };
+    case "not_found":
+      return { ok: false, reason: missingReason };
+    default: {
+      const _exhaustive: never = result;
+      return _exhaustive;
+    }
+  }
 }
 
 export async function replaceTargetingRules(

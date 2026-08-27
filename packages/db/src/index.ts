@@ -26,6 +26,10 @@ export type {
 export type { FlagChangeEventRow } from "./repo/flag-change-events";
 export type { UpdateVariantResult } from "./repo/flag-variant-approval";
 export type {
+  RemoveVariantResult,
+  TargetingRuleVariantRef,
+} from "./repo/flag-variant-ops";
+export type {
   VariantFrozenChange,
   VariantRunFreeze,
 } from "./repo/flag-variant-run-freeze";

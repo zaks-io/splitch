@@ -5,6 +5,7 @@ import type { ApplicationOutcome } from "./approval-service-types";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { purgeFlagConfigsKvForKey } from "./flag-config-lifecycle";
 import {
+  type VariantDeleteRefusal,
   type VariantWriteRefusal,
   variantFreezeDetails,
   variantFreezeMessage,
@@ -248,10 +249,9 @@ async function applyVariantDelete(
       error: { code: "VARIANT_NOT_FOUND" as const, details: {} },
     };
   }
-  // Re-check at apply, not only at proposal: a Targeting Rule added after the
-  // Request was minted would otherwise land as an approved delete that leaves
-  // `targeting_rules.variant_id` dangling. Terminal (`unapplicable`), not a
-  // retryable failure — the proposal no longer describes a legal delete.
+  // Fail-fast only. `removeVariant` is the seam that actually refuses when a
+  // Targeting Rule exists at write time; this read cannot close the race
+  // between listing and the DELETE (`targeting_rules.variant_id` has no FK).
   const envs = await deps.repo.identity.listEnvironments(appScope(request.appId));
   const targetingRules = await targetingRulesReferencingVariant(
     deps.repo,
@@ -261,15 +261,12 @@ async function applyVariantDelete(
     envs,
   );
   if (targetingRules.length > 0) {
-    const refusal = { variantName: variant.name, targetingRules };
-    return {
-      ok: false as const,
-      unapplicable: {
-        code: "RESOURCE_NOT_EMPTY" as const,
-        message: variantTargetingRuleReferenceMessage(refusal),
-        details: variantTargetingRuleReferenceDetails(refusal),
-      },
-    };
+    return variantDeleteApplicationRefusal({
+      ok: false,
+      reason: "TARGETING_RULE_REFS",
+      variantName: variant.name,
+      targetingRules,
+    });
   }
   const removed = await deps.repo.flags.removeVariant(
     appScope(request.appId),
@@ -277,9 +274,38 @@ async function applyVariantDelete(
     variant.name,
     { updatedAt: commit.reviewedAt, updatedBy: commit.reviewedBy, approval: commit },
   );
-  if (removed === 0) return notApplied();
+  if (!removed.ok) return variantDeleteApplicationRefusal(removed);
   await resyncFlagSnapshots(deps, request.appId, variant.flagId);
   return { ok: true as const };
+}
+
+/** The delete sibling of `variantApplicationRefusal`. */
+export function variantDeleteApplicationRefusal(refusal: VariantDeleteRefusal): ApplicationOutcome {
+  switch (refusal.reason) {
+    case "TARGETING_RULE_REFS":
+      return {
+        ok: false,
+        unapplicable: {
+          code: "RESOURCE_NOT_EMPTY" as const,
+          message: variantTargetingRuleReferenceMessage(refusal),
+          details: variantTargetingRuleReferenceDetails(refusal),
+        },
+      };
+    case "NOT_FOUND":
+      return {
+        ok: false,
+        targetState: "rolled_back",
+        error: { code: "VARIANT_NOT_FOUND" as const, details: {} },
+      };
+    case "NOT_APPLIED":
+      return notApplied();
+    default:
+      return unhandledDeleteRefusal(refusal);
+  }
+}
+
+function unhandledDeleteRefusal(refusal: never): never {
+  throw new Error(`unhandled removeVariant refusal: ${JSON.stringify(refusal)}`);
 }
 
 /**
