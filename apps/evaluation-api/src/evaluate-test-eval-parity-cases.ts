@@ -6,7 +6,10 @@
  * again (SPL-303).
  */
 
-export type ParityAttributes = Record<string, string | number | boolean | null>;
+export type ParityAttributes = Record<
+  string,
+  string | number | boolean | ReadonlyArray<string | number | boolean> | null
+>;
 
 export type ParityCase = {
   readonly name: string;
@@ -31,6 +34,9 @@ export type ParityCase = {
 
 /** Targeting Rule under test: `plan eq enterprise` → treatment. */
 export const PARITY_PLAN_RULE_ID = "rule-plan-enterprise";
+
+/** Targeting Rule under test: `roles in ["admin"]` → treatment. */
+export const PARITY_ROLES_RULE_ID = "rule-roles-admin";
 
 /**
  * Baseline at 0% so unmatched traffic resolves to the Default Variant

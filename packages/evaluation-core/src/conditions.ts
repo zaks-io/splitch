@@ -33,9 +33,9 @@ function matchesCondition(
   }
   switch (condition.operator) {
     case "eq":
-      return Object.is(actual.value, condition.value);
+      return anyEquals(actual.value, condition.value);
     case "neq":
-      return !Object.is(actual.value, condition.value);
+      return !anyEquals(actual.value, condition.value);
     case "gt":
       return compareNumbers(actual.value, condition.value, (a, b) => a > b);
     case "lt":
@@ -45,15 +45,9 @@ function matchesCondition(
     case "lte":
       return compareNumbers(actual.value, condition.value, (a, b) => a <= b);
     case "in":
-      return (
-        Array.isArray(condition.value) &&
-        condition.value.some((value) => Object.is(value, actual.value))
-      );
+      return Array.isArray(condition.value) && intersects(actual.value, condition.value);
     case "not_in":
-      return (
-        Array.isArray(condition.value) &&
-        !condition.value.some((value) => Object.is(value, actual.value))
-      );
+      return Array.isArray(condition.value) && !intersects(actual.value, condition.value);
     case "matches":
       return matchesRegex(actual.value, condition.value);
     case "not_matches":
@@ -68,6 +62,20 @@ function contextValue(context: EvaluationContext, attribute: string) {
     hasAttribute: Object.hasOwn(context.attributes, attribute),
     value: context.attributes[attribute] ?? null,
   };
+}
+
+function comparableValues(actual: unknown): readonly unknown[] {
+  return Array.isArray(actual) ? actual : [actual];
+}
+
+function anyEquals(actual: unknown, expected: unknown): boolean {
+  return comparableValues(actual).some((value) => Object.is(value, expected));
+}
+
+function intersects(actual: unknown, expected: readonly unknown[]): boolean {
+  return comparableValues(actual).some((actualValue) =>
+    expected.some((expectedValue) => Object.is(actualValue, expectedValue)),
+  );
 }
 
 function compareNumbers(

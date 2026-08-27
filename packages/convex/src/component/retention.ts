@@ -44,36 +44,58 @@ export async function ensureRetentionScheduled(ctx: MutationCtx): Promise<void> 
 
 async function purgeExpiredHandler(ctx: MutationCtx): Promise<number> {
   const cutoff = Date.now() - RETENTION_MS;
-  const [legacyEvaluationClaims, evaluationClaims, webhookClaims, terminalExposures] =
-    await Promise.all([
-      ctx.db
-        .query("evaluationClaims")
-        .withIndex("by_created_at", (q) => q.eq("createdAt", undefined))
-        .take(BATCH_SIZE),
-      ctx.db
-        .query("evaluationClaims")
-        .withIndex("by_created_at", (q) => q.lte("createdAt", cutoff))
-        .take(BATCH_SIZE),
-      ctx.db
-        .query("webhookClaims")
-        .withIndex("by_claimed_at", (q) => q.lte("claimedAt", cutoff))
-        .take(BATCH_SIZE),
-      ctx.db
-        .query("exposureOutbox")
-        .withIndex("by_state_terminal_at", (q) =>
-          q.eq("state", "terminal").lte("terminalAt", cutoff),
-        )
-        .take(BATCH_SIZE),
-    ]);
+  const [
+    legacyEvaluationClaims,
+    evaluationClaims,
+    webhookClaims,
+    terminalExposures,
+    acceptedMetricEvents,
+    terminalMetricEvents,
+    suppressedMetricEvents,
+  ] = await Promise.all([
+    ctx.db
+      .query("evaluationClaims")
+      .withIndex("by_created_at", (q) => q.eq("createdAt", undefined))
+      .take(BATCH_SIZE),
+    ctx.db
+      .query("evaluationClaims")
+      .withIndex("by_created_at", (q) => q.lte("createdAt", cutoff))
+      .take(BATCH_SIZE),
+    ctx.db
+      .query("webhookClaims")
+      .withIndex("by_claimed_at", (q) => q.lte("claimedAt", cutoff))
+      .take(BATCH_SIZE),
+    ctx.db
+      .query("exposureOutbox")
+      .withIndex("by_state_terminal_at", (q) => q.eq("state", "terminal").lte("terminalAt", cutoff))
+      .take(BATCH_SIZE),
+    completedMetricEvents(ctx, "accepted", cutoff),
+    completedMetricEvents(ctx, "terminal", cutoff),
+    completedMetricEvents(ctx, "suppressed", cutoff),
+  ]);
   for (const row of legacyEvaluationClaims)
     await ctx.db.patch(row._id, { createdAt: row._creationTime });
-  const rows = [...evaluationClaims, ...webhookClaims, ...terminalExposures];
+  const rows = [
+    ...evaluationClaims,
+    ...webhookClaims,
+    ...terminalExposures,
+    ...acceptedMetricEvents,
+    ...terminalMetricEvents,
+    ...suppressedMetricEvents,
+  ];
   for (const row of rows) await ctx.db.delete(row._id);
   return rows.length;
 }
 
 async function nextRetentionDueAt(ctx: MutationCtx): Promise<number | null> {
-  const [evaluationClaim, webhookClaim, terminalExposure] = await Promise.all([
+  const [
+    evaluationClaim,
+    webhookClaim,
+    terminalExposure,
+    acceptedMetricEvent,
+    terminalMetricEvent,
+    suppressedMetricEvent,
+  ] = await Promise.all([
     ctx.db.query("evaluationClaims").withIndex("by_created_at").order("asc").first(),
     ctx.db.query("webhookClaims").withIndex("by_claimed_at").order("asc").first(),
     ctx.db
@@ -81,6 +103,9 @@ async function nextRetentionDueAt(ctx: MutationCtx): Promise<number | null> {
       .withIndex("by_state_terminal_at", (q) => q.eq("state", "terminal"))
       .order("asc")
       .first(),
+    firstCompletedMetricEvent(ctx, "accepted"),
+    firstCompletedMetricEvent(ctx, "terminal"),
+    firstCompletedMetricEvent(ctx, "suppressed"),
   ]);
   if (terminalExposure && terminalExposure.terminalAt === undefined)
     throw new Error("Terminal Convex Exposure is missing terminalAt");
@@ -93,8 +118,40 @@ async function nextRetentionDueAt(ctx: MutationCtx): Promise<number | null> {
       : null,
     webhookClaim ? webhookClaim.claimedAt + RETENTION_MS : null,
     terminalDueAt === undefined ? null : terminalDueAt + RETENTION_MS,
+    completedDueAt(acceptedMetricEvent),
+    completedDueAt(terminalMetricEvent),
+    completedDueAt(suppressedMetricEvent),
   ].filter((value): value is number => value !== null);
   return due.length === 0 ? null : Math.min(...due);
+}
+
+function completedMetricEvents(
+  ctx: MutationCtx,
+  state: "accepted" | "terminal" | "suppressed",
+  cutoff: number,
+) {
+  return ctx.db
+    .query("metricEventClaims")
+    .withIndex("by_state_completed_at", (q) => q.eq("state", state).lte("completedAt", cutoff))
+    .take(BATCH_SIZE);
+}
+
+function firstCompletedMetricEvent(
+  ctx: MutationCtx,
+  state: "accepted" | "terminal" | "suppressed",
+) {
+  return ctx.db
+    .query("metricEventClaims")
+    .withIndex("by_state_completed_at", (q) => q.eq("state", state))
+    .order("asc")
+    .first();
+}
+
+function completedDueAt(row: { completedAt?: number } | null): number | null {
+  if (!row) return null;
+  if (row.completedAt === undefined)
+    throw new Error("Completed Convex Metric Event claim is missing completedAt");
+  return row.completedAt + RETENTION_MS;
 }
 
 async function currentIntegration(ctx: MutationCtx) {

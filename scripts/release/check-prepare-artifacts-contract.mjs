@@ -59,6 +59,8 @@ const FAKE_DIST = {
     "component/convex.config.js": "export {};\n",
     "component/integration_recovery.js": "export {};\n",
     "component/integration_recovery.d.ts": "export {};\n",
+    "component/metric_event.js": "export {};\n",
+    "component/metric_event.d.ts": "export {};\n",
     "component/_generated/component.d.ts": "export {};\n",
   },
   cloudflare: {

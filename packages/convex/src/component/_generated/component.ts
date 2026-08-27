@@ -109,4 +109,31 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       syncNow: FunctionReference<"action", "internal", {}, number, Name>;
       uninstall: FunctionReference<"action", "internal", {}, null, Name>;
     };
+    metric_event: {
+      status: FunctionReference<
+        "query",
+        "internal",
+        { eventId: string },
+        {
+          error?: string;
+          eventId: string;
+          state: "missing" | "queued" | "accepted" | "terminal" | "suppressed";
+        },
+        Name
+      >;
+      track: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          dimensions: Record<string, boolean | string | number>;
+          eventId: string;
+          eventName: string;
+          fields: Record<string, any>;
+          idType: string;
+          targetingKey: string;
+        },
+        { eventId: string; queued: true },
+        Name
+      >;
+    };
   };
