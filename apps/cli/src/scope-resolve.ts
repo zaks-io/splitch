@@ -16,10 +16,12 @@ export interface NamedResource {
 
 /**
  * Flag selector resolution. `matched` is true when `flags_list` found the
- * selector as an ID or key. When the catalog is truncated and the selector is
- * absent, `matched` is false and `id` is the selector verbatim — write paths
- * that need a canonical Flag ID must follow up with explicit `flags_get`
- * `by=id` and `by=key` lookups.
+ * selector as an ID or key. When the catalog is truncated, a page match cannot
+ * prove uniqueness: a hidden Flag past the ceiling may use the same selector
+ * as the other kind (ID vs key). Write paths that need a canonical Flag ID
+ * must follow up with explicit `flags_get` `by=id` and `by=key` lookups on
+ * the original selector whenever `readTruncated` is true, and refuse distinct
+ * canonical IDs.
  */
 export interface FlagSelectorResolution extends NamedResource {
   readonly readTruncated: boolean;
@@ -185,7 +187,9 @@ export async function resolveEnvironmentSelector(
  * try. Only `flags_get` with `?by=key` accepts a key on the server; other
  * `:flagId` routes still require a canonical id past the ceiling. Write paths
  * that need that id must issue explicit `flags_get` `by=id` and `by=key`
- * lookups. An untruncated miss still fails with CLI_SCOPE_UNRESOLVED.
+ * lookups on the original selector whenever `readTruncated` is true — a
+ * visible page match is not enough, because a hidden Flag may collide on the
+ * other selector kind. An untruncated miss still fails with CLI_SCOPE_UNRESOLVED.
  */
 export async function resolveFlagSelector(
   deps: CliDeps,

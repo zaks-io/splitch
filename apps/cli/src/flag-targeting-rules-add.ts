@@ -125,10 +125,10 @@ async function readFlagCatalogForAdd(
   selector: string,
   listed: FlagSelectorResolution,
 ): Promise<{ flag: Flag } | CliResult> {
-  if (listed.matched) {
-    return readFlagBySelector(deps, io, appId, listed.id, "id");
+  if (listed.readTruncated) {
+    return readFlagPastCeiling(deps, io, appId, selector);
   }
-  return readFlagPastCeiling(deps, io, appId, selector);
+  return readFlagBySelector(deps, io, appId, listed.id, "id");
 }
 
 async function readFlagPastCeiling(
