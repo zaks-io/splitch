@@ -95,6 +95,28 @@ describe("listResponse factory", () => {
     );
   });
 
+  it("rejects a readLimit above LIST_READ_LIMIT", () => {
+    expect(
+      PageOfStrings.safeParse({
+        items: [],
+        readLimit: LIST_READ_LIMIT + 1,
+        readTruncated: false,
+        cursor: null,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a non-positive readLimit", () => {
+    expect(
+      PageOfStrings.safeParse({
+        items: [],
+        readLimit: 0,
+        readTruncated: false,
+        cursor: null,
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects the deleted total field as an extra if the helper is strict about known keys", () => {
     const parsed = PageOfStrings.parse({
       items: [],
@@ -130,6 +152,10 @@ describe("boundListRead", () => {
     expect(page.readTruncated).toBe(true);
     expect(page.items).toHaveLength(LIST_READ_LIMIT);
     expect(page.cursor).toBeNull();
+  });
+
+  it("refuses a readLimit above LIST_READ_LIMIT", () => {
+    expect(() => boundListRead(["a"], LIST_READ_LIMIT + 1)).toThrow(/1\.\.200/);
   });
 });
 

@@ -177,6 +177,19 @@ describe("panel Segments binding transport", () => {
     });
   });
 
+  it("rejects a list envelope whose readLimit is not a positive integer at or under the cap", async () => {
+    for (const readLimit of [0, -1, 1.5, 201]) {
+      const client = createPanelSegmentsClient({
+        fetch: vi.fn(async () =>
+          Response.json({ items: [], readLimit, readTruncated: false, cursor: null }),
+        ),
+      });
+      await expect(client.list({ appId: "app_1" })).rejects.toThrow(
+        "panel_segments_list returned an invalid response body",
+      );
+    }
+  });
+
   it("rejects a list body that is not an items array", async () => {
     const client = createPanelSegmentsClient({
       fetch: vi.fn(async () => Response.json({ segments: [] })),

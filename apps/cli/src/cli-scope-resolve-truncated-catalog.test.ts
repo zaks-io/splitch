@@ -30,6 +30,54 @@ describe("truncated org/app/env catalogs", () => {
     ).toBe(false);
   });
 
+  it("does not resolve a visible App key when the catalog is truncated", async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = new FakeCliTransport([
+      {
+        match: (request) =>
+          request.method === "GET" && new URL(request.url).pathname === "/orgs/org_1/apps",
+        status: 200,
+        body: {
+          items: [
+            {
+              id: "app_visible",
+              organizationId: "org_1",
+              key: "checkout",
+              name: "Visible",
+              createdAt: "2026-07-03T00:00:00.000Z",
+              updatedAt: "2026-07-03T00:00:00.000Z",
+            },
+          ],
+          readLimit: 200,
+          readTruncated: true,
+          cursor: null,
+        },
+      },
+      ...scopeResolutionStubs(),
+      flagsListStub({ appId: "checkout", flags: [] }),
+    ]);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli(["flags", "list", "--json", "--app", "checkout"], {
+      credentialPath,
+      fetch: transport.fetch,
+    });
+
+    expect(code).toBe(EXIT_OK);
+    expect(
+      transport.requests.some(
+        (request) => new URL(request.url).pathname === "/apps/checkout/flags",
+      ),
+    ).toBe(true);
+    expect(
+      transport.requests.some(
+        (request) => new URL(request.url).pathname === "/apps/app_visible/flags",
+      ),
+    ).toBe(false);
+    expect(error.mock.calls.join(" ")).not.toContain("CLI_SCOPE_UNRESOLVED");
+  });
+
   it("passes a missing App key through when the catalog is truncated", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);

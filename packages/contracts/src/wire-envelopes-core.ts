@@ -95,7 +95,7 @@ export function listResponse<ItemSchema extends z.ZodTypeAny>(itemSchema: ItemSc
   return z.object({
     items: z.array(itemSchema),
     // Cap actually applied to this read (requested and applied can differ).
-    readLimit: z.number().int().positive(),
+    readLimit: z.number().int().positive().max(LIST_READ_LIMIT),
     // Observed at limit+1, never inferred from items.length.
     readTruncated: z.boolean(),
     // null = no continuation available from this call.
@@ -111,6 +111,11 @@ export function boundListRead<T>(
   scanned: readonly T[],
   readLimit: number = LIST_READ_LIMIT,
 ): { items: T[]; readLimit: number; readTruncated: boolean; cursor: null } {
+  if (!Number.isInteger(readLimit) || readLimit < 1 || readLimit > LIST_READ_LIMIT) {
+    throw new Error(
+      `boundListRead: readLimit must be an integer in 1..${LIST_READ_LIMIT}, got ${readLimit}`,
+    );
+  }
   const readTruncated = scanned.length > readLimit;
   return {
     items: readTruncated ? scanned.slice(0, readLimit) : [...scanned],

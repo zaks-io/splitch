@@ -87,19 +87,9 @@ describe("get/update shared-field placement", () => {
         const readableTop = hasTopLevel(getPaths.get(key), key);
         const writableTop = hasTopLevel(writePaths.get(key), key);
         expect(
-          {
-            operation: `${getRoute.operationId}/${updateRoute.operationId}`,
-            key,
-            readableTop,
-            writableTop,
-          },
-          `${getRoute.operationId}/${updateRoute.operationId} field "${key}" must live at the same level on get and update`,
-        ).toEqual({
-          operation: `${getRoute.operationId}/${updateRoute.operationId}`,
-          key,
           readableTop,
-          writableTop,
-        });
+          `${getRoute.operationId}/${updateRoute.operationId} field "${key}" must live at the same level on get and update`,
+        ).toBe(writableTop);
       }
     }
   });

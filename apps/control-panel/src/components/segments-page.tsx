@@ -76,7 +76,7 @@ export function SegmentsPage({
           nounPlural="Segments"
           readLimit={readLimit}
           scopeNoun="App"
-          shownCount={segments.length}
+          shownCount={segments.length + unparseable.length}
           testId="segments-truncated"
         />
       ) : null}

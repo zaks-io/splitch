@@ -272,7 +272,10 @@ Every `*_list` tool returns the shared `ListResponse<T>` wrapper
 `approval_requests_list`) accept `limit?` and `cursor?` query params (default `limit` 50, schema-max
 500). An agent paginates those by resending the returned `cursor` until `cursor === null`. On every
 other list, `cursor` is always null; if `readTruncated` is true the catalog is incomplete and the
-query must be narrowed. Canonical contract in
+query must be narrowed. Lists with no catalog-reducing filter (`organizations_list`, and
+`flags_list` whose optional `environmentId` hydrates config rather than shrinking the Flag set)
+have no narrowing query to send: use a keyed get (`organizations_get`, `flags_get?by=key`) for a
+known id or key, or stop. Do not invent parameters the route does not accept. Canonical contract in
 [request-response-envelopes-conventions.md](./request-response-envelopes-conventions.md#listresponse-wrapper-every-_list-operation).
 
 ## Idempotency on retried creates

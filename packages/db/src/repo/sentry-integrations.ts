@@ -74,10 +74,14 @@ export function makeSentryIntegrationRepo(d1: D1Database) {
       const statement =
         limit === undefined
           ? d1
-              .prepare(`${INSTALLATION_SELECT} WHERE org_id = ? ORDER BY created_at DESC`)
+              .prepare(
+                `${INSTALLATION_SELECT} WHERE org_id = ? ORDER BY created_at DESC, installation_id DESC`,
+              )
               .bind(orgId)
           : d1
-              .prepare(`${INSTALLATION_SELECT} WHERE org_id = ? ORDER BY created_at DESC LIMIT ?`)
+              .prepare(
+                `${INSTALLATION_SELECT} WHERE org_id = ? ORDER BY created_at DESC, installation_id DESC LIMIT ?`,
+              )
               .bind(orgId, limit);
       const rows = await statement.all<SentryInstallationRow>();
       return rows.results;

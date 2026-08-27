@@ -2,6 +2,7 @@ import {
   type Condition,
   type ConditionOperator,
   type CreateSegmentRequest,
+  LIST_READ_LIMIT,
   type PatchSegmentRequest,
   type Segment,
   SegmentSchema,
@@ -163,11 +164,15 @@ function parseSegmentList(
 function isListEnvelope(
   input: unknown,
 ): input is { items: unknown[]; readLimit: number; readTruncated: boolean; cursor: string | null } {
+  if (!isObject(input) || !Array.isArray(input.items) || typeof input.readTruncated !== "boolean") {
+    return false;
+  }
+  const readLimit = input.readLimit;
   return (
-    isObject(input) &&
-    Array.isArray(input.items) &&
-    typeof input.readLimit === "number" &&
-    typeof input.readTruncated === "boolean" &&
+    typeof readLimit === "number" &&
+    Number.isInteger(readLimit) &&
+    readLimit > 0 &&
+    readLimit <= LIST_READ_LIMIT &&
     (input.cursor === null || typeof input.cursor === "string")
   );
 }

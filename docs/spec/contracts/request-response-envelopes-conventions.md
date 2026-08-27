@@ -48,7 +48,7 @@ Resource envelope files:
 
 ## ListResponse wrapper (every `*_list` operation)
 
-```
+```text
 ListResponse<T> = {
   items:         T[]
   readLimit:     positive integer  // cap actually applied to this read
@@ -69,11 +69,12 @@ more and this call cannot get it for you".
 Every list array is under `items`. There is no `total` on a list response — an always-null count is
 the disguised shape ADR-0036 forbids. A real count, if wanted, is a `*_count` operation.
 
-The applied cap is `LIST_READ_LIMIT` (200). Requested `limit` may differ: a caller asking
-`limit=500` against the 200-cap sees `readLimit: 200`. Request `limit` stays a query param on
-paginated routes (`approval_requests_list`: default 50, schema-max 500, over-cap →
-`INVALID_PAGINATION { field: 'limit' }`). Other `*_list` routes are unpaginable: they always return
-`cursor: null` and report truncation when the scan hits the cap.
+The applied cap is `LIST_READ_LIMIT` (200). Requested `limit` may differ. The two caps are
+distinct: the request schema maximum is 500; the applied read never exceeds 200. A caller asking
+`limit=500` (the request maximum) against the 200-cap sees `readLimit: 200`. Request `limit` stays
+a query param on paginated routes (`approval_requests_list`: default 50, schema-max 500;
+`limit > 500` → `INVALID_PAGINATION { field: 'limit' }`). Other `*_list` routes are unpaginable:
+they always return `cursor: null` and report truncation when the scan hits the cap.
 
 **Cursor contract (paginated lists).** The `cursor` is an opaque, server-encoded string. Do not
 parse, construct, or mutate it. A cursor is valid for **15 minutes** and is scoped to the exact

@@ -110,10 +110,15 @@ export async function resolveAppSelector(deps: CliDeps, selector: string): Promi
     });
   }
   const [match] = byKey;
-  if (match) return match;
+  // App keys are unique per Org, not globally. A single visible key match in a
+  // truncated catalog cannot prove there is no second reachable App with the
+  // same key past the cap — returning it would pick an App the ID-then-key
+  // rule would have refused. Pass the selector through instead.
+  if (match && !catalogTruncated) return match;
   if (catalogTruncated) {
-    // Incomplete catalog — cannot prove absence. Pass the selector through so
-    // a later wire call can still try, same as Flag resolution past the cap.
+    // Incomplete catalog — cannot prove absence or key uniqueness. Pass the
+    // selector through so a later wire call can still try, same as Flag
+    // resolution past the cap.
     return { id: selector };
   }
   throw new SplitchCliError({

@@ -31,12 +31,12 @@ export async function listPushInstallations<T extends { installationId: string }
     limit === undefined
       ? d1
           .prepare(
-            `${installationSelect} WHERE app_id = ? AND environment_id = ? ORDER BY created_at DESC`,
+            `${installationSelect} WHERE app_id = ? AND environment_id = ? ORDER BY created_at DESC, installation_id DESC`,
           )
           .bind(scope.appId, scope.environmentId)
       : d1
           .prepare(
-            `${installationSelect} WHERE app_id = ? AND environment_id = ? ORDER BY created_at DESC LIMIT ?`,
+            `${installationSelect} WHERE app_id = ? AND environment_id = ? ORDER BY created_at DESC, installation_id DESC LIMIT ?`,
           )
           .bind(scope.appId, scope.environmentId, limit),
     d1
