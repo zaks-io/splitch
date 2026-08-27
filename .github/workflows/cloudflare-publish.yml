@@ -52,7 +52,16 @@ jobs:
           package-manager-cache: false
 
       - name: Update npm for trusted publishing
-        run: npm install --global npm@^11.15.0
+        env:
+          NPM_VERSION: 11.15.0
+        run: |
+          set -euo pipefail
+          npm install --global "npm@${NPM_VERSION}"
+          installed="$(npm --version)"
+          if [ "$installed" != "$NPM_VERSION" ]; then
+            echo "::error::npm reports '${installed}', expected ${NPM_VERSION}"
+            exit 1
+          fi
 
       - name: Resolve CLOUDFLARE release target
         id: target
