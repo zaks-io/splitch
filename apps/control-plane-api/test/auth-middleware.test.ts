@@ -76,7 +76,7 @@ beforeAll(async () => {
   await seedOrgApp(bindings.d1, ANALYTICS);
   await seedOrgMember(bindings.d1, { orgId: PAYMENTS.orgId, userId: ALICE, role: "admin" });
   await seedOrgMember(bindings.d1, { orgId: ANALYTICS.orgId, userId: BOB, role: "member" });
-  await seedOrgMember(bindings.d1, { orgId: PAYMENTS.orgId, userId: CAROL, role: "member" });
+  await seedOrgMember(bindings.d1, { orgId: PAYMENTS.orgId, userId: CAROL, role: "admin" });
   await seedAppMember(bindings.d1, { appId: PAYMENTS.appId, userId: ALICE, role: "admin" });
   await seedAppMember(bindings.d1, { appId: ANALYTICS.appId, userId: BOB, role: "member" });
 });
