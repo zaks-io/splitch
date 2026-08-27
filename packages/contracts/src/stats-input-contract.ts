@@ -131,15 +131,60 @@ export const DEFAULT_CUPED_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
  * The source binding used to materialize one Metric for a Run snapshot.
  * Measurement edits can replace this payload without changing the Run id.
  */
-export const MetricQueryConfigSchema = z
-  .object({
-    metric_id: MetricIdSchema,
-    metric_type: MetricKindSchema,
-    event_definition_id: z.string(),
-    window_duration_ms: z.number().int().nonnegative(),
-    cuped_lookback_ms: z.number().int().nonnegative(),
-  })
-  .strict();
+const MetricSourceBindingSchema = z.union([
+  z
+    .object({
+      metric_id: MetricIdSchema,
+      metric_type: z.literal("binomial"),
+      event_definition_id: z.string(),
+      event_field_name: z.null().default(null),
+    })
+    .strict(),
+  z
+    .object({
+      metric_id: MetricIdSchema,
+      metric_type: z.enum(["count", "revenue"]),
+      event_definition_id: z.string(),
+      event_field_name: z.string(),
+    })
+    .strict(),
+]);
+
+const MetricQueryWindowSchema = {
+  metric_id: MetricIdSchema,
+  window_duration_ms: z.number().int().nonnegative(),
+  cuped_lookback_ms: z.number().int().nonnegative(),
+};
+
+export const MetricQueryConfigSchema = z.union([
+  z
+    .object({
+      ...MetricQueryWindowSchema,
+      metric_type: z.literal("binomial"),
+      event_definition_id: z.string(),
+      event_field_name: z.null().default(null),
+    })
+    .strict(),
+  z
+    .object({
+      ...MetricQueryWindowSchema,
+      metric_type: z.enum(["count", "revenue"]),
+      event_definition_id: z.string(),
+      event_field_name: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      ...MetricQueryWindowSchema,
+      metric_type: z.literal("ratio"),
+      numerator: MetricSourceBindingSchema,
+      denominator: MetricSourceBindingSchema,
+    })
+    .strict()
+    .refine((config) => config.numerator.metric_id !== config.denominator.metric_id, {
+      message: "Ratio source bindings must be distinct Metrics",
+    }),
+]);
 export type MetricQueryConfig = z.infer<typeof MetricQueryConfigSchema>;
 
 /**

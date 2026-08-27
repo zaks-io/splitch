@@ -64,6 +64,7 @@ describe("Experiment Start Run Snapshot delivery", () => {
           metric_id: fx.metricId,
           metric_type: "binomial",
           event_definition_id: "event_definition_signed_up",
+          event_field_name: null,
           window_duration_ms: 0,
           cuped_lookback_ms: 604_800_000,
         },

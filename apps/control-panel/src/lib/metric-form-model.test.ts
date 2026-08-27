@@ -34,7 +34,6 @@ describe("Metric editor model", () => {
         ...emptyMetricDraft(),
         name: "Rate",
         key: "rate",
-        eventDefinitionId: "signed_up",
         kind: "ratio",
       }),
     ).toContainEqual({
@@ -43,10 +42,10 @@ describe("Metric editor model", () => {
     });
   });
 
-  it("disables Ratio with an explanation until a denominator Metric exists", () => {
+  it("disables Ratio with an explanation until two operand Metrics exist", () => {
     expect(metricKindOptions(false).find(({ kind }) => kind === "ratio")).toEqual({
       kind: "ratio",
-      label: "Ratio (create another Metric first)",
+      label: "Ratio (create two Metrics first)",
       disabled: true,
     });
     expect(metricKindOptions(true).find(({ kind }) => kind === "ratio")).toEqual({
@@ -62,7 +61,7 @@ describe("Metric editor model", () => {
       name: " Signup rate ",
       key: " signup-rate ",
       kind: "ratio",
-      eventDefinitionId: " signed_up ",
+      numeratorMetricId: "metric_signups",
       denominatorMetricId: "metric_visitors",
     });
 
@@ -71,7 +70,7 @@ describe("Metric editor model", () => {
       name: "Signup rate",
       key: "signup-rate",
       kind: "ratio",
-      eventDefinitionId: "signed_up",
+      numerator: { metricId: "metric_signups" },
       denominator: { metricId: "metric_visitors" },
     });
     expect(JSON.stringify(ratio)).not.toMatch(/role|guardrail|activation/u);
@@ -97,5 +96,26 @@ describe("Metric editor model", () => {
       eventFieldName: "amount",
     });
     expect(metricUpdateInput(draft)).not.toHaveProperty("kind");
+  });
+
+  it("turns an incomplete legacy Ratio into a canonical operand repair", () => {
+    const draft = metricDraft({
+      id: "metric_ratio_legacy",
+      appId: "app_1",
+      name: "Legacy rate",
+      key: "legacy-rate",
+      kind: "ratio",
+      eventDefinitionId: "event_definition_numerator",
+      denominator: { metricId: "metric_denominator" },
+      configurationStatus: "needs_configuration",
+      createdAt: "2026-07-29T00:00:00.000Z",
+    });
+    draft.numeratorMetricId = "metric_numerator";
+
+    expect(metricUpdateInput(draft)).toMatchObject({
+      eventDefinitionId: null,
+      numerator: { metricId: "metric_numerator" },
+      denominator: { metricId: "metric_denominator" },
+    });
   });
 });

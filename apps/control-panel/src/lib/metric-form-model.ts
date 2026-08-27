@@ -14,16 +14,16 @@ const METRIC_KINDS: ReadonlyArray<{ kind: MetricKind; label: string }> = [
   { kind: "ratio", label: "Ratio" },
 ];
 
-export function metricKindOptions(hasDenominatorCandidates: boolean): ReadonlyArray<{
+export function metricKindOptions(hasRatioOperands: boolean): ReadonlyArray<{
   kind: MetricKind;
   label: string;
   disabled: boolean;
 }> {
   return METRIC_KINDS.map(({ kind, label }) => {
-    const disabled = kind === "ratio" && !hasDenominatorCandidates;
+    const disabled = kind === "ratio" && !hasRatioOperands;
     return {
       kind,
-      label: disabled ? `${label} (create another Metric first)` : label,
+      label: disabled ? `${label} (create two Metrics first)` : label,
       disabled,
     };
   });
@@ -37,6 +37,7 @@ export const MetricDraftSchema = z
     kind: MetricKindSchema,
     eventDefinitionId: z.string(),
     eventFieldName: z.string(),
+    numeratorMetricId: z.string(),
     denominatorMetricId: z.string(),
   })
   .strict();
@@ -56,6 +57,7 @@ export function emptyMetricDraft(): MetricDraft {
     kind: "binomial",
     eventDefinitionId: "",
     eventFieldName: "",
+    numeratorMetricId: "",
     denominatorMetricId: "",
   };
 }
@@ -66,8 +68,9 @@ export function metricDraft(metric: Metric): MetricDraft {
     key: metric.key,
     description: metric.description ?? "",
     kind: metric.kind,
-    eventDefinitionId: metric.eventDefinitionId,
+    eventDefinitionId: metric.eventDefinitionId ?? "",
     eventFieldName: metric.eventFieldName ?? "",
+    numeratorMetricId: metric.numerator?.metricId ?? "",
     denominatorMetricId: metric.denominator?.metricId ?? "",
   };
 }
@@ -76,12 +79,14 @@ export function metricDraftIssues(draft: MetricDraft): MetricDraftIssue[] {
   const issues: MetricDraftIssue[] = [];
   required(issues, draft.name, "name", "Enter a Metric name.");
   required(issues, draft.key, "key", "Enter a Metric key.");
-  required(
-    issues,
-    draft.eventDefinitionId,
-    "eventDefinitionId",
-    "Enter the event name this Metric measures.",
-  );
+  if (draft.kind !== "ratio") {
+    required(
+      issues,
+      draft.eventDefinitionId,
+      "eventDefinitionId",
+      "Enter the event name this Metric measures.",
+    );
+  }
   if (draft.kind === "count" || draft.kind === "revenue") {
     required(
       issues,
@@ -91,12 +96,19 @@ export function metricDraftIssues(draft: MetricDraft): MetricDraftIssue[] {
     );
   }
   if (draft.kind === "ratio") {
+    required(issues, draft.numeratorMetricId, "numeratorMetricId", "Choose a numerator Metric.");
     required(
       issues,
       draft.denominatorMetricId,
       "denominatorMetricId",
       "Choose a denominator Metric.",
     );
+    if (draft.numeratorMetricId && draft.numeratorMetricId === draft.denominatorMetricId) {
+      issues.push({
+        path: "denominatorMetricId",
+        message: "Choose two distinct Metrics.",
+      });
+    }
   }
   return issues;
 }
@@ -107,12 +119,17 @@ export function metricCreateInput(appId: string, draft: MetricDraft): CreateMetr
     name: draft.name.trim(),
     key: draft.key.trim(),
     kind: draft.kind,
-    eventDefinitionId: draft.eventDefinitionId.trim(),
+    ...(draft.kind !== "ratio" ? { eventDefinitionId: draft.eventDefinitionId.trim() } : {}),
     ...(draft.description.trim() ? { description: draft.description.trim() } : {}),
     ...(draft.kind === "count" || draft.kind === "revenue"
       ? { eventFieldName: draft.eventFieldName.trim() }
       : {}),
-    ...(draft.kind === "ratio" ? { denominator: { metricId: draft.denominatorMetricId } } : {}),
+    ...(draft.kind === "ratio"
+      ? {
+          numerator: { metricId: draft.numeratorMetricId },
+          denominator: { metricId: draft.denominatorMetricId },
+        }
+      : {}),
   };
 }
 
@@ -121,11 +138,18 @@ export function metricUpdateInput(draft: MetricDraft): PatchMetricRequest {
     name: draft.name.trim(),
     key: draft.key.trim(),
     description: draft.description.trim(),
-    eventDefinitionId: draft.eventDefinitionId.trim(),
+    ...(draft.kind === "ratio"
+      ? { eventDefinitionId: null, eventFieldName: null }
+      : { eventDefinitionId: draft.eventDefinitionId.trim() }),
     ...(draft.kind === "count" || draft.kind === "revenue"
       ? { eventFieldName: draft.eventFieldName.trim() }
       : {}),
-    ...(draft.kind === "ratio" ? { denominator: { metricId: draft.denominatorMetricId } } : {}),
+    ...(draft.kind === "ratio"
+      ? {
+          numerator: { metricId: draft.numeratorMetricId },
+          denominator: { metricId: draft.denominatorMetricId },
+        }
+      : {}),
   };
 }
 

@@ -2,19 +2,19 @@ import type { Metric } from "@splitch/contracts";
 import type { MutationErrorSurface } from "#lib/api";
 import type { MetricDraft, metricDraftIssues } from "#lib/metric-form-model";
 import { MetricAggregationField } from "./metric-aggregation-field";
-import { MetricDenominatorField } from "./metric-denominator-field";
+import { MetricOperandField } from "./metric-operand-field";
 import { MetricTextField } from "./metric-text-field";
 import { workerMetricFieldError } from "./use-metric-form";
 
 export function MetricFactFields({
-  denominatorMetrics,
+  ratioOperandMetrics,
   draft,
   edit,
   editing,
   mutationError,
   shown,
 }: {
-  denominatorMetrics: Metric[];
+  ratioOperandMetrics: Metric[];
   draft: MetricDraft;
   edit: (patch: Partial<MetricDraft>) => void;
   editing: boolean;
@@ -26,19 +26,21 @@ export function MetricFactFields({
       <MetricAggregationField
         draft={draft}
         editing={editing}
-        hasDenominatorCandidates={denominatorMetrics.length > 0}
+        hasDenominatorCandidates={ratioOperandMetrics.length >= 2}
         onEdit={edit}
       />
-      <MetricTextField
-        description="The exact event type matched in the Metric Event stream."
-        draft={draft}
-        label={draft.kind === "ratio" ? "Numerator event name" : "Event name"}
-        onEdit={edit}
-        path="eventDefinitionId"
-        placeholder="checkout_completed"
-        shown={shown}
-        workerError={workerMetricFieldError(mutationError, "eventDefinitionId")}
-      />
+      {draft.kind !== "ratio" ? (
+        <MetricTextField
+          description="The exact event type matched in the Metric Event stream."
+          draft={draft}
+          label="Event name"
+          onEdit={edit}
+          path="eventDefinitionId"
+          placeholder="checkout_completed"
+          shown={shown}
+          workerError={workerMetricFieldError(mutationError, "eventDefinitionId")}
+        />
+      ) : null}
       {draft.kind === "count" || draft.kind === "revenue" ? (
         <MetricTextField
           description={
@@ -56,13 +58,26 @@ export function MetricFactFields({
         />
       ) : null}
       {draft.kind === "ratio" ? (
-        <MetricDenominatorField
-          draft={draft}
-          metrics={denominatorMetrics}
-          onEdit={edit}
-          shown={shown}
-          workerError={workerMetricFieldError(mutationError, "denominator")}
-        />
+        <>
+          <MetricOperandField
+            draft={draft}
+            label="Numerator Metric"
+            metrics={ratioOperandMetrics}
+            onEdit={edit}
+            path="numeratorMetricId"
+            shown={shown}
+            workerError={workerMetricFieldError(mutationError, "numerator")}
+          />
+          <MetricOperandField
+            draft={draft}
+            label="Denominator Metric"
+            metrics={ratioOperandMetrics}
+            onEdit={edit}
+            path="denominatorMetricId"
+            shown={shown}
+            workerError={workerMetricFieldError(mutationError, "denominator")}
+          />
+        </>
       ) : null}
     </>
   );

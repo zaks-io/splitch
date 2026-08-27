@@ -51,8 +51,8 @@ describe("SignedControlPanelEntrypoint Metric operations", () => {
       key: "signup-rate",
       name: "Signup rate",
       kind: "ratio",
-      eventDefinitionId: "signed_up",
-      denominator: { metricId: binomial.id },
+      numerator: { metricId: binomial.id },
+      denominator: { metricId: count.id },
     });
     const created = [binomial, count, revenue, ratio];
 
@@ -156,21 +156,20 @@ type MetricCreateBody = {
   key: string;
   name: string;
   kind: MetricKind;
-  eventDefinitionId: string;
+  eventDefinitionId?: string;
   eventFieldName?: string;
+  numerator?: { metricId: string };
   denominator?: { metricId: string };
 };
 
 async function createMetric(body: MetricCreateBody) {
-  const eventDefinitionId = await seedMetricEventDefinition(
-    ids,
-    body.eventDefinitionId,
-    body.eventFieldName,
-  );
+  const eventDefinitionId = body.eventDefinitionId
+    ? await seedMetricEventDefinition(ids, body.eventDefinitionId, body.eventFieldName)
+    : undefined;
   const response = await panelRequest("POST", `/apps/${APP_ID}/metrics`, {
     appId: APP_ID,
     ...body,
-    eventDefinitionId,
+    ...(eventDefinitionId ? { eventDefinitionId } : {}),
   });
   if (!response.ok) throw new Error(`Metric create failed: ${await response.text()}`);
   return (await response.json()) as {

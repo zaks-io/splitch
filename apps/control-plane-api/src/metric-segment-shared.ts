@@ -38,9 +38,12 @@ export function metricResponse(row: MetricRow): Metric {
     name: row.name,
     ...(row.description ? { description: row.description } : {}),
     kind: row.kind as MetricKind,
-    eventDefinitionId: requiredMetricEventDefinitionId(row),
+    eventDefinitionId: row.eventDefinitionId,
     ...(row.eventFieldName ? { eventFieldName: row.eventFieldName } : {}),
+    ...(row.numeratorMetricId ? { numerator: { metricId: row.numeratorMetricId } } : {}),
     ...(row.denominatorMetricId ? { denominator: { metricId: row.denominatorMetricId } } : {}),
+    configurationStatus:
+      row.kind === "ratio" && !row.numeratorMetricId ? "needs_configuration" : "ready",
     // Analysis config is reported as an explicit null when unset, not omitted:
     // "no preference, engine default applies" is an answer a caller acts on, and
     // an absent key reads as "this build does not have the field".
@@ -51,13 +54,6 @@ export function metricResponse(row: MetricRow): Metric {
     cupedCoverageThresholdPct: row.cupedCoverageThresholdPct,
     createdAt: row.createdAt,
   };
-}
-
-function requiredMetricEventDefinitionId(row: MetricRow): string {
-  if (!row.eventDefinitionId) {
-    throw new Error(`Metric ${row.id} has no Event Definition`);
-  }
-  return row.eventDefinitionId;
 }
 
 export function segmentResponse(row: SegmentRow): Segment {

@@ -76,6 +76,28 @@ describe("panel Metrics binding transport", () => {
       "panel_metrics_list returned an invalid response body",
     );
   });
+
+  it("keeps a migrated Ratio readable so the Control Panel can repair it", async () => {
+    const legacyRatio = {
+      id: "metric_ratio_legacy",
+      appId: "app_1",
+      key: "legacy-rate",
+      name: "Legacy rate",
+      kind: "ratio",
+      eventDefinitionId: "event_definition_numerator",
+      denominator: { metricId: "metric_denominator" },
+      configurationStatus: "needs_configuration",
+      createdAt: "2026-07-29T00:00:00.000Z",
+    };
+    const client = createPanelMetricsClient({
+      fetch: vi.fn(async () => Response.json({ items: [legacyRatio] })),
+    });
+
+    await expect(client.list({ appId: "app_1" })).resolves.toMatchObject({
+      ok: true,
+      data: { items: [legacyRatio] },
+    });
+  });
 });
 
 function metric() {

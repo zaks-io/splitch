@@ -21,6 +21,7 @@ const STRADDLE_ANCHOR = `(
 export async function proveAnalysisScopePredicates(root, runQuery, fail) {
   await prove("analysis_metric_values", metricValueProofs(root), runQuery, fail);
   await prove("analysis_pre_period_covariates", prePeriodProofs(root), runQuery, fail);
+  await prove("analysis_ratio_metric_values", ratioProofs(root), runQuery, fail);
 }
 
 function metricValueProofs(root) {
@@ -115,6 +116,50 @@ function prePeriodProofs(root) {
   ];
 }
 
+/**
+ * The Ratio pipe reads serve_deduped_metric_events twice under two independent
+ * predicate sets, so each operand gets the same raw-event axes the
+ * single-source pipes get. Its tenant-scoped final node reads the per-Entity
+ * aggregates, not raw rows, so the four axes below are the whole raw surface.
+ */
+function ratioProofs(root) {
+  const pipe = readPipe(root, "analysis_ratio_metric_values");
+  return ["numerator", "denominator"].flatMap((operand) =>
+    operandProofs(
+      pipeNode(pipe, `scoped_${operand}_events`),
+      pipeNode(pipe, `${operand}_values`),
+      operand,
+    ),
+  );
+}
+
+function operandProofs(events, values, operand) {
+  return [
+    {
+      name: `scoped ${operand} Metric Events App predicate`,
+      predicate: predicate(events, "WHERE app_id = {{String(app_id)}}", { app_id: "app_1" }),
+      query: (scope) => scanAttack("app_id != 'app_1'", "environment_id = 'env_prod'", scope, ""),
+    },
+    {
+      name: `scoped ${operand} Metric Events Environment predicate`,
+      predicate: predicate(events, "AND environment_id = {{String(environment_id)}}", {
+        environment_id: "env_prod",
+      }),
+      query: (scope) => scanAttack("environment_id != 'env_prod'", "app_id = 'app_1'", scope, ""),
+    },
+    {
+      name: `${operand} Metric Event to Exposure App join predicate`,
+      predicate: predicate(values, "ON events.app_id = exposures.app_id"),
+      query: (scope) => windowlessJoinAttack(FOREIGN_APP, scope),
+    },
+    {
+      name: `${operand} Metric Event to Exposure Environment join predicate`,
+      predicate: predicate(values, "AND events.environment_id = exposures.environment_id"),
+      query: (scope) => windowlessJoinAttack(FOREIGN_ENVIRONMENT, scope),
+    },
+  ];
+}
+
 const FOREIGN_APP = "events.app_id = 'app_2' AND events.environment_id = 'env_prod'";
 const FOREIGN_ENVIRONMENT = "events.app_id = 'app_1' AND events.environment_id = 'env_dev'";
 
@@ -149,14 +194,24 @@ function pipeNode(pipe, name) {
 }
 
 function predicate(node, source, params = {}) {
-  const occurrences = node.split(source).length - 1;
+  const normalizedNode = normalizeSql(node);
+  const normalizedSource = normalizeSql(source);
+  const occurrences = normalizedNode.split(normalizedSource).length - 1;
   if (occurrences === 0) return "1";
   if (occurrences > 1) throw new Error(`analysis scope predicate is duplicated: ${source}`);
-  let sql = source.replace(/^(?:WHERE|AND|ON)\s+/, "");
+  let sql = normalizedSource.replace(/^(?:WHERE|AND|ON)\s+/, "");
   for (const [name, value] of Object.entries(params)) {
     sql = sql.replace(`{{String(${name})}}`, `'${value}'`);
   }
   return sql;
+}
+
+function normalizeSql(sql) {
+  return sql
+    .replace(/\{\{\s*/gu, "{{")
+    .replace(/\s*\}\}/gu, "}}")
+    .replace(/\s+/gu, " ")
+    .trim();
 }
 
 /** One predicate held against the raw Metric Events it alone is meant to exclude. */

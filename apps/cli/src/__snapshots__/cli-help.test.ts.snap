@@ -1148,8 +1148,9 @@ Request body (--body-json):
   name                       required  string
   key                        required  string
   kind                       required  string ("binomial" | "count" | "revenue" | "ratio")
-  eventDefinitionId          required  string
+  eventDefinitionId          optional  string
   eventFieldName             optional  string
+  numerator                  optional  { metricId: string }
   denominator                optional  { metricId: string }
   description                optional  string
   downsideThresholdPct       optional  number | null
@@ -1159,10 +1160,10 @@ Request body (--body-json):
   cupedCoverageThresholdPct  optional  number | null
   idempotency_key            optional  string
   Example:
-    {"appId":"app_1","name":"name","key":"key","kind":"binomial","eventDefinitionId":"eventDefinition_1"}
+    {"appId":"app_1","name":"name","key":"key","kind":"binomial"}
 
 Example:
-  splitch metrics create --body-json '{"appId":"app_1","name":"name","key":"key","kind":"binomial","eventDefinitionId":"eventDefinition_1"}' --json",
+  splitch metrics create --body-json '{"appId":"app_1","name":"name","key":"key","kind":"binomial"}' --json",
     "metrics delete": "Delete a Metric (blocked if referenced by a running Experiment).
 
 Usage:
@@ -1216,8 +1217,9 @@ Request body (--body-json):
   name                       optional  string
   key                        optional  string
   kind                       optional  string ("binomial" | "count" | "revenue" | "ratio")
-  eventDefinitionId          optional  string
-  eventFieldName             optional  string
+  eventDefinitionId          optional  string | null
+  eventFieldName             optional  string | null
+  numerator                  optional  { metricId: string }
   denominator                optional  { metricId: string }
   description                optional  string
   downsideThresholdPct       optional  number | null
