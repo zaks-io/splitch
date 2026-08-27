@@ -13,7 +13,9 @@ export async function revokeLocalHandler(ctx: MutationCtx): Promise<void> {
 
 export async function purgeBatchHandler(ctx: MutationCtx): Promise<number> {
   const tables = [
+    "metricEventOutbox",
     "exposureOutbox",
+    "metricEventClaims",
     "assignments",
     "evaluationClaims",
     "entityDeletions",

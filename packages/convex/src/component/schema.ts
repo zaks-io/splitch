@@ -51,6 +51,21 @@ export default defineSchema({
   })
     .index("by_key", ["idempotencyKey"])
     .index("by_created_at", ["createdAt"]),
+  metricEventClaims: defineTable({
+    eventId: v.string(),
+    fingerprint: v.string(),
+    createdAt: v.number(),
+    state: v.union(
+      v.literal("queued"),
+      v.literal("accepted"),
+      v.literal("terminal"),
+      v.literal("suppressed"),
+    ),
+    completedAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_state_completed_at", ["state", "completedAt"]),
   entityDeletions: defineTable({
     idType: v.string(),
     targetingKeyHash: v.string(),
@@ -81,6 +96,27 @@ export default defineSchema({
     .index("by_recovery_watch_state", ["recoveryWatchGeneration", "state"])
     .index("by_state_next_attempt", ["state", "nextAttemptAt"])
     .index("by_state_terminal_at", ["state", "terminalAt"])
+    .index("by_entity_state", ["idType", "targetingKeyHash", "state"]),
+  metricEventOutbox: defineTable({
+    eventId: v.string(),
+    installationId: v.string(),
+    fingerprint: v.string(),
+    eventName: v.string(),
+    idType: v.string(),
+    targetingKeyHash: v.optional(v.string()),
+    targetingKey: v.optional(v.string()),
+    fieldsJson: v.optional(v.string()),
+    dimensionsJson: v.optional(v.string()),
+    createdAt: v.number(),
+    state: v.union(v.literal("pending"), v.literal("delivering")),
+    attemptCount: v.number(),
+    nextAttemptAt: v.number(),
+    recoveryWatchGeneration: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_recovery_watch_state", ["recoveryWatchGeneration", "state"])
+    .index("by_state_next_attempt", ["state", "nextAttemptAt"])
     .index("by_entity_state", ["idType", "targetingKeyHash", "state"]),
   webhookClaims: defineTable({
     deliveryId: v.string(),

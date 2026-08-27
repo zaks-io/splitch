@@ -60,6 +60,8 @@ export function assertPackedTarball(tarballPath) {
     "package/dist/component/convex.config.js",
     "package/dist/component/integration_recovery.js",
     "package/dist/component/integration_recovery.d.ts",
+    "package/dist/component/metric_event.js",
+    "package/dist/component/metric_event.d.ts",
     "package/dist/component/_generated/component.d.ts",
   ]) {
     if (!listing.includes(required))
