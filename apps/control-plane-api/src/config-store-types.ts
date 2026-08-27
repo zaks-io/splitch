@@ -5,6 +5,7 @@ import type {
   PercentageRollout,
   RunConfigKV,
   TargetingRule,
+  TargetingRuleInput,
 } from "@splitch/contracts";
 import type { AuthKind } from "@splitch/contracts";
 import type { ApprovalCommit, Repository } from "@splitch/db";
@@ -85,7 +86,7 @@ export interface ReplaceTargetingRulesInput {
   appId: string;
   environmentId: string;
   flagId: string;
-  targetingRules: TargetingRule[];
+  targetingRules: TargetingRuleInput[];
   approval?: ApprovalCommit;
 }
 
@@ -128,6 +129,7 @@ type FlagConfigWriteFailure =
    * tenant-scoped lookup.
    */
   | { ok: false; reason: "TARGETING_RULE_ID_CONFLICT"; targetingRules: TargetingRule[] }
+  | { ok: false; reason: "TARGETING_RULE_SALT_REJECTED"; callerSaltIndexes: number[] }
   | { ok: false; reason: "ROLLOUT_AMBIGUOUS"; availableVariantNames: string[] }
   /**
    * The Approval Request's changed-field set could not be read. Fail closed: do

@@ -8,6 +8,7 @@ import {
   flagSegmentNotFound,
   rolloutAmbiguous,
   targetingRuleIdConflict,
+  targetingRuleSaltRejected,
 } from "./flag-config-errors";
 import { runFrozenResponse } from "./flag-config-run-freeze";
 
@@ -95,6 +96,9 @@ export function renderFlagConfigWriteResult(
   if (result.reason === "TARGETING_RULE_ID_CONFLICT") {
     return targetingRuleIdConflict(result.targetingRules, requestId);
   }
+  if (result.reason === "TARGETING_RULE_SALT_REJECTED") {
+    return targetingRuleSaltRejected(result.callerSaltIndexes, requestId);
+  }
   if (result.reason === "RUN_FROZEN") return runFrozenResponse(result, requestId);
   // Direct writers never produce APPROVAL_NOT_APPLIED, CHANGED_FIELDS_UNDETERMINED,
   // or APPROVAL_EMPTY_CHANGE.
@@ -122,6 +126,9 @@ export function renderPromotionResult(
   }
   if (result.reason === "TARGETING_RULE_ID_CONFLICT") {
     return targetingRuleIdConflict(result.targetingRules, requestId);
+  }
+  if (result.reason === "TARGETING_RULE_SALT_REJECTED") {
+    return targetingRuleSaltRejected(result.callerSaltIndexes, requestId);
   }
   if (result.reason === "RUN_FROZEN") return runFrozenResponse(result, requestId);
   // Direct writers never produce APPROVAL_NOT_APPLIED, CHANGED_FIELDS_UNDETERMINED,
