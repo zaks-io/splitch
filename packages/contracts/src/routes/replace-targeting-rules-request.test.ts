@@ -23,6 +23,24 @@ describe("ReplaceTargetingRulesRequestSchema identity", () => {
     ).toBe(true);
   });
 
+  it("accepts a percentage without requiring a caller-minted salt", () => {
+    expect(
+      ReplaceTargetingRulesRequestSchema.safeParse({
+        targetingRules: [{ ...rule, percentageRollout: { percentage: 25 } }],
+        idempotency_key: "idem_percentage",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("keeps a persisted percentage rollout round-trippable", () => {
+    expect(
+      ReplaceTargetingRulesRequestSchema.safeParse({
+        targetingRules: [{ ...rule, percentageRollout: { percentage: 25, salt: "server-minted" } }],
+        idempotency_key: "idem_round_trip",
+      }).success,
+    ).toBe(true);
+  });
+
   it("reports each repeated id at targetingRules.N.id", () => {
     const parsed = ReplaceTargetingRulesRequestSchema.safeParse({
       targetingRules: [rule, { ...rule, priority: 1 }, { ...rule, id: "rule-beta", priority: 2 }],

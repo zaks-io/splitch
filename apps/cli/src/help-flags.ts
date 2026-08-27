@@ -86,6 +86,22 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
 }
 
 function operationFlags(command: CliCommandDefinition): HelpFlag[] {
+  if (command.kind === "flag_targeting_rules_add") {
+    return [
+      flag(
+        "--when <attr=value>",
+        "string (repeatable)",
+        "none",
+        "String equality Condition. Repeat to AND more. Number or boolean values require replace --body-json.",
+      ),
+      flag(
+        "--serve <variant>",
+        "string",
+        "none",
+        "Catalog Variant name to serve when the Conditions match.",
+      ),
+    ];
+  }
   switch (command.operationId) {
     case "flags_list":
       return [

@@ -27,6 +27,8 @@ import {
   validateCommandScope,
   validateFlagsVerifyUsage,
 } from "./execute-operations.js";
+import { executeFlagTargetingRulesAdd } from "./flag-targeting-rules-add.js";
+import { validateFlagTargetingRulesAddUsage } from "./flag-targeting-rules-add-input.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { CliInputError } from "./flag-create-input.js";
@@ -157,14 +159,9 @@ async function executeCommand(
     return handleExecutionError(error, io);
   }
 
-  if (command.kind === "flags_verify") {
-    return executeFlagsVerify(command, invocation, deps, io, context);
-  }
-  if (command.kind === "env_policy_get") {
-    return executeEnvPolicyGet(invocation, deps, io, context);
-  }
-  if (command.kind === "env_policy_set") {
-    return executeEnvPolicySet(invocation, deps, io, context);
+  const specialized = executeSpecializedCommand(command, invocation, deps, io, context);
+  if (specialized) {
+    return specialized;
   }
 
   let input: Record<string, unknown>;
@@ -184,6 +181,28 @@ async function executeCommand(
     io,
     outputFile ? (data) => writeApiKeySecret(data, outputFile) : undefined,
   );
+}
+
+function executeSpecializedCommand(
+  command: CliCommandDefinition,
+  invocation: ParsedInvocation,
+  deps: CliDeps,
+  io: CliIo,
+  context: ResolvedContext,
+): Promise<CliResult> | null {
+  if (command.kind === "flags_verify") {
+    return executeFlagsVerify(command, invocation, deps, io, context);
+  }
+  if (command.kind === "env_policy_get") {
+    return executeEnvPolicyGet(invocation, deps, io, context);
+  }
+  if (command.kind === "env_policy_set") {
+    return executeEnvPolicySet(invocation, deps, io, context);
+  }
+  if (command.kind === "flag_targeting_rules_add") {
+    return executeFlagTargetingRulesAdd(command, invocation, deps, io, context);
+  }
+  return null;
 }
 
 function validateSpecializedUsage(
@@ -208,7 +227,13 @@ function validateSpecializedUsage(
       return { exitCode: EXIT_USAGE };
     }
   }
-  return command.kind === "flags_verify" ? validateFlagsVerifyUsage(invocation, io) : null;
+  if (command.kind === "flags_verify") {
+    return validateFlagsVerifyUsage(invocation, io);
+  }
+  if (command.kind === "flag_targeting_rules_add") {
+    return validateFlagTargetingRulesAddUsage(invocation, io);
+  }
+  return null;
 }
 
 function isCloudflareCommand(command: CliCommandDefinition): command is CliCommandDefinition & {

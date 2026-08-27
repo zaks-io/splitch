@@ -73,6 +73,21 @@ export const PercentageRolloutSchema = z
   .strict();
 export type PercentageRollout = z.infer<typeof PercentageRolloutSchema>;
 
+/**
+ * Authoring shape for a Targeting Rule rollout.
+ *
+ * `salt` is accepted only so a stored rule can round-trip through the replace
+ * endpoint. The Control Plane decides whether that salt belongs to the existing
+ * rule and rejects it when no persisted salt exists.
+ */
+export const TargetingRuleRolloutInputSchema = z
+  .object({
+    percentage: z.number().min(0).max(100),
+    salt: z.string().optional(),
+  })
+  .strict();
+export type TargetingRuleRolloutInput = z.infer<typeof TargetingRuleRolloutInputSchema>;
+
 // ---------------------------------------------------------------------------
 // Variant
 // ---------------------------------------------------------------------------
@@ -89,15 +104,31 @@ export type Variant = z.infer<typeof VariantSchema>;
 // TargetingRule
 // ---------------------------------------------------------------------------
 
-const TargetingRuleFields = {
+const TargetingRuleCoreFields = {
   id: z.string(),
   flagId: z.string(),
   // Integer ≥ 0; lower = evaluated first
   priority: z.number().int().min(0),
   conditions: z.array(ConditionSchema),
   variantId: z.string(),
+};
+
+const TargetingRuleFields = {
+  ...TargetingRuleCoreFields,
   percentageRollout: PercentageRolloutSchema.nullable().optional(),
 };
+
+export const TargetingRuleInputSchema = z
+  .object({
+    ...TargetingRuleCoreFields,
+    segmentId: z.string().optional(),
+    percentageRollout: TargetingRuleRolloutInputSchema.nullable().optional(),
+  })
+  .refine((rule) => rule.conditions.length > 0 || rule.segmentId !== undefined, {
+    message: "a Targeting Rule requires direct Conditions or a Segment",
+    path: ["conditions"],
+  });
+export type TargetingRuleInput = z.infer<typeof TargetingRuleInputSchema>;
 
 export const TargetingRuleSchema = z
   .object({

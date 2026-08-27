@@ -131,14 +131,26 @@ describe("Targeting Rule edit input", () => {
         idempotencyKey: "key_1",
       }).success,
     ).toBe(true);
+    expect(
+      TargetingEditInputSchema.safeParse({
+        ...scope,
+        edit: {
+          kind: "add",
+          ruleId: "rule_percentage",
+          condition: { attribute: "plan", operator: "eq", value: "pro" },
+          variantId: "var_treatment",
+          percentage: 25,
+        },
+        idempotencyKey: "key_percentage",
+      }).success,
+    ).toBe(true);
   });
 
   /**
-   * A rule-level `percentageRollout` needs a bucketing salt and there is no
-   * minting path for one on this route, so the edit shape must not accept one
-   * (SPL-245). `.strict()` is what enforces that.
+   * The browser expresses only the percentage scalar. Accepting the raw rollout
+   * object would let it smuggle a caller-chosen salt into the server function.
    */
-  it("rejects a caller-supplied rule rollout", () => {
+  it("rejects a caller-supplied rule rollout object", () => {
     expect(
       TargetingEditInputSchema.safeParse({
         ...scope,
@@ -152,6 +164,25 @@ describe("Targeting Rule edit input", () => {
         idempotencyKey: "key_1",
       }).success,
     ).toBe(false);
+  });
+
+  it("rejects a rule percentage outside 0-100", () => {
+    const input = (percentage: number) => ({
+      ...scope,
+      edit: {
+        kind: "add" as const,
+        ruleId: "rule_1",
+        condition: { attribute: "plan", operator: "eq" as const, value: "pro" },
+        variantId: "var_treatment",
+        percentage,
+      },
+      idempotencyKey: "key_1",
+    });
+
+    expect(TargetingEditInputSchema.safeParse(input(-1)).success).toBe(false);
+    expect(TargetingEditInputSchema.safeParse(input(101)).success).toBe(false);
+    expect(TargetingEditInputSchema.safeParse(input(0)).success).toBe(true);
+    expect(TargetingEditInputSchema.safeParse(input(100)).success).toBe(true);
   });
 
   it("rejects an operator the evaluation path does not implement", () => {

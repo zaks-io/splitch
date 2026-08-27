@@ -27,8 +27,19 @@ export function operationBehaviorNotes(command: CliCommandDefinition): string[] 
       "Without --json, the CLI prints that the live Run is unaffected.",
     ];
   }
+  if (command.kind === "flag_targeting_rules_add") {
+    return [
+      "Builds one equality Targeting Rule (id, Variant name, schema) and appends it via flag-targeting-rules replace.",
+      "Repeat --when to AND Conditions. Each value is a string (evaluation uses Object.is); shell quoting cannot change the type. Number or boolean Conditions require flag-targeting-rules replace --body-json.",
+      "For Segments, non-equality operators, OR groups, reordering, or removal, use flag-targeting-rules replace.",
+      "Read-modify-write is last-write-wins: a concurrent replace can overwrite this append. The replace endpoint has no version guard.",
+      "While a Run is live on this Flag, the write is refused with RUN_FROZEN (end the Run first).",
+    ];
+  }
   if (command.operationId === "flag_targeting_rules_replace") {
     return [
+      "Raw full-replace of this Environment's ordered Targeting Rule list. For the common equality case, use flag-targeting-rules add --when attr=value --serve <variant>.",
+      "Read-modify-write is last-write-wins: send the complete list, or a concurrent writer drops rules you omitted. The replace endpoint has no version guard.",
       "While a Run is live on this Flag, replace is refused with RUN_FROZEN (end the Run first).",
       "A live Run evaluates its own frozen Targeting Rule snapshot, not this Flag Configuration list.",
     ];

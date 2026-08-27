@@ -52,6 +52,10 @@ describe("unknown flags", () => {
       "10",
       "--idempotency-key",
       "idem-1",
+      "--when",
+      "plan=enterprise",
+      "--serve",
+      "on",
       "--json",
       "--confirm",
     ]);
@@ -71,6 +75,8 @@ describe("unknown flags", () => {
       enabled: true,
       rollout: 10,
       idempotencyKey: "idem-1",
+      when: ["plan=enterprise"],
+      serve: "on",
       json: true,
       confirm: true,
     });

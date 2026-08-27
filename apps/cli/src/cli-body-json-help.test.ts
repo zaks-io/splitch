@@ -63,6 +63,7 @@ function assertOneHandWrittenCommand(
   if (
     kind === "flags_verify" ||
     kind === "env_policy_get" ||
+    kind === "flag_targeting_rules_add" ||
     kind === "cloudflare_setup" ||
     kind === "cloudflare_status" ||
     kind === "cloudflare_remove"
