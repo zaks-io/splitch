@@ -67,6 +67,8 @@ interface SdkRouteHarnessOptions {
   readonly ticketNow?: () => Date;
   readonly previousTicketKey?: string;
   readonly delegationBindings?: Parameters<typeof createApp>[0]["delegationBindings"];
+  readonly rateLimiter?: RateLimiter;
+  readonly clientKeyRateLimitRps?: number | null;
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -103,7 +105,7 @@ async function seededCredentialKv(options: SdkRouteHarnessOptions = {}): Promise
         kind: "client_key",
         scopes: ["data-plane:evaluate", "data-plane:write"],
         originAllowlist: null,
-        rateLimitRps: null,
+        rateLimitRps: options.clientKeyRateLimitRps ?? null,
         revoked: false,
         cachedAt: "2026-07-02T00:00:00.000Z",
       }),
@@ -206,7 +208,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     door: options.door ?? "public",
     authResolver: options.authResolver ?? controlPlaneAuthResolver,
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(credentialKv),
-    rateLimiter: allowLimiter,
+    rateLimiter: options.rateLimiter ?? allowLimiter,
     delegationBindings: options.delegationBindings,
     provider: new KvProvider(configKv),
     assignmentStore,

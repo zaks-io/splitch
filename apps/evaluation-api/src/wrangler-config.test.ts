@@ -57,6 +57,16 @@ describe("Evaluation Worker service bindings", () => {
     ).toBe(true);
   });
 
+  it.each(targets)("binds the per-credential Evaluation rate limiter for %s", (_target, target) => {
+    expect(target?.ratelimits).toEqual([
+      {
+        name: "EVALUATION_RATE_LIMITER",
+        namespace_id: expect.stringMatching(/^\d+$/u),
+        simple: { limit: 3000, period: 10 },
+      },
+    ]);
+  });
+
   it.each(targets)("binds the holdover write App inventory DO for %s", (_target, target) => {
     const binding = target?.durable_objects?.bindings?.find(
       (candidate) => candidate.name === "HOLDOVER_WRITE_APP_INVENTORY",
@@ -143,6 +153,11 @@ interface WranglerTarget {
   migrations?: Array<{ tag?: string; new_sqlite_classes?: string[]; new_classes?: string[] }>;
   env?: Record<string, WranglerTarget | undefined>;
   services?: Array<{ binding?: string; service?: string; entrypoint?: string }>;
+  ratelimits?: Array<{
+    name?: string;
+    namespace_id?: string;
+    simple?: { limit?: number; period?: number };
+  }>;
 }
 
 function readWranglerConfig(): WranglerTarget {

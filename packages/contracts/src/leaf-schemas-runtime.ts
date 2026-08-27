@@ -1,5 +1,10 @@
 import { z } from "zod";
 import {
+  DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS as defaultClientKeyRateLimitRps,
+  resolveClientKeyRateLimitRps as resolveStoredClientKeyRateLimitRps,
+  StoredClientKeyRateLimitRpsFieldSchema,
+} from "./client-key-rate-limit";
+import {
   type ResolutionDetails,
   ResolutionDetailsSchema,
   type VariantValue,
@@ -244,6 +249,9 @@ export type OrganizationMember = z.infer<typeof OrganizationMemberSchema>;
 // into the public ClientKey member. Fail loud, no secret leak (ADR-0018).
 // ---------------------------------------------------------------------------
 
+export const DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS = defaultClientKeyRateLimitRps;
+export const resolveClientKeyRateLimitRps = resolveStoredClientKeyRateLimitRps;
+
 export const ClientKeySchema = z
   .object({
     keyId: z.string(),
@@ -252,7 +260,7 @@ export const ClientKeySchema = z
     keyMaterial: z.string(),
     originAllowlist: z.array(z.string()).nullable().optional(),
     isOriginOpen: z.boolean(),
-    rateLimitRps: z.number().nullable().optional(),
+    rateLimitRps: StoredClientKeyRateLimitRpsFieldSchema,
     revokedAt: z.string().nullable().optional(),
     createdAt: z.string(),
   })

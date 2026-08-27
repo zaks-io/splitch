@@ -14,6 +14,18 @@ export * from "./barrels/storage-contracts";
 export * from "./barrels/wire-envelopes";
 export { type CanonicalJsonSha256, CanonicalJsonSha256Schema } from "./canonical-hash";
 export {
+  CachedClientKeyRateLimitRpsFieldSchema,
+  CLIENT_KEY_RATE_LIMIT_RPS_MESSAGE,
+  CLIENT_KEY_RATE_LIMIT_WINDOW_RPS,
+  CLIENT_KEY_RATE_LIMIT_WINDOW_SECONDS,
+  CLIENT_KEY_RATE_LIMIT_WINDOW_TOKENS,
+  clientKeyRateLimitTokensPerRequest,
+  EXACT_CLIENT_KEY_RATE_LIMIT_RPS,
+  isExactClientKeyRateLimitRps,
+  StoredClientKeyRateLimitRpsFieldSchema,
+  StoredClientKeyRateLimitRpsSchema,
+} from "./client-key-rate-limit";
+export {
   ClientOriginSchema,
   NormalizedOriginAllowlistSchema,
   normalizeClientOrigins,
@@ -124,6 +136,7 @@ export {
   approvalPolicyLevels,
   type ClientKey,
   ClientKeySchema,
+  DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS,
   type Environment,
   type EnvironmentPolicy,
   type EnvironmentPolicyLevel,
@@ -151,6 +164,7 @@ export {
   ResolutionReasonSchema,
   reservedEnvironmentPolicyLevels,
   resolutionReasons,
+  resolveClientKeyRateLimitRps,
   type User,
   type UserRole,
   UserRoleSchema,

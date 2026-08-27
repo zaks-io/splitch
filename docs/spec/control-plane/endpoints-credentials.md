@@ -34,8 +34,9 @@ Returns: `{ key_id, key_material, origin_allowlist, is_origin_open, created_at, 
 
 ### `PATCH /apps/{app_id}/envs/{environment_id}/client-key`
 
-Body: `{ origin_allowlist?: string[] | null, rate_limit_rps?: number }`
-Returns: updated Client Key record.
+Body: `{ origin_allowlist?: string[] | null, rate_limit_rps?: 1 | 2 | 3 | 4 | 5 | 6 | 10 | 12 | 15 | 20 | 25 | 30 | 50 | 60 | 75 | 100 }`
+Returns: updated Client Key record. Zero, negative, fractional, and non-exact integers are
+`VALIDATION_ERROR` before any D1 or KV mutation.
 
 ### `POST /apps/{app_id}/envs/{environment_id}/client-key/revoke`
 

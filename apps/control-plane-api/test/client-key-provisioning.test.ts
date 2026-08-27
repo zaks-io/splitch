@@ -1,3 +1,9 @@
+import {
+  CredentialCacheKVSchema,
+  clientKeyCacheKey,
+  DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS,
+  kvEnvelope,
+} from "@splitch/contracts";
 import { createRepository, envScope, type Repository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
@@ -5,6 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { readOrProvisionClientKey } from "../src/client-key-provisioning";
+import { sha256Hex } from "../src/credential-cache";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
@@ -182,6 +189,35 @@ describe("control-plane Client Key provisioning", () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
     expect(writes).toBe(2);
+  });
+
+  it("provisions Client Keys at the ADR 100 rps default and writes it through to KV", async () => {
+    const jwt = await token();
+    const response = await request(jwt);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      keyMaterial: string;
+      rateLimitRps: number | null;
+    };
+    expect(body.rateLimitRps).toBe(DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS);
+
+    const rows = (
+      await createRepository(h.bindings.d1).credentials.listClientKeys(
+        envScope(APP.appId, ENV.environmentId),
+      )
+    ).filter((row) => !row.revokedAt);
+    expect(rows).toEqual([expect.objectContaining({ rateLimitRps: 100 })]);
+
+    const raw = await h.bindings.credentialKv.get(
+      clientKeyCacheKey(await sha256Hex(body.keyMaterial)),
+      "text",
+    );
+    expect(raw).not.toBeNull();
+    expect(kvEnvelope(CredentialCacheKVSchema).parse(JSON.parse(raw as string)).data).toMatchObject(
+      {
+        rateLimitRps: 100,
+      },
+    );
   });
 
   it("fails loud when a restriction cache write throws", async () => {

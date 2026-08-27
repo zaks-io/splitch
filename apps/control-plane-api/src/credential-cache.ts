@@ -6,6 +6,7 @@ import {
   clientKeyCacheKey,
   credentialRevocationCacheKey,
   kvEnvelope,
+  StoredClientKeyRateLimitRpsFieldSchema,
   TERMINAL_CREDENTIAL_REVOCATION_MARKER,
 } from "@splitch/contracts";
 
@@ -134,6 +135,7 @@ async function writeCredentialCache(
   if (!value.revoked && value.organizationId === null) {
     throw new Error("credential cache active writes require an organizationId");
   }
+  StoredClientKeyRateLimitRpsFieldSchema.parse(value.rateLimitRps);
   // Active entries are written WITHOUT an expiry: the data plane has no D1
   // fallback on a KV miss (it rejects UNAUTHORIZED), so an expiring entry would
   // brick a deployed SDK key one TTL after the last control-plane touch.
@@ -185,7 +187,7 @@ function clientKeyCache(
     kind: "client_key",
     scopes: ["data-plane:evaluate", "data-plane:write"],
     originAllowlist,
-    rateLimitRps: row.rateLimitRps,
+    rateLimitRps: StoredClientKeyRateLimitRpsFieldSchema.parse(row.rateLimitRps),
     revoked,
     cachedAt: nowIso(deps),
   };

@@ -1,13 +1,14 @@
 import {
   apiKeyCacheKey,
-  clientKeyCacheKey,
-  credentialRevocationCacheKey,
   CredentialCacheKVSchema,
   CredentialCacheKVSchemaV1,
+  clientKeyCacheKey,
+  credentialRevocationCacheKey,
   type ErrorResponse,
   kvEnvelope,
 } from "@splitch/contracts";
 import type { AuthResolver, AuthResult, Principal } from "@splitch/worker-runtime";
+import { rememberCredentialRateLimitRps } from "./evaluation-rate-limit";
 
 interface CredentialReader {
   get(key: string): Promise<string | null>;
@@ -35,6 +36,7 @@ export function makeDataPlaneAuthResolver(credentialStore: CredentialReader): Au
     const failure = credentialFailure(request, cached);
     if (failure !== null) return failure;
 
+    rememberCredentialRateLimitRps(request, cached.rateLimitRps);
     return {
       ok: true,
       principal: principalFromCredential(hash, cached),

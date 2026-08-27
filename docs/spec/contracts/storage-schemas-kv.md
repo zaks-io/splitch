@@ -143,6 +143,11 @@ that D1 value. It never accepts an Organization from the request or guesses from
 data plane may resume the credential only after the v2 entry is present; a failed or incomplete
 backfill therefore remains a visible 503 instead of becoming an unscoped billing write.
 
+Client Key entries may carry `rateLimitRps`. New Control Plane writes persist only an exact
+enforceable integer (`1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 25, 30, 50, 60, 75, 100`) or `null`. The
+Evaluation reader keeps the field numeric so a legacy override such as `80` still parses; the
+limiter then fail-closes as typed `RATE_LIMITED` instead of failing auth as `500`.
+
 ```
 {
   appId:                   string
@@ -151,6 +156,7 @@ backfill therefore remains a visible 503 instead of becoming an unscoped billing
   organizationId:           string | null
   kind:                     'api_key' | 'client_key'
   scopes:                   string[]
+  rateLimitRps:            number | null  // write: exact set or null; read: any number
   revoked:                  boolean
   cachedAt:                 string  // ISO 8601
 }

@@ -6,14 +6,16 @@ import {
   AppSchema,
   approvalPolicyLevels,
   ClientKeySchema,
+  DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS,
   EnvironmentPolicySchema,
   EnvironmentSchema,
   environmentPolicyLevels,
-  OrganizationSchema,
   OrganizationMemberSchema,
+  OrganizationSchema,
   OrgPlanSchema,
   orgPlans,
   reservedEnvironmentPolicyLevels,
+  resolveClientKeyRateLimitRps,
   UserRoleSchema,
   UserSchema,
   userRoles,
@@ -208,6 +210,22 @@ describe("ClientKey (public)", () => {
     expect(ClientKeySchema.safeParse({ ...validClientKey, scopes: ["flags:read"] }).success).toBe(
       false,
     );
+  });
+
+  it("treats a missing or null rateLimitRps as the ADR 100 rps default", () => {
+    expect(DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS).toBe(100);
+    expect(resolveClientKeyRateLimitRps(null)).toBe(100);
+    expect(resolveClientKeyRateLimitRps(undefined)).toBe(100);
+    expect(resolveClientKeyRateLimitRps(25)).toBe(25);
+    expect(resolveClientKeyRateLimitRps(30)).toBe(30);
+  });
+
+  it("rejects a persisted Client Key rateLimitRps the limiter cannot enforce exactly", () => {
+    expect(ClientKeySchema.safeParse({ ...validClientKey, rateLimitRps: 0 }).success).toBe(false);
+    expect(ClientKeySchema.safeParse({ ...validClientKey, rateLimitRps: -1 }).success).toBe(false);
+    expect(ClientKeySchema.safeParse({ ...validClientKey, rateLimitRps: 1.5 }).success).toBe(false);
+    expect(ClientKeySchema.safeParse({ ...validClientKey, rateLimitRps: 7 }).success).toBe(false);
+    expect(ClientKeySchema.safeParse({ ...validClientKey, rateLimitRps: 30 }).success).toBe(true);
   });
 });
 

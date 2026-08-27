@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CachedClientKeyRateLimitRpsFieldSchema } from "./client-key-rate-limit";
 import { ExperimentStatusSchema } from "./leaf-schemas-experiment";
 import {
   PercentageRolloutSchema,
@@ -144,7 +145,7 @@ export const CredentialCacheKVSchemaV1 = z
     kind: CredentialKindSchema,
     scopes: z.array(z.string()),
     originAllowlist: z.array(z.string()).nullable().optional(),
-    rateLimitRps: z.number().nullable().optional(),
+    rateLimitRps: CachedClientKeyRateLimitRpsFieldSchema,
     revoked: z.boolean(),
     cachedAt: z.string(),
   })
@@ -162,7 +163,7 @@ export const CredentialCacheKVSchema = z
     kind: CredentialKindSchema,
     scopes: z.array(z.string()),
     originAllowlist: z.array(z.string()).nullable().optional(),
-    rateLimitRps: z.number().nullable().optional(),
+    rateLimitRps: CachedClientKeyRateLimitRpsFieldSchema,
     revoked: z.boolean(),
     cachedAt: z.string(),
   })
