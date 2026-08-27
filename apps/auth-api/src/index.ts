@@ -20,7 +20,7 @@ import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import type { AuthApiEnv } from "./env";
 import { makeJtiCache } from "./jti-cache";
-import { fetchTrustedJwks } from "./jwks-url";
+import { fetchTrustedJwks } from "./jwks-fetch";
 import type { SmokeClientCredentials } from "./oauth-routes";
 import { makeFixtureOtp, makeIdempotencyStore } from "./otp";
 import { makeRateLimiter } from "./rate-limit";

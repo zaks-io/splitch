@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchTrustedJwks, jwksUrlError, normalizeJwksUrl, parseJwksUrl } from "./jwks-url";
+import { fetchTrustedJwks, type OpenTrustedJwks } from "./jwks-fetch";
+import { isGlobalRemoteAddress } from "./jwks-ip";
+import { jwksUrlError, normalizeJwksUrl, parseJwksUrl } from "./jwks-url";
 import { CreateTrustedIdpRequestSchema } from "./schemas";
 
 const PUBLIC = "https://idp.example.com/.well-known/jwks.json";
@@ -31,6 +33,21 @@ describe("JWKS URL policy", () => {
     expect(jwksUrlError("not a url")).toBe("jwks_uri is not a valid URL");
   });
 
+  it("rejects an explicit default HTTPS port before WHATWG strips it", () => {
+    expect(jwksUrlError("https://idp.example.com:443/jwks")).toBe(
+      "jwks_uri must not specify a port",
+    );
+    expect(jwksUrlError("https://idp.example.com:0443/jwks")).toBe(
+      "jwks_uri must not specify a port",
+    );
+    expect(jwksUrlError("https://idp.example.com:00443/jwks")).toBe(
+      "jwks_uri must not specify a port",
+    );
+    expect(jwksUrlError("https://[2001:4860:4860::8888]:443/jwks")).toBe(
+      "jwks_uri must not specify a port",
+    );
+  });
+
   it("rejects localhost, loopback, link-local, and private-network IPv4", () => {
     for (const url of [
       "https://localhost/jwks",
@@ -46,12 +63,30 @@ describe("JWKS URL policy", () => {
     }
   });
 
-  it("rejects loopback, link-local, ULA, and IPv4-mapped IPv6", () => {
+  it("rejects special-use and multicast IPv4 literals", () => {
+    for (const url of [
+      "https://100.64.0.1/jwks",
+      "https://192.0.0.8/jwks",
+      "https://192.0.2.1/jwks",
+      "https://198.18.0.1/jwks",
+      "https://198.51.100.1/jwks",
+      "https://203.0.113.1/jwks",
+      "https://224.0.0.1/jwks",
+      "https://240.0.0.1/jwks",
+    ]) {
+      expect(jwksUrlError(url), url).toBe("jwks_uri host is not allowed");
+    }
+  });
+
+  it("rejects loopback, link-local, ULA, multicast, and IPv4-mapped IPv6", () => {
     for (const url of [
       "https://[::1]/jwks",
       "https://[::]/jwks",
       "https://[fe80::1]/jwks",
       "https://[fd12:3456:789a:1::1]/jwks",
+      "https://[ff02::1]/jwks",
+      "https://[ff00::1]/jwks",
+      "https://[2001:db8::1]/jwks",
       "https://[::ffff:127.0.0.1]/jwks",
       "https://[::ffff:169.254.169.254]/jwks",
       "https://[::ffff:10.0.0.1]/jwks",
@@ -70,7 +105,6 @@ describe("JWKS URL policy", () => {
     expect(jwksUrlError("https://%6c%6f%63%61%6c%68%6f%73%74/jwks")).toBe(
       "jwks_uri host is not allowed",
     );
-    // Encoded dots are either decoded to loopback or rejected as an invalid host.
     expect(jwksUrlError("https://127%2e0%2e0%2e1/jwks")).not.toBeNull();
   });
 
@@ -100,29 +134,107 @@ describe("CreateTrustedIdpRequestSchema jwks_uri", () => {
     });
     expect(bad.success).toBe(false);
   });
+
+  it("rejects explicit :443 and zero-padded default ports", () => {
+    for (const jwksUri of [
+      "https://idp.example.com:443/jwks",
+      "https://idp.example.com:0443/jwks",
+      "https://idp.example.com:00443/jwks",
+    ]) {
+      const parsed = CreateTrustedIdpRequestSchema.safeParse({
+        issuer: "https://idp.example.com",
+        jwks_uri: jwksUri,
+        client_ids: ["cid"],
+      });
+      expect(parsed.success, jwksUri).toBe(false);
+    }
+  });
 });
 
-describe("fetchTrustedJwks redirect behavior", () => {
+describe("fetchTrustedJwks destination binding", () => {
+  it("rejects a private-resolving hostname on the connected peer", async () => {
+    const send = vi.fn(async () => new Response("{}", { status: 200 }));
+    const open = vi.fn<OpenTrustedJwks>(async () => ({
+      remoteAddress: "169.254.169.254",
+      send,
+      close: async () => undefined,
+    }));
+
+    await expect(
+      fetchTrustedJwks("https://169.254.169.254.nip.io/jwks", { method: "GET" }, { open }),
+    ).rejects.toThrow("jwks_uri host is not allowed");
+    expect(open).toHaveBeenCalledWith("169.254.169.254.nip.io");
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("rejects multicast and special-use peers reported by the socket", async () => {
+    for (const remoteAddress of ["100.64.0.1", "224.0.0.1", "ff02::1", "[ff02::1]:443"]) {
+      expect(isGlobalRemoteAddress(remoteAddress), remoteAddress).toBe(false);
+      const send = vi.fn();
+      await expect(
+        fetchTrustedJwks(
+          PUBLIC,
+          { method: "GET" },
+          {
+            open: async () => ({
+              remoteAddress,
+              send,
+              close: async () => undefined,
+            }),
+          },
+        ),
+      ).rejects.toThrow("jwks_uri host is not allowed");
+      expect(send).not.toHaveBeenCalled();
+    }
+  });
+
   it("does not follow a redirect to a disallowed destination", async () => {
-    const fetcher = vi.fn(async () => {
+    const send = vi.fn(async () => {
       return new Response(null, {
         status: 302,
         headers: { location: "https://169.254.169.254/latest/meta-data/" },
       });
     });
 
-    const response = await fetchTrustedJwks(PUBLIC, { method: "GET" }, fetcher);
+    const response = await fetchTrustedJwks(
+      PUBLIC,
+      { method: "GET" },
+      {
+        open: async () => ({
+          remoteAddress: "8.8.8.8",
+          send,
+          close: async () => undefined,
+        }),
+      },
+    );
 
     expect(response.status).toBe(302);
-    expect(fetcher).toHaveBeenCalledOnce();
-    expect(fetcher).toHaveBeenCalledWith(PUBLIC, expect.objectContaining({ redirect: "manual" }));
+    expect(send).toHaveBeenCalledOnce();
+    expect(response.headers.get("location")).toBe("https://169.254.169.254/latest/meta-data/");
   });
 
-  it("refuses to fetch a disallowed URL", async () => {
-    const fetcher = vi.fn();
+  it("refuses to open a disallowed literal URL", async () => {
+    const open = vi.fn();
     await expect(
-      fetchTrustedJwks("https://127.0.0.1/jwks", { method: "GET" }, fetcher),
+      fetchTrustedJwks("https://127.0.0.1/jwks", { method: "GET" }, { open }),
     ).rejects.toThrow("jwks_uri host is not allowed");
-    expect(fetcher).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("sends HTTP only after the peer is a global address", async () => {
+    const send = vi.fn(async () => Response.json({ keys: [] }));
+    const response = await fetchTrustedJwks(
+      PUBLIC,
+      { method: "GET" },
+      {
+        open: async () => ({
+          remoteAddress: "8.8.8.8:443",
+          send,
+          close: async () => undefined,
+        }),
+      },
+    );
+    expect(response.ok).toBe(true);
+    expect(send).toHaveBeenCalledOnce();
   });
 });

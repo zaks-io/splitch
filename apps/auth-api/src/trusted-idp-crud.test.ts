@@ -264,7 +264,12 @@ describe("trusted-idp JWKS URL policy", () => {
       "https://169.254.169.254/jwks",
       "https://10.0.0.1/jwks",
       "https://192.168.1.1/jwks",
+      "https://100.64.0.1/jwks",
+      "https://224.0.0.1/jwks",
+      "https://[ff02::1]/jwks",
       "https://localhost/jwks",
+      "https://idp.example.com:443/jwks",
+      "https://idp.example.com:0443/jwks",
     ]) {
       const res = await app.request(`/orgs/${ORG_A}/trusted-idps`, {
         method: "POST",
