@@ -10,6 +10,7 @@ import {
   responseFromSnapshot,
   type Snapshot,
 } from "./config-store-shared";
+import { normalizeTargetingRuleRollouts } from "./flag-config-rollout";
 import { resolveTargetingRules } from "./targeting-rule-resolution";
 
 export async function previewTargetingRules(
@@ -22,15 +23,26 @@ export async function previewTargetingRules(
   const scope = envScope(input.appId, input.environmentId);
   const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
   if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  const missingVariants = missingRuleVariantNames(
+  const normalized = normalizeTargetingRuleRollouts(
+    snapshot.authoringTargetingRules,
     input.targetingRules,
+  );
+  if (!normalized.ok) {
+    return {
+      ok: false,
+      reason: "TARGETING_RULE_SALT_REJECTED",
+      callerSaltIndexes: normalized.callerSaltIndexes,
+    };
+  }
+  const missingVariants = missingRuleVariantNames(
+    normalized.targetingRules,
     snapshot.flag.variants,
     snapshot.flag.availableVariantNames,
   );
   if (missingVariants.length > 0) {
     return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants };
   }
-  const resolved = await resolveTargetingRules(deps.repo, input.appId, input.targetingRules);
+  const resolved = await resolveTargetingRules(deps.repo, input.appId, normalized.targetingRules);
   if (!resolved.ok) {
     return {
       ok: false,
@@ -38,7 +50,11 @@ export async function previewTargetingRules(
       missingSegmentIds: resolved.missingSegmentIds,
     };
   }
-  return previewSnapshotResult(snapshot, { targetingRules: resolved.rules }, input.targetingRules);
+  return previewSnapshotResult(
+    snapshot,
+    { targetingRules: resolved.rules },
+    normalized.targetingRules,
+  );
 }
 
 export function previewSnapshotResult(

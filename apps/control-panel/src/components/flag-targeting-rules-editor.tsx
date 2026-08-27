@@ -16,10 +16,9 @@ import type { FlagEditing } from "#lib/use-flag-editing";
 /**
  * The Targeting Rules of ONE Environment, editable as a whole list.
  *
- * A new rule serves all matches and carries no percentage: a rule-level rollout
- * needs a bucketing salt, the salt is server-minted and has no minting path on
- * this route yet, and inventing one here would silently decide who gets bucketed
- * (SPL-245). Existing rules go back verbatim, salt included.
+ * A new rule may serve all matches or a percentage of them. The percentage is
+ * operator-authored; the bucketing salt remains server-owned and never renders.
+ * Existing rules go back verbatim so their persisted salts remain stable.
  *
  * This component is rendered only when the field group is unlocked. An Experiment
  * that owns targeting makes it structurally absent, not disabled — a frozen
@@ -36,10 +35,19 @@ export function FlagTargetingRulesEditor({
   const [value, setValue] = useState("");
   const [variantId, setVariantId] = useState(view.catalog[0]?.id ?? "");
   const [segmentId, setSegmentId] = useState("");
+  const [percentage, setPercentage] = useState("");
 
   const hasCondition = attribute.trim() !== "" && value.trim() !== "";
   const hasPartialCondition = (attribute.trim() === "") !== (value.trim() === "");
-  const canAdd = !hasPartialCondition && (hasCondition || segmentId !== "") && variantId !== "";
+  const parsedPercentage = Number(percentage);
+  const percentageValid =
+    percentage.trim() === "" ||
+    (Number.isFinite(parsedPercentage) && parsedPercentage >= 0 && parsedPercentage <= 100);
+  const canAdd =
+    !hasPartialCondition &&
+    (hasCondition || segmentId !== "") &&
+    variantId !== "" &&
+    percentageValid;
 
   return (
     <div className="grid gap-4" data-flag-targeting-editor="true">
@@ -145,6 +153,16 @@ export function FlagTargetingRulesEditor({
               </option>
             ))}
           </select>
+          <Input
+            aria-label="rule rollout percentage"
+            className="w-28"
+            data-targeting-percentage="true"
+            disabled={editing.busy}
+            inputMode="decimal"
+            onChange={(event) => setPercentage(event.target.value)}
+            placeholder="all matches"
+            value={percentage}
+          />
           <Button
             data-targeting-add="true"
             disabled={editing.busy || !canAdd}
@@ -155,6 +173,7 @@ export function FlagTargetingRulesEditor({
                     ...(hasCondition ? { attribute: attribute.trim(), value: value.trim() } : {}),
                     ...(segmentId ? { segmentId } : {}),
                     variantId,
+                    ...(percentage.trim() === "" ? {} : { percentage: parsedPercentage }),
                   },
                   crypto.randomUUID(),
                 ),
@@ -167,8 +186,7 @@ export function FlagTargetingRulesEditor({
         </div>
         <p className="text-muted-foreground text-xs leading-5">
           Choose a Segment, a direct Condition, or both; a rule with both serves only traffic that
-          matches the Segment and the Condition. Percentage rollout on a rule is not editable here
-          yet.
+          matches the Segment and the Condition. Leave percentage blank to serve all matches.
         </p>
       </div>
     </div>

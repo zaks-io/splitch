@@ -64,6 +64,7 @@ export const TargetingEditSchema = z.discriminatedUnion("kind", [
         .optional(),
       segmentId: z.string().min(1).optional(),
       variantId: z.string().min(1),
+      percentage: z.number().min(0).max(100).optional(),
     })
     .strict()
     .refine((edit) => edit.condition !== undefined || edit.segmentId !== undefined, {

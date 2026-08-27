@@ -5,12 +5,12 @@ import {
   buildSnapshotFromD1,
   type ConfigStoreDeps,
   type FlagConfigWriteResult,
-  loadFlagConfigWriteContext,
   missingRuleVariantNames,
   type ReplaceTargetingRulesInput,
   targetingRuleRows,
   writeSnapshotAndBroadcast,
 } from "./config-store-shared";
+import { normalizeTargetingRuleRollouts } from "./flag-config-rollout";
 import { resolveTargetingRules } from "./targeting-rule-resolution";
 
 /**
@@ -36,19 +36,30 @@ export async function replaceTargetingRules(
   if (frozen) return frozen;
 
   const scope = envScope(input.appId, input.environmentId);
-  const context = await loadFlagConfigWriteContext(deps.repo, scope, input.flagId);
-  if (!context) return { ok: false, reason: "FLAG_NOT_FOUND" };
+  const current = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
+  if (!current) return { ok: false, reason: "FLAG_NOT_FOUND" };
+  const normalized = normalizeTargetingRuleRollouts(
+    current.authoringTargetingRules,
+    input.targetingRules,
+  );
+  if (!normalized.ok) {
+    return {
+      ok: false,
+      reason: "TARGETING_RULE_SALT_REJECTED",
+      callerSaltIndexes: normalized.callerSaltIndexes,
+    };
+  }
 
   const missingVariants = missingRuleVariantNames(
-    input.targetingRules,
-    context.variants,
-    JSON.parse(context.config.availableVariantNames) as string[],
+    normalized.targetingRules,
+    current.flag.variants,
+    current.flag.availableVariantNames,
   );
   if (missingVariants.length > 0) {
     return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants };
   }
 
-  const resolved = await resolveTargetingRules(deps.repo, input.appId, input.targetingRules);
+  const resolved = await resolveTargetingRules(deps.repo, input.appId, normalized.targetingRules);
   if (!resolved.ok) {
     return {
       ok: false,
@@ -57,13 +68,16 @@ export async function replaceTargetingRules(
     };
   }
 
-  return commitTargetingRules(deps, scope, input);
+  return commitTargetingRules(deps, scope, {
+    ...input,
+    targetingRules: normalized.targetingRules,
+  });
 }
 
 async function commitTargetingRules(
   deps: ConfigStoreDeps,
   scope: EnvScope,
-  input: ReplaceTargetingRulesInput,
+  input: ReplaceTargetingRulesInput & { targetingRules: TargetingRule[] },
 ): Promise<FlagConfigWriteResult> {
   const { approval, flagId } = input;
   const now = approval ? new Date(approval.reviewedAt) : (deps.now?.() ?? new Date());

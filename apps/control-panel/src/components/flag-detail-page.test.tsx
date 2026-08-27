@@ -132,6 +132,14 @@ describe("Flag detail page", () => {
     expect(html).not.toContain("salt");
   });
 
+  it("offers percentage authoring without exposing a salt input", () => {
+    const html = render(view());
+
+    expect(html).toContain('data-targeting-percentage="true"');
+    expect(html).toContain('aria-label="rule rollout percentage"');
+    expect(html).not.toContain("bucketing salt");
+  });
+
   it("does not read as 'No Segment AND ...' before a Segment is picked", () => {
     const html = render(view());
     const composer = html.slice(html.indexOf("Add a rule"));

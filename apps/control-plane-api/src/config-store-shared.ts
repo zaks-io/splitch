@@ -133,11 +133,7 @@ async function buildSnapshot(
   };
 }
 
-export async function loadFlagConfigWriteContext(
-  repo: Repository,
-  scope: EnvScope,
-  flagId: string,
-) {
+async function loadFlagConfigWriteContext(repo: Repository, scope: EnvScope, flagId: string) {
   const [flag, config, variantCatalogs] = await Promise.all([
     repo.flags.getFlag(appScope(scope.appId), flagId),
     repo.flags.getFlagConfig(scope, flagId),
