@@ -10,19 +10,34 @@ describe("scheduled recovery adoption", () => {
   it("attaches recovery watches to pre-upgrade delivery rows", async () => {
     const pending = [{ _id: "pending_id", exposureId: "exp_pending" }];
     const delivering = [{ _id: "delivering_id", exposureId: "exp_delivering" }];
-    const { ctx, patch, runAfter } = fakeContext({ pending, delivering });
+    const metricPending = [{ _id: "metric_pending_id", eventId: "evt_pending" }];
+    const metricDelivering = [{ _id: "metric_delivering_id", eventId: "evt_delivering" }];
+    const { ctx, patch, runAfter } = fakeContext({
+      pending,
+      delivering,
+      metricPending,
+      metricDelivering,
+    });
 
     await adoptExistingWorkHandler(ctx, { generation: RECOVERY_GENERATION });
 
-    expect(runAfter).toHaveBeenCalledTimes(2);
+    expect(runAfter).toHaveBeenCalledTimes(4);
     expect(runAfter.mock.calls.map((call) => call[2])).toEqual([
       { exposureId: "exp_pending" },
       { exposureId: "exp_delivering" },
+      { eventId: "evt_pending" },
+      { eventId: "evt_delivering" },
     ]);
     expect(patch).toHaveBeenCalledWith("pending_id", {
       recoveryWatchGeneration: RECOVERY_GENERATION,
     });
     expect(patch).toHaveBeenCalledWith("delivering_id", {
+      recoveryWatchGeneration: RECOVERY_GENERATION,
+    });
+    expect(patch).toHaveBeenCalledWith("metric_pending_id", {
+      recoveryWatchGeneration: RECOVERY_GENERATION,
+    });
+    expect(patch).toHaveBeenCalledWith("metric_delivering_id", {
       recoveryWatchGeneration: RECOVERY_GENERATION,
     });
     expect(patch).toHaveBeenCalledWith("integration_id", {
@@ -71,6 +86,8 @@ function fakeContext(options: {
   integration?: Record<string, unknown>;
   pending?: Array<{ _id: string; exposureId: string }>;
   delivering?: Array<{ _id: string; exposureId: string }>;
+  metricPending?: Array<{ _id: string; eventId: string }>;
+  metricDelivering?: Array<{ _id: string; eventId: string }>;
   scheduledJob?: unknown;
 }): {
   ctx: MutationCtx;
@@ -82,30 +99,9 @@ function fakeContext(options: {
     if (table === "integrations") {
       return { withIndex: vi.fn(() => ({ unique: vi.fn().mockResolvedValue(current) })) };
     }
-    if (table === "exposureOutbox") {
-      return {
-        withIndex: vi.fn((index: string, applyIndex: (query: unknown) => unknown) => {
-          if (index !== "by_recovery_watch_state") {
-            return { order: vi.fn(() => ({ first: vi.fn().mockResolvedValue(null) })) };
-          }
-          let state: "pending" | "delivering" | undefined;
-          const indexQuery = {
-            eq: vi.fn((field: string, value: unknown) => {
-              if (field === "state") state = value as "pending" | "delivering";
-              return indexQuery;
-            }),
-          };
-          applyIndex(indexQuery);
-          return {
-            take: vi
-              .fn()
-              .mockResolvedValue(
-                state === "pending" ? (options.pending ?? []) : (options.delivering ?? []),
-              ),
-          };
-        }),
-      };
-    }
+    if (table === "exposureOutbox") return recoveryRows(options.pending, options.delivering);
+    if (table === "metricEventOutbox")
+      return recoveryRows(options.metricPending, options.metricDelivering);
     return {
       withIndex: vi.fn(() => ({
         order: vi.fn(() => ({ first: vi.fn().mockResolvedValue(null) })),
@@ -125,6 +121,24 @@ function fakeContext(options: {
     } as unknown as MutationCtx,
     patch,
     runAfter,
+  };
+}
+
+function recoveryRows<Row>(pending: Row[] = [], delivering: Row[] = []) {
+  return {
+    withIndex: vi.fn((index: string, applyIndex: (query: unknown) => unknown) => {
+      if (index !== "by_recovery_watch_state")
+        return { order: vi.fn(() => ({ first: vi.fn().mockResolvedValue(null) })) };
+      let state: "pending" | "delivering" | undefined;
+      const indexQuery = {
+        eq: vi.fn((field: string, value: unknown) => {
+          if (field === "state") state = value as "pending" | "delivering";
+          return indexQuery;
+        }),
+      };
+      applyIndex(indexQuery);
+      return { take: vi.fn().mockResolvedValue(state === "pending" ? pending : delivering) };
+    }),
   };
 }
 

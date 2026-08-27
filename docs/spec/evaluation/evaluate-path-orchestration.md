@@ -149,6 +149,25 @@ caller) the same as absence, so the two entry points cannot diverge on that inpu
 `test-eval` and data-plane `evaluate` share this Condition matching function. A config the
 dry run endorses for a given context must not ERROR on the edge for that same context.
 
+### Array-valued Evaluation Context attributes
+
+`attributes` may carry arrays (`boolean | string | number | unknown[]`). For `eq`, `neq`,
+`in`, and `not_in`, an array-valued actual attribute is compared element-wise against the
+Condition `value` with `Object.is`. This is LaunchDarkly-compatible membership: a context
+such as `{ roles: ["admin", "analyst"] }` matches an `in` Condition with `value: ["admin"]`.
+
+| Operator | Array actual                                         | Scalar actual                           |
+| -------- | ---------------------------------------------------- | --------------------------------------- |
+| `eq`     | any element `Object.is` the scalar Condition `value` | whole-value `Object.is`                 |
+| `neq`    | no element `Object.is` the scalar Condition `value`  | `!Object.is`                            |
+| `in`     | any actual element equals any expected list member   | whole actual equals any expected member |
+| `not_in` | no actual element equals any expected list member    | whole actual equals no expected member  |
+
+Empty actual arrays never match `eq` or `in` and always match `neq` and `not_in`. Empty
+expected lists never match `in` and always match `not_in`. Arrays are never coerced to
+strings. `gt` / `lt` / `gte` / `lte` / `matches` / `not_matches` still require a scalar
+actual and do not iterate elements.
+
 ## Fractional Evaluation
 
 ```

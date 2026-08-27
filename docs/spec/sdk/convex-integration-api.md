@@ -22,6 +22,12 @@ nonstandard ports, redirects, and other hosts fail validation. Splitch excludes 
 from logs, encrypts the secret under the Control Plane Worker's required 32-byte base64
 `CONVEX_WEBHOOK_KEK`, and never returns it.
 
+Installation requires both `data-plane:evaluate` and `data-plane:write`, unlike every other route
+here. The Key mounted at install is the Component's only credential, and it authenticates Metric
+Event delivery as well as evaluation. Delivery happens after the caller's Mutation has committed, so
+an evaluate-only Key would let `track()` return a receipt and then send every Metric Event terminal,
+unobserved. Install refuses it with `INSUFFICIENT_SCOPES` instead, while a human is watching.
+
 An exact retry returns the existing installation. Reusing `installationId` with a different
 callback or secret fails `IDEMPOTENCY_KEY_CONFLICT`. The response is:
 
