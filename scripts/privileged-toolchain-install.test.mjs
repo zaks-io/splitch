@@ -33,6 +33,18 @@ test("unparseable installer shapes fail closed", () => {
   assert.equal(unpinned("eval npm install npm@11.15.0"), true);
   assert.equal(unpinned("xargs npm install npm@11.15.0"), true);
   assert.equal(unpinned("npm $ACTION npm@11.15.0"), true);
+  assert.equal(unpinned('n"p"m install --global npm@11'), true);
+  assert.equal(unpinned('sh -c "npm install --global npm@11"'), true);
+  assert.equal(unpinned('eval "npm install --global npm@11"'), true);
+});
+
+test("zero-package installs require an immutable lock mode", () => {
+  assert.equal(unpinned("npm install"), true);
+  assert.equal(unpinned("npm i"), true);
+  assert.equal(unpinned("pnpm install"), true);
+  assert.equal(unpinned("pnpm install --frozen-lockfile"), false);
+  assert.equal(unpinned("npm ci"), false);
+  assert.equal(unpinned("yarn install --immutable"), false);
 });
 
 test("non-install npm/pnpm/uv commands are not treated as floating installs", () => {

@@ -13,6 +13,23 @@ const TIMEOUT_FLAGS = flagKinds(
   ["--foreground", "--preserve-status", "-v", "--verbose"],
   ["-k", "-s", "--kill-after", "--signal"],
 );
+const INDIRECT_COMMANDS = new Set(["eval", "source", "."]);
+const SHELL_COMMANDS = new Set(["sh", "bash", "dash", "zsh", "ksh"]);
+const SHELL_COMMAND_FLAGS = new Set(["-c", "-lc", "--command"]);
+const SENSITIVE_COMMANDS = new Set([
+  "npm",
+  "pnpm",
+  "yarn",
+  "corepack",
+  "pip",
+  "pip3",
+  "python",
+  "python3",
+  "uv",
+  "cargo",
+  ...INDIRECT_COMMANDS,
+  ...SHELL_COMMANDS,
+]);
 
 /**
  * @param {string} script
@@ -73,6 +90,32 @@ export function skipKnownFlags(tokens, flags) {
  */
 export function hasUnresolvableToken(token) {
   return /\$|`/.test(token);
+}
+
+/**
+ * Concatenated quotes such as `n"p"m` hide the real command name.
+ *
+ * @param {string} command
+ * @returns {boolean}
+ */
+export function hasUnsupportedQuoting(command) {
+  const word = rawLeadingWord(command);
+  if (!/["']/.test(word)) return false;
+  const dequoted = word.replaceAll(/["']/g, "");
+  if (!SENSITIVE_COMMANDS.has(dequoted)) return false;
+  return word !== `"${dequoted}"` && word !== `'${dequoted}'`;
+}
+
+/**
+ * `eval`, `source`, and `sh -c` hide the real argv from the token scanner.
+ *
+ * @param {string[]} tokens
+ * @returns {boolean}
+ */
+export function isIndirectExecution(tokens) {
+  const lead = tokens[0] ?? "";
+  if (INDIRECT_COMMANDS.has(lead)) return true;
+  return SHELL_COMMANDS.has(lead) && tokens.some((token) => SHELL_COMMAND_FLAGS.has(token));
 }
 
 /**
@@ -177,4 +220,9 @@ function stripTimeout(tokens) {
   const skipped = skipKnownFlags(tokens, TIMEOUT_FLAGS);
   if (skipped.rest.length === 0) return skipped.rest;
   return skipped.rest.slice(1);
+}
+
+function rawLeadingWord(command) {
+  const words = [...command.matchAll(/"[^"]*"|'[^']*'|\S+/g)].map((match) => match[0] ?? "");
+  return stripWrappers(words)[0] ?? "";
 }

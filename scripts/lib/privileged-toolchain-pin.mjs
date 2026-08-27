@@ -183,9 +183,29 @@ function mutableInstallerViolationsForFile(file) {
 
 function floatingPackageViolationsForFile(file) {
   const document = parseGithubYaml(file.source);
+  if (file.kind === "action") return floatingPackageViolationsForAction(file, document);
   return parsedJobs(document)
     .map(({ name, job }) => floatingPackageViolationForJob(file, document, name, job))
     .filter((violation) => violation !== null);
+}
+
+function floatingPackageViolationsForAction(file, document) {
+  if (!isCompositeAction(document)) return [];
+  const unpinned = compositeSteps(document).some((step) =>
+    stepHasUnpinnedInstall(document, {}, step),
+  );
+  if (!unpinned) return [];
+  return [`${file.name} installs a floating package range`];
+}
+
+function isCompositeAction(document) {
+  return isPlainObject(document.runs) && document.runs.using === "composite";
+}
+
+function compositeSteps(document) {
+  return isPlainObject(document.runs) && Array.isArray(document.runs.steps)
+    ? document.runs.steps
+    : [];
 }
 
 function floatingPackageViolationForJob(file, document, name, job) {

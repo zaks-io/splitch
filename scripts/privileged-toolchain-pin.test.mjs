@@ -15,7 +15,6 @@ import {
 
 const FIXTURE_ROOT = "scripts/fixtures/privileged-toolchain-pin";
 const files = loadGithubCiFiles(".github");
-const workflows = files.filter((file) => file.kind === "workflow");
 
 test("every third-party action pin is a full commit SHA with a version comment", () => {
   assert.deepEqual(unpinnedActionViolations(files), []);
@@ -25,8 +24,8 @@ test("no privileged job executes a mutable installer", () => {
   assert.deepEqual(mutableInstallerViolations(files), []);
 });
 
-test("no privileged job installs a floating package range", () => {
-  assert.deepEqual(floatingPackageViolations(workflows), []);
+test("no privileged job or composite action installs a floating package range", () => {
+  assert.deepEqual(floatingPackageViolations(files), []);
 });
 
 test("cloudflare-publish pins and verifies an exact npm version before OIDC publish", () => {
@@ -160,8 +159,9 @@ test("OIDC jobs reject shorthand, ranged, unpinned, and variable installer versi
       "uv-unpinned",
       "cargo-unpinned",
       "npm-variable",
+      "npm-zero",
     ],
-    ["npm-exact"],
+    ["npm-exact", "pnpm-frozen"],
   );
 });
 
@@ -171,6 +171,18 @@ test("privileged environments enforce exact installer versions without OIDC", ()
     ["preview-literal", "production-case", "mapping-preview", "dynamic-env"],
     ["preview-exact"],
   );
+});
+
+test("local composite action runs.steps are scanned as privileged", () => {
+  const violations = floatingPackageViolations(
+    loadGithubCiFiles(join(FIXTURE_ROOT, "composite-unpinned")),
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0] ?? "", /action\.yml installs a floating package range/);
+});
+
+test("concatenated quotes and indirect shells fail closed", () => {
+  assertRejectedJobs("indirect-quoting", ["concatenated-quotes", "sh-c", "eval-quoted"], []);
 });
 
 test("wrappers, global options, pipelines, and mixed cargo crates cannot evade the gate", () => {

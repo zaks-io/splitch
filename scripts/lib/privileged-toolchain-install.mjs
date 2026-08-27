@@ -2,6 +2,8 @@ import {
   commandSegments,
   flagKinds,
   hasUnresolvableToken,
+  hasUnsupportedQuoting,
+  isIndirectExecution,
   skipKnownFlags,
   stripWrappers,
   tokenize,
@@ -29,6 +31,7 @@ const NPM_FLAGS = flagKinds(
     "--offline",
     "--prefer-offline",
     "--frozen-lockfile",
+    "--immutable",
     "--ignore-scripts",
     "--no-save",
     "--save-dev",
@@ -143,7 +146,10 @@ function substitute(text, bindings) {
 }
 
 function commandHasUnpinnedInstall(command) {
-  const classified = classifyCommand(stripWrappers(tokenize(command)));
+  if (hasUnsupportedQuoting(command)) return true;
+  const tokens = stripWrappers(tokenize(command));
+  if (isIndirectExecution(tokens)) return true;
+  const classified = classifyCommand(tokens);
   if (classified.kind === "not-install") return false;
   if (classified.kind === "unparsed") return true;
   if (classified.tokens.some((token) => UNRESOLVABLE_FLAGS.has(token))) return true;
@@ -257,8 +263,17 @@ function consumeInstallFlag(token, flags) {
 
 function installIsExact(install) {
   if (install.kind === "cargo") return cargoIsExact(install);
-  if (install.packages.length === 0) return true;
+  if (install.packages.length === 0) return hasImmutableLockMode(install);
   return install.packages.every((spec) => isExactSpec(spec, install.kind));
+}
+
+function hasImmutableLockMode(install) {
+  if (install.kind !== "npm") return false;
+  return (
+    install.tokens.includes("ci") ||
+    install.tokens.includes("--frozen-lockfile") ||
+    install.tokens.includes("--immutable")
+  );
 }
 
 function cargoIsExact(install) {
