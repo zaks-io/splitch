@@ -1,4 +1,11 @@
-import { compactVerify, createRemoteJWKSet, errors, type RemoteJWKSet } from "jose";
+import {
+  compactVerify,
+  createRemoteJWKSet,
+  customFetch,
+  errors,
+  type FetchImplementation,
+  type RemoteJWKSet,
+} from "jose";
 
 const MAX_REMOTE_JWKS_RESOLVERS = 32;
 const rejectedCredentialCodes = new Set([
@@ -12,6 +19,10 @@ export interface RemoteJwksSignatureVerifier {
   verify(compactJws: string): Promise<boolean>;
 }
 
+export interface RemoteJwksSignatureVerifierOptions {
+  fetch?: FetchImplementation;
+}
+
 /**
  * Process-local remote JWKS resolvers keyed only by their trusted URI. A fresh
  * isolate refetches, which affects latency but never verification correctness.
@@ -23,8 +34,11 @@ const remoteResolvers = new Map<string, RemoteJWKSet>();
  * Reuse jose's Cloudflare-aware remote resolver. It caches parsed keys, bounds
  * refreshes, refreshes after a new `kid`, and fails loud on transport faults.
  */
-export function remoteJwksSignatureVerifier(jwksUri: string): RemoteJwksSignatureVerifier {
-  const resolver = remoteResolver(jwksUri);
+export function remoteJwksSignatureVerifier(
+  jwksUri: string,
+  options?: RemoteJwksSignatureVerifierOptions,
+): RemoteJwksSignatureVerifier {
+  const resolver = remoteResolver(jwksUri, options?.fetch);
   return {
     async verify(compactJws) {
       try {
@@ -40,7 +54,7 @@ export function remoteJwksSignatureVerifier(jwksUri: string): RemoteJwksSignatur
   };
 }
 
-function remoteResolver(jwksUri: string): RemoteJWKSet {
+function remoteResolver(jwksUri: string, fetchImpl?: FetchImplementation): RemoteJWKSet {
   const key = new URL(jwksUri).href;
   const existing = remoteResolvers.get(key);
   if (existing) {
@@ -49,7 +63,10 @@ function remoteResolver(jwksUri: string): RemoteJWKSet {
     return existing;
   }
 
-  const resolver = createRemoteJWKSet(new URL(key));
+  const resolver = createRemoteJWKSet(
+    new URL(key),
+    fetchImpl === undefined ? undefined : { [customFetch]: fetchImpl },
+  );
   remoteResolvers.set(key, resolver);
   if (remoteResolvers.size > MAX_REMOTE_JWKS_RESOLVERS) {
     const oldest = remoteResolvers.keys().next().value;

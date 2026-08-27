@@ -22,10 +22,13 @@ export type { RawInput } from "./parse-input";
 export { MALFORMED_BODY } from "./parse-input";
 export type { AuthResolver, AuthResult, Principal } from "./principal";
 export type { RateLimitDecision, RateLimiter } from "./rate-limit";
+export type {
+  RemoteJwksSignatureVerifier,
+  RemoteJwksSignatureVerifierOptions,
+} from "./remote-jwks";
+export { remoteJwksSignatureVerifier } from "./remote-jwks";
 export type { HandlerArgs, Registrar, RouteHandler } from "./registrar";
 export { createRegistrar, PUBLIC_PRINCIPAL } from "./registrar";
-export type { RemoteJwksSignatureVerifier } from "./remote-jwks";
-export { remoteJwksSignatureVerifier } from "./remote-jwks";
 export type { EmptyDetailCode } from "./respond";
 export { emptyError, renderError } from "./respond";
 export { timingSafeEqualString } from "./secret-compare";

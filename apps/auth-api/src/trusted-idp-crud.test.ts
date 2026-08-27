@@ -243,6 +243,64 @@ describe("B1: trusted-idp CRUD is tenant-isolated", () => {
   });
 });
 
+describe("trusted-idp JWKS URL policy", () => {
+  it("rejects unsafe JWKS URLs before writing D1", async () => {
+    const app = buildApp();
+    const token = await accessTokenFor(OWNER, [`org:${ORG_A}:owner`]);
+    const before = await local.d1
+      .prepare("SELECT COUNT(*) AS n FROM trusted_idps WHERE org_id = ?")
+      .bind(ORG_A)
+      .first<{ n: number }>();
+
+    for (const jwksUri of [
+      "http://idp.example.com/jwks",
+      "https://user:pass@idp.example.com/jwks",
+      "https://idp.example.com:8443/jwks",
+      "https://idp.example.com/jwks?x=1",
+      "https://idp.example.com/jwks#frag",
+      "https://127.0.0.1/jwks",
+      "https://[::1]/jwks",
+      "https://169.254.169.254/jwks",
+      "https://10.0.0.1/jwks",
+      "https://192.168.1.1/jwks",
+      "https://localhost/jwks",
+    ]) {
+      const res = await app.request(`/orgs/${ORG_A}/trusted-idps`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          issuer: `https://unsafe-${jwksUri.length}.test`,
+          jwks_uri: jwksUri,
+          client_ids: ["cid"],
+        }),
+      });
+      expect(res.status, jwksUri).toBe(400);
+      expect(((await res.json()) as { code: string }).code).toBe("VALIDATION_ERROR");
+    }
+
+    const after = await local.d1
+      .prepare("SELECT COUNT(*) AS n FROM trusted_idps WHERE org_id = ?")
+      .bind(ORG_A)
+      .first<{ n: number }>();
+    expect(after?.n).toBe(before?.n);
+  });
+
+  it("still persists a valid public HTTPS JWKS URL", async () => {
+    const app = buildApp();
+    const token = await accessTokenFor(OWNER, [`org:${ORG_A}:owner`]);
+    const idp = await createIdp(app, ORG_A, token, "https://idp.allowed.test");
+    const row = await local.d1
+      .prepare("SELECT jwks_uri AS jwksUri FROM trusted_idps WHERE idp_id = ?")
+      .bind(idp.idpId)
+      .first<{ jwksUri: string }>();
+    expect(row?.jwksUri).toBe("https://idp.allowed.test/jwks");
+    await app.request(`/orgs/${ORG_A}/trusted-idps/${idp.idpId}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${token}` },
+    });
+  });
+});
+
 describe("H1: an identity_assertion cannot be replayed as a control-plane Bearer", () => {
   it("rejects an identity_assertion presented as a Bearer (type confusion)", async () => {
     const app = buildApp();

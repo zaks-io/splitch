@@ -47,6 +47,26 @@ describe("remote JWKS signature verification", () => {
       "Expected 200 OK",
     );
   });
+
+  it("does not follow a JWKS redirect to another host", async () => {
+    const trusted = await keypair("trusted");
+    const fetchJwks = vi.fn(async () => {
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://169.254.169.254/jwks" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchJwks);
+    const verifier = remoteJwksSignatureVerifier(uniqueJwksUri());
+
+    await expect(verifier.verify(await sign(trusted, { sub: "valid" }))).rejects.toThrow(
+      "Expected 200 OK",
+    );
+    expect(fetchJwks).toHaveBeenCalledOnce();
+    const fetchedUrl = String(fetchJwks.mock.calls.at(0)?.at(0));
+    expect(fetchedUrl).toContain("jwks.test");
+    expect(fetchedUrl).not.toContain("169.254.169.254");
+  });
 });
 
 type Keypair = {
