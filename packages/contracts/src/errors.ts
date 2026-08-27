@@ -30,10 +30,15 @@ import { SegmentDependenciesSchema, SegmentNotFoundDetailsSchema } from "./segme
  * this file is its executable form.
  */
 
-export type { ErrorCode };
-export { ErrorCodeSchema, errorCodes };
-export type { PolicyChangeType, RecommendedAction };
-export { PolicyChangeTypeSchema, policyChangeTypes, RecommendedActionSchema, recommendedActions };
+export type { ErrorCode, PolicyChangeType, RecommendedAction };
+export {
+  ErrorCodeSchema,
+  errorCodes,
+  PolicyChangeTypeSchema,
+  policyChangeTypes,
+  RecommendedActionSchema,
+  recommendedActions,
+};
 
 const JsonScalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 const JsonScalarArraySchema = z.array(JsonScalarSchema);
@@ -182,6 +187,8 @@ const errorMembers = [
       childCount: z.number(),
       /** Complete counts by CLI child type when more than one type can block. */
       childCounts: z.record(z.string(), z.number().int().nonnegative()).optional(),
+      /** Targeting Rules that directly reference a Variant deletion target. */
+      targetingRuleIds: z.array(z.string()).min(1).optional(),
       attemptedOp: z.string(),
       /**
        * Every current blocker group, each child named by ID and by the CLI

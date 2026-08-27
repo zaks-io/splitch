@@ -8,8 +8,11 @@ import {
   type VariantWriteRefusal,
   variantFreezeDetails,
   variantFreezeMessage,
+  variantTargetingRuleReferenceDetails,
+  variantTargetingRuleReferenceMessage,
 } from "./flag-definition-errors";
 import { resyncFlagSnapshots } from "./flag-definition-handler-utils";
+import { targetingRuleIdsReferencingVariant } from "./flag-definition-variant-prepare";
 import type { RunSnapshotDelivery } from "./run-snapshot";
 import { republishApplicationError } from "./segment-republication";
 import { applyApprovedSegmentUpdate } from "./segment-update";
@@ -243,6 +246,24 @@ async function applyVariantDelete(
       ok: false as const,
       targetState: "rolled_back" as const,
       error: { code: "VARIANT_NOT_FOUND" as const, details: {} },
+    };
+  }
+  const environments = await deps.repo.identity.listEnvironments(appScope(request.appId));
+  const targetingRuleIds = await targetingRuleIdsReferencingVariant(
+    deps.repo,
+    request.appId,
+    variant.flagId,
+    variant.id,
+    environments,
+  );
+  if (targetingRuleIds.length > 0) {
+    return {
+      ok: false as const,
+      unapplicable: {
+        code: "RESOURCE_NOT_EMPTY" as const,
+        message: variantTargetingRuleReferenceMessage(variant.name),
+        details: variantTargetingRuleReferenceDetails(variant.name, targetingRuleIds),
+      },
     };
   }
   const removed = await deps.repo.flags.removeVariant(

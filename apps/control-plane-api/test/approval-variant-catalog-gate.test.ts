@@ -9,6 +9,7 @@ import {
   createVariantRequest,
   deleteVariantRequest,
   patchVariant,
+  readRequest,
   reviewRequest,
 } from "./approval-harness";
 import { makePoolHarness } from "./config-store-pool-harness";
@@ -28,6 +29,7 @@ beforeEach(async () => {
   h = await makePoolHarness();
   await setProdPolicy(h, confirmPolicy);
   await clearFrozenRun(h);
+  await h.d1.prepare("DELETE FROM targeting_rules WHERE app_id = ?").bind(ids.appId).run();
   for (const envId of [ids.environmentId, ids.devEnvironmentId]) {
     await h.repo.flags.updateFlagConfig(envScope(ids.appId, envId), ids.flagId, {
       availableVariantNames: JSON.stringify([]),
@@ -135,3 +137,78 @@ describe("the delete guard reads explicit references, not servability", () => {
     expect(await treatment()).not.toBeNull();
   });
 });
+
+describe("Targeting Rule references block Variant deletion", () => {
+  it("refuses an allow-policy delete and names every referencing Targeting Rule ID", async () => {
+    await setProdPolicy(h, allowPolicy);
+    await seedTreatmentRule(ids.devEnvironmentId, "rule_dev_treatment");
+    await seedTreatmentRule(ids.environmentId, "rule_prod_treatment");
+
+    const removed = await deleteVariantRequest(h, "treatment", "cat_rule_allow");
+
+    expect(removed.status).toBe(409);
+    expect(removed.code).toBe("RESOURCE_NOT_EMPTY");
+    expect(removed.details).toMatchObject({
+      resourceType: "variant",
+      resourceId: "treatment",
+      childType: "flag-targeting-rules",
+      childCount: 2,
+      attemptedOp: "DELETE_VARIANT",
+      targetingRuleIds: ["rule_dev_treatment", "rule_prod_treatment"],
+    });
+    expect(await treatment()).not.toBeNull();
+  });
+
+  it("refuses a confirm-policy proposal before creating an Approval Request", async () => {
+    await seedTreatmentRule(ids.devEnvironmentId, "rule_confirm_treatment");
+    const before = await h.repo.approvals.countRequests(appScope(ids.appId), {});
+
+    const removed = await deleteVariantRequest(h, "treatment", "cat_rule_confirm");
+
+    expect(removed.status).toBe(409);
+    expect(removed.code).toBe("RESOURCE_NOT_EMPTY");
+    expect(removed.details?.targetingRuleIds).toEqual(["rule_confirm_treatment"]);
+    expect(removed.approvalRequestId).toBeUndefined();
+    expect(await h.repo.approvals.countRequests(appScope(ids.appId), {})).toBe(before);
+    expect(await treatment()).not.toBeNull();
+  });
+
+  it("rechecks references when an approved delete is applied", async () => {
+    const proposed = await deleteVariantRequest(h, "treatment", "cat_rule_race");
+    expect(proposed.code).toBe("APPROVAL_REVIEW_REQUIRED");
+    const requestId = proposed.approvalRequestId;
+    if (!requestId) throw new Error("missing Variant delete Approval Request");
+
+    await seedTreatmentRule(ids.devEnvironmentId, "rule_race_treatment");
+    const reviewed = await reviewRequest(h, requestId, "cat_rule_race_review");
+
+    expect(reviewed.status).toBe(409);
+    expect(await reviewed.json()).toMatchObject({
+      code: "RESOURCE_NOT_EMPTY",
+      details: {
+        resourceType: "variant",
+        resourceId: "treatment",
+        targetingRuleIds: ["rule_race_treatment"],
+      },
+    });
+    expect(await treatment()).not.toBeNull();
+    expect(await readRequest(h, requestId)).toMatchObject({
+      status: 200,
+      body: { status: "stale" },
+    });
+  });
+});
+
+async function seedTreatmentRule(environmentId: string, id: string): Promise<void> {
+  await h.repo.flags.targetingRules.insert(envScope(ids.appId, environmentId), {
+    id,
+    appId: ids.appId,
+    environmentId,
+    flagId: ids.flagId,
+    priority: 0,
+    conditions: JSON.stringify([{ attribute: "plan", operator: "eq", value: "pro" }]),
+    variantId: ids.treatmentVariantId,
+    createdAt: "2026-07-02T09:45:00.000Z",
+    updatedAt: "2026-07-02T09:45:00.000Z",
+  });
+}

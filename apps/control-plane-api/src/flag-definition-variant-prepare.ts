@@ -1,10 +1,12 @@
-import type { Repository } from "@splitch/db";
+import { validateJsonSchema } from "@splitch/contracts";
+import { envScope, type Repository } from "@splitch/db";
 import {
   resourceNotEmpty,
   runningExperimentError,
   validationError,
   validationErrors,
   variantRunFrozenError,
+  variantTargetingRuleReferenceError,
 } from "./flag-definition-errors";
 import { explicitVariantReferenceCount } from "./flag-definition-guards";
 import {
@@ -15,7 +17,6 @@ import {
   type Result,
 } from "./flag-definition-handler-utils";
 import { parseStoredSchema, pathBodyMismatch } from "./flag-definition-model";
-import { validateJsonSchema } from "@splitch/contracts";
 
 export type VariantRow = NonNullable<Awaited<ReturnType<Repository["flags"]["getVariantByName"]>>>;
 export type VariantPatch = Parameters<Repository["flags"]["updateVariant"]>[3];
@@ -156,6 +157,34 @@ export async function variantDeleteBlocker(
     );
   }
 
+  const targetingRuleIds = await targetingRuleIdsReferencingVariant(
+    deps.repo,
+    loaded.appId,
+    loaded.flag.id,
+    variant.id,
+    envs,
+  );
+  if (targetingRuleIds.length > 0) {
+    return variantTargetingRuleReferenceError(variantName, targetingRuleIds, requestId);
+  }
+
   const running = await deps.repo.flags.liveRunUsingVariant(loaded.scope, loaded.flag.id, variant);
   return running ? runningExperimentError(running, "DELETE_VARIANT", requestId) : null;
+}
+
+export async function targetingRuleIdsReferencingVariant(
+  repo: Repository,
+  appId: string,
+  flagId: string,
+  variantId: string,
+  envs: Awaited<ReturnType<Repository["identity"]["listEnvironments"]>>,
+): Promise<string[]> {
+  const ids = new Set<string>();
+  for (const env of envs) {
+    const rules = await repo.flags.listTargetingRules(envScope(appId, env.id), flagId);
+    for (const rule of rules) {
+      if (rule.variantId === variantId) ids.add(rule.id);
+    }
+  }
+  return [...ids].sort();
 }

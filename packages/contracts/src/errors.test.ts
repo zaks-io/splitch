@@ -84,6 +84,32 @@ describe("ErrorResponse contract", () => {
     expect(parsed.code).toBe("FLAG_NOT_FOUND");
   });
 
+  it("types the Targeting Rule IDs that block Variant deletion", () => {
+    const parsed = ErrorResponseSchema.parse({
+      code: "RESOURCE_NOT_EMPTY",
+      message: "Variant is referenced by Targeting Rules",
+      details: {
+        resourceType: "variant",
+        resourceId: "treatment",
+        childType: "flag-targeting-rules",
+        childCount: 2,
+        attemptedOp: "DELETE_VARIANT",
+        targetingRuleIds: ["rule_dev", "rule_prod"],
+      },
+    });
+
+    if (parsed.code !== "RESOURCE_NOT_EMPTY") {
+      throw new Error("discriminant did not narrow to RESOURCE_NOT_EMPTY");
+    }
+    expect(parsed.details.targetingRuleIds).toEqual(["rule_dev", "rule_prod"]);
+    expect(
+      ErrorResponseSchema.safeParse({
+        ...parsed,
+        details: { ...parsed.details, targetingRuleIds: [] },
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts optional fault on INTERNAL_SERVER_ERROR", () => {
     const withFault = ErrorResponseSchema.parse({
       code: "INTERNAL_SERVER_ERROR",

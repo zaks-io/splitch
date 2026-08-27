@@ -35,6 +35,7 @@ export interface PatchOutcome {
   status: number;
   code?: string;
   message?: string;
+  details?: Record<string, unknown>;
   approvalRequestId?: string;
 }
 
@@ -126,12 +127,13 @@ async function outcome(response: Response): Promise<PatchOutcome> {
   const parsed = (await response.json()) as {
     code?: string;
     message?: string;
-    details?: { approvalRequestId?: string };
+    details?: Record<string, unknown> & { approvalRequestId?: string };
   };
   return {
     status: response.status,
     code: parsed.code,
     message: parsed.message,
+    details: parsed.details,
     approvalRequestId: parsed.details?.approvalRequestId,
   };
 }

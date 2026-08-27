@@ -1,7 +1,7 @@
+import type { ValidationIssue } from "@splitch/contracts";
 import type { UpdateVariantResult, VariantFrozenChange, VariantRunFreeze } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import type { RunningBlocker } from "./flag-definition-guards";
-import type { ValidationIssue } from "@splitch/contracts";
 
 export interface VariantFreezeRefusal {
   freeze: VariantRunFreeze;
@@ -168,6 +168,39 @@ export function resourceNotEmpty(
       code: "RESOURCE_NOT_EMPTY",
       message: "resource has children that must be deleted before this operation can continue",
       details: { resourceType, resourceId, childType, childCount, attemptedOp },
+    },
+    { requestId },
+  );
+}
+
+export function variantTargetingRuleReferenceDetails(
+  variantName: string,
+  targetingRuleIds: readonly string[],
+) {
+  return {
+    resourceType: "variant" as const,
+    resourceId: variantName,
+    childType: "flag-targeting-rules",
+    childCount: targetingRuleIds.length,
+    attemptedOp: "DELETE_VARIANT",
+    targetingRuleIds: [...targetingRuleIds],
+  };
+}
+
+export function variantTargetingRuleReferenceMessage(variantName: string): string {
+  return `Variant "${variantName}" is referenced by Targeting Rules that must be removed or rewritten before deletion`;
+}
+
+export function variantTargetingRuleReferenceError(
+  variantName: string,
+  targetingRuleIds: readonly string[],
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "RESOURCE_NOT_EMPTY",
+      message: variantTargetingRuleReferenceMessage(variantName),
+      details: variantTargetingRuleReferenceDetails(variantName, targetingRuleIds),
     },
     { requestId },
   );
