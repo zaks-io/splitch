@@ -17,6 +17,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Cloud Agent user shells put /usr/local/bin on PATH, but this install process
+# can see /exec-daemon/node first. Pin checks and the proof block have to
+# observe the toolchain we just wrote, not the image's bootstrap node.
+export PATH="/usr/local/bin:${PATH}"
+
 # Exactly one match, or stop. `head -n1` on a disagreeing set would install a
 # version nothing else in the repo uses.
 pin() {
@@ -49,20 +54,80 @@ esac
 ########################################################
 
 # `pnpm verify:push` runs tinybird:local, which drives a tinybird-local
-# container, so an agent without Docker cannot push. Checked before anything is
-# downloaded: this depends on the base image, not on this script.
+# container, so an agent without Docker cannot push. The managed Cloud Agent
+# base image no longer ships the client or the daemon. Install docker-ce here
+# with fuse-overlayfs plus iptables-legacy so docker-in-docker can start, using
+# Cursor's documented noble pins so an upstream publish cannot hand the agent
+# a different engine with no repo change.
+# https://cursor.com/docs/cloud-agent/setup#running-docker
+DOCKER_VERSION="28.5.2"
+DOCKER_CE_PIN="5:${DOCKER_VERSION}-1~ubuntu.24.04~noble"
+
+docker_client_version() {
+  docker --version 2>/dev/null | sed -n 's/^Docker version \([0-9][0-9.]*\).*/\1/p'
+}
+
+if [ "$(docker_client_version)" != "$DOCKER_VERSION" ] || ! command -v fuse-overlayfs >/dev/null 2>&1; then
+  # Sourced for VERSION_CODENAME only. The rest of the script does not depend
+  # on distro fields, so keep the leak local to this block.
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  if [ "${VERSION_CODENAME}" != "noble" ]; then
+    echo "install: docker-ce pin is for Ubuntu noble, found ${VERSION_CODENAME:-unknown}" >&2
+    exit 1
+  fi
+
+  sudo install -m 0755 -d /etc/apt/keyrings
+  if [ ! -f /etc/apt/keyrings/docker.gpg ]; then
+    curl -fsSL --retry 3 --retry-delay 5 --max-time 60 \
+      https://download.docker.com/linux/ubuntu/gpg |
+      sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    sudo chmod a+r /etc/apt/keyrings/docker.gpg
+  fi
+
+  if [ ! -f /etc/apt/sources.list.d/docker.list ]; then
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" |
+      sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+  fi
+
+  sudo apt-get update
+  # fuse3 asks about /etc/fuse.conf when the base image already has one.
+  # Without force-confold, a Cloud Agent Build dies on a conffile prompt.
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    -o Dpkg::Options::=--force-confdef \
+    -o Dpkg::Options::=--force-confold \
+    "docker-ce=${DOCKER_CE_PIN}" \
+    "docker-ce-cli=${DOCKER_CE_PIN}" \
+    containerd.io \
+    docker-buildx-plugin \
+    docker-compose-plugin \
+    fuse-overlayfs \
+    iptables
+fi
+
+# daemon.json and iptables-legacy stay outside the package install so a
+# retry after a failed apt step still produces a usable docker-in-docker
+# config. The packages can be present while these files are not.
+sudo mkdir -p /etc/docker
+if [ ! -f /etc/docker/daemon.json ]; then
+  printf '%s\n' '{' '  "storage-driver": "fuse-overlayfs"' '}' |
+    sudo tee /etc/docker/daemon.json >/dev/null
+fi
+
+sudo update-alternatives --set iptables /usr/sbin/iptables-legacy
+sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+
 if ! command -v docker >/dev/null 2>&1; then
-  echo "install: docker is not on PATH. The cloud agent base image is expected" >&2
-  echo "         to ship it; if that changed, install docker-ce here and set" >&2
-  echo "         storage-driver fuse-overlayfs plus iptables-legacy per" >&2
-  echo "         https://cursor.com/docs/cloud-agent/setup" >&2
+  echo "install: docker is not on PATH after installing docker-ce" >&2
   exit 1
 fi
 
 # tinybird:local reaches the daemon socket as this user, not through sudo, and
 # the socket is root:docker 0660. Membership lands in /etc/group inside the
 # snapshot, so the shells Cursor starts after boot pick it up; .cursor/start.sh
-# proves it against a live daemon.
+# proves it against a live daemon. docker-ce creates the group; -f covers a
+# partial install that somehow left the binary without it.
+sudo groupadd -f docker
 sudo usermod -aG docker "$(id -un)"
 
 ########################################################
@@ -178,3 +243,4 @@ require_version node "v${NODE_VERSION}" node --version
 require_version pnpm "$PNPM_VERSION" pnpm --version
 require_version gitleaks "$GITLEAKS_VERSION" gitleaks version
 require_version tinybird "$TINYBIRD_CLI_VERSION" tb --no-version-warning --version
+require_version docker "$DOCKER_VERSION" docker --version

@@ -18,7 +18,7 @@
     "format:write": "biome format --write . && prettier --write \"**/*.md\"",
     "knip": "knip --treat-config-hints-as-errors",
     "lint": "turbo run lint",
-    "prepare": "lefthook install",
+    "prepare": "node scripts/install-git-hooks.mjs",
     "audit": "pnpm audit --audit-level=high",
     "pins:check": "node scripts/security-check.mjs pinact run -check",
     "sast": "node scripts/security-check.mjs semgrep scan --config .semgrep/ --error apps packages scripts",
