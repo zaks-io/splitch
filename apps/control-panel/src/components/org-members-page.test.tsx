@@ -23,6 +23,8 @@ const members: OrgMemberList = {
     { userId: "u_admin", email: "admin@acme.test", role: "admin" },
     { userId: "u_member", email: "member@acme.test", role: "member" },
   ],
+  readTruncated: false,
+  readLimit: 200,
 };
 
 function page(orgRole: OrgRole, list: OrgMemberList = members, userId = "u_owner") {
@@ -87,6 +89,8 @@ describe("Members screen role matrix", () => {
     const html = page("owner", {
       kind: "ready",
       items: [{ userId: "u_new", email: null, role: "member" }],
+      readTruncated: false,
+      readLimit: 200,
     });
 
     expect(html).toContain('data-member-id="u_new"');
@@ -125,6 +129,8 @@ describe("last-owner guard", () => {
         { userId: "u_owner", email: "owner@acme.test", role: "owner" },
         { userId: "u_admin", email: "admin@acme.test", role: "admin" },
       ],
+      readTruncated: false,
+      readLimit: 200,
     });
 
     expect(html).toContain("The only owner. Promote another member to owner first.");
@@ -141,9 +147,17 @@ describe("last-owner guard", () => {
         { userId: "u_owner", email: "owner@acme.test", role: "owner" },
         { userId: "u_second", email: "second@acme.test", role: "owner" },
       ],
+      readTruncated: false,
+      readLimit: 200,
     });
 
     expect(html).not.toContain("The only owner. Promote another member to owner first.");
+  });
+
+  it("says the roster is incomplete when the Control Plane list was truncated", () => {
+    const html = page("owner", { ...members, readTruncated: true, readLimit: 200 });
+    expect(html).toContain('data-testid="members-truncated"');
+    expect(html).toContain("More than 200 members in this Organization");
   });
 });
 

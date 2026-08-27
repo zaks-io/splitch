@@ -20,7 +20,12 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/metrics")({
 
     const result = await loadControlPanelMetrics({ data: scoped.context.scope });
     if (!result.ok) throw new Error(result.error.message);
-    return { metrics: result.data.items, scope: scoped.context.scope };
+    return {
+      metrics: result.data.items,
+      readLimit: result.data.readLimit,
+      readTruncated: result.data.readTruncated,
+      scope: scoped.context.scope,
+    };
   },
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/metrics");
@@ -31,10 +36,16 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/metrics")({
 });
 
 function MetricsSectionRoute() {
-  const { metrics, scope } = Route.useLoaderData();
+  const { metrics, readLimit, readTruncated, scope } = Route.useLoaderData();
   return (
     <PanelPageBody>
-      <MetricsPage appId={scope.appId} environmentId={scope.environmentId} metrics={metrics} />
+      <MetricsPage
+        appId={scope.appId}
+        environmentId={scope.environmentId}
+        metrics={metrics}
+        readLimit={readLimit}
+        readTruncated={readTruncated}
+      />
     </PanelPageBody>
   );
 }

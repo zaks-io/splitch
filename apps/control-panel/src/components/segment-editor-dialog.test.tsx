@@ -12,7 +12,14 @@ vi.mock("#lib/control-plane-segment-functions", () => ({
 describe("Segment editor dialog", () => {
   it("does not expose an inert Create Segment button in server-rendered HTML", () => {
     const html = renderToStaticMarkup(
-      <SegmentsPage appId="app_billing" environmentId="env_prod" segments={[]} unparseable={[]} />,
+      <SegmentsPage
+        appId="app_billing"
+        environmentId="env_prod"
+        readLimit={200}
+        readTruncated={false}
+        segments={[]}
+        unparseable={[]}
+      />,
     );
     const trigger = html.match(/<button[^>]*>Create Segment<\/button>/)?.[0];
 

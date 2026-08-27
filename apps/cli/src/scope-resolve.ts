@@ -85,11 +85,17 @@ export async function resolveAppSelector(deps: CliDeps, selector: string): Promi
   // No binding: `/orgs` is keyed by the principal, so whatever token is
   // already cached answers it, bound or not.
   const orgs = await callList(deps, "organizations_list", {});
+  let catalogTruncated = orgs.readTruncated;
   const reachable: NamedResource[] = [];
-  for (const org of orgs) {
-    reachable.push(
-      ...(await callList(deps, "apps_list", { orgId: org.id }, { kind: "org", selector: org.id })),
+  for (const org of orgs.items) {
+    const apps = await callList(
+      deps,
+      "apps_list",
+      { orgId: org.id },
+      { kind: "org", selector: org.id },
     );
+    catalogTruncated = catalogTruncated || apps.readTruncated;
+    reachable.push(...apps.items);
   }
   const byId = reachable.find((app) => app.id === selector);
   if (byId) return byId;
@@ -105,6 +111,11 @@ export async function resolveAppSelector(deps: CliDeps, selector: string): Promi
   }
   const [match] = byKey;
   if (match) return match;
+  if (catalogTruncated) {
+    // Incomplete catalog — cannot prove absence. Pass the selector through so
+    // a later wire call can still try, same as Flag resolution past the cap.
+    return { id: selector };
+  }
   throw new SplitchCliError({
     code: "CLI_SCOPE_UNRESOLVED",
     causeSummary: `No App matching "${selector}" is reachable from your memberships. Reachable Apps: ${
@@ -128,20 +139,19 @@ export async function resolveEnvironmentSelector(
     { kind: "app", selector: appId },
   );
   const match =
-    environments.find((environment) => environment.id === selector) ??
-    environments.find((environment) => environment.key === selector);
-  if (!match) {
-    throw new SplitchCliError({
-      code: "CLI_SCOPE_UNRESOLVED",
-      causeSummary: `No Environment matching "${selector}" exists on App ${appId}. Available: ${
-        environments.length
-          ? environments.map((environment) => environment.key ?? environment.id).join(", ")
-          : "(none)"
-      }`,
-      remediation: "Pass one of the listed Environment keys or IDs",
-    });
-  }
-  return match;
+    environments.items.find((environment) => environment.id === selector) ??
+    environments.items.find((environment) => environment.key === selector);
+  if (match) return match;
+  if (environments.readTruncated) return { id: selector };
+  throw new SplitchCliError({
+    code: "CLI_SCOPE_UNRESOLVED",
+    causeSummary: `No Environment matching "${selector}" exists on App ${appId}. Available: ${
+      environments.items.length
+        ? environments.items.map((environment) => environment.key ?? environment.id).join(", ")
+        : "(none)"
+    }`,
+    remediation: "Pass one of the listed Environment keys or IDs",
+  });
 }
 
 /**
@@ -222,14 +232,40 @@ async function listFlagsForResolution(deps: CliDeps, appId: string): Promise<Fla
   };
 }
 
+interface ListPage {
+  readonly items: NamedResource[];
+  readonly readTruncated: boolean;
+  readonly readLimit: number;
+}
+
 async function callList(
   deps: CliDeps,
   operationId: string,
   input: Record<string, unknown>,
   binding?: TokenBinding,
-): Promise<NamedResource[]> {
+): Promise<ListPage> {
   const data = await callOperation(deps, operationId, input, binding);
-  return (data as { items: NamedResource[] }).items;
+  const page = data as {
+    items?: NamedResource[];
+    readTruncated?: boolean;
+    readLimit?: number;
+  };
+  if (
+    !Array.isArray(page.items) ||
+    typeof page.readTruncated !== "boolean" ||
+    typeof page.readLimit !== "number"
+  ) {
+    throw new SplitchCliError({
+      code: "CLI_SCOPE_UNRESOLVED",
+      causeSummary: `${operationId} returned an unexpected envelope while resolving a selector (missing items, readTruncated, or readLimit)`,
+      remediation: `Update the CLI or report the ${operationId} response shape before retrying`,
+    });
+  }
+  return {
+    items: page.items,
+    readTruncated: page.readTruncated,
+    readLimit: page.readLimit,
+  };
 }
 
 async function callOperation(

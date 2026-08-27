@@ -95,6 +95,8 @@ async function readMembers(
             email: user.email,
             role: user.role,
           })),
+          readTruncated: result.data.readTruncated,
+          readLimit: result.data.readLimit,
         }
       : { kind: "unavailable", message: result.error.message };
   } catch (cause) {

@@ -46,6 +46,9 @@ export interface PanelSegmentsListOutput {
   items: PanelSegment[];
   unparseable: UnparseablePanelSegment[];
   affectedEnvironmentIds: Record<string, string[]>;
+  readLimit: number;
+  readTruncated: boolean;
+  cursor: string | null;
 }
 
 export interface PanelSegmentDeleteOutput {
@@ -150,6 +153,9 @@ function parseSegmentList(
       items,
       unparseable,
       affectedEnvironmentIds,
+      readLimit: input.readLimit,
+      readTruncated: input.readTruncated,
+      cursor: input.cursor,
     },
   };
 }

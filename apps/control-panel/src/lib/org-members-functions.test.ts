@@ -84,8 +84,42 @@ describe("loadOrgMembersForRequest", () => {
     expect(result.view.members).toEqual({
       kind: "ready",
       items: [{ userId: "user_cap", email: "owner@example.test", role: "owner" }],
+      readTruncated: false,
+      readLimit: 200,
     });
     expect(controlPlaneCalls).toHaveLength(1);
+  }, 20_000);
+
+  it("forwards list truncation instead of presenting a partial roster as complete", async () => {
+    bindings.CONTROL_PLANE_API = {
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        controlPlaneCalls.push(new Request(input, init).url);
+        return Response.json({
+          items: [
+            {
+              id: "user_cap",
+              email: "owner@example.test",
+              organizationId: "org_000",
+              role: "owner",
+              createdAt: NOW,
+            },
+          ],
+          readLimit: 200,
+          readTruncated: true,
+          cursor: null,
+        });
+      },
+    } as unknown as Fetcher;
+    await seedSession("owner");
+
+    const result = await loadOrgMembersForRequest(bindings, requestWithSessionCookie(), "org-000");
+
+    if (result.kind !== "ok") throw new Error(`expected kind "ok", got "${result.kind}"`);
+    expect(result.view.members).toMatchObject({
+      kind: "ready",
+      readTruncated: true,
+      readLimit: 200,
+    });
   }, 20_000);
 
   it("locks the roster for a member without asking the Control Plane for it", async () => {

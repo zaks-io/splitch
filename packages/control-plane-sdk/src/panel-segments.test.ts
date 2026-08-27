@@ -34,6 +34,9 @@ describe("panel Segments list envelope", () => {
       data: {
         items: [{ id: "segment_paid", name: "Paid plan" }],
         affectedEnvironmentIds: { segment_paid: ["env_dev", "env_prod"] },
+        readLimit: 200,
+        readTruncated: false,
+        cursor: null,
       },
     });
   });

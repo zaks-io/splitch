@@ -23,6 +23,8 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/segments")({
     return {
       segments: result.data.items,
       unparseable: result.data.unparseable,
+      readLimit: result.data.readLimit,
+      readTruncated: result.data.readTruncated,
       scope: scoped.context.scope,
     };
   },
@@ -35,12 +37,14 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/segments")({
 });
 
 function SegmentsSectionRoute() {
-  const { segments, unparseable, scope } = Route.useLoaderData();
+  const { segments, unparseable, readLimit, readTruncated, scope } = Route.useLoaderData();
   return (
     <PanelPageBody>
       <SegmentsPage
         appId={scope.appId}
         environmentId={scope.environmentId}
+        readLimit={readLimit}
+        readTruncated={readTruncated}
         segments={segments}
         unparseable={unparseable}
       />

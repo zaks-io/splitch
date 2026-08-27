@@ -3,7 +3,14 @@ import { describe, expect, it } from "vitest";
 import type { FlagDetailData } from "./flag-detail-data";
 import { flagDetailView as buildFlagDetailView, isLocked } from "./flag-detail-view";
 
-const NO_SEGMENTS = { items: [], unparseable: [], affectedEnvironmentIds: {} };
+const NO_SEGMENTS = {
+  items: [],
+  unparseable: [],
+  affectedEnvironmentIds: {},
+  readLimit: 200,
+  readTruncated: false,
+  cursor: null,
+};
 
 function flagDetailView(data: FlagDetailData, env: string) {
   return buildFlagDetailView(data, env, NO_SEGMENTS);
@@ -89,6 +96,9 @@ describe("Flag detail view model", () => {
       ],
       unparseable: [],
       affectedEnvironmentIds: { segment_paid: ["env_dev"] },
+      readLimit: 200,
+      readTruncated: false,
+      cursor: null,
     });
 
     expect(view.targetingRules[0]).toMatchObject({

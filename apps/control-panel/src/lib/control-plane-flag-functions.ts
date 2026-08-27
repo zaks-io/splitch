@@ -81,6 +81,9 @@ export const loadControlPanelFlagDetail = createServerFn({ method: "GET" })
             items: [],
             unparseable: [],
             affectedEnvironmentIds: {},
+            readLimit: 200,
+            readTruncated: false,
+            cursor: null,
           }),
         };
       }
