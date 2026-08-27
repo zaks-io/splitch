@@ -1,3 +1,4 @@
+import { CURRENT_KV_SCHEMA_VERSION, clientKeyCacheKey } from "@splitch/contracts";
 import type { Principal } from "@splitch/worker-runtime";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -7,7 +8,14 @@ import {
   makeEvaluationRateLimiter,
   rememberCredentialRateLimitRps,
 } from "./evaluation-rate-limit";
-import { CLIENT_KEY, makeSdkRouteHarness, sdkRouteInit } from "./sdk-route-test-fixtures";
+import {
+  APP_ID,
+  CLIENT_KEY,
+  ENVIRONMENT_ID,
+  makeSdkRouteHarness,
+  sdkRouteInit,
+  sha256Hex,
+} from "./sdk-route-test-fixtures";
 
 describe("exact 30 rps Client Key override", () => {
   it("RATE_LIMITED with retry timing after the exact 30 rps window is exhausted", async () => {
@@ -74,6 +82,37 @@ describe("exact 30 rps Client Key override", () => {
     await expect(
       makeEvaluationRateLimiter({ limit: async () => ({ success: true }) })(input({ request })),
     ).rejects.toThrow(/positive integer/);
+  });
+
+  it("legacy raw cache 80 fail-closes as typed RATE_LIMITED on mounted evaluate", async () => {
+    const { app, credentialKv } = await makeSdkRouteHarness({
+      liveRun: true,
+      rateLimiter: makeEvaluationRateLimiter({
+        limit: async () => ({ success: true }),
+      }),
+    });
+    credentialKv.putRaw(
+      clientKeyCacheKey(await sha256Hex(CLIENT_KEY)),
+      JSON.stringify({
+        schemaVersion: CURRENT_KV_SCHEMA_VERSION,
+        data: {
+          appId: APP_ID,
+          environmentId: ENVIRONMENT_ID,
+          credentialSchemaVersion: 2,
+          organizationId: "org_verify",
+          kind: "client_key",
+          scopes: ["data-plane:evaluate", "data-plane:write"],
+          originAllowlist: null,
+          rateLimitRps: 80,
+          revoked: false,
+          cachedAt: "2026-07-02T00:00:00.000Z",
+        },
+      }),
+    );
+
+    const limited = await app.request("/api/sdk/evaluate", sdkRouteInit(CLIENT_KEY));
+    expect(limited.status).toBe(429);
+    await expect(limited.json()).resolves.toMatchObject({ code: "RATE_LIMITED" });
   });
 });
 

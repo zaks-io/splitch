@@ -20,16 +20,16 @@ prod config only.
 
 ## D1: `client_keys` table
 
-| column             | type    | required | meaning                                                                                                                                          |
-| ------------------ | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `key_id`           | TEXT PK | yes      | Splitch-generated (`ck_<ulid>`)                                                                                                                  |
-| `app_id`           | TEXT FK | yes      | Owning App                                                                                                                                       |
-| `environment_id`   | TEXT FK | yes      | Owning Environment — the key reaches only this Environment (ADR-0027)                                                                            |
-| `key_material`     | TEXT    | yes      | The public key value shipped to the client (not a hash; this is the public value)                                                                |
-| `origin_allowlist` | TEXT    | no       | JSON array of allowed origins/referrers; null = **open to all origins** (see default note below — null is no longer the silent creation default) |
-| `rate_limit_rps`   | INTEGER | no       | Per-key rate limit override; null = global default (100 rps)                                                                                     |
-| `revoked_at`       | TEXT    | no       | ISO 8601; null = active                                                                                                                          |
-| `created_at`       | TEXT    | yes      | ISO 8601                                                                                                                                         |
+| column             | type    | required | meaning                                                                                                                                                                                         |
+| ------------------ | ------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `key_id`           | TEXT PK | yes      | Splitch-generated (`ck_<ulid>`)                                                                                                                                                                 |
+| `app_id`           | TEXT FK | yes      | Owning App                                                                                                                                                                                      |
+| `environment_id`   | TEXT FK | yes      | Owning Environment — the key reaches only this Environment (ADR-0027)                                                                                                                           |
+| `key_material`     | TEXT    | yes      | The public key value shipped to the client (not a hash; this is the public value)                                                                                                               |
+| `origin_allowlist` | TEXT    | no       | JSON array of allowed origins/referrers; null = **open to all origins** (see default note below — null is no longer the silent creation default)                                                |
+| `rate_limit_rps`   | INTEGER | no       | Per-key override. New writes must be an exact enforceable rps (`1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 25, 30, 50, 60, 75, 100`) or null (ADR 100 rps default). Legacy numeric rows may still exist. |
+| `revoked_at`       | TEXT    | no       | ISO 8601; null = active                                                                                                                                                                         |
+| `created_at`       | TEXT    | yes      | ISO 8601                                                                                                                                                                                        |
 
 **Auto-provisioned, open-but-loudly-flagged (ADR-0034 §1).** Exactly one
 Client Key is auto-created when an Environment is created (see
@@ -167,9 +167,11 @@ fire-and-forget — a leaked secret API Key is exactly the incident the threat m
 All controls below are Cloudflare-native (WAF rate limiting, origin/referrer match, Turnstile). They are
 layered, not either/or: rate limiting bounds volume, origin/referrer bounds reach, Turnstile bounds bots.
 
-- **Per-Client-Key rate limit:** 100 rps default, configurable via `client_keys.rate_limit_rps`. The
-  counter is keyed on the Client Key value (a per-credential header counter), so one key's abuse cannot
-  spend another's budget.
+- **Per-Client-Key rate limit:** 100 rps default. `PATCH` accepts only the exact integers the
+  Cloudflare 3000-token / 10s binding can enforce (`1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 25, 30, 50,
+60, 75, 100`). A legacy or corrupt cached number is parsed on the Evaluation read path and fail-closes
+  as typed `RATE_LIMITED`, not `500`. The counter is keyed on the Client Key hash plus route class, so
+  one key's abuse cannot spend another's budget.
 - **Origin/referrer check:** if `origin_allowlist` is non-null, requests must match. Auto-provisioned
   keys start open (`null`, loudly flagged — see the open-state note above); locking down is a one-step
   `PATCH …/client-key`.

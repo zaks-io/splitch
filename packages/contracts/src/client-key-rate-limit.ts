@@ -24,7 +24,12 @@ export function isExactClientKeyRateLimitRps(rateLimitRps: number): boolean {
   );
 }
 
-/** Shared wire/storage validator: accepted positive integers only, never quantized. */
+/** Exact PATCH/write set: 300 % rps === 0 and rps <= 100. */
+export const EXACT_CLIENT_KEY_RATE_LIMIT_RPS = [
+  1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 25, 30, 50, 60, 75, 100,
+] as const;
+
+/** Shared wire/storage write validator: accepted positive integers only, never quantized. */
 export const StoredClientKeyRateLimitRpsSchema = z
   .number()
   .int()
@@ -33,6 +38,12 @@ export const StoredClientKeyRateLimitRpsSchema = z
 
 export const StoredClientKeyRateLimitRpsFieldSchema =
   StoredClientKeyRateLimitRpsSchema.nullable().optional();
+
+/**
+ * Read-side cache field. Main previously persisted any numeric override (including
+ * 80). Those blobs must parse so Evaluation can fail closed as RATE_LIMITED.
+ */
+export const CachedClientKeyRateLimitRpsFieldSchema = z.number().nullable().optional();
 
 /**
  * Resolve a stored Client Key `rateLimitRps` to the enforced per-second cap.

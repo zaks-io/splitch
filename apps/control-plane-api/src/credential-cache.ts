@@ -135,6 +135,7 @@ async function writeCredentialCache(
   if (!value.revoked && value.organizationId === null) {
     throw new Error("credential cache active writes require an organizationId");
   }
+  StoredClientKeyRateLimitRpsFieldSchema.parse(value.rateLimitRps);
   // Active entries are written WITHOUT an expiry: the data plane has no D1
   // fallback on a KV miss (it rejects UNAUTHORIZED), so an expiring entry would
   // brick a deployed SDK key one TTL after the last control-plane touch.

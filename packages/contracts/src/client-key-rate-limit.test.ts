@@ -5,8 +5,10 @@ import {
   CLIENT_KEY_RATE_LIMIT_WINDOW_TOKENS,
   clientKeyRateLimitTokensPerRequest,
   DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS,
+  EXACT_CLIENT_KEY_RATE_LIMIT_RPS,
   isExactClientKeyRateLimitRps,
   resolveClientKeyRateLimitRps,
+  StoredClientKeyRateLimitRpsSchema,
 } from "./client-key-rate-limit";
 import { PatchClientKeyRequestSchema } from "./routes/route-shapes";
 
@@ -32,10 +34,11 @@ describe("client key rate-limit contract", () => {
   });
 
   it("accepts only integers the 3000/10s binding can enforce exactly", () => {
-    expect(isExactClientKeyRateLimitRps(30)).toBe(true);
-    expect(isExactClientKeyRateLimitRps(25)).toBe(true);
-    expect(isExactClientKeyRateLimitRps(7)).toBe(false);
-    expect(isExactClientKeyRateLimitRps(80)).toBe(false);
+    const accepted = Array.from({ length: 100 }, (_, i) => i + 1).filter(
+      isExactClientKeyRateLimitRps,
+    );
+    expect(accepted).toEqual([...EXACT_CLIENT_KEY_RATE_LIMIT_RPS]);
+    expect(StoredClientKeyRateLimitRpsSchema.safeParse(80).success).toBe(false);
     expect(isExactClientKeyRateLimitRps(300)).toBe(false);
   });
 

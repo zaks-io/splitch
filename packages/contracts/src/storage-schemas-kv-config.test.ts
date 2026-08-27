@@ -180,16 +180,14 @@ describe("CredentialCacheKVSchema", () => {
     expect(c.rateLimitRps).toBe(25);
   });
 
-  it("rejects a cached rateLimitRps the limiter cannot enforce exactly", () => {
-    for (const rateLimitRps of [0, -1, 1.5, 7, 80]) {
-      expect(
-        CredentialCacheKVSchema.safeParse({
-          ...validCredentialCache,
-          kind: "client_key",
-          rateLimitRps,
-        }).success,
-      ).toBe(false);
-    }
+  it("keeps the read-side cache field permissive for legacy numeric overrides", () => {
+    expect(
+      CredentialCacheKVSchema.safeParse({
+        ...validCredentialCache,
+        kind: "client_key",
+        rateLimitRps: 80,
+      }).success,
+    ).toBe(true);
   });
 
   it("rejects an unknown credential kind", () => {
