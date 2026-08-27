@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   authorizeBearerMembership,
   makeTokenMembershipAccess,
+  requireTokenMembershipAccess,
   withBearerMembershipCheck,
 } from "./token-membership";
 
@@ -18,8 +19,30 @@ describe("authorizeBearerMembership", () => {
     expect(authorize).not.toHaveBeenCalled();
   });
 
-  it("skips the read when no membership port is wired and no axes are present", async () => {
-    await expect(authorizeBearerMembership(undefined, USER, [])).resolves.toBeNull();
+  it("skips the read when no membership axes are present", async () => {
+    const authorize = vi.fn();
+    await expect(authorizeBearerMembership({ authorize }, USER, [])).resolves.toBeNull();
+    expect(authorize).not.toHaveBeenCalled();
+  });
+
+  it("throws when the membership port is missing", () => {
+    expect(() => requireTokenMembershipAccess(undefined)).toThrow(
+      "control-plane: membershipAccess is required",
+    );
+  });
+
+  it("propagates a thrown membership read instead of minting a principal", async () => {
+    await expect(
+      authorizeBearerMembership(
+        {
+          authorize: async () => {
+            throw new Error("d1 membership read failed");
+          },
+        },
+        USER,
+        [`app:${APP}:admin`],
+      ),
+    ).rejects.toThrow("d1 membership read failed");
   });
 
   it("refuses a claimed membership the port rejects", async () => {

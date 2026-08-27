@@ -95,6 +95,7 @@ export function makeAppForRepo(
     authResolver: makeControlPlaneAuthResolver({
       verifier,
       sessions: makeSessionStore(h.bindings.kv),
+      membershipAccess: { authorize: async () => true },
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,

@@ -83,6 +83,7 @@ export function makeAuthedApp(
       sessions: makeSessionStore(
         h.sessions ?? ({ get: async () => null } as unknown as KVNamespace),
       ),
+      membershipAccess: { authorize: async () => true },
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,

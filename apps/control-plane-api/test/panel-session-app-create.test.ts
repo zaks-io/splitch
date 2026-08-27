@@ -69,6 +69,7 @@ beforeEach(async () => {
       controlPlaneAudience: AUDIENCE,
     }),
     sessions: makeSessionStore(bindings.kv),
+    membershipAccess: { authorize: async () => true },
     now: () => NOW_MS,
   };
   const repo = createRepository(bindings.d1);

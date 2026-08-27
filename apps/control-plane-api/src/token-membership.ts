@@ -48,15 +48,24 @@ export function makeTokenMembershipAccess(
   };
 }
 
+/** Fail loud when the bearer resolver is constructed without a membership port. */
+export function requireTokenMembershipAccess(
+  access: TokenMembershipAccess | undefined,
+): TokenMembershipAccess {
+  if (!access) {
+    throw new Error("control-plane: membershipAccess is required");
+  }
+  return access;
+}
+
 /** Refuse a removed or role-incompatible membership before route scope checks. */
 export async function authorizeBearerMembership(
-  access: TokenMembershipAccess | undefined,
+  access: TokenMembershipAccess,
   userId: string,
   scopes: readonly string[],
 ): Promise<AuthResult | null> {
   const claims = membershipClaimsInScopes(scopes);
   if (claims.length === 0) return null;
-  if (!access) return null;
   return (await access.authorize(userId, claims)) ? null : MEMBERSHIP_REFUSED;
 }
 

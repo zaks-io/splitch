@@ -179,6 +179,62 @@ describe("bearer token live membership recheck", () => {
     expect(serviceBody.message).not.toBe("live membership is required");
   });
 
+  it("fails loud with 500 when membershipAccess is unwired and never returns a principal", async () => {
+    const jwt = await token(ALICE, [appAdminScope(PAYMENTS.appId)]);
+    const app = createApp({
+      authResolver: makeControlPlaneAuthResolver({
+        verifier: makeJwksVerifier({
+          fetchJwks: async () => h.signer.jwks,
+          controlPlaneAudience: AUDIENCE,
+        }),
+        sessions: makeSessionStore(h.bindings.kv),
+        now: () => NOW_MS,
+        membershipAccess: undefined as unknown as ReturnType<typeof makeTokenMembershipAccess>,
+      }),
+      rateLimiter: allowLimiter,
+      repo: h.repo,
+    });
+
+    const refused = await app.request(`/apps/${PAYMENTS.appId}`, {
+      headers: { authorization: `Bearer ${jwt}` },
+    });
+    expect(refused.status).toBe(500);
+    const body = (await refused.json()) as ErrorResponse;
+    expect(body).toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+    expect(body).not.toHaveProperty("id");
+    expect(JSON.stringify(body)).not.toContain(PAYMENTS.appId);
+  });
+
+  it("fails loud with 500 when the D1 membership read throws and never returns a principal", async () => {
+    const jwt = await token(ALICE, [appAdminScope(PAYMENTS.appId)]);
+    const app = createApp({
+      authResolver: makeControlPlaneAuthResolver({
+        verifier: makeJwksVerifier({
+          fetchJwks: async () => h.signer.jwks,
+          controlPlaneAudience: AUDIENCE,
+        }),
+        sessions: makeSessionStore(h.bindings.kv),
+        now: () => NOW_MS,
+        membershipAccess: {
+          authorize: async () => {
+            throw new Error("d1 membership read failed");
+          },
+        },
+      }),
+      rateLimiter: allowLimiter,
+      repo: h.repo,
+    });
+
+    const refused = await app.request(`/apps/${PAYMENTS.appId}`, {
+      headers: { authorization: `Bearer ${jwt}` },
+    });
+    expect(refused.status).toBe(500);
+    const body = (await refused.json()) as ErrorResponse;
+    expect(body).toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+    expect(body).not.toHaveProperty("id");
+    expect(JSON.stringify(body)).not.toContain(PAYMENTS.appId);
+  });
+
   it("refuses a removed member on an Environment list without leaking App existence", async () => {
     const jwt = await token(ALICE, [appAdminScope(PAYMENTS.appId)]);
     expect((await get(`/apps/${PAYMENTS.appId}/envs`, jwt)).status).toBe(200);
