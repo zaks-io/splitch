@@ -44,7 +44,13 @@ export const convexRoutes = [
     request: { body: ConvexInstallationCreateRequestSchema },
     response: ConvexInstallationSchema,
     auth: "api-key",
-    scopes: ["data-plane:evaluate"],
+    // The mounted API Key is the Component's only credential: it authenticates
+    // evaluation and Metric Event delivery alike. Delivery runs after the
+    // caller's Mutation has committed, so an evaluate-only Key would let
+    // install and every `track()` report success and then send each Metric
+    // Event terminal, where nobody is looking. Requiring both scopes at
+    // install refuses that Key at the one moment a human is watching.
+    scopes: ["data-plane:evaluate", "data-plane:write"],
     rateLimit: "api-key",
     idempotency: "none",
     errors: [...commonErrors, "IDEMPOTENCY_KEY_CONFLICT"],

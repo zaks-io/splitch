@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MutationCtx } from "./_generated/server";
-import { DELIVERY_LEASE_MS, watchDeliveryHandler } from "./exposure_delivery";
+import { DELIVERY_LEASE_MS } from "./delivery_policy";
+import { watchDeliveryHandler } from "./exposure_delivery";
 
 const NOW = 1_800_000_000_000;
 

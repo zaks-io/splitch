@@ -1,4 +1,4 @@
-import type { TargetingRule } from "@splitch/contracts";
+import type { TargetingRuleInput } from "@splitch/contracts";
 import { envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
@@ -244,7 +244,7 @@ export function makeHandlers(deps: HandlerDeps) {
         environmentId,
         flagId,
         actor: actorOf(principal),
-        targetingRules: body.targetingRules as TargetingRule[],
+        targetingRules: body.targetingRules as TargetingRuleInput[],
       };
       const contexts = environmentPolicyContexts(environmentId, policy, [
         "targeting_rollout_value",

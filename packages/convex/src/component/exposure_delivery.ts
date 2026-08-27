@@ -3,10 +3,13 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "./_generated/server";
 import { env } from "./_generated/server";
+import {
+  DELIVERY_LEASE_MS,
+  DELIVERY_PRIVACY_DEADLINE_MS,
+  deliveryRetryDelay,
+  isRetryableHttpStatus,
+} from "./delivery_policy";
 import { ensureRetentionScheduled } from "./retention";
-
-const EXPOSURE_PRIVACY_DEADLINE_MS = 86_400_000;
-export const DELIVERY_LEASE_MS = 60_000;
 
 export async function scheduleDeliveryWatch(
   ctx: MutationCtx,
@@ -24,7 +27,7 @@ export async function claimDeliveryHandler(ctx: MutationCtx, args: { exposureId:
   if (!row || row.state === "accepted" || row.state === "terminal" || row.state === "suppressed")
     return null;
   const now = Date.now();
-  if (now - row.createdAt >= EXPOSURE_PRIVACY_DEADLINE_MS) {
+  if (now - row.createdAt >= DELIVERY_PRIVACY_DEADLINE_MS) {
     await makeTerminal(ctx, row, "Exposure delivery exceeded the 24-hour privacy deadline");
     return null;
   }
@@ -98,12 +101,12 @@ export async function finishDeliveryHandler(
     await makeTerminal(ctx, row, args.error);
     return;
   }
-  if (Date.now() - row.createdAt >= EXPOSURE_PRIVACY_DEADLINE_MS) {
+  if (Date.now() - row.createdAt >= DELIVERY_PRIVACY_DEADLINE_MS) {
     await makeTerminal(ctx, row, "Exposure delivery exceeded the 24-hour privacy deadline");
     return;
   }
   const attemptCount = row.attemptCount + 1;
-  const delay = retryDelay(row.exposureId, attemptCount);
+  const delay = deliveryRetryDelay(row.exposureId, attemptCount);
   await ctx.db.patch(row._id, {
     state: "pending",
     attemptCount,
@@ -146,7 +149,7 @@ async function finishFromResponse(
   response: Response,
 ): Promise<void> {
   if (!response.ok) {
-    const retry = response.status === 408 || response.status === 429 || response.status >= 500;
+    const retry = isRetryableHttpStatus(response.status);
     await ctx.runMutation(internal.evaluation.finishDelivery, {
       exposureId,
       outcome: retry ? "retry" : "terminal",
@@ -216,14 +219,4 @@ async function makeTerminal(
     lastError: error,
   });
   await ensureRetentionScheduled(ctx);
-}
-
-function retryDelay(exposureId: string, attempt: number): number {
-  const delays = [1_000, 5_000, 30_000, 120_000, 600_000, 1_800_000];
-  const base = delays[Math.min(Math.max(attempt - 1, 0), delays.length - 1)] ?? 1_800_000;
-  const seed = [...`${exposureId}:${attempt}`].reduce(
-    (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
-    0,
-  );
-  return Math.round(base * (0.8 + (seed / 0xffffffff) * 0.4));
 }

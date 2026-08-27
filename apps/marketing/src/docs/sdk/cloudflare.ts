@@ -18,12 +18,12 @@ export const cloudflareTopic: SdkTopic = {
     { kind: "heading", text: "Setup" },
     {
       kind: "prose",
-      text: "You need Wrangler, an authenticated Cloudflare account, an application `wrangler.jsonc`, and the Environment's API Key exported as `SPLITCH_API_KEY`. The name is exact; setup reads no other variable. Setup checks the Wrangler major itself and names the one it wants if yours is wrong.",
+      text: "You need Wrangler, an authenticated Cloudflare account, an application `wrangler.jsonc`, and the Environment's API Key exported as `SPLITCH_API_KEY`. The name is exact; setup reads no other variable. Setup runs the project's own Wrangler if there is one and otherwise the one on your `PATH`, so npm, pnpm, yarn, bun, and a global install all work; it checks the Wrangler major itself and names the one it wants if yours is wrong.",
     },
     {
       kind: "code",
       lang: "bash",
-      code: `npm install @splitch/cloudflare @splitch/cli
+      code: `npm install @splitch/cloudflare @splitch/cli wrangler
 export SPLITCH_API_KEY=sk_...
 npx splitch cloudflare setup --env production`,
     },
