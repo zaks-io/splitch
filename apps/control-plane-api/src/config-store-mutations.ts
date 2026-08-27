@@ -17,7 +17,6 @@ import {
   writeSnapshotAndBroadcast,
 } from "./config-store-shared";
 import { targetingRulePersistFailure } from "./config-store-targeting-rules";
-import { randomHex } from "./credential-cache";
 import { baselineIsUnresolvable, mintSalt } from "./flag-config-rollout";
 import { SegmentNotFoundError } from "./targeting-rule-resolution";
 
@@ -187,8 +186,9 @@ function promotedAvailability(
 
 /**
  * Targeting Rules move only under `select.targeting`, and they move WHOLE:
- * conditions and `percentageRollout` together, because a percentage is the split
- * of one rule's matched traffic and means nothing apart from that rule.
+ * conditions, `percentageRollout`, and the source `id`. A rule id is scoped to
+ * one Flag Configuration, so the same id is valid in the target Environment.
+ * Reminting would destroy the identity an Approval Request already proposed.
  *
  * `select.rollout` therefore means exactly one thing — the config-level baseline.
  * It used to ALSO graft each source rule's percentage onto the target rule with
@@ -201,9 +201,7 @@ function promotedRules(
   source: Snapshot,
   target: Snapshot,
 ): TargetingRule[] {
-  return input.select.targeting
-    ? promotedTargetingRules(source.authoringTargetingRules)
-    : target.authoringTargetingRules;
+  return input.select.targeting ? source.authoringTargetingRules : target.authoringTargetingRules;
 }
 
 /**
@@ -322,11 +320,4 @@ function copySelectedAvailability(
     }
   }
   return variants.map((variant) => variant.name).filter((name) => next.has(name));
-}
-
-function promotedTargetingRules(rules: TargetingRule[]): TargetingRule[] {
-  return rules.map((rule) => ({
-    ...rule,
-    id: `rule_${randomHex(12)}`,
-  }));
 }

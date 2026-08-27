@@ -6,11 +6,13 @@ import { narrowSeededAvailability } from "../src/config-store-fixture-data";
 import {
   type Harness,
   ids,
+  promoteFlagConfig,
   replaceTargetingRules,
   setProdPolicy,
   token,
 } from "../src/config-store-harness-core";
 import { renderFlagConfigWriteResult } from "../src/flag-config-handler-render";
+import { reviewRequest } from "./approval-harness";
 import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
 
 const SECOND_FLAG_ID = "flag_search";
@@ -118,6 +120,35 @@ describe("Targeting Rule identity", () => {
         issues: [{ path: ["body", "targetingRules", "1", "id"] }],
       },
     });
+  });
+
+  it("keeps the source Targeting Rule id when selected Promotion lands through Approval Review", async () => {
+    await setProdPolicy(h, confirmPolicy);
+    const proposed = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { targeting: true },
+    });
+    expect(proposed.status).toBe(409);
+    const proposal = (await proposed.json()) as { details: { approvalRequestId: string } };
+    const requestId = proposal.details.approvalRequestId;
+    const stored = await h.repo.approvals.getRequest(appScope(ids.appId), requestId);
+    expect(JSON.parse(stored?.diff ?? "{}")).toMatchObject({
+      proposed: {
+        targetingRules: [expect.objectContaining({ id: ids.devTargetingRuleId })],
+      },
+    });
+    expect(await persistedRuleEnvs(ids.devTargetingRuleId)).toEqual([ids.devEnvironmentId]);
+
+    const reviewed = await reviewRequest(h, requestId, "idem_promote_targeting_review");
+    expect(reviewed.status).toBe(200);
+    expect(await reviewed.json()).toMatchObject({
+      id: requestId,
+      status: "applied",
+    });
+    expect(await persistedRuleEnvs(ids.devTargetingRuleId)).toEqual([
+      ids.devEnvironmentId,
+      ids.environmentId,
+    ]);
   });
 });
 

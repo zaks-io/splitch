@@ -370,8 +370,8 @@ malformed value is corrupt config, not "no rollout", so reads fail loud rather t
 
 UNIQUE constraint: `(app_id, environment_id, flag_id, id)`. Targeting Rule identity is one Flag
 Configuration, so the same `id` may exist on another Flag or on the same Flag in another Environment.
-Promotion can therefore preserve a rule `id` across Environments. A repeated `id` inside one Flag
-Configuration is a uniqueness violation, not a global id collision.
+Selected targeting Promotion therefore preserves each source rule `id` in the target Environment.
+A repeated `id` inside one Flag Configuration is a uniqueness violation, not a global id collision.
 
 `conditions` may be empty only when `segment_id` is present. Publication resolves the Segment and
 AND-merges its Conditions with this direct array; the authoring reference remains in D1 across

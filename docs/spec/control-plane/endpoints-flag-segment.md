@@ -211,9 +211,9 @@ availability"** sends `{ availability: ["variant_name"] }`. There is no separate
 nothing else. A Targeting Rule's own `percentage_rollout` is part of that rule and moves only under
 `select.targeting`, which moves each rule whole (conditions and percentage together). The two never
 overlap: a rule's percentage is the split of that one rule's matched traffic and is meaningless apart
-from its conditions. A rule `id` is scoped to one Flag Configuration, so Promotion may preserve the
-same `id` in the target Environment; `priority` remains a sort key, and source and target rule lists
-routinely differ.
+from its conditions. A rule `id` is scoped to one Flag Configuration, so selected targeting Promotion
+preserves the same `id` in the target Environment; `priority` remains a sort key, and source and
+target rule lists routinely differ.
 
 The baseline moves as a **percentage only**: the target keeps its own salt, or mints a fresh one if it
 had no baseline. Adopting the source's salt would reshuffle every already-bucketed Entity in the target.
