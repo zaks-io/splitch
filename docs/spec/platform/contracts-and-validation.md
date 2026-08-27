@@ -139,7 +139,7 @@ A route contract is not documentation for a handler to remember. It is mounted t
 - auth kind and Worker-provided resolver
 - required scopes and App/Environment co-scope
 - declared rate-limit class
-- a conservative raw-body byte limit on mutating JSON routes (smaller explicit route caps are preserved)
+- a conservative raw-body byte limit on mutating JSON routes (32 KiB on the public/data-plane edge, 1 MiB for control-plane writes; explicit route caps are preserved)
 - idempotency header policy for mutating routes
 - allowed `ErrorCode` values and their shared HTTP status mapping
 

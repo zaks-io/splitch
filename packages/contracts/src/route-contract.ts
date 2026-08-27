@@ -114,43 +114,63 @@ export interface RawBodyByteLimit {
 }
 
 /**
- * Conservative UTF-8 byte cap for mutating JSON routes that omit an explicit
- * `rawBodyByteLimit`. Matches the existing Exposure / Metric Event envelope
- * (32 KiB). Routes may declare a smaller limit; they cannot silently opt into
- * an unbounded buffer through the registrar.
+ * Conservative UTF-8 byte cap for untrusted mutating JSON routes that omit an
+ * explicit `rawBodyByteLimit`. Matches the existing Exposure / Metric Event
+ * envelope (32 KiB). Control-plane writes use a larger registrar default
+ * because Flag Configuration and Segment bodies are already schema-legal
+ * above 32 KiB. Routes may declare any finite explicit limit; they cannot
+ * silently opt into an unbounded buffer through the registrar.
  */
 export const DEFAULT_MUTATING_JSON_BODY_MAX_BYTES = 32 * 1024;
 
+/** Authenticated control-plane writes: same 1 MiB ceiling as a config snapshot. */
+export const DEFAULT_CONTROL_PLANE_JSON_BODY_MAX_BYTES = 1024 * 1024;
+
 export const DEFAULT_MUTATING_JSON_BODY_LIMIT: RawBodyByteLimit = {
   maxBytes: DEFAULT_MUTATING_JSON_BODY_MAX_BYTES,
-  error: {
+  error: mutatingJsonBodyLimitError(DEFAULT_MUTATING_JSON_BODY_MAX_BYTES),
+};
+
+export const DEFAULT_CONTROL_PLANE_JSON_BODY_LIMIT: RawBodyByteLimit = {
+  maxBytes: DEFAULT_CONTROL_PLANE_JSON_BODY_MAX_BYTES,
+  error: mutatingJsonBodyLimitError(DEFAULT_CONTROL_PLANE_JSON_BODY_MAX_BYTES),
+};
+
+function mutatingJsonBodyLimitError(maxBytes: number): ErrorResponse {
+  return {
     code: "VALIDATION_ERROR",
-    message: `request body exceeds ${DEFAULT_MUTATING_JSON_BODY_MAX_BYTES} UTF-8 bytes`,
+    message: `request body exceeds ${maxBytes} UTF-8 bytes`,
     details: {
       issues: [
         {
           path: ["body"],
-          message: `body must be at most ${DEFAULT_MUTATING_JSON_BODY_MAX_BYTES} UTF-8 bytes`,
+          message: `body must be at most ${maxBytes} UTF-8 bytes`,
         },
       ],
     },
-  },
-};
+  };
+}
 
 /**
  * Effective raw-body cap the registrar must pass to parseInput.
  *
  * GET never buffers a body. Every other method is mutating JSON at this
  * boundary: use the route's explicit limit when present (including a tighter
- * cap), otherwise the conservative default. Absence is never unbounded.
+ * or larger cap), otherwise the conservative default for that auth kind.
+ * Absence is never unbounded.
  */
 export function rawBodyByteLimitFor(
-  contract: Pick<RouteContract, "method" | "rawBodyByteLimit">,
+  contract: Pick<RouteContract, "method" | "auth" | "rawBodyByteLimit">,
 ): RawBodyByteLimit | undefined {
   if (contract.method === "GET") {
     return contract.rawBodyByteLimit;
   }
-  return contract.rawBodyByteLimit ?? DEFAULT_MUTATING_JSON_BODY_LIMIT;
+  if (contract.rawBodyByteLimit !== undefined) {
+    return contract.rawBodyByteLimit;
+  }
+  return contract.auth === "control-plane-token"
+    ? DEFAULT_CONTROL_PLANE_JSON_BODY_LIMIT
+    : DEFAULT_MUTATING_JSON_BODY_LIMIT;
 }
 
 /**
