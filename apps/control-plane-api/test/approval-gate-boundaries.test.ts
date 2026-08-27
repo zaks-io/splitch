@@ -11,6 +11,7 @@ import {
   patchConfig,
   patchVariant,
   readRequest,
+  removeVariantAfterClearingRules,
   reviewRequest,
 } from "./approval-harness";
 import { makePoolHarness } from "./config-store-pool-harness";
@@ -63,7 +64,7 @@ describe("a failed apply on the targeting-rule path rolls back completely", () =
     expect(requestId).toBeTruthy();
 
     // Force the apply to fail mid-flight: remove the Variant the rule needs.
-    await h.repo.flags.removeVariant(appScope(ids.appId), ids.flagId, "treatment");
+    await removeVariantAfterClearingRules(h, "treatment");
     await reviewRequest(h, requestId as string, "idem_c5r");
 
     const rules = await h.d1
