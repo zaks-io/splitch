@@ -63,7 +63,7 @@
     {
       "name": "EVALUATION_RATE_LIMITER",
       "namespace_id": "2101",
-      "simple": { "limit": 1000, "period": 10 }
+      "simple": { "limit": 3000, "period": 10 }
     }
   ],
   "durable_objects": {
@@ -159,7 +159,7 @@
         {
           "name": "EVALUATION_RATE_LIMITER",
           "namespace_id": "2102",
-          "simple": { "limit": 1000, "period": 10 }
+          "simple": { "limit": 3000, "period": 10 }
         }
       ],
       "durable_objects": {
@@ -267,7 +267,7 @@
         {
           "name": "EVALUATION_RATE_LIMITER",
           "namespace_id": "2103",
-          "simple": { "limit": 1000, "period": 10 }
+          "simple": { "limit": 3000, "period": 10 }
         }
       ],
       "durable_objects": {

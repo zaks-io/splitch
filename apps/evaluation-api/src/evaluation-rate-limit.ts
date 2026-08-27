@@ -1,18 +1,14 @@
 import {
-  DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS,
+  CLIENT_KEY_RATE_LIMIT_WINDOW_SECONDS,
+  CLIENT_KEY_RATE_LIMIT_WINDOW_TOKENS,
+  clientKeyRateLimitTokensPerRequest,
   type RateLimitClass,
   resolveClientKeyRateLimitRps,
 } from "@splitch/contracts";
 import type { Principal, RateLimitDecision, RateLimiter } from "@splitch/worker-runtime";
 
-/**
- * Cloudflare Rate Limit bindings only accept a 10s or 60s window. 1000 tokens
- * per 10s is the ADR-0034 100 rps default. The published `limit()` contract is
- * `{ key }` and each call spends one token, so tighter per-key overrides debit
- * that many documented calls against the same window.
- */
-export const EVALUATION_RATE_LIMIT_PERIOD_SECONDS = 10;
-export const EVALUATION_RATE_LIMIT_BINDING_LIMIT = 1000;
+export const EVALUATION_RATE_LIMIT_PERIOD_SECONDS = CLIENT_KEY_RATE_LIMIT_WINDOW_SECONDS;
+export const EVALUATION_RATE_LIMIT_BINDING_LIMIT = CLIENT_KEY_RATE_LIMIT_WINDOW_TOKENS;
 export const EVALUATION_RATE_LIMIT_RETRY_AFTER_MS = EVALUATION_RATE_LIMIT_PERIOD_SECONDS * 1000;
 
 const DATA_PLANE_RATE_LIMIT_CLASSES = new Set<Exclude<RateLimitClass, "none">>([
@@ -36,7 +32,7 @@ export function rememberCredentialRateLimitRps(
 }
 
 export function evaluationRateLimitIncrement(rps: number): number {
-  return Math.max(1, Math.ceil(DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS / rps));
+  return clientKeyRateLimitTokensPerRequest(rps);
 }
 
 export function evaluationRateLimitKey(

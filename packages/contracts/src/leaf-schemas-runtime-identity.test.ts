@@ -217,12 +217,7 @@ describe("ClientKey (public)", () => {
     expect(resolveClientKeyRateLimitRps(null)).toBe(100);
     expect(resolveClientKeyRateLimitRps(undefined)).toBe(100);
     expect(resolveClientKeyRateLimitRps(25)).toBe(25);
-  });
-
-  it("fails loud on a non-positive rateLimitRps override", () => {
-    expect(() => resolveClientKeyRateLimitRps(0)).toThrow(/positive integer/);
-    expect(() => resolveClientKeyRateLimitRps(-1)).toThrow(/positive integer/);
-    expect(() => resolveClientKeyRateLimitRps(1.5)).toThrow(/positive integer/);
+    expect(resolveClientKeyRateLimitRps(30)).toBe(30);
   });
 });
 

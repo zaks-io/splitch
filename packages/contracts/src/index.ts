@@ -14,6 +14,13 @@ export * from "./barrels/storage-contracts";
 export * from "./barrels/wire-envelopes";
 export { type CanonicalJsonSha256, CanonicalJsonSha256Schema } from "./canonical-hash";
 export {
+  CLIENT_KEY_RATE_LIMIT_WINDOW_RPS,
+  CLIENT_KEY_RATE_LIMIT_WINDOW_SECONDS,
+  CLIENT_KEY_RATE_LIMIT_WINDOW_TOKENS,
+  clientKeyRateLimitTokensPerRequest,
+  isExactClientKeyRateLimitRps,
+} from "./client-key-rate-limit";
+export {
   ClientOriginSchema,
   NormalizedOriginAllowlistSchema,
   normalizeClientOrigins,

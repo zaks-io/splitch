@@ -62,7 +62,7 @@ describe("Evaluation Worker service bindings", () => {
       {
         name: "EVALUATION_RATE_LIMITER",
         namespace_id: expect.stringMatching(/^\d+$/u),
-        simple: { limit: 1000, period: 10 },
+        simple: { limit: 3000, period: 10 },
       },
     ]);
   });

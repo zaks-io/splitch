@@ -19,22 +19,22 @@ import {
 } from "./sdk-route-test-fixtures";
 
 describe("evaluationRateLimitIncrement", () => {
-  it("matches the Cloudflare binding's 100 rps window", () => {
-    expect(EVALUATION_RATE_LIMIT_BINDING_LIMIT / EVALUATION_RATE_LIMIT_PERIOD_SECONDS).toBe(100);
+  it("matches the Cloudflare binding's exact 100 rps debit", () => {
+    expect(
+      EVALUATION_RATE_LIMIT_BINDING_LIMIT /
+        EVALUATION_RATE_LIMIT_PERIOD_SECONDS /
+        evaluationRateLimitIncrement(100),
+    ).toBe(100);
   });
 
-  it("consumes one token at the ADR 100 rps default", () => {
-    expect(evaluationRateLimitIncrement(100)).toBe(1);
+  it("consumes three tokens at the ADR 100 rps default", () => {
+    expect(evaluationRateLimitIncrement(100)).toBe(3);
   });
 
-  it("consumes more tokens for a tighter override", () => {
-    expect(evaluationRateLimitIncrement(25)).toBe(4);
-    expect(evaluationRateLimitIncrement(50)).toBe(2);
-  });
-
-  it("never spends fewer tokens than the stored cap allows", () => {
-    expect(evaluationRateLimitIncrement(80)).toBe(2);
-    expect(evaluationRateLimitIncrement(67)).toBe(2);
+  it("consumes an integer token count that yields the stored cap exactly", () => {
+    expect(evaluationRateLimitIncrement(25)).toBe(12);
+    expect(evaluationRateLimitIncrement(50)).toBe(6);
+    expect(evaluationRateLimitIncrement(30)).toBe(10);
   });
 });
 
@@ -121,7 +121,8 @@ describe("makeEvaluationRateLimiter", () => {
     );
 
     expect(limit).toHaveBeenNthCalledWith(1, { key: `${firstHash}:client-key` });
-    expect(limit).toHaveBeenNthCalledWith(2, { key: `${secondHash}:api-key` });
+    expect(limit).toHaveBeenNthCalledWith(4, { key: `${secondHash}:api-key` });
+    expect(limit).toHaveBeenCalledTimes(6);
   });
 
   it("honors an explicit tighter override by debiting more official limit() calls", async () => {
@@ -131,7 +132,7 @@ describe("makeEvaluationRateLimiter", () => {
 
     await makeEvaluationRateLimiter({ limit })(input({ request }));
 
-    expect(limit).toHaveBeenCalledTimes(4);
+    expect(limit).toHaveBeenCalledTimes(12);
     expect(limit).toHaveBeenCalledWith({ key: `${"a".repeat(64)}:client-key` });
   });
 
@@ -239,7 +240,7 @@ describe("evaluation rate limiter on the public evaluate route", () => {
     });
 
     expect((await app.request("/api/sdk/evaluate", sdkRouteInit(CLIENT_KEY))).status).toBe(200);
-    expect(limit).toHaveBeenCalledTimes(4);
+    expect(limit).toHaveBeenCalledTimes(12);
     expect(limit).toHaveBeenCalledWith({
       key: `${await sha256Hex(CLIENT_KEY)}:client-key`,
     });
