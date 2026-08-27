@@ -45,18 +45,21 @@ describe("Metric Event delivery", () => {
       eventId: EVENT_ID,
       outcome: "terminal",
       leaseExpiresAt: NOW + 60_000,
-      error: "HTTP 400 EVENT_SCHEMA_MISMATCH: Metric Event is invalid",
+      error:
+        "HTTP 400 EVENT_SCHEMA_MISMATCH: Metric Event does not match the Event Definition Version",
     });
 
     expect(patch).toHaveBeenCalledWith("claim", {
       state: "terminal",
       completedAt: NOW,
-      lastError: "HTTP 400 EVENT_SCHEMA_MISMATCH: Metric Event is invalid",
+      lastError:
+        "HTTP 400 EVENT_SCHEMA_MISMATCH: Metric Event does not match the Event Definition Version",
     });
     expect(deleteRow).toHaveBeenCalledWith("outbox");
     expect(error).toHaveBeenCalledWith("Splitch Metric Event delivery stopped", {
       eventId: EVENT_ID,
-      error: "HTTP 400 EVENT_SCHEMA_MISMATCH: Metric Event is invalid",
+      error:
+        "HTTP 400 EVENT_SCHEMA_MISMATCH: Metric Event does not match the Event Definition Version",
     });
   });
 
@@ -64,14 +67,16 @@ describe("Metric Event delivery", () => {
     const { ctx, runMutation } = actionContext();
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          Response.json(
-            { code: "EVENT_SCHEMA_MISMATCH", message: "Metric Event is invalid", details: {} },
-            { status: 400 },
-          ),
+      vi.fn().mockResolvedValue(
+        Response.json(
+          {
+            code: "EVENT_SCHEMA_MISMATCH",
+            message: "Metric Event for user_123 contains secret prompt text",
+            details: {},
+          },
+          { status: 400 },
         ),
+      ),
     );
     await deliverMetricEventHandler(ctx, { eventId: EVENT_ID });
 
@@ -79,7 +84,8 @@ describe("Metric Event delivery", () => {
       eventId: EVENT_ID,
       outcome: "terminal",
       leaseExpiresAt: NOW + 60_000,
-      error: "HTTP 400 EVENT_SCHEMA_MISMATCH: Metric Event is invalid",
+      error:
+        "HTTP 400 EVENT_SCHEMA_MISMATCH: Metric Event does not match the Event Definition Version",
     });
   });
 
@@ -160,6 +166,32 @@ describe("Metric Event delivery", () => {
     expect(deleteRow).toHaveBeenCalledWith("outbox");
     expect(runAfter).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Metric Event response diagnostics", () => {
+  it("retains only the HTTP status for an unknown response code", async () => {
+    const { ctx, runMutation } = actionContext();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json(
+            { code: "UPSTREAM_FAILURE", message: "user_123 contains secret prompt text" },
+            { status: 400 },
+          ),
+        ),
+    );
+
+    await deliverMetricEventHandler(ctx, { eventId: EVENT_ID });
+
+    expect(runMutation.mock.calls[1]?.[1]).toEqual({
+      eventId: EVENT_ID,
+      outcome: "terminal",
+      leaseExpiresAt: NOW + 60_000,
+      error: "HTTP 400",
+    });
   });
 });
 

@@ -12,6 +12,30 @@ import { ensureRetentionScheduled } from "./retention";
 
 type MetricEventFieldValue = boolean | string | number | null | unknown[] | Record<string, unknown>;
 
+const SAFE_METRIC_EVENT_ERRORS = {
+  UNAUTHORIZED: { status: 401, message: "Metric Event credential was rejected" },
+  CREDENTIAL_REVOKED: { status: 403, message: "Metric Event credential is revoked" },
+  INSUFFICIENT_SCOPES: { status: 403, message: "Metric Event credential cannot write events" },
+  ORIGIN_NOT_ALLOWED: { status: 403, message: "Metric Event origin is not allowed" },
+  VALIDATION_ERROR: { status: 400, message: "Metric Event request is invalid" },
+  EVENT_DEFINITION_NOT_FOUND: { status: 404, message: "Metric Event Definition not found" },
+  EVENT_DEFINITION_UNPUBLISHED: {
+    status: 409,
+    message: "Metric Event Definition is not published",
+  },
+  EVENT_SCHEMA_MISMATCH: {
+    status: 400,
+    message: "Metric Event does not match the Event Definition Version",
+  },
+  ENTITY_TYPE_MISMATCH: {
+    status: 400,
+    message: "Metric Event Entity type does not match the Event Definition Version",
+  },
+  EVENT_ID_CONFLICT: { status: 409, message: "Metric Event eventId conflicts with prior content" },
+  RATE_LIMITED: { status: 429, message: "Metric Event ingest is rate limited" },
+  SERVICE_UNAVAILABLE: { status: 503, message: "Metric Event ingest is unavailable" },
+} as const;
+
 export async function scheduleMetricEventDeliveryWatch(
   ctx: MutationCtx,
   eventId: string,
@@ -198,11 +222,13 @@ export async function watchMetricEventDeliveryHandler(
 
 async function responseError(response: Response): Promise<string> {
   try {
-    const body = (await response.json()) as { code?: unknown; message?: unknown };
-    const code = typeof body.code === "string" ? body.code : null;
-    const message = typeof body.message === "string" ? body.message : null;
-    if (code && message) return `HTTP ${response.status} ${code}: ${message}`;
-    if (code) return `HTTP ${response.status} ${code}`;
+    const body = (await response.json()) as { code?: unknown };
+    if (typeof body.code === "string" && Object.hasOwn(SAFE_METRIC_EVENT_ERRORS, body.code)) {
+      const code = body.code as keyof typeof SAFE_METRIC_EVENT_ERRORS;
+      const safeError = SAFE_METRIC_EVENT_ERRORS[code];
+      if (safeError.status === response.status)
+        return `HTTP ${response.status} ${code}: ${safeError.message}`;
+    }
   } catch {
     // The HTTP status remains an actionable, privacy-safe failure signal.
   }
