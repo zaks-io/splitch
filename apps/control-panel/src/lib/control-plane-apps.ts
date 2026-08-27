@@ -158,6 +158,9 @@ export function panelDelegationFetch(
         ...(options.nonce ? { nonce: options.nonce() } : {}),
       }),
     );
-    return controlPlane.fetch(new Request(request, { headers }));
+    // Default fetch follows 3xx and replays every header, including this signed
+    // delegation, onto Location. The SDK wrap runs before this header exists and
+    // does not treat it as a credential, so the refusal has to happen here.
+    return controlPlane.fetch(new Request(request, { headers, redirect: "error" }));
   };
 }
