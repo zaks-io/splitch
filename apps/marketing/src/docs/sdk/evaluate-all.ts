@@ -4,6 +4,7 @@ export const evaluateAllTopic: SdkTopic = {
   slug: "evaluate-all",
   title: "evaluateAll and bootstrap",
   summary: "Resolve every Flag once, then hydrate a browser client without another fetch.",
+  section: "guide",
   blocks: [
     {
       kind: "prose",

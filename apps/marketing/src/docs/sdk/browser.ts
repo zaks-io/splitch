@@ -4,6 +4,7 @@ export const browserTopic: SdkTopic = {
   slug: "browser",
   title: "Browser client",
   summary: "Fetch once, read Flags synchronously, and fire Exposures on first use.",
+  section: "integration",
   blocks: [
     {
       kind: "prose",

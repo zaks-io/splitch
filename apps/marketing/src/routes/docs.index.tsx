@@ -4,7 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ErrorCodeIndex } from "../components/error-code-index";
 import { cliDoc } from "../docs/cli";
 import { flagsDoc } from "../docs/flags";
-import { sdkTopics } from "../docs/sdk";
+import { type SdkTopic, sdkGuideTopics, sdkIntegrationTopics } from "../docs/sdk";
 
 export const Route = createFileRoute("/docs/")({
   head: () => ({
@@ -95,30 +95,59 @@ function DocsIndexRoute() {
           </ul>
         </section>
 
-        <section className="grid gap-4" id="sdk">
-          <h2 className="font-display font-semibold text-2xl text-foreground tracking-tight">
-            SDK
-          </h2>
-          <ul className="grid gap-3">
-            {sdkTopics.map((topic) => (
-              <li className="grid gap-1" key={topic.slug}>
-                <Link
-                  className="font-medium text-foreground underline underline-offset-4"
-                  params={{ topic: topic.slug }}
-                  to="/docs/sdk/$topic"
-                >
-                  {topic.title}
-                </Link>
-                <span className="text-muted-foreground text-sm leading-relaxed">
-                  {topic.summary}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <TopicSection
+          heading="Integrations"
+          id="integrations"
+          lede="One guide per runtime, each from npm install to a first resolving Flag."
+          topics={sdkIntegrationTopics}
+        />
+
+        <TopicSection
+          heading="SDK"
+          id="sdk"
+          lede="The contract every integration shares."
+          topics={sdkGuideTopics}
+        />
 
         <ErrorCodeIndex />
       </div>
     </main>
+  );
+}
+
+function TopicSection({
+  heading,
+  id,
+  lede,
+  topics,
+}: {
+  heading: string;
+  id: string;
+  lede: string;
+  topics: readonly SdkTopic[];
+}) {
+  return (
+    <section className="grid gap-4" id={id}>
+      <div className="grid gap-1">
+        <h2 className="font-display font-semibold text-2xl text-foreground tracking-tight">
+          {heading}
+        </h2>
+        <p className="text-muted-foreground text-sm leading-relaxed">{lede}</p>
+      </div>
+      <ul className="grid gap-3">
+        {topics.map((topic) => (
+          <li className="grid gap-1" key={topic.slug}>
+            <Link
+              className="font-medium text-foreground underline underline-offset-4"
+              params={{ topic: topic.slug }}
+              to="/docs/sdk/$topic"
+            >
+              {topic.title}
+            </Link>
+            <span className="text-muted-foreground text-sm leading-relaxed">{topic.summary}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

@@ -2,8 +2,9 @@ import type { SdkTopic } from "./types";
 
 export const methodsTopic: SdkTopic = {
   slug: "methods",
-  title: "The five methods",
+  title: "The six methods",
   summary: "Which calls fire an Exposure, and which credential each needs.",
+  section: "guide",
   blocks: [
     {
       kind: "prose",
@@ -18,6 +19,12 @@ export const methodsTopic: SdkTopic = {
         ["`peekVariant`", "the Variant value", "no", "API Key only"],
         ["`verify`", "full `ResolutionDetails`", "no", "Client Key or API Key"],
         ["`evaluateAll`", "every Flag, in one round trip", "no", "Client Key or API Key"],
+        [
+          "`track`",
+          "the accepted Metric Event",
+          "no",
+          "Client Key, or an API Key with `data-plane:write`",
+        ],
       ],
     },
     {
@@ -27,6 +34,7 @@ export const methodsTopic: SdkTopic = {
         "`peekVariant` to inspect a resolution without polluting experiment data: admin screens, support tooling, debugging.",
         "`verify` to confirm setup end to end. Same shape as `evaluateDetails`, no Exposure, safe to run repeatedly in CI.",
         "`evaluateAll` to render a whole page from one request. Each fresh assignment under a live Run carries an Exposure Ticket that a client redeems when it actually reads that Flag, so a page holding 20 Flags and showing 3 records 3 Exposures.",
+        "`track` to append the Metric Event an experiment measures. It is the other half of the pair: Exposures are the denominator, Metric Events are the numerator.",
       ],
     },
     { kind: "heading", text: "Reading ResolutionDetails" },
@@ -48,6 +56,28 @@ if (details.reason === "ERROR") {
   // Every code is documented at https://splitch.dev/docs/error/{code}
 }`,
     },
+    { kind: "heading", text: "Recording a Metric Event" },
+    {
+      kind: "prose",
+      text: "`track` appends one Metric Event against an Event Definition you declared beforehand. You own the `eventId` and reuse it when retrying, exactly as `idempotencyKey` works for evaluation; a replay comes back with `duplicate: true` and appends nothing.",
+    },
+    {
+      kind: "code",
+      lang: "ts",
+      code: `const result = await splitch.track("checkout_completed", {
+  targetingKey: user.id,
+  idType: "user",
+  eventId: crypto.randomUUID(),
+  fields: { revenue: 42.5 },
+  dimensions: { plan: "pro" },
+});
+
+result.duplicate; // true when this eventId was already appended`,
+    },
+    {
+      kind: "prose",
+      text: "Unlike `evaluate`, `track` has no Default Variant to fall back to, so it throws `SplitchSdkError` on rejection rather than returning a partial result. An undeclared `eventName`, a payload that fails the Event Definition, or a credential without `data-plane:write` all surface as a throw naming the code.",
+    },
   ],
 };
 
@@ -55,6 +85,7 @@ export const idempotencyTopic: SdkTopic = {
   slug: "idempotency",
   title: "idempotencyKey",
   summary: "One key per logical evaluation. Reuse it to retry safely.",
+  section: "guide",
   blocks: [
     {
       kind: "prose",
@@ -83,6 +114,7 @@ export const failuresTopic: SdkTopic = {
   title: "Failure behavior",
   summary:
     "Server evaluation never throws and never hides. Peek throws, and so does a browser read before init().",
+  section: "guide",
   blocks: [
     {
       kind: "prose",
@@ -132,6 +164,7 @@ export const dedupTopic: SdkTopic = {
   slug: "exposure-dedup",
   title: "Exposure dedup",
   summary: "Repeat evaluations replay locally. Run boundaries do not.",
+  section: "guide",
   blocks: [
     {
       kind: "prose",

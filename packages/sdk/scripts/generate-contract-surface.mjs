@@ -74,7 +74,7 @@ async function loadContracts() {
     bundle: true,
     format: "esm",
     platform: "node",
-    target: "node20",
+    target: "node24",
     write: false,
   });
   const staging = mkdtempSync(join(tmpdir(), "splitch-contract-surface-"));

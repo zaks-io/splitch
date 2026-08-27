@@ -9,7 +9,7 @@ import {
   surfaceLabels,
 } from "./errors";
 import { flagsDoc } from "./flags";
-import { type SdkTopic, sdkTopics } from "./sdk";
+import { type SdkTopic, sdkGuideTopics, sdkIntegrationTopics } from "./sdk";
 import { DOCS_ORIGIN, docsPath } from "./site";
 
 export function sdkTopicMarkdown(topic: SdkTopic): string {
@@ -70,10 +70,8 @@ export function errorMarkdown(code: DocumentedErrorCode): string {
  * an absence of documentation.
  */
 export function llmsTxt(): string {
-  const topicLines = sdkTopics.map(
-    (topic) =>
-      `- [${topic.title}](${DOCS_ORIGIN}${docsPath.sdkTopicMarkdown(topic.slug)}): ${topic.summary}`,
-  );
+  const topicLine = (topic: SdkTopic) =>
+    `- [${topic.title}](${DOCS_ORIGIN}${docsPath.sdkTopicMarkdown(topic.slug)}): ${topic.summary}`;
   const errorLines = documentedErrorCodes.map((code) => {
     const status = httpStatusForDocumentedCode(code);
     const prefix = status === null ? surfaceLabels[surfaceForCode(code)] : String(status);
@@ -89,8 +87,12 @@ export function llmsTxt(): string {
     "## CLI",
     `- [${cliDoc.title}](${DOCS_ORIGIN}${docsPath.cliMarkdown()}): ${cliDoc.summary}`,
     "Every command accepts `--json` (one line on stdout, failures included) and `--help`. Policy-gated changes take `--confirm`.",
+    "## Integrations",
+    "One guide per runtime, each from `npm install` to a first resolving Flag. `@splitch/sdk` covers Node, browsers, and React; Convex and Cloudflare Workers each ship their own package.",
+    sdkIntegrationTopics.map(topicLine).join("\n"),
     "## SDK",
-    topicLines.join("\n"),
+    "The contract every integration shares.",
+    sdkGuideTopics.map(topicLine).join("\n"),
     "## Errors",
     `Every failure code the API, SDK, and CLI can emit resolves to a page at ${DOCS_ORIGIN}/docs/error/{code}.`,
     errorLines.join("\n"),

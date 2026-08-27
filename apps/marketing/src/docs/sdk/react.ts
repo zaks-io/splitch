@@ -4,6 +4,7 @@ export const reactTopic: SdkTopic = {
   slug: "react",
   title: "React bindings",
   summary: "Provide one initialized browser client and subscribe each hook to one Flag.",
+  section: "integration",
   blocks: [
     {
       kind: "prose",

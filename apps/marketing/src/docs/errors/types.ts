@@ -1,5 +1,5 @@
-import type { ErrorCode } from "@splitch/contracts";
 import type { CliClientErrorCode } from "@splitch/cli";
+import type { ErrorCode } from "@splitch/contracts";
 import type { SdkClientErrorCode } from "@splitch/sdk";
 
 /**
