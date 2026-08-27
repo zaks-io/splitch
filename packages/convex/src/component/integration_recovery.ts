@@ -4,6 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { scheduleDeliveryWatch } from "./exposure_delivery";
 import { requiredIntegration } from "./integration_state";
+import { scheduleMetricEventDeliveryWatch } from "./metric_event_delivery";
 import { ensureRetentionScheduled } from "./retention";
 
 const CURRENT_KEY = "current" as const;
@@ -45,17 +46,27 @@ export async function adoptExistingWorkHandler(
   const integration = await currentIntegration(ctx);
   if (!integration || (integration.recoveryGeneration ?? 0) >= args.generation) return;
 
-  const [pending, delivering] = await Promise.all([
-    legacyDeliveries(ctx, "pending"),
-    legacyDeliveries(ctx, "delivering"),
+  const [pending, delivering, pendingMetricEvents, deliveringMetricEvents] = await Promise.all([
+    legacyExposureDeliveries(ctx, "pending"),
+    legacyExposureDeliveries(ctx, "delivering"),
+    legacyMetricEventDeliveries(ctx, "pending"),
+    legacyMetricEventDeliveries(ctx, "delivering"),
   ]);
-  const rows = [...pending, ...delivering];
-  for (const row of rows) {
+  for (const row of [...pending, ...delivering]) {
     await scheduleDeliveryWatch(ctx, row.exposureId, 0);
     await ctx.db.patch(row._id, { recoveryWatchGeneration: args.generation });
   }
+  for (const row of [...pendingMetricEvents, ...deliveringMetricEvents]) {
+    await scheduleMetricEventDeliveryWatch(ctx, row.eventId, 0);
+    await ctx.db.patch(row._id, { recoveryWatchGeneration: args.generation });
+  }
 
-  if (pending.length === ADOPTION_BATCH_SIZE || delivering.length === ADOPTION_BATCH_SIZE) {
+  if (
+    pending.length === ADOPTION_BATCH_SIZE ||
+    delivering.length === ADOPTION_BATCH_SIZE ||
+    pendingMetricEvents.length === ADOPTION_BATCH_SIZE ||
+    deliveringMetricEvents.length === ADOPTION_BATCH_SIZE
+  ) {
     const jobId = await ctx.scheduler.runAfter(
       0,
       internal.integration_recovery.adoptExistingWork,
@@ -72,9 +83,18 @@ export async function adoptExistingWorkHandler(
   await ensureRetentionScheduled(ctx);
 }
 
-function legacyDeliveries(ctx: MutationCtx, state: "pending" | "delivering") {
+function legacyExposureDeliveries(ctx: MutationCtx, state: "pending" | "delivering") {
   return ctx.db
     .query("exposureOutbox")
+    .withIndex("by_recovery_watch_state", (q) =>
+      q.eq("recoveryWatchGeneration", undefined).eq("state", state),
+    )
+    .take(ADOPTION_BATCH_SIZE);
+}
+
+function legacyMetricEventDeliveries(ctx: MutationCtx, state: "pending" | "delivering") {
+  return ctx.db
+    .query("metricEventOutbox")
     .withIndex("by_recovery_watch_state", (q) =>
       q.eq("recoveryWatchGeneration", undefined).eq("state", state),
     )

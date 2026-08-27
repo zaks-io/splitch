@@ -1,8 +1,8 @@
 # @splitch/convex
 
 The first-party Convex Component for local Splitch Flag evaluation. Configuration is synced into
-component-private tables. Queries can peek without network access. Mutations can evaluate and put
-the resulting Exposure into a transactional outbox alongside application writes.
+component-private tables. Queries can peek without network access. Mutations can put Exposures and
+Metric Events into transactional outboxes alongside application writes.
 It installs `@splitch/sdk`, which owns the shared local evaluator and contract types.
 
 ```bash
@@ -64,14 +64,52 @@ and schedules retention for existing retained rows. The callback is served at
 `/integrations/splitch/configuration`. `SPLITCH_API_KEY` stays in the Convex deployment environment
 and must never be sent to browser code.
 
-Background recovery is activity-driven. Configuration nudges and new Exposure outbox rows schedule
-their own recovery mutations, which stop once the work is complete. Retained claims and terminal
-Exposure rows share one scheduled cleanup job set for the earliest expiry. The component registers
-no cron jobs and invokes nothing periodically while idle.
+Background recovery is activity-driven. Configuration nudges and new Exposure or Metric Event
+outbox rows schedule their own recovery mutations, which stop once the work is complete. Retained
+claims and terminal Exposure rows share one scheduled cleanup job set for the earliest expiry. The
+component registers no cron jobs and invokes nothing periodically while idle.
 
 Use `flags.deleteEntity(ctx, { targetingKey, idType })` inside a Mutation to remove one Entity's
-local holdovers and queued Exposures. `flags.uninstall(ctx)` revokes the remote installation before
-purging the component's private state.
+local holdovers and queued Exposures or Metric Events. `flags.uninstall(ctx)` revokes the remote
+installation before purging the component's private state.
+
+## Metric Events
+
+Call `track()` inside the same Mutation that persists the application outcome being measured. The
+caller owns one lowercase UUID per logical Metric Event and reuses it if the Mutation is retried.
+
+```ts
+export const saveGeneration = mutation({
+  args: {
+    eventId: v.string(),
+    targetingKey: v.string(),
+    tokenCount: v.number(),
+    model: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.insert("generations", {
+      targetingKey: args.targetingKey,
+      tokenCount: args.tokenCount,
+      model: args.model,
+    });
+    await flags.track(ctx, "model-generation", {
+      targetingKey: args.targetingKey,
+      idType: "user",
+      eventId: args.eventId,
+      fields: { generationCount: 1, tokenCount: args.tokenCount },
+      dimensions: { model: args.model },
+    });
+    return null;
+  },
+});
+```
+
+`{ eventId, queued: true }` confirms only that the delivery intent joined the caller's Convex
+transaction. It does not claim that Splitch accepted the Event Definition or payload. Delivery is
+asynchronous. `trackStatus(ctx, eventId)` returns `queued`, `accepted`, `terminal`, `suppressed`, or
+`missing`; terminal responses include the safe error returned by Splitch. Exact retries reuse the
+existing delivery. Reusing an ID for different content throws `EVENT_ID_CONFLICT`.
 
 ## React
 
