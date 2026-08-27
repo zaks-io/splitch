@@ -16,9 +16,26 @@ always observable, never a silently disguised default.
 npm install @splitch/sdk
 ```
 
-ESM only. Node >= 20, browsers, and edge runtimes. The root and browser entries
-remain zod-free and never load the schema/transport dependencies used by the
-named `control-plane` and `local-evaluation` entries.
+ESM only. Node 24 or newer, browsers, Cloudflare Workers, and other edge
+runtimes.
+
+### Export surface
+
+| Import                          | What it is                                                                 | Extra install  |
+| ------------------------------- | -------------------------------------------------------------------------- | -------------- |
+| `@splitch/sdk`                  | server client: `evaluate`, `peekVariant`, `verify`, `evaluateAll`, `track` | none           |
+| `@splitch/sdk/browser`          | static-context browser client with synchronous reads                       | none           |
+| `@splitch/sdk/react`            | `SplitchProvider` and the `useFlag` hooks                                  | `react`        |
+| `@splitch/sdk/sentry`           | mirror resolutions into Sentry's flag context                              | `@sentry/core` |
+| `@splitch/sdk/local-evaluation` | the local evaluator the Convex component runs on                           | `zod`          |
+| `@splitch/sdk/control-plane`    | typed control-plane client and contract schemas                            | `zod`          |
+
+The three evaluation entrypoints (`.`, `./browser`, `./react`) bundle their
+implementation and pull in no runtime dependency, so adding the SDK to an app
+adds nothing to its dependency tree beyond React if you use the hooks.
+`./sentry`, `./local-evaluation`, and `./control-plane` deliberately leave theirs
+external: a second bundled copy of `@sentry/core` would not share a client with
+the host app's, and a second `zod` would not share schema identity.
 
 `@splitch/cli` consumes `@splitch/sdk/control-plane`. `@splitch/convex` consumes
 `@splitch/sdk/local-evaluation`. Those package interfaces keep published Splitch
@@ -43,34 +60,84 @@ const variant = await splitch.evaluate("new-checkout", {
 
 ## Credentials
 
-Construct the client with exactly one credential (anything else throws):
+Construct the client with exactly one credential. Zero or both throws
+`SDK_CREDENTIAL_CONFIGURATION_INVALID` at construction, because the two unlock
+different methods and the client cannot guess which you meant.
 
-| Option      | Credential                | Where it may live                                  | Unlocks                                                |
-| ----------- | ------------------------- | -------------------------------------------------- | ------------------------------------------------------ |
-| `clientKey` | public Client Key (`pk_`) | browsers, mobile, servers: anything that evaluates | `evaluate`, `evaluateDetails`, `verify`, `evaluateAll` |
-| `apiKey`    | secret API Key (`sk_`)    | servers only; never ship it to a client            | `peekVariant`, `verify`, `evaluateAll`                 |
+| Option      | Credential                | Where it may live                                  | Unlocks                                                         |
+| ----------- | ------------------------- | -------------------------------------------------- | --------------------------------------------------------------- |
+| `clientKey` | public Client Key (`pk_`) | browsers, mobile, servers: anything that evaluates | `evaluate`, `evaluateDetails`, `verify`, `evaluateAll`, `track` |
+| `apiKey`    | secret API Key (`sk_`)    | servers only; never ship it to a client            | `peekVariant`, `verify`, `evaluateAll`, `track`                 |
 
 A server-side integration that fires Exposures uses a Client Key, not an API
 Key. The API Key cannot call `evaluate` or `evaluateDetails`; present a Client
 Key on that path (Client Keys are safe to use from servers).
 
-## The five methods
+### Scopes
+
+The data plane has two scopes. A Client Key carries both, which is why it can
+`track` as well as evaluate. An API Key carries whichever you enumerate at
+`splitch api-keys create`, so an API Key minted for evaluation alone is refused
+by `track` with `INSUFFICIENT_SCOPES`.
+
+| Scope                 | Covers                                                                |
+| --------------------- | --------------------------------------------------------------------- |
+| `data-plane:evaluate` | `evaluate`, `evaluateDetails`, `peekVariant`, `verify`, `evaluateAll` |
+| `data-plane:write`    | `track`, the Metric Event append                                      |
+
+## The six methods
 
 An **Exposure** is the "this subject saw this Variant" event that experiment
 analysis counts. Which methods fire one is the core thing to get right:
 
-| Method            | Returns                       | Fires an Exposure | Credential            |
-| ----------------- | ----------------------------- | ----------------- | --------------------- |
-| `evaluate`        | the Variant value             | yes               | Client Key only       |
-| `evaluateDetails` | full `ResolutionDetails`      | yes               | Client Key only       |
-| `peekVariant`     | the Variant value             | no                | API Key only          |
-| `verify`          | full `ResolutionDetails`      | no                | Client Key or API Key |
-| `evaluateAll`     | every Flag, in one round trip | no                | Client Key or API Key |
+| Method            | Returns                       | Fires an Exposure | Credential                                        |
+| ----------------- | ----------------------------- | ----------------- | ------------------------------------------------- |
+| `evaluate`        | the Variant value             | yes               | Client Key only                                   |
+| `evaluateDetails` | full `ResolutionDetails`      | yes               | Client Key only                                   |
+| `peekVariant`     | the Variant value             | no                | API Key only                                      |
+| `verify`          | full `ResolutionDetails`      | no                | Client Key or API Key                             |
+| `evaluateAll`     | every Flag, in one round trip | no                | Client Key or API Key                             |
+| `track`           | the accepted Metric Event     | no                | Client Key, or an API Key with `data-plane:write` |
 
-Use `evaluate` on the real user path. Use `peekVariant` to inspect a resolution
-without polluting experiment data. Use `verify` to confirm setup end to end
-(same shape as `evaluateDetails`, no Exposure, safe to run repeatedly). Use
-`evaluateAll` to render a whole page from one request.
+- `evaluate` or `evaluateDetails` on the real user path. These belong in
+  production request handling; reach for `evaluateDetails` when the handler needs
+  `ResolutionDetails`.
+- `peekVariant` to inspect a resolution without polluting experiment data: admin
+  screens, support tooling, debugging.
+- `verify` to confirm setup end to end. Same shape as `evaluateDetails`, no
+  Exposure, safe to run repeatedly in CI.
+- `evaluateAll` to render a whole page from one request.
+- `track` to append the Metric Event an experiment measures. It is the other
+  half of the pair: Exposures are the denominator, Metric Events are the
+  numerator.
+
+## track: recording a Metric Event
+
+`track` appends one Metric Event against an Event Definition you declared
+beforehand (`splitch event-definitions create`). You own the `eventId` and reuse
+it when retrying, exactly as `idempotencyKey` works for evaluation; a replay
+comes back with `duplicate: true` and appends nothing.
+
+```ts
+const result = await splitch.track("checkout_completed", {
+  targetingKey: user.id,
+  idType: "user",
+  eventId: crypto.randomUUID(),
+  fields: { revenue: 42.5 },
+  dimensions: { plan: "pro" },
+});
+
+result.duplicate; // true when this eventId was already appended
+```
+
+`fields` carries the measured values the Event Definition declares.
+`dimensions` carries the low-cardinality slice labels (`boolean | string |
+number`) you want to break results down by.
+
+Unlike `evaluate`, `track` has no Default Variant to fall back to, so it throws
+`SplitchSdkError` on rejection rather than returning a partial result. An
+undeclared `eventName`, a payload that fails the Event Definition, or a
+credential without `data-plane:write` all surface as a throw naming the code.
 
 ## evaluateAll: every Flag in one round trip
 
@@ -139,8 +206,10 @@ request so the platform can deduplicate the Exposure.
   during render, so await `init()` before mounting `SplitchProvider`. After
   init, reads never throw: a failed revalidation marks the payload degraded
   rather than clearing it.
-- `peekVariant` and `evaluateAll` throw a `SplitchSdkError` carrying `code`,
-  `status`, and `docsUrl`. Every code resolves to a page at
+- `peekVariant`, `evaluateAll`, and `track` throw a `SplitchSdkError` carrying
+  `code`, `status`, and `docsUrl`. None of them has a Default Variant to serve,
+  so a failure is a throw rather than a value you cannot distinguish from a real
+  resolution. Every code resolves to a page at
   `https://splitch.dev/docs/error/{code}`, and the error message prints it.
 - `retries` must be `0`. A retry is a fresh resolution and would double-count
   Exposures; retry by reusing `idempotencyKey` instead.
@@ -155,16 +224,39 @@ Exposure. Errors are never cached.
 
 ## Options
 
-Every option is documented in the shipped type declarations
-(`dist/index.d.ts`); highlights:
+Every option carries its own doc comment in the shipped type declarations
+(`dist/index.d.ts`). The full set:
 
-| Option      | Default                    | Notes                                       |
-| ----------- | -------------------------- | ------------------------------------------- |
-| `endpoint`  | `https://edge.splitch.dev` | override for self-hosted or preview targets |
-| `timeoutMs` | `5000`                     | per-call timeout; a timeout is an ERROR     |
-| `retries`   | `0`                        | must stay `0` (see above)                   |
-| `logger`    | `console`                  | receives every fail-loud report             |
-| `transport` | built-in `fetch` adapter   | injectable seam for tests                   |
+| Option           | Default                    | Notes                                                           |
+| ---------------- | -------------------------- | --------------------------------------------------------------- |
+| `clientKey`      | none                       | public Client Key; mutually exclusive with `apiKey`             |
+| `apiKey`         | none                       | secret API Key; servers only                                    |
+| `endpoint`       | `https://edge.splitch.dev` | override for self-hosted or preview targets                     |
+| `timeoutMs`      | `5000`                     | per-call timeout; a timeout is an ERROR                         |
+| `retries`        | `0`                        | must stay `0` (see above)                                       |
+| `logger`         | `console`                  | receives every fail-loud report                                 |
+| `transport`      | built-in `fetch` adapter   | injectable seam for tests                                       |
+| `fetch`          | the global `fetch`         | injectable `fetch`; the default is bound to `globalThis`        |
+| `now`            | `Date.now`                 | injectable epoch-ms clock, so dedup is testable without waiting |
+| `revalidateMs`   | `60000`                    | Exposure-dedup window; a new Run is detected within it          |
+| `seenSetMaxSize` | `10000`                    | max entries in the local Exposure-dedup cache                   |
+| `onResolution`   | none                       | observability hook; see below                                   |
+
+Both dedup options are validated at construction: a `seenSetMaxSize` below `1`
+throws `SDK_SEEN_SET_MAX_SIZE_INVALID` and a negative `revalidateMs` throws
+`SDK_SEEN_SET_TTL_INVALID`, rather than silently falling back to the default.
+
+### onResolution
+
+`onResolution(flagKey, details)` is called with every resolution the user path
+produced, which is what an observability sink needs to answer "which Flags were
+active when this broke". It fires for `evaluate`, `evaluateDetails`, and
+`evaluateAll`, and never for `peekVariant` or `verify`: those fire no Exposure,
+and reporting them would claim a resolution the user never received.
+
+It is called synchronously and never awaited, and a throwing reporter is not
+caught. An observability sink that fails should fail where it fails rather than
+be swallowed into a silently degraded evaluation.
 
 `transport` gained a required `evaluateAll` method in the release that added
 `evaluateAll`. It is required rather than optional so a stale transport fails at
@@ -202,98 +294,34 @@ page. The bootstrap payload is public page content, so pass only Evaluation
 Context attributes you are willing to publish.
 
 ```js
-// server.mjs
-import { readFile } from "node:fs/promises";
-import { createServer } from "node:http";
-import { dirname, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+// server.mjs: the part that matters
 import { createSplitchClient } from "@splitch/sdk";
 
-const requiredEnv = (name) => {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is required`);
-  return value;
-};
-const splitch = createSplitchClient({
-  apiKey: requiredEnv("SPLITCH_API_KEY"),
-});
-const recipeRoot = dirname(fileURLToPath(import.meta.url));
-const sdkDistRoot = resolve(recipeRoot, "node_modules/@splitch/sdk/dist");
+const splitch = createSplitchClient({ apiKey: process.env.SPLITCH_API_KEY });
 
-const serveFile = async (response, pathname, root, prefix) => {
-  const target = resolve(root, pathname.slice(prefix.length));
-  if (!target.startsWith(`${root}${sep}`)) {
-    response.writeHead(404).end("Not Found");
-    return;
-  }
-  try {
-    const source = await readFile(target);
-    response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
-    response.end(source);
-  } catch {
-    response.writeHead(404).end("Not Found");
-  }
-};
+const context = { targetingKey, idType: "user", attributes: { plan: "pro" } };
+const bootstrap = await splitch.evaluateAll(context);
 
-const jsonForHtml = (value) => {
-  const serialized = JSON.stringify(value);
-  if (serialized === undefined) throw new Error("SSR JSON value is not serializable");
-  return serialized
-    .replaceAll("<", "\\u003c")
-    .replaceAll("\u2028", "\\u2028")
-    .replaceAll("\u2029", "\\u2029");
-};
+const entry = bootstrap.evaluations["new-checkout"];
+if (entry === undefined || typeof entry.variant !== "boolean" || entry.reason === "ERROR") {
+  throw new Error("SSR requires a successful new-checkout evaluation");
+}
 
-createServer(async (request, response) => {
-  try {
-    const url = new URL(request.url ?? "/", "http://localhost:3000");
-    if (url.pathname === "/browser.mjs") {
-      await serveFile(response, url.pathname, recipeRoot, "/");
-      return;
-    }
-    if (url.pathname.startsWith("/vendor/sdk/")) {
-      await serveFile(response, url.pathname, sdkDistRoot, "/vendor/sdk/");
-      return;
-    }
-    if (url.pathname !== "/") {
-      response.writeHead(404).end("Not Found");
-      return;
-    }
-
-    const targetingKey = url.searchParams.get("user");
-    if (!targetingKey) {
-      response.writeHead(400).end("user is required");
-      return;
-    }
-    const context = {
-      targetingKey,
-      idType: "user",
-      attributes: { plan: "pro" },
-    };
-    const bootstrap = await splitch.evaluateAll(context);
-    const entry = bootstrap.evaluations["new-checkout"];
-    if (entry === undefined || typeof entry.variant !== "boolean" || entry.reason === "ERROR") {
-      throw new Error("SSR requires a successful new-checkout evaluation");
-    }
-
-    const html = `
-      <main id="app">${entry.variant ? "New checkout" : "Current checkout"}</main>
-      <script type="importmap">{"imports":{"@splitch/sdk/browser":"/vendor/sdk/browser/index.js"}}</script>
-      <script id="splitch-bootstrap" type="application/json">${jsonForHtml(bootstrap)}</script>
-      <script id="splitch-config" type="application/json">${jsonForHtml({
-        clientKey: requiredEnv("SPLITCH_CLIENT_KEY"),
-        context,
-      })}</script>
-      <script type="module" src="/browser.mjs"></script>
-    `;
-    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    response.end(html);
-  } catch (error) {
-    response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
-    response.end(error instanceof Error ? error.message : "SSR failed");
-  }
-}).listen(3000);
+// Serialize the payload as-is; that exact object is the browser client's bootstrap.
+const html = `
+  <main id="app">${entry.variant ? "New checkout" : "Current checkout"}</main>
+  <script id="splitch-bootstrap" type="application/json">${jsonForHtml(bootstrap)}</script>
+  <script id="splitch-config" type="application/json">${jsonForHtml({
+    clientKey: process.env.SPLITCH_CLIENT_KEY,
+    context,
+  })}</script>
+  <script type="module" src="/browser.mjs"></script>
+`;
 ```
+
+`jsonForHtml` is `JSON.stringify` with `<`, `U+2028`, and `U+2029` escaped, so
+the payload cannot break out of the `<script>` element. Read it back with
+`JSON.parse`.
 
 The browser constructs the static-context client with the matching Evaluation
 Context. A valid bootstrap makes `init()` perform no fetch. The first local read
@@ -331,7 +359,7 @@ server and hydrated values, zero bootstrap fetches, one first-read Exposure, and
 the fail-loud `SDK_BOOTSTRAP_CONTEXT_MISMATCH` path.
 
 Reading before `init()` throws `SDK_NOT_INITIALIZED`. An unknown Flag Key returns
-your default with `reason: "ERROR"` / `FLAG_NOT_FOUND` and a loud log — never a
+your default with `reason: "ERROR"` / `FLAG_NOT_FOUND` and a loud log, never a
 silent invented default.
 
 Bootstrap must carry the exact normalized Evaluation Context used to construct
@@ -385,6 +413,37 @@ createRoot(document.getElementById("root")!).render(
 imperative reads. Hooks outside `SplitchProvider` throw
 `SDK_REACT_PROVIDER_MISSING`. An unknown Flag keeps the browser client's loud
 `FLAG_NOT_FOUND` details and returns the caller's Default Variant.
+
+## Sentry (`@splitch/sdk/sentry`)
+
+`sentryResolutionReporter()` builds the `onResolution` callback that mirrors
+resolutions into Sentry's feature-flag context, so an error event carries the
+Flags that were active when it happened and suspect-flag detection has something
+to correlate against.
+
+```ts
+import * as Sentry from "@sentry/node";
+import { createSplitchClient } from "@splitch/sdk";
+import { sentryResolutionReporter } from "@splitch/sdk/sentry";
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  integrations: [Sentry.featureFlagsIntegration()],
+});
+
+const splitch = createSplitchClient({
+  clientKey: "pk_...",
+  onResolution: sentryResolutionReporter(),
+});
+```
+
+`Sentry.featureFlagsIntegration()` is required; without it the reporter logs
+once and reports nothing rather than dropping resolutions quietly. Sentry's flag
+buffer stores booleans only, so a multivariate resolution is recorded as
+`` `${flagKey}:${variantName}` = true ``, which keeps two arms of one Flag from
+colliding. A resolution with `reason: "ERROR"` is skipped: it served your Default
+Variant because evaluation failed, and recording it would claim a resolution that
+never happened.
 
 ## Convex
 
@@ -528,8 +587,8 @@ decisions, use `@splitch/convex` instead.
 
 An [HTTP action](https://docs.convex.dev/functions/http-actions) is the natural
 place to mint Precomputed Evaluations for SSR / hydration. Use an **API Key**
-from [Convex environment variables](https://docs.convex.dev/production/environment-variables)
-— never ship an API Key into Convex client-side code:
+from [Convex environment variables](https://docs.convex.dev/production/environment-variables).
+Never ship an API Key into Convex client-side code:
 
 ```ts
 // convex/http.ts
