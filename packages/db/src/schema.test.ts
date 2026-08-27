@@ -135,6 +135,13 @@ describe("Targeting Rule Segment reference", () => {
       "FOREIGN KEY (`app_id`,`segment_id`) REFERENCES `segments`(`app_id`,`id`) ON UPDATE no action ON DELETE restrict",
     );
   });
+
+  it("scopes Targeting Rule identity to one Flag Configuration", () => {
+    expect(getTableColumns(targetingRules).id?.primary).toBeFalsy();
+    expect(migrationSql).toContain(
+      "CREATE UNIQUE INDEX `targeting_rules_scope_id_unique` ON `targeting_rules` (`app_id`,`environment_id`,`flag_id`,`id`)",
+    );
+  });
 });
 
 describe("credential invariants", () => {

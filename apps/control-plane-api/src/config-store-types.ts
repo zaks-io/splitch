@@ -122,6 +122,12 @@ type FlagConfigWriteFailure =
   | { ok: false; reason: "APPROVAL_NOT_APPLIED" }
   | { ok: false; reason: "VARIANT_NOT_AVAILABLE"; missingVariants: string[] }
   | { ok: false; reason: "SEGMENT_NOT_FOUND"; missingSegmentIds: string[] }
+  /**
+   * A uniqueness race at the Targeting Rule persist boundary. The submitted
+   * list is returned so the route can name each colliding `id` without another
+   * tenant-scoped lookup.
+   */
+  | { ok: false; reason: "TARGETING_RULE_ID_CONFLICT"; targetingRules: TargetingRule[] }
   | { ok: false; reason: "ROLLOUT_AMBIGUOUS"; availableVariantNames: string[] }
   /**
    * The Approval Request's changed-field set could not be read. Fail closed: do

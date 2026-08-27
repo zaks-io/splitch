@@ -1,4 +1,5 @@
-import { type EnvScope, envScope } from "@splitch/db";
+import type { TargetingRule } from "@splitch/contracts";
+import { type EnvScope, envScope, type ReplaceTargetingRulesResult } from "@splitch/db";
 import { targetingFreeze } from "./config-store-freeze";
 import {
   buildSnapshotFromD1,
@@ -11,6 +12,21 @@ import {
   writeSnapshotAndBroadcast,
 } from "./config-store-shared";
 import { resolveTargetingRules } from "./targeting-rule-resolution";
+
+/**
+ * Persist uniqueness races stay typed. A missing row is caller-specific:
+ * direct/Promotion writes treat it as FLAG_NOT_FOUND; an approved write must
+ * not claim the Flag vanished when the Approval guard simply selected zero.
+ */
+export function targetingRulePersistFailure(
+  result: Extract<ReplaceTargetingRulesResult, { ok: false }>,
+  targetingRules: TargetingRule[],
+  missingReason: "FLAG_NOT_FOUND" | "APPROVAL_NOT_APPLIED",
+): Extract<FlagConfigWriteResult, { ok: false }> {
+  return result.reason === "id_conflict"
+    ? { ok: false, reason: "TARGETING_RULE_ID_CONFLICT", targetingRules }
+    : { ok: false, reason: missingReason };
+}
 
 export async function replaceTargetingRules(
   deps: ConfigStoreDeps,
@@ -60,7 +76,9 @@ async function commitTargetingRules(
     { updatedAt: now.toISOString(), updatedBy: input.actor.ref, updatedVia: input.actor.via },
     approval,
   );
-  if (!replaced) return { ok: false, reason: "FLAG_NOT_FOUND" };
+  if (!replaced.ok) {
+    return targetingRulePersistFailure(replaced, input.targetingRules, "FLAG_NOT_FOUND");
+  }
 
   const committed = await buildSnapshotFromD1(deps.repo, scope, flagId);
   if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };

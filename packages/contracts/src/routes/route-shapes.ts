@@ -188,9 +188,45 @@ export const PatchFlagConfigRequestSchema = z
   })
   .strict();
 
+export const TARGETING_RULE_ID_DUPLICATE_MESSAGE = "Targeting Rule id is already used in this list";
+
+/**
+ * Duplicate `id`s inside one submitted Targeting Rule list. Paths are relative
+ * to the request body object so the route input wrapper can prefix `body`.
+ */
+export function targetingRuleDuplicateIdIssues(
+  rules: ReadonlyArray<{ id: string }>,
+): Array<{ path: Array<string | number>; message: string }> {
+  const seen = new Set<string>();
+  const issues: Array<{ path: Array<string | number>; message: string }> = [];
+  for (const [index, rule] of rules.entries()) {
+    if (seen.has(rule.id)) {
+      issues.push({
+        path: ["targetingRules", index, "id"],
+        message: TARGETING_RULE_ID_DUPLICATE_MESSAGE,
+      });
+      continue;
+    }
+    seen.add(rule.id);
+  }
+  return issues;
+}
+
+const TargetingRulesListSchema = z.array(TargetingRuleSchema).superRefine((rules, ctx) => {
+  for (const issue of targetingRuleDuplicateIdIssues(rules)) {
+    ctx.addIssue({
+      code: "custom",
+      // Paths from the helper are relative to the request body; this refine
+      // sits on the array, so drop the `targetingRules` prefix.
+      path: issue.path.slice(1),
+      message: issue.message,
+    });
+  }
+});
+
 export const ReplaceTargetingRulesRequestSchema = z
   .object({
-    targetingRules: z.array(TargetingRuleSchema),
+    targetingRules: TargetingRulesListSchema,
     review: InlineApproveAndApplyReviewSchema.optional(),
     idempotency_key: z.string().min(1),
   })

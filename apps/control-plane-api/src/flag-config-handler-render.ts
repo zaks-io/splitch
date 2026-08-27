@@ -3,7 +3,12 @@ import type { Principal } from "@splitch/worker-runtime";
 import type { ConfigStoreWriter } from "./config-store";
 import type { FlagConfigActor } from "./config-store-types";
 import { variantNotAvailable } from "./experiment-errors";
-import { flagConfigNotFound, flagSegmentNotFound, rolloutAmbiguous } from "./flag-config-errors";
+import {
+  flagConfigNotFound,
+  flagSegmentNotFound,
+  rolloutAmbiguous,
+  targetingRuleIdConflict,
+} from "./flag-config-errors";
 import { runFrozenResponse } from "./flag-config-run-freeze";
 
 /**
@@ -87,6 +92,9 @@ export function renderFlagConfigWriteResult(
   if (result.reason === "SEGMENT_NOT_FOUND") {
     return flagSegmentNotFound(result.missingSegmentIds, requestId);
   }
+  if (result.reason === "TARGETING_RULE_ID_CONFLICT") {
+    return targetingRuleIdConflict(result.targetingRules, requestId);
+  }
   if (result.reason === "RUN_FROZEN") return runFrozenResponse(result, requestId);
   // Direct writers never produce APPROVAL_NOT_APPLIED, CHANGED_FIELDS_UNDETERMINED,
   // or APPROVAL_EMPTY_CHANGE.
@@ -111,6 +119,9 @@ export function renderPromotionResult(
   }
   if (result.reason === "SEGMENT_NOT_FOUND") {
     return flagSegmentNotFound(result.missingSegmentIds, requestId);
+  }
+  if (result.reason === "TARGETING_RULE_ID_CONFLICT") {
+    return targetingRuleIdConflict(result.targetingRules, requestId);
   }
   if (result.reason === "RUN_FROZEN") return runFrozenResponse(result, requestId);
   // Direct writers never produce APPROVAL_NOT_APPLIED, CHANGED_FIELDS_UNDETERMINED,

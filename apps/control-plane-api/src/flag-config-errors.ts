@@ -1,4 +1,6 @@
+import { type TargetingRule, targetingRuleDuplicateIdIssues } from "@splitch/contracts";
 import { renderError } from "@splitch/worker-runtime";
+import { validationErrors } from "./flag-definition-errors";
 
 /**
  * Refusals specific to a Flag Configuration write.
@@ -46,5 +48,23 @@ export function flagSegmentNotFound(missingSegmentIds: string[], requestId: stri
       details: { missingSegmentIds },
     },
     { requestId },
+  );
+}
+
+export function targetingRuleIdConflict(rules: TargetingRule[], requestId: string): Response {
+  const issues = targetingRuleDuplicateIdIssues(rules).map((issue) => ({
+    path: ["body", ...issue.path.map(String)],
+    message: issue.message,
+  }));
+  return validationErrors(
+    requestId,
+    issues.length > 0
+      ? issues
+      : [
+          {
+            path: ["body", "targetingRules"],
+            message: "Targeting Rule id already exists in this Flag Configuration",
+          },
+        ],
   );
 }

@@ -227,6 +227,8 @@ export {
   CreateSegmentRequestSchema,
   type PatchSegmentRequest,
   PatchSegmentRequestSchema,
+  TARGETING_RULE_ID_DUPLICATE_MESSAGE,
+  targetingRuleDuplicateIdIssues,
 } from "./routes/route-shapes";
 export {
   type ApprovalApplicationResult,

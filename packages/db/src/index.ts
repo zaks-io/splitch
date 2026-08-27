@@ -29,6 +29,7 @@ export type {
   VariantFrozenChange,
   VariantRunFreeze,
 } from "./repo/flag-variant-run-freeze";
+export type { ReplaceTargetingRulesResult } from "./repo/flag-config-ops";
 export type { CreateFlagResult } from "./repo/flags";
 export type {
   ApprovalCommit,

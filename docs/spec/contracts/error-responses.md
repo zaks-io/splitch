@@ -541,7 +541,11 @@ under an API Key `verify` returns the full reason (ADR-0037). The mapping from H
 
 - `RUN_FROZEN` — if a running Experiment owns this Flag in this Environment. Same ordering: ahead of the
   Environment Policy gate.
-- `VARIANT_NOT_AVAILABLE` / `FLAG_NOT_FOUND` / `VALIDATION_ERROR`
+- `VALIDATION_ERROR` — repeated Targeting Rule `id`s in the submitted list, named at
+  `["body", "targetingRules", N, "id"]`. Checked before the Environment Policy gate so an invalid
+  list never becomes a pending Approval Request. A persist uniqueness race on
+  `(app_id, environment_id, flag_id, id)` is the same code, never `INTERNAL_SERVER_ERROR`.
+- `VARIANT_NOT_AVAILABLE` / `FLAG_NOT_FOUND`
 
 **POST /apps/:appId/envs/:environmentId/flags/:flagKey/test-eval** (dry-run, control-plane token)
 

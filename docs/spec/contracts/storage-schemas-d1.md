@@ -356,7 +356,7 @@ malformed value is corrupt config, not "no rollout", so reads fail loud rather t
 
 | Column               | Type        | Constraints                                                     |
 | -------------------- | ----------- | --------------------------------------------------------------- |
-| `id`                 | text        | PK                                                              |
+| `id`                 | text        | not null; unique with `(app_id, environment_id, flag_id)`       |
 | `app_id`             | text        | FK → apps, not null                                             |
 | `environment_id`     | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027) |
 | `flag_id`            | text        | FK → flags, not null                                            |
@@ -367,6 +367,11 @@ malformed value is corrupt config, not "no rollout", so reads fail loud rather t
 | `percentage_rollout` | text        | nullable (JSON PercentageRollout)                               |
 | `created_at`         | timestamptz | not null                                                        |
 | `updated_at`         | timestamptz | not null                                                        |
+
+UNIQUE constraint: `(app_id, environment_id, flag_id, id)`. Targeting Rule identity is one Flag
+Configuration, so the same `id` may exist on another Flag or on the same Flag in another Environment.
+Selected targeting Promotion therefore preserves each source rule `id` in the target Environment.
+A repeated `id` inside one Flag Configuration is a uniqueness violation, not a global id collision.
 
 `conditions` may be empty only when `segment_id` is present. Publication resolves the Segment and
 AND-merges its Conditions with this direct array; the authoring reference remains in D1 across

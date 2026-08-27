@@ -2,6 +2,26 @@ import { describe, expect, it } from "vitest";
 import { createLocalD1, RESET_TABLES } from "./repo/test-d1-pool";
 
 describe("applied D1 schema", () => {
+  it("scopes Targeting Rule identity to one Flag Configuration", async () => {
+    const local = await createLocalD1();
+    try {
+      const columns = await local.d1
+        .prepare("PRAGMA table_info('targeting_rules')")
+        .all<{ name: string; pk: number }>();
+      expect(columns.results.find((column) => column.name === "id")).toMatchObject({ pk: 0 });
+      const indexes = await local.d1
+        .prepare("PRAGMA index_list('targeting_rules')")
+        .all<{ name: string; unique: number }>();
+      expect(indexes.results).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "targeting_rules_scope_id_unique", unique: 1 }),
+        ]),
+      );
+    } finally {
+      await local.dispose();
+    }
+  });
+
   it("retains a nullable same-App Segment foreign key with restrictive delete", async () => {
     const local = await createLocalD1();
     try {
@@ -14,6 +34,9 @@ describe("applied D1 schema", () => {
       const foreignKeys = await local.d1
         .prepare("PRAGMA foreign_key_list('targeting_rules')")
         .all<{ table: string; from: string; to: string; on_delete: string }>();
+      expect(columns.results.find((column) => column.name === "id")).toMatchObject({
+        notnull: 1,
+      });
       expect(foreignKeys.results).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
