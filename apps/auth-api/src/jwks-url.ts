@@ -81,7 +81,8 @@ function hostError(url: URL): JwksUrlParse | null {
   if (ipv6 !== null) {
     return isBlockedIPv6(ipv6) ? fail("jwks_uri host is not allowed") : null;
   }
-  return null;
+  // A colon in hostname is an IPv6 literal. If we cannot classify it, fail closed.
+  return host.includes(":") ? fail("jwks_uri host is not allowed") : null;
 }
 
 function fail(error: string): JwksUrlParse {
@@ -200,10 +201,40 @@ function isUnspecifiedOrLoopback6(groups: number[]): boolean {
 }
 
 function embedsBlockedIPv4(groups: number[]): boolean {
-  if (!isIpv4Mapped(groups) && !isIpv4Translated(groups)) return false;
-  const sixth = groups[6] ?? 0;
-  const seventh = groups[7] ?? 0;
-  return isBlockedIPv4(((sixth << 16) | seventh) >>> 0);
+  const embedded = embeddedIPv4(groups);
+  return embedded !== null && isBlockedIPv4(embedded);
+}
+
+function embeddedIPv4(groups: number[]): number | null {
+  if (isLast32BitIpv4Embedding(groups) || isIpv4Mapped(groups) || isIpv4Translated(groups)) {
+    return ipv4FromLast32(groups);
+  }
+  if (isNat64(groups)) return ipv4FromLast32(groups);
+  if ((groups[0] ?? 0) !== 0x2002) return null;
+  return ipv4FromHextets(groups[1] ?? 0, groups[2] ?? 0);
+}
+
+function ipv4FromLast32(groups: number[]): number {
+  return ipv4FromHextets(groups[6] ?? 0, groups[7] ?? 0);
+}
+
+function ipv4FromHextets(high: number, low: number): number {
+  return ((high << 16) | low) >>> 0;
+}
+
+function isLast32BitIpv4Embedding(groups: number[]): boolean {
+  return groups.slice(0, 6).every((group) => group === 0);
+}
+
+function isNat64(groups: number[]): boolean {
+  return (
+    groups[0] === 0x64 &&
+    groups[1] === 0xff9b &&
+    groups[2] === 0 &&
+    groups[3] === 0 &&
+    groups[4] === 0 &&
+    groups[5] === 0
+  );
 }
 
 function isIpv4Mapped(groups: number[]): boolean {

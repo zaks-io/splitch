@@ -260,6 +260,7 @@ describe("trusted-idp JWKS URL policy", () => {
       "https://idp.example.com/jwks#frag",
       "https://127.0.0.1/jwks",
       "https://[::1]/jwks",
+      "https://[::127.0.0.1]/jwks",
       "https://169.254.169.254/jwks",
       "https://10.0.0.1/jwks",
       "https://192.168.1.1/jwks",

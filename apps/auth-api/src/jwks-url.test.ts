@@ -55,6 +55,12 @@ describe("JWKS URL policy", () => {
       "https://[::ffff:127.0.0.1]/jwks",
       "https://[::ffff:169.254.169.254]/jwks",
       "https://[::ffff:10.0.0.1]/jwks",
+      "https://[::127.0.0.1]/jwks",
+      "https://[::7f00:1]/jwks",
+      "https://[::a00:1]/jwks",
+      "https://[::a9fe:a9fe]/jwks",
+      "https://[64:ff9b::127.0.0.1]/jwks",
+      "https://[2002:7f00:1::]/jwks",
     ]) {
       expect(jwksUrlError(url), url).toBe("jwks_uri host is not allowed");
     }
