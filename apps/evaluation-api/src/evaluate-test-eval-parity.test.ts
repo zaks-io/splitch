@@ -1,47 +1,48 @@
 import {
+  type ErrorResponse,
   EvaluationContextSchema,
   experimentConfigKey,
   flagConfigKey,
-  type ErrorResponse,
   type TestEvaluationResponse,
 } from "@splitch/contracts";
 import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
-import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import { createApp } from "./app";
+import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import { makeDataPlaneAuthResolver } from "./data-plane-auth";
+import { evaluatePath } from "./evaluate/evaluate-path";
+import {
+  APP_ID,
+  baseInput,
+  ENVIRONMENT_ID,
+  EXPERIMENT_ID,
+  experimentConfig,
+  FLAG_KEY,
+  flagConfig,
+  RecordingAssignmentStore,
+  RecordingProvider,
+  targetingRule,
+} from "./evaluate/evaluate-path-test-fixtures";
 import {
   MISSING_ATTR_PARITY_CASES,
   PARITY_BASELINE_ROLLOUT,
   PARITY_PLAN_RULE_ID,
+  PARITY_ROLES_RULE_ID,
   type ParityAttributes,
 } from "./evaluate-test-eval-parity-cases";
-import { evaluatePath } from "./evaluate/evaluate-path";
-import {
-  APP_ID,
-  ENVIRONMENT_ID,
-  EXPERIMENT_ID,
-  FLAG_KEY,
-  RecordingAssignmentStore,
-  RecordingProvider,
-  baseInput,
-  experimentConfig,
-  flagConfig,
-  targetingRule,
-} from "./evaluate/evaluate-path-test-fixtures";
+import { RecordingExposureIngestSink } from "./exposure-redemption";
+import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 import { FakeKv } from "./provider/fake-kv";
 import { experimentConfigKV, flagConfigKV } from "./provider/fixtures";
 import { KvProvider } from "./provider/kv-provider";
 import {
   CLIENT_KEY,
+  makeSdkRouteHarness,
   RecordingEvaluationCommitSink,
   RecordingEvaluationUsageSink,
   RecordingExposureSink,
-  makeSdkRouteHarness,
   sdkRouteInit,
 } from "./sdk-route-test-fixtures";
-import { RecordingExposureIngestSink } from "./exposure-redemption";
-import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 
 const TEST_EVAL_PATH = `/apps/${APP_ID}/envs/${ENVIRONMENT_ID}/flags/${FLAG_KEY}/test-eval`;
 const EVALUATE_PATH = "/api/sdk/evaluate";
@@ -69,8 +70,33 @@ const controlPlaneAuthResolver: AuthResolver = (request) => {
   return { ok: false, reason: "UNAUTHORIZED" };
 };
 
-function wireAttributes(attributes: ParityAttributes): Record<string, string | number | boolean> {
-  const out: Record<string, string | number | boolean> = {};
+type WireAttributes = Record<
+  string,
+  string | number | boolean | ReadonlyArray<string | number | boolean>
+>;
+
+function planParityRules() {
+  return [
+    targetingRule({
+      id: PARITY_PLAN_RULE_ID,
+      conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
+      variantId: "v-treatment",
+    }),
+  ];
+}
+
+function rolesParityRules() {
+  return [
+    targetingRule({
+      id: PARITY_ROLES_RULE_ID,
+      conditions: [{ attribute: "roles", operator: "in", value: ["admin"] }],
+      variantId: "v-treatment",
+    }),
+  ];
+}
+
+function wireAttributes(attributes: ParityAttributes): WireAttributes {
+  const out: WireAttributes = {};
   for (const [key, value] of Object.entries(attributes)) {
     if (value === null) {
       throw new Error(`parity http case must not carry null attribute "${key}"`);
@@ -80,37 +106,25 @@ function wireAttributes(attributes: ParityAttributes): Record<string, string | n
   return out;
 }
 
-function parityFlag() {
+function parityFlag(targetingRules = planParityRules()) {
   return flagConfig({
     experimentId: EXPERIMENT_ID,
     rollout: { ...PARITY_BASELINE_ROLLOUT },
-    targetingRules: [
-      targetingRule({
-        id: PARITY_PLAN_RULE_ID,
-        conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
-        variantId: "v-treatment",
-      }),
-    ],
+    targetingRules,
   });
 }
 
-function parityFlagKv() {
+function parityFlagKv(targetingRules = planParityRules()) {
   return flagConfigKV({
     experimentId: EXPERIMENT_ID,
     rollout: { ...PARITY_BASELINE_ROLLOUT },
-    targetingRules: [
-      targetingRule({
-        id: PARITY_PLAN_RULE_ID,
-        conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
-        variantId: "v-treatment",
-      }),
-    ],
+    targetingRules,
   });
 }
 
-async function makeParityHttpHarness() {
+async function makeParityHttpHarness(targetingRules = planParityRules()) {
   const configKv = new FakeKv()
-    .put(flagConfigKey(APP_ID, ENVIRONMENT_ID, FLAG_KEY), parityFlagKv())
+    .put(flagConfigKey(APP_ID, ENVIRONMENT_ID, FLAG_KEY), parityFlagKv(targetingRules))
     .put(
       experimentConfigKey(APP_ID, ENVIRONMENT_ID, EXPERIMENT_ID),
       experimentConfigKV({ liveRunId: null, status: "draft" }),
@@ -122,13 +136,7 @@ async function makeParityHttpHarness() {
     flagOverrides: {
       experimentId: EXPERIMENT_ID,
       rollout: { ...PARITY_BASELINE_ROLLOUT },
-      targetingRules: [
-        targetingRule({
-          id: PARITY_PLAN_RULE_ID,
-          conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
-          variantId: "v-treatment",
-        }),
-      ],
+      targetingRules,
     },
   });
 
@@ -159,6 +167,59 @@ async function makeParityHttpHarness() {
   });
 
   return { app };
+}
+
+async function assertHttpParity(
+  app: Awaited<ReturnType<typeof makeParityHttpHarness>>["app"],
+  attributes: WireAttributes,
+  expected: {
+    variantName: string;
+    value: boolean;
+    reasonType: "rule_matched" | "baseline_rollout";
+  },
+) {
+  const testEvalRes = await app.request(TEST_EVAL_PATH, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${CONTROL_PLANE_TOKEN}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      evaluationContext: {
+        targetingKey: "user-parity",
+        idType: "user",
+        attributes,
+      },
+    }),
+  });
+  const evaluateRes = await app.request(
+    EVALUATE_PATH,
+    sdkRouteInit(
+      CLIENT_KEY,
+      {},
+      {
+        targetingKey: "user-parity",
+        idType: "user",
+        attributes,
+      },
+    ),
+  );
+
+  expect(testEvalRes.status).toBe(200);
+  expect(evaluateRes.status).toBe(200);
+
+  const testEvalBody = (await testEvalRes.json()) as TestEvaluationResponse;
+  const evaluateBody = (await evaluateRes.json()) as { variant: boolean };
+
+  expect(testEvalBody).toMatchObject({
+    variantName: expected.variantName,
+    value: expected.value,
+    reason: { type: expected.reasonType },
+  });
+  expect(evaluateBody).toEqual({ variant: expected.value });
+  // Public evaluate deliberately flattens reason detail (out of scope for
+  // SPL-303); parity here is success + resolved value, not reason wire shape.
+  expect(evaluateRes.headers.get("x-variant-name")).toBe(expected.variantName);
 }
 
 describe("test-eval ↔ evaluate missing-attribute parity (shared case table)", () => {
@@ -192,50 +253,20 @@ describe("test-eval ↔ evaluate missing-attribute parity (shared case table)", 
 
   it.each(httpCases)("$name — test-eval and evaluate agree", async (parityCase) => {
     const { app } = await makeParityHttpHarness();
-    const attributes = wireAttributes(parityCase.attributes);
+    await assertHttpParity(app, wireAttributes(parityCase.attributes), parityCase.expect);
+  });
 
-    const testEvalRes = await app.request(TEST_EVAL_PATH, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${CONTROL_PLANE_TOKEN}`,
-        "content-type": "application/json",
+  it("array-valued roles in [admin] matches on test-eval and evaluate", async () => {
+    const { app } = await makeParityHttpHarness(rolesParityRules());
+    await assertHttpParity(
+      app,
+      { roles: ["admin", "analyst"] },
+      {
+        variantName: "treatment",
+        value: true,
+        reasonType: "rule_matched",
       },
-      body: JSON.stringify({
-        evaluationContext: {
-          targetingKey: "user-parity",
-          idType: "user",
-          attributes,
-        },
-      }),
-    });
-    const evaluateRes = await app.request(
-      EVALUATE_PATH,
-      sdkRouteInit(
-        CLIENT_KEY,
-        {},
-        {
-          targetingKey: "user-parity",
-          idType: "user",
-          attributes,
-        },
-      ),
     );
-
-    expect(testEvalRes.status).toBe(200);
-    expect(evaluateRes.status).toBe(200);
-
-    const testEvalBody = (await testEvalRes.json()) as TestEvaluationResponse;
-    const evaluateBody = (await evaluateRes.json()) as { variant: boolean };
-
-    expect(testEvalBody).toMatchObject({
-      variantName: parityCase.expect.variantName,
-      value: parityCase.expect.value,
-      reason: { type: parityCase.expect.reasonType },
-    });
-    expect(evaluateBody).toEqual({ variant: parityCase.expect.value });
-    // Public evaluate deliberately flattens reason detail (out of scope for
-    // SPL-303); parity here is success + resolved value, not reason wire shape.
-    expect(evaluateRes.headers.get("x-variant-name")).toBe(parityCase.expect.variantName);
   });
 
   it("wire schema rejects null attribute values; absent keys are allowed", () => {
