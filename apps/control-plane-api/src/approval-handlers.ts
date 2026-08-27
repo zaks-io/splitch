@@ -111,6 +111,8 @@ async function listApprovalRequests(
     items: page.items,
     cursor: page.cursor,
     limit,
+    readLimit: limit,
+    readTruncated: page.cursor !== null,
     // Production lists merge D1 and Tinybird, so an exact count is not computed.
     // Pending/stale filters additionally resolve effective status after projection.
     // `index.ts` always passes an `archiveStore` (approvalArchiveStoreFromEnv

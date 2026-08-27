@@ -77,7 +77,7 @@ export function renderFlagConfigWriteResult(
   requestId: string,
   approvalRequest: ApprovalRequest | null,
 ): Response {
-  if (result.ok) return Response.json({ config: result.config, approvalRequest });
+  if (result.ok) return Response.json({ ...result.config, approvalRequest });
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);
   }
@@ -101,7 +101,7 @@ export function renderPromotionResult(
   approvalRequest: ApprovalRequest | null,
 ): Response {
   if (result.ok) {
-    return Response.json({ config: result.config, diff: result.diff, approvalRequest });
+    return Response.json({ ...result.config, diff: result.diff, approvalRequest });
   }
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);

@@ -69,7 +69,7 @@ describe("flag-targeting-rules replace body stripping (SPL-296)", () => {
       {
         match: (request) => request.method === "PUT" && request.url.includes("/targeting-rules"),
         status: 200,
-        body: { config: flagConfigResponse, approvalRequest: null },
+        body: { ...flagConfigResponse, approvalRequest: null },
       },
     ]);
 

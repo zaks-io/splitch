@@ -119,7 +119,10 @@ test.describe("shared-preview functional API workflow", () => {
     const treatment = variant(flag, "treatment");
 
     const configMutation = await smoke.callTool<{
-      config: Record<string, unknown>;
+      flagId: string;
+      environmentId: string;
+      enabled: boolean;
+      availableVariantNames: string[];
       approvalRequest: unknown | null;
     }>(accessToken, "flag_config_update", {
       appId: smoke.config.smokeAppId,
@@ -131,12 +134,10 @@ test.describe("shared-preview functional API workflow", () => {
     });
     expect(configMutation).toMatchObject({
       approvalRequest: null,
-      config: {
-        flagId: smoke.config.smokeFlagId,
-        environmentId: smoke.config.smokeEnvironmentId,
-        enabled: true,
-        availableVariantNames: ["control", "treatment"],
-      },
+      flagId: smoke.config.smokeFlagId,
+      environmentId: smoke.config.smokeEnvironmentId,
+      enabled: true,
+      availableVariantNames: ["control", "treatment"],
     });
 
     await smoke.callTool(accessToken, "flag_targeting_rules_replace", {

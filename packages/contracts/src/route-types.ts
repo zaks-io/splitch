@@ -90,7 +90,10 @@ import { paginatedResponse } from "./wire-envelopes-core";
  */
 
 const ExperimentListResponseSchema = z.object({ items: z.array(ExperimentResponseSchema) });
-const ApprovalRequestListResponseSchema = paginatedResponse(ApprovalRequestSchema);
+const ApprovalRequestListResponseSchema = paginatedResponse(ApprovalRequestSchema).extend({
+  readTruncated: z.boolean(),
+  readLimit: z.number().int().positive(),
+});
 const DeletedResponseSchema = z.object({ deleted: z.literal(true) });
 
 type EventDefinitionPath = z.infer<typeof AppParams> & { eventDefinitionId: string };

@@ -114,7 +114,7 @@ describe("approval command exit codes", () => {
       {
         match: (request) => request.url.includes("/config") && request.method === "PATCH",
         status: 200,
-        body: { config: flagConfigResponse, approvalRequest: null },
+        body: { ...flagConfigResponse, approvalRequest: null },
       },
     ]);
 

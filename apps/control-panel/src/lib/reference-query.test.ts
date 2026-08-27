@@ -56,7 +56,7 @@ describe("reference Flag Configuration route query flow", () => {
     expect(queryClient.getQueryData(query.queryKey)).toEqual(initialConfig);
 
     readConfig = config({ version: 2, enabled: true });
-    resolveUpdate?.(Response.json({ config: readConfig, approvalRequest: null }));
+    resolveUpdate?.(Response.json({ ...readConfig, approvalRequest: null }));
 
     await expect(mutation).resolves.toEqual({
       ok: true,

@@ -81,6 +81,8 @@ interface ListBody {
   cursor: string | null;
   limit: number;
   total: number | null;
+  readLimit: number;
+  readTruncated: boolean;
 }
 
 /** Count the per-request projection reads the list handler performs. */
@@ -108,6 +110,8 @@ describe("Approval Request list paging", () => {
     expect(first.body.items).toHaveLength(2);
     expect(first.body.cursor).toBe(first.body.items[1]?.id);
     expect(first.body.total).toBeNull();
+    expect(first.body.readLimit).toBe(2);
+    expect(first.body.readTruncated).toBe(true);
 
     // Triple the table. The cost of the same page must not move: if the handler
     // materialized every request before slicing, this doubles or worse.

@@ -132,8 +132,17 @@ Keys are not auto-provisioned here; they are minted through the per-Environment 
 
 ### ListCredentialsResponse
 
-Returns `(APIKey | ClientKey)[]`. API Key responses never include a raw secret value. Client Key
-responses include `keyMaterial`.
+```
+{
+  items: (APIKey | ClientKey)[]
+  readTruncated: boolean
+  readLimit: positive integer
+}
+```
+
+API Key responses never include a raw secret value. Client Key responses include `keyMaterial`.
+`readTruncated` reports whether the bounded read omitted additional keys, and `readLimit` reports
+that bound — the same envelope `flags_list` already documents.
 
 ## Sources
 

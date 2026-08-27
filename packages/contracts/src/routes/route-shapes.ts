@@ -196,12 +196,14 @@ export const ReplaceTargetingRulesRequestSchema = z
   })
   .strict();
 
-export const FlagConfigMutationResponseSchema = z
-  .object({
-    config: FlagConfigResponseSchema,
-    approvalRequest: ApprovalRequestSchema.nullable(),
-  })
-  .strict();
+/**
+ * Write responses keep get's resource fields at the same paths and put
+ * side-channel data (`approvalRequest`, and `diff` on promote) alongside —
+ * never wrap the resource in `config` (SPL-451).
+ */
+export const FlagConfigMutationResponseSchema = FlagConfigResponseSchema.extend({
+  approvalRequest: ApprovalRequestSchema.nullable(),
+}).strict();
 
 // ---------------------------------------------------------------------------
 // Promotion (ADR-0028) — explicit ticked field-groups; absence = leave untouched.
@@ -223,11 +225,10 @@ export const PromoteRequestSchema = z
   })
   .strict();
 
-export const PromoteResponseSchema = z.object({
-  config: FlagConfigResponseSchema,
+export const PromoteResponseSchema = FlagConfigResponseSchema.extend({
   diff: z.object({ before: FlagConfigResponseSchema, after: FlagConfigResponseSchema }),
   approvalRequest: ApprovalRequestSchema.nullable(),
-});
+}).strict();
 
 // ---------------------------------------------------------------------------
 // Segments (no create/patch envelope; compose from the Condition leaf).

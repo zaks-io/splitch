@@ -205,7 +205,7 @@ function stubFlagsResponse(request: Request): Response {
     return promoteResponse();
   }
   if (isConfigWrite(pathname, request.method)) {
-    return Response.json({ config: flagConfig, approvalRequest: null });
+    return Response.json({ ...flagConfig, approvalRequest: null });
   }
   if (pathname.includes("/config")) return Response.json(flagConfig);
   if (pathname.includes("/variants")) {
@@ -219,7 +219,7 @@ function stubFlagsResponse(request: Request): Response {
 
 function promoteResponse(): Response {
   return Response.json({
-    config: flagConfig,
+    ...flagConfig,
     diff: { before: { ...flagConfig, enabled: false }, after: flagConfig },
     approvalRequest: null,
   });
@@ -233,7 +233,7 @@ function isConfigWrite(pathname: string, method: string): boolean {
 
 function variantResponse(method: string): Response {
   if (method === "PATCH") {
-    return Response.json({ flag: flagDefinition, approvalRequest: null });
+    return Response.json({ ...flagDefinition, approvalRequest: null });
   }
   return Response.json(flagDefinition);
 }

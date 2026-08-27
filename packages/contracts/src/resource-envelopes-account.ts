@@ -254,5 +254,9 @@ export type CreateCredentialResponse = z.infer<typeof CreateCredentialResponseSc
 
 export const ListCredentialsResponseSchema = z.object({
   items: z.array(CredentialSchema),
+  // Same bounded-list envelope as `flags_list`: a missing pair is
+  // indistinguishable from "the list is complete" (SPL-451, ADR-0036).
+  readTruncated: z.boolean(),
+  readLimit: z.number().int().positive(),
 });
 export type ListCredentialsResponse = z.infer<typeof ListCredentialsResponseSchema>;

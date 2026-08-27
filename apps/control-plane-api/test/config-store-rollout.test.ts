@@ -35,9 +35,7 @@ describe("baseline rollout on Flag Configuration", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       approvalRequest: null,
-      config: {
-        rollout: { percentage: 10, salt: expect.stringMatching(/^[0-9a-f]{16}$/) },
-      },
+      rollout: { percentage: 10, salt: expect.stringMatching(/^[0-9a-f]{16}$/) },
     });
   });
 
@@ -53,7 +51,7 @@ describe("baseline rollout on Flag Configuration", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toMatchObject({
         approvalRequest: null,
-        config: { rollout: { percentage, salt: minted?.salt } },
+        rollout: { percentage, salt: minted?.salt },
       });
     }
 
@@ -69,7 +67,8 @@ describe("baseline rollout on Flag Configuration", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       approvalRequest: null,
-      config: { enabled: true, rollout: before },
+      enabled: true,
+      rollout: before,
     });
   });
 
@@ -81,7 +80,7 @@ describe("baseline rollout on Flag Configuration", () => {
     expect(cleared.status).toBe(200);
     expect(await cleared.json()).toMatchObject({
       approvalRequest: null,
-      config: { rollout: null },
+      rollout: null,
     });
     expect(await storedRollout()).toBeNull();
 
@@ -171,7 +170,7 @@ describe("baseline rollout under Promotion", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
-      config: { rollout: { percentage: 75, salt: targetSaltBefore } },
+      rollout: { percentage: 75, salt: targetSaltBefore },
     });
     expect((await storedRollout())?.salt).not.toBe("dev-salt-abcdef01");
   });

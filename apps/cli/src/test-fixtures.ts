@@ -146,7 +146,7 @@ export const flagConfigResponse = {
 };
 
 export const promoteResponse = {
-  config: flagConfigResponse,
+  ...flagConfigResponse,
   diff: { before: flagConfigResponse, after: flagConfigResponse },
   approvalRequest: null,
 };

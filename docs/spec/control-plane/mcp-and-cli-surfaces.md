@@ -170,6 +170,12 @@ The CLI passes that Environment as `flags_list.environmentId`; it fails before t
 `--with-config` has no resolved Environment. `--env` without `--with-config` does not change the
 App-level response.
 
+`--json` envelopes are verb-class consistent: a get returns the resource bare, and the matching
+write returns those same fields at the same paths with `approvalRequest` alongside (never wrapped
+in `config` or `flag`). List commands — including `flags list`, `api-keys list`, and
+`approval-requests list` — return `{items, readLimit, readTruncated}` so a caller can tell a
+complete page from a truncated one.
+
 **Output and scripting:** every command accepts `--json` for machine-readable output (the same
 shape the MCP tool returns), so the CLI is pipe-able and an agent shelling out to the CLI parses one
 contract. Default output is indented, human-readable JSON plus exit codes. When a required scope is

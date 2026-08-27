@@ -62,7 +62,7 @@ export async function updateVariant(
     const applied = await deps.repo.flags.getFlag(loaded.value.scope, loaded.value.flag.id);
     if (!applied) return flagNotFound(args.requestId);
     return Response.json({
-      flag: await flagResponse(deps.repo, loaded.value.appId, applied),
+      ...(await flagResponse(deps.repo, loaded.value.appId, applied)),
       approvalRequest: replay.approvalRequest,
     });
   }
@@ -115,7 +115,7 @@ export async function updateVariant(
     const applied = await deps.repo.flags.getFlag(loaded.value.scope, loaded.value.flag.id);
     if (!applied) return flagNotFound(args.requestId);
     return Response.json({
-      flag: await flagResponse(deps.repo, loaded.value.appId, applied),
+      ...(await flagResponse(deps.repo, loaded.value.appId, applied)),
       approvalRequest: approval.approvalRequest,
     });
   }
@@ -137,7 +137,7 @@ export async function updateVariant(
   const updated = await deps.repo.flags.getFlag(loaded.value.scope, loaded.value.flag.id);
   if (!updated) return flagNotFound(args.requestId);
   return Response.json({
-    flag: await flagResponse(deps.repo, loaded.value.appId, updated),
+    ...(await flagResponse(deps.repo, loaded.value.appId, updated)),
     approvalRequest: null,
   });
 }
