@@ -38,6 +38,8 @@ function supportsConfirm(operationId: string): boolean {
     operationId === "flag_config_update" ||
     operationId === "flag_targeting_rules_replace" ||
     operationId === "flag_variants_update" ||
+    operationId === "flag_variants_create" ||
+    operationId === "segments_update" ||
     operationId === "experiments_start"
   );
 }

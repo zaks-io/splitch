@@ -223,6 +223,18 @@ describe("CreateVariantRequestSchema (Idempotency-Key route)", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("parses an optional inline review (SPL-455)", () => {
+    const request = CreateVariantRequestSchema.parse({
+      appId: "app_1",
+      flagId: "flag_1",
+      name: "treatment-b",
+      value: true,
+      review: { action: "approve_and_apply" },
+      idempotency_key: "idem-1",
+    });
+    expect(request.review?.action).toBe("approve_and_apply");
+  });
 });
 
 describe("PatchVariantRequestSchema (value is Run-frozen at the Worker)", () => {

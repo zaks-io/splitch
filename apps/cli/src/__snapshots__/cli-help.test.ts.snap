@@ -924,6 +924,7 @@ Flags:
   --name <name>            [type: string; default: none] Resource name.
   --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
 
@@ -934,6 +935,7 @@ Request body (--body-json):
   value            required  boolean | string | number | Record<string, unknown>
   isDefault        optional  boolean
   description      optional  string
+  review           optional  { action: "approve_and_apply" }
   idempotency_key  required  string
   Example:
     {"appId":"app_1","flagId":"flag_1","name":"name","value":true,"idempotency_key":"idem-1"}
@@ -950,6 +952,12 @@ Flags:
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
+
+Behavior:
+  This DELETE route does not accept --confirm (DELETE carries no request body).
+  Review a pending Approval Request, then apply it:
+  splitch approval-requests list
+  splitch approval-request-reviews create <id> --body-json '{"action":"approve_and_apply"}'
 
 Example:
   splitch flag-variants delete <flag-id-or-key> <variant-name> --json",
@@ -1016,6 +1024,12 @@ Flags:
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
+
+Behavior:
+  This DELETE route does not accept --confirm (DELETE carries no request body).
+  Review a pending Approval Request, then apply it:
+  splitch approval-requests list
+  splitch approval-request-reviews create <id> --body-json '{"action":"approve_and_apply"}'
 
 Example:
   splitch flags delete <flag-id-or-key> --json",
@@ -1482,6 +1496,7 @@ Flags:
   --name <name>            [type: string; default: none] Resource name.
   --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
 

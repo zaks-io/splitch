@@ -77,9 +77,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Louder remediation when the API refusal already names frozen fields.
  *
  * `commandSupportsConfirm` must be the invoking command's own
- * `CliCommandDefinition.supportsConfirm` (see command-registry.ts): only 5 of
- * the 9 operations that can answer APPROVAL_REVIEW_REQUIRED wire --confirm at
- * all, so the copy must not invite a retry the command can never honor.
+ * `CliCommandDefinition.supportsConfirm` (see command-registry.ts): 7 of the 9
+ * operations that can answer APPROVAL_REVIEW_REQUIRED wire --confirm; the two
+ * DELETE routes do not (no body), so the copy must not invite a retry those
+ * commands can never honor.
  */
 export function remediationForServerError(
   error: ErrorResponse,

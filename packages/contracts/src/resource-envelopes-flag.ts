@@ -134,6 +134,7 @@ export const CreateVariantRequestSchema = z
     value: VariantSchema.shape.value,
     isDefault: z.boolean().optional(),
     description: z.string().optional(),
+    review: InlineApproveAndApplyReviewSchema.optional(),
     idempotency_key: z.string().min(1),
   })
   .strict();
