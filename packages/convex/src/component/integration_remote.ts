@@ -76,5 +76,7 @@ function missingWriteScope(body: string): boolean {
   }
   if (parsed.code !== "INSUFFICIENT_SCOPES") return false;
   const held = parsed.details?.heldScopes;
-  return !Array.isArray(held) || !held.includes("data-plane:write");
+  // A refusal that never listed the held scopes names no cause. Reporting it
+  // verbatim beats sending the caller after a scope the response never blamed.
+  return Array.isArray(held) && !held.includes("data-plane:write");
 }

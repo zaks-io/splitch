@@ -19,7 +19,9 @@ npm install @splitch/cloudflare
 npm install --global @splitch/cli
 ```
 
-Node 24 or newer for the CLI that drives setup. The package itself runs in the Workers runtime.
+Node 24 or newer for the CLI that drives setup, and `pnpm` on your PATH: setup shells out to
+`pnpm exec wrangler`, so an npm- or yarn-only project needs pnpm installed before it can run.
+The package itself runs in the Workers runtime.
 
 ## Setup
 
@@ -63,7 +65,7 @@ Targeting Rules, baseline rollouts, live Experiments, and holdover replay.
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const enabled = await env.SPLITCH.evaluate("new-checkout", {
-      targetingKey: userId,
+      targetingKey: "customer-123",
       idempotencyKey: crypto.randomUUID(),
       defaultValue: false,
     });

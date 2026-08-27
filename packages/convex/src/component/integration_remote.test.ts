@@ -33,6 +33,17 @@ describe("installRejected", () => {
     expect(error.message).toBe(`install Convex integration failed with HTTP 409: ${body}`);
   });
 
+  it("reports a scope refusal that never listed the held scopes verbatim", () => {
+    const body = JSON.stringify({
+      code: "INSUFFICIENT_SCOPES",
+      message: "credential lacks scopes",
+    });
+
+    const error = installRejected(403, body);
+
+    expect(error.message).toBe(`install Convex integration failed with HTTP 403: ${body}`);
+  });
+
   it("reports a non-JSON body verbatim instead of guessing at a cause", () => {
     const error = installRejected(502, "<html>bad gateway</html>");
 

@@ -189,7 +189,7 @@ The full generated reference, rendered from the binary's own command registry, i
 | `sentry-installations`        | `create`, `get`, `list`, `delete`                                             |
 | `sentry-secret-rotations`     | `create`                                                                      |
 
-`splitch cloudflare setup` deploys the Cloudflare integration Worker into your own account; see
+`splitch cloudflare setup` deploys the Cloudflare integration Worker into your own Cloudflare account; see
 [`@splitch/cloudflare`](https://www.npmjs.com/package/@splitch/cloudflare). The `*-installations`
 groups are the operator view of integrations already installed in an Environment.
 

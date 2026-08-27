@@ -245,9 +245,9 @@ directly from an Action or HTTP Action when a request-time round-trip is what yo
 to mint Precomputed Evaluations for SSR hydration. See <https://splitch.dev/docs/sdk/convex>.
 
 The SDK's `track()` is the Action-side counterpart of this component's: it awaits the platform's
-answer and throws on rejection, where the component's commits a queued delivery inside your
-transaction and reports the outcome through `trackStatus`. Prefer the component's from a Mutation, so
-the Metric Event cannot survive a write that rolled back.
+answer and throws on rejection. The component's commits a queued delivery inside your transaction
+and reports the outcome through `trackStatus`. Prefer the component's from a Mutation, so the
+Metric Event cannot survive a write that rolled back.
 
 ## Links
 

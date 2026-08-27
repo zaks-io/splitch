@@ -21,14 +21,14 @@ runtimes.
 
 ### Export surface
 
-| Import                          | What it is                                                                 | Extra install  |
-| ------------------------------- | -------------------------------------------------------------------------- | -------------- |
-| `@splitch/sdk`                  | server client: `evaluate`, `peekVariant`, `verify`, `evaluateAll`, `track` | none           |
-| `@splitch/sdk/browser`          | static-context browser client with synchronous reads                       | none           |
-| `@splitch/sdk/react`            | `SplitchProvider` and the `useFlag` hooks                                  | `react`        |
-| `@splitch/sdk/sentry`           | mirror resolutions into Sentry's flag context                              | `@sentry/core` |
-| `@splitch/sdk/local-evaluation` | the local evaluator the Convex component runs on                           | `zod`          |
-| `@splitch/sdk/control-plane`    | typed control-plane client and contract schemas                            | `zod`          |
+| Import                          | What it is                                                                                    | Extra install  |
+| ------------------------------- | --------------------------------------------------------------------------------------------- | -------------- |
+| `@splitch/sdk`                  | server client: `evaluate`, `evaluateDetails`, `peekVariant`, `verify`, `evaluateAll`, `track` | none           |
+| `@splitch/sdk/browser`          | static-context browser client with synchronous reads                                          | none           |
+| `@splitch/sdk/react`            | `SplitchProvider` and the `useFlag` hooks                                                     | `react`        |
+| `@splitch/sdk/sentry`           | mirror resolutions into Sentry's flag context                                                 | `@sentry/core` |
+| `@splitch/sdk/local-evaluation` | the local evaluator the Convex component runs on                                              | `zod`          |
+| `@splitch/sdk/control-plane`    | typed control-plane client and contract schemas                                               | `zod`          |
 
 The three evaluation entrypoints (`.`, `./browser`, `./react`) bundle their
 implementation and pull in no runtime dependency, so adding the SDK to an app
@@ -199,6 +199,9 @@ request so the platform can deduplicate the Exposure.
   body) they return your `defaultValue` (or `false` when you gave none), log
   loudly through `logger.error`, and report `reason: "ERROR"` plus an
   `errorCode` in `ResolutionDetails`. Branch on `reason` when you need to react.
+  The one exception is your own `onResolution` reporter: it is called
+  synchronously and its exception is not caught, so it propagates out of the
+  evaluate call. That is deliberate, and covered under `onResolution` below.
 - The browser client has one throw: it resolves from the payload `init()`
   fetched, so `evaluate`, `evaluateDetails`, and the `useFlag` /
   `useFlagDetails` hooks throw `SDK_NOT_INITIALIZED` when read before `init()`
@@ -440,7 +443,7 @@ const splitch = createSplitchClient({
 `Sentry.featureFlagsIntegration()` is required; without it the reporter logs
 once and reports nothing rather than dropping resolutions quietly. Sentry's flag
 buffer stores booleans only, so a multivariate resolution is recorded as
-`` `${flagKey}:${variantName}` = true ``, which keeps two arms of one Flag from
+`` `${flagKey}:${variantName}` = true ``, which keeps two Variants of one Flag from
 colliding. A resolution with `reason: "ERROR"` is skipped: it served your Default
 Variant because evaluation failed, and recording it would claim a resolution that
 never happened.
