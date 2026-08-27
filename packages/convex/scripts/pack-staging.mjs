@@ -58,6 +58,8 @@ export function assertPackedTarball(tarballPath) {
     "package/dist/react/index.js",
     "package/dist/react/index.d.ts",
     "package/dist/component/convex.config.js",
+    "package/dist/component/integration_recovery.js",
+    "package/dist/component/integration_recovery.d.ts",
     "package/dist/component/_generated/component.d.ts",
   ]) {
     if (!listing.includes(required))
@@ -65,6 +67,9 @@ export function assertPackedTarball(tarballPath) {
   }
   if (listing.split("\n").some((file) => file.endsWith(".map"))) {
     throw new Error("packed @splitch/convex must not contain source maps");
+  }
+  if (listing.includes("package/dist/component/crons.")) {
+    throw new Error("packed @splitch/convex must not contain the removed cron module");
   }
   const manifest = JSON.parse(
     execFileSync("tar", ["-xOf", tarballPath, "package/package.json"], { encoding: "utf8" }),

@@ -57,9 +57,17 @@ export const completeCheckout = mutation({
 });
 ```
 
-Call `flags.install(ctx)` once from an Action after mounting the component. The callback is served at
+Call `flags.install(ctx)` from an Action after mounting the component and again after upgrading
+`@splitch/convex`. The installation request is idempotent. On upgrade, it starts one bounded adoption
+chain for Exposure delivery work created by the previous version, resumes stale configuration sync,
+and schedules retention for existing retained rows. The callback is served at
 `/integrations/splitch/configuration`. `SPLITCH_API_KEY` stays in the Convex deployment environment
 and must never be sent to browser code.
+
+Background recovery is activity-driven. Configuration nudges and new Exposure outbox rows schedule
+their own recovery mutations, which stop once the work is complete. Retained claims and terminal
+Exposure rows share one scheduled cleanup job set for the earliest expiry. The component registers
+no cron jobs and invokes nothing periodically while idle.
 
 Use `flags.deleteEntity(ctx, { targetingKey, idType })` inside a Mutation to remove one Entity's
 local holdovers and queued Exposures. `flags.uninstall(ctx)` revokes the remote installation before
