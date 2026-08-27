@@ -104,7 +104,7 @@ describe("ExperimentResults", () => {
 
     const html = renderToStaticMarkup(<ExperimentResults results={resultsFixture(stats)} />);
 
-    expect(html).toContain("Baseline (control) arm is missing from these results");
+    expect(html).toContain("Baseline (control) Variant is missing from these results");
     expect(html).not.toContain("at zero lift by definition");
     expect(html).not.toContain("0% by definition");
   });
@@ -124,7 +124,7 @@ describe("ExperimentResults", () => {
       />,
     );
 
-    expect(html).toContain("Baseline (analysis_control) arm is missing from these results");
+    expect(html).toContain("Baseline (analysis_control) Variant is missing from these results");
     expect(html).not.toContain("at zero lift by definition");
   });
 
@@ -161,7 +161,7 @@ describe("ExperimentResults", () => {
     expect(svg).not.toContain("−∞");
     // Legend matches what is drawn: the baseline row is present.
     expect(html).toContain("Baseline (control) at zero lift by definition");
-    expect(html).not.toContain("arm is missing from these results");
+    expect(html).not.toContain("Variant is missing from these results");
     // The table agrees with the plot: the baseline is an anchor, not a result
     // with an infinitely wide interval and a p-value of 1.
     expect(html).toContain("baseline, by definition");
@@ -201,7 +201,7 @@ describe("ExperimentResults warning states", () => {
 
     expect(html).toContain('data-testid="ship-blocked"');
     expect(html).toContain("Sample Ratio Mismatch is firing");
-    expect(html).toContain("Conclude and promote winner");
+    expect(html).toContain("Conclude and apply winner");
     expect(html).toMatch(/<button[^>]*\sdisabled=""/);
   });
 
@@ -268,7 +268,7 @@ describe("ExperimentResults warning states", () => {
       const buttons = html.match(/<button[\s\S]*?<\/button>/g) ?? [];
 
       expect(buttons).toHaveLength(1);
-      expect(buttons[0]).toContain("Conclude and promote winner");
+      expect(buttons[0]).toContain("Conclude and apply winner");
       expect(buttons[0]).toMatch(/\sdisabled=""/);
       expect(html).toContain("SPL-158");
     }

@@ -39,6 +39,19 @@ describe("context resolution", () => {
     expect(code).toBe(EXIT_SCOPE);
   });
 
+  it("exits EXIT_SCOPE when splitch use cannot resolve the requested scope", async () => {
+    const { dir, credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+
+    const code = await runCli(["use", "--env", "dev", "--json"], {
+      credentialPath,
+      cwd: dir,
+    });
+
+    // Documented in README and on splitch.dev/docs/cli: exit 3 is the scope class.
+    expect(code).toBe(EXIT_SCOPE);
+  });
+
   it("resolves App/Env from flags before env vars and config", async () => {
     const { dir, credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);

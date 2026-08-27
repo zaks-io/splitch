@@ -60,7 +60,7 @@ function ClaimRoute() {
         <section className="grid gap-2">
           <h1 className="font-semibold text-3xl text-foreground">Claim Organization</h1>
           <p className="text-muted-foreground">
-            Verify your email before this demo workspace expires {organization.demoExpiresAt}.
+            Verify your email before this demo Organization expires {organization.demoExpiresAt}.
           </p>
         </section>
         <Card>

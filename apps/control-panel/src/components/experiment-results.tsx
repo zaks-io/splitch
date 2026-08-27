@@ -39,7 +39,7 @@ export function ExperimentResults({ results }: { results: PanelExperimentResults
       <ExperimentResultsControlIntegrity control={results.control} resultsRendered={true} />
 
       <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
-        <h3 className="font-semibold text-base text-foreground">Lift by arm</h3>
+        <h3 className="font-semibold text-base text-foreground">Lift by Variant</h3>
         <p className="mt-1 mb-4 max-w-prose text-muted-foreground text-sm">
           Relative lift against {measurementAnchor}, with an always-valid confidence sequence.
           Checking mid-Run is safe: the interval already accounts for continuous peeking.

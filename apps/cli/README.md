@@ -144,7 +144,7 @@ Two more worth knowing:
 - `splitch flags list --with-config --env prod` includes each Flag's `enabled`, rollout, and
   Default Variant for that one Environment, so "which Flags are on here" is one call rather than one
   call per Flag.
-- `splitch apps delete <app> --dry-run` lists every delete blocker with its ID and the command that
+- `splitch apps delete --app <app> --dry-run` lists every delete blocker with its ID and the command that
   removes it, and deletes nothing. `--force` cascades the non-gated children in dependency order and
   stops with pending Approval Request IDs where Policy requires review.
 
@@ -199,7 +199,7 @@ An Environment can require review before a change applies. When it does, a mutat
 `APPROVAL_REVIEW_REQUIRED` and names the Approval Request it opened, rather than applying the change:
 
 ```text
-splitch approval-requests get <approval_request_id>
+splitch approval-requests get <id>
 ```
 
 Reruns with `--confirm` apply it if you hold approver rights. The commands that wire `--confirm` are

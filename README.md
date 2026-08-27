@@ -45,7 +45,7 @@ the series colors on the results plot. The mark is the product, not decoration.
 The full path from zero to a resolving Flag lives at
 **[splitch.dev/quickstart](https://splitch.dev/quickstart)**. The short version:
 
-**1. Install the CLI** (Node.js 20+):
+**1. Install the CLI** (Node.js 24+):
 
 ```bash
 npm install --global @splitch/cli
@@ -145,7 +145,7 @@ function Checkout() {
 ```
 
 Which methods fire an Exposure and which credential each one needs is the thing to get
-right up front: see [the five methods](https://splitch.dev/docs/sdk/methods) and
+right up front: see [the six methods](https://splitch.dev/docs/sdk/methods) and
 [credentials](https://splitch.dev/docs/sdk/credentials). The short rule: the public Client
 Key (`pk_…`) evaluates and may ship to clients; the secret API Key (`sk_…`) peeks and stays
 on a server.
@@ -209,7 +209,7 @@ docs/, infra/, e2e/, fixtures/, examples/
 
 ## Local development
 
-Requires **Node.js 20+** and **pnpm 11.8** (`corepack enable` picks up the pinned version
+Requires **Node.js 24+** and **pnpm 11.8** (`corepack enable` picks up the pinned version
 from `package.json`).
 
 ```bash

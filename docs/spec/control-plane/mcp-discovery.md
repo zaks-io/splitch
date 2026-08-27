@@ -1,7 +1,8 @@
 # MCP discovery: prompts and resources over the derived tools
 
 The derived tools (one per endpoint, [mcp-tool-derivation.md](../contracts/mcp-tool-derivation.md))
-give an agent the full capability surface, but a flat list of ~40 typed tools does not tell an
+give an agent the full capability surface, but a flat list of 85 typed tools (84 derived plus
+`context_use`) does not tell an
 agent **where to start**, **what order things go in**, or **what the nouns mean**. An agent
 landing on splitch cold should not have to infer the first-run sequence from tool schemas or read
 the docs site. This layer closes that: MCP **prompts** carry the canonical workflows, MCP
@@ -33,14 +34,14 @@ Prompts are the "how do I…" layer. Each is a named, parameterized template tha
 message sequence naming the exact derived tools to call, in order, with the active-context and
 verify steps built in. The agent gets a plan, then executes it with tools.
 
-| Prompt               | Arguments                                 | Returns a plan that…                                                                                                                                      |
-| -------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `onboard_new_app`    | `orgId`, `appName`                        | `apps_create` (provisions dev+prod Envs) → `context_use` (select dev) → `client_key_get` → `flags_create` → `flags_test_eval` using the returned Flag key |
-| `ship_a_flag`        | `flagKey`, `variants`                     | `flags_create` (App-level) → `flags_promote` into the active Env → `flags_test_eval` using `flagKey`                                                      |
-| `run_an_experiment`  | `flagId`, `variants`, `allocation`        | `flags_get` derives the key → `experiments_create` → `experiments_start` → `flags_test_eval` must return the started Run id → poll results                |
-| `end_a_run`          | `runId`, `experimentId`                   | `experiments_get` derives `flagId` → `flags_get` derives the key → `flags_test_eval` must return `runId` → `runs_end`                                     |
-| `recover_from_error` | `errorCode`, `details`, optional `flagId` | reads `details.recommendedAction`; `CREATE_NEW_RUN` requires `flagId`, and other actions ignore it (see Recovery below)                                   |
-| `diagnose_setup`     | `flagKey`                                 | resolve active App/Environment → `client_key_get` → `flags_test_eval` using `flagKey` → report what is and is not wired                                   |
+| Prompt               | Arguments                                 | Returns a plan that…                                                                                                                                                                                                                                                                      |
+| -------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onboard_new_app`    | `orgId`, `appName`                        | `apps_create` (provisions dev+prod Envs) → `context_use` (select dev) → `client_key_get` → `flags_create` → `flag_config_update` → `experiments_create` → `experiments_start` → `flags_test_eval` using the returned Flag key → `experiment_results_get` observes the first real Exposure |
+| `ship_a_flag`        | `flagKey`, `variants`                     | `flags_create` (App-level) → `flags_promote` into the active Env → `flags_test_eval` using `flagKey`                                                                                                                                                                                      |
+| `run_an_experiment`  | `flagId`, `variants`, `allocation`        | `flags_get` derives the key → `experiments_create` → `experiments_start` → `flags_test_eval` must return the started Run id → poll results                                                                                                                                                |
+| `end_a_run`          | `runId`, `experimentId`                   | `experiments_get` derives `flagId` → `flags_get` derives the key → `flags_test_eval` must return `runId` → `runs_end`                                                                                                                                                                     |
+| `recover_from_error` | `errorCode`, `details`, optional `flagId` | reads `details.recommendedAction`; `CREATE_NEW_RUN` requires `flagId`, and other actions ignore it (see Recovery below)                                                                                                                                                                   |
+| `diagnose_setup`     | `flagKey`                                 | resolve active App/Environment → `client_key_get` → `flags_test_eval` using `flagKey` → report what is and is not wired                                                                                                                                                                   |
 
 Notes:
 
@@ -55,10 +56,12 @@ Notes:
 - Every workflow prompt **ends on a real `verify` / `test_eval` round-trip**, so the agent's
   time-to-first-confidence is one call, on any tier (ADR-0037). A prompt never ends on "probably
   fine."
-- `onboard_new_app` uses the **data-plane** `flags_verify` step via the CLI/SDK credential path
-  (the Client Key it just fetched), because that is the credential the customer's code will hold;
-  the deeper `flags_test_eval` (control-plane, full reason) is used where rule identity matters.
-  This mirrors the tiered verification in ADR-0037.
+- `onboard_new_app` confirms wiring in-band with the control-plane `flags_test_eval` round trip
+  (full resolution reason, on the agent's own token) and completes on `experiment_results_get`
+  observing the first real, deduplicated Exposure. The **data-plane** `verify` under the Client Key
+  the App's code will hold is deliberately not an MCP tool (data-plane routes are not derived
+  tools), so that tier is exercised out-of-band by the first real SDK `evaluate` (or
+  `splitch flags verify` from the CLI). This mirrors the tiered verification in ADR-0037.
 - Prompts are advisory plans, not transactions. The agent may deviate; the Worker is still the
   guardian. A prompt that suggests `experiments_start` does not pre-authorize it — the Start still
   goes through Environment Policy confirmation (ADR-0029).
@@ -124,7 +127,7 @@ Agent connects to MCP server URL
   → readResource splitch://quickstart   (optional; the narrative)
   → getPrompt onboard_new_app { orgId, appName }   → a plan
   → executes the plan via derived tools (each Worker-validated)
-  → ends on flags_verify / flags_test_eval → green
+  → ends on flags_test_eval / experiment_results_get → green
 ```
 
 The agent never needs the docs site to onboard: the glossary, the auth model, its own scope, and

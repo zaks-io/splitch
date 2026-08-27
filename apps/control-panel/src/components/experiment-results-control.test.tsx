@@ -43,7 +43,7 @@ describe("ExperimentResults with an unidentifiable Control", () => {
   it("explains the unresolved Control and styles the recorded diagnostic value", () => {
     const html = unresolvableHtml();
 
-    expect(html).toContain("Control arm cannot be identified");
+    expect(html).toContain("Control Variant cannot be identified");
     expect(html).toContain("it is absent from the Variant set this Run froze");
     expect(html).toContain("control, treatment");
     expect(html).toContain(
@@ -84,7 +84,7 @@ describe("ExperimentResults with an unidentifiable Control", () => {
     expect(text).toContain(
       "Relative lift against control, with an always-valid confidence sequence.",
     );
-    expect(text).toContain("Relative lift and confidence interval per arm, against control.");
+    expect(text).toContain("Relative lift and confidence interval per Variant, against control.");
     expect(text).toContain("relative lift vs control (%)");
     expect(html).toContain('aria-label="Relative lift with confidence intervals against control"');
     expect(text).not.toContain("unidentified");
@@ -135,7 +135,7 @@ describe("ExperimentResults with an Analysis Control disagreement", () => {
     expect(html).toContain("The numbers below remain visible for diagnosis.");
     expect(html).toContain("Relative lift against legacy_checkout");
     expect(html).toContain(
-      "Relative lift and confidence interval per arm, against legacy_checkout.",
+      "Relative lift and confidence interval per Variant, against legacy_checkout.",
     );
     expect(html).toContain(
       'aria-label="Relative lift with confidence intervals against legacy_checkout"',
@@ -175,7 +175,7 @@ describe("ExperimentResults with an Analysis Control disagreement", () => {
     expect(html).toContain("<svg");
     expect(html).toContain('data-testid="ship-blocked"');
     expect(html).toContain("Analysis Control disagrees with the Run");
-    expect(html).toContain("Conclude and promote winner");
+    expect(html).toContain("Conclude and apply winner");
     expect(html).toMatch(/<button[^>]*\sdisabled=""/);
   });
 });

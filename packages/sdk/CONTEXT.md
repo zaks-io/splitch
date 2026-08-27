@@ -3,6 +3,16 @@
 Read this when touching `packages/sdk`, public runtime docs, evaluation accessors, or client key
 handling.
 
+## Implementation status
+
+The Web Analytics SDK surface (Web Track, Web Instrument, Web Instrumentation Adapter, Web Flush,
+the `web.sessionId` client option, and the bundled `web-vitals` / `@opentelemetry/api` adapters) is
+**specified but not implemented** in this package. Every `web.*` reference below describes the
+target contract owned by
+[`docs/spec/sdk/web-analytics-capture.md`](../../docs/spec/sdk/web-analytics-capture.md), not shipped
+exports or dependencies. There is currently no `web` client option, no `web.track()` /
+`web.instrument()` / `web.flush()`, and no Web Event queue in `@splitch/sdk`.
+
 ## Owns
 
 - Public data-plane SDK language.
@@ -14,9 +24,10 @@ handling.
 
 **Client Key**:
 The public, non-secret identifier a client-side SDK presents. It is safe to embed in shipped client
-code. It evaluates Flags and submits Metric Events and schema-defined Web Events for exactly
-one App in exactly one Environment. Its only write capabilities are the strictly validated,
-write-only `track()` and `web.track()` accessors, which reveal no Event Definition or configuration.
+code. It evaluates Flags and submits Metric Events for exactly
+one App in exactly one Environment. Its only write capability is the strictly validated,
+write-only `track()` accessor, which reveals no Event Definition or configuration. (The spec'd
+`web.track()` Web Event accessor would share this property once implemented.)
 It cannot read full flag config, Targeting Rules, salts, Metric Events, Web Events, mint keys, or
 reach another App.
 
