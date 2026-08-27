@@ -48,6 +48,39 @@ describe("remote JWKS signature verification", () => {
     );
   });
 
+  it("does not reuse a resolver across two fetch implementations for the same URI", async () => {
+    const trusted = await keypair("shared");
+    const uri = uniqueJwksUri();
+    const fetchA = vi.fn(async () => Response.json(trusted.jwks));
+    const fetchB = vi.fn(async () => Response.json(trusted.jwks));
+    const token = await sign(trusted, { sub: "shared" });
+
+    await expect(remoteJwksSignatureVerifier(uri, { fetch: fetchA }).verify(token)).resolves.toBe(
+      true,
+    );
+    await expect(remoteJwksSignatureVerifier(uri, { fetch: fetchB }).verify(token)).resolves.toBe(
+      true,
+    );
+    expect(fetchA).toHaveBeenCalledOnce();
+    expect(fetchB).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the default fetch partition distinct from a custom fetch", async () => {
+    const trusted = await keypair("default-partition");
+    const uri = uniqueJwksUri();
+    const defaultFetch = vi.fn(async () => Response.json(trusted.jwks));
+    const customFetch = vi.fn(async () => Response.json(trusted.jwks));
+    vi.stubGlobal("fetch", defaultFetch);
+    const token = await sign(trusted, { sub: "default-partition" });
+
+    await expect(remoteJwksSignatureVerifier(uri).verify(token)).resolves.toBe(true);
+    await expect(
+      remoteJwksSignatureVerifier(uri, { fetch: customFetch }).verify(token),
+    ).resolves.toBe(true);
+    expect(defaultFetch).toHaveBeenCalledOnce();
+    expect(customFetch).toHaveBeenCalledOnce();
+  });
+
   it("does not follow a JWKS redirect to another host", async () => {
     const trusted = await keypair("trusted");
     const fetchJwks = vi.fn(async () => {

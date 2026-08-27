@@ -24,11 +24,14 @@ export interface RemoteJwksSignatureVerifierOptions {
 }
 
 /**
- * Process-local remote JWKS resolvers keyed only by their trusted URI. A fresh
- * isolate refetches, which affects latency but never verification correctness.
- * The bound prevents a trusted-IdP catalog from growing isolate memory forever.
+ * Process-local remote JWKS resolvers keyed by normalized URI and fetch
+ * implementation. The default `fetch` shares one partition so first-party
+ * callers keep a stable cache. A custom fetch (tenant JWKS policy) must not
+ * inherit a resolver that was created with a different transport.
  */
 const remoteResolvers = new Map<string, RemoteJWKSet>();
+const fetchPartitions = new WeakMap<FetchImplementation, string>();
+let nextFetchPartition = 1;
 
 /**
  * Reuse jose's Cloudflare-aware remote resolver. It caches parsed keys, bounds
@@ -55,7 +58,8 @@ export function remoteJwksSignatureVerifier(
 }
 
 function remoteResolver(jwksUri: string, fetchImpl?: FetchImplementation): RemoteJWKSet {
-  const key = new URL(jwksUri).href;
+  const href = new URL(jwksUri).href;
+  const key = `${fetchPartition(fetchImpl)}\0${href}`;
   const existing = remoteResolvers.get(key);
   if (existing) {
     remoteResolvers.delete(key);
@@ -64,7 +68,7 @@ function remoteResolver(jwksUri: string, fetchImpl?: FetchImplementation): Remot
   }
 
   const resolver = createRemoteJWKSet(
-    new URL(key),
+    new URL(href),
     fetchImpl === undefined ? undefined : { [customFetch]: fetchImpl },
   );
   remoteResolvers.set(key, resolver);
@@ -75,4 +79,14 @@ function remoteResolver(jwksUri: string, fetchImpl?: FetchImplementation): Remot
     }
   }
   return resolver;
+}
+
+function fetchPartition(fetchImpl?: FetchImplementation): string {
+  if (fetchImpl === undefined) return "default";
+  const existing = fetchPartitions.get(fetchImpl);
+  if (existing !== undefined) return existing;
+  const id = `custom:${nextFetchPartition}`;
+  nextFetchPartition += 1;
+  fetchPartitions.set(fetchImpl, id);
+  return id;
 }
