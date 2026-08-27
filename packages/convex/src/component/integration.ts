@@ -16,6 +16,7 @@ import {
 } from "./integration_recovery";
 import {
   ensureTrailingSlash,
+  installRejected,
   normalizedEndpoint,
   requestHeaders,
   responseJson,
@@ -109,8 +110,8 @@ export const install = action({
       }),
       redirect: "error",
     });
-    const payload = await responseJson(response, "install Convex integration");
-    const parsed = ConvexInstallationSchema.parse(payload);
+    if (!response.ok) throw installRejected(response.status, await response.text());
+    const parsed = ConvexInstallationSchema.parse(await response.json());
     await ctx.runMutation(internal.integration.activate, {
       appId: parsed.appId,
       environmentId: parsed.environmentId,

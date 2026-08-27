@@ -6,7 +6,9 @@ import type {
 import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { hmacHex, stableUuid } from "./crypto";
-import { DELIVERY_LEASE_MS, scheduleDeliveryWatch } from "./exposure_delivery";
+import { DELIVERY_LEASE_MS } from "./delivery_policy";
+import { scheduleDeliveryWatch } from "./exposure_delivery";
+import { ensureRetentionScheduled } from "./retention";
 import { parseSnapshot } from "./snapshot";
 
 export async function purgeEntityBatch(
@@ -21,6 +23,16 @@ export async function purgeEntityBatch(
     )
     .first();
   if (inFlight)
+    throw new Error(
+      "ENTITY_DELIVERY_IN_PROGRESS: Retry deletion after the active delivery finishes",
+    );
+  const metricEventInFlight = await ctx.db
+    .query("metricEventOutbox")
+    .withIndex("by_entity_state", (q) =>
+      q.eq("idType", idType).eq("targetingKeyHash", targetingKeyHash).eq("state", "delivering"),
+    )
+    .first();
+  if (metricEventInFlight)
     throw new Error(
       "ENTITY_DELIVERY_IN_PROGRESS: Retry deletion after the active delivery finishes",
     );
@@ -43,9 +55,10 @@ export async function purgeEntityBatch(
       q.eq("idType", idType).eq("targetingKeyHash", targetingKeyHash),
     )
     .take(100);
+  const metricEventCount = await suppressMetricEvents(ctx, idType, targetingKeyHash);
   for (const row of outbox) await ctx.db.delete(row._id);
   for (const row of assignments) await ctx.db.delete(row._id);
-  if (assignments.length === 100 || outbox.length === 100) {
+  if (assignments.length === 100 || outbox.length === 100 || metricEventCount === 100) {
     await ctx.scheduler.runAfter(0, internal.evaluation.continueDeleteEntity, {
       idType,
       targetingKeyHash,
@@ -57,6 +70,34 @@ export async function purgeEntityBatch(
     .withIndex("by_entity", (q) => q.eq("idType", idType).eq("targetingKeyHash", targetingKeyHash))
     .unique();
   if (deletion) await ctx.db.delete(deletion._id);
+}
+
+async function suppressMetricEvents(
+  ctx: MutationCtx,
+  idType: string,
+  targetingKeyHash: string,
+): Promise<number> {
+  const rows = await ctx.db
+    .query("metricEventOutbox")
+    .withIndex("by_entity_state", (q) =>
+      q.eq("idType", idType).eq("targetingKeyHash", targetingKeyHash),
+    )
+    .take(100);
+  for (const row of rows) {
+    const claim = await ctx.db
+      .query("metricEventClaims")
+      .withIndex("by_event", (q) => q.eq("eventId", row.eventId))
+      .unique();
+    if (!claim) throw new Error(`Metric Event "${row.eventId}" is missing its idempotency claim`);
+    await ctx.db.patch(claim._id, {
+      state: "suppressed",
+      completedAt: Date.now(),
+      lastError: "Entity deletion suppressed delivery",
+    });
+    await ctx.db.delete(row._id);
+  }
+  if (rows.length > 0) await ensureRetentionScheduled(ctx);
+  return rows.length;
 }
 
 export async function runtimeState(ctx: QueryCtx | MutationCtx, context: EvaluationContext) {

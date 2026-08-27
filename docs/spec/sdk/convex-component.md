@@ -27,7 +27,10 @@ The component declares one required secret environment value, `SPLITCH_API_KEY`.
 mounted callback URL from `CONVEX_SITE_URL`. `install()` generates and privately stores the
 installation ID and webhook secret, registers them through the API-Key-only
 [Convex integration API](./convex-integration-api.md), and performs the first full sync. Missing or
-malformed credentials fail before any integration or config row is written.
+malformed credentials fail before any integration or config row is written. That Key must hold both
+`data-plane:evaluate` and `data-plane:write`: it authenticates Metric Event delivery too, and
+delivery runs after the caller's Mutation has committed, so an evaluate-only Key would fail every
+`track()` asynchronously and terminally. Install rejects it and names the missing scope.
 
 `install()` is an exact-retry-safe upgrade entrypoint as well as the initial installation call.
 After a package upgrade, rerunning it resumes stale configuration sync, schedules retention for
@@ -127,6 +130,19 @@ atomically creates the local holdover and Exposure outbox row described in
 perform an explicit mutation when the Variant is actually encountered, or use the browser SDK's
 Exposure Ticket flow.
 
+## Metric Events
+
+`track(ctx, eventName, event)` accepts Mutation context only and uses the same Metric Event request
+shape as `@splitch/sdk`: explicit Targeting Key, Entity type, caller-stable lowercase UUID `eventId`,
+fields, and Dimensions. It atomically claims the ID, writes a private outbox row, and schedules
+delivery alongside the caller's application writes. See
+[convex-metric-event-delivery.md](./convex-metric-event-delivery.md).
+
+Its `{ eventId, queued: true }` receipt proves local transactional durability, not remote schema
+acceptance. The synced component snapshot contains Flags and Experiment Runs, not Event Definitions,
+so the Event Ingest API remains authoritative asynchronously. `trackStatus(ctx, eventId)` exposes
+`queued`, `accepted`, `terminal`, `suppressed`, or `missing` without revealing Event payload values.
+
 ## React bindings
 
 `createSplitchReact(api.flags.resolve)` binds `useFlag` and `useFlagDetails` to an app-owned public
@@ -167,7 +183,7 @@ so the component can perform the same purge.
   Targeting Rules or assignment salts.
 - A generic webhook framework or a second configuration source. The signed callback is only a nudge
   to pull the authoritative snapshot.
-- An OpenFeature Provider surface in V1. The component exposes the four explicit Splitch accessors.
+- An OpenFeature Provider surface in V1. The component exposes explicit Splitch accessors.
 - Supporting arbitrary local-evaluation adapters before a second real adapter exists.
 
 ## Done

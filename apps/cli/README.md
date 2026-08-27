@@ -1,12 +1,12 @@
 # @splitch/cli
 
 The agent-first command-line interface for managing splitch Organizations, Apps, Environments,
-Flags, and Experiments. It exposes the same control-plane operations as the MCP server, with stable
-JSON output for scripts and agents.
+Flags, and Experiments. Every control-plane operation the MCP server exposes is a command here, under
+the same operation identity, with stable JSON output and stable exit codes for scripts and agents.
 
 ## Install
 
-`@splitch/cli` is published on npm and requires Node.js 20 or newer.
+`@splitch/cli` is published on npm and requires Node.js 24 or newer.
 It installs `@splitch/sdk` as its one Splitch runtime dependency.
 
 ```bash
@@ -68,7 +68,12 @@ The CLI login is separate from the credentials used by your application at runti
 
 Both credentials belong to one App and one Environment. Do not use an API Key in client-side code.
 New Client Keys start open to all origins so they work immediately. Lock the Client Key to your
-App's origins before production.
+App's origins with `splitch client-key update` before production.
+
+`splitch api-keys create --output-file <path>` writes the secret straight to a file at mode `0600`
+instead of putting it in your terminal scrollback and your shell history. It refuses an existing path
+before the key is minted, and the JSON it prints carries `valueWrittenTo` with a null `value`.
+
 The CLI's `flags verify` command fetches the selected Environment's Client Key and uses it for a
 non-exposing data-plane check; it does not use either SDK credential to log in to the control plane.
 
@@ -116,10 +121,39 @@ Pass `--app` and `--env` on an individual command when you do not want to persis
 `splitch context --json` to see who you are logged in as and the resolved App and Environment;
 with no session it exits `2` with `CLI_NOT_AUTHENTICATED` rather than reporting empty scope.
 
+## Working with JSON
+
+`--json` is the contract an agent should build on. On success stdout carries the operation's response
+body and nothing else; prose goes to stderr.
+
+List commands answer one envelope, so a truncated read is visible rather than inferred:
+
+```json
+{ "items": [], "readLimit": 200, "readTruncated": false, "cursor": null }
+```
+
+`readLimit` is 200. When `readTruncated` is `true` there is more to read; pass `cursor` back to
+continue. Never treat a full page as the whole set.
+
+Typed flags cover the common fields (`--key`, `--name`, `--variants`, `--enabled`, `--rollout`,
+`--targeting-key`, `--context-json`). Anything a route accepts that has no typed flag goes through
+`--body-json '<json>'`; `splitch <resource> <action> --help` prints that route's body schema.
+
+Two more worth knowing:
+
+- `splitch flags list --with-config --env prod` includes each Flag's `enabled`, rollout, and
+  Default Variant for that one Environment, so "which Flags are on here" is one call rather than one
+  call per Flag.
+- `splitch apps delete <app> --dry-run` lists every delete blocker with its ID and the command that
+  removes it, and deletes nothing. `--force` cascades the non-gated children in dependency order and
+  stops with pending Approval Request IDs where Policy requires review.
+
 ## Command map
 
 Run `splitch --help` for the root map, `splitch <resource> --help` for a resource group, or
 `splitch <resource> <action> --help` for typed flags, defaults, credential semantics, and an example.
+The full generated reference, rendered from the binary's own command registry, is at
+<https://splitch.dev/docs/cli>.
 
 | Command group                 | Actions                                                                       |
 | ----------------------------- | ----------------------------------------------------------------------------- |
@@ -127,13 +161,13 @@ Run `splitch --help` for the root map, `splitch <resource> --help` for a resourc
 | `use`, `context`, `health`    | Select scope, inspect scope, or check API health                              |
 | `orgs`                        | `list`, `create`, `get`, `update`                                             |
 | `organization-members`        | `list`, `add`, `update`, `remove`                                             |
+| `organization-usage`          | `get`                                                                         |
 | `apps`                        | `list`, `create`, `get`, `update`, `delete`                                   |
 | `app-members`                 | `list`, `add`, `update`, `remove`                                             |
+| `app-attention-rollup`        | `get`                                                                         |
 | `envs`                        | `list`, `create`, `get`, `update`, `delete`                                   |
 | `env-policy`                  | `get`, `set`                                                                  |
 | `environment-exposure-status` | `get`                                                                         |
-| `event-definitions`           | `list`, `create`, `get`, `update`                                             |
-| `event-definition-versions`   | `create`, `list`, `get`                                                       |
 | `flags`                       | `list`, `create`, `get`, `update`, `delete`, `promote`, `test-eval`, `verify` |
 | `flag-variants`               | `create`, `update`, `delete`                                                  |
 | `flag-config`                 | `get`, `update`                                                               |
@@ -142,20 +176,56 @@ Run `splitch --help` for the root map, `splitch <resource> --help` for a resourc
 | `experiments`                 | `list`, `create`, `get`, `update`, `start`, `delete`                          |
 | `runs`                        | `list`, `get`, `end`                                                          |
 | `metrics`                     | `list`, `create`, `get`, `update`, `delete`                                   |
+| `event-definitions`           | `list`, `create`, `get`, `update`                                             |
+| `event-definition-versions`   | `create`, `list`, `get`                                                       |
+| `experiment-results`          | `get`, `post`                                                                 |
 | `client-key`                  | `get`, `update`, `rotate`                                                     |
 | `api-keys`                    | `list`, `create`, `revoke`                                                    |
 | `approval-requests`           | `list`, `get`                                                                 |
 | `approval-request-reviews`    | `create`                                                                      |
-| `app-attention-rollup`        | `get`                                                                         |
-| `experiment-results`          | `get`, `post`                                                                 |
-| `organization-usage`          | `get`                                                                         |
+| `cloudflare`                  | `setup`, `status`, `remove`                                                   |
+| `cloudflare-installations`    | `list`, `revoke`                                                              |
+| `convex-installations`        | `list`, `revoke`                                                              |
+| `sentry-installations`        | `create`, `get`, `list`, `delete`                                             |
+| `sentry-secret-rotations`     | `create`                                                                      |
+
+`splitch cloudflare setup` deploys the Cloudflare integration Worker into your own Cloudflare account; see
+[`@splitch/cloudflare`](https://www.npmjs.com/package/@splitch/cloudflare). The `*-installations`
+groups are the operator view of integrations already installed in an Environment.
+
+## Approval Policies
+
+An Environment can require review before a change applies. When it does, a mutating command answers
+`APPROVAL_REVIEW_REQUIRED` and names the Approval Request it opened, rather than applying the change:
+
+```text
+splitch approval-requests get <approval_request_id>
+```
+
+Reruns with `--confirm` apply it if you hold approver rights. The commands that wire `--confirm` are
+`experiments start`, `flag-config update`, `flag-targeting-rules replace`, `flag-variants create`,
+`flag-variants update`, `flags promote`, and `segments update`. The two delete routes carry no body
+and cannot honor it, so they never suggest it.
 
 ## Errors and exit codes
 
-Every failure prints one line carrying a stable code, the cause, what to do, and a link:
+Every failure prints one line on stderr carrying a stable code, the cause, what to do, and a link:
 
 ```text
 CLI_SCOPE_UNRESOLVED: Cause: ... Remediation: ... Docs: https://splitch.dev/docs/error/CLI_SCOPE_UNRESOLVED
+```
+
+Under `--json` that same failure also lands on stdout as one object, so a caller piping to `jq` gets
+a refusal it can branch on instead of a sentence to regex:
+
+```json
+{
+  "code": "CLI_SCOPE_UNRESOLVED",
+  "message": "...",
+  "remediation": "...",
+  "docsUrl": "https://splitch.dev/docs/error/CLI_SCOPE_UNRESOLVED",
+  "details": null
+}
 ```
 
 Scripts branch on the exit code; the printed code says which failure within that class:
@@ -177,6 +247,7 @@ Every code the CLI, the SDK, and the API can emit has a page at
 Read the [public quickstart](https://splitch.dev/quickstart) for the complete path from authentication
 through the first real Exposure.
 
+- CLI reference: <https://splitch.dev/docs/cli>
 - Error catalog: <https://splitch.dev/docs#errors>
 - SDK guide: <https://splitch.dev/docs/sdk/install>
 - Machine-readable index: <https://splitch.dev/llms.txt>
