@@ -29,19 +29,20 @@ request guard. The package is shared plumbing, not a new capability boundary.
 
 Each route contract in `@splitch/contracts` carries:
 
-| Field         | Meaning                                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------------------------- |
-| `id`          | Stable route identifier for tests, MCP/CLI derivation, and guard assertions                                   |
-| `owner`       | Owning deploy unit: `control-plane-api`, `evaluation-api`, `event-ingest-api`, `analysis-api`, or `auth-api`  |
-| `method`      | HTTP method                                                                                                   |
-| `path`        | Canonical path template                                                                                       |
-| `input`       | Zod request schema for params, query, headers, and body                                                       |
-| `output`      | Zod success response schema                                                                                   |
-| `auth`        | Auth requirement: public, control-plane token, Client Key, API Key, internal Worker, or mixed data-plane key  |
-| `scopes`      | Required control-plane scopes, empty for public/data-plane routes                                             |
-| `rateLimit`   | Rate-limit class, such as `none`, `control-plane-actor`, `client-key`, `api-key`, or `anonymous-registration` |
-| `idempotency` | `none`, `optional`, or `required`                                                                             |
-| `errors`      | Allowed `ErrorCode` values for the route                                                                      |
+| Field              | Meaning                                                                                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `id`               | Stable route identifier for tests, MCP/CLI derivation, and guard assertions                                             |
+| `owner`            | Owning deploy unit: `control-plane-api`, `evaluation-api`, `event-ingest-api`, `analysis-api`, or `auth-api`            |
+| `method`           | HTTP method                                                                                                             |
+| `path`             | Canonical path template                                                                                                 |
+| `input`            | Zod request schema for params, query, headers, and body                                                                 |
+| `output`           | Zod success response schema                                                                                             |
+| `auth`             | Auth requirement: public, control-plane token, Client Key, API Key, internal Worker, or mixed data-plane key            |
+| `scopes`           | Required control-plane scopes, empty for public/data-plane routes                                                       |
+| `rateLimit`        | Rate-limit class, such as `none`, `control-plane-actor`, `client-key`, `api-key`, or `anonymous-registration`           |
+| `idempotency`      | `none`, `optional`, or `required`                                                                                       |
+| `rawBodyByteLimit` | Optional raw UTF-8 byte cap. Mutating JSON routes get 32 KiB (public/data-plane) or 1 MiB (control-plane) when omitted. |
+| `errors`           | Allowed `ErrorCode` values for the route                                                                                |
 
 Contracts stay pure: schemas, metadata, inferred types, and route definitions only. They do not
 import Hono app instances, repositories, Cloudflare bindings, or runtime helpers.
@@ -64,7 +65,15 @@ createRegistrar(deps).mount(contract, handler);
 The guard order is fixed for every mounted route:
 
 1. Attach request ID and observability context.
-2. Enforce the route contract's `RawBodyByteLimit` against raw body bytes when declared.
+2. Enforce a raw-body byte limit before buffering or parsing JSON. Mutating
+   routes use the contract's `rawBodyByteLimit` when present (including a
+   smaller or larger explicit cap). Otherwise the registrar applies 32 KiB for
+   untrusted/public/data-plane writes and 1 MiB for `control-plane-token`
+   writes, so Flag Configuration bodies that are already schema-legal above
+   32 KiB still parse. An oversized `Content-Length` is rejected without
+   reading the body; an oversized chunked body stops during the stream. GET
+   routes do not buffer a body. No mutating registrar route silently opts into
+   an unbounded buffer.
 3. Parse params, query, headers, and body with the route contract's Zod schemas.
 4. Resolve the principal through the Worker-provided auth resolver.
 5. Apply the route's rate-limit class. Missing or throwing rate-limit bindings fail closed for guarded routes.

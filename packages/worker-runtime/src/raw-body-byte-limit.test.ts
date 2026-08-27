@@ -1,7 +1,7 @@
-import type { ErrorResponse } from "@splitch/contracts";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import type { ErrorResponse } from "@splitch/contracts";
 import { createRegistrar } from "./registrar";
 import { deps, principal, route } from "./test-fixtures";
 
@@ -147,20 +147,6 @@ describe("registrar raw-body byte limit", () => {
     expect(handler).toHaveBeenCalledTimes(1);
     parse.mockRestore();
     expect(response.status).toBe(200);
-  });
-
-  it("does not impose a body limit on routes without registration metadata", async () => {
-    const handler = vi.fn(() => Response.json({ ok: true }));
-    const app = new Hono();
-    createRegistrar(deps()).mount(app, route({ input: z.any() }), handler);
-
-    const response = await app.request("/things", {
-      method: "POST",
-      body: "x".repeat(32 * 1024 + 1),
-    });
-
-    expect(response.status).toBe(200);
-    expect(handler).toHaveBeenCalledTimes(1);
   });
 });
 

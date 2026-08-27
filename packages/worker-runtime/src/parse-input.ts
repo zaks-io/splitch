@@ -89,6 +89,10 @@ async function readBody(
     return { ok: true, value: undefined, request };
   }
 
+  // Unbounded only for callers that opt out (GET/HEAD already returned, and
+  // standalone Auth/MCP/Event Ingest/Convex readers). The registrar never
+  // reaches this path for mutating JSON routes: it always passes
+  // rawBodyByteLimitFor(contract).
   if (rawBodyByteLimit === undefined) {
     return {
       ok: true,
