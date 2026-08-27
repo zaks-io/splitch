@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parse } from "yaml";
 
 const ACTION_FILENAMES = new Set(["action.yml", "action.yaml"]);
 const WORKFLOW_EXTENSIONS = new Set([".yml", ".yaml"]);
@@ -7,9 +8,7 @@ const FLOATING_PACKAGE =
   /(?:npm|pnpm|yarn|npx|pip|uv|cargo)\s+(?:install|add|exec)\s[^\n]*@[\^~*]|npm@[\^~]|npm@(?:latest|next)\b/;
 export const MUTABLE_INSTALLER = /curl[^\n]*\|\s*(?:ba)?sh\b/;
 const FULL_SHA = /^[0-9a-f]{40}$/;
-
 const ACTION_USES = /uses:\s+(\S+)/g;
-const RUN_KEY = /^(\s*(?:-\s+)?)(?:["']run["']|run):\s*(.*)$/;
 
 /**
  * Load composite actions and workflows GitHub executes (`.yml` and `.yaml`).
@@ -22,59 +21,32 @@ export function loadGithubCiFiles(githubRoot = ".github") {
 }
 
 /**
- * Collect every `run` mapping value, resolving plain, quoted, literal, and
- * folded YAML scalars. Block contents are consumed so a `run:` inside a script
- * is not treated as another key.
+ * Collect every resolved `run` string from a GitHub Actions YAML document.
  *
  * @param {string} source
  * @returns {string[]}
  */
 export function extractRunScripts(source) {
-  const scripts = [];
-  const lines = source.split(/\r?\n/);
-  let index = 0;
-  while (index < lines.length) {
-    const line = lines[index] ?? "";
-    if (!line.trim() || /^\s*#/.test(line)) {
-      index += 1;
-      continue;
-    }
-    const match = line.match(RUN_KEY);
-    if (!match) {
-      index += 1;
-      continue;
-    }
-    const parsed = readYamlScalar(match[2] ?? "", lines, index + 1, match[1].length);
-    if (parsed.value) scripts.push(parsed.value);
-    index = parsed.nextIndex;
-  }
-  return scripts;
+  return collectStringRuns(parseGithubYaml(source));
 }
 
-function jobBodies(source) {
-  return [
-    ...source.matchAll(/\n {2}([A-Za-z][\w-]*):\n([\s\S]*?)(?=\n {2}(?:#|[A-Za-z][\w-]*:\n)|$)/g),
-  ].map(([, name, body]) => ({ name, body }));
+/**
+ * Remove shell backslash-newline continuations so `curl … \` / `| sh`
+ * becomes one pipeline before installer detection.
+ *
+ * @param {string} script
+ * @returns {string}
+ */
+export function normalizeShellContinuations(script) {
+  return script.replace(/\\[ \t]*\r?\n/g, "");
 }
 
-function isPrivileged(workflow, job) {
-  return (
-    /id-token:\s*write/.test(workflow) ||
-    /id-token:\s*write/.test(job) ||
-    /environment:\s*production/.test(job) ||
-    /environment:\s*shared-preview/.test(job)
-  );
-}
-
-function isOidcEnabled(workflow, job) {
-  return /id-token:\s*write/.test(workflow) || /id-token:\s*write/.test(job);
-}
-
-function isPrivilegedFile(file) {
-  return (
-    file.kind === "action" ||
-    jobBodies(file.source).some((job) => isPrivileged(file.source, job.body))
-  );
+/**
+ * @param {string} script
+ * @returns {boolean}
+ */
+export function scriptHasMutableInstaller(script) {
+  return MUTABLE_INSTALLER.test(normalizeShellContinuations(script));
 }
 
 /**
@@ -90,11 +62,7 @@ export function mutableInstallerViolations(files) {
  * @returns {string[]}
  */
 export function floatingPackageViolations(files) {
-  return files.flatMap((file) =>
-    jobBodies(file.source)
-      .map((job) => floatingPackageViolationForJob(file, job))
-      .filter((violation) => violation !== null),
-  );
+  return files.flatMap(floatingPackageViolationsForFile);
 }
 
 /**
@@ -138,10 +106,64 @@ function extensionOf(filename) {
   return filename.slice(filename.lastIndexOf("."));
 }
 
+function parseGithubYaml(source) {
+  const document = parse(source);
+  if (!isPlainObject(document)) {
+    throw new Error("GitHub Actions YAML must parse to a mapping");
+  }
+  return document;
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function collectStringRuns(value, scripts = []) {
+  if (Array.isArray(value)) {
+    for (const item of value) collectStringRuns(item, scripts);
+    return scripts;
+  }
+  if (!isPlainObject(value)) return scripts;
+  if (typeof value.run === "string") scripts.push(value.run);
+  for (const child of Object.values(value)) collectStringRuns(child, scripts);
+  return scripts;
+}
+
+function parsedJobs(document) {
+  if (!isPlainObject(document.jobs)) return [];
+  return Object.entries(document.jobs).map(([name, job]) => ({ name, job }));
+}
+
+function hasIdTokenWrite(permissions) {
+  if (permissions === "write-all") return true;
+  return isPlainObject(permissions) && permissions["id-token"] === "write";
+}
+
+function environmentName(environment) {
+  if (typeof environment === "string") return environment;
+  return isPlainObject(environment) && typeof environment.name === "string" ? environment.name : "";
+}
+
+function jobIsOidc(document, job) {
+  return hasIdTokenWrite(document.permissions) || hasIdTokenWrite(job?.permissions);
+}
+
+function jobIsPrivileged(document, job) {
+  const name = environmentName(job?.environment);
+  return jobIsOidc(document, job) || name === "production" || name === "shared-preview";
+}
+
+function isPrivilegedFile(file, document) {
+  return (
+    file.kind === "action" || parsedJobs(document).some(({ job }) => jobIsPrivileged(document, job))
+  );
+}
+
 function mutableInstallerViolationsForFile(file) {
-  if (!isPrivilegedFile(file)) return [];
-  const violations = extractRunScripts(file.source)
-    .filter((script) => MUTABLE_INSTALLER.test(script))
+  const document = parseGithubYaml(file.source);
+  if (!isPrivilegedFile(file, document)) return [];
+  const violations = collectStringRuns(document)
+    .filter(scriptHasMutableInstaller)
     .map(() => `${file.name} pipes a remote installer to a shell`);
   if (/astral\.sh\/uv\/install/.test(file.source)) {
     violations.push(`${file.name} uses the mutable uv installer`);
@@ -149,11 +171,20 @@ function mutableInstallerViolationsForFile(file) {
   return violations;
 }
 
-function floatingPackageViolationForJob(file, job) {
-  if (!isOidcEnabled(file.source, job.body)) return null;
-  const texts = [job.body, ...extractRunScripts(job.body)];
-  if (!texts.some((text) => FLOATING_PACKAGE.test(text))) return null;
-  return `${file.name} job ${job.name} installs a floating package range`;
+function floatingPackageViolationsForFile(file) {
+  const document = parseGithubYaml(file.source);
+  return parsedJobs(document)
+    .map(({ name, job }) => floatingPackageViolationForJob(file, document, name, job))
+    .filter((violation) => violation !== null);
+}
+
+function floatingPackageViolationForJob(file, document, name, job) {
+  if (!jobIsOidc(document, job)) return null;
+  const hasFloating = collectStringRuns(job)
+    .map(normalizeShellContinuations)
+    .some((script) => FLOATING_PACKAGE.test(script));
+  if (!hasFloating) return null;
+  return `${file.name} job ${name} installs a floating package range`;
 }
 
 function actionPinViolations(name, source, match) {
@@ -173,111 +204,4 @@ function actionPinHasVersionComment(source, index) {
   const line = source.slice(0, index).split("\n").at(-1) ?? "";
   const rest = source.slice(index).split("\n")[0] ?? "";
   return /# v?\d/.test(`${line}${rest}`);
-}
-
-function readYamlScalar(raw, lines, nextIndex, keyIndent) {
-  const withoutComment = stripTrailingComment(raw.trimEnd());
-  const block = withoutComment.match(/^([|>])([+-]?)(\d*)$/);
-  if (block) {
-    return readBlockScalar(lines, nextIndex, keyIndent, block[1] ?? "|");
-  }
-  if (withoutComment.startsWith('"')) {
-    return { value: unquoteDouble(withoutComment), nextIndex };
-  }
-  if (withoutComment.startsWith("'")) {
-    return { value: unquoteSingle(withoutComment), nextIndex };
-  }
-  return readPlainScalar(withoutComment, lines, nextIndex, keyIndent);
-}
-
-function readPlainScalar(first, lines, nextIndex, keyIndent) {
-  const parts = [];
-  if (first) parts.push(first.trim());
-  let index = nextIndex;
-  while (index < lines.length) {
-    const line = lines[index] ?? "";
-    if (!line.trim() || /^\s*#/.test(line) || leadingSpaces(line) <= keyIndent) break;
-    parts.push(line.trim());
-    index += 1;
-  }
-  return { value: parts.join(" "), nextIndex: index };
-}
-
-function readBlockScalar(lines, start, keyIndent, style) {
-  const { collected, nextIndex } = collectBlockLines(lines, start, keyIndent);
-  const body = trimTrailingEmpty(collected);
-  return {
-    value: style === ">" ? foldBlock(body) : body.join("\n"),
-    nextIndex,
-  };
-}
-
-function collectBlockLines(lines, start, keyIndent) {
-  const collected = [];
-  let index = start;
-  let contentIndent = null;
-  while (index < lines.length) {
-    const line = lines[index] ?? "";
-    if (line.trim() === "") {
-      collected.push("");
-      index += 1;
-      continue;
-    }
-    if (leadingSpaces(line) <= keyIndent) break;
-    contentIndent ??= leadingSpaces(line);
-    collected.push(line.slice(Math.min(contentIndent, line.length)));
-    index += 1;
-  }
-  return { collected, nextIndex: index };
-}
-
-function trimTrailingEmpty(lines) {
-  const trimmed = [...lines];
-  while (trimmed.at(-1) === "") trimmed.pop();
-  return trimmed;
-}
-
-function foldBlock(lines) {
-  const paragraphs = [];
-  let current = [];
-  for (const line of lines) {
-    if (line === "") {
-      if (current.length > 0) {
-        paragraphs.push(current.join(" "));
-        current = [];
-      }
-      continue;
-    }
-    current.push(line.replace(/^\s+/, "").replace(/\s+$/, ""));
-  }
-  if (current.length > 0) paragraphs.push(current.join(" "));
-  return paragraphs.join("\n");
-}
-
-function stripTrailingComment(text) {
-  if (text.startsWith('"') || text.startsWith("'") || /^[|>]/.test(text.trim())) {
-    return text.trim();
-  }
-  const comment = text.match(/^(.*?)\s+#/);
-  return (comment?.[1] ?? text).trim();
-}
-
-function unquoteDouble(text) {
-  const match = text.match(/^"(.*)"\s*$/s);
-  if (!match) return text;
-  return (match[1] ?? "")
-    .replace(/\\n/g, "\n")
-    .replace(/\\t/g, "\t")
-    .replace(/\\"/g, '"')
-    .replace(/\\\\/g, "\\");
-}
-
-function unquoteSingle(text) {
-  const match = text.match(/^'(.*)'\s*$/s);
-  if (!match) return text;
-  return (match[1] ?? "").replace(/''/g, "'");
-}
-
-function leadingSpaces(line) {
-  return line.match(/^ */)?.[0].length ?? 0;
 }

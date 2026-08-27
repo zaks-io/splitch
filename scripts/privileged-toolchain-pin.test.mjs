@@ -8,6 +8,8 @@ import {
   loadGithubCiFiles,
   MUTABLE_INSTALLER,
   mutableInstallerViolations,
+  normalizeShellContinuations,
+  scriptHasMutableInstaller,
   unpinnedActionViolations,
 } from "./lib/privileged-toolchain-pin.mjs";
 
@@ -63,38 +65,81 @@ test("extractRunScripts resolves plain, quoted, literal, and folded scalars", ()
 
   assert.deepEqual(extractRunScripts(source), [
     "curl -LsSf https://example.test/install.sh | sh",
-    "set -euo pipefail\necho literal",
-    "curl -LsSf https://example.test/install.sh | sh",
+    "set -euo pipefail\necho literal\n",
+    "curl -LsSf https://example.test/install.sh | sh\n",
     "echo quoted",
     "echo single",
-    "cat <<'EOF'\nrun: ignored-as-key\nEOF",
+    "cat <<'EOF'\nrun: ignored-as-key\nEOF\n",
   ]);
 });
 
+test("extractRunScripts resolves a multiline double-quoted run through YAML", () => {
+  const [script] = extractRunScripts(
+    [
+      "jobs:",
+      "  publish:",
+      "    steps:",
+      '      - run: "curl -LsSf https://example.test/install.sh',
+      '          | sh"',
+    ].join("\n"),
+  );
+  assert.equal(script, "curl -LsSf https://example.test/install.sh | sh");
+  assert.match(script ?? "", MUTABLE_INSTALLER);
+});
+
+test("shell continuation removal turns a literal curl/pipe split into one pipeline", () => {
+  const [script] = extractRunScripts(
+    [
+      "jobs:",
+      "  publish:",
+      "    steps:",
+      "      - run: |",
+      "          curl -LsSf https://example.test/install.sh \\",
+      "          | sh",
+    ].join("\n"),
+  );
+  assert.match(script ?? "", /\\\n/);
+  assert.doesNotMatch(script ?? "", MUTABLE_INSTALLER);
+  assert.match(normalizeShellContinuations(script ?? ""), MUTABLE_INSTALLER);
+  assert.equal(scriptHasMutableInstaller(script ?? ""), true);
+});
+
 test("the gate discovers .yaml workflows and rejects a curl-pipe installer", () => {
-  const fixture = loadGithubCiFiles(join(FIXTURE_ROOT, "yaml-extension"));
-  assert.equal(fixture.length, 1);
-  assert.match(fixture[0]?.name ?? "", /\.yaml$/);
-  const violations = mutableInstallerViolations(fixture);
-  assert.equal(violations.length, 1);
-  assert.match(violations[0] ?? "", /oidc-curl\.yaml pipes a remote installer/);
+  assertFixtureViolation("yaml-extension", /oidc-curl\.yaml pipes a remote installer/);
 });
 
 test("the gate rejects a privileged scalar run: curl-pipe", () => {
   const fixture = loadGithubCiFiles(join(FIXTURE_ROOT, "scalar-run"));
   const [script] = extractRunScripts(fixture[0]?.source ?? "");
   assert.match(script ?? "", MUTABLE_INSTALLER);
-  const violations = mutableInstallerViolations(fixture);
-  assert.equal(violations.length, 1);
-  assert.match(violations[0] ?? "", /oidc-curl\.yml pipes a remote installer/);
+  assertFixtureViolation("scalar-run", /oidc-curl\.yml pipes a remote installer/);
 });
 
 test("the gate rejects a privileged folded run: > curl-pipe", () => {
   const fixture = loadGithubCiFiles(join(FIXTURE_ROOT, "folded-run"));
   const [script] = extractRunScripts(fixture[0]?.source ?? "");
-  assert.match(script ?? "", MUTABLE_INSTALLER);
-  assert.doesNotMatch(script ?? "", /\n/);
+  assert.match(normalizeShellContinuations(script ?? "").replace(/\n$/, ""), MUTABLE_INSTALLER);
+  assertFixtureViolation("folded-run", /oidc-curl\.yml pipes a remote installer/);
+});
+
+test("the gate rejects a privileged multiline double-quoted run: curl-pipe", () => {
+  const fixture = loadGithubCiFiles(join(FIXTURE_ROOT, "multiline-quoted-run"));
+  const [script] = extractRunScripts(fixture[0]?.source ?? "");
+  assert.equal(script, "curl -LsSf https://example.test/install.sh | sh");
+  assertFixtureViolation("multiline-quoted-run", /oidc-curl\.yml pipes a remote installer/);
+});
+
+test("the gate rejects a privileged literal run with a shell line continuation", () => {
+  const fixture = loadGithubCiFiles(join(FIXTURE_ROOT, "literal-continuation-run"));
+  const [script] = extractRunScripts(fixture[0]?.source ?? "");
+  assert.doesNotMatch(script ?? "", MUTABLE_INSTALLER);
+  assert.equal(scriptHasMutableInstaller(script ?? ""), true);
+  assertFixtureViolation("literal-continuation-run", /oidc-curl\.yml pipes a remote installer/);
+});
+
+function assertFixtureViolation(name, pattern) {
+  const fixture = loadGithubCiFiles(join(FIXTURE_ROOT, name));
   const violations = mutableInstallerViolations(fixture);
   assert.equal(violations.length, 1);
-  assert.match(violations[0] ?? "", /oidc-curl\.yml pipes a remote installer/);
-});
+  assert.match(violations[0] ?? "", pattern);
+}

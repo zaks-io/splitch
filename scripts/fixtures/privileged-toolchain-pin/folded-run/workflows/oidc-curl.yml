@@ -4,6 +4,7 @@ name: folded-run-mutable-installer
 on: push
 jobs:
   publish:
+    runs-on: ubuntu-24.04
     permissions:
       id-token: write
     steps:
