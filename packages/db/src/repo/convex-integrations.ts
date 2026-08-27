@@ -1,3 +1,4 @@
+import { listPushInstallations } from "./push-installation-list";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
 
@@ -66,6 +67,17 @@ export function makeConvexIntegrationRepo(d1: D1Database) {
         )
         .bind(scope.appId, scope.environmentId, installationId)
         .first<ConvexInstallationRow>();
+    },
+
+    async listInstallations(scope: EnvScope, options?: { limit?: number }) {
+      assertMintedScope(scope);
+      return listPushInstallations<ConvexInstallationRow>(
+        d1,
+        scope,
+        INSTALLATION_SELECT,
+        "config_webhook_deliveries",
+        options,
+      );
     },
 
     async createInstallation(

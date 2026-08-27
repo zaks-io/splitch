@@ -13,11 +13,10 @@ vi.mock("#lib/control-plane-sentry-functions", () => ({
 
 const { SentryIntegrationCard } = await import("./sentry-integration-card");
 
-const APP_ID = "app_1";
-const ENVIRONMENT_ID = "env_1";
+const ORG_ID = "org_1";
 
 /**
- * An Environment that is already wired to Sentry must never flash the
+ * An Organization that is already wired to Sentry must never flash the
  * disconnected state on its way to rendering. The list decides that, so an
  * in-flight list is its own state rather than an empty one.
  */
@@ -34,7 +33,7 @@ describe("SentryIntegrationCard", () => {
     expect(html).toContain("Connect Sentry");
   });
 
-  it("withholds the install form from an Environment that already has an active org", () => {
+  it("withholds the install form from an Organization that already has an active org", () => {
     const html = render(seeded([installation({ status: "active" })]));
     expect(html).not.toContain("Connect Sentry");
   });
@@ -48,25 +47,21 @@ describe("SentryIntegrationCard", () => {
 function render(queryClient: QueryClient): string {
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
-      <SentryIntegrationCard appId={APP_ID} environmentId={ENVIRONMENT_ID} />
+      <SentryIntegrationCard orgId={ORG_ID} />
     </QueryClientProvider>,
   );
 }
 
 function seeded(installations: SentryInstallationStatus[]): QueryClient {
   const queryClient = new QueryClient();
-  queryClient.setQueryData(
-    queryKeys.environment.sentryInstallations(APP_ID, ENVIRONMENT_ID),
-    installations,
-  );
+  queryClient.setQueryData(queryKeys.org.sentryInstallations(ORG_ID), installations);
   return queryClient;
 }
 
 function installation(overrides: Partial<SentryInstallationStatus>): SentryInstallationStatus {
   return {
     installationId: "11111111-1111-4111-8111-111111111111",
-    appId: APP_ID,
-    environmentId: ENVIRONMENT_ID,
+    orgId: ORG_ID,
     webhookUrl: "https://sentry.io/api/0/organizations/acme/flags/hooks/provider/generic/",
     status: "active",
     lastDeliveredSeq: null,

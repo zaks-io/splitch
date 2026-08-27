@@ -29,6 +29,11 @@ installation ID and webhook secret, registers them through the API-Key-only
 [Convex integration API](./convex-integration-api.md), and performs the first full sync. Missing or
 malformed credentials fail before any integration or config row is written.
 
+`install()` is an exact-retry-safe upgrade entrypoint as well as the initial installation call.
+After a package upgrade, rerunning it resumes stale configuration sync, schedules retention for
+existing retained rows, and activates one versioned, bounded adoption chain that attaches recovery
+watches to pending or delivering Exposure rows created by the prior component version.
+
 Each additional Splitch Environment uses another named component instance, API Key, HTTP prefix,
 configuration store, local Assignment Store, and outbox. No instance can read another instance's
 tables or credential.
@@ -85,8 +90,17 @@ ConfigChanged {
 The request carries `Splitch-Signature` over the exact body plus a bounded timestamp. The component
 rejects an invalid signature, wrong App/Environment, expired timestamp, or reused `deliveryId`
 before scheduling work. A valid nudge first raises the stored `announcedVersion`, then atomically
-schedules an immediate sync Action and returns `202`. Duplicate or older versions return `202`
-without another pull.
+schedules an immediate sync Action and one version-scoped recovery Mutation. The recovery Mutation
+keeps scheduling the Action once per minute only while the stored snapshot remains behind that
+announced version, and cancels its next run when a current snapshot commits. Duplicate or older
+versions return `202` without another pull.
+
+There is no reconciliation cron. Configuration and Exposure recovery chains are created atomically
+with the durable work they protect. Retained claims and terminal Exposure rows share one scheduled
+cleanup Mutation set for the earliest expiry; it schedules its successor only while retained data
+remains. An idempotent `install()` retry after an upgrade runs the finite adoption chain for durable
+Exposure delivery work created before these scheduling fields existed. Activation separately seeds
+version-scoped recovery when configuration is stale.
 
 D1 triggers insert the webhook outbox in the same transaction as the authoritative Flag Configuration
 commit and increment the Environment configuration version. A lease scanner dispatches immediately

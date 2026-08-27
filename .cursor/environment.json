@@ -1,0 +1,12 @@
+{
+  "name": "splitch",
+  "install": "./.cursor/install.sh",
+  "start": "./.cursor/start.sh",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "pnpm dev",
+      "description": "Every Worker (wrangler, ports 8787-8792) and frontend (vite, 8793-8794), in parallel. Bound to 127.0.0.1, so reach them with curl from inside the VM."
+    }
+  ]
+}

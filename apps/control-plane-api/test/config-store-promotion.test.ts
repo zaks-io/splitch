@@ -224,21 +224,20 @@ describe("flag configuration Promotion routes", () => {
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      config: { version: number; targetingRules: { percentageRollout?: unknown }[] };
+      version: number;
+      targetingRules: { percentageRollout?: unknown }[];
     };
     expect(body).toMatchObject({
-      config: {
-        version: 2,
-        targetingRules: [
-          {
-            id: "rule_checkout_prod_control",
-            variantId: ids.controlVariantId,
-            conditions: [{ attribute: "country", operator: "eq", value: "US" }],
-          },
-        ],
-      },
+      version: 2,
+      targetingRules: [
+        {
+          id: "rule_checkout_prod_control",
+          variantId: ids.controlVariantId,
+          conditions: [{ attribute: "country", operator: "eq", value: "US" }],
+        },
+      ],
     });
-    expect(body.config.targetingRules[0]?.percentageRollout).toBeUndefined();
+    expect(body.targetingRules[0]?.percentageRollout).toBeUndefined();
     expect(h.events.slice(0, 2)).toEqual(["d1-before-kv:false", "kv:flag"]);
     expect(h.events.at(-1)).toBe("broadcast");
   });

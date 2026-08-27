@@ -16,8 +16,13 @@ try {
     "dist/react/index.js",
     "dist/react/index.d.ts",
     "dist/component/convex.config.js",
+    "dist/component/integration_recovery.js",
+    "dist/component/integration_recovery.d.ts",
   ]) {
     if (!listing.includes(required)) throw new Error(`pack --dry-run is missing ${required}`);
+  }
+  if (listing.includes("dist/component/crons.")) {
+    throw new Error("pack --dry-run contains the removed cron module");
   }
 } finally {
   rmSync(staging, { recursive: true, force: true });

@@ -106,6 +106,15 @@ function ErrorCodeRoute() {
           )}
         </dl>
 
+        {doc.remediation && (
+          <section className="grid gap-3">
+            <h2 className="font-display font-semibold text-2xl text-foreground tracking-tight">
+              Remediation
+            </h2>
+            <p className="max-w-2xl text-foreground leading-relaxed">{doc.remediation}</p>
+          </section>
+        )}
+
         <section className="grid gap-3">
           <h2 className="font-display font-semibold text-2xl text-foreground tracking-tight">
             Cause

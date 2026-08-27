@@ -313,6 +313,9 @@ importers:
       '@sentry/react':
         specifier: ^10.68.0
         version: 10.68.0(react@19.2.8)
+      '@splitch/cli':
+        specifier: workspace:*
+        version: link:../cli
       '@splitch/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -344,9 +347,6 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^5.20260724.1
         version: 5.20260724.1
-      '@splitch/cli':
-        specifier: workspace:*
-        version: link:../cli
       '@splitch/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk

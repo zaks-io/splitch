@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authorizedSentryClient } from "./panel-authorized-clients";
 
 /**
- * Sentry change-tracking installations, as the Environment settings screen
+ * Sentry change-tracking installations, as the Organization integrations screen
  * drives them.
  *
  * The signing secret never travels in a request from the browser: splitch mints
@@ -12,8 +12,7 @@ import { authorizedSentryClient } from "./panel-authorized-clients";
  */
 
 const SentryScopeSchema = z.object({
-  appId: z.string().min(1),
-  environmentId: z.string().min(1),
+  orgId: z.string().min(1),
 });
 
 const InstallSchema = SentryScopeSchema.extend({

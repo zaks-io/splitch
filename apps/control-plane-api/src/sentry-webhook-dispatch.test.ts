@@ -172,8 +172,7 @@ async function fixture(
         (override) =>
           ({
             installationId: "00000000-0000-4000-8000-000000000001",
-            appId: "app_a",
-            environmentId: "env_a",
+            orgId: "org_a",
             webhookUrl: URL_OK,
             secretCiphertext: encrypted.ciphertext,
             secretKeyVersion: encrypted.keyVersion,
@@ -192,7 +191,7 @@ async function fixture(
     },
   };
   const flagChangeEvents = {
-    pendingForScope: async (_appId: string, _envId: string, afterSeq: number) => {
+    pendingForOrg: async (_orgId: string, afterSeq: number) => {
       options.onPending?.(afterSeq);
       return events;
     },

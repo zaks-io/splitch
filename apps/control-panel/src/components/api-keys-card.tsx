@@ -158,7 +158,7 @@ export function ApiKeysCard({ appId, environmentId, initialApiKeys }: ApiKeysCar
 
         {error ? (
           <Alert variant="destructive">
-            <AlertTitle>API Key operation failed loud</AlertTitle>
+            <AlertTitle>API Key operation failed</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}

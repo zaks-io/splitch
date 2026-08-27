@@ -1,5 +1,10 @@
 import { getRoute } from "@splitch/sdk/control-plane";
 import {
+  API_KEY_CREATE_OPERATION_ID,
+  apiKeyOutputPathError,
+  writeApiKeySecret,
+} from "./api-key-output.js";
+import {
   assertPathParamsPresent,
   commandUsageLine,
   conflictingSuppliedPositional,
@@ -12,7 +17,7 @@ import { findCommand } from "./command-registry.js";
 
 import { type ResolvedContext, resolveContext } from "./context.js";
 import { SplitchCliError, writeCliError } from "./errors.js";
-import { consoleIo, emit } from "./execute-io.js";
+import { consoleIo, emit, withJsonMode } from "./execute-io.js";
 import {
   executeApiOperation,
   executeEnvPolicyGet,
@@ -36,7 +41,7 @@ export async function executeInvocation(
   invocation: ParsedInvocation,
   deps: CliDeps,
 ): Promise<CliResult> {
-  const io = deps.io ?? consoleIo();
+  const io = withJsonMode(deps.io ?? consoleIo(), invocation.flags.json);
   if (invocation.metaCommand) {
     return executeMeta(invocation, deps, io);
   }
@@ -170,7 +175,15 @@ async function executeCommand(
   } catch (error) {
     return handleInputError(error, invocation, io);
   }
-  return executeApiOperation(command.operationId, input, invocation, deps, io);
+  const outputFile = invocation.flags.outputFile;
+  return executeApiOperation(
+    command.operationId,
+    input,
+    invocation,
+    deps,
+    io,
+    outputFile ? (data) => writeApiKeySecret(data, outputFile) : undefined,
+  );
 }
 
 function validateSpecializedUsage(
@@ -178,6 +191,23 @@ function validateSpecializedUsage(
   invocation: ParsedInvocation,
   io: CliIo,
 ): CliResult | null {
+  // Accepting --output-file on a command that returns no secret would write
+  // nothing and still exit 0, which reads as "the credential is in the file".
+  if (invocation.flags.outputFile) {
+    if (command.operationId !== API_KEY_CREATE_OPERATION_ID) {
+      writeCliError(io, {
+        code: "CLI_USAGE_INVALID",
+        causeSummary: `--output-file is only accepted by splitch api-keys create, not ${command.path.join(" ")}`,
+        remediation: "Drop --output-file, or run splitch api-keys create to mint a secret",
+      });
+      return { exitCode: EXIT_USAGE };
+    }
+    const pathError = apiKeyOutputPathError(invocation.flags.outputFile);
+    if (pathError) {
+      writeCliError(io, pathError);
+      return { exitCode: EXIT_USAGE };
+    }
+  }
   return command.kind === "flags_verify" ? validateFlagsVerifyUsage(invocation, io) : null;
 }
 

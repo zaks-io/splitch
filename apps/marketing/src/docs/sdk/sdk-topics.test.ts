@@ -6,6 +6,7 @@ import { browserTopic } from "./browser";
 import { evaluateAllTopic } from "./evaluate-all";
 import { findSdkTopic, sdkTopics } from "./index";
 import { reactTopic } from "./react";
+import { failuresTopic } from "./semantics";
 import { installTopic } from "./setup";
 
 const addedSlugs = ["evaluate-all", "browser", "react", "convex"] as const;
@@ -37,6 +38,19 @@ describe("SDK topic routes", () => {
     expect(markdown).toContain("`./browser`");
     expect(markdown).toContain("`./react`");
     expect(markdown).not.toContain("sole dependency");
+  });
+
+  /**
+   * `useFlag` before `init()` resolves throws SDK_NOT_INITIALIZED during render
+   * (packages/sdk/src/react/index.test.ts pins it). An unqualified "never
+   * throws" here reads as a promise the shipped client does not keep.
+   */
+  it("scopes the never-throws contract to the server client", () => {
+    const markdown = sdkTopicMarkdown(failuresTopic);
+
+    expect(markdown).toContain("SDK_NOT_INITIALIZED");
+    expect(markdown).toContain("useFlag");
+    expect(markdown).not.toMatch(/These never throw/);
   });
 
   it("keeps literal credentials on their correct side of the server boundary", () => {

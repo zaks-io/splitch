@@ -70,31 +70,125 @@ describe("MetricSchema — count / revenue require eventFieldName", () => {
       MetricSchema.safeParse({ ...baseMetric, kind: "revenue", eventFieldName: null }).success,
     ).toBe(false);
   });
+
+  it("rejects an eventFieldName on a Binomial Metric", () => {
+    expect(
+      MetricSchema.safeParse({ ...baseMetric, kind: "binomial", eventFieldName: "amount" }).success,
+    ).toBe(false);
+  });
 });
 
-describe("MetricSchema — ratio requires denominator", () => {
-  it("parses ratio with a denominator MetricRef", () => {
+describe("MetricSchema — ratio requires two operand Metrics", () => {
+  it("parses ratio with distinct numerator and denominator MetricRefs", () => {
     const m = MetricSchema.parse({
       ...baseMetric,
       kind: "ratio",
+      eventDefinitionId: null,
+      numerator: { metricId: "metric_num" },
       denominator: { metricId: "metric_denom" },
     });
     expect(m.denominator?.metricId).toBe("metric_denom");
   });
 
-  it("rejects ratio without a denominator", () => {
+  it("parses an explicitly incomplete legacy ratio so callers can repair it", () => {
+    const m = MetricSchema.parse({
+      ...baseMetric,
+      kind: "ratio",
+      configurationStatus: "needs_configuration",
+      denominator: { metricId: "metric_denom" },
+    });
+
+    expect(m).toMatchObject({
+      eventDefinitionId: "checkout_completed",
+      configurationStatus: "needs_configuration",
+      denominator: { metricId: "metric_denom" },
+    });
+  });
+
+  it("parses a legacy ratio that also carries an event field", () => {
+    // Ratio writes before operands existed accepted eventFieldName, so rejecting
+    // it here would turn a list read into a 500 the caller cannot repair.
+    const m = MetricSchema.parse({
+      ...baseMetric,
+      kind: "ratio",
+      configurationStatus: "needs_configuration",
+      eventFieldName: "amount",
+      denominator: { metricId: "metric_denom" },
+    });
+
+    expect(m.eventFieldName).toBe("amount");
+  });
+
+  it("rejects a complete ratio that carries an event field", () => {
+    expect(
+      MetricSchema.safeParse({
+        ...baseMetric,
+        kind: "ratio",
+        eventDefinitionId: null,
+        eventFieldName: "amount",
+        numerator: { metricId: "metric_num" },
+        denominator: { metricId: "metric_denom" },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects ratio without its operands", () => {
     expect(MetricSchema.safeParse({ ...baseMetric, kind: "ratio" }).success).toBe(false);
+  });
+
+  it("rejects an incomplete legacy ratio without its explicit status", () => {
+    expect(
+      MetricSchema.safeParse({
+        ...baseMetric,
+        kind: "ratio",
+        denominator: { metricId: "metric_denom" },
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects ratio with a null denominator", () => {
     expect(
-      MetricSchema.safeParse({ ...baseMetric, kind: "ratio", denominator: null }).success,
+      MetricSchema.safeParse({
+        ...baseMetric,
+        kind: "ratio",
+        eventDefinitionId: null,
+        numerator: { metricId: "metric_num" },
+        denominator: null,
+      }).success,
     ).toBe(false);
   });
 
   it("rejects a denominator that is not a MetricRef", () => {
     expect(
-      MetricSchema.safeParse({ ...baseMetric, kind: "ratio", denominator: "metric_denom" }).success,
+      MetricSchema.safeParse({
+        ...baseMetric,
+        kind: "ratio",
+        eventDefinitionId: null,
+        numerator: { metricId: "metric_num" },
+        denominator: "metric_denom",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a direct Event Definition or identical operands", () => {
+    const ratio = {
+      ...baseMetric,
+      kind: "ratio",
+      numerator: { metricId: "metric_operand" },
+      denominator: { metricId: "metric_operand" },
+    };
+    expect(MetricSchema.safeParse(ratio).success).toBe(false);
+    expect(MetricSchema.safeParse({ ...ratio, eventDefinitionId: null }).success).toBe(false);
+  });
+
+  it("rejects Ratio operands on a non-Ratio Metric", () => {
+    expect(
+      MetricSchema.safeParse({
+        ...baseMetric,
+        kind: "binomial",
+        numerator: { metricId: "metric_num" },
+        denominator: { metricId: "metric_denom" },
+      }).success,
     ).toBe(false);
   });
 });

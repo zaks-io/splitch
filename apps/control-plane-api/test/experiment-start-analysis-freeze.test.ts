@@ -9,7 +9,9 @@ import {
   startExperiment,
 } from "../src/experiment-run-test-fixture";
 import { errorBody } from "../src/flag-definition-test-harness";
+import { frozenAnalysisConfig } from "../src/experiment-start-analysis";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
+import { ensureMetricEventDefinition } from "./metric-event-definition-fixture";
 
 /**
  * Start is the only moment the analysis knobs can be fixed: a Metric edited
@@ -33,13 +35,24 @@ async function metric(
   id: string,
   overrides: Record<string, unknown> = {},
 ): Promise<string> {
+  const kind = (overrides.kind as string | undefined) ?? "binomial";
+  const eventDefinitionId =
+    kind === "ratio"
+      ? null
+      : await ensureMetricEventDefinition(
+          ctx.h.bindings.d1,
+          appId,
+          id,
+          NOW_ISO,
+          overrides.eventFieldName as string | undefined,
+        );
   const row = await ctx.repo.experiments.metrics.insert(appScope(appId), {
     id,
     appId,
     key: id,
     name: id,
     kind: "binomial",
-    eventDefinitionId: id,
+    eventDefinitionId,
     createdAt: NOW_ISO,
     ...overrides,
   });
@@ -47,6 +60,82 @@ async function metric(
 }
 
 describe("Experiment Start freezes the analysis config", () => {
+  it("freezes Count, Revenue, and Ratio source bindings for one Run snapshot", async () => {
+    const fx = await experimentFixture(ctx);
+    const durationId = await metric(fx.appId, "metric_duration", {
+      kind: "count",
+      eventFieldName: "duration_ms",
+    });
+    const costId = await metric(fx.appId, "metric_cost", {
+      kind: "revenue",
+      eventFieldName: "cost_usd",
+    });
+    const errorsId = await metric(fx.appId, "metric_errors_count", {
+      kind: "count",
+      eventFieldName: "error_count",
+    });
+    const requestsId = await metric(fx.appId, "metric_requests", {
+      kind: "count",
+      eventFieldName: "request_count",
+    });
+    const ratioId = await metric(fx.appId, "metric_errors_per_request", {
+      kind: "ratio",
+      numeratorMetricId: errorsId,
+      denominatorMetricId: requestsId,
+    });
+
+    const frozen = await frozenAnalysisConfig(
+      ctx.repo,
+      fx.appId,
+      {
+        metrics: [{ metricId: durationId }, { metricId: costId }, { metricId: ratioId }],
+        guardrailMetrics: [],
+      },
+      ["treatment"],
+      60_000,
+      "user",
+      "req_continuous_metrics",
+    );
+
+    if (!frozen.ok) throw new Error(await frozen.response.text());
+    expect(frozen.value.metricQueryConfig).toEqual([
+      {
+        metric_id: durationId,
+        metric_type: "count",
+        event_definition_id: `event_definition_${durationId}_${fx.appId}`,
+        event_field_name: "duration_ms",
+        window_duration_ms: 60_000,
+        cuped_lookback_ms: 604_800_000,
+      },
+      {
+        metric_id: costId,
+        metric_type: "revenue",
+        event_definition_id: `event_definition_${costId}_${fx.appId}`,
+        event_field_name: "cost_usd",
+        window_duration_ms: 60_000,
+        cuped_lookback_ms: 604_800_000,
+      },
+      {
+        metric_id: ratioId,
+        metric_type: "ratio",
+        numerator: {
+          metric_id: errorsId,
+          metric_type: "count",
+          event_definition_id: `event_definition_${errorsId}_${fx.appId}`,
+          event_field_name: "error_count",
+        },
+        denominator: {
+          metric_id: requestsId,
+          metric_type: "count",
+          event_definition_id: `event_definition_${requestsId}_${fx.appId}`,
+          event_field_name: "request_count",
+        },
+        window_duration_ms: 60_000,
+        cuped_lookback_ms: 604_800_000,
+      },
+    ]);
+  });
+
   it("freezes a guardrail bound against the treatment Variant, never the Control", async () => {
     const fx = await experimentFixture(ctx);
     const guardrailId = await metric(fx.appId, "metric_errors", { downsideThresholdPct: -2 });
@@ -139,9 +228,11 @@ describe("Experiment Start freezes the analysis config", () => {
     // is not fit on, so it is off regardless of what the Metric asks for.
     const fx = await experimentFixture(ctx);
     const optedOutId = await metric(fx.appId, "metric_opted_out", { cuped: false });
+    const denominatorId = await metric(fx.appId, "metric_ratio_denominator");
     const ratioId = await metric(fx.appId, "metric_ratio", {
       kind: "ratio",
-      denominatorMetricId: fx.metricId,
+      numeratorMetricId: optedOutId,
+      denominatorMetricId: denominatorId,
       cuped: true,
     });
     const experiment = await createExperimentDraft(ctx, fx, {

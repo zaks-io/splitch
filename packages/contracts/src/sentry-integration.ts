@@ -4,10 +4,14 @@ import { listResponse } from "./wire-envelopes-core";
 /**
  * Sentry change-tracking installation surface.
  *
- * One installation binds an Environment to one Sentry organization's Generic
- * Flag Log endpoint. The Environment is named in the path, like every other
- * Environment-scoped resource: Sentry's payload has no environment field, so a
- * prod Sentry org must not be reachable from a dev Environment's installation.
+ * One installation binds a splitch Organization to one Sentry organization's
+ * Generic Flag Log endpoint, so the Organization is named in the path. Sentry
+ * stores ONE signing secret per provider type per organization ("Create Generic
+ * Flag Log", getsentry/sentry `src/sentry/flags/docs/api.md`), which is why this
+ * cannot be an Environment-scoped resource: a second Environment wiring up the
+ * same Sentry org would mint a second secret and silently break the first one.
+ * Sentry has no project or environment axis on a flag change either, so every
+ * App and Environment under the Organization publishes to the same log.
  *
  * The signing secret is write-only. It is what Sentry verifies
  * `X-Sentry-Signature` against, so reads return delivery health and never the
@@ -37,8 +41,7 @@ export const SentryInstallationCreateRequestSchema = z
 export const SentryInstallationSchema = z
   .object({
     installationId: UuidSchema,
-    appId: z.string(),
-    environmentId: z.string(),
+    orgId: z.string(),
     webhookUrl: z.url(),
     status: z.enum(["active", "revoked"]),
   })
@@ -67,7 +70,7 @@ export const SentryInstallationStatusSchema = SentryInstallationSchema.extend({
 }).strict();
 
 /**
- * At most one active installation per Environment, so this list is 0 or 1 long
+ * At most one active installation per Organization, so this list is 0 or 1 long
  * today. It stays a collection because that is what lets the Panel ask "is
  * Sentry wired up here?" without already knowing an installation id, and
  * revoked rows remain readable as history.

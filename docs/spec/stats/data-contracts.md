@@ -65,6 +65,10 @@ independently through each operand Metric's Event Definition and field contract 
 per-Entity `(num_value, denom_value)` pair. Metric Events never create denominator rows: the
 pipeline left-joins values onto the complete first-touch Exposure population.
 
+An accepted Metric Event that omits an optional selected number field contributes no value for that
+Metric. This is a filter, not a numeric default: present values remain strict numeric conversions,
+and the Exposure left join is solely responsible for a zero per-Entity aggregate when none remain.
+
 Physical retry rows must never inflate Binomial, Count, Revenue, or Ratio inputs. The mandatory
 logical source and ordering are defined in [physical-datasources.md](../pipeline/physical-datasources.md#metric-retry-state-deduped_metric_events_state).
 

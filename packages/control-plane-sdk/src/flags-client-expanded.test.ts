@@ -65,7 +65,7 @@ describe("control plane sdk Variant catalog operations", () => {
   });
 
   it("patches a Variant by name and returns the Approval envelope", async () => {
-    const response = { flag, approvalRequest: null };
+    const response = { ...flag, approvalRequest: null };
     const { sdk, requests } = sdkWith(() => Response.json(response));
 
     const result = await sdk.flags.updateVariant({
@@ -84,7 +84,7 @@ describe("control plane sdk Variant catalog operations", () => {
       description: "the new checkout",
       idempotency_key: "variant-update-1",
     });
-    expect(result.ok && result.data.flag.variants).toHaveLength(2);
+    expect(result.ok && result.data.variants).toHaveLength(2);
     expect(result.ok && result.data.approvalRequest).toBeNull();
   });
 
@@ -147,7 +147,7 @@ describe("control plane sdk Variant catalog operations", () => {
 
 describe("control plane sdk targeting and promotion", () => {
   it("replaces the targeting rules for one Environment's Flag Configuration", async () => {
-    const response = { config, approvalRequest: null };
+    const response = { ...config, approvalRequest: null };
     const { sdk, requests } = sdkWith(() => Response.json(response));
 
     const result = await sdk.flags.replaceTargetingRules({
@@ -172,7 +172,7 @@ describe("control plane sdk targeting and promotion", () => {
   it("promotes selected field groups and returns the before/after diff", async () => {
     const { sdk, requests } = sdkWith(() =>
       Response.json({
-        config,
+        ...config,
         diff: { before: { ...config, enabled: false }, after: config },
         approvalRequest: null,
       }),
@@ -242,7 +242,7 @@ describe("control plane sdk targeting and promotion", () => {
  */
 describe("control plane sdk idempotency header", () => {
   it("sends the Flag Configuration update key in both body and header", async () => {
-    const { sdk, requests } = sdkWith(() => Response.json({ config, approvalRequest: null }));
+    const { sdk, requests } = sdkWith(() => Response.json({ ...config, approvalRequest: null }));
 
     await sdk.flags.updateConfig({
       appId: "app_checkout",
@@ -257,7 +257,7 @@ describe("control plane sdk idempotency header", () => {
   });
 
   it("sends the Targeting Rules replace key in both body and header", async () => {
-    const { sdk, requests } = sdkWith(() => Response.json({ config, approvalRequest: null }));
+    const { sdk, requests } = sdkWith(() => Response.json({ ...config, approvalRequest: null }));
 
     await sdk.flags.replaceTargetingRules({
       appId: "app_checkout",
@@ -273,7 +273,11 @@ describe("control plane sdk idempotency header", () => {
 
   it("sends the promotion key in both body and header", async () => {
     const { sdk, requests } = sdkWith(() =>
-      Response.json({ config, diff: { before: config, after: config }, approvalRequest: null }),
+      Response.json({
+        ...config,
+        diff: { before: config, after: config },
+        approvalRequest: null,
+      }),
     );
 
     await sdk.flags.promote({

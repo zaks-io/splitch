@@ -20,21 +20,19 @@ import { SentryInstallationsTable } from "./sentry-installations-table";
 import { SentrySecretReveal } from "./sentry-secret-reveal";
 
 /**
- * Connecting an Environment to Sentry's Generic feature-flag provider.
+ * Connecting an Organization to Sentry's Generic feature-flag provider.
+ *
+ * Sentry holds one signing secret per provider for a whole Sentry organization
+ * and its flag log has no project or environment axis, so this is one connection
+ * per splitch Organization, carrying every App and Environment under it.
  *
  * splitch is the provider, and Sentry's form only accepts a pasted signing
  * secret, so the exchange is two-way: Sentry's webhook URL comes in here, and
  * the secret splitch mints goes back there. The secret is shown once.
  */
-export function SentryIntegrationCard({
-  appId,
-  environmentId,
-}: {
-  appId: string;
-  environmentId: string;
-}) {
+export function SentryIntegrationCard({ orgId }: { orgId: string }) {
   const queryClient = useQueryClient();
-  const scope = { appId, environmentId };
+  const scope = { orgId };
   const installations = useQuery(sentryInstallationsQuery(scope));
   const [secret, setSecret] = useState<string>();
   const [error, setError] = useState<string>();
@@ -98,7 +96,7 @@ export function SentryIntegrationCard({
   async function revoke(installationId: string) {
     if (
       !window.confirm(
-        "Disconnect Sentry? Flag changes in this Environment will stop reaching its flag audit log.",
+        "Disconnect Sentry? Flag changes in this Organization will stop reaching its flag audit log.",
       )
     ) {
       return;
@@ -124,8 +122,8 @@ export function SentryIntegrationCard({
       <CardHeader>
         <CardTitle>Sentry change tracking</CardTitle>
         <CardDescription>
-          Publishes every Flag change in this Environment to Sentry's flag audit log, so an error
-          can be traced to the toggle that preceded it.
+          Publishes every Flag change in this Organization, across all Apps and Environments, to
+          Sentry's flag audit log, so an error can be traced to the toggle that preceded it.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
@@ -139,7 +137,7 @@ export function SentryIntegrationCard({
 
         {error ? (
           <Alert variant="destructive">
-            <AlertTitle>Sentry operation failed loud</AlertTitle>
+            <AlertTitle>Sentry operation failed</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}

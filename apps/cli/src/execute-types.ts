@@ -4,6 +4,8 @@ import type { SdkFactoryOptions } from "./sdks.js";
 export interface CliIo {
   readonly log: (line: string) => void;
   readonly error: (line: string) => void;
+  /** `--json`: failures also land on stdout as one machine-readable object. */
+  readonly json?: boolean;
 }
 
 interface CliCommandResult {

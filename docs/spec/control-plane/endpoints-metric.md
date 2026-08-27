@@ -208,6 +208,12 @@ span versions remain lossless after later measurement edits. A later publish tha
 a referenced field rejects new Metric create/patch and new ingest against the current version; it
 does not rewrite already-accepted rows.
 
+Metric responses include `configuration_status = ready`. A Ratio migrated from the former direct
+Event Definition shape has `configuration_status = needs_configuration`, keeps its former binding
+visible for diagnosis, and remains readable through the SDK and Control Panel. Run Start rejects it
+until an operator supplies distinct numerator and denominator Metrics; that repair clears the legacy
+direct binding instead of inferring an operand.
+
 Returns the canonical `Metric`.
 
 ### `GET /apps/{app_id}/metrics/{metric_id}`

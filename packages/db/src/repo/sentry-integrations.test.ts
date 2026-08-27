@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createRepository, envScope } from "../index";
+import { createRepository } from "../index";
 import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 import { type SeededTenants, seedTwoTenants } from "./test-seed";
 
@@ -7,7 +7,8 @@ import { type SeededTenants, seedTwoTenants } from "./test-seed";
  * The Sentry installation row IS the delivery outbox: `last_delivered_seq` is the
  * only thing standing between "Sentry saw this change" and "Sentry saw it twice
  * or not at all". These tests pin the cursor's advance/hold semantics, and the
- * tenant scoping that keeps one App's webhook secret out of another's reach.
+ * tenant scoping that keeps one Organization's webhook secret out of another's
+ * reach.
  */
 
 let local: LocalD1;
@@ -29,7 +30,7 @@ const LATER = "2026-08-25T00:05:00.000Z";
 
 function install(tenant: "a" | "b", installationId: string) {
   const t = seed[tenant];
-  return repo.sentry.createInstallation(envScope(t.appId, t.environmentId), {
+  return repo.sentry.createInstallation(t.orgId, {
     installationId,
     webhookUrl: "https://sentry.io/api/0/organizations/acme/flags/hooks/provider/generic/",
     secretCiphertext: `cipher_${installationId}`,
@@ -47,29 +48,22 @@ describe("sentry installations", () => {
     expect(row.nextAttemptAt).toBe(NOW);
   });
 
-  it("refuses a second installation on the same Environment", async () => {
+  it("refuses a second installation on the same Organization", async () => {
     await install("a", "sin_a");
     // A silent no-op here would leave the caller believing a second Sentry org
     // was wired up while every change still went to the first.
     await expect(install("a", "sin_a_dup")).rejects.toThrow();
   });
 
-  it("frees the Environment once the installation is revoked", async () => {
+  it("frees the Organization once the installation is revoked", async () => {
     await install("a", "sin_a");
-    await repo.sentry.revokeInstallation(
-      envScope(seed.a.appId, seed.a.environmentId),
-      "sin_a",
-      LATER,
-    );
+    await repo.sentry.revokeInstallation(seed.a.orgId, "sin_a", LATER);
     await expect(install("a", "sin_a_next")).resolves.toMatchObject({ status: "active" });
   });
 
   it("does not expose one tenant's installation to another", async () => {
     await install("a", "sin_a");
-    const stolen = await repo.sentry.getInstallation(
-      envScope(seed.b.appId, seed.b.environmentId),
-      "sin_a",
-    );
+    const stolen = await repo.sentry.getInstallation(seed.b.orgId, "sin_a");
     expect(stolen).toBeNull();
   });
 
@@ -117,11 +111,7 @@ describe("sentry installations", () => {
 
   it("never dispatches to a revoked installation", async () => {
     await install("a", "sin_a");
-    await repo.sentry.revokeInstallation(
-      envScope(seed.a.appId, seed.a.environmentId),
-      "sin_a",
-      NOW,
-    );
+    await repo.sentry.revokeInstallation(seed.a.orgId, "sin_a", NOW);
     expect(await repo.sentry.dueInstallations(LATER, 10)).toHaveLength(0);
   });
 
@@ -138,28 +128,20 @@ describe("sentry installations", () => {
     await install("a", "sin_a");
     await install("b", "sin_b");
     await repo.sentry.recordSuccess("sin_a", 90, LATER);
-    await repo.sentry.revokeInstallation(
-      envScope(seed.b.appId, seed.b.environmentId),
-      "sin_b",
-      LATER,
-    );
+    await repo.sentry.revokeInstallation(seed.b.orgId, "sin_b", LATER);
     expect(await repo.sentry.minUndeliveredSeq()).toBe(90);
   });
 
   it("rotates the secret without disturbing the delivery cursor", async () => {
     await install("a", "sin_a");
     await repo.sentry.recordSuccess("sin_a", 42, NOW);
-    const rotated = await repo.sentry.rotateSecret(
-      envScope(seed.a.appId, seed.a.environmentId),
-      "sin_a",
-      {
-        secretCiphertext: "cipher_rotated",
-        secretKeyVersion: "v2",
-        secretFingerprint: "fp_rotated",
-        rotationId: "rot_1",
-        now: LATER,
-      },
-    );
+    const rotated = await repo.sentry.rotateSecret(seed.a.orgId, "sin_a", {
+      secretCiphertext: "cipher_rotated",
+      secretKeyVersion: "v2",
+      secretFingerprint: "fp_rotated",
+      rotationId: "rot_1",
+      now: LATER,
+    });
     expect(rotated).toMatchObject({
       secretCiphertext: "cipher_rotated",
       secretKeyVersion: "v2",
@@ -171,22 +153,18 @@ describe("sentry installations", () => {
 
   it("does not let another tenant rotate the secret", async () => {
     await install("a", "sin_a");
-    const rotated = await repo.sentry.rotateSecret(
-      envScope(seed.b.appId, seed.b.environmentId),
-      "sin_a",
-      {
-        secretCiphertext: "cipher_stolen",
-        secretKeyVersion: "v2",
-        secretFingerprint: "fp_stolen",
-        rotationId: "rot_evil",
-        now: LATER,
-      },
-    );
+    const rotated = await repo.sentry.rotateSecret(seed.b.orgId, "sin_a", {
+      secretCiphertext: "cipher_stolen",
+      secretKeyVersion: "v2",
+      secretFingerprint: "fp_stolen",
+      rotationId: "rot_evil",
+      now: LATER,
+    });
     expect(rotated).toBeNull();
     expect((await current())?.secretCiphertext).toBe("cipher_sin_a");
   });
 });
 
 function current() {
-  return repo.sentry.getInstallation(envScope(seed.a.appId, seed.a.environmentId), "sin_a");
+  return repo.sentry.getInstallation(seed.a.orgId, "sin_a");
 }

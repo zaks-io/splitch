@@ -70,7 +70,7 @@ export const credentialRoutes = [
     owner: OWNER,
     method: "GET",
     path: "/apps/:appId/envs/:environmentId/api-keys",
-    summary: "List API Key metadata (no secrets).",
+    summary: "List API Key metadata (no secrets; bounded; reports its own truncation).",
     request: { params: EnvParams },
     response: ListCredentialsResponseSchema,
     auth: AUTH,

@@ -207,15 +207,20 @@ async function resolveDelegatedPrincipal(
       },
     };
   }
-  // Org membership reads and writes name an Organization and no App, and the
-  // usage read is Organization-wide: all of them derive authority from live Org
-  // membership rather than from the claimed orgId.
+  // Org membership reads and writes name an Organization and no App, the usage
+  // read is Organization-wide, and a Sentry installation wires the whole
+  // Organization into one Sentry organization: all of them derive authority from
+  // live Org membership rather than from the claimed orgId.
   if (
     operation.id === "organization_usage_get" ||
     operation.id === "organization_members_list" ||
     operation.id === "organization_members_add" ||
     operation.id === "organization_members_update" ||
-    operation.id === "organization_members_remove"
+    operation.id === "organization_members_remove" ||
+    operation.id === "sentry_installations_list" ||
+    operation.id === "sentry_installations_create" ||
+    operation.id === "sentry_installations_delete" ||
+    operation.id === "sentry_secret_rotations_create"
   ) {
     return resolvePanelOrgPrincipal(operation.orgId, actorId, panelAccess);
   }

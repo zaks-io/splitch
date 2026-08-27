@@ -114,18 +114,21 @@ never operator-facing: no editor surface displays or accepts it
 
 ### FlagConfigMutationResponse
 
-Flag Configuration patch and Targeting Rule replacement return:
+Flag Configuration patch and Targeting Rule replacement return the same fields as
+`FlagConfigResponse`, with side-channel data alongside rather than wrapping the resource:
 
 ```
 {
-  config: FlagConfigResponse
+  ...FlagConfigResponse
   approvalRequest: ApprovalRequest | null
 }
 ```
 
 `approvalRequest` is null under `allow` and contains the applied request under `confirm`. Promotion
-uses the same field alongside its selected Configuration diff. A pending future `approve` or omitted
-required Review returns `APPROVAL_REVIEW_REQUIRED` instead of pretending the target changed.
+uses the same field alongside its selected Configuration `diff`. Shared fields (`enabled`,
+`targetingRules`, …) live at the same paths as `flag_config_get`, so a read-after-write script never
+has to special-case the verb. A pending future `approve` or omitted required Review returns
+`APPROVAL_REVIEW_REQUIRED` instead of pretending the target changed.
 
 ---
 
@@ -183,12 +186,13 @@ Applied response:
 
 ```
 {
-  flag: FlagResponse
+  ...FlagResponse
   approvalRequest: ApprovalRequest | null
 }
 ```
 
-The request is null when no Review was required and contains the applied request otherwise.
+The request is null when no Review was required and contains the applied request otherwise. Shared
+Flag fields live at the same paths as `flags_get`.
 
 ## Sources
 

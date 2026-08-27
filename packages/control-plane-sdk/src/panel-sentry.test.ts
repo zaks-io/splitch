@@ -3,12 +3,12 @@ import { createPanelSentryClient } from "./panel-sentry";
 
 /**
  * The Panel half of the Sentry exchange. What matters here is that the
- * Environment is in the PATH — the delegation claim is derived from it, so an
- * installation reachable without naming its Environment would be unbindable —
- * and that a minted secret survives the round trip exactly as sent.
+ * Organization is in the PATH: the delegation claim is derived from it, so an
+ * installation reachable without naming its Organization would be unbindable.
+ * And that a minted secret survives the round trip exactly as sent.
  */
 
-const SCOPE = { appId: "app_1", environmentId: "env_prod" };
+const SCOPE = { orgId: "org_1" };
 const WEBHOOK = "https://zaksio.sentry.io/api/0/organizations/zaksio/flags/hooks/provider/generic/";
 const INSTALLATION_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -25,14 +25,13 @@ function json(body: unknown, status = 200) {
 
 const INSTALLATION = {
   installationId: INSTALLATION_ID,
-  appId: "app_1",
-  environmentId: "env_prod",
+  orgId: "org_1",
   webhookUrl: WEBHOOK,
   status: "active" as const,
 };
 
 describe("panel Sentry client", () => {
-  it("lists installations from the Environment-scoped path", async () => {
+  it("lists installations from the Organization-scoped path", async () => {
     const fetch = stubFetch(
       json({
         items: [
@@ -55,7 +54,7 @@ describe("panel Sentry client", () => {
     const result = await client.list(SCOPE);
 
     expect(String(fetch.mock.calls[0]?.[0])).toBe(
-      "https://control-plane.internal/apps/app_1/envs/env_prod/integrations/sentry/installations",
+      "https://control-plane.internal/orgs/org_1/integrations/sentry/installations",
     );
     expect(result.ok && result.data.items[0]?.lastDeliveredSeq).toBe(12);
   });
@@ -99,7 +98,7 @@ describe("panel Sentry client", () => {
     });
 
     expect(String(fetch.mock.calls[0]?.[0])).toBe(
-      "https://control-plane.internal/apps/app_1/envs/env_prod" +
+      "https://control-plane.internal/orgs/org_1" +
         `/integrations/sentry/installations/${INSTALLATION_ID}/secret-rotations`,
     );
     expect(result.ok && result.data.webhookSecret).toBe("b".repeat(64));

@@ -1,72 +1,108 @@
 - name: binomial_values_use_one_logical_event_per_entity
   description: Physical retries collapse before a Binomial Metric becomes one per-Entity value, and events outside the Conversion Window or from another Event Definition do not count.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 200
   expected_result: |
+    {"targeting_key_hash":"tk_conflict","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"in_window":1}
     {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"in_window":1}
+    {"targeting_key_hash":"tk_edge","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_null_variant","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_straddle","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_tail","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"in_window":1}
     {"targeting_key_hash":"tk_treatment_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"in_window":1}
 - name: zero_window_is_unbounded
   description: The documented zero Conversion Window includes a Metric Event after the ordinary three-day boundary.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=0&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&window_duration_ms=0&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 200
   expected_result: |
+    {"targeting_key_hash":"tk_conflict","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"in_window":1}
     {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"in_window":1}
+    {"targeting_key_hash":"tk_edge","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_null_variant","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_straddle","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"in_window":1}
     {"targeting_key_hash":"tk_tail","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"in_window":1}
     {"targeting_key_hash":"tk_treatment_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"in_window":1}
 - name: another_tenant_sees_only_its_own_metric_events
   description: Distinguishable App and Metric Event identities prove that identical Experiment, Run, Environment, and Event Definition values cannot cross the App boundary.
-  parameters: "app_id=app_2&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup_app_2&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_2&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup_app_2&metric_type=binomial&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 200
   expected_result: |
     {"targeting_key_hash":"tk_other_app","run_id":"run_1","metric_id":"metric_signup_app_2","metric_type":"binomial","value":1,"in_window":1}
+    {"targeting_key_hash":"tk_other_app_tail","run_id":"run_1","metric_id":"metric_signup_app_2","metric_type":"binomial","value":0,"in_window":1}
 - name: another_environment_sees_only_its_own_metric_events
   description: Distinguishable Environment and Metric Event identities prove that identical App, Experiment, Run, and Event Definition values cannot cross the Environment boundary.
-  parameters: "app_id=app_1&environment_id=env_dev&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup_dev&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_dev&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup_dev&metric_type=binomial&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 200
   expected_result: |
     {"targeting_key_hash":"tk_other_environment","run_id":"run_1","metric_id":"metric_signup_dev","metric_type":"binomial","value":1,"in_window":1}
+    {"targeting_key_hash":"tk_other_environment_tail","run_id":"run_1","metric_id":"metric_signup_dev","metric_type":"binomial","value":0,"in_window":1}
 - name: missing_app_id_is_rejected
   description: A missing app_id fails loudly rather than reading another tenant's Metric Events.
-  parameters: "environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "app_id is required"
 - name: missing_environment_id_is_rejected
   description: A missing environment_id fails loudly rather than mixing Environments into one analysis.
-  parameters: "app_id=app_1&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "environment_id is required"
 - name: missing_experiment_id_is_rejected
   description: A missing experiment_id fails loudly rather than reading Exposures from another Experiment.
-  parameters: "app_id=app_1&environment_id=env_prod&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "experiment_id is required"
 - name: missing_run_id_is_rejected
   description: A missing run_id fails loudly rather than mixing Runs of the same Experiment into one analysis.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "run_id is required"
 - name: missing_metric_id_is_rejected
   description: A missing metric_id fails loudly rather than assigning Metric Events to an inferred Metric.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_type=binomial&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "metric_id is required"
 - name: missing_event_definition_id_is_rejected
   description: A missing event_definition_id fails loudly rather than reading every Metric Event in the App.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "event_definition_id is required"
 - name: missing_window_duration_ms_is_rejected
   description: A missing window_duration_ms fails loudly rather than assuming a Conversion Window the Run never declared.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "window_duration_ms is required"
 - name: missing_from_ts_is_rejected
   description: A missing from_ts fails loudly rather than scanning an unbounded history.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&window_duration_ms=259200000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "from_ts is required"
 - name: missing_to_ts_is_rejected
   description: A missing to_ts fails loudly rather than scanning past the requested boundary.
-  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000"
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "to_ts is required"
+
+- name: count_values_sum_numeric_fields_after_retry_deduplication
+  description: Count Metrics sum present selected numeric fields once per logical event, ignore an absent optional value, and preserve exposed Entities with zero values.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_duration&metric_type=count&event_definition_id=event_definition_llm&event_field_name=duration_ms&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_conflict","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":1000,"in_window":1}
+    {"targeting_key_hash":"tk_edge","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_null_variant","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_straddle","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_tail","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_treatment_snapshot","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":2000,"in_window":1}
+- name: revenue_values_sum_numeric_fields_without_tenant_contamination
+  description: Revenue Metrics sum decimal values and cannot read distinguishable values from another App or Environment.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_cost&metric_type=revenue&event_definition_id=event_definition_llm&event_field_name=cost_usd&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_conflict","run_id":"run_1","metric_id":"metric_cost","metric_type":"revenue","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","metric_id":"metric_cost","metric_type":"revenue","value":0.01,"in_window":1}
+    {"targeting_key_hash":"tk_edge","run_id":"run_1","metric_id":"metric_cost","metric_type":"revenue","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_null_variant","run_id":"run_1","metric_id":"metric_cost","metric_type":"revenue","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_straddle","run_id":"run_1","metric_id":"metric_cost","metric_type":"revenue","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_tail","run_id":"run_1","metric_id":"metric_cost","metric_type":"revenue","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_treatment_snapshot","run_id":"run_1","metric_id":"metric_cost","metric_type":"revenue","value":0.025,"in_window":1}

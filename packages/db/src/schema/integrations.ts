@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { createdAt, updatedAt } from "./columns";
-import { apps, environments } from "./identity";
+import { apps, environments, organizations } from "./identity";
 
 export const convexInstallations = sqliteTable(
   "convex_installations",
@@ -42,10 +42,15 @@ export const convexInstallations = sqliteTable(
 );
 
 /**
- * One Sentry organization bound to one splitch Environment.
+ * One Sentry organization bound to one splitch Organization.
  *
- * Environment-scoped because Sentry's change-tracking payload has no environment
- * axis: a customer's production Sentry org must not be told about dev toggles.
+ * Organization-scoped because Sentry's feature-flag integration is: it keeps ONE
+ * signing secret per provider type per Sentry organization, and its flag log has
+ * no project or environment axis at all (getsentry/sentry
+ * `src/sentry/flags/docs/api.md`). Under the earlier Environment scoping, wiring
+ * a second Environment to the same Sentry org minted a second secret that
+ * silently invalidated the first, so only the most recent install kept
+ * delivering.
  *
  * There is no companion delivery table. Sentry's `change_id` is an idempotency
  * token by contract, so redelivering a batch is safe, and `last_delivered_seq`
@@ -57,12 +62,9 @@ export const sentryInstallations = sqliteTable(
   "sentry_installations",
   {
     installationId: text("installation_id").primaryKey(),
-    appId: text("app_id")
+    orgId: text("org_id")
       .notNull()
-      .references(() => apps.id),
-    environmentId: text("environment_id")
-      .notNull()
-      .references(() => environments.id),
+      .references(() => organizations.id),
     /**
      * The full webhook URL copied out of Sentry's provider settings, stored
      * verbatim rather than rebuilt from an org slug so region hosts
@@ -88,17 +90,13 @@ export const sentryInstallations = sqliteTable(
   },
   (table) => [
     index("sentry_installations_due_idx").on(table.status, table.nextAttemptAt),
-    uniqueIndex("sentry_installations_scope_id_unique").on(
-      table.appId,
-      table.environmentId,
-      table.installationId,
-    ),
+    uniqueIndex("sentry_installations_scope_id_unique").on(table.orgId, table.installationId),
     /**
-     * The one-active-Sentry-org-per-Environment rule. Partial so revoked rows
+     * The one-active-Sentry-org-per-Organization rule. Partial so revoked rows
      * accumulate as history without blocking a reinstall.
      */
     uniqueIndex("sentry_installations_active_scope_unique")
-      .on(table.appId, table.environmentId)
+      .on(table.orgId)
       .where(sql`${table.status} = 'active'`),
   ],
 );

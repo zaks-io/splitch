@@ -1,0 +1,196 @@
+DESCRIPTION >
+    Returns paired per-Entity numerator and denominator values for one Ratio Metric.
+
+NODE scoped_ratio_exposures
+SQL >
+    %
+    {% if not defined(app_id) %} {{ error('app_id is required') }}{% end %}
+    {% if not defined(environment_id) %} {{ error('environment_id is required') }}{% end %}
+    {% if not defined(experiment_id) %} {{ error('experiment_id is required') }}{% end %}
+    {% if not defined(run_id) %} {{ error('run_id is required') }}{% end %}
+    SELECT
+        app_id, environment_id, run_id, id_type, targeting_key_hash, first_exposure_ts AS window_anchor
+    FROM serve_deduped_exposures
+    WHERE
+        app_id = {{ String(app_id) }}
+        AND environment_id = {{ String(environment_id) }}
+        AND experiment_id = {{ String(experiment_id) }}
+        AND run_id = {{ String(run_id) }}
+
+NODE scoped_numerator_events
+SQL >
+    %
+    {% if not defined(app_id) %} {{ error('app_id is required') }}{% end %}
+    {% if not defined(environment_id) %} {{ error('environment_id is required') }}{% end %}
+    {% if not defined(numerator_event_definition_id) %}
+        {{ error('numerator_event_definition_id is required') }}
+    {% end %}
+    {% if not defined(numerator_metric_type) %}
+        {{ error('numerator_metric_type is required') }}
+    {% end %}
+    {% if numerator_metric_type not in ['binomial', 'count', 'revenue'] %}
+        {{ error('numerator_metric_type must be non-Ratio') }}
+    {% end %}
+    {% if numerator_metric_type != 'binomial' and not defined(numerator_event_field_name) %}
+        {{ error('numerator_event_field_name is required for Count and Revenue') }}
+    {% end %}
+    {% if not defined(from_ts) %} {{ error('from_ts is required') }}{% end %}
+    {% if not defined(to_ts) %} {{ error('to_ts is required') }}{% end %}
+    SELECT
+        app_id,
+        environment_id,
+        id_type,
+        targeting_key_hash,
+        accepted_at,
+        {% if numerator_metric_type == 'binomial' %} toFloat64(1) AS event_value
+        {% else %}
+            toFloat64(JSONExtractRaw(fields, {{ String(numerator_event_field_name) }})) AS event_value
+        {% end %}
+    FROM serve_deduped_metric_events
+    WHERE
+        app_id = {{ String(app_id) }}
+        AND environment_id = {{ String(environment_id) }}
+        AND event_definition_id = {{ String(numerator_event_definition_id) }}
+        AND accepted_at >= {{ DateTime64(from_ts) }}
+        AND accepted_at < {{ DateTime64(to_ts) }}
+        {% if numerator_metric_type != 'binomial' %}
+            AND JSONHas(fields, {{ String(numerator_event_field_name) }})
+        {% end %}
+
+NODE numerator_values
+SQL >
+    %
+    {% if not defined(window_duration_ms) %} {{ error('window_duration_ms is required') }}{% end %}
+    SELECT
+        exposures.app_id AS app_id,
+        exposures.environment_id AS environment_id,
+        exposures.run_id AS run_id,
+        exposures.id_type AS id_type,
+        exposures.targeting_key_hash AS targeting_key_hash,
+        {% if numerator_metric_type == 'binomial' %}
+            toFloat64(countIf(events.event_value > 0) > 0) AS value
+        {% else %} sum(events.event_value) AS value
+        {% end %}
+    FROM scoped_ratio_exposures AS exposures
+    LEFT JOIN
+        scoped_numerator_events AS events
+        ON events.app_id = exposures.app_id
+        AND events.environment_id = exposures.environment_id
+        AND events.id_type = exposures.id_type
+        AND events.targeting_key_hash = exposures.targeting_key_hash
+        AND events.accepted_at >= exposures.window_anchor
+        AND (
+            {{ UInt64(window_duration_ms) }} = 0
+            OR events.accepted_at
+            < addMilliseconds(exposures.window_anchor, {{ UInt64(window_duration_ms) }})
+        )
+    GROUP BY
+        exposures.app_id,
+        exposures.environment_id,
+        exposures.run_id,
+        exposures.id_type,
+        exposures.targeting_key_hash
+
+NODE scoped_denominator_events
+SQL >
+    %
+    {% if not defined(app_id) %} {{ error('app_id is required') }}{% end %}
+    {% if not defined(environment_id) %} {{ error('environment_id is required') }}{% end %}
+    {% if not defined(denominator_event_definition_id) %}
+        {{ error('denominator_event_definition_id is required') }}
+    {% end %}
+    {% if not defined(denominator_metric_type) %}
+        {{ error('denominator_metric_type is required') }}
+    {% end %}
+    {% if denominator_metric_type not in ['binomial', 'count', 'revenue'] %}
+        {{ error('denominator_metric_type must be non-Ratio') }}
+    {% end %}
+    {% if denominator_metric_type != 'binomial' and not defined(denominator_event_field_name) %}
+        {{ error('denominator_event_field_name is required for Count and Revenue') }}
+    {% end %}
+    {% if not defined(from_ts) %} {{ error('from_ts is required') }}{% end %}
+    {% if not defined(to_ts) %} {{ error('to_ts is required') }}{% end %}
+    SELECT
+        app_id,
+        environment_id,
+        id_type,
+        targeting_key_hash,
+        accepted_at,
+        {% if denominator_metric_type == 'binomial' %} toFloat64(1) AS event_value
+        {% else %}
+            toFloat64(JSONExtractRaw(fields, {{ String(denominator_event_field_name) }})) AS event_value
+        {% end %}
+    FROM serve_deduped_metric_events
+    WHERE
+        app_id = {{ String(app_id) }}
+        AND environment_id = {{ String(environment_id) }}
+        AND event_definition_id = {{ String(denominator_event_definition_id) }}
+        AND accepted_at >= {{ DateTime64(from_ts) }}
+        AND accepted_at < {{ DateTime64(to_ts) }}
+        {% if denominator_metric_type != 'binomial' %}
+            AND JSONHas(fields, {{ String(denominator_event_field_name) }})
+        {% end %}
+
+NODE denominator_values
+SQL >
+    %
+    {% if not defined(window_duration_ms) %} {{ error('window_duration_ms is required') }}{% end %}
+    SELECT
+        exposures.app_id AS app_id,
+        exposures.environment_id AS environment_id,
+        exposures.run_id AS run_id,
+        exposures.id_type AS id_type,
+        exposures.targeting_key_hash AS targeting_key_hash,
+        {% if denominator_metric_type == 'binomial' %}
+            toFloat64(countIf(events.event_value > 0) > 0) AS value
+        {% else %} sum(events.event_value) AS value
+        {% end %}
+    FROM scoped_ratio_exposures AS exposures
+    LEFT JOIN
+        scoped_denominator_events AS events
+        ON events.app_id = exposures.app_id
+        AND events.environment_id = exposures.environment_id
+        AND events.id_type = exposures.id_type
+        AND events.targeting_key_hash = exposures.targeting_key_hash
+        AND events.accepted_at >= exposures.window_anchor
+        AND (
+            {{ UInt64(window_duration_ms) }} = 0
+            OR events.accepted_at
+            < addMilliseconds(exposures.window_anchor, {{ UInt64(window_duration_ms) }})
+        )
+    GROUP BY
+        exposures.app_id,
+        exposures.environment_id,
+        exposures.run_id,
+        exposures.id_type,
+        exposures.targeting_key_hash
+
+NODE ratio_entity_values
+SQL >
+    %
+    {% if not defined(app_id) %} {{ error('app_id is required') }}{% end %}
+    {% if not defined(environment_id) %} {{ error('environment_id is required') }}{% end %}
+    {% if not defined(metric_id) %} {{ error('metric_id is required') }}{% end %}
+    SELECT
+        numerator.targeting_key_hash AS targeting_key_hash,
+        numerator.run_id AS run_id,
+        {{ String(metric_id) }} AS metric_id,
+        'ratio' AS metric_type,
+        toFloat64(0) AS value,
+        numerator.value AS num_value,
+        denominator.value AS denom_value,
+        toUInt8(1) AS in_window
+    FROM numerator_values AS numerator
+    INNER JOIN
+        denominator_values AS denominator
+        ON denominator.app_id = numerator.app_id
+        AND denominator.environment_id = numerator.environment_id
+        AND denominator.run_id = numerator.run_id
+        AND denominator.id_type = numerator.id_type
+        AND denominator.targeting_key_hash = numerator.targeting_key_hash
+    WHERE
+        numerator.app_id = {{ String(app_id) }}
+        AND numerator.environment_id = {{ String(environment_id) }}
+    ORDER BY targeting_key_hash
+
+TYPE ENDPOINT

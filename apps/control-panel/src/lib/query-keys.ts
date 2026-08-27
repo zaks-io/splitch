@@ -24,6 +24,12 @@ function variantList(appId: string, environmentId: string, flagId: string) {
 }
 
 export const queryKeys = {
+  org: {
+    // Sentry keeps one signing secret per provider for a whole Sentry
+    // organization, so the installation is Org-scoped and its key must not sit
+    // under an App or an Environment.
+    sentryInstallations: (orgId: string) => ["org", orgId, "sentry-installations"] as const,
+  },
   app: {
     root,
     // App Settings is App-scoped, so its key is NOT under an Environment: the
@@ -35,8 +41,10 @@ export const queryKeys = {
       [...entityPrefix(appId, environmentId, "environment"), "settings"] as const,
     exposureStatus: (appId: string, environmentId: string) =>
       [...entityPrefix(appId, environmentId, "environment"), "exposure-status"] as const,
-    sentryInstallations: (appId: string, environmentId: string) =>
-      [...entityPrefix(appId, environmentId, "environment"), "sentry-installations"] as const,
+    convexInstallations: (appId: string, environmentId: string) =>
+      [...entityPrefix(appId, environmentId, "environment"), "convex-installations"] as const,
+    cloudflareInstallations: (appId: string, environmentId: string) =>
+      [...entityPrefix(appId, environmentId, "environment"), "cloudflare-installations"] as const,
   },
   experiment: {
     prefix: (appId: string, environmentId: string) =>

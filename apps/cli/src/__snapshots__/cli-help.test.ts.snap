@@ -13,6 +13,7 @@ Flags:
   --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
   --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --output-file <path>     [type: string; default: none] Write the once-only secret to a new 0600 file instead of stdout; the payload reports valueWrittenTo.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
 
@@ -27,7 +28,7 @@ Credential semantics:
 
 Example:
   splitch api-keys create --body-json '{"scopes":[]}' --json",
-    "api-keys list": "List API Key metadata (no secrets).
+    "api-keys list": "List API Key metadata (no secrets; bounded; reports its own truncation).
 
 Usage:
   splitch api-keys list [flags]
@@ -171,7 +172,7 @@ Flags:
 
 Example:
   splitch approval-requests get <id> --json",
-    "approval-requests list": "List Approval Requests in an App.
+    "approval-requests list": "List Approval Requests in an App (bounded; reports its own truncation).
 
 Usage:
   splitch approval-requests list [flags]
@@ -359,6 +360,58 @@ Flags:
 
 Example:
   splitch cloudflare status --env production --json",
+    "cloudflare-installations list": "List Cloudflare installations and their delivery health for this Environment.
+
+Usage:
+  splitch cloudflare-installations list [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch cloudflare-installations list --json",
+    "cloudflare-installations revoke": "Revoke a Cloudflare integration and suppress pending deliveries.
+
+Usage:
+  splitch cloudflare-installations revoke <installation-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch cloudflare-installations revoke <installation-id> --json",
+    "convex-installations list": "List Convex installations and their delivery health for this Environment.
+
+Usage:
+  splitch convex-installations list [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch convex-installations list --json",
+    "convex-installations revoke": "Revoke a Convex integration and suppress pending deliveries.
+
+Usage:
+  splitch convex-installations revoke <installation-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch convex-installations revoke <installation-id> --json",
     "env-policy get": "Get the selected Environment Policy.
 
 Usage:
@@ -1096,8 +1149,9 @@ Request body (--body-json):
   name                       required  string
   key                        required  string
   kind                       required  string ("binomial" | "count" | "revenue" | "ratio")
-  eventDefinitionId          required  string
+  eventDefinitionId          optional  string
   eventFieldName             optional  string
+  numerator                  optional  { metricId: string }
   denominator                optional  { metricId: string }
   description                optional  string
   downsideThresholdPct       optional  number | null
@@ -1107,10 +1161,10 @@ Request body (--body-json):
   cupedCoverageThresholdPct  optional  number | null
   idempotency_key            optional  string
   Example:
-    {"appId":"app_1","name":"name","key":"key","kind":"binomial","eventDefinitionId":"eventDefinition_1"}
+    {"appId":"app_1","name":"name","key":"key","kind":"binomial"}
 
 Example:
-  splitch metrics create --body-json '{"appId":"app_1","name":"name","key":"key","kind":"binomial","eventDefinitionId":"eventDefinition_1"}' --json",
+  splitch metrics create --body-json '{"appId":"app_1","name":"name","key":"key","kind":"binomial"}' --json",
     "metrics delete": "Delete a Metric (blocked if referenced by a running Experiment).
 
 Usage:
@@ -1164,8 +1218,9 @@ Request body (--body-json):
   name                       optional  string
   key                        optional  string
   kind                       optional  string ("binomial" | "count" | "revenue" | "ratio")
-  eventDefinitionId          optional  string
-  eventFieldName             optional  string
+  eventDefinitionId          optional  string | null
+  eventFieldName             optional  string | null
+  numerator                  optional  { metricId: string }
   denominator                optional  { metricId: string }
   description                optional  string
   downsideThresholdPct       optional  number | null
@@ -1441,17 +1496,16 @@ Request body (--body-json):
 
 Example:
   splitch segments update <segment-id> --body-json '{"name":"name"}' --json",
-    "sentry-installations create": "Send this Environment's Flag changes to a Sentry organization.
+    "sentry-installations create": "Send this Organization's Flag changes to a Sentry organization.
 
 Usage:
-  splitch sentry-installations create [flags]
+  splitch sentry-installations create <org-id> [flags]
 
 Flags:
-  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
-  --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
-  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help           [type: boolean; default: false] Show help and exit.
+  --org <organization>  [type: string; default: none] Organization ID.
+  --body-json <json>    [type: JSON object; default: none] Request body fields; see Request body below.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
   installationId  required  string
@@ -1461,57 +1515,53 @@ Request body (--body-json):
     {"installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","webhookUrl":"https://app.example.com"}
 
 Example:
-  splitch sentry-installations create --body-json '{"installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","webhookUrl":"https://app.example.com"}' --json",
+  splitch sentry-installations create <org-id> --body-json '{"installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","webhookUrl":"https://app.example.com"}' --json",
     "sentry-installations delete": "Revoke a Sentry integration and stop change delivery.
 
 Usage:
-  splitch sentry-installations delete <installation-id> [flags]
+  splitch sentry-installations delete <org-id> <installation-id> [flags]
 
 Flags:
-  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
-  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help           [type: boolean; default: false] Show help and exit.
+  --org <organization>  [type: string; default: none] Organization ID.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch sentry-installations delete <installation-id> --json",
+  splitch sentry-installations delete <org-id> <installation-id> --json",
     "sentry-installations get": "Read Sentry change-tracking delivery health without secrets.
 
 Usage:
-  splitch sentry-installations get <installation-id> [flags]
+  splitch sentry-installations get <org-id> <installation-id> [flags]
 
 Flags:
-  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
-  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help           [type: boolean; default: false] Show help and exit.
+  --org <organization>  [type: string; default: none] Organization ID.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch sentry-installations get <installation-id> --json",
+  splitch sentry-installations get <org-id> <installation-id> --json",
     "sentry-installations list": "List Sentry change-tracking installations and their delivery health.
 
 Usage:
-  splitch sentry-installations list [flags]
+  splitch sentry-installations list <org-id> [flags]
 
 Flags:
-  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
-  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help           [type: boolean; default: false] Show help and exit.
+  --org <organization>  [type: string; default: none] Organization ID.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch sentry-installations list --json",
+  splitch sentry-installations list <org-id> --json",
     "sentry-secret-rotations create": "Rotate the Sentry webhook signing secret.
 
 Usage:
-  splitch sentry-secret-rotations create <installation-id> [flags]
+  splitch sentry-secret-rotations create <org-id> <installation-id> [flags]
 
 Flags:
-  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
-  --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
-  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help           [type: boolean; default: false] Show help and exit.
+  --org <organization>  [type: string; default: none] Organization ID.
+  --body-json <json>    [type: JSON object; default: none] Request body fields; see Request body below.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
   rotationId     required  string
@@ -1520,7 +1570,7 @@ Request body (--body-json):
     {"rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}
 
 Example:
-  splitch sentry-secret-rotations create <installation-id> --body-json '{"rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}' --json",
+  splitch sentry-secret-rotations create <org-id> <installation-id> --body-json '{"rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}' --json",
   },
   "groups": {
     "api-keys": "Manage api-keys resources.
@@ -1529,7 +1579,7 @@ Usage:
   splitch api-keys <action> [arguments] [flags]
 
 Commands:
-  list            List API Key metadata (no secrets).
+  list            List API Key metadata (no secrets; bounded; reports its own truncation).
   create          Mint an API Key (raw secret surfaced once only).
   revoke          Revoke an API Key.
 
@@ -1586,7 +1636,7 @@ Usage:
   splitch approval-requests <action> [arguments] [flags]
 
 Commands:
-  list            List Approval Requests in an App.
+  list            List Approval Requests in an App (bounded; reports its own truncation).
   get             Get one full Approval Request projection.
 
 Flags:
@@ -1641,6 +1691,34 @@ Flags:
 
 Example:
   splitch cloudflare setup --help",
+    "cloudflare-installations": "Manage cloudflare-installations resources.
+
+Usage:
+  splitch cloudflare-installations <action> [arguments] [flags]
+
+Commands:
+  list            List Cloudflare installations and their delivery health for this Environment.
+  revoke          Revoke a Cloudflare integration and suppress pending deliveries.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch cloudflare-installations list --help",
+    "convex-installations": "Manage convex-installations resources.
+
+Usage:
+  splitch convex-installations <action> [arguments] [flags]
+
+Commands:
+  list            List Convex installations and their delivery health for this Environment.
+  revoke          Revoke a Convex integration and suppress pending deliveries.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch convex-installations list --help",
     "env-policy": "Manage env-policy resources.
 
 Usage:
@@ -1911,7 +1989,7 @@ Usage:
 
 Commands:
   list            List Sentry change-tracking installations and their delivery health.
-  create          Send this Environment's Flag changes to a Sentry organization.
+  create          Send this Organization's Flag changes to a Sentry organization.
   get             Read Sentry change-tracking delivery health without secrets.
   delete          Revoke a Sentry integration and stop change delivery.
 
@@ -2019,6 +2097,8 @@ Resource groups:
   apps
   client-key
   cloudflare
+  cloudflare-installations
+  convex-installations
   env-policy
   environment-exposure-status
   envs

@@ -1,6 +1,8 @@
 import { env as workerEnv } from "cloudflare:workers";
 import type { ApprovalsClient, FlagsClient, PanelSegmentsClient } from "@splitch/control-plane-sdk";
 import type { PanelExposureStatusClient } from "@splitch/control-plane-sdk/panel-exposure-status";
+import type { PanelCloudflareClient } from "@splitch/control-plane-sdk/panel-cloudflare";
+import type { PanelConvexClient } from "@splitch/control-plane-sdk/panel-convex";
 import type { PanelSentryClient } from "@splitch/control-plane-sdk/panel-sentry";
 import { getRequest } from "@tanstack/react-start/server";
 import { controlPanelMutationBindings } from "./bindings";
@@ -11,6 +13,8 @@ import {
 } from "./control-plane-apps";
 import { createControlPanelExperimentsClient } from "./control-plane-experiments";
 import { createControlPanelExposureStatusClient } from "./control-plane-exposure-status";
+import { createControlPanelCloudflareClient } from "./control-plane-cloudflare";
+import { createControlPanelConvexClient } from "./control-plane-convex";
 import { createControlPanelSegmentsClient } from "./control-plane-segments";
 import { createControlPanelSentryClient } from "./control-plane-sentry";
 import { loadSessionFromRequest } from "./session-refresh";
@@ -195,8 +199,9 @@ export async function authorizedAppSettingsClient(): Promise<AuthorizedAppSettin
 }
 
 /**
- * No Environment pinned: the Sentry paths name the Environment themselves, so a
- * header-carried one would be a second source of truth for the same axis.
+ * No Environment pinned: Sentry keeps one signing secret per provider for a whole
+ * Sentry organization, so an installation wires up a splitch Organization and the
+ * Sentry paths name that Organization themselves.
  */
 export async function authorizedSentryClient(): Promise<AuthorizedClient<PanelSentryClient>> {
   const authorized = await panelBindingContext();
@@ -205,6 +210,38 @@ export async function authorizedSentryClient(): Promise<AuthorizedClient<PanelSe
   return {
     ok: true,
     client: createControlPanelSentryClient(
+      bindings.CONTROL_PLANE_API,
+      actor,
+      bindings.CONTROL_PANEL_DELEGATION_SECRET,
+    ),
+  };
+}
+
+/** No Environment pinned, because every Convex path names it. */
+export async function authorizedConvexClient(): Promise<AuthorizedClient<PanelConvexClient>> {
+  const authorized = await panelBindingContext();
+  if (!authorized.ok) return authorized;
+  const { bindings, actor } = authorized;
+  return {
+    ok: true,
+    client: createControlPanelConvexClient(
+      bindings.CONTROL_PLANE_API,
+      actor,
+      bindings.CONTROL_PANEL_DELEGATION_SECRET,
+    ),
+  };
+}
+
+/** No Environment pinned, because every Cloudflare path names it. */
+export async function authorizedCloudflareClient(): Promise<
+  AuthorizedClient<PanelCloudflareClient>
+> {
+  const authorized = await panelBindingContext();
+  if (!authorized.ok) return authorized;
+  const { bindings, actor } = authorized;
+  return {
+    ok: true,
+    client: createControlPanelCloudflareClient(
       bindings.CONTROL_PLANE_API,
       actor,
       bindings.CONTROL_PANEL_DELEGATION_SECRET,

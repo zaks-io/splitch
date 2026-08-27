@@ -8,15 +8,14 @@ Runnable wiring for both halves of Sentry's feature-flag support. Full contract:
 In Sentry: **Settings → Feature Flags → Change Tracking → Add provider → Generic**. Copy the webhook
 URL it shows you; leave the Secret field for later, because splitch mints that side.
 
-The fastest path is the Control Panel: open the Environment whose changes that Sentry organization
-should hear about, go to **Settings**, and use the **Sentry change tracking** card. Paste the webhook
-URL, press Connect Sentry, and paste the secret it returns back into Sentry's Secret field. The
-secret is shown once.
+The fastest path is the Control Panel: open your Organization, go to **Integrations**, and use the
+**Sentry change tracking** card. Paste the webhook URL, press Connect Sentry, and paste the secret it
+returns back into Sentry's Secret field. The secret is shown once.
 
 The same install over the API, for an agent or a script:
 
 ```bash
-curl -X POST "https://api.splitch.dev/apps/$SPLITCH_APP_ID/envs/$SPLITCH_ENVIRONMENT_ID/integrations/sentry/installations" \
+curl -X POST "https://api.splitch.dev/orgs/$SPLITCH_ORG_ID/integrations/sentry/installations" \
   -H "Authorization: Bearer $SPLITCH_CONTROL_PLANE_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -25,12 +24,14 @@ curl -X POST "https://api.splitch.dev/apps/$SPLITCH_APP_ID/envs/$SPLITCH_ENVIRON
       }'
 ```
 
-The Environment is in the path, so one installation binds one Environment to one Sentry
-organization. Omitting `webhookSecret` is what makes the server mint one and return it once on the
-response; supply your own instead if you are rotating out of your own keystore.
+The Organization is in the path, so one installation binds one splitch Organization to one Sentry
+organization and publishes every Flag change under it, across all its Apps and Environments. Sentry's
+flag log has no project or environment axis to filter on. Omitting `webhookSecret` is what makes the
+server mint one and return it once on the response; supply your own instead if you are rotating out
+of your own keystore.
 
 Toggle a Flag and it shows up in Sentry's flag audit log within a minute. Check delivery health with
-`GET /apps/<appId>/envs/<environmentId>/integrations/sentry/installations`; it returns
+`GET /orgs/<orgId>/integrations/sentry/installations`; it returns
 `{ items, readLimit, readTruncated, cursor }`, and each item carries `lastDeliveredSeq`,
 `attemptCount`, and `latestDeliveryError`, never the secret.
 

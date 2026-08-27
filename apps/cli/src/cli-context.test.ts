@@ -90,7 +90,13 @@ describe("splitch context reports the session, never an empty success", () => {
     expect(code).toBe(EXIT_AUTH);
     expect(error.mock.calls.join(" ")).toContain("CLI_NOT_AUTHENTICATED");
     expect(error.mock.calls.join(" ")).toContain("splitch login");
-    expect(log).not.toHaveBeenCalled();
+    expect(JSON.parse(log.mock.calls.join(""))).toEqual({
+      code: "CLI_NOT_AUTHENTICATED",
+      message: expect.stringContaining("session"),
+      remediation: expect.stringContaining("splitch login"),
+      docsUrl: "https://splitch.dev/docs/error/CLI_NOT_AUTHENTICATED",
+      details: null,
+    });
   });
 
   it("reports the principal and the next step when authenticated but unscoped", async () => {

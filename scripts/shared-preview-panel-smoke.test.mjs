@@ -106,11 +106,22 @@ test("cleanup names only tables that exist in the Drizzle schema", () => {
     ...appScopedSchemaTables(),
     "app_deletion_sagas",
     "apps",
+    "sentry_installations",
     "variants",
   ]);
   for (const table of buildCleanupSql().matchAll(/DELETE FROM ([a-z_]+) /g)) {
     assert.ok(schemaTables.has(table[1]), `cleanup deletes from unknown table ${table[1]}`);
   }
+});
+
+test("cleanup removes the Organization-scoped Sentry installation", () => {
+  // A Sentry installation hangs off the Organization, so no transient App going
+  // away takes it with it, and the partial unique index allows only one active
+  // row per Organization: leaving it behind breaks the next run's install.
+  assert.match(
+    buildCleanupSql(),
+    new RegExp(`DELETE FROM sentry_installations WHERE org_id = '${SMOKE_IDS.org}'`),
+  );
 });
 
 test("cleanup removes every table the panel golden path writes to", () => {

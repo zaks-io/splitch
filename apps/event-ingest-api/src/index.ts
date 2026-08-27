@@ -16,6 +16,7 @@ import { handleEvaluationCommit } from "./evaluation-commit";
 import { EvaluationCommitOutboxDurableObject } from "./evaluation-commit-outbox";
 import { EvaluationUsageReplayWindowDurableObject } from "./evaluation-usage-replay-window";
 import { handleEvaluationIngest, handleIngest } from "./ingest";
+import { IngestAdmissionGateDurableObject } from "./ingest-admission-gate";
 import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
 import { handleMetricEventQueue } from "./metric-event-queue";
@@ -157,6 +158,7 @@ function recordRequest(
 export {
   EvaluationCommitOutboxDurableObject,
   EvaluationUsageReplayWindowDurableObject,
+  IngestAdmissionGateDurableObject,
   MetricEventOutboxDurableObject,
   MetricEventRateLimitDurableObject,
 };

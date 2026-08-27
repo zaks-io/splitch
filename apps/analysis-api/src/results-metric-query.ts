@@ -3,6 +3,7 @@ import { ResultsInputError } from "./results-errors";
 import { tinybirdDateTime64, type TinybirdReadTransport } from "./tinybird";
 
 const METRIC_VALUES_PIPE = "analysis_metric_values";
+const RATIO_METRIC_VALUES_PIPE = "analysis_ratio_metric_values";
 const PRE_PERIOD_PIPE = "analysis_pre_period_covariates";
 
 export async function readMetricRows(
@@ -14,15 +15,18 @@ export async function readMetricRows(
 ): Promise<readonly unknown[]> {
   const rows = await Promise.all(
     configs.map((config) => {
-      assertBinomialQuery(config);
-      return tinybird.readPipe(METRIC_VALUES_PIPE, {
-        ...params,
-        metric_id: config.metric_id,
-        event_definition_id: config.event_definition_id,
-        window_duration_ms: String(config.window_duration_ms),
-        from_ts: tinybirdDateTime64(startedAt),
-        to_ts: toTs,
-      });
+      return tinybird.readPipe(
+        config.metric_type === "ratio" ? RATIO_METRIC_VALUES_PIPE : METRIC_VALUES_PIPE,
+        {
+          ...params,
+          metric_id: config.metric_id,
+          metric_type: config.metric_type,
+          window_duration_ms: String(config.window_duration_ms),
+          from_ts: tinybirdDateTime64(startedAt),
+          to_ts: toTs,
+          ...sourceParams(config),
+        },
+      );
     }),
   );
   return rows.flat();
@@ -40,17 +44,22 @@ export async function readPrePeriodRows(
     throw new ResultsInputError("analysis_run_inputs.started_at is not a timestamp");
   }
   const rows = await Promise.all(
-    configs.map((config) => {
-      assertBinomialQuery(config);
-      return tinybird.readPipe(PRE_PERIOD_PIPE, {
-        ...params,
-        metric_id: config.metric_id,
-        event_definition_id: config.event_definition_id,
-        lookback_ms: String(config.cuped_lookback_ms),
-        from_ts: tinybirdDateTime64(new Date(startedAtMs - config.cuped_lookback_ms).toISOString()),
-        to_ts: toTs,
-      });
-    }),
+    configs
+      .filter((config) => config.metric_type !== "ratio")
+      .map((config) => {
+        return tinybird.readPipe(PRE_PERIOD_PIPE, {
+          ...params,
+          metric_id: config.metric_id,
+          metric_type: config.metric_type,
+          event_definition_id: config.event_definition_id,
+          ...(config.event_field_name ? { event_field_name: config.event_field_name } : {}),
+          lookback_ms: String(config.cuped_lookback_ms),
+          from_ts: tinybirdDateTime64(
+            new Date(startedAtMs - config.cuped_lookback_ms).toISOString(),
+          ),
+          to_ts: toTs,
+        });
+      }),
   );
   return rows.flat();
 }
@@ -78,10 +87,23 @@ export function assertMetricQueryCoverage(
   }
 }
 
-function assertBinomialQuery(config: MetricQueryConfig): void {
-  if (config.metric_type !== "binomial") {
-    throw new ResultsInputError(
-      `analysis materialization for ${config.metric_type} Metric ${config.metric_id} is unavailable`,
-    );
+function sourceParams(config: MetricQueryConfig): Record<string, string> {
+  if (config.metric_type !== "ratio") {
+    return {
+      event_definition_id: config.event_definition_id,
+      ...(config.event_field_name ? { event_field_name: config.event_field_name } : {}),
+    };
   }
+  return {
+    numerator_metric_type: config.numerator.metric_type,
+    numerator_event_definition_id: config.numerator.event_definition_id,
+    ...(config.numerator.event_field_name
+      ? { numerator_event_field_name: config.numerator.event_field_name }
+      : {}),
+    denominator_metric_type: config.denominator.metric_type,
+    denominator_event_definition_id: config.denominator.event_definition_id,
+    ...(config.denominator.event_field_name
+      ? { denominator_event_field_name: config.denominator.event_field_name }
+      : {}),
+  };
 }

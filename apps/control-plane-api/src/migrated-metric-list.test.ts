@@ -1,5 +1,10 @@
 import { appScope, createRepository } from "@splitch/db";
-import { applySchema, migrationStatements } from "@splitch/db/test-d1";
+import {
+  applySchema,
+  migrationFileStatements,
+  migrationStatements,
+  migrationStatementsThrough,
+} from "@splitch/db/test-d1";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
 import { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -149,6 +154,46 @@ describe("the Event Definition migration", () => {
   });
 });
 
+describe("the Ratio operand migration", () => {
+  it("keeps a legacy Ratio readable and repairable without inferring a numerator", async () => {
+    await migrateExistingRatio();
+    const app = migratedApp();
+
+    const listResponse = await app.request(`/apps/${APP_ID}/metrics`, {
+      headers: { authorization: "Bearer migration-proof" },
+    });
+    expect(listResponse.status).toBe(200);
+    const list = (await listResponse.json()) as { items: Array<{ id: string }> };
+    expect(list.items.find(({ id }) => id === "metric_legacy_ratio")).toMatchObject({
+      id: "metric_legacy_ratio",
+      kind: "ratio",
+      eventDefinitionId: "event_definition_legacy_numerator",
+      denominator: { metricId: "metric_denominator" },
+      configurationStatus: "needs_configuration",
+    });
+
+    const repairResponse = await app.request(`/apps/${APP_ID}/metrics/metric_legacy_ratio`, {
+      method: "PATCH",
+      headers: {
+        authorization: "Bearer migration-proof",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        numerator: { metricId: "metric_numerator" },
+        denominator: { metricId: "metric_denominator" },
+      }),
+    });
+    expect(repairResponse.status).toBe(200);
+    expect(await repairResponse.json()).toMatchObject({
+      id: "metric_legacy_ratio",
+      eventDefinitionId: null,
+      numerator: { metricId: "metric_numerator" },
+      denominator: { metricId: "metric_denominator" },
+      configurationStatus: "ready",
+    });
+  });
+});
+
 /** Seeds the pre-migration Metric, then applies the Event Definition migration over it. */
 async function migrateExistingMetric(): Promise<void> {
   const statements = migrationStatements();
@@ -197,6 +242,63 @@ async function migrateExistingMetric(): Promise<void> {
       ),
   ]);
   await applySchema(d1, statements.slice(eventMigration));
+}
+
+async function migrateExistingRatio(): Promise<void> {
+  await applySchema(d1, migrationStatementsThrough("0026_flag_change_log.sql"));
+  await d1.batch([
+    d1
+      .prepare(
+        `INSERT INTO organizations
+           (id, name, slug, plan, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .bind("org_existing_metric", "Existing Metric Co", "existing-metric", "free", NOW, NOW),
+    d1
+      .prepare(
+        `INSERT INTO apps
+           (id, organization_id, name, key, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(APP_ID, "org_existing_metric", "Existing Metric App", "existing-metric", NOW, NOW),
+    d1
+      .prepare(
+        "INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?, ?, ?, ?)",
+      )
+      .bind(APP_ID, "migration-proof", "owner", NOW),
+    legacyMetric("metric_numerator", "numerator", "binomial", "event_definition_numerator", null),
+    legacyMetric(
+      "metric_denominator",
+      "denominator",
+      "binomial",
+      "event_definition_denominator",
+      null,
+    ),
+    legacyMetric(
+      "metric_legacy_ratio",
+      "legacy-ratio",
+      "ratio",
+      "event_definition_legacy_numerator",
+      "metric_denominator",
+    ),
+  ]);
+  await applySchema(d1, migrationFileStatements("0027_ratio_metric_operands.sql"));
+}
+
+function legacyMetric(
+  id: string,
+  key: string,
+  kind: string,
+  eventDefinitionId: string,
+  denominatorMetricId: string | null,
+): D1PreparedStatement {
+  return d1
+    .prepare(
+      `INSERT INTO metrics
+         (id, app_id, key, name, kind, event_definition_id, denominator_metric_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(id, APP_ID, key, key, kind, eventDefinitionId, denominatorMetricId, NOW);
 }
 
 function migratedApp() {

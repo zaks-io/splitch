@@ -182,6 +182,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
           | "description"
           | "eventDefinitionId"
           | "eventFieldName"
+          | "numeratorMetricId"
           | "denominatorMetricId"
           | "downsideThresholdPct"
           | "winsorize"

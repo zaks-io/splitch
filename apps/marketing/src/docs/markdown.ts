@@ -1,4 +1,5 @@
 import { blocksToMarkdown } from "./blocks";
+import { cliDoc } from "./cli";
 import {
   type DocumentedErrorCode,
   documentedErrorCodes,
@@ -29,6 +30,15 @@ export function flagsDocMarkdown(): string {
   ].join("\n\n");
 }
 
+export function cliDocMarkdown(): string {
+  return [
+    `# ${cliDoc.title}`,
+    cliDoc.summary,
+    blocksToMarkdown(cliDoc.blocks),
+    `Source: ${DOCS_ORIGIN}${docsPath.cli()}`,
+  ].join("\n\n");
+}
+
 export function errorMarkdown(code: DocumentedErrorCode): string {
   const doc = errorDocs[code];
   const status = httpStatusForDocumentedCode(code);
@@ -38,12 +48,11 @@ export function errorMarkdown(code: DocumentedErrorCode): string {
   if (doc.recommendedAction) facts.push(`Recommended action: \`${doc.recommendedAction}\``);
   if (doc.details) facts.push(`Details: \`${doc.details}\``);
 
-  const sections = [
-    `# ${code}`,
-    facts.map((fact) => `- ${fact}`).join("\n"),
-    `## Cause\n\n${doc.cause}`,
-    `## Fix\n\n${doc.fix}`,
-  ];
+  // Remediation leads: an agent reading this page is mid-failure, and the one
+  // action that clears the code should be readable before the explanation of it.
+  const sections = [`# ${code}`, facts.map((fact) => `- ${fact}`).join("\n")];
+  if (doc.remediation) sections.push(`## Remediation\n\n${doc.remediation}`);
+  sections.push(`## Cause\n\n${doc.cause}`, `## Fix\n\n${doc.fix}`);
   if (doc.related?.length) {
     sections.push(
       `## Related\n\n${doc.related
@@ -77,6 +86,9 @@ export function llmsTxt(): string {
     "Every page below is also served as HTML at the same URL without the `.md` suffix.",
     "## Flags",
     `- [${flagsDoc.title}](${DOCS_ORIGIN}${docsPath.flagsMarkdown()}): ${flagsDoc.summary}`,
+    "## CLI",
+    `- [${cliDoc.title}](${DOCS_ORIGIN}${docsPath.cliMarkdown()}): ${cliDoc.summary}`,
+    "Every command accepts `--json` (one line on stdout, failures included) and `--help`. Policy-gated changes take `--confirm`.",
     "## SDK",
     topicLines.join("\n"),
     "## Errors",

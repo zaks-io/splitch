@@ -120,6 +120,17 @@ describe("mcp tools: surface isolation (CRITICAL)", () => {
 });
 
 describe("mcp tools: 1:1 parity with control-plane routes", () => {
+  it("derives the Convex and Cloudflare operator installation tools", () => {
+    for (const operationId of [
+      "convex_installations_list",
+      "convex_installations_revoke",
+      "cloudflare_installations_list",
+      "cloudflare_installations_revoke",
+    ]) {
+      expect(toolNames.has(operationId)).toBe(true);
+    }
+  });
+
   it("derives the Organization usage read tool and its flat Org input", () => {
     const usage = tools.find((tool) => tool.name === "organization_usage_get");
     const route = getRoute("organization_usage_get");

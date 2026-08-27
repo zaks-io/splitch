@@ -7,9 +7,9 @@
  *
  * Both methods are SYSTEM reads driven by the cron, not tenant reads: they run
  * with no caller and no scope, exactly like `convex.claimDueDeliveries`. Every
- * row they return is bounded by an `app_id`/`environment_id` the caller already
- * holds from a claimed installation row, so no scope is fabricated. When the
- * read surface for humans lands, it goes through the scoped seam instead.
+ * row they return is bounded by the `org_id` the caller already holds from a
+ * claimed installation row, so no scope is fabricated. When the read surface for
+ * humans lands, it goes through the scoped seam instead.
  */
 
 export interface FlagChangeEventRow {
@@ -27,15 +27,20 @@ export interface FlagChangeEventRow {
 export function makeFlagChangeEventRepo(d1: D1Database) {
   return {
     /**
-     * The next batch of changes an Environment-bound integration has not seen.
+     * The next batch of changes an Organization-bound integration has not seen:
+     * every App under the Organization, every Environment, in `seq` order.
      *
-     * `environment_id IS NULL` rows are App-level DEFINITION changes (the Flag
-     * itself, its Variant catalog). They affect every Environment, so an
-     * Environment-scoped consumer must receive them too.
+     * Both axes are deliberate. Sentry's flag log has no project or environment
+     * field, so there is nothing narrower to publish to, and an Environment
+     * filter here would hide real production changes the moment an operator
+     * picked the wrong Environment.
+     *
+     * Apps are resolved through a subquery rather than a join so the cursor scan
+     * stays on `flag_change_events`. An App's log rows are deleted with the App
+     * (`app-delete-cascade`), so no row this misses could still be deliverable.
      */
-    async pendingForScope(
-      appId: string,
-      environmentId: string,
+    async pendingForOrg(
+      orgId: string,
       afterSeq: number,
       limit: number,
     ): Promise<FlagChangeEventRow[]> {
@@ -45,10 +50,10 @@ export function makeFlagChangeEventRepo(d1: D1Database) {
             action, target_type AS targetType, actor_ref AS actorRef, actor_via AS actorVia,
             changed_at AS changedAt
           FROM flag_change_events
-          WHERE app_id = ? AND (environment_id = ? OR environment_id IS NULL) AND seq > ?
+          WHERE app_id IN (SELECT id FROM apps WHERE organization_id = ?) AND seq > ?
           ORDER BY seq ASC LIMIT ?`,
         )
-        .bind(appId, environmentId, afterSeq, limit)
+        .bind(orgId, afterSeq, limit)
         .all<FlagChangeEventRow>();
       return rows.results;
     },

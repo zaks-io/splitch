@@ -1,123 +1,93 @@
-DESCRIPTION Returns deduplicated per-Entity values for one Binomial Metric in one Run.
+DESCRIPTION >
+    Returns one zero-preserving per-Entity value for a Binomial, Count, or Revenue Metric.
 
 NODE scoped_exposures
 SQL >
     %
-    {% if not defined(app_id) %}
-    {{error('app_id is required')}}
-    {% end %}
-    {% if not defined(environment_id) %}
-    {{error('environment_id is required')}}
-    {% end %}
-    {% if not defined(experiment_id) %}
-    {{error('experiment_id is required')}}
-    {% end %}
-    {% if not defined(run_id) %}
-    {{error('run_id is required')}}
-    {% end %}
-    {% if not defined(metric_id) %}
-    {{error('metric_id is required')}}
-    {% end %}
-    {% if not defined(event_definition_id) %}
-    {{error('event_definition_id is required')}}
-    {% end %}
-    {% if not defined(window_duration_ms) %}
-    {{error('window_duration_ms is required')}}
-    {% end %}
-    {% if not defined(from_ts) %}
-    {{error('from_ts is required')}}
-    {% end %}
-    {% if not defined(to_ts) %}
-    {{error('to_ts is required')}}
-    {% end %}
+    {% if not defined(app_id) %} {{ error('app_id is required') }}{% end %}
+    {% if not defined(environment_id) %} {{ error('environment_id is required') }}{% end %}
+    {% if not defined(experiment_id) %} {{ error('experiment_id is required') }}{% end %}
+    {% if not defined(run_id) %} {{ error('run_id is required') }}{% end %}
     SELECT
-        app_id,
-        environment_id,
-        run_id,
-        id_type,
-        targeting_key_hash,
-        first_exposure_ts AS window_anchor
+        app_id, environment_id, run_id, id_type, targeting_key_hash, first_exposure_ts AS window_anchor
     FROM serve_deduped_exposures
-    WHERE app_id = {{String(app_id)}}
-        AND environment_id = {{String(environment_id)}}
-        AND experiment_id = {{String(experiment_id)}}
-        AND run_id = {{String(run_id)}}
+    WHERE
+        app_id = {{ String(app_id) }}
+        AND environment_id = {{ String(environment_id) }}
+        AND experiment_id = {{ String(experiment_id) }}
+        AND run_id = {{ String(run_id) }}
 
 NODE scoped_metric_events
 SQL >
     %
-    {% if not defined(app_id) %}
-    {{error('app_id is required')}}
+    {% if not defined(app_id) %} {{ error('app_id is required') }}{% end %}
+    {% if not defined(environment_id) %} {{ error('environment_id is required') }}{% end %}
+    {% if not defined(event_definition_id) %} {{ error('event_definition_id is required') }}{% end %}
+    {% if not defined(metric_type) %} {{ error('metric_type is required') }}{% end %}
+    {% if metric_type not in ['binomial', 'count', 'revenue'] %}
+        {{ error('metric_type must be binomial, count, or revenue') }}
     {% end %}
-    {% if not defined(environment_id) %}
-    {{error('environment_id is required')}}
+    {% if metric_type != 'binomial' and not defined(event_field_name) %}
+        {{ error('event_field_name is required for Count and Revenue') }}
     {% end %}
-    {% if not defined(event_definition_id) %}
-    {{error('event_definition_id is required')}}
-    {% end %}
-    {% if not defined(from_ts) %}
-    {{error('from_ts is required')}}
-    {% end %}
-    {% if not defined(to_ts) %}
-    {{error('to_ts is required')}}
-    {% end %}
+    {% if not defined(from_ts) %} {{ error('from_ts is required') }}{% end %}
+    {% if not defined(to_ts) %} {{ error('to_ts is required') }}{% end %}
     SELECT
         app_id,
         environment_id,
-        event_definition_id,
         id_type,
         targeting_key_hash,
-        accepted_at
+        accepted_at,
+        {% if metric_type == 'binomial' %} toFloat64(1) AS event_value
+        {% else %} toFloat64(JSONExtractRaw(fields, {{ String(event_field_name) }})) AS event_value
+        {% end %}
     FROM serve_deduped_metric_events
-    WHERE app_id = {{String(app_id)}}
-        AND environment_id = {{String(environment_id)}}
-        AND event_definition_id = {{String(event_definition_id)}}
-        AND accepted_at >= {{DateTime64(from_ts)}}
-        AND accepted_at < {{DateTime64(to_ts)}}
+    WHERE
+        app_id = {{ String(app_id) }}
+        AND environment_id = {{ String(environment_id) }}
+        AND event_definition_id = {{ String(event_definition_id) }}
+        AND accepted_at >= {{ DateTime64(from_ts) }}
+        AND accepted_at < {{ DateTime64(to_ts) }}
+        {% if metric_type != 'binomial' %}
+            AND JSONHas(fields, {{ String(event_field_name) }})
+        {% end %}
 
 NODE binomial_entity_values
 SQL >
     %
-    {% if not defined(app_id) %}
-    {{error('app_id is required')}}
-    {% end %}
-    {% if not defined(environment_id) %}
-    {{error('environment_id is required')}}
-    {% end %}
-    {% if not defined(metric_id) %}
-    {{error('metric_id is required')}}
-    {% end %}
-    {% if not defined(window_duration_ms) %}
-    {{error('window_duration_ms is required')}}
-    {% end %}
+    {% if not defined(app_id) %} {{ error('app_id is required') }}{% end %}
+    {% if not defined(environment_id) %} {{ error('environment_id is required') }}{% end %}
+    {% if not defined(metric_id) %} {{ error('metric_id is required') }}{% end %}
+    {% if not defined(metric_type) %} {{ error('metric_type is required') }}{% end %}
+    {% if not defined(window_duration_ms) %} {{ error('window_duration_ms is required') }}{% end %}
     SELECT
         exposures.targeting_key_hash AS targeting_key_hash,
         exposures.run_id AS run_id,
-        {{String(metric_id)}} AS metric_id,
-        'binomial' AS metric_type,
-        toFloat64(1) AS value,
+        {{ String(metric_id) }} AS metric_id,
+        {{ String(metric_type) }} AS metric_type,
+        {% if metric_type == 'binomial' %} toFloat64(countIf(events.event_value > 0) > 0) AS value,
+        {% else %} sum(events.event_value) AS value,
+        {% end %}
         toUInt8(1) AS in_window
     FROM scoped_exposures AS exposures
-    INNER JOIN scoped_metric_events AS events
+    LEFT JOIN
+        scoped_metric_events AS events
         ON events.app_id = exposures.app_id
         AND events.environment_id = exposures.environment_id
+        AND events.app_id = {{ String(app_id) }}
+        AND events.environment_id = {{ String(environment_id) }}
         AND events.id_type = exposures.id_type
         AND events.targeting_key_hash = exposures.targeting_key_hash
-    WHERE exposures.app_id = {{String(app_id)}}
-        AND exposures.environment_id = {{String(environment_id)}}
-        AND events.app_id = {{String(app_id)}}
-        AND events.environment_id = {{String(environment_id)}}
         AND events.accepted_at >= exposures.window_anchor
         AND (
-            {{UInt64(window_duration_ms)}} = 0
-            OR events.accepted_at < addMilliseconds(
-                exposures.window_anchor,
-                {{UInt64(window_duration_ms)}}
-            )
+            {{ UInt64(window_duration_ms) }} = 0
+            OR events.accepted_at
+            < addMilliseconds(exposures.window_anchor, {{ UInt64(window_duration_ms) }})
         )
-    GROUP BY
-        exposures.targeting_key_hash,
-        exposures.run_id
+    WHERE
+        exposures.app_id = {{ String(app_id) }}
+        AND exposures.environment_id = {{ String(environment_id) }}
+    GROUP BY exposures.targeting_key_hash, exposures.run_id
     ORDER BY targeting_key_hash
 
 TYPE ENDPOINT

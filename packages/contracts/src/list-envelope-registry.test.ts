@@ -19,6 +19,8 @@ describe("list envelope: every *_list route uses listResponse", () => {
       "app_members_list",
       "approval_requests_list",
       "apps_list",
+      "cloudflare_installations_list",
+      "convex_installations_list",
       "environments_list",
       "event_definition_versions_list",
       "event_definitions_list",

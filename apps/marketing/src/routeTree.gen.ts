@@ -14,6 +14,8 @@ import { Route as HealthRouteImport } from './routes/health'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as QuickstartRouteImport } from './routes/quickstart'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
+import { Route as DocsCliRouteImport } from './routes/docs.cli'
+import { Route as DocsCliDotmdRouteImport } from './routes/docs.cli[.]md'
 import { Route as DocsFlagsRouteImport } from './routes/docs.flags'
 import { Route as DocsFlagsDotmdRouteImport } from './routes/docs.flags[.]md'
 import { Route as DocsErrorCodeRouteImport } from './routes/docs.error.$code'
@@ -44,6 +46,16 @@ const DocsIndexRoute = DocsIndexRouteImport.update({
   path: '/docs/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocsCliRoute = DocsCliRouteImport.update({
+  id: '/docs/cli',
+  path: '/docs/cli',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsCliDotmdRoute = DocsCliDotmdRouteImport.update({
+  id: '/docs/cli.md',
+  path: '/docs/cli.md',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocsFlagsRoute = DocsFlagsRouteImport.update({
   id: '/docs/flags',
   path: '/docs/flags',
@@ -70,6 +82,8 @@ export interface FileRoutesByFullPath {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/docs/cli': typeof DocsCliRoute
+  '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/flags': typeof DocsFlagsRoute
   '/docs/flags.md': typeof DocsFlagsDotmdRoute
   '/docs/': typeof DocsIndexRoute
@@ -81,6 +95,8 @@ export interface FileRoutesByTo {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/docs/cli': typeof DocsCliRoute
+  '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/flags': typeof DocsFlagsRoute
   '/docs/flags.md': typeof DocsFlagsDotmdRoute
   '/docs': typeof DocsIndexRoute
@@ -93,6 +109,8 @@ export interface FileRoutesById {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/docs/cli': typeof DocsCliRoute
+  '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/flags': typeof DocsFlagsRoute
   '/docs/flags.md': typeof DocsFlagsDotmdRoute
   '/docs/': typeof DocsIndexRoute
@@ -106,6 +124,8 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/docs/cli'
+    | '/docs/cli.md'
     | '/docs/flags'
     | '/docs/flags.md'
     | '/docs/'
@@ -117,6 +137,8 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/docs/cli'
+    | '/docs/cli.md'
     | '/docs/flags'
     | '/docs/flags.md'
     | '/docs'
@@ -128,6 +150,8 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/docs/cli'
+    | '/docs/cli.md'
     | '/docs/flags'
     | '/docs/flags.md'
     | '/docs/'
@@ -140,6 +164,8 @@ export interface RootRouteChildren {
   HealthRoute: typeof HealthRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   QuickstartRoute: typeof QuickstartRoute
+  DocsCliRoute: typeof DocsCliRoute
+  DocsCliDotmdRoute: typeof DocsCliDotmdRoute
   DocsFlagsRoute: typeof DocsFlagsRoute
   DocsFlagsDotmdRoute: typeof DocsFlagsDotmdRoute
   DocsIndexRoute: typeof DocsIndexRoute
@@ -184,6 +210,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/docs/cli': {
+      id: '/docs/cli'
+      path: '/docs/cli'
+      fullPath: '/docs/cli'
+      preLoaderRoute: typeof DocsCliRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/cli.md': {
+      id: '/docs/cli.md'
+      path: '/docs/cli.md'
+      fullPath: '/docs/cli.md'
+      preLoaderRoute: typeof DocsCliDotmdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/docs/flags': {
       id: '/docs/flags'
       path: '/docs/flags'
@@ -220,6 +260,8 @@ const rootRouteChildren: RootRouteChildren = {
   HealthRoute: HealthRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   QuickstartRoute: QuickstartRoute,
+  DocsCliRoute: DocsCliRoute,
+  DocsCliDotmdRoute: DocsCliDotmdRoute,
   DocsFlagsRoute: DocsFlagsRoute,
   DocsFlagsDotmdRoute: DocsFlagsDotmdRoute,
   DocsIndexRoute: DocsIndexRoute,

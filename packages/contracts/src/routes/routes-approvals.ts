@@ -25,7 +25,7 @@ export const approvalRoutes = [
     owner: OWNER,
     method: "GET",
     path: "/apps/:appId/approval-requests",
-    summary: "List Approval Requests in an App.",
+    summary: "List Approval Requests in an App (bounded; reports its own truncation).",
     request: { params: AppParams, query: ApprovalRequestListQuerySchema },
     response: ApprovalRequestListResponseSchema,
     auth: AUTH,

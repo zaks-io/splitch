@@ -20,6 +20,7 @@ export interface ParsedGlobalFlags {
   readonly enabled?: boolean;
   readonly rollout?: number | null;
   readonly idempotencyKey?: string;
+  readonly outputFile?: string;
 }
 
 export interface ParsedInvocation {
@@ -57,6 +58,7 @@ const KNOWN_FLAGS = new Set([
   "enabled",
   "rollout",
   "idempotencyKey",
+  "outputFile",
 ]);
 
 export function parseInvocation(args: readonly string[]): ParsedInvocation {
@@ -171,6 +173,7 @@ function toParsedFlags(flags: Record<string, string | boolean>): ParsedGlobalFla
     enabled: parseEnabledFlag(flags.enabled),
     rollout: parseRolloutFlag(flags.rollout),
     idempotencyKey: stringFlag(flags.idempotencyKey),
+    outputFile: stringFlag(flags.outputFile),
   };
 }
 

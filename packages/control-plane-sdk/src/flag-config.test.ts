@@ -43,7 +43,7 @@ describe("typed Flag Configuration routes", () => {
       fetch: async (_input, init) => {
         capturedBody = init?.body ? JSON.parse(String(init.body)) : undefined;
         capturedAuthorization = new Headers(init?.headers).get("authorization");
-        return Response.json({ config: flagConfig, approvalRequest: null });
+        return Response.json({ ...flagConfig, approvalRequest: null });
       },
     });
 

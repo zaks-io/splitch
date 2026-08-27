@@ -1,14 +1,19 @@
 import type { OperationCoverage } from "./control-panel-operation-coverage-types";
 
 /**
- * Integration installation routes. Both Sentry writes name the installation as
- * well as the Environment, so a claim minted for one installation's secret
- * cannot be replayed against another.
+ * Integration installation routes. Resource writes name the installation as
+ * well as its scope, so a claim minted for one installation cannot be replayed
+ * against another. Convex and Cloudflare install per Environment; Sentry
+ * installs per Organization, because Sentry keeps one signing secret per
+ * provider for the whole org.
  */
 
 const APP = "app_1";
 const ENV = "env_1";
-const SENTRY = `/apps/${APP}/envs/${ENV}/integrations/sentry/installations`;
+const ORG = "org_1";
+const SENTRY = `/orgs/${ORG}/integrations/sentry/installations`;
+const CONVEX = `/apps/${APP}/envs/${ENV}/integrations/convex/installations`;
+const CLOUDFLARE = `/apps/${APP}/envs/${ENV}/integrations/cloudflare/installations`;
 
 export const INTEGRATION_ROUTES: Pick<
   OperationCoverage,
@@ -16,28 +21,48 @@ export const INTEGRATION_ROUTES: Pick<
   | "sentry_installations_create"
   | "sentry_installations_delete"
   | "sentry_secret_rotations_create"
+  | "convex_installations_list"
+  | "convex_installations_revoke"
+  | "cloudflare_installations_list"
+  | "cloudflare_installations_revoke"
 > = {
   sentry_installations_list: {
     route: { method: "GET", pathname: `${SENTRY}` },
-    operation: { id: "sentry_installations_list", appId: APP, environmentId: ENV },
+    operation: { id: "sentry_installations_list", orgId: ORG },
   },
   sentry_installations_create: {
     route: { method: "POST", pathname: `${SENTRY}` },
-    operation: { id: "sentry_installations_create", appId: APP, environmentId: ENV },
+    operation: { id: "sentry_installations_create", orgId: ORG },
   },
   sentry_installations_delete: {
     route: { method: "DELETE", pathname: `${SENTRY}/inst_1` },
+    operation: { id: "sentry_installations_delete", orgId: ORG, installationId: "inst_1" },
+  },
+  sentry_secret_rotations_create: {
+    route: { method: "POST", pathname: `${SENTRY}/inst_1/secret-rotations` },
+    operation: { id: "sentry_secret_rotations_create", orgId: ORG, installationId: "inst_1" },
+  },
+  convex_installations_list: {
+    route: { method: "GET", pathname: CONVEX },
+    operation: { id: "convex_installations_list", appId: APP, environmentId: ENV },
+  },
+  convex_installations_revoke: {
+    route: { method: "DELETE", pathname: `${CONVEX}/inst_1` },
     operation: {
-      id: "sentry_installations_delete",
+      id: "convex_installations_revoke",
       appId: APP,
       environmentId: ENV,
       installationId: "inst_1",
     },
   },
-  sentry_secret_rotations_create: {
-    route: { method: "POST", pathname: `${SENTRY}/inst_1/secret-rotations` },
+  cloudflare_installations_list: {
+    route: { method: "GET", pathname: CLOUDFLARE },
+    operation: { id: "cloudflare_installations_list", appId: APP, environmentId: ENV },
+  },
+  cloudflare_installations_revoke: {
+    route: { method: "DELETE", pathname: `${CLOUDFLARE}/inst_1` },
     operation: {
-      id: "sentry_secret_rotations_create",
+      id: "cloudflare_installations_revoke",
       appId: APP,
       environmentId: ENV,
       installationId: "inst_1",

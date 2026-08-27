@@ -15,6 +15,14 @@
  * not a query handle.
  */
 
+export type {
+  CloudflareInstallationRow,
+  CloudflareInstallationWrite,
+} from "./repo/cloudflare-integrations";
+export type {
+  ConvexInstallationRow,
+  ConvexInstallationWrite,
+} from "./repo/convex-integrations";
 export type { FlagChangeEventRow } from "./repo/flag-change-events";
 export type { UpdateVariantResult } from "./repo/flag-variant-approval";
 export type {

@@ -6,6 +6,7 @@ import {
 } from "./config-snapshot";
 import { EvaluationContextSchema } from "./leaf-schemas-runtime";
 import { FlagConfigKVSchema, RunConfigKVSchema } from "./storage-schemas-kv";
+import { listResponse } from "./wire-envelopes-core";
 
 export const CONVEX_CONFIG_SCHEMA_VERSION = CONFIG_SNAPSHOT_SCHEMA_VERSION;
 export const CONVEX_SERVER_EXPOSURE_MAX_ITEMS = 25;
@@ -50,6 +51,8 @@ export const ConvexInstallationStatusSchema = ConvexInstallationSchema.extend({
     .strict()
     .nullable(),
 }).strict();
+
+export const ConvexInstallationListResponseSchema = listResponse(ConvexInstallationStatusSchema);
 
 export const ConvexSecretRotationRequestSchema = z
   .object({ rotationId: UuidSchema, webhookSecret: z.string().min(43).max(128) })
@@ -159,6 +162,7 @@ export type ConvexExposureVerificationResult = z.infer<
   typeof ConvexExposureVerificationResultSchema
 >;
 export type ConvexInstallation = z.infer<typeof ConvexInstallationSchema>;
+export type ConvexInstallationListResponse = z.infer<typeof ConvexInstallationListResponseSchema>;
 export type ConvexInstallationStatus = z.infer<typeof ConvexInstallationStatusSchema>;
 export type ConvexServerExposureItem = z.infer<typeof ConvexServerExposureItemSchema>;
 export type ConvexServerExposureResponse = z.infer<typeof ConvexServerExposureResponseSchema>;

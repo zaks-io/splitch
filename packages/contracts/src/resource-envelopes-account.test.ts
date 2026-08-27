@@ -63,14 +63,15 @@ describe("PatchMetricRequestSchema", () => {
 });
 
 describe("MetricResponseSchema", () => {
-  it("parses a ratio metric leaf with denominator", () => {
+  it("parses a ratio metric leaf with both operands", () => {
     const res = MetricResponseSchema.parse({
       id: "m_1",
       appId: "app_1",
       key: "ctr",
       name: "CTR",
       kind: "ratio",
-      eventDefinitionId: "click",
+      eventDefinitionId: null,
+      numerator: { metricId: "m_num" },
       denominator: { metricId: "m_0" },
       createdAt: "2026-06-28T00:00:00.000Z",
     });
@@ -85,7 +86,7 @@ describe("MetricResponseSchema", () => {
         key: "ctr",
         name: "CTR",
         kind: "ratio",
-        eventDefinitionId: "click",
+        eventDefinitionId: null,
         createdAt: "2026-06-28T00:00:00.000Z",
       }).success,
     ).toBe(false);
@@ -223,6 +224,12 @@ describe("Credential responses", () => {
       cursor: null,
     });
     expect(res.items).toHaveLength(2);
+  });
+
+  it("ListCredentialsResponse rejects a list that omits its own bound", () => {
+    expect(
+      ListCredentialsResponseSchema.safeParse({ items: [apiKeyLeaf, clientKeyLeaf] }).success,
+    ).toBe(false);
   });
 
   it("CredentialSchema REJECTS a secret-bearing API-key-shaped object (no leak)", () => {

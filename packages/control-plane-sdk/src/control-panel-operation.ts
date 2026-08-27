@@ -20,6 +20,8 @@ import { parseEventDefinitionOperation } from "./control-panel-event-definition-
 import { parseEnvironmentExposureStatus } from "./control-panel-exposure-status-operation";
 import { parseFlags } from "./control-panel-operation-flags";
 import { parseAppScoped } from "./panel-app-settings-parse.js";
+import { parseCloudflareIntegration } from "./panel-cloudflare-parse.js";
+import { parseConvexIntegration } from "./panel-convex-parse.js";
 import { parseMetrics } from "./panel-metrics-parse.js";
 import {
   parseOrganizationsCreate,
@@ -174,18 +176,34 @@ export type ControlPanelOperation =
       keyId: string;
     }
   /**
-   * Sentry change tracking. The installation binds this Environment to one
-   * Sentry organization, so the claim names both axes; the resource pair also
-   * names the installation, so a delegation minted to rotate one Environment's
-   * signing secret can never be replayed against another installation.
+   * Sentry change tracking. Sentry holds one signing secret per provider per
+   * organization and its flag log has no project or environment axis, so the
+   * installation binds an entire splitch Organization and the claim names only
+   * that; the resource pair also names the installation, so a delegation minted
+   * to rotate one signing secret can never be replayed against another
+   * installation.
    */
   | {
       id: "sentry_installations_list" | "sentry_installations_create";
+      orgId: string;
+    }
+  | {
+      id: "sentry_installations_delete" | "sentry_secret_rotations_create";
+      orgId: string;
+      installationId: string;
+    }
+  /**
+   * Convex and Cloudflare sync installations name the Environment on reads and
+   * additionally name the installation on revoke. The extra resource keeps a
+   * claim for one installation from authorizing a different installation.
+   */
+  | {
+      id: "convex_installations_list" | "cloudflare_installations_list";
       appId: string;
       environmentId: string;
     }
   | {
-      id: "sentry_installations_delete" | "sentry_secret_rotations_create";
+      id: "convex_installations_revoke" | "cloudflare_installations_revoke";
       appId: string;
       environmentId: string;
       installationId: string;
@@ -235,6 +253,8 @@ export function parseControlPanelOperation(
     parseMetrics(method, pathname, panelEnvironmentId) ??
     parseSegments(method, pathname, panelEnvironmentId) ??
     parseEventDefinitionOperation(method, pathname, panelEnvironmentId) ??
+    parseConvexIntegration(method, pathname) ??
+    parseCloudflareIntegration(method, pathname) ??
     parseSentryIntegration(method, pathname)
   );
 }

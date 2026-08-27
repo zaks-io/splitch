@@ -50,7 +50,7 @@ describe("Promotion that selects no field group", () => {
 
     expect(promoted.status).toBe(200);
     expect(await prodVersion()).toBe(before);
-    expect(await promoted.json()).toMatchObject({ config: { version: before } });
+    expect(await promoted.json()).toMatchObject({ version: before });
   });
 
   it("previews the version it will actually leave behind", async () => {
