@@ -214,10 +214,18 @@ describe("Variant delete refuses a Targeting Rule that lands in the write window
 describe("Targeting Rule replace refuses a Variant that vanished in the write window", () => {
   it("does not insert a rule after the referenced Variant is deleted", async () => {
     await seedFlagConfig();
+    // The leftover rule names control, not treatment. A treatment-pointing
+    // leftover would itself be the dangler this test forbids, and a legal
+    // `removeVariant` would refuse that delete. Control stays so the replace
+    // rollback is visible.
     await insertRule(CONTROL_RULE_ID, seed.a.variantId);
     const racy = createRepository(
       d1WithWriteBeforeFirstBatch(local.d1, () =>
-        local.d1.prepare("DELETE FROM variants WHERE id = ?").bind(TREATMENT_ID).run(),
+        createRepository(local.d1).flags.removeVariant(
+          appScope(seed.a.appId),
+          seed.a.flagId,
+          "treatment",
+        ),
       ),
     );
 
@@ -246,10 +254,20 @@ describe("Targeting Rule replace refuses a Variant that vanished in the write wi
     });
     expect(await treatmentExists()).toBe(false);
     const leftover = await local.d1
-      .prepare("SELECT id FROM targeting_rules WHERE app_id = ? AND flag_id = ?")
+      .prepare(
+        `SELECT id, environment_id AS environmentId, variant_id AS variantId
+         FROM targeting_rules
+         WHERE app_id = ? AND flag_id = ?`,
+      )
       .bind(seed.a.appId, seed.a.flagId)
-      .all<{ id: string }>();
-    expect((leftover.results ?? []).map((row) => row.id)).toEqual([CONTROL_RULE_ID]);
+      .all<{ id: string; environmentId: string; variantId: string }>();
+    expect(leftover.results ?? []).toEqual([
+      {
+        id: CONTROL_RULE_ID,
+        environmentId: seed.a.environmentId,
+        variantId: seed.a.variantId,
+      },
+    ]);
     expect(await danglingVariantIds()).toEqual([]);
   });
 });
