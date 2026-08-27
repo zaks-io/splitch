@@ -88,7 +88,7 @@ export function ExperimentResultsGuardrails({
         {/* "Sufficient" would claim a power calculation this number cannot
             support. The engine raised a warning or it did not. */}
         <Stat
-          hint="The engine raises this when an arm is below the minimum Entity count. Its absence is not a power calculation."
+          hint="The engine raises this when a Variant is below the minimum Entity count. Its absence is not a power calculation."
           label="Sample size"
           tone={health.low_n_warning ? "warn" : "ok"}
           value={health.low_n_warning ? "low-n warning raised" : "no low-n warning"}

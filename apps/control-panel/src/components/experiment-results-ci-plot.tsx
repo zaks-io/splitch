@@ -60,7 +60,7 @@ export function ExperimentResultsCiPlot({
   return (
     <figure className="m-0">
       <figcaption className="sr-only">
-        Relative lift and confidence interval per arm, against {analysisControl}.
+        Relative lift and confidence interval per Variant, against {analysisControl}.
       </figcaption>
       <div className="overflow-x-auto">
         <svg
@@ -144,7 +144,7 @@ function Ticks({ domain, height }: { domain: CiPlotDomain; height: number }) {
 function Legend({ baseline, baselineDrawn }: { baseline: string; baselineDrawn: boolean }) {
   const baselineLegend = baselineDrawn
     ? `Baseline (${baseline}) at zero lift by definition`
-    : `Baseline (${baseline}) arm is missing from these results`;
+    : `Baseline (${baseline}) Variant is missing from these results`;
 
   return (
     <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-muted-foreground text-xs">

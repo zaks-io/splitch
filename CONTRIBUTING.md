@@ -27,7 +27,7 @@ short issue first saves you the round trip.
 
 ## Working in the repo
 
-Requires **Node.js 20+** and **pnpm 11.8** (`corepack enable` picks up the pinned version).
+Requires **Node.js 24+** and **pnpm 11.8** (`corepack enable` picks up the pinned version).
 
 ```bash
 pnpm install     # also installs the Lefthook git hooks

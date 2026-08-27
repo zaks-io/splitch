@@ -129,7 +129,7 @@ describe("Experiment Results route no_data waiting state", () => {
     );
 
     expect(alertMarkup(html)).not.toMatch(/\b(?:below|here|numbers)\b/i);
-    expect(html).toContain("Control arm cannot be identified");
+    expect(html).toContain("Control Variant cannot be identified");
     expect(html).toContain(
       "This Run&#x27;s frozen Control cannot be identified because it is absent from the Variant set this Run froze. Runs created before the Control was frozen on the Run were backfilled from the Experiment&#x27;s default Variant, which the Run itself may never have carried.",
     );

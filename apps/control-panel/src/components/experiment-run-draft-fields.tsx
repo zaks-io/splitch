@@ -64,8 +64,8 @@ export function ExperimentRunDraftFields({
         <FieldLegend>Assignment identity</FieldLegend>
         {hasRunningRun ? (
           <FieldDescription>
-            Frozen until the current Run ends. The running Run's published config reads these off
-            the Experiment, so there is nowhere to stage a change to them.
+            Frozen until the current Run ends. The running Run's Run Snapshot reads these off the
+            Experiment, so there is nowhere to stage a change to them.
           </FieldDescription>
         ) : null}
         <Field data-invalid={Boolean(errors.targetingKey)}>

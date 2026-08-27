@@ -136,7 +136,7 @@ export function activationBalanceCheck(
     return {
       id: "activation_balance",
       status: "not_applicable",
-      title: "Per-arm activation rate",
+      title: "Per-Variant activation rate",
       detail: "This Experiment has no activation gate, so there is no activation rate to compare.",
     };
   }
@@ -145,23 +145,23 @@ export function activationBalanceCheck(
     return {
       id: "activation_balance",
       status: "fail",
-      title: "Per-arm activation rate differs",
-      detail: `Arms are activating at different rates (chi-square p = ${p}). The gap explains why the gated population is skewed and makes the gated result untrusted.`,
+      title: "Per-Variant activation rate differs",
+      detail: `Variants are activating at different rates (chi-square p = ${p}). The gap explains why the gated population is skewed and makes the gated result untrusted.`,
     };
   }
   if (balance.tier === "possible_imbalance") {
     return {
       id: "activation_balance",
       status: "pass",
-      title: "Activation rates match across arms, with a caution",
-      detail: `Chi-square p = ${p} on activated vs not-activated by arm sits in the caution band.`,
+      title: "Activation rates match across Variants, with a caution",
+      detail: `Chi-square p = ${p} on activated vs not-activated by Variant sits in the caution band.`,
     };
   }
   return {
     id: "activation_balance",
     status: "pass",
-    title: "Activation rates match across arms",
-    detail: `Chi-square p = ${p} on activated vs not-activated by arm.`,
+    title: "Activation rates match across Variants",
+    detail: `Chi-square p = ${p} on activated vs not-activated by Variant.`,
   };
 }
 
@@ -219,7 +219,7 @@ export function underpoweredCheck(stats: StatsOutput): DecisionGateCheck {
     const detail =
       starved.length > 0
         ? `Not enough data to decide on ${named(starved)}. Let the Run collect more Exposures.`
-        : "At least one arm is below the minimum Entity count for a decision. Let the Run collect more Exposures.";
+        : "At least one Variant is below the minimum Entity count for a decision. Let the Run collect more Exposures.";
     return { id: "underpowered", status: "fail", title: "Result is underpowered", detail };
   }
   // A fixed-horizon Run that has not reached its locked sample size reports

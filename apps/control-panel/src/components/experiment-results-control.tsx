@@ -80,7 +80,7 @@ export function ExperimentResultsControlIntegrity({
           className="mr-2 inline-block size-4 align-[-0.2em] text-destructive"
           data-testid="control-integrity-alert-icon"
         />
-        Control arm cannot be identified
+        Control Variant cannot be identified
       </h3>
       <p className="mt-2 max-w-prose text-muted-foreground text-sm leading-6">
         This Run&apos;s frozen Control cannot be identified because {reason}. Runs created before

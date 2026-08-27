@@ -105,7 +105,7 @@ export function KitchenSinkOverlays() {
                 <DropdownMenuItem>Clone into draft</DropdownMenuItem>
                 <DropdownMenuItem>Export results</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive">Stop Run</DropdownMenuItem>
+                <DropdownMenuItem variant="destructive">End Run</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
