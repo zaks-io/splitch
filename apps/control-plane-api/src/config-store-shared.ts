@@ -277,7 +277,7 @@ function runConfig(run: Awaited<ReturnType<Repository["experiments"]["getRun"]>>
   });
 }
 
-function toTargetingRule(
+export function toTargetingRule(
   rule: Awaited<ReturnType<Repository["flags"]["listTargetingRules"]>>[number],
 ) {
   return TargetingRuleSchema.parse({

@@ -5,6 +5,7 @@ import { OriginAllowlistSchema } from "../client-origin";
 import {
   ConditionSchema,
   PercentageRolloutSchema,
+  TargetingRuleInputSchema,
   TargetingRuleSchema,
 } from "../leaf-schemas-flag";
 import { EnvironmentPolicySchema, UserRoleSchema } from "../leaf-schemas-runtime";
@@ -212,7 +213,7 @@ export function targetingRuleDuplicateIdIssues(
   return issues;
 }
 
-const TargetingRulesListSchema = z.array(TargetingRuleSchema).superRefine((rules, ctx) => {
+const TargetingRulesListSchema = z.array(TargetingRuleInputSchema).superRefine((rules, ctx) => {
   for (const issue of targetingRuleDuplicateIdIssues(rules)) {
     ctx.addIssue({
       code: "custom",

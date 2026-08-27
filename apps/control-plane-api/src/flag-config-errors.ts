@@ -68,3 +68,13 @@ export function targetingRuleIdConflict(rules: TargetingRule[], requestId: strin
         ],
   );
 }
+
+export function targetingRuleSaltRejected(indexes: number[], requestId: string): Response {
+  return validationErrors(
+    requestId,
+    indexes.map((index) => ({
+      path: ["body", "targetingRules", String(index), "percentageRollout", "salt"],
+      message: "Targeting Rule bucketing salt is server-owned",
+    })),
+  );
+}

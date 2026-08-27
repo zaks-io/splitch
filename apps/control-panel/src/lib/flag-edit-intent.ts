@@ -37,6 +37,7 @@ type TargetingEdit =
       };
       readonly segmentId?: string;
       readonly variantId: string;
+      readonly percentage?: number;
     };
 
 export function killSwitchIntent(enabled: boolean): FlagEditIntent {
@@ -90,15 +91,17 @@ export function removeTargetingRuleIntent(ruleId: string): FlagEditIntent {
 }
 
 /**
- * Appends a rule that serves one Variant to everyone matching one condition.
- *
- * No percentage rollout on a NEW rule: a rule-level rollout carries a bucketing
- * salt, the salt is server-minted for the baseline and has no minting path here
- * yet, and inventing one in the browser would silently choose who gets bucketed.
- * An honest "all matches" rule beats a fabricated salt (SPL-245).
+ * Appends a rule that serves one Variant to matching traffic. The operator may
+ * narrow it by percentage, but never supplies the server-owned bucketing salt.
  */
 export function addTargetingRuleIntent(
-  draft: { attribute?: string; value?: string; segmentId?: string; variantId: string },
+  draft: {
+    attribute?: string;
+    value?: string;
+    segmentId?: string;
+    variantId: string;
+    percentage?: number;
+  },
   ruleId: string,
 ): FlagEditIntent {
   return {
@@ -112,6 +115,7 @@ export function addTargetingRuleIntent(
         : {}),
       ...(draft.segmentId ? { segmentId: draft.segmentId } : {}),
       variantId: draft.variantId,
+      ...(draft.percentage !== undefined ? { percentage: draft.percentage } : {}),
     },
   };
 }

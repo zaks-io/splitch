@@ -1,4 +1,10 @@
-import { type PercentageRollout, PercentageRolloutSchema } from "@splitch/contracts";
+import {
+  type PercentageRollout,
+  PercentageRolloutSchema,
+  type TargetingRule,
+  type TargetingRuleInput,
+  TargetingRuleSchema,
+} from "@splitch/contracts";
 import { randomHex } from "./credential-cache";
 
 /**
@@ -36,6 +42,44 @@ export function nextBaselineRollout(
 /** 16 hex chars of CSPRNG entropy — enough to keep two rollouts from colliding. */
 export function mintSalt(): string {
   return randomHex(8);
+}
+
+/**
+ * Make rule-level rollout salts server-owned without breaking stored-rule
+ * round trips.
+ *
+ * A persisted salt may be restated verbatim or omitted. It is never replaced.
+ * A rollout with no persisted salt gets a new server mint, and any supplied
+ * salt in that case is rejected instead of becoming caller-chosen bucketing.
+ */
+export function normalizeTargetingRuleRollouts(
+  current: readonly TargetingRule[],
+  proposed: readonly TargetingRuleInput[],
+  freshSalt = mintSalt,
+): { ok: true; targetingRules: TargetingRule[] } | { ok: false; callerSaltIndexes: number[] } {
+  const currentById = new Map(current.map((rule) => [rule.id, rule]));
+  const callerSaltIndexes = proposed.flatMap((rule, index) => {
+    const suppliedSalt = rule.percentageRollout?.salt;
+    if (suppliedSalt === undefined) return [];
+    const persistedSalt = currentById.get(rule.id)?.percentageRollout?.salt;
+    return suppliedSalt === persistedSalt ? [] : [index];
+  });
+  if (callerSaltIndexes.length > 0) return { ok: false, callerSaltIndexes };
+
+  return {
+    ok: true,
+    targetingRules: proposed.map((rule) => {
+      if (!rule.percentageRollout) return TargetingRuleSchema.parse(rule);
+      const persistedSalt = currentById.get(rule.id)?.percentageRollout?.salt;
+      return TargetingRuleSchema.parse({
+        ...rule,
+        percentageRollout: {
+          percentage: rule.percentageRollout.percentage,
+          salt: persistedSalt ?? freshSalt(),
+        },
+      });
+    }),
+  };
 }
 
 /**

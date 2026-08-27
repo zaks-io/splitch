@@ -158,6 +158,8 @@ function writeFailure(
       };
     case "TARGETING_RULE_ID_CONFLICT":
       return { ...identity, reason: failure.reason, targetingRules: failure.targetingRules };
+    case "TARGETING_RULE_SALT_REJECTED":
+      return { ...identity, reason: failure.reason, callerSaltIndexes: failure.callerSaltIndexes };
     default:
       return { ...identity, reason: failure.reason };
   }

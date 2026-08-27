@@ -1,4 +1,9 @@
-import type { ApprovalRequest, ErrorResponse, TargetingRule } from "@splitch/contracts";
+import type {
+  ApprovalRequest,
+  ErrorResponse,
+  TargetingRule,
+  TargetingRuleInput,
+} from "@splitch/contracts";
 import { createServerFn } from "@tanstack/react-start";
 import type { z } from "zod";
 import { type ApprovalGateRecord, approvalGateRecord } from "./approval-gate-record";
@@ -179,16 +184,14 @@ export const reviewControlPanelApprovalRequest = createServerFn({ method: "POST"
   });
 
 /**
- * A new rule serves every request that matches and carries no percentage: a
- * rule-level rollout needs a bucketing salt, there is no minting path for one on
- * this route, and fabricating one would silently decide who gets bucketed
- * (SPL-245). Existing rules are passed through untouched.
+ * Existing rules are passed through untouched. A new percentage rollout carries
+ * only the operator-authored percentage; the Worker owns the salt.
  */
 function applyTargetingEdit(
   rules: readonly TargetingRule[],
   edit: z.infer<typeof TargetingEditSchema>,
   flagId: string,
-): TargetingRule[] {
+): TargetingRuleInput[] {
   if (edit.kind === "remove") return rules.filter((rule) => rule.id !== edit.ruleId);
   const priority = rules.reduce((highest, rule) => Math.max(highest, rule.priority), -1) + 1;
   return [
@@ -200,7 +203,7 @@ function applyTargetingEdit(
       conditions: edit.condition ? [edit.condition] : [],
       ...(edit.segmentId ? { segmentId: edit.segmentId } : {}),
       variantId: edit.variantId,
-      percentageRollout: null,
+      percentageRollout: edit.percentage === undefined ? null : { percentage: edit.percentage },
     },
   ];
 }
