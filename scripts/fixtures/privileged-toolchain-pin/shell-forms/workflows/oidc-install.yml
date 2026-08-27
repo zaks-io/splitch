@@ -1,0 +1,22 @@
+# Negative fixture: adjacent quotes, option groups with c, and shell paths.
+name: shell-forms
+on: push
+jobs:
+  adjacent-quotes:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: "'n''p''m' install npm@latest"
+  bash-xc:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: bash -xc 'npm install npm@latest'
+  bin-sh-c:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: /bin/sh -c 'npm install npm@latest'

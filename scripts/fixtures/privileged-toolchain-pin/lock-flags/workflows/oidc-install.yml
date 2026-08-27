@@ -1,0 +1,52 @@
+# Negative fixture: lock flags are manager-specific; npm ignores foreign flags.
+name: lock-flags
+on: push
+jobs:
+  npm-immutable:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: npm install --immutable
+  npm-frozen:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: npm install --frozen-lockfile
+  yarn-frozen:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: yarn install --frozen-lockfile
+  pnpm-immutable:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: pnpm install --immutable
+  npm-ci:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: npm ci
+  pnpm-frozen:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: pnpm install --frozen-lockfile
+  pnpm-ci:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: pnpm ci
+  yarn-immutable:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: yarn install --immutable

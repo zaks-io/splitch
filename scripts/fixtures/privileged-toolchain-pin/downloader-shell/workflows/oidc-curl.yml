@@ -1,0 +1,22 @@
+# Negative fixture: downloader-to-shell including paths and wrappers.
+name: downloader-shell
+on: push
+jobs:
+  curl-bin-sh:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: curl -LsSf https://example.test/install.sh | /bin/sh
+  curl-env-sh:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: curl -LsSf https://example.test/install.sh | env sh
+  wget-sh:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: wget -qO- https://example.test/install.sh | sh

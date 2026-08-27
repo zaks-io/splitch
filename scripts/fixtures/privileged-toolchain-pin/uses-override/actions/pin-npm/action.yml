@@ -1,0 +1,13 @@
+# Negative fixture: caller `with:` must override composite defaults.
+name: pin-npm
+description: Composite that installs npm at the requested version
+inputs:
+  version:
+    description: npm version to install
+    required: false
+    default: "11.15.0"
+runs:
+  using: composite
+  steps:
+    - run: npm install --global "npm@${{ inputs.version }}"
+      shell: bash

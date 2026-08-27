@@ -1,9 +1,15 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
-import { scriptHasUnpinnedInstall } from "./privileged-toolchain-install.mjs";
+import {
+  compositeSteps,
+  isCompositeAction,
+  isPlainObject,
+  loadActionFiles,
+  stepsHaveUnpinnedInstall,
+} from "./privileged-toolchain-actions.mjs";
+import { scriptHasDownloaderToShell } from "./privileged-toolchain-command.mjs";
 
-const ACTION_FILENAMES = new Set(["action.yml", "action.yaml"]);
 const WORKFLOW_EXTENSIONS = new Set([".yml", ".yaml"]);
 const PRIVILEGED_ENVIRONMENTS = new Set(["production", "preview", "shared-preview"]);
 export const MUTABLE_INSTALLER = /curl[^\n]*\|\s*(?:ba)?sh\b/;
@@ -14,7 +20,7 @@ const ACTION_USES = /uses:\s+(\S+)/g;
  * Load composite actions and workflows GitHub executes (`.yml` and `.yaml`).
  *
  * @param {string} [githubRoot=".github"]
- * @returns {{ name: string, source: string, kind: "action" | "workflow" }[]}
+ * @returns {{ name: string, source: string, kind: "action" | "workflow", githubRoot: string }[]}
  */
 export function loadGithubCiFiles(githubRoot = ".github") {
   return [...loadActionFiles(githubRoot), ...loadWorkflowFiles(githubRoot)];
@@ -46,7 +52,8 @@ export function normalizeShellContinuations(script) {
  * @returns {boolean}
  */
 export function scriptHasMutableInstaller(script) {
-  return MUTABLE_INSTALLER.test(normalizeShellContinuations(script));
+  const normalized = normalizeShellContinuations(script);
+  return MUTABLE_INSTALLER.test(normalized) || scriptHasDownloaderToShell(normalized);
 }
 
 /**
@@ -58,7 +65,7 @@ export function mutableInstallerViolations(files) {
 }
 
 /**
- * @param {{ name: string, source: string }[]} files
+ * @param {{ name: string, source: string, githubRoot?: string }[]} files
  * @returns {string[]}
  */
 export function floatingPackageViolations(files) {
@@ -75,31 +82,16 @@ export function unpinnedActionViolations(files) {
   );
 }
 
-function loadActionFiles(githubRoot) {
-  const actionsDir = join(githubRoot, "actions");
-  if (!existsSync(actionsDir)) return [];
-  return readdirSync(actionsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .flatMap((entry) => actionFilesInDirectory(join(actionsDir, entry.name)));
-}
-
-function actionFilesInDirectory(directory) {
-  return [...ACTION_FILENAMES]
-    .map((filename) => join(directory, filename))
-    .filter(existsSync)
-    .map((path) => readCiFile(path, "action"));
-}
-
 function loadWorkflowFiles(githubRoot) {
   const workflowsDir = join(githubRoot, "workflows");
   if (!existsSync(workflowsDir)) return [];
   return readdirSync(workflowsDir)
     .filter((filename) => WORKFLOW_EXTENSIONS.has(extensionOf(filename)))
-    .map((filename) => readCiFile(join(workflowsDir, filename), "workflow"));
+    .map((filename) => readCiFile(join(workflowsDir, filename), "workflow", githubRoot));
 }
 
-function readCiFile(path, kind) {
-  return { name: path, source: readFileSync(path, "utf8"), kind };
+function readCiFile(path, kind, githubRoot) {
+  return { name: path, source: readFileSync(path, "utf8"), kind, githubRoot };
 }
 
 function extensionOf(filename) {
@@ -112,10 +104,6 @@ function parseGithubYaml(source) {
     throw new Error("GitHub Actions YAML must parse to a mapping");
   }
   return document;
-}
-
-function isPlainObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function collectStringRuns(value, scripts = []) {
@@ -191,60 +179,22 @@ function floatingPackageViolationsForFile(file) {
 
 function floatingPackageViolationsForAction(file, document) {
   if (!isCompositeAction(document)) return [];
-  const unpinned = compositeSteps(document).some((step) =>
-    stepHasUnpinnedInstall(document, {}, step),
+  const unpinned = stepsHaveUnpinnedInstall(
+    document,
+    {},
+    compositeSteps(document),
+    file.githubRoot ?? ".github",
   );
   if (!unpinned) return [];
   return [`${file.name} installs a floating package range`];
 }
 
-function isCompositeAction(document) {
-  return isPlainObject(document.runs) && document.runs.using === "composite";
-}
-
-function compositeSteps(document) {
-  return isPlainObject(document.runs) && Array.isArray(document.runs.steps)
-    ? document.runs.steps
-    : [];
-}
-
 function floatingPackageViolationForJob(file, document, name, job) {
   if (!jobIsPrivileged(document, job)) return null;
   const steps = Array.isArray(job?.steps) ? job.steps : [];
-  const unpinned = steps.some((step) => stepHasUnpinnedInstall(document, job, step));
+  const unpinned = stepsHaveUnpinnedInstall(document, job, steps, file.githubRoot ?? ".github");
   if (!unpinned) return null;
   return `${file.name} job ${name} installs a floating package range`;
-}
-
-function stepHasUnpinnedInstall(document, job, step) {
-  if (typeof step?.run !== "string") return false;
-  return scriptHasUnpinnedInstall(step.run, {
-    inputs: actionInputDefaults(document),
-    env: {
-      ...stringMap(document.env),
-      ...stringMap(job?.env),
-      ...stringMap(step.env),
-    },
-  });
-}
-
-function actionInputDefaults(document) {
-  if (!isPlainObject(document.inputs)) return {};
-  const defaults = {};
-  for (const [name, spec] of Object.entries(document.inputs)) {
-    if (!isPlainObject(spec) || spec.default === undefined || spec.default === null) continue;
-    defaults[name] = String(spec.default);
-  }
-  return defaults;
-}
-
-function stringMap(value) {
-  if (!isPlainObject(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([, item]) => typeof item === "string" || typeof item === "number")
-      .map(([key, item]) => [key, String(item)]),
-  );
 }
 
 function actionPinViolations(name, source, match) {

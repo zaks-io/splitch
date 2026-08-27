@@ -185,6 +185,55 @@ test("concatenated quotes and indirect shells fail closed", () => {
   assertRejectedJobs("indirect-quoting", ["concatenated-quotes", "sh-c", "eval-quoted"], []);
 });
 
+test("caller with: overrides and recursive local uses are evaluated", () => {
+  const violations = floatingPackageViolations(
+    loadGithubCiFiles(join(FIXTURE_ROOT, "uses-override")),
+  );
+  assertRejectedJobs("uses-override", ["override-latest", "relay-latest"], ["default-pin"]);
+  assert.equal(
+    violations.some((violation) => violation.includes("relay/action.yml")),
+    true,
+  );
+});
+
+test("the gate discovers nested composite actions", () => {
+  const violations = floatingPackageViolations(
+    loadGithubCiFiles(join(FIXTURE_ROOT, "nested-action")),
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0] ?? "", /nested\/deep\/action\.yml installs a floating package range/);
+});
+
+test("adjacent quotes, shell paths, and -xc fail closed", () => {
+  assertRejectedJobs("shell-forms", ["adjacent-quotes", "bash-xc", "bin-sh-c"], []);
+});
+
+test("lock flags are manager-specific", () => {
+  assertRejectedJobs(
+    "lock-flags",
+    ["npm-immutable", "npm-frozen", "yarn-frozen", "pnpm-immutable"],
+    ["npm-ci", "pnpm-frozen", "pnpm-ci", "yarn-immutable"],
+  );
+});
+
+test("corepack install and python interpreter options are gated", () => {
+  assertRejectedJobs(
+    "installer-grammars",
+    ["corepack-install", "python-isolated-pip", "python-path-pip"],
+    [],
+  );
+});
+
+test("downloader-to-shell includes paths, wrappers, and wget", () => {
+  const violations = mutableInstallerViolations(
+    loadGithubCiFiles(join(FIXTURE_ROOT, "downloader-shell")),
+  );
+  assert.equal(violations.length, 3);
+  for (const violation of violations) {
+    assert.match(violation, /oidc-curl\.yml pipes a remote installer/);
+  }
+});
+
 test("wrappers, global options, pipelines, and mixed cargo crates cannot evade the gate", () => {
   assertRejectedJobs(
     "wrapped-installers",
@@ -212,12 +261,11 @@ function assertFixtureViolation(name, pattern) {
 
 function assertRejectedJobs(name, rejectedJobs, allowedJobs) {
   const violations = floatingPackageViolations(loadGithubCiFiles(join(FIXTURE_ROOT, name)));
-  assert.deepEqual(
-    violations
-      .map((violation) => violation.replace(/^.* job /, "").replace(/ installs.*$/, ""))
-      .toSorted(),
-    rejectedJobs.toSorted(),
-  );
+  const jobs = violations
+    .filter((violation) => / job /.test(violation))
+    .map((violation) => violation.replace(/^.* job /, "").replace(/ installs.*$/, ""))
+    .toSorted();
+  assert.deepEqual(jobs, rejectedJobs.toSorted());
   for (const job of allowedJobs) {
     assert.equal(
       violations.some((violation) => violation.includes(`job ${job} `)),

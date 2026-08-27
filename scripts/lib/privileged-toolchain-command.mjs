@@ -45,13 +45,43 @@ export function commandSegments(script) {
 }
 
 /**
+ * Split a command into argv tokens, joining adjacent quoted parts so
+ * `'n''p''m'` and `n"p"m` both become `npm`.
+ *
  * @param {string} command
  * @returns {string[]}
  */
 export function tokenize(command) {
-  return [...command.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map(
-    (match) => match[1] ?? match[2] ?? match[3] ?? "",
-  );
+  const tokens = [];
+  let index = 0;
+  while (index < command.length) {
+    const next = takeToken(command, index);
+    if (next.token !== null) tokens.push(next.token);
+    index = next.index;
+  }
+  return tokens;
+}
+
+/**
+ * Last path segment of a command token (`/bin/sh` → `sh`).
+ *
+ * @param {string} token
+ * @returns {string}
+ */
+export function commandBasename(token) {
+  const normalized = token.replaceAll("\\", "/");
+  const separator = normalized.lastIndexOf("/");
+  return separator === -1 ? normalized : normalized.slice(separator + 1);
+}
+
+/**
+ * A downloader (`curl`/`wget`) piped into a shell, including paths and wrappers.
+ *
+ * @param {string} script
+ * @returns {boolean}
+ */
+export function scriptHasDownloaderToShell(script) {
+  return pipelineGroups(script).some(pipelineDownloadsToShell);
 }
 
 /**
@@ -113,9 +143,9 @@ export function hasUnsupportedQuoting(command) {
  * @returns {boolean}
  */
 export function isIndirectExecution(tokens) {
-  const lead = tokens[0] ?? "";
+  const lead = commandBasename(tokens[0] ?? "");
   if (INDIRECT_COMMANDS.has(lead)) return true;
-  return SHELL_COMMANDS.has(lead) && tokens.some((token) => SHELL_COMMAND_FLAGS.has(token));
+  return SHELL_COMMANDS.has(lead) && tokens.some((token) => isShellCommandFlag(token));
 }
 
 /**
@@ -185,8 +215,108 @@ function controlDelimiterLength(character, next) {
   return character === "|" ? 1 : 0;
 }
 
+function takeToken(command, start) {
+  let index = skipSpaces(command, start);
+  if (index >= command.length) return { token: null, index };
+  let token = "";
+  while (index < command.length && !isSpace(command[index] ?? "")) {
+    const part = takeTokenPart(command, index);
+    token += part.value;
+    index = part.index;
+  }
+  return { token, index };
+}
+
+function takeTokenPart(command, index) {
+  const character = command[index] ?? "";
+  if (character === "'" || character === '"') return takeQuotedPart(command, index, character);
+  return { value: character, index: index + 1 };
+}
+
+function takeQuotedPart(command, start, quote) {
+  let index = start + 1;
+  let value = "";
+  while (index < command.length && command[index] !== quote) {
+    value += command[index] ?? "";
+    index += 1;
+  }
+  return { value, index: index < command.length ? index + 1 : index };
+}
+
+function skipSpaces(command, start) {
+  let index = start;
+  while (index < command.length && isSpace(command[index] ?? "")) index += 1;
+  return index;
+}
+
+function isSpace(character) {
+  return /\s/.test(character);
+}
+
+function isShellCommandFlag(token) {
+  if (SHELL_COMMAND_FLAGS.has(token)) return true;
+  if (!token.startsWith("-") || token.startsWith("--")) return false;
+  return token.toLowerCase().includes("c");
+}
+
+function pipelineGroups(script) {
+  return script
+    .split(/\n/)
+    .flatMap((line) => splitOnStatement(line))
+    .map((group) => group.trim())
+    .filter(Boolean);
+}
+
+function splitOnStatement(line) {
+  const parts = [];
+  let current = "";
+  let quote = "";
+  for (let index = 0; index < line.length; index += 1) {
+    const consumed = takeStatementCharacter(line, index, quote);
+    current += consumed.chunk;
+    quote = consumed.quote;
+    if (consumed.split) {
+      parts.push(current);
+      current = "";
+    }
+    index += consumed.advance;
+  }
+  parts.push(current);
+  return parts;
+}
+
+function takeStatementCharacter(line, index, quote) {
+  const character = line[index] ?? "";
+  if (quote) return quotedChunk(character, quote);
+  if (character === "'" || character === '"')
+    return { chunk: character, quote: character, split: false, advance: 0 };
+  return unquotedStatementCharacter(character, line[index + 1] ?? "");
+}
+
+function quotedChunk(character, quote) {
+  return { chunk: character, quote: character === quote ? "" : quote, split: false, advance: 0 };
+}
+
+function unquotedStatementCharacter(character, next) {
+  if (character === ";" || ((character === "&" || character === "|") && next === character)) {
+    return { chunk: "", quote: "", split: true, advance: character === ";" ? 0 : 1 };
+  }
+  return { chunk: character, quote: "", split: false, advance: 0 };
+}
+
+function pipelineDownloadsToShell(group) {
+  const DOWNLOADERS = new Set(["curl", "wget"]);
+  let sawDownloader = false;
+  for (const segment of group.split("|")) {
+    const lead = commandBasename(stripWrappers(tokenize(segment.trim()))[0] ?? "");
+    if (DOWNLOADERS.has(lead)) sawDownloader = true;
+    else if (sawDownloader && SHELL_COMMANDS.has(lead)) return true;
+  }
+  return false;
+}
+
 function stripOneWrapper(tokens) {
-  const lead = tokens[0] ?? "";
+  const lead = commandBasename(tokens[0] ?? "");
   if (tokens.length === 0) return null;
   if (ASSIGNMENT.test(lead)) return tokens.slice(1);
   if (lead === "sudo") return skipKnownFlags(tokens.slice(1), SUDO_FLAGS).rest;

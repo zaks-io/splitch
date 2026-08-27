@@ -36,15 +36,34 @@ test("unparseable installer shapes fail closed", () => {
   assert.equal(unpinned('n"p"m install --global npm@11'), true);
   assert.equal(unpinned('sh -c "npm install --global npm@11"'), true);
   assert.equal(unpinned('eval "npm install --global npm@11"'), true);
+  assert.equal(unpinned("/usr/bin/npm install --global npm@latest"), true);
 });
 
-test("zero-package installs require an immutable lock mode", () => {
+test("zero-package installs require a manager-specific lock mode", () => {
   assert.equal(unpinned("npm install"), true);
   assert.equal(unpinned("npm i"), true);
   assert.equal(unpinned("pnpm install"), true);
+  assert.equal(unpinned("npm install --immutable"), true);
+  assert.equal(unpinned("npm install --frozen-lockfile"), true);
+  assert.equal(unpinned("yarn install --frozen-lockfile"), true);
+  assert.equal(unpinned("pnpm install --immutable"), true);
   assert.equal(unpinned("pnpm install --frozen-lockfile"), false);
   assert.equal(unpinned("npm ci"), false);
+  assert.equal(unpinned("pnpm ci"), false);
   assert.equal(unpinned("yarn install --immutable"), false);
+});
+
+test("shell quote concatenation, paths, and -xc fail closed", () => {
+  assert.equal(unpinned("'n''p''m' install npm@latest"), true);
+  assert.equal(unpinned("bash -xc 'npm install npm@latest'"), true);
+  assert.equal(unpinned("/bin/sh -c 'npm install npm@latest'"), true);
+});
+
+test("corepack install and python options before -m are gated", () => {
+  assert.equal(unpinned("corepack install --global pnpm@latest"), true);
+  assert.equal(unpinned("python -I -m pip install requests"), true);
+  assert.equal(unpinned("/usr/bin/python3 -I -m pip install requests"), true);
+  assert.equal(unpinned("corepack prepare pnpm@11.15.0"), false);
 });
 
 test("non-install npm/pnpm/uv commands are not treated as floating installs", () => {
