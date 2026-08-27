@@ -59,8 +59,18 @@ test("the install script pins docker-ce for the Cloud Agent Ubuntu release", () 
   assert.match(install, /storage-driver": "fuse-overlayfs/);
   assert.match(
     install,
+    /force-confold/,
+    "apt must keep existing fuse.conf; a conffile prompt fails the Build",
+  );
+  assert.match(
+    install,
     /docker is not on PATH after installing docker-ce/,
     "the fail-loud check after install is gone; a missing client would look like success",
+  );
+  assert.match(
+    install,
+    /export PATH="\/usr\/local\/bin:\$\{PATH\}"/,
+    "proofs would otherwise observe /exec-daemon/node instead of the pinned toolchain",
   );
 });
 

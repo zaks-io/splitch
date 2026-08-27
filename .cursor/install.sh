@@ -17,6 +17,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Cloud Agent user shells put /usr/local/bin on PATH, but this install process
+# can see /exec-daemon/node first. Pin checks and the proof block have to
+# observe the toolchain we just wrote, not the image's bootstrap node.
+export PATH="/usr/local/bin:${PATH}"
+
 # Exactly one match, or stop. `head -n1` on a disagreeing set would install a
 # version nothing else in the repo uses.
 pin() {
@@ -62,7 +67,7 @@ docker_client_version() {
   docker --version 2>/dev/null | sed -n 's/^Docker version \([0-9][0-9.]*\).*/\1/p'
 }
 
-if [ "$(docker_client_version)" != "$DOCKER_VERSION" ]; then
+if [ "$(docker_client_version)" != "$DOCKER_VERSION" ] || ! command -v fuse-overlayfs >/dev/null 2>&1; then
   # Sourced for VERSION_CODENAME only. The rest of the script does not depend
   # on distro fields, so keep the leak local to this block.
   # shellcheck disable=SC1091
@@ -86,7 +91,11 @@ if [ "$(docker_client_version)" != "$DOCKER_VERSION" ]; then
   fi
 
   sudo apt-get update
+  # fuse3 asks about /etc/fuse.conf when the base image already has one.
+  # Without force-confold, a Cloud Agent Build dies on a conffile prompt.
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    -o Dpkg::Options::=--force-confdef \
+    -o Dpkg::Options::=--force-confold \
     "docker-ce=${DOCKER_CE_PIN}" \
     "docker-ce-cli=${DOCKER_CE_PIN}" \
     containerd.io \
@@ -94,16 +103,19 @@ if [ "$(docker_client_version)" != "$DOCKER_VERSION" ]; then
     docker-compose-plugin \
     fuse-overlayfs \
     iptables
-
-  sudo mkdir -p /etc/docker
-  if [ ! -f /etc/docker/daemon.json ]; then
-    printf '%s\n' '{' '  "storage-driver": "fuse-overlayfs"' '}' |
-      sudo tee /etc/docker/daemon.json >/dev/null
-  fi
-
-  sudo update-alternatives --set iptables /usr/sbin/iptables-legacy
-  sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
 fi
+
+# daemon.json and iptables-legacy stay outside the package install so a
+# retry after a failed apt step still produces a usable docker-in-docker
+# config. The packages can be present while these files are not.
+sudo mkdir -p /etc/docker
+if [ ! -f /etc/docker/daemon.json ]; then
+  printf '%s\n' '{' '  "storage-driver": "fuse-overlayfs"' '}' |
+    sudo tee /etc/docker/daemon.json >/dev/null
+fi
+
+sudo update-alternatives --set iptables /usr/sbin/iptables-legacy
+sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "install: docker is not on PATH after installing docker-ce" >&2
