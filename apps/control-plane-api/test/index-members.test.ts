@@ -39,6 +39,7 @@ beforeAll(async () => {
     ...env,
     CONTROL_PLANE_ORIGIN: AUDIENCE,
     AUTH_JWKS_URI: JWKS_URI,
+    SPLITCH_PLATFORM_TARGET: "local",
   } as ControlPlaneApiEnv;
 });
 
