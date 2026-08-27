@@ -6,20 +6,59 @@ import {
 } from "@splitch/contracts";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
-import { claimMetricEvent } from "./metric-event-outbox";
+import {
+  admitAndClaimMetricEvent,
+  canonicalJson,
+  replayExistingMetricEvent,
+  schemaMismatch,
+} from "./metric-event-admission";
 import { checkMetricEventRateLimit } from "./metric-event-rate-limit";
-import { validateMetricEvent } from "./metric-event-validation";
 import type { Env } from "./types";
 
 const MAX_BODY_BYTES = 32_768;
 const hotConfigEnvelope = kvEnvelope(EventDefinitionHotConfigSchema);
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the contract requires ordered side-effect-free guards before the claim boundary
 export async function handleAuthorizedMetricEvent(
   request: Request,
   env: Env,
   credential: MetricEventCredentialScope,
 ): Promise<Response> {
+  const parsed = await parseMetricEventRequest(request);
+  if (parsed instanceof Response) return parsed;
+  const limited = await enforceCredentialRateLimit(env, credential);
+  if (limited) return limited;
+
+  const targetingKeyHash = await computeTargetingKeyHash(env, parsed.idType, parsed.targetingKey);
+  const fingerprint = await sha256(
+    canonicalJson({
+      eventName: parsed.eventName,
+      idType: parsed.idType,
+      targetingKeyHash,
+      fields: parsed.fields,
+      dimensions: parsed.dimensions,
+    }),
+  );
+  const dedupKey = await sha256(
+    `metric:${credential.appId}:${credential.environmentId}:${parsed.eventId}`,
+  );
+  const replay = await replayExistingMetricEvent(env, parsed.eventId, dedupKey, fingerprint);
+  if (replay) return replay;
+
+  const hot = await loadDefinition(env, credential.appId, parsed.eventName);
+  if (hot instanceof Response) return hot;
+  const mismatch = schemaMismatch(parsed, hot);
+  if (mismatch) return mismatch;
+
+  return admitAndClaimMetricEvent(env, credential, parsed, {
+    targetingKeyHash,
+    fingerprint,
+    dedupKey,
+    eventDefinitionId: hot.eventDefinition.id,
+    eventDefinitionVersionId: hot.version.id,
+  });
+}
+
+async function parseMetricEventRequest(request: Request) {
   const text = await readMetricEventBody(request);
   if (text === null) {
     return renderError(validation("Metric Event body exceeds 32768 bytes", []));
@@ -43,7 +82,13 @@ export async function handleAuthorizedMetricEvent(
       },
     });
   }
+  return parsed.data;
+}
 
+async function enforceCredentialRateLimit(
+  env: Env,
+  credential: MetricEventCredentialScope,
+): Promise<Response | null> {
   try {
     const rate = await checkMetricEventRateLimit(
       env.METRIC_EVENT_RATE_LIMIT,
@@ -57,95 +102,9 @@ export async function handleAuthorizedMetricEvent(
         details: { retryAfterMs: rate.retryAfterMs },
       });
     }
+    return null;
   } catch {
     return renderError(serviceUnavailable("Metric Event rate limiter is unavailable"));
-  }
-
-  const targetingKeyHash = await computeTargetingKeyHash(
-    env,
-    parsed.data.idType,
-    parsed.data.targetingKey,
-  );
-  const fingerprint = await sha256(
-    canonicalJson({
-      eventName: parsed.data.eventName,
-      idType: parsed.data.idType,
-      targetingKeyHash,
-      fields: parsed.data.fields,
-      dimensions: parsed.data.dimensions,
-    }),
-  );
-  const dedupKey = await sha256(
-    `metric:${credential.appId}:${credential.environmentId}:${parsed.data.eventId}`,
-  );
-
-  const hot = await loadDefinition(env, credential.appId, parsed.data.eventName);
-  if (hot instanceof Response) return hot;
-  const issues = validateMetricEvent(parsed.data, hot.version);
-  if (issues.length > 0) {
-    if (issues.length === 1 && issues[0]?.path[0] === "idType") {
-      return renderError({
-        code: "ENTITY_TYPE_MISMATCH",
-        message: "Metric Event Entity type does not match the Event Definition Version",
-        details: {
-          expectedIdType: hot.version.entityType,
-          receivedIdType: parsed.data.idType,
-          eventDefinitionId: hot.eventDefinition.id,
-        },
-      });
-    }
-    return renderError({
-      code: "EVENT_SCHEMA_MISMATCH",
-      message: "Metric Event does not match the Event Definition Version",
-      details: {
-        eventName: parsed.data.eventName,
-        eventDefinitionVersionId: hot.version.id,
-        issues,
-      },
-    });
-  }
-
-  const now = new Date().toISOString();
-  const row = {
-    dedup_key: dedupKey,
-    event_id: parsed.data.eventId,
-    app_id: credential.appId,
-    environment_id: credential.environmentId,
-    event_definition_id: hot.eventDefinition.id,
-    event_definition_version_id: hot.version.id,
-    event_name: parsed.data.eventName,
-    id_type: parsed.data.idType,
-    targeting_key_hash: targetingKeyHash,
-    fields: canonicalJson(parsed.data.fields),
-    dimensions: canonicalJson(parsed.data.dimensions),
-    server_received_at: now,
-  };
-  try {
-    const claim = await claimMetricEvent(env.METRIC_EVENT_OUTBOX, dedupKey, {
-      fingerprint,
-      eventDefinitionId: hot.eventDefinition.id,
-      eventDefinitionVersionId: hot.version.id,
-      row,
-    });
-    if (claim.outcome === "conflict") {
-      return renderError({
-        code: "EVENT_ID_CONFLICT",
-        message: "eventId was already used for different Metric Event content",
-        details: { eventId: parsed.data.eventId },
-      });
-    }
-    return Response.json(
-      {
-        accepted: true,
-        duplicate: claim.outcome === "duplicate",
-        eventId: parsed.data.eventId,
-        eventDefinitionId: claim.eventDefinitionId,
-        eventDefinitionVersionId: claim.eventDefinitionVersionId,
-      },
-      { status: 202 },
-    );
-  } catch {
-    return renderError(serviceUnavailable("Metric Event outbox is unavailable"));
   }
 }
 
@@ -242,17 +201,6 @@ async function computeTargetingKeyHash(
 
 function validation(message: string, path: string[]) {
   return { code: "VALIDATION_ERROR" as const, message, details: { issues: [{ path, message }] } };
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
 }
 
 async function sha256(value: string): Promise<string> {

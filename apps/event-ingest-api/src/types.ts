@@ -7,6 +7,7 @@ import type {
   EvaluationUsageReplayWindow,
   EvaluationUsageReplayWindowNamespace,
 } from "./evaluation-usage-replay-window";
+import type { IngestAdmissionGateNamespace } from "./ingest-admission-gate";
 import type { MetricEventOutboxNamespace } from "./metric-event-outbox";
 import type { MetricEventRateLimitNamespace } from "./metric-event-rate-limit";
 
@@ -14,6 +15,7 @@ export type Env = {
   CONFIG_STORE?: KVNamespace;
   CREDENTIAL_STORE?: KVNamespace;
   EVALUATION_PRIVACY_SALT?: string;
+  INGEST_ADMISSION_GATE?: IngestAdmissionGateNamespace;
   METRIC_EVENT_OUTBOX?: MetricEventOutboxNamespace;
   METRIC_EVENT_RATE_LIMIT?: MetricEventRateLimitNamespace;
   METRIC_EVENTS_QUEUE?: Queue<Record<string, unknown>>;

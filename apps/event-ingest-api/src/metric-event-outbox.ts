@@ -6,6 +6,12 @@ export interface MetricEventClaim {
   readonly eventDefinitionVersionId: string;
 }
 
+export interface MetricEventLookup {
+  readonly fingerprint: string;
+  readonly eventDefinitionId: string;
+  readonly eventDefinitionVersionId: string;
+}
+
 export interface MetricEventOutboxNamespace {
   idFromName(name: string): DurableObjectId;
   get(id: DurableObjectId): {
@@ -30,6 +36,12 @@ export class MetricEventOutboxDurableObject {
   ) {}
 
   async fetch(request: Request): Promise<Response> {
+    const path = new URL(request.url).pathname;
+    if (request.method === "GET" && path === "/lookup") {
+      const existing = await this.ctx.storage.get<ClaimState>(STATE_KEY);
+      if (existing === undefined) return new Response("not found", { status: 404 });
+      return Response.json(asLookup(existing));
+    }
     if (request.method !== "POST") return new Response("not found", { status: 404 });
     const incoming = (await request.json()) as ClaimState;
     const existing = await this.ctx.storage.get<ClaimState>(STATE_KEY);
@@ -61,6 +73,39 @@ function asClaim(outcome: MetricEventClaim["outcome"], state: ClaimState): Metri
     outcome,
     eventDefinitionId: state.eventDefinitionId,
     eventDefinitionVersionId: state.eventDefinitionVersionId,
+  };
+}
+
+function asLookup(state: ClaimState): MetricEventLookup {
+  return {
+    fingerprint: state.fingerprint,
+    eventDefinitionId: state.eventDefinitionId,
+    eventDefinitionVersionId: state.eventDefinitionVersionId,
+  };
+}
+
+export async function lookupMetricEvent(
+  namespace: MetricEventOutboxNamespace | undefined,
+  dedupKey: string,
+): Promise<MetricEventLookup | null> {
+  if (!namespace) throw new Error("METRIC_EVENT_OUTBOX binding is unavailable");
+  const response = await namespace
+    .get(namespace.idFromName(dedupKey))
+    .fetch("https://metric-event-outbox.local/lookup", { method: "GET" });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Metric Event outbox lookup returned HTTP ${response.status}`);
+  const lookup = (await response.json()) as Partial<MetricEventLookup>;
+  if (
+    typeof lookup.fingerprint !== "string" ||
+    typeof lookup.eventDefinitionId !== "string" ||
+    typeof lookup.eventDefinitionVersionId !== "string"
+  ) {
+    throw new Error("Metric Event outbox returned an invalid lookup");
+  }
+  return {
+    fingerprint: lookup.fingerprint,
+    eventDefinitionId: lookup.eventDefinitionId,
+    eventDefinitionVersionId: lookup.eventDefinitionVersionId,
   };
 }
 

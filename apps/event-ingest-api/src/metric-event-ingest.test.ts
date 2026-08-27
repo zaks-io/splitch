@@ -1,10 +1,12 @@
 import { eventDefinitionConfigKey } from "@splitch/contracts";
 import { describe, expect, it, vi } from "vitest";
 import worker from "./index";
+import { ingestAdmissionScopeName } from "./ingest-admission-config";
 import {
   hotConfig,
   METRIC_APP_ID,
   METRIC_CLIENT_KEY,
+  METRIC_ENVIRONMENT_ID,
   METRIC_EVENT_NAME,
   makeMetricEventFixture,
   metricEventBody,
@@ -64,6 +66,78 @@ describe("Metric Event ingest", () => {
     expect(fixture.claims.size).toBe(1);
   });
 
+  it("charges one new Metric Event under the scoped metric_events gate", async () => {
+    const fixture = await makeMetricEventFixture();
+
+    const response = await sendMetricEvent(fixture, metricEventBody());
+
+    expect(response.status).toBe(202);
+    expect(fixture.claims.size).toBe(1);
+    expect(fixture.admissionCharges).toEqual([
+      {
+        scope: ingestAdmissionScopeName(METRIC_APP_ID, METRIC_ENVIRONMENT_ID, "metric_events"),
+        rowCost: 1,
+        byteCost: expect.any(Number),
+      },
+    ]);
+    expect(fixture.admissionCharges[0]?.byteCost).toBeGreaterThan(0);
+  });
+
+  it("rejects an exhausted gate before creating a claim", async () => {
+    const fixture = await makeMetricEventFixture({}, "client_key", {
+      admission: { allowed: false, retryAfterMs: 2500 },
+    });
+
+    const response = await sendMetricEvent(fixture, metricEventBody());
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("3");
+    expect(await response.json()).toMatchObject({
+      code: "RATE_LIMITED",
+      details: { retryAfterMs: 2500 },
+    });
+    expect(fixture.claims.size).toBe(0);
+    expect(fixture.admissionCharges).toHaveLength(1);
+  });
+
+  it.each([
+    false,
+    "throw",
+  ] as const)("fails closed when the Admission Gate is %s", async (admission) => {
+    const fixture = await makeMetricEventFixture({}, "client_key", { admission });
+
+    const response = await sendMetricEvent(fixture, metricEventBody());
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("1");
+    expect(await response.json()).toMatchObject({
+      code: "RATE_LIMITED",
+      message: "Ingest Admission Gate is unavailable",
+      details: { retryAfterMs: 1000 },
+    });
+    expect(fixture.claims.size).toBe(0);
+  });
+
+  it("does not charge an exact retry and returns the original Version", async () => {
+    const fixture = await makeMetricEventFixture();
+    const first = await sendMetricEvent(fixture, metricEventBody());
+    expect(first.status).toBe(202);
+
+    fixture.config.set(
+      eventDefinitionConfigKey(METRIC_APP_ID, METRIC_EVENT_NAME),
+      hotConfig("edv_2", 2),
+    );
+    const retry = await sendMetricEvent(fixture, metricEventBody());
+
+    expect(retry.status).toBe(202);
+    expect(await retry.json()).toMatchObject({
+      duplicate: true,
+      eventDefinitionVersionId: "edv_1",
+    });
+    expect(fixture.claims.size).toBe(1);
+    expect(fixture.admissionCharges).toHaveLength(1);
+  });
+
   it("rejects unknown fields before creating a durable claim", async () => {
     const fixture = await makeMetricEventFixture();
     const response = await sendMetricEvent(
@@ -73,6 +147,7 @@ describe("Metric Event ingest", () => {
     expect(response.status).toBe(400);
     expect(await responseCode(response)).toBe("EVENT_SCHEMA_MISMATCH");
     expect(fixture.claims.size).toBe(0);
+    expect(fixture.admissionCharges).toHaveLength(0);
   });
 
   it("rejects an oversized body from Content-Length before reading its stream", async () => {
