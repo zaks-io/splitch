@@ -21,7 +21,7 @@ const SAFE_METRIC_EVENT_ERRORS = {
   EVENT_DEFINITION_NOT_FOUND: { status: 404, message: "Metric Event Definition not found" },
   EVENT_DEFINITION_UNPUBLISHED: {
     status: 409,
-    message: "Metric Event Definition is not published",
+    message: "Metric Event Definition Version is not published",
   },
   EVENT_SCHEMA_MISMATCH: {
     status: 400,
