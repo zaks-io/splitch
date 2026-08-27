@@ -33,5 +33,22 @@ export function operationBehaviorNotes(command: CliCommandDefinition): string[] 
       "A live Run evaluates its own frozen Targeting Rule snapshot, not this Flag Configuration list.",
     ];
   }
+  if (command.operationId === "flags_delete" || command.operationId === "flag_variants_delete") {
+    return deleteWithoutConfirmNotes();
+  }
   return [];
+}
+
+/**
+ * DELETE carries no body, so --confirm cannot send an inline review. Silence
+ * used to read as an oversight (SPL-455); name the two-step path instead.
+ * Invocations are the registered command paths and flags — not invented ones.
+ */
+function deleteWithoutConfirmNotes(): string[] {
+  return [
+    "This DELETE route does not accept --confirm (DELETE carries no request body).",
+    "Review a pending Approval Request, then apply it:",
+    "splitch approval-requests list",
+    'splitch approval-request-reviews create <id> --body-json \'{"action":"approve_and_apply"}\'',
+  ];
 }
