@@ -91,7 +91,7 @@ describe("panel Metrics binding transport", () => {
       createdAt: "2026-07-29T00:00:00.000Z",
     };
     const client = createPanelMetricsClient({
-      fetch: vi.fn(async () => Response.json({ items: [legacyRatio] })),
+      fetch: vi.fn(async () => Response.json(boundListRead([legacyRatio]))),
     });
 
     await expect(client.list({ appId: "app_1" })).resolves.toMatchObject({
