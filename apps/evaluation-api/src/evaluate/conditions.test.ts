@@ -11,4 +11,21 @@ describe("resolved Targeting Rule Conditions", () => {
       }),
     ).toThrow(ConditionMatchError);
   });
+
+  it("matches array-valued attributes through the shared evaluator re-export", () => {
+    expect(
+      matchesConditions([{ attribute: "roles", operator: "in", value: ["admin"] }], {
+        targetingKey: "user_1",
+        idType: "user",
+        attributes: { roles: ["admin", "analyst"] },
+      }),
+    ).toBe(true);
+    expect(
+      matchesConditions([{ attribute: "roles", operator: "in", value: ["admin"] }], {
+        targetingKey: "user_1",
+        idType: "user",
+        attributes: { roles: ["viewer"] },
+      }),
+    ).toBe(false);
+  });
 });

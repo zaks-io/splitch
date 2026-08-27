@@ -101,6 +101,21 @@ reshuffling a live cohort is exactly the invisible-change failure ADR-0036 forbi
 `matches` / `not_matches` interpret `value` as a regex string.
 `in` / `not_in` require `value` to be an array.
 
+When the Evaluation Context attribute is an array, `eq`, `neq`, `in`, and `not_in` compare
+element-wise with `Object.is` (no string coercion, no loose equality):
+
+- `eq` matches when any actual element equals the scalar Condition `value`.
+- `neq` matches when no actual element equals the scalar Condition `value`.
+- `in` matches when any actual element equals any expected list member (set intersection).
+- `not_in` matches when that intersection is empty.
+
+An empty actual array therefore never matches `eq` or `in`, and always matches `neq` and
+`not_in`. An empty expected list never matches `in` and always matches `not_in`, for both
+scalar and array actuals. Scalar actuals keep the existing whole-value `Object.is`
+comparison. Numeric, regex, and other non-membership operators do not iterate array
+elements. See
+[evaluate-path-orchestration.md § Array-valued Evaluation Context attributes](../evaluation/evaluate-path-orchestration.md#array-valued-evaluation-context-attributes).
+
 ---
 
 ## Segment
