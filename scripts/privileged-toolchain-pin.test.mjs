@@ -137,6 +137,42 @@ test("the gate rejects a privileged literal run with a shell line continuation",
   assertFixtureViolation("literal-continuation-run", /oidc-curl\.yml pipes a remote installer/);
 });
 
+test("the gate treats environment: preview as privileged", () => {
+  assertFixtureViolation("preview-env", /oidc-curl\.yml pipes a remote installer/);
+});
+
+test("the gate treats environment: Production as privileged", () => {
+  assertFixtureViolation("production-case-env", /oidc-curl\.yml pipes a remote installer/);
+});
+
+test("the gate treats a dynamic environment expression as privileged", () => {
+  assertFixtureViolation("dynamic-env", /oidc-curl\.yml pipes a remote installer/);
+});
+
+test("OIDC jobs reject shorthand, ranged, unpinned, and variable installer versions", () => {
+  const fixture = loadGithubCiFiles(join(FIXTURE_ROOT, "unpinned-installers"));
+  const violations = floatingPackageViolations(fixture);
+  const rejectedJobs = [
+    "npm-shorthand",
+    "npm-x-range",
+    "npm-comparator",
+    "pip-unpinned",
+    "uv-unpinned",
+    "cargo-unpinned",
+    "npm-variable",
+  ];
+  assert.deepEqual(
+    violations
+      .map((violation) => violation.replace(/^.* job /, "").replace(/ installs.*$/, ""))
+      .toSorted(),
+    rejectedJobs.toSorted(),
+  );
+  assert.equal(
+    violations.some((violation) => violation.includes("job npm-exact ")),
+    false,
+  );
+});
+
 function assertFixtureViolation(name, pattern) {
   const fixture = loadGithubCiFiles(join(FIXTURE_ROOT, name));
   const violations = mutableInstallerViolations(fixture);

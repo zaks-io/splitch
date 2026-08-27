@@ -1,0 +1,11 @@
+# Negative fixture: this repo's shared-preview jobs use `environment: preview`.
+# Exact-lowercase `production` / `shared-preview` matching would miss it.
+name: preview-env-mutable-installer
+on: push
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: preview
+    steps:
+      - name: Install
+        run: curl -LsSf https://example.test/install.sh | sh

@@ -1,11 +1,11 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
+import { scriptHasUnpinnedInstall } from "./privileged-toolchain-install.mjs";
 
 const ACTION_FILENAMES = new Set(["action.yml", "action.yaml"]);
 const WORKFLOW_EXTENSIONS = new Set([".yml", ".yaml"]);
-const FLOATING_PACKAGE =
-  /(?:npm|pnpm|yarn|npx|pip|uv|cargo)\s+(?:install|add|exec)\s[^\n]*@[\^~*]|npm@[\^~]|npm@(?:latest|next)\b/;
+const PRIVILEGED_ENVIRONMENTS = new Set(["production", "preview", "shared-preview"]);
 export const MUTABLE_INSTALLER = /curl[^\n]*\|\s*(?:ba)?sh\b/;
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const ACTION_USES = /uses:\s+(\S+)/g;
@@ -144,13 +144,23 @@ function environmentName(environment) {
   return isPlainObject(environment) && typeof environment.name === "string" ? environment.name : "";
 }
 
+function isDynamicGithubExpression(value) {
+  return /\$\{\{/.test(value);
+}
+
+function jobHasPrivilegedEnvironment(job) {
+  const name = environmentName(job?.environment);
+  if (!name) return false;
+  if (isDynamicGithubExpression(name)) return true;
+  return PRIVILEGED_ENVIRONMENTS.has(name.toLowerCase());
+}
+
 function jobIsOidc(document, job) {
   return hasIdTokenWrite(document.permissions) || hasIdTokenWrite(job?.permissions);
 }
 
 function jobIsPrivileged(document, job) {
-  const name = environmentName(job?.environment);
-  return jobIsOidc(document, job) || name === "production" || name === "shared-preview";
+  return jobIsOidc(document, job) || jobHasPrivilegedEnvironment(job);
 }
 
 function isPrivilegedFile(file, document) {
@@ -180,11 +190,41 @@ function floatingPackageViolationsForFile(file) {
 
 function floatingPackageViolationForJob(file, document, name, job) {
   if (!jobIsOidc(document, job)) return null;
-  const hasFloating = collectStringRuns(job)
-    .map(normalizeShellContinuations)
-    .some((script) => FLOATING_PACKAGE.test(script));
-  if (!hasFloating) return null;
+  const steps = Array.isArray(job?.steps) ? job.steps : [];
+  const unpinned = steps.some((step) => stepHasUnpinnedInstall(document, job, step));
+  if (!unpinned) return null;
   return `${file.name} job ${name} installs a floating package range`;
+}
+
+function stepHasUnpinnedInstall(document, job, step) {
+  if (typeof step?.run !== "string") return false;
+  return scriptHasUnpinnedInstall(step.run, {
+    inputs: actionInputDefaults(document),
+    env: {
+      ...stringMap(document.env),
+      ...stringMap(job?.env),
+      ...stringMap(step.env),
+    },
+  });
+}
+
+function actionInputDefaults(document) {
+  if (!isPlainObject(document.inputs)) return {};
+  const defaults = {};
+  for (const [name, spec] of Object.entries(document.inputs)) {
+    if (!isPlainObject(spec) || spec.default === undefined || spec.default === null) continue;
+    defaults[name] = String(spec.default);
+  }
+  return defaults;
+}
+
+function stringMap(value) {
+  if (!isPlainObject(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, item]) => typeof item === "string" || typeof item === "number")
+      .map(([key, item]) => [key, String(item)]),
+  );
 }
 
 function actionPinViolations(name, source, match) {
