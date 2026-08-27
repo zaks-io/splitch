@@ -137,7 +137,7 @@ Run `splitch --help` for the root map, `splitch <resource> --help` for a resourc
 | `flags`                       | `list`, `create`, `get`, `update`, `delete`, `promote`, `test-eval`, `verify` |
 | `flag-variants`               | `create`, `update`, `delete`                                                  |
 | `flag-config`                 | `get`, `update`                                                               |
-| `flag-targeting-rules`        | `replace`                                                                     |
+| `flag-targeting-rules`        | `add`, `replace`                                                              |
 | `segments`                    | `list`, `create`, `get`, `update`, `delete`                                   |
 | `experiments`                 | `list`, `create`, `get`, `update`, `start`, `delete`                          |
 | `runs`                        | `list`, `get`, `end`                                                          |

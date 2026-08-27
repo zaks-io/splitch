@@ -61,12 +61,16 @@ export const flagsDoc = {
     },
     {
       kind: "prose",
-      text: "Ordered rules decide matched traffic before the baseline rollout. First match wins. Rules may only target Variants in the Environment's available set (or the full catalog when that set is empty).",
+      text: "Ordered rules decide matched traffic before the baseline rollout. First match wins. Rules may only target Variants in the Environment's available set (or the full catalog when that set is empty). The common equality case is one command:",
     },
     {
       kind: "code",
       lang: "bash",
-      code: "splitch flag-targeting-rules replace new-checkout --body-json '<TargetingRulesReplaceRequest JSON>'",
+      code: "splitch flag-targeting-rules add new-checkout --when plan=enterprise --serve on",
+    },
+    {
+      kind: "prose",
+      text: "Repeat `--when` to AND Conditions. `add` generates the rule id, resolves the Variant by name, and appends via replace (last-write-wins). For Segments, non-equality operators, OR groups, reordering, or removal, hand-author the full list with `flag-targeting-rules replace --body-json`.",
     },
     {
       kind: "prose",

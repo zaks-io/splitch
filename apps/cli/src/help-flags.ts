@@ -86,6 +86,22 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
 }
 
 function operationFlags(command: CliCommandDefinition): HelpFlag[] {
+  if (command.kind === "flag_targeting_rules_add") {
+    return [
+      flag(
+        "--when <attr=value>",
+        "string (repeatable)",
+        "none",
+        "Equality Condition. Repeat to AND more Conditions.",
+      ),
+      flag(
+        "--serve <variant>",
+        "string",
+        "none",
+        "Catalog Variant name to serve when the Conditions match.",
+      ),
+    ];
+  }
   switch (command.operationId) {
     case "flags_list":
       return [
