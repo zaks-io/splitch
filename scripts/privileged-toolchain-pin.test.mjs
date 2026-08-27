@@ -1,94 +1,30 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
+import {
+  extractRunScripts,
+  floatingPackageViolations,
+  loadGithubCiFiles,
+  MUTABLE_INSTALLER,
+  mutableInstallerViolations,
+  unpinnedActionViolations,
+} from "./lib/privileged-toolchain-pin.mjs";
 
-const ACTION_USES = /uses:\s+(\S+)/g;
-const FLOATING_PACKAGE =
-  /(?:npm|pnpm|yarn|npx|pip|uv|cargo)\s+(?:install|add|exec)\s[^\n]*@[\^~*]|npm@[\^~]|npm@(?:latest|next)\b/;
-const MUTABLE_INSTALLER = /curl[^\n]*\|\s*(?:ba)?sh\b/;
-const FULL_SHA = /^[0-9a-f]{40}$/;
-
-const actions = readdirSync(".github/actions", { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => ({
-    name: `.github/actions/${entry.name}/action.yml`,
-    source: readFileSync(`.github/actions/${entry.name}/action.yml`, "utf8"),
-  }));
-const workflows = readdirSync(".github/workflows")
-  .filter((name) => name.endsWith(".yml"))
-  .map((name) => ({
-    name: `.github/workflows/${name}`,
-    source: readFileSync(`.github/workflows/${name}`, "utf8"),
-  }));
-const files = [...actions, ...workflows];
-
-function jobBodies(source) {
-  return [
-    ...source.matchAll(/\n {2}([A-Za-z][\w-]*):\n([\s\S]*?)(?=\n {2}(?:#|[A-Za-z][\w-]*:\n)|$)/g),
-  ].map(([, name, body]) => ({ name, body }));
-}
-
-function isPrivileged(workflow, job) {
-  return (
-    /id-token:\s*write/.test(workflow) ||
-    /id-token:\s*write/.test(job) ||
-    /environment:\s*production/.test(job) ||
-    /environment:\s*shared-preview/.test(job)
-  );
-}
-
-function isOidcEnabled(workflow, job) {
-  return /id-token:\s*write/.test(workflow) || /id-token:\s*write/.test(job);
-}
-
-function runScripts(source) {
-  return [...source.matchAll(/\n\s+run:\s*\|\n((?:[ \t]+.*\n)+)/g)].flatMap(([, body]) =>
-    body
-      .split("\n")
-      .map((line) => line.replace(/^[ \t]+/, ""))
-      .filter((line) => line && !line.startsWith("#")),
-  );
-}
+const FIXTURE_ROOT = "scripts/fixtures/privileged-toolchain-pin";
+const files = loadGithubCiFiles(".github");
+const workflows = files.filter((file) => file.kind === "workflow");
 
 test("every third-party action pin is a full commit SHA with a version comment", () => {
-  for (const { name, source } of files) {
-    for (const match of source.matchAll(ACTION_USES)) {
-      const ref = match[1];
-      if (ref.startsWith("./") || ref.startsWith(".github/")) continue;
-      const [action, pin] = ref.split("@");
-      assert.ok(pin, `${name} uses unpinned ${action}`);
-      assert.match(pin, FULL_SHA, `${name} uses ${ref} without a full SHA`);
-      const line = source.slice(0, match.index).split("\n").at(-1) ?? "";
-      const rest = source.slice(match.index).split("\n")[0] ?? "";
-      assert.match(`${line}${rest}`, /# v?\d/, `${name} uses ${ref} without a version comment`);
-    }
-  }
+  assert.deepEqual(unpinnedActionViolations(files), []);
 });
 
 test("no privileged job executes a mutable installer", () => {
-  for (const { name, source } of files) {
-    const privileged =
-      name.endsWith("action.yml") ||
-      jobBodies(source).some((job) => isPrivileged(source, job.body));
-    if (!privileged) continue;
-    for (const script of runScripts(source)) {
-      assert.doesNotMatch(script, MUTABLE_INSTALLER, `${name} pipes a remote installer to a shell`);
-    }
-    assert.doesNotMatch(source, /astral\.sh\/uv\/install/, `${name} uses the mutable uv installer`);
-  }
+  assert.deepEqual(mutableInstallerViolations(files), []);
 });
 
 test("no OIDC-enabled job installs a floating package range", () => {
-  for (const { name, source } of workflows) {
-    for (const job of jobBodies(source)) {
-      if (!isOidcEnabled(source, job.body)) continue;
-      assert.doesNotMatch(
-        job.body,
-        FLOATING_PACKAGE,
-        `${name} job ${job.name} installs a floating package range`,
-      );
-    }
-  }
+  assert.deepEqual(floatingPackageViolations(workflows), []);
 });
 
 test("cloudflare-publish pins and verifies an exact npm version before OIDC publish", () => {
@@ -101,4 +37,64 @@ test("cloudflare-publish pins and verifies an exact npm version before OIDC publ
   assert.match(publishJob, /npm reports '\$\{installed\}', expected \$\{NPM_VERSION\}/);
   assert.doesNotMatch(publishJob, /npm@[\^~]/);
   assert.doesNotMatch(publishJob, /npm@(?:latest|next)\b/);
+});
+
+test("extractRunScripts resolves plain, quoted, literal, and folded scalars", () => {
+  const source = [
+    "jobs:",
+    "  publish:",
+    "    steps:",
+    "      - run: curl -LsSf https://example.test/install.sh | sh",
+    "        working-directory: .",
+    "      - run: |",
+    "          set -euo pipefail",
+    "          echo literal",
+    "      - run: >",
+    "          curl -LsSf https://example.test/install.sh",
+    "          | sh",
+    '      - run: "echo quoted"',
+    "      - run: 'echo single'",
+    "      - name: not-a-run",
+    "        run: |",
+    "          cat <<'EOF'",
+    "          run: ignored-as-key",
+    "          EOF",
+  ].join("\n");
+
+  assert.deepEqual(extractRunScripts(source), [
+    "curl -LsSf https://example.test/install.sh | sh",
+    "set -euo pipefail\necho literal",
+    "curl -LsSf https://example.test/install.sh | sh",
+    "echo quoted",
+    "echo single",
+    "cat <<'EOF'\nrun: ignored-as-key\nEOF",
+  ]);
+});
+
+test("the gate discovers .yaml workflows and rejects a curl-pipe installer", () => {
+  const fixture = loadGithubCiFiles(join(FIXTURE_ROOT, "yaml-extension"));
+  assert.equal(fixture.length, 1);
+  assert.match(fixture[0]?.name ?? "", /\.yaml$/);
+  const violations = mutableInstallerViolations(fixture);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0] ?? "", /oidc-curl\.yaml pipes a remote installer/);
+});
+
+test("the gate rejects a privileged scalar run: curl-pipe", () => {
+  const fixture = loadGithubCiFiles(join(FIXTURE_ROOT, "scalar-run"));
+  const [script] = extractRunScripts(fixture[0]?.source ?? "");
+  assert.match(script ?? "", MUTABLE_INSTALLER);
+  const violations = mutableInstallerViolations(fixture);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0] ?? "", /oidc-curl\.yml pipes a remote installer/);
+});
+
+test("the gate rejects a privileged folded run: > curl-pipe", () => {
+  const fixture = loadGithubCiFiles(join(FIXTURE_ROOT, "folded-run"));
+  const [script] = extractRunScripts(fixture[0]?.source ?? "");
+  assert.match(script ?? "", MUTABLE_INSTALLER);
+  assert.doesNotMatch(script ?? "", /\n/);
+  const violations = mutableInstallerViolations(fixture);
+  assert.equal(violations.length, 1);
+  assert.match(violations[0] ?? "", /oidc-curl\.yml pipes a remote installer/);
 });

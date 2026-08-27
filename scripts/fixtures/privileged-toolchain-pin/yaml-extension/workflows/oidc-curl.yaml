@@ -1,0 +1,12 @@
+# Negative fixture: GitHub executes `.yaml` workflows. The privileged pin
+# gate must discover this file; a `.yml`-only scanner would miss it.
+name: yaml-extension-mutable-installer
+on: push
+jobs:
+  publish:
+    permissions:
+      id-token: write
+    steps:
+      - name: Install
+        run: |
+          curl -LsSf https://example.test/install.sh | sh
