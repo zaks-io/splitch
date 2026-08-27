@@ -32,12 +32,11 @@ export const surfaceLabels: Record<ErrorSurface, string> = {
 };
 
 /**
- * One page per documented code. `satisfies Record<DocumentedErrorCode, ErrorDoc>`
- * is the coverage gate: adding a code to `errorCodes`, `sdkClientErrorCodes`, or
- * `cliClientErrorCodes` without an entry here fails the typecheck rather than
- * shipping a `/docs/error/{code}` link that 404s.
+ * The wire families alone. `satisfies Record<ErrorCode, ErrorDoc & { remediation: string }>`
+ * is the second gate: a new wire code has to arrive with its terminal sentence,
+ * and a code that is not on the wire cannot be smuggled in here.
  */
-const catalog = {
+const wireCatalog = {
   ...validationErrorDocs,
   ...eventErrorDocs,
   ...runErrorDocs,
@@ -46,6 +45,16 @@ const catalog = {
   ...approvalErrorDocs,
   ...decisionErrorDocs,
   ...systemErrorDocs,
+} satisfies Record<ErrorCode, ErrorDoc & { remediation: string }>;
+
+/**
+ * One page per documented code. `satisfies Record<DocumentedErrorCode, ErrorDoc>`
+ * is the coverage gate: adding a code to `errorCodes`, `sdkClientErrorCodes`, or
+ * `cliClientErrorCodes` without an entry here fails the typecheck rather than
+ * shipping a `/docs/error/{code}` link that 404s.
+ */
+const catalog = {
+  ...wireCatalog,
   ...sdkErrorDocs,
   ...cliErrorDocs,
 } satisfies Record<DocumentedErrorCode, ErrorDoc>;
@@ -54,6 +63,13 @@ const catalog = {
 // annotation here gives every consumer one uniform shape instead of a 72-member
 // union where the optional fields exist on only some branches.
 export const errorDocs: Record<DocumentedErrorCode, ErrorDoc> = catalog;
+
+/**
+ * The wire slice, typed with `remediation` REQUIRED. A terminal or MCP renderer
+ * reads this rather than `errorDocs` so a missing sentence is a typecheck
+ * failure at the call site instead of an `undefined` printed as blank advice.
+ */
+export const wireErrorDocs: Record<ErrorCode, ErrorDoc & { remediation: string }> = wireCatalog;
 
 export const documentedErrorCodes = Object.keys(errorDocs).sort() as DocumentedErrorCode[];
 

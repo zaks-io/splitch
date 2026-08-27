@@ -38,12 +38,11 @@ export function errorMarkdown(code: DocumentedErrorCode): string {
   if (doc.recommendedAction) facts.push(`Recommended action: \`${doc.recommendedAction}\``);
   if (doc.details) facts.push(`Details: \`${doc.details}\``);
 
-  const sections = [
-    `# ${code}`,
-    facts.map((fact) => `- ${fact}`).join("\n"),
-    `## Cause\n\n${doc.cause}`,
-    `## Fix\n\n${doc.fix}`,
-  ];
+  // Remediation leads: an agent reading this page is mid-failure, and the one
+  // action that clears the code should be readable before the explanation of it.
+  const sections = [`# ${code}`, facts.map((fact) => `- ${fact}`).join("\n")];
+  if (doc.remediation) sections.push(`## Remediation\n\n${doc.remediation}`);
+  sections.push(`## Cause\n\n${doc.cause}`, `## Fix\n\n${doc.fix}`);
   if (doc.related?.length) {
     sections.push(
       `## Related\n\n${doc.related
