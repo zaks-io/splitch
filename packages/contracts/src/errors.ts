@@ -191,6 +191,24 @@ const errorMembers = [
        */
       blockers: z.array(ResourceDeleteBlockerSchema).min(1).optional(),
       segmentDependencies: SegmentDependenciesSchema.optional(),
+      /**
+       * Targeting Rule IDs that still point at this Variant. Present on the
+       * Variant-delete path so the caller can retarget those rules; IDs alone
+       * are not unique across Environments (SPL-450), so `targetingRules`
+       * carries the Environment each ID belongs to.
+       */
+      targetingRuleIds: z.array(z.string().min(1)).min(1).optional(),
+      targetingRules: z
+        .array(
+          z
+            .object({
+              id: z.string().min(1),
+              environmentId: z.string().min(1),
+            })
+            .strict(),
+        )
+        .min(1)
+        .optional(),
     }),
   ),
 

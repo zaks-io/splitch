@@ -5,8 +5,12 @@ import {
   validationError,
   validationErrors,
   variantRunFrozenError,
+  variantTargetingRuleReferenceError,
 } from "./flag-definition-errors";
-import { explicitVariantReferenceCount } from "./flag-definition-guards";
+import {
+  explicitVariantReferenceCount,
+  targetingRulesReferencingVariant,
+} from "./flag-definition-guards";
 import {
   type FlagDefinitionDeps,
   fail,
@@ -154,6 +158,19 @@ export async function variantDeleteBlocker(
       "DELETE_VARIANT",
       requestId,
     );
+  }
+
+  // Fail-fast only. `removeVariant` re-checks this predicate on the DELETE
+  // itself; reading it here is not permission to write.
+  const targetingRules = await targetingRulesReferencingVariant(
+    deps.repo,
+    loaded.appId,
+    loaded.flag.id,
+    variant.id,
+    envs,
+  );
+  if (targetingRules.length > 0) {
+    return variantTargetingRuleReferenceError({ variantName, targetingRules }, requestId);
   }
 
   const running = await deps.repo.flags.liveRunUsingVariant(loaded.scope, loaded.flag.id, variant);

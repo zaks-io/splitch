@@ -75,6 +75,46 @@ describe("ErrorResponse contract", () => {
     }
   });
 
+  it("names Targeting Rules on a Variant-delete RESOURCE_NOT_EMPTY", () => {
+    const parsed = ErrorResponseSchema.parse({
+      code: "RESOURCE_NOT_EMPTY",
+      message:
+        "Targeting Rules still reference this Variant (rule_prod); remove or retarget them before deleting it",
+      details: {
+        resourceType: "variant",
+        resourceId: "treatment",
+        childType: "flag-targeting-rules",
+        childCount: 1,
+        attemptedOp: "DELETE_VARIANT",
+        targetingRuleIds: ["rule_prod"],
+        targetingRules: [{ id: "rule_prod", environmentId: "env_prod" }],
+      },
+    });
+
+    if (parsed.code !== "RESOURCE_NOT_EMPTY") {
+      throw new Error("discriminant did not narrow to RESOURCE_NOT_EMPTY");
+    }
+    expect(parsed.details.targetingRuleIds).toEqual(["rule_prod"]);
+    expect(parsed.details.targetingRules).toEqual([{ id: "rule_prod", environmentId: "env_prod" }]);
+  });
+
+  it("rejects a Variant-delete RESOURCE_NOT_EMPTY that names no Targeting Rules", () => {
+    expect(
+      ErrorResponseSchema.safeParse({
+        code: "RESOURCE_NOT_EMPTY",
+        message: "Targeting Rules still reference this Variant",
+        details: {
+          resourceType: "variant",
+          resourceId: "treatment",
+          childType: "flag-targeting-rules",
+          childCount: 1,
+          attemptedOp: "DELETE_VARIANT",
+          targetingRuleIds: [],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts empty details for codes that carry none", () => {
     const parsed = ErrorResponseSchema.parse({
       code: "FLAG_NOT_FOUND",

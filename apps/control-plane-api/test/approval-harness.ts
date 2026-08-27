@@ -216,6 +216,26 @@ export async function insertFlagConfig(h: Harness, envId: string): Promise<void>
   });
 }
 
+/**
+ * The fixture seeds `rule_checkout_dev_treatment` on treatment. The write-time
+ * Targeting Rule predicate refuses `removeVariant` while that row exists, so a
+ * test that needs the Variant gone (vanished-target stale, apply-time
+ * VARIANT_NOT_AVAILABLE) must clear those references first. Setup only — not a
+ * production door around the invariant.
+ */
+export async function removeVariantAfterClearingRules(
+  h: Harness,
+  name: "control" | "treatment",
+): Promise<void> {
+  const variantId = name === "treatment" ? ids.treatmentVariantId : ids.controlVariantId;
+  await h.d1
+    .prepare("DELETE FROM targeting_rules WHERE app_id = ? AND variant_id = ?")
+    .bind(ids.appId, variantId)
+    .run();
+  const removed = await h.repo.flags.removeVariant(appScope(ids.appId), ids.flagId, name);
+  expect(removed).toEqual({ ok: true });
+}
+
 export function countApprovalReviews(h: Harness): Promise<number> {
   return h.d1
     .prepare("SELECT COUNT(*) AS n FROM approval_reviews")

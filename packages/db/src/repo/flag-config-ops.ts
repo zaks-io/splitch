@@ -10,25 +10,21 @@ import {
 } from "./approval-atomic";
 import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
+import {
+  missingReferencedVariants,
+  referencedVariantMustExist,
+  targetingRuleWriteFailure,
+} from "./flag-config-variant-refs";
 import { idBatches } from "./id-batches";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
 import type { ScopedTable } from "./scoped-table";
-import { hasUniqueViolationMessage, uniqueViolationMessage } from "./unique-violation";
 
 export type ReplaceTargetingRulesResult =
   | { ok: true; config: typeof flagConfigs.$inferSelect }
   | { ok: false; reason: "not_found" }
-  | { ok: false; reason: "id_conflict" };
-
-/**
- * SQLite reports a composite unique-index violation by COLUMN LIST, not by
- * index name. Matching the whole constraint string keeps this from swallowing
- * a different fault on the same columns.
- */
-const TARGETING_RULE_ID_UNIQUE_VIOLATION =
-  "UNIQUE constraint failed: targeting_rules.app_id, targeting_rules.environment_id, targeting_rules.flag_id, targeting_rules.id";
-const TARGETING_RULE_ID_UNIQUE_MESSAGE = uniqueViolationMessage(TARGETING_RULE_ID_UNIQUE_VIOLATION);
+  | { ok: false; reason: "id_conflict" }
+  | { ok: false; reason: "missing_variant"; missingVariantIds: string[] };
 
 /**
  * Per-Environment Flag CONFIGURATION reads and writes (ADR-0027), split out of
@@ -284,6 +280,7 @@ async function replaceApprovedTargetingRules(
     .returning();
   try {
     await db.batch([
+      ...referencedVariantMustExist(db, scope, flagId, rows),
       guardedUpdate,
       appliedReviewInsert(db, scope, approval),
       guardedDelete,
@@ -291,7 +288,10 @@ async function replaceApprovedTargetingRules(
       appliedRequestUpdate(db, scope, approval),
     ] as unknown as Parameters<Db["batch"]>[0]);
   } catch (cause) {
-    return targetingRuleWriteFailure(cause);
+    return targetingRuleWriteFailure(
+      cause,
+      await missingReferencedVariants(db, scope, flagId, rows),
+    );
   }
   if (!(await approvalReviewLanded(db, scope, approval))) {
     return { ok: false, reason: "not_found" };
@@ -308,6 +308,7 @@ async function replaceDirectTargetingRules(
   configPatch: FlagConfigWritePatch,
 ): Promise<ReplaceTargetingRulesResult> {
   const batch = [
+    ...referencedVariantMustExist(db, scope, flagId, rows),
     db.delete(targetingRules).where(scopedTargetingRule(scope, flagId)).returning(),
     ...rows.map((row) =>
       db
@@ -331,15 +332,11 @@ async function replaceDirectTargetingRules(
     const updated = results.at(-1) as (typeof flagConfigs.$inferSelect)[] | undefined;
     return updated?.[0] ? { ok: true, config: updated[0] } : { ok: false, reason: "not_found" };
   } catch (cause) {
-    return targetingRuleWriteFailure(cause);
+    return targetingRuleWriteFailure(
+      cause,
+      await missingReferencedVariants(db, scope, flagId, rows),
+    );
   }
-}
-
-function targetingRuleWriteFailure(cause: unknown): ReplaceTargetingRulesResult {
-  if (hasUniqueViolationMessage(cause, TARGETING_RULE_ID_UNIQUE_MESSAGE)) {
-    return { ok: false, reason: "id_conflict" };
-  }
-  throw cause;
 }
 
 export function scopedTargetingRule(scope: EnvScope, flagId: string) {

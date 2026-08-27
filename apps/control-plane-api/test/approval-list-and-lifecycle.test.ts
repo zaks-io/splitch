@@ -8,6 +8,7 @@ import {
   token,
 } from "../src/config-store-harness-core";
 import { MemoryApprovalArchiveStore } from "./approval-archive-test-store";
+import { removeVariantAfterClearingRules } from "./approval-harness";
 import { makePoolHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -221,7 +222,7 @@ describe("Approval Request list paging", () => {
 describe("an Approval Request whose target no longer resolves", () => {
   it("renders stale rather than reporting NOT_FOUND, and can still be declined", async () => {
     const requestId = await proposeVariantValue("idem_gone", "never-applied");
-    await h.repo.flags.removeVariant(appScope(ids.appId), ids.flagId, "treatment");
+    await removeVariantAfterClearingRules(h, "treatment");
 
     const jwt = await token(h.signer);
     const read = await h.app.request(`/apps/${ids.appId}/approval-requests/${requestId}`, {
@@ -255,7 +256,7 @@ describe("an Approval Request whose target no longer resolves", () => {
 
   it("declines a request against a vanished target", async () => {
     const requestId = await proposeVariantValue("idem_gone_b", "never-applied-b");
-    await h.repo.flags.removeVariant(appScope(ids.appId), ids.flagId, "treatment");
+    await removeVariantAfterClearingRules(h, "treatment");
 
     const jwt = await token(h.signer);
     const declined = await h.app.request(

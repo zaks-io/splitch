@@ -1,4 +1,9 @@
-import type { UpdateVariantResult, VariantFrozenChange, VariantRunFreeze } from "@splitch/db";
+import type {
+  RemoveVariantResult,
+  UpdateVariantResult,
+  VariantFrozenChange,
+  VariantRunFreeze,
+} from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import type { RunningBlocker } from "./flag-definition-guards";
 import type { ValidationIssue } from "@splitch/contracts";
@@ -60,6 +65,7 @@ export function variantRunFrozenError(refusal: VariantFreezeRefusal, requestId: 
 }
 
 export type VariantWriteRefusal = Exclude<UpdateVariantResult, { ok: true }>;
+export type VariantDeleteRefusal = Exclude<RemoveVariantResult, { ok: true }>;
 
 /**
  * EVERY refusal reason gets a status code here, in one place.
@@ -108,6 +114,39 @@ function variantWriteNotApplied(requestId: string): Response {
 /** A reason added to the union without a status code must not reach a caller silently. */
 function unhandledRefusal(refusal: never): never {
   throw new Error(`unhandled updateVariant refusal: ${JSON.stringify(refusal)}`);
+}
+
+/**
+ * The delete sibling of `variantWriteRefusal`. A concurrent Targeting Rule
+ * that landed after the preflight is the same fact as a preflight hit, and
+ * must not fall through to a 200 Flag body.
+ */
+export function variantDeleteRefusal(refusal: VariantDeleteRefusal, requestId: string): Response {
+  switch (refusal.reason) {
+    case "TARGETING_RULE_REFS":
+      return variantTargetingRuleReferenceError(refusal, requestId);
+    case "NOT_FOUND":
+      return variantNotFound(requestId);
+    case "NOT_APPLIED":
+      return variantDeleteNotApplied(requestId);
+    default:
+      return unhandledDeleteRefusal(refusal);
+  }
+}
+
+function variantDeleteNotApplied(requestId: string): Response {
+  return renderError(
+    {
+      code: "INTERNAL_SERVER_ERROR",
+      message: "variant delete selected no rows and applied nothing",
+      details: {},
+    },
+    { requestId },
+  );
+}
+
+function unhandledDeleteRefusal(refusal: never): never {
+  throw new Error(`unhandled removeVariant refusal: ${JSON.stringify(refusal)}`);
 }
 
 export function validationError(requestId: string, issue: [string[], string]): Response {
@@ -168,6 +207,43 @@ export function resourceNotEmpty(
       code: "RESOURCE_NOT_EMPTY",
       message: "resource has children that must be deleted before this operation can continue",
       details: { resourceType, resourceId, childType, childCount, attemptedOp },
+    },
+    { requestId },
+  );
+}
+
+export interface VariantTargetingRuleReference {
+  variantName: string;
+  targetingRules: Array<{ id: string; environmentId: string }>;
+}
+
+/** Shared by the direct delete 409 and the unapplicable Review outcome. */
+export function variantTargetingRuleReferenceDetails(input: VariantTargetingRuleReference) {
+  return {
+    resourceType: "variant" as const,
+    resourceId: input.variantName,
+    childType: "flag-targeting-rules",
+    childCount: input.targetingRules.length,
+    attemptedOp: "DELETE_VARIANT",
+    targetingRuleIds: input.targetingRules.map((rule) => rule.id),
+    targetingRules: input.targetingRules,
+  };
+}
+
+export function variantTargetingRuleReferenceMessage(input: VariantTargetingRuleReference): string {
+  const ids = input.targetingRules.map((rule) => rule.id).join(", ");
+  return `Targeting Rules still reference this Variant (${ids}); remove or retarget them before deleting it`;
+}
+
+export function variantTargetingRuleReferenceError(
+  input: VariantTargetingRuleReference,
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "RESOURCE_NOT_EMPTY",
+      message: variantTargetingRuleReferenceMessage(input),
+      details: variantTargetingRuleReferenceDetails(input),
     },
     { requestId },
   );

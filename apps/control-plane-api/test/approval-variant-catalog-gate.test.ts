@@ -28,6 +28,13 @@ beforeEach(async () => {
   h = await makePoolHarness();
   await setProdPolicy(h, confirmPolicy);
   await clearFrozenRun(h);
+  // These cases prove available-set emptiness, not Targeting Rule references.
+  // The seeded dev rule points at treatment; leave it in place and the delete
+  // is refused for a different reason than the one under test.
+  await h.d1
+    .prepare("DELETE FROM targeting_rules WHERE app_id = ? AND flag_id = ?")
+    .bind(ids.appId, ids.flagId)
+    .run();
   for (const envId of [ids.environmentId, ids.devEnvironmentId]) {
     await h.repo.flags.updateFlagConfig(envScope(ids.appId, envId), ids.flagId, {
       availableVariantNames: JSON.stringify([]),

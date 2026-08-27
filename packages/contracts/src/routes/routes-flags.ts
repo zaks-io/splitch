@@ -155,7 +155,8 @@ export const flagRoutes = [
     owner: OWNER,
     method: "DELETE",
     path: "/apps/:appId/flags/:flagId/variants/:variantName",
-    summary: "Remove a catalog Variant (blocked if available or in a running Run).",
+    summary:
+      "Remove a catalog Variant (blocked if available, referenced by a Targeting Rule, or in a running Run).",
     request: { params: FlagVariantParams },
     response: FlagResponseSchema,
     auth: AUTH,

@@ -1,5 +1,5 @@
-import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
-import { flags, variants } from "../schema/index";
+import { and, asc, eq, inArray, notExists, sql, type SQL } from "drizzle-orm";
+import { flags, targetingRules, variants } from "../schema/index";
 import { approvalPendingCondition, approvalReviewLanded } from "./approval-atomic";
 import type { Db } from "./client";
 import {
@@ -81,6 +81,79 @@ function makeEnsureCreateVariant(db: Db, flagInScope: FlagInScope, variantByName
   };
 }
 
+export type TargetingRuleVariantRef = {
+  id: string;
+  environmentId: string;
+};
+
+/**
+ * The Variant delete as a RESULT, not a deleted-row count.
+ *
+ * `targeting_rules.variant_id` has no SQLite FK (schema/flags.ts), so a count
+ * of 0 used to mean both "deleted" and "a concurrent Targeting Rule landed
+ * between the preflight and this write". Those must stay DISTINCT: the
+ * predicate lives on the DELETE itself, and a live reference is a typed
+ * refusal rather than a silent no-op (ADR-0036).
+ */
+export type RemoveVariantResult =
+  | { ok: true }
+  | { ok: false; reason: "NOT_FOUND" }
+  | { ok: false; reason: "NOT_APPLIED" }
+  | {
+      ok: false;
+      reason: "TARGETING_RULE_REFS";
+      variantName: string;
+      targetingRules: TargetingRuleVariantRef[];
+    };
+
+/**
+ * The write-time predicate: refuse the delete when any Targeting Rule in this
+ * App still names the Variant. A preceding list is fail-fast only — this is
+ * the statement that actually preserves the invariant.
+ */
+function noTargetingRuleReferences(db: Db, scope: TenantScope, variantId: string) {
+  return notExists(
+    db
+      .select({ one: sql<number>`1` })
+      .from(targetingRules)
+      .where(and(eq(targetingRules.appId, scope.appId), eq(targetingRules.variantId, variantId))),
+  );
+}
+
+async function listTargetingRuleRefs(
+  db: Db,
+  scope: TenantScope,
+  variantId: string,
+): Promise<TargetingRuleVariantRef[]> {
+  const rows = await db
+    .select({
+      id: targetingRules.id,
+      environmentId: targetingRules.environmentId,
+    })
+    .from(targetingRules)
+    .where(and(eq(targetingRules.appId, scope.appId), eq(targetingRules.variantId, variantId)));
+  return rows.sort((left, right) => {
+    const byEnv = left.environmentId.localeCompare(right.environmentId);
+    return byEnv !== 0 ? byEnv : left.id.localeCompare(right.id);
+  });
+}
+
+async function targetingRefsOrNotApplied(
+  db: Db,
+  scope: TenantScope,
+  variant: { id: string; name: string },
+): Promise<Exclude<RemoveVariantResult, { ok: true }>> {
+  const targetingRulesForVariant = await listTargetingRuleRefs(db, scope, variant.id);
+  return targetingRulesForVariant.length > 0
+    ? {
+        ok: false,
+        reason: "TARGETING_RULE_REFS",
+        variantName: variant.name,
+        targetingRules: targetingRulesForVariant,
+      }
+    : { ok: false, reason: "NOT_APPLIED" };
+}
+
 /**
  * The Approval-guarded delete, its landing check, and the confirming re-read.
  * A lost guard leaves every statement in the batch a no-op, so without the
@@ -92,11 +165,11 @@ async function approvedVariantDelete(
   input: {
     scope: TenantScope;
     flag: typeof flags.$inferSelect;
-    variantId: string;
+    variant: { id: string; name: string };
     options: VariantWriteOptions;
     reread: () => Promise<unknown>;
   },
-): Promise<number> {
+): Promise<RemoveVariantResult> {
   const approval = input.options.approval;
   if (!approval) throw new Error("approvedVariantDelete: an Approval commit is required");
   await db.batch(
@@ -107,16 +180,19 @@ async function approvedVariantDelete(
         .delete(variants)
         .where(
           and(
-            eq(variants.id, input.variantId),
+            eq(variants.id, input.variant.id),
             approvalPendingCondition(db, input.scope, approval),
+            noTargetingRuleReferences(db, input.scope, input.variant.id),
           ),
         )
         .returning(),
       options: input.options,
     }),
   );
-  if (!(await approvalReviewLanded(db, input.scope, approval))) return 0;
-  return (await input.reread()) ? 0 : 1;
+  if (await approvalReviewLanded(db, input.scope, approval)) {
+    return (await input.reread()) ? { ok: false, reason: "NOT_APPLIED" } : { ok: true };
+  }
+  return targetingRefsOrNotApplied(db, input.scope, input.variant);
 }
 
 export function makeVariantOps(
@@ -267,21 +343,31 @@ export function makeVariantOps(
       flagId: string,
       name: string,
       options?: VariantWriteOptions,
-    ): Promise<number> {
+    ): Promise<RemoveVariantResult> {
       const variant = await variantByName(scope, flagId, name);
       const flag = await flagInScope(scope, flagId);
-      if (!(variant && flag)) return 0;
+      if (!(variant && flag)) return { ok: false, reason: "NOT_FOUND" };
       if (options?.approval) {
         return approvedVariantDelete(db, {
           scope,
           flag,
-          variantId: variant.id,
+          variant,
           options,
           reread: () => variantByName(scope, flagId, name),
         });
       }
-      const rows = await db.delete(variants).where(eq(variants.id, variant.id)).returning();
-      return rows.length;
+      // One-statement batch so the write-time predicate and the delete are the
+      // same D1 transaction a concurrent Targeting Rule replace cannot split,
+      // and so a test can land that replace strictly between the reads above
+      // and this mutation — the same hook `updateVariant` already uses.
+      const mutation = db
+        .delete(variants)
+        .where(and(eq(variants.id, variant.id), noTargetingRuleReferences(db, scope, variant.id)))
+        .returning();
+      await db.batch([mutation] as unknown as Parameters<Db["batch"]>[0]);
+      return (await variantByName(scope, flagId, name))
+        ? targetingRefsOrNotApplied(db, scope, variant)
+        : { ok: true };
     },
 
     async removeVariantsForFlag(scope: TenantScope, flagId: string): Promise<number> {

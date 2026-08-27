@@ -968,7 +968,7 @@ Request body (--body-json):
 
 Example:
   splitch flag-variants create <flag-id-or-key> --body-json '{"appId":"app_1","flagId":"flag_1","name":"name","value":true,"idempotency_key":"idem-1"}' --json",
-    "flag-variants delete": "Remove a catalog Variant (blocked if available or in a running Run).
+    "flag-variants delete": "Remove a catalog Variant (blocked if available, referenced by a Targeting Rule, or in a running Run).
 
 Usage:
   splitch flag-variants delete <flag-id-or-key> <variant-name> [flags]
@@ -1903,7 +1903,7 @@ Usage:
 Commands:
   create          Add a Variant to the App-level catalog.
   update          Update a catalog Variant (value is Run-frozen).
-  delete          Remove a catalog Variant (blocked if available or in a running Run).
+  delete          Remove a catalog Variant (blocked if available, referenced by a Targeting Rule, or in a running Run).
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.
