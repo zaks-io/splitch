@@ -1,6 +1,6 @@
 import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { SplitchCliError } from "./errors.js";
 
 /**
@@ -57,11 +57,14 @@ export interface CredentialStore {
 
 const CREDENTIALS_DIR = join(homedir(), ".splitch");
 const CREDENTIALS_PATH = join(CREDENTIALS_DIR, "credentials.json");
+const CREDENTIAL_DIR_MODE = 0o700;
+const CREDENTIAL_FILE_MODE = 0o600;
 
 export function createFileCredentialStore(path = CREDENTIALS_PATH): CredentialStore {
   return {
     async load() {
       try {
+        await repairCredentialPermissions(path, { createDir: false });
         const raw = await readFile(path, "utf8");
         if (!raw.trim()) {
           return null;
@@ -71,15 +74,19 @@ export function createFileCredentialStore(path = CREDENTIALS_PATH): CredentialSt
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
           return null;
         }
-        throw credentialStoreError(error, "read");
+        throw error instanceof SplitchCliError ? error : credentialStoreError(error, "read");
       }
     },
     async save(file) {
-      await mkdir(join(path, ".."), { recursive: true });
-      await writeFile(path, `${JSON.stringify(normalizeCredentialFile(file), null, 2)}\n`, {
-        mode: 0o600,
-      });
-      await chmod(path, 0o600);
+      try {
+        await repairCredentialPermissions(path, { createDir: true });
+        await writeFile(path, `${JSON.stringify(normalizeCredentialFile(file), null, 2)}\n`, {
+          mode: CREDENTIAL_FILE_MODE,
+        });
+        await chmod(path, CREDENTIAL_FILE_MODE);
+      } catch (error) {
+        throw error instanceof SplitchCliError ? error : credentialStoreError(error, "write");
+      }
     },
     async clear() {
       try {
@@ -91,6 +98,38 @@ export function createFileCredentialStore(path = CREDENTIALS_PATH): CredentialSt
       }
     },
   };
+}
+
+/**
+ * The credential file is 0600; its parent must be 0700 so a world-traversable
+ * directory cannot leak the filename or let another user replace it. Repair
+ * both on every read and write — a pre-existing 0755 `~/.splitch` is the same
+ * leak as creating one.
+ */
+async function repairCredentialPermissions(
+  path: string,
+  options: { createDir: boolean },
+): Promise<void> {
+  const dir = dirname(path);
+  if (options.createDir) {
+    await mkdir(dir, { recursive: true, mode: CREDENTIAL_DIR_MODE });
+  }
+  await chmodExisting(dir, CREDENTIAL_DIR_MODE, options.createDir ? "write" : "read");
+  await chmodExisting(path, CREDENTIAL_FILE_MODE, options.createDir ? "write" : "read");
+}
+
+async function chmodExisting(
+  path: string,
+  mode: number,
+  operation: "read" | "write",
+): Promise<void> {
+  try {
+    await chmod(path, mode);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw credentialStoreError(error, operation);
+    }
+  }
 }
 
 /**
@@ -169,7 +208,10 @@ export function emailUnavailableReason(
   return "backfill_pending";
 }
 
-function credentialStoreError(error: unknown, operation: "read" | "clear"): SplitchCliError {
+function credentialStoreError(
+  error: unknown,
+  operation: "read" | "clear" | "write",
+): SplitchCliError {
   return new SplitchCliError({
     code: "CLI_CREDENTIAL_STORE_FAILED",
     causeSummary: `The credential store could not ${operation}: ${error instanceof Error ? error.message : String(error)}`,

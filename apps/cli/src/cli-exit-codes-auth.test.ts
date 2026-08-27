@@ -47,10 +47,11 @@ describe("login exit code", () => {
     const code = await runCli(["login", "--json", "--app", "checkout-app"], {
       credentialPath,
       fetch: transport.fetch,
+      platformTarget: "production",
     });
     expect(code).toBe(EXIT_OK);
     expect(open).toHaveBeenCalledOnce();
-    expect(open).toHaveBeenCalledWith("https://auth.test/device?user_code=ABCD-1234");
+    expect(open).toHaveBeenCalledWith("https://auth.splitch.dev/device?user_code=ABCD-1234");
     expect(transport.requests.map((request) => request.body?.app)).toEqual([
       "checkout-app",
       undefined,
@@ -83,7 +84,13 @@ describe("login exit code", () => {
     ]);
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    expect(await runCli(["login"], { credentialPath, fetch: transport.fetch })).toBe(EXIT_OK);
+    expect(
+      await runCli(["login"], {
+        credentialPath,
+        fetch: transport.fetch,
+        platformTarget: "production",
+      }),
+    ).toBe(EXIT_OK);
 
     expect(error.mock.calls.join(" ")).toContain("Logged in as user_test.");
     const saved = await readFile(credentialPath, "utf8");
@@ -111,7 +118,13 @@ describe("login exit code", () => {
     ]);
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    expect(await runCli(["login"], { credentialPath, fetch: transport.fetch })).not.toBe(EXIT_OK);
+    expect(
+      await runCli(["login"], {
+        credentialPath,
+        fetch: transport.fetch,
+        platformTarget: "production",
+      }),
+    ).not.toBe(EXIT_OK);
 
     expect(error.mock.calls.join(" ")).toContain("CLI_DEVICE_TOKEN_EXCHANGE_FAILED");
     // Nothing half-written: a later command must not find a nameless session.
@@ -139,6 +152,7 @@ describe("login exit code", () => {
       credentialPath,
       cwd: (await makeTempHome()).dir,
       fetch: transport.fetch,
+      platformTarget: "production",
     });
     expect(code).toBe(EXIT_OK);
     expect(transport.requests[0]?.body?.app).toBeUndefined();

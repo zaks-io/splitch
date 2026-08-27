@@ -12,6 +12,7 @@ import {
   MCP_DELEGATION_HEADER,
   userRoles,
 } from "@splitch/contracts";
+import { withoutCredentialRedirect } from "./credential-fetch";
 import { type ControlPlaneHcOptions, resolveControlPlaneUrl, withAuthorization } from "./hc-client";
 import { withIdempotencyHeader } from "./idempotency-header";
 import {
@@ -49,7 +50,7 @@ export class McpOperationInvalidParamsError extends Error {
 export function createMcpOperationAdapter(
   options: McpOperationAdapterOptions,
 ): McpOperationAdapter {
-  const requestFetch = options.fetch ?? fetch;
+  const requestFetch = withoutCredentialRedirect(options.fetch ?? fetch);
 
   return {
     async callOperationById(operationId, input, callOptions: McpOperationCallOptions | undefined) {

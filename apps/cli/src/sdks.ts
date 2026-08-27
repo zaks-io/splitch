@@ -2,8 +2,8 @@ import {
   createMcpOperationAdapter,
   type PlatformTarget,
   PlatformTargetSchema,
-  platformTargets,
   type PublicSurface,
+  platformTargets,
   publicSurfaceFor,
   type RouteContract,
 } from "@splitch/sdk/control-plane";
@@ -117,6 +117,15 @@ export function resolveControlPlaneBaseUrl(options: SdkFactoryOptions = {}): str
 export function resolveAuthBaseUrl(options: SdkFactoryOptions = {}): string {
   const platformTarget = requirePlatformTarget(options.platformTarget);
   return apiBaseUrl("AUTH_API_ORIGIN", options.authBaseUrl, defaultAuthBaseUrl, platformTarget);
+}
+
+/**
+ * Hosted targets must open HTTPS device-approval URLs only. Local HTTP is
+ * allowed solely for the explicit `local` and `pr-ci` loopback targets.
+ */
+export function authOriginRequiresHttps(options: SdkFactoryOptions = {}): boolean {
+  const platformTarget = requirePlatformTarget(options.platformTarget);
+  return platformTarget === "shared-preview" || platformTarget === "production";
 }
 
 export function resolveDataPlaneBaseUrl(options: SdkFactoryOptions = {}): string {

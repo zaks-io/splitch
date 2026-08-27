@@ -2,6 +2,7 @@ import type { HealthResponse } from "@splitch/contracts";
 import { HealthResponseSchema } from "@splitch/contracts";
 import { type ApprovalsClient, createApprovalsClient } from "./approvals-client";
 import { type AppsClient, createAppsClient } from "./apps-client";
+import { withoutCredentialRedirect } from "./credential-fetch";
 import { type CredentialsClient, createCredentialsClient } from "./credentials-client";
 import { createEnvironmentsClient, type EnvironmentsClient } from "./environments-client";
 import {
@@ -48,7 +49,7 @@ export interface ControlPlaneSdk {
 }
 
 export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlPlaneSdk {
-  const requestFetch = options.fetch ?? fetch;
+  const requestFetch = withoutCredentialRedirect(options.fetch ?? fetch);
   const baseUrl = new URL(options.baseUrl);
   const hcOptions: ControlPlaneHcOptions = {
     baseUrl: baseUrl.toString(),

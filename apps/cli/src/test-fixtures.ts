@@ -202,8 +202,8 @@ export function deviceAuthorizationResponse() {
   return {
     device_code: "device-code-1",
     user_code: "ABCD-1234",
-    verification_uri: "https://auth.test/device",
-    verification_uri_complete: "https://auth.test/device?user_code=ABCD-1234",
+    verification_uri: "https://auth.splitch.dev/device",
+    verification_uri_complete: "https://auth.splitch.dev/device?user_code=ABCD-1234",
     interval: 0,
   };
 }
