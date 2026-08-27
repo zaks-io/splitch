@@ -27,7 +27,10 @@ The component declares one required secret environment value, `SPLITCH_API_KEY`.
 mounted callback URL from `CONVEX_SITE_URL`. `install()` generates and privately stores the
 installation ID and webhook secret, registers them through the API-Key-only
 [Convex integration API](./convex-integration-api.md), and performs the first full sync. Missing or
-malformed credentials fail before any integration or config row is written.
+malformed credentials fail before any integration or config row is written. That Key must hold both
+`data-plane:evaluate` and `data-plane:write`: it authenticates Metric Event delivery too, and
+delivery runs after the caller's Mutation has committed, so an evaluate-only Key would fail every
+`track()` asynchronously and terminally. Install rejects it and names the missing scope.
 
 `install()` is an exact-retry-safe upgrade entrypoint as well as the initial installation call.
 After a package upgrade, rerunning it resumes stale configuration sync, schedules retention for
