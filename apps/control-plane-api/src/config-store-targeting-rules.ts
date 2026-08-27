@@ -5,9 +5,11 @@ import {
   buildSnapshotFromD1,
   type ConfigStoreDeps,
   type FlagConfigWriteResult,
+  loadFlagConfigWriteContext,
   missingRuleVariantNames,
   type ReplaceTargetingRulesInput,
   targetingRuleRows,
+  toTargetingRule,
   writeSnapshotAndBroadcast,
 } from "./config-store-shared";
 import { normalizeTargetingRuleRollouts } from "./flag-config-rollout";
@@ -36,12 +38,13 @@ export async function replaceTargetingRules(
   if (frozen) return frozen;
 
   const scope = envScope(input.appId, input.environmentId);
-  const current = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
-  if (!current) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  const normalized = normalizeTargetingRuleRollouts(
-    current.authoringTargetingRules,
-    input.targetingRules,
-  );
+  const [context, currentRows] = await Promise.all([
+    loadFlagConfigWriteContext(deps.repo, scope, input.flagId),
+    deps.repo.flags.listTargetingRules(scope, input.flagId),
+  ]);
+  if (!context) return { ok: false, reason: "FLAG_NOT_FOUND" };
+  const currentTargetingRules = currentRows.map(toTargetingRule);
+  const normalized = normalizeTargetingRuleRollouts(currentTargetingRules, input.targetingRules);
   if (!normalized.ok) {
     return {
       ok: false,
@@ -52,8 +55,8 @@ export async function replaceTargetingRules(
 
   const missingVariants = missingRuleVariantNames(
     normalized.targetingRules,
-    current.flag.variants,
-    current.flag.availableVariantNames,
+    context.variants,
+    JSON.parse(context.config.availableVariantNames) as string[],
   );
   if (missingVariants.length > 0) {
     return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants };

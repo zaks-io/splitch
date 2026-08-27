@@ -133,7 +133,11 @@ async function buildSnapshot(
   };
 }
 
-async function loadFlagConfigWriteContext(repo: Repository, scope: EnvScope, flagId: string) {
+export async function loadFlagConfigWriteContext(
+  repo: Repository,
+  scope: EnvScope,
+  flagId: string,
+) {
   const [flag, config, variantCatalogs] = await Promise.all([
     repo.flags.getFlag(appScope(scope.appId), flagId),
     repo.flags.getFlagConfig(scope, flagId),
@@ -273,7 +277,7 @@ function runConfig(run: Awaited<ReturnType<Repository["experiments"]["getRun"]>>
   });
 }
 
-function toTargetingRule(
+export function toTargetingRule(
   rule: Awaited<ReturnType<Repository["flags"]["listTargetingRules"]>>[number],
 ) {
   return TargetingRuleSchema.parse({
