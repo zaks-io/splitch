@@ -40,6 +40,21 @@ describe("retention scheduling", () => {
     expect(patch).not.toHaveBeenCalled();
   });
 
+  it("retains a completed Metric Event claim for 30 days", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const completedAt = NOW - 2_000;
+    const { ctx, patch, runAfter } = fakeContext({ metricEventClaim: { completedAt } });
+
+    await ensureRetentionScheduled(ctx);
+
+    expect(runAfter.mock.calls[0]?.[0]).toBe(RETENTION_MS - 2_000);
+    expect(patch).toHaveBeenCalledWith("integration_id", {
+      retentionJobId: "scheduled_job",
+      retentionDueAt: completedAt + RETENTION_MS,
+    });
+  });
+
   it("does nothing when there is no retained data", async () => {
     const { ctx, patch, runAfter } = fakeContext({});
 
@@ -55,6 +70,7 @@ function fakeContext(options: {
   evaluationClaim?: { createdAt?: number };
   webhookClaim?: { claimedAt: number };
   terminalExposure?: { terminalAt?: number };
+  metricEventClaim?: { completedAt?: number };
   scheduledJob?: unknown;
 }): {
   ctx: MutationCtx;
@@ -69,6 +85,7 @@ function fakeContext(options: {
     evaluationClaims: options.evaluationClaim ?? null,
     webhookClaims: options.webhookClaim ?? null,
     exposureOutbox: options.terminalExposure ?? null,
+    metricEventClaims: options.metricEventClaim ?? null,
   };
   const query = vi.fn((table: string) => {
     if (table === "integrations") {
