@@ -130,9 +130,6 @@ importers:
       '@splitch/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@splitch/evaluation-core':
-        specifier: workspace:*
-        version: link:../../packages/evaluation-core
       '@splitch/observability':
         specifier: workspace:*
         version: link:../../packages/observability

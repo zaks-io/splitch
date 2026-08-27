@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
-import { evaluatePath } from "@splitch/evaluation-core";
 import type { TargetingRule } from "@splitch/sdk/control-plane";
+import { evaluatePath } from "@splitch/sdk/local-evaluation";
 import { afterEach, describe, expect, it } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK } from "./exit-codes.js";

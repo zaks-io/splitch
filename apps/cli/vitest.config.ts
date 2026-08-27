@@ -10,11 +10,8 @@ export default defineConfig({
       "@splitch/observability": fileURLToPath(
         new URL("../../packages/observability/src/index.ts", import.meta.url),
       ),
-      "@splitch/evaluation-core": fileURLToPath(
-        new URL("../../packages/evaluation-core/src/index.ts", import.meta.url),
-      ),
-      "@splitch/contracts": fileURLToPath(
-        new URL("../../packages/contracts/src/index.ts", import.meta.url),
+      "@splitch/sdk/local-evaluation": fileURLToPath(
+        new URL("../../packages/sdk/src/local-evaluation/index.ts", import.meta.url),
       ),
       "@splitch/sdk": fileURLToPath(new URL("../../packages/sdk/src/index.ts", import.meta.url)),
       "@splitch/db": fileURLToPath(new URL("../../packages/db/src/index.ts", import.meta.url)),
