@@ -19,6 +19,9 @@ describe("flags docs surface", () => {
     expect(markdown).toContain("availableVariantNames");
     expect(markdown).toContain("never narrowed");
     expect(markdown).toContain("Targeting Rules");
+    expect(markdown).toContain("flag-targeting-rules add");
+    expect(markdown).toContain("--when plan=enterprise --serve on");
+    expect(markdown).toContain("Object.is");
     expect(markdown).toContain('"DISABLED"');
     expect(markdown).toContain('"SPLIT"');
     expect(markdown).toContain(`Source: ${DOCS_ORIGIN}${docsPath.flags()}`);

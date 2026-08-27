@@ -24,11 +24,11 @@ export interface CliInputErrorPayload {
 export class CliInputError extends SplitchCliError {
   readonly payload: CliInputErrorPayload;
 
-  constructor(payload: CliInputErrorPayload) {
+  constructor(payload: CliInputErrorPayload, remediation?: string) {
     super({
       code: payload.code,
       causeSummary: payload.message,
-      remediation: "Correct the named input field and run the command again",
+      remediation: remediation ?? "Correct the named input field and run the command again",
     });
     this.name = "CliInputError";
     this.payload = payload;

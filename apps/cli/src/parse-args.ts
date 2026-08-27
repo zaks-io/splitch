@@ -21,6 +21,8 @@ export interface ParsedGlobalFlags {
   readonly rollout?: number | null;
   readonly idempotencyKey?: string;
   readonly outputFile?: string;
+  readonly when: readonly string[];
+  readonly serve?: string;
 }
 
 export interface ParsedInvocation {
@@ -59,10 +61,16 @@ const KNOWN_FLAGS = new Set([
   "rollout",
   "idempotencyKey",
   "outputFile",
+  "when",
+  "serve",
 ]);
 
+const REPEATABLE_FLAGS = new Set(["when"]);
+
+type ParsedFlagValue = string | boolean | string[];
+
 export function parseInvocation(args: readonly string[]): ParsedInvocation {
-  const flags: Record<string, string | boolean> = {
+  const flags: Record<string, ParsedFlagValue> = {
     confirm: false,
     json: false,
     dryRun: false,
@@ -108,7 +116,7 @@ function parseFlagToken(
   key: string,
   args: readonly string[],
   index: number,
-  flags: Record<string, string | boolean>,
+  flags: Record<string, ParsedFlagValue>,
 ): number {
   const name = toCamel(key);
   if (!KNOWN_FLAGS.has(name)) {
@@ -129,6 +137,11 @@ function parseFlagToken(
       causeSummary: `${key} requires a value`,
       remediation: `Pass a value immediately after ${key}`,
     });
+  }
+  if (REPEATABLE_FLAGS.has(name)) {
+    const existing = flags[name];
+    flags[name] = Array.isArray(existing) ? [...existing, value] : [value];
+    return index + 1;
   }
   flags[name] = value;
   return index + 1;
@@ -152,7 +165,7 @@ function toCamel(flag: string): string {
     .join("");
 }
 
-function toParsedFlags(flags: Record<string, string | boolean>): ParsedGlobalFlags {
+function toParsedFlags(flags: Record<string, ParsedFlagValue>): ParsedGlobalFlags {
   return {
     json: Boolean(flags.json),
     confirm: Boolean(flags.confirm),
@@ -174,13 +187,15 @@ function toParsedFlags(flags: Record<string, string | boolean>): ParsedGlobalFla
     rollout: parseRolloutFlag(flags.rollout),
     idempotencyKey: stringFlag(flags.idempotencyKey),
     outputFile: stringFlag(flags.outputFile),
+    when: Array.isArray(flags.when) ? flags.when : [],
+    serve: stringFlag(flags.serve),
   };
 }
 
 // `--rollout` moves the share of live traffic in the baseline rollout, so a
 // silent coerce (NaN, "" -> 0) would quietly roll it back to nobody. Accept only
 // a number in 0-100 or the literal "none" to clear it; anything else is loud.
-function parseRolloutFlag(value: string | boolean | undefined): number | null | undefined {
+function parseRolloutFlag(value: ParsedFlagValue | undefined): number | null | undefined {
   if (value === undefined) return undefined;
   if (value === "none") return null;
   // `Number("")` and `Number(" ")` are both 0, so a blank value would silently
@@ -199,7 +214,7 @@ function parseRolloutFlag(value: string | boolean | undefined): number | null | 
 // `--enabled` inverts a Flag's state, so a silent coerce of anything-but-"true"
 // to false would let `--enabled TRUE` (or a typo) DISABLE the Flag. Accept only
 // the two boolean literals; anything else is a loud usage error.
-function parseEnabledFlag(value: string | boolean | undefined): boolean | undefined {
+function parseEnabledFlag(value: ParsedFlagValue | undefined): boolean | undefined {
   if (value === undefined) return undefined;
   if (value === true || value === "true") return true;
   if (value === false || value === "false") return false;
@@ -210,7 +225,7 @@ function parseEnabledFlag(value: string | boolean | undefined): boolean | undefi
   });
 }
 
-function stringFlag(value: string | boolean | undefined): string | undefined {
+function stringFlag(value: ParsedFlagValue | undefined): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 

@@ -13,7 +13,13 @@ import type { CliCommandDefinition } from "./command-registry.js";
  */
 
 export function commandHasBodyJson(command: CliCommandDefinition): boolean {
-  if (command.kind === "flags_verify" || command.kind.startsWith("cloudflare_")) return false;
+  if (
+    command.kind === "flags_verify" ||
+    command.kind === "flag_targeting_rules_add" ||
+    command.kind.startsWith("cloudflare_")
+  ) {
+    return false;
+  }
   if (command.kind === "env_policy_set") return true;
   return requestBodySchemaForOperation(command.operationId) !== undefined;
 }

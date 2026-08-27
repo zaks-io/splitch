@@ -15,5 +15,8 @@ export function commandDescription(command: CliCommandDefinition): string {
   }
   if (command.kind === "env_policy_get") return "Get the selected Environment Policy.";
   if (command.kind === "env_policy_set") return "Update the selected Environment Policy.";
+  if (command.kind === "flag_targeting_rules_add") {
+    return "Append one equality Targeting Rule: serve a Variant when attributes match.";
+  }
   return toolByOperation.get(command.operationId)?.description ?? `Run ${command.operationId}.`;
 }

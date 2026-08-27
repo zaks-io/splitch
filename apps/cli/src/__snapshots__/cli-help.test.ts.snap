@@ -887,6 +887,30 @@ Request body (--body-json):
 
 Example:
   splitch flag-config update <flag-id-or-key> --enabled true --rollout 100 --json",
+    "flag-targeting-rules add": "Append one equality Targeting Rule: serve a Variant when attributes match.
+
+Usage:
+  splitch flag-targeting-rules add <flag-id-or-key> [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --when <attr=value>      [type: string (repeatable); default: none] String equality Condition. Repeat to AND more. Number or boolean values require replace --body-json.
+  --serve <variant>        [type: string; default: none] Catalog Variant name to serve when the Conditions match.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Behavior:
+  Builds one equality Targeting Rule (id, Variant name, schema) and appends it via flag-targeting-rules replace.
+  Repeat --when to AND Conditions. Each value is a string (evaluation uses Object.is); shell quoting cannot change the type. Number or boolean Conditions require flag-targeting-rules replace --body-json.
+  For Segments, non-equality operators, OR groups, reordering, or removal, use flag-targeting-rules replace.
+  Read-modify-write is last-write-wins: a concurrent replace can overwrite this append. The replace endpoint has no version guard.
+  While a Run is live on this Flag, the write is refused with RUN_FROZEN (end the Run first).
+
+Example:
+  splitch flag-targeting-rules add checkout --when plan=enterprise --serve on --json",
     "flag-targeting-rules replace": "Full-replace this Environment's ordered Targeting Rule list.
 
 Usage:
@@ -909,6 +933,8 @@ Request body (--body-json):
     {"targetingRules":[{"id":"id_1","flagId":"flag_1","priority":0,"conditions":[{"attribute":"attribute","operator":"eq","value":true}],"variantId":"variant_1"}],"idempotency_key":"idem-1"}
 
 Behavior:
+  Raw full-replace of this Environment's ordered Targeting Rule list. For the common equality case, use flag-targeting-rules add --when attr=value --serve <variant>.
+  Read-modify-write is last-write-wins: send the complete list, or a concurrent writer drops rules you omitted. The replace endpoint has no version guard.
   While a Run is live on this Flag, replace is refused with RUN_FROZEN (end the Run first).
   A live Run evaluates its own frozen Targeting Rule snapshot, not this Flag Configuration list.
 
@@ -1862,6 +1888,7 @@ Usage:
 
 Commands:
   replace         Full-replace this Environment's ordered Targeting Rule list.
+  add             Append one equality Targeting Rule: serve a Variant when attributes match.
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.

@@ -43,6 +43,8 @@ function simpleCommandExample(command: CliCommandDefinition): string | undefined
       return 'splitch flags update <flag-id-or-key> --name "Checkout" --json';
     case "flag-config update":
       return "splitch flag-config update <flag-id-or-key> --enabled true --rollout 100 --json";
+    case "flag-targeting-rules add":
+      return "splitch flag-targeting-rules add checkout --when plan=enterprise --serve on --json";
     case "cloudflare setup":
       return "splitch cloudflare setup --env production --json";
     case "cloudflare status":
