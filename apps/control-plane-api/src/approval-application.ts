@@ -8,7 +8,10 @@ import {
   type VariantWriteRefusal,
   variantFreezeDetails,
   variantFreezeMessage,
+  variantTargetingRuleReferenceDetails,
+  variantTargetingRuleReferenceMessage,
 } from "./flag-definition-errors";
+import { targetingRulesReferencingVariant } from "./flag-definition-guards";
 import { resyncFlagSnapshots } from "./flag-definition-handler-utils";
 import type { RunSnapshotDelivery } from "./run-snapshot";
 import { republishApplicationError } from "./segment-republication";
@@ -243,6 +246,29 @@ async function applyVariantDelete(
       ok: false as const,
       targetState: "rolled_back" as const,
       error: { code: "VARIANT_NOT_FOUND" as const, details: {} },
+    };
+  }
+  // Re-check at apply, not only at proposal: a Targeting Rule added after the
+  // Request was minted would otherwise land as an approved delete that leaves
+  // `targeting_rules.variant_id` dangling. Terminal (`unapplicable`), not a
+  // retryable failure — the proposal no longer describes a legal delete.
+  const envs = await deps.repo.identity.listEnvironments(appScope(request.appId));
+  const targetingRules = await targetingRulesReferencingVariant(
+    deps.repo,
+    request.appId,
+    variant.flagId,
+    variant.id,
+    envs,
+  );
+  if (targetingRules.length > 0) {
+    const refusal = { variantName: variant.name, targetingRules };
+    return {
+      ok: false as const,
+      unapplicable: {
+        code: "RESOURCE_NOT_EMPTY" as const,
+        message: variantTargetingRuleReferenceMessage(refusal),
+        details: variantTargetingRuleReferenceDetails(refusal),
+      },
     };
   }
   const removed = await deps.repo.flags.removeVariant(

@@ -33,6 +33,41 @@ export async function explicitVariantReferenceCount(
   return count;
 }
 
+export interface TargetingRuleVariantRef {
+  id: string;
+  environmentId: string;
+}
+
+/**
+ * Targeting Rules that name this Variant by `variant_id`.
+ *
+ * Distinct from `explicitVariantReferenceCount` (available-set names) and from
+ * `servesVariant` (would this Environment serve it). A rule can point at a
+ * Variant that no Environment lists, and deleting the Variant would leave that
+ * `variant_id` dangling.
+ */
+export async function targetingRulesReferencingVariant(
+  repo: Repository,
+  appId: string,
+  flagId: string,
+  variantId: string,
+  envs: EnvironmentRows,
+): Promise<TargetingRuleVariantRef[]> {
+  const refs: TargetingRuleVariantRef[] = [];
+  for (const env of envs) {
+    const rules = await repo.flags.listTargetingRules(envScope(appId, env.id), flagId);
+    for (const rule of rules) {
+      if (rule.variantId === variantId) {
+        refs.push({ id: rule.id, environmentId: env.id });
+      }
+    }
+  }
+  return refs.sort((left, right) => {
+    const byEnv = left.environmentId.localeCompare(right.environmentId);
+    return byEnv !== 0 ? byEnv : left.id.localeCompare(right.id);
+  });
+}
+
 export interface ExperimentReference {
   experimentId: string;
   status: string;

@@ -184,6 +184,8 @@ export async function deleteVariant(
   );
   if (replay) return replay.ok ? flagJson(deps, loaded.value, args.requestId) : replay.response;
 
+  // `applyVariantDelete` re-runs the Targeting Rule half of this blocker so an
+  // Approval race cannot delete the Variant and leave `variant_id` dangling.
   const blocked = await variantDeleteBlocker(
     deps,
     loaded.value,

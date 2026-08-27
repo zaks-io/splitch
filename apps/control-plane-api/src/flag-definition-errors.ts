@@ -172,3 +172,40 @@ export function resourceNotEmpty(
     { requestId },
   );
 }
+
+export interface VariantTargetingRuleReference {
+  variantName: string;
+  targetingRules: Array<{ id: string; environmentId: string }>;
+}
+
+/** Shared by the direct delete 409 and the unapplicable Review outcome. */
+export function variantTargetingRuleReferenceDetails(input: VariantTargetingRuleReference) {
+  return {
+    resourceType: "variant" as const,
+    resourceId: input.variantName,
+    childType: "flag-targeting-rules",
+    childCount: input.targetingRules.length,
+    attemptedOp: "DELETE_VARIANT",
+    targetingRuleIds: input.targetingRules.map((rule) => rule.id),
+    targetingRules: input.targetingRules,
+  };
+}
+
+export function variantTargetingRuleReferenceMessage(input: VariantTargetingRuleReference): string {
+  const ids = input.targetingRules.map((rule) => rule.id).join(", ");
+  return `Targeting Rules still reference this Variant (${ids}); remove or retarget them before deleting it`;
+}
+
+export function variantTargetingRuleReferenceError(
+  input: VariantTargetingRuleReference,
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "RESOURCE_NOT_EMPTY",
+      message: variantTargetingRuleReferenceMessage(input),
+      details: variantTargetingRuleReferenceDetails(input),
+    },
+    { requestId },
+  );
+}
