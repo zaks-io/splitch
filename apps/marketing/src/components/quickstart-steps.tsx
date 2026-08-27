@@ -9,7 +9,7 @@ type Step = {
 const steps: Step[] = [
   {
     title: "Install and authenticate",
-    body: "The CLI ships on npm and needs Node 20+. Log in with the device flow: it prints a verification URL and polls until approved.",
+    body: "The CLI ships on npm. Log in with the device flow: it prints a verification URL and polls until approved.",
     code: "npm install --global @splitch/cli\nsplitch login",
   },
   {

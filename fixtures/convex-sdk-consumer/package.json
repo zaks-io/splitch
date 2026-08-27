@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Convex consumer fixture proving @splitch/sdk in actions and HTTP actions (SPL-336).",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "scripts": {
     "test": "vitest run",
