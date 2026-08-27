@@ -97,7 +97,7 @@ export async function assertSharedOperationParity(): Promise<number> {
         `cli-mcp-shared-operation: ${surface} did not publish the expected answer for ${OPERATION_ID} (${scenario.name})`,
       );
     }
-    for (const field of ["request", "status", "code", "body"] as const) {
+    for (const field of ["request", "status", "code"] as const) {
       assert.deepStrictEqual(
         mcp[field],
         cli[field],
@@ -105,8 +105,52 @@ export async function assertSharedOperationParity(): Promise<number> {
           `  CLI: ${JSON.stringify(cli[field])}\n  MCP: ${JSON.stringify(mcp[field])}`,
       );
     }
+    assertBodyParity(scenario, cli, mcp);
   }
   return scenarios.length;
+}
+
+/**
+ * Success payloads must match outright. Refusals may not: the CLI publishes the
+ * `remediation` and `docsUrl` a wire `ErrorResponse` has no room for (SPL-453),
+ * and that enrichment is surface-specific copy. What both skins must still
+ * agree on is the refusal itself, so the contract fields are compared exactly
+ * and the CLI's extra fields are checked for presence rather than dropped from
+ * the comparison.
+ */
+function assertBodyParity(scenario: Scenario, cli: SurfaceOutcome, mcp: SurfaceOutcome): void {
+  const label = `cli-mcp-shared-operation: ${OPERATION_ID} (${scenario.name})`;
+  if (scenario.expected.code === null) {
+    assert.deepStrictEqual(
+      mcp.body,
+      cli.body,
+      `${label} body differs between surfaces\n` +
+        `  CLI: ${JSON.stringify(cli.body)}\n  MCP: ${JSON.stringify(mcp.body)}`,
+    );
+    return;
+  }
+  assert.deepStrictEqual(
+    refusalContract(mcp.body),
+    refusalContract(cli.body),
+    `${label} refusal differs between surfaces\n` +
+      `  CLI: ${JSON.stringify(cli.body)}\n  MCP: ${JSON.stringify(mcp.body)}`,
+  );
+  const enriched = cli.body as { remediation?: unknown; docsUrl?: unknown };
+  assert.ok(
+    typeof enriched.remediation === "string" && enriched.remediation.length > 0,
+    `${label} CLI refusal carries no remediation: ${JSON.stringify(cli.body)}`,
+  );
+  assert.strictEqual(
+    enriched.docsUrl,
+    `https://splitch.dev/docs/error/${scenario.expected.code}`,
+    `${label} CLI refusal carries the wrong docs URL: ${JSON.stringify(cli.body)}`,
+  );
+}
+
+/** The refusal fields the Control Plane owns, which no skin may restate. */
+function refusalContract(body: unknown): Record<string, unknown> {
+  const value = body as { code?: unknown; message?: unknown; details?: unknown };
+  return { code: value?.code, message: value?.message, details: value?.details };
 }
 
 /**

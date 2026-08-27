@@ -42,6 +42,8 @@ export interface CliErrorDetail {
   readonly code: SplitchCliErrorCode;
   readonly causeSummary: string;
   readonly remediation: string;
+  /** Structured refusal payload from the API; reaches the caller only under `--json`. */
+  readonly details?: Record<string, unknown>;
   readonly originalError?: unknown;
 }
 
@@ -55,16 +57,26 @@ function sentence(value: string): string {
 export class SplitchCliError extends Error {
   readonly code: SplitchCliErrorCode;
   readonly causeSummary: string;
+  /**
+   * The cause verbatim, as the server sent it or the call site wrote it.
+   * `causeSummary` is the sentence-cased prose form the human channel prints;
+   * re-punctuating a forwarded wire `message` would make the machine-readable
+   * answer differ from the same refusal read over MCP.
+   */
+  readonly summary: string;
   readonly remediation: string;
   readonly docsUrl: string;
+  readonly details: Record<string, unknown> | null;
 
   constructor(detail: CliErrorDetail) {
     super(formatSdkErrorMessage(detail), { cause: detail.originalError });
     this.name = "SplitchCliError";
     this.code = detail.code;
+    this.summary = detail.causeSummary.trim();
     this.causeSummary = sentence(detail.causeSummary);
     this.remediation = sentence(detail.remediation);
     this.docsUrl = resolveErrorDocsUrl(detail.code);
+    this.details = detail.details ?? null;
   }
 }
 
@@ -102,6 +114,44 @@ export function normalizeCliError(error: unknown): SplitchCliError {
   });
 }
 
+/**
+ * The one machine-readable failure shape, written to stdout under `--json`.
+ *
+ * `message` rather than `causeSummary` because the wire `ErrorResponse` already
+ * uses it and API refusals are the common case: a caller should not need two
+ * key names depending on whether the CLI or the server refused. It carries the
+ * server's text verbatim, so the same refusal read over MCP compares equal
+ * (`scripts/lib/cli-mcp-shared-operation.ts`). `remediation` and `docsUrl` are
+ * the fields the raw wire error lacks, and the reason this shape exists rather
+ * than forwarding `ErrorResponse` verbatim.
+ */
+interface CliErrorJson {
+  readonly code: SplitchCliErrorCode;
+  readonly message: string;
+  readonly remediation: string;
+  readonly docsUrl: string;
+  readonly details: Record<string, unknown> | null;
+}
+
+function cliErrorJson(error: SplitchCliError): CliErrorJson {
+  return {
+    code: error.code,
+    message: error.summary,
+    remediation: error.remediation,
+    docsUrl: error.docsUrl,
+    details: error.details,
+  };
+}
+
+/**
+ * Prose on stderr always; under `--json` the same failure also lands on stdout
+ * as one object, so an agent piping to `jq` gets a refusal it can branch on
+ * instead of a sentence it has to regex.
+ */
 export function writeCliError(io: CliIo, error: CliErrorDetail | SplitchCliError): void {
-  io.error(error instanceof SplitchCliError ? error.message : formatSdkErrorMessage(error));
+  const normalized = error instanceof SplitchCliError ? error : new SplitchCliError(error);
+  if (io.json) {
+    io.log(JSON.stringify(cliErrorJson(normalized)));
+  }
+  io.error(normalized.message);
 }

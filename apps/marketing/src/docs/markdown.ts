@@ -1,4 +1,5 @@
 import { blocksToMarkdown } from "./blocks";
+import { cliDoc } from "./cli";
 import {
   type DocumentedErrorCode,
   documentedErrorCodes,
@@ -26,6 +27,15 @@ export function flagsDocMarkdown(): string {
     flagsDoc.summary,
     blocksToMarkdown(flagsDoc.blocks),
     `Source: ${DOCS_ORIGIN}${docsPath.flags()}`,
+  ].join("\n\n");
+}
+
+export function cliDocMarkdown(): string {
+  return [
+    `# ${cliDoc.title}`,
+    cliDoc.summary,
+    blocksToMarkdown(cliDoc.blocks),
+    `Source: ${DOCS_ORIGIN}${docsPath.cli()}`,
   ].join("\n\n");
 }
 
@@ -77,6 +87,9 @@ export function llmsTxt(): string {
     "Every page below is also served as HTML at the same URL without the `.md` suffix.",
     "## Flags",
     `- [${flagsDoc.title}](${DOCS_ORIGIN}${docsPath.flagsMarkdown()}): ${flagsDoc.summary}`,
+    "## CLI",
+    `- [${cliDoc.title}](${DOCS_ORIGIN}${docsPath.cliMarkdown()}): ${cliDoc.summary}`,
+    "Every command accepts `--json` (one line on stdout, failures included) and `--help`. Policy-gated changes take `--confirm`.",
     "## SDK",
     topicLines.join("\n"),
     "## Errors",

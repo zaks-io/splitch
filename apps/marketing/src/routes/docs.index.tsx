@@ -2,6 +2,7 @@ import { Badge } from "@splitch/ui/components/badge";
 import { Button } from "@splitch/ui/components/button";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ErrorCodeIndex } from "../components/error-code-index";
+import { cliDoc } from "../docs/cli";
 import { flagsDoc } from "../docs/flags";
 import { sdkTopics } from "../docs/sdk";
 
@@ -70,6 +71,25 @@ function DocsIndexRoute() {
               </Link>
               <span className="text-muted-foreground text-sm leading-relaxed">
                 {flagsDoc.summary}
+              </span>
+            </li>
+          </ul>
+        </section>
+
+        <section className="grid gap-4" id="cli">
+          <h2 className="font-display font-semibold text-2xl text-foreground tracking-tight">
+            CLI
+          </h2>
+          <ul className="grid gap-3">
+            <li className="grid gap-1">
+              <Link
+                className="font-medium text-foreground underline underline-offset-4"
+                to="/docs/cli"
+              >
+                {cliDoc.title}
+              </Link>
+              <span className="text-muted-foreground text-sm leading-relaxed">
+                {cliDoc.summary}
               </span>
             </li>
           </ul>

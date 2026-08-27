@@ -13,6 +13,7 @@ Flags:
   --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
   --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --output-file <path>     [type: string; default: none] Write the once-only secret to a new 0600 file instead of stdout; the payload reports valueWrittenTo.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
 

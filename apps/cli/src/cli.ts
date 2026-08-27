@@ -4,11 +4,11 @@ import { CLI_COMMANDS, findCommand } from "./command-registry.js";
 import { createFileCredentialStore } from "./credentials.js";
 import { normalizeCliError, writeCliError } from "./errors.js";
 import { executeInvocation } from "./execute.js";
-import { consoleIo } from "./execute-io.js";
+import { consoleIo, withJsonMode } from "./execute-io.js";
 import { EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
 import { renderHelp, renderRootHelp } from "./help.js";
 import type { ParsedInvocation } from "./parse-args.js";
-import type { CliCommandRunner } from "./execute-types.js";
+import type { CliCommandRunner, CliIo } from "./execute-types.js";
 import { longestMatchingCommandPath, parseInvocation } from "./parse-args.js";
 
 const cliObservability = initCliObservability();
@@ -46,6 +46,9 @@ export async function runCli(
   runOptions: RunCliOptions = {},
 ): Promise<number> {
   const options = withEnvOrigins(runOptions);
+  // `--json` is a bare boolean flag, so raw argv answers it before the parse
+  // that these first three error sites can themselves fail.
+  const io = withJsonMode(consoleIo(), args.includes("--json"));
   if (args[0] === "--version" || args[0] === "-v") {
     console.log(cliVersion());
     return EXIT_OK;
@@ -56,12 +59,12 @@ export async function runCli(
     return EXIT_OK;
   }
   if (args.length === 0) {
-    writeCliError(consoleIo(), {
+    writeCliError(io, {
       code: "CLI_USAGE_INVALID",
       causeSummary: "No command was provided",
       remediation: "Choose a command from the usage output",
     });
-    printUsage();
+    printUsageUnlessJson(io);
     return EXIT_USAGE;
   }
 
@@ -84,16 +87,16 @@ export async function runCli(
       invocation.commandPath.length > 0 &&
       !findCommand(invocation.commandPath)
     ) {
-      writeCliError(consoleIo(), {
+      writeCliError(io, {
         code: "CLI_USAGE_INVALID",
         causeSummary: `Unknown command ${invocation.commandPath.join(" ")}`,
         remediation: "Choose a command from the usage output",
       });
-      printUsage();
+      printUsageUnlessJson(io);
       return EXIT_USAGE;
     }
   } catch (error) {
-    writeCliError(consoleIo(), normalizeCliError(error));
+    writeCliError(io, normalizeCliError(error));
     return EXIT_USAGE;
   }
 
@@ -121,7 +124,7 @@ async function executeParsedInvocation(
   } catch (error) {
     cliObservability.captureException(error);
     const cliError = normalizeCliError(error);
-    writeCliError(consoleIo(), cliError);
+    writeCliError(withJsonMode(consoleIo(), invocation.flags.json), cliError);
     return cliError.code === "CLI_NOT_AUTHENTICATED" ||
       cliError.code === "CLI_SESSION_EXPIRED" ||
       cliError.code === "CLI_EMAIL_UNVERIFIED"
@@ -132,7 +135,10 @@ async function executeParsedInvocation(
   }
 }
 
-function printUsage(): void {
+// Under `--json` stdout carries the failure object and nothing else; appending
+// the human usage block would make it unparseable.
+function printUsageUnlessJson(io: CliIo): void {
+  if (io.json) return;
   console.log(renderRootHelp());
 }
 
@@ -152,7 +158,10 @@ export async function launchCli(): Promise<void> {
     process.exitCode = await runCli();
   } catch (error) {
     cliObservability.captureException(error);
-    writeCliError(consoleIo(), normalizeCliError(error));
+    writeCliError(
+      withJsonMode(consoleIo(), process.argv.slice(2).includes("--json")),
+      normalizeCliError(error),
+    );
     process.exitCode = 1;
   } finally {
     await shutdownCliObservability();
