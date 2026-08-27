@@ -36,7 +36,7 @@ export function rememberCredentialRateLimitRps(
 }
 
 export function evaluationRateLimitIncrement(rps: number): number {
-  return Math.max(1, Math.round(DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS / rps));
+  return Math.max(1, Math.ceil(DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS / rps));
 }
 
 export function evaluationRateLimitKey(

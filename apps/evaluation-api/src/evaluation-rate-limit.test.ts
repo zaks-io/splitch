@@ -31,6 +31,11 @@ describe("evaluationRateLimitIncrement", () => {
     expect(evaluationRateLimitIncrement(25)).toBe(4);
     expect(evaluationRateLimitIncrement(50)).toBe(2);
   });
+
+  it("never spends fewer tokens than the stored cap allows", () => {
+    expect(evaluationRateLimitIncrement(80)).toBe(2);
+    expect(evaluationRateLimitIncrement(67)).toBe(2);
+  });
 });
 
 describe("makeEvaluationRateLimiter", () => {
