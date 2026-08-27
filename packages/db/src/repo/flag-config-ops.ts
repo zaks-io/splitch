@@ -210,7 +210,7 @@ export function makeFlagConfigOps(
             flagConfigsTable,
             scope,
             flagId,
-            current.version,
+            current,
             rows,
             configPatch,
             approval,
@@ -236,7 +236,7 @@ async function replaceApprovedTargetingRules(
   flagConfigsTable: ScopedTable<typeof flagConfigs>,
   scope: EnvScope,
   flagId: string,
-  currentVersion: number,
+  current: typeof flagConfigs.$inferSelect,
   rows: TargetingRuleWrite[],
   configPatch: FlagConfigWritePatch,
   approval: ApprovalCommit,
@@ -273,11 +273,11 @@ async function replaceApprovedTargetingRules(
   );
   const guardedUpdate = db
     .update(flagConfigs)
-    .set({ ...configPatch, version: currentVersion + 1 })
+    .set({ ...configPatch, version: current.version + 1 })
     .where(
       and(
         scopedFlagConfig(scope, flagId),
-        eq(flagConfigs.version, currentVersion),
+        eq(flagConfigs.version, current.version),
         approvalPendingCondition(db, scope, approval),
       ),
     )
