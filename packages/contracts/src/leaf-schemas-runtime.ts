@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS as defaultClientKeyRateLimitRps,
   resolveClientKeyRateLimitRps as resolveStoredClientKeyRateLimitRps,
+  StoredClientKeyRateLimitRpsFieldSchema,
 } from "./client-key-rate-limit";
 import {
   type ResolutionDetails,
@@ -259,7 +260,7 @@ export const ClientKeySchema = z
     keyMaterial: z.string(),
     originAllowlist: z.array(z.string()).nullable().optional(),
     isOriginOpen: z.boolean(),
-    rateLimitRps: z.number().nullable().optional(),
+    rateLimitRps: StoredClientKeyRateLimitRpsFieldSchema,
     revokedAt: z.string().nullable().optional(),
     createdAt: z.string(),
   })

@@ -3,6 +3,7 @@ import {
   boundListRead,
   LIST_READ_LIMIT,
   normalizeClientOrigins,
+  StoredClientKeyRateLimitRpsSchema,
 } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
@@ -222,7 +223,7 @@ function clientKeyPatchValues(body: Record<string, unknown>): Partial<ClientKeyR
         : JSON.stringify(normalizeClientOrigins(body.originAllowlist as string[]));
   }
   if ("rateLimitRps" in body) {
-    updates.rateLimitRps = body.rateLimitRps as number;
+    updates.rateLimitRps = StoredClientKeyRateLimitRpsSchema.parse(body.rateLimitRps);
   }
   return updates;
 }

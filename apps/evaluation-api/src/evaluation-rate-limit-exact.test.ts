@@ -37,8 +37,8 @@ describe("exact 30 rps Client Key override", () => {
     expect(allowedRequests).toBe(300);
   });
 
-  it("returns typed RATE_LIMITED when evaluate traffic exceeds an exact 30 rps cap", async () => {
-    const tokens = { remaining: evaluationRateLimitIncrement(30) };
+  it("PATCH-to-evaluate: 300 requests at a persisted 30 rps then typed RATE_LIMITED", async () => {
+    const tokens = { remaining: EVALUATION_RATE_LIMIT_BINDING_LIMIT };
     const { app } = await makeSdkRouteHarness({
       liveRun: true,
       clientKeyRateLimitRps: 30,
@@ -53,7 +53,10 @@ describe("exact 30 rps Client Key override", () => {
       }),
     });
 
-    expect((await app.request("/api/sdk/evaluate", sdkRouteInit(CLIENT_KEY))).status).toBe(200);
+    for (let i = 0; i < 300; i += 1) {
+      expect((await app.request("/api/sdk/evaluate", sdkRouteInit(CLIENT_KEY))).status).toBe(200);
+    }
+
     const limited = await app.request("/api/sdk/evaluate", sdkRouteInit(CLIENT_KEY));
     expect(limited.status).toBe(429);
     await expect(limited.json()).resolves.toMatchObject({
@@ -63,6 +66,14 @@ describe("exact 30 rps Client Key override", () => {
     expect(limited.headers.get("retry-after")).toBe(
       String(Math.ceil(EVALUATION_RATE_LIMIT_RETRY_AFTER_MS / 1000)),
     );
+  });
+
+  it("maps a non-exact remembered override to a limiter fault, not an auth throw", async () => {
+    const request = new Request("https://edge.test/api/sdk/evaluate");
+    rememberCredentialRateLimitRps(request, 0);
+    await expect(
+      makeEvaluationRateLimiter({ limit: async () => ({ success: true }) })(input({ request })),
+    ).rejects.toThrow(/positive integer/);
   });
 });
 

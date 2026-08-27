@@ -219,6 +219,14 @@ describe("ClientKey (public)", () => {
     expect(resolveClientKeyRateLimitRps(25)).toBe(25);
     expect(resolveClientKeyRateLimitRps(30)).toBe(30);
   });
+
+  it("rejects a persisted Client Key rateLimitRps the limiter cannot enforce exactly", () => {
+    expect(ClientKeySchema.safeParse({ ...validClientKey, rateLimitRps: 0 }).success).toBe(false);
+    expect(ClientKeySchema.safeParse({ ...validClientKey, rateLimitRps: -1 }).success).toBe(false);
+    expect(ClientKeySchema.safeParse({ ...validClientKey, rateLimitRps: 1.5 }).success).toBe(false);
+    expect(ClientKeySchema.safeParse({ ...validClientKey, rateLimitRps: 7 }).success).toBe(false);
+    expect(ClientKeySchema.safeParse({ ...validClientKey, rateLimitRps: 30 }).success).toBe(true);
+  });
 });
 
 describe("APIKey (secret)", () => {

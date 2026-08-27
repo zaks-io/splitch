@@ -61,5 +61,8 @@ describe("client key rate-limit contract", () => {
     expect(PatchClientKeyRequestSchema.safeParse({ rateLimitRps: 25 }).success).toBe(true);
     expect(PatchClientKeyRequestSchema.safeParse({ rateLimitRps: 7 }).success).toBe(false);
     expect(PatchClientKeyRequestSchema.safeParse({ rateLimitRps: 80 }).success).toBe(false);
+    expect(PatchClientKeyRequestSchema.safeParse({ rateLimitRps: 0 }).success).toBe(false);
+    expect(PatchClientKeyRequestSchema.safeParse({ rateLimitRps: -1 }).success).toBe(false);
+    expect(PatchClientKeyRequestSchema.safeParse({ rateLimitRps: 1.5 }).success).toBe(false);
   });
 });

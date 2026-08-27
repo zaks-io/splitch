@@ -6,6 +6,7 @@ import {
   clientKeyCacheKey,
   credentialRevocationCacheKey,
   kvEnvelope,
+  StoredClientKeyRateLimitRpsFieldSchema,
   TERMINAL_CREDENTIAL_REVOCATION_MARKER,
 } from "@splitch/contracts";
 
@@ -185,7 +186,7 @@ function clientKeyCache(
     kind: "client_key",
     scopes: ["data-plane:evaluate", "data-plane:write"],
     originAllowlist,
-    rateLimitRps: row.rateLimitRps,
+    rateLimitRps: StoredClientKeyRateLimitRpsFieldSchema.parse(row.rateLimitRps),
     revoked,
     cachedAt: nowIso(deps),
   };

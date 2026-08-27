@@ -1,7 +1,7 @@
 import { z } from "@hono/zod-openapi";
 import { ApiKeyScopeSchema } from "../api-key-scopes";
 import { ApprovalRequestIdSchema } from "../approval-identifiers";
-import { isExactClientKeyRateLimitRps } from "../client-key-rate-limit";
+import { StoredClientKeyRateLimitRpsSchema } from "../client-key-rate-limit";
 import { OriginAllowlistSchema } from "../client-origin";
 import {
   ConditionSchema,
@@ -298,15 +298,7 @@ export type PatchSegmentRequest = z.infer<typeof PatchSegmentRequestSchema>;
 export const PatchClientKeyRequestSchema = z
   .object({
     originAllowlist: OriginAllowlistSchema.nullable().optional(),
-    rateLimitRps: z
-      .number()
-      .int()
-      .positive()
-      .refine(isExactClientKeyRateLimitRps, {
-        message:
-          "rateLimitRps must be a positive integer the Cloudflare limiter can enforce exactly",
-      })
-      .optional(),
+    rateLimitRps: StoredClientKeyRateLimitRpsSchema.optional(),
   })
   .strict();
 

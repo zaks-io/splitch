@@ -16,19 +16,19 @@ const DATA_PLANE_RATE_LIMIT_CLASSES = new Set<Exclude<RateLimitClass, "none">>([
   "client-key",
 ]);
 
-const configuredRpsByRequest = new WeakMap<Request, number>();
+const configuredRpsByRequest = new WeakMap<Request, number | null>();
 
 export type EvaluationRateLimitBinding = Pick<RateLimit, "limit">;
 
 /**
- * Remember the cached per-credential cap after auth. The guard calls the
- * limiter next; a missing value on a data-plane class fails closed.
+ * Stash the cached cap after auth. Resolve happens in the limiter so a
+ * corrupt override fails closed as RATE_LIMITED, not as an auth 500.
  */
 export function rememberCredentialRateLimitRps(
   request: Request,
   rateLimitRps: number | null | undefined,
 ): void {
-  configuredRpsByRequest.set(request, resolveClientKeyRateLimitRps(rateLimitRps));
+  configuredRpsByRequest.set(request, rateLimitRps ?? null);
 }
 
 export function evaluationRateLimitIncrement(rps: number): number {
@@ -59,10 +59,10 @@ export function makeEvaluationRateLimiter(
       throw new Error("evaluation-api: evaluation rate-limit binding is not configured");
     }
 
-    const configuredRps = configuredRpsByRequest.get(request);
-    if (configuredRps === undefined) {
+    if (!configuredRpsByRequest.has(request)) {
       throw new Error("evaluation-api: credential rate-limit state is missing");
     }
+    const configuredRps = resolveClientKeyRateLimitRps(configuredRpsByRequest.get(request));
     return debitEvaluationRateLimit(
       binding,
       evaluationRateLimitKey(principal, rateLimitClass),
