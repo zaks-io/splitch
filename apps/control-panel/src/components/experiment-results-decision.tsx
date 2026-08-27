@@ -139,7 +139,7 @@ function ConcludeAction({ shipAllowed }: { shipAllowed: boolean }) {
   return (
     <div className="grid justify-items-end gap-1">
       <Button disabled type="button">
-        Conclude and apply winner
+        Conclude Run
       </Button>
       <p className="text-muted-foreground text-xs">
         {shipAllowed

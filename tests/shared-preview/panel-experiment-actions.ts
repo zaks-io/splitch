@@ -65,7 +65,7 @@ export async function expectResultsRendered(page: Page, appSlug: string): Promis
 
   const results = page
     .getByTestId("results-waiting")
-    .or(page.getByRole("heading", { name: "Lift by arm" }));
+    .or(page.getByRole("heading", { name: "Lift by Variant" }));
   await expect(
     results.first(),
     `Results rendered neither a waiting state nor a read-out at ${page.url()}`,

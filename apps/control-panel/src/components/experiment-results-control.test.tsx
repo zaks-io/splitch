@@ -175,7 +175,7 @@ describe("ExperimentResults with an Analysis Control disagreement", () => {
     expect(html).toContain("<svg");
     expect(html).toContain('data-testid="ship-blocked"');
     expect(html).toContain("Analysis Control disagrees with the Run");
-    expect(html).toContain("Conclude and apply winner");
+    expect(html).toContain("Conclude Run");
     expect(html).toMatch(/<button[^>]*\sdisabled=""/);
   });
 });

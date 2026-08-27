@@ -31,7 +31,7 @@ export function controlIdentityCheck(control: FrozenControlIdentity): DecisionGa
   return {
     id: "control_identity",
     status: "fail",
-    title: "Control arm cannot be identified",
+    title: "Control Variant cannot be identified",
     detail: `This Run's frozen Control cannot be identified because ${reason}. ${froze}The Experiment's default Variant was backfilled onto this Run as "${control.variantId}", which the Run itself ${relationshipToRun}. The Run Snapshot's Control anchors the lift, but nothing can be promoted against a Control this Run ${relationshipToRun}. Start a new Run to get a Control that is frozen and validated.`,
   };
 }

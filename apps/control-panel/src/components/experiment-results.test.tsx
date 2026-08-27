@@ -201,7 +201,7 @@ describe("ExperimentResults warning states", () => {
 
     expect(html).toContain('data-testid="ship-blocked"');
     expect(html).toContain("Sample Ratio Mismatch is firing");
-    expect(html).toContain("Conclude and apply winner");
+    expect(html).toContain("Conclude Run");
     expect(html).toMatch(/<button[^>]*\sdisabled=""/);
   });
 
@@ -268,7 +268,7 @@ describe("ExperimentResults warning states", () => {
       const buttons = html.match(/<button[\s\S]*?<\/button>/g) ?? [];
 
       expect(buttons).toHaveLength(1);
-      expect(buttons[0]).toContain("Conclude and apply winner");
+      expect(buttons[0]).toContain("Conclude Run");
       expect(buttons[0]).toMatch(/\sdisabled=""/);
       expect(html).toContain("SPL-158");
     }

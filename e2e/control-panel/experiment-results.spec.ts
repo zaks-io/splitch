@@ -28,7 +28,7 @@ test.describe("Experiment Results tab", () => {
       "/acme-labs/checkout-api/dev/experiments/experiment_checkout_significance_e2e/results",
     );
 
-    await expect(page.getByRole("heading", { name: "Lift by arm" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Lift by Variant" })).toBeVisible();
     await expect(page.getByRole("img", { name: /Relative lift with confidence/ })).toBeVisible();
     const srm = page.locator('[data-srm-tier="clean"]');
     await expect(srm.getByText("Balanced").first()).toBeVisible();
@@ -36,7 +36,7 @@ test.describe("Experiment Results tab", () => {
     // conclude mutation ships in SPL-158, and a live-looking dead button would
     // be a lie about what the Panel can do.
     await expect(page.getByText(/No blocking check/)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Conclude and promote winner" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Conclude Run" })).toBeDisabled();
     await expect(page.getByText(/SPL-158/)).toBeVisible();
     await expect(page.getByText(/Enforced by control-plane-api/)).toBeVisible();
 
@@ -55,7 +55,7 @@ test.describe("Experiment Results tab", () => {
 
     // The warning qualifies the numbers; it never replaces them.
     await expect(page.getByRole("img", { name: /Relative lift with confidence/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Lift by arm" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Lift by Variant" })).toBeVisible();
     await expect(srm.getByRole("columnheader", { name: "Observed" })).toBeVisible();
     await expect(page.getByText(/Exposures control/)).toBeVisible();
 
@@ -63,7 +63,7 @@ test.describe("Experiment Results tab", () => {
     await expect(blocked).toContainText("Sample Ratio Mismatch is firing");
     // This Run is also too small to call, and the refusal names both checks.
     await expect(blocked).toContainText("Result is underpowered");
-    await expect(page.getByRole("button", { name: "Conclude and promote winner" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Conclude Run" })).toBeDisabled();
 
     await captureThemeScreenshots(page, testInfo, "experiment-results-srm-warning");
   });
@@ -79,7 +79,7 @@ test.describe("Experiment Results tab", () => {
     const blocked = page.getByTestId("ship-blocked");
     await expect(blocked).toContainText("Result is underpowered");
     await expect(blocked).toContainText("No decision-valid result");
-    await expect(page.getByRole("button", { name: "Conclude and promote winner" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Conclude Run" })).toBeDisabled();
     await expect(page.getByText(/Enforced by control-plane-api/)).toBeVisible();
     // Guardrails and health are reported beside the refusal, not instead of it.
     await expect(page.getByText("__multiple__ quarantine rate")).toBeVisible();
@@ -102,7 +102,7 @@ test.describe("Experiment Results tab", () => {
 
     const integrity = page
       .getByRole("alert")
-      .filter({ hasText: "Control arm cannot be identified" });
+      .filter({ hasText: "Control Variant cannot be identified" });
     await expect(integrity).toBeVisible();
     await expect(integrity.getByText(/absent from the Variant set this Run froze/)).toBeVisible();
 
@@ -111,7 +111,7 @@ test.describe("Experiment Results tab", () => {
     await expect(srm.getByText("Confirmed mismatch").first()).toBeVisible();
 
     // Neither card withholds the numbers.
-    await expect(page.getByRole("heading", { name: "Lift by arm" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Lift by Variant" })).toBeVisible();
 
     // Distinguishable by icon, not by reading either card's copy.
     const integrityIcon = page.getByTestId("control-integrity-alert-icon");
@@ -125,8 +125,8 @@ test.describe("Experiment Results tab", () => {
     await expect(blocked).toBeVisible();
     // The unresolvable Control is itself a named, gating check, not just a
     // visual alongside an SRM/power failure that would block regardless.
-    await expect(blocked).toContainText("Control arm cannot be identified");
-    await expect(page.getByRole("button", { name: "Conclude and promote winner" })).toBeDisabled();
+    await expect(blocked).toContainText("Control Variant cannot be identified");
+    await expect(page.getByRole("button", { name: "Conclude Run" })).toBeDisabled();
 
     await captureThemeScreenshots(page, testInfo, "experiment-results-control-integrity");
   });

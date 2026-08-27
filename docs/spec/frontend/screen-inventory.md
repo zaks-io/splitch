@@ -363,7 +363,7 @@ trustworthy-experiments literature) and then adds splitch's enforcement seam.
 conclude` fails with the same cited `control_identity`, `engine_status`, `decision_valid_result`,
 `underpowered`, `exposure_srm`, `activated_srm`, or `activation_balance` check on every skin. Reading
 Results and diagnostics remains available on all three skins; only the rendering differs. Under
-`confirm`, "Conclude and promote winner" is one interaction over the two durable commits specified in
+`confirm`, "Conclude Run" is one interaction over the two durable commits specified in
 [conclusion-and-winner-promotion.md](../control-plane/conclusion-and-winner-promotion.md).
 
 That interaction requires the operator to choose the target Environment and author the complete
