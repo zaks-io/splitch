@@ -1,0 +1,65 @@
+# Negative fixture: wrappers, global options, pipelines, and mixed cargo crates
+# must not evade exact-version enforcement.
+name: wrapped-installers
+on: push
+jobs:
+  npm-flag-order:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: npm --global install npm@11
+  sudo-npm:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: sudo npm install --global npm@11
+  assignment-npm:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: PREFIX=/usr/local npm install --global npm@11
+  env-npm:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: env npm install --global npm@11
+  pip-global-opt:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: pip --user install requests
+  uv-global-opt:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: uv --offline tool install tinybird
+  cargo-global-opt:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: cargo --locked install ripgrep
+  pipeline-npm:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: echo ready | npm install --global npm@11
+  cargo-mixed:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: cargo install ripgrep@14.1.1 fd-find
+  npm-exact-wrapped:
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - run: sudo env PREFIX=/usr npm --global install npm@11.15.0

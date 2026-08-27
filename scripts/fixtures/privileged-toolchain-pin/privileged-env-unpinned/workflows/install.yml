@@ -1,0 +1,38 @@
+# Negative fixture: exact installer pins apply to every privileged environment,
+# not only OIDC jobs. Literal, case-insensitive, mapping, and dynamic names.
+name: privileged-env-unpinned
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Unresolvable environment name
+        type: string
+        required: true
+jobs:
+  preview-literal:
+    runs-on: ubuntu-24.04
+    environment: preview
+    steps:
+      - run: npm install --global npm@11
+  production-case:
+    runs-on: ubuntu-24.04
+    environment: Production
+    steps:
+      - run: pip install requests
+  mapping-preview:
+    runs-on: ubuntu-24.04
+    environment:
+      name: preview
+      url: https://example.test
+    steps:
+      - run: cargo install ripgrep
+  dynamic-env:
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.environment }}
+    steps:
+      - run: npm install --global npm@11
+  preview-exact:
+    runs-on: ubuntu-24.04
+    environment: preview
+    steps:
+      - run: npm install --global npm@11.15.0

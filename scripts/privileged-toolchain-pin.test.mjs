@@ -25,7 +25,7 @@ test("no privileged job executes a mutable installer", () => {
   assert.deepEqual(mutableInstallerViolations(files), []);
 });
 
-test("no OIDC-enabled job installs a floating package range", () => {
+test("no privileged job installs a floating package range", () => {
   assert.deepEqual(floatingPackageViolations(workflows), []);
 });
 
@@ -150,26 +150,44 @@ test("the gate treats a dynamic environment expression as privileged", () => {
 });
 
 test("OIDC jobs reject shorthand, ranged, unpinned, and variable installer versions", () => {
-  const fixture = loadGithubCiFiles(join(FIXTURE_ROOT, "unpinned-installers"));
-  const violations = floatingPackageViolations(fixture);
-  const rejectedJobs = [
-    "npm-shorthand",
-    "npm-x-range",
-    "npm-comparator",
-    "pip-unpinned",
-    "uv-unpinned",
-    "cargo-unpinned",
-    "npm-variable",
-  ];
-  assert.deepEqual(
-    violations
-      .map((violation) => violation.replace(/^.* job /, "").replace(/ installs.*$/, ""))
-      .toSorted(),
-    rejectedJobs.toSorted(),
+  assertRejectedJobs(
+    "unpinned-installers",
+    [
+      "npm-shorthand",
+      "npm-x-range",
+      "npm-comparator",
+      "pip-unpinned",
+      "uv-unpinned",
+      "cargo-unpinned",
+      "npm-variable",
+    ],
+    ["npm-exact"],
   );
-  assert.equal(
-    violations.some((violation) => violation.includes("job npm-exact ")),
-    false,
+});
+
+test("privileged environments enforce exact installer versions without OIDC", () => {
+  assertRejectedJobs(
+    "privileged-env-unpinned",
+    ["preview-literal", "production-case", "mapping-preview", "dynamic-env"],
+    ["preview-exact"],
+  );
+});
+
+test("wrappers, global options, pipelines, and mixed cargo crates cannot evade the gate", () => {
+  assertRejectedJobs(
+    "wrapped-installers",
+    [
+      "npm-flag-order",
+      "sudo-npm",
+      "assignment-npm",
+      "env-npm",
+      "pip-global-opt",
+      "uv-global-opt",
+      "cargo-global-opt",
+      "pipeline-npm",
+      "cargo-mixed",
+    ],
+    ["npm-exact-wrapped"],
   );
 });
 
@@ -178,4 +196,20 @@ function assertFixtureViolation(name, pattern) {
   const violations = mutableInstallerViolations(fixture);
   assert.equal(violations.length, 1);
   assert.match(violations[0] ?? "", pattern);
+}
+
+function assertRejectedJobs(name, rejectedJobs, allowedJobs) {
+  const violations = floatingPackageViolations(loadGithubCiFiles(join(FIXTURE_ROOT, name)));
+  assert.deepEqual(
+    violations
+      .map((violation) => violation.replace(/^.* job /, "").replace(/ installs.*$/, ""))
+      .toSorted(),
+    rejectedJobs.toSorted(),
+  );
+  for (const job of allowedJobs) {
+    assert.equal(
+      violations.some((violation) => violation.includes(`job ${job} `)),
+      false,
+    );
+  }
 }

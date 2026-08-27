@@ -1,24 +1,111 @@
+import {
+  commandSegments,
+  flagKinds,
+  hasUnresolvableToken,
+  skipKnownFlags,
+  stripWrappers,
+  tokenize,
+} from "./privileged-toolchain-command.mjs";
+
 const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
-const NPM_INSTALL = new Set(["install", "i", "add"]);
-const FLAG_WITH_VALUE = new Set([
-  "--prefix",
-  "--python",
-  "--version",
-  "--index-url",
-  "--extra-index-url",
-  "--registry",
-  "--cache",
-  "--root",
-  "--target",
-  "--index",
-  "--git",
-  "--branch",
-  "--rev",
-  "--path",
-  "--requirement",
-  "-i",
-  "-r",
-]);
+const NPM_INSTALL = new Set(["install", "i", "add", "ci"]);
+const UNRESOLVABLE_FLAGS = new Set(["-r", "--requirement", "--git"]);
+const NPM_FLAGS = flagKinds(
+  [
+    "-g",
+    "--global",
+    "-h",
+    "--help",
+    "-s",
+    "--silent",
+    "-q",
+    "--quiet",
+    "-v",
+    "--version",
+    "-y",
+    "--yes",
+    "--activate",
+    "--force",
+    "--offline",
+    "--prefer-offline",
+    "--frozen-lockfile",
+    "--ignore-scripts",
+    "--no-save",
+    "--save-dev",
+    "--save-exact",
+    "--strict-peer-dependencies",
+  ],
+  [
+    "-C",
+    "-w",
+    "--cache",
+    "--dir",
+    "--filter",
+    "--loglevel",
+    "--prefix",
+    "--registry",
+    "--workspace",
+  ],
+);
+const PIP_FLAGS = flagKinds(
+  [
+    "--user",
+    "--isolated",
+    "--break-system-packages",
+    "--no-deps",
+    "--no-cache-dir",
+    "--pre",
+    "-U",
+    "--upgrade",
+    "-q",
+    "--quiet",
+  ],
+  ["-i", "--index-url", "--extra-index-url", "--proxy", "--root", "--target", "--prefix"],
+);
+const UV_FLAGS = flagKinds(
+  [
+    "--offline",
+    "--no-cache",
+    "-h",
+    "--help",
+    "-n",
+    "-q",
+    "--quiet",
+    "-v",
+    "--verbose",
+    "--version",
+    "--force",
+    "--no-progress",
+  ],
+  [
+    "--cache-dir",
+    "--config-file",
+    "--directory",
+    "--index",
+    "--index-url",
+    "--project",
+    "--python",
+  ],
+);
+const CARGO_GLOBAL_FLAGS = flagKinds(
+  [
+    "--locked",
+    "--offline",
+    "--frozen",
+    "-h",
+    "--help",
+    "-q",
+    "--quiet",
+    "-v",
+    "--verbose",
+    "--version",
+  ],
+  ["--color", "--config"],
+);
+const CARGO_INSTALL_FLAGS = flagKinds(
+  ["--locked", "--offline", "--frozen", "-q", "--quiet", "-v", "--verbose", "--force", "--debug"],
+  ["--bin", "--color", "--features", "--profile", "--registry", "--root", "--target", "--version"],
+);
 
 /**
  * @param {string} script
@@ -55,90 +142,145 @@ function substitute(text, bindings) {
     );
 }
 
-function commandSegments(script) {
-  return script
-    .replace(/\\[ \t]*\r?\n/g, "")
-    .split(/\n/)
-    .flatMap((line) => line.split(/\s*(?:&&|\|\||;)\s*/))
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-}
-
 function commandHasUnpinnedInstall(command) {
-  const tokens = tokenize(command);
-  const install = identifyInstaller(tokens);
-  if (install === null) return false;
-  if (hasUnresolvableRequirement(tokens)) return true;
-  if (install.kind === "cargo") return !cargoIsExact(tokens);
-  if (install.packages.length === 0) return false;
-  return !install.packages.every((spec) => isExactSpec(spec, install.kind));
+  const classified = classifyCommand(stripWrappers(tokenize(command)));
+  if (classified.kind === "not-install") return false;
+  if (classified.kind === "unparsed") return true;
+  if (classified.tokens.some((token) => UNRESOLVABLE_FLAGS.has(token))) return true;
+  return !installIsExact(classified);
 }
 
-function hasUnresolvableRequirement(tokens) {
-  return tokens.includes("-r") || tokens.includes("--requirement") || tokens.includes("--git");
+function classifyCommand(tokens) {
+  if (tokens.length === 0) return { kind: "not-install" };
+  const classifier = classifierFor(tokens[0] ?? "");
+  if (classifier) return classifier(tokens);
+  return leftoverInstaller(tokens);
 }
 
-function identifyInstaller(tokens) {
-  if (isPythonPipInstall(tokens))
-    return { kind: "pip", packages: extractPackages(tokens.slice(4)) };
-  if ((tokens[0] === "pip" || tokens[0] === "pip3") && tokens[1] === "install") {
-    return { kind: "pip", packages: extractPackages(tokens.slice(2)) };
+function leftoverInstaller(tokens) {
+  for (let index = 1; index < tokens.length; index += 1) {
+    if (!classifierFor(tokens[index] ?? "")) continue;
+    const inner = classifyCommand(tokens.slice(index));
+    if (inner.kind !== "not-install") return { kind: "unparsed" };
   }
-  if (tokens[0] === "uv" && tokens[1] === "tool" && tokens[2] === "install") {
-    return { kind: "uv", packages: extractPackages(tokens.slice(3)) };
-  }
-  if (tokens[0] === "uv" && tokens[1] === "pip" && tokens[2] === "install") {
-    return { kind: "uv", packages: extractPackages(tokens.slice(3)) };
-  }
-  if (tokens[0] === "cargo" && tokens[1] === "install") {
-    return { kind: "cargo", packages: extractPackages(tokens.slice(2)) };
-  }
-  return identifyNpmFamilyInstaller(tokens);
+  return { kind: "not-install" };
 }
 
-function isPythonPipInstall(tokens) {
-  return (
-    (tokens[0] === "python" || tokens[0] === "python3") &&
-    tokens[1] === "-m" &&
-    (tokens[2] === "pip" || tokens[2] === "pip3") &&
-    tokens[3] === "install"
-  );
-}
-
-function identifyNpmFamilyInstaller(tokens) {
-  if (tokens[0] === "corepack" && tokens[1] === "prepare") {
-    return { kind: "npm", packages: extractPackages(tokens.slice(2)) };
-  }
-  if (
-    (tokens[0] === "npm" || tokens[0] === "pnpm" || tokens[0] === "yarn") &&
-    NPM_INSTALL.has(tokens[1] ?? "")
-  ) {
-    return { kind: "npm", packages: extractPackages(tokens.slice(2)) };
-  }
+function classifierFor(command) {
+  if (command === "npm" || command === "pnpm" || command === "yarn") return classifyNpm;
+  if (command === "corepack") return classifyCorepack;
+  if (command === "pip" || command === "pip3") return classifyPip;
+  if (command === "python" || command === "python3") return classifyPython;
+  if (command === "uv") return classifyUv;
+  if (command === "cargo") return classifyCargo;
   return null;
 }
 
-function extractPackages(tokens) {
+function classifyNpm(tokens) {
+  return classifyInstallVerb(tokens.slice(1), NPM_FLAGS, NPM_FLAGS, "npm", NPM_INSTALL);
+}
+
+function classifyCorepack(tokens) {
+  return classifyInstallVerb(tokens.slice(1), NPM_FLAGS, NPM_FLAGS, "npm", new Set(["prepare"]));
+}
+
+function classifyPip(tokens) {
+  return classifyInstallVerb(tokens.slice(1), PIP_FLAGS, PIP_FLAGS, "pip", new Set(["install"]));
+}
+
+function classifyPython(tokens) {
+  if (tokens[1] !== "-m") {
+    return hasUnresolvableToken(tokens[1] ?? "") ? { kind: "unparsed" } : { kind: "not-install" };
+  }
+  const name = tokens[2];
+  if (name !== "pip" && name !== "pip3") {
+    return hasUnresolvableToken(name ?? "") ? { kind: "unparsed" } : { kind: "not-install" };
+  }
+  return classifyPip(tokens.slice(2));
+}
+
+function classifyUv(tokens) {
+  const global = skipKnownFlags(tokens.slice(1), UV_FLAGS);
+  if (global.unparsed) return { kind: "unparsed" };
+  const tool = global.rest[0];
+  if (tool !== "tool" && tool !== "pip") {
+    if (!tool) return { kind: "not-install" };
+    return hasUnresolvableToken(tool) ? { kind: "unparsed" } : { kind: "not-install" };
+  }
+  return classifyInstallVerb(global.rest.slice(1), UV_FLAGS, UV_FLAGS, "uv", new Set(["install"]));
+}
+
+function classifyCargo(tokens) {
+  const afterToolchain = (tokens[1] ?? "").startsWith("+") ? tokens.slice(2) : tokens.slice(1);
+  return classifyInstallVerb(
+    afterToolchain,
+    CARGO_GLOBAL_FLAGS,
+    CARGO_INSTALL_FLAGS,
+    "cargo",
+    new Set(["install"]),
+  );
+}
+
+function classifyInstallVerb(tokens, beforeFlags, afterFlags, kind, verbs) {
+  const skipped = skipKnownFlags(tokens, beforeFlags);
+  if (skipped.unparsed) return { kind: "unparsed" };
+  const [verb, ...rest] = skipped.rest;
+  if (!verb) return { kind: "not-install" };
+  if (hasUnresolvableToken(verb)) return { kind: "unparsed" };
+  if (!verbs.has(verb)) return { kind: "not-install" };
+  const packages = extractPackages(rest, afterFlags);
+  if (packages === null) return { kind: "unparsed" };
+  return { kind, packages, tokens: skipped.rest };
+}
+
+function extractPackages(tokens, flags) {
   const packages = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index] ?? "";
-    if (token.startsWith("-")) {
-      if (FLAG_WITH_VALUE.has(token)) index += 1;
+    if (!token.startsWith("-")) {
+      packages.push(token);
       continue;
     }
-    packages.push(token);
+    const consumed = consumeInstallFlag(token, flags);
+    if (consumed === null) return null;
+    index += consumed;
   }
   return packages;
 }
 
-function tokenize(command) {
-  return [...command.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map(
-    (match) => match[1] ?? match[2] ?? match[3] ?? "",
-  );
+function consumeInstallFlag(token, flags) {
+  const name = token.includes("=") ? token.slice(0, token.indexOf("=")) : token;
+  const kind = flags.get(name);
+  if (kind === undefined && !UNRESOLVABLE_FLAGS.has(name)) return null;
+  return kind === "value" && !token.includes("=") ? 1 : 0;
+}
+
+function installIsExact(install) {
+  if (install.kind === "cargo") return cargoIsExact(install);
+  if (install.packages.length === 0) return true;
+  return install.packages.every((spec) => isExactSpec(spec, install.kind));
+}
+
+function cargoIsExact(install) {
+  const version = cargoVersionFlag(install.tokens);
+  const flagExact = version !== null && EXACT_VERSION.test(version);
+  if (install.packages.length === 0) return flagExact;
+  return install.packages.every((spec) => crateIsExact(spec, flagExact));
+}
+
+function cargoVersionFlag(tokens) {
+  const index = tokens.indexOf("--version");
+  if (index === -1) return null;
+  return tokens[index + 1] ?? "";
+}
+
+function crateIsExact(spec, flagExact) {
+  if (isExactNpmSpec(spec)) return true;
+  return flagExact && !spec.includes("@") && !hasUnresolvableToken(spec);
 }
 
 function isExactSpec(spec, kind) {
-  if (/\$|\$\{\{/.test(spec)) return false;
+  if (hasUnresolvableToken(spec)) return false;
   return kind === "npm" ? isExactNpmSpec(spec) : isExactEqualitySpec(spec);
 }
 
@@ -160,10 +302,4 @@ function isExactEqualitySpec(spec) {
   const separator = spec.lastIndexOf("==");
   if (separator === -1) return false;
   return EXACT_VERSION.test(spec.slice(separator + 2));
-}
-
-function cargoIsExact(tokens) {
-  const versionIndex = tokens.indexOf("--version");
-  if (versionIndex !== -1) return EXACT_VERSION.test(tokens[versionIndex + 1] ?? "");
-  return extractPackages(tokens.slice(2)).some(isExactNpmSpec);
 }

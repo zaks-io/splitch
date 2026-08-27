@@ -189,7 +189,7 @@ function floatingPackageViolationsForFile(file) {
 }
 
 function floatingPackageViolationForJob(file, document, name, job) {
-  if (!jobIsOidc(document, job)) return null;
+  if (!jobIsPrivileged(document, job)) return null;
   const steps = Array.isArray(job?.steps) ? job.steps : [];
   const unpinned = steps.some((step) => stepHasUnpinnedInstall(document, job, step));
   if (!unpinned) return null;
