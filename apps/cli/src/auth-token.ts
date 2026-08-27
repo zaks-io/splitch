@@ -138,6 +138,9 @@ export async function formPost(
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams(body).toString(),
+    // Refresh tokens, device codes, and revoke form bodies must never be
+    // replayed onto a 3xx Location. Default fetch follows redirects.
+    redirect: "error",
   });
 }
 

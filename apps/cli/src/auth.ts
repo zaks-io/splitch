@@ -17,7 +17,7 @@ import {
 import type { CliCredentialFile } from "./credentials.js";
 import { isAccessTokenExpired } from "./credentials.js";
 import { SplitchCliError } from "./errors.js";
-import { resolveAuthBaseUrl } from "./sdks.js";
+import { authOriginRequiresHttps, resolveAuthBaseUrl } from "./sdks.js";
 
 const DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 const CLI_CLIENT_ID = "splitch-cli";
@@ -53,6 +53,8 @@ export async function loginWithDeviceFlow(
     verificationUri: grant.verification_uri,
     verificationUriComplete: grant.verification_uri_complete,
     userCode: grant.user_code,
+    authBaseUrl,
+    requireHttps: authOriginRequiresHttps(deps),
   });
 
   const intervalMs = (grant.interval ?? 5) * 1000;
