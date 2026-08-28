@@ -4,7 +4,7 @@ type SnapshotRevisionStorage = Pick<DurableObjectStorage, "get" | "put">;
 
 export class DeletedFlagConfigSnapshotError extends Error {
   constructor(readonly flagId: string) {
-    super(`config-store: repair refused for deleted Flag Configuration ${flagId}`);
+    super(`config-store: snapshot publication refused for deleted Flag Configuration ${flagId}`);
     this.name = "DeletedFlagConfigSnapshotError";
   }
 }
@@ -24,7 +24,7 @@ async function nextSnapshotRevision(
     storage.get<number>(SNAPSHOT_REVISION_KEY),
     storage.get<SnapshotState>(stateKey),
   ]);
-  if (request.operation === "repair" && state === "deleted") {
+  if (request.operation !== "delete" && state === "deleted") {
     throw new DeletedFlagConfigSnapshotError(request.flagId);
   }
 

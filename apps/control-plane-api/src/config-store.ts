@@ -99,14 +99,7 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
     },
 
     async repairFlagConfigSnapshot(input) {
-      try {
-        return await catchSegmentNotFound(() => repairFlagConfigSnapshot(runtimeDeps, input));
-      } catch (cause) {
-        if (cause instanceof DeletedFlagConfigSnapshotError) {
-          return { ok: false, reason: "FLAG_NOT_FOUND" };
-        }
-        throw cause;
-      }
+      return catchSegmentNotFound(() => repairFlagConfigSnapshot(runtimeDeps, input));
     },
 
     async writeFlagConfig(input) {
@@ -166,6 +159,9 @@ async function catchSegmentNotFound<T>(operation: () => Promise<T>) {
   try {
     return await operation();
   } catch (cause) {
+    if (cause instanceof DeletedFlagConfigSnapshotError) {
+      return { ok: false as const, reason: "FLAG_NOT_FOUND" as const };
+    }
     if (cause instanceof SegmentNotFoundError) {
       return {
         ok: false as const,
