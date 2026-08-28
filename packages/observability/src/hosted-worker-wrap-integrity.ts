@@ -30,6 +30,7 @@ import { locationOf } from "./hosted-worker-wrap-ast.js";
 import type { ResolvedBinding } from "./hosted-worker-wrap-scope.js";
 import {
   expressionAliasesKnownBinding,
+  outermostValueCarrier,
   unsupportedValueFlow,
 } from "./hosted-worker-wrap-value-flow.js";
 
@@ -165,7 +166,7 @@ function unsupportedMethodCall(
 }
 
 function containingAssignmentTarget(reference: Node): Node | undefined {
-  let current: Node = reference;
+  let current = outermostValueCarrier(reference);
   while (current.parent && isAssignmentContainer(current.parent)) {
     const parent = current.parent;
     const assignment = directAssignmentTarget(parent, reference);
@@ -265,7 +266,7 @@ function containingAssignmentValue(reference: Node): Node | undefined {
 }
 
 function outermostAccess(reference: Node): Node {
-  let current = reference;
+  let current = outermostValueCarrier(reference);
   while (current.parent && isAccessNode(current.parent) && current.parent.expression === current) {
     current = current.parent;
   }

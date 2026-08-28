@@ -2,7 +2,9 @@ import {
   type ElementAccessExpression,
   type Expression,
   isArrowFunction,
+  isBindingElement,
   isBinaryExpression,
+  isCallExpression,
   isConditionalExpression,
   isElementAccessExpression,
   isExportAssignment,
@@ -11,10 +13,16 @@ import {
   isFunctionExpression,
   isFunctionLike,
   isIdentifier,
+  isNewExpression,
   isParameter,
+  isPostfixUnaryExpression,
+  isPrefixUnaryExpression,
   isPropertyAccessExpression,
+  isPropertyDeclaration,
   isReturnStatement,
+  isThrowStatement,
   isVariableDeclaration,
+  isYieldExpression,
   type Node,
   type PropertyAccessExpression,
   type SourceFile,
@@ -64,6 +72,14 @@ export function unsupportedValueFlow(
   return undefined;
 }
 
+export function outermostValueCarrier(reference: Node): Node {
+  let current = reference;
+  while (current.parent && valueFlowsThrough(current.parent, current)) {
+    current = current.parent;
+  }
+  return current;
+}
+
 type ValueFlowStep = "continue" | "safe" | { readonly escape: Node };
 
 function valueFlowStep(parent: Node, child: Node, declarations: ReadonlySet<Node>): ValueFlowStep {
@@ -71,7 +87,8 @@ function valueFlowStep(parent: Node, child: Node, declarations: ReadonlySet<Node
   const boundary = valueFlowBoundary(parent, child, declarations);
   if (boundary) return boundary;
   if (valueFlowsThrough(parent, child)) return "continue";
-  return isUnsupportedValueCarrier(parent, child) ? { escape: parent } : "safe";
+  if (isKnownValueConsumer(parent, child)) return "safe";
+  return isExpression(parent) ? { escape: parent } : "safe";
 }
 
 function valueFlowBoundary(
@@ -79,10 +96,38 @@ function valueFlowBoundary(
   child: Node,
   declarations: ReadonlySet<Node>,
 ): ValueFlowStep | undefined {
+  const initializer = initializerBoundary(parent, child, declarations);
+  if (initializer) return initializer;
+  const returned = returnBoundary(parent, child, declarations);
+  if (returned) return returned;
+  if (isYieldExpression(parent) && parent.expression === child) return { escape: parent };
+  if (isThrowStatement(parent) && parent.expression === child) return { escape: parent };
+  return undefined;
+}
+
+function initializerBoundary(
+  parent: Node,
+  child: Node,
+  declarations: ReadonlySet<Node>,
+): ValueFlowStep | undefined {
   if (isVariableDeclaration(parent) && parent.initializer === child) {
     return declarations.has(parent) ? "safe" : { escape: parent };
   }
+  if (
+    (isParameter(parent) || isBindingElement(parent) || isPropertyDeclaration(parent)) &&
+    parent.initializer === child
+  ) {
+    return { escape: parent };
+  }
   if (isExportAssignment(parent) && parent.expression === child) return "safe";
+  return undefined;
+}
+
+function returnBoundary(
+  parent: Node,
+  child: Node,
+  declarations: ReadonlySet<Node>,
+): ValueFlowStep | undefined {
   if (isReturnStatement(parent) && parent.expression === child) {
     return helperReturnBoundary(enclosingFunction(parent), declarations, parent);
   }
@@ -106,26 +151,27 @@ function isParameterDerived(declarations: ReadonlySet<Node>): boolean {
   return [...declarations].some(isParameter);
 }
 
-function isUnsupportedValueCarrier(parent: Node, child: Node): boolean {
-  if (!isBinaryExpression(parent) || (parent.left !== child && parent.right !== child))
-    return false;
-  return (
-    parent.operatorToken.kind === SyntaxKind.AmpersandAmpersandToken ||
-    parent.operatorToken.kind === SyntaxKind.BarBarToken ||
-    parent.operatorToken.kind === SyntaxKind.QuestionQuestionToken
-  );
-}
-
 function valueFlowsThrough(parent: Node, child: Node): boolean {
   if (isExpression(parent) && unwrap(parent) !== parent) return true;
   if (isConditionalExpression(parent)) {
     return parent.whenTrue === child || parent.whenFalse === child;
   }
+  if (!isBinaryExpression(parent)) return false;
+  if (parent.operatorToken.kind === SyntaxKind.CommaToken) return parent.right === child;
   return (
-    isBinaryExpression(parent) &&
-    parent.operatorToken.kind === SyntaxKind.CommaToken &&
-    parent.right === child
+    (parent.left === child || parent.right === child) &&
+    (parent.operatorToken.kind === SyntaxKind.AmpersandAmpersandToken ||
+      parent.operatorToken.kind === SyntaxKind.BarBarToken ||
+      parent.operatorToken.kind === SyntaxKind.QuestionQuestionToken)
   );
+}
+
+function isKnownValueConsumer(parent: Node, child: Node): boolean {
+  if (isAccessNode(parent)) return true;
+  if (isCallExpression(parent) || isNewExpression(parent)) return parent.expression === child;
+  if (isConditionalExpression(parent)) return parent.condition === child;
+  if (isBinaryExpression(parent)) return true;
+  return isPrefixUnaryExpression(parent) || isPostfixUnaryExpression(parent);
 }
 
 function enclosingFunction(node: Node): Node | undefined {

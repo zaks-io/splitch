@@ -216,4 +216,21 @@ describe("hosted Worker wrap-gate lexical scope", () => {
     expect(defaultExportIsWrapped(cycle)).toBe(false);
     expect(proveDefaultExportWrapped(cycle, "cycle.ts").reason).toMatch(/circular wrap alias/);
   });
+
+  it.each([
+    "=",
+    "||=",
+    "??=",
+    "&&=",
+  ])("rejects an official wrapper alias changed with %s", (operator) => {
+    const source = `
+        import { ${WRAPPER} } from "@splitch/worker-runtime";
+        const raw = { fetch() { return new Response("raw"); } };
+        const fake = (handler: unknown) => handler;
+        let wrap = ${WRAPPER};
+        wrap ${operator} fake;
+        export default wrap(raw);
+      `;
+    expect(defaultExportIsWrapped(source)).toBe(false);
+  });
 });

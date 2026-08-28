@@ -75,6 +75,79 @@ describe("hosted Worker wrap-gate immutable proof", () => {
     expect(defaultExportIsWrapped(source)).toBe(false);
   });
 
+  it("fails when an omitted parameter default returns a wrapped handler for mutation", () => {
+    const source = wrappedThen(`
+      function choose(handler = wrapped) {
+        return handler;
+      }
+      choose().fetch = raw.fetch;
+    `);
+    expect(defaultExportIsWrapped(source)).toBe(false);
+  });
+
+  it("fails when a class field carries a wrapped handler for mutation", () => {
+    const source = wrappedThen(`
+      class Holder {
+        value = wrapped;
+      }
+      const holder = new Holder();
+      holder.value.fetch = raw.fetch;
+    `);
+    expect(defaultExportIsWrapped(source)).toBe(false);
+  });
+
+  it("fails when a generator yields a wrapped handler for mutation", () => {
+    const source = wrappedThen(`
+      function* values() {
+        yield wrapped;
+      }
+      values().next().value.fetch = raw.fetch;
+    `);
+    expect(defaultExportIsWrapped(source)).toBe(false);
+  });
+
+  it.each([
+    ["conditional assignment", "(true ? wrapped : wrapped).fetch = raw.fetch;"],
+    ["comma assignment", "(0, wrapped).fetch = raw.fetch;"],
+    ["type-asserted update", "(wrapped as any).fetch++;"],
+    ["conditional delete", "delete (true ? wrapped : wrapped).fetch;"],
+    ["conditional unknown call", "(true ? wrapped : wrapped).mutate();"],
+  ])("fails after transparent receiver %s", (_name, statement) => {
+    expect(defaultExportIsWrapped(wrappedThen(statement))).toBe(false);
+  });
+
+  it("fails when a constructor default carries a wrapped handler", () => {
+    const source = wrappedThen(`
+      class Holder {
+        value: typeof wrapped;
+        constructor(handler = wrapped) {
+          this.value = handler;
+        }
+      }
+      new Holder().value.fetch = raw.fetch;
+    `);
+    expect(defaultExportIsWrapped(source)).toBe(false);
+  });
+
+  it("fails when a destructuring default carries a wrapped handler", () => {
+    const source = wrappedThen(`
+      const { value = wrapped } = {};
+      value.fetch = raw.fetch;
+    `);
+    expect(defaultExportIsWrapped(source)).toBe(false);
+  });
+
+  it("fails when a thrown wrapped handler is mutated through catch", () => {
+    const source = wrappedThen(`
+      try {
+        throw wrapped;
+      } catch (caught) {
+        caught.fetch = raw.fetch;
+      }
+    `);
+    expect(defaultExportIsWrapped(source)).toBe(false);
+  });
+
   it.each([
     ["object property", "const holder = { value: wrapped }; holder.value.fetch = raw.fetch;"],
     ["array element", "const holder = [wrapped]; holder[0].fetch = raw.fetch;"],

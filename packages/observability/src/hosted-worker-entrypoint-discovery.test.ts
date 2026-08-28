@@ -3,6 +3,7 @@ import { discoverFixture, omissionFailures } from "./hosted-worker-discovery";
 import {
   classFetchIsWrapped,
   exportedWorkerEntrypoints,
+  proveClassFetchWrapped,
   WRAP_WORKER_HANDLER as WRAPPER,
 } from "./hosted-worker-wrap-gate";
 
@@ -141,5 +142,60 @@ describe("hosted Worker entrypoint binding discovery", () => {
         /unsupported exported fetch-bearing class PublicDoor \(.*src[/\\]worker\.ts:\d+:\d+\)/,
       ),
     ]);
+  });
+
+  it("fails when an exported WorkerEntrypoint class binding is reassigned", () => {
+    const source = `
+      import { WorkerEntrypoint } from "cloudflare:workers";
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      const wrapped = ${WRAPPER}({ fetch() { return new Response("ok"); } });
+      export default wrapped;
+      export let PublicDoor = class extends WorkerEntrypoint {
+        fetch(request: Request) {
+          return wrapped.fetch(request, this.env, this.ctx);
+        }
+      };
+      PublicDoor = class extends WorkerEntrypoint {
+        fetch() { return new Response("raw"); }
+      };
+    `;
+
+    expect(exportedWorkerEntrypoints(source)).toEqual(["PublicDoor"]);
+    expect(classFetchIsWrapped(source, "PublicDoor")).toBe(false);
+    expect(proveClassFetchWrapped(source, "PublicDoor", "reassigned.ts")).toMatchObject({
+      wrapped: false,
+      location: expect.stringMatching(/reassigned\.ts:\d+:\d+/),
+    });
+  });
+
+  it.each([
+    ["assignment", "PublicDoor.prototype.fetch = rawFetch;"],
+    ["delete", "delete PublicDoor.prototype.fetch;"],
+    ["update", "PublicDoor.prototype.fetch++;"],
+    ["Object.assign", "Object.assign(PublicDoor.prototype, { fetch: rawFetch });"],
+    [
+      "Object.defineProperty",
+      'Object.defineProperty(PublicDoor.prototype, "fetch", { value: rawFetch });',
+    ],
+  ])("fails after exported WorkerEntrypoint prototype fetch %s", (_name, mutation) => {
+    const source = `
+      import { WorkerEntrypoint } from "cloudflare:workers";
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      const wrapped = ${WRAPPER}({ fetch() { return new Response("ok"); } });
+      const rawFetch = () => new Response("raw");
+      export default wrapped;
+      export class PublicDoor extends WorkerEntrypoint {
+        fetch(request: Request) {
+          return wrapped.fetch(request, this.env, this.ctx);
+        }
+      }
+      ${mutation}
+    `;
+
+    expect(classFetchIsWrapped(source, "PublicDoor")).toBe(false);
+    expect(proveClassFetchWrapped(source, "PublicDoor", "prototype.ts")).toMatchObject({
+      wrapped: false,
+      location: expect.stringMatching(/prototype\.ts:\d+:\d+/),
+    });
   });
 });

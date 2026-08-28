@@ -22,12 +22,14 @@ import {
   unsupportedExportedFetchClasses,
 } from "./hosted-worker-entrypoints.js";
 import { blockPath, locationOf, type PathResult } from "./hosted-worker-wrap-ast.js";
+import { bindingIntegrity } from "./hosted-worker-wrap-integrity.js";
 import {
   expressionIsWrappedFetch,
   expressionWrapPath,
   functionWrapPath,
   WRAP_WORKER_HANDLER,
 } from "./hosted-worker-wrap-resolve.js";
+import { resolveName } from "./hosted-worker-wrap-scope.js";
 
 export { WRAP_WORKER_HANDLER };
 
@@ -80,13 +82,30 @@ export function proveClassFetchWrapped(
   fileName = "worker.ts",
 ): WrapProof {
   const file = parseSource(source, fileName);
-  const cls = findExportedClass(file, className);
+  const exported = exportedFetchClasses(file).find(
+    (entry) => entry.exportName === className || entry.className === className,
+  );
+  const cls = exported?.declaration ?? findExportedClass(file, className);
   if (!cls) {
     return {
       wrapped: false,
       reason: `class ${className} not found`,
       location: `${file.fileName}:1:1`,
     };
+  }
+  if (exported) {
+    const integrity = bindingIntegrity(
+      file,
+      resolveName(file, exported.className, exported.declaration),
+      resolveName,
+    );
+    if (!integrity.immutable) {
+      return {
+        wrapped: false,
+        reason: integrity.reason,
+        location: integrity.location,
+      };
+    }
   }
   return classFetchProof(file, cls);
 }
