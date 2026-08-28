@@ -22,12 +22,37 @@ export interface EntityMetricPrivacyNamespace {
   };
 }
 
+export function appIdentityPrivacyInventoryStub(
+  namespace: EntityMetricPrivacyNamespace | undefined,
+  appId: string,
+) {
+  if (!namespace) throw new Error("ENTITY_METRIC_PRIVACY binding is unavailable");
+  return namespace.get(namespace.idFromName(`${appId}:app-identity-inventory`));
+}
+
 export async function registerEntityMetricEvent(
   namespace: EntityMetricPrivacyNamespace | undefined,
   identity: { appId: string; idType: string; entityFamilyHash: string },
   entry: EntityMetricInventoryEntry,
   platformTarget: string | undefined,
 ): Promise<boolean> {
+  if (!namespace && (platformTarget === "local" || platformTarget === "pr-ci")) return false;
+  const inventoryResponse = await appIdentityPrivacyInventoryStub(namespace, identity.appId).fetch(
+    "https://entity-privacy.local/register-app-entity",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(identity),
+    },
+  );
+  if (!inventoryResponse.ok) {
+    throw new Error(`App Entity privacy inventory returned HTTP ${inventoryResponse.status}`);
+  }
+  const inventoryResult = (await inventoryResponse.json()) as { suppressed?: unknown };
+  if (inventoryResult.suppressed === true) return true;
+  if (inventoryResult.suppressed !== false) {
+    throw new Error("App Entity privacy inventory returned an invalid result");
+  }
   return registerEntityEntry(namespace, identity, entry, platformTarget, "/register", "Metric");
 }
 
@@ -37,6 +62,23 @@ export async function registerEntityEvaluationCommit(
   entry: EntityEvaluationInventoryEntry,
   platformTarget: string | undefined,
 ): Promise<boolean> {
+  if (!namespace && (platformTarget === "local" || platformTarget === "pr-ci")) return false;
+  const inventoryResponse = await appIdentityPrivacyInventoryStub(namespace, identity.appId).fetch(
+    "https://entity-privacy.local/register-app-entity",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(identity),
+    },
+  );
+  if (!inventoryResponse.ok) {
+    throw new Error(`App Entity privacy inventory returned HTTP ${inventoryResponse.status}`);
+  }
+  const inventoryResult = (await inventoryResponse.json()) as { suppressed?: unknown };
+  if (inventoryResult.suppressed === true) return true;
+  if (inventoryResult.suppressed !== false) {
+    throw new Error("App Entity privacy inventory returned an invalid result");
+  }
   return registerEntityEntry(
     namespace,
     identity,

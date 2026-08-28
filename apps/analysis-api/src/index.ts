@@ -24,7 +24,7 @@ import { createApp } from "./app";
 import type { AnalysisApiEnv } from "./env";
 import { runScheduledSnapshot } from "./scheduled";
 import { createTinybirdCopyTransport, createTinybirdReadTransport } from "./tinybird";
-import { createTinybirdDeleteTransport } from "./tinybird-delete";
+import { createTinybirdDeleteTransport, deleteAppIdentityData } from "./tinybird-delete";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
 /** The operations `api.splitch.dev` may hand this Worker over the binding (ADR-0046). */
@@ -74,6 +74,10 @@ export class ControlPlaneEntrypoint extends WorkerEntrypoint<AnalysisApiEnv> {
       this.env,
       this.ctx,
     );
+  }
+
+  async purgeAppIdentityAnalytics(appId: string): Promise<string> {
+    return deleteAppIdentityData(this.env, appId);
   }
 }
 

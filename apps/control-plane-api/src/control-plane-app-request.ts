@@ -11,8 +11,8 @@ import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { durableConfigStoreAccess } from "./config-store-do";
 import { durableCredentialCacheWriterAccess } from "./credential-cache-writer-do";
-import type { ControlPlaneApiEnv } from "./env";
 import { createEntityPrivacyConsumer } from "./entity-privacy-consumer";
+import type { ControlPlaneApiEnv } from "./env";
 import { createHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { rateLimiterForTarget } from "./rate-limit";
@@ -28,6 +28,7 @@ export async function handleControlPlaneAppRequest(input: {
   delegated: boolean;
 }): Promise<Response> {
   const { request, env, ctx, authResolver, repo, delegated } = input;
+  const configStore = durableConfigStoreAccess(env.CONFIG_STORE_WRITER);
   const app = createApp({
     door: delegated ? "binding" : "public",
     authResolver,
@@ -38,7 +39,7 @@ export async function handleControlPlaneAppRequest(input: {
     repo,
     credentialStore: env.CREDENTIAL_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
-    configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
+    configStore,
     eventDefinitionStore: env.CONFIG_STORE,
     runSnapshotDelivery: {
       ...runSnapshotDeliveryFromEnv(env),
@@ -50,7 +51,7 @@ export async function handleControlPlaneAppRequest(input: {
       env,
       workerObservabilityWithWaitUntil("control-plane-api", ctx),
     ),
-    analysisResults: createAnalysisResultsReader(env.ANALYSIS_API),
+    analysisResults: createAnalysisResultsReader(env.ANALYSIS_API, undefined, configStore),
     delegationBindings: {
       "analysis-api": env.ANALYSIS_API,
       "evaluation-api": env.EVALUATION_API,

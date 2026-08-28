@@ -9,6 +9,12 @@
   parameters: "environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "app_id is required"
+- name: retained_epoch_family_joins_before_cuped_aggregation
+  description: An old App-key Metric Event and a new App-key Exposure join through their persisted App identity family before CUPED aggregation.
+  parameters: "app_id=app_epoch&environment_id=env_prod&experiment_id=exp_epoch&run_id=run_epoch&metric_id=metric_epoch&metric_type=binomial&event_definition_id=event_definition_epoch&lookback_ms=86400000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"app-v2:aaaaaaaa-new","metric_id":"metric_epoch","pre_period_value":1,"covariate_source":"pre_period"}
 - name: missing_environment_id_is_rejected
   description: A missing environment_id fails loudly rather than mixing Environments into one analysis.
   parameters: "app_id=app_1&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&lookback_ms=86400000&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"

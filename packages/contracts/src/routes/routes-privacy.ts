@@ -38,13 +38,33 @@ const PrivacyJobSchema = z.object({
   kind: z.enum(["export", "delete"]),
   status: z.enum(["queued", "running", "completed", "failed"]),
 });
+const PrivacyExportArtifactSchema = z
+  .object({
+    schemaVersion: z.literal("entity-privacy-export-v1"),
+    appId: z.string(),
+    idType: z.string(),
+    targetingKeyHashes: z.array(z.string()),
+    entityFamilyHash: z.string(),
+    stores: z.array(
+      z
+        .object({
+          name: z.enum(["assignments", "analysis", "event-ingest"]),
+          records: z.array(z.unknown()),
+          proofs: z.array(z.string().min(1)),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
 const PrivacyResponseSchema = z.object({
   request: PrivacyRequestSchema,
   job: PrivacyJobSchema,
+  artifact: PrivacyExportArtifactSchema.nullable(),
 });
 const PrivacyStatusResponseSchema = z.object({
   request: PrivacyRequestSchema,
   job: PrivacyJobSchema.nullable(),
+  artifact: PrivacyExportArtifactSchema.nullable(),
 });
 
 // Entity export/delete carry the raw Targeting Key; the Worker hashes it server-side.

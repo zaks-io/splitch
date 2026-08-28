@@ -1,5 +1,6 @@
 export function entityMetricPrivacyFixtureFetch(input: RequestInfo | URL): Promise<Response> {
   const responses: Record<string, unknown> = {
+    "/register-app-entity": { suppressed: false },
     "/register": { suppressed: false },
     "/register-evaluation": { suppressed: false },
     "/suppressed": { suppressed: false },

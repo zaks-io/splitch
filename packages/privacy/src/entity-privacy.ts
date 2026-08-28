@@ -4,8 +4,10 @@
  * only and are never returned as durable identifiers.
  */
 
+import { isAppIdentityKeyVersion } from "./app-identity-key";
 import { HISTORICAL_SHARED_ROOT_KEY_VERSIONS } from "./derived-salt-store-versions";
 import { computeTargetingKeyHash, keyVersionOf } from "./hash";
+import { hmacSha256Hex } from "./hmac";
 import type { SaltStore } from "./salt-store";
 
 export interface EntityPrivacyInput {
@@ -56,40 +58,57 @@ export async function resolveEntityPrivacyIdentity(
     appId: input.appId,
     idType: input.idType,
     targetingKeyHashes,
-    entityFamilyHash: entityFamilyHash(input.appId, input.idType, targetingKeyHashes),
+    entityFamilyHash: await entityFamilyHashForRetained(store, input, targetingKeyHashes),
   };
 }
 
 /**
  * App-scoped join key shared by every retained physical hash for one Entity.
- * Historical rows can derive the same value from their stored shared-root hash;
- * current rows persist it while the raw Targeting Key is still in memory.
+ * The oldest retained App-specific epoch remains the family anchor while any
+ * rows from that epoch exist. A destructive reset purges those rows before the
+ * epoch is removed, so the replacement App identity starts a new family.
  */
 export function entityFamilyHash(
   _appId: string,
   _idType: string,
   retainedHashes: readonly string[],
 ): string {
-  const historical = retainedHashes.find((hash) => {
-    const version = keyVersionOf(hash);
-    return (HISTORICAL_SHARED_ROOT_KEY_VERSIONS as readonly string[]).includes(version);
-  });
-  const anchor = historical ?? retainedHashes.at(-1);
+  const anchor = retainedHashes.find((hash) => isAppIdentityKeyVersion(keyVersionOf(hash)));
   if (anchor === undefined) {
-    throw new Error("privacy: no retained targeting_key_hash for Entity family");
+    throw new Error("privacy: no App-scoped targeting_key_hash for Entity family");
   }
-  return canonicalizeSharedRootTargetingKeyHash(anchor);
+  return anchor;
 }
 
 export async function computeEntityFamilyHash(
   store: SaltStore,
   input: EntityPrivacyInput,
 ): Promise<string> {
-  return entityFamilyHash(
-    input.appId,
-    input.idType,
+  return entityFamilyHashForRetained(
+    store,
+    input,
     await computeRetainedTargetingKeyHashes(store, input),
   );
+}
+
+async function entityFamilyHashForRetained(
+  store: SaltStore,
+  input: EntityPrivacyInput,
+  retainedHashes: readonly string[],
+): Promise<string> {
+  const appAnchor = retainedHashes.find((hash) => isAppIdentityKeyVersion(keyVersionOf(hash)));
+  if (appAnchor !== undefined) return appAnchor;
+  const compatibilityAnchor = retainedHashes[0];
+  if (compatibilityAnchor === undefined) {
+    throw new Error("privacy: no retained targeting_key_hash for Entity family");
+  }
+  const version = keyVersionOf(compatibilityAnchor);
+  const salt = await store.saltFor(input.appId, version);
+  const digest = await hmacSha256Hex(
+    salt,
+    `entity-family:${input.appId}:${input.idType}:${input.targetingKey}`,
+  );
+  return `${version}:${digest}`;
 }
 
 /** Current-epoch hash when present; otherwise the newest retained hash. */

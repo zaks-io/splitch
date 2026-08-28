@@ -1,7 +1,6 @@
 import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
@@ -10,6 +9,7 @@ import { appAdminScope } from "../src/scope-binding";
 import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp } from "../src/test-seeds";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 18, 12, 0, 0);
@@ -61,17 +61,43 @@ describe("entity privacy delete route availability", () => {
       nowIso: () => NOW_ISO,
       entityPrivacy: {
         async exportEntity() {
+          const assignmentRecords = [
+            {
+              targetingKeyHash: hashes[0],
+              assignments: { "exp-old": { runId: "run-old", variant: "control" } },
+              holdoverWrites: [{ environmentId: "env-prod", experimentId: "exp-old" }],
+            },
+          ];
           return {
             appId: PRIMARY.appId,
             idType: "user",
             targetingKeyHashes: hashes,
             entityFamilyHash: hashes[0],
-            records: [
-              {
-                targetingKeyHash: hashes[0],
-                assignments: { "exp-old": { runId: "run-old", variant: "control" } },
-              },
-            ],
+            records: assignmentRecords,
+            exportArtifact: {
+              schemaVersion: "entity-privacy-export-v1",
+              appId: PRIMARY.appId,
+              idType: "user",
+              targetingKeyHashes: hashes,
+              entityFamilyHash: hashes[0],
+              stores: [
+                {
+                  name: "assignments",
+                  records: assignmentRecords,
+                  proofs: hashes.map((hash) => `assignment-kv:${hash}`),
+                },
+                {
+                  name: "analysis",
+                  records: [{ source: "metric_events", event_name: "purchase" }],
+                  proofs: hashes.map((hash) => `tinybird:metric_events:${hash}`),
+                },
+                {
+                  name: "event-ingest",
+                  records: [{ store: "metric-event-outbox", deliveryId: "delivery-1" }],
+                  proofs: hashes.map((hash) => `metric-event-outbox-inventory:${hash}`),
+                },
+              ],
+            },
           };
         },
         async suppressEntity() {},
@@ -121,11 +147,38 @@ describe("entity privacy delete route availability", () => {
     expect(exportBody).toMatchObject({
       request: { requestType: "export", subjectType: "entity", status: "completed" },
       job: { kind: "export", status: "completed" },
+      artifact: {
+        schemaVersion: "entity-privacy-export-v1",
+        stores: [
+          { name: "assignments", records: [{ holdoverWrites: [{ experimentId: "exp-old" }] }] },
+          { name: "analysis", records: [{ event_name: "purchase" }] },
+          { name: "event-ingest", records: [{ deliveryId: "delivery-1" }] },
+        ],
+      },
     });
     expect(deleteBody).toMatchObject({
       request: { requestType: "delete", subjectType: "entity", status: "completed" },
       job: { kind: "delete", status: "completed" },
     });
     expect(JSON.stringify({ exportBody, deleteBody })).not.toContain("subject_entity_privacy");
+
+    const status = await app.request(`/privacy/requests/${exportBody.request.requestId}`, {
+      headers: { authorization: `Bearer ${jwt}` },
+    });
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({ artifact: exportBody.artifact });
+
+    const outsiderJwt = await signer.sign({
+      sub: "user_other_tenant",
+      iss: "https://auth.splitch.test",
+      aud: AUDIENCE,
+      iat: Math.floor(NOW_MS / 1000),
+      exp: Math.floor(NOW_MS / 1000) + 3600,
+      scopes: [appAdminScope(PRIMARY.appId)],
+    });
+    const forbidden = await app.request(`/privacy/requests/${exportBody.request.requestId}`, {
+      headers: { authorization: `Bearer ${outsiderJwt}` },
+    });
+    expect(forbidden.status).toBe(403);
   });
 });

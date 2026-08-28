@@ -5,9 +5,9 @@ import {
   MetricEventTrackRequestSchema,
 } from "@splitch/contracts";
 import {
+  computeEntityFamilyHash,
   computeRetainedTargetingKeyHashes,
   computeTargetingKeyHash,
-  entityFamilyHash,
 } from "@splitch/privacy";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
@@ -45,7 +45,11 @@ export async function handleAuthorizedMetricEvent(
     idType: parsed.idType,
     targetingKey: parsed.targetingKey,
   });
-  const entityFamily = entityFamilyHash(credential.appId, parsed.idType, retainedHashes);
+  const entityFamily = await computeEntityFamilyHash(saltStore, {
+    appId: credential.appId,
+    idType: parsed.idType,
+    targetingKey: parsed.targetingKey,
+  });
   const fingerprint = await metricEventPayloadFingerprint({
     eventName: parsed.eventName,
     idType: parsed.idType,

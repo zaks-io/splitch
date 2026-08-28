@@ -188,7 +188,7 @@ describe("Evaluation commit ingest", () => {
       get: () => ({
         fetch: vi.fn(async (input: RequestInfo | URL) => {
           const path = new URL(String(input)).pathname;
-          if (path === "/register-evaluation" || path === "/suppressed") {
+          if (["/register-app-entity", "/register-evaluation", "/suppressed"].includes(path)) {
             return Response.json({ suppressed: true });
           }
           return new Response("not found", { status: 404 });

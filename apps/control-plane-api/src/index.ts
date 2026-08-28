@@ -21,7 +21,11 @@ import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { loadCloudflareExposureVerificationConfig } from "./cloudflare-exposure-verification";
-import { ConfigStoreDurableObject } from "./config-store-do";
+import {
+  ConfigStoreDurableObject,
+  durableAppIdentityResetAccess,
+  durableConfigStoreAccess,
+} from "./config-store-do";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import { handleControlPlaneAppRequest } from "./control-plane-app-request";
 import {
@@ -118,6 +122,13 @@ export class EvaluationEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
     input: ConvexExposureVerificationRequest,
   ): Promise<ConvexExposureVerificationResult> {
     return loadCloudflareExposureVerificationConfig(createRepository(this.env.DB), input);
+  }
+
+  resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string> {
+    return durableAppIdentityResetAccess(this.env.CONFIG_STORE_WRITER).resetCompromisedAppIdentity(
+      appId,
+      resetId,
+    );
   }
 }
 
@@ -269,8 +280,12 @@ async function handleSignedPanelOverview(
   if (operation?.id !== "overview_get") return null;
   const auth = await authResolver(request);
   if (!auth.ok) return unauthorized();
+  const configStore = durableConfigStoreAccess(env.CONFIG_STORE_WRITER);
   return panelOverviewRead(
-    { repo, analysisResults: createAnalysisResultsReader(env.ANALYSIS_API) },
+    {
+      repo,
+      analysisResults: createAnalysisResultsReader(env.ANALYSIS_API, undefined, configStore),
+    },
     {
       actorId: auth.principal.id,
       appId: operation.appId,

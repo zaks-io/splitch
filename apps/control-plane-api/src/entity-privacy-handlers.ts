@@ -3,9 +3,11 @@ import { appScope } from "@splitch/db";
 import { type HandlerArgs, type Registrar, renderError } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { requireAppWrite } from "./app-authz";
-import { type EntityPrivacyConsumer, EntityPrivacyConsumerError } from "./entity-privacy-consumer";
+import type { EntityPrivacyConsumer } from "./entity-privacy-consumer";
+import { EntityPrivacyConsumerError } from "./entity-privacy-service-client";
 import { objectBody, pathParam } from "./handler-input";
 import { controlPlaneRoute } from "./routes";
+import { authorizePrivacyRequestStatus } from "./unavailable-handler";
 
 const ACK_MS = 10 * 24 * 60 * 60 * 1000;
 const RESPONSE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -33,6 +35,7 @@ export function mountEntityPrivacyRoutes(
   const handlers = makeEntityPrivacyHandlers(deps);
   registrar.mount(app, controlPlaneRoute("entity_privacy_export"), handlers.exportEntity);
   registrar.mount(app, controlPlaneRoute("entity_privacy_delete"), handlers.deleteEntity);
+  registrar.mount(app, controlPlaneRoute("privacy_requests_get"), privacyStatusHandler(deps));
 }
 
 function entityPrivacyHandler(
@@ -114,7 +117,10 @@ async function recordPrivacyCompletion(
   app: { id: string; organizationId: string },
   kind: "export" | "delete",
   args: HandlerArgs<unknown>,
-  storeResult: { targetingKeyHashes: readonly string[] },
+  storeResult: {
+    targetingKeyHashes: readonly string[];
+    exportArtifact?: unknown;
+  },
 ) {
   const receivedAt = deps.nowIso?.() ?? new Date().toISOString();
   const receivedMs = Date.parse(receivedAt);
@@ -131,6 +137,8 @@ async function recordPrivacyCompletion(
     ackDueAt: new Date(receivedMs + ACK_MS).toISOString(),
     responseDueAt: new Date(receivedMs + RESPONSE_MS).toISOString(),
     completedAt: receivedAt,
+    resultJson:
+      kind === "export" ? JSON.stringify(requireExportArtifact(storeResult.exportArtifact)) : null,
   });
   return {
     request: {
@@ -148,7 +156,60 @@ async function recordPrivacyCompletion(
       kind,
       status: "completed",
     },
+    artifact: kind === "export" ? requireExportArtifact(storeResult.exportArtifact) : null,
   };
+}
+
+function requireExportArtifact(value: unknown): unknown {
+  if (typeof value !== "object" || value === null) {
+    throw new EntityPrivacyConsumerError("control-plane-api: Entity export omitted its artifact");
+  }
+  return value;
+}
+
+function privacyStatusHandler(deps: { repo: Repository }) {
+  return async (args: HandlerArgs<unknown>): Promise<Response> => {
+    const authorizationError = await authorizePrivacyRequestStatus(deps, args);
+    if (authorizationError) return authorizationError;
+    const request = await deps.repo.privacy.getPrivacyRequestById(
+      pathParam(args.input, "requestId"),
+    );
+    if (!request) throw new Error("authorized privacy request disappeared");
+    return Response.json(privacyStatusResponse(request));
+  };
+}
+
+function privacyStatusResponse(
+  request: NonNullable<Awaited<ReturnType<Repository["privacy"]["getPrivacyRequestById"]>>>,
+) {
+  return {
+    request: {
+      requestId: request.requestId,
+      organizationId: request.orgId,
+      appId: request.appId,
+      requestType: request.requestType,
+      subjectType: request.subjectType,
+      status: request.status,
+      receivedAt: request.receivedAt,
+    },
+    job: privacyStatusJob(request.requestId, request.requestType, request.status),
+    artifact: request.resultJson ? parseArtifact(request.resultJson) : null,
+  };
+}
+
+function privacyStatusJob(requestId: string, requestType: string, status: string) {
+  if (requestType !== "export" && requestType !== "delete") return null;
+  return {
+    jobId: `job_${requestId}`,
+    requestId,
+    kind: requestType,
+    status: status === "completed" ? "completed" : "running",
+  };
+}
+
+function parseArtifact(value: string): unknown {
+  const parsed: unknown = JSON.parse(value);
+  return requireExportArtifact(parsed);
 }
 
 async function insertEntityDeletions(

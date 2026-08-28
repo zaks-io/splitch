@@ -25,6 +25,8 @@ export const privacyRequests = sqliteTable("privacy_requests", {
   responseDueAt: text("response_due_at").notNull(),
   completedAt: text("completed_at"),
   denialReason: text("denial_reason"),
+  /** Durable, authenticated retrieval payload for completed export requests. */
+  resultJson: text("result_json"),
 });
 
 /**

@@ -22,6 +22,11 @@ import {
   type Principal,
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
+import {
+  completeAppIdentityReset,
+  purgeAppIdentityAssignments,
+  purgeAppIdentityRetryClaims,
+} from "./app-identity-reset";
 import { AssignmentStoreDurableObject } from "./assignment/assignment-store-do";
 import { DurableHoldoverWriteAppInventoryClient } from "./assignment/holdover-write-app-inventory-client";
 import { HoldoverWriteAppInventoryDurableObject } from "./assignment/holdover-write-app-inventory-do";
@@ -106,6 +111,18 @@ export class ControlPlaneEntrypoint extends WorkerEntrypoint<EvaluationApiEnv> {
       this.ctx,
     );
   }
+
+  purgeAppIdentityAssignments(appId: string, resetId: string): Promise<string> {
+    return purgeAppIdentityAssignments(this.env, appId, resetId);
+  }
+
+  purgeAppIdentityRetryClaims(appId: string, environmentIds: readonly string[]): Promise<string> {
+    return purgeAppIdentityRetryClaims(this.env, appId, environmentIds);
+  }
+
+  completeAppIdentityReset(appId: string, resetId: string): Promise<void> {
+    return completeAppIdentityReset(this.env, appId, resetId);
+  }
 }
 
 type EvaluationRequestAuthority = { kind: "control-plane"; identity: DelegatedIdentity };
@@ -163,6 +180,7 @@ async function handleRequest(
     entityAssignmentPrivacy: {
       assignmentsKv: env.ASSIGNMENTS_KV,
       assignmentWriters: env.ASSIGNMENT_STORE_WRITER,
+      holdoverWriteOutboxes: holdoverWriteOutbox,
       saltStore,
     },
     exposureAssembly: {

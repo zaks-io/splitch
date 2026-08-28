@@ -4,12 +4,26 @@ import {
   atOrBefore,
   evaluationEntryGroups,
   evaluationEntryKey,
+  entityStub,
   type EntityEvaluationInventoryEntry,
   type EntityMetricInventoryEntry,
   parseDeleteBefore,
   parseEntry,
   parseEvaluationEntry,
 } from "./entity-metric-privacy";
+
+const APP_ENTITY_PREFIX = "privacy:app-entity:";
+const APP_RESET_SUPPRESSION_KEY = "privacy:app-reset-suppression";
+
+interface AppEntityRef {
+  appId: string;
+  idType: string;
+  entityFamilyHash: string;
+}
+
+interface AppResetSuppression {
+  resetId: string;
+}
 
 const SUPPRESSION_KEY = "privacy:suppression";
 const EVENT_PREFIX = "event:";
@@ -41,8 +55,58 @@ export class EntityMetricPrivacyDurableObject {
       "/suppressed": () => this.suppressed(request),
       "/suppress": () => this.suppress(request),
       "/delete": () => this.deleteRecords(),
+      "/register-app-entity": () => this.registerAppEntity(request),
+      "/reset-app": () => this.resetApp(request),
+      "/complete-reset": () => this.completeReset(request),
     };
     return handlers[path]?.() ?? Promise.resolve(new Response("not found", { status: 404 }));
+  }
+
+  private async registerAppEntity(request: Request): Promise<Response> {
+    const ref = parseAppEntityRef(await request.json());
+    if (await this.ctx.storage.get(APP_RESET_SUPPRESSION_KEY)) {
+      return Response.json({ suppressed: true });
+    }
+    await this.ctx.storage.put(`${APP_ENTITY_PREFIX}${ref.idType}:${ref.entityFamilyHash}`, ref);
+    return Response.json({ suppressed: false });
+  }
+
+  private async resetApp(request: Request): Promise<Response> {
+    const body = (await request.json()) as Record<string, unknown>;
+    if (typeof body.appId !== "string" || typeof body.resetId !== "string") {
+      throw new Error("App identity reset inventory input is invalid");
+    }
+    const existing = await this.ctx.storage.get<AppResetSuppression>(APP_RESET_SUPPRESSION_KEY);
+    if (existing && existing.resetId !== body.resetId) {
+      throw new Error("a different App identity reset is already running");
+    }
+    await this.ctx.storage.put(APP_RESET_SUPPRESSION_KEY, { resetId: body.resetId });
+    const refs = await this.ctx.storage.list<AppEntityRef>({ prefix: APP_ENTITY_PREFIX });
+    const cutoff = new Date().toISOString();
+    for (const [key, ref] of refs) {
+      const stub = entityStub(this.env.ENTITY_METRIC_PRIVACY, ref);
+      const suppress = await stub.fetch("https://entity-privacy.local/suppress", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deleteBeforeTs: cutoff }),
+      });
+      if (!suppress.ok)
+        throw new Error(`App identity reset suppression returned ${suppress.status}`);
+      const deleted = await stub.fetch("https://entity-privacy.local/delete", { method: "POST" });
+      if (!deleted.ok) throw new Error(`App identity reset deletion returned ${deleted.status}`);
+      await this.ctx.storage.delete(key);
+    }
+    return Response.json({ proof: `event-delivery:entities=${refs.size}` });
+  }
+
+  private async completeReset(request: Request): Promise<Response> {
+    const body = (await request.json()) as Record<string, unknown>;
+    const existing = await this.ctx.storage.get<AppResetSuppression>(APP_RESET_SUPPRESSION_KEY);
+    if (!existing || body.resetId !== existing.resetId) {
+      throw new Error("App identity reset completion does not match suppression");
+    }
+    await this.ctx.storage.delete(APP_RESET_SUPPRESSION_KEY);
+    return Response.json({ completed: true });
   }
 
   private async register(request: Request): Promise<Response> {
@@ -224,6 +288,21 @@ export class EntityMetricPrivacyDurableObject {
     if (!outbox) throw new Error("EVALUATION_COMMIT_OUTBOX binding is unavailable");
     return outbox;
   }
+}
+
+function parseAppEntityRef(value: unknown): AppEntityRef {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("App Entity privacy inventory input is invalid");
+  }
+  const ref = value as Record<string, unknown>;
+  if (
+    typeof ref.appId !== "string" ||
+    typeof ref.idType !== "string" ||
+    typeof ref.entityFamilyHash !== "string"
+  ) {
+    throw new Error("App Entity privacy inventory input is invalid");
+  }
+  return { appId: ref.appId, idType: ref.idType, entityFamilyHash: ref.entityFamilyHash };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

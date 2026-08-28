@@ -18,6 +18,7 @@ import { appNotFound } from "./app-environment-model";
 import { experimentNotFound, runNotFound } from "./experiment-errors";
 import { environmentExists } from "./experiment-handler-shared";
 import { controlPlaneRoute } from "./routes";
+import type { ConfigStoreAccess } from "./config-store-do";
 
 /**
  * The routes `api.splitch.dev` answers for but does not execute (ADR-0046).
@@ -44,12 +45,13 @@ export function mountDelegatedRoutes(
   registrar: Registrar,
   bindings: DelegationBindings,
   repo: Repository,
+  configStore?: ConfigStoreAccess,
 ): void {
   for (const route of routesDelegatedBy("control-plane-api")) {
     registrar.mount(
       app,
       controlPlaneRoute(route.operationId),
-      delegatingHandler(route, bindings[route.owner], repo),
+      delegatingHandler(route, bindings[route.owner], repo, configStore),
     );
   }
 }
@@ -79,9 +81,17 @@ function delegatingHandler(
   route: ApiRouteContract,
   binding: Fetcher | undefined,
   repo: Repository,
+  configStore?: ConfigStoreAccess,
 ): RouteHandler<unknown> {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     const parts = inputParts(input);
+    const trafficError = await analysisTrafficError(
+      route,
+      parts.params?.appId,
+      configStore,
+      requestId,
+    );
+    if (trafficError) return trafficError;
     const scopeError = await delegationScopeError(
       route,
       repo,
@@ -107,6 +117,30 @@ function delegatingHandler(
       }),
     );
   };
+}
+
+async function analysisTrafficError(
+  route: ApiRouteContract,
+  appId: string | undefined,
+  configStore: ConfigStoreAccess | undefined,
+  requestId: string,
+): Promise<Response | null> {
+  if (route.owner !== "analysis-api" || !appId || !configStore?.assertAppIdentityTrafficAllowed) {
+    return null;
+  }
+  try {
+    await configStore.assertAppIdentityTrafficAllowed(appId);
+    return null;
+  } catch {
+    return renderError(
+      {
+        code: "SERVICE_UNAVAILABLE",
+        message: "App identity reset is in progress",
+        details: { retryAfterMs: 30_000 },
+      },
+      { requestId },
+    );
+  }
 }
 
 async function delegationScopeError(

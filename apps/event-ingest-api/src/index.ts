@@ -15,6 +15,7 @@ import {
   notDelegatedResponse,
   type Observability,
 } from "@splitch/worker-runtime";
+import { appIdentityPrivacyInventoryStub } from "./entity-metric-privacy";
 import {
   handleEntityMetricPrivacy,
   requireEntityMetricPrivacyBinding,
@@ -165,6 +166,35 @@ export class ControlPlaneEntrypoint extends WorkerEntrypoint<Env> {
       this.env,
       this.ctx,
     );
+  }
+
+  async purgeAppIdentityDelivery(appId: string, resetId: string): Promise<string> {
+    const response = await appIdentityPrivacyInventoryStub(
+      this.env.ENTITY_METRIC_PRIVACY,
+      appId,
+    ).fetch("https://entity-privacy.local/reset-app", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ appId, resetId }),
+    });
+    if (!response.ok) throw new Error(`Event delivery identity purge returned ${response.status}`);
+    const body = (await response.json()) as { proof?: unknown };
+    if (typeof body.proof !== "string")
+      throw new Error("Event delivery identity purge omitted proof");
+    return body.proof;
+  }
+
+  async completeAppIdentityReset(appId: string, resetId: string): Promise<void> {
+    const response = await appIdentityPrivacyInventoryStub(
+      this.env.ENTITY_METRIC_PRIVACY,
+      appId,
+    ).fetch("https://entity-privacy.local/complete-reset", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resetId }),
+    });
+    if (!response.ok)
+      throw new Error(`Event identity reset completion returned ${response.status}`);
   }
 }
 

@@ -4,6 +4,7 @@ export const EntityAssignmentPrivacyRequestSchema = z
   .object({
     idType: z.string().min(1),
     targetingKey: z.string().min(1),
+    deleteBeforeTs: z.string().datetime({ offset: true }).optional(),
   })
   .strict();
 
@@ -17,8 +18,14 @@ export const EntityAssignmentPrivacyExportSchema = z
       z.object({
         targetingKeyHash: z.string(),
         assignments: z.record(z.string(), z.object({ runId: z.string(), variant: z.string() })),
+        holdoverWrites: z.array(z.record(z.string(), z.unknown())),
+        holdoverSuppression: z
+          .object({ deleteBeforeTsMs: z.number().finite() })
+          .strict()
+          .nullable(),
       }),
     ),
+    proofs: z.array(z.string().min(1)),
   })
   .strict();
 
@@ -30,6 +37,7 @@ export const EntityAssignmentPrivacyDeleteSchema = z
     entityFamilyHash: z.string(),
     deletedKeyCount: z.number().int().nonnegative(),
     deletedWriterCount: z.number().int().nonnegative(),
+    deletedOutboxCount: z.number().int().nonnegative(),
     proofs: z.array(z.string().min(1)),
   })
   .strict();

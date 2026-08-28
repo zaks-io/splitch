@@ -2,6 +2,7 @@ import type { ErrorResponse } from "@splitch/contracts";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import type { SaltStore } from "@splitch/privacy";
 import type { AssignmentKv } from "./assignment-store";
+import type { HoldoverWriteOutboxNamespace } from "./holdover-write-outbox";
 import {
   type AssignmentWriterNamespace,
   deleteEntityAssignments,
@@ -11,6 +12,7 @@ import {
 export interface EntityAssignmentPrivacyHandlerDeps {
   assignmentsKv: AssignmentKv;
   assignmentWriters: AssignmentWriterNamespace;
+  holdoverWriteOutboxes: HoldoverWriteOutboxNamespace;
   saltStore: SaltStore;
 }
 
@@ -18,7 +20,12 @@ export function makeEntityAssignmentPrivacyExportHandler(deps: EntityAssignmentP
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     try {
       const scope = entityPrivacyScope(input, principal.appId);
-      const exported = await exportEntityAssignments(deps.assignmentsKv, deps.saltStore, scope);
+      const exported = await exportEntityAssignments(
+        deps.assignmentsKv,
+        deps.holdoverWriteOutboxes,
+        deps.saltStore,
+        scope,
+      );
       return Response.json(exported);
     } catch (cause) {
       return renderError(entityPrivacyError(cause), { requestId });
@@ -30,11 +37,16 @@ export function makeEntityAssignmentPrivacyDeleteHandler(deps: EntityAssignmentP
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     try {
       const scope = entityPrivacyScope(input, principal.appId);
+      if (!scope.deleteBeforeTs) {
+        throw new Error("entity assignment privacy delete is missing deleteBeforeTs");
+      }
       const deleted = await deleteEntityAssignments(
         deps.assignmentsKv,
         deps.assignmentWriters,
+        deps.holdoverWriteOutboxes,
         deps.saltStore,
         scope,
+        scope.deleteBeforeTs,
       );
       return Response.json(deleted);
     } catch (cause) {
@@ -46,18 +58,32 @@ export function makeEntityAssignmentPrivacyDeleteHandler(deps: EntityAssignmentP
 function entityPrivacyScope(
   input: unknown,
   principalAppId: string | null,
-): { appId: string; idType: string; targetingKey: string } {
+): { appId: string; idType: string; targetingKey: string; deleteBeforeTs?: string } {
   const root = asRecord(input);
   const appId = stringField(asRecord(root.params), "appId");
   if (principalAppId !== appId) {
     throw new EntityAssignmentPrivacyForbiddenError();
   }
   const body = asRecord(root.body);
+  const deleteBeforeTs = optionalStringField(body, "deleteBeforeTs");
+  if (deleteBeforeTs !== undefined && !Number.isFinite(Date.parse(deleteBeforeTs))) {
+    throw new Error("entity assignment privacy deleteBeforeTs must be an ISO timestamp");
+  }
   return {
     appId,
     idType: stringField(body, "idType"),
     targetingKey: stringField(body, "targetingKey"),
+    ...(deleteBeforeTs ? { deleteBeforeTs } : {}),
   };
+}
+
+function optionalStringField(value: Record<string, unknown>, key: string): string | undefined {
+  const field = value[key];
+  if (field === undefined) return undefined;
+  if (typeof field !== "string" || field.length === 0) {
+    throw new Error(`entity assignment privacy ${key} must be a non-empty string`);
+  }
+  return field;
 }
 
 function entityPrivacyError(cause: unknown): ErrorResponse {

@@ -37,12 +37,16 @@ export type {
   AppIdentityResetProofs,
   AppIdentityResetStore,
 } from "./app-identity-lifecycle";
-export { APP_IDENTITY_RESET_STORES } from "./app-identity-lifecycle";
+export {
+  APP_IDENTITY_RESET_STORES,
+  assertAppIdentityTrafficAllowed,
+} from "./app-identity-lifecycle";
 export type { AppIdentityStore } from "./app-identity-store";
 export {
   makeKvAppIdentityStore,
   makeMemoryAppIdentityStore,
   mintInitialAppIdentityRecord,
+  requireAppIdentityRecord,
   rewrapKvAppIdentityRecord,
 } from "./app-identity-store";
 export type { DerivedSaltStoreOptions, IdentitySaltStoreOptions } from "./derived-salt-store";

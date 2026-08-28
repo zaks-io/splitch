@@ -10,7 +10,11 @@ import {
   type RunConfigKV,
 } from "@splitch/contracts";
 import { appScope, createRepository, envScope } from "@splitch/db";
-import { putWrappedAppIdentityIfAbsent } from "@splitch/privacy";
+import {
+  assertConfigStoreAppIdentityTrafficAllowed,
+  putConfigStoreAppIdentityIfAbsent,
+  resetConfigStoreAppIdentity,
+} from "./config-store-app-identity";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import { buildSnapshotFromD1 } from "./config-store-shared";
 import type { ControlPlaneApiEnv } from "./env";
@@ -26,6 +30,8 @@ interface ConfigStoreDurableObjectStub extends ConfigStoreWriter {
   ): Promise<EvaluationFlagConfigSnapshot | null>;
   setLiveUpdatesAvailable(available: boolean): Promise<void>;
   putAppIdentityIfAbsent(recordKey: string, value: string): Promise<string>;
+  resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string>;
+  assertAppIdentityTrafficAllowed(appId: string): Promise<void>;
 }
 
 export interface EvaluationFlagConfigRead {
@@ -48,6 +54,23 @@ interface ConfigStoreLiveUpdates {
 export interface ConfigStoreAccess {
   writerFor(appId: string, environmentId: string): ConfigStoreWriter;
   liveUpdatesFor(appId: string, environmentId: string): ConfigStoreLiveUpdates;
+  assertAppIdentityTrafficAllowed?(appId: string): Promise<void>;
+}
+
+export interface AppIdentityResetAccess {
+  resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string>;
+}
+
+export function durableAppIdentityResetAccess(
+  namespace: ConfigStoreDurableObjectNamespace,
+): AppIdentityResetAccess {
+  return {
+    resetCompromisedAppIdentity(appId, resetId) {
+      return namespace
+        .getByName(`app-identity:${appId}`)
+        .resetCompromisedAppIdentity(appId, resetId);
+    },
+  };
 }
 
 function configWriterName(appId: string, environmentId: string): string {
@@ -56,7 +79,7 @@ function configWriterName(appId: string, environmentId: string): string {
 
 export function durableConfigStoreAccess(
   namespace: ConfigStoreDurableObjectNamespace,
-): ConfigStoreAccess {
+): ConfigStoreAccess & Required<Pick<ConfigStoreAccess, "assertAppIdentityTrafficAllowed">> {
   return {
     writerFor(appId, environmentId) {
       return namespace.getByName(configWriterName(appId, environmentId));
@@ -67,6 +90,9 @@ export function durableConfigStoreAccess(
           return namespace.getByName(configWriterName(appId, environmentId)).fetch(request);
         },
       };
+    },
+    assertAppIdentityTrafficAllowed(appId) {
+      return namespace.getByName(`app-identity:${appId}`).assertAppIdentityTrafficAllowed(appId);
     },
   };
 }
@@ -214,16 +240,15 @@ export class ConfigStoreDurableObject
    * Ingest call this on `app-identity:${appId}` so both planes share one winner.
    */
   async putAppIdentityIfAbsent(recordKey: string, value: string): Promise<string> {
-    return this.ctx.blockConcurrencyWhile(() =>
-      putWrappedAppIdentityIfAbsent(
-        {
-          get: async (key) => (await this.env.CONFIG_STORE.get(key)) ?? null,
-          put: (key, wrapped) => this.env.CONFIG_STORE.put(key, wrapped),
-        },
-        recordKey,
-        value,
-      ),
-    );
+    return putConfigStoreAppIdentityIfAbsent(this.ctx, this.env, recordKey, value);
+  }
+
+  async resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string> {
+    return resetConfigStoreAppIdentity(this.ctx, this.env, appId, resetId);
+  }
+
+  async assertAppIdentityTrafficAllowed(appId: string): Promise<void> {
+    return assertConfigStoreAppIdentityTrafficAllowed(this.env, appId);
   }
 
   private store(): ConfigStoreWriter {

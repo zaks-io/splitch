@@ -11,6 +11,15 @@ export function stubEntityAssignmentPrivacy(): EntityAssignmentPrivacyHandlerDep
         fetch: async () => Response.json({ deleted: true, proof: "assignment-do-tombstone-v1" }),
       }),
     },
+    holdoverWriteOutboxes: {
+      idFromName: (name) => name as unknown as DurableObjectId,
+      get: () => ({
+        fetch: async (input) =>
+          new URL(String(input)).pathname === "/export"
+            ? Response.json({ jobs: [], suppression: null })
+            : Response.json({ ok: true }),
+      }),
+    },
     saltStore: new StaticSaltStore(),
   };
 }

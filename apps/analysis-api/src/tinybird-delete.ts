@@ -17,6 +17,47 @@ export interface TinybirdDeleteTransport {
   deleteEntity?(scope: EntityTinybirdPrivacyScope): Promise<readonly string[]>;
 }
 
+const APP_IDENTITY_RESET_DATASOURCES = [
+  "raw_events",
+  "metric_events",
+  "deduped_exposures",
+  "deduped_metric_events_state",
+  "entity_deletions",
+] as const;
+
+export async function deleteAppIdentityData(
+  env: AnalysisApiEnv,
+  appId: string,
+  options: {
+    fetchFn?: typeof fetch;
+    pollIntervalMs?: number;
+    timeoutMs?: number;
+    delay?: (milliseconds: number) => Promise<void>;
+  } = {},
+): Promise<string> {
+  const safeAppId = safeTenantId(appId, "appId");
+  const apiUrl = requiredConfig(env.TINYBIRD_API_URL, "TINYBIRD_API_URL");
+  const token = requiredConfig(env.TINYBIRD_DELETE_TOKEN, "TINYBIRD_DELETE_TOKEN");
+  const fetchFn = options.fetchFn ?? fetch;
+  const timeoutMs = options.timeoutMs ?? 30_000;
+  const wait = {
+    delay:
+      options.delay ??
+      ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))),
+    pollIntervalMs: options.pollIntervalMs ?? 250,
+    timeoutMs,
+  };
+  const proofs = [];
+  for (const datasource of APP_IDENTITY_RESET_DATASOURCES) {
+    const endpoint = new URL(`/v0/datasources/${datasource}/delete`, apiUrl);
+    const body = new URLSearchParams({ delete_condition: `app_id = '${safeAppId}'` });
+    const job = await requestJob(fetchFn, endpoint, token, { method: "POST", body }, timeoutMs);
+    await waitForJob(fetchFn, apiUrl, token, job, wait);
+    proofs.push(datasource);
+  }
+  return `tinybird-app-identity-reset:${proofs.join(",")}`;
+}
+
 export interface EntityTinybirdPrivacyScope {
   appId: string;
   idType: string;

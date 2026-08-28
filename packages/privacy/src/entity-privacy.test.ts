@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ACTIVE_APP_IDENTITY_LIFECYCLE } from "./app-identity-lifecycle";
 import { makeMemoryAppIdentityStore } from "./app-identity-store";
 import { makeIdentitySaltStore } from "./derived-salt-store";
 import {
@@ -30,6 +31,36 @@ describe("entity privacy consumers", () => {
     ]);
     expect(JSON.stringify(identity)).not.toContain(INPUT.targetingKey);
     expect(canonicalizeAnalysisEntityHash(identity.targetingKeyHashes)).toBe(current);
+  });
+
+  it("keeps families joinable across one App's epochs without linking Apps", async () => {
+    const identityStore = makeMemoryAppIdentityStore(
+      new Map([
+        [
+          INPUT.appId,
+          {
+            currentVersion: "app-v2",
+            lifecycle: ACTIVE_APP_IDENTITY_LIFECYCLE,
+            epochs: [
+              { version: "app-v1", role: "retained" as const, key: keyBytes(1) },
+              { version: "app-v2", role: "active" as const, key: keyBytes(2) },
+            ],
+          },
+        ],
+      ]),
+    );
+    const store = makeIdentitySaltStore({ rootSecret: ROOT, identityStore });
+    const appA = await resolveEntityPrivacyIdentity(store, INPUT);
+    const appACurrent = await computeTargetingKeyHash(store, INPUT);
+    const appARetained = await computeTargetingKeyHash(store, { ...INPUT, keyVersion: "app-v1" });
+    expect(appA.entityFamilyHash).toBe(appARetained);
+    expect(appA.entityFamilyHash).not.toBe(appACurrent);
+
+    const appBInput = { ...INPUT, appId: "app_2" };
+    const appB = await resolveEntityPrivacyIdentity(store, appBInput);
+    const appBCurrent = await computeTargetingKeyHash(store, appBInput);
+    expect(appBCurrent).not.toBe(appACurrent);
+    expect(appB.entityFamilyHash).not.toBe(appA.entityFamilyHash);
   });
 
   it("joins analysis rows written under every retained epoch", async () => {
@@ -86,3 +117,7 @@ describe("entity privacy consumers", () => {
     ]);
   });
 });
+
+function keyBytes(fill: number): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(32).fill(fill) as Uint8Array<ArrayBuffer>;
+}

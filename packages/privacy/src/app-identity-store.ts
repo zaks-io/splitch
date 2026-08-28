@@ -26,6 +26,8 @@ import { utf8Bytes } from "./hmac";
 import type { SaltBytes } from "./salt-store";
 
 export interface AppIdentityStore {
+  /** Reset is permitted only when a durable owner serializes the whole workflow. */
+  resetSerialization: "durable" | "test" | "process-local";
   load(appId: string): Promise<AppIdentityRecord | null>;
   save(appId: string, record: AppIdentityRecord): Promise<void>;
   runExclusive<T>(appId: string, fn: () => Promise<T>): Promise<T>;
@@ -63,6 +65,7 @@ export function makeMemoryAppIdentityStore(
     }
   }
   return {
+    resetSerialization: "test",
     async load(appId) {
       const record = records.get(appId);
       return record === undefined ? null : cloneAppIdentityRecord(record);
@@ -93,10 +96,12 @@ export function makeKvAppIdentityStore(options: {
   recordKey?: (appId: string) => string;
   exclusive?: AppIdentityExclusive;
   putIfAbsent?: (recordKey: string, value: string) => Promise<string>;
+  durablySerializedReset?: boolean;
 }): AppIdentityStore {
   const recordKey = options.recordKey ?? defaultAppEntityIdentityRecordKey;
   const exclusive = options.exclusive ?? makeInProcessAppIdentityExclusive();
   return {
+    resetSerialization: options.durablySerializedReset ? "durable" : "process-local",
     async load(appId) {
       const raw = await options.kv.get(recordKey(appId));
       if (raw === null) return null;

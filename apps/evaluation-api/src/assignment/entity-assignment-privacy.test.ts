@@ -36,22 +36,54 @@ describe("entity assignment privacy consumers", () => {
       serializeAssignmentValue({ "exp-new": { runId: "run-new", variant: "treatment" } }),
     );
 
-    const exported = await exportEntityAssignments(kv, saltStore, identity);
+    const deletionCalls: string[] = [];
+    const deleteBodies: unknown[] = [];
+    const outboxes = holdoverOutboxes({ historical, deletionCalls, deleteBodies });
+    const exported = await exportEntityAssignments(kv, outboxes, saltStore, identity);
     expect(exported.records).toEqual([
       {
         targetingKeyHash: historical,
         assignments: { "exp-old": { runId: "run-old", variant: "control" } },
+        holdoverWrites: [
+          expect.objectContaining({
+            experimentId: "exp-old",
+            targetingKeyHash: historical,
+            status: "pending",
+          }),
+        ],
+        holdoverSuppression: null,
       },
       {
         targetingKeyHash: current,
         assignments: { "exp-new": { runId: "run-new", variant: "treatment" } },
+        holdoverWrites: [],
+        holdoverSuppression: null,
       },
     ]);
     expect(JSON.stringify(exported)).not.toContain(RAW_TARGETING_KEY);
 
-    const deleted = await deleteEntityAssignments(kv, assignmentWriters(), saltStore, identity);
+    const deleted = await deleteEntityAssignments(
+      kv,
+      assignmentWriters(deletionCalls),
+      outboxes,
+      saltStore,
+      identity,
+      "2026-07-18T12:00:00.000Z",
+    );
     expect(deleted.deletedKeyCount).toBe(deleted.targetingKeyHashes.length);
     expect(deleted.deletedWriterCount).toBe(deleted.targetingKeyHashes.length);
+    expect(deleted.deletedOutboxCount).toBe(deleted.targetingKeyHashes.length);
+    expect(deletionCalls).toEqual(
+      deleted.targetingKeyHashes.flatMap((hash) => [`outbox:${hash}`, `writer:${hash}`]),
+    );
+    expect(deleteBodies).toEqual(
+      deleted.targetingKeyHashes.map((targetingKeyHash) => ({
+        appId: identity.appId,
+        idType: identity.idType,
+        targetingKeyHash,
+        deleteBeforeTsMs: Date.parse("2026-07-18T12:00:00.000Z"),
+      })),
+    );
     expect(kv.has(assignmentKey(identity.appId, identity.idType, historical))).toBe(false);
     expect(kv.has(assignmentKey(identity.appId, identity.idType, current))).toBe(false);
     expect(JSON.stringify(deleted)).not.toContain(RAW_TARGETING_KEY);
@@ -70,11 +102,58 @@ describe("entity assignment privacy consumers", () => {
   });
 });
 
-function assignmentWriters() {
+function assignmentWriters(calls: string[]) {
   return {
     idFromName: (name: string) => name as unknown as DurableObjectId,
-    get: () => ({
-      fetch: async () => Response.json({ deleted: true, proof: "assignment-do-tombstone-v1" }),
+    get: (id: DurableObjectId) => ({
+      fetch: async () => {
+        calls.push(`writer:${targetingHashFromName(String(id))}`);
+        return Response.json({ deleted: true, proof: "assignment-do-tombstone-v1" });
+      },
     }),
   };
+}
+
+function holdoverOutboxes(input: {
+  historical: string;
+  deletionCalls: string[];
+  deleteBodies: unknown[];
+}) {
+  return {
+    idFromName: (name: string) => name as unknown as DurableObjectId,
+    get: (id: DurableObjectId) => ({
+      fetch: async (request: RequestInfo | URL, init?: RequestInit) => {
+        const targetingKeyHash = targetingHashFromName(String(id));
+        if (new URL(String(request)).pathname === "/export") {
+          return Response.json({
+            jobs:
+              targetingKeyHash === input.historical
+                ? [
+                    {
+                      appId: basePut.appId,
+                      experimentId: "exp-old",
+                      idType: basePut.idType,
+                      targetingKeyHash,
+                      runId: "run-old",
+                      variant: basePut.variant,
+                      status: "pending",
+                      attempt: 1,
+                      createdAtMs: 1_000,
+                      updatedAtMs: 1_000,
+                    },
+                  ]
+                : [],
+            suppression: null,
+          });
+        }
+        input.deletionCalls.push(`outbox:${targetingKeyHash}`);
+        input.deleteBodies.push(JSON.parse(String(init?.body)));
+        return Response.json({ ok: true });
+      },
+    }),
+  };
+}
+
+function targetingHashFromName(name: string): string {
+  return name.split(":").slice(2).join(":");
 }

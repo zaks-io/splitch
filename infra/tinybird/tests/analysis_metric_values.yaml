@@ -46,7 +46,7 @@
   parameters: "app_id=app_epoch&environment_id=env_prod&experiment_id=exp_epoch&run_id=run_epoch&metric_id=metric_epoch&metric_type=count&event_definition_id=event_definition_epoch&event_field_name=count&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 200
   expected_result: |
-    {"targeting_key_hash":"local-v1:aaaaaaaa","run_id":"run_epoch","metric_id":"metric_epoch","metric_type":"count","value":2,"in_window":1}
+    {"targeting_key_hash":"app-v2:aaaaaaaa-new","run_id":"run_epoch","metric_id":"metric_epoch","metric_type":"count","value":2,"in_window":1}
 - name: missing_environment_id_is_rejected
   description: A missing environment_id fails loudly rather than mixing Environments into one analysis.
   parameters: "app_id=app_1&experiment_id=exp_1&run_id=run_1&metric_id=metric_signup&metric_type=binomial&event_definition_id=event_definition_signup&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"

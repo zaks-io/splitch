@@ -87,6 +87,7 @@
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
+    "EVALUATION_PRIVACY_SALT": "local-app-identity-reset-fixture",
     "TINYBIRD_API_URL": "http://127.0.0.1:18788",
     "CONTROL_PLANE_ORIGIN": "http://localhost:8787",
     "CONTROL_PANEL_DELEGATION_SECRET": "local-control-panel-delegation-secret",
@@ -144,7 +145,8 @@
           "CONTROL_PANEL_DELEGATION_SECRET",
           "MCP_CONTROL_PLANE_DELEGATION_SECRET",
           "CONVEX_WEBHOOK_KEK",
-          "INTEGRATION_SECRET_KEK"
+          "INTEGRATION_SECRET_KEK",
+          "EVALUATION_PRIVACY_SALT"
         ]
       },
       "vars": {
@@ -230,7 +232,8 @@
           "CONTROL_PANEL_DELEGATION_SECRET",
           "MCP_CONTROL_PLANE_DELEGATION_SECRET",
           "CONVEX_WEBHOOK_KEK",
-          "INTEGRATION_SECRET_KEK"
+          "INTEGRATION_SECRET_KEK",
+          "EVALUATION_PRIVACY_SALT"
         ]
       },
       "vars": {

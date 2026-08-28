@@ -282,7 +282,7 @@ export function createApp(deps: AppDeps): Hono {
     nowIso: deps.nowIso,
   });
   mountUnavailableControlPlaneRoutes(app, registrar, deps.repo);
-  mountDelegatedRoutes(app, registrar, deps.delegationBindings ?? {}, deps.repo);
+  mountDelegatedRoutes(app, registrar, deps.delegationBindings ?? {}, deps.repo, deps.configStore);
 
   return app;
 }
