@@ -58,7 +58,8 @@ describe("App attention rollup contract", () => {
   // The generated-document proof that this metadata emits the declared 409 and
   // excludes undeclared 409 codes lives in openapi-document.test.ts.
   //
-  // Set EQUALITY, not containment: this is the full set of codes
+  // Handler and resolver sets together close over the full declared set.
+  // The handler set is the full set of codes
   // makeAttentionRollupHandler can emit (attention-rollup.ts +
   // attention-rollup-errors.ts) -- appNotFound, forbidden,
   // fanoutLimitExceeded, analysisUnavailable, and experimentIntegrityFault
@@ -72,19 +73,17 @@ describe("App attention rollup contract", () => {
   // against this same route metadata -- a renderer drifting from this list,
   // or a new refusal added without one, fails that test.
   it("declares exactly the errors the attention rollup can return in its route metadata", () => {
-    const declared = new Set(getRoute("app_attention_rollup_get")?.errors);
-    declared.delete("SELECTOR_AMBIGUOUS");
-    const emittedByHandler = new Set([
+    const declared = new Set<string>(getRoute("app_attention_rollup_get")?.errors ?? []);
+    const emittedByHandler = new Set<string>([
       "APP_NOT_FOUND",
       "FORBIDDEN",
       "SERVICE_UNAVAILABLE",
       "ATTENTION_FANOUT_LIMIT_EXCEEDED",
       "INTERNAL_SERVER_ERROR",
     ]);
-    expect(declared).toEqual(emittedByHandler);
-  });
-
-  it("declares the authenticated App selector ambiguity emitted before the handler", () => {
-    expect(getRoute("app_attention_rollup_get")?.errors).toContain("SELECTOR_AMBIGUOUS");
+    const emittedByResolver = new Set<string>(["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]);
+    expect([...emittedByHandler].every((code) => declared.has(code))).toBe(true);
+    expect([...emittedByResolver].every((code) => declared.has(code))).toBe(true);
+    expect(declared).toEqual(new Set([...emittedByHandler, ...emittedByResolver]));
   });
 });

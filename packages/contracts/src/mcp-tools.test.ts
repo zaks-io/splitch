@@ -153,6 +153,7 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
 
   it("accepts human App, Environment, and Flag selectors in derived tool input", () => {
     const config = tools.find((tool) => tool.name === "flag_config_get");
+    const shape = objectShape(config?.inputSchema);
 
     expect(
       config?.inputSchema.safeParse({
@@ -161,6 +162,11 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
         flagId: "checkout",
       }).success,
     ).toBe(true);
+    expect((shape.appId as z.ZodTypeAny | undefined)?.description).toContain("App ID");
+    expect((shape.environmentId as z.ZodTypeAny | undefined)?.description).toContain(
+      "Environment ID",
+    );
+    expect((shape.flagId as z.ZodTypeAny | undefined)?.description).toContain("Flag ID");
   });
 
   it("derives the Organization create tool with a body-only input (SPL-171)", () => {

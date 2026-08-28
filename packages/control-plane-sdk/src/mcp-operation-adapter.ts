@@ -110,15 +110,14 @@ function scopedDelegationActor(
 
 function scopeTarget(kind: "org" | "app", id: unknown): string | null {
   if (typeof id !== "string") return null;
-  // An App slug cannot be matched against canonical app:<id>:<role>
-  // scopes until the Control Plane resolves it inside live membership. Preserve
-  // the actor's signed scopes for that one server-side decision; canonical IDs
-  // keep the existing exact-target narrowing.
-  if (kind === "app" && !id.startsWith("app_")) return null;
+  // An App slug may match any App authority the actor holds, but never Org
+  // authority. The Control Plane narrows that union after membership resolution.
+  if (kind === "app" && !id.startsWith("app_")) return "app:";
   return `${kind}:${id}:`;
 }
 
 function scopeMatchesTarget(scope: string, target: string): boolean {
+  if (target === "app:") return /^app:app_[^:]+:(owner|admin|member)$/.test(scope);
   const role = scope.slice(target.length);
   return scope.startsWith(target) && USER_ROLES.has(role);
 }

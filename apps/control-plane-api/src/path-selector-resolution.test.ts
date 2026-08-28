@@ -1,5 +1,5 @@
 import { createRepository } from "@splitch/db";
-import type { Principal, RateLimiter } from "@splitch/worker-runtime";
+import type { Principal } from "@splitch/worker-runtime";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app";
@@ -15,11 +15,7 @@ import {
 const USER = "user_selector";
 const APP_A = "app_selector_a";
 const APP_B = "app_selector_b";
-const allowLimiter: RateLimiter = () => ({ limited: false });
-
-beforeEach(async () => {
-  await resetOrganizationGraph(env.DB);
-});
+beforeEach(() => resetOrganizationGraph(env.DB));
 
 describe("authenticated control-plane path selectors", () => {
   it("returns the same Flag list by App ID or unique App key with one extra query", async () => {
@@ -58,6 +54,12 @@ describe("authenticated control-plane path selectors", () => {
       appId: APP_B,
       appKey: "neuron",
     });
+    await seedReachableApp(env.DB, {
+      orgId: "org_selector_scope_excluded",
+      orgSlug: "scope-excluded",
+      appId: "app_selector_scope_excluded",
+      appKey: "neuron",
+    });
     await seedHalfReachableApp(env.DB, {
       orgId: "org_selector_c",
       orgSlug: "charlie",
@@ -88,7 +90,9 @@ describe("authenticated control-plane path selectors", () => {
       },
     });
   });
+});
 
+describe("selector resolution failures and descendant selectors", () => {
   it("matches unknown-name and unknown-ID errors when either membership predicate fails", async () => {
     await seedHalfReachableApp(env.DB, {
       orgId: "org_selector_c",
@@ -170,7 +174,7 @@ describe("authenticated control-plane path selectors", () => {
     expect(byId.status).toBe(200);
     expect(byName.status).toBe(200);
     expect(await byName.json()).toEqual(await byId.json());
-    expect(nameQueries - idQueries).toBe(3);
+    expect(nameQueries - idQueries).toBe(2);
     expect(seen.at(-1)).toEqual({
       appId: APP_A,
       environmentId: "env_selector_prod",
@@ -213,7 +217,7 @@ function testApp(
 ) {
   return createApp({
     authResolver: async () => ({ ok: true, principal: actor }),
-    rateLimiter: allowLimiter,
+    rateLimiter: () => ({ limited: false }),
     repo,
     configStore: store,
   });

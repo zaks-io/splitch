@@ -152,7 +152,7 @@ describe("mcp operation adapter", () => {
     });
   });
 
-  it("preserves signed App scopes until a human App selector is resolved server-side", async () => {
+  it("delegates only signed App scopes until a human App selector is resolved", async () => {
     let forwardedRequest: Request | undefined;
     const adapter = createMcpOperationAdapter({
       baseUrl: "https://control-plane.test",
@@ -169,7 +169,7 @@ describe("mcp operation adapter", () => {
       {
         delegation: {
           subject: "user_mcp",
-          scopes: ["app:app_local:admin", "app:app_other:owner"],
+          scopes: ["app:app_local:admin", "app:app_other:owner", "org:org_unrelated:owner"],
           authDoor: "id_jag",
         },
       },

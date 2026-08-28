@@ -49,12 +49,13 @@ async function handleLiveUpdate(c: Context, deps: LiveUpdateDeps): Promise<Respo
       return renderError(rateLimited, { requestId, defaultHeaders: deps.defaultHeaders });
     }
 
-    const resolved = await resolveControlPlanePathSelectors(
-      deps.repo,
-      { params: { appId: requestedAppId, environmentId: requestedEnvironmentId } },
-      { appId: requestedAppId, environmentId: requestedEnvironmentId },
-      auth.principal,
-    );
+    const resolved = await resolveControlPlanePathSelectors(deps.repo, {
+      contract: { id: "live_updates" },
+      input: { params: { appId: requestedAppId, environmentId: requestedEnvironmentId } },
+      params: { appId: requestedAppId, environmentId: requestedEnvironmentId },
+      principal: auth.principal,
+      request,
+    });
     if (!resolved.ok) {
       return renderError(resolved.error, { requestId, defaultHeaders: deps.defaultHeaders });
     }

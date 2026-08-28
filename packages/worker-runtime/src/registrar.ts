@@ -118,8 +118,9 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
     }
 
     // Step 5: resolve authenticated path selectors, then enforce scopes against
-    // the canonical params. Resolution cannot run before authentication because
-    // membership is the tenant boundary for human-readable selectors.
+    // the canonical params. A resolver must reject a canonical App co-scope
+    // mismatch before its first repository read; a human App selector may perform
+    // one membership-bounded lookup before enforcing the resolved co-scope.
     const resolved = deps.authenticatedInputResolver
       ? await deps.authenticatedInputResolver({
           contract,

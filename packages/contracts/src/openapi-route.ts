@@ -233,16 +233,17 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
   };
 }
 
-/** App selectors can be ambiguous only on authenticated Control Plane routes. */
+/** Resolver errors are derived from the selector axes exposed by the route. */
 function selectorAwareErrors(input: DefineApiRouteInput): readonly ErrorCode[] {
-  if (
-    input.auth !== "control-plane-token" ||
-    !input.path.includes(":appId") ||
-    input.errors.includes("SELECTOR_AMBIGUOUS")
-  ) {
-    return input.errors;
+  if (input.auth !== "control-plane-token" || !input.path.includes(":appId")) return input.errors;
+  const errors = new Set(input.errors);
+  errors.add("APP_NOT_FOUND");
+  errors.add("SELECTOR_AMBIGUOUS");
+  if (input.path.includes(":environmentId") || input.path.includes(":targetEnvironmentId")) {
+    errors.add("APP_NOT_FOUND");
   }
-  return [...input.errors, "SELECTOR_AMBIGUOUS"];
+  if (input.path.includes(":flagId")) errors.add("FLAG_NOT_FOUND");
+  return [...errors];
 }
 
 export { z };

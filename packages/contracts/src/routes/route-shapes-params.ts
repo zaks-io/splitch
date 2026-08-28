@@ -1,0 +1,82 @@
+import { z } from "@hono/zod-openapi";
+import { ApprovalRequestIdSchema } from "../approval-identifiers";
+
+const AppSelectorSchema = z
+  .string()
+  .describe("Canonical App ID (app_...) or human-readable App slug.");
+const EnvironmentSelectorSchema = z
+  .string()
+  .describe("Canonical Environment ID (env_...) or human-readable Environment slug.");
+const FlagSelectorSchema = z
+  .string()
+  .describe("Canonical Flag ID (flag_...) or human-readable Flag slug.");
+
+export const OrgParams = z.object({ orgId: z.string() });
+export const OrgMemberParams = z.object({ orgId: z.string(), userId: z.string() });
+export const AppParams = z.object({ appId: AppSelectorSchema });
+export const FlagListQuerySchema = z
+  .object({ environmentId: z.string().min(1).optional() })
+  .strict();
+export const AppMemberParams = z.object({ appId: AppSelectorSchema, userId: z.string() });
+export const OrgAppsParams = z.object({ orgId: z.string() });
+export const EnvParams = z.object({
+  appId: AppSelectorSchema,
+  environmentId: EnvironmentSelectorSchema,
+});
+export const FlagParams = z.object({ appId: AppSelectorSchema, flagId: FlagSelectorSchema });
+
+/**
+ * Flag path segments accept canonical IDs or slugs. The resolver treats a
+ * canonical-looking value as an ID unless `by=key` explicitly selects the key
+ * collision, then hands one canonical ID to the handler (SPL-236/SPL-524).
+ */
+export const FlagGetQuerySchema = z.object({ by: z.enum(["id", "key"]).optional() }).strict();
+
+export const FlagVariantParams = z.object({
+  appId: AppSelectorSchema,
+  flagId: FlagSelectorSchema,
+  variantName: z.string(),
+});
+export const EnvFlagParams = z.object({
+  appId: AppSelectorSchema,
+  environmentId: EnvironmentSelectorSchema,
+  flagId: FlagSelectorSchema,
+});
+export const EnvFlagKeyParams = z.object({
+  appId: AppSelectorSchema,
+  environmentId: EnvironmentSelectorSchema,
+  flagKey: z.string(),
+});
+export const SegmentParams = z.object({ appId: AppSelectorSchema, segmentId: z.string() });
+export const MetricParams = z.object({ appId: AppSelectorSchema, metricId: z.string() });
+export const ExperimentParams = z.object({
+  appId: AppSelectorSchema,
+  environmentId: EnvironmentSelectorSchema,
+  experimentId: z.string(),
+});
+export const RunParams = z.object({
+  appId: AppSelectorSchema,
+  environmentId: EnvironmentSelectorSchema,
+  experimentId: z.string(),
+  runId: z.string(),
+});
+export const RunEndParams = z.object({
+  appId: AppSelectorSchema,
+  environmentId: EnvironmentSelectorSchema,
+  runId: z.string(),
+});
+export const ApiKeyParams = z.object({
+  appId: AppSelectorSchema,
+  environmentId: EnvironmentSelectorSchema,
+  keyId: z.string(),
+});
+export const PromoteParams = z.object({
+  appId: AppSelectorSchema,
+  targetEnvironmentId: EnvironmentSelectorSchema,
+  flagId: FlagSelectorSchema,
+});
+export const ApprovalRequestParams = z.object({
+  appId: AppSelectorSchema,
+  id: ApprovalRequestIdSchema,
+});
+export const PrivacyRequestParams = z.object({ requestId: z.string() });

@@ -1,6 +1,5 @@
 import { z } from "@hono/zod-openapi";
 import { ApiKeyScopeSchema } from "../api-key-scopes";
-import { ApprovalRequestIdSchema } from "../approval-identifiers";
 import { StoredClientKeyRateLimitRpsSchema } from "../client-key-rate-limit";
 import { OriginAllowlistSchema } from "../client-origin";
 import { PercentageRolloutSchema, TargetingRuleSchema } from "../leaf-schemas-flag";
@@ -19,6 +18,31 @@ import {
   InlineApproveAndApplyReviewSchema,
 } from "./route-shapes-approval-request";
 
+// biome-ignore lint/performance/noBarrelFile: route consumers keep one stable domain import while this file stays below the repository size limit
+export {
+  ApiKeyParams,
+  AppMemberParams,
+  AppParams,
+  ApprovalRequestParams,
+  EnvFlagKeyParams,
+  EnvFlagParams,
+  EnvParams,
+  ExperimentParams,
+  FlagGetQuerySchema,
+  FlagListQuerySchema,
+  FlagParams,
+  FlagVariantParams,
+  MetricParams,
+  OrgAppsParams,
+  OrgMemberParams,
+  OrgParams,
+  PrivacyRequestParams,
+  PromoteParams,
+  RunEndParams,
+  RunParams,
+  SegmentParams,
+} from "./route-shapes-params";
+
 /**
  * Path-param and route-local request/response shapes that have NO dedicated
  * resource envelope (members, environments, flag-config, promotion, privacy,
@@ -28,90 +52,6 @@ import {
  * Param schemas carry `.openapi()` examples so the generated document and MCP
  * tool inputs read well; the runtime guard only cares that the value is a string.
  */
-
-// ---------------------------------------------------------------------------
-// Reusable path params (camelCase to match the Hono `:appId` co-scope params
-// the worker-runtime guard reads — see worker-runtime/steps/scopes.ts).
-// ---------------------------------------------------------------------------
-
-export const OrgParams = z.object({ orgId: z.string() });
-export const OrgMemberParams = z.object({ orgId: z.string(), userId: z.string() });
-export const AppParams = z.object({ appId: z.string() });
-export const FlagListQuerySchema = z
-  .object({
-    environmentId: z.string().min(1).optional(),
-  })
-  .strict();
-export const AppMemberParams = z.object({ appId: z.string(), userId: z.string() });
-export const OrgAppsParams = z.object({ orgId: z.string() });
-export const EnvParams = z.object({ appId: z.string(), environmentId: z.string() });
-export const FlagParams = z.object({ appId: z.string(), flagId: z.string() });
-/**
- * `flags_get` path segment is always a selector string; `by` says how to resolve
- * it. Default `id` keeps the canonical-id lookup exact. `key` is the explicit
- * keyed read the Panel uses past the catalog list ceiling (SPL-236) — never
- * overload one segment with both meanings.
- */
-export const FlagGetQuerySchema = z
-  .object({
-    by: z.enum(["id", "key"]).optional(),
-  })
-  .strict();
-export const FlagVariantParams = z.object({
-  appId: z.string(),
-  flagId: z.string(),
-  variantName: z.string(),
-});
-export const EnvFlagParams = z.object({
-  appId: z.string(),
-  environmentId: z.string(),
-  flagId: z.string(),
-});
-/**
- * Data-plane resolution addresses a Flag by key, not by id: the edge reads a
- * KV entry keyed by `flagKey` and never sees the Flag definition table. Naming
- * the segment `flagKey` keeps the route, the CLI usage line, and the handler
- * saying the same thing — `flags test-eval <flag-id>` used to accept only a key
- * and report a passed id as FLAG_NOT_FOUND.
- */
-export const EnvFlagKeyParams = z.object({
-  appId: z.string(),
-  environmentId: z.string(),
-  flagKey: z.string(),
-});
-export const SegmentParams = z.object({ appId: z.string(), segmentId: z.string() });
-export const MetricParams = z.object({ appId: z.string(), metricId: z.string() });
-export const ExperimentParams = z.object({
-  appId: z.string(),
-  environmentId: z.string(),
-  experimentId: z.string(),
-});
-export const RunParams = z.object({
-  appId: z.string(),
-  environmentId: z.string(),
-  experimentId: z.string(),
-  runId: z.string(),
-});
-export const RunEndParams = z.object({
-  appId: z.string(),
-  environmentId: z.string(),
-  runId: z.string(),
-});
-export const ApiKeyParams = z.object({
-  appId: z.string(),
-  environmentId: z.string(),
-  keyId: z.string(),
-});
-export const PromoteParams = z.object({
-  appId: z.string(),
-  targetEnvironmentId: z.string(),
-  flagId: z.string(),
-});
-export const ApprovalRequestParams = z.object({
-  appId: z.string(),
-  id: ApprovalRequestIdSchema,
-});
-export const PrivacyRequestParams = z.object({ requestId: z.string() });
 
 // ---------------------------------------------------------------------------
 // Environment Policy (ADR-0029) — per-change-type allow/confirm map, inline on
