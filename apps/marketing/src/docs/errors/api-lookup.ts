@@ -57,6 +57,14 @@ export const lookupErrorDocs = {
     recommendedAction: "REVOKE_ACTIVE_INSTALLATION",
     related: ["SENTRY_INSTALLATION_NOT_FOUND", "IDEMPOTENCY_KEY_CONFLICT"],
   },
+  SELECTOR_AMBIGUOUS: {
+    remediation: "Choose the intended App from details.candidates and resend with its appId",
+    cause:
+      "The App slug matches more than one App across Organizations where the caller has membership.",
+    fix: "Use `details.candidates[].orgSlug` to choose the intended App, then resend the request with that candidate's canonical `appId`.",
+    details: "{ candidates: Array<{ orgSlug: string, appId: string, appSlug: string }> }",
+    related: ["APP_NOT_FOUND"],
+  },
 
   EXPERIMENT_NOT_FOUND: notFound(
     "Experiment",

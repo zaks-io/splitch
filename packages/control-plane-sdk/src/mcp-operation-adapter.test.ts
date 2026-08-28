@@ -152,6 +152,36 @@ describe("mcp operation adapter", () => {
     });
   });
 
+  it("preserves signed App scopes until a human App selector is resolved server-side", async () => {
+    let forwardedRequest: Request | undefined;
+    const adapter = createMcpOperationAdapter({
+      baseUrl: "https://control-plane.test",
+      delegationSecret: "d".repeat(32),
+      fetch: async (request) => {
+        forwardedRequest = request instanceof Request ? request : new Request(request);
+        return Response.json(flagPage);
+      },
+    });
+
+    await adapter.callOperationById(
+      "flags_list",
+      { appId: "neuron" },
+      {
+        delegation: {
+          subject: "user_mcp",
+          scopes: ["app:app_local:admin", "app:app_other:owner"],
+          authDoor: "id_jag",
+        },
+      },
+    );
+
+    await expect(delegatedActor(forwardedRequest, "control-plane-api")).resolves.toEqual({
+      subject: "user_mcp",
+      scopes: ["app:app_local:admin", "app:app_other:owner"],
+      authDoor: "id_jag",
+    });
+  });
+
   it("delegates only the selected Organization authority for Org operations", async () => {
     let forwardedRequest: Request | undefined;
     const adapter = createMcpOperationAdapter({

@@ -216,6 +216,14 @@ describe("route registry: per-route invariants", () => {
     }
   });
 
+  it("authenticated Control Plane App paths document selector ambiguity", () => {
+    for (const route of routeRegistry) {
+      if (route.auth === "control-plane-token" && route.path.includes(":appId")) {
+        expect(route.errors).toContain("SELECTOR_AMBIGUOUS");
+      }
+    }
+  });
+
   it("every auth/rateLimit/idempotency/method is a valid enum member", () => {
     const auths = new Set<string>(authKinds);
     const rates = new Set<string>(rateLimitClasses);

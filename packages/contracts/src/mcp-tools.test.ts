@@ -151,6 +151,18 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
     );
   });
 
+  it("accepts human App, Environment, and Flag selectors in derived tool input", () => {
+    const config = tools.find((tool) => tool.name === "flag_config_get");
+
+    expect(
+      config?.inputSchema.safeParse({
+        appId: "neuron",
+        environmentId: "production",
+        flagId: "checkout",
+      }).success,
+    ).toBe(true);
+  });
+
   it("derives the Organization create tool with a body-only input (SPL-171)", () => {
     const create = tools.find((tool) => tool.name === "organizations_create");
     const shape = objectShape(create?.inputSchema);

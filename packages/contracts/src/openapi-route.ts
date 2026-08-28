@@ -184,6 +184,7 @@ function buildOpenApiErrorResponses(codes: readonly ErrorCode[]) {
 }
 
 export function defineApiRoute<const Input extends DefineApiRouteInput>(input: Input) {
+  const errors = selectorAwareErrors(input);
   const contract = defineRoute({
     id: input.operationId,
     owner: input.owner,
@@ -196,7 +197,7 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
     rateLimit: input.rateLimit,
     idempotency: input.idempotency,
     rawBodyByteLimit: input.rawBodyByteLimit,
-    errors: input.errors,
+    errors,
   });
 
   return {
@@ -215,7 +216,7 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
           : {}),
       },
       responses: {
-        ...buildOpenApiErrorResponses(input.errors),
+        ...buildOpenApiErrorResponses(errors),
         200: {
           description: input.summary,
           content: { [JSON_CONTENT]: { schema: input.response } },
@@ -230,6 +231,18 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
       },
     } as const),
   };
+}
+
+/** App selectors can be ambiguous only on authenticated Control Plane routes. */
+function selectorAwareErrors(input: DefineApiRouteInput): readonly ErrorCode[] {
+  if (
+    input.auth !== "control-plane-token" ||
+    !input.path.includes(":appId") ||
+    input.errors.includes("SELECTOR_AMBIGUOUS")
+  ) {
+    return input.errors;
+  }
+  return [...input.errors, "SELECTOR_AMBIGUOUS"];
 }
 
 export { z };

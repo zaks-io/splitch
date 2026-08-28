@@ -212,6 +212,25 @@ const errorMembers = [
     }),
   ),
 
+  member(
+    "SELECTOR_AMBIGUOUS",
+    z
+      .object({
+        candidates: z
+          .array(
+            z
+              .object({
+                orgSlug: z.string().min(1),
+                appId: z.string().min(1),
+                appSlug: z.string().min(1),
+              })
+              .strict(),
+          )
+          .min(2),
+      })
+      .strict(),
+  ),
+
   ...conflictErrorMembers,
 
   member("EXPERIMENT_NOT_FOUND", EmptyDetails),

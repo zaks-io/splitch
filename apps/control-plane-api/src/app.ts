@@ -34,6 +34,7 @@ import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup
 import { mountLiveUpdateRoute } from "./live-updates";
 import { makeMetricSegmentHandlers } from "./metric-segment-handlers";
 import type { MemberProfileResolver } from "./org-handlers";
+import { makePathSelectorResolver } from "./path-selector-resolution";
 import { controlPlaneRoute } from "./routes";
 import type { SentryHandlerDeps } from "./sentry-handlers";
 import { mountSentryRoutes } from "./sentry-route-mounting";
@@ -93,6 +94,7 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
         : {}),
     },
     rateLimiter: deps.rateLimiter,
+    authenticatedInputResolver: makePathSelectorResolver(deps.repo),
     defaultHeaders: deps.defaultHeaders,
     observability: deps.observability,
   };

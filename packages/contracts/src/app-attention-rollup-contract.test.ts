@@ -73,6 +73,7 @@ describe("App attention rollup contract", () => {
   // or a new refusal added without one, fails that test.
   it("declares exactly the errors the attention rollup can return in its route metadata", () => {
     const declared = new Set(getRoute("app_attention_rollup_get")?.errors);
+    declared.delete("SELECTOR_AMBIGUOUS");
     const emittedByHandler = new Set([
       "APP_NOT_FOUND",
       "FORBIDDEN",
@@ -81,5 +82,9 @@ describe("App attention rollup contract", () => {
       "INTERNAL_SERVER_ERROR",
     ]);
     expect(declared).toEqual(emittedByHandler);
+  });
+
+  it("declares the authenticated App selector ambiguity emitted before the handler", () => {
+    expect(getRoute("app_attention_rollup_get")?.errors).toContain("SELECTOR_AMBIGUOUS");
   });
 });

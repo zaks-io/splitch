@@ -109,7 +109,13 @@ function scopedDelegationActor(
 }
 
 function scopeTarget(kind: "org" | "app", id: unknown): string | null {
-  return typeof id === "string" ? `${kind}:${id}:` : null;
+  if (typeof id !== "string") return null;
+  // A human App key cannot be matched against canonical app:<id>:<role>
+  // scopes until the Control Plane resolves it inside live membership. Preserve
+  // the actor's signed scopes for that one server-side decision; canonical IDs
+  // keep the existing exact-target narrowing.
+  if (kind === "app" && !id.startsWith("app_")) return null;
+  return `${kind}:${id}:`;
 }
 
 function scopeMatchesTarget(scope: string, target: string): boolean {

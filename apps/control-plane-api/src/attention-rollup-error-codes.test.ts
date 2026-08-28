@@ -41,6 +41,7 @@ describe("attention rollup handler emitted error codes", () => {
     );
 
     const declared = new Set(getRoute("app_attention_rollup_get")?.errors);
+    declared.delete("SELECTOR_AMBIGUOUS");
     expect(emitted).toEqual(declared);
   });
 });

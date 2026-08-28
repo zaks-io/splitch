@@ -11,7 +11,14 @@ export {
   delegatedRequest,
   notDelegatedResponse,
 } from "./delegation";
-export type { Observability, RegistrarDeps, ResolvableAuthKind } from "./deps";
+export type {
+  AuthenticatedInputResolution,
+  AuthenticatedInputResolver,
+  AuthenticatedInputResolverArgs,
+  Observability,
+  RegistrarDeps,
+  ResolvableAuthKind,
+} from "./deps";
 export { makeMcpDelegationAuthResolver } from "./mcp-delegation-auth";
 export type { McpDelegationReplayDurableObjectNamespace } from "./mcp-delegation-replay";
 export {

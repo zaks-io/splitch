@@ -140,6 +140,41 @@ describe("guard: scope + co-scope enforcement", () => {
   });
 });
 
+describe("guard: authenticated input resolution", () => {
+  it("enforces co-scope after substituting a resolver", async () => {
+    let handledInput: unknown;
+    const reg = createRegistrar(
+      deps({
+        authResolvers: {
+          "control-plane-token": resolverFor(
+            principal({ appId: null, scopes: ["app:app_1:owner"] }),
+          ),
+        },
+        authenticatedInputResolver: ({ input, params, principal: actor }) => ({
+          ok: true,
+          input: { ...(input as object), params: { ...params, appId: "app_1" } },
+          params: { ...params, appId: "app_1" },
+          principal: { ...actor, appId: "app_1" },
+        }),
+      }),
+    );
+    const app = new Hono();
+    reg.mount(
+      app,
+      route({ auth: "control-plane-token", method: "GET", path: "/apps/:appId/things" }),
+      ({ input }) => {
+        handledInput = input;
+        return Response.json({ ok: true });
+      },
+    );
+
+    const res = await app.request("/apps/neuron/things");
+
+    expect(res.status).toBe(200);
+    expect(handledInput).toMatchObject({ params: { appId: "app_1" } });
+  });
+});
+
 describe("guard: idempotency header validation", () => {
   it("rejects a required idempotency route with no key", async () => {
     const reg = createRegistrar(deps());
