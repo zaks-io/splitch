@@ -37,7 +37,7 @@ export function errorResponse(
   if (code === "INTERNAL_SERVER_ERROR") {
     return { code, message: "evaluation failed", details: {} };
   }
-  if (code === "SERVICE_UNAVAILABLE") {
+  if (code === "SERVICE_UNAVAILABLE" || code === "RATE_LIMITED") {
     return { code, message, details: { retryAfterMs: 1000 } };
   }
   return { code, message, details: {} } as ErrorResponse;

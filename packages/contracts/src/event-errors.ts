@@ -30,7 +30,7 @@ export const eventErrorMembers = [
   member("EVENT_DEFINITION_VERSION_NOT_FOUND", EmptyDetails),
   member(
     "EVENT_DEFINITION_UNPUBLISHED",
-    z.object({ eventDefinitionId: z.string(), eventName: z.string() }),
+    z.object({ eventDefinitionId: z.string().optional(), eventName: z.string() }),
   ),
   member(
     "EVENT_DEFINITION_IMMUTABLE",

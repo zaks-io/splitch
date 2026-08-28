@@ -41,16 +41,19 @@ export async function handleAuthorizedMetricEvent(
   const dedupKey = await sha256(
     `metric:${credential.appId}:${credential.environmentId}:${parsed.eventId}`,
   );
-  const replay = await replayExistingMetricEvent(env, parsed.eventId, dedupKey, fingerprint);
+  const disclosure = credential.credentialKind === "api_key" ? "trusted" : "public";
+  const replay = await replayExistingMetricEvent(
+    env,
+    parsed.eventId,
+    dedupKey,
+    fingerprint,
+    disclosure,
+  );
   if (replay) return replay;
 
   const hot = await loadDefinition(env, credential.appId, parsed.eventName);
   if (hot instanceof Response) return hot;
-  const mismatch = schemaMismatch(
-    parsed,
-    hot,
-    credential.credentialKind === "api_key" ? "trusted" : "public",
-  );
+  const mismatch = schemaMismatch(parsed, hot, disclosure);
   if (mismatch) return mismatch;
 
   return admitAndClaimMetricEvent(env, credential, parsed, {

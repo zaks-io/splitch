@@ -4,6 +4,8 @@ import type {
   CachedEvaluationTelemetry,
   EvaluateAllTransportRequest,
   EvaluateAllTransportResult,
+  TrackRequest,
+  TrackResult,
   Transport,
   TransportRequest,
   TransportResult,
@@ -108,6 +110,10 @@ export class FakeTransport implements Transport {
       );
     }
     return Promise.resolve(next);
+  }
+
+  track(_request: TrackRequest): Promise<TrackResult> {
+    throw new Error("FakeTransport: unexpected track call");
   }
 }
 

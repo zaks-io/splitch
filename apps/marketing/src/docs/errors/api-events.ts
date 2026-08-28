@@ -25,7 +25,7 @@ export const eventErrorDocs = {
     cause:
       "The Event Definition exists, but it has no published Version that can validate and stamp the Metric Event.",
     fix: "Publish an Event Definition Version with the intended Entity, field, and Dimension contract, then retry the Metric Event unchanged.",
-    details: "{ eventDefinitionId: string, eventName: string }",
+    details: "{ eventDefinitionId?: string, eventName: string }",
     related: ["EVENT_DEFINITION_NOT_FOUND", "EVENT_DEFINITION_IMMUTABLE", "EVENT_SCHEMA_MISMATCH"],
   },
   EVENT_DEFINITION_IMMUTABLE: {

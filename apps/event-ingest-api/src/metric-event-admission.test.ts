@@ -1,7 +1,7 @@
 import { EventDefinitionHotConfigSchema, MetricEventTrackRequestSchema } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { schemaMismatch } from "./metric-event-admission";
 import { hotConfig, metricEventBody } from "./metric-event.test-fixture";
+import { schemaMismatch } from "./metric-event-admission";
 
 const BOUNDED_AMOUNT = {
   fields: [
@@ -17,21 +17,30 @@ const BOUNDED_AMOUNT = {
   dimensions: [],
 } as const;
 
-describe("schemaMismatch disclosure", () => {
+describe("schemaMismatch public vs trusted", () => {
   it("omits Event Definition IDs, Entity types, and bounds from public responses", async () => {
-    const entity = await jsonOf(schemaMismatch(track({ idType: "workspace" }), hot(), "public"));
+    const silent = () => undefined;
+    const entity = await jsonOf(
+      schemaMismatch(track({ idType: "workspace" }), hot(), "public", silent),
+    );
     const bounds = await jsonOf(
       schemaMismatch(
         track({ fields: { amount: 5 }, dimensions: {} }),
         hot(BOUNDED_AMOUNT),
         "public",
+        silent,
       ),
     );
     const unknown = await jsonOf(
-      schemaMismatch(track({ fields: { converted: true, profile: "forbidden" } }), hot(), "public"),
+      schemaMismatch(
+        track({ fields: { converted: true, profile: "forbidden" } }),
+        hot(),
+        "public",
+        silent,
+      ),
     );
     const allowlist = await jsonOf(
-      schemaMismatch(track({ dimensions: { plan: "enterprise" } }), hot(), "public"),
+      schemaMismatch(track({ dimensions: { plan: "enterprise" } }), hot(), "public", silent),
     );
 
     expect([entity, bounds, unknown, allowlist]).toMatchInlineSnapshot(`
@@ -111,12 +120,16 @@ describe("schemaMismatch disclosure", () => {
   });
 
   it("keeps Event Definition diagnostics on the trusted path", async () => {
-    const entity = await jsonOf(schemaMismatch(track({ idType: "workspace" }), hot(), "trusted"));
+    const silent = () => undefined;
+    const entity = await jsonOf(
+      schemaMismatch(track({ idType: "workspace" }), hot(), "trusted", silent),
+    );
     const bounds = await jsonOf(
       schemaMismatch(
         track({ fields: { amount: 5 }, dimensions: {} }),
         hot(BOUNDED_AMOUNT),
         "trusted",
+        silent,
       ),
     );
 

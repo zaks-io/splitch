@@ -28,8 +28,8 @@ export const MetricEventTrackResponseSchema = z
     accepted: z.literal(true),
     duplicate: z.boolean(),
     eventId: MetricEventTrackRequestSchema.shape.eventId,
-    eventDefinitionId: z.string(),
-    eventDefinitionVersionId: z.string(),
+    eventDefinitionId: z.string().optional(),
+    eventDefinitionVersionId: z.string().optional(),
   })
   .strict();
 

@@ -12,8 +12,8 @@ import {
   metricEventBody,
   sendMetricEvent,
 } from "./metric-event.test-fixture";
-import { TestExecutionContext } from "./test-fixtures";
 import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
+import { TestExecutionContext } from "./test-fixtures";
 
 describe("Metric Event ingest", () => {
   it("accepts the Evaluation-authorized caller only through the binding entrypoint", async () => {
@@ -41,9 +41,10 @@ describe("Metric Event ingest", () => {
     const fixture = await makeMetricEventFixture();
     const first = await sendMetricEvent(fixture, metricEventBody());
     expect(first.status).toBe(202);
-    expect(await first.json()).toMatchObject({
+    expect(await first.json()).toEqual({
+      accepted: true,
       duplicate: false,
-      eventDefinitionVersionId: "edv_1",
+      eventId: "123e4567-e89b-42d3-a456-426614174000",
     });
 
     fixture.config.set(
@@ -52,9 +53,10 @@ describe("Metric Event ingest", () => {
     );
     const retry = await sendMetricEvent(fixture, metricEventBody());
     expect(retry.status).toBe(202);
-    expect(await retry.json()).toMatchObject({
+    expect(await retry.json()).toEqual({
+      accepted: true,
       duplicate: true,
-      eventDefinitionVersionId: "edv_1",
+      eventId: "123e4567-e89b-42d3-a456-426614174000",
     });
 
     const conflict = await sendMetricEvent(
@@ -130,9 +132,10 @@ describe("Metric Event ingest", () => {
     const retry = await sendMetricEvent(fixture, metricEventBody());
 
     expect(retry.status).toBe(202);
-    expect(await retry.json()).toMatchObject({
+    expect(await retry.json()).toEqual({
+      accepted: true,
       duplicate: true,
-      eventDefinitionVersionId: "edv_1",
+      eventId: "123e4567-e89b-42d3-a456-426614174000",
     });
     expect(fixture.claims.size).toBe(1);
     expect(fixture.admissionCharges).toHaveLength(1);
@@ -158,7 +161,9 @@ describe("Metric Event ingest", () => {
     expect(fixture.claims.size).toBe(0);
     expect(fixture.admissionCharges).toHaveLength(0);
   });
+});
 
+describe("Metric Event ingest request bounds", () => {
   it("rejects an oversized body from Content-Length before reading its stream", async () => {
     const fixture = await makeMetricEventFixture();
     const request = new Request("https://ingest.test/metric-events", {
@@ -178,107 +183,6 @@ describe("Metric Event ingest", () => {
 
     expect(response.status).toBe(400);
     expect(getReader).not.toHaveBeenCalled();
-  });
-});
-
-describe("Metric Event ingest Client Key disclosure", () => {
-  it("omits configured Entity type and Event Definition IDs from an idType mismatch", async () => {
-    const fixture = await makeMetricEventFixture();
-    const response = await sendMetricEvent(fixture, metricEventBody({ idType: "workspace" }));
-    const body = await response.json();
-    const raw = JSON.stringify(body);
-
-    expect(response.status).toBe(400);
-    expect(body).toEqual({
-      code: "ENTITY_TYPE_MISMATCH",
-      message: "Metric Event Entity type does not match the Event Definition Version",
-      details: { receivedIdType: "workspace" },
-    });
-    expect(raw).not.toContain("expectedIdType");
-    expect(raw).not.toContain("ed_signed_up");
-    expect(raw).not.toContain('"user"');
-  });
-
-  it("omits configured numeric bounds from a schema mismatch", async () => {
-    const fixture = await makeMetricEventFixture();
-    fixture.config.set(
-      eventDefinitionConfigKey(METRIC_APP_ID, METRIC_EVENT_NAME),
-      hotConfig("edv_1", 1, boundedAmountVersion()),
-    );
-    const response = await sendMetricEvent(
-      fixture,
-      metricEventBody({ fields: { amount: 5 }, dimensions: {} }),
-    );
-    const body = await response.json();
-    const raw = JSON.stringify(body);
-
-    expect(response.status).toBe(400);
-    expect(body).toEqual({
-      code: "EVENT_SCHEMA_MISMATCH",
-      message: "Metric Event does not match the Event Definition Version",
-      details: {
-        eventName: METRIC_EVENT_NAME,
-        issues: [{ path: ["fields", "amount"], message: "number is out of range" }],
-      },
-    });
-    expect(raw).not.toContain("edv_1");
-    expect(raw).not.toContain("at least");
-    expect(raw).not.toContain("10");
-    expect(raw).not.toContain("100");
-  });
-
-  it("omits configured allowlist values from a schema mismatch", async () => {
-    const fixture = await makeMetricEventFixture();
-    const response = await sendMetricEvent(
-      fixture,
-      metricEventBody({ dimensions: { plan: "enterprise" } }),
-    );
-    const body = await response.json();
-    const raw = JSON.stringify(body);
-
-    expect(response.status).toBe(400);
-    expect(body).toEqual({
-      code: "EVENT_SCHEMA_MISMATCH",
-      message: "Metric Event does not match the Event Definition Version",
-      details: {
-        eventName: METRIC_EVENT_NAME,
-        issues: [{ path: ["dimensions", "plan"], message: "value is not allowed" }],
-      },
-    });
-    expect(raw).not.toContain("edv_1");
-    expect(raw).not.toContain("pro");
-    expect(raw).not.toContain("free");
-  });
-
-  it("keeps Event Definition diagnostics on the API Key path", async () => {
-    const fixture = await makeMetricEventFixture({}, "api_key");
-    fixture.config.set(
-      eventDefinitionConfigKey(METRIC_APP_ID, METRIC_EVENT_NAME),
-      hotConfig("edv_1", 1, boundedAmountVersion()),
-    );
-
-    const entity = await sendMetricEvent(fixture, metricEventBody({ idType: "workspace" }));
-    expect(await entity.json()).toMatchObject({
-      code: "ENTITY_TYPE_MISMATCH",
-      details: {
-        expectedIdType: "user",
-        receivedIdType: "workspace",
-        eventDefinitionId: "ed_signed_up",
-      },
-    });
-
-    const bounds = await sendMetricEvent(
-      fixture,
-      metricEventBody({ fields: { amount: 5 }, dimensions: {} }),
-    );
-    expect(await bounds.json()).toMatchObject({
-      code: "EVENT_SCHEMA_MISMATCH",
-      details: {
-        eventName: METRIC_EVENT_NAME,
-        eventDefinitionVersionId: "edv_1",
-        issues: [{ path: ["fields", "amount"], message: "number must be at least 10" }],
-      },
-    });
   });
 });
 
@@ -302,20 +206,4 @@ describe("Metric Event ingest admission", () => {
 
 async function responseCode(response: Response): Promise<unknown> {
   return ((await response.json()) as { code?: unknown }).code;
-}
-
-function boundedAmountVersion() {
-  return {
-    fields: [
-      {
-        name: "amount",
-        type: "number",
-        required: true,
-        numberKind: "amount",
-        minimum: 10,
-        maximum: 100,
-      },
-    ],
-    dimensions: [],
-  };
 }
