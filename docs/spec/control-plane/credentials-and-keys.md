@@ -164,8 +164,12 @@ fire-and-forget — a leaked secret API Key is exactly the incident the threat m
 
 ## Edge abuse controls (Client Key) — Cloudflare-enforced (ADR-0034)
 
-All controls below are Cloudflare-native (WAF rate limiting, origin/referrer match, Turnstile). They are
-layered, not either/or: rate limiting bounds volume, origin/referrer bounds reach, Turnstile bounds bots.
+The target controls below are Cloudflare-native (WAF rate limiting, origin/referrer match, Turnstile).
+They are layered, not either/or: rate limiting bounds volume, origin/referrer bounds reach, Turnstile
+bounds bots. The current Cloudflare Free launch posture is narrower: Turnstile and the in-app controls
+remain required, while the live source-IP rule on exact path `/agent/identity` is only a short-window
+partial control. ADR-0034 records the verified rule and the paid WAF controls deferred until traffic
+justifies the plan cost.
 
 - **Per-Client-Key rate limit:** 100 rps default. `PATCH` accepts only the exact integers the
   Cloudflare 3000-token / 10s binding can enforce (`1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 25, 30, 50,
@@ -183,11 +187,12 @@ layered, not either/or: rate limiting bounds volume, origin/referrer bounds reac
   and how to fix it. The detail is safe to reveal (the caller already knows its own origin); it leaks
   no config, rules, or allocation. Where the WAF blocks before the Worker, the WAF response uses the
   same `ORIGIN_NOT_ALLOWED` code so both layers read identically (ADR-0036 fail-loud spirit).
-- **Public evaluate surface:** progressive WAF rate-limit rules (challenge before block) layered over the
-  per-key counter.
+- **Public evaluate surface:** the per-key counter is current; progressive WAF rate-limit rules
+  (challenge before block) are part of the deferred full WAF posture.
 - **Anonymous registration endpoint:** Cloudflare **Turnstile** (challenge before any row is created,
-  verified server-side via siteverify, single-use, 300s token) **plus** a **global** WAF rate limit, in
-  addition to the per-IP limit — per-IP alone is defeated by IP rotation (see [auth-doors.md](auth-doors.md)).
+  verified server-side via siteverify, single-use, 300s token), the in-app per-IP/global limiter, and the
+  current partial source-IP WAF rule. The authoritative one-hour cross-IP/global WAF ceiling remains
+  deferred; per-IP alone is defeated by IP rotation (see [auth-doors.md](auth-doors.md)).
 - **Peek is not a Client Key surface (ADR-0034):** `peekVariant` requires an API Key, not a Client Key —
   see [../sdk/exposure-accessor.md](../sdk/exposure-accessor.md). The Client Key's evaluation capability
   is Exposure-bearing `evaluate`.
@@ -203,7 +208,8 @@ layered, not either/or: rate limiting bounds volume, origin/referrer bounds reac
   data, and apply the same origin and rate-limit controls as evaluate. See
   [../pipeline/metric-event-contract.md](../pipeline/metric-event-contract.md) and
   [../sdk/web-analytics-capture.md](../sdk/web-analytics-capture.md).
-- Mechanism throughout: Cloudflare WAF / rate-limiting rules / Turnstile (ADR-0017, all-Cloudflare).
+- Target mechanism throughout: Cloudflare WAF / rate-limiting rules / Turnstile (ADR-0017,
+  all-Cloudflare). ADR-0034 distinguishes the partial Free-plan launch control from that full contract.
 
 ## Sources
 

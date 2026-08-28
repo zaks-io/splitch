@@ -67,10 +67,11 @@ token on the ID-JAG path. Every runtime target uses the RS256/JWKS trust contrac
    **write** surface that mints WorkOS users and D1 rows; per-IP rate limiting alone is defeated by IP
    rotation. Verify the Cloudflare Turnstile token server-side (siteverify; single-use; 300s expiry)
    before step 2. Reject on failure — no rows created.
-1. Rate-limit per source IP **and a global ceiling** (Cloudflare WAF; default: 10 provisional creates
-   per IP per hour, plus a global cap — placeholder **10,000 provisional creates/hour across all IPs** —
-   so IP rotation cannot make creation unbounded. The number is set deliberately high for launch and
-   tuned down against real traffic; the point is that the ceiling exists, not its exact value.)
+1. Rate-limit per source IP **and a global ceiling** in app (default: 10 provisional creates per IP per
+   hour, plus a coarse per-isolate cap of 10,000 provisional creates/hour). Cloudflare Free also applies
+   the verified short-window source-IP rule on exact path `/agent/identity`. It is not the authoritative
+   one-hour cross-IP/global ceiling: host/method scoping and that global WAF control remain deferred until
+   traffic justifies the paid plan (ADR-0034).
 2. Create WorkOS user (unverified email placeholder)
 3. Create provisional Org: `is_provisional = 1`, `demo_expires_at = now + 24h`
 4. Create provisional App under the Org (with a default Environment; Environment is per-App, ADR-0027)
