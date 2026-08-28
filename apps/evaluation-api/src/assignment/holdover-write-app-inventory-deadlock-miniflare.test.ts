@@ -11,7 +11,7 @@ import {
   DurableHoldoverWriteCoordinator,
   type HoldoverWriteOutboxNamespace,
 } from "./holdover-write-outbox";
-import { holdoverWriteOutboxName } from "./holdover-write-outbox-core";
+import { HOLDOVER_WRITE_MAX_ATTEMPTS, holdoverWriteOutboxName } from "./holdover-write-outbox-core";
 
 const PUT = {
   appId: "app-A",
@@ -32,7 +32,14 @@ afterEach(async () => {
 
 describe("HoldoverWriteAppInventoryDurableObject two-DO races", () => {
   it("settles cancel racing an Entity ensure after KV clear", async () => {
-    const runtime = await setup({ pauseCancelAfterKvDelete: true });
+    // The seeded job's retry alarm is due 1s after its failed put. The barrier
+    // waits below can outlast that on a loaded runner, so a single seeded
+    // failure lets the retry succeed and drain the outbox before the assertion.
+    // Failing every attempt keeps the job pending for the whole test window.
+    const runtime = await setup({
+      pauseCancelAfterKvDelete: true,
+      writerPutFailsRemaining: HOLDOVER_WRITE_MAX_ATTEMPTS,
+    });
     await runtime.inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000);
 
     const cancel = runtime.inventory.cancelDeletion(PUT.appId, GENERATION_ID);
@@ -88,6 +95,7 @@ async function setup(options: {
   pauseCancelAfterKvDelete?: boolean;
   pauseFinalizeAfterInventoryList?: boolean;
   missingSuppressionReadsRemaining?: number;
+  writerPutFailsRemaining?: number;
 }) {
   mf = await miniflareWithInventoryAndOutbox({
     registerFailsRemaining: 0,
