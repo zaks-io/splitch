@@ -2,28 +2,30 @@
  * Targeting-key hashing: the derived `targeting_key_hash` that durable Entity
  * stores use in place of the raw Targeting Key.
  *
- * Construction (docs/spec/platform/privacy-data-lifecycle.md / ADR-0044):
+ * Construction (docs/spec/platform/privacy-data-lifecycle.md, ADR-0044):
  *
  *   targeting_key_hash =
- *     epoch_id + ":" + HMAC_SHA256(app_entity_identity_key,
- *                                  id_type + ":" + targetingKey)
+ *     key_version + ":" + HMAC_SHA256(identity_key, id_type + ":" + targetingKey)
  *
- * The HMAC key is the persisted App identity key for the active epoch, not a
- * salt derived from the deployment root on every call. Historical `v1:` /
- * `local-v1:` prefixes stay pinned to the shared-root algorithm so retained
- * rows remain comparable. Leftover `app-v1:` hashes stay lookup-only.
+ * Current writes use that App's stored `app_entity_identity_key` and an
+ * explicit per-App epoch (`app-v1`, `app-v2`, …). Routine root/wrapper rotation
+ * rewraps the same key and keeps the same prefix and digest. Historical `v1:`
+ * and `local-v1:` prefixes stay pinned to the shared-root algorithm so retained
+ * rows remain comparable. A new epoch never reuses those prefixes. The version
+ * prefix is a non-secret routing label for export, deletion, and retry.
  *
  * WHY Web Crypto (crypto.subtle), not node:crypto: this runs on the Cloudflare
  * Worker edge runtime, which exposes the WebCrypto API and not Node's crypto.
  * subtle.sign is async, so the public API is async — callers await it.
  *
- * The output is `epoch_id:<hex digest>`. The raw Targeting Key is the HMAC
- * MESSAGE, never echoed. Export/delete recomputes every compatible hash for
- * the App so joins, retries, and deletion still find retained rows.
+ * The output is `key_version:<hex digest>`. The raw Targeting Key is the HMAC
+ * MESSAGE, never echoed: a digest is one-way, and the identity key is the secret,
+ * so the function cannot reproduce the input. Export/delete/retry recompute
+ * every retained epoch rather than remapping old rows onto the current hash.
  */
 
 import { hmacSha256Hex } from "./hmac";
-import type { KeyVersion, SaltBytes, SaltStore } from "./salt-store";
+import type { KeyVersion, SaltStore } from "./salt-store";
 
 function validateIdType(idType: string): void {
   if (idType.length === 0) {
@@ -67,36 +69,6 @@ export async function computeTargetingKeyHash(
   }
   const digest = await hmacSha256Hex(salt, targetingHashMessage(input.idType, input.targetingKey));
   return `${keyVersion}:${digest}`;
-}
-
-/** HMAC under caller-supplied key material and an explicit epoch prefix. */
-export async function hashTargetingKeyWithMaterial(
-  hmacKey: SaltBytes,
-  keyVersion: KeyVersion,
-  input: Pick<TargetingKeyHashInput, "idType" | "targetingKey">,
-): Promise<string> {
-  if (hmacKey.length === 0) {
-    throw new Error(`privacy: empty salt for version=${keyVersion}`);
-  }
-  const digest = await hmacSha256Hex(
-    hmacKey,
-    targetingHashMessage(input.idType, input.targetingKey),
-  );
-  return `${keyVersion}:${digest}`;
-}
-
-/**
- * Current write hash plus every retained-epoch hash that must still join or
- * retry. Plain SaltStore implementations return only the current hash.
- */
-export async function targetingKeyHashesForLookup(
-  store: SaltStore,
-  input: TargetingKeyHashInput,
-): Promise<string[]> {
-  if (typeof store.compatibleTargetingKeyHashes === "function") {
-    return store.compatibleTargetingKeyHashes(input);
-  }
-  return [await computeTargetingKeyHash(store, input)];
 }
 
 /** The salt version a hash was derived under (the prefix before the first `:`). */

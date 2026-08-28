@@ -1,9 +1,7 @@
 import {
   computeTargetingKeyHash,
   LOCAL_PRIVACY_SALT_FIXTURE,
-  makeMemoryIdentityKeyPersist,
-  makePersistedIdentitySaltStore,
-  mintAppIdentityEpoch,
+  makeMemoryAppIdentityStore,
 } from "@splitch/privacy";
 import { describe, expect, it } from "vitest";
 import { hashedAssignmentIdentity } from "./assignment/assignment-store";
@@ -11,7 +9,8 @@ import { makeEnvSaltStore } from "./local-salt-store";
 
 const ROOT = "test-root-secret-do-not-use";
 const TARGETING_KEY = "user-123";
-const HISTORICAL = "local-v1:485bdba84f840c9627db32bcc99a6f00722b5253754e513ff473c90a8febc588";
+const HISTORICAL_LOCAL =
+  "local-v1:485bdba84f840c9627db32bcc99a6f00722b5253754e513ff473c90a8febc588";
 
 describe("makeEnvSaltStore", () => {
   it("hashes the same Targeting Key identically within one App", async () => {
@@ -20,13 +19,13 @@ describe("makeEnvSaltStore", () => {
       SPLITCH_PLATFORM_TARGET: "production",
     });
     const input = { appId: "app_1", idType: "user", targetingKey: TARGETING_KEY };
-    expect(await computeTargetingKeyHash(store, input)).toBe(
-      await computeTargetingKeyHash(store, input),
-    );
-    expect(await computeTargetingKeyHash(store, input)).toBe(HISTORICAL);
+    const first = await computeTargetingKeyHash(store, input);
+    expect(await computeTargetingKeyHash(store, input)).toBe(first);
+    expect(first.startsWith("app-v1:")).toBe(true);
+    expect(first).not.toContain(TARGETING_KEY);
   });
 
-  it("bootstraps a shared-root compat epoch until each App identity key is minted", async () => {
+  it("hashes the same Targeting Key differently in two Apps under one deployment secret", async () => {
     const store = makeEnvSaltStore({
       EVALUATION_PRIVACY_SALT: ROOT,
       SPLITCH_PLATFORM_TARGET: "shared-preview",
@@ -41,47 +40,15 @@ describe("makeEnvSaltStore", () => {
       idType: "user",
       targetingKey: TARGETING_KEY,
     });
-    expect(appA.targetingKeyHash).toBe(HISTORICAL);
-    expect(appB.targetingKeyHash).toBe(HISTORICAL);
+    expect(appA.targetingKeyHash.startsWith("app-v1:")).toBe(true);
+    expect(appB.targetingKeyHash.startsWith("app-v1:")).toBe(true);
     expect(appA.entityKey).not.toBe(appB.entityKey);
-    expect(appA.targetingKeyHash).not.toContain(TARGETING_KEY);
-  });
-
-  it("isolates two Apps after minting independent identity keys under one KEK", async () => {
-    const persist = makeMemoryIdentityKeyPersist();
-    await mintAppIdentityEpoch({
-      persist,
-      appId: "app_1",
-      kekMaterial: ROOT,
-      epochId: "epoch-a",
-    });
-    await mintAppIdentityEpoch({
-      persist,
-      appId: "app_2",
-      kekMaterial: ROOT,
-      epochId: "epoch-b",
-    });
-    const store = makePersistedIdentitySaltStore({
-      persist,
-      rootSecret: ROOT,
-      currentKeyVersion: "local-v1",
-    });
-    const appA = await hashedAssignmentIdentity(store, {
-      appId: "app_1",
-      idType: "user",
-      targetingKey: TARGETING_KEY,
-    });
-    const appB = await hashedAssignmentIdentity(store, {
-      appId: "app_2",
-      idType: "user",
-      targetingKey: TARGETING_KEY,
-    });
     expect(appA.targetingKeyHash).not.toBe(appB.targetingKeyHash);
-    expect(appA.targetingKeyHash.startsWith("epoch-a:")).toBe(true);
-    expect(appB.targetingKeyHash.startsWith("epoch-b:")).toBe(true);
+    expect(appA.targetingKeyHash).not.toContain(TARGETING_KEY);
+    expect(appB.targetingKeyHash).not.toContain(TARGETING_KEY);
   });
 
-  it("keeps historical prefixes resolvable and rejects unknown versions", async () => {
+  it("keeps pinned historical versions distinct and rejects unknown versions", async () => {
     const store = makeEnvSaltStore({
       EVALUATION_PRIVACY_SALT: ROOT,
       SPLITCH_PLATFORM_TARGET: "production",
@@ -91,17 +58,15 @@ describe("makeEnvSaltStore", () => {
       idType: "user",
       targetingKey: TARGETING_KEY,
     });
-    expect(current).toBe(HISTORICAL);
-    const leftover = await computeTargetingKeyHash(store, {
+    expect(current.startsWith("app-v1:")).toBe(true);
+    const historical = await computeTargetingKeyHash(store, {
       appId: "app_1",
       idType: "user",
       targetingKey: TARGETING_KEY,
-      keyVersion: "app-v1",
+      keyVersion: "local-v1",
     });
-    expect(leftover).toBe(
-      "app-v1:45f18403be72b778d418f62c9a0283fc4ab44bee3bc6fba1a5927543e021c01a",
-    );
-    expect(leftover).not.toBe(current);
+    expect(historical).toBe(HISTORICAL_LOCAL);
+    expect(historical).not.toBe(current);
     await expect(
       computeTargetingKeyHash(store, {
         appId: "app_1",
@@ -112,27 +77,67 @@ describe("makeEnvSaltStore", () => {
     ).rejects.toThrow(/unknown salt version/);
   });
 
-  it("uses the committed local fixture only for explicit local and pr-ci targets", async () => {
-    const localStore = makeEnvSaltStore({ SPLITCH_PLATFORM_TARGET: "local" });
-    const prCiStore = makeEnvSaltStore({ SPLITCH_PLATFORM_TARGET: "pr-ci" });
+  it("uses the committed local fixture only for explicit local and pr-ci historical hashes", async () => {
+    const identityStore = makeMemoryAppIdentityStore();
+    const localStore = makeEnvSaltStore({
+      SPLITCH_PLATFORM_TARGET: "local",
+      identityStore,
+    });
+    const prCiStore = makeEnvSaltStore({
+      SPLITCH_PLATFORM_TARGET: "pr-ci",
+      identityStore,
+    });
     const configuredLocal = makeEnvSaltStore({
       EVALUATION_PRIVACY_SALT: LOCAL_PRIVACY_SALT_FIXTURE,
       SPLITCH_PLATFORM_TARGET: "local",
+      identityStore,
     });
     const input = { appId: "app_1", idType: "user", targetingKey: TARGETING_KEY };
-    const localHash = await computeTargetingKeyHash(localStore, input);
-    expect(localHash).toBe(await computeTargetingKeyHash(prCiStore, input));
-    expect(localHash).toBe(await computeTargetingKeyHash(configuredLocal, input));
-    expect(localHash.startsWith("local-v1:")).toBe(true);
-    expect(localHash).not.toBe(
+    const historical = { ...input, keyVersion: "local-v1" as const };
+    expect(await computeTargetingKeyHash(localStore, historical)).toBe(
+      await computeTargetingKeyHash(prCiStore, historical),
+    );
+    expect(await computeTargetingKeyHash(localStore, historical)).toBe(
+      await computeTargetingKeyHash(configuredLocal, historical),
+    );
+    expect(await computeTargetingKeyHash(localStore, input)).toBe(
+      await computeTargetingKeyHash(prCiStore, input),
+    );
+    expect(await computeTargetingKeyHash(localStore, historical)).not.toBe(
       await computeTargetingKeyHash(
         makeEnvSaltStore({
           EVALUATION_PRIVACY_SALT: ROOT,
           SPLITCH_PLATFORM_TARGET: "local",
         }),
-        input,
+        historical,
       ),
     );
+  });
+
+  it("persists the current App identity key in CONFIG_STORE across store instances", async () => {
+    const values = new Map<string, string>();
+    const configStore = {
+      async get(key: string) {
+        return values.get(key) ?? null;
+      },
+      async put(key: string, value: string) {
+        values.set(key, value);
+      },
+    };
+    const first = makeEnvSaltStore({
+      EVALUATION_PRIVACY_SALT: ROOT,
+      SPLITCH_PLATFORM_TARGET: "production",
+      CONFIG_STORE: configStore,
+    });
+    const input = { appId: "app_1", idType: "user", targetingKey: TARGETING_KEY };
+    const hash = await computeTargetingKeyHash(first, input);
+    const second = makeEnvSaltStore({
+      EVALUATION_PRIVACY_SALT: ROOT,
+      SPLITCH_PLATFORM_TARGET: "production",
+      CONFIG_STORE: configStore,
+    });
+    expect(await computeTargetingKeyHash(second, input)).toBe(hash);
+    expect(values.size).toBe(1);
   });
 
   it("fails closed when the platform target or hosted root salt is missing", () => {

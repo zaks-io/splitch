@@ -1,5 +1,5 @@
 /**
- * Salt-store seam for the App-scoped, versioned `app_privacy_salt`.
+ * Salt-store seam for App-scoped identity-key material.
  *
  * WHY an injected interface and not a concrete store: the secret salt material
  * lives outside this package (a Worker secret binding / KV / DO), and it MUST
@@ -27,25 +27,22 @@ export type SaltBytes = Uint8Array<ArrayBuffer>;
  */
 export interface SaltStore {
   /**
-   * The identity epoch to stamp on NEW hashes for this App. Routine KEK
-   * rotation must not change this value or the underlying identity key.
+   * The salt version to stamp on NEW hashes for this App (the latest active
+   * version). Lazy rotation means this can advance without rewriting old rows.
    */
   currentKeyVersion(appId: string): Promise<KeyVersion>;
 
   /**
-   * The HMAC key for `(appId, keyVersion)`. MUST throw if the version is
-   * unknown for the App — a wrong or empty key silently corrupts every derived
-   * hash and breaks export/delete matching.
+   * The raw secret salt bytes for `(appId, keyVersion)`. MUST throw if the
+   * version is unknown for the App — a wrong or empty salt silently corrupts
+   * every derived hash and breaks export/delete matching.
    */
   saltFor(appId: string, keyVersion: KeyVersion): Promise<SaltBytes>;
 
   /**
-   * Current write hash plus retained-epoch hashes that must still join, retry,
-   * export, or delete. Optional on test fakes that only have one epoch.
+   * Every identity epoch that still has retained durable rows for this App,
+   * oldest first. Export, deletion, Assignment holdover reads, and Metric Event
+   * retries must resolve all of these — not only the current write epoch.
    */
-  compatibleTargetingKeyHashes?(input: {
-    appId: string;
-    idType: string;
-    targetingKey: string;
-  }): Promise<string[]>;
+  retainedKeyVersions(appId: string): Promise<readonly KeyVersion[]>;
 }

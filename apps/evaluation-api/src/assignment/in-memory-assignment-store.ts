@@ -1,5 +1,5 @@
+import type { SaltStore } from "@splitch/privacy";
 import { assignmentKey } from "@splitch/contracts";
-import { targetingKeyHashesForLookup, type SaltStore } from "@splitch/privacy";
 import {
   type AssignmentPutInput,
   type AssignmentStore,
@@ -8,7 +8,10 @@ import {
   type HashedAssignmentPutInput,
   assignmentValueToMap,
   assignmentWriterName,
+  hashedAssignmentIdentity,
   mergeAssignmentValue,
+  mergeRetainedAssignmentValues,
+  retainedAssignmentIdentities,
 } from "./assignment-store";
 
 export class InMemoryAssignmentStore implements AssignmentStore {
@@ -22,13 +25,17 @@ export class InMemoryAssignmentStore implements AssignmentStore {
   constructor(private readonly saltStore: SaltStore) {}
 
   async getAll(input: Parameters<AssignmentStore["getAll"]>[0]) {
-    const { entityKey, assignments } = await this.resolveHoldover(input);
-    this.entityKeyNames.push(entityKey);
-    return assignmentValueToMap(assignments);
+    const identities = await retainedAssignmentIdentities(this.saltStore, input);
+    const values = [];
+    for (const { entityKey } of identities) {
+      this.entityKeyNames.push(entityKey);
+      values.push(this.entityValues.get(entityKey) ?? {});
+    }
+    return assignmentValueToMap(mergeRetainedAssignmentValues(values));
   }
 
   async put(input: AssignmentPutInput): Promise<AssignmentStorePutResult> {
-    const { targetingKeyHash } = await this.resolveHoldover(input);
+    const { targetingKeyHash } = await hashedAssignmentIdentity(this.saltStore, input);
     return this.putHashed({
       appId: input.appId,
       experimentId: input.experimentId,
@@ -67,25 +74,6 @@ export class InMemoryAssignmentStore implements AssignmentStore {
       );
       return { status: "stored", assignment };
     });
-  }
-
-  private async resolveHoldover(
-    input: AssignmentPutInput | Parameters<AssignmentStore["getAll"]>[0],
-  ) {
-    const hashes = await targetingKeyHashesForLookup(this.saltStore, input);
-    let fallback: { entityKey: string; targetingKeyHash: string } | undefined;
-    for (const targetingKeyHash of hashes) {
-      const entityKey = assignmentKey(input.appId, input.idType, targetingKeyHash);
-      const assignments = this.entityValues.get(entityKey);
-      if (assignments !== undefined && Object.keys(assignments).length > 0) {
-        return { entityKey, targetingKeyHash, assignments };
-      }
-      fallback ??= { entityKey, targetingKeyHash };
-    }
-    if (fallback === undefined) {
-      throw new Error("privacy: no Targeting Key hash for assignment identity");
-    }
-    return { ...fallback, assignments: {} };
   }
 
   private async withLock<T>(key: string, operation: () => Promise<T>): Promise<T> {

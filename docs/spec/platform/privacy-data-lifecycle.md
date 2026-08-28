@@ -10,10 +10,14 @@ acknowledged within 10 business days and answered within 45 calendar days, with 
 after notice. Opt-out and limit requests must be honored as soon as feasible, no later than 15 business
 days.
 
-**Implementation status:** the current `@splitch/privacy` package still emits version-prefixed hashes
-from a rotating salt store. Before Metric Event or Entity-identified Web Event implementation ships,
-it must migrate to the stable App Entity identity-key contract in ADR-0044. Until that refactor,
-cross-version identity joins and idempotent retries are not claimed.
+**Implementation status:** `@splitch/privacy` mints a random App `app_entity_identity_key` per
+identity epoch and keeps routine root/wrapper rotation from changing that key. Evaluation and Event
+Ingest persist wrapped epochs in CONFIG_STORE. Assignment holdover reads, Metric Event exact retries,
+export, deletion, and analysis joins resolve every retained epoch, including historical `v1:` and
+`local-v1:` shared-root prefixes. Durable rows still use a non-secret version prefix as a routing
+label; the HMAC key for current writes is the stored App identity key, not a root-derived salt.
+Destructive App-wide purge after compromise is specified here and in ADR-0044 but is not this
+slice. Control Plane Entity export/delete HTTP routes remain explicitly unavailable.
 
 ## Privacy roles
 
@@ -107,9 +111,10 @@ Rules:
   pseudonyms use the same key. No old-epoch identity-bearing row may remain.
 - The replacement key starts a new identity epoch only after every store-specific purge checkpoint
   passes. The App requires explicit credential re-issuance before Evaluation or ingest resumes.
-- Entity export/delete computes the one stable `targeting_key_hash` for the active identity epoch and
-  operates on all matches. Requests accepted before a destructive reset are completed by the
-  mandatory App-wide purge rather than by retaining old keys.
+- Entity export/delete computes the stable `targeting_key_hash` for the active identity epoch and
+  also recomputes every retained prior epoch, including historical `v1:` and `local-v1:` prefixes,
+  until those rows expire. Requests accepted before a destructive reset are completed by the
+  mandatory App-wide purge rather than by retaining old keys after that purge.
 - The raw Targeting Key is used in memory for `assign()`, Condition matching, or Metric/Web Event
   HMAC derivation, then discarded.
 - A customer-installed Convex Component may retain the raw Targeting Key and Evaluation Context only

@@ -20,6 +20,9 @@ function fakeStore(current: Record<string, KeyVersion>): SaltStore {
       if (salt === undefined) throw new Error(`no salt for ${appId}/${keyVersion}`);
       return new TextEncoder().encode(salt) as SaltBytes;
     },
+    async retainedKeyVersions(appId) {
+      return Object.keys(FAKE_SALTS[appId] ?? {});
+    },
   };
 }
 
@@ -115,6 +118,9 @@ describe("computeTargetingKeyHash", () => {
       },
       async saltFor() {
         return new Uint8Array() as SaltBytes;
+      },
+      async retainedKeyVersions() {
+        return ["v1"];
       },
     };
     await expect(

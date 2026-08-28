@@ -10,7 +10,10 @@ import {
   AssignmentStoreError,
   type AssignmentStoreLogger,
   type AssignmentStorePutResult,
-  resolveAssignmentHoldover,
+  hashedAssignmentIdentity,
+  mergeRetainedAssignmentValues,
+  readAssignmentValue,
+  retainedAssignmentIdentities,
 } from "./assignment-store";
 
 export interface AssignmentWriterNamespace {
@@ -31,22 +34,16 @@ export class KvAssignmentStore implements AssignmentStore {
   ) {}
 
   async getAll(input: AssignmentIdentity): Promise<Map<string, AssignmentStoreEntry>> {
-    const { assignments } = await resolveAssignmentHoldover(
-      this.kv,
-      this.saltStore,
-      input,
-      this.logger,
-    );
-    return assignmentValueToMap(assignments);
+    const identities = await retainedAssignmentIdentities(this.saltStore, input);
+    const values = [];
+    for (const { entityKey } of identities) {
+      values.push(await readAssignmentValue(this.kv, entityKey, this.logger));
+    }
+    return assignmentValueToMap(mergeRetainedAssignmentValues(values));
   }
 
   async put(input: AssignmentPutInput): Promise<AssignmentStorePutResult> {
-    const { targetingKeyHash } = await resolveAssignmentHoldover(
-      this.kv,
-      this.saltStore,
-      input,
-      this.logger,
-    );
+    const { targetingKeyHash } = await hashedAssignmentIdentity(this.saltStore, input);
     return this.putHashed({
       appId: input.appId,
       experimentId: input.experimentId,

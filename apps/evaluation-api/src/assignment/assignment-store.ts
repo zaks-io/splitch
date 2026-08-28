@@ -6,10 +6,14 @@ import {
   CURRENT_KV_SCHEMA_VERSION,
   kvEnvelope,
 } from "@splitch/contracts";
-import { targetingKeyHashesForLookup, type SaltStore } from "@splitch/privacy";
+import {
+  computeRetainedTargetingKeyHashes,
+  computeTargetingKeyHash,
+  type SaltStore,
+} from "@splitch/privacy";
 import { AssignmentStoreError } from "@splitch/evaluation-core";
 
-export type { AssignmentStoreEntry } from "@splitch/contracts";
+export type { AssignmentStoreEntry, AssignmentStoreValue } from "@splitch/contracts";
 
 export interface AssignmentIdentity {
   appId: string;
@@ -74,41 +78,41 @@ export async function hashedAssignmentIdentity(
   saltStore: SaltStore,
   input: AssignmentIdentity,
 ): Promise<{ entityKey: string; targetingKeyHash: string }> {
-  const hashes = await targetingKeyHashesForLookup(saltStore, input);
-  const targetingKeyHash = hashes[0];
-  if (targetingKeyHash === undefined) {
-    throw new AssignmentStoreError("privacy: no Targeting Key hash for assignment identity");
-  }
+  const targetingKeyHash = await computeTargetingKeyHash(saltStore, input);
   return {
     entityKey: assignmentKey(input.appId, input.idType, targetingKeyHash),
     targetingKeyHash,
   };
 }
 
-export async function resolveAssignmentHoldover(
-  kv: Pick<AssignmentKv, "get">,
+/**
+ * Current and every retained-epoch Assignment Store key for this Entity.
+ * Historical epochs come first so a holdover written before an identity-epoch
+ * transition wins over a later empty or duplicate current-epoch write.
+ */
+export async function retainedAssignmentIdentities(
   saltStore: SaltStore,
   input: AssignmentIdentity,
-  logger?: AssignmentStoreLogger,
-): Promise<{
-  entityKey: string;
-  targetingKeyHash: string;
-  assignments: AssignmentStoreValue;
-}> {
-  const hashes = await targetingKeyHashesForLookup(saltStore, input);
-  let fallback: { entityKey: string; targetingKeyHash: string } | undefined;
-  for (const targetingKeyHash of hashes) {
-    const entityKey = assignmentKey(input.appId, input.idType, targetingKeyHash);
-    const assignments = await readAssignmentValue(kv, entityKey, logger);
-    if (Object.keys(assignments).length > 0) {
-      return { entityKey, targetingKeyHash, assignments };
+): Promise<readonly { entityKey: string; targetingKeyHash: string }[]> {
+  const hashes = await computeRetainedTargetingKeyHashes(saltStore, input);
+  return hashes.map((targetingKeyHash) => ({
+    targetingKeyHash,
+    entityKey: assignmentKey(input.appId, input.idType, targetingKeyHash),
+  }));
+}
+
+export function mergeRetainedAssignmentValues(
+  values: readonly AssignmentStoreValue[],
+): AssignmentStoreValue {
+  const merged: AssignmentStoreValue = {};
+  for (const value of values) {
+    for (const [experimentId, entry] of Object.entries(value)) {
+      if (merged[experimentId] === undefined) {
+        merged[experimentId] = entry;
+      }
     }
-    fallback ??= { entityKey, targetingKeyHash };
   }
-  if (fallback === undefined) {
-    throw new AssignmentStoreError("privacy: no Targeting Key hash for assignment identity");
-  }
-  return { ...fallback, assignments: {} };
+  return merged;
 }
 
 export function assignmentWriterName(

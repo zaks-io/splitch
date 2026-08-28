@@ -1,4 +1,5 @@
 import { assignmentKey } from "@splitch/contracts";
+import { computeTargetingKeyHash, makeDerivedSaltStore } from "@splitch/privacy";
 import { describe, expect, it } from "vitest";
 import { serializeAssignmentValue } from "./assignment-store";
 import { AssignmentStoreWriter } from "./assignment-store-writer";
@@ -55,6 +56,32 @@ describe("InMemoryAssignmentStore", () => {
       assignment: { runId: "run-1", variant: "control" },
     });
     expect(store.policyCalls).toEqual([]);
+  });
+
+  it("keeps a retained local-v1 holdover visible after the App identity epoch starts", async () => {
+    const saltStore = makeDerivedSaltStore({ rootSecret: "test-root-secret-do-not-use" });
+    const store = new InMemoryAssignmentStore(saltStore);
+    const historicalHash = await computeTargetingKeyHash(saltStore, {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+      keyVersion: "local-v1",
+    });
+
+    await store.putHashed({
+      appId: basePut.appId,
+      experimentId: "exp-checkout",
+      idType: basePut.idType,
+      targetingKeyHash: historicalHash,
+      runId: "run-old",
+      variant: "control",
+    });
+    const holdovers = await store.getAll(basePut);
+
+    expect(holdovers).toEqual(
+      new Map([["exp-checkout", { runId: "run-old", variant: "control" }]]),
+    );
+    expect(store.entityKeyNames.join("|")).not.toContain(RAW_TARGETING_KEY);
   });
 });
 

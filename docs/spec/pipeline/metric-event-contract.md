@@ -129,7 +129,10 @@ attempts.
 - A retry with the same key and fingerprint is idempotent and returns `duplicate: true` with the
   originally accepted version; it does not re-validate against the current published version and
   does not append a second logical row.
-- Reusing the key with a different fingerprint returns `409 EVENT_ID_CONFLICT` and writes nothing.
+- An exact retry whose only change is that the current Targeting Key hash/version advanced still
+  matches if the stored fingerprint equals the payload hashed under any retained identity epoch.
+- Reusing the key with a fingerprint that matches no retained epoch returns `409 EVENT_ID_CONFLICT`
+  and writes nothing.
 
 At-least-once queue and Tinybird delivery may still produce duplicate physical rows. Tinybird does
 not enforce `dedup_key` uniqueness. Every Metric query reads the aggregate-state

@@ -42,15 +42,6 @@ export function eventDefinitionConfigKey(appId: string, eventName: string): stri
   return `app:${appId}:event-definition:${eventName}`;
 }
 
-/**
- * `app:{appId}:entity-identity` — wrapped `app_entity_identity_key` plus epoch
- * id (ADR-0044). Lives in CONFIG_STORE, outside Tinybird. The KEK is derived
- * from the deployment privacy root; wrapper rotation must not change the key.
- */
-export function appIdentityKeyRecordKey(appId: string): string {
-  return `app:${appId}:entity-identity`;
-}
-
 /** `live_run:{appId}:{environmentId}:{experimentId}` — explicit live Experiment Run pointer. */
 export function liveRunKey(appId: string, environmentId: string, experimentId: string): string {
   return `live_run:${appId}:${environmentId}:${experimentId}`;
@@ -97,4 +88,12 @@ export function memberProfileCacheKey(userId: string): string {
  */
 export function assignmentKey(appId: string, idType: string, targetingKeyHash: string): string {
   return `assignment:${appId}:${idType}:${targetingKeyHash}`;
+}
+
+/**
+ * `app:{appId}:entity-identity` — wrapped App `app_entity_identity_key` epochs
+ * (ADR-0044). Lives in CONFIG_STORE. The raw Targeting Key is never stored.
+ */
+export function appEntityIdentityKey(appId: string): string {
+  return `app:${appId}:entity-identity`;
 }

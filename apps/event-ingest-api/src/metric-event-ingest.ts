@@ -1,5 +1,4 @@
 import {
-  appIdentityKeyRecordKey,
   EventDefinitionHotConfigSchema,
   eventDefinitionConfigKey,
   isLocalPlatformTarget,
@@ -8,21 +7,20 @@ import {
   requirePlatformTarget,
 } from "@splitch/contracts";
 import {
-  INGEST_IDENTITY_EPOCH,
-  makeKvIdentityKeyPersist,
-  makeMemoryIdentityKeyPersist,
-  makePersistedIdentitySaltStore,
+  computeRetainedTargetingKeyHashes,
+  computeTargetingKeyHash,
+  makeIdentitySaltStore,
+  makeKvAppIdentityStore,
+  makeMemoryAppIdentityStore,
   resolvePrivacyRootSecret,
-  targetingKeyHashesForLookup,
 } from "@splitch/privacy";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
 import {
   admitAndClaimMetricEvent,
-  fingerprintMetricEvent,
+  canonicalJson,
   replayExistingMetricEvent,
   schemaMismatch,
-  sha256Prefixed,
 } from "./metric-event-admission";
 import { checkMetricEventRateLimit } from "./metric-event-rate-limit";
 import type { Env } from "./types";
@@ -40,42 +38,40 @@ export async function handleAuthorizedMetricEvent(
   const limited = await enforceCredentialRateLimit(env, credential);
   if (limited) return limited;
 
-  const hashes = await targetingKeyHashesForLookup(makeMetricEventSaltStore(env), {
+  const saltStore = makeMetricEventSaltStore(env);
+  const targetingKeyHash = await computeTargetingKeyHash(saltStore, {
     appId: credential.appId,
     idType: parsed.idType,
     targetingKey: parsed.targetingKey,
   });
-  const targetingKeyHash = hashes[0];
-  if (targetingKeyHash === undefined) {
-    return renderError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Metric Event identity hash is unavailable",
-      details: {},
-    });
-  }
-  const fingerprints = await Promise.all(
-    hashes.map((hash) =>
-      fingerprintMetricEvent({
-        eventName: parsed.eventName,
-        idType: parsed.idType,
-        targetingKeyHash: hash,
-        fields: parsed.fields,
-        dimensions: parsed.dimensions,
-      }),
-    ),
+  const fingerprint = await metricEventPayloadFingerprint({
+    eventName: parsed.eventName,
+    idType: parsed.idType,
+    targetingKeyHash,
+    fields: parsed.fields,
+    dimensions: parsed.dimensions,
+  });
+  const retainedFingerprints = await retainedMetricEventFingerprints(saltStore, {
+    appId: credential.appId,
+    eventName: parsed.eventName,
+    idType: parsed.idType,
+    targetingKey: parsed.targetingKey,
+    targetingKeyHash,
+    fields: parsed.fields,
+    dimensions: parsed.dimensions,
+  });
+  const dedupKey = await metricEventDedupKey(
+    credential.appId,
+    credential.environmentId,
+    parsed.eventId,
   );
-  const fingerprint = fingerprints[0];
-  if (fingerprint === undefined) {
-    return renderError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Metric Event identity hash is unavailable",
-      details: {},
-    });
-  }
-  const dedupKey = await sha256Prefixed(
-    `metric:${credential.appId}:${credential.environmentId}:${parsed.eventId}`,
+  const replay = await replayExistingMetricEvent(
+    env,
+    parsed.eventId,
+    dedupKey,
+    fingerprint,
+    retainedFingerprints,
   );
-  const replay = await replayExistingMetricEvent(env, parsed.eventId, dedupKey, fingerprints);
   if (replay) return replay;
 
   const hot = await loadDefinition(env, credential.appId, parsed.eventName);
@@ -212,16 +208,83 @@ export function makeMetricEventSaltStore(env: Env) {
     configuredSalt: env.EVALUATION_PRIVACY_SALT,
     localFixtureAllowed: isLocalPlatformTarget(target),
   });
-  const persist = env.CONFIG_STORE
-    ? makeKvIdentityKeyPersist(env.CONFIG_STORE, appIdentityKeyRecordKey)
-    : makeMemoryIdentityKeyPersist();
-  return makePersistedIdentitySaltStore({
-    persist,
-    rootSecret,
-    currentKeyVersion: INGEST_IDENTITY_EPOCH,
+  const configStore = env.CONFIG_STORE;
+  const identityStore = configStore
+    ? makeKvAppIdentityStore({
+        kv: {
+          get: async (key) => (await configStore.get(key, "text")) ?? null,
+          put: (key, value) => configStore.put(key, value),
+        },
+        rootSecret,
+      })
+    : makeMemoryAppIdentityStore();
+  return makeIdentitySaltStore({ rootSecret, identityStore });
+}
+
+export async function metricEventDedupKey(
+  appId: string,
+  environmentId: string,
+  eventId: string,
+): Promise<string> {
+  return sha256(`metric:${appId}:${environmentId}:${eventId}`);
+}
+
+export async function metricEventPayloadFingerprint(input: {
+  eventName: string;
+  idType: string;
+  targetingKeyHash: string;
+  fields: unknown;
+  dimensions: unknown;
+}): Promise<string> {
+  return sha256(
+    canonicalJson({
+      eventName: input.eventName,
+      idType: input.idType,
+      targetingKeyHash: input.targetingKeyHash,
+      fields: input.fields,
+      dimensions: input.dimensions,
+    }),
+  );
+}
+
+async function retainedMetricEventFingerprints(
+  saltStore: ReturnType<typeof makeMetricEventSaltStore>,
+  input: {
+    appId: string;
+    eventName: string;
+    idType: string;
+    targetingKey: string;
+    targetingKeyHash: string;
+    fields: unknown;
+    dimensions: unknown;
+  },
+): Promise<readonly string[]> {
+  const hashes = await computeRetainedTargetingKeyHashes(saltStore, {
+    appId: input.appId,
+    idType: input.idType,
+    targetingKey: input.targetingKey,
   });
+  const fingerprints = [];
+  for (const hash of hashes) {
+    if (hash === input.targetingKeyHash) continue;
+    fingerprints.push(
+      await metricEventPayloadFingerprint({
+        eventName: input.eventName,
+        idType: input.idType,
+        targetingKeyHash: hash,
+        fields: input.fields,
+        dimensions: input.dimensions,
+      }),
+    );
+  }
+  return fingerprints;
 }
 
 function validation(message: string, path: string[]) {
   return { code: "VALIDATION_ERROR" as const, message, details: { issues: [{ path, message }] } };
+}
+
+async function sha256(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return `sha256:${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }

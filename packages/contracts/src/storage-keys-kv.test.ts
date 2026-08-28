@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   apiKeyCacheKey,
-  appIdentityKeyRecordKey,
+  appEntityIdentityKey,
   assignmentKey,
   clientKeyCacheKey,
   credentialRevocationCacheKey,
@@ -56,12 +56,6 @@ describe("member profile identity-cache key", () => {
   });
 });
 
-describe("App identity-key record (ADR-0044)", () => {
-  it("appIdentityKeyRecordKey produces app:{appId}:entity-identity", () => {
-    expect(appIdentityKeyRecordKey("app_1")).toBe("app:app_1:entity-identity");
-  });
-});
-
 describe("assignment key-pattern constructor (per-Entity, ADR-0008/0009)", () => {
   it("produces assignment:{appId}:{idType}:{targetingKeyHash}", () => {
     expect(assignmentKey("app_1", "user", "hash_xyz")).toBe("assignment:app_1:user:hash_xyz");
@@ -78,5 +72,11 @@ describe("assignment key-pattern constructor (per-Entity, ADR-0008/0009)", () =>
   it("does not embed a raw Targeting Key — only the supplied hash appears", () => {
     const key = assignmentKey("app_1", "user", "hash_of_user_42");
     expect(key.endsWith(":hash_of_user_42")).toBe(true);
+  });
+});
+
+describe("App entity identity key", () => {
+  it("produces app:{appId}:entity-identity", () => {
+    expect(appEntityIdentityKey("app_1")).toBe("app:app_1:entity-identity");
   });
 });

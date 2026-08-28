@@ -1,145 +1,140 @@
 /**
- * SaltStore backed by a persisted per-App identity key (ADR-0044).
+ * SaltStore backed by one deployment root secret plus per-App identity epochs.
  *
- * Bootstrap wraps the historical shared-root HMAC key so retained `v1:` and
- * `local-v1:` rows stay comparable. Current writes use that persisted key, not
- * a root-derived salt recomputed on every call. Leftover `app-v1` hashes from
- * the rejected derived-epoch cutover stay resolvable for lookup only.
+ * Current-epoch HMAC keys are random `app_entity_identity_key` values stored
+ * (and rewrapped) per App. Historical shared-root versions stay resolvable so
+ * retained `v1:` / `local-v1:` rows remain comparable. The root is never the
+ * current Targeting Key HMAC key.
  */
 
-import { deriveAppPrivacySalt } from "./derive-app-salt";
+import { isAppIdentityKeyVersion } from "./app-identity-key";
 import {
-  computeTargetingKeyHash,
-  hashTargetingKeyWithMaterial,
-  type TargetingKeyHashInput,
-} from "./hash";
+  type AppIdentityRecord,
+  type AppIdentityStore,
+  makeMemoryAppIdentityStore,
+  mintInitialAppIdentityRecord,
+} from "./app-identity-store";
 import { utf8Bytes } from "./hmac";
-import {
-  type IdentityKeyPersist,
-  loadOrBootstrapAppIdentityKey,
-  makeMemoryIdentityKeyPersist,
-} from "./identity-key-persist";
 import type { KeyVersion, SaltBytes, SaltStore } from "./salt-store";
 
-/** Evaluation write-path epoch. Matches retained Assignment / Exposure prefixes. */
-export const EVALUATION_IDENTITY_EPOCH: KeyVersion = "local-v1";
+/** Current write-path identity epoch label for a newly minted App. */
+export const DEFAULT_PRIVACY_KEY_VERSION: KeyVersion = "app-v1";
 
-/** Event Ingest write-path epoch. Matches retained Metric Event prefixes. */
-export const INGEST_IDENTITY_EPOCH: KeyVersion = "v1";
-
-/** Leftover derived-epoch prefix. Lookup only; never a new write epoch. */
-export const LEFTOVER_APP_DERIVED_KEY_VERSION: KeyVersion = "app-v1";
-
-/** Shared-root prefixes whose HMAC key is the raw deployment root. */
+/**
+ * Pre-App-identity prefixes. HMAC key material is the raw root secret so
+ * retained Evaluation (`local-v1:`) and Metric Event (`v1:`) rows stay
+ * recomputable. Current writes must not emit these prefixes.
+ */
 export const HISTORICAL_SHARED_ROOT_KEY_VERSIONS = ["local-v1", "v1"] as const;
 
 /** Committed local/pr-ci fixture. Never a hosted fallback. */
 export const LOCAL_PRIVACY_SALT_FIXTURE = "splitch-local-evaluation-salt";
 
-export interface IdentitySaltStore extends SaltStore {
-  compatibleTargetingKeyHashes(input: TargetingKeyHashInput): Promise<string[]>;
+export interface IdentitySaltStoreOptions {
+  rootSecret: string | SaltBytes;
+  identityStore: AppIdentityStore;
+  /**
+   * Extra allowlist. Defaults to historical shared-root prefixes plus every
+   * stored App epoch. Unknown versions still fail loud.
+   */
+  allowedKeyVersions?: readonly KeyVersion[];
 }
 
-export interface PersistedIdentitySaltStoreOptions {
-  persist: IdentityKeyPersist;
-  rootSecret: string;
-  currentKeyVersion: KeyVersion;
+export interface DerivedSaltStoreOptions {
+  rootSecret: string | SaltBytes;
+  identityStore?: AppIdentityStore;
+  /**
+   * Rejected when it names a historical shared-root prefix. The live current
+   * version comes from the App identity record, not this option.
+   */
+  currentKeyVersion?: KeyVersion;
+  allowedKeyVersions?: readonly KeyVersion[];
 }
 
 export function isHistoricalSharedRootKeyVersion(keyVersion: KeyVersion): boolean {
   return (HISTORICAL_SHARED_ROOT_KEY_VERSIONS as readonly string[]).includes(keyVersion);
 }
 
-function rootSecretBytes(rootSecret: string): SaltBytes {
+function rootSecretBytes(rootSecret: string | SaltBytes): SaltBytes {
+  if (typeof rootSecret === "string") {
+    if (rootSecret.length === 0) {
+      throw new Error("privacy: empty root privacy secret");
+    }
+    return utf8Bytes(rootSecret);
+  }
   if (rootSecret.length === 0) {
     throw new Error("privacy: empty root privacy secret");
   }
-  return utf8Bytes(rootSecret);
+  return rootSecret;
 }
 
-function uniqueHashes(hashes: readonly string[]): string[] {
-  return [...new Set(hashes)];
-}
+export function makeIdentitySaltStore(options: IdentitySaltStoreOptions): SaltStore {
+  const allowed = options.allowedKeyVersions ? new Set(options.allowedKeyVersions) : null;
+  const rootSecret = options.rootSecret;
+  const identityStore = options.identityStore;
 
-export function makePersistedIdentitySaltStore(
-  options: PersistedIdentitySaltStoreOptions,
-): IdentitySaltStore {
-  if (options.rootSecret.length === 0) {
-    throw new Error("privacy: empty root privacy secret");
+  function assertAllowed(keyVersion: KeyVersion): void {
+    if (allowed && !allowed.has(keyVersion)) {
+      throw new Error(`privacy: unknown salt version ${keyVersion}`);
+    }
   }
-  if (options.currentKeyVersion.length === 0 || options.currentKeyVersion.includes(":")) {
-    throw new Error("privacy: invalid current identity epoch");
+
+  async function ensureCurrent(appId: string): Promise<AppIdentityRecord> {
+    const existing = await identityStore.load(appId);
+    if (existing) return existing;
+    const minted = mintInitialAppIdentityRecord();
+    await identityStore.save(appId, minted);
+    const stored = await identityStore.load(appId);
+    return stored ?? minted;
   }
-  const cache = new Map<string, { epochId: string; identityKey: SaltBytes }>();
 
-  const resolveIdentity = async (appId: string) => {
-    const cached = cache.get(appId);
-    if (cached) return cached;
-    const loaded = await loadOrBootstrapAppIdentityKey({
-      persist: options.persist,
-      appId,
-      kekMaterial: options.rootSecret,
-      epochId: options.currentKeyVersion,
-    });
-    cache.set(appId, loaded);
-    return loaded;
-  };
-
-  const store: IdentitySaltStore = {
+  return {
     async currentKeyVersion(appId) {
-      return (await resolveIdentity(appId)).epochId;
+      return (await ensureCurrent(appId)).currentVersion;
     },
     async saltFor(appId, keyVersion) {
-      if (keyVersion === LEFTOVER_APP_DERIVED_KEY_VERSION) {
-        return deriveAppPrivacySalt({
-          rootSecret: options.rootSecret,
-          appId,
-          keyVersion,
-        });
-      }
+      assertAllowed(keyVersion);
       if (isHistoricalSharedRootKeyVersion(keyVersion)) {
-        const identity = await resolveIdentity(appId);
-        return identity.epochId === keyVersion
-          ? identity.identityKey
-          : rootSecretBytes(options.rootSecret);
+        return rootSecretBytes(rootSecret);
       }
-      const identity = await resolveIdentity(appId);
-      if (identity.epochId !== keyVersion) {
+      if (!isAppIdentityKeyVersion(keyVersion)) {
         throw new Error(`privacy: unknown salt version ${keyVersion}`);
       }
-      return identity.identityKey;
+      const loaded = await identityStore.load(appId);
+      const record = loaded ?? (await ensureCurrent(appId));
+      const epoch = record.epochs.find((candidate) => candidate.version === keyVersion);
+      if (!epoch) {
+        throw new Error(`privacy: unknown salt version ${keyVersion}`);
+      }
+      return epoch.key;
     },
-    async compatibleTargetingKeyHashes(input) {
-      const current = await computeTargetingKeyHash(store, input);
-      const rootKey = rootSecretBytes(options.rootSecret);
-      const historical = await Promise.all(
-        HISTORICAL_SHARED_ROOT_KEY_VERSIONS.map((version) =>
-          hashTargetingKeyWithMaterial(rootKey, version, input),
-        ),
-      );
-      const leftover = await hashTargetingKeyWithMaterial(
-        await deriveAppPrivacySalt({
-          rootSecret: options.rootSecret,
-          appId: input.appId,
-          keyVersion: LEFTOVER_APP_DERIVED_KEY_VERSION,
-        }),
-        LEFTOVER_APP_DERIVED_KEY_VERSION,
-        input,
-      );
-      return uniqueHashes([current, ...historical, leftover]);
+    async retainedKeyVersions(appId) {
+      const loaded = await identityStore.load(appId);
+      const appVersions = loaded === null ? [] : loaded.epochs.map((epoch) => epoch.version);
+      const versions = [...HISTORICAL_SHARED_ROOT_KEY_VERSIONS, ...appVersions];
+      return allowed ? versions.filter((version) => allowed.has(version)) : versions;
     },
   };
-  return store;
 }
 
-export function makeMemoryIdentitySaltStore(options: {
-  rootSecret: string;
-  currentKeyVersion: KeyVersion;
-}): IdentitySaltStore {
-  return makePersistedIdentitySaltStore({
-    persist: makeMemoryIdentityKeyPersist(),
+/**
+ * Convenience store with an isolated in-memory identity map. Each call mints
+ * independent random App keys. Share an `identityStore` (or a KV adapter) when
+ * two store instances must see the same epochs.
+ */
+export function makeDerivedSaltStore(options: DerivedSaltStoreOptions): SaltStore {
+  if (
+    options.currentKeyVersion !== undefined &&
+    isHistoricalSharedRootKeyVersion(options.currentKeyVersion)
+  ) {
+    throw new Error(
+      `privacy: currentKeyVersion ${options.currentKeyVersion} is a historical shared-root epoch`,
+    );
+  }
+  return makeIdentitySaltStore({
     rootSecret: options.rootSecret,
-    currentKeyVersion: options.currentKeyVersion,
+    identityStore: options.identityStore ?? makeMemoryAppIdentityStore(),
+    allowedKeyVersions: options.allowedKeyVersions,
   });
 }
 

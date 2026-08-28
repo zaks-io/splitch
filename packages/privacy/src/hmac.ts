@@ -1,6 +1,6 @@
 /**
- * WebCrypto HMAC-SHA256 helpers shared by Targeting Key hashing and App salt
- * derivation. The Worker edge exposes subtle, not node:crypto.
+ * WebCrypto HMAC-SHA256 helpers shared by Targeting Key hashing and App
+ * identity-key wrap. The Worker edge exposes subtle, not node:crypto.
  */
 
 import type { SaltBytes } from "./salt-store";
@@ -21,14 +21,21 @@ export function toHex(buffer: ArrayBuffer | Uint8Array): string {
   return hex;
 }
 
+export function fromHex(hex: string): Uint8Array<ArrayBuffer> {
+  if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/u.test(hex)) {
+    throw new Error("privacy: malformed hex");
+  }
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes as Uint8Array<ArrayBuffer>;
+}
+
 export async function hmacSha256Hex(key: SaltBytes, message: string): Promise<string> {
   return toHex(await hmacSha256(key, message));
 }
 
 export function utf8Bytes(value: string): SaltBytes {
   return new TextEncoder().encode(value) as SaltBytes;
-}
-
-export async function sha256Bytes(data: BufferSource): Promise<SaltBytes> {
-  return new Uint8Array(await crypto.subtle.digest("SHA-256", data)) as SaltBytes;
 }

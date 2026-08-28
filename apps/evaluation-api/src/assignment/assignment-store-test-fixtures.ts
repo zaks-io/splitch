@@ -31,6 +31,10 @@ export class StaticSaltStore implements SaltStore {
     }
     return Promise.resolve(salt);
   }
+
+  retainedKeyVersions(): Promise<readonly string[]> {
+    return Promise.resolve(["v1"]);
+  }
 }
 
 export class RecordingKv implements AssignmentKv {
