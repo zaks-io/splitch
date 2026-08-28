@@ -12,6 +12,7 @@ import {
   PersistedNameSchema,
   persistedArray,
 } from "../persisted-field-limits";
+import { SlugSchema } from "../slug";
 import { TargetingRuleInputSchema, WriteConditionSchema } from "../write-persisted-schemas";
 import {
   ApprovalRequestSchema,
@@ -119,7 +120,7 @@ export const PrivacyRequestParams = z.object({ requestId: z.string() });
 
 export const CreateEnvironmentRequestSchema = z
   .object({
-    key: PersistedNameSchema,
+    key: SlugSchema,
     name: PersistedNameSchema.optional(),
     policy: EnvironmentPolicySchema.optional(),
   })
