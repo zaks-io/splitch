@@ -153,9 +153,10 @@ These are the proofs the implementing slice must write, verbatim:
    ADR-0048 amplification bound) — analysis denominators are unchanged under either path, and
    pipeline first-touch (ADR-0005) remains the analytical authority if a concurrent race dual-appends.
 4. **Expiry**: an expired ticket is rejected loud, never silently dropped.
-5. **No amplification**: max 25 items / 32 KiB per request; per-key WAF rate limits apply as on
-   every Client Key surface (ADR-0034, ADR-0040 posture: fail closed on malformed identity, origin,
-   and rate violations).
+5. **No amplification**: max 25 items / 32 KiB per request; current per-key application rate limits
+   apply as on every Client Key surface. The paid per-credential WAF header counter remains
+   target-state debt (ADR-0034, ADR-0040 posture: fail closed on malformed identity, origin, and rate
+   violations).
 
 ## Billing
 

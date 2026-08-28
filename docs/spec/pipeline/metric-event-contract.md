@@ -50,9 +50,11 @@ Both SDK credential classes may call the route:
   Event Definitions, Metric Events, Metrics, or configuration.
 - An API Key may call `track` through its existing `data-plane:write` capability.
 
-The Event Ingest Worker resolves `app_id` and `environment_id` from the validated credential. A
-request cannot override either scope. Client Key requests pass the same origin/referrer allow-list
-and per-key rate limit as evaluation requests before Worker dispatch.
+The Evaluation Worker resolves `app_id` and `environment_id` from the validated credential and
+enforces the Client Key origin/referrer allow-list in `data-plane-auth.ts`. Its shared registrar then
+applies the per-credential Cloudflare Workers Rate Limiting binding before delegating the request to
+Event Ingest. A request cannot override either scope. The live Cloudflare Free WAF rule covers only
+exact path `/agent/identity`; broader paid WAF enforcement remains deferred under ADR-0034.
 
 New canonical Metric Event rows must also pass the aggregate Ingest Admission Gate for
 `(app_id, environment_id, metric_events)`, charged by row count and serialized queue-payload bytes.
@@ -64,44 +66,54 @@ logical Metric Event.
 
 ## Validation and no-write ordering
 
-The Worker performs these steps in order:
+The Evaluation and Event Ingest Workers perform these steps in order:
 
-1. Cloudflare rejects a disallowed origin or exceeded rate limit.
-2. Credential validation resolves one App and Environment or rejects the request.
-3. Strict Zod parsing rejects unknown top-level fields and malformed values.
-4. The Worker derives `targeting_key_hash` with the active identity epoch's immutable
+1. The Evaluation Worker validates the credential, resolves one App and Environment, and rejects a
+   disallowed Client Key origin in `data-plane-auth.ts`.
+2. The shared registrar applies the per-credential Cloudflare Workers Rate Limiting binding and returns
+   `429 RATE_LIMITED` when the budget is exhausted.
+3. The Evaluation Worker delegates the authorized request to Event Ingest.
+4. Event Ingest revalidates the delegated credential and its App and Environment scope before
+   accepting the request.
+5. Event Ingest performs bounded body reading and strict Zod parsing. Oversized bodies, unknown
+   top-level fields, and malformed values are rejected.
+6. Event Ingest applies its per-credential Durable Object rate limiter. Exhaustion returns
+   `429 RATE_LIMITED`; an unavailable or invalid limiter response fails closed with
+   `503 SERVICE_UNAVAILABLE`.
+7. The Event Ingest Worker derives `targeting_key_hash` with the active identity epoch's immutable
    `app_entity_identity_key` and builds the stable request fingerprint (see Idempotency). Routine
    key-encryption rotation does not change the derived hash. The fingerprint intentionally excludes
    `event_definition_version_id` so retries survive a later publish.
-5. The Worker looks up any existing `(metric, app_id, environment_id, event_id)` idempotency claim:
+8. The Event Ingest Worker looks up any existing `(metric, app_id, environment_id, event_id)` idempotency claim:
    - Exact fingerprint match returns `202 { duplicate: true }` and writes nothing further. A
      trusted API Key response includes the originally accepted `eventDefinitionId` /
      `eventDefinitionVersionId`. A Client Key response omits those internal IDs. Current published
      version validation is not re-applied.
    - A different fingerprint returns `409 EVENT_ID_CONFLICT` and writes nothing.
    - No claim continues.
-6. The Worker resolves `eventName` to the App-level Event Definition, requires `family = "metric"`,
+9. The Worker resolves `eventName` to the App-level Event Definition, requires `family = "metric"`,
    and resolves its current published Event Definition Version. A `web` definition with the same
    requested name is not a Metric Event contract and fails before any claim or append. The client
    cannot select a version or family.
-7. `idType` must equal the published version's `entityType`.
-8. The complete `fields` and `dimensions` objects are validated against that version. Unknown field
-   names, unknown Dimensions, missing required values, type mismatches, schemaless JSON, unknown
-   nested JSON keys, and string values outside definition-time machine-token allowlists fail. Metric
-   Events have no free-form string or direct-PII payload path.
-9. The Worker charges one new canonical row and its serialized queue-payload bytes through the
-   Ingest Admission Gate for `(app_id, environment_id, metric_events)`. Rejection returns
-   `429 RATE_LIMITED` before any new claim, outbox write, or queue publication.
-10. The Worker atomically seals the family-scoped claim, stable fingerprint, accepted immutable
+10. `idType` must equal the published version's `entityType`.
+11. The complete `fields` and `dimensions` objects are validated against that version. Unknown field
+    names, unknown Dimensions, missing required values, type mismatches, schemaless JSON, unknown
+    nested JSON keys, and string values outside definition-time machine-token allowlists fail. Metric
+    Events have no free-form string or direct-PII payload path.
+12. The Worker charges one new canonical row and its serialized queue-payload bytes through the
+    Ingest Admission Gate for `(app_id, environment_id, metric_events)`. Rejection returns
+    `429 RATE_LIMITED` before any new claim, outbox write, or queue publication.
+13. The Worker atomically seals the family-scoped claim, stable fingerprint, accepted immutable
     version id, and complete canonical `metric_events` delivery payload in the sharded durable
     ingest outbox.
-11. The outbox publishes the row to the `metric_events` queue until successful. The request handler
+14. The outbox publishes the row to the `metric_events` queue until successful. The request handler
     never posts the row directly to Tinybird; the queue consumer includes it in a
     datasource-specific NDJSON microbatch.
 
-Steps 1 through 8 are side-effect free. Step 9 may update only aggregate Admission Gate state. A
-failure through step 9 writes no idempotency claim, outbox row, queue message, or Tinybird row. Step
-10 is one atomic durable acceptance boundary, so a committed claim cannot exist without its
+Within Event Ingest, steps 4 and 5 are side-effect free. Step 6 may increment only the
+per-credential Durable Object rate-limit counter, and step 12 may update only aggregate Admission
+Gate state. A failure through step 12 writes no idempotency claim, outbox row, queue message, or
+Tinybird row. Step 13 is one atomic durable acceptance boundary, so a committed claim cannot exist without its
 canonical delivery payload. `202` may return after that seal and does not wait for queue publication
 or Tinybird commit.
 

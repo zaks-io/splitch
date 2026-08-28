@@ -6,15 +6,30 @@ Splitch's code is public, so its security posture cannot rely on obscurity. The 
 surfaces (evaluate, peek, anonymous registration) and the secret-key revocation path are the highest
 blast-radius seams. This ADR pins their abuse controls as an **enforced contract** carried by the
 Cloudflare edge already chosen in ADR-0017 — Turnstile, WAF rate limiting, and origin/referrer
-allow-listing — and tightens four defaults that were previously open or best-effort.
+allow-listing — and tightens four defaults that were previously open or best-effort. The target
+contract is unchanged, but its paid WAF portion is intentionally deferred while launch traffic is
+limited to dogfooding.
 
 This refines ADR-0018 (which introduced the public Client Key and named origin allow-list + rate
 limiting as its abuse bound) and ADR-0022 (which rate-limited anonymous registration per IP only).
 
 ## Decision
 
-All four controls below are mandatory, not configurable-to-off, and enforced at the Cloudflare edge.
-No second mechanism is invented; these compose with the WAF already in use.
+All four controls below remain mandatory product requirements. The current launch posture stages their
+implementation: Turnstile and the in-app per-IP/global limiter remain required, while the complete paid
+WAF posture is security debt that will be completed when real production traffic justifies the plan
+cost. Traffic, not a calendar date or an invented request threshold, is the upgrade trigger.
+
+Cloudflare Free currently enforces one live partial control, rule
+`de05f018db704510a0a94d081ebbb205`: a zone-wide, source-IP-keyed rate limit for the exact path
+`/agent/identity`, allowing 10 requests per 10 seconds and blocking for 10 seconds. The Free-plan rule
+cannot express the full contract. Shared-preview safe `GET` proof reached the origin's `404` before the
+threshold, returned `429` after the threshold, and recovered to `404` after the window.
+
+The deferred WAF work is explicit: scope the rule by host and method, add the one-hour cross-IP/global
+ceiling, use progressive challenge before block, and add per-credential header counters. Until those
+controls ship, the partial rule must not be described as satisfying the full WAF contract or as the
+authoritative global abuse bound.
 
 ### 1. Public Client Keys are open by default, secured by loud open-state surfacing
 
@@ -68,11 +83,12 @@ Revocation is the one credential operation that must never be fire-and-forget. O
 
 Anonymous provisional Org+App creation (ADR-0022, Door B) is a public, unauthenticated **write** surface
 that mints WorkOS users and D1 rows. Per-IP rate limiting alone is trivially defeated by IP rotation.
-It is therefore gated by **Cloudflare Turnstile** (challenge before any row is created) in addition to a
-**global** WAF rate limit, not only the per-IP limit. Turnstile tokens are verified server-side
-(siteverify), are single-use, and expire in 300s. The same layered posture — progressive WAF rate-limit
-rules (challenge before block) plus per-credential counters keyed on the SDK key — applies to the public
-evaluate surface.
+At launch it is gated by **Cloudflare Turnstile** (challenge before any row is created), the in-app
+per-IP/global limiter, and the partial source-IP WAF rule documented above. Turnstile tokens are verified
+server-side (siteverify), are single-use, and expire in 300s. The complete target posture adds the
+deferred cross-IP/global WAF ceiling. The public evaluate target remains progressive WAF rate-limit rules
+(challenge before block) plus per-credential counters keyed on the SDK key; those paid WAF controls are
+not part of the current Free-plan launch posture.
 
 ## Considered options
 
@@ -108,8 +124,11 @@ evaluate surface.
   no longer best-effort.
 - Anonymous registration depends on Turnstile being configured; the control is a launch blocker for that
   surface, consistent with treating these as an enforced contract.
-- Origin/referrer allow-list, per-credential rate-limit counters, global rate limits, and Turnstile are
-  all Cloudflare-native — no new platform, consistent with ADR-0017.
+- Launch remains on Cloudflare Free with the documented partial WAF rule and required in-app backstops.
+  Host/method scoping, the one-hour cross-IP/global ceiling, progressive challenge-before-block, and
+  per-credential header counters remain explicit security debt until traffic justifies the paid plan.
+- The target origin/referrer allow-list, per-credential rate-limit counters, global rate limits, and
+  Turnstile are all Cloudflare-native — no new platform, consistent with ADR-0017.
 
 ## Sources
 
