@@ -40,6 +40,7 @@ describe("Door A: paused", () => {
 
     const response = await app.request("/agent/identity", {
       method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({
         id_jag: "eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJodHRwczovL2lkcC50ZXN0In0.signature",
       }),

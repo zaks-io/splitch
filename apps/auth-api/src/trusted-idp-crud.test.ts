@@ -133,7 +133,7 @@ async function createIdp(
 ): Promise<IdpRow> {
   const res = await app.request(`/orgs/${orgId}/trusted-idps`, {
     method: "POST",
-    headers: { authorization: `Bearer ${token}` },
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({ issuer, jwks_uri: `${issuer}/jwks`, client_ids: ["cid"] }),
   });
   expect(res.status).toBe(201);
