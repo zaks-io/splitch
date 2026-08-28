@@ -20,6 +20,7 @@ import { OAuthError } from "./oauth-errors";
  */
 
 const HOUR_MS = 60 * 60 * 1000;
+export const MAX_TRACKED_IP_WINDOWS = 10_000;
 
 export interface RateLimitConfig {
   perIpPerHour: number;
@@ -48,6 +49,32 @@ function tick(window: Window | undefined, nowMs: number): Window {
   return { startMs: window.startMs, count: window.count + 1 };
 }
 
+function sweepExpired(
+  windows: Map<string, Window>,
+  lastSweepMs: number | undefined,
+  nowMs: number,
+): number {
+  if (lastSweepMs !== undefined && nowMs - lastSweepMs < HOUR_MS) return lastSweepMs;
+  for (const [ip, window] of windows) {
+    if (nowMs - window.startMs >= HOUR_MS) windows.delete(ip);
+  }
+  return nowMs;
+}
+
+function touch(windows: Map<string, Window>, ip: string, window: Window): void {
+  windows.delete(ip);
+  windows.set(ip, window);
+}
+
+function setBounded(windows: Map<string, Window>, ip: string, window: Window): void {
+  touch(windows, ip, window);
+  if (windows.size <= MAX_TRACKED_IP_WINDOWS) return;
+  const leastRecentlyUsedIp = windows.keys().next().value;
+  if (leastRecentlyUsedIp === undefined)
+    throw new Error("rate-limit IP window map is inconsistent");
+  windows.delete(leastRecentlyUsedIp);
+}
+
 /**
  * In-memory fixed-window limiter. The global window is checked FIRST (a flood
  * from rotating IPs trips it even when each IP is individually under its cap),
@@ -56,20 +83,25 @@ function tick(window: Window | undefined, nowMs: number): Window {
  */
 export function makeRateLimiter(config: RateLimitConfig = DEFAULT_RATE_LIMITS): RateLimiter {
   let global: Window | undefined;
+  let lastExpirySweepMs: number | undefined;
   const perIp = new Map<string, Window>();
 
   return {
     assertUnderCeiling(ip, nowMs) {
+      lastExpirySweepMs = sweepExpired(perIp, lastExpirySweepMs, nowMs);
+
       const nextGlobal = tick(global, nowMs);
       if (nextGlobal.count > config.globalPerHour) {
         throw new OAuthError("too_many_requests", "global anonymous-create ceiling reached");
       }
-      const nextIp = tick(perIp.get(ip), nowMs);
+      const currentIp = perIp.get(ip);
+      const nextIp = tick(currentIp, nowMs);
       if (nextIp.count > config.perIpPerHour) {
+        if (currentIp) touch(perIp, ip, currentIp);
         throw new OAuthError("too_many_requests", "per-IP anonymous-create ceiling reached");
       }
       global = nextGlobal;
-      perIp.set(ip, nextIp);
+      setBounded(perIp, ip, nextIp);
     },
   };
 }
