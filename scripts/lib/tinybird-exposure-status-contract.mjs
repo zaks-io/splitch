@@ -21,8 +21,8 @@ export function assertEnvironmentExposureStatusContract(root, fail) {
   );
   requireInstruction(
     datasource,
-    /^(?![\s\S]*FORWARD_QUERY)/,
-    "Environment Exposure status must not retain its one-shot migration query",
+    /^FORWARD_QUERY >\s+SELECT \*$/m,
+    "Environment Exposure status must preserve live history when its retained source is rebuilt",
     fail,
   );
   requireIdentityFree(datasource, "Environment Exposure status", fail);
