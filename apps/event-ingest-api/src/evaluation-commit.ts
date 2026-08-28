@@ -80,7 +80,7 @@ async function evaluationCommitInput(
   request: Request,
   env: Env,
 ): Promise<Outcome<{ scope: EvaluationUsageScope; payload: EvaluationCommitPayload }>> {
-  const scope = evaluationUsageScope(request, env);
+  const scope = await evaluationUsageScope(request, env);
   if (!scope.ok) return scope;
 
   const payload = await readJsonObject(request);

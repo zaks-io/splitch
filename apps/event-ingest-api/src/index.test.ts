@@ -222,7 +222,7 @@ describe("Exposure ingest", () => {
     expect(calls.ctx.waits).toHaveLength(0);
   });
 
-  it("rejects unauthenticated requests before parsing the body", async () => {
+  it("does not mount internal ingest on the public Worker", async () => {
     const fetch = mockTinybirdFetch();
     const ctx = new TestExecutionContext();
 
@@ -241,8 +241,7 @@ describe("Exposure ingest", () => {
       ctx,
     );
 
-    expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(response.status).toBe(404);
     expect(fetch).not.toHaveBeenCalled();
     expect(ctx.waits).toHaveLength(0);
   });

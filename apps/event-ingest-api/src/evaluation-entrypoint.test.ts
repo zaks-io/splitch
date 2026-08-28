@@ -102,6 +102,45 @@ describe("Evaluation binding entrypoint", () => {
     expect(fetch.mock.calls[1]?.[0]).toBe("https://tinybird.test/v0/events?name=raw_events");
   });
 
+  it("rejects a missing internal token without appending", async () => {
+    const fetch = mockTinybirdFetch();
+    const ctx = new TestExecutionContext();
+    const response = await new EvaluationEntrypoint(ctx, makeEnv() as Env).fetch(
+      new Request("https://splitch-event-ingest.internal/api/internal/exposures", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-splitch-app-id": appId,
+          "x-splitch-environment-id": environmentId,
+        },
+        body: "{",
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a wrong internal token without appending", async () => {
+    const fetch = mockTinybirdFetch();
+    const ctx = new TestExecutionContext();
+    const response = await new EvaluationEntrypoint(ctx, makeEnv() as Env).fetch(
+      new Request("https://splitch-event-ingest.internal/api/internal/exposures", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer wrong",
+          "content-type": "application/json",
+          "x-splitch-app-id": appId,
+          "x-splitch-environment-id": environmentId,
+        },
+        body: "{",
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("reaches the Metric Event handler", async () => {
     const fixture = await makeMetricEventFixture();
 

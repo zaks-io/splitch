@@ -96,9 +96,16 @@ async function loadEventIngestWorker(): Promise<{
   fetch: (request: Request, env: unknown, ctx: ExecutionContext) => Promise<Response>;
 }> {
   const href = pathToFileURL(join(process.cwd(), "../event-ingest-api/src/index.ts")).href;
-  const mod = (await import(href)) as { default: { fetch: typeof fetch } };
-  return mod.default as unknown as {
-    fetch: (request: Request, env: unknown, ctx: ExecutionContext) => Promise<Response>;
+  const mod = (await import(href)) as {
+    EvaluationEntrypoint: new (
+      ctx: ExecutionContext,
+      env: unknown,
+    ) => { fetch(request: Request): Promise<Response> };
+  };
+  return {
+    fetch(request, env, ctx) {
+      return new mod.EvaluationEntrypoint(ctx, env).fetch(request);
+    },
   };
 }
 
