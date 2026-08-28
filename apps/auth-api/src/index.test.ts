@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { makeEphemeralAccessTokenPrivateJwk } from "./access-token-key";
 import type { AuthApiEnv } from "./env";
-import worker from "./index";
+import worker, { committedAssertionSigningSecrets } from "./index";
 import { FIXTURE_OTP } from "./otp";
 import { makePoolBindings } from "./test-bindings-pool";
 import type { LocalBindings } from "./test-fixtures";
@@ -30,9 +30,15 @@ let env: AuthApiEnv;
  * shape production actually shipped in.
  */
 let hostedAccessTokenSecret: string;
+/**
+ * Unique per isolate so hosted fixtures never inherit a committed known HMAC
+ * key. The reviewer reproduction used the inherited `test-assertion-secret`.
+ */
+let hostedAssertionSigningSecret: string;
 
 beforeAll(async () => {
   hostedAccessTokenSecret = await makeEphemeralAccessTokenPrivateJwk();
+  hostedAssertionSigningSecret = `hosted-uncommitted-${crypto.randomUUID()}`;
   local = await makePoolBindings();
   env = {
     DB: local.d1,
@@ -240,6 +246,7 @@ function hostedEnvWith(overrides: Partial<AuthApiEnv>): AuthApiEnv {
     WORKOS_JWKS_URI: "https://api.workos.test/jwks",
     WORKOS_ISSUER: "https://api.workos.test",
     TURNSTILE_SECRET: "test-turnstile-secret",
+    ASSERTION_SIGNING_SECRET: hostedAssertionSigningSecret,
     ...overrides,
   };
 }
@@ -321,7 +328,9 @@ describe("index.ts: hosted assertion secret and platform target fail closed", ()
     expect(await rowCount("organizations")).toBe(beforeOrganizations);
   });
 
-  it("rejects the committed local assertion secret on hosted targets", async () => {
+  it.each(
+    committedAssertionSigningSecrets,
+  )("rejects committed assertion secret %s on hosted targets", async (secret) => {
     const beforeOrganizations = await rowCount("organizations");
     const res = await call(
       { turnstile_token: turnstileToken() },
@@ -329,7 +338,7 @@ describe("index.ts: hosted assertion secret and platform target fail closed", ()
       "/agent/identity",
       hostedEnvWith({
         ACCESS_TOKEN_SECRET: hostedAccessTokenSecret,
-        ASSERTION_SIGNING_SECRET: "local-dev-assertion-secret",
+        ASSERTION_SIGNING_SECRET: secret,
       }),
     );
     expect(res.status).toBe(500);

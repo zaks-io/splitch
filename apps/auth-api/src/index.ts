@@ -31,6 +31,17 @@ import { makeWorkOsAccessTokenVerifier } from "./workos-access-token";
 
 const service = "splitch-auth-api";
 const localAssertionSigningSecret = "local-dev-assertion-secret";
+const testAssertionSigningSecret = "test-assertion-secret";
+
+/**
+ * Fixture HMAC keys committed in this repo. Hosted targets must reject every
+ * one: accepting `test-assertion-secret` let a reviewer forge arbitrary `sub`
+ * and `scopes` and mint an RS256 access token.
+ */
+export const committedAssertionSigningSecrets = [
+  localAssertionSigningSecret,
+  testAssertionSigningSecret,
+] as const;
 
 const fixtureWorkos = makeFixtureWorkOs();
 const otp = makeFixtureOtp();
@@ -221,10 +232,14 @@ function hostedClaimOriginConfigured(env: AuthApiEnv): boolean {
   }
 }
 
+function isCommittedAssertionSigningSecret(secret: string | undefined): boolean {
+  return committedAssertionSigningSecrets.some((committed) => committed === secret);
+}
+
 function hostedAssertionSigningSecretConfigured(env: AuthApiEnv): boolean {
   return (
     Boolean(env.ASSERTION_SIGNING_SECRET) &&
-    env.ASSERTION_SIGNING_SECRET !== localAssertionSigningSecret
+    !isCommittedAssertionSigningSecret(env.ASSERTION_SIGNING_SECRET)
   );
 }
 
