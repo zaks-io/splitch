@@ -43,6 +43,8 @@ export function incomingJsonBoundVisited(value: unknown, rootPath: readonly stri
 
 function walkIncomingJsonBound(value: unknown, rootPath: readonly string[]): IncomingJsonBoundWalk {
   const queue: IncomingJsonFrame[] = [{ node: value, path: [...rootPath], depth: 1 }];
+  // Incrementing cursor: Array.shift() is O(queue length) per pop, so a wide
+  // shallow body would be quadratic on this pre-auth walk.
   let cursor = 0;
   let visited = 0;
   while (cursor < queue.length) {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { VariantSchema } from "./leaf-schemas-flag";
 import {
   PERSISTED_ARRAY_MAX_ITEMS,
@@ -264,11 +264,14 @@ describe("incoming JSON structure bound", () => {
     });
   });
 
-  it("visits each node of a wide shallow array exactly once", () => {
+  it("visits each node of a wide shallow array without shifting the queue", () => {
     const wide = Array.from({ length: 250_000 }, () => 0);
-    expect(incomingJsonBoundIssue(wide)).toBeNull();
-    expect(incomingJsonBoundVisited(wide)).toBe(250_001);
-    expect(incomingJsonBoundVisited(wide.slice(0, 125_000))).toBe(125_001);
+    const largeShifts = countLargeArrayShifts(() => {
+      expect(incomingJsonBoundIssue(wide)).toBeNull();
+      expect(incomingJsonBoundVisited(wide)).toBe(250_001);
+      expect(incomingJsonBoundVisited(wide.slice(0, 125_000))).toBe(125_001);
+    });
+    expect(largeShifts).toBe(0);
   });
 });
 
@@ -277,3 +280,37 @@ describe("write name bound stays absolute", () => {
     expect(PERSISTED_NAME_MAX_LENGTH).toBe(200);
   });
 });
+
+/** Queues this wide are the shift() footgun; incidental tiny helper arrays are ignored. */
+const LARGE_QUEUE_MIN = 32;
+
+let originalArrayShift: typeof Array.prototype.shift | undefined;
+
+afterEach(() => {
+  restoreArrayShift();
+});
+
+function countLargeArrayShifts(run: () => void): number {
+  const previousShift = Array.prototype.shift;
+  originalArrayShift = previousShift;
+  let largeShifts = 0;
+  Array.prototype.shift = function largeArrayShift(this: unknown[]) {
+    if (this.length >= LARGE_QUEUE_MIN) {
+      largeShifts += 1;
+    }
+    return previousShift.call(this);
+  };
+  try {
+    run();
+    return largeShifts;
+  } finally {
+    restoreArrayShift();
+  }
+}
+
+function restoreArrayShift(): void {
+  if (originalArrayShift !== undefined) {
+    Array.prototype.shift = originalArrayShift;
+    originalArrayShift = undefined;
+  }
+}
