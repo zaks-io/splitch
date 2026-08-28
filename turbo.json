@@ -27,7 +27,7 @@
     "@splitch/control-panel#build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
-      "inputs": ["$TURBO_DEFAULT$"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/lib/vite-*.ts"],
       "env": [
         "SPLITCH_PLATFORM_TARGET",
         "CLOUDFLARE_ENV",
@@ -43,7 +43,7 @@
     "@splitch/marketing#build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
-      "inputs": ["$TURBO_DEFAULT$"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/lib/vite-*.ts"],
       "env": [
         "SPLITCH_PLATFORM_TARGET",
         "CLOUDFLARE_ENV",

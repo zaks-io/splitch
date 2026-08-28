@@ -8,11 +8,19 @@ export function resolveViteCloudflareWebAnalyticsToken(platformTarget: string): 
     return "";
   }
 
-  const siteToken = process.env.CLOUDFLARE_WEB_ANALYTICS_TOKEN ?? "";
+  const siteToken = (process.env.CLOUDFLARE_WEB_ANALYTICS_TOKEN ?? "").trim();
 
   if (!siteToken) {
     throw new Error(
       "CLOUDFLARE_WEB_ANALYTICS_TOKEN is required for a production build; set it from the Cloudflare Web Analytics site token",
+    );
+  }
+
+  // A GitHub repository variable keeps whatever was pasted into it. A token
+  // carrying a stray quote or delimiter would build green and report nothing.
+  if (!/^[A-Za-z0-9_-]+$/.test(siteToken)) {
+    throw new Error(
+      "CLOUDFLARE_WEB_ANALYTICS_TOKEN is not a Cloudflare Web Analytics site token; expected an unpunctuated alphanumeric value",
     );
   }
 

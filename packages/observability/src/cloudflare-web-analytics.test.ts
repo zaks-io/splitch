@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { cloudflareWebAnalyticsScripts } from "./cloudflare-web-analytics.js";
 
 describe("cloudflareWebAnalyticsScripts", () => {
-  it("emits the beacon script tag for production", () => {
+  it("emits a classic beacon tag carrying the token in data-cf-beacon", () => {
     expect(
       cloudflareWebAnalyticsScripts({
         platformTarget: "production",
@@ -11,8 +11,9 @@ describe("cloudflareWebAnalyticsScripts", () => {
       }),
     ).toEqual([
       {
-        type: "module",
-        src: "https://static.cloudflareinsights.com/beacon.min.js?token=site-token-1",
+        src: "https://static.cloudflareinsights.com/beacon.min.js",
+        defer: true,
+        "data-cf-beacon": '{"token":"site-token-1"}',
       },
     ]);
   });
