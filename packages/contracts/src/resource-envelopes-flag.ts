@@ -6,7 +6,6 @@ import {
   PersistedIdentifierSchema,
   PersistedNameSchema,
   persistedArray,
-  persistedRecord,
 } from "./persisted-field-limits";
 import {
   ApprovalRequestSchema,
@@ -14,7 +13,7 @@ import {
 } from "./routes/route-shapes-approval-request";
 import { SlugSchema } from "./slug";
 import { listResponse } from "./wire-envelopes-core";
-import { WriteVariantValueSchema } from "./write-persisted-schemas";
+import { WriteFlagJsonSchemaSchema, WriteVariantValueSchema } from "./write-persisted-schemas";
 
 /**
  * Create/patch/response wire envelopes for App-level Flag definition and
@@ -57,7 +56,7 @@ export const CreateFlagRequestSchema = z
     // caller-chosen handle that appears in selectors and URLs, so it takes the
     // system's one slug shape — the same rule App keys and Org slugs follow.
     key: SlugSchema,
-    schema: persistedRecord(z.unknown()).nullable().optional(),
+    schema: WriteFlagJsonSchemaSchema.nullable().optional(),
     variants: persistedArray(CreateVariantCatalogEntrySchema).min(1),
     description: PersistedDescriptionSchema.optional(),
     idempotency_key: IdempotencyKeySchema,
@@ -75,7 +74,7 @@ export type CreateFlagRequest = z.infer<typeof CreateFlagRequestSchema>;
 export const PatchFlagRequestSchema = z
   .object({
     name: PersistedNameSchema.optional(),
-    schema: persistedRecord(z.unknown()).nullable().optional(),
+    schema: WriteFlagJsonSchemaSchema.nullable().optional(),
     description: PersistedDescriptionSchema.optional(),
   })
   .strict();

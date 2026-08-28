@@ -10,12 +10,12 @@ import {
   StartRunRequestSchema,
 } from "./resource-envelopes-experiment";
 import { CreateFlagRequestSchema } from "./resource-envelopes-flag";
-import { WriteVariantValueSchema } from "./write-persisted-schemas";
 import {
   PatchFlagConfigRequestSchema,
   ReplaceTargetingRulesRequestSchema,
 } from "./routes/route-shapes";
 import { ReviewApprovalRequestSchema } from "./routes/route-shapes-approval-request";
+import { WriteVariantValueSchema } from "./write-persisted-schemas";
 
 describe("requestBodySchemaForOperation", () => {
   it("returns the route body schema for known body operations", () => {
@@ -203,13 +203,13 @@ describe("write Variant value help labels", () => {
   it("labels the write Variant value schema by identity instead of unrolling JSON depth", () => {
     const create = describeRequestBody(CreateFlagRequestSchema);
     expect(create.fields.find((field) => field.name === "variants")?.typeLabel).toContain(
-      "boolean | string | number | unknown[] | Record<string, unknown>",
+      "boolean | string | number | Record<string, unknown>",
     );
     expect(CreateFlagRequestSchema.safeParse(create.example).success).toBe(true);
 
     const renamed = describeRequestBody(z.object({ payload: WriteVariantValueSchema }));
     expect(renamed.fields[0]?.typeLabel).toBe(
-      "boolean | string | number | unknown[] | Record<string, unknown>",
+      "boolean | string | number | Record<string, unknown>",
     );
   });
 });

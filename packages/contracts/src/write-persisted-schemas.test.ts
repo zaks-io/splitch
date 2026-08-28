@@ -7,6 +7,7 @@ import {
   PERSISTED_IDENTIFIER_MAX_LENGTH,
   PERSISTED_JSON_MAX_DEPTH,
   PERSISTED_NAME_MAX_LENGTH,
+  PERSISTED_RECORD_KEY_MAX_LENGTH,
   PERSISTED_RECORD_MAX_KEYS,
   PERSISTED_VARIANT_VALUE_STRING_MAX_LENGTH,
 } from "./persisted-field-limits";
@@ -15,6 +16,7 @@ import {
   persistedJsonDepth,
   TargetingRuleInputSchema,
   WriteConditionSchema,
+  WriteFlagJsonSchemaSchema,
   WriteMetricRefSchema,
   WriteVariantValueSchema,
 } from "./write-persisted-schemas";
@@ -87,6 +89,59 @@ describe("WriteVariantValueSchema", () => {
     expect(persistedJsonDepth(nested)).toBe(PERSISTED_JSON_MAX_DEPTH);
     expect(WriteVariantValueSchema.safeParse(nested).success).toBe(true);
     expect(WriteVariantValueSchema.safeParse({ overflow: nested }).success).toBe(false);
+  });
+
+  it("rejects a root array and accepts a nested array inside an object", () => {
+    expect(WriteVariantValueSchema.safeParse([]).success).toBe(false);
+    expect(WriteVariantValueSchema.safeParse(["x"]).success).toBe(false);
+    expect(WriteVariantValueSchema.safeParse({ items: ["x"] }).success).toBe(true);
+  });
+});
+
+describe("WriteFlagJsonSchemaSchema", () => {
+  it("accepts a typical Flag JSON Schema document", () => {
+    expect(WriteFlagJsonSchemaSchema.safeParse({ type: "boolean" }).success).toBe(true);
+    expect(
+      WriteFlagJsonSchemaSchema.safeParse({
+        type: "object",
+        properties: { items: { type: "array" } },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects nested strings, arrays, records, keys, and depth over the named bounds", () => {
+    expect(
+      WriteFlagJsonSchemaSchema.safeParse({
+        title: "s".repeat(PERSISTED_VARIANT_VALUE_STRING_MAX_LENGTH + 1),
+      }).success,
+    ).toBe(false);
+    expect(
+      WriteFlagJsonSchemaSchema.safeParse({
+        enum: Array.from({ length: PERSISTED_ARRAY_MAX_ITEMS + 1 }, (_, index) => `v${index}`),
+      }).success,
+    ).toBe(false);
+    expect(
+      WriteFlagJsonSchemaSchema.safeParse({
+        properties: Object.fromEntries(
+          Array.from({ length: PERSISTED_RECORD_MAX_KEYS + 1 }, (_, index) => [
+            `k${index}`,
+            { type: "string" },
+          ]),
+        ),
+      }).success,
+    ).toBe(false);
+    expect(
+      WriteFlagJsonSchemaSchema.safeParse({
+        properties: { ["k".repeat(PERSISTED_RECORD_KEY_MAX_LENGTH + 1)]: { type: "string" } },
+      }).success,
+    ).toBe(false);
+
+    let nested: unknown = "leaf";
+    for (let depth = 1; depth < PERSISTED_JSON_MAX_DEPTH; depth += 1) {
+      nested = { child: nested };
+    }
+    expect(WriteFlagJsonSchemaSchema.safeParse(nested).success).toBe(true);
+    expect(WriteFlagJsonSchemaSchema.safeParse({ overflow: nested }).success).toBe(false);
   });
 });
 

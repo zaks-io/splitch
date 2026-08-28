@@ -5,6 +5,7 @@ import {
   PERSISTED_JSON_MAX_DEPTH,
   PERSISTED_RECORD_KEY_MAX_LENGTH,
   PERSISTED_RECORD_MAX_KEYS,
+  PERSISTED_VARIANT_VALUE_STRING_MAX_LENGTH,
   PersistedConditionAttributeSchema,
   PersistedConditionValueStringSchema,
   PersistedDescriptionSchema,
@@ -76,8 +77,12 @@ export const TargetingRuleInputSchema = z
   });
 export type TargetingRuleInput = z.infer<typeof TargetingRuleInputSchema>;
 
+function writeVariantValueScalar() {
+  return z.union([z.boolean(), z.number(), PersistedVariantValueStringSchema]);
+}
+
 function writeVariantValueSchema(remainingDepth: number): z.ZodType<unknown> {
-  const scalar = z.union([z.boolean(), z.number(), PersistedVariantValueStringSchema]);
+  const scalar = writeVariantValueScalar();
   if (remainingDepth <= 1) {
     return scalar;
   }
@@ -85,7 +90,33 @@ function writeVariantValueSchema(remainingDepth: number): z.ZodType<unknown> {
   return z.union([scalar, persistedArray(nested), persistedRecord(nested)]);
 }
 
-export const WriteVariantValueSchema = writeVariantValueSchema(PERSISTED_JSON_MAX_DEPTH);
+/**
+ * Canonical `Variant.value` is scalar or object, never a root array. Nested
+ * arrays remain allowed inside a bounded object so JSON payloads can still
+ * carry lists without making the public Variant contract unreadable.
+ */
+function writeVariantValueRootSchema(remainingDepth: number): z.ZodType<unknown> {
+  const scalar = writeVariantValueScalar();
+  if (remainingDepth <= 1) {
+    return scalar;
+  }
+  return z.union([scalar, persistedRecord(writeVariantValueSchema(remainingDepth - 1))]);
+}
+
+export const WriteVariantValueSchema = writeVariantValueRootSchema(PERSISTED_JSON_MAX_DEPTH);
+
+/**
+ * Write-only Flag JSON Schema document. Storage `Flag.schema` stays a
+ * permissive record so retained rows remain readable. Nested strings, arrays,
+ * records, keys, and depth use the same named persisted JSON bounds.
+ */
+export const WriteFlagJsonSchemaSchema = persistedRecord(z.unknown()).superRefine(
+  (value, context) => {
+    for (const [key, child] of Object.entries(value)) {
+      addBoundedJsonWriteIssues(child, context, [key], 2);
+    }
+  },
+);
 
 export const WriteMetricRefSchema = z
   .object({
@@ -170,5 +201,83 @@ function addClosedJsonObjectIssues(
       path: [...path, "required"],
       message: `must contain at most ${PERSISTED_ARRAY_MAX_ITEMS} items`,
     });
+  }
+}
+
+export function addBoundedJsonWriteIssues(
+  value: unknown,
+  context: z.RefinementCtx,
+  path: Array<string | number>,
+  depth: number,
+): void {
+  if (depth > PERSISTED_JSON_MAX_DEPTH) {
+    context.addIssue({
+      code: "custom",
+      path,
+      message: `exceeds persisted JSON max depth of ${PERSISTED_JSON_MAX_DEPTH}`,
+    });
+    return;
+  }
+  if (typeof value === "string") {
+    if (value.length > PERSISTED_VARIANT_VALUE_STRING_MAX_LENGTH) {
+      context.addIssue({
+        code: "custom",
+        path,
+        message: `must be at most ${PERSISTED_VARIANT_VALUE_STRING_MAX_LENGTH} characters`,
+      });
+    }
+    return;
+  }
+  if (value === null || typeof value !== "object") {
+    return;
+  }
+  if (Array.isArray(value)) {
+    addBoundedJsonArrayIssues(value, context, path, depth);
+    return;
+  }
+  addBoundedJsonRecordIssues(value as Record<string, unknown>, context, path, depth);
+}
+
+function addBoundedJsonArrayIssues(
+  value: unknown[],
+  context: z.RefinementCtx,
+  path: Array<string | number>,
+  depth: number,
+): void {
+  if (value.length > PERSISTED_ARRAY_MAX_ITEMS) {
+    context.addIssue({
+      code: "custom",
+      path,
+      message: `must contain at most ${PERSISTED_ARRAY_MAX_ITEMS} items`,
+    });
+  }
+  for (const [index, item] of value.entries()) {
+    addBoundedJsonWriteIssues(item, context, [...path, index], depth + 1);
+  }
+}
+
+function addBoundedJsonRecordIssues(
+  value: Record<string, unknown>,
+  context: z.RefinementCtx,
+  path: Array<string | number>,
+  depth: number,
+): void {
+  const keys = Object.keys(value);
+  if (keys.length > PERSISTED_RECORD_MAX_KEYS) {
+    context.addIssue({
+      code: "custom",
+      path,
+      message: `must contain at most ${PERSISTED_RECORD_MAX_KEYS} keys`,
+    });
+  }
+  for (const key of keys) {
+    if (key.length > PERSISTED_RECORD_KEY_MAX_LENGTH) {
+      context.addIssue({
+        code: "custom",
+        path: [...path, key],
+        message: `key longer than ${PERSISTED_RECORD_KEY_MAX_LENGTH}`,
+      });
+    }
+    addBoundedJsonWriteIssues(value[key], context, [...path, key], depth + 1);
   }
 }

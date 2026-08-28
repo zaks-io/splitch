@@ -958,7 +958,7 @@ Request body (--body-json):
   appId            required  string
   flagId           required  string
   name             required  string
-  value            required  boolean | string | number | unknown[] | Record<string, unknown>
+  value            required  boolean | string | number | Record<string, unknown>
   isDefault        optional  boolean
   description      optional  string
   review           optional  { action: "approve_and_apply" }
@@ -1003,7 +1003,7 @@ Flags:
 
 Request body (--body-json):
   name             optional  string
-  value            optional  boolean | string | number | unknown[] | Record<string, unknown>
+  value            optional  boolean | string | number | Record<string, unknown>
   description      optional  string
   review           optional  { action: "approve_and_apply" }
   idempotency_key  required  string
@@ -1032,7 +1032,7 @@ Request body (--body-json):
   name             required  string
   key              required  string
   schema           optional  Record<string, unknown> | null
-  variants         required  { name: string; value: boolean | string | number | unknown[] | Record<string, unknown>; isDefault: boolean; description?: string }[]
+  variants         required  { name: string; value: boolean | string | number | Record<string, unknown>; isDefault: boolean; description?: string }[]
   description      optional  string
   idempotency_key  required  string
   Example:

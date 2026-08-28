@@ -110,7 +110,7 @@ export function zodLiteralValues(schema: z.ZodTypeAny): unknown[] {
 
 function typeLabel(schema: z.ZodTypeAny, depth = 0): string {
   if (schema === WriteVariantValueSchema) {
-    return "boolean | string | number | unknown[] | Record<string, unknown>";
+    return "boolean | string | number | Record<string, unknown>";
   }
   if (depth >= MAX_TYPE_DEPTH) {
     throw new Error(
