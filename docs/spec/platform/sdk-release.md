@@ -1,6 +1,7 @@
 # Package release runbook
 
-This runbook is the operating contract for publishing `@splitch/sdk`, `@splitch/cli`, and `@splitch/convex`. It
+This runbook is the operating contract for publishing `@splitch/sdk`, `@splitch/cli`, `@splitch/convex`, and
+`@splitch/cloudflare`. It
 documents the implemented workflow path and the human-owned provider setup it depends on. It does
 not grant permission to publish, change repository visibility, configure providers, or change
 tag/release rules.
@@ -21,11 +22,21 @@ and the published release/tag are immutable. Never re-run its failed `cli-publis
 consume npm version `0.1.0` with a binary-less package. The CLI's first stable version is
 `0.1.1`.
 
-| Target   | Manifest                       | Tag                 | Draft workflow                                              | Trusted-publish workflow                                    |
-| -------- | ------------------------------ | ------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
-| `sdk`    | `packages/sdk/package.json`    | `sdk-v<version>`    | [`sdk-release`](../../../.github/workflows/sdk-release.yml) | [`sdk-publish`](../../../.github/workflows/sdk-publish.yml) |
-| `cli`    | `apps/cli/package.json`        | `cli-v<version>`    | [`cli-release`](../../../.github/workflows/cli-release.yml) | [`cli-publish`](../../../.github/workflows/cli-publish.yml) |
-| `convex` | `packages/convex/package.json` | `convex-v<version>` | `convex-release`                                            | `convex-publish`                                            |
+`cloudflare-v0.1.0` is a burned tag: it was published before the package's npm trusted publisher
+existed, so `cloudflare-publish` failed with `E404`. Deleting the release freed the tag for
+deletion but [immutable releases permanently block reusing a released tag
+name](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases),
+so `cloudflare-release` can no longer move it and fails with `GH013`. npm never received `0.1.0`;
+only the tag name is spent. The Cloudflare package's first stable version is `0.1.1`. Any target
+whose tag name is burned this way is recovered the same way: bump the manifest, never force the
+tag.
+
+| Target       | Manifest                           | Tag                     | Draft workflow                                              | Trusted-publish workflow                                    |
+| ------------ | ---------------------------------- | ----------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
+| `sdk`        | `packages/sdk/package.json`        | `sdk-v<version>`        | [`sdk-release`](../../../.github/workflows/sdk-release.yml) | [`sdk-publish`](../../../.github/workflows/sdk-publish.yml) |
+| `cli`        | `apps/cli/package.json`            | `cli-v<version>`        | [`cli-release`](../../../.github/workflows/cli-release.yml) | [`cli-publish`](../../../.github/workflows/cli-publish.yml) |
+| `convex`     | `packages/convex/package.json`     | `convex-v<version>`     | `convex-release`                                            | `convex-publish`                                            |
+| `cloudflare` | `packages/cloudflare/package.json` | `cloudflare-v<version>` | `cloudflare-release`                                        | `cloudflare-publish`                                        |
 
 The release workflows are manual `workflow_dispatch` jobs on Blacksmith. They validate the
 repo-wide candidate, prepare artifacts, and create or update a draft GitHub Release. They never
@@ -37,7 +48,7 @@ dedicated Linear release pipeline. The SDK pipeline reads `SDK_LINEAR_ACCESS_KEY
 reads `CLI_LINEAR_ACCESS_KEY`. The platform deploy continues to use `LINEAR_ACCESS_KEY`.
 
 Pushing a namespaced tag alone does not publish. The publish workflows accept only a
-`release: published` event and filter their own `sdk-v*`, `cli-v*`, or `convex-v*` namespace.
+`release: published` event and filter their own `sdk-v*`, `cli-v*`, `convex-v*`, or `cloudflare-v*` namespace.
 
 The SDK derives its public declaration surface from private contracts and implementation packages.
 Its manifest and declarations must not require a private `@splitch/*` package. The CLI and Convex
@@ -58,21 +69,24 @@ credentials, tokens, signed URLs, or private logs.
    public.
 2. Enable immutable releases. A publish workflow requires a published, non-prerelease, immutable
    GitHub Release tied to one matching tag, target commit, checked-out commit, and `GITHUB_SHA`.
-3. Maintain separate tag rulesets for `sdk-v*`, `cli-v*`, and `convex-v*`. Each ruleset restricts
+3. Maintain separate tag rulesets for `sdk-v*`, `cli-v*`, `convex-v*`, and `cloudflare-v*`. Each ruleset restricts
    tag creation, update, and deletion. The dedicated release GitHub App is the sole bypass actor for
    all three. It
    uses repository variable `SDK_RELEASE_APP_ID` and secret `SDK_RELEASE_APP_PRIVATE_KEY`, has only
    repository `contents: write`, and is installed on `zaks-io/splitch` alone.
-4. Confirm the `@splitch` npm scope and all three packages are controlled by the intended organization.
+4. Confirm the `@splitch` npm scope and all four packages are controlled by the intended organization.
 5. Configure one trusted publisher per package:
 
-   | Package           | Repository        | Workflow filename    | Allowed action |
-   | ----------------- | ----------------- | -------------------- | -------------- |
-   | `@splitch/sdk`    | `zaks-io/splitch` | `sdk-publish.yml`    | `npm publish`  |
-   | `@splitch/cli`    | `zaks-io/splitch` | `cli-publish.yml`    | `npm publish`  |
-   | `@splitch/convex` | `zaks-io/splitch` | `convex-publish.yml` | `npm publish`  |
+   | Package               | Repository        | Workflow filename        | Allowed action |
+   | --------------------- | ----------------- | ------------------------ | -------------- |
+   | `@splitch/sdk`        | `zaks-io/splitch` | `sdk-publish.yml`        | `npm publish`  |
+   | `@splitch/cli`        | `zaks-io/splitch` | `cli-publish.yml`        | `npm publish`  |
+   | `@splitch/convex`     | `zaks-io/splitch` | `convex-publish.yml`     | `npm publish`  |
+   | `@splitch/cloudflare` | `zaks-io/splitch` | `cloudflare-publish.yml` | `npm publish`  |
 
    Do not configure an environment unless the workflow is changed to use that exact environment.
+   `cloudflare-publish` runs its publish job in the `production` environment, so its trusted
+   publisher must name that environment; the other three publish jobs declare none.
 
 6. After bootstrap, revoke every temporary publishing token and grant. Set each npm package's
    Publishing Access to disallow token-based publishing. The normal workflows remain OIDC-only.
@@ -88,6 +102,7 @@ and 2FA manually publishes only the disposable prerelease for the package being 
 - `@splitch/sdk@0.1.0-bootstrap.0` with dist-tag `bootstrap`
 - `@splitch/cli@0.1.0-bootstrap.0` with dist-tag `bootstrap`
 - `@splitch/convex@0.1.0-bootstrap.0` with dist-tag `bootstrap`
+- `@splitch/cloudflare@0.1.0-bootstrap.0` with dist-tag `bootstrap`
 
 The prerelease must not consume `0.1.0` or a stable release tag. npm may force `latest` onto the
 first-ever version until the stable publish repoints it. Record that state instead of working
@@ -112,6 +127,8 @@ Use this only after a human approves the package release.
       caret range and ships no dev dependency.
 - [ ] Convex only: the packed manifest resolves the same SDK caret range; a clean install of both
       tarballs passes typecheck and all public subpath imports.
+- [ ] Cloudflare only: the tarball carries both the root and `./worker` entries with their
+      declarations and a build stamp, ships no source map, and leaks no workspace dependency.
 - [ ] Candidate validation passes as one shared Turbo graph covering format, lint, typecheck,
       tests, builds, Knip, secret scanning, Tinybird and D1 checks, pack checks, and consumer smoke.
 
@@ -127,7 +144,8 @@ Use this only after a human approves the package release.
 
 ### 3. Prepare the draft
 
-1. Dispatch the target's `sdk-release`, `cli-release`, or `convex-release` from the approved commit.
+1. Dispatch the target's `sdk-release`, `cli-release`, `convex-release`, or `cloudflare-release`
+   from the approved commit.
 2. Inspect both `<target>-release-validation-<tag>` and `<target>-release-package-<tag>` artifacts.
    They contain validation evidence, the tarball, checksum, tarball listing, dependency inventory,
    and release manifest.
@@ -167,6 +185,8 @@ Never add an npm token, publish ad hoc, or move a published release/tag around t
 - [`sdk-publish` workflow](../../../.github/workflows/sdk-publish.yml)
 - [`cli-release` workflow](../../../.github/workflows/cli-release.yml)
 - [`cli-publish` workflow](../../../.github/workflows/cli-publish.yml)
+- [`cloudflare-release` workflow](../../../.github/workflows/cloudflare-release.yml)
+- [`cloudflare-publish` workflow](../../../.github/workflows/cloudflare-publish.yml)
 - [GitHub immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
 - [GitHub tag rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository)
 - [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/)
