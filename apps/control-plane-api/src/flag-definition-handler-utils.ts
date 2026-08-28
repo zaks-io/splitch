@@ -81,7 +81,13 @@ export async function requireWritableApp(
 }
 
 export function serializeSchema(schema: Record<string, unknown> | null | undefined): string | null {
-  return schema === null || schema === undefined ? null : JSON.stringify(schema);
+  if (schema === null || schema === undefined) return null;
+  return JSON.stringify(schema, (_key, value: unknown) => {
+    if (typeof value === "number" && !Number.isFinite(value)) {
+      throw new Error("Flag schema contains a non-finite number");
+    }
+    return value;
+  });
 }
 
 export function ok<T>(value: T): Result<T> {
