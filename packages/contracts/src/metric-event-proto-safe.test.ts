@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getRoute } from "./route-registry";
 import { MetricEventTrackRequestSchema } from "./metric-event";
 import { OWN_PROTO_KEY } from "./proto-safe-record";
 
@@ -46,6 +47,26 @@ describe("Metric Event track request proto-safe records", () => {
     expect(parsed.success).toBe(false);
     if (parsed.success) throw new Error("expected refusal");
     expect(parsed.error.issues.some((issue) => issue.path.includes(OWN_PROTO_KEY))).toBe(true);
+  });
+
+  it("route.input refuses a raw root __proto__ fields key", () => {
+    const parsed = getRoute("sdk_track")?.input.safeParse({
+      body: {
+        ...BASE,
+        fields: JSON.parse(`{${JSON.stringify(OWN_PROTO_KEY)}:true}`),
+      },
+    });
+    expect(parsed?.success).toBe(false);
+  });
+
+  it("route.input refuses a nested profile __proto__ key", () => {
+    const parsed = getRoute("sdk_track")?.input.safeParse({
+      body: {
+        ...BASE,
+        fields: { profile: JSON.parse(`{${JSON.stringify(OWN_PROTO_KEY)}:true}`) },
+      },
+    });
+    expect(parsed?.success).toBe(false);
   });
 
   it("still accepts ordinary JSON objects", () => {
