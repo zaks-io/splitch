@@ -174,7 +174,7 @@ export async function executeApiOperation(
 ): Promise<CliResult> {
   try {
     const route = requireOperationRoute(operationId);
-    const authorization = operationAuthorization(route.method, input);
+    const authorization = operationAuthorization(route, input);
     const payload = await withAuthorizationRetry(
       deps,
       async (authorization) => {
@@ -225,13 +225,15 @@ function requireOperationRoute(operationId: string): NonNullable<ReturnType<type
   });
 }
 
-function operationAuthorization(
-  method: string,
+export function operationAuthorization(
+  route: NonNullable<ReturnType<typeof getRoute>>,
   input: Record<string, unknown>,
 ): TokenAuthorization | undefined {
   const selectorBinding = operationBinding(input);
   if (selectorBinding) return selectorBinding;
-  return method === "GET" ? { kind: MEMBERSHIP_WIDE_READ_AUTHORIZATION } : undefined;
+  return route.method === "GET" && route.auth === "control-plane-token"
+    ? { kind: MEMBERSHIP_WIDE_READ_AUTHORIZATION }
+    : undefined;
 }
 
 async function clearScopeAfterAppDelete(

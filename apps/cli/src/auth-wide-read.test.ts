@@ -1,10 +1,30 @@
+import { getRoute } from "@splitch/sdk/control-plane";
 import { describe, expect, it, vi } from "vitest";
 import { withAuthorizationRetry } from "./auth.js";
 import { MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "./auth-binding.js";
 import type { CliCredentialFile } from "./credentials.js";
+import { operationAuthorization } from "./execute-operations.js";
 import { storedCredential } from "./test-fixtures.js";
 
 describe("membership-wide read token caching", () => {
+  it("selects wide authority only for selector-free Control Plane reads", () => {
+    const organizationsList = getRoute("organizations_list");
+    const cloudflareInstallationGet = getRoute("cloudflare_installations_get");
+    const appGet = getRoute("apps_get");
+    if (!organizationsList || !cloudflareInstallationGet || !appGet) {
+      throw new Error("expected authorization test routes to be registered");
+    }
+
+    expect(operationAuthorization(organizationsList, {})).toEqual({
+      kind: MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+    });
+    expect(operationAuthorization(cloudflareInstallationGet, {})).toBeUndefined();
+    expect(operationAuthorization(appGet, { appId: "app_1" })).toEqual({
+      kind: "app",
+      selector: "app_1",
+    });
+  });
+
   it("mints once for scope-free reads and reuses the cached token", async () => {
     let stored: CliCredentialFile | null = {
       ...storedCredential(),
