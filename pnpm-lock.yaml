@@ -441,10 +441,6 @@ importers:
   packages/bounded-body: {}
 
   packages/cloudflare:
-    dependencies:
-      '@splitch/worker-runtime':
-        specifier: workspace:*
-        version: link:../worker-runtime
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.22.0
@@ -455,6 +451,9 @@ importers:
       '@splitch/evaluation-core':
         specifier: workspace:*
         version: link:../evaluation-core
+      '@splitch/worker-runtime':
+        specifier: workspace:*
+        version: link:../worker-runtime
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(happy-dom@20.11.2)(vite@8.2.2(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
