@@ -78,29 +78,30 @@ export const TargetingRuleInputSchema = z
 export type TargetingRuleInput = z.infer<typeof TargetingRuleInputSchema>;
 
 function writeVariantValueScalar() {
-  return z.union([z.boolean(), z.number(), PersistedVariantValueStringSchema]);
+  return z.union([z.boolean(), z.number().finite(), PersistedVariantValueStringSchema]);
 }
 
-function writeVariantValueSchema(remainingDepth: number): z.ZodType<unknown> {
-  const scalar = writeVariantValueScalar();
+/** Nested JSON values inside a Variant object, including `null`. Root `null` stays invalid. */
+function writeVariantValueNested(remainingDepth: number): z.ZodType<unknown> {
+  const leaf = z.union([writeVariantValueScalar(), z.null()]);
   if (remainingDepth <= 1) {
-    return scalar;
+    return leaf;
   }
-  const nested = writeVariantValueSchema(remainingDepth - 1);
-  return z.union([scalar, persistedArray(nested), persistedRecord(nested)]);
+  const nested = writeVariantValueNested(remainingDepth - 1);
+  return z.union([leaf, persistedArray(nested), persistedRecord(nested)]);
 }
 
 /**
  * Canonical `Variant.value` is scalar or object, never a root array. Nested
- * arrays remain allowed inside a bounded object so JSON payloads can still
- * carry lists without making the public Variant contract unreadable.
+ * arrays and `null` remain allowed inside a bounded object so a write cannot
+ * reject a value the public Variant contract would later accept.
  */
 function writeVariantValueRootSchema(remainingDepth: number): z.ZodType<unknown> {
   const scalar = writeVariantValueScalar();
   if (remainingDepth <= 1) {
     return scalar;
   }
-  return z.union([scalar, persistedRecord(writeVariantValueSchema(remainingDepth - 1))]);
+  return z.union([scalar, persistedRecord(writeVariantValueNested(remainingDepth - 1))]);
 }
 
 export const WriteVariantValueSchema = writeVariantValueRootSchema(PERSISTED_JSON_MAX_DEPTH);
@@ -141,6 +142,41 @@ export function persistedJsonDepth(value: unknown): number {
     return 1;
   }
   return 1 + Math.max(...children.map(persistedJsonDepth));
+}
+
+/**
+ * Walk Closed JSON `object.properties` / `array.items` without recursion so a
+ * depth-2000 document cannot exhaust the parser stack before the named bound.
+ */
+export function closedJsonSchemaDepthExceeds(value: unknown, maxDepth: number): boolean {
+  const stack: Array<{ value: unknown; depth: number }> = [{ value, depth: 1 }];
+  while (stack.length > 0) {
+    const frame = stack.pop();
+    if (!frame) continue;
+    if (frame.depth > maxDepth) return true;
+    pushClosedJsonChildren(stack, frame.value, frame.depth + 1);
+  }
+  return false;
+}
+
+function pushClosedJsonChildren(
+  stack: Array<{ value: unknown; depth: number }>,
+  value: unknown,
+  childDepth: number,
+): void {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const node = value as Record<string, unknown>;
+  if (node.type === "array") {
+    stack.push({ value: node.items, depth: childDepth });
+    return;
+  }
+  if (node.type !== "object" || !node.properties || typeof node.properties !== "object") {
+    return;
+  }
+  if (Array.isArray(node.properties)) return;
+  for (const child of Object.values(node.properties as Record<string, unknown>)) {
+    stack.push({ value: child, depth: childDepth });
+  }
 }
 
 export function addClosedJsonWriteIssues(
@@ -224,6 +260,16 @@ export function addBoundedJsonWriteIssues(
         code: "custom",
         path,
         message: `must be at most ${PERSISTED_VARIANT_VALUE_STRING_MAX_LENGTH} characters`,
+      });
+    }
+    return;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      context.addIssue({
+        code: "custom",
+        path,
+        message: "must be a finite number",
       });
     }
     return;

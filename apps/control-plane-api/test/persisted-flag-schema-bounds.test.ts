@@ -14,6 +14,7 @@ import {
   type FlagDefinitionHarness,
   makeFlagDefinitionHarness,
   request,
+  requestRawJson,
 } from "../src/flag-definition-test-harness";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
@@ -104,6 +105,61 @@ describe("control-plane Flag schema write bounds", () => {
     expect(err.code).toBe("VALIDATION_ERROR");
     if (err.code !== "VALIDATION_ERROR") return;
     expect(err.details.issues.some((issue) => issue.path.join(".") === path)).toBe(true);
+    expect(await flagSchema(flag.id)).toBe(before);
+  });
+});
+
+describe("control-plane Flag schema non-finite numbers", () => {
+  it("rejects 1e400 on create before any Flag write", async () => {
+    const created = await createDefaultApp(h);
+    const jwt = await appToken(h, created.app.id);
+    const before = await flagCount(created.app.id);
+    const res = await requestRawJson(
+      h,
+      "POST",
+      `/apps/${created.app.id}/flags`,
+      jwt,
+      JSON.stringify({
+        appId: created.app.id,
+        name: "Infinite schema",
+        key: "infinite-schema-flag",
+        schema: { type: "number", maximum: 0 },
+        variants: [{ name: "control", value: false, isDefault: true }],
+        idempotency_key: "idem-schema-1e400-create",
+      }).replace('"maximum":0', '"maximum":1e400'),
+      "idem-schema-1e400-create",
+    );
+
+    expect(res.status).toBe(400);
+    const err = await errorBody(res);
+    expect(err.code).toBe("VALIDATION_ERROR");
+    if (err.code !== "VALIDATION_ERROR") return;
+    expect(err.details.issues.some((issue) => issue.path.join(".") === "body.schema.maximum")).toBe(
+      true,
+    );
+    expect(await flagCount(created.app.id)).toBe(before);
+  });
+
+  it("rejects 1e400 on patch before any Flag write", async () => {
+    const created = await createDefaultApp(h);
+    const jwt = await appToken(h, created.app.id);
+    const flag = await createFlag(h, created.app.id, jwt);
+    const before = await flagSchema(flag.id);
+    const res = await requestRawJson(
+      h,
+      "PATCH",
+      `/apps/${created.app.id}/flags/${flag.id}`,
+      jwt,
+      '{"schema":{"type":"number","maximum":1e400}}',
+    );
+
+    expect(res.status).toBe(400);
+    const err = await errorBody(res);
+    expect(err.code).toBe("VALIDATION_ERROR");
+    if (err.code !== "VALIDATION_ERROR") return;
+    expect(err.details.issues.some((issue) => issue.path.join(".") === "body.schema.maximum")).toBe(
+      true,
+    );
     expect(await flagSchema(flag.id)).toBe(before);
   });
 });

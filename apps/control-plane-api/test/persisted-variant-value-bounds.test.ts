@@ -1,6 +1,9 @@
+import { FlagMutationResponseSchema, FlagSchema } from "@splitch/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  allowAllPolicies,
   appToken,
+  baseFlag,
   createDefaultApp,
   createFlag,
   errorBody,
@@ -83,6 +86,75 @@ describe("control-plane Variant value root arrays", () => {
     if (err.code !== "VALIDATION_ERROR") return;
     expect(err.details.issues.some((issue) => issue.path.join(".") === "body.value")).toBe(true);
     expect(await variantValue(variant.id)).toBe(beforeValue);
+  });
+});
+
+describe("control-plane Variant nested null writes", () => {
+  it("persists a nested-null catalog value and returns a canonical Variant", async () => {
+    const created = await createDefaultApp(h);
+    await allowAllPolicies(h, created.app.id);
+    const jwt = await appToken(h, created.app.id);
+    const res = await request(h, "POST", `/apps/${created.app.id}/flags`, jwt, {
+      appId: created.app.id,
+      name: "Null object",
+      key: "null-object-flag",
+      variants: [{ name: "control", value: { a: null }, isDefault: true }],
+      idempotency_key: "idem-nested-null-flag",
+    });
+
+    expect(res.status).toBe(200);
+    const body = FlagSchema.parse(await res.json());
+    const control = body.variants.find((entry) => entry.name === "control");
+    expect(control?.value).toEqual({ a: null });
+    if (!control) throw new Error("expected control Variant");
+    expect(await variantValue(control.id)).toBe(JSON.stringify({ a: null }));
+  });
+
+  it("persists a nested-null Variant create and patch", async () => {
+    const created = await createDefaultApp(h);
+    await allowAllPolicies(h, created.app.id);
+    const jwt = await appToken(h, created.app.id);
+    const flag = await createFlag(h, created.app.id, jwt, {
+      ...baseFlag(created.app.id),
+      schema: null,
+      variants: [
+        { name: "control", value: { a: false }, isDefault: true },
+        { name: "treatment", value: { a: true }, isDefault: false },
+      ],
+    });
+    const createdVariant = await request(
+      h,
+      "POST",
+      `/apps/${created.app.id}/flags/${flag.id}/variants`,
+      jwt,
+      {
+        appId: created.app.id,
+        flagId: flag.id,
+        name: "nullable",
+        value: { a: null },
+        idempotency_key: "idem-nested-null-variant",
+      },
+    );
+    expect(createdVariant.status).toBe(200);
+    const createdBody = FlagSchema.parse(await createdVariant.json());
+    const nullable = createdBody.variants.find((entry) => entry.name === "nullable");
+    expect(nullable?.value).toEqual({ a: null });
+    if (!nullable) throw new Error("expected nullable Variant");
+    expect(await variantValue(nullable.id)).toBe(JSON.stringify({ a: null }));
+
+    const patched = await request(
+      h,
+      "PATCH",
+      `/apps/${created.app.id}/flags/${flag.id}/variants/treatment`,
+      jwt,
+      { value: { a: null }, idempotency_key: "idem-nested-null-variant-patch" },
+    );
+    expect(patched.status).toBe(200);
+    const patchedBody = FlagMutationResponseSchema.parse(await patched.json());
+    const treatment = patchedBody.variants.find((entry) => entry.name === "treatment");
+    expect(treatment?.value).toEqual({ a: null });
+    if (!treatment) throw new Error("expected treatment Variant");
+    expect(await variantValue(treatment.id)).toBe(JSON.stringify({ a: null }));
   });
 });
 

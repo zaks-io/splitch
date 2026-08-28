@@ -236,5 +236,6 @@ export const EventDefinitionHotConfigSchema = z
   .strict();
 
 export type ClosedJson = z.infer<typeof ClosedJsonSchemaSchema>;
+export type EventFieldDefinition = z.infer<typeof EventFieldDefinitionSchema>;
 export type EventDefinition = z.infer<typeof EventDefinitionSchema>;
 export type EventDefinitionVersion = z.infer<typeof EventDefinitionVersionSchema>;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { VariantSchema } from "./leaf-schemas-flag";
 import {
   PERSISTED_ARRAY_MAX_ITEMS,
   PERSISTED_CONDITION_ATTRIBUTE_MAX_LENGTH,
@@ -96,6 +97,21 @@ describe("WriteVariantValueSchema", () => {
     expect(WriteVariantValueSchema.safeParse(["x"]).success).toBe(false);
     expect(WriteVariantValueSchema.safeParse({ items: ["x"] }).success).toBe(true);
   });
+
+  it("accepts nested null so write matches the canonical Variant object shape", () => {
+    expect(VariantSchema.safeParse({ id: "v", name: "nested", value: { a: null } }).success).toBe(
+      true,
+    );
+    expect(WriteVariantValueSchema.safeParse({ a: null }).success).toBe(true);
+    expect(WriteVariantValueSchema.safeParse({ items: [null] }).success).toBe(true);
+    expect(WriteVariantValueSchema.safeParse(null).success).toBe(false);
+  });
+
+  it("rejects non-finite numbers that JSON would persist as null", () => {
+    expect(WriteVariantValueSchema.safeParse(Number.POSITIVE_INFINITY).success).toBe(false);
+    expect(WriteVariantValueSchema.safeParse({ a: Number.POSITIVE_INFINITY }).success).toBe(false);
+    expect(WriteVariantValueSchema.safeParse({ a: Number.NaN }).success).toBe(false);
+  });
 });
 
 describe("WriteFlagJsonSchemaSchema", () => {
@@ -142,6 +158,20 @@ describe("WriteFlagJsonSchemaSchema", () => {
     }
     expect(WriteFlagJsonSchemaSchema.safeParse(nested).success).toBe(true);
     expect(WriteFlagJsonSchemaSchema.safeParse({ overflow: nested }).success).toBe(false);
+  });
+
+  it("rejects non-finite schema numbers before they stringify to null", () => {
+    const fromLiteral = JSON.parse('{"type":"number","maximum":1e400}') as Record<string, unknown>;
+    expect(fromLiteral.maximum).toBe(Number.POSITIVE_INFINITY);
+    expect(WriteFlagJsonSchemaSchema.safeParse(fromLiteral).success).toBe(false);
+    expect(
+      WriteFlagJsonSchemaSchema.safeParse({ type: "number", maximum: Number.POSITIVE_INFINITY })
+        .success,
+    ).toBe(false);
+    expect(
+      WriteFlagJsonSchemaSchema.safeParse({ type: "number", minimum: Number.NEGATIVE_INFINITY })
+        .success,
+    ).toBe(false);
   });
 });
 

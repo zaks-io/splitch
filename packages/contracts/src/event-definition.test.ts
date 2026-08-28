@@ -158,3 +158,22 @@ describe("Event Definition publication contracts", () => {
     expect(overflow.error.issues[0]?.path[0]).toBe("fields");
   });
 });
+
+describe("Event Definition publication pre-refinement depth guard", () => {
+  it("rejects a valid Closed JSON document at depth 2000 without throwing", () => {
+    let jsonSchema: Record<string, unknown> = { type: "null" };
+    for (let depth = 0; depth < 2000; depth += 1) {
+      jsonSchema = { type: "array", items: jsonSchema };
+    }
+    const encoded = JSON.stringify(jsonSchema);
+    expect(encoded.length).toBeGreaterThan(50_000);
+    expect(encoded.length).toBeLessThan(1_048_576);
+
+    const parsed = PublishEventDefinitionVersionRequestSchema.safeParse({
+      entityType: "user",
+      fields: [{ name: "payload", type: "json", required: false, jsonSchema }],
+      dimensions: [],
+    });
+    expect(parsed.success).toBe(false);
+  });
+});
