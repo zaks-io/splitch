@@ -9,6 +9,7 @@ import {
   isFunctionDeclaration,
   isMethodDeclaration,
   type MethodDeclaration,
+  type ClassLikeDeclaration,
   ScriptKind,
   ScriptTarget,
   type SourceFile,
@@ -122,7 +123,7 @@ function isDefaultExported(node: { modifiers?: ClassDeclaration["modifiers"] }):
   );
 }
 
-function classFetchProof(file: SourceFile, cls: ClassDeclaration): WrapProof {
+function classFetchProof(file: SourceFile, cls: ClassLikeDeclaration): WrapProof {
   const fetch = cls.members.find(
     (member): member is MethodDeclaration =>
       isMethodDeclaration(member) && isFetchPropertyName(member.name),

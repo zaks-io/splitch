@@ -103,4 +103,43 @@ describe("hosted Worker entrypoint binding discovery", () => {
       /unsupported exported fetch-bearing class FalseDoor/,
     );
   });
+
+  it("discovers and proves an exported WorkerEntrypoint class expression", () => {
+    const source = `
+      import { WorkerEntrypoint } from "cloudflare:workers";
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      const wrapped = ${WRAPPER}({ fetch() { return new Response("ok"); } });
+      export default wrapped;
+      export const PublicDoor = class extends WorkerEntrypoint {
+        fetch(request: Request) {
+          return wrapped.fetch(request, this.env, this.ctx);
+        }
+      };
+    `;
+
+    expect(exportedWorkerEntrypoints(source)).toEqual(["PublicDoor"]);
+    expect(classFetchIsWrapped(source, "PublicDoor")).toBe(true);
+  });
+
+  it("fails an unsupported exported fetch-bearing class expression with its location", () => {
+    const discovered = discoverFixture({
+      wrangler: `{ "name": "class-expression", "main": "src/worker.ts" }`,
+      source: `
+        import { ${WRAPPER} } from "@splitch/worker-runtime";
+        const wrapped = ${WRAPPER}({ fetch() { return new Response("ok"); } });
+        export default wrapped;
+        export const PublicDoor = class {
+          fetch() {
+            return new Response("unsupported");
+          }
+        };
+      `,
+    });
+
+    expect(omissionFailures(discovered)).toEqual([
+      expect.stringMatching(
+        /unsupported exported fetch-bearing class PublicDoor \(.*src[/\\]worker\.ts:\d+:\d+\)/,
+      ),
+    ]);
+  });
 });

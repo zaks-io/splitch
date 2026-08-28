@@ -1,6 +1,7 @@
 import {
   type ElementAccessExpression,
   forEachChild,
+  isArrayLiteralExpression,
   isArrayBindingPattern,
   isBinaryExpression,
   isCallExpression,
@@ -9,6 +10,9 @@ import {
   isForInStatement,
   isForOfStatement,
   isIdentifier,
+  isFunctionLike,
+  isNewExpression,
+  isObjectLiteralExpression,
   isObjectBindingPattern,
   isPostfixUnaryExpression,
   isPrefixUnaryExpression,
@@ -110,8 +114,16 @@ function mutationOfBindingReference(
   if (assignment) return mutated(file, assignment, "wrapped handler binding is reassigned");
   const direct = directMutation(reference);
   if (direct) return mutated(file, direct.node, direct.reason);
+  const storage = containingContainerStorage(reference);
+  if (storage) return mutated(file, storage, "wrapped handler escapes through container storage");
+  const assignmentValue = containingAssignmentValue(reference);
+  if (assignmentValue)
+    return mutated(file, assignmentValue, "wrapped handler escapes through assignment");
   const call = containingCallArgument(reference);
   if (call) return mutated(file, call, "wrapped handler escapes to a potentially mutating call");
+  const constructorEscape = containingConstructorArgument(reference);
+  if (constructorEscape)
+    return mutated(file, constructorEscape, "wrapped handler escapes through a constructor");
   return unsupportedMethodCall(file, reference, allowedMethods);
 }
 
@@ -188,6 +200,57 @@ function containingCallArgument(reference: Node): Node | undefined {
     }
     if (isVariableDeclaration(parent) || isVariableStatement(parent) || isSourceFile(parent)) {
       return undefined;
+    }
+    current = parent;
+  }
+  return undefined;
+}
+
+function containingConstructorArgument(reference: Node): Node | undefined {
+  let current: Node = reference;
+  while (current.parent) {
+    const parent = current.parent;
+    if (isNewExpression(parent)) {
+      return parent.arguments?.some((argument) => nodeContains(argument, reference))
+        ? parent
+        : undefined;
+    }
+    if (isVariableDeclaration(parent) || isVariableStatement(parent) || isSourceFile(parent)) {
+      return undefined;
+    }
+    current = parent;
+  }
+  return undefined;
+}
+
+function containingContainerStorage(reference: Node): Node | undefined {
+  let current: Node = reference;
+  while (current.parent) {
+    const parent = current.parent;
+    if (isArrayLiteralExpression(parent) || isObjectLiteralExpression(parent)) return parent;
+    if (
+      isFunctionLike(parent) ||
+      isVariableDeclaration(parent) ||
+      isVariableStatement(parent) ||
+      isSourceFile(parent)
+    ) {
+      return undefined;
+    }
+    current = parent;
+  }
+  return undefined;
+}
+
+function containingAssignmentValue(reference: Node): Node | undefined {
+  let current: Node = reference;
+  while (current.parent && isAssignmentContainer(current.parent)) {
+    const parent = current.parent;
+    if (
+      isBinaryExpression(parent) &&
+      isAssignmentOperator(parent.operatorToken.kind) &&
+      nodeContains(parent.right, reference)
+    ) {
+      return parent;
     }
     current = parent;
   }

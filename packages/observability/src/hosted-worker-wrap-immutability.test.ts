@@ -50,6 +50,25 @@ describe("hosted Worker wrap-gate immutable proof", () => {
     expect(defaultExportIsWrapped(source)).toBe(false);
   });
 
+  it.each([
+    ["object property", "const holder = { value: wrapped }; holder.value.fetch = raw.fetch;"],
+    ["array element", "const holder = [wrapped]; holder[0].fetch = raw.fetch;"],
+  ])("fails when %s storage hides a wrapped handler mutation", (_name, statement) => {
+    expect(defaultExportIsWrapped(wrappedThen(statement))).toBe(false);
+  });
+
+  it("fails when a wrapped handler escapes through a constructor", () => {
+    const source = wrappedThen(`
+      class Mutator {
+        constructor(handler: typeof wrapped) {
+          handler.fetch = raw.fetch;
+        }
+      }
+      new Mutator(wrapped);
+    `);
+    expect(defaultExportIsWrapped(source)).toBe(false);
+  });
+
   it("fails an exported class after its delegated wrapped fetch is replaced", () => {
     const source = `
       import { WorkerEntrypoint } from "cloudflare:workers";

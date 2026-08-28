@@ -1,7 +1,8 @@
 import {
-  type ClassDeclaration,
+  type ClassLikeDeclaration,
   type Expression,
   isClassDeclaration,
+  isClassExpression,
   isComputedPropertyName,
   isExportDeclaration,
   isGetAccessorDeclaration,
@@ -26,7 +27,7 @@ import { locationOf, unwrap } from "./hosted-worker-wrap-ast.js";
 export interface ExportedFetchClass {
   readonly exportName: string;
   readonly className: string;
-  readonly declaration: ClassDeclaration;
+  readonly declaration: ClassLikeDeclaration;
   readonly workerEntrypoint: boolean;
 }
 
@@ -54,7 +55,7 @@ export function exportedFetchClasses(file: SourceFile): ExportedFetchClass[] {
 export function findExportedClass(
   file: SourceFile,
   exportOrClassName: string,
-): ClassDeclaration | undefined {
+): ClassLikeDeclaration | undefined {
   const exported = exportedFetchClasses(file).find(
     (entry) => entry.exportName === exportOrClassName || entry.className === exportOrClassName,
   );
@@ -71,19 +72,31 @@ export function unsupportedExportedFetchClasses(file: SourceFile): UnsupportedEx
     }));
 }
 
-function moduleClasses(file: SourceFile): Map<string, ClassDeclaration> {
-  const classes = new Map<string, ClassDeclaration>();
+function moduleClasses(file: SourceFile): Map<string, ClassLikeDeclaration> {
+  const classes = new Map<string, ClassLikeDeclaration>();
   for (const statement of file.statements) {
     if (isClassDeclaration(statement) && statement.name) {
       classes.set(statement.name.text, statement);
+    }
+    for (const [name, declaration] of variableClassExpressions(statement)) {
+      classes.set(name, declaration);
     }
   }
   return classes;
 }
 
+function variableClassExpressions(statement: Node): Array<readonly [string, ClassLikeDeclaration]> {
+  if (!isVariableStatement(statement)) return [];
+  return statement.declarationList.declarations.flatMap((declaration) => {
+    if (!isIdentifier(declaration.name) || !declaration.initializer) return [];
+    const initializer = unwrap(declaration.initializer);
+    return isClassExpression(initializer) ? [[declaration.name.text, initializer] as const] : [];
+  });
+}
+
 function exportedNames(
   file: SourceFile,
-  classes: ReadonlyMap<string, ClassDeclaration>,
+  classes: ReadonlyMap<string, ClassLikeDeclaration>,
 ): Map<string, Set<string>> {
   const names = new Map<string, Set<string>>();
   const add = (className: string, exportName: string): void => {
@@ -93,18 +106,27 @@ function exportedNames(
     names.set(className, current);
   };
   for (const statement of file.statements) {
-    const direct = directlyExportedClassName(statement);
-    if (direct) add(direct, direct);
+    for (const direct of directlyExportedClassNames(statement, classes)) add(direct, direct);
     for (const [className, exportName] of namedClassExports(statement)) add(className, exportName);
   }
   return names;
 }
 
-function directlyExportedClassName(statement: Node): string | undefined {
-  if (!isClassDeclaration(statement) || !statement.name) return undefined;
-  return statement.modifiers?.some((modifier) => modifier.kind === SyntaxKind.ExportKeyword)
-    ? statement.name.text
-    : undefined;
+function directlyExportedClassNames(
+  statement: Node,
+  classes: ReadonlyMap<string, ClassLikeDeclaration>,
+): string[] {
+  if (!isClassDeclaration(statement) && !isVariableStatement(statement)) return [];
+  const exported = statement.modifiers?.some(
+    (modifier) => modifier.kind === SyntaxKind.ExportKeyword,
+  );
+  if (!exported) return [];
+  if (isClassDeclaration(statement)) return statement.name ? [statement.name.text] : [];
+  return statement.declarationList.declarations.flatMap((declaration) =>
+    isIdentifier(declaration.name) && classes.has(declaration.name.text)
+      ? [declaration.name.text]
+      : [],
+  );
 }
 
 function namedClassExports(statement: Node): Array<readonly [string, string]> {
@@ -122,7 +144,7 @@ function namedClassExports(statement: Node): Array<readonly [string, string]> {
     .map((element) => [(element.propertyName ?? element.name).text, element.name.text] as const);
 }
 
-function hasFetchMethod(cls: ClassDeclaration): boolean {
+function hasFetchMethod(cls: ClassLikeDeclaration): boolean {
   return cls.members.some(
     (member) =>
       (isMethodDeclaration(member) ||
@@ -142,7 +164,7 @@ export function isFetchPropertyName(name: PropertyName): boolean {
   );
 }
 
-function extendsOfficialWorkerEntrypoint(file: SourceFile, cls: ClassDeclaration): boolean {
+function extendsOfficialWorkerEntrypoint(file: SourceFile, cls: ClassLikeDeclaration): boolean {
   return (cls.heritageClauses ?? []).some(
     (clause) =>
       clause.token === SyntaxKind.ExtendsKeyword &&
