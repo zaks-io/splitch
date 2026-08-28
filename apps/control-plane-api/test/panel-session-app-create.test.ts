@@ -145,7 +145,7 @@ describe("Control Panel delegation for apps_create", () => {
         [CONTROL_PANEL_DELEGATION_HEADER]: "not-a-delegation",
         "content-type": "application/json",
       },
-      body: JSON.stringify({ organizationId: PRIMARY.orgId, name: "bad", key: "bad" }),
+      body: JSON.stringify({ name: "bad", key: "bad" }),
     });
     expect(malformed.status).toBe(401);
   });
