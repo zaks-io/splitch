@@ -268,6 +268,7 @@ function loopPath(
 function loopAlwaysRuns(
   statement: ForStatement | ForInStatement | ForOfStatement | WhileStatement | DoStatement,
 ): boolean {
+  if (isDoStatement(statement)) return true;
   if (isForInStatement(statement) || isForOfStatement(statement)) return false;
   if (isForStatement(statement)) {
     return statement.condition === undefined || isTrueLiteral(statement.condition);

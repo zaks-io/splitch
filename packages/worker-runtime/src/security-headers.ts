@@ -141,11 +141,7 @@ function mergeHeaderValue(name: string, current: string, extra: string): string 
     return strongerToken(current, extra, (value) => (value.toLowerCase() === "nosniff" ? 1 : 0));
   }
   if (key === "referrer-policy") {
-    return strongerToken(
-      current,
-      extra,
-      (value) => REFERRER_POLICY_STRENGTH[value.toLowerCase()] ?? 0,
-    );
+    return strongerReferrerPolicy(current, extra);
   }
   return current;
 }
@@ -156,6 +152,28 @@ function strongerToken(
   strength: (value: string) => number,
 ): string {
   return strength(extra) > strength(current) ? extra : current;
+}
+
+/**
+ * Referrer-Policy is an ordered token list. Browsers use the last recognized
+ * token. Never replace a stronger effective final token with a weaker extra.
+ */
+function strongerReferrerPolicy(current: string, extra: string): string {
+  return referrerPolicyStrength(extra) > referrerPolicyStrength(current) ? extra : current;
+}
+
+function referrerPolicyStrength(header: string): number {
+  const effective = lastRecognizedReferrerPolicy(header);
+  return effective === undefined ? 0 : (REFERRER_POLICY_STRENGTH[effective] ?? 0);
+}
+
+function lastRecognizedReferrerPolicy(header: string): string | undefined {
+  let recognized: string | undefined;
+  for (const token of header.split(",")) {
+    const normalized = token.trim().toLowerCase();
+    if (normalized in REFERRER_POLICY_STRENGTH) recognized = normalized;
+  }
+  return recognized;
 }
 
 function xFrameOptionsStrength(value: string): number {

@@ -149,6 +149,28 @@ describe("applyResponseHeaders", () => {
     );
   });
 
+  it("keeps a stronger comma-delimited Referrer-Policy as the last recognized token", () => {
+    const existing = applyResponseHeaders(
+      new Response("ok", {
+        headers: { "referrer-policy": "unsafe-url, no-referrer" },
+      }),
+      { "referrer-policy": "strict-origin-when-cross-origin" },
+    );
+    const extrasOnly = applyResponseHeaders(new Response("ok"), {
+      "referrer-policy": "unsafe-url, no-referrer",
+    });
+    const weakerFinal = applyResponseHeaders(
+      new Response("ok", {
+        headers: { "referrer-policy": "no-referrer, unsafe-url" },
+      }),
+      { "referrer-policy": "strict-origin-when-cross-origin" },
+    );
+
+    expect(existing.headers.get("referrer-policy")).toBe("unsafe-url, no-referrer");
+    expect(extrasOnly.headers.get("referrer-policy")).toBe("unsafe-url, no-referrer");
+    expect(weakerFinal.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+  });
+
   it("does not weaken an existing frame-ancestors 'none' when extras are looser", () => {
     const response = applyResponseHeaders(
       new Response("ok", {

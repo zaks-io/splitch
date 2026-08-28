@@ -67,19 +67,18 @@ describe("hosted Worker security-header wiring", () => {
   });
 
   it("resolves every configured service entrypoint to a wrapped exported class", () => {
-    const wrappedClasses = new Set(
-      workers.flatMap((worker) =>
-        exportedWorkerEntrypoints(worker.source).filter((className) =>
-          classFetchIsWrapped(worker.source, className),
-        ),
-      ),
+    const referenced = workers.flatMap((worker) => worker.referencedEntrypoints);
+    expect(referenced.length).toBeGreaterThan(0);
+    const bindingFailures = omissionFailures(workers).filter((failure) =>
+      failure.includes("configured entrypoint"),
     );
-    const referenced = new Set(workers.flatMap((worker) => worker.referencedEntrypoints));
-    expect(referenced.size).toBeGreaterThan(0);
-    for (const entrypoint of referenced) {
+    expect(bindingFailures).toEqual([]);
+    for (const binding of referenced) {
+      const target = workers.find((worker) => worker.serviceNames.includes(binding.service));
+      expect(target, `service ${binding.service} is missing`).toBeDefined();
       expect(
-        wrappedClasses.has(entrypoint),
-        `configured entrypoint ${entrypoint} is unwrapped`,
+        classFetchIsWrapped(target?.source ?? "", binding.entrypoint),
+        `configured entrypoint ${binding.entrypoint} is unwrapped for service ${binding.service}`,
       ).toBe(true);
     }
   });

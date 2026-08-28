@@ -9,11 +9,26 @@ import {
   proveDefaultExportWrapped,
 } from "./hosted-worker-wrap-gate.js";
 
+interface WranglerServiceBinding {
+  service?: string;
+  entrypoint?: string;
+}
+
+interface WranglerEnv {
+  name?: string;
+  services?: WranglerServiceBinding[];
+}
+
 interface WranglerConfig {
   name?: string;
   main?: string;
-  services?: Array<{ entrypoint?: string }>;
-  env?: Record<string, { name?: string; services?: Array<{ entrypoint?: string }> } | undefined>;
+  services?: WranglerServiceBinding[];
+  env?: Record<string, WranglerEnv | undefined>;
+}
+
+interface ReferencedEntrypoint {
+  readonly service: string;
+  readonly entrypoint: string;
 }
 
 export interface HostedWorker {
@@ -21,7 +36,14 @@ export interface HostedWorker {
   name: string;
   mainPath: string;
   source: string;
-  referencedEntrypoints: string[];
+  serviceNames: string[];
+  referencedEntrypoints: ReferencedEntrypoint[];
+}
+
+export interface WorkerFixtureFiles {
+  readonly directory?: string;
+  readonly wrangler: string;
+  readonly source: string;
 }
 
 const WRANGLER_WALK_SKIP = new Set([
@@ -34,14 +56,23 @@ const WRANGLER_WALK_SKIP = new Set([
   ".output",
 ]);
 
-export function discoverFixture(files: { wrangler: string; source: string }): HostedWorker[] {
+export function discoverFixture(files: WorkerFixtureFiles): HostedWorker[] {
+  return discoverFixtures([files]);
+}
+
+export function discoverFixtures(workers: readonly WorkerFixtureFiles[]): HostedWorker[] {
   const fixtureRoot = mkdtempSync(join(tmpdir(), "unwrapped-worker-"));
   try {
-    writeFileSync(join(fixtureRoot, "wrangler.jsonc"), files.wrangler);
-    const config = readWranglerConfig(join(fixtureRoot, "wrangler.jsonc"));
-    const mainPath = join(fixtureRoot, config.main ?? "index.ts");
-    mkdirSync(dirname(mainPath), { recursive: true });
-    writeFileSync(mainPath, files.source);
+    for (const [index, files] of workers.entries()) {
+      const directory = join(fixtureRoot, files.directory ?? `worker-${index}`);
+      mkdirSync(directory, { recursive: true });
+      const configPath = join(directory, "wrangler.jsonc");
+      writeFileSync(configPath, files.wrangler);
+      const config = readWranglerConfig(configPath);
+      const mainPath = join(directory, config.main ?? "index.ts");
+      mkdirSync(dirname(mainPath), { recursive: true });
+      writeFileSync(mainPath, files.source);
+    }
     return discoverDeployableWorkers(fixtureRoot);
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true });
@@ -56,11 +87,13 @@ export function discoverDeployableWorkers(root: string): HostedWorker[] {
     const config = readWranglerConfig(configPath);
     if (!config.main) continue;
     const mainPath = join(dirname(configPath), config.main);
+    const fallbackName = config.name ?? rel;
     workers.push({
       configPath,
-      name: config.name ?? rel,
+      name: fallbackName,
       mainPath,
       source: readFileSync(mainPath, "utf8"),
+      serviceNames: collectServiceNames(config, fallbackName),
       referencedEntrypoints: collectReferencedEntrypoints(config),
     });
   }
@@ -68,22 +101,37 @@ export function discoverDeployableWorkers(root: string): HostedWorker[] {
 }
 
 export function omissionFailures(discovered: HostedWorker[]): string[] {
-  const wrappedClasses = wrappedEntrypointNames(discovered);
+  const wrappedByService = wrappedEntrypointsByService(discovered);
   return discovered.flatMap((worker) => [
     ...unwrappedDefaultFailures(worker),
     ...unwrappedClassFailures(worker),
-    ...unwrappedBindingFailures(worker, wrappedClasses),
+    ...unwrappedBindingFailures(worker, wrappedByService),
   ]);
 }
 
-function wrappedEntrypointNames(discovered: HostedWorker[]): Set<string> {
-  return new Set(
-    discovered.flatMap((worker) =>
-      exportedWorkerEntrypoints(worker.source).filter((className) =>
-        classFetchIsWrapped(worker.source, className),
-      ),
-    ),
-  );
+function collectServiceNames(config: WranglerConfig, fallback: string): string[] {
+  const names = new Set<string>();
+  if (config.name) names.add(config.name);
+  for (const target of Object.values(config.env ?? {})) {
+    if (target?.name) names.add(target.name);
+  }
+  if (names.size === 0) names.add(fallback);
+  return [...names];
+}
+
+function wrappedEntrypointsByService(discovered: HostedWorker[]): Map<string, Set<string>> {
+  const byService = new Map<string, Set<string>>();
+  for (const worker of discovered) {
+    const classes = exportedWorkerEntrypoints(worker.source).filter((className) =>
+      classFetchIsWrapped(worker.source, className),
+    );
+    for (const serviceName of worker.serviceNames) {
+      const existing = byService.get(serviceName) ?? new Set<string>();
+      for (const className of classes) existing.add(className);
+      byService.set(serviceName, existing);
+    }
+  }
+  return byService;
 }
 
 function unwrappedDefaultFailures(worker: HostedWorker): string[] {
@@ -109,10 +157,16 @@ function unwrappedClassFailures(worker: HostedWorker): string[] {
     .filter((failure): failure is string => failure !== undefined);
 }
 
-function unwrappedBindingFailures(worker: HostedWorker, wrappedClasses: Set<string>): string[] {
+function unwrappedBindingFailures(
+  worker: HostedWorker,
+  wrappedByService: Map<string, Set<string>>,
+): string[] {
   return worker.referencedEntrypoints
-    .filter((entrypoint) => !wrappedClasses.has(entrypoint))
-    .map((entrypoint) => `configured entrypoint ${entrypoint} is unwrapped`);
+    .filter((binding) => !wrappedByService.get(binding.service)?.has(binding.entrypoint))
+    .map(
+      (binding) =>
+        `configured entrypoint ${binding.entrypoint} is unwrapped for service ${binding.service}`,
+    );
 }
 
 function isTestWranglerPath(rel: string): boolean {
@@ -146,14 +200,22 @@ function readWranglerConfig(path: string): WranglerConfig {
   return parsed.config as WranglerConfig;
 }
 
-function collectReferencedEntrypoints(config: WranglerConfig): string[] {
-  const names = new Set(entrypointNames(config.services));
+function collectReferencedEntrypoints(config: WranglerConfig): ReferencedEntrypoint[] {
+  const refs: ReferencedEntrypoint[] = [];
+  const seen = new Set<string>();
+  const add = (services: WranglerServiceBinding[] | undefined): void => {
+    for (const service of services ?? []) {
+      if (!service.entrypoint) continue;
+      const target = service.service ?? "";
+      const key = `${target}\0${service.entrypoint}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      refs.push({ service: target, entrypoint: service.entrypoint });
+    }
+  };
+  add(config.services);
   for (const target of Object.values(config.env ?? {})) {
-    for (const name of entrypointNames(target?.services)) names.add(name);
+    add(target?.services);
   }
-  return [...names];
-}
-
-function entrypointNames(services: Array<{ entrypoint?: string }> | undefined): string[] {
-  return (services ?? []).flatMap((service) => (service.entrypoint ? [service.entrypoint] : []));
+  return refs;
 }
