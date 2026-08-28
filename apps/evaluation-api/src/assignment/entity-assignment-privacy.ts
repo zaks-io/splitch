@@ -27,6 +27,7 @@ export interface EntityAssignmentExport {
   records: readonly {
     targetingKeyHash: string;
     assignments: AssignmentStoreValue;
+    assignmentWriterAssignments: AssignmentStoreValue;
     holdoverWrites: readonly HoldoverWriteJob[];
     holdoverSuppression: EntityHoldoverWriteSuppression | null;
   }[];
@@ -46,6 +47,7 @@ export interface EntityAssignmentDeleteResult {
 
 export async function exportEntityAssignments(
   kv: AssignmentKv,
+  writers: AssignmentWriterNamespace,
   outboxes: AssignmentWriterNamespace,
   saltStore: SaltStore,
   input: { appId: string; idType: string; targetingKey: string },
@@ -60,6 +62,7 @@ export async function exportEntityAssignments(
       assignmentKey(input.appId, input.idType, targetingKeyHash),
       logger,
     );
+    const writerExport = await exportAssignmentWriter(writers, input, targetingKeyHash);
     const outbox = outboxes.get(
       outboxes.idFromName(
         holdoverWriteOutboxName({ appId: input.appId, idType: input.idType, targetingKeyHash }),
@@ -70,11 +73,20 @@ export async function exportEntityAssignments(
       throw new Error(`Holdover write outbox export failed with HTTP ${outboxResponse.status}`);
     }
     const holdover = parseHoldoverExport(await outboxResponse.json());
-    proofs.push(`${targetingKeyHash}:assignment-and-holdover-exported-v1`);
-    if (Object.keys(assignments).length > 0 || holdover.jobs.length > 0 || holdover.suppression) {
+    proofs.push(
+      `${targetingKeyHash}:${writerExport.proof}`,
+      `${targetingKeyHash}:assignment-and-holdover-exported-v1`,
+    );
+    if (
+      Object.keys(assignments).length > 0 ||
+      Object.keys(writerExport.assignments).length > 0 ||
+      holdover.jobs.length > 0 ||
+      holdover.suppression
+    ) {
       records.push({
         targetingKeyHash,
         assignments,
+        assignmentWriterAssignments: writerExport.assignments,
         holdoverWrites: holdover.jobs,
         holdoverSuppression: holdover.suppression,
       });
@@ -98,8 +110,8 @@ export async function deleteEntityAssignments(
   const proofs = [];
   for (const targetingKeyHash of identity.targetingKeyHashes) {
     proofs.push(
-      await deleteHoldoverOutbox(outboxes, input, targetingKeyHash, deleteBeforeTs),
       await deleteAssignmentWriter(writers, input, targetingKeyHash),
+      await deleteHoldoverOutbox(outboxes, input, targetingKeyHash, deleteBeforeTs),
     );
     await kv.delete(assignmentKey(input.appId, input.idType, targetingKeyHash));
   }
@@ -141,11 +153,53 @@ async function deleteHoldoverOutbox(
   if (!response.ok) {
     throw new Error(`Holdover write outbox delete failed with HTTP ${response.status}`);
   }
-  const result = (await response.json()) as { ok?: unknown };
-  if (result.ok !== true) {
+  const result = (await response.json()) as { ok?: unknown; remainingJobs?: unknown };
+  if (result.ok !== true || result.remainingJobs !== false) {
     throw new Error("Holdover write outbox delete returned an invalid proof");
   }
   return `${targetingKeyHash}:holdover-write-outbox-suppressed-and-purged-v1`;
+}
+
+async function exportAssignmentWriter(
+  writers: AssignmentWriterNamespace,
+  input: { appId: string; idType: string },
+  targetingKeyHash: string,
+): Promise<{
+  assignments: AssignmentStoreValue;
+  proof: "assignment-do-winners-exported-v1";
+}> {
+  const name = assignmentWriterName({ ...input, targetingKeyHash });
+  const response = await writers
+    .get(writers.idFromName(name))
+    .fetch("https://assignment-store.internal/export");
+  if (!response.ok) {
+    throw new Error(`Assignment writer export failed with HTTP ${response.status}`);
+  }
+  const body = (await response.json()) as {
+    assignments?: unknown;
+    tombstoned?: unknown;
+    proof?: unknown;
+  };
+  if (
+    !isAssignmentStoreValue(body.assignments) ||
+    typeof body.tombstoned !== "boolean" ||
+    body.proof !== "assignment-do-winners-exported-v1"
+  ) {
+    throw new Error("Assignment writer export returned an invalid proof");
+  }
+  return { assignments: body.assignments, proof: body.proof };
+}
+
+function isAssignmentStoreValue(value: unknown): value is AssignmentStoreValue {
+  if (!isRecord(value)) return false;
+  return Object.values(value).every(
+    (entry) =>
+      isRecord(entry) &&
+      typeof entry.runId === "string" &&
+      entry.runId.length > 0 &&
+      typeof entry.variant === "string" &&
+      entry.variant.length > 0,
+  );
 }
 
 async function deleteAssignmentWriter(
@@ -198,6 +252,10 @@ function isSuppression(value: unknown): value is EntityHoldoverWriteSuppression 
     value !== null &&
     typeof (value as { deleteBeforeTsMs?: unknown }).deleteBeforeTsMs === "number"
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function exportedIdentity(

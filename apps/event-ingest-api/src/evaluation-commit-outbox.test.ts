@@ -36,6 +36,29 @@ describe("Evaluation commit outbox privacy", () => {
       await post(object, "/privacy-delete", { identity: IDENTITY, eventIds: ["event-a"] }),
     ).toEqual({ deletedCount: 0 });
   });
+
+  it("purges the sealed usage and Exposure payload and makes retries non-delivering", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-08-28T00:00:00.000Z"));
+    const object = new EvaluationCommitOutboxDurableObject(durableState());
+    await post(object, "/commit", {
+      identity: IDENTITY,
+      payload: {
+        usage: { appId: "app_1", flagKey: "checkout" },
+        exposureRows: [{ event_id: "event-a", entity_family_hash: "family-a" }],
+      },
+    });
+
+    await expect(post(object, "/privacy-delete-all", { identity: IDENTITY })).resolves.toEqual({
+      proof: "evaluation-commit-outbox-purged-v1",
+    });
+    await expect(post(object, "/lookup", { identity: IDENTITY })).resolves.toMatchObject({
+      delivered: true,
+      payload: { usage: { privacyDeleted: true }, exposureRows: [] },
+    });
+    await expect(post(object, "/privacy-delete-all", { identity: IDENTITY })).resolves.toEqual({
+      proof: "evaluation-commit-outbox-purged-v1",
+    });
+  });
 });
 
 async function post(

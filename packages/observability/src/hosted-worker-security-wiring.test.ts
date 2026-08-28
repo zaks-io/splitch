@@ -88,7 +88,7 @@ describe("hosted Worker security-header wiring", () => {
         ],
       ],
       ["apps/evaluation-api/src/index.ts", ["ControlPlaneEntrypoint"]],
-      ["apps/event-ingest-api/src/index.ts", ["EvaluationEntrypoint"]],
+      ["apps/event-ingest-api/src/index.ts", ["ControlPlaneEntrypoint", "EvaluationEntrypoint"]],
       ["apps/marketing/src/server.ts", []],
       ["apps/mcp-server/src/index.ts", []],
       ["packages/cloudflare/src/worker.ts", ["SplitchCloudflareWorker"]],

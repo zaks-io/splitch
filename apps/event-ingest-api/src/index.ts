@@ -136,62 +136,66 @@ export class EvaluationEntrypoint extends WorkerEntrypoint<Env> {
   }
 }
 
-const controlPlaneHandler = wrapWorkerHandler(
-  {
-    async fetch(request, env): Promise<Response> {
-      requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
-      requireEntityMetricPrivacyBinding(env);
-      const identity = delegatedIdentityFor(request, entityPrivacyRoutes);
-      if (!identity) return notDelegatedResponse(request);
-      const operationId = identity.operation;
-      const operation = operationId.endsWith("_export")
-        ? "export"
-        : operationId.endsWith("_suppress")
-          ? "suppress"
-          : "delete";
-      return handleEntityMetricPrivacy(request, env, identity, operation);
-    },
-  } satisfies ExportedHandler<Env>,
-  { surface: "event-ingest-api" },
-);
+const controlPlaneHandler = {
+  async fetch(request, env): Promise<Response> {
+    requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+    requireEntityMetricPrivacyBinding(env);
+    const identity = delegatedIdentityFor(request, entityPrivacyRoutes);
+    if (!identity) return notDelegatedResponse(request);
+    const operationId = identity.operation;
+    const operation = operationId.endsWith("_export")
+      ? "export"
+      : operationId.endsWith("_suppress")
+        ? "suppress"
+        : "delete";
+    return handleEntityMetricPrivacy(request, env, identity, operation);
+  },
+} satisfies ExportedHandler<Env>;
 
 export class ControlPlaneEntrypoint extends WorkerEntrypoint<Env> {
   override async fetch(request: Request): Promise<Response> {
-    return controlPlaneHandler.fetch(
+    return wrapWorkerHandler(controlPlaneHandler, { surface: "event-ingest-api" }).fetch(
       request as Parameters<typeof controlPlaneHandler.fetch>[0],
       this.env,
       this.ctx,
     );
   }
 
-  async purgeAppIdentityDelivery(appId: string, resetId: string): Promise<string> {
-    const response = await appIdentityPrivacyInventoryStub(
-      this.env.ENTITY_METRIC_PRIVACY,
-      appId,
-    ).fetch("https://entity-privacy.local/reset-app", {
+  purgeAppIdentityDelivery(appId: string, resetId: string): Promise<string> {
+    return purgeAppIdentityDelivery(this.env, appId, resetId);
+  }
+
+  completeAppIdentityReset(appId: string, resetId: string): Promise<void> {
+    return completeAppIdentityReset(this.env, appId, resetId);
+  }
+}
+
+async function purgeAppIdentityDelivery(env: Env, appId: string, resetId: string): Promise<string> {
+  const response = await appIdentityPrivacyInventoryStub(env.ENTITY_METRIC_PRIVACY, appId).fetch(
+    "https://entity-privacy.local/reset-app",
+    {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ appId, resetId }),
-    });
-    if (!response.ok) throw new Error(`Event delivery identity purge returned ${response.status}`);
-    const body = (await response.json()) as { proof?: unknown };
-    if (typeof body.proof !== "string")
-      throw new Error("Event delivery identity purge omitted proof");
-    return body.proof;
-  }
+    },
+  );
+  if (!response.ok) throw new Error(`Event delivery identity purge returned ${response.status}`);
+  const body = (await response.json()) as { proof?: unknown };
+  if (typeof body.proof !== "string")
+    throw new Error("Event delivery identity purge omitted proof");
+  return body.proof;
+}
 
-  async completeAppIdentityReset(appId: string, resetId: string): Promise<void> {
-    const response = await appIdentityPrivacyInventoryStub(
-      this.env.ENTITY_METRIC_PRIVACY,
-      appId,
-    ).fetch("https://entity-privacy.local/complete-reset", {
+async function completeAppIdentityReset(env: Env, appId: string, resetId: string): Promise<void> {
+  const response = await appIdentityPrivacyInventoryStub(env.ENTITY_METRIC_PRIVACY, appId).fetch(
+    "https://entity-privacy.local/complete-reset",
+    {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ resetId }),
-    });
-    if (!response.ok)
-      throw new Error(`Event identity reset completion returned ${response.status}`);
-  }
+    },
+  );
+  if (!response.ok) throw new Error(`Event identity reset completion returned ${response.status}`);
 }
 
 export default wrapWorkerHandler(handler, { surface: "event-ingest-api" });

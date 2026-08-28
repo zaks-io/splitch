@@ -143,6 +143,16 @@ export class MapStorage implements AssignmentWriterStorage {
     return Promise.resolve();
   }
 
+  list<T>({ prefix }: { prefix: string }): Promise<Map<string, T>> {
+    return Promise.resolve(
+      new Map(
+        [...this.values.entries()]
+          .filter(([key]) => key.startsWith(prefix))
+          .map(([key, value]) => [key, value as T]),
+      ),
+    );
+  }
+
   deleteAll(): Promise<void> {
     this.values.clear();
     return Promise.resolve();

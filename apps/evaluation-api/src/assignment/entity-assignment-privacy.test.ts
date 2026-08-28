@@ -39,11 +39,15 @@ describe("entity assignment privacy consumers", () => {
     const deletionCalls: string[] = [];
     const deleteBodies: unknown[] = [];
     const outboxes = holdoverOutboxes({ historical, deletionCalls, deleteBodies });
-    const exported = await exportEntityAssignments(kv, outboxes, saltStore, identity);
+    const writers = assignmentWriters(deletionCalls, {
+      [current]: { "exp-writer-only": { runId: "run-writer", variant: "treatment" } },
+    });
+    const exported = await exportEntityAssignments(kv, writers, outboxes, saltStore, identity);
     expect(exported.records).toEqual([
       {
         targetingKeyHash: historical,
         assignments: { "exp-old": { runId: "run-old", variant: "control" } },
+        assignmentWriterAssignments: {},
         holdoverWrites: [
           expect.objectContaining({
             experimentId: "exp-old",
@@ -56,6 +60,9 @@ describe("entity assignment privacy consumers", () => {
       {
         targetingKeyHash: current,
         assignments: { "exp-new": { runId: "run-new", variant: "treatment" } },
+        assignmentWriterAssignments: {
+          "exp-writer-only": { runId: "run-writer", variant: "treatment" },
+        },
         holdoverWrites: [],
         holdoverSuppression: null,
       },
@@ -64,7 +71,7 @@ describe("entity assignment privacy consumers", () => {
 
     const deleted = await deleteEntityAssignments(
       kv,
-      assignmentWriters(deletionCalls),
+      writers,
       outboxes,
       saltStore,
       identity,
@@ -74,7 +81,7 @@ describe("entity assignment privacy consumers", () => {
     expect(deleted.deletedWriterCount).toBe(deleted.targetingKeyHashes.length);
     expect(deleted.deletedOutboxCount).toBe(deleted.targetingKeyHashes.length);
     expect(deletionCalls).toEqual(
-      deleted.targetingKeyHashes.flatMap((hash) => [`outbox:${hash}`, `writer:${hash}`]),
+      deleted.targetingKeyHashes.flatMap((hash) => [`writer:${hash}`, `outbox:${hash}`]),
     );
     expect(deleteBodies).toEqual(
       deleted.targetingKeyHashes.map((targetingKeyHash) => ({
@@ -100,15 +107,60 @@ describe("entity assignment privacy consumers", () => {
     expect(joined.map((row) => row.runId)).toEqual(["run-old", "run-new"]);
     expect(canonicalizeAnalysisEntityHash(hashes)).toBe(current);
   });
+
+  it("does not unregister an Entity outbox when the writer tombstone fails", async () => {
+    const saltStore = makeDerivedSaltStore({ rootSecret: ROOT });
+    const calls: string[] = [];
+    const identity = {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+    };
+
+    await expect(
+      deleteEntityAssignments(
+        new RecordingKv(),
+        failingAssignmentWriters(calls),
+        holdoverOutboxes({ historical: "none", deletionCalls: calls, deleteBodies: [] }),
+        saltStore,
+        identity,
+        "2026-07-18T12:00:00.000Z",
+      ),
+    ).rejects.toThrow("Assignment writer delete failed with HTTP 503");
+    expect(calls).toEqual([expect.stringMatching(/^writer:/u)]);
+  });
 });
 
-function assignmentWriters(calls: string[]) {
+function assignmentWriters(
+  calls: string[],
+  exports: Record<string, Record<string, { runId: string; variant: string }>> = {},
+) {
+  return {
+    idFromName: (name: string) => name as unknown as DurableObjectId,
+    get: (id: DurableObjectId) => ({
+      fetch: async (request: RequestInfo | URL) => {
+        const hash = targetingHashFromName(String(id));
+        if (new URL(String(request)).pathname === "/export") {
+          return Response.json({
+            assignments: exports[hash] ?? {},
+            tombstoned: false,
+            proof: "assignment-do-winners-exported-v1",
+          });
+        }
+        calls.push(`writer:${hash}`);
+        return Response.json({ deleted: true, proof: "assignment-do-tombstone-v1" });
+      },
+    }),
+  };
+}
+
+function failingAssignmentWriters(calls: string[]) {
   return {
     idFromName: (name: string) => name as unknown as DurableObjectId,
     get: (id: DurableObjectId) => ({
       fetch: async () => {
         calls.push(`writer:${targetingHashFromName(String(id))}`);
-        return Response.json({ deleted: true, proof: "assignment-do-tombstone-v1" });
+        return new Response("failed", { status: 503 });
       },
     }),
   };
@@ -148,7 +200,7 @@ function holdoverOutboxes(input: {
         }
         input.deletionCalls.push(`outbox:${targetingKeyHash}`);
         input.deleteBodies.push(JSON.parse(String(init?.body)));
-        return Response.json({ ok: true });
+        return Response.json({ ok: true, remainingJobs: false });
       },
     }),
   };

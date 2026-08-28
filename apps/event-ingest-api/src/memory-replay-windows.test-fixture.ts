@@ -71,6 +71,15 @@ export class MemoryEvaluationCommitOutbox implements EvaluationCommitOutbox {
     };
     return rows.length;
   }
+
+  async privacyDeleteAll(identity: string): Promise<"evaluation-commit-outbox-purged-v1"> {
+    const existing = await this.lookup(identity);
+    if (existing !== null) {
+      existing.payload = { usage: { privacyDeleted: true }, exposureRows: [] };
+      existing.delivered = true;
+    }
+    return "evaluation-commit-outbox-purged-v1";
+  }
 }
 
 function selectedExposureRows(

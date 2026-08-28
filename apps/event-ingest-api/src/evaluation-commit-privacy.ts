@@ -1,17 +1,35 @@
 import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
-import { registerEntityEvaluationCommit } from "./entity-metric-privacy";
+import {
+  registerAppEvaluationCommit,
+  registerEntityEvaluationCommit,
+} from "./entity-metric-privacy";
 import type { Env } from "./types";
 
 interface InventoryCommit {
   identity: string;
   outbox: EvaluationCommitOutbox;
-  commit: { payload: { exposureRows: readonly Record<string, unknown>[] } };
+  commit: {
+    payload: { usage: { appId: string }; exposureRows: readonly Record<string, unknown>[] };
+  };
 }
 
-export async function inventoryEvaluationExposures(
+export async function inventoryEvaluationCommit(
   prepared: InventoryCommit,
   env: Env,
-): Promise<void> {
+): Promise<boolean> {
+  const scopeAppId = prepared.commit.payload.usage.appId;
+  if (typeof scopeAppId !== "string" || scopeAppId.length === 0) {
+    throw new Error("Evaluation commit app_id is invalid");
+  }
+  const appSuppressed = await registerAppEvaluationCommit(
+    env.ENTITY_METRIC_PRIVACY,
+    { appId: scopeAppId, commitIdentity: prepared.identity },
+    env.SPLITCH_PLATFORM_TARGET,
+  );
+  if (appSuppressed) {
+    await prepared.outbox.privacyDeleteAll(prepared.identity);
+    return true;
+  }
   const suppressedEventIds = [];
   for (const row of prepared.commit.payload.exposureRows) {
     const eventId = rowString(row, "event_id");
@@ -34,6 +52,7 @@ export async function inventoryEvaluationExposures(
   if (suppressedEventIds.length > 0) {
     await prepared.outbox.privacyDelete(prepared.identity, suppressedEventIds);
   }
+  return false;
 }
 
 function rowString(row: Record<string, unknown>, field: string): string {

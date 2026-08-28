@@ -15,6 +15,11 @@ export interface EntityEvaluationInventoryEntry {
   serverReceivedAt: string;
 }
 
+export interface AppEvaluationCommitRef {
+  appId: string;
+  commitIdentity: string;
+}
+
 export interface EntityMetricPrivacyNamespace {
   idFromName(name: string): DurableObjectId;
   get(id: DurableObjectId): {
@@ -87,6 +92,30 @@ export async function registerEntityEvaluationCommit(
     "/register-evaluation",
     "Evaluation",
   );
+}
+
+export async function registerAppEvaluationCommit(
+  namespace: EntityMetricPrivacyNamespace | undefined,
+  ref: AppEvaluationCommitRef,
+  platformTarget: string | undefined,
+): Promise<boolean> {
+  if (!namespace && (platformTarget === "local" || platformTarget === "pr-ci")) return false;
+  const response = await appIdentityPrivacyInventoryStub(namespace, ref.appId).fetch(
+    "https://entity-privacy.local/register-app-evaluation",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(ref),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`App Evaluation privacy inventory returned HTTP ${response.status}`);
+  }
+  const body = (await response.json()) as { suppressed?: unknown };
+  if (typeof body.suppressed !== "boolean") {
+    throw new Error("App Evaluation privacy inventory returned an invalid result");
+  }
+  return body.suppressed;
 }
 
 async function registerEntityEntry(

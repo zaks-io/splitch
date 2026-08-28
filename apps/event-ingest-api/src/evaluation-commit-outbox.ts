@@ -9,6 +9,7 @@ export interface EvaluationCommitOutbox {
     eventIds: readonly string[],
   ): Promise<readonly Record<string, unknown>[]>;
   privacyDelete(identity: string, eventIds: readonly string[]): Promise<number>;
+  privacyDeleteAll(identity: string): Promise<"evaluation-commit-outbox-purged-v1">;
 }
 
 export interface EvaluationCommitOutboxNamespace {
@@ -29,6 +30,7 @@ interface OutboxState {
   readonly payload: unknown;
   readonly expiresAt: number;
   readonly deliveredAt?: string;
+  readonly privacyDeletedAt?: string;
 }
 
 const STATE_KEY = "evaluation-commit-outbox";
@@ -57,6 +59,7 @@ export class EvaluationCommitOutboxDurableObject {
       "/acknowledge": () => this.acknowledge(identity),
       "/privacy-export": () => this.privacyExport(request),
       "/privacy-delete": () => this.privacyDelete(request),
+      "/privacy-delete-all": () => this.privacyDeleteAll(),
     };
     return handlers[path]?.() ?? Promise.resolve(new Response("not found", { status: 404 }));
   }
@@ -130,117 +133,30 @@ export class EvaluationCommitOutboxDurableObject {
     return Response.json({ deletedCount: deleted });
   }
 
+  private async privacyDeleteAll(): Promise<Response> {
+    const state = await this.currentState();
+    if (state !== undefined && state.privacyDeletedAt === undefined) {
+      await this.ctx.storage.put(STATE_KEY, {
+        ...state,
+        payload: { usage: { privacyDeleted: true }, exposureRows: [] },
+        privacyDeletedAt: new Date().toISOString(),
+      });
+    }
+    return Response.json({ proof: "evaluation-commit-outbox-purged-v1" });
+  }
+
   private async currentState(): Promise<OutboxState | undefined> {
     const state = await this.ctx.storage.get<OutboxState>(STATE_KEY);
     return state !== undefined && state.expiresAt > Date.now() ? state : undefined;
   }
 }
 
-function parseEvaluationCommit(body: unknown): EvaluationCommit {
-  const commit = body as Partial<EvaluationCommit>;
-  if (
-    typeof commit.eventId !== "string" ||
-    !/^sha256:[a-f0-9]{64}$/.test(commit.eventId) ||
-    commit.payload === undefined ||
-    typeof commit.delivered !== "boolean"
-  ) {
-    throw new Error("Evaluation commit outbox returned an invalid commit");
-  }
-  return commit as EvaluationCommit;
-}
-
 function asResponse(state: OutboxState): EvaluationCommit {
   return {
     eventId: state.eventId,
     payload: state.payload,
-    delivered: state.deliveredAt !== undefined,
+    delivered: state.deliveredAt !== undefined || state.privacyDeletedAt !== undefined,
   };
-}
-
-function durableEvaluationCommitOutbox(
-  namespace: EvaluationCommitOutboxNamespace,
-): EvaluationCommitOutbox {
-  return {
-    async lookup(identity) {
-      const response = await namespace
-        .get(namespace.idFromName(identity))
-        .fetch("https://evaluation-commit-outbox.local/lookup", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ identity }),
-        });
-      if (response.status === 404) return null;
-      if (!response.ok) {
-        throw new Error(`Evaluation commit outbox lookup returned HTTP ${response.status}`);
-      }
-      return parseEvaluationCommit(await response.json());
-    },
-    async commit(identity, payload) {
-      const response = await namespace
-        .get(namespace.idFromName(identity))
-        .fetch("https://evaluation-commit-outbox.local/commit", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ identity, payload }),
-        });
-      if (!response.ok)
-        throw new Error(`Evaluation commit outbox returned HTTP ${response.status}`);
-      return parseEvaluationCommit(await response.json());
-    },
-    async acknowledge(identity) {
-      const response = await namespace
-        .get(namespace.idFromName(identity))
-        .fetch("https://evaluation-commit-outbox.local/acknowledge", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ identity }),
-        });
-      if (!response.ok)
-        throw new Error(`Evaluation commit acknowledgement returned HTTP ${response.status}`);
-    },
-    async privacyExport(identity, eventIds) {
-      const response = await privacyRequest(namespace, identity, "privacy-export", eventIds);
-      const result = (await response.json()) as { records?: unknown };
-      if (!Array.isArray(result.records) || result.records.some((row) => !isRecord(row))) {
-        throw new Error("Evaluation commit privacy export returned invalid records");
-      }
-      return result.records as Record<string, unknown>[];
-    },
-    async privacyDelete(identity, eventIds) {
-      const response = await privacyRequest(namespace, identity, "privacy-delete", eventIds);
-      const result = (await response.json()) as { deletedCount?: unknown };
-      if (typeof result.deletedCount !== "number" || !Number.isInteger(result.deletedCount)) {
-        throw new Error("Evaluation commit privacy deletion returned invalid proof");
-      }
-      return result.deletedCount;
-    },
-  };
-}
-
-async function privacyRequest(
-  namespace: EvaluationCommitOutboxNamespace,
-  identity: string,
-  operation: "privacy-export" | "privacy-delete",
-  eventIds: readonly string[],
-): Promise<Response> {
-  const response = await namespace
-    .get(namespace.idFromName(identity))
-    .fetch(`https://evaluation-commit-outbox.local/${operation}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ identity, eventIds }),
-    });
-  if (!response.ok) {
-    throw new Error(`Evaluation commit ${operation} returned HTTP ${response.status}`);
-  }
-  return response;
-}
-
-export function evaluationCommitOutbox(
-  binding: EvaluationCommitOutbox | EvaluationCommitOutboxNamespace | undefined,
-): EvaluationCommitOutbox | undefined {
-  if (binding === undefined) return undefined;
-  return "commit" in binding ? binding : durableEvaluationCommitOutbox(binding);
 }
 
 async function requestIdentity(request: Request): Promise<string | null> {

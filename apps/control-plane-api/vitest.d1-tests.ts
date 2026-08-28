@@ -1,6 +1,7 @@
 import { defineTestFileManifest } from "../../scripts/vitest-test-manifest";
 
 export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
+  "src/app-identity-reset-runtime.test.ts",
   "src/attention-rollup-fanout.test.ts",
   "src/attention-rollup-isolation.test.ts",
   "src/attention-rollup-plan-guard.test.ts",

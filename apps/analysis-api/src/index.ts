@@ -24,7 +24,8 @@ import { createApp } from "./app";
 import type { AnalysisApiEnv } from "./env";
 import { runScheduledSnapshot } from "./scheduled";
 import { createTinybirdCopyTransport, createTinybirdReadTransport } from "./tinybird";
-import { createTinybirdDeleteTransport, deleteAppIdentityData } from "./tinybird-delete";
+import { deleteAppIdentityData } from "./tinybird-app-identity-reset";
+import { createTinybirdDeleteTransport } from "./tinybird-delete";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
 /** The operations `api.splitch.dev` may hand this Worker over the binding (ADR-0046). */

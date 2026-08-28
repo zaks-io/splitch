@@ -1,5 +1,5 @@
 import { appScope, createRepository } from "@splitch/db";
-import type { AppIdentityResetPurgers } from "@splitch/privacy";
+import { APP_IDENTITY_RESET_SUBJECT_REF, type AppIdentityResetPurgers } from "@splitch/privacy";
 import { durableCredentialCacheWriterAccess } from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
 import { revokeEnvironmentCredentialsForAppDelete } from "./app-environment-credentials";
@@ -69,10 +69,11 @@ export function productionAppIdentityResetPurgers(
       return `d1-entity-deletions:${String(result.meta.changes ?? 0)}`;
     }),
     privacy_subject_refs: scoped(async (appId) => {
+      const redactedAt = new Date().toISOString();
       const result = await env.DB.prepare(
-        "UPDATE privacy_requests SET subject_ref = 'redacted:app-identity-reset' WHERE app_id = ? AND subject_ref != 'redacted:app-identity-reset'",
+        "UPDATE privacy_requests SET subject_ref = ?, subject_ref_redacted_at = ? WHERE app_id = ? AND subject_type = 'entity' AND subject_ref != ?",
       )
-        .bind(appId)
+        .bind(APP_IDENTITY_RESET_SUBJECT_REF, redactedAt, appId, APP_IDENTITY_RESET_SUBJECT_REF)
         .run();
       return `d1-privacy-subject-refs:${String(result.meta.changes ?? 0)}`;
     }),

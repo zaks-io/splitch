@@ -72,6 +72,41 @@ describe("Entity Metric privacy Durable Object", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("keeps every Evaluation commit in the App reset inventory, including zero-Exposure commits", async () => {
+    const fixture = makeFixture();
+    const commitIdentity = "b".repeat(64);
+    await fixture.post("/register-app-evaluation", {
+      appId: "app_1",
+      commitIdentity,
+    });
+
+    await expect(
+      fixture.post("/reset-app", { appId: "app_1", resetId: "reset_1" }),
+    ).resolves.toEqual({ proof: "event-delivery:entities=0;evaluation_commits=1" });
+    expect(fixture.evaluationOutbox.privacyDeleteAll).toHaveBeenCalledWith(commitIdentity);
+    await expect(fixture.post("/complete-reset", { resetId: "reset_1" })).resolves.toEqual({
+      completed: true,
+    });
+  });
+
+  it("retains a failed Evaluation commit purge checkpoint across a Durable Object restart", async () => {
+    const fixture = makeFixture();
+    const commitIdentity = "c".repeat(64);
+    await fixture.post("/register-app-evaluation", { appId: "app_1", commitIdentity });
+    fixture.evaluationOutbox.privacyDeleteAll.mockRejectedValueOnce(
+      new Error("forced purge failure"),
+    );
+
+    await expect(
+      fixture.post("/reset-app", { appId: "app_1", resetId: "reset_2" }),
+    ).rejects.toThrow("forced purge failure");
+    fixture.restart();
+    await expect(
+      fixture.post("/reset-app", { appId: "app_1", resetId: "reset_2" }),
+    ).resolves.toEqual({ proof: "event-delivery:entities=0;evaluation_commits=1" });
+    expect(fixture.evaluationOutbox.privacyDeleteAll).toHaveBeenCalledTimes(2);
+  });
 });
 
 function makeFixture() {
@@ -121,6 +156,7 @@ function makeFixture() {
       { event_id: EVALUATION_ENTRY.eventId, source: "evaluation-commit" },
     ]),
     privacyDelete: vi.fn(async () => 1),
+    privacyDeleteAll: vi.fn(async () => "evaluation-commit-outbox-purged-v1" as const),
   };
   const env = {
     METRIC_EVENT_OUTBOX: {
@@ -129,9 +165,13 @@ function makeFixture() {
     },
     EVALUATION_COMMIT_OUTBOX: evaluationOutbox,
   } as Env;
-  const object = new EntityMetricPrivacyDurableObject(ctx, env);
+  let object = new EntityMetricPrivacyDurableObject(ctx, env);
   return {
     outboxFetch,
+    evaluationOutbox,
+    restart() {
+      object = new EntityMetricPrivacyDurableObject(ctx, env);
+    },
     async post(path: string, body: unknown) {
       const response = await object.fetch(
         new Request(`https://entity-privacy.local${path}`, {

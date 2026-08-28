@@ -22,6 +22,7 @@ export function makeEntityAssignmentPrivacyExportHandler(deps: EntityAssignmentP
       const scope = entityPrivacyScope(input, principal.appId);
       const exported = await exportEntityAssignments(
         deps.assignmentsKv,
+        deps.assignmentWriters,
         deps.holdoverWriteOutboxes,
         deps.saltStore,
         scope,

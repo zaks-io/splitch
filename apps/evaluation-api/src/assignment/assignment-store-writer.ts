@@ -1,5 +1,5 @@
 import { assignmentKey } from "@splitch/contracts";
-import type { AssignmentStoreEntry } from "./assignment-store";
+import type { AssignmentStoreEntry, AssignmentStoreValue } from "./assignment-store";
 import {
   type AssignmentKv,
   type AssignmentStorePutResult,
@@ -17,12 +17,19 @@ const ENTITY_DELETED_KEY = "privacy:entity-deleted";
 export interface AssignmentWriterStorage {
   get<T>(key: string): Promise<T | undefined>;
   put<T>(key: string, value: T): Promise<void>;
+  list<T>(options: { prefix: string }): Promise<Map<string, T>>;
   deleteAll?(): Promise<void>;
 }
 
 export type WaitUntil = (promise: Promise<unknown>) => void;
 
 interface StoredAssignment extends HashedAssignmentPutInput {}
+
+export interface AssignmentWriterExport {
+  assignments: AssignmentStoreValue;
+  tombstoned: boolean;
+  proof: "assignment-do-winners-exported-v1";
+}
 
 export class AssignmentStoreWriter {
   constructor(
@@ -62,6 +69,23 @@ export class AssignmentStoreWriter {
     await this.storage.deleteAll();
     await this.storage.put(ENTITY_DELETED_KEY, true);
     return "assignment-do-tombstone-v1";
+  }
+
+  async exportEntity(): Promise<AssignmentWriterExport> {
+    const stored = await this.storage.list<StoredAssignment>({ prefix: STORAGE_KEY_PREFIX });
+    const assignments: AssignmentStoreValue = {};
+    for (const [key, assignment] of stored) {
+      const experimentId = key.slice(STORAGE_KEY_PREFIX.length);
+      if (!experimentId || assignment.experimentId !== experimentId) {
+        throw new Error("assignment-store: durable winner key is invalid");
+      }
+      assignments[experimentId] = entryFrom(assignment);
+    }
+    return {
+      assignments,
+      tombstoned: (await this.storage.get<boolean>(ENTITY_DELETED_KEY)) === true,
+      proof: "assignment-do-winners-exported-v1",
+    };
   }
 
   private async writeThrough(input: HashedAssignmentPutInput): Promise<void> {

@@ -252,6 +252,11 @@ describe("AssignmentStoreWriter", () => {
     expect(await storage.get("assignment:exp-checkout")).toMatchObject({
       targetingKeyHash: "v1:hash-a",
     });
+    await expect(writer.exportEntity()).resolves.toEqual({
+      assignments: { "exp-checkout": { runId: "run-1", variant: "control" } },
+      tombstoned: false,
+      proof: "assignment-do-winners-exported-v1",
+    });
 
     // Second put for the same assignment: still "existing", but the KV entry is
     // re-asserted so the holdover becomes visible to getAll.

@@ -1,7 +1,7 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { emptyError, renderError, serviceUnavailable, validationError } from "./errors";
-import { evaluationCommitOutbox } from "./evaluation-commit-outbox";
-import { inventoryEvaluationExposures } from "./evaluation-commit-privacy";
+import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
+import { inventoryEvaluationCommit } from "./evaluation-commit-privacy";
 import { isEntityEventSuppressed } from "./entity-metric-privacy";
 import { evaluationUsageScope, requiredIdentity } from "./ingest";
 import { ingestAdmissionDenial } from "./ingest-admission";
@@ -35,16 +35,18 @@ const EVALUATION_COMMIT_USAGE_BYTE_COST_EVENT_ID = `sha256:${"0".repeat(64)}`;
 export async function handleEvaluationCommit(request: Request, env: Env): Promise<Response> {
   const prepared = await prepareEvaluationCommit(request, env);
   if (!prepared.ok) return renderError(prepared.error);
+  const { commit } = prepared.value;
+  if (commit.delivered)
+    return Response.json({ ok: true, eventId: commit.eventId }, { status: 202 });
 
+  let suppressed = false;
   try {
-    await inventoryEvaluationExposures(prepared.value, env);
+    suppressed = await inventoryEvaluationCommit(prepared.value, env);
   } catch {
     return renderError(serviceUnavailable("Evaluation commit privacy inventory is unavailable"));
   }
 
-  const { commit } = prepared.value;
-  if (commit.delivered)
-    return Response.json({ ok: true, eventId: commit.eventId }, { status: 202 });
+  if (suppressed) return Response.json({ ok: true, eventId: commit.eventId }, { status: 202 });
 
   return deliverEvaluationCommit(prepared.value, env);
 }
