@@ -1,7 +1,10 @@
 import { z } from "@hono/zod-openapi";
 import { validateNumericDomain, validatePropertyNames } from "./event-definition-validation";
 import { PERSISTED_TELEMETRY_ENUM_MAX_ITEMS } from "./persisted-field-limits";
+import { OWN_PROTO_KEY, protoSafeRecord } from "./proto-safe-record";
 import { listResponse } from "./wire-envelopes-core";
+
+const PROTO_KEY_MESSAGE = `must not contain a "${OWN_PROTO_KEY}" key`;
 
 export const eventDefinitionFamilies = ["metric", "web"] as const;
 export const EventDefinitionFamilySchema = z.enum(eventDefinitionFamilies);
@@ -137,14 +140,14 @@ function closedJsonObjectSchema(nested: z.ZodType<ClosedJsonSchema>) {
   return z
     .object({
       type: z.literal("object"),
-      properties: z.record(z.string(), nested),
+      properties: protoSafeRecord(nested, PROTO_KEY_MESSAGE),
       required: z.array(z.string()).refine(unique).optional(),
       additionalProperties: z.literal(false),
     })
     .strict()
     .superRefine((value, context) => {
       for (const required of value.required ?? []) {
-        if (!(required in value.properties)) {
+        if (!Object.hasOwn(value.properties, required)) {
           context.addIssue({
             code: "custom",
             path: ["required"],

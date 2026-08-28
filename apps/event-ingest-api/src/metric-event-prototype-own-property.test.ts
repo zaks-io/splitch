@@ -3,23 +3,16 @@ import type {
   EventDefinitionVersion,
   MetricEventTrackRequest,
 } from "@splitch/contracts";
-import { eventDefinitionConfigKey, ErrorResponseSchema } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { validateMetricEvent } from "./metric-event-validation";
+import { METRIC_EVENT_NAME } from "./metric-event.test-fixture";
 import {
-  hotConfig,
-  METRIC_APP_ID,
-  METRIC_EVENT_NAME,
-  makeMetricEventFixture,
-  metricEventBody,
-  sendMetricEvent,
-} from "./metric-event.test-fixture";
-
-const PROTOTYPE_NAMES = ["constructor", "toString", "__proto__"] as const;
-
-function ownJson(key: string, value: unknown): Record<string, unknown> {
-  return JSON.parse(`{${JSON.stringify(key)}:${JSON.stringify(value)}}`) as Record<string, unknown>;
-}
+  expectNoDefinitionIds,
+  ingestPrototypeMetricEvent,
+  mismatchIssues,
+  ownJson,
+  PROTOTYPE_NAMES,
+} from "./metric-event-prototype-helpers";
+import { validateMetricEvent } from "./metric-event-validation";
 
 function rootRequired(name: string) {
   return { fields: [{ name, type: "boolean" as const, required: true }], dimensions: [] };
@@ -86,28 +79,7 @@ function unitVersion(fields: EventDefinitionVersion["fields"]): EventDefinitionV
   };
 }
 
-async function ingestWith(
-  version: Record<string, unknown>,
-  body: Record<string, unknown>,
-  credentialKind: "api_key" | "client_key" = "api_key",
-) {
-  const fixture = await makeMetricEventFixture({}, credentialKind);
-  fixture.config.set(
-    eventDefinitionConfigKey(METRIC_APP_ID, METRIC_EVENT_NAME),
-    hotConfig("edv_1", 1, version),
-  );
-  const response = await sendMetricEvent(fixture, metricEventBody(body));
-  const parsed = ErrorResponseSchema.parse(await response.json());
-  return { response, parsed };
-}
-
-function mismatchIssues(body: ReturnType<typeof ErrorResponseSchema.parse>) {
-  expect(body.code).toBe("EVENT_SCHEMA_MISMATCH");
-  if (body.code !== "EVENT_SCHEMA_MISMATCH") throw new Error("expected EVENT_SCHEMA_MISMATCH");
-  return body.details.issues;
-}
-
-describe("metric event own-property validation", () => {
+describe("metric event own-property unit validation", () => {
   it.each(
     PROTOTYPE_NAMES,
   )("absent required root %s is missing, not an inherited boolean mismatch", (name) => {
@@ -153,11 +125,13 @@ describe("metric event own-property validation", () => {
       { path: ["fields", "profile", name], message: "JSON key is not declared" },
     ]);
   });
+});
 
+describe("metric event own-property HTTP validation", () => {
   it.each(
     PROTOTYPE_NAMES,
   )("HTTP trusted: absent root %s is missing, not expected boolean", async (name) => {
-    const { response, parsed } = await ingestWith(rootRequired(name), {
+    const { response, parsed } = await ingestPrototypeMetricEvent(rootRequired(name), {
       fields: {},
       dimensions: {},
     });
@@ -170,11 +144,19 @@ describe("metric event own-property validation", () => {
   });
 
   it.each(PROTOTYPE_NAMES)("HTTP trusted: absent nested %s is missing", async (name) => {
-    const { response, parsed } = await ingestWith(nestedRequired(name), {
+    const { response, parsed } = await ingestPrototypeMetricEvent(nestedRequired(name), {
       fields: { profile: {} },
       dimensions: {},
     });
     expect(response.status).not.toBe(202);
+    if (name === "__proto__") {
+      expect(parsed).toEqual({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Event Definition config is invalid",
+        details: {},
+      });
+      return;
+    }
     expect(mismatchIssues(parsed)).toContainEqual({
       path: ["fields", "profile", name],
       message: "required JSON key is missing",
@@ -185,7 +167,7 @@ describe("metric event own-property validation", () => {
   it.each(
     PROTOTYPE_NAMES,
   )("HTTP trusted: own nested %s is not admitted against properties: {}", async (name) => {
-    const { response, parsed } = await ingestWith(CLOSED_EMPTY_OBJECT, {
+    const { response, parsed } = await ingestPrototypeMetricEvent(CLOSED_EMPTY_OBJECT, {
       fields: { profile: ownJson(name, true) },
       dimensions: {},
     });
@@ -203,7 +185,7 @@ describe("metric event own-property validation", () => {
   it.each(
     PROTOTYPE_NAMES,
   )("Client Key does not leak an absent configured %s name or type", async (name) => {
-    const { response, parsed } = await ingestWith(
+    const { response, parsed } = await ingestPrototypeMetricEvent(
       rootRequired(name),
       { fields: {}, dimensions: {} },
       "client_key",
@@ -219,14 +201,13 @@ describe("metric event own-property validation", () => {
     });
     expect(JSON.stringify(parsed)).not.toContain(name);
     expect(JSON.stringify(parsed)).not.toContain("expected ");
-    expect(JSON.stringify(parsed)).not.toContain("ed_signed_up");
-    expect(JSON.stringify(parsed)).not.toContain("edv_1");
+    expectNoDefinitionIds(parsed);
   });
 
   it.each(
     PROTOTYPE_NAMES,
   )("Client Key rejects own nested %s against a closed schema without IDs", async (name) => {
-    const { response, parsed } = await ingestWith(
+    const { response, parsed } = await ingestPrototypeMetricEvent(
       CLOSED_EMPTY_OBJECT,
       { fields: { profile: ownJson(name, true) }, dimensions: {} },
       "client_key",
@@ -235,8 +216,7 @@ describe("metric event own-property validation", () => {
     expect(response.status).not.toBe(202);
     if (name === "__proto__") {
       expect(parsed.code).toBe("VALIDATION_ERROR");
-      expect(JSON.stringify(parsed)).not.toContain("ed_signed_up");
-      expect(JSON.stringify(parsed)).not.toContain("edv_1");
+      expectNoDefinitionIds(parsed);
       return;
     }
     expect(parsed).toEqual({
@@ -247,7 +227,6 @@ describe("metric event own-property validation", () => {
         issues: [{ path: ["fields", "profile", name], message: "JSON key is not declared" }],
       },
     });
-    expect(JSON.stringify(parsed)).not.toContain("ed_signed_up");
-    expect(JSON.stringify(parsed)).not.toContain("edv_1");
+    expectNoDefinitionIds(parsed);
   });
 });
