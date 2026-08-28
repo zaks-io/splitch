@@ -1,11 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __setSentryModuleForTests } from "./sentry-module.js";
 import {
-  activeTraceId,
   createWorkerObservability,
   workerEmitter,
   workerObservabilityWithWaitUntil,
-  workerSentryOptions,
   wrapWorkerHandler,
 } from "./worker.js";
 
