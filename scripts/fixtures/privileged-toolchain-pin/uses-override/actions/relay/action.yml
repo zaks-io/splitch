@@ -1,9 +1,0 @@
-# Negative fixture: privileged local uses edges must be followed recursively.
-name: relay
-description: Relays an unpinned npm version into pin-npm
-runs:
-  using: composite
-  steps:
-    - uses: ./actions/pin-npm
-      with:
-        version: latest

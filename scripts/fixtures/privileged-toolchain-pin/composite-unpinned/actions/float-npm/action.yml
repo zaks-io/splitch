@@ -1,9 +1,0 @@
-# Negative fixture: local composite actions use runs.steps, not jobs.
-# A floating npm install here must violate even with no workflow job.
-name: float-npm
-description: Composite action with a floating npm install
-runs:
-  using: composite
-  steps:
-    - run: npm install --global npm@11
-      shell: bash

@@ -1,8 +1,0 @@
-# Negative fixture: discovery must recurse under actions/, not one level.
-name: nested-deep
-description: Nested composite with a floating npm install
-runs:
-  using: composite
-  steps:
-    - run: npm install --global npm@latest
-      shell: bash
