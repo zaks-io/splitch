@@ -97,6 +97,44 @@ describe("Event Ingest hosted configuration", () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(fetch.mock.calls.map(([url]) => String(url)).join()).not.toContain("api.tinybird.co");
   });
+
+  it("fails health when a hosted target has no privacy root salt", async () => {
+    const env = hostedBindings("production");
+    delete (env as { EVALUATION_PRIVACY_SALT?: string }).EVALUATION_PRIVACY_SALT;
+
+    await expect(
+      worker.fetch(
+        workerRequest("https://event-ingest.test/health"),
+        env,
+        new TestExecutionContext(),
+      ),
+    ).rejects.toThrow(/EVALUATION_PRIVACY_SALT/);
+  });
+
+  it("serves hosted health when the root salt and deployed SHA are present", async () => {
+    const response = await worker.fetch(
+      workerRequest("https://event-ingest.test/health"),
+      hostedBindings("production"),
+      new TestExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, platformTarget: "production" });
+  });
+
+  it("serves health on an explicit local target without a hosted salt", async () => {
+    const env = makeEnv();
+    delete (env as { EVALUATION_PRIVACY_SALT?: string }).EVALUATION_PRIVACY_SALT;
+
+    const response = await worker.fetch(
+      workerRequest("https://event-ingest.test/health"),
+      env,
+      new TestExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, platformTarget: "local" });
+  });
 });
 
 function hostedBindings(platformTarget: string | undefined): Env {

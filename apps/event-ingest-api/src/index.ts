@@ -17,7 +17,7 @@ import { EvaluationCommitOutboxDurableObject } from "./evaluation-commit-outbox"
 import { EvaluationUsageReplayWindowDurableObject } from "./evaluation-usage-replay-window";
 import { handleEvaluationIngest, handleIngest } from "./ingest";
 import { IngestAdmissionGateDurableObject } from "./ingest-admission-gate";
-import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
+import { handleAuthorizedMetricEvent, makeMetricEventSaltStore } from "./metric-event-ingest";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
 import { handleMetricEventQueue } from "./metric-event-queue";
 import { MetricEventRateLimitDurableObject } from "./metric-event-rate-limit";
@@ -122,6 +122,7 @@ function healthResponse(
   env: Env,
   platformTarget = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
 ): Response {
+  makeMetricEventSaltStore(env);
   return Response.json(
     createHealthResponse(service, platformTarget, env.SPLITCH_DEPLOYED_COMMIT_SHA),
   );
