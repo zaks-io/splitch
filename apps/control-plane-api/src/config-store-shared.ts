@@ -14,6 +14,7 @@ import { parseFlagConfigEnvelope, writeSnapshot } from "./config-store-kv";
 import type {
   ApplyApprovedFlagConfigInput,
   ConfigStoreDeps,
+  ConfigStoreRuntimeDeps,
   FlagConfigResult,
   FlagConfigWriteResult,
   PatchFlagConfigInput,
@@ -28,6 +29,7 @@ import { requireResolvedTargetingRules, resolveTargetingRules } from "./targetin
 export type {
   ApplyApprovedFlagConfigInput,
   ConfigStoreDeps,
+  ConfigStoreRuntimeDeps,
   FlagConfigResult,
   FlagConfigWriteResult,
   PatchFlagConfigInput,
@@ -38,7 +40,7 @@ export type {
 };
 
 export async function readFlagSnapshot(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   scope: EnvScope,
   flagId: string,
 ): Promise<Snapshot | null> {
@@ -48,13 +50,15 @@ export async function readFlagSnapshot(
   const key = flagConfigKey(scope.appId, scope.environmentId, fromD1.flag.key);
   const raw = await deps.kv.get(key, "text");
   if (!raw) {
-    await writeSnapshot(
-      deps.kv,
-      scope,
-      fromD1,
-      responseFromSnapshot(fromD1),
-      await deps.nextSnapshotRevision({ flagId, operation: "repair" }),
-    );
+    await deps.snapshotMutations.run(async () => {
+      await writeSnapshot(
+        deps.kv,
+        scope,
+        fromD1,
+        responseFromSnapshot(fromD1),
+        await deps.nextSnapshotRevision({ flagId, operation: "repair" }),
+      );
+    });
     return fromD1;
   }
 
@@ -160,16 +164,18 @@ export async function loadFlagConfigWriteContext(
 }
 
 export async function writeSnapshotAndBroadcast(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   scope: EnvScope,
   flagId: string,
   snapshot: Snapshot,
 ): Promise<FlagConfigWriteResult> {
-  const result = flagConfigResult(flagId, snapshot);
-  const snapshotRevision = await deps.nextSnapshotRevision({ flagId, operation: "write" });
-  await writeSnapshot(deps.kv, scope, snapshot, result.config, snapshotRevision);
-  await deps.broadcaster.broadcast(result.nudge);
-  return { ...result, snapshotRevision };
+  return deps.snapshotMutations.run(async () => {
+    const result = flagConfigResult(flagId, snapshot);
+    const snapshotRevision = await deps.nextSnapshotRevision({ flagId, operation: "write" });
+    await writeSnapshot(deps.kv, scope, snapshot, result.config, snapshotRevision);
+    await deps.broadcaster.broadcast(result.nudge);
+    return { ...result, snapshotRevision };
+  });
 }
 
 /**

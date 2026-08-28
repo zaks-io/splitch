@@ -3,7 +3,7 @@ import { type EnvScope, envScope, type ReplaceTargetingRulesResult } from "@spli
 import { targetingFreeze } from "./config-store-freeze";
 import {
   buildSnapshotFromD1,
-  type ConfigStoreDeps,
+  type ConfigStoreRuntimeDeps,
   type FlagConfigWriteResult,
   loadFlagConfigWriteContext,
   missingRuleVariantNames,
@@ -44,7 +44,7 @@ export function targetingRulePersistFailure(
 }
 
 export async function replaceTargetingRules(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: ReplaceTargetingRulesInput,
 ): Promise<FlagConfigWriteResult> {
   const frozen = await targetingFreeze(deps, input);
@@ -91,7 +91,7 @@ export async function replaceTargetingRules(
 }
 
 async function commitTargetingRules(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   scope: EnvScope,
   input: ReplaceTargetingRulesInput & { targetingRules: TargetingRule[] },
 ): Promise<FlagConfigWriteResult> {

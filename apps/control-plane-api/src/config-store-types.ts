@@ -180,6 +180,12 @@ export interface ConfigStoreDeps {
   now?: () => Date;
 }
 
+export interface ConfigStoreRuntimeDeps extends ConfigStoreDeps {
+  snapshotMutations: {
+    run<T>(operation: () => Promise<T>): Promise<T>;
+  };
+}
+
 export interface Snapshot {
   flag: FlagConfigKV;
   /** D1 authoring rules, including Segment references; never written to KV. */

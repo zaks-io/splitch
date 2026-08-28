@@ -3,7 +3,7 @@ import { appScope, envScope } from "@splitch/db";
 import { deleteFlagConfigSnapshot, writeSnapshot } from "./config-store-kv";
 import {
   buildSnapshotFromD1,
-  type ConfigStoreDeps,
+  type ConfigStoreRuntimeDeps,
   type FlagConfigResult,
   readFlagSnapshot,
   responseFromSnapshot,
@@ -24,7 +24,7 @@ export type FlagConfigDeleteResult =
   | { ok: false; reason: "FLAG_NOT_FOUND" };
 
 export async function repairFlagConfigSnapshot(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: FlagConfigResyncInput,
 ): Promise<
   | { ok: true; config: FlagConfigResult; snapshotRevision: number }
@@ -34,16 +34,18 @@ export async function repairFlagConfigSnapshot(
   const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
   if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
   const config = responseFromSnapshot(snapshot);
-  const snapshotRevision = await deps.nextSnapshotRevision({
-    flagId: input.flagId,
-    operation: "repair",
+  return deps.snapshotMutations.run(async () => {
+    const snapshotRevision = await deps.nextSnapshotRevision({
+      flagId: input.flagId,
+      operation: "repair",
+    });
+    await writeSnapshot(deps.kv, scope, snapshot, config, snapshotRevision);
+    return { ok: true, config, snapshotRevision };
   });
-  await writeSnapshot(deps.kv, scope, snapshot, config, snapshotRevision);
-  return { ok: true, config, snapshotRevision };
 }
 
 export async function deleteFlagConfigFromStore(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: FlagConfigDeleteInput,
 ): Promise<FlagConfigDeleteResult> {
   const scope = envScope(input.appId, input.environmentId);
@@ -55,25 +57,27 @@ export async function deleteFlagConfigFromStore(
 
   const existing = await readFlagSnapshot(deps, scope, input.flagId);
   const experimentId = existing?.flag.experimentId ?? null;
-  const snapshotRevision = await deps.nextSnapshotRevision({
-    flagId: input.flagId,
-    operation: "delete",
-  });
-  await deleteFlagConfigSnapshot(
-    deps.kv,
-    scope,
-    input.flagId,
-    snapshotRevision,
-    flag.key,
-    experimentId,
-  );
+  return deps.snapshotMutations.run(async () => {
+    const snapshotRevision = await deps.nextSnapshotRevision({
+      flagId: input.flagId,
+      operation: "delete",
+    });
+    await deleteFlagConfigSnapshot(
+      deps.kv,
+      scope,
+      input.flagId,
+      snapshotRevision,
+      flag.key,
+      experimentId,
+    );
 
-  const nudge = DeltaNudgeSchema.parse({
-    type: "config.changed",
-    entity: "flag",
-    id: input.flagId,
-    version: 0,
+    const nudge = DeltaNudgeSchema.parse({
+      type: "config.changed",
+      entity: "flag",
+      id: input.flagId,
+      version: 0,
+    });
+    await deps.broadcaster.broadcast(nudge);
+    return { ok: true, nudge, snapshotRevision };
   });
-  await deps.broadcaster.broadcast(nudge);
-  return { ok: true, nudge, snapshotRevision };
 }

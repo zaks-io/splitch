@@ -1,6 +1,7 @@
 import { type EnvScope, envScope } from "@splitch/db";
 import { applyApprovedFlagConfig } from "./config-store-approved-write";
 import { configPatchFreeze, targetingFreeze } from "./config-store-freeze";
+import { makeConfigStoreMutationQueue } from "./config-store-mutation-queue";
 import { promoteFlagConfig } from "./config-store-mutations";
 import { previewSnapshotResult, previewTargetingRules } from "./config-store-preview";
 import {
@@ -8,6 +9,7 @@ import {
   buildExperimentSnapshotFromD1,
   buildSnapshotFromD1,
   type ConfigStoreDeps,
+  type ConfigStoreRuntimeDeps,
   type FlagConfigResult,
   type FlagConfigWriteResult,
   json,
@@ -82,11 +84,15 @@ interface ExperimentConfigSyncInput {
 }
 
 export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
+  const runtimeDeps: ConfigStoreRuntimeDeps = {
+    ...deps,
+    snapshotMutations: makeConfigStoreMutationQueue(),
+  };
   return {
     async readFlagConfig(input) {
       return catchSegmentNotFound(async () => {
         const scope = envScope(input.appId, input.environmentId);
-        const snapshot = await readFlagSnapshot(deps, scope, input.flagId);
+        const snapshot = await readFlagSnapshot(runtimeDeps, scope, input.flagId);
         if (!snapshot) return { ok: false as const, reason: "FLAG_NOT_FOUND" as const };
         return { ok: true as const, config: responseFromSnapshot(snapshot) };
       });
@@ -94,7 +100,7 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
 
     async repairFlagConfigSnapshot(input) {
       try {
-        return await catchSegmentNotFound(() => repairFlagConfigSnapshot(deps, input));
+        return await catchSegmentNotFound(() => repairFlagConfigSnapshot(runtimeDeps, input));
       } catch (cause) {
         if (cause instanceof DeletedFlagConfigSnapshotError) {
           return { ok: false, reason: "FLAG_NOT_FOUND" };
@@ -104,50 +110,50 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
     },
 
     async writeFlagConfig(input) {
-      return catchSegmentNotFound(() => writeFlagConfig(deps, input));
+      return catchSegmentNotFound(() => writeFlagConfig(runtimeDeps, input));
     },
 
     async replaceTargetingRules(input) {
-      return catchSegmentNotFound(() => replaceTargetingRules(deps, input));
+      return catchSegmentNotFound(() => replaceTargetingRules(runtimeDeps, input));
     },
 
     async promoteFlagConfig(input) {
-      return promoteFlagConfig(deps, input);
+      return promoteFlagConfig(runtimeDeps, input);
     },
 
     async previewFlagConfig(input) {
-      return catchSegmentNotFound(() => previewFlagConfig(deps, input));
+      return catchSegmentNotFound(() => previewFlagConfig(runtimeDeps, input));
     },
 
     async previewTargetingRules(input) {
-      return catchSegmentNotFound(() => previewTargetingRules(deps, input));
+      return catchSegmentNotFound(() => previewTargetingRules(runtimeDeps, input));
     },
 
     async previewPromotion(input) {
-      return promoteFlagConfig(deps, { ...input, preview: true });
+      return promoteFlagConfig(runtimeDeps, { ...input, preview: true });
     },
 
     async applyApprovedFlagConfig(input) {
-      return catchSegmentNotFound(() => applyApprovedFlagConfig(deps, input));
+      return catchSegmentNotFound(() => applyApprovedFlagConfig(runtimeDeps, input));
     },
 
     async syncExperimentConfig(input) {
-      return catchSegmentNotFound(() => syncExperimentConfig(deps, input));
+      return catchSegmentNotFound(() => syncExperimentConfig(runtimeDeps, input));
     },
 
     async resyncFlagConfig(input) {
-      const frozen = await targetingFreeze(deps, input);
+      const frozen = await targetingFreeze(runtimeDeps, input);
       if (frozen) return frozen;
-      return resyncFromD1(deps, input);
+      return resyncFromD1(runtimeDeps, input);
     },
 
     async deleteFlagConfig(input) {
-      return deleteFlagConfigFromStore(deps, input);
+      return deleteFlagConfigFromStore(runtimeDeps, input);
     },
   };
 }
 
-async function resyncFromD1(deps: ConfigStoreDeps, input: FlagConfigResyncInput) {
+async function resyncFromD1(deps: ConfigStoreRuntimeDeps, input: FlagConfigResyncInput) {
   return catchSegmentNotFound(async () => {
     const scope = envScope(input.appId, input.environmentId);
     const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
@@ -172,7 +178,7 @@ async function catchSegmentNotFound<T>(operation: () => Promise<T>) {
 }
 
 async function syncExperimentConfig(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: ExperimentConfigSyncInput,
 ): Promise<FlagConfigWriteResult> {
   const scope = envScope(input.appId, input.environmentId);
@@ -182,7 +188,7 @@ async function syncExperimentConfig(
 }
 
 async function writeFlagConfig(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: PatchFlagConfigInput,
 ): Promise<FlagConfigWriteResult> {
   const frozen = await configPatchFreeze(deps, input);
@@ -234,7 +240,7 @@ async function writeFlagConfig(
 }
 
 async function previewFlagConfig(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: PatchFlagConfigInput,
 ): Promise<FlagConfigWriteResult> {
   // The preview is what the Policy gate turns into an Approval Request, so it is
@@ -297,7 +303,7 @@ function validateFlagConfigPatch(
 }
 
 async function commitFlagConfigPatch(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   scope: EnvScope,
   input: PatchFlagConfigInput,
   current: Snapshot,

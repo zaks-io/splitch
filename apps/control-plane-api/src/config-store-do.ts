@@ -26,6 +26,8 @@ export class ConfigStoreDurableObject
   extends DurableObject<ControlPlaneApiEnv>
   implements ConfigStoreWriter
 {
+  #configStore: ConfigStoreWriter | undefined;
+
   async readFlagConfigForEvaluation(
     input: EvaluationFlagConfigRead,
   ): Promise<EvaluationFlagConfigSnapshot | null> {
@@ -167,13 +169,14 @@ export class ConfigStoreDurableObject
   }
 
   private store(): ConfigStoreWriter {
-    return makeConfigStore({
+    this.#configStore ??= makeConfigStore({
       repo: createRepository(this.env.DB),
       kv: this.env.CONFIG_STORE,
       broadcaster: { broadcast: (nudge) => this.broadcast(nudge) },
       nextSnapshotRevision: makeDurableSnapshotRevisionAllocator(this.ctx.storage),
       logger: console,
     });
+    return this.#configStore;
   }
 
   private broadcast(nudge: DeltaNudge): void {

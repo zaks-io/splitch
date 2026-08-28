@@ -146,14 +146,36 @@ describe("flag_config_get read-your-writes", () => {
       state: "deleted",
     });
   });
+
+  it("serializes a delete behind an in-flight repair KV write", async () => {
+    const key = controlPlaneFlagConfigKey(scope(), ids.flagId);
+    const deferred = deferredPresentSnapshotPut(h.kv, key);
+    const store = makeStore(durableRevisionAllocator(), deferred.kv);
+    expect(await store.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
+
+    deferred.arm();
+    const repair = store.repairFlagConfigSnapshot(configIdentity());
+    await deferred.paused;
+    const deletion = store.deleteFlagConfig(configIdentity());
+
+    expect(await settlesWithin(deletion, 25)).toBe(false);
+    deferred.release();
+    expect(await repair).toMatchObject({ ok: true, snapshotRevision: 2 });
+    expect(await deletion).toMatchObject({ ok: true, snapshotRevision: 3 });
+    expect(JSON.parse(await requiredSnapshot(key))).toMatchObject({
+      revision: 3,
+      state: "deleted",
+    });
+  });
 });
 
 function makeStore(
   nextSnapshotRevision: ConfigStoreDeps["nextSnapshotRevision"],
+  kv: KVNamespace = h.kv,
 ): ConfigStoreWriter {
   return makeConfigStore({
     repo: h.repo,
-    kv: h.kv,
+    kv,
     broadcaster: { broadcast: () => undefined },
     nextSnapshotRevision,
   });
@@ -250,4 +272,40 @@ function durableRevisionAllocator(): ConfigStoreDeps["nextSnapshotRevision"] {
     },
   } as unknown as DurableObjectStorage;
   return makeDurableSnapshotRevisionAllocator(storage);
+}
+
+function deferredPresentSnapshotPut(base: KVNamespace, key: string) {
+  let armed = false;
+  let release!: () => void;
+  let markPaused!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const paused = new Promise<void>((resolve) => {
+    markPaused = resolve;
+  });
+  const kv = new Proxy(base, {
+    get(target, property) {
+      if (property === "put") {
+        return async (requestedKey: string, value: string, options?: KVNamespacePutOptions) => {
+          if (armed && requestedKey === key && JSON.parse(value).state === "present") {
+            armed = false;
+            markPaused();
+            await gate;
+          }
+          return target.put(requestedKey, value, options);
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return { kv, paused, arm: () => (armed = true), release };
+}
+
+async function settlesWithin<T>(promise: Promise<T>, milliseconds: number): Promise<boolean> {
+  return Promise.race([
+    promise.then(() => true),
+    new Promise<false>((resolve) => setTimeout(() => resolve(false), milliseconds)),
+  ]);
 }

@@ -3,7 +3,7 @@ import { approvedProposalFreeze } from "./config-store-freeze";
 import {
   type ApplyApprovedFlagConfigInput,
   buildSnapshotFromD1,
-  type ConfigStoreDeps,
+  type ConfigStoreRuntimeDeps,
   type FlagConfigWriteResult,
   json,
   missingAvailableVariants,
@@ -24,7 +24,7 @@ import { resolveTargetingRules } from "./targeting-rule-resolution";
  * carries the Review commit so a lost guard leaves the edge untouched.
  */
 export async function applyApprovedFlagConfig(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: ApplyApprovedFlagConfigInput,
 ): Promise<FlagConfigWriteResult> {
   const scope = envScope(input.appId, input.environmentId);
@@ -122,7 +122,7 @@ export function approvedPatchMovesConfig(patch: ReturnType<typeof approvedConfig
 }
 
 async function validateProposal(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   current: Snapshot,
   input: ApplyApprovedFlagConfigInput,
 ): Promise<Extract<FlagConfigWriteResult, { ok: false }> | null> {

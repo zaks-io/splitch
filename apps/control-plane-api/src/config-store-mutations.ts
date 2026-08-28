@@ -3,7 +3,7 @@ import { type EnvScope, envScope } from "@splitch/db";
 import { promotionFreeze } from "./config-store-freeze";
 import {
   buildSnapshotFromD1,
-  type ConfigStoreDeps,
+  type ConfigStoreRuntimeDeps,
   type FlagConfigWriteResult,
   flagConfigResult,
   json,
@@ -29,7 +29,7 @@ interface PreparedPromotion {
 }
 
 export async function promoteFlagConfig(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: PromoteFlagConfigInput,
 ): Promise<PromoteFlagConfigResult> {
   // Covers the preview too, and deliberately: `previewPromotion` is what the
@@ -95,7 +95,7 @@ function promotionPreview(
   };
 }
 
-async function loadPromotionSnapshots(deps: ConfigStoreDeps, input: PromoteFlagConfigInput) {
+async function loadPromotionSnapshots(deps: ConfigStoreRuntimeDeps, input: PromoteFlagConfigInput) {
   const targetScope = envScope(input.appId, input.targetEnvironmentId);
   const sourceScope = envScope(input.appId, input.fromEnvironmentId);
   const source = await buildSnapshotFromD1(deps.repo, sourceScope, input.flagId);
@@ -263,7 +263,7 @@ function promotionSelectsNothing(input: PromoteFlagConfigInput): boolean {
 }
 
 async function commitPromotion(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: PromoteFlagConfigInput,
   targetScope: EnvScope,
   prepared: PreparedPromotion,
