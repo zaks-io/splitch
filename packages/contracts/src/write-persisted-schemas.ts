@@ -134,14 +134,29 @@ export const EndRunRequestSchema = z
 export type EndRunRequest = z.infer<typeof EndRunRequestSchema>;
 
 export function persistedJsonDepth(value: unknown): number {
+  let maxDepth = 1;
+  const stack: Array<{ value: unknown; depth: number }> = [{ value, depth: 1 }];
+  while (stack.length > 0) {
+    const frame = stack.pop();
+    if (!frame) break;
+    maxDepth = Math.max(maxDepth, frame.depth);
+    pushJsonChildren(stack, frame.value, frame.depth + 1);
+  }
+  return maxDepth;
+}
+
+function pushJsonChildren(
+  stack: Array<{ value: unknown; depth: number }>,
+  value: unknown,
+  childDepth: number,
+): void {
   if (value === null || typeof value !== "object") {
-    return 1;
+    return;
   }
   const children = Array.isArray(value) ? value : Object.values(value);
-  if (children.length === 0) {
-    return 1;
+  for (const child of children) {
+    stack.push({ value: child, depth: childDepth });
   }
-  return 1 + Math.max(...children.map(persistedJsonDepth));
 }
 
 export function addClosedJsonWriteIssues(

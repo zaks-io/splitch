@@ -59,6 +59,30 @@ describe("Event Definition publication depth guard", () => {
       .first<{ current_published_version_id: string | null }>();
     expect(published?.current_published_version_id).toBeNull();
   });
+
+  it("rejects a type:null + properties chain at depth 2000 with 400 before auth", async () => {
+    let jsonSchema: Record<string, unknown> = { type: "null" };
+    for (let depth = 0; depth < 2000; depth += 1) {
+      jsonSchema = { type: "null", properties: { child: jsonSchema } };
+    }
+    const response = await h.app.request(
+      `/apps/${appId}/event-definitions/${DEFINITION_ID}/versions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          entityType: "user",
+          fields: [{ name: "payload", type: "json", required: false, jsonSchema }],
+          dimensions: [],
+        }),
+      },
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { issues: [{ path: expect.arrayContaining(["body", "fields"]) }] },
+    });
+  });
 });
 
 async function seedDefinition(repo: Repository, targetAppId: string): Promise<void> {
