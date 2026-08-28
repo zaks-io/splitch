@@ -1,3 +1,4 @@
+import { z } from "@hono/zod-openapi";
 import { describe, expect, it } from "vitest";
 import { EventDefinitionVersionSchema } from "./event-definition";
 import { PublishEventDefinitionVersionRequestSchema } from "./event-definition-write";
@@ -169,11 +170,17 @@ describe("Event Definition publication pre-refinement depth guard", () => {
     expect(encoded.length).toBeGreaterThan(50_000);
     expect(encoded.length).toBeLessThan(1_048_576);
 
-    const parsed = PublishEventDefinitionVersionRequestSchema.safeParse({
+    const body = {
       entityType: "user",
       fields: [{ name: "payload", type: "json", required: false, jsonSchema }],
       dimensions: [],
-    });
+    };
+    expect(() => PublishEventDefinitionVersionRequestSchema.safeParse(body)).not.toThrow();
+    const parsed = PublishEventDefinitionVersionRequestSchema.safeParse(body);
     expect(parsed.success).toBe(false);
+  });
+
+  it("stays JSON-Schema-representable for MCP tool derivation", () => {
+    expect(() => z.toJSONSchema(PublishEventDefinitionVersionRequestSchema)).not.toThrow();
   });
 });

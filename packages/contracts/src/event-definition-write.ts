@@ -2,7 +2,6 @@ import { z } from "@hono/zod-openapi";
 import {
   ClosedJsonSchemaSchema,
   EventDefinitionFamilySchema,
-  type EventFieldDefinition,
   ScalarDefinitionSchema,
   TelemetryTokenSchema,
 } from "./event-definition";
@@ -37,38 +36,29 @@ export const PatchEventDefinitionRequestSchema = z
   })
   .strict();
 
+/**
+ * `z.preprocess`, not `.transform`: MCP derives tool JSON Schema from this
+ * request body. A transform cannot be represented and breaks tool derivation.
+ * Overflow replaces the document with `null` so the lazy Closed JSON parser
+ * never walks a 2000-deep tree.
+ */
+function writeClosedJsonSchemaInput(value: unknown): unknown {
+  if (closedJsonSchemaDepthExceeds(value, PERSISTED_JSON_MAX_DEPTH)) {
+    return null;
+  }
+  return value;
+}
+
 const WriteJsonFieldDefinitionSchema = z
   .object({
     name: z.string().min(1),
     type: z.literal("json"),
     required: z.boolean(),
-    jsonSchema: z.unknown(),
+    jsonSchema: z.preprocess(writeClosedJsonSchemaInput, ClosedJsonSchemaSchema),
   })
-  .strict()
-  .transform((value, context): Extract<EventFieldDefinition, { type: "json" }> => {
-    if (closedJsonSchemaDepthExceeds(value.jsonSchema, PERSISTED_JSON_MAX_DEPTH)) {
-      context.addIssue({
-        code: "custom",
-        path: ["jsonSchema"],
-        message: `exceeds persisted JSON max depth of ${PERSISTED_JSON_MAX_DEPTH}`,
-      });
-      return z.NEVER;
-    }
-    const parsed = ClosedJsonSchemaSchema.safeParse(value.jsonSchema);
-    if (!parsed.success) {
-      for (const issue of parsed.error.issues) {
-        context.addIssue({
-          code: "custom",
-          path: ["jsonSchema", ...issue.path],
-          message: issue.message,
-        });
-      }
-      return z.NEVER;
-    }
-    return { ...value, jsonSchema: parsed.data };
-  });
+  .strict();
 
-const WriteEventFieldDefinitionSchema: z.ZodType<EventFieldDefinition> = z.union([
+const WriteEventFieldDefinitionSchema = z.union([
   ScalarDefinitionSchema,
   WriteJsonFieldDefinitionSchema,
 ]);
