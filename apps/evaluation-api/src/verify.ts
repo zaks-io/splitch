@@ -1,5 +1,4 @@
 import {
-  type ErrorCode,
   type ErrorResponse,
   ResolutionDetailsSchema,
   type ResolutionReason,
@@ -9,6 +8,7 @@ import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-r
 import { verify } from "./evaluate/accessor-paths";
 import type { EvaluateResult } from "./evaluate/evaluate-path";
 import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
+import { errorDisclosureForKind, errorResponse } from "./evaluation-error-response";
 import type { FlagConfig, Provider } from "./provider/provider";
 import { reasonForResolution } from "./resolution-reason";
 
@@ -34,7 +34,12 @@ export function makeVerifyHandler(deps: EvaluatePathDeps) {
     if (!scope.ok) return renderError(scope.error, { requestId });
 
     const evaluated = await verifyWithCapture(parsed.body, scope.value, deps);
-    return verifyResponse(evaluated, principal.kind === "api-key", requestId);
+    return verifyResponse(
+      evaluated,
+      principal.kind === "api-key",
+      requestId,
+      errorDisclosureForKind(principal.kind),
+    );
   };
 }
 
@@ -42,10 +47,13 @@ function credentialScope(
   principal: Principal,
   appId: string | undefined,
 ): { ok: true; value: CredentialScope } | { ok: false; error: ErrorResponse } {
+  const disclosure = errorDisclosureForKind(principal.kind);
   if (principal.appId === null || principal.environmentId === null) {
     return {
       ok: false,
-      error: errorResponse("INTERNAL_SERVER_ERROR", "credential is not environment-scoped"),
+      error: errorResponse("INTERNAL_SERVER_ERROR", "credential is not environment-scoped", {
+        disclosure,
+      }),
     };
   }
   const assertionError = appAssertionError(appId, principal.appId);
@@ -80,23 +88,28 @@ function verifyResponse(
   evaluated: Awaited<ReturnType<typeof verifyWithCapture>>,
   trusted: boolean,
   requestId: string,
+  disclosure: ReturnType<typeof errorDisclosureForKind>,
 ): Response {
   const { output, provider } = evaluated;
   if (output.result.kind === "error") {
-    return renderError(errorResponse(output.result.errorCode, output.result.errorMessage), {
-      requestId,
-    });
+    return renderError(
+      errorResponse(output.result.errorCode, output.result.errorMessage, { disclosure }),
+      { requestId },
+    );
   }
   if (provider.flag === null) {
-    return renderError(errorResponse("INTERNAL_SERVER_ERROR", "flag config was not resolved"), {
-      requestId,
-    });
+    return renderError(
+      errorResponse("INTERNAL_SERVER_ERROR", "flag config was not resolved", { disclosure }),
+      { requestId },
+    );
   }
 
   const details = verifyDetails(output.result, provider.flag, trusted);
   if (!details.ok) {
     return renderError(
-      errorResponse("INTERNAL_SERVER_ERROR", `Variant "${details.variantName}" has no value`),
+      errorResponse("INTERNAL_SERVER_ERROR", `Variant "${details.variantName}" has no value`, {
+        disclosure,
+      }),
       { requestId },
     );
   }
@@ -212,17 +225,4 @@ function valueForVariant(
 ): { ok: true; value: Variant["value"] } | { ok: false } {
   const variant = variants.find((item) => item.name === variantName);
   return variant === undefined ? { ok: false } : { ok: true, value: variant.value };
-}
-
-function errorResponse(code: ErrorCode, message: string): ErrorResponse {
-  if (code === "FLAG_NOT_FOUND") {
-    return { code, message: "flag not found", details: {} };
-  }
-  if (code === "VALIDATION_ERROR") {
-    return { code, message, details: { issues: [] } };
-  }
-  if (code === "INTERNAL_SERVER_ERROR") {
-    return { code, message: "evaluation failed", details: {} };
-  }
-  return { code, message, details: {} } as ErrorResponse;
 }

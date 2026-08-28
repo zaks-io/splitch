@@ -1,13 +1,9 @@
-import {
-  type ErrorCode,
-  type ErrorResponse,
-  PeekEvaluateResponseSchema,
-  type Variant,
-} from "@splitch/contracts";
+import { type ErrorResponse, PeekEvaluateResponseSchema, type Variant } from "@splitch/contracts";
 import { renderError, type HandlerArgs, type Principal } from "@splitch/worker-runtime";
 import { peekVariant } from "./evaluate/accessor-paths";
 import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
 import type { EvaluateResult } from "./evaluate/evaluate-path";
+import { errorResponse } from "./evaluation-error-response";
 import type { FlagConfig, Provider } from "./provider/provider";
 
 type ResolvedEvaluateResult = Exclude<EvaluateResult, { kind: "error" }>;
@@ -49,7 +45,9 @@ function credentialScope(
   if (principal.appId === null || principal.environmentId === null) {
     return {
       ok: false,
-      error: errorResponse("INTERNAL_SERVER_ERROR", "credential is not environment-scoped"),
+      error: errorResponse("INTERNAL_SERVER_ERROR", "credential is not environment-scoped", {
+        disclosure: "trusted",
+      }),
     };
   }
   const assertionError = appAssertionError(appId, principal.appId);
@@ -90,15 +88,20 @@ function peekResponse(
     return renderError(resolved.error, { requestId });
   }
   if (provider.flag === null) {
-    return renderError(errorResponse("INTERNAL_SERVER_ERROR", "flag config was not resolved"), {
-      requestId,
-    });
+    return renderError(
+      errorResponse("INTERNAL_SERVER_ERROR", "flag config was not resolved", {
+        disclosure: "trusted",
+      }),
+      { requestId },
+    );
   }
 
   const value = valueForVariant(provider.flag.variants, resolved.result);
   if (!value.ok) {
     return renderError(
-      errorResponse("INTERNAL_SERVER_ERROR", `Variant "${value.variantName}" has no value`),
+      errorResponse("INTERNAL_SERVER_ERROR", `Variant "${value.variantName}" has no value`, {
+        disclosure: "trusted",
+      }),
       { requestId },
     );
   }
@@ -110,7 +113,10 @@ function resolvePeekResult(
   result: EvaluateResult,
 ): { ok: true; result: ResolvedEvaluateResult } | { ok: false; error: ErrorResponse } {
   if (result.kind === "error") {
-    return { ok: false, error: errorResponse(result.errorCode, result.errorMessage) };
+    return {
+      ok: false,
+      error: errorResponse(result.errorCode, result.errorMessage, { disclosure: "trusted" }),
+    };
   }
   if (isPeekDefaultFallback(result)) {
     return {
@@ -118,6 +124,7 @@ function resolvePeekResult(
       error: errorResponse(
         "VALIDATION_ERROR",
         `peek cannot return a Default Variant fallback (${result.kind})`,
+        { disclosure: "trusted" },
       ),
     };
   }
@@ -126,7 +133,9 @@ function resolvePeekResult(
 
 function appAssertionError(appId: string | undefined, scopedAppId: string): ErrorResponse | null {
   return appId !== undefined && appId !== scopedAppId
-    ? errorResponse("APP_MISMATCH", "credential does not belong to appId")
+    ? errorResponse("APP_MISMATCH", "credential does not belong to appId", {
+        disclosure: "trusted",
+      })
     : null;
 }
 
@@ -210,17 +219,4 @@ function valueForVariant(
   return variant === undefined
     ? { ok: false, variantName: result.variant }
     : { ok: true, value: variant.value };
-}
-
-function errorResponse(code: ErrorCode, message: string): ErrorResponse {
-  if (code === "FLAG_NOT_FOUND") {
-    return { code, message: "flag not found", details: {} };
-  }
-  if (code === "VALIDATION_ERROR") {
-    return { code, message, details: { issues: [] } };
-  }
-  if (code === "INTERNAL_SERVER_ERROR") {
-    return { code, message: "evaluation failed", details: {} };
-  }
-  return { code, message, details: {} } as ErrorResponse;
 }

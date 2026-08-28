@@ -1,10 +1,10 @@
+import { requireCredentialPrefix } from "./credential";
 import { SplitchSdkError } from "./errors";
 import type { EvaluateContext, EvaluateDeps, EvaluationContext, Logger } from "./evaluate";
 import { runEvaluate, runPeekVariant, runVerify } from "./evaluate";
 import type { PrecomputedEvaluations } from "./evaluate-all";
 import { runEvaluateAll } from "./evaluate-all";
 import { createFetchTransport } from "./fetch-transport";
-import { requireCredentialPrefix } from "./credential";
 import type { VariantValue } from "./generated/contract-surface.js";
 import type { SdkResolutionDetails } from "./resolution";
 import { SeenSet } from "./seen-set";
@@ -68,8 +68,6 @@ export interface SplitchClient {
     event: Omit<TrackRequest, "eventName">,
   ): Promise<{
     eventId: string;
-    eventDefinitionId: string;
-    eventDefinitionVersionId: string;
     duplicate: boolean;
   }>;
   /**
@@ -190,12 +188,7 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
   return {
     async track(eventName, event) {
       const result = await deps.transport.track({ eventName, ...event });
-      if (
-        !result.accepted ||
-        result.eventId === null ||
-        result.eventDefinitionId === null ||
-        result.eventDefinitionVersionId === null
-      ) {
+      if (!result.accepted || result.eventId === null) {
         throw new SplitchSdkError({
           code: result.errorCode ?? "SDK_TRANSPORT_PARSE",
           causeSummary: result.errorMessage ?? "Metric Event was rejected",
@@ -206,8 +199,6 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
       }
       return {
         eventId: result.eventId,
-        eventDefinitionId: result.eventDefinitionId,
-        eventDefinitionVersionId: result.eventDefinitionVersionId,
         duplicate: result.duplicate,
       };
     },

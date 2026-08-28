@@ -170,6 +170,31 @@ describe("Metric Event delivery", () => {
 });
 
 describe("Metric Event response diagnostics", () => {
+  it("accepts a Client Key 202 that omits Event Definition IDs", async () => {
+    const { ctx, runMutation } = actionContext();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json(
+          {
+            accepted: true,
+            duplicate: false,
+            eventId: EVENT_ID,
+          },
+          { status: 202 },
+        ),
+      ),
+    );
+
+    await deliverMetricEventHandler(ctx, { eventId: EVENT_ID });
+
+    expect(runMutation.mock.calls[1]?.[1]).toEqual({
+      eventId: EVENT_ID,
+      outcome: "accepted",
+      leaseExpiresAt: NOW + 60_000,
+    });
+  });
+
   it("retains only the HTTP status for an unknown response code", async () => {
     const { ctx, runMutation } = actionContext();
     vi.stubGlobal(

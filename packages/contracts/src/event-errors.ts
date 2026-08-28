@@ -12,16 +12,16 @@ export const eventErrorMembers = [
     "EVENT_SCHEMA_MISMATCH",
     z.object({
       eventName: z.string(),
-      eventDefinitionVersionId: z.string(),
+      eventDefinitionVersionId: z.string().optional(),
       issues: z.array(ValidationIssue),
     }),
   ),
   member(
     "ENTITY_TYPE_MISMATCH",
     z.object({
-      expectedIdType: z.string().nullable(),
+      expectedIdType: z.string().nullable().optional(),
       receivedIdType: z.string(),
-      eventDefinitionId: z.string(),
+      eventDefinitionId: z.string().optional(),
       metricId: z.string().optional(),
       runId: z.string().optional(),
     }),
@@ -30,7 +30,7 @@ export const eventErrorMembers = [
   member("EVENT_DEFINITION_VERSION_NOT_FOUND", EmptyDetails),
   member(
     "EVENT_DEFINITION_UNPUBLISHED",
-    z.object({ eventDefinitionId: z.string(), eventName: z.string() }),
+    z.object({ eventDefinitionId: z.string().optional(), eventName: z.string() }),
   ),
   member(
     "EVENT_DEFINITION_IMMUTABLE",

@@ -147,8 +147,8 @@ structurally valid and admitted batch returns `202` with results in input order:
     | {
         eventId: string;
         status: "accepted" | "duplicate";
-        eventDefinitionId: string;
-        eventDefinitionVersionId: string;
+        eventDefinitionId?: string;
+        eventDefinitionVersionId?: string;
       }
     | {
         eventId: string;
@@ -158,6 +158,9 @@ structurally valid and admitted batch returns `202` with results in input order:
   >;
 }
 ```
+
+A trusted API Key accepted or duplicate item includes `eventDefinitionId` and
+`eventDefinitionVersionId`. A Client Key response omits both IDs.
 
 An accepted item has atomically committed its family-scoped claim and canonical payload to the
 durable outbox for `web_events` delivery. A duplicate item was accepted previously and returns the

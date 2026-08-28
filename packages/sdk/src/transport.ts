@@ -114,8 +114,6 @@ export interface TrackRequest {
 export interface TrackResult extends TransportFailure {
   readonly accepted: boolean;
   readonly eventId: string | null;
-  readonly eventDefinitionId: string | null;
-  readonly eventDefinitionVersionId: string | null;
   readonly duplicate: boolean;
 }
 

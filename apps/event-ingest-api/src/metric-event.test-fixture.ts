@@ -42,11 +42,15 @@ export async function makeMetricEventFixture(
   credentialKind: "api_key" | "client_key" = "client_key",
   options: {
     admission?: AdmissionOption;
+    credential?: { revoked?: boolean; scopes?: string[] };
+    omitCredentialStore?: boolean;
   } = {},
 ): Promise<MetricEventFixture> {
   const hash = await sha256Hex(METRIC_CLIENT_KEY);
   const key = credentialKind === "client_key" ? clientKeyCacheKey(hash) : apiKeyCacheKey(hash);
-  const credential = new Map<string, string>([[key, credentialRecord(credentialKind)]]);
+  const credential = new Map<string, string>([
+    [key, credentialRecord(credentialKind, options.credential)],
+  ]);
   const config = new Map([
     [eventDefinitionConfigKey(METRIC_APP_ID, METRIC_EVENT_NAME), hotConfig("edv_1", 1)],
   ]);
@@ -55,7 +59,7 @@ export async function makeMetricEventFixture(
   const env = {
     SPLITCH_PLATFORM_TARGET: "local",
     ...base,
-    CREDENTIAL_STORE: kv(credential),
+    ...(options.omitCredentialStore ? {} : { CREDENTIAL_STORE: kv(credential) }),
     CONFIG_STORE: mergedConfigStore(base.CONFIG_STORE, config),
     METRIC_EVENT_OUTBOX: outboxStub(claims),
     ...admissionBinding(options.admission, admissionCharges),
@@ -67,13 +71,14 @@ export async function makeMetricEventFixture(
 export async function sendMetricEvent(
   fixture: Pick<MetricEventFixture, "credentialKind" | "env" | "hash">,
   body: unknown,
+  options: { actorId?: string } = {},
 ): Promise<Response> {
   return new EvaluationEntrypoint(new TestExecutionContext(), fixture.env).fetch(
     delegatedRequest(
       metricEventRoute(),
       {
         operation: "sdk_track",
-        actorId: `${fixture.credentialKind}:${fixture.hash}`,
+        actorId: options.actorId ?? `${fixture.credentialKind}:${fixture.hash}`,
         orgId: METRIC_ORGANIZATION_ID,
         appId: METRIC_APP_ID,
         environmentId: METRIC_ENVIRONMENT_ID,
@@ -101,7 +106,12 @@ export function metricEventBody(patch: Record<string, unknown> = {}) {
   };
 }
 
-export function hotConfig(versionId: string, version: number): string {
+export function hotConfig(
+  versionId: string,
+  version: number,
+  versionPatch: Record<string, unknown> = {},
+  eventDefinitionPatch: Record<string, unknown> = {},
+): string {
   return JSON.stringify({
     schemaVersion: CURRENT_KV_SCHEMA_VERSION,
     data: {
@@ -115,6 +125,7 @@ export function hotConfig(versionId: string, version: number): string {
         currentPublishedVersionId: versionId,
         createdAt: "2026-08-07T00:00:00.000Z",
         updatedAt: "2026-08-07T00:00:00.000Z",
+        ...eventDefinitionPatch,
       },
       version: {
         id: versionId,
@@ -127,6 +138,7 @@ export function hotConfig(versionId: string, version: number): string {
           { name: "plan", type: "string", required: true, allowedValues: ["pro", "free"] },
         ],
         publishedAt: "2026-08-07T00:00:00.000Z",
+        ...versionPatch,
       },
     },
   });
@@ -137,7 +149,10 @@ async function sha256Hex(value: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function credentialRecord(kind: "api_key" | "client_key"): string {
+function credentialRecord(
+  kind: "api_key" | "client_key",
+  patch: { revoked?: boolean; scopes?: string[] } = {},
+): string {
   return JSON.stringify({
     schemaVersion: CURRENT_KV_SCHEMA_VERSION,
     data: {
@@ -146,9 +161,9 @@ function credentialRecord(kind: "api_key" | "client_key"): string {
       kind,
       appId: METRIC_APP_ID,
       environmentId: METRIC_ENVIRONMENT_ID,
-      scopes: ["data-plane:evaluate", "data-plane:write"],
+      scopes: patch.scopes ?? ["data-plane:evaluate", "data-plane:write"],
       ...(kind === "client_key" ? { originAllowlist: null, rateLimitRps: null } : {}),
-      revoked: false,
+      revoked: patch.revoked ?? false,
       cachedAt: "2026-08-07T00:00:00.000Z",
     },
   });

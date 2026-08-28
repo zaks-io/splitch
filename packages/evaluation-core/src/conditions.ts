@@ -49,9 +49,9 @@ function matchesCondition(
     case "not_in":
       return Array.isArray(condition.value) && !intersects(actual.value, condition.value);
     case "matches":
-      return matchesRegex(actual.value, condition.value);
+      return matchesRegex(actual.value, condition.value, options);
     case "not_matches":
-      return !matchesRegex(actual.value, condition.value);
+      return !matchesRegex(actual.value, condition.value, options);
   }
 }
 
@@ -86,15 +86,15 @@ function compareNumbers(
   return typeof actual === "number" && typeof expected === "number" && predicate(actual, expected);
 }
 
-function matchesRegex(actual: unknown, expected: unknown): boolean {
+function matchesRegex(actual: unknown, expected: unknown, options: ConditionMatchOptions): boolean {
   if (typeof actual !== "string" || typeof expected !== "string") return false;
   try {
     return new RegExp(expected).test(actual);
   } catch (cause) {
-    throw new ConditionMatchError(
-      `Invalid regex condition "${expected}"`,
-      "INTERNAL_SERVER_ERROR",
-      { cause },
-    );
+    options.logger?.warn("invalid_regex_condition", {
+      pattern: expected,
+      ruleId: options.ruleId ?? null,
+    });
+    throw new ConditionMatchError("Invalid regex condition", "INTERNAL_SERVER_ERROR", { cause });
   }
 }

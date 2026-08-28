@@ -12,8 +12,8 @@ import {
   metricEventBody,
   sendMetricEvent,
 } from "./metric-event.test-fixture";
-import { TestExecutionContext } from "./test-fixtures";
 import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
+import { TestExecutionContext } from "./test-fixtures";
 
 describe("Metric Event ingest", () => {
   it("accepts the Evaluation-authorized caller only through the binding entrypoint", async () => {
@@ -41,9 +41,10 @@ describe("Metric Event ingest", () => {
     const fixture = await makeMetricEventFixture();
     const first = await sendMetricEvent(fixture, metricEventBody());
     expect(first.status).toBe(202);
-    expect(await first.json()).toMatchObject({
+    expect(await first.json()).toEqual({
+      accepted: true,
       duplicate: false,
-      eventDefinitionVersionId: "edv_1",
+      eventId: "123e4567-e89b-42d3-a456-426614174000",
     });
 
     fixture.config.set(
@@ -52,9 +53,10 @@ describe("Metric Event ingest", () => {
     );
     const retry = await sendMetricEvent(fixture, metricEventBody());
     expect(retry.status).toBe(202);
-    expect(await retry.json()).toMatchObject({
+    expect(await retry.json()).toEqual({
+      accepted: true,
       duplicate: true,
-      eventDefinitionVersionId: "edv_1",
+      eventId: "123e4567-e89b-42d3-a456-426614174000",
     });
 
     const conflict = await sendMetricEvent(
@@ -130,9 +132,10 @@ describe("Metric Event ingest", () => {
     const retry = await sendMetricEvent(fixture, metricEventBody());
 
     expect(retry.status).toBe(202);
-    expect(await retry.json()).toMatchObject({
+    expect(await retry.json()).toEqual({
+      accepted: true,
       duplicate: true,
-      eventDefinitionVersionId: "edv_1",
+      eventId: "123e4567-e89b-42d3-a456-426614174000",
     });
     expect(fixture.claims.size).toBe(1);
     expect(fixture.admissionCharges).toHaveLength(1);
@@ -144,12 +147,23 @@ describe("Metric Event ingest", () => {
       fixture,
       metricEventBody({ fields: { converted: true, profile: "forbidden" } }),
     );
+    const body = await response.json();
     expect(response.status).toBe(400);
-    expect(await responseCode(response)).toBe("EVENT_SCHEMA_MISMATCH");
+    expect(body).toEqual({
+      code: "EVENT_SCHEMA_MISMATCH",
+      message: "Metric Event does not match the Event Definition Version",
+      details: {
+        eventName: METRIC_EVENT_NAME,
+        issues: [{ path: ["fields", "profile"], message: "fields key is not declared" }],
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain("edv_1");
     expect(fixture.claims.size).toBe(0);
     expect(fixture.admissionCharges).toHaveLength(0);
   });
+});
 
+describe("Metric Event ingest request bounds", () => {
   it("rejects an oversized body from Content-Length before reading its stream", async () => {
     const fixture = await makeMetricEventFixture();
     const request = new Request("https://ingest.test/metric-events", {
@@ -161,6 +175,7 @@ describe("Metric Event ingest", () => {
 
     const response = await handleAuthorizedMetricEvent(request, fixture.env, {
       credentialHash: fixture.hash,
+      credentialKind: fixture.credentialKind,
       appId: METRIC_APP_ID,
       environmentId: "env_prod",
       rateLimitRps: null,

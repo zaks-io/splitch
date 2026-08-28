@@ -17,6 +17,7 @@ import { z } from "zod";
  */
 
 export const OWN_PROTO_KEY = "__proto__";
+export const OWN_PROTO_KEY_MESSAGE = `must not contain a "${OWN_PROTO_KEY}" key`;
 
 function isPlainObject(input: unknown): input is Record<string | symbol, unknown> {
   return typeof input === "object" && input !== null && !Array.isArray(input);
@@ -67,4 +68,53 @@ export function protoSafeRecord<Value extends z.ZodType>(
   });
   gateOwnProtoKeyInParse(schema, message);
   return schema as ProtoSafeRecordSchema<Value>;
+}
+
+/**
+ * Refuse an own `"__proto__"` key anywhere in a raw parse tree. Use on the
+ * request object so a parent `z.object({ body })` wrapper still sees the key
+ * before child `z.record` / union members strip it.
+ */
+export function refuseOwnProtoTreeInParse(schema: z.ZodTypeAny, message: string): void {
+  const prev = schema._zod.parse.bind(schema._zod);
+  schema._zod.parse = (payload, ctx) => {
+    const path = ownProtoPath(payload.value);
+    if (path !== null) {
+      payload.issues.push({
+        code: "custom",
+        message,
+        path,
+        input: payload.value,
+        inst: schema,
+      });
+      return payload;
+    }
+    return prev(payload, ctx);
+  };
+}
+
+function ownProtoPath(value: unknown, path: PropertyKey[] = []): PropertyKey[] | null {
+  if (value === null || typeof value !== "object") return null;
+  if (Array.isArray(value)) return ownProtoPathInArray(value, path);
+  if (Object.hasOwn(value, OWN_PROTO_KEY)) return [...path, OWN_PROTO_KEY];
+  return ownProtoPathInObject(value as Record<string, unknown>, path);
+}
+
+function ownProtoPathInArray(value: unknown[], path: PropertyKey[]): PropertyKey[] | null {
+  for (const [index, item] of value.entries()) {
+    const found = ownProtoPath(item, [...path, index]);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+function ownProtoPathInObject(
+  value: Record<string, unknown>,
+  path: PropertyKey[],
+): PropertyKey[] | null {
+  for (const key of Object.keys(value)) {
+    const found = ownProtoPath(value[key], [...path, key]);
+    if (found !== null) return found;
+  }
+  return null;
 }

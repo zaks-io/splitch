@@ -77,6 +77,35 @@ describe("Metric Event delegation", () => {
     expect(((await response.json()) as ErrorResponse).code).toBe("ORIGIN_NOT_ALLOWED");
     expect(forwarded).toHaveLength(0);
   });
+
+  it("refuses a Client Key own __proto__ field before Event Ingest can admit it", async () => {
+    const forwarded: Request[] = [];
+    const { app } = await makeSdkRouteHarness({
+      delegationBindings: {
+        "event-ingest-api": {
+          async fetch(input: RequestInfo | URL) {
+            forwarded.push(input as Request);
+            return Response.json({ accepted: true }, { status: 202 });
+          },
+        },
+      },
+    });
+    const fields = JSON.parse('{"__proto__":true}') as Record<string, unknown>;
+    const nested = JSON.parse('{"profile":{"__proto__":true}}') as Record<string, unknown>;
+    for (const body of [fields, nested]) {
+      forwarded.length = 0;
+      const response = await app.request("/api/sdk/events", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${CLIENT_KEY}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ ...metricEvent(), fields: body, dimensions: {} }),
+      });
+      expect(response.status).not.toBe(202);
+      expect(forwarded).toHaveLength(0);
+    }
+  });
 });
 
 function metricEvent() {
