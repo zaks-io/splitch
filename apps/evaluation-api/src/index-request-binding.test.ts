@@ -32,7 +32,22 @@ describe("evaluationApiHandler hosted privacy startup", () => {
     ).rejects.toThrow(/EVALUATION_PRIVACY_SALT/);
   });
 
-  it("serves hosted health when the root salt and deployed SHA are present", async () => {
+  it("fails health when a hosted target has no CONFIG_STORE", async () => {
+    await expect(
+      evaluationApiHandler.fetch(
+        new Request("https://evaluation.test/health") as Parameters<
+          typeof evaluationApiHandler.fetch
+        >[0],
+        {
+          SPLITCH_PLATFORM_TARGET: "production",
+          EVALUATION_PRIVACY_SALT: "hosted-root-secret",
+        } as EvaluationApiEnv,
+        emptyCtx,
+      ),
+    ).rejects.toThrow(/CONFIG_STORE is required/);
+  });
+
+  it("serves hosted health when the root salt, CONFIG_STORE, and deployed SHA are present", async () => {
     const response = await evaluationApiHandler.fetch(
       new Request("https://evaluation.test/health") as Parameters<
         typeof evaluationApiHandler.fetch
@@ -41,7 +56,11 @@ describe("evaluationApiHandler hosted privacy startup", () => {
         SPLITCH_PLATFORM_TARGET: "production",
         EVALUATION_PRIVACY_SALT: "hosted-root-secret",
         SPLITCH_DEPLOYED_COMMIT_SHA: "a".repeat(40),
-      } as EvaluationApiEnv,
+        CONFIG_STORE: {
+          get: async () => null,
+          put: async () => undefined,
+        },
+      } as unknown as EvaluationApiEnv,
       emptyCtx,
     );
     expect(response.status).toBe(200);

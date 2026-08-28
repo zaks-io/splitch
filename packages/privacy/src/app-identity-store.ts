@@ -4,14 +4,16 @@
  */
 
 import {
+  appIdentityVersionNumber,
   deriveAppIdentityKek,
   generateAppIdentityKey,
   INITIAL_APP_IDENTITY_KEY_VERSION,
   nextAppIdentityVersion,
   unwrapAppIdentityKey,
-  wrapAppIdentityKey,
   type WrappedAppIdentityKey,
+  wrapAppIdentityKey,
 } from "./app-identity-key";
+import { toHex } from "./hmac";
 import type { KeyVersion, SaltBytes } from "./salt-store";
 
 export const APP_IDENTITY_RECORD_SCHEMA_VERSION = 1;
@@ -42,9 +44,18 @@ export interface WrappedAppIdentityRecord {
   epochs: readonly WrappedAppIdentityEpoch[];
 }
 
+export interface AppIdentitySaveOptions {
+  /**
+   * When true (default), union incoming epochs with any record already stored
+   * for the App. A raced first mint keeps both keys under `app-v1` so hashes
+   * already emitted stay resolvable. Rewrap uses `{ merge: false }`.
+   */
+  merge?: boolean;
+}
+
 export interface AppIdentityStore {
   load(appId: string): Promise<AppIdentityRecord | null>;
-  save(appId: string, record: AppIdentityRecord): Promise<void>;
+  save(appId: string, record: AppIdentityRecord, options?: AppIdentitySaveOptions): Promise<void>;
 }
 
 export interface AppIdentityKv {
@@ -73,8 +84,13 @@ export function makeMemoryAppIdentityStore(
       const record = records.get(appId);
       return record === undefined ? null : cloneAppIdentityRecord(record);
     },
-    async save(appId, record) {
-      records.set(appId, cloneAppIdentityRecord(record));
+    async save(appId, record, options) {
+      const existing = options?.merge === false ? undefined : records.get(appId);
+      const next =
+        existing === undefined
+          ? cloneAppIdentityRecord(record)
+          : mergeAppIdentityRecords(existing, record);
+      records.set(appId, next);
     },
   };
 }
@@ -91,8 +107,10 @@ export function makeKvAppIdentityStore(options: {
       if (raw === null) return null;
       return unwrapAppIdentityRecord(parseWrappedAppIdentityRecord(raw), options.rootSecret, appId);
     },
-    async save(appId, record) {
-      const wrapped = await wrapAppIdentityRecord(record, options.rootSecret, appId);
+    async save(appId, record, saveOptions) {
+      const existing = saveOptions?.merge === false ? null : await this.load(appId);
+      const next = existing === null ? record : mergeAppIdentityRecords(existing, record);
+      const wrapped = await wrapAppIdentityRecord(next, options.rootSecret, appId);
       await options.kv.put(recordKey(appId), JSON.stringify(wrapped));
     },
   };
@@ -174,7 +192,7 @@ export async function rewrapKvAppIdentityRecord(options: {
     rootSecret: options.newRootSecret,
     recordKey: options.recordKey,
   });
-  await next.save(options.appId, record);
+  await next.save(options.appId, record, { merge: false });
 }
 
 export function parseWrappedAppIdentityRecord(raw: string): WrappedAppIdentityRecord {
@@ -208,6 +226,30 @@ function isWrappedAppIdentityEpoch(value: unknown): value is WrappedAppIdentityE
   if (typeof epoch.wrappedKey !== "object" || epoch.wrappedKey === null) return false;
   const wrapped = epoch.wrappedKey as Record<string, unknown>;
   return typeof wrapped.iv === "string" && typeof wrapped.ciphertext === "string";
+}
+
+function mergeAppIdentityRecords(
+  existing: AppIdentityRecord,
+  incoming: AppIdentityRecord,
+): AppIdentityRecord {
+  const epochs = existing.epochs.map((epoch) => ({
+    version: epoch.version,
+    key: new Uint8Array(epoch.key) as SaltBytes,
+  }));
+  const seen = new Set(existing.epochs.map((epoch) => toHex(epoch.key)));
+  for (const epoch of incoming.epochs) {
+    const hex = toHex(epoch.key);
+    if (seen.has(hex)) continue;
+    epochs.push({ version: epoch.version, key: new Uint8Array(epoch.key) as SaltBytes });
+    seen.add(hex);
+  }
+  const existingNumber = appIdentityVersionNumber(existing.currentVersion) ?? 0;
+  const incomingNumber = appIdentityVersionNumber(incoming.currentVersion) ?? 0;
+  return {
+    currentVersion:
+      incomingNumber > existingNumber ? incoming.currentVersion : existing.currentVersion,
+    epochs,
+  };
 }
 
 function cloneAppIdentityRecord(record: AppIdentityRecord): AppIdentityRecord {

@@ -31,10 +31,15 @@ export async function computeRetainedTargetingKeyHashes(
   const hashes: string[] = [];
   const seen = new Set<string>();
   for (const keyVersion of versions) {
-    const hash = await computeTargetingKeyHash(store, { ...input, keyVersion });
-    if (!seen.has(hash)) {
-      seen.add(hash);
-      hashes.push(hash);
+    const salts = store.saltsFor
+      ? await store.saltsFor(input.appId, keyVersion)
+      : [await store.saltFor(input.appId, keyVersion)];
+    for (const salt of salts) {
+      const hash = await computeTargetingKeyHash(store, { ...input, keyVersion, salt });
+      if (!seen.has(hash)) {
+        seen.add(hash);
+        hashes.push(hash);
+      }
     }
   }
   return hashes;

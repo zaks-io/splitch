@@ -209,16 +209,25 @@ export function makeMetricEventSaltStore(env: Env) {
     localFixtureAllowed: isLocalPlatformTarget(target),
   });
   const configStore = env.CONFIG_STORE;
-  const identityStore = configStore
-    ? makeKvAppIdentityStore({
+  if (configStore) {
+    return makeIdentitySaltStore({
+      rootSecret,
+      identityStore: makeKvAppIdentityStore({
         kv: {
           get: async (key) => (await configStore.get(key, "text")) ?? null,
           put: (key, value) => configStore.put(key, value),
         },
         rootSecret,
-      })
-    : makeMemoryAppIdentityStore();
-  return makeIdentitySaltStore({ rootSecret, identityStore });
+      }),
+    });
+  }
+  if (isLocalPlatformTarget(target)) {
+    return makeIdentitySaltStore({
+      rootSecret,
+      identityStore: makeMemoryAppIdentityStore(),
+    });
+  }
+  throw new Error("CONFIG_STORE is required outside local targets");
 }
 
 export async function metricEventDedupKey(

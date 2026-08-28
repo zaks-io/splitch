@@ -25,7 +25,7 @@
  */
 
 import { hmacSha256Hex } from "./hmac";
-import type { KeyVersion, SaltStore } from "./salt-store";
+import type { KeyVersion, SaltBytes, SaltStore } from "./salt-store";
 
 function validateIdType(idType: string): void {
   if (idType.length === 0) {
@@ -51,6 +51,11 @@ export interface TargetingKeyHashInput {
    * current version.
    */
   keyVersion?: KeyVersion;
+  /**
+   * Override `saltFor` when a version has more than one retained key (a raced
+   * first mint). The version prefix on the hash still comes from `keyVersion`.
+   */
+  salt?: SaltBytes;
 }
 
 /**
@@ -63,7 +68,7 @@ export async function computeTargetingKeyHash(
   input: TargetingKeyHashInput,
 ): Promise<string> {
   const keyVersion = input.keyVersion ?? (await store.currentKeyVersion(input.appId));
-  const salt = await store.saltFor(input.appId, keyVersion);
+  const salt = input.salt ?? (await store.saltFor(input.appId, keyVersion));
   if (salt.length === 0) {
     throw new Error(`privacy: empty salt for app=${input.appId} version=${keyVersion}`);
   }

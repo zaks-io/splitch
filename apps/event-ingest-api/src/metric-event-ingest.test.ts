@@ -220,9 +220,16 @@ describe("Metric Event retained-epoch retry", () => {
 
 describe("Metric Event privacy salts", () => {
   it("hashes the same Targeting Key differently across Apps under one root", async () => {
+    const values = new Map<string, string>();
     const store = makeMetricEventSaltStore({
       EVALUATION_PRIVACY_SALT: "test-root-secret-do-not-use",
       SPLITCH_PLATFORM_TARGET: "production",
+      CONFIG_STORE: {
+        get: async (key: string) => values.get(key) ?? null,
+        put: async (key: string, value: string) => {
+          values.set(key, value);
+        },
+      },
     } as never);
     const input = { idType: "user", targetingKey: "user-123" } as const;
     const appA = await computeTargetingKeyHash(store, { ...input, appId: "app_1" });
@@ -244,6 +251,12 @@ describe("Metric Event privacy salts", () => {
     expect(() =>
       makeMetricEventSaltStore({ SPLITCH_PLATFORM_TARGET: "production" } as never),
     ).toThrow(/EVALUATION_PRIVACY_SALT/);
+    expect(() =>
+      makeMetricEventSaltStore({
+        EVALUATION_PRIVACY_SALT: "hosted-root-secret",
+        SPLITCH_PLATFORM_TARGET: "production",
+      } as never),
+    ).toThrow(/CONFIG_STORE is required/);
   });
 });
 

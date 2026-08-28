@@ -17,6 +17,7 @@ describe("makeEnvSaltStore", () => {
     const store = makeEnvSaltStore({
       EVALUATION_PRIVACY_SALT: ROOT,
       SPLITCH_PLATFORM_TARGET: "production",
+      identityStore: makeMemoryAppIdentityStore(),
     });
     const input = { appId: "app_1", idType: "user", targetingKey: TARGETING_KEY };
     const first = await computeTargetingKeyHash(store, input);
@@ -29,6 +30,7 @@ describe("makeEnvSaltStore", () => {
     const store = makeEnvSaltStore({
       EVALUATION_PRIVACY_SALT: ROOT,
       SPLITCH_PLATFORM_TARGET: "shared-preview",
+      identityStore: makeMemoryAppIdentityStore(),
     });
     const appA = await hashedAssignmentIdentity(store, {
       appId: "app_1",
@@ -52,6 +54,7 @@ describe("makeEnvSaltStore", () => {
     const store = makeEnvSaltStore({
       EVALUATION_PRIVACY_SALT: ROOT,
       SPLITCH_PLATFORM_TARGET: "production",
+      identityStore: makeMemoryAppIdentityStore(),
     });
     const current = await computeTargetingKeyHash(store, {
       appId: "app_1",
@@ -139,8 +142,10 @@ describe("makeEnvSaltStore", () => {
     expect(await computeTargetingKeyHash(second, input)).toBe(hash);
     expect(values.size).toBe(1);
   });
+});
 
-  it("fails closed when the platform target or hosted root salt is missing", () => {
+describe("makeEnvSaltStore hosted fail-closed", () => {
+  it("fails closed when the platform target, hosted root salt, or CONFIG_STORE is missing", () => {
     expect(() => makeEnvSaltStore({})).toThrow(/SPLITCH_PLATFORM_TARGET is required/);
     expect(() => makeEnvSaltStore({ SPLITCH_PLATFORM_TARGET: "staging" })).toThrow(
       /not a platform target/,
@@ -157,5 +162,17 @@ describe("makeEnvSaltStore", () => {
         SPLITCH_PLATFORM_TARGET: "production",
       }),
     ).toThrow(/EVALUATION_PRIVACY_SALT/);
+    expect(() =>
+      makeEnvSaltStore({
+        EVALUATION_PRIVACY_SALT: ROOT,
+        SPLITCH_PLATFORM_TARGET: "production",
+      }),
+    ).toThrow(/CONFIG_STORE is required/);
+    expect(() =>
+      makeEnvSaltStore({
+        EVALUATION_PRIVACY_SALT: ROOT,
+        SPLITCH_PLATFORM_TARGET: "shared-preview",
+      }),
+    ).toThrow(/CONFIG_STORE is required/);
   });
 });

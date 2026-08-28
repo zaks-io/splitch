@@ -88,29 +88,47 @@ export function makeIdentitySaltStore(options: IdentitySaltStoreOptions): SaltSt
     return stored ?? minted;
   }
 
+  async function saltsForVersion(appId: string, keyVersion: KeyVersion): Promise<SaltBytes[]> {
+    assertAllowed(keyVersion);
+    if (isHistoricalSharedRootKeyVersion(keyVersion)) {
+      return [rootSecretBytes(rootSecret)];
+    }
+    if (!isAppIdentityKeyVersion(keyVersion)) {
+      return [];
+    }
+    const loaded = await identityStore.load(appId);
+    const record = loaded ?? (await ensureCurrent(appId));
+    return record.epochs.filter((epoch) => epoch.version === keyVersion).map((epoch) => epoch.key);
+  }
+
   return {
     async currentKeyVersion(appId) {
       return (await ensureCurrent(appId)).currentVersion;
     },
     async saltFor(appId, keyVersion) {
-      assertAllowed(keyVersion);
-      if (isHistoricalSharedRootKeyVersion(keyVersion)) {
-        return rootSecretBytes(rootSecret);
-      }
-      if (!isAppIdentityKeyVersion(keyVersion)) {
+      const salts = await saltsForVersion(appId, keyVersion);
+      const salt = salts[0];
+      if (salt === undefined) {
         throw new Error(`privacy: unknown salt version ${keyVersion}`);
       }
-      const loaded = await identityStore.load(appId);
-      const record = loaded ?? (await ensureCurrent(appId));
-      const epoch = record.epochs.find((candidate) => candidate.version === keyVersion);
-      if (!epoch) {
+      return salt;
+    },
+    async saltsFor(appId, keyVersion) {
+      const salts = await saltsForVersion(appId, keyVersion);
+      if (salts.length === 0) {
         throw new Error(`privacy: unknown salt version ${keyVersion}`);
       }
-      return epoch.key;
+      return salts;
     },
     async retainedKeyVersions(appId) {
       const loaded = await identityStore.load(appId);
-      const appVersions = loaded === null ? [] : loaded.epochs.map((epoch) => epoch.version);
+      const appVersions: KeyVersion[] = [];
+      const seen = new Set<string>();
+      for (const epoch of loaded?.epochs ?? []) {
+        if (seen.has(epoch.version)) continue;
+        seen.add(epoch.version);
+        appVersions.push(epoch.version);
+      }
       const versions = [...HISTORICAL_SHARED_ROOT_KEY_VERSIONS, ...appVersions];
       return allowed ? versions.filter((version) => allowed.has(version)) : versions;
     },

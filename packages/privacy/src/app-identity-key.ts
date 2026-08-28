@@ -30,11 +30,17 @@ export function isAppIdentityKeyVersion(version: KeyVersion): boolean {
 }
 
 export function nextAppIdentityVersion(current: KeyVersion): KeyVersion {
-  const match = APP_IDENTITY_VERSION_PATTERN.exec(current);
-  if (!match) {
+  const number = appIdentityVersionNumber(current);
+  if (number === null) {
     throw new Error(`privacy: cannot advance non-app identity version ${current}`);
   }
-  return `app-v${Number(match[1]) + 1}`;
+  return `app-v${number + 1}`;
+}
+
+/** Numeric suffix of `app-vN`, or null when the label is not an App epoch. */
+export function appIdentityVersionNumber(version: KeyVersion): number | null {
+  const match = APP_IDENTITY_VERSION_PATTERN.exec(version);
+  return match ? Number(match[1]) : null;
 }
 
 function validateAppIdentityLabel(field: string, value: string): void {

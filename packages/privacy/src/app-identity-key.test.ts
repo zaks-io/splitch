@@ -15,6 +15,7 @@ import {
   rewrapKvAppIdentityRecord,
 } from "./app-identity-store";
 import { makeIdentitySaltStore } from "./derived-salt-store";
+import { computeRetainedTargetingKeyHashes } from "./entity-privacy";
 import { computeTargetingKeyHash } from "./hash";
 import { toHex } from "./hmac";
 
@@ -95,7 +96,7 @@ describe("App identity store", () => {
     expect(kv.raw(defaultAppEntityIdentityRecordKey(input.appId))).toEqual(expect.any(String));
   });
 
-  it("uses the stored winner when two mints race", async () => {
+  it("retains both first-mint keys when a later mint overwrites", async () => {
     const kv = memoryKv();
     const store = makeKvAppIdentityStore({ kv, rootSecret: ROOT });
     const first = mintInitialAppIdentityRecord();
@@ -108,15 +109,18 @@ describe("App identity store", () => {
       throw new Error("minted App identity record is missing its first epoch");
     }
     expect(toHex(firstKey)).not.toBe(toHex(secondKey));
-    await store.save(input.appId, first);
+    await store.save(input.appId, first, { merge: false });
+    const saltStore = makeIdentitySaltStore({ rootSecret: ROOT, identityStore: store });
+    const hashA = await computeTargetingKeyHash(saltStore, input);
     await store.save(input.appId, second);
     const loaded = await store.load(input.appId);
-    const loadedKey = loaded?.epochs[0]?.key;
-    expect(loadedKey).toBeDefined();
-    if (loadedKey === undefined) {
-      throw new Error("stored App identity record is missing its first epoch");
-    }
-    expect(toHex(loadedKey)).toBe(toHex(secondKey));
+    expect(loaded?.currentVersion).toBe("app-v1");
+    expect(loaded?.epochs).toHaveLength(2);
+    expect(toHex(loaded?.epochs[0]?.key ?? new Uint8Array())).toBe(toHex(firstKey));
+    expect(toHex(loaded?.epochs[1]?.key ?? new Uint8Array())).toBe(toHex(secondKey));
+    const retained = await computeRetainedTargetingKeyHashes(saltStore, input);
+    expect(retained).toContain(hashA);
+    expect(await computeTargetingKeyHash(saltStore, input)).toBe(hashA);
   });
 
   it("keeps memory-store keys stable for one App and unlinkable across Apps", async () => {

@@ -20,15 +20,29 @@ export function makeEnvSaltStore(env: {
     configuredSalt: env.EVALUATION_PRIVACY_SALT,
     localFixtureAllowed: isLocalPlatformTarget(target),
   });
-  const identityStore =
-    env.identityStore ??
-    (env.CONFIG_STORE
-      ? makeKvAppIdentityStore({ kv: asAppIdentityKv(env.CONFIG_STORE), rootSecret })
-      : makeMemoryAppIdentityStore());
+  const identityStore = resolveIdentityStore(env, target, rootSecret);
   return makeIdentitySaltStore({
     rootSecret,
     identityStore,
   });
+}
+
+function resolveIdentityStore(
+  env: {
+    CONFIG_STORE?: AppIdentityKv;
+    identityStore?: AppIdentityStore;
+  },
+  target: ReturnType<typeof requirePlatformTarget>,
+  rootSecret: string,
+): AppIdentityStore {
+  if (env.identityStore) return env.identityStore;
+  if (env.CONFIG_STORE) {
+    return makeKvAppIdentityStore({ kv: asAppIdentityKv(env.CONFIG_STORE), rootSecret });
+  }
+  if (isLocalPlatformTarget(target)) {
+    return makeMemoryAppIdentityStore();
+  }
+  throw new Error("CONFIG_STORE is required outside local targets");
 }
 
 function asAppIdentityKv(kv: AppIdentityKv): AppIdentityKv {

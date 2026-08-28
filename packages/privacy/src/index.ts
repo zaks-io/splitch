@@ -25,6 +25,7 @@ export type {
   AppIdentityEpoch,
   AppIdentityKv,
   AppIdentityRecord,
+  AppIdentitySaveOptions,
   AppIdentityStore,
   WrappedAppIdentityEpoch,
   WrappedAppIdentityRecord,
