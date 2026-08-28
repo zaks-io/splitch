@@ -10,6 +10,7 @@ import { makeTokenSigner } from "./token-exchange";
  */
 
 const ACCESS_SECRET = "guard-access-secret";
+const ISSUER = "https://auth.splitch.test";
 const CP_AUDIENCE = "https://cp.splitch.test";
 const NOW = 1_780_000_000;
 
@@ -55,12 +56,13 @@ async function privateRsaJwkSecret(): Promise<string> {
   return JSON.stringify({ ...jwk, kid: "test-access-key", alg: "RS256", use: "sig" });
 }
 
-const opts = { accessSecret: ACCESS_SECRET, controlPlaneAudience: CP_AUDIENCE };
+const opts = { accessSecret: ACCESS_SECRET, issuer: ISSUER, controlPlaneAudience: CP_AUDIENCE };
 
 function valid(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     typ: "access_token",
     sub: "user_x",
+    iss: ISSUER,
     aud: CP_AUDIENCE,
     exp: NOW + 3600,
     scopes: [],
@@ -101,9 +103,34 @@ describe("verifyAccessToken guards", () => {
     });
   });
 
-  it("accepts a well-formed access token (control)", async () => {
-    const token = await sign(valid(), ACCESS_SECRET);
-    expect(await verifyAccessToken(`Bearer ${token}`, opts, NOW)).not.toBeNull();
+  it("accepts canonical scopes without changing the verified actor", async () => {
+    const claims = valid({
+      scopes: ["app:app_demo:admin", "org:org_demo:member"],
+    });
+    const token = await sign(claims, ACCESS_SECRET);
+
+    await expect(verifyAccessToken(`Bearer ${token}`, opts, NOW)).resolves.toEqual({
+      userId: "user_x",
+      scopes: ["app:app_demo:admin", "org:org_demo:member"],
+      expiresAt: NOW + 3600,
+    });
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["a non-array", "app:app_demo:member"],
+    ["an object", [{}]],
+    ["a number", [42]],
+    ["an empty string", [""]],
+    ["an unknown value", ["bogus"]],
+    ["an empty identifier", ["app::member"]],
+    ["an unknown role", ["app:app_demo:viewer"]],
+    ["more than 64 entries", Array.from({ length: 65 }, () => "app:app_demo:member")],
+    ["an entry longer than 512 characters", [`app:${"x".repeat(507)}:member`]],
+  ])("rejects scopes containing %s", async (_case, scopes) => {
+    const token = await sign(valid({ scopes }), ACCESS_SECRET);
+
+    await expect(verifyAccessToken(`Bearer ${token}`, opts, NOW)).resolves.toBeNull();
   });
 
   it("accepts an RS256 access token when ACCESS_TOKEN_SECRET is an RSA private JWK", async () => {
@@ -124,7 +151,7 @@ describe("verifyAccessToken guards", () => {
 
     const actor = await verifyAccessToken(
       `Bearer ${token}`,
-      { accessSecret, controlPlaneAudience: CP_AUDIENCE },
+      { accessSecret, issuer: ISSUER, controlPlaneAudience: CP_AUDIENCE },
       NOW,
     );
 
@@ -159,7 +186,7 @@ describe("verifyAccessToken guards", () => {
     await expect(
       verifyAccessToken(
         `Bearer ${token}`,
-        { accessSecret: "{malformed", controlPlaneAudience: CP_AUDIENCE },
+        { accessSecret: "{malformed", issuer: ISSUER, controlPlaneAudience: CP_AUDIENCE },
         NOW,
       ),
     ).resolves.toBeNull();
@@ -185,6 +212,23 @@ describe("verifyAccessToken guards", () => {
   it("H1: rejects a mismatched aud", async () => {
     const token = await sign(valid({ aud: "https://evil.test" }), ACCESS_SECRET);
     expect(await verifyAccessToken(`Bearer ${token}`, opts, NOW)).toBeNull();
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["mismatched", "https://attacker.test"],
+  ])("rejects a token with a %s issuer", async (_case, issuer) => {
+    const token = await sign(valid({ iss: issuer }), ACCESS_SECRET);
+
+    await expect(verifyAccessToken(`Bearer ${token}`, opts, NOW)).resolves.toBeNull();
+  });
+
+  it("fails loud when the verifier issuer is missing", async () => {
+    const token = await sign(valid(), ACCESS_SECRET);
+
+    await expect(
+      verifyAccessToken(`Bearer ${token}`, { ...opts, issuer: "" }, NOW),
+    ).rejects.toThrow("auth-api access-token issuer is required");
   });
 
   it("rejects a token signed with the assertion secret (separate-key defense)", async () => {

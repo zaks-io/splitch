@@ -1,10 +1,15 @@
-import type { MetricEventTrackRequest } from "@splitch/contracts";
+import type { EventDefinition, MetricEventTrackRequest } from "@splitch/contracts";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { registerEntityMetricEvent } from "./entity-metric-privacy";
 import { renderError, serviceUnavailable } from "./errors";
+import {
+  type EventDefinitionMismatchSink,
+  recordEventDefinitionMismatch,
+} from "./event-definition-mismatch-diagnostics";
 import { rejectIngestAdmission } from "./ingest-admission";
 import { claimMetricEvent, lookupMetricEvent } from "./metric-event-outbox";
 import { validateMetricEvent } from "./metric-event-validation";
+import { publicValidationIssues } from "./public-schema-mismatch";
 import type { Env } from "./types";
 
 export async function replayExistingMetricEvent(
@@ -13,6 +18,7 @@ export async function replayExistingMetricEvent(
   dedupKey: string,
   fingerprint: string,
   retainedFingerprints: readonly string[] = [],
+  disclosure: "public" | "trusted" = "public",
 ): Promise<Response | null> {
   try {
     const existing = await lookupMetricEvent(env.METRIC_EVENT_OUTBOX, dedupKey);
@@ -26,7 +32,7 @@ export async function replayExistingMetricEvent(
       eventDefinitionVersionId: existing.eventDefinitionVersionId,
       row: {},
     });
-    return acceptedMetricEvent(eventId, replay);
+    return acceptedMetricEvent(eventId, replay, disclosure);
   } catch {
     return renderError(serviceUnavailable("Metric Event outbox is unavailable"));
   }
@@ -82,11 +88,15 @@ export async function admitAndClaimMetricEvent(
       env.SPLITCH_PLATFORM_TARGET,
     );
     if (suppressed) {
-      return acceptedMetricEvent(parsed.eventId, {
-        eventDefinitionId: identity.eventDefinitionId,
-        eventDefinitionVersionId: identity.eventDefinitionVersionId,
-        outcome: "duplicate",
-      });
+      return acceptedMetricEvent(
+        parsed.eventId,
+        {
+          eventDefinitionId: identity.eventDefinitionId,
+          eventDefinitionVersionId: identity.eventDefinitionVersionId,
+          outcome: "duplicate",
+        },
+        credential.credentialKind === "api_key" ? "trusted" : "public",
+      );
     }
     const claim = await claimMetricEvent(env.METRIC_EVENT_OUTBOX, identity.dedupKey, {
       fingerprint: identity.fingerprint,
@@ -95,7 +105,11 @@ export async function admitAndClaimMetricEvent(
       row,
     });
     if (claim.outcome === "conflict") return eventIdConflict(parsed.eventId);
-    return acceptedMetricEvent(parsed.eventId, claim);
+    return acceptedMetricEvent(
+      parsed.eventId,
+      claim,
+      credential.credentialKind === "api_key" ? "trusted" : "public",
+    );
   } catch {
     return renderError(serviceUnavailable("Metric Event outbox is unavailable"));
   }
@@ -103,19 +117,32 @@ export async function admitAndClaimMetricEvent(
 
 export function schemaMismatch(
   parsed: MetricEventTrackRequest,
-  hot: { eventDefinition: { id: string }; version: Parameters<typeof validateMetricEvent>[1] },
+  hot: { eventDefinition: EventDefinition; version: Parameters<typeof validateMetricEvent>[1] },
+  disclosure: "public" | "trusted" = "public",
+  sink: EventDefinitionMismatchSink = recordEventDefinitionMismatch,
 ): Response | null {
   const issues = validateMetricEvent(parsed, hot.version);
   if (issues.length === 0) return null;
+  sink({
+    eventName: parsed.eventName,
+    eventDefinitionId: hot.eventDefinition.id,
+    eventDefinitionVersionId: hot.version.id,
+    eventDefinition: hot.eventDefinition,
+    version: hot.version,
+    originalIssues: issues,
+  });
   if (issues.length === 1 && issues[0]?.path[0] === "idType") {
     return renderError({
       code: "ENTITY_TYPE_MISMATCH",
       message: "Metric Event Entity type does not match the Event Definition Version",
-      details: {
-        expectedIdType: hot.version.entityType,
-        receivedIdType: parsed.idType,
-        eventDefinitionId: hot.eventDefinition.id,
-      },
+      details:
+        disclosure === "trusted"
+          ? {
+              expectedIdType: hot.version.entityType,
+              receivedIdType: parsed.idType,
+              eventDefinitionId: hot.eventDefinition.id,
+            }
+          : { receivedIdType: parsed.idType },
     });
   }
   return renderError({
@@ -123,8 +150,8 @@ export function schemaMismatch(
     message: "Metric Event does not match the Event Definition Version",
     details: {
       eventName: parsed.eventName,
-      eventDefinitionVersionId: hot.version.id,
-      issues,
+      ...(disclosure === "trusted" ? { eventDefinitionVersionId: hot.version.id } : {}),
+      issues: disclosure === "trusted" ? issues : publicValidationIssues(issues, parsed),
     },
   });
 }
@@ -168,14 +195,19 @@ function eventIdConflict(eventId: string): Response {
 function acceptedMetricEvent(
   eventId: string,
   claim: { eventDefinitionId: string; eventDefinitionVersionId: string; outcome: string },
+  disclosure: "public" | "trusted",
 ): Response {
   return Response.json(
     {
       accepted: true,
       duplicate: claim.outcome === "duplicate",
       eventId,
-      eventDefinitionId: claim.eventDefinitionId,
-      eventDefinitionVersionId: claim.eventDefinitionVersionId,
+      ...(disclosure === "trusted"
+        ? {
+            eventDefinitionId: claim.eventDefinitionId,
+            eventDefinitionVersionId: claim.eventDefinitionVersionId,
+          }
+        : {}),
     },
     { status: 202 },
   );

@@ -11,6 +11,7 @@ import type { Env, Outcome } from "./types";
 
 export interface MetricEventCredentialScope {
   readonly credentialHash: string;
+  readonly credentialKind: "api_key" | "client_key";
   readonly appId: string;
   readonly environmentId: string;
   readonly rateLimitRps: number | null;
@@ -77,6 +78,7 @@ export async function authenticateDelegatedDataPlaneCredential(
     ok: true,
     value: {
       credentialHash: delegated.hash,
+      credentialKind: delegated.kind,
       appId: credential.appId,
       environmentId: credential.environmentId,
       rateLimitRps: credential.rateLimitRps ?? null,

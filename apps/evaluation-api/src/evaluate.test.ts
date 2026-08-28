@@ -1,5 +1,6 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
+import { targetingRule } from "./evaluate/evaluate-path-test-fixtures";
 import { type EvaluationCommitEvent, EvaluationCommitSinkError } from "./evaluation-commit-sink";
 import {
   API_KEY,
@@ -263,6 +264,55 @@ describe("POST /api/sdk/evaluate: non-exposing outcomes", () => {
     expect(res.status).toBe(200);
     expect(Object.keys(body)).toEqual(["variant"]);
     expect(exposureSink.writes).toEqual([]);
+  });
+});
+
+describe("POST /api/sdk/evaluate: Client Key validation errors", () => {
+  it("omits Experiment Entity type from an idType mismatch", async () => {
+    const { app } = await makeSdkRouteHarness({
+      liveRun: true,
+      experimentOverrides: { targetingKeyType: "workspace" },
+    });
+
+    const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
+    const body = (await res.json()) as ErrorResponse;
+    const raw = JSON.stringify(body);
+
+    expect(res.status).toBe(400);
+    expect(body).toEqual({
+      code: "VALIDATION_ERROR",
+      message: "idType does not match the Experiment",
+      details: { issues: [] },
+    });
+    expect(raw).not.toContain("workspace");
+    expect(raw).not.toContain("targetingKeyType");
+  });
+
+  it("omits a configured Targeting Rule regex from an invalid matches Condition", async () => {
+    const pattern = "(unclosed";
+    const { app } = await makeSdkRouteHarness({
+      flagOverrides: {
+        experimentId: null,
+        targetingRules: [
+          targetingRule({
+            conditions: [{ attribute: "email", operator: "matches", value: pattern }],
+          }),
+        ],
+      },
+    });
+
+    const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
+    const body = (await res.json()) as ErrorResponse;
+    const raw = JSON.stringify(body);
+
+    expect(res.status).toBe(500);
+    expect(body).toEqual({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "evaluation failed",
+      details: {},
+    });
+    expect(raw).not.toContain(pattern);
+    expect(raw).not.toContain("Invalid regex");
   });
 });
 

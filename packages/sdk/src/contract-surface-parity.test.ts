@@ -11,6 +11,7 @@ import {
 import {
   DataPlaneEvaluateResponseSchema,
   ErrorCodeSchema,
+  errorCodes,
   EvaluateAllResponseSchema,
   PeekEvaluateResponseSchema,
   ResolutionDetailsSchema,
@@ -51,13 +52,25 @@ function resolutionDetailsForReason(reason: string) {
 }
 
 describe("contract-surface enum lockstep", () => {
-  it("ErrorCodeSchema.options matches contracts errorCodes", () => {
-    expect([...ErrorCodeSchema.options]).toEqual([...contractErrorCodes]);
+  it("exported errorCodes matches contracts errorCodes", () => {
+    expect([...errorCodes]).toEqual([...contractErrorCodes]);
   });
 
-  it("ErrorCodeSchema.safeParse accepts only contract codes", () => {
-    expect(ErrorCodeSchema.safeParse("FLAG_NOT_FOUND").success).toBe(true);
-    expect(ErrorCodeSchema.safeParse("NOT_A_REAL_CODE").success).toBe(false);
+  it("ErrorCodeSchema.safeParse accepts every contract code", () => {
+    for (const code of contractErrorCodes) {
+      expect(ErrorCodeSchema.safeParse(code).success).toBe(true);
+    }
+  });
+
+  it("ErrorCodeSchema.safeParse is shape-only: well-formed unknown codes pass, malformed fail", () => {
+    // Membership is the server's job (contracts); a stale client must accept
+    // codes a newer server added.
+    expect(ErrorCodeSchema.safeParse("NOT_A_REAL_CODE").success).toBe(true);
+    expect(ErrorCodeSchema.safeParse("not_a_code").success).toBe(false);
+    expect(ErrorCodeSchema.safeParse("_LEADING").success).toBe(false);
+    expect(ErrorCodeSchema.safeParse("").success).toBe(false);
+    expect(ErrorCodeSchema.safeParse(7).success).toBe(false);
+    expect(ErrorCodeSchema.safeParse(null).success).toBe(false);
   });
 
   it("resolution reason set matches contracts", () => {

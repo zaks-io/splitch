@@ -27,8 +27,6 @@ export async function postMetricEvent(
   if (
     body.accepted !== true ||
     typeof body.eventId !== "string" ||
-    typeof body.eventDefinitionId !== "string" ||
-    typeof body.eventDefinitionVersionId !== "string" ||
     typeof body.duplicate !== "boolean"
   ) {
     throw new Error("Metric Event response did not match the track contract");
@@ -37,8 +35,6 @@ export async function postMetricEvent(
     status: response.status,
     accepted: true,
     eventId: body.eventId,
-    eventDefinitionId: body.eventDefinitionId,
-    eventDefinitionVersionId: body.eventDefinitionVersionId,
     duplicate: body.duplicate,
   };
 }
@@ -48,8 +44,6 @@ export function trackFailure(failure: TransportFailure): TrackResult {
     ...failure,
     accepted: false,
     eventId: null,
-    eventDefinitionId: null,
-    eventDefinitionVersionId: null,
     duplicate: false,
   };
 }

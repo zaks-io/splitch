@@ -1,6 +1,7 @@
 import type { Repository } from "@splitch/db";
 import type { JtiCache } from "./jti-cache";
 import { type DecodedJwt, decodeJwt, type JwksFetcher, verifySignature } from "./jwks";
+import { jwksUrlError } from "./jwks-url";
 import { OAuthError } from "./oauth-errors";
 import type { WorkOsPort } from "./workos";
 
@@ -105,6 +106,13 @@ async function verifyAgainstTrustedIdp(
   }
   if (!idp.enabled) {
     throw new OAuthError("issuer_disabled", `trusted IdP "${issuer}" is disabled`);
+  }
+  // Re-check on the read path: a legacy or directly-written row must not
+  // become an outbound fetch just because it already sat in D1.
+  const urlError = jwksUrlError(idp.jwksUri);
+  if (urlError) {
+    console.error("trusted_idp_jwks_url_rejected", { issuer, reason: urlError });
+    throw new OAuthError("invalid_token", "trusted IdP JWKS URL is not allowed");
   }
   if (deps.verifyRemoteSignature !== undefined) {
     if (!(await deps.verifyRemoteSignature(idp.jwksUri, compactJws))) {

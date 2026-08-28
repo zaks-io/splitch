@@ -74,8 +74,9 @@ The Worker performs these steps in order:
    key-encryption rotation does not change the derived hash. The fingerprint intentionally excludes
    `event_definition_version_id` so retries survive a later publish.
 5. The Worker looks up any existing `(metric, app_id, environment_id, event_id)` idempotency claim:
-   - Exact fingerprint match returns `202 { duplicate: true }` with the originally accepted
-     `eventDefinitionId` / `eventDefinitionVersionId` and writes nothing further. Current published
+   - Exact fingerprint match returns `202 { duplicate: true }` and writes nothing further. A
+     trusted API Key response includes the originally accepted `eventDefinitionId` /
+     `eventDefinitionVersionId`. A Client Key response omits those internal IDs. Current published
      version validation is not re-applied.
    - A different fingerprint returns `409 EVENT_ID_CONFLICT` and writes nothing.
    - No claim continues.
@@ -149,13 +150,15 @@ Successful first delivery and idempotent retry both return `202`:
   accepted: true;
   duplicate: boolean;
   eventId: string;
-  eventDefinitionId: string;
-  eventDefinitionVersionId: string;
+  eventDefinitionId?: string;
+  eventDefinitionVersionId?: string;
 }
 ```
 
-The response proves which immutable Event Definition Version accepted the event. It never returns
-the raw Targeting Key or its hash.
+A trusted API Key response includes `eventDefinitionId` and `eventDefinitionVersionId` so the
+caller can prove which immutable Event Definition Version accepted the event. A Client Key
+response omits both IDs. The public SDK `track()` projection never returns them. The response
+never returns the raw Targeting Key or its hash.
 
 ## Accepted row
 

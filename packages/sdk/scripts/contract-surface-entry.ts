@@ -30,6 +30,9 @@ export type {
   VariantValue,
 } from "./contract-surface-validators";
 
+// Value import of the code table for runtimes that want membership (the
+// browser client validates shape only and never bundles it).
+import { errorCodes } from "./generated/contract-surface-members";
 import {
   EXPOSURE_BATCH_MAX_BODY_BYTES,
   EXPOSURE_BATCH_MAX_ITEMS,
@@ -47,6 +50,7 @@ import {
 export {
   DataPlaneEvaluateResponseSchema,
   ErrorCodeSchema,
+  errorCodes,
   EvaluateAllResponseSchema,
   EXPOSURE_BATCH_MAX_BODY_BYTES,
   EXPOSURE_BATCH_MAX_ITEMS,

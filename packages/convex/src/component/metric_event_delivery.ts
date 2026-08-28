@@ -179,14 +179,9 @@ async function finishFromResponse(
     return;
   }
   const body = (await response.json()) as Record<string, unknown>;
-  if (
-    body.accepted !== true ||
-    body.eventId !== eventId ||
-    typeof body.eventDefinitionId !== "string" ||
-    typeof body.eventDefinitionVersionId !== "string" ||
-    typeof body.duplicate !== "boolean"
-  )
+  if (body.accepted !== true || body.eventId !== eventId || typeof body.duplicate !== "boolean") {
     throw new Error("Metric Event response did not match the track contract");
+  }
   await ctx.runMutation(internal.metric_event.finishDelivery, {
     eventId,
     outcome: "accepted",

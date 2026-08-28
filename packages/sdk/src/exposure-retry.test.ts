@@ -80,13 +80,21 @@ describe("retainRetryableExposures: real retry cycle", () => {
     ).toThrow(/missing a code/);
   });
 
-  it("fails loud on an unrecognised rejection code", () => {
+  it("treats a well-formed future rejection code as non-retryable instead of wedging the drain", () => {
+    const retained = retainRetryableExposures(
+      [{ exposureId: EXPOSURE_ID }],
+      [{ exposureId: EXPOSURE_ID, status: "rejected", code: "SOME_FUTURE_CODE" }],
+    );
+    expect(retained).toEqual([]);
+  });
+
+  it("fails loud on a malformed rejection code", () => {
     expect(() =>
       retainRetryableExposures(
         [{ exposureId: EXPOSURE_ID }],
-        [{ exposureId: EXPOSURE_ID, status: "rejected", code: "SOME_FUTURE_CODE" }],
+        [{ exposureId: EXPOSURE_ID, status: "rejected", code: "not a code" }],
       ),
-    ).toThrow(/Unrecognized Exposure rejection code/);
+    ).toThrow(/Malformed Exposure rejection code/);
   });
 
   it("fails loud on an unrecognised result status", () => {

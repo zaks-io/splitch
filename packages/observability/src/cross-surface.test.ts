@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -10,17 +10,6 @@ import {
 } from "./surfaces.js";
 
 const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "../../..");
-
-const WORKER_APP_ENTRYPOINTS: Record<string, string> = {
-  "control-plane-api": "apps/control-plane-api/src/index.ts",
-  "evaluation-api": "apps/evaluation-api/src/index.ts",
-  "event-ingest-api": "apps/event-ingest-api/src/index.ts",
-  "analysis-api": "apps/analysis-api/src/index.ts",
-  "auth-api": "apps/auth-api/src/index.ts",
-  "control-panel": "apps/control-panel/src/server.ts",
-  marketing: "apps/marketing/src/server.ts",
-  "mcp-server": "apps/mcp-server/src/index.ts",
-};
 
 describe("cross-surface observability wiring", () => {
   it("enumerates Worker, CLI, MCP, and SDK-harness boundaries", () => {
@@ -67,13 +56,9 @@ describe("cross-surface observability wiring", () => {
     it(`${surface.id} is wired in its owning workspace entrypoint`, () => {
       const marker = "@splitch/observability";
       if (surface.kind === "worker") {
-        const entrypoint = WORKER_APP_ENTRYPOINTS[surface.id];
-        expect(entrypoint, `missing worker entrypoint for ${surface.id}`).toBeDefined();
-        const indexSource = readFileSync(join(repoRoot, entrypoint as string), "utf8");
         expect(
-          indexSource.includes(marker) ||
-            indexSource.includes("wrapWorkerHandler") ||
-            indexSource.includes("workerObservabilityWithWaitUntil"),
+          existsSync(join(repoRoot, "apps", surface.id, "wrangler.jsonc")),
+          `missing apps/${surface.id}/wrangler.jsonc; hosted wrap is checked from Wrangler discovery`,
         ).toBe(true);
         return;
       }
@@ -95,4 +80,14 @@ describe("cross-surface observability wiring", () => {
       expect(surfaceKindFor(surface.id)).toBe(surface.kind);
     });
   }
+
+  it("applies the shared Worker baseline from wrapWorkerHandler so a new Worker cannot omit it", () => {
+    const wrapperSource = readFileSync(
+      join(repoRoot, "packages/observability/src/worker.ts"),
+      "utf8",
+    );
+    expect(wrapperSource).toContain("applyResponseHeaders");
+    expect(wrapperSource).toContain("WORKER_BASELINE_SECURITY_HEADERS");
+    expect(wrapperSource).toContain("applyWorkerBaselineHeaders");
+  });
 });

@@ -5,6 +5,10 @@ import { describe, expect, it } from "vitest";
 const config = readWranglerConfig();
 
 describe("Auth Worker Wrangler runtime config", () => {
+  it("restricts global fetch to public Internet destinations", () => {
+    expect(config.compatibility_flags).toContain("global_fetch_strictly_public");
+  });
+
   it.each([
     ["shared-preview", config.env?.["shared-preview"], "0x4AAAAAADsCXVP9TRrC6c6N"],
     ["production", config.env?.production, "0x4AAAAAADsCY8JNBv2vrTFC"],
@@ -54,10 +58,21 @@ describe("Auth Worker Wrangler runtime config", () => {
     expect(target?.vars?.CONTROL_PANEL_ORIGIN).toBe(origin);
     expect(target?.vars?.CONTROL_PANEL_ORIGIN).not.toBe(target?.vars?.CONTROL_PLANE_ORIGIN);
   });
+
+  it.each([
+    ["local", config, "http://localhost:8791"],
+    ["shared-preview", config.env?.["shared-preview"], "https://auth.preview.splitch.dev"],
+    ["production", config.env?.production, "https://auth.splitch.dev"],
+  ])("configures one canonical Auth API origin for %s", (_target, target, origin) => {
+    expect(target?.vars?.AUTH_API_ORIGIN).toBe(origin);
+    expect(new URL(origin).origin).toBe(origin);
+  });
 });
 
 interface WranglerConfig {
+  compatibility_flags?: string[];
   env?: Record<string, WranglerTarget | undefined>;
+  vars?: Record<string, unknown>;
 }
 
 interface WranglerTarget {

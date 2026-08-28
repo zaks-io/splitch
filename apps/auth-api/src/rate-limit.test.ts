@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OAuthError } from "./oauth-errors";
-import { makeRateLimiter } from "./rate-limit";
+import { makeRateLimiter, MAX_TRACKED_IP_WINDOWS } from "./rate-limit";
 
 /**
  * Focused guards on the anon-create rate ceiling (ADR-0034 §4). Both the per-IP
@@ -44,5 +44,50 @@ describe("makeRateLimiter", () => {
     expectCeiling(() => limiter.assertUnderCeiling("1.1.1.1", T0));
     // An hour later the per-IP window resets.
     limiter.assertUnderCeiling("1.1.1.1", T0 + HOUR);
+  });
+
+  it("bounds active IP windows and retains a hot entry under LRU pressure", () => {
+    const limiter = makeRateLimiter({
+      perIpPerHour: 1,
+      globalPerHour: MAX_TRACKED_IP_WINDOWS + 10,
+    });
+    limiter.assertUnderCeiling("hot", T0);
+    for (let index = 0; index < MAX_TRACKED_IP_WINDOWS - 1; index += 1) {
+      limiter.assertUnderCeiling(`cold-${index}`, T0);
+    }
+
+    expectCeiling(() => limiter.assertUnderCeiling("hot", T0));
+    limiter.assertUnderCeiling("overflow", T0);
+
+    limiter.assertUnderCeiling("cold-0", T0);
+    expectCeiling(() => limiter.assertUnderCeiling("hot", T0));
+  });
+
+  it("keeps the global ceiling closed after per-IP eviction", () => {
+    const limiter = makeRateLimiter({
+      perIpPerHour: 1,
+      globalPerHour: MAX_TRACKED_IP_WINDOWS + 1,
+    });
+    for (let index = 0; index <= MAX_TRACKED_IP_WINDOWS; index += 1) {
+      limiter.assertUnderCeiling(`rotating-${index}`, T0);
+    }
+
+    expectCeiling(() => limiter.assertUnderCeiling("blocked-globally", T0));
+  });
+
+  it("evicts expired windows before active LRU entries", () => {
+    const limiter = makeRateLimiter({
+      perIpPerHour: 1,
+      globalPerHour: MAX_TRACKED_IP_WINDOWS + 10,
+    });
+    limiter.assertUnderCeiling("expired", T0);
+    for (let index = 0; index < MAX_TRACKED_IP_WINDOWS - 1; index += 1) {
+      limiter.assertUnderCeiling(`active-${index}`, T0 + 1);
+    }
+
+    expectCeiling(() => limiter.assertUnderCeiling("expired", T0 + HOUR - 1));
+    limiter.assertUnderCeiling("newcomer", T0 + HOUR);
+
+    expectCeiling(() => limiter.assertUnderCeiling("active-0", T0 + HOUR));
   });
 });

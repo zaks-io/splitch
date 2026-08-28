@@ -2,6 +2,7 @@ import { defineTestFileManifest } from "../../scripts/vitest-test-manifest";
 
 export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/app-delete-grant-issuance.test.ts",
+  "src/auth-api-origin-runtime.test.ts",
   "src/claim-lifetime-security.test.ts",
   "src/claim-reservation-boundaries.test.ts",
   "src/claim-reservation-security.test.ts",
@@ -14,6 +15,7 @@ export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/door-b.test.ts",
   "src/door-c.test.ts",
   "src/hosted-assertion-forgery.test.ts",
+  "src/idjag-jwks-url.test.ts",
   "src/idjag.test.ts",
   "src/index.test.ts",
   "src/mcp-local-integration.test.ts",

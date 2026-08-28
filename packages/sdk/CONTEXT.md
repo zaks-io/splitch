@@ -106,7 +106,8 @@ ETag revalidation. Client Key only.
 The top-level stateless Metric Event accessor:
 `track(eventName, { targetingKey, idType, eventId, fields, dimensions })`. Every call carries
 explicit Entity identity and a caller-stable UUID retry ID. There is no `identify()` state and
-callers cannot select an Event Definition Version. It never accepts or infers Web Events.
+callers cannot select an Event Definition Version. The public projection returns `eventId` and
+`duplicate` only; it never exposes Event Definition IDs. It never accepts or infers Web Events.
 
 **Web Track**:
 The Web Event accessor under `web.track(eventName, event)`. Calling it activates manual Web Event

@@ -20,6 +20,7 @@ import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import type { AuthApiEnv } from "./env";
 import { makeJtiCache } from "./jti-cache";
+import { fetchTrustedJwks } from "./jwks-fetch";
 import type { SmokeClientCredentials } from "./oauth-routes";
 import { makeFixtureOtp, makeIdempotencyStore } from "./otp";
 import { makeRateLimiter } from "./rate-limit";
@@ -58,7 +59,17 @@ const handler = {
       env,
       workerObservabilityWithWaitUntil("auth-api", ctx),
     );
-    if (!authRuntimeConfigured(env)) {
+    const origin = configuredAuthApiOrigin(env);
+    if (!origin) {
+      return Response.json(
+        {
+          error: "server_error",
+          error_description: "AUTH_API_ORIGIN must be a canonical Auth API origin",
+        },
+        { status: 500 },
+      );
+    }
+    if (!authRuntimeConfigured(env, origin)) {
       return Response.json(
         { error: "server_error", error_description: "hosted auth configuration is incomplete" },
         { status: 500 },
@@ -97,7 +108,6 @@ const handler = {
     }
 
     const repo = createRepository(env.DB);
-    const origin = env.AUTH_API_ORIGIN ?? url.origin;
     const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? "http://localhost:8787";
     const mcpAudience = env.MCP_ORIGIN;
     const assertionSecret = assertionSigningSecret(env);
@@ -116,6 +126,7 @@ const handler = {
     const app = createApp({
       repo,
       accessSecret,
+      issuer: origin,
       controlPlaneAudience,
       mcpAudience,
       now,
@@ -125,7 +136,7 @@ const handler = {
         jtiCache: makeJtiCache(env.JTI_CACHE),
         workos,
         verifyRemoteSignature: (jwksUri, compactJws) =>
-          remoteJwksSignatureVerifier(jwksUri).verify(compactJws),
+          remoteJwksSignatureVerifier(jwksUri, { fetch: fetchTrustedJwks }).verify(compactJws),
         authApiOrigin: origin,
       },
       register: { repo, turnstile, rateLimiter, workos, tokenSigner, now },
@@ -198,7 +209,8 @@ function makeDeviceFlow(env: AuthApiEnv) {
   });
 }
 
-function authRuntimeConfigured(env: AuthApiEnv): boolean {
+function authRuntimeConfigured(env: AuthApiEnv, authApiOrigin: string | undefined): boolean {
+  if (!authApiOrigin) return false;
   if (isLocalPlatformTarget(env.SPLITCH_PLATFORM_TARGET)) return true;
   if (!isHostedPlatformTarget(env.SPLITCH_PLATFORM_TARGET)) return false;
   return (
@@ -206,6 +218,21 @@ function authRuntimeConfigured(env: AuthApiEnv): boolean {
     hostedClaimOriginConfigured(env) &&
     hostedAssertionSigningSecretConfigured(env)
   );
+}
+
+function configuredAuthApiOrigin(env: AuthApiEnv): string | undefined {
+  if (!env.AUTH_API_ORIGIN) return undefined;
+  try {
+    const url = new URL(env.AUTH_API_ORIGIN);
+    const allowedProtocol =
+      url.protocol === "https:" ||
+      (isLocalPlatformTarget(env.SPLITCH_PLATFORM_TARGET) &&
+        url.protocol === "http:" &&
+        url.hostname === "localhost");
+    return allowedProtocol && url.origin === env.AUTH_API_ORIGIN ? env.AUTH_API_ORIGIN : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function hostedWorkOsKeysPresent(env: AuthApiEnv): boolean {

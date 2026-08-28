@@ -72,7 +72,7 @@ describe("Door C discovery and device flow", () => {
     await expect(
       verifyAccessToken(
         `Bearer ${accessToken}`,
-        { accessSecret: ACCESS_SECRET, controlPlaneAudience: CP_AUDIENCE },
+        { accessSecret: ACCESS_SECRET, issuer: ORIGIN, controlPlaneAudience: CP_AUDIENCE },
         Math.floor(NOW_MS / 1000),
       ),
     ).resolves.toMatchObject({ userId: DEVICE_USER, scopes: [`app:${APP}:owner`] });
@@ -84,14 +84,14 @@ describe("Door C discovery and device flow", () => {
     await expect(
       verifyAccessToken(
         `Bearer ${accessToken}`,
-        { accessSecret: ACCESS_SECRET, controlPlaneAudience: MCP_AUDIENCE },
+        { accessSecret: ACCESS_SECRET, issuer: ORIGIN, controlPlaneAudience: MCP_AUDIENCE },
         Math.floor(NOW_MS / 1000),
       ),
     ).resolves.toMatchObject({ userId: DEVICE_USER });
     await expect(
       verifyAccessToken(
         `Bearer ${accessToken}`,
-        { accessSecret: ACCESS_SECRET, controlPlaneAudience: CP_AUDIENCE },
+        { accessSecret: ACCESS_SECRET, issuer: ORIGIN, controlPlaneAudience: CP_AUDIENCE },
         Math.floor(NOW_MS / 1000),
       ),
     ).resolves.toBeNull();
@@ -169,7 +169,7 @@ describe("Door C refresh authority", () => {
     await expect(
       verifyAccessToken(
         `Bearer ${body.access_token}`,
-        { accessSecret: ACCESS_SECRET, controlPlaneAudience: CP_AUDIENCE },
+        { accessSecret: ACCESS_SECRET, issuer: ORIGIN, controlPlaneAudience: CP_AUDIENCE },
         Math.floor(NOW_MS / 1000),
       ),
     ).resolves.toMatchObject({ userId: DEVICE_USER, scopes: [`app:${APP}:owner`] });

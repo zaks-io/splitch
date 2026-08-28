@@ -29,6 +29,7 @@ describe("delegated Metric Event credential compatibility", () => {
       ok: true,
       value: {
         credentialHash: credentialFixtures[kind].hash,
+        credentialKind: kind,
         appId: credentialFixtures[kind].appId,
         environmentId: credentialFixtures[kind].environmentId,
         rateLimitRps: kind === "client_key" ? 12 : null,

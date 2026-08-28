@@ -10,6 +10,7 @@ import { authorizeLiveUpdateUpgrade } from "#lib/live-update-authorization";
 import { handleLiveUpdateUpgrade } from "#lib/live-update-upgrade";
 import { loadOrgAppList } from "#lib/org-app-list-functions";
 import { setControlPanelSentryClient } from "#lib/panel-observability";
+import { withControlPanelSecurityHeaders } from "#lib/security-headers";
 
 // Keep server functions in the Worker graph so their handlers are deployed with
 // the app. Being imported by a component is not enough: the client graph can
@@ -65,7 +66,9 @@ const controlPanelHandler = {
           .CONFIG_STORE_WRITER.getByName(`${scope.appId}:${scope.environmentId}`)
           .fetch(upgradeRequest),
     });
-    return liveUpdateResponse ?? startHandler.fetch(request, env, ctx);
+    return withControlPanelSecurityHeaders(
+      liveUpdateResponse ?? (await startHandler.fetch(request, env, ctx)),
+    );
   },
 } satisfies ExportedHandler<ControlPanelWorkerEnv>;
 

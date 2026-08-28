@@ -7,7 +7,7 @@ export const eventErrorDocs = {
       "The Metric Event did not match the published Event Definition Version: a field or Dimension was unknown, missing, or the wrong type, or a JSON value violated its declared schema.",
     fix: "Send the declared fields and Dimensions with their published types and constraints. If the Metric Event shape has changed, publish a new Event Definition Version before sending that shape.",
     details:
-      "{ eventName: string, eventDefinitionVersionId: string, issues: Array<{ path: string[], message: string }> }",
+      "{ eventName: string, eventDefinitionVersionId?: string, issues: Array<{ path: string[], message: string }> }",
     related: ["ENTITY_TYPE_MISMATCH", "EVENT_DEFINITION_UNPUBLISHED", "VALIDATION_ERROR"],
   },
   ENTITY_TYPE_MISMATCH: {
@@ -17,7 +17,7 @@ export const eventErrorDocs = {
       "The Metric Event's Entity type did not match the Entity type declared by its published Event Definition Version.",
     fix: "Send the Metric Event with the declared Entity type. If the Event Definition now describes a different Entity type, publish a new Version and then retry.",
     details:
-      "{ expectedIdType: string | null, receivedIdType: string, eventDefinitionId: string, metricId?: string, runId?: string }",
+      "{ expectedIdType?: string | null, receivedIdType: string, eventDefinitionId?: string, metricId?: string, runId?: string }",
     related: ["EVENT_SCHEMA_MISMATCH", "EVENT_DEFINITION_UNPUBLISHED", "APP_MISMATCH"],
   },
   EVENT_DEFINITION_UNPUBLISHED: {
@@ -25,7 +25,7 @@ export const eventErrorDocs = {
     cause:
       "The Event Definition exists, but it has no published Version that can validate and stamp the Metric Event.",
     fix: "Publish an Event Definition Version with the intended Entity, field, and Dimension contract, then retry the Metric Event unchanged.",
-    details: "{ eventDefinitionId: string, eventName: string }",
+    details: "{ eventDefinitionId?: string, eventName: string }",
     related: ["EVENT_DEFINITION_NOT_FOUND", "EVENT_DEFINITION_IMMUTABLE", "EVENT_SCHEMA_MISMATCH"],
   },
   EVENT_DEFINITION_IMMUTABLE: {
