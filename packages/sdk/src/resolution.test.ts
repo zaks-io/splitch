@@ -77,8 +77,9 @@ describe("synthesizeDetails: canonical HTTP-status -> reason/errorCode mapping",
     expect(errorCodeForStatus(null)).toBe("SDK_TRANSPORT_NETWORK");
     const details = synthesizeDetails(result({ status: null }), DEFAULT_VALUE);
     expect(details.errorCode).toBe("SDK_TRANSPORT_NETWORK");
-    // SDK client codes are outside the wire ResolutionDetailsSchema.
-    expect(ResolutionDetailsSchema.safeParse(details).success).toBe(false);
+    // SDK client codes are outside the wire ErrorCode union at the type level;
+    // the runtime schema is shape-only (membership is enforced server-side),
+    // so no runtime rejection to assert here.
   });
 
   it("preserves distinct SDK_TRANSPORT_* codes from the transport", () => {

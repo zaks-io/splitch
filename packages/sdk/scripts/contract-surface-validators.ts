@@ -33,7 +33,6 @@ import type {
 } from "./contract-surface-types";
 import {
   dataPlaneEvaluateRequiredKeys,
-  errorCodes,
   evaluateAllEntryRequiredKeys,
   evaluateAllReasons,
   evaluateAllResponseRequiredKeys,
@@ -69,10 +68,6 @@ type ParseResult<T> = ParseSuccess<T> | ParseFailure;
 export interface Schema<T> {
   parse(input: unknown): T;
   safeParse(input: unknown): ParseResult<T>;
-}
-
-interface EnumSchema<T extends string> extends Schema<T> {
-  readonly options: readonly T[];
 }
 
 export function fail(message: string): never {
@@ -138,19 +133,30 @@ function parseVariantValue(value: unknown, path: string): VariantValue {
   return value;
 }
 
-const errorCodeSet: ReadonlySet<string> = new Set(errorCodes);
-const resolutionReasonSet: ReadonlySet<string> = new Set(resolutionReasons);
-const evaluateAllReasonSet: ReadonlySet<string> = new Set(evaluateAllReasons);
+// The `@__PURE__` annotations survive the tsup bundle into
+// src/generated/contract-surface.js and let consumer bundlers tree-shake the
+// schemas an entry never imports; the size-check budgets assume this.
+const resolutionReasonSet: ReadonlySet<string> = /* @__PURE__ */ new Set(resolutionReasons);
+const evaluateAllReasonSet: ReadonlySet<string> = /* @__PURE__ */ new Set(evaluateAllReasons);
 
-export const ErrorCodeSchema: EnumSchema<ErrorCode> = {
-  options: errorCodes,
-  ...asSchema((input: unknown): ErrorCode => {
-    if (typeof input !== "string" || !errorCodeSet.has(input)) {
+const ERROR_CODE_RE = /^[A-Z][A-Z0-9_]*$/;
+
+/**
+ * Shape-only on purpose: contracts enforces `ErrorCode` membership on the
+ * server, so shipping the code table to every client page would spend ~2 KiB
+ * re-checking values the server already validated — and would make stale
+ * clients reject codes a newer server legitimately added. Malformed values
+ * still fail loud; the enumerated table stays available as `errorCodes` for
+ * runtimes that want it.
+ */
+export const ErrorCodeSchema: Schema<ErrorCode> = /* @__PURE__ */ asSchema(
+  (input: unknown): ErrorCode => {
+    if (typeof input !== "string" || !ERROR_CODE_RE.test(input)) {
       fail("invalid ErrorCode");
     }
     return input as ErrorCode;
-  }),
-};
+  },
+);
 
 function assertResolutionErrorFields(details: ResolutionDetails): void {
   if (details.reason === "ERROR") {
@@ -219,7 +225,8 @@ function parseResolutionDetails(input: unknown): ResolutionDetails {
   return details;
 }
 
-export const ResolutionDetailsSchema: Schema<ResolutionDetails> = asSchema(parseResolutionDetails);
+export const ResolutionDetailsSchema: Schema<ResolutionDetails> =
+  /* @__PURE__ */ asSchema(parseResolutionDetails);
 
 function parseDataPlaneEvaluateResponse(input: unknown): DataPlaneEvaluateResponse {
   if (!isPlainObject(input)) {
@@ -232,9 +239,8 @@ function parseDataPlaneEvaluateResponse(input: unknown): DataPlaneEvaluateRespon
   return { variant: input.variant as VariantValue | null };
 }
 
-export const DataPlaneEvaluateResponseSchema: Schema<DataPlaneEvaluateResponse> = asSchema(
-  parseDataPlaneEvaluateResponse,
-);
+export const DataPlaneEvaluateResponseSchema: Schema<DataPlaneEvaluateResponse> =
+  /* @__PURE__ */ asSchema(parseDataPlaneEvaluateResponse);
 
 function parsePeekEvaluateResponse(input: unknown): PeekEvaluateResponse {
   if (!isPlainObject(input)) {
@@ -245,7 +251,7 @@ function parsePeekEvaluateResponse(input: unknown): PeekEvaluateResponse {
 }
 
 export const PeekEvaluateResponseSchema: Schema<PeekEvaluateResponse> =
-  asSchema(parsePeekEvaluateResponse);
+  /* @__PURE__ */ asSchema(parsePeekEvaluateResponse);
 
 function assertEvaluateAllEntryRefinements(entry: EvaluateAllEntry, path: string): void {
   if (entry.reason === "ERROR" ? entry.errorCode === null : entry.errorCode !== null) {
@@ -320,4 +326,4 @@ function parseEvaluateAllResponse(input: unknown): EvaluateAllResponse {
 }
 
 export const EvaluateAllResponseSchema: Schema<EvaluateAllResponse> =
-  asSchema(parseEvaluateAllResponse);
+  /* @__PURE__ */ asSchema(parseEvaluateAllResponse);
