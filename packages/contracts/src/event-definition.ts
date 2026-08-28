@@ -1,6 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { validateNumericDomain, validatePropertyNames } from "./event-definition-validation";
-import { IdempotencyKeySchema } from "./persisted-field-limits";
+import { PERSISTED_TELEMETRY_ENUM_MAX_ITEMS } from "./persisted-field-limits";
 import { listResponse } from "./wire-envelopes-core";
 
 export const eventDefinitionFamilies = ["metric", "web"] as const;
@@ -40,7 +40,11 @@ const StringDefinitionSchema = z
     name: z.string().min(1),
     type: z.literal("string"),
     required: z.boolean(),
-    allowedValues: z.array(TelemetryTokenSchema).min(1).max(256).refine(unique),
+    allowedValues: z
+      .array(TelemetryTokenSchema)
+      .min(1)
+      .max(PERSISTED_TELEMETRY_ENUM_MAX_ITEMS)
+      .refine(unique),
   })
   .strict();
 
@@ -50,7 +54,12 @@ const NumberDefinitionSchema = z
     type: z.literal("number"),
     required: z.boolean(),
     numberKind: NumberKindSchema,
-    allowedValues: z.array(finiteNumber).min(1).max(256).refine(unique).optional(),
+    allowedValues: z
+      .array(finiteNumber)
+      .min(1)
+      .max(PERSISTED_TELEMETRY_ENUM_MAX_ITEMS)
+      .refine(unique)
+      .optional(),
     minimum: finiteNumber.optional(),
     maximum: finiteNumber.optional(),
   })
@@ -120,14 +129,23 @@ export const ClosedJsonSchemaSchema: z.ZodType<ClosedJsonSchema> = z
         z
           .object({
             type: z.literal("string"),
-            enum: z.array(TelemetryTokenSchema).min(1).max(256).refine(unique),
+            enum: z
+              .array(TelemetryTokenSchema)
+              .min(1)
+              .max(PERSISTED_TELEMETRY_ENUM_MAX_ITEMS)
+              .refine(unique),
           })
           .strict(),
         z
           .object({
             type: z.enum(["number", "integer"]),
             numberKind: NumberKindSchema,
-            enum: z.array(finiteNumber).min(1).max(256).refine(unique).optional(),
+            enum: z
+              .array(finiteNumber)
+              .min(1)
+              .max(PERSISTED_TELEMETRY_ENUM_MAX_ITEMS)
+              .refine(unique)
+              .optional(),
             minimum: finiteNumber.optional(),
             maximum: finiteNumber.optional(),
           })
@@ -203,48 +221,6 @@ export const EventDefinitionVersionSchema = z
     publishedAt: z.string(),
   })
   .strict();
-
-export const CreateEventDefinitionRequestSchema = z
-  .object({
-    name: TelemetryTokenSchema,
-    family: EventDefinitionFamilySchema,
-    displayName: z.string().min(1),
-    description: z.string().optional(),
-    idempotency_key: IdempotencyKeySchema.optional(),
-  })
-  .strict();
-
-export const PatchEventDefinitionRequestSchema = z
-  .object({ displayName: z.string().min(1).optional(), description: z.string().optional() })
-  .strict();
-
-export const PublishEventDefinitionVersionRequestSchema = z
-  .object({
-    entityType: z.string().min(1).nullable(),
-    fields: z.array(EventFieldDefinitionSchema),
-    dimensions: z.array(ScalarDefinitionSchema),
-    idempotency_key: IdempotencyKeySchema.optional(),
-  })
-  .strict()
-  .superRefine((value, context) => {
-    const fieldNames = value.fields.map(({ name }) => name);
-    const dimensionNames = value.dimensions.map(({ name }) => name);
-    validatePropertyNames([...fieldNames, ...dimensionNames], context, []);
-    if (!unique(fieldNames)) {
-      context.addIssue({ code: "custom", path: ["fields"], message: "field names must be unique" });
-    }
-    if (!unique(dimensionNames)) {
-      context.addIssue({
-        code: "custom",
-        path: ["dimensions"],
-        message: "Dimension names must be unique",
-      });
-    }
-    const dimensions = new Set(dimensionNames);
-    if (fieldNames.some((name) => dimensions.has(name))) {
-      context.addIssue({ code: "custom", message: "field and Dimension names must be disjoint" });
-    }
-  });
 
 export const EventDefinitionDetailSchema = EventDefinitionSchema.extend({
   versions: z.array(EventDefinitionVersionSchema),

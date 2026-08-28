@@ -1,14 +1,16 @@
 import { z } from "@hono/zod-openapi";
 import {
-  CreateEventDefinitionRequestSchema,
   EventDefinitionDetailSchema,
   EventDefinitionListResponseSchema,
   EventDefinitionSchema,
   EventDefinitionVersionListResponseSchema,
   EventDefinitionVersionSchema,
+} from "../event-definition";
+import {
+  CreateEventDefinitionRequestSchema,
   PatchEventDefinitionRequestSchema,
   PublishEventDefinitionVersionRequestSchema,
-} from "../event-definition";
+} from "../event-definition-write";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import { AppParams } from "./route-shapes";
 

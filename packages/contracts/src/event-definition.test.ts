@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-import {
-  EventDefinitionVersionSchema,
-  PublishEventDefinitionVersionRequestSchema,
-} from "./event-definition";
+import { EventDefinitionVersionSchema } from "./event-definition";
+import { PublishEventDefinitionVersionRequestSchema } from "./event-definition-write";
+import { PERSISTED_ARRAY_MAX_ITEMS, PERSISTED_JSON_MAX_DEPTH } from "./persisted-field-limits";
 
 describe("Event Definition publication contracts", () => {
   it("allows an anonymous-only Web Event Definition Version", () => {
@@ -87,5 +86,75 @@ describe("Event Definition publication contracts", () => {
     });
 
     expect(parsed.success).toBe(false);
+  });
+
+  it("still reads a historically long field name on a stored Version", () => {
+    const parsed = EventDefinitionVersionSchema.safeParse({
+      id: "event_definition_version_legacy",
+      eventDefinitionId: "event_definition_legacy",
+      version: 1,
+      schemaHash: "legacy",
+      entityType: "user",
+      fields: [
+        {
+          name: "n".repeat(400),
+          type: "boolean",
+          required: false,
+        },
+      ],
+      dimensions: [],
+      publishedAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects more published fields than the named array bound", () => {
+    const parsed = PublishEventDefinitionVersionRequestSchema.safeParse({
+      entityType: "user",
+      fields: Array.from({ length: PERSISTED_ARRAY_MAX_ITEMS + 1 }, (_, index) => ({
+        name: `field_${index}`,
+        type: "boolean",
+        required: false,
+      })),
+      dimensions: [],
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects Closed JSON deeper than the named depth bound", () => {
+    let jsonSchema: Record<string, unknown> = { type: "null" };
+    for (let depth = 1; depth < PERSISTED_JSON_MAX_DEPTH; depth += 1) {
+      jsonSchema = {
+        type: "object",
+        properties: { child: jsonSchema },
+        additionalProperties: false,
+      };
+    }
+    const atBound = PublishEventDefinitionVersionRequestSchema.safeParse({
+      entityType: "user",
+      fields: [{ name: "payload", type: "json", required: false, jsonSchema }],
+      dimensions: [],
+    });
+    expect(atBound.success).toBe(true);
+
+    const overflow = PublishEventDefinitionVersionRequestSchema.safeParse({
+      entityType: "user",
+      fields: [
+        {
+          name: "payload",
+          type: "json",
+          required: false,
+          jsonSchema: {
+            type: "object",
+            properties: { child: jsonSchema },
+            additionalProperties: false,
+          },
+        },
+      ],
+      dimensions: [],
+    });
+    expect(overflow.success).toBe(false);
+    if (overflow.success) return;
+    expect(overflow.error.issues[0]?.path[0]).toBe("fields");
   });
 });

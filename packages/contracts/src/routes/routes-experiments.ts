@@ -14,6 +14,8 @@ import {
   StartRunRequestSchema,
   StartRunResponseSchema,
 } from "../resource-envelopes-experiment";
+import { listResponse } from "../wire-envelopes-core";
+import { EndRunRequestSchema } from "../write-persisted-schemas";
 import {
   AppParams,
   EnvParams,
@@ -22,7 +24,6 @@ import {
   RunEndParams,
   RunParams,
 } from "./route-shapes";
-import { listResponse } from "../wire-envelopes-core";
 
 /**
  * Experiment draft/start lifecycle, Experiment Run reads + end, and Metric CRUD.
@@ -184,7 +185,7 @@ export const experimentRoutes = [
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/runs/:runId/end",
     summary: "End a running Run.",
-    request: { params: RunEndParams, body: z.object({ reason: z.string().optional() }).optional() },
+    request: { params: RunEndParams, body: EndRunRequestSchema.optional() },
     response: RunResponseSchema,
     auth: AUTH,
     rateLimit: RATE,

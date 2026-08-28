@@ -69,6 +69,21 @@ describe("VariantSchema", () => {
     expect(v.description).toBe("Control group");
   });
 
+  it("accepts historically long names, strings, and nested objects", () => {
+    const deep = { a: { b: { c: { d: { e: { f: { g: { h: { i: "deep" } } } } } } } } };
+    const result = VariantSchema.safeParse({
+      id: "v",
+      name: "n".repeat(400),
+      value: "s".repeat(5000),
+      description: "d".repeat(4000),
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.name).toHaveLength(400);
+    expect(result.data.value).toHaveLength(5000);
+    expect(VariantSchema.safeParse({ id: "v", name: "nested", value: deep }).success).toBe(true);
+  });
+
   it("rejects a function as value", () => {
     expect(VariantSchema.safeParse({ id: "v", name: "t", value: () => {} }).success).toBe(false);
   });
@@ -163,6 +178,19 @@ describe("FlagSchema", () => {
   it("accepts optional description", () => {
     const f = FlagSchema.parse({ ...validFlag, description: "Controls X" });
     expect(f.description).toBe("Controls X");
+  });
+
+  it("accepts a historically long Flag name and Variant catalog", () => {
+    const result = FlagSchema.safeParse({
+      ...validFlag,
+      name: "n".repeat(400),
+      variants: [{ id: "var_1", name: "control", value: "s".repeat(5000) }],
+      defaultVariantId: "var_1",
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.name).toHaveLength(400);
+    expect(result.data.variants[0]?.value).toHaveLength(5000);
   });
 
   it("rejects a flag with no variants", () => {

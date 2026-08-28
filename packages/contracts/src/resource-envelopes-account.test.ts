@@ -38,6 +38,23 @@ describe("CreateMetricRequestSchema", () => {
     expect(req.idempotency_key).toBe("idem-1");
   });
 
+  it("rejects an unknown MetricRef field on a ratio operand", () => {
+    const result = CreateMetricRequestSchema.safeParse({
+      appId: "app_1",
+      name: "CTR",
+      key: "ctr",
+      kind: "ratio",
+      numerator: { metricId: "m_num", extra: true },
+      denominator: { metricId: "m_den" },
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]).toMatchObject({
+      code: "unrecognized_keys",
+      keys: ["extra"],
+    });
+  });
+
   it("rejects an invalid kind", () => {
     expect(
       CreateMetricRequestSchema.safeParse({

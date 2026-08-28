@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { DraftAllocationSchema } from "./draft-allocation";
-import { ExperimentSchema, MetricRefSchema, RunSchema } from "./leaf-schemas-experiment";
+import { ExperimentSchema, RunSchema } from "./leaf-schemas-experiment";
+import {
+  ResolvedTargetingRuleSchema,
+  TargetingRuleSchema,
+  VariantSchema,
+} from "./leaf-schemas-flag";
 import {
   IdempotencyKeySchema,
   PersistedDescriptionSchema,
@@ -10,15 +15,11 @@ import {
   persistedArray,
 } from "./persisted-field-limits";
 import {
-  ResolvedTargetingRuleSchema,
-  TargetingRuleSchema,
-  VariantSchema,
-} from "./leaf-schemas-flag";
-import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
 } from "./routes/route-shapes-approval-request";
 import { TargetingKeyTypeSchema } from "./targeting-key-type";
+import { TargetingRuleInputSchema, WriteMetricRefSchema } from "./write-persisted-schemas";
 
 /**
  * Create/patch/response wire envelopes for the Experiment and Experiment Run
@@ -69,14 +70,14 @@ export const CreateExperimentRequestSchema = z
     description: PersistedDescriptionSchema.optional(),
     hypothesis: PersistedDescriptionSchema.optional(),
     confidenceLevel: ExperimentSchema.shape.confidenceLevel.default(0.95),
-    metrics: persistedArray(MetricRefSchema).min(0),
-    guardrailMetrics: persistedArray(MetricRefSchema).default([]),
+    metrics: persistedArray(WriteMetricRefSchema).min(0),
+    guardrailMetrics: persistedArray(WriteMetricRefSchema).default([]),
     activationMetricId: PersistedIdentifierSchema.nullable().optional(),
     conversionWindowMs: z.number().default(0),
     dimensions: persistedArray(PersistedNameSchema).default([]),
     allocation: DraftAllocationSchema.optional(),
     salt: PersistedSaltSchema.optional(),
-    targetingRules: persistedArray(TargetingRuleSchema).optional(),
+    targetingRules: persistedArray(TargetingRuleInputSchema).optional(),
     segmentIds: persistedArray(PersistedIdentifierSchema).optional(),
     idempotency_key: IdempotencyKeySchema.optional(),
   })
@@ -113,10 +114,10 @@ export const PatchExperimentRequestSchema = z
     // of `.strict()` answering "unrecognized key" — see
     // `variantSetNotPatchable` in the control-plane Worker.
     variantSet: persistedArray(VariantSchema).optional(),
-    targetingRules: persistedArray(TargetingRuleSchema).optional(),
+    targetingRules: persistedArray(TargetingRuleInputSchema).optional(),
     segmentIds: persistedArray(PersistedIdentifierSchema).optional(),
-    metrics: persistedArray(MetricRefSchema).optional(),
-    guardrailMetrics: persistedArray(MetricRefSchema).optional(),
+    metrics: persistedArray(WriteMetricRefSchema).optional(),
+    guardrailMetrics: persistedArray(WriteMetricRefSchema).optional(),
     conversionWindowMs: z.number().optional(),
     dimensions: persistedArray(PersistedNameSchema).optional(),
     confidenceLevel: z.number().optional(),

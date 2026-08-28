@@ -1,11 +1,5 @@
 import { z } from "zod";
-import { MetricRefSchema, MetricSchema } from "./leaf-schemas-experiment";
-import {
-  IdempotencyKeySchema,
-  PersistedDescriptionSchema,
-  PersistedIdentifierSchema,
-  PersistedNameSchema,
-} from "./persisted-field-limits";
+import { MetricSchema } from "./leaf-schemas-experiment";
 import {
   APIKeySchema,
   AppSchema,
@@ -14,8 +8,15 @@ import {
   OrganizationSchema,
 } from "./leaf-schemas-runtime";
 import { OrganizationSlugSchema } from "./organization-slug";
+import {
+  IdempotencyKeySchema,
+  PersistedDescriptionSchema,
+  PersistedIdentifierSchema,
+  PersistedNameSchema,
+} from "./persisted-field-limits";
 import { SlugSchema } from "./slug";
 import { listResponse } from "./wire-envelopes-core";
+import { WriteMetricRefSchema } from "./write-persisted-schemas";
 
 /**
  * Create/patch/response wire envelopes for the account-tier resources: Metric,
@@ -64,8 +65,8 @@ export const CreateMetricRequestSchema = z
     kind: MetricSchema.shape.kind,
     eventDefinitionId: PersistedIdentifierSchema.optional(),
     eventFieldName: PersistedNameSchema.optional(),
-    numerator: MetricRefSchema.optional(),
-    denominator: MetricRefSchema.optional(),
+    numerator: WriteMetricRefSchema.optional(),
+    denominator: WriteMetricRefSchema.optional(),
     description: PersistedDescriptionSchema.optional(),
     ...MetricAnalysisFields,
     idempotency_key: IdempotencyKeySchema.optional(),
@@ -83,8 +84,8 @@ export const PatchMetricRequestSchema = z
     kind: MetricSchema.shape.kind.optional(),
     eventDefinitionId: PersistedIdentifierSchema.nullable().optional(),
     eventFieldName: PersistedNameSchema.nullable().optional(),
-    numerator: MetricRefSchema.optional(),
-    denominator: MetricRefSchema.optional(),
+    numerator: WriteMetricRefSchema.optional(),
+    denominator: WriteMetricRefSchema.optional(),
     description: PersistedDescriptionSchema.optional(),
     ...MetricAnalysisFields,
   })

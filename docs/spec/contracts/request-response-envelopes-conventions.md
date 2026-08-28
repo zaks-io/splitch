@@ -12,15 +12,17 @@ inferred or optional unless explicitly marked `no`.
 
 ## Wire conventions (all control-plane endpoints)
 
-**Unknown request keys fail loud.** External create and patch bodies use Zod `.strict()`. An
+**Unknown request keys fail loud.** External create and patch bodies use Zod `.strict()`, including
+nested write objects (`WriteCondition`, `WriteMetricRef`, `TargetingRuleInput`, `runs_end`). An
 unrecognized field is `VALIDATION_ERROR` with the field path (for example
-`["body", "organizationId"]`). Response and storage schemas may stay non-strict so forward-compatible
-fields can round-trip.
+`["body", "metrics", "0", "extra"]`). Response and storage schemas stay permissive so retained
+KV/D1 rows remain readable.
 
 **Persisted field bounds.** Write envelopes compose named limits from `persisted-field-limits.ts`
 (names 200, descriptions 2000, identifiers 128, Condition values 1024, Variant strings 4096, salts
-128, arrays 100 items, records 64 keys, Idempotency Keys 255 printable ASCII without whitespace).
-Over-limit values fail at parse. Stored values are not truncated.
+128, arrays 100 items, records 64 keys, JSON depth 8, Client Key origins 2048, telemetry enums 256,
+Idempotency Keys 255 printable ASCII without whitespace). Over-limit values fail at parse. Stored
+values are not truncated.
 
 **Optional fields are present-with-null, never omitted.** A field marked optional (`no`) in any
 envelope or leaf schema appears in the JSON with a `null` value rather than being absent. Consumers

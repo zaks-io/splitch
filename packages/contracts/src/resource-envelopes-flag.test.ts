@@ -27,6 +27,19 @@ describe("CreateFlagRequestSchema", () => {
     expect(req.variants.filter((variant) => variant.isDefault)).toHaveLength(1);
   });
 
+  it("rejects an unknown nested Variant catalog field", () => {
+    const result = CreateFlagRequestSchema.safeParse({
+      ...validCreateFlag,
+      variants: [{ ...variantControl, extra: true }, variantTreatment],
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]).toMatchObject({
+      code: "unrecognized_keys",
+      keys: ["extra"],
+    });
+  });
+
   it("rejects an unknown field instead of stripping it", () => {
     const result = CreateFlagRequestSchema.safeParse({
       ...validCreateFlag,

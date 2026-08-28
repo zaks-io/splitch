@@ -16,6 +16,12 @@ export const PERSISTED_SALT_MAX_LENGTH = 128;
 export const PERSISTED_ARRAY_MAX_ITEMS = 100;
 export const PERSISTED_RECORD_MAX_KEYS = 64;
 export const PERSISTED_RECORD_KEY_MAX_LENGTH = 128;
+/** Maximum nesting depth of persisted JSON objects and arrays, including the root. */
+export const PERSISTED_JSON_MAX_DEPTH = 8;
+/** Maximum UTF-16 code units in a persisted client-key origin URL. */
+export const PERSISTED_ORIGIN_MAX_LENGTH = 2048;
+/** Maximum items in a telemetry enum / allowlist (named domain bound, not the array product cap). */
+export const PERSISTED_TELEMETRY_ENUM_MAX_ITEMS = 256;
 
 export const IDEMPOTENCY_KEY_MAX_LENGTH = 255;
 /** Printable ASCII excluding space and control characters. */

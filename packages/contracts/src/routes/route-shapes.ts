@@ -3,12 +3,7 @@ import { ApiKeyScopeSchema } from "../api-key-scopes";
 import { ApprovalRequestIdSchema } from "../approval-identifiers";
 import { StoredClientKeyRateLimitRpsSchema } from "../client-key-rate-limit";
 import { OriginAllowlistSchema } from "../client-origin";
-import {
-  ConditionSchema,
-  PercentageRolloutSchema,
-  TargetingRuleInputSchema,
-  TargetingRuleSchema,
-} from "../leaf-schemas-flag";
+import { PercentageRolloutSchema, TargetingRuleSchema } from "../leaf-schemas-flag";
 import { EnvironmentPolicySchema, UserRoleSchema } from "../leaf-schemas-runtime";
 import {
   IdempotencyKeySchema,
@@ -17,6 +12,7 @@ import {
   PersistedNameSchema,
   persistedArray,
 } from "../persisted-field-limits";
+import { TargetingRuleInputSchema, WriteConditionSchema } from "../write-persisted-schemas";
 import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
@@ -289,7 +285,7 @@ export const CreateSegmentRequestSchema = z
   .object({
     name: PersistedNameSchema,
     description: PersistedDescriptionSchema.optional(),
-    conditions: persistedArray(ConditionSchema).min(1),
+    conditions: persistedArray(WriteConditionSchema).min(1),
     idempotency_key: IdempotencyKeySchema.optional(),
   })
   .strict();
@@ -299,7 +295,7 @@ export const PatchSegmentRequestSchema = z
   .object({
     name: PersistedNameSchema.optional(),
     description: PersistedDescriptionSchema.optional(),
-    conditions: persistedArray(ConditionSchema).min(1).optional(),
+    conditions: persistedArray(WriteConditionSchema).min(1).optional(),
     review: InlineApproveAndApplyReviewSchema.optional(),
     idempotency_key: IdempotencyKeySchema.optional(),
   })

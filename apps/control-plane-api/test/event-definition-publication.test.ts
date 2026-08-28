@@ -183,6 +183,45 @@ describe("Event Definition publication", () => {
   });
 });
 
+describe("Event Definition publication write bounds", () => {
+  it("rejects too many fields before publishing a Version", async () => {
+    const fields = Array.from({ length: 101 }, (_, index) => ({
+      name: `field_${index}`,
+      type: "boolean",
+      required: false,
+    }));
+    const response = await publish({ entityType: "user", fields, dimensions: [] });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { issues: [{ path: ["body", "fields"] }] },
+    });
+    await expectUnpublished();
+  });
+
+  it("rejects Closed JSON deeper than the named bound before publishing", async () => {
+    let jsonSchema: Record<string, unknown> = { type: "null" };
+    for (let depth = 0; depth < 8; depth += 1) {
+      jsonSchema = {
+        type: "object",
+        properties: { child: jsonSchema },
+        additionalProperties: false,
+      };
+    }
+    const response = await publish({
+      entityType: "user",
+      fields: [{ name: "payload", type: "json", required: false, jsonSchema }],
+      dimensions: [],
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { issues: [{ path: expect.arrayContaining(["body", "fields"]) }] },
+    });
+    await expectUnpublished();
+  });
+});
+
 function validVersion(): Record<string, unknown> {
   return {
     entityType: "user",

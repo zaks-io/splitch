@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FlagSchema, VariantSchema } from "./leaf-schemas-flag";
+import { FlagSchema } from "./leaf-schemas-flag";
 import {
   IdempotencyKeySchema,
   PersistedDescriptionSchema,
@@ -8,12 +8,13 @@ import {
   persistedArray,
   persistedRecord,
 } from "./persisted-field-limits";
-import { SlugSchema } from "./slug";
-import { listResponse } from "./wire-envelopes-core";
 import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
 } from "./routes/route-shapes-approval-request";
+import { SlugSchema } from "./slug";
+import { listResponse } from "./wire-envelopes-core";
+import { WriteVariantValueSchema } from "./write-persisted-schemas";
 
 /**
  * Create/patch/response wire envelopes for App-level Flag definition and
@@ -42,7 +43,7 @@ import {
 const CreateVariantCatalogEntrySchema = z
   .object({
     name: PersistedNameSchema,
-    value: VariantSchema.shape.value,
+    value: WriteVariantValueSchema,
     isDefault: z.boolean(),
     description: PersistedDescriptionSchema.optional(),
   })
@@ -139,7 +140,7 @@ export const CreateVariantRequestSchema = z
     appId: PersistedIdentifierSchema,
     flagId: PersistedIdentifierSchema,
     name: PersistedNameSchema,
-    value: VariantSchema.shape.value,
+    value: WriteVariantValueSchema,
     isDefault: z.boolean().optional(),
     description: PersistedDescriptionSchema.optional(),
     review: InlineApproveAndApplyReviewSchema.optional(),
@@ -160,7 +161,7 @@ export type CreateVariantRequest = z.infer<typeof CreateVariantRequestSchema>;
 export const PatchVariantRequestSchema = z
   .object({
     name: PersistedNameSchema.optional(),
-    value: VariantSchema.shape.value.optional(),
+    value: WriteVariantValueSchema.optional(),
     description: PersistedDescriptionSchema.optional(),
     review: InlineApproveAndApplyReviewSchema.optional(),
     idempotency_key: IdempotencyKeySchema,

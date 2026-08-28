@@ -1,14 +1,16 @@
 import { z } from "@hono/zod-openapi";
 import type {
-  CreateEventDefinitionRequestSchema,
   EventDefinitionDetailSchema,
   EventDefinitionListResponseSchema,
   EventDefinitionSchema,
   EventDefinitionVersionListResponseSchema,
   EventDefinitionVersionSchema,
+} from "./event-definition";
+import type {
+  CreateEventDefinitionRequestSchema,
   PatchEventDefinitionRequestSchema,
   PublishEventDefinitionVersionRequestSchema,
-} from "./event-definition";
+} from "./event-definition-write";
 import {
   AppMemberSchema,
   AppSchema,
@@ -23,8 +25,8 @@ import type {
   AppAttentionRollupResponseSchema,
   CreateAppRequestSchema,
   CreateAppResponseSchema,
-  CreateEnvironmentResponseSchema,
   CreateCredentialResponseSchema,
+  CreateEnvironmentResponseSchema,
   CreateOrganizationRequestSchema,
   ListCredentialsResponseSchema,
   OrganizationResponseSchema,
