@@ -55,8 +55,8 @@ export function assertEnvironmentExposureStatusContract(root, fail) {
   );
   requireInstruction(
     materialization,
-    /minState\(server_received_at\) AS first_exposure_state/,
-    "Environment Exposure status must preserve the earliest server timestamp",
+    /minState\(exposure_at\) AS first_exposure_state/,
+    "Environment Exposure status must preserve the earliest encounter timestamp",
     fail,
   );
   requireInstruction(
