@@ -108,12 +108,14 @@ describe("MCP hosted configuration", () => {
       controlPlaneBaseUrl: "https://control-plane.splitch.test",
     };
 
+    const target = platformTarget === undefined ? {} : { platformTarget };
+
     await expect(
       handleMcpServerRequest({
         request: new Request("https://mcp.test/.well-known/oauth-protected-resource"),
         service,
-        platformTarget,
         ...hostedOrigins,
+        ...target,
         tokenVerifier: staticMcpTokenVerifier(),
         revocations: allowMcpRevocations(),
       }),
@@ -123,15 +125,15 @@ describe("MCP hosted configuration", () => {
       handleMcpServerRequest({
         request: new Request("https://mcp.test/mcp", { method: "POST" }),
         service,
-        platformTarget,
         ...hostedOrigins,
+        ...target,
         revocations: allowMcpRevocations(),
       }),
     ).rejects.toThrow(message);
 
     const sdk = createControlPlaneOperationSdk({
-      platformTarget,
-      controlPlaneBaseUrl: hostedOrigins.controlPlaneBaseUrl,
+      ...hostedOrigins,
+      ...target,
       controlPlaneFetch: async () => new Response(null, { status: 204 }),
       controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
     });

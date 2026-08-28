@@ -68,8 +68,34 @@ describe("Event Ingest hosted configuration", () => {
       ),
     ).rejects.toThrow(message);
 
-    await expect(deliver(env)).rejects.toThrow(message);
+    const queued = {
+      id: "message-hosted-config",
+      timestamp: new Date("2026-08-07T00:00:00.000Z"),
+      body: { event_id: "event-hosted-config" },
+      attempts: 1,
+      ack: vi.fn(),
+      retry: vi.fn(),
+    };
+    if (!worker.queue) {
+      throw new Error("Event ingest queue handler is not configured");
+    }
+    await expect(
+      worker.queue(
+        {
+          messages: [queued],
+          queue: "metric-events",
+          metadata: { metrics: { backlogCount: 1, backlogBytes: 64 } },
+          ackAll: vi.fn(),
+          retryAll: vi.fn(),
+        },
+        env,
+        ctx,
+      ),
+    ).rejects.toThrow(message);
+    expect(queued.ack).not.toHaveBeenCalled();
+    expect(queued.retry).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
+    expect(fetch.mock.calls.map(([url]) => String(url)).join()).not.toContain("api.tinybird.co");
   });
 });
 
@@ -80,31 +106,7 @@ function hostedBindings(platformTarget: string | undefined): Env {
     SPLITCH_PLATFORM_TARGET: platformTarget,
     TINYBIRD_API_URL: "https://api.us-west-2.aws.tinybird.co",
     TINYBIRD_INGEST_TOKEN: "tb_hosted_secret",
+    EVALUATION_PRIVACY_SALT: "hosted-privacy-salt",
+    SPLITCH_DEPLOYED_COMMIT_SHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   } as Env;
-}
-
-async function deliver(env: Env): Promise<void> {
-  if (!worker.queue) {
-    throw new Error("Event ingest queue handler is not configured");
-  }
-  await worker.queue(
-    {
-      messages: [
-        {
-          id: "message-hosted-config",
-          timestamp: new Date("2026-08-07T00:00:00.000Z"),
-          body: { event_id: "event-hosted-config" },
-          attempts: 1,
-          ack: vi.fn(),
-          retry: vi.fn(),
-        },
-      ],
-      queue: "metric-events",
-      metadata: { metrics: { backlogCount: 1, backlogBytes: 64 } },
-      ackAll: vi.fn(),
-      retryAll: vi.fn(),
-    },
-    env,
-    {} as ExecutionContext,
-  );
 }
