@@ -1,10 +1,18 @@
-import { mintInitialAppIdentityRecord, wrapAppIdentityRecord } from "@splitch/privacy";
-import { describe, expect, it } from "vitest";
-import { putConfigStoreAppIdentityIfAbsent } from "../src/config-store-app-identity.js";
+import {
+  defaultAppEntityIdentityRecordKey,
+  mintInitialAppIdentityRecord,
+  wrapAppIdentityRecord,
+} from "@splitch/privacy";
+import { describe, expect, it, vi } from "vitest";
 import {
   type ConfigStoreDurableObjectNamespace,
   durableAppIdentityResetAccess,
-} from "../src/config-store-do.js";
+} from "../src/config-store-access.js";
+import { putConfigStoreAppIdentityIfAbsent } from "../src/config-store-app-identity.js";
+import {
+  beginConfigStoreEntityPrivacy,
+  recordConfigStoreEntityPrivacyCompletion,
+} from "../src/config-store-app-identity-ledger.js";
 
 describe("durableAppIdentityResetAccess", () => {
   it("routes independent production callers through the same App-scoped Config Store DO", async () => {
@@ -66,6 +74,50 @@ describe("durableAppIdentityResetAccess", () => {
       ]),
     ).resolves.toEqual([first, first]);
     expect(staleKvWrites).toEqual([]);
+  });
+
+  it("rejects an in-flight Entity ledger insert after the durable App identity changes", async () => {
+    const rootSecret = "test-root-secret-do-not-use";
+    const appId = "app-checkout";
+    const ctx = memoryDurableObjectState();
+    const initial = mintInitialAppIdentityRecord(rootSecret);
+    const first = JSON.stringify(await wrapAppIdentityRecord(initial, rootSecret, appId));
+    const dbPrepare = vi.fn();
+    const env = {
+      EVALUATION_PRIVACY_SALT: rootSecret,
+      SPLITCH_PLATFORM_TARGET: "production",
+      DB: { prepare: dbPrepare },
+    } as never;
+    await putConfigStoreAppIdentityIfAbsent(ctx, env, appId, first);
+    const expectedVersion = await beginConfigStoreEntityPrivacy(ctx, env, appId);
+    const active = initial.epochs.find((epoch) => epoch.role === "active");
+    if (!active) throw new Error("missing active fixture epoch");
+    const replaced = {
+      currentVersion: "app-v2",
+      lifecycle: { ...initial.lifecycle, resetId: "reset-race" },
+      epochs: [{ ...active, version: "app-v2" }],
+    };
+    await ctx.storage.put(
+      defaultAppEntityIdentityRecordKey(appId),
+      JSON.stringify(await wrapAppIdentityRecord(replaced, rootSecret, appId)),
+    );
+
+    await expect(
+      recordConfigStoreEntityPrivacyCompletion(ctx, env, appId, expectedVersion, {
+        requestId: "prv_late",
+        orgId: "org_1",
+        appId,
+        requestType: "export",
+        subjectRef: '["app-v1:old"]',
+        requestedBy: "user_1",
+        receivedAt: "2026-08-28T00:00:00.000Z",
+        ackDueAt: "2026-09-01T00:00:00.000Z",
+        responseDueAt: "2026-10-01T00:00:00.000Z",
+        completedAt: "2026-08-28T00:00:00.000Z",
+        resultJson: '{"old":"artifact"}',
+      }),
+    ).rejects.toThrow(/identity changed/iu);
+    expect(dbPrepare).not.toHaveBeenCalled();
   });
 });
 

@@ -37,6 +37,24 @@ describe("Entity Metric privacy Durable Object", () => {
     ).toEqual({ suppressed: false });
   });
 
+  it("serializes Entity inventory check-put against suppression", async () => {
+    const fixture = makeFixture();
+    const gate = fixture.pauseNextGet("privacy:suppression");
+    const registration = fixture.post("/register", ENTRY);
+    await gate.started;
+    const suppression = fixture.post("/suppress", {
+      deleteBeforeTs: "2026-08-07T00:00:01.000Z",
+    });
+    await Promise.resolve();
+    gate.release();
+
+    await expect(registration).resolves.toEqual({ suppressed: false });
+    await expect(suppression).resolves.toEqual({
+      proofs: ["metric-event-queue-suppression:2026-08-07T00:00:01.000Z"],
+    });
+    await expect(fixture.post("/register", ENTRY)).resolves.toEqual({ suppressed: true });
+  });
+
   it("exports pending outbox rows, redacts stale claims, and returns idempotent proofs", async () => {
     const fixture = makeFixture();
     await fixture.post("/register", ENTRY);
@@ -88,6 +106,15 @@ describe("Entity Metric privacy Durable Object", () => {
     await expect(fixture.post("/complete-reset", { resetId: "reset_1" })).resolves.toEqual({
       completed: true,
     });
+    await expect(
+      fixture.post("/register-app-evaluation", {
+        appId: "app_1",
+        commitIdentity: "e".repeat(64),
+      }),
+    ).resolves.toEqual({ suppressed: false });
+    await expect(fixture.post("/complete-reset", { resetId: "reset_1" })).resolves.toEqual({
+      completed: true,
+    });
   });
 
   it("retains a failed Evaluation commit purge checkpoint across a Durable Object restart", async () => {
@@ -107,10 +134,49 @@ describe("Entity Metric privacy Durable Object", () => {
     ).resolves.toEqual({ proof: "event-delivery:entities=0;evaluation_commits=1" });
     expect(fixture.evaluationOutbox.privacyDeleteAll).toHaveBeenCalledTimes(2);
   });
+
+  it("serializes App inventory check-put against reset suppression and purge", async () => {
+    const fixture = makeFixture();
+    const commitIdentity = "d".repeat(64);
+    const gate = fixture.pauseNextGet("privacy:app-reset-suppression");
+    const registration = fixture.post("/register-app-evaluation", {
+      appId: "app_1",
+      commitIdentity,
+    });
+    await gate.started;
+    const reset = fixture.post("/reset-app", { appId: "app_1", resetId: "reset_race" });
+    await Promise.resolve();
+    expect(fixture.evaluationOutbox.privacyDeleteAll).not.toHaveBeenCalled();
+
+    gate.release();
+    await expect(registration).resolves.toEqual({ suppressed: false });
+    await expect(reset).resolves.toEqual({
+      proof: "event-delivery:entities=0;evaluation_commits=1",
+    });
+    expect(fixture.evaluationOutbox.privacyDeleteAll).toHaveBeenCalledWith(commitIdentity);
+  });
+
+  it("blocks standalone Evaluation usage delivery while App reset suppression is durable", async () => {
+    const fixture = makeFixture();
+    const append = vi.fn(async () => new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", append);
+    const row = { app_id: "app_1", dedup_key: "sha256:usage" };
+
+    await expect(fixture.post("/deliver-app-evaluation", { appId: "app_1", row })).resolves.toEqual(
+      { suppressed: false },
+    );
+    await fixture.post("/reset-app", { appId: "app_1", resetId: "reset_usage" });
+    await expect(fixture.post("/deliver-app-evaluation", { appId: "app_1", row })).resolves.toEqual(
+      { suppressed: true },
+    );
+    expect(append).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
 });
 
 function makeFixture() {
   const storage = new Map<string, unknown>();
+  let blockedGet: { key: string; started: () => void; wait: Promise<void> } | undefined;
   const outboxFetch = vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input)).pathname;
     if (path === "/export") {
@@ -127,6 +193,12 @@ function makeFixture() {
   const ctx = {
     storage: {
       async get<T>(key: string) {
+        if (blockedGet?.key === key) {
+          const gate = blockedGet;
+          blockedGet = undefined;
+          gate.started();
+          await gate.wait;
+        }
         return storage.has(key) ? (structuredClone(storage.get(key)) as T) : undefined;
       },
       async put(key: string, value: unknown) {
@@ -151,6 +223,9 @@ function makeFixture() {
     commit: vi.fn(async () => {
       throw new Error("not used");
     }),
+    deliver: vi.fn(async () => {
+      throw new Error("not used");
+    }),
     acknowledge: vi.fn(async () => undefined),
     privacyExport: vi.fn(async () => [
       { event_id: EVALUATION_ENTRY.eventId, source: "evaluation-commit" },
@@ -159,6 +234,9 @@ function makeFixture() {
     privacyDeleteAll: vi.fn(async () => "evaluation-commit-outbox-purged-v1" as const),
   };
   const env = {
+    SPLITCH_PLATFORM_TARGET: "production",
+    TINYBIRD_API_URL: "https://tinybird.test",
+    TINYBIRD_INGEST_TOKEN: "test-token",
     METRIC_EVENT_OUTBOX: {
       idFromName: () => ({}) as DurableObjectId,
       get: () => ({ fetch: outboxFetch }),
@@ -169,6 +247,18 @@ function makeFixture() {
   return {
     outboxFetch,
     evaluationOutbox,
+    pauseNextGet(key: string) {
+      let release!: () => void;
+      let started!: () => void;
+      const wait = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const startedPromise = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      blockedGet = { key, started, wait };
+      return { started: startedPromise, release };
+    },
     restart() {
       object = new EntityMetricPrivacyDurableObject(ctx, env);
     },

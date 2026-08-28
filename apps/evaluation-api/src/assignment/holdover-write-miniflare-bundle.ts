@@ -2,14 +2,16 @@
  * Shared TypeScript concatenation harness for Miniflare tests that load the
  * real App inventory + Entity outbox + assignment-store DO classes.
  */
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { holdoverWriteFaultHooks } from "./holdover-write-miniflare-faults";
 import { holdoverWriteInventoryClientStubs } from "./holdover-write-miniflare-harness";
-
-const root = dirname(fileURLToPath(import.meta.url));
+import {
+  readSource,
+  stripExport,
+  stripImport,
+  stripImports,
+  stripIsRecordHelpers,
+} from "./holdover-write-miniflare-source";
 
 interface HoldoverWriteMiniflareOptions {
   registerFailsRemaining?: number;
@@ -97,10 +99,16 @@ function readWorkerSources() {
       "./holdover-write-app-deletion-saga-finalize",
       "./holdover-write-outbox-core",
     ]),
+    identityReset: stripImports(readSource("holdover-write-app-identity-reset.ts"), [
+      "./holdover-write-app-deletion-input",
+      "./holdover-write-app-deletion-saga",
+      "./holdover-write-app-inventory",
+    ]),
     inventoryDo: stripImports(readSource("holdover-write-app-inventory-do.ts"), [
       "cloudflare:workers",
       "./assignment-store",
       "./holdover-write-app-inventory",
+      "./holdover-write-app-identity-reset",
       "./holdover-write-app-inventory-fetch",
       "./holdover-write-app-deletion-input",
       "./holdover-write-app-deletion-saga",
@@ -165,6 +173,7 @@ function renderWorkerSource(
     saga,
     inventoryFetch,
     inventoryEntityPort,
+    identityReset,
     inventoryDo,
     core,
     ensure,
@@ -216,6 +225,7 @@ ${stripExport(sagaFinalize)}
 ${stripExport(saga)}
 ${stripExport(inventoryFetch)}
 ${stripExport(inventoryEntityPort)}
+${stripExport(identityReset)}
 ${inventoryDo}
 ${stripExport(core)}
 ${stripExport(ensure)}
@@ -272,44 +282,4 @@ export default {
   },
 };
 `;
-}
-
-function readSource(name: string): string {
-  return readFileSync(join(root, name), "utf8");
-}
-
-function stripImport(source: string, from: string): string {
-  return source.replace(
-    new RegExp(`^import[\\s\\S]*?from ["']${escapeRegExp(from)}["'];?\\s*`, "m"),
-    "",
-  );
-}
-
-function stripImports(source: string, froms: string[]): string {
-  let next = source;
-  for (const from of froms) next = stripImport(next, from);
-  return next;
-}
-
-function stripIsRecordHelpers(source: string): string {
-  return source.replace(
-    /\nfunction isRecord\(value: unknown\): value is Record<string, unknown> \{[\s\S]*?\n\}\n\nfunction requireString\(value: Record<string, unknown>, key: string\): string \{[\s\S]*?\n\}\n/,
-    "\n",
-  );
-}
-
-function stripExport(source: string): string {
-  // Drop barrel re-exports entirely (`export … { … } from "…"`), including
-  // type-only forms. Leaving a dangling `from "…"` after stripping `export type`
-  // becomes a runtime `from is not defined` in the Miniflare worker.
-  return source
-    .replace(/^export\s+type\s+\{[\s\S]*?\}\s+from\s+["'][^"']+["'];?\s*/gm, "")
-    .replace(/^export\s+\{[\s\S]*?\}\s+from\s+["'][^"']+["'];?\s*/gm, "")
-    .replace(/^export\s+type\s+\{[\s\S]*?\};?\s*/gm, "")
-    .replace(/^export\s+\{[\s\S]*?\};?\s*/gm, "")
-    .replace(/^export /gm, "");
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

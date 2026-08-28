@@ -9,7 +9,7 @@ import {
 } from "@splitch/contracts";
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import {
   appToken,
   createDefaultApp,

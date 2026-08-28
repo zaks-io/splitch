@@ -4,6 +4,7 @@ import {
   type ErrorResponse,
 } from "@splitch/contracts";
 import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
+import { appIdentityTrafficError } from "./app-identity-traffic";
 import { evaluate } from "./evaluate/accessor-paths";
 import type { EvaluateResult } from "./evaluate/evaluate-path";
 import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
@@ -46,6 +47,11 @@ export function makeEvaluateHandler(deps: EvaluateRouteDeps) {
 
     const assertionError = appAssertionError(parsed.body.appId, scope.value.appId);
     if (assertionError !== null) return renderError(assertionError, { requestId });
+    const identityError = await appIdentityTrafficError(
+      deps.exposureAssembly.saltStore,
+      scope.value.appId,
+    );
+    if (identityError !== null) return renderError(identityError, { requestId });
 
     const evaluated = await evaluateWithCapture(parsed.body, scope.value, deps);
     return evaluateResponse(evaluated, deps, requestId, request);

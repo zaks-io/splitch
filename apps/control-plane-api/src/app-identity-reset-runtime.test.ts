@@ -30,33 +30,42 @@ describe("App identity reset privacy ledger redaction", () => {
       );
 
       await expect(purgers.privacy_subject_refs({ appId: "app_a" })).resolves.toBe(
-        "d1-privacy-subject-refs:1",
+        "d1-privacy-subject-refs:2",
       );
       const rows = await db
         .prepare(
-          "SELECT request_id, subject_ref, subject_ref_redacted_at FROM privacy_requests ORDER BY request_id",
+          "SELECT request_id, subject_ref, subject_ref_redacted_at, result_json FROM privacy_requests ORDER BY request_id",
         )
         .all<{
           request_id: string;
           subject_ref: string;
           subject_ref_redacted_at: string | null;
+          result_json: string | null;
         }>();
       expect(rows.results).toEqual([
-        { request_id: "app-a", subject_ref: "app_a", subject_ref_redacted_at: null },
+        {
+          request_id: "app-a",
+          subject_ref: "app_a",
+          subject_ref_redacted_at: null,
+          result_json: '{"artifact":"app-evidence"}',
+        },
         {
           request_id: "entity-a",
           subject_ref: "redacted:app-identity-reset",
           subject_ref_redacted_at: "2026-08-28T12:00:00.000Z",
+          result_json: null,
         },
         {
           request_id: "entity-b",
           subject_ref: '["app-v1:other"]',
           subject_ref_redacted_at: null,
+          result_json: '{"artifact":"app-evidence"}',
         },
         {
           request_id: "entity-redacted",
           subject_ref: "redacted:app-identity-reset",
-          subject_ref_redacted_at: null,
+          subject_ref_redacted_at: "2026-08-28T12:00:00.000Z",
+          result_json: null,
         },
       ]);
     } finally {
@@ -82,7 +91,7 @@ function privacyRequest(
 ): D1PreparedStatement {
   return db
     .prepare(
-      "INSERT INTO privacy_requests (request_id, org_id, app_id, request_type, subject_type, subject_ref, requested_by, status, received_at, ack_due_at, response_due_at) VALUES (?, 'org_1', ?, 'delete', ?, ?, 'user_1', 'processing', '2026-08-28T00:00:00.000Z', '2026-09-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')",
+      "INSERT INTO privacy_requests (request_id, org_id, app_id, request_type, subject_type, subject_ref, requested_by, status, received_at, ack_due_at, response_due_at, result_json) VALUES (?, 'org_1', ?, 'delete', ?, ?, 'user_1', 'processing', '2026-08-28T00:00:00.000Z', '2026-09-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z', '{\"artifact\":\"app-evidence\"}')",
     )
     .bind(requestId, appId, subjectType, subjectRef);
 }

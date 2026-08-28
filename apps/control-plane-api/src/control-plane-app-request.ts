@@ -9,7 +9,7 @@ import { createApp } from "./app";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
 import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
-import { durableConfigStoreAccess } from "./config-store-do";
+import { durableConfigStoreAccess } from "./config-store-access";
 import { durableCredentialCacheWriterAccess } from "./credential-cache-writer-do";
 import { createEntityPrivacyConsumer } from "./entity-privacy-consumer";
 import type { ControlPlaneApiEnv } from "./env";

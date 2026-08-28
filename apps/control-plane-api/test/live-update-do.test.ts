@@ -6,8 +6,9 @@ import { authorizeLiveUpdateUpgrade } from "../../control-panel/src/lib/live-upd
 import { handleLiveUpdateUpgrade } from "../../control-panel/src/lib/live-update-upgrade.js";
 import { createApp } from "../src/app.js";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver.js";
-import { durableConfigStoreAccess, LIVE_UPDATE_CONTEXT_HEADER } from "../src/config-store-do.js";
+import { durableConfigStoreAccess } from "../src/config-store-access.js";
 import { ids, NOW_MS, seedConfigGraph } from "../src/config-store-fixture-data.js";
+import { LIVE_UPDATE_CONTEXT_HEADER } from "../src/config-store-live-update-context.js";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js";
 import { makeJwksVerifier } from "../src/jwks-verify.js";
 import { appAdminScope } from "../src/scope-binding.js";

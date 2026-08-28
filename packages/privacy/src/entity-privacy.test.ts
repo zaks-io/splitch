@@ -33,6 +33,22 @@ describe("entity privacy consumers", () => {
     expect(canonicalizeAnalysisEntityHash(identity.targetingKeyHashes)).toBe(current);
   });
 
+  it("keeps the shared-root family anchor when the first App epoch becomes active", async () => {
+    const identityStore = makeMemoryAppIdentityStore();
+    const store = makeIdentitySaltStore({ rootSecret: ROOT, identityStore });
+    const before = await resolveEntityPrivacyIdentity(
+      {
+        ...store,
+        retainedKeyVersions: async () => ["local-v1", "v1"],
+      },
+      INPUT,
+    );
+    const after = await resolveEntityPrivacyIdentity(store, INPUT);
+
+    expect(after.targetingKeyHashes.some((hash) => hash.startsWith("app-v1:"))).toBe(true);
+    expect(after.entityFamilyHash).toBe(before.entityFamilyHash);
+  });
+
   it("keeps families joinable across one App's epochs without linking Apps", async () => {
     const identityStore = makeMemoryAppIdentityStore(
       new Map([

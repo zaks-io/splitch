@@ -1,18 +1,16 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { emptyError, renderError, serviceUnavailable, validationError } from "./errors";
+import { deliverSealedEvaluationCommit } from "./evaluation-commit-delivery";
 import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
 import { inventoryEvaluationCommit } from "./evaluation-commit-privacy";
-import { isEntityEventSuppressed } from "./entity-metric-privacy";
 import { evaluationUsageScope, requiredIdentity } from "./ingest";
 import { ingestAdmissionDenial } from "./ingest-admission";
 import { loadRunScope } from "./kv-config";
 import { readJsonObject } from "./payload";
 import {
-  appendRawEvent,
   type EvaluationUsageEventInput,
   evaluationUsagePayload,
   exposureEvent,
-  tinybirdDelivery,
   toEvaluationUsageTinybirdRow,
   toTinybirdRow,
 } from "./tinybird";
@@ -38,15 +36,6 @@ export async function handleEvaluationCommit(request: Request, env: Env): Promis
   const { commit } = prepared.value;
   if (commit.delivered)
     return Response.json({ ok: true, eventId: commit.eventId }, { status: 202 });
-
-  let suppressed = false;
-  try {
-    suppressed = await inventoryEvaluationCommit(prepared.value, env);
-  } catch {
-    return renderError(serviceUnavailable("Evaluation commit privacy inventory is unavailable"));
-  }
-
-  if (suppressed) return Response.json({ ok: true, eventId: commit.eventId }, { status: 202 });
 
   return deliverEvaluationCommit(prepared.value, env);
 }
@@ -85,6 +74,7 @@ async function prepareEvaluationCommit(
     const denied = await chargeNewEvaluationCommit(env, scope, payload);
     if (denied) return { ok: false, error: denied };
 
+    await inventoryEvaluationCommit({ identity, outbox, payload }, env);
     const sealed = await outbox.commit(identity, payload);
     return preparedCommit(scope, identity, outbox, sealed);
   } catch {
@@ -184,19 +174,13 @@ async function deliverEvaluationCommit(
   env: Env,
 ): Promise<Response> {
   const { commit, identity, outbox, scope } = prepared;
-  const usageDelivery = tinybirdDelivery(env, "raw_evaluations");
-  const exposureDelivery = commit.payload.exposureRows.length > 0 ? tinybirdDelivery(env) : null;
-  if (!usageDelivery.ok) return renderError(usageDelivery.error);
-  if (exposureDelivery !== null && !exposureDelivery.ok) return renderError(exposureDelivery.error);
 
   try {
-    await appendRawEvent(
-      toEvaluationUsageTinybirdRow({ eventId: commit.eventId, ...commit.payload.usage }),
-      usageDelivery.value,
-    );
-    if (exposureDelivery?.ok)
-      await appendEvaluationExposures(commit.payload.exposureRows, exposureDelivery.value, env);
-    await outbox.acknowledge(identity);
+    const delivered = await outbox.deliver(identity);
+    if (!delivered.delivered) {
+      await deliverSealedEvaluationCommit(env, commit.eventId, commit.payload);
+      await outbox.acknowledge(identity);
+    }
   } catch (error) {
     console.error("event-ingest-api Evaluation commit delivery failed", {
       organizationId: scope.organizationId,
@@ -208,21 +192,6 @@ async function deliverEvaluationCommit(
   }
 
   return Response.json({ ok: true, eventId: commit.eventId }, { status: 202 });
-}
-
-async function appendEvaluationExposures(
-  rows: readonly Record<string, unknown>[],
-  delivery: { url: string; token: string },
-  env: Env,
-): Promise<void> {
-  for (const row of rows) {
-    const suppressed = await isEntityEventSuppressed(
-      env.ENTITY_METRIC_PRIVACY,
-      row,
-      env.SPLITCH_PLATFORM_TARGET,
-    );
-    if (!suppressed) await appendRawEvent(row, delivery);
-  }
 }
 
 interface EvaluationCommitPayload {

@@ -96,6 +96,14 @@ async function entityFamilyHashForRetained(
   input: EntityPrivacyInput,
   retainedHashes: readonly string[],
 ): Promise<string> {
+  const sharedAnchor = retainedHashes.find((hash) =>
+    HISTORICAL_SHARED_ROOT_KEY_VERSIONS.includes(
+      keyVersionOf(hash) as (typeof HISTORICAL_SHARED_ROOT_KEY_VERSIONS)[number],
+    ),
+  );
+  if (sharedAnchor !== undefined) {
+    return compatibilityEntityFamilyHash(store, input, keyVersionOf(sharedAnchor));
+  }
   const appAnchor = retainedHashes.find((hash) => isAppIdentityKeyVersion(keyVersionOf(hash)));
   if (appAnchor !== undefined) return appAnchor;
   const compatibilityAnchor = retainedHashes[0];
@@ -103,6 +111,14 @@ async function entityFamilyHashForRetained(
     throw new Error("privacy: no retained targeting_key_hash for Entity family");
   }
   const version = keyVersionOf(compatibilityAnchor);
+  return compatibilityEntityFamilyHash(store, input, version);
+}
+
+async function compatibilityEntityFamilyHash(
+  store: SaltStore,
+  input: EntityPrivacyInput,
+  version: string,
+): Promise<string> {
   const salt = await store.saltFor(input.appId, version);
   const digest = await hmacSha256Hex(
     salt,

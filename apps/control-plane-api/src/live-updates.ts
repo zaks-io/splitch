@@ -1,14 +1,14 @@
 import type { ErrorResponse, ServerAuthenticatedLiveUpdateContext } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import {
-  emptyError,
-  renderError,
   type AuthResolver,
+  emptyError,
   type Principal,
   type RateLimiter,
+  renderError,
 } from "@splitch/worker-runtime";
 import type { Context, Hono } from "hono";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 
 const LIVE_UPDATE_PATH = "/apps/:appId/envs/:environmentId/live";
 const REQUEST_ID_HEADER = "x-request-id";

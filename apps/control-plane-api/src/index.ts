@@ -19,11 +19,8 @@ import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { loadCloudflareExposureVerificationConfig } from "./cloudflare-exposure-verification";
-import {
-  ConfigStoreDurableObject,
-  durableAppIdentityResetAccess,
-  durableConfigStoreAccess,
-} from "./config-store-do";
+import { durableAppIdentityResetAccess, durableConfigStoreAccess } from "./config-store-access";
+import { ConfigStoreDurableObject } from "./config-store-do";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import { handleControlPlaneAppRequest } from "./control-plane-app-request";
 import {

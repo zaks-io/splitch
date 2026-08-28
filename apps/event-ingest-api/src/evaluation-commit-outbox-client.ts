@@ -31,6 +31,11 @@ function durableEvaluationCommitOutbox(
       requireOk(response, "Evaluation commit outbox");
       return parseEvaluationCommit(await response.json());
     },
+    async deliver(identity) {
+      const response = await post(namespace, identity, "deliver", { identity });
+      requireOk(response, "Evaluation commit delivery");
+      return parseEvaluationCommit(await response.json());
+    },
     async acknowledge(identity) {
       const response = await post(namespace, identity, "acknowledge", { identity });
       requireOk(response, "Evaluation commit acknowledgement");

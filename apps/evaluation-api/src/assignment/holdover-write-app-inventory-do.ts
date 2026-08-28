@@ -5,8 +5,6 @@ import {
   parseDeletionBody,
   parseMarkD1Body,
 } from "./holdover-write-app-deletion-input";
-import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
-import { handleHoldoverWriteAppInventoryFetch } from "./holdover-write-app-inventory-fetch";
 import {
   checkpointAppDeletionCancelStep,
   checkpointAppDeletionFinalizeStep,
@@ -17,11 +15,17 @@ import {
   readAppDeletionSaga,
 } from "./holdover-write-app-deletion-saga";
 import type { HoldoverWriteAppDeletionSaga } from "./holdover-write-app-deletion-saga-storage";
-import type { HoldoverWriteOutboxNamespace } from "./holdover-write-outbox";
+import {
+  completeHoldoverWriteAppIdentityReset,
+  prepareHoldoverWriteAppIdentityReset,
+} from "./holdover-write-app-identity-reset";
+import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
 import {
   purgeAppDeletionEntityOutbox,
   resumeAppDeletionEntityAlarms,
 } from "./holdover-write-app-inventory-entity-port";
+import { handleHoldoverWriteAppInventoryFetch } from "./holdover-write-app-inventory-fetch";
+import type { HoldoverWriteOutboxNamespace } from "./holdover-write-outbox";
 
 export interface HoldoverWriteAppInventoryEnv {
   ASSIGNMENTS_KV: AssignmentKv;
@@ -44,6 +48,9 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
     const url = new URL(request.url);
     if (request.method === "POST" && url.pathname === "/cancel-deletion") {
       return this.cancelDeletion(request);
+    }
+    if (request.method === "POST" && url.pathname === "/complete-identity-reset") {
+      return this.completeIdentityReset(request);
     }
     if (request.method === "POST" && url.pathname === "/finalize-deletion") {
       return this.finalizeDeletion(request);
@@ -92,6 +99,7 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
   private async beginDeletion(request: Request): Promise<Response> {
     const parsed = await parseDeletionBody(request);
     if (!parsed.ok) return parsed.response;
+    await prepareHoldoverWriteAppIdentityReset(this.ctx.storage, parsed.generationId);
     await this.ctx.storage.setAlarm(Date.now() + SAGA_RETRY_DELAY_MS);
     try {
       const result = await prepareAppDeletionSaga(
@@ -139,6 +147,15 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
         { status: 400 },
       );
     }
+  }
+
+  private async completeIdentityReset(request: Request): Promise<Response> {
+    return completeHoldoverWriteAppIdentityReset(
+      this.ctx.storage,
+      request,
+      this.ctx.id.name,
+      (appId, resetId) => this.advanceCancel(appId, resetId),
+    );
   }
 
   private async markD1Deleted(request: Request): Promise<Response> {

@@ -9,6 +9,7 @@ export interface EntityPrivacyStoreResult {
   records?: readonly {
     targetingKeyHash: string;
     assignments: Record<string, { runId: string; variant: string }>;
+    assignmentWriterAssignments: Record<string, { runId: string; variant: string }>;
   }[];
   deletedKeyCount?: number;
   deletedWriterCount?: number;
@@ -191,7 +192,10 @@ function assertAssignmentPrivacyProof(
     if (
       !Array.isArray(body.records) ||
       !Array.isArray(body.proofs) ||
-      body.proofs.length !== body.targetingKeyHashes.length
+      body.proofs.length !== body.targetingKeyHashes.length ||
+      body.records.some(
+        (record) => !isRecord(record.assignments) || !isRecord(record.assignmentWriterAssignments),
+      )
     ) {
       throw new EntityPrivacyConsumerError(
         "control-plane-api: entity_assignment_privacy_export returned incomplete store proof",
@@ -211,6 +215,10 @@ function assertAssignmentPrivacyProof(
       "control-plane-api: entity_assignment_privacy_delete returned incomplete store proof",
     );
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function requiredStoreProofs(operationId: string): readonly string[] {

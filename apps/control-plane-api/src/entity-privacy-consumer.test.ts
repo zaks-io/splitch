@@ -22,6 +22,9 @@ describe("createEntityPrivacyConsumer export", () => {
       {
         targetingKeyHash: HASH,
         assignments: { exp_checkout: { runId: "run_1", variant: "control" } },
+        assignmentWriterAssignments: {
+          exp_checkout: { runId: "run_1", variant: "control" },
+        },
         holdoverWrites: [{ environmentId: "env_prod", experimentId: "exp_checkout" }],
       },
     ];

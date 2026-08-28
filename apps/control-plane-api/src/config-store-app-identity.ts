@@ -74,7 +74,7 @@ export async function assertConfigStoreAppIdentityTrafficAllowed(
   assertAppIdentityTrafficAllowed(record.lifecycle);
 }
 
-function configStoreAppIdentityStore(ctx: DurableObjectState, env: ControlPlaneApiEnv) {
+export function configStoreAppIdentityStore(ctx: DurableObjectState, env: ControlPlaneApiEnv) {
   return makeKvAppIdentityStore({
     kv: {
       get: async (key) => (await ctx.storage.get<string>(key)) ?? null,

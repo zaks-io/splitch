@@ -1,21 +1,22 @@
-import type { Env } from "./types";
-import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
 import {
   completeAppIdentityDeliveryReset,
+  deliverAppEvaluationUsage,
   registerAppEntity,
   registerAppEvaluation,
   resetAppIdentityDelivery,
 } from "./app-identity-event-inventory";
 import {
   atOrBefore,
-  evaluationEntryGroups,
-  evaluationEntryKey,
   type EntityEvaluationInventoryEntry,
   type EntityMetricInventoryEntry,
+  evaluationEntryGroups,
+  evaluationEntryKey,
   parseDeleteBefore,
   parseEntry,
   parseEvaluationEntry,
 } from "./entity-metric-privacy";
+import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
+import type { Env } from "./types";
 
 const SUPPRESSION_KEY = "privacy:suppression";
 const EVENT_PREFIX = "event:";
@@ -26,12 +27,17 @@ interface SuppressionState {
 }
 
 export class EntityMetricPrivacyDurableObject {
+  private section = Promise.resolve();
   constructor(
     private readonly ctx: DurableObjectState,
     private readonly env: Env,
   ) {}
 
   async fetch(request: Request): Promise<Response> {
+    return this.serialized(() => this.handleFetch(request));
+  }
+
+  private async handleFetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
     if (request.method === "GET") {
       return path === "/export" ? this.exportRecords() : new Response("not found", { status: 404 });
@@ -49,6 +55,7 @@ export class EntityMetricPrivacyDurableObject {
       "/delete": () => this.deleteRecords(),
       "/register-app-entity": () => this.registerAppEntity(request),
       "/register-app-evaluation": () => this.registerAppEvaluation(request),
+      "/deliver-app-evaluation": () => this.deliverAppEvaluation(request),
       "/reset-app": () => this.resetApp(request),
       "/complete-reset": () => this.completeReset(request),
     };
@@ -61,6 +68,10 @@ export class EntityMetricPrivacyDurableObject {
 
   private async registerAppEvaluation(request: Request): Promise<Response> {
     return registerAppEvaluation(this.ctx.storage, request);
+  }
+
+  private async deliverAppEvaluation(request: Request): Promise<Response> {
+    return deliverAppEvaluationUsage(this.ctx.storage, this.env, request);
   }
 
   private async resetApp(request: Request): Promise<Response> {
@@ -249,6 +260,15 @@ export class EntityMetricPrivacyDurableObject {
     const outbox = evaluationCommitOutbox(this.env.EVALUATION_COMMIT_OUTBOX);
     if (!outbox) throw new Error("EVALUATION_COMMIT_OUTBOX binding is unavailable");
     return outbox;
+  }
+
+  private serialized<T>(run: () => Promise<T>): Promise<T> {
+    const result = this.section.then(run, run);
+    this.section = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 }
 

@@ -6,7 +6,7 @@ import {
   type ConfigStoreWriter,
   makeConfigStore,
 } from "../../control-plane-api/src/config-store.js";
-import type { ConfigStoreAccess } from "../../control-plane-api/src/config-store-do.js";
+import type { ConfigStoreAccess } from "../../control-plane-api/src/config-store-access.js";
 import type { FixtureSigner } from "../../control-plane-api/src/fixture-signer.js";
 import {
   appToken,

@@ -1,8 +1,8 @@
 import { appScope, createRepository } from "@splitch/db";
 import { APP_IDENTITY_RESET_SUBJECT_REF, type AppIdentityResetPurgers } from "@splitch/privacy";
+import { revokeEnvironmentCredentialsForAppDelete } from "./app-environment-credentials";
 import { durableCredentialCacheWriterAccess } from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
-import { revokeEnvironmentCredentialsForAppDelete } from "./app-environment-credentials";
 
 export function productionAppIdentityResetPurgers(
   env: ControlPlaneApiEnv,
@@ -71,7 +71,7 @@ export function productionAppIdentityResetPurgers(
     privacy_subject_refs: scoped(async (appId) => {
       const redactedAt = new Date().toISOString();
       const result = await env.DB.prepare(
-        "UPDATE privacy_requests SET subject_ref = ?, subject_ref_redacted_at = ? WHERE app_id = ? AND subject_type = 'entity' AND subject_ref != ?",
+        "UPDATE privacy_requests SET subject_ref = ?, subject_ref_redacted_at = ?, result_json = NULL WHERE app_id = ? AND subject_type = 'entity' AND (subject_ref != ? OR result_json IS NOT NULL)",
       )
         .bind(APP_IDENTITY_RESET_SUBJECT_REF, redactedAt, appId, APP_IDENTITY_RESET_SUBJECT_REF)
         .run();

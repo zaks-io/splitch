@@ -1,7 +1,7 @@
 import type { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it } from "vitest";
-import { DurableHoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
 import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
+import { DurableHoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
 import { miniflareWithInventoryAndOutbox } from "./holdover-write-app-inventory-miniflare-fixture";
 import {
   DurableHoldoverWriteCoordinator,
@@ -135,6 +135,34 @@ describe("HoldoverWriteAppInventoryDurableObject via Miniflare", () => {
       sagaPhase: null,
     });
     expect(await kv.get(appHoldoverWriteSuppressKey(PUT.appId))).toBeNull();
+  });
+
+  it("recovers identity reset completion after cancellation committed before its marker", async () => {
+    mf = await miniflareWithInventoryAndOutbox({ registerFailsRemaining: 0 });
+    const inventoryNs = (await mf.getDurableObjectNamespace(
+      "HOLDOVER_WRITE_APP_INVENTORY",
+    )) as unknown as HoldoverWriteAppInventoryNamespace;
+    const inventory = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
+
+    await inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000);
+    await expect(inventory.cancelDeletion(PUT.appId, GENERATION_ID)).resolves.toMatchObject({
+      cancelled: true,
+      done: true,
+      sagaPhase: null,
+    });
+
+    const restartedClient = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
+    await expect(
+      restartedClient.completeIdentityReset(PUT.appId, GENERATION_ID),
+    ).resolves.toMatchObject({ cancelled: true, done: true, sagaPhase: null });
+    await expect(
+      restartedClient.completeIdentityReset(PUT.appId, GENERATION_ID),
+    ).resolves.toMatchObject({ cancelled: true, done: true, sagaPhase: null });
+    expect(await restartedClient.status(PUT.appId)).toMatchObject({
+      suppressed: false,
+      sagaPhase: null,
+      entities: [],
+    });
   });
 });
 

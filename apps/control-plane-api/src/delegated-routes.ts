@@ -15,10 +15,10 @@ import {
 } from "./analysis-results-request";
 import { requireAppMember } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
+import type { ConfigStoreAccess } from "./config-store-access";
 import { experimentNotFound, runNotFound } from "./experiment-errors";
 import { environmentExists } from "./experiment-handler-shared";
 import { controlPlaneRoute } from "./routes";
-import type { ConfigStoreAccess } from "./config-store-do";
 
 /**
  * The routes `api.splitch.dev` answers for but does not execute (ADR-0046).

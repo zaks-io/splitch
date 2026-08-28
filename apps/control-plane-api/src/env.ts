@@ -1,5 +1,5 @@
 import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
-import type { ConfigStoreDurableObjectNamespace } from "./config-store-do";
+import type { ConfigStoreDurableObjectNamespace } from "./config-store-access";
 
 interface AnalysisControlPlaneBinding extends Fetcher {
   purgeAppIdentityAnalytics(appId: string): Promise<string>;
@@ -15,6 +15,7 @@ interface EventIngestControlPlaneBinding extends Fetcher {
   purgeAppIdentityDelivery(appId: string, resetId: string): Promise<string>;
   completeAppIdentityReset(appId: string, resetId: string): Promise<void>;
 }
+
 import type { CredentialCacheBackfillDurableObjectNamespace } from "./credential-cache-backfill-do";
 import type { CredentialCacheWriterDurableObjectNamespace } from "./credential-cache-writer-do";
 import type { PanelDelegationReplayDurableObjectNamespace } from "./panel-identity-replay";

@@ -5,6 +5,7 @@ import {
   EvaluateAllResponseSchema,
 } from "@splitch/contracts";
 import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
+import { appIdentityTrafficError } from "./app-identity-traffic";
 import { memoizeGetAll } from "./assignment/memoize-get-all";
 import { evaluateAllFlag } from "./evaluate/accessor-paths";
 import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
@@ -43,13 +44,16 @@ export function makeEvaluateAllHandler(deps: EvaluateAllRouteDeps) {
     request,
   }: HandlerArgs<unknown>): Promise<Response> => {
     const parsed = evaluateAllInput(input);
-    const scope = credentialScope(principal);
-    if (!scope.ok) return renderError(scope.error, { requestId });
+    const checked = await checkedEvaluationScope(
+      principal,
+      parsed.body.appId,
+      deps.exposureTicket.saltStore,
+      requestId,
+    );
+    if (!checked.ok) return checked.response;
+    const scope = checked.scope;
 
-    const assertionError = appAssertionError(parsed.body.appId, scope.value.appId);
-    if (assertionError !== null) return renderError(assertionError, { requestId });
-
-    const payload = await resolveAll(parsed.body, scope.value, deps);
+    const payload = await resolveAll(parsed.body, scope, deps);
     if (!payload.ok) return renderError(payload.error, { requestId });
 
     const body = EvaluateAllResponseSchema.parse({ evaluations: payload.evaluations });
@@ -57,8 +61,8 @@ export function makeEvaluateAllHandler(deps: EvaluateAllRouteDeps) {
       etagMaterial(
         body,
         {
-          appId: scope.value.appId,
-          environmentId: scope.value.environmentId,
+          appId: scope.appId,
+          environmentId: scope.environmentId,
           targetingKey: parsed.body.targetingKey,
           idType: parsed.body.idType,
           attributes: parsed.body.attributes,
@@ -76,7 +80,7 @@ export function makeEvaluateAllHandler(deps: EvaluateAllRouteDeps) {
       });
     }
 
-    const billed = await writeBatchUsage(body, scope.value, request, deps);
+    const billed = await writeBatchUsage(body, scope, request, deps);
     if (!billed.ok) return renderError(billed.error, { requestId });
 
     return Response.json(body, {
@@ -86,6 +90,24 @@ export function makeEvaluateAllHandler(deps: EvaluateAllRouteDeps) {
       },
     });
   };
+}
+
+async function checkedEvaluationScope(
+  principal: Principal,
+  assertedAppId: string | undefined,
+  saltStore: MintExposureTicketDeps["saltStore"],
+  requestId: string,
+): Promise<{ ok: true; scope: CredentialScope } | { ok: false; response: Response }> {
+  const scope = credentialScope(principal);
+  if (!scope.ok) return { ok: false, response: renderError(scope.error, { requestId }) };
+  const assertionError = appAssertionError(assertedAppId, scope.value.appId);
+  if (assertionError !== null) {
+    return { ok: false, response: renderError(assertionError, { requestId }) };
+  }
+  const identityError = await appIdentityTrafficError(saltStore, scope.value.appId);
+  return identityError === null
+    ? { ok: true, scope: scope.value }
+    : { ok: false, response: renderError(identityError, { requestId }) };
 }
 
 async function resolveAll(

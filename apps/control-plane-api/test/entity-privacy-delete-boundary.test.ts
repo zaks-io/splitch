@@ -3,6 +3,7 @@ import type { RateLimiter } from "@splitch/worker-runtime";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import type { EntityPrivacyLedgerInput } from "../src/config-store-app-identity-ledger";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { appAdminScope } from "../src/scope-binding";
@@ -46,6 +47,7 @@ describe("entity privacy delete route availability", () => {
 
   it("exports and deletes every retained-epoch hash without echoing the Targeting Key", async () => {
     const hashes = ["local-v1:abc", "app-v1:def"] as const;
+    const repo = createRepository(bindings.d1);
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
@@ -57,7 +59,8 @@ describe("entity privacy delete route availability", () => {
         now: () => NOW_MS,
       }),
       rateLimiter: allowLimiter,
-      repo: createRepository(bindings.d1),
+      repo,
+      configStore: identityCoordinator(repo),
       nowIso: () => NOW_ISO,
       entityPrivacy: {
         async exportEntity() {
@@ -65,6 +68,9 @@ describe("entity privacy delete route availability", () => {
             {
               targetingKeyHash: hashes[0],
               assignments: { "exp-old": { runId: "run-old", variant: "control" } },
+              assignmentWriterAssignments: {
+                "exp-old": { runId: "run-old", variant: "control" },
+              },
               holdoverWrites: [{ environmentId: "env-prod", experimentId: "exp-old" }],
             },
           ];
@@ -109,6 +115,7 @@ describe("entity privacy delete route availability", () => {
             entityFamilyHash: hashes[0],
             deletedKeyCount: hashes.length,
             deletedWriterCount: hashes.length,
+            deletedOutboxCount: hashes.length,
             proofs: hashes.map((hash) => `${hash}:assignment-do-tombstone-v1`),
           };
         },
@@ -182,3 +189,26 @@ describe("entity privacy delete route availability", () => {
     expect(forbidden.status).toBe(403);
   });
 });
+
+function identityCoordinator(repo: ReturnType<typeof createRepository>) {
+  return {
+    writerFor: () => {
+      throw new Error("not used");
+    },
+    liveUpdatesFor: () => {
+      throw new Error("not used");
+    },
+    beginEntityPrivacy: async () => "app-v1",
+    recordEntityDeletionSuppression: async () => undefined,
+    recordEntityPrivacyCompletion: async (
+      _appId: string,
+      _version: string,
+      input: EntityPrivacyLedgerInput,
+    ) =>
+      repo.privacy.createPrivacyRequest({
+        ...input,
+        subjectType: "entity",
+        status: "completed",
+      }),
+  };
+}

@@ -12,7 +12,7 @@ import { makeOtherApprovalApplication } from "./approval-application";
 import { createApproval, replayApprovalIfExists } from "./approval-service";
 import { environmentPolicyContexts } from "./approval-target";
 import { experimentTargetProjection } from "./approval-target-experiment";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import { randomHex } from "./credential-cache";
 import {
   configStoreUnavailable,

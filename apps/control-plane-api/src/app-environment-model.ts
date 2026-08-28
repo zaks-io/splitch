@@ -10,7 +10,7 @@ import { type appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import { collectEnvironmentDeleteBlockers } from "./app-delete-tree";
 import { clientKeyResponse, provisionClientKey } from "./client-key-provisioning";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import { type CredentialCacheWriterAccess, randomHex } from "./credential-cache";
 import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";

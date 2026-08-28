@@ -18,12 +18,14 @@ import { unavailableAnalysisResults } from "./attention-analysis-reader";
 import { makeAttentionRollupHandler } from "./attention-rollup";
 import type { CloudflareHandlerDeps } from "./cloudflare-handlers";
 import { mountCloudflareRoutes } from "./cloudflare-route-mounting";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import type { ConvexHandlerDeps } from "./convex-handlers";
 import { mountConvexRoutes } from "./convex-route-mounting";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
+import type { EntityPrivacyConsumer } from "./entity-privacy-consumer";
+import { mountEntityPrivacyRoutes } from "./entity-privacy-handlers";
 import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import { registerEventDefinitionRoutes } from "./event-definition-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
@@ -38,8 +40,6 @@ import type { MemberProfileResolver } from "./org-handlers";
 import { controlPlaneRoute } from "./routes";
 import type { SentryHandlerDeps } from "./sentry-handlers";
 import { mountSentryRoutes } from "./sentry-route-mounting";
-import type { EntityPrivacyConsumer } from "./entity-privacy-consumer";
-import { mountEntityPrivacyRoutes } from "./entity-privacy-handlers";
 import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
 
 /**
@@ -279,6 +279,7 @@ export function createApp(deps: AppDeps): Hono {
   mountEntityPrivacyRoutes(app, registrar, {
     repo: deps.repo,
     entityPrivacy: deps.entityPrivacy,
+    configStore: deps.configStore,
     nowIso: deps.nowIso,
   });
   mountUnavailableControlPlaneRoutes(app, registrar, deps.repo);

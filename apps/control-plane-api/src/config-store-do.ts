@@ -2,102 +2,33 @@ import { DurableObject } from "cloudflare:workers";
 import {
   authorizesLiveUpdateConnection,
   type DeltaNudge,
-  type ExperimentConfigKV,
-  type FlagConfigKV,
   type LiveUpdateAuthorizationContext,
-  type LiveUpdateConnectionContext,
   parseLiveUpdateConnectionContext,
-  type RunConfigKV,
 } from "@splitch/contracts";
 import { appScope, createRepository, envScope } from "@splitch/db";
+import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
+import type { EvaluationFlagConfigRead, EvaluationFlagConfigSnapshot } from "./config-store-access";
 import {
   assertConfigStoreAppIdentityTrafficAllowed,
   putConfigStoreAppIdentityIfAbsent,
   readConfigStoreAppIdentity,
   resetConfigStoreAppIdentity,
 } from "./config-store-app-identity";
-import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
+import {
+  beginConfigStoreEntityPrivacy,
+  type EntityPrivacyLedgerInput,
+  type EntityPrivacyLedgerRecord,
+  recordConfigStoreEntityDeletionSuppression,
+  recordConfigStoreEntityPrivacyCompletion,
+} from "./config-store-app-identity-ledger";
+import {
+  isPanelSessionContext,
+  LIVE_UPDATE_CONTEXT_HEADER,
+  parseConfigStoreConnectionContext,
+  parsePanelSessionContext,
+} from "./config-store-live-update-context";
 import { buildSnapshotFromD1 } from "./config-store-shared";
 import type { ControlPlaneApiEnv } from "./env";
-
-export interface ConfigStoreDurableObjectNamespace {
-  getByName(name: string): ConfigStoreDurableObjectStub;
-}
-
-interface ConfigStoreDurableObjectStub extends ConfigStoreWriter {
-  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
-  readFlagConfigForEvaluation(
-    input: EvaluationFlagConfigRead,
-  ): Promise<EvaluationFlagConfigSnapshot | null>;
-  setLiveUpdatesAvailable(available: boolean): Promise<void>;
-  readAppIdentity(appId: string): Promise<string | null>;
-  putAppIdentityIfAbsent(appId: string, value: string): Promise<string>;
-  resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string>;
-  assertAppIdentityTrafficAllowed(appId: string): Promise<void>;
-}
-
-export interface EvaluationFlagConfigRead {
-  appId: string;
-  environmentId: string;
-  flagKey: string;
-}
-
-export interface EvaluationFlagConfigSnapshot {
-  experiment: ExperimentConfigKV | null;
-  flag: FlagConfigKV;
-  run: RunConfigKV | null;
-  version: number;
-}
-
-interface ConfigStoreLiveUpdates {
-  connect(request: Request): Promise<Response>;
-}
-
-export interface ConfigStoreAccess {
-  writerFor(appId: string, environmentId: string): ConfigStoreWriter;
-  liveUpdatesFor(appId: string, environmentId: string): ConfigStoreLiveUpdates;
-  assertAppIdentityTrafficAllowed?(appId: string): Promise<void>;
-}
-
-export interface AppIdentityResetAccess {
-  resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string>;
-}
-
-export function durableAppIdentityResetAccess(
-  namespace: ConfigStoreDurableObjectNamespace,
-): AppIdentityResetAccess {
-  return {
-    resetCompromisedAppIdentity(appId, resetId) {
-      return namespace
-        .getByName(`app-identity:${appId}`)
-        .resetCompromisedAppIdentity(appId, resetId);
-    },
-  };
-}
-
-function configWriterName(appId: string, environmentId: string): string {
-  return `${appId}:${environmentId}`;
-}
-
-export function durableConfigStoreAccess(
-  namespace: ConfigStoreDurableObjectNamespace,
-): ConfigStoreAccess & Required<Pick<ConfigStoreAccess, "assertAppIdentityTrafficAllowed">> {
-  return {
-    writerFor(appId, environmentId) {
-      return namespace.getByName(configWriterName(appId, environmentId));
-    },
-    liveUpdatesFor(appId, environmentId) {
-      return {
-        connect(request) {
-          return namespace.getByName(configWriterName(appId, environmentId)).fetch(request);
-        },
-      };
-    },
-    assertAppIdentityTrafficAllowed(appId) {
-      return namespace.getByName(`app-identity:${appId}`).assertAppIdentityTrafficAllowed(appId);
-    },
-  };
-}
 
 export class ConfigStoreDurableObject
   extends DurableObject<ControlPlaneApiEnv>
@@ -196,7 +127,7 @@ export class ConfigStoreDurableObject
     }
 
     const context = parseLiveUpdateConnectionContext(
-      parseConnectionContextHeader(request.headers.get(LIVE_UPDATE_CONTEXT_HEADER)),
+      parseConfigStoreConnectionContext(request.headers.get(LIVE_UPDATE_CONTEXT_HEADER)),
     );
     if (!context || !(await this.isAuthorized(context))) {
       return new Response("live update authorization required", { status: 403 });
@@ -257,6 +188,38 @@ export class ConfigStoreDurableObject
     return assertConfigStoreAppIdentityTrafficAllowed(this.ctx, this.env, appId);
   }
 
+  async beginEntityPrivacy(appId: string): Promise<string> {
+    return beginConfigStoreEntityPrivacy(this.ctx, this.env, appId);
+  }
+
+  async recordEntityDeletionSuppression(
+    appId: string,
+    expectedVersion: string,
+    input: { idType: string; targetingKeyHashes: readonly string[]; deleteBeforeTs: string },
+  ): Promise<void> {
+    return recordConfigStoreEntityDeletionSuppression(
+      this.ctx,
+      this.env,
+      appId,
+      expectedVersion,
+      input,
+    );
+  }
+
+  async recordEntityPrivacyCompletion(
+    appId: string,
+    expectedVersion: string,
+    input: EntityPrivacyLedgerInput,
+  ): Promise<EntityPrivacyLedgerRecord> {
+    return recordConfigStoreEntityPrivacyCompletion(
+      this.ctx,
+      this.env,
+      appId,
+      expectedVersion,
+      input,
+    );
+  }
+
   private store(): ConfigStoreWriter {
     return makeConfigStore({
       repo: createRepository(this.env.DB),
@@ -313,30 +276,9 @@ export class ConfigStoreDurableObject
   }
 }
 
-export const LIVE_UPDATE_CONTEXT_HEADER = "x-splitch-live-update-context";
 const AUTHORIZATION_POLICY_CLOSE_CODE = 1008;
 
 const PANEL_SESSION_KEY_PREFIX = "session:";
 const SESSION_REVALIDATION_INTERVAL_MS = 60_000;
 const LIVE_UPDATES_AVAILABLE_KEY = "liveUpdatesAvailable";
 const SERVICE_RESTART_CLOSE_CODE = 1012;
-
-function parseConnectionContextHeader(value: string | null): unknown {
-  if (!value) return null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}
-
-function parsePanelSessionContext(raw: unknown): LiveUpdateConnectionContext | null {
-  const context = parseLiveUpdateConnectionContext(raw);
-  return isPanelSessionContext(context) ? context : null;
-}
-
-function isPanelSessionContext(
-  context: LiveUpdateAuthorizationContext | null,
-): context is LiveUpdateConnectionContext {
-  return context !== null && "sessionTokenHash" in context;
-}

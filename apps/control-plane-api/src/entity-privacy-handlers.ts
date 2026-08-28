@@ -1,8 +1,8 @@
 import type { Repository } from "@splitch/db";
-import { appScope } from "@splitch/db";
 import { type HandlerArgs, type Registrar, renderError } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { requireAppWrite } from "./app-authz";
+import type { ConfigStoreAccess } from "./config-store-access";
 import type { EntityPrivacyConsumer } from "./entity-privacy-consumer";
 import { EntityPrivacyConsumerError } from "./entity-privacy-service-client";
 import { objectBody, pathParam } from "./handler-input";
@@ -15,6 +15,7 @@ const RESPONSE_MS = 30 * 24 * 60 * 60 * 1000;
 function makeEntityPrivacyHandlers(deps: {
   repo: Repository;
   entityPrivacy?: EntityPrivacyConsumer;
+  configStore?: ConfigStoreAccess;
   nowIso?: () => string;
 }) {
   return {
@@ -29,6 +30,7 @@ export function mountEntityPrivacyRoutes(
   deps: {
     repo: Repository;
     entityPrivacy?: EntityPrivacyConsumer;
+    configStore?: ConfigStoreAccess;
     nowIso?: () => string;
   },
 ): void {
@@ -42,6 +44,7 @@ function entityPrivacyHandler(
   deps: {
     repo: Repository;
     entityPrivacy?: EntityPrivacyConsumer;
+    configStore?: ConfigStoreAccess;
     nowIso?: () => string;
   },
   kind: "export" | "delete",
@@ -56,7 +59,7 @@ function entityPrivacyHandler(
 }
 
 async function completeEntityPrivacy(
-  deps: { repo: Repository; nowIso?: () => string },
+  deps: { repo: Repository; configStore?: ConfigStoreAccess; nowIso?: () => string },
   consumer: EntityPrivacyConsumer,
   kind: "export" | "delete",
   args: HandlerArgs<unknown>,
@@ -73,6 +76,8 @@ async function completeEntityPrivacy(
     );
   }
   try {
+    const coordinator = requireEntityPrivacyCoordinator(deps.configStore);
+    const identityVersion = await coordinator.beginEntityPrivacy(appId);
     const storeInput = {
       appId,
       idType,
@@ -88,11 +93,25 @@ async function completeEntityPrivacy(
       const identity = await consumer.exportEntity(storeInput);
       const deleteBeforeTs = deps.nowIso?.() ?? new Date().toISOString();
       await consumer.suppressEntity(storeInput, identity, deleteBeforeTs);
-      await insertEntityDeletions(deps, appId, idType, identity.targetingKeyHashes, deleteBeforeTs);
+      await coordinator.recordEntityDeletionSuppression(appId, identityVersion, {
+        idType,
+        targetingKeyHashes: identity.targetingKeyHashes,
+        deleteBeforeTs,
+      });
       storeResult = await consumer.deleteEntity(storeInput, identity, deleteBeforeTs);
       assertSameHashes(identity.targetingKeyHashes, storeResult.targetingKeyHashes);
     }
-    return Response.json(await recordPrivacyCompletion(deps, app, kind, args, storeResult));
+    return Response.json(
+      await recordPrivacyCompletion(
+        deps,
+        app,
+        kind,
+        args,
+        storeResult,
+        identityVersion,
+        coordinator,
+      ),
+    );
   } catch (cause) {
     if (cause instanceof EntityPrivacyConsumerError) {
       return renderError(
@@ -121,18 +140,23 @@ async function recordPrivacyCompletion(
     targetingKeyHashes: readonly string[];
     exportArtifact?: unknown;
   },
+  identityVersion: string,
+  coordinator: Required<
+    Pick<
+      ConfigStoreAccess,
+      "beginEntityPrivacy" | "recordEntityDeletionSuppression" | "recordEntityPrivacyCompletion"
+    >
+  >,
 ) {
   const receivedAt = deps.nowIso?.() ?? new Date().toISOString();
   const receivedMs = Date.parse(receivedAt);
-  const request = await deps.repo.privacy.createPrivacyRequest({
+  const request = await coordinator.recordEntityPrivacyCompletion(app.id, identityVersion, {
     requestId: `prv_${crypto.randomUUID()}`,
     orgId: app.organizationId,
     appId: app.id,
     requestType: kind === "export" ? "export" : "delete",
-    subjectType: "entity",
     subjectRef: JSON.stringify(storeResult.targetingKeyHashes),
     requestedBy: args.principal.id,
-    status: "completed",
     receivedAt,
     ackDueAt: new Date(receivedMs + ACK_MS).toISOString(),
     responseDueAt: new Date(receivedMs + RESPONSE_MS).toISOString(),
@@ -158,6 +182,31 @@ async function recordPrivacyCompletion(
     },
     artifact: kind === "export" ? requireExportArtifact(storeResult.exportArtifact) : null,
   };
+}
+
+function requireEntityPrivacyCoordinator(
+  configStore: ConfigStoreAccess | undefined,
+): Required<
+  Pick<
+    ConfigStoreAccess,
+    "beginEntityPrivacy" | "recordEntityDeletionSuppression" | "recordEntityPrivacyCompletion"
+  >
+> {
+  if (
+    !configStore?.beginEntityPrivacy ||
+    !configStore.recordEntityDeletionSuppression ||
+    !configStore.recordEntityPrivacyCompletion
+  ) {
+    throw new EntityPrivacyConsumerError(
+      "control-plane-api: Entity privacy identity coordinator is unavailable",
+    );
+  }
+  return configStore as Required<
+    Pick<
+      ConfigStoreAccess,
+      "beginEntityPrivacy" | "recordEntityDeletionSuppression" | "recordEntityPrivacyCompletion"
+    >
+  >;
 }
 
 function requireExportArtifact(value: unknown): unknown {
@@ -210,24 +259,6 @@ function privacyStatusJob(requestId: string, requestType: string, status: string
 function parseArtifact(value: string): unknown {
   const parsed: unknown = JSON.parse(value);
   return requireExportArtifact(parsed);
-}
-
-async function insertEntityDeletions(
-  deps: { repo: Repository },
-  appId: string,
-  idType: string,
-  targetingKeyHashes: readonly string[],
-  deleteBeforeTs: string,
-): Promise<void> {
-  for (const targetingKeyHash of targetingKeyHashes) {
-    await deps.repo.privacy.entityDeletions.insert(appScope(appId), {
-      appId,
-      idType,
-      targetingKeyHash,
-      deleteBeforeTs,
-      requestedAt: deleteBeforeTs,
-    });
-  }
 }
 
 function unavailable(requestId: string): Response {

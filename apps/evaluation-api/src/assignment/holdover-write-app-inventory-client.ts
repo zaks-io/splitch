@@ -1,3 +1,4 @@
+import type { HoldoverWriteAppDeletionSagaPhase } from "./holdover-write-app-deletion-saga";
 import {
   type HoldoverWriteAppDeletionBeginResult,
   type HoldoverWriteAppEntityRef,
@@ -6,7 +7,6 @@ import {
   type HoldoverWriteAppInventoryStatus,
   holdoverWriteAppInventoryName,
 } from "./holdover-write-app-inventory";
-import type { HoldoverWriteAppDeletionSagaPhase } from "./holdover-write-app-deletion-saga";
 import type { HoldoverWriteInventoryRegisterPort } from "./holdover-write-outbox-ensure";
 
 class HoldoverWriteAppInventoryError extends Error {
@@ -94,6 +94,27 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
     const body = await this.postJson(appId, "/cancel-deletion", { appId, generationId });
     if (!isRecord(body) || typeof body.cancelled !== "boolean" || !Array.isArray(body.entities)) {
       throw new HoldoverWriteAppInventoryError("cancel-deletion returned an invalid payload");
+    }
+    return {
+      cancelled: body.cancelled,
+      done: body.done === true,
+      entities: body.entities.map(parseEntityRef),
+      sagaPhase: parseSagaPhase(body.sagaPhase),
+    };
+  }
+
+  async completeIdentityReset(
+    appId: string,
+    generationId: string,
+  ): Promise<HoldoverWriteAppInventoryCancelResult> {
+    const body = await this.postJson(appId, "/complete-identity-reset", {
+      appId,
+      generationId,
+    });
+    if (!isRecord(body) || typeof body.cancelled !== "boolean" || !Array.isArray(body.entities)) {
+      throw new HoldoverWriteAppInventoryError(
+        "complete-identity-reset returned an invalid payload",
+      );
     }
     return {
       cancelled: body.cancelled,

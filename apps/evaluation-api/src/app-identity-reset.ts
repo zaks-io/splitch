@@ -1,9 +1,9 @@
-import type { HoldoverWriteAppInventoryStatus } from "./assignment/holdover-write-app-inventory";
-import { holdoverWriteOutboxName } from "./assignment/holdover-write-outbox-core";
 import { assignmentWriterName } from "./assignment/assignment-store";
+import type { HoldoverWriteAppInventoryStatus } from "./assignment/holdover-write-app-inventory";
 import { DurableHoldoverWriteAppInventoryClient } from "./assignment/holdover-write-app-inventory-client";
-import { exposureRedemptionClaimScopeName } from "./exposure-redemption-claim";
+import { holdoverWriteOutboxName } from "./assignment/holdover-write-outbox-core";
 import type { EvaluationApiEnv } from "./env";
+import { exposureRedemptionClaimScopeName } from "./exposure-redemption-claim";
 
 export async function purgeAppIdentityAssignments(
   env: EvaluationApiEnv,
@@ -73,7 +73,7 @@ export async function completeAppIdentityReset(
   );
   const status = await inventory.status(appId);
   assertResetCancellationReady(status, resetId);
-  const cancellation = await inventory.cancelDeletion(appId, resetId);
+  const cancellation = await inventory.completeIdentityReset(appId, resetId);
   if (!cancellation.cancelled || !cancellation.done) {
     throw new Error(
       `App identity reset Assignment cancellation is incomplete in phase ${cancellation.sagaPhase ?? "idle"} with ${String(cancellation.entities.length)} Entity checkpoint(s) pending`,

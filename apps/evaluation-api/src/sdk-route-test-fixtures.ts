@@ -11,11 +11,11 @@ import {
   type RunConfigKV,
   runConfigKey,
 } from "@splitch/contracts";
+import type { SaltStore } from "@splitch/privacy";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
 import { createApp, type EvaluationDoor } from "./app";
 import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import { makeDataPlaneAuthResolver, sha256Hex } from "./data-plane-auth";
-import { stubEntityAssignmentPrivacy } from "./sdk-route-entity-privacy-fixture";
 import {
   APP_ID,
   ENVIRONMENT_ID,
@@ -35,6 +35,7 @@ import { FakeKv } from "./provider/fake-kv";
 import { experimentConfigKV, flagConfigKV, runConfigKV } from "./provider/fixtures";
 import { KvProvider } from "./provider/kv-provider";
 import { stubHoldoverWriteOutboxCleanup } from "./sdk-route-binding-cleanup-fixture";
+import { stubEntityAssignmentPrivacy } from "./sdk-route-entity-privacy-fixture";
 
 export { APP_ID, ENVIRONMENT_ID, EXPERIMENT_ID, FLAG_KEY, sha256Hex };
 
@@ -69,6 +70,7 @@ interface SdkRouteHarnessOptions {
   readonly delegationBindings?: Parameters<typeof createApp>[0]["delegationBindings"];
   readonly rateLimiter?: RateLimiter;
   readonly clientKeyRateLimitRps?: number | null;
+  readonly saltStore?: SaltStore;
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -203,6 +205,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
   const exposureRedemptionClaims =
     options.exposureRedemptionClaims ?? new MemoryExposureRedemptionClaimStore();
   const logger = new RecordingLogger();
+  const saltStore = routeSaltStore(options);
   const app = createApp({
     logger,
     door: options.door ?? "public",
@@ -217,13 +220,13 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
       options.door === "binding" ? stubHoldoverWriteOutboxCleanup() : undefined,
     entityAssignmentPrivacy: options.door === "binding" ? stubEntityAssignmentPrivacy() : undefined,
     exposureAssembly: {
-      saltStore: new StaticSaltStore(),
+      saltStore,
       sourceId: "pop-route-test",
       newEventId: () => "evt-route-1",
       now: () => new Date("2026-07-03T00:00:00.000Z"),
     },
     exposureTicket: {
-      saltStore: new StaticSaltStore(),
+      saltStore,
       ticketKey: "splitch-test-exposure-ticket-key-32chars",
       previousTicketKey: options.previousTicketKey,
       now: options.ticketNow ?? (() => new Date("2026-07-03T00:00:00.000Z")),
@@ -244,6 +247,10 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     evaluationUsageSink,
     logger,
   };
+}
+
+function routeSaltStore(options: SdkRouteHarnessOptions): SaltStore {
+  return options.saltStore ?? new StaticSaltStore();
 }
 
 // biome-ignore lint/performance/noBarrelFile: compatibility export preserves existing test imports

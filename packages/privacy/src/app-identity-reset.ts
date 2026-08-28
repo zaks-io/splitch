@@ -26,12 +26,12 @@ export async function resetCompromisedAppIdentity(
   appId: string,
   resetId: string,
   purgers: AppIdentityResetPurgers,
-  beforeActivate?: () => Promise<void>,
+  afterActivate?: () => Promise<void>,
 ): Promise<AppIdentityRecord> {
   if (store.resetSerialization === "process-local") {
     throw new Error("privacy: compromised App identity reset requires a durable serialized owner");
   }
-  return store.runExclusive(appId, () => runReset(store, appId, resetId, purgers, beforeActivate));
+  return store.runExclusive(appId, () => runReset(store, appId, resetId, purgers, afterActivate));
 }
 
 async function runReset(
@@ -39,10 +39,13 @@ async function runReset(
   appId: string,
   resetId: string,
   purgers: AppIdentityResetPurgers,
-  beforeActivate?: () => Promise<void>,
+  afterActivate?: () => Promise<void>,
 ): Promise<AppIdentityRecord> {
   let current = await requireAppIdentityRecord(store, appId);
-  if (current.lifecycle.state === "active" && current.lifecycle.resetId === resetId) return current;
+  if (current.lifecycle.state === "active" && current.lifecycle.resetId === resetId) {
+    await afterActivate?.();
+    return current;
+  }
   if (current.lifecycle.state === "active") {
     current = { ...current, lifecycle: blockedAppIdentityLifecycle(resetId) };
     await store.save(appId, current);
@@ -57,8 +60,8 @@ async function runReset(
     lifecycle: { ...ACTIVE_APP_IDENTITY_LIFECYCLE, resetId },
     epochs: [{ version: nextVersion, role: "active", key: generateAppIdentityKey() }],
   };
-  await beforeActivate?.();
   await store.save(appId, replaced);
+  await afterActivate?.();
   return replaced;
 }
 

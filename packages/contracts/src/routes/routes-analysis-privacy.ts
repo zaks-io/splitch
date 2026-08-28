@@ -18,6 +18,10 @@ export const EntityAssignmentPrivacyExportSchema = z
       z.object({
         targetingKeyHash: z.string(),
         assignments: z.record(z.string(), z.object({ runId: z.string(), variant: z.string() })),
+        assignmentWriterAssignments: z.record(
+          z.string(),
+          z.object({ runId: z.string(), variant: z.string() }),
+        ),
         holdoverWrites: z.array(z.record(z.string(), z.unknown())),
         holdoverSuppression: z
           .object({ deleteBeforeTsMs: z.number().finite() })

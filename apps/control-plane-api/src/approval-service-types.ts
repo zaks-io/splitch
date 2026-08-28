@@ -1,7 +1,7 @@
 import type { ApprovalRequest, ErrorCode } from "@splitch/contracts";
 import type { ApprovalCommit, ApprovalTargetState, Repository } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 
 export interface ApprovalServiceDeps {
   repo: Repository;

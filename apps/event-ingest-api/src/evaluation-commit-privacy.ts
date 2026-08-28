@@ -1,23 +1,21 @@
-import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
 import {
   registerAppEvaluationCommit,
   registerEntityEvaluationCommit,
 } from "./entity-metric-privacy";
+import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
 import type { Env } from "./types";
 
 interface InventoryCommit {
   identity: string;
   outbox: EvaluationCommitOutbox;
-  commit: {
-    payload: { usage: { appId: string }; exposureRows: readonly Record<string, unknown>[] };
-  };
+  payload: { usage: { appId: string }; exposureRows: readonly Record<string, unknown>[] };
 }
 
 export async function inventoryEvaluationCommit(
   prepared: InventoryCommit,
   env: Env,
 ): Promise<boolean> {
-  const scopeAppId = prepared.commit.payload.usage.appId;
+  const scopeAppId = prepared.payload.usage.appId;
   if (typeof scopeAppId !== "string" || scopeAppId.length === 0) {
     throw new Error("Evaluation commit app_id is invalid");
   }
@@ -31,7 +29,7 @@ export async function inventoryEvaluationCommit(
     return true;
   }
   const suppressedEventIds = [];
-  for (const row of prepared.commit.payload.exposureRows) {
+  for (const row of prepared.payload.exposureRows) {
     const eventId = rowString(row, "event_id");
     const suppressed = await registerEntityEvaluationCommit(
       env.ENTITY_METRIC_PRIVACY,

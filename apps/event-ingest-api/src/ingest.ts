@@ -1,7 +1,7 @@
 import { timingSafeEqualString } from "@splitch/worker-runtime";
+import { deliverAppEvaluationUsage, isEntityEventSuppressed } from "./entity-metric-privacy";
 import { emptyError, renderError, serviceUnavailable } from "./errors";
 import { evaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
-import { isEntityEventSuppressed } from "./entity-metric-privacy";
 import { rejectIngestAdmission } from "./ingest-admission";
 import { loadRunScope } from "./kv-config";
 import { readJsonObject, stringField } from "./payload";
@@ -134,9 +134,6 @@ export async function handleEvaluationIngest(request: Request, env: Env): Promis
   );
   if (!event.ok) return renderError(event.error);
 
-  const delivery = tinybirdDelivery(env, "raw_evaluations");
-  if (!delivery.ok) return renderError(delivery.error);
-
   const row = toEvaluationUsageTinybirdRow(event.value);
   const denied = await rejectIngestAdmission(
     env.INGEST_ADMISSION_GATE,
@@ -151,7 +148,8 @@ export async function handleEvaluationIngest(request: Request, env: Env): Promis
   if (denied) return denied;
 
   try {
-    await appendRawEvent(row, delivery.value);
+    const deliveryError = await deliverStandaloneEvaluationUsage(row, scope.value.appId, env);
+    if (deliveryError) return deliveryError;
   } catch (error) {
     console.error("event-ingest-api Tinybird Evaluation append failed", {
       organizationId: event.value.organizationId,
@@ -163,6 +161,26 @@ export async function handleEvaluationIngest(request: Request, env: Env): Promis
   }
 
   return Response.json({ ok: true, eventId: event.value.eventId }, { status: 202 });
+}
+
+async function deliverStandaloneEvaluationUsage(
+  row: Record<string, unknown>,
+  appId: string,
+  env: Env,
+): Promise<Response | null> {
+  if (env.SPLITCH_PLATFORM_TARGET === "local" || env.SPLITCH_PLATFORM_TARGET === "pr-ci") {
+    const delivery = tinybirdDelivery(env, "raw_evaluations");
+    if (!delivery.ok) return renderError(delivery.error);
+    await appendRawEvent(row, delivery.value);
+    return null;
+  }
+  await deliverAppEvaluationUsage(
+    env.ENTITY_METRIC_PRIVACY,
+    appId,
+    row,
+    env.SPLITCH_PLATFORM_TARGET,
+  );
+  return null;
 }
 
 async function credentialScope(request: Request, env: Env): Promise<Outcome<CredentialScope>> {

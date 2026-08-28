@@ -1,12 +1,15 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import type { HandlerArgs, Principal } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
+import { appIdentityTrafficError } from "./app-identity-traffic";
+import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
 import { errorResponse } from "./evaluation-error-response";
 import { type EvaluationUsageScope, writeEvaluationUsage } from "./evaluation-usage";
 import type { EvaluationUsageSink } from "./evaluation-usage-sink";
 
 export function makeCachedEvaluationTelemetryHandler(deps: {
   evaluationUsageSink: EvaluationUsageSink;
+  exposureAssembly: ExposureAssemblyDeps;
   logger?: Pick<Console, "error">;
 }) {
   return async ({
@@ -17,6 +20,11 @@ export function makeCachedEvaluationTelemetryHandler(deps: {
   }: HandlerArgs<unknown>): Promise<Response> => {
     const scope = credentialScope(principal);
     if (!scope.ok) return renderError(scope.error, { requestId });
+    const identityError = await appIdentityTrafficError(
+      deps.exposureAssembly.saltStore,
+      scope.value.appId,
+    );
+    if (identityError !== null) return renderError(identityError, { requestId });
     const body = telemetryBody(input);
     const idempotencyKey = request.headers.get("idempotency-key");
     if (idempotencyKey === null || body.idempotencyKey !== idempotencyKey) {

@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { completeAppIdentityReset, purgeAppIdentityAssignments } from "./app-identity-reset";
 import type {
   HoldoverWriteAppEntityRef,
   HoldoverWriteAppInventoryNamespace,
 } from "./assignment/holdover-write-app-inventory";
 import type { HoldoverWriteOutboxNamespace } from "./assignment/holdover-write-outbox";
 import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store";
-import { completeAppIdentityReset, purgeAppIdentityAssignments } from "./app-identity-reset";
 import type { EvaluationApiEnv } from "./env";
 
 const APP_ID = "app-A";
@@ -105,6 +105,8 @@ describe("App identity Assignment reset", () => {
     expect(reset.directKvDeletes).toBe(0);
     expect(reset.suppressed).toBe(false);
     expect(reset.phase).toBeNull();
+    await expect(completeAppIdentityReset(reset.env(), APP_ID, RESET_ID)).resolves.toBeUndefined();
+    expect(reset.completedResetId).toBe(RESET_ID);
   });
 });
 
@@ -130,6 +132,7 @@ class ResetHarness {
   phase: SagaPhase = null;
   cutoff: number | null = null;
   directKvDeletes = 0;
+  completedResetId: string | null = null;
 
   constructor(entities: readonly HoldoverWriteAppEntityRef[]) {
     this.entities = [...entities];
@@ -188,6 +191,7 @@ class ResetHarness {
   private async inventoryFetch(input: NamedRequest, init?: RequestInit): Promise<Response> {
     const path = new URL(requestUrl(input)).pathname;
     if (path === "/begin-deletion") {
+      this.completedResetId = null;
       const body = await requestBody(init);
       const generationId = requireString(body, "generationId");
       if (this.phase === null) {
@@ -206,25 +210,33 @@ class ResetHarness {
       });
     }
     if (path === "/status") return Response.json(this.status());
-    if (path === "/cancel-deletion") {
-      const response = this.cancelResponses.shift() ?? {
-        cancelled: true,
-        done: true,
-        entities: [],
-        sagaPhase: null,
-      };
-      if (response.done) {
-        this.generationId = null;
-        this.suppressed = false;
-        this.phase = null;
-        this.cutoff = null;
-        this.kv.delete(`holdover-write:suppress:${APP_ID}`);
-      } else {
-        this.phase = "canceling";
-      }
-      return Response.json(response);
+    if (path === "/cancel-deletion" || path === "/complete-identity-reset") {
+      return this.cancelFetch(path === "/complete-identity-reset");
     }
     return Response.json({ error: "not found" }, { status: 404 });
+  }
+
+  private cancelFetch(completingReset: boolean): Response {
+    if (completingReset && this.completedResetId === RESET_ID) {
+      return Response.json({ cancelled: true, done: true, entities: [], sagaPhase: null });
+    }
+    const response = this.cancelResponses.shift() ?? {
+      cancelled: true,
+      done: true,
+      entities: [],
+      sagaPhase: null,
+    };
+    if (!response.done) {
+      this.phase = "canceling";
+      return Response.json(response);
+    }
+    if (completingReset) this.completedResetId = RESET_ID;
+    this.generationId = null;
+    this.suppressed = false;
+    this.phase = null;
+    this.cutoff = null;
+    this.kv.delete(`holdover-write:suppress:${APP_ID}`);
+    return Response.json(response);
   }
 
   private status() {
@@ -240,7 +252,7 @@ class ResetHarness {
 
   private writerNamespace(): AssignmentWriterNamespace {
     return namespace(async (request) => {
-      const name = requestName(request);
+      const name = request.name;
       const path = new URL(requestUrl(request)).pathname;
       if (path === "/put") {
         return this.tombstonedWriters.has(name)
@@ -258,7 +270,7 @@ class ResetHarness {
 
   private outboxNamespace(): HoldoverWriteOutboxNamespace {
     return namespace(async (request, init) => {
-      const name = requestName(request);
+      const name = request.name;
       const body = await requestBody(init);
       this.calls.push(`outbox:delete:${name}:${String(requireNumber(body, "deleteBeforeTsMs"))}`);
       if (!this.tombstonedWriters.has(name)) {
@@ -291,10 +303,6 @@ interface NamedRequest {
 function requestUrl(request: NamedRequest): string {
   const input = request.input;
   return input instanceof Request ? input.url : String(input);
-}
-
-function requestName(request: NamedRequest): string {
-  return request.name;
 }
 
 async function requestBody(init?: RequestInit): Promise<Record<string, unknown>> {
