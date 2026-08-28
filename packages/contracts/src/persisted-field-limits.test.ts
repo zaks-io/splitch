@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
 import {
   IDEMPOTENCY_KEY_MAX_LENGTH,
   IDEMPOTENCY_KEY_SHAPE_MESSAGE,
@@ -29,10 +28,12 @@ describe("persisted field limits", () => {
     );
 
     const record = Object.fromEntries(
-      Array.from({ length: PERSISTED_RECORD_MAX_KEYS }, (_, index) => [`k${index}`, 1]),
+      Array.from({ length: PERSISTED_RECORD_MAX_KEYS }, (_, index) => [`k${index}`, `v${index}`]),
     );
-    expect(persistedRecord(z.number()).safeParse(record).success).toBe(true);
-    expect(persistedRecord(z.number()).safeParse({ ...record, overflow: 1 }).success).toBe(false);
+    expect(persistedRecord(PersistedNameSchema).safeParse(record).success).toBe(true);
+    expect(
+      persistedRecord(PersistedNameSchema).safeParse({ ...record, overflow: "v64" }).success,
+    ).toBe(false);
   });
 
   it("shares the header idempotency bound and printable-ASCII policy", () => {
