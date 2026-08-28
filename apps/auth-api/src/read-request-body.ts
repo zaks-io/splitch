@@ -34,7 +34,8 @@ export async function readJsonRequestBody(request: Request): Promise<AuthBodyRea
   try {
     return { ok: true, value: JSON.parse(bounded.text) as unknown };
   } catch {
-    return { ok: true, value: undefined };
+    // Distinct from an empty body so consent can say "malformed", not "missing".
+    return { ok: true, value: bounded.text };
   }
 }
 
