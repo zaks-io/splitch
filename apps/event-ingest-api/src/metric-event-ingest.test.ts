@@ -171,6 +171,24 @@ describe("Metric Event ingest", () => {
   });
 });
 
+describe("Metric Event ingest admission", () => {
+  it("rejects a malformed allow decision before creating a claim", async () => {
+    const fixture = await makeMetricEventFixture({}, "client_key", {
+      admission: { allowed: true, retryAfterMs: -1 },
+    });
+
+    const response = await sendMetricEvent(fixture, metricEventBody());
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({
+      code: "RATE_LIMITED",
+      message: "Ingest Admission Gate is unavailable",
+    });
+    expect(fixture.claims.size).toBe(0);
+    expect(fixture.admissionCharges).toHaveLength(1);
+  });
+});
+
 async function responseCode(response: Response): Promise<unknown> {
   return ((await response.json()) as { code?: unknown }).code;
 }

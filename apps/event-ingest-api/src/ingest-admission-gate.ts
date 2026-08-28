@@ -151,15 +151,27 @@ export async function chargeIngestAdmission(
       body: JSON.stringify({ ...cost, budget }),
     });
   if (!response.ok) throw new Error(`Ingest Admission Gate returned HTTP ${response.status}`);
-  const body = (await response.json()) as Partial<AdmissionDecision>;
+  return parseAdmissionDecision(await response.json());
+}
+
+/**
+ * Allowed decisions carry a zero retry; denials carry a positive finite delay.
+ * Any other pairing, a negative delay, or a non-finite delay is invalid.
+ */
+function parseAdmissionDecision(body: unknown): AdmissionDecision {
+  if (typeof body !== "object" || body === null) {
+    throw new Error("Ingest Admission Gate returned an invalid decision");
+  }
+  const allowed = "allowed" in body ? body.allowed : undefined;
+  const retryAfterMs = "retryAfterMs" in body ? body.retryAfterMs : undefined;
   if (
-    typeof body.allowed !== "boolean" ||
-    typeof body.retryAfterMs !== "number" ||
-    !Number.isFinite(body.retryAfterMs)
+    typeof allowed !== "boolean" ||
+    !isNonNegative(retryAfterMs) ||
+    allowed !== (retryAfterMs === 0)
   ) {
     throw new Error("Ingest Admission Gate returned an invalid decision");
   }
-  return { allowed: body.allowed, retryAfterMs: body.retryAfterMs };
+  return { allowed, retryAfterMs };
 }
 
 function refillBuckets(

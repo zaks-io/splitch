@@ -83,6 +83,27 @@ describe.each(INGEST_STREAMS)("%s admission", (stream) => {
     });
   });
 
+  it.each([
+    { allowed: true, retryAfterMs: -1 },
+    { allowed: true, retryAfterMs: 50 },
+    { allowed: false, retryAfterMs: 0 },
+  ] as const)("fails closed on malformed decision %j", async (admission) => {
+    const charges: AdmissionCharge[] = [];
+    const denied = await ingestAdmissionDenial(
+      admissionBinding(admission, charges).INGEST_ADMISSION_GATE,
+      { appId: "app_shop", environmentId: "env_prod", ingestStream: stream },
+      [{ event_name: stream }],
+      STREAM_MESSAGE[stream],
+    );
+
+    expect(denied).toEqual({
+      code: "RATE_LIMITED",
+      message: "Ingest Admission Gate is unavailable",
+      details: { retryAfterMs: 1_000 },
+    });
+    expect(charges).toHaveLength(1);
+  });
+
   it("routes the charge through the stream launch budget", async () => {
     const seen: Array<{ name: string; body: Record<string, unknown> }> = [];
     await chargeIngestAdmission(

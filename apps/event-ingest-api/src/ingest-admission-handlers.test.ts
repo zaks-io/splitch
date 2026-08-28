@@ -68,6 +68,24 @@ describe("Exposure ingest admission", () => {
     });
     expect(calls.fetch).not.toHaveBeenCalled();
   });
+
+  it("rejects a malformed allow decision before Tinybird delivery", async () => {
+    const charges: AdmissionCharge[] = [];
+    const calls = await postExposure({
+      env: makeEnv(undefined, undefined, {
+        admission: { allowed: true, retryAfterMs: -1 },
+        admissionCharges: charges,
+      }),
+    });
+
+    expect(calls.response.status).toBe(429);
+    await expect(calls.response.json()).resolves.toMatchObject({
+      code: "RATE_LIMITED",
+      message: "Ingest Admission Gate is unavailable",
+    });
+    expect(calls.fetch).not.toHaveBeenCalled();
+    expect(charges).toHaveLength(1);
+  });
 });
 
 describe("Evaluation usage ingest admission", () => {
@@ -106,6 +124,22 @@ describe("Evaluation usage ingest admission", () => {
       {},
       undefined,
       makeEnv(undefined, undefined, { admission }),
+    );
+
+    expect(calls.response.status).toBe(429);
+    await expect(calls.response.json()).resolves.toMatchObject({
+      code: "RATE_LIMITED",
+      message: "Ingest Admission Gate is unavailable",
+    });
+    expect(calls.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed allow decision before Tinybird delivery", async () => {
+    const calls = await postEvaluationAt(
+      "2026-07-01T12:34:56.789Z",
+      {},
+      undefined,
+      makeEnv(undefined, undefined, { admission: { allowed: true, retryAfterMs: -1 } }),
     );
 
     expect(calls.response.status).toBe(429);
@@ -184,6 +218,29 @@ describe("Evaluation commit admission", () => {
       message: "Ingest Admission Gate is unavailable",
     });
     expect(calls.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed allow decision before sealing or delivering", async () => {
+    const outbox = new MemoryEvaluationCommitOutbox();
+    const first = await postEvaluationCommit({
+      env: makeEnv(new MemoryReplayWindow(), outbox, {
+        admission: { allowed: true, retryAfterMs: -1 },
+      }),
+    });
+
+    expect(first.response.status).toBe(429);
+    await expect(first.response.json()).resolves.toMatchObject({
+      code: "RATE_LIMITED",
+      message: "Ingest Admission Gate is unavailable",
+    });
+    expect(first.fetch).not.toHaveBeenCalled();
+
+    const charges: AdmissionCharge[] = [];
+    const second = await postEvaluationCommit({
+      env: makeEnv(new MemoryReplayWindow(), outbox, { admissionCharges: charges }),
+    });
+    expect(second.response.status).toBe(202);
+    expect(charges).toHaveLength(2);
   });
 
   it("rejects an oversized Exposure batch before Run-scope lookups or Tinybird delivery", async () => {
