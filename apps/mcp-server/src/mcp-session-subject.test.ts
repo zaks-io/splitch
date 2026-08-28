@@ -104,7 +104,40 @@ describe("MCP session subject binding", () => {
     const replay = await mcp("tools/list", undefined, { sessionStore, actor: owner, sessionId });
     await expectOpaqueDeadSession(replay);
   });
+
+  it("returns the same opaque 404 on a repeated owner DELETE", async () => {
+    const sessionStore = memorySessionStore();
+    const sessionId = await initialize(sessionStore, owner);
+
+    const first = await endSession(sessionStore, owner, sessionId);
+    expect(first.status).toBe(204);
+
+    const second = await endSession(sessionStore, owner, sessionId);
+    await expectOpaqueDeadSession(second);
+  });
 });
+
+async function endSession(
+  sessionStore: ReturnType<typeof memorySessionStore>,
+  actor: McpAccessTokenActor,
+  sessionId: string,
+): Promise<Response> {
+  return handleMcpServerRequest({
+    request: new Request("https://mcp.test/mcp", {
+      method: "DELETE",
+      headers: {
+        authorization: "Bearer local-test-token",
+        "mcp-session-id": sessionId,
+      },
+    }),
+    service,
+    platformTarget: "local",
+    tokenVerifier: staticMcpTokenVerifier(actor),
+    revocations: allowMcpRevocations(),
+    controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    sessionStore,
+  });
+}
 
 async function initialize(
   sessionStore: ReturnType<typeof memorySessionStore>,

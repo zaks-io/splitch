@@ -71,15 +71,26 @@ export function durableMcpSessionStore(
       return result.value;
     },
     async set(id, context, subject) {
-      unwrap(await namespace.getByName(id).setContext(context, now(), subject));
+      unwrapBound(await namespace.getByName(id).setContext(context, now(), subject));
     },
     async end(id, subject) {
-      unwrap(await namespace.getByName(id).endForSubject(now(), subject));
+      unwrapBound(await namespace.getByName(id).endForSubject(now(), subject));
     },
   };
 }
 
 function unwrap<T>(result: McpSessionResult<T>): T {
   if (!result.ok) throw new Error(result.message);
+  return result.value;
+}
+
+/**
+ * Subject-bound set/end fail the same way get does: unknown, expired, or the
+ * wrong subject. Map those to `McpSessionNotFoundError` so a DELETE (or
+ * context_use) that loses the race with expiry or a concurrent end becomes a
+ * 404, not a 500 from a generic `Error`.
+ */
+function unwrapBound<T>(result: McpSessionResult<T>): T {
+  if (!result.ok) throw new McpSessionNotFoundError();
   return result.value;
 }

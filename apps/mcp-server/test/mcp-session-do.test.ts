@@ -133,6 +133,12 @@ describe("MCP session Worker transport", () => {
     });
 
     expect(ended.status).toBe(204);
+
+    const repeated = await SELF.fetch("https://mcp.test/mcp", {
+      method: "DELETE",
+      headers: { authorization, "mcp-session-id": sessionId },
+    });
+    await expectOpaqueDeadSession(repeated);
     await expectDeadSession(sessionId);
   });
 

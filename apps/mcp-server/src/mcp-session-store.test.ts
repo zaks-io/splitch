@@ -44,16 +44,22 @@ describe("durable MCP session store subject binding", () => {
     const id = await store.create(owner, transport);
 
     await expect(store.get(id, foreign)).rejects.toBeInstanceOf(McpSessionNotFoundError);
-    await expect(store.set(id, context, foreign)).rejects.toThrow(
-      "mcp-server: MCP session is unknown or expired",
-    );
-    await expect(store.end(id, foreign)).rejects.toThrow(
-      "mcp-server: MCP session is unknown or expired",
-    );
+    await expect(store.set(id, context, foreign)).rejects.toBeInstanceOf(McpSessionNotFoundError);
+    await expect(store.end(id, foreign)).rejects.toBeInstanceOf(McpSessionNotFoundError);
+  });
+
+  it("maps a failed subject-bound set or end after a successful get to not-found", async () => {
+    const { namespace } = fakeNamespace({ failBound: true });
+    const store = durableMcpSessionStore(namespace, { now: () => 1_000 });
+    const id = await store.create(owner, transport);
+
+    await expect(store.get(id, owner)).resolves.toBeUndefined();
+    await expect(store.set(id, context, owner)).rejects.toBeInstanceOf(McpSessionNotFoundError);
+    await expect(store.end(id, owner)).rejects.toBeInstanceOf(McpSessionNotFoundError);
   });
 });
 
-function fakeNamespace(options: { rejectSubject?: string } = {}): {
+function fakeNamespace(options: { rejectSubject?: string; failBound?: boolean } = {}): {
   namespace: McpSessionDurableObjectNamespace;
   calls: Array<Record<string, unknown>>;
 } {
@@ -77,10 +83,12 @@ function fakeNamespace(options: { rejectSubject?: string } = {}): {
           },
           async setContext(sessionContext, now, subject) {
             calls.push({ op: "setContext", id, context: sessionContext, now, subject });
+            if (options.failBound) return expired();
             return rejectIfForeign(subject, options.rejectSubject, undefined);
           },
           async endForSubject(now, subject) {
             calls.push({ op: "endForSubject", id, now, subject });
+            if (options.failBound) return expired();
             return rejectIfForeign(subject, options.rejectSubject, undefined);
           },
         };
@@ -102,4 +110,8 @@ function rejectIfForeign<T>(
 
 function ok<T>(value?: T): McpSessionResult<T> {
   return { ok: true, value: value as T };
+}
+
+function expired<T>(): McpSessionResult<T> {
+  return { ok: false, message: "mcp-server: MCP session is unknown or expired" };
 }

@@ -127,12 +127,12 @@ async function endSession(
 ): Promise<Response> {
   const sessionId = request.headers.get("mcp-session-id");
   if (!sessionId) return new Response("MCP session ID is required", { status: 400 });
-  const invalidSession = await validateSession(request, sessionStore, subject);
-  if (invalidSession) return invalidSession;
   if (!sessionStore) throw new Error("mcp-server: MCP session store is not configured");
   if (!subject) {
     throw new Error("mcp-server: MCP session operations require an authenticated subject");
   }
+  // One subject-bound end: a prior get-then-end left a window where expiry or a
+  // concurrent DELETE turned the second hop into a generic Error and a 500.
   try {
     await sessionStore.end(sessionId, subject);
   } catch (error) {
