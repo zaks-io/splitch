@@ -1,5 +1,9 @@
 const textEncoder = new TextEncoder();
 
+/**
+ * Compare two secrets without leaking which bytes differed. Both sides are
+ * hashed first so a length mismatch cannot short-circuit the compare.
+ */
 export async function timingSafeEqualString(a: string, b: string): Promise<boolean> {
   const [hashA, hashB] = await Promise.all([
     crypto.subtle.digest("SHA-256", textEncoder.encode(a)),

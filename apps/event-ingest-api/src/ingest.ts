@@ -1,3 +1,4 @@
+import { timingSafeEqualString } from "@splitch/worker-runtime";
 import { emptyError, renderError, serviceUnavailable } from "./errors";
 import { evaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import { loadRunScope } from "./kv-config";
@@ -29,7 +30,7 @@ export function requiredIdentity(
 }
 
 export async function handleIngest(request: Request, env: Env): Promise<Response> {
-  const credential = credentialScope(request, env);
+  const credential = await credentialScope(request, env);
   if (!credential.ok) return renderError(credential.error);
 
   const payload = await readJsonObject(request);
@@ -81,7 +82,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
 }
 
 export async function handleEvaluationIngest(request: Request, env: Env): Promise<Response> {
-  const scope = evaluationUsageScope(request, env);
+  const scope = await evaluationUsageScope(request, env);
   if (!scope.ok) return renderError(scope.error);
 
   const payload = await readJsonObject(request);
@@ -112,14 +113,9 @@ export async function handleEvaluationIngest(request: Request, env: Env): Promis
   return Response.json({ ok: true, eventId: event.value.eventId }, { status: 202 });
 }
 
-function credentialScope(request: Request, env: Env): Outcome<CredentialScope> {
-  const internalToken = env.SPLITCH_EVENT_INGEST_TOKEN;
-  if (!internalToken) {
-    return { ok: false, error: serviceUnavailable("internal ingest token is unavailable") };
-  }
-  if (request.headers.get("authorization") !== `Bearer ${internalToken}`) {
-    return { ok: false, error: emptyError("UNAUTHORIZED", "invalid internal ingest token") };
-  }
+async function credentialScope(request: Request, env: Env): Promise<Outcome<CredentialScope>> {
+  const authenticated = await authenticateInternalIngestToken(request, env);
+  if (!authenticated.ok) return authenticated;
 
   const appId = request.headers.get("x-splitch-app-id");
   const environmentId = request.headers.get("x-splitch-environment-id");
@@ -134,8 +130,33 @@ function credentialScope(request: Request, env: Env): Outcome<CredentialScope> {
   return { ok: true, value: { appId, environmentId } };
 }
 
-export function evaluationUsageScope(request: Request, env: Env): Outcome<EvaluationUsageScope> {
-  const credential = credentialScope(request, env);
+/**
+ * Defense in depth on the binding door. The public hostname never mounts these
+ * routes; a leaked bearer still cannot select App or Environment scope until
+ * this compare succeeds, and the presented token is never logged.
+ */
+async function authenticateInternalIngestToken(request: Request, env: Env): Promise<Outcome<true>> {
+  const internalToken = env.SPLITCH_EVENT_INGEST_TOKEN;
+  if (!internalToken) {
+    return { ok: false, error: serviceUnavailable("internal ingest token is unavailable") };
+  }
+
+  const presented = presentedBearerToken(request.headers.get("authorization"));
+  if (!(await timingSafeEqualString(presented, internalToken))) {
+    return { ok: false, error: emptyError("UNAUTHORIZED", "invalid internal ingest token") };
+  }
+  return { ok: true, value: true };
+}
+
+function presentedBearerToken(authorization: string | null): string {
+  return authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
+}
+
+export async function evaluationUsageScope(
+  request: Request,
+  env: Env,
+): Promise<Outcome<EvaluationUsageScope>> {
+  const credential = await credentialScope(request, env);
   if (!credential.ok) return credential;
 
   const organizationId = request.headers.get("x-splitch-organization-id");

@@ -28,3 +28,4 @@ export type { RemoteJwksSignatureVerifier } from "./remote-jwks";
 export { remoteJwksSignatureVerifier } from "./remote-jwks";
 export type { EmptyDetailCode } from "./respond";
 export { emptyError, renderError } from "./respond";
+export { timingSafeEqualString } from "./secret-compare";

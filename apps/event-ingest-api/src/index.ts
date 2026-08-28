@@ -33,10 +33,11 @@ const metricEventRoutes = routesDelegatedTo("event-ingest-api").filter(
 );
 
 /**
- * The token-authenticated writes the Evaluation Worker makes for its own
- * account: sealed Exposures, Evaluation commits and Evaluation usage. They carry
- * `SPLITCH_EVENT_INGEST_TOKEN`, not a delegated identity, and each handler
- * re-derives its own tenant scope from the request.
+ * Binding-only writes the Evaluation Worker makes for its own account: sealed
+ * Exposures, Evaluation commits and Evaluation usage. The public hostname never
+ * mounts these paths. The shared token is defense in depth on the binding door,
+ * not a public credential, and each handler re-derives tenant scope from the
+ * request only after that compare succeeds.
  */
 const internalRoutes: Readonly<
   Record<
@@ -59,13 +60,12 @@ const internalRoutes: Readonly<
 };
 
 const handler = {
-  async fetch(request, env, ctx): Promise<Response> {
+  async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) {
       return healthResponse(env);
     }
-    const internal = await handleInternalRoute(request, env, observabilityFor(env, ctx), url);
-    return internal ?? new Response("not found", { status: 404 });
+    return new Response("not found", { status: 404 });
   },
   queue: handleMetricEventQueue,
 } satisfies ExportedHandler<Env, Record<string, unknown>>;

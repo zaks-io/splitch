@@ -8,6 +8,14 @@ const requiredSecrets = ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_I
 
 describe("Event Ingest Worker Wrangler runtime config", () => {
   it.each([
+    ["shared-preview", config.env?.["shared-preview"], "ingest.preview.splitch.dev"],
+    ["production", config.env?.production, "ingest.splitch.dev"],
+  ])("keeps %s on a public custom domain with no workers.dev fallback", (_target, target, host) => {
+    expect(target?.workers_dev).toBe(false);
+    expect(target?.routes).toEqual([{ pattern: host, custom_domain: true }]);
+  });
+
+  it.each([
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
@@ -70,8 +78,10 @@ interface WranglerTarget {
   durable_objects?: DurableObjectsConfig;
   migrations?: Migration[];
   queues?: { consumers?: Array<{ max_retries?: number }> };
+  routes?: Array<{ pattern?: string; custom_domain?: boolean }>;
   secrets?: { required?: string[] };
   vars?: Record<string, unknown>;
+  workers_dev?: boolean;
 }
 
 interface DurableObjectsConfig {

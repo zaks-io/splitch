@@ -19,7 +19,7 @@ import {
   RevokeTokenRequestSchema,
   TokenExchangeRequestSchema,
 } from "./schemas";
-import { timingSafeEqualString } from "./secret-compare";
+import { timingSafeEqualString } from "@splitch/worker-runtime";
 import type { TokenSigner } from "./token-exchange";
 
 const ACCESS_TOKEN_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange";

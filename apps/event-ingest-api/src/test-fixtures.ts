@@ -7,7 +7,9 @@ import {
   MemoryEvaluationCommitOutbox,
   MemoryReplayWindow,
 } from "./memory-replay-windows.test-fixture";
-import worker from "./index";
+import { EvaluationEntrypoint } from "./index";
+import type worker from "./index";
+import type { Env } from "./types";
 
 export const appId = "app_credential";
 export const clientAppId = "app_from_client";
@@ -27,8 +29,8 @@ export async function postExposure(
   vi.spyOn(Date, "now").mockReturnValue(new Date(fixedNow).getTime());
   const fetch = mockTinybirdFetch(options.tinybirdStatus);
   const ctx = new TestExecutionContext();
-  const response = await worker.fetch(
-    workerRequest("https://event-ingest.test/api/internal/exposures", {
+  const response = await new EvaluationEntrypoint(ctx, makeEnv() as Env).fetch(
+    workerRequest("https://splitch-event-ingest.internal/api/internal/exposures", {
       method: "POST",
       headers: {
         authorization: "Bearer internal_ingest_secret",
@@ -38,8 +40,6 @@ export async function postExposure(
       },
       body: JSON.stringify({ ...baseExposure(), ...options.payload }),
     }),
-    makeEnv(),
-    ctx,
   );
 
   if (options.awaitWaits !== false) await Promise.all(ctx.waits);
@@ -75,8 +75,8 @@ export async function postEvaluationAt(
   vi.spyOn(Date, "now").mockReturnValue(new Date(now).getTime());
   const fetch = mockTinybirdFetch();
   const ctx = new TestExecutionContext();
-  const response = await worker.fetch(
-    workerRequest("https://event-ingest.test/api/internal/evaluations", {
+  const response = await new EvaluationEntrypoint(ctx, env as Env).fetch(
+    workerRequest("https://splitch-event-ingest.internal/api/internal/evaluations", {
       method: "POST",
       headers: {
         authorization: "Bearer internal_ingest_secret",
@@ -96,8 +96,6 @@ export async function postEvaluationAt(
         ...payload,
       }),
     }),
-    env,
-    ctx,
   );
   return captureResponse(ctx, fetch, response);
 }
@@ -112,8 +110,8 @@ export async function postEvaluationCommit(
   vi.spyOn(Date, "now").mockReturnValue(new Date(fixedNow).getTime());
   const fetch = mockTinybirdFetch(options.statuses);
   const ctx = new TestExecutionContext();
-  const response = await worker.fetch(
-    workerRequest("https://event-ingest.test/api/internal/evaluation-commits", {
+  const response = await new EvaluationEntrypoint(ctx, (options.env ?? makeEnv()) as Env).fetch(
+    workerRequest("https://splitch-event-ingest.internal/api/internal/evaluation-commits", {
       method: "POST",
       headers: {
         authorization: "Bearer internal_ingest_secret",
@@ -133,8 +131,6 @@ export async function postEvaluationCommit(
         exposures: [{ ...baseExposure(), ...options.payload }],
       }),
     }),
-    options.env ?? makeEnv(),
-    ctx,
   );
   return captureResponse(ctx, fetch, response);
 }
