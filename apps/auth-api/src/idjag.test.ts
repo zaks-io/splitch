@@ -250,6 +250,7 @@ describe("Dormant ID-JAG verifier: fail-loud security paths", () => {
     const app = buildApp();
     const res = await app.request("/oauth2/token", {
       method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ grant_type: "password", identity_assertion: "x.y.z" }),
     });
     expect(res.status).toBe(400);
@@ -297,6 +298,7 @@ describe("OAuth error shape is separate from ErrorResponse", () => {
     const body = (await (
       await app.request("/agent/identity", {
         method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ id_jag: idJag }),
       })
     ).json()) as Record<string, unknown>;

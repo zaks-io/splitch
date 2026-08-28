@@ -144,6 +144,7 @@ real package API boundary.
 | `apps/event-ingest-api`      | `@splitch/event-ingest-api`  | Event Ingest Worker scaffold                |
 | `apps/analysis-api`          | `@splitch/analysis-api`      | Analysis Worker scaffold                    |
 | `apps/auth-api`              | `@splitch/auth-api`          | Auth API Worker scaffold                    |
+| `packages/bounded-body`      | `@splitch/bounded-body`      | shared raw-body byte/content-type gate      |
 | `packages/contracts`         | `@splitch/contracts`         | shared Zod/platform contracts scaffold      |
 | `packages/control-plane-sdk` | `@splitch/control-plane-sdk` | shared Control Plane SDK transport scaffold |
 | `packages/convex`            | `@splitch/convex`            | public Convex Component package             |

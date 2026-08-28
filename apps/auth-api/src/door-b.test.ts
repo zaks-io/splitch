@@ -127,6 +127,7 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 async function registerOk(app: ReturnType<typeof createApp>): Promise<RegisterBody> {
   const res = await app.request("/agent/identity", {
     method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({ turnstile_token: FIXTURE_TURNSTILE_TOKEN }),
   });
   expect(res.status).toBe(200);
@@ -189,6 +190,7 @@ describe("Door B register: Turnstile-before-write, provisional Org+App+Environme
     const { app } = build();
     const res = await app.request("/agent/identity", {
       method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(400);
@@ -201,6 +203,7 @@ describe("Door B register: Turnstile-before-write, provisional Org+App+Environme
     const { app } = build();
     const res = await app.request("/agent/identity", {
       method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ turnstile_token: "not-the-fixture-token" }),
     });
     expect(res.status).toBe(403);
@@ -215,7 +218,7 @@ describe("Door B register: Turnstile-before-write, provisional Org+App+Environme
     // request carries a DISTINCT valid Turnstile token (prefix fixture) so it is
     // the ceiling — not Turnstile single-use — that rejects it.
     const { app } = build({ rateLimits: { perIpPerHour: 1, globalPerHour: 1000 } });
-    const headers = { "cf-connecting-ip": "203.0.113.7" };
+    const headers = { "cf-connecting-ip": "203.0.113.7", "content-type": "application/json" };
     const first = await app.request("/agent/identity", {
       method: "POST",
       headers,
@@ -237,6 +240,7 @@ describe("Door B register: Turnstile-before-write, provisional Org+App+Environme
     const { app } = build();
     const res = await app.request("/agent/identity", {
       method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ turnstile_token: "bad" }),
     });
     const body = (await res.json()) as Record<string, unknown>;

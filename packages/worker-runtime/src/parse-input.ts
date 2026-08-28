@@ -1,3 +1,4 @@
+import { readBoundedRequestBytes, trustedContentLength } from "@splitch/bounded-body";
 import type { ErrorResponse, RawBodyByteLimit } from "@splitch/contracts";
 import type { z } from "zod";
 
@@ -89,10 +90,10 @@ async function readBody(
     return { ok: true, value: undefined, request };
   }
 
-  // Unbounded only for callers that opt out (GET/HEAD already returned, and
-  // standalone Auth/MCP/Event Ingest/Convex readers). The registrar never
+  // Unbounded only when a caller opts out of a limit. The registrar never
   // reaches this path for mutating JSON routes: it always passes
-  // rawBodyByteLimitFor(contract).
+  // rawBodyByteLimitFor(contract). Standalone Auth/MCP/Event Ingest/Convex
+  // readers call readBoundedRequestBody instead of this unbounded fallback.
   if (rawBodyByteLimit === undefined) {
     return {
       ok: true,
@@ -106,7 +107,7 @@ async function readBody(
     return { ok: false, error: rawBodyByteLimit.error };
   }
 
-  const bytes = await readBodyBytes(request.body, rawBodyByteLimit.maxBytes);
+  const bytes = await readBoundedRequestBytes(request.body, rawBodyByteLimit.maxBytes);
   if (bytes === null) {
     return { ok: false, error: rawBodyByteLimit.error };
   }
@@ -126,53 +127,6 @@ function parseBodyText(text: string): unknown {
     return JSON.parse(text);
   } catch {
     return MALFORMED_BODY;
-  }
-}
-
-function trustedContentLength(value: string | null): number | null {
-  if (value === null || !/^\d+$/.test(value)) return null;
-  const bytes = Number(value);
-  return Number.isSafeInteger(bytes) ? bytes : null;
-}
-
-async function readBodyBytes(
-  body: ReadableStream<Uint8Array> | null,
-  maxBytes: number,
-): Promise<Uint8Array | null> {
-  if (body === null) return new Uint8Array();
-
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let byteLength = 0;
-  try {
-    while (true) {
-      const next = await reader.read();
-      if (next.done) break;
-      if (next.value.byteLength > maxBytes - byteLength) {
-        await cancelReader(reader);
-        return null;
-      }
-      chunks.push(next.value);
-      byteLength += next.value.byteLength;
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const bytes = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
-}
-
-async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
-  try {
-    await reader.cancel();
-  } catch {
-    // Rejection is already decided; a broken cancellation cannot reopen the body gate.
   }
 }
 

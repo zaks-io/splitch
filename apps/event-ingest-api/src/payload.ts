@@ -1,8 +1,25 @@
+import { DEFAULT_MUTATING_JSON_BODY_MAX_BYTES } from "@splitch/contracts";
+import { readBoundedRequestBody } from "@splitch/worker-runtime";
 import { validationError } from "./errors";
 import type { Outcome, Payload } from "./types";
 
+export const EVENT_INGEST_MAX_BODY_BYTES = DEFAULT_MUTATING_JSON_BODY_MAX_BYTES;
+
 export async function readJsonObject(request: Request): Promise<Outcome<Payload>> {
-  const text = await request.text();
+  const bounded = await readBoundedRequestBody(request, {
+    maxBytes: EVENT_INGEST_MAX_BODY_BYTES,
+    allowedMediaTypes: ["application/json"],
+  });
+  if (!bounded.ok) {
+    return {
+      ok: false,
+      error:
+        bounded.reason === "too_large"
+          ? validationError("request body is too large", ["body"])
+          : validationError("request body must be application/json", ["body"]),
+    };
+  }
+  const text = bounded.text;
   if (text.length === 0) {
     return { ok: false, error: validationError("request body is required", ["body"]) };
   }

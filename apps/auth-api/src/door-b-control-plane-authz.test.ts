@@ -125,6 +125,7 @@ async function registerAnonymous(): Promise<Registration> {
   const response = await authFetch(
     new Request(`${AUTH_ORIGIN}/agent/identity`, {
       method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ turnstile_token: FIXTURE_TURNSTILE_TOKEN }),
     }),
   );
@@ -164,11 +165,12 @@ async function expectOwnerMemberships(registration: Registration): Promise<void>
 }
 
 async function makeControlPlaneApp(): Promise<TestApp> {
-  const [appModule, authModule, jwksModule, sessionModule] = await Promise.all([
+  const [appModule, authModule, jwksModule, sessionModule, membershipModule] = await Promise.all([
     import(new URL("../../control-plane-api/src/app.ts", import.meta.url).href),
     import(new URL("../../control-plane-api/src/auth-resolver.ts", import.meta.url).href),
     import(new URL("../../control-plane-api/src/jwks-verify.ts", import.meta.url).href),
     import(new URL("../../control-plane-api/src/session-store.ts", import.meta.url).href),
+    import(new URL("../../control-plane-api/src/token-membership.ts", import.meta.url).href),
   ]);
   const verifier = jwksModule.makeJwksVerifier({
     fetchJwks: async () => {
@@ -177,13 +179,15 @@ async function makeControlPlaneApp(): Promise<TestApp> {
     },
     controlPlaneAudience: CONTROL_PLANE_ORIGIN,
   });
+  const repo = createRepository(local.d1);
   return appModule.createApp({
     authResolver: authModule.makeControlPlaneAuthResolver({
       verifier,
       sessions: sessionModule.makeSessionStore(local.sessionKv),
+      membershipAccess: membershipModule.makeTokenMembershipAccess(repo),
     }),
     rateLimiter: () => ({ limited: false }),
-    repo: createRepository(local.d1),
+    repo,
   });
 }
 

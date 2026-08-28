@@ -1,5 +1,5 @@
 {
-  "name": "@splitch/worker-runtime",
+  "name": "@splitch/bounded-body",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -19,12 +19,5 @@
     "lint": "biome lint src",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
-  },
-  "dependencies": {
-    "@splitch/bounded-body": "workspace:*",
-    "@splitch/contracts": "workspace:*",
-    "hono": "^4.12.32",
-    "jose": "^6.2.10",
-    "zod": "^4.4.3"
   }
 }
