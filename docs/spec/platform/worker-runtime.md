@@ -109,7 +109,10 @@ not move queue or Tinybird ownership into `@splitch/worker-runtime`.
   baseline; `wrapWorkerHandler` stamps it on every Worker fetch response. Existing
   CORS, session, and redirect headers are never overwritten. Applied security headers
   take the stronger value: a weaker `frame-ancestors` (including `https:`) is upgraded
-  when a stronger policy is stamped, and unrelated CSP directives are preserved.
+  when a stronger policy is stamped. `Content-Security-Policy` is treated as a CSP3
+  policy list (comma-separated policies); each policy is upgraded so a comma cannot
+  hide a weaker `frame-ancestors` from a later deny. Unrelated CSP directives are
+  preserved.
 
 ## What the runtime does not own
 

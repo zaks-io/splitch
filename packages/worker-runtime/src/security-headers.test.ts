@@ -86,6 +86,37 @@ describe("applyResponseHeaders", () => {
     expect(response.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
   });
 
+  it("upgrades every comma-delimited CSP policy so frame-ancestors https: cannot remain", () => {
+    const response = applyResponseHeaders(
+      new Response("ok", {
+        headers: {
+          "content-security-policy": "default-src https:, frame-ancestors https:",
+        },
+      }),
+      { "content-security-policy": "frame-ancestors 'none'" },
+    );
+
+    expect(response.headers.get("content-security-policy")).toBe(
+      "default-src https:; frame-ancestors 'none', frame-ancestors 'none'",
+    );
+  });
+
+  it("upgrades comma-combined CSP headers the same way as a serialized policy list", () => {
+    const headers = new Headers();
+    headers.append("content-security-policy", "default-src https:");
+    headers.append("content-security-policy", "frame-ancestors https:");
+    const response = applyResponseHeaders(new Response("ok", { headers }), {
+      "content-security-policy": "frame-ancestors 'none'",
+    });
+
+    expect(headers.get("content-security-policy")).toBe(
+      "default-src https:, frame-ancestors https:",
+    );
+    expect(response.headers.get("content-security-policy")).toBe(
+      "default-src https:; frame-ancestors 'none', frame-ancestors 'none'",
+    );
+  });
+
   it("does not weaken an existing frame-ancestors 'none' when extras are looser", () => {
     const response = applyResponseHeaders(
       new Response("ok", {

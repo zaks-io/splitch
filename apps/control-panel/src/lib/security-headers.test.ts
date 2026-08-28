@@ -43,6 +43,21 @@ describe("Control Panel anti-framing and baseline headers", () => {
     expectPanelSecurity(rejectedUpgrade);
   });
 
+  it("upgrades a comma-delimited policy list so frame-ancestors https: cannot remain", () => {
+    const response = withControlPanelSecurityHeaders(
+      new Response("ok", {
+        headers: {
+          "content-security-policy": "default-src https:, frame-ancestors https:",
+        },
+      }),
+    );
+
+    expect(response.headers.get("content-security-policy")).toBe(
+      "default-src https:; frame-ancestors 'none', frame-ancestors 'none'",
+    );
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
+  });
+
   it("upgrades a permissive frame-ancestors https: CSP and keeps other directives", () => {
     const response = withControlPanelSecurityHeaders(
       new Response("ok", {

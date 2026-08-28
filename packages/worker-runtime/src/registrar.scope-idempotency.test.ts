@@ -302,6 +302,26 @@ describe("guard: fault path + response decoration", () => {
     );
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
   });
+
+  it("upgrades comma-delimited CSP policies so a later deny cannot be ignored", async () => {
+    const reg = createRegistrar(
+      deps({ defaultHeaders: { "content-security-policy": "frame-ancestors 'none'" } }),
+    );
+    const app = new Hono();
+    reg.mount(
+      app,
+      route(),
+      () =>
+        new Response("ok", {
+          headers: { "content-security-policy": "default-src https:, frame-ancestors https:" },
+        }),
+    );
+
+    const res = await app.request("/things", { method: "POST" });
+    expect(res.headers.get("content-security-policy")).toBe(
+      "default-src https:; frame-ancestors 'none', frame-ancestors 'none'",
+    );
+  });
 });
 
 describe("contract status map is the single source of HTTP status", () => {

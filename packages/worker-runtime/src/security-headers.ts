@@ -70,10 +70,11 @@ export function mergeHeaderRecords(
 
 /**
  * Stamp extra headers onto a Response. Protocol headers already on the response
- * win. Security headers take the stronger value; CSP keeps unrelated directives
- * and enforces a stronger `frame-ancestors` when one is applied. A WebSocket
- * upgrade is returned unchanged so the socket is not dropped. A stream keeps
- * its unread body.
+ * win. Security headers take the stronger value. CSP is a comma-separated
+ * policy list (CSP3); each policy is upgraded on its own so a weaker
+ * `frame-ancestors` cannot hide behind a comma and ignore a later deny.
+ * Unrelated directives stay. A WebSocket upgrade is returned unchanged so the
+ * socket is not dropped. A stream keeps its unread body.
  */
 export function applyResponseHeaders(response: Response, extra?: Record<string, string>): Response {
   if (!extra) return response;
@@ -131,29 +132,49 @@ function xFrameOptionsStrength(value: string): number {
   return 0;
 }
 
+type CspDirective = { name: string; value: string };
+type CspPolicy = CspDirective[];
+
 function mergeContentSecurityPolicy(current: string, extra: string): string {
-  const directives = parseCsp(current);
-  const extraDirectives = parseCsp(extra);
+  const extraPolicies = parseCspPolicyList(extra);
+  const currentPolicies = parseCspPolicyList(current);
+  if (currentPolicies.length === 0) return serializeCspPolicyList(extraPolicies);
+  const merged = currentPolicies.map((policy) => {
+    const directives = policy.map((directive) => ({ ...directive }));
+    for (const extraPolicy of extraPolicies) mergeCspDirectives(directives, extraPolicy);
+    return directives;
+  });
+  return serializeCspPolicyList(merged);
+}
+
+function mergeCspDirectives(directives: CspPolicy, extraDirectives: CspPolicy): void {
   for (const extraDirective of extraDirectives) {
     if (extraDirective.name === "frame-ancestors") {
       const existing = directives.find((directive) => directive.name === "frame-ancestors");
       if (!existing) {
-        directives.push(extraDirective);
+        directives.push({ ...extraDirective });
         continue;
       }
       existing.value = strongerFrameAncestors(existing.value, extraDirective.value);
       continue;
     }
     if (!directives.some((directive) => directive.name === extraDirective.name)) {
-      directives.push(extraDirective);
+      directives.push({ ...extraDirective });
     }
   }
-  return serializeCsp(directives);
 }
 
-function parseCsp(header: string): Array<{ name: string; value: string }> {
-  const directives: Array<{ name: string; value: string }> = [];
-  for (const part of header.split(";")) {
+/** CSP3 serialized CSP list: comma separates policies, semicolon separates directives. */
+function parseCspPolicyList(header: string): CspPolicy[] {
+  return header
+    .split(",")
+    .map((policy) => parseCspDirectives(policy))
+    .filter((policy) => policy.length > 0);
+}
+
+function parseCspDirectives(policy: string): CspPolicy {
+  const directives: CspPolicy = [];
+  for (const part of policy.split(";")) {
     const trimmed = part.trim();
     if (!trimmed) continue;
     const space = trimmed.search(/\s/);
@@ -169,7 +190,11 @@ function parseCsp(header: string): Array<{ name: string; value: string }> {
   return directives;
 }
 
-function serializeCsp(directives: Array<{ name: string; value: string }>): string {
+function serializeCspPolicyList(policies: CspPolicy[]): string {
+  return policies.map((policy) => serializeCspDirectives(policy)).join(", ");
+}
+
+function serializeCspDirectives(directives: CspPolicy): string {
   return directives
     .map((directive) => (directive.value ? `${directive.name} ${directive.value}` : directive.name))
     .join("; ");

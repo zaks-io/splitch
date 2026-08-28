@@ -45,6 +45,7 @@
     "@sentry/node": "^10.68.0",
     "@splitch/contracts": "workspace:*",
     "@splitch/privacy": "workspace:*",
-    "@splitch/worker-runtime": "workspace:*"
+    "@splitch/worker-runtime": "workspace:*",
+    "typescript": "^6.0.3"
   }
 }

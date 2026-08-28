@@ -4,9 +4,15 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseConfigFileTextToJson } from "typescript";
 import { describe, expect, it } from "vitest";
+import {
+  classFetchIsWrapped,
+  defaultExportIsWrapped,
+  exportedWorkerEntrypoints,
+  WRAP_WORKER_HANDLER,
+} from "./hosted-worker-wrap-gate.js";
 
 const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "../../..");
-const WRAPPER = "wrapWorkerHandler";
+const WRAPPER = WRAP_WORKER_HANDLER;
 
 /** Customer-installable Worker, not a hosted Splitch surface. */
 const NON_HOSTED_WRANGLER = new Set(["packages/cloudflare/wrangler.jsonc"]);
@@ -68,13 +74,7 @@ describe("hosted Worker security-header wiring", () => {
   });
 
   it("resolves every configured service entrypoint to a wrapped exported class", () => {
-    const wrappedClasses = new Set(
-      workers.flatMap((worker) =>
-        exportedWorkerEntrypoints(worker.source).filter((className) =>
-          classFetchIsWrapped(worker.source, className),
-        ),
-      ),
-    );
+    const wrappedClasses = wrappedEntrypointNames(workers);
     const referenced = new Set(workers.flatMap((worker) => worker.referencedEntrypoints));
     expect(referenced.size).toBeGreaterThan(0);
     for (const entrypoint of referenced) {
@@ -98,47 +98,104 @@ describe("hosted Worker security-header wiring", () => {
     expect(defaultExportIsWrapped(unwrapped)).toBe(false);
   });
 
-  it("fails when a deployable wrangler.jsonc fixture ships an unwrapped fetch", () => {
-    const fixtureRoot = mkdtempSync(join(tmpdir(), "unwrapped-worker-"));
-    try {
-      writeFileSync(
-        join(fixtureRoot, "wrangler.jsonc"),
-        `{
-          // deployable hosted Worker whose fetch is not wrapped
-          "name": "unwrapped-fixture",
-          "main": "index.ts",
-          "services": [{ "binding": "OTHER", "service": "other", "entrypoint": "LooseDoor" }]
-        }`,
-      );
-      writeFileSync(
-        join(fixtureRoot, "index.ts"),
-        `
-          import { WorkerEntrypoint } from "cloudflare:workers";
-          import { ${WRAPPER} } from "@splitch/observability/worker";
-          export default {
+  it("fails a comment/helper fixture that only mentions wrapWorkerHandler in a comment", () => {
+    const discovered = discoverFixture({
+      wrangler: `{
+        "name": "comment-helper-fixture",
+        "main": "index.ts"
+      }`,
+      source: `
+        import { ${WRAPPER} } from "@splitch/observability/worker";
+        function helper() {
+          /* return wrapWorkerHandler( */
+          return {
             fetch() {
               return new Response("ok");
             },
           };
-          export class LooseDoor extends WorkerEntrypoint {
-            fetch() {
-              return new Response("ok");
-            }
-          }
-        `,
-      );
+        }
+        export default helper();
+      `,
+    });
+    expect(discovered).toHaveLength(1);
+    expect(discovered[0]?.source.includes(`return ${WRAPPER}(`)).toBe(true);
+    expect(defaultExportIsWrapped(discovered[0]?.source ?? "")).toBe(false);
+    expect(omissionFailures(discovered).length).toBeGreaterThan(0);
+  });
 
-      const discovered = discoverHostedWorkers(fixtureRoot);
-      expect(discovered).toHaveLength(1);
-      expect(discovered[0]?.source.includes(WRAPPER)).toBe(true);
-      expect(omissionFailures(discovered).length).toBeGreaterThan(0);
-      expect(defaultExportIsWrapped(discovered[0]?.source ?? "")).toBe(false);
-      expect(classFetchIsWrapped(discovered[0]?.source ?? "", "LooseDoor")).toBe(false);
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true });
-    }
+  it("fails a mixed-branch fixture that wraps only one fetch return path", () => {
+    const discovered = discoverFixture({
+      wrangler: `{
+        "name": "mixed-branch-fixture",
+        "main": "index.ts",
+        "services": [{ "binding": "OTHER", "service": "other", "entrypoint": "MixedDoor" }]
+      }`,
+      source: `
+        import { WorkerEntrypoint } from "cloudflare:workers";
+        import { ${WRAPPER} } from "@splitch/observability/worker";
+        const wrapped = ${WRAPPER}(
+          { fetch() { return new Response("ok"); } },
+          { surface: "control-plane-api" },
+        );
+        export default ${WRAPPER}(
+          { fetch() { return new Response("ok"); } },
+          { surface: "control-plane-api" },
+        );
+        export class MixedDoor extends WorkerEntrypoint {
+          fetch(request: Request) {
+            if (request.method === "GET") return new Response("ok");
+            return wrapped.fetch(request, this.env, this.ctx);
+          }
+        }
+      `,
+    });
+    expect(discovered).toHaveLength(1);
+    expect(defaultExportIsWrapped(discovered[0]?.source ?? "")).toBe(true);
+    expect(classFetchIsWrapped(discovered[0]?.source ?? "", "MixedDoor")).toBe(false);
+    expect(omissionFailures(discovered).length).toBeGreaterThan(0);
+  });
+
+  it("fails when a deployable wrangler.jsonc fixture ships an unwrapped fetch", () => {
+    const discovered = discoverFixture({
+      wrangler: `{
+        // deployable hosted Worker whose fetch is not wrapped
+        "name": "unwrapped-fixture",
+        "main": "index.ts",
+        "services": [{ "binding": "OTHER", "service": "other", "entrypoint": "LooseDoor" }]
+      }`,
+      source: `
+        import { WorkerEntrypoint } from "cloudflare:workers";
+        import { ${WRAPPER} } from "@splitch/observability/worker";
+        export default {
+          fetch() {
+            return new Response("ok");
+          },
+        };
+        export class LooseDoor extends WorkerEntrypoint {
+          fetch() {
+            return new Response("ok");
+          }
+        }
+      `,
+    });
+    expect(discovered).toHaveLength(1);
+    expect(discovered[0]?.source.includes(WRAPPER)).toBe(true);
+    expect(omissionFailures(discovered).length).toBeGreaterThan(0);
+    expect(defaultExportIsWrapped(discovered[0]?.source ?? "")).toBe(false);
+    expect(classFetchIsWrapped(discovered[0]?.source ?? "", "LooseDoor")).toBe(false);
   });
 });
+
+function discoverFixture(files: { wrangler: string; source: string }): HostedWorker[] {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), "unwrapped-worker-"));
+  try {
+    writeFileSync(join(fixtureRoot, "wrangler.jsonc"), files.wrangler);
+    writeFileSync(join(fixtureRoot, "index.ts"), files.source);
+    return discoverHostedWorkers(fixtureRoot);
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true });
+  }
+}
 
 function omissionFailures(discovered: HostedWorker[]): string[] {
   const wrappedClasses = wrappedEntrypointNames(discovered);
@@ -241,77 +298,4 @@ function collectReferencedEntrypoints(config: WranglerConfig): string[] {
 
 function entrypointNames(services: Array<{ entrypoint?: string }> | undefined): string[] {
   return (services ?? []).flatMap((service) => (service.entrypoint ? [service.entrypoint] : []));
-}
-
-function defaultExportIsWrapped(source: string): boolean {
-  if (/\bexport\s+default\s+wrapWorkerHandler\s*\(/.test(source)) return true;
-  const ident = source.match(/\bexport\s+default\s+([A-Za-z_$][\w$]*)\s*;/);
-  return ident?.[1] ? identifierResolvesToWrap(source, ident[1]) : false;
-}
-
-function exportedWorkerEntrypoints(source: string): string[] {
-  return [
-    ...source.matchAll(/\bexport\s+class\s+([A-Za-z_$][\w$]*)\s+extends\s+WorkerEntrypoint\b/g),
-  ].map((match) => match[1] as string);
-}
-
-function classFetchIsWrapped(source: string, className: string): boolean {
-  const classBody = extractClassBody(source, className);
-  if (!classBody) return false;
-  const fetchBody = extractFetchMethodBody(classBody);
-  if (!fetchBody) return false;
-  const callee = fetchBody.match(/\b(?:return\s+(?:await\s+)?)?([A-Za-z_$][\w$]*)\.fetch\s*\(/);
-  return callee?.[1] ? identifierResolvesToWrap(source, callee[1]) : false;
-}
-
-function identifierResolvesToWrap(source: string, name: string): boolean {
-  if (name === WRAPPER) return true;
-  const assigned = source.match(
-    new RegExp(`\\b(?:const|let|var)\\s+${escapeRegExp(name)}\\s*=\\s*([A-Za-z_$][\\w$]*)`),
-  );
-  if (assigned?.[1] === WRAPPER) return true;
-  if (assigned?.[1]) return functionReturnsWrap(source, assigned[1]);
-  return functionReturnsWrap(source, name);
-}
-
-function functionReturnsWrap(source: string, name: string): boolean {
-  const start = source.search(new RegExp(`\\bfunction\\s+${escapeRegExp(name)}\\s*\\(`));
-  if (start === -1) return false;
-  const bodyStart = source.indexOf("{", start);
-  if (bodyStart === -1) return false;
-  const body = sliceBalanced(source, bodyStart);
-  return body.includes(`return ${WRAPPER}(`);
-}
-
-function extractClassBody(source: string, className: string): string | undefined {
-  const start = source.search(new RegExp(`\\bclass\\s+${escapeRegExp(className)}\\b`));
-  if (start === -1) return undefined;
-  const bodyStart = source.indexOf("{", start);
-  if (bodyStart === -1) return undefined;
-  return sliceBalanced(source, bodyStart);
-}
-
-function extractFetchMethodBody(classBody: string): string | undefined {
-  const start = classBody.search(/\bfetch\s*\(/);
-  if (start === -1) return undefined;
-  const bodyStart = classBody.indexOf("{", start);
-  if (bodyStart === -1) return undefined;
-  return sliceBalanced(classBody, bodyStart);
-}
-
-function sliceBalanced(source: string, openIndex: number): string {
-  let depth = 0;
-  for (let index = openIndex; index < source.length; index += 1) {
-    const char = source[index];
-    if (char === "{") depth += 1;
-    if (char === "}") {
-      depth -= 1;
-      if (depth === 0) return source.slice(openIndex, index + 1);
-    }
-  }
-  return source.slice(openIndex);
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

@@ -549,6 +549,9 @@ importers:
       '@splitch/worker-runtime':
         specifier: workspace:*
         version: link:../worker-runtime
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   packages/privacy: {}
 
