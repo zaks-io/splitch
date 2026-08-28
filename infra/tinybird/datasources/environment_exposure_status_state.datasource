@@ -7,3 +7,6 @@ SCHEMA >
 
 ENGINE "AggregatingMergeTree"
 ENGINE_SORTING_KEY "app_id, environment_id"
+
+FORWARD_QUERY >
+    SELECT *
