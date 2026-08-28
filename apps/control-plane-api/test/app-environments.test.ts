@@ -14,6 +14,7 @@ import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 import { noOpExposureStatusCleanup } from "./exposure-status-cleanup-fixture";
 import { noOpHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup-fixture";
+import { membershipAccessWithoutWideResolution } from "./token-membership-access-fixture";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
@@ -57,6 +58,7 @@ beforeEach(async () => {
   const bindings = await makeLocalBindings();
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({
+    issuer: "https://auth.splitch.test",
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -65,7 +67,7 @@ beforeEach(async () => {
       authResolver: makeControlPlaneAuthResolver({
         verifier,
         sessions: makeSessionStore(bindings.kv),
-        membershipAccess: { authorize: async () => true },
+        membershipAccess: membershipAccessWithoutWideResolution,
         now: () => NOW_MS,
       }),
       rateLimiter: allowLimiter,

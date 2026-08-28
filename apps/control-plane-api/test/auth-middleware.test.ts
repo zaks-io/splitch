@@ -86,6 +86,7 @@ beforeEach(async () => {
   const bindings = await makeLocalBindings();
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({
+    issuer: "https://auth.splitch.test",
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -317,6 +318,7 @@ describe("control-plane auth middleware: fail-loud KV fault", () => {
       },
     } as unknown as KVNamespace;
     const verifier = makeJwksVerifier({
+      issuer: "https://auth.splitch.test",
       fetchJwks: async () => h.signer.jwks,
       controlPlaneAudience: AUDIENCE,
     });

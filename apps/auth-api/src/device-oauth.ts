@@ -192,9 +192,9 @@ export async function exchangeRefreshToken(
   try {
     requireFirstPartyClient(parsed.data.client_id);
     const stored = await deps.deviceRefreshSessions.lookup(parsed.data.refresh_token);
-    if (!stored?.userId || !stored.providerSessionId) {
+    if (!stored?.userId || !stored.providerSessionId)
       throw new OAuthError("invalid_grant", "refresh token authority is unknown");
-    }
+    assertCompatibleDeviceAuthorization(parsed.data.authorization, stored.selectedAppSelector);
     // Resolve the binding BEFORE touching the provider: WorkOS refresh tokens
     // are single-use, so an unresolvable app/org selector must fail this one
     // request, not consume the token and strand the whole session.

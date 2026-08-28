@@ -11,8 +11,8 @@ import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
  *
  * The control-plane token is the short-lived bearer the auth-api mints
  * (access-control-matrix.md "Token validation": verify signature against the
- * issuer JWKS, assert `aud`, assert `exp`). This module owns ONLY signature +
- * aud + exp. Scope derivation and session revocation are separate concerns.
+ * issuer JWKS, assert `iss`, `typ`, `aud`, and `exp`). Scope derivation and
+ * session revocation are separate concerns.
  *
  * The signature is the entire trust root, so a bad/absent/non-RS256 signature is
  * a loud failure, never a skipped check. `alg: none` and any non-RS256 alg are
@@ -71,7 +71,8 @@ export function makeHttpJwksFetcher(jwksUri: string): JwksFetcher {
 export interface JwksVerifier {
   /**
    * Verify a compact JWT and return its actor claims, or `null` on ANY
-   * verification failure (bad signature, wrong aud, expired, malformed). A null
+   * verification failure (bad signature, issuer/type/audience mismatch, expired,
+   * malformed). A null
    * is an authentication failure the resolver maps to UNAUTHORIZED; it never
    * throws for the ordinary bad-token case. A genuine fault in the fetcher
    * (e.g. JWKS unreachable) is allowed to throw — the guard maps it to 500.
@@ -85,11 +86,12 @@ export function makeCachedJwksVerifier(options: {
   controlPlaneAudience: string;
 }): JwksVerifier {
   const signatures = remoteJwksSignatureVerifier(options.jwksUri);
+  const issuer = new URL(options.jwksUri).origin;
   return {
     async verify(token, nowSeconds) {
       const parsed = parseJwt(token);
       if (!parsed || !(await signatures.verify(token))) return null;
-      return actorFromClaims(parsed.payload, options.controlPlaneAudience, nowSeconds);
+      return actorFromClaims(parsed.payload, issuer, options.controlPlaneAudience, nowSeconds);
     },
   };
 }
@@ -173,12 +175,16 @@ async function signatureValid(parsed: ParsedJwt, fetchJwks: JwksFetcher): Promis
   );
 }
 
-/** Assert aud + exp + sub on a signature-verified payload, returning the actor. */
+/** Assert issuer, token type, audience, expiry, and subject on a verified payload. */
 function actorFromClaims(
   payload: Record<string, unknown>,
+  issuer: string,
   controlPlaneAudience: string,
   nowSeconds: number,
 ): VerifiedToken | null {
+  if (payload.iss !== issuer || payload.typ !== "access_token") {
+    return null;
+  }
   // aud must bind to this control-plane resource (matrix.md step 2).
   if (payload.aud !== controlPlaneAudience) {
     return null;
@@ -224,6 +230,7 @@ function authDoorFromClaim(claim: unknown): AuthDoor {
  */
 export function makeJwksVerifier(opts: {
   fetchJwks: JwksFetcher;
+  issuer: string;
   controlPlaneAudience: string;
 }): JwksVerifier {
   return {
@@ -235,7 +242,7 @@ export function makeJwksVerifier(opts: {
       if (!(await signatureValid(parsed, opts.fetchJwks))) {
         return null;
       }
-      return actorFromClaims(parsed.payload, opts.controlPlaneAudience, nowSeconds);
+      return actorFromClaims(parsed.payload, opts.issuer, opts.controlPlaneAudience, nowSeconds);
     },
   };
 }

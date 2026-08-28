@@ -1,6 +1,7 @@
+import { MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/sdk/control-plane";
 import { SplitchCliError } from "./errors.js";
 
-export const MEMBERSHIP_WIDE_READ_AUTHORIZATION = "membership-wide-read" as const;
+export { MEMBERSHIP_WIDE_READ_AUTHORIZATION };
 
 /** The selector a minted access token is bound to through the refresh grant. */
 export interface TokenBinding {
@@ -14,16 +15,20 @@ interface MembershipWideReadAuthorization {
 
 export type TokenAuthorization = TokenBinding | MembershipWideReadAuthorization;
 
+/**
+ * The cache label for the minted authority. An empty key is the unbound or
+ * legacy session token preserved when no explicit selector was requested.
+ */
 export function bindingKey(authorization: TokenAuthorization | null): string {
   if (!authorization) return "";
-  return authorization.kind === "membership-wide-read"
+  return authorization.kind === MEMBERSHIP_WIDE_READ_AUTHORIZATION
     ? MEMBERSHIP_WIDE_READ_AUTHORIZATION
     : `${authorization.kind}:${authorization.selector}`;
 }
 
 export function bindingParams(authorization: TokenAuthorization | null): Record<string, string> {
   if (!authorization) return {};
-  return authorization.kind === "membership-wide-read"
+  return authorization.kind === MEMBERSHIP_WIDE_READ_AUTHORIZATION
     ? { authorization: MEMBERSHIP_WIDE_READ_AUTHORIZATION }
     : { [authorization.kind]: authorization.selector };
 }

@@ -191,9 +191,13 @@ A Control Plane token request may instead set `authorization=membership-wide-rea
 mutually exclusive with `app`, `org`, and a device grant's selected App. It mints no selector scopes;
 the Control Plane reconstructs the principal's complete live membership set from D1 on every
 request. The route registrar accepts that structural grant only for `GET` and rejects every mutation
-before its handler runs. Scope-free CLI reads request and cache this token; selector-scoped commands
-continue to mint selector-bound tokens. The authorization is refused for MCP resources, does not
-change token TTL, and uses the same session revocation check as every other access token.
+before its handler runs. Internal delegation carries the grant and request-live membership set,
+binds only axes the surface registrar already authorized, and reruns Organization/App co-scope in
+the owner Worker. The CLI reuses any unexpired device-flow token for principal-keyed Organization
+discovery; when it must refresh, it requests and caches wide authority. Selector-scoped commands
+continue to mint selector-bound tokens. Both device-code exchange and refresh refuse wide authority
+when the session has a selected App. The authorization is refused for MCP resources, does not change
+token TTL, and uses the same session revocation check as every other access token.
 
 **Selector resolution is two-pass, ID before key.** An App ID is globally unique; an App key is
 unique per Organization only, and any user may add another user to an Organization they own. So a

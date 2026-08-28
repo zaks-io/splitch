@@ -56,7 +56,7 @@ function refreshRequest(app: ReturnType<typeof routeApp>, extra: Record<string, 
 }
 
 describe("OAuth membership-wide read refresh", () => {
-  it("mints membership-wide read authority without selector scopes or a stored App binding", async () => {
+  it("refuses membership-wide read authority when the session has a stored App selection", async () => {
     const minted: Array<{ scopes: string[]; authorization: string | undefined }> = [];
     const app = routeApp({
       tokenSigner: {
@@ -85,9 +85,9 @@ describe("OAuth membership-wide read refresh", () => {
 
     const res = await refreshRequest(app, { authorization: "membership-wide-read" });
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ access_token: "membership-wide-read-token" });
-    expect(minted).toEqual([{ scopes: [], authorization: "membership-wide-read" }]);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_request" });
+    expect(minted).toEqual([]);
   });
 
   it("rejects membership-wide read authority combined with a selector", async () => {

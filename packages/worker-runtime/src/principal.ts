@@ -24,9 +24,11 @@ export interface PrincipalMemberships {
  *
  * `orgId`/`appId`/`environmentId` are the scope the credential is bound to. The
  * guard enforces that they match the route's path params where the contract
- * requires co-scoping (ADR-0027). A `null` means the credential is not yet bound
- * to that axis. A selector resolver may bind it to one App already named by a
- * matching signed scope; otherwise a required null co-scope is FORBIDDEN.
+ * requires co-scoping (ADR-0027). A `null` means the credential is not bound to
+ * one value on that axis. A selector resolver may bind it to one App already
+ * named by a matching signed scope; otherwise a selector-bound credential is
+ * FORBIDDEN on a null co-scope axis. Membership-wide read tokens instead
+ * co-scope against their complete live `memberships` set.
  *
  * `orgId` follows the same single-value-or-null shape as `appId`: it is the one
  * Org the credential is bound to, meaningful only when the token names exactly

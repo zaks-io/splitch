@@ -16,13 +16,10 @@ async function bodyOf(res: Response): Promise<ErrorResponse> {
 }
 
 describe("guard: membership-wide read enforcement", () => {
-  it("allows membership-wide reads only for live Organization and App memberships", async () => {
+  it("does not let membership-wide authority satisfy a required scope", async () => {
     const wide = principal({
       authorization: MEMBERSHIP_WIDE_READ_AUTHORIZATION,
-      memberships: {
-        organizations: [{ id: "org_a", role: "member" }],
-        apps: [{ id: "app_1", organizationId: "org_a", role: "member" }],
-      },
+      memberships: { organizations: [], apps: [] },
     });
     const reg = createRegistrar(
       deps({ authResolvers: { "control-plane-token": resolverFor(wide) } }),
@@ -39,8 +36,9 @@ describe("guard: membership-wide read enforcement", () => {
       okHandler,
     );
 
-    expect((await app.request("/apps/app_1/things")).status).toBe(200);
-    expect((await app.request("/apps/app_other/things")).status).toBe(403);
+    const res = await app.request("/apps/app_1/things");
+    expect(res.status).toBe(403);
+    expect(await bodyOf(res)).toMatchObject({ code: "INSUFFICIENT_SCOPES" });
   });
 
   it("refuses every registered control-plane mutation for membership-wide tokens", () => {

@@ -18,10 +18,10 @@ import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedAppMember, seedEnvironment, seedOrgApp } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
+import { membershipAccessWithoutWideResolution } from "./token-membership-access-fixture";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
-const NOW_ISO = new Date(NOW_MS).toISOString();
 const APP = {
   orgId: "org_credentials_37ad",
   orgName: "Credentials Co",
@@ -66,6 +66,7 @@ afterEach(async () => h.bindings.dispose());
 
 function makeApp(bindings: LocalBindings, signer: FixtureSigner, credentialStore: KVNamespace) {
   const verifier = makeJwksVerifier({
+    issuer: "https://auth.splitch.test",
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -73,13 +74,13 @@ function makeApp(bindings: LocalBindings, signer: FixtureSigner, credentialStore
     authResolver: makeControlPlaneAuthResolver({
       verifier,
       sessions: makeSessionStore(bindings.kv),
-      membershipAccess: { authorize: async () => true },
+      membershipAccess: membershipAccessWithoutWideResolution,
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,
     repo: createRepository(bindings.d1),
     credentialStore,
-    nowIso: () => NOW_ISO,
+    nowIso: () => new Date(NOW_MS).toISOString(),
   });
 }
 
@@ -221,7 +222,7 @@ describe("control-plane credential endpoints", () => {
     expect(revoked.status).toBe(200);
     expect(await revoked.json()).toEqual({
       keyId: createdBody.credential.keyId,
-      revokedAt: NOW_ISO,
+      revokedAt: new Date(NOW_MS).toISOString(),
     });
     expect((await readCache(h.bindings.credentialKv, apiCacheKey))?.data.revoked).toBe(true);
   });

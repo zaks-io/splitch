@@ -79,6 +79,7 @@ beforeEach(async () => {
   const app = createApp({
     authResolver: makeControlPlaneAuthResolver({
       verifier: makeJwksVerifier({
+        issuer: "https://auth.splitch.test",
         fetchJwks: async () => signer.jwks,
         controlPlaneAudience: AUDIENCE,
       }),
@@ -205,6 +206,7 @@ describe("bearer token live membership recheck", () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
+          issuer: "https://auth.splitch.test",
           fetchJwks: async () => h.signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
@@ -231,6 +233,7 @@ describe("bearer token live membership recheck", () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
+          issuer: "https://auth.splitch.test",
           fetchJwks: async () => h.signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
@@ -238,6 +241,9 @@ describe("bearer token live membership recheck", () => {
         now: () => NOW_MS,
         membershipAccess: {
           authorize: async () => {
+            throw new Error("d1 membership read failed");
+          },
+          resolve: async () => {
             throw new Error("d1 membership read failed");
           },
         },

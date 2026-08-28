@@ -59,12 +59,12 @@ export function makeSessionReads(db: Db) {
      * (Organizations x Apps).
      *
      * Batched because D1 caps bound parameters per statement; see `idBatches`.
-     * `orgIds` is caller-supplied with no length cap of its own here — today the
-     * only caller trims to `SESSION_ORG_LIMIT` (50), comfortably under a single
-     * batch, but that cap lives in `apps/control-panel`, a layer away from this
-     * query. Batching removes the coupling instead of documenting it, so raising
-     * that constant, or a future caller skipping it, degrades to more queries
-     * rather than a `too many SQL variables` 500.
+     * `orgIds` is caller-supplied with no length cap of its own here. Session
+     * materialization in `apps/control-panel` trims to `SESSION_ORG_LIMIT` (50).
+     * Membership-wide bearer resolution in `apps/control-plane-api` deliberately
+     * passes the complete Organization set: trimming there would turn a valid
+     * membership into a plausible-but-wrong 403. Batching lets that caller grow
+     * to more queries rather than a `too many SQL variables` 500.
      */
     async listAppMembershipsWithAppForUser(userId: string, orgIds: readonly string[]) {
       if (orgIds.length === 0) {

@@ -174,7 +174,7 @@ export async function executeApiOperation(
 ): Promise<CliResult> {
   try {
     const route = requireOperationRoute(operationId);
-    const authorization = operationAuthorization(route, input);
+    const tokenAuthorization = operationAuthorization(route, input);
     const payload = await withAuthorizationRetry(
       deps,
       async (authorization) => {
@@ -183,7 +183,7 @@ export async function executeApiOperation(
         const result = await sdk.callOperationById(operationId, input, { authorization });
         return { status: result.ok ? 200 : result.status, value: result };
       },
-      authorization,
+      tokenAuthorization,
     );
     if (!payload.ok) {
       // `writeServerError` owns both channels: the enriched JSON on stdout and
@@ -225,6 +225,11 @@ function requireOperationRoute(operationId: string): NonNullable<ReturnType<type
   });
 }
 
+/**
+ * Path selectors bind to their App or Organization. Selector-free Control
+ * Plane reads request membership-wide authority; mutations keep the session's
+ * existing selector authority.
+ */
 export function operationAuthorization(
   route: NonNullable<ReturnType<typeof getRoute>>,
   input: Record<string, unknown>,

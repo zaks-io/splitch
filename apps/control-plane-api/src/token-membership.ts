@@ -19,7 +19,7 @@ import {
 
 export interface TokenMembershipAccess {
   authorize(userId: string, claims: readonly MembershipClaim[]): Promise<boolean>;
-  resolve?(userId: string): Promise<PrincipalMemberships>;
+  resolve(userId: string): Promise<PrincipalMemberships>;
 }
 
 const ROLE_RANK: Record<UserRole, number> = {

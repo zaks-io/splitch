@@ -1,4 +1,5 @@
 import {
+  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
   type UnavailableControlPlaneOperationId,
   unavailableControlPlaneOperationIds,
 } from "@splitch/contracts";
@@ -97,7 +98,17 @@ async function requireScopedOrgOwner(
   args: HandlerArgs<unknown>,
   privacyRequest: PrivacyRequest,
 ): Promise<Response | null | undefined> {
-  if (args.principal.orgId !== privacyRequest.orgId) return undefined;
+  if (
+    args.principal.orgId !== privacyRequest.orgId &&
+    !(
+      args.principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION &&
+      args.principal.memberships?.organizations.some(
+        (membership) => membership.id === privacyRequest.orgId,
+      )
+    )
+  ) {
+    return undefined;
+  }
   return requireOrgRole(
     deps,
     privacyRequest.orgId,
@@ -112,7 +123,15 @@ async function requireScopedAppAdmin(
   args: HandlerArgs<unknown>,
   appId: string,
 ): Promise<Response | null | undefined> {
-  if (args.principal.appId !== appId) return undefined;
+  if (
+    args.principal.appId !== appId &&
+    !(
+      args.principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION &&
+      args.principal.memberships?.apps.some((membership) => membership.id === appId)
+    )
+  ) {
+    return undefined;
+  }
   return requireAppWrite(deps, appId, args.principal, args.requestId);
 }
 

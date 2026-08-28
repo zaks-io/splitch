@@ -87,11 +87,17 @@ describe("live-update Durable Object authorization", () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
+          issuer: "https://auth.splitch.test",
           fetchJwks: async () => signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
         sessions: makeSessionStore(env.SESSION_STORE),
-        membershipAccess: { authorize: async () => true },
+        membershipAccess: {
+          authorize: async () => true,
+          resolve: async () => {
+            throw new Error("test fixture has no wide membership resolver");
+          },
+        },
         now: () => NOW_MS,
       }),
       rateLimiter: () => ({ limited: false }),
@@ -113,11 +119,17 @@ describe("live-update Durable Object authorization", () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
+          issuer: "https://auth.splitch.test",
           fetchJwks: async () => signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
         sessions: makeSessionStore(env.SESSION_STORE),
-        membershipAccess: { authorize: async () => true },
+        membershipAccess: {
+          authorize: async () => true,
+          resolve: async () => {
+            throw new Error("test fixture has no wide membership resolver");
+          },
+        },
         now: () => NOW_MS,
       }),
       rateLimiter: () => ({ limited: false }),

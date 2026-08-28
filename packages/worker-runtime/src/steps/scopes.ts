@@ -3,7 +3,7 @@ import {
   MEMBERSHIP_WIDE_READ_AUTHORIZATION,
   type RouteContract,
 } from "@splitch/contracts";
-import type { Principal } from "../principal";
+import type { Principal, PrincipalMemberships } from "../principal";
 
 /**
  * Step 5. Enforce required scopes, then Org/App/Environment co-scope (ADR-0027).
@@ -22,19 +22,17 @@ export function enforceScopes(
   const authorizationError = membershipWideReadError(contract, principal);
   if (authorizationError) return authorizationError;
 
-  if (principal.authorization !== MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
-    const held = new Set(principal.scopes);
-    const missing = contract.scopes.filter((scope) => !held.has(scope));
-    if (missing.length > 0) {
-      return {
-        code: "INSUFFICIENT_SCOPES",
-        message: "credential lacks required scopes",
-        details: {
-          requiredScopes: [...contract.scopes],
-          heldScopes: [...principal.scopes],
-        },
-      };
-    }
+  const held = new Set(principal.scopes);
+  const missing = contract.scopes.filter((scope) => !held.has(scope));
+  if (missing.length > 0) {
+    return {
+      code: "INSUFFICIENT_SCOPES",
+      message: "credential lacks required scopes",
+      details: {
+        requiredScopes: [...contract.scopes],
+        heldScopes: [...principal.scopes],
+      },
+    };
   }
 
   // Org co-scope. The Org is the tenant boundary one level above the App, so a
@@ -85,14 +83,21 @@ function membershipWideReadError(
 ): ErrorResponse | null {
   if (principal.authorization !== MEMBERSHIP_WIDE_READ_AUTHORIZATION) return null;
   if (contract.method !== "GET") return forbidden("credential grants read access only");
-  return principal.memberships ? null : forbidden("live membership is required");
+  requireWideMemberships(principal);
+  return null;
+}
+
+function requireWideMemberships(principal: Principal): PrincipalMemberships {
+  if (!principal.memberships) {
+    throw new Error("worker-runtime: membership-wide principal has no live memberships");
+  }
+  return principal.memberships;
 }
 
 function organizationAccessCovers(principal: Principal, organizationId: string): boolean {
   if (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
-    return (
-      principal.memberships?.organizations.some((membership) => membership.id === organizationId) ??
-      false
+    return requireWideMemberships(principal).organizations.some(
+      (membership) => membership.id === organizationId,
     );
   }
   return principal.orgId === organizationId;
@@ -100,7 +105,7 @@ function organizationAccessCovers(principal: Principal, organizationId: string):
 
 function appAccessCovers(principal: Principal, appId: string): boolean {
   if (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
-    return principal.memberships?.apps.some((membership) => membership.id === appId) ?? false;
+    return requireWideMemberships(principal).apps.some((membership) => membership.id === appId);
   }
   return principal.appId === appId;
 }

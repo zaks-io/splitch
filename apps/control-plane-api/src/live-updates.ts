@@ -1,4 +1,8 @@
-import type { ErrorResponse, ServerAuthenticatedLiveUpdateContext } from "@splitch/contracts";
+import {
+  type ErrorResponse,
+  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+  type ServerAuthenticatedLiveUpdateContext,
+} from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import {
   emptyError,
@@ -129,7 +133,11 @@ function liveScopeError(
   appId: string,
   environmentId: string,
 ): ErrorResponse | null {
-  if (principal.appId !== appId) {
+  const hasApp =
+    principal.appId === appId ||
+    (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION &&
+      principal.memberships?.apps.some((membership) => membership.id === appId));
+  if (!hasApp) {
     return emptyError("FORBIDDEN", "credential is not scoped to this app");
   }
   if (principal.environmentId !== null && principal.environmentId !== environmentId) {

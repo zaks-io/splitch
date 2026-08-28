@@ -1,4 +1,9 @@
-import { type UserRole, UserRoleSchema } from "@splitch/contracts";
+import {
+  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+  type UserRole,
+  UserRoleSchema,
+} from "@splitch/contracts";
+import type { Principal } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 
 export const ORG_MEMBER_ROLES: readonly UserRole[] = ["owner", "admin", "member"];
@@ -13,10 +18,7 @@ interface OrgAuthzDeps {
   };
 }
 
-interface ScopedActor {
-  id: string;
-  scopes: readonly string[];
-}
+type ScopedActor = Pick<Principal, "id" | "scopes" | "authorization" | "memberships">;
 
 export async function requireOrgRole(
   deps: OrgAuthzDeps,
@@ -25,8 +27,13 @@ export async function requireOrgRole(
   allowed: readonly UserRole[],
   requestId: string,
 ): Promise<Response | null> {
-  const hasScope = allowed.some((role) => actor.scopes.includes(`org:${orgId}:${role}`));
-  if (!hasScope) return forbidden(requestId);
+  const hasAuthority =
+    allowed.some((role) => actor.scopes.includes(`org:${orgId}:${role}`)) ||
+    (actor.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION &&
+      actor.memberships?.organizations.some(
+        (membership) => membership.id === orgId && allowed.includes(membership.role),
+      ));
+  if (!hasAuthority) return forbidden(requestId);
 
   const membership = await deps.repo.identity.getOrgMembership(orgId, actor.id);
   if (membership) {

@@ -14,14 +14,18 @@ const APP = "app_membership_recheck";
 describe("authorizeBearerMembership", () => {
   it("skips tokens whose authority does not derive from membership", async () => {
     const authorize = vi.fn();
-    const refused = await authorizeBearerMembership({ authorize }, USER, ["service:smoke"]);
+    const refused = await authorizeBearerMembership(fakeAccess({ authorize }), USER, [
+      "service:smoke",
+    ]);
     expect(refused).toBeNull();
     expect(authorize).not.toHaveBeenCalled();
   });
 
   it("skips the read when no membership axes are present", async () => {
     const authorize = vi.fn();
-    await expect(authorizeBearerMembership({ authorize }, USER, [])).resolves.toBeNull();
+    await expect(
+      authorizeBearerMembership(fakeAccess({ authorize }), USER, []),
+    ).resolves.toBeNull();
     expect(authorize).not.toHaveBeenCalled();
   });
 
@@ -34,11 +38,11 @@ describe("authorizeBearerMembership", () => {
   it("propagates a thrown membership read instead of minting a principal", async () => {
     await expect(
       authorizeBearerMembership(
-        {
+        fakeAccess({
           authorize: async () => {
             throw new Error("d1 membership read failed");
           },
-        },
+        }),
         USER,
         [`app:${APP}:admin`],
       ),
@@ -46,9 +50,11 @@ describe("authorizeBearerMembership", () => {
   });
 
   it("refuses a claimed membership the port rejects", async () => {
-    const refused = await authorizeBearerMembership({ authorize: async () => false }, USER, [
-      `app:${APP}:admin`,
-    ]);
+    const refused = await authorizeBearerMembership(
+      fakeAccess({ authorize: async () => false }),
+      USER,
+      [`app:${APP}:admin`],
+    );
     expect(refused).toEqual({
       ok: false,
       reason: "UNAUTHORIZED",
@@ -62,7 +68,7 @@ describe("authorizeBearerMembership", () => {
 
   it("passes a claimed membership the port accepts", async () => {
     await expect(
-      authorizeBearerMembership({ authorize: async () => true }, USER, [`org:${ORG}:member`]),
+      authorizeBearerMembership(fakeAccess(), USER, [`org:${ORG}:member`]),
     ).resolves.toBeNull();
   });
 });
@@ -70,9 +76,10 @@ describe("authorizeBearerMembership", () => {
 describe("withBearerMembershipCheck", () => {
   it("leaves an already-refused resolver result alone", async () => {
     const authorize = vi.fn(async () => false);
-    const wrapped = withBearerMembershipCheck(async () => ({ ok: false, reason: "UNAUTHORIZED" }), {
-      authorize,
-    });
+    const wrapped = withBearerMembershipCheck(
+      async () => ({ ok: false, reason: "UNAUTHORIZED" }),
+      fakeAccess({ authorize }),
+    );
     await expect(wrapped(new Request("https://cp.test"))).resolves.toEqual({
       ok: false,
       reason: "UNAUTHORIZED",
@@ -94,7 +101,7 @@ describe("withBearerMembershipCheck", () => {
           authDoor: "id_jag",
         },
       }),
-      { authorize: async () => false },
+      fakeAccess({ authorize: async () => false }),
     );
     await expect(wrapped(new Request("https://cp.test"))).resolves.toMatchObject({
       ok: false,
@@ -166,7 +173,7 @@ describe("makeTokenMembershipAccess", () => {
     expect(getAppMembership).toHaveBeenCalledWith(appScope(APP), USER);
   });
 
-  it("resolves the complete live membership set without accepting memberships from a claim", async () => {
+  it("resolves the complete live membership set for the User", async () => {
     const access = makeTokenMembershipAccess({
       identity: {
         listOrgMembershipsForUser: async () => [
@@ -185,7 +192,7 @@ describe("makeTokenMembershipAccess", () => {
       },
     } as unknown as Parameters<typeof makeTokenMembershipAccess>[0]);
 
-    await expect(access.resolve?.(USER)).resolves.toEqual({
+    await expect(access.resolve(USER)).resolves.toEqual({
       organizations: [
         { id: ORG, role: "admin" },
         { id: "org_other", role: "member" },
@@ -194,6 +201,16 @@ describe("makeTokenMembershipAccess", () => {
     });
   });
 });
+
+function fakeAccess(
+  overrides: Partial<Parameters<typeof authorizeBearerMembership>[0]> = {},
+): Parameters<typeof authorizeBearerMembership>[0] {
+  return {
+    authorize: async () => true,
+    resolve: async () => ({ organizations: [], apps: [] }),
+    ...overrides,
+  };
+}
 
 function identity(options: {
   appRole?: string | null;
