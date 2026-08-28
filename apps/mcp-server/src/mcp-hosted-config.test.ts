@@ -91,4 +91,50 @@ describe("MCP hosted configuration", () => {
       "mcp-server: CONTROL_PLANE_API_ORIGIN is required for shared-preview",
     );
   });
+
+  it.each([
+    { label: "missing", platformTarget: undefined, message: "SPLITCH_PLATFORM_TARGET is required" },
+    {
+      label: "invalid",
+      platformTarget: "staging",
+      message: 'SPLITCH_PLATFORM_TARGET "staging" is not a platform target',
+    },
+  ] as const)("does not use configured hosted origins when the platform target is $label", async ({
+    platformTarget,
+    message,
+  }) => {
+    const hostedOrigins = {
+      authBaseUrl: "https://auth.splitch.test",
+      controlPlaneBaseUrl: "https://control-plane.splitch.test",
+    };
+
+    await expect(
+      handleMcpServerRequest({
+        request: new Request("https://mcp.test/.well-known/oauth-protected-resource"),
+        service,
+        platformTarget,
+        ...hostedOrigins,
+        tokenVerifier: staticMcpTokenVerifier(),
+        revocations: allowMcpRevocations(),
+      }),
+    ).rejects.toThrow(message);
+
+    await expect(
+      handleMcpServerRequest({
+        request: new Request("https://mcp.test/mcp", { method: "POST" }),
+        service,
+        platformTarget,
+        ...hostedOrigins,
+        revocations: allowMcpRevocations(),
+      }),
+    ).rejects.toThrow(message);
+
+    const sdk = createControlPlaneOperationSdk({
+      platformTarget,
+      controlPlaneBaseUrl: hostedOrigins.controlPlaneBaseUrl,
+      controlPlaneFetch: async () => new Response(null, { status: 204 }),
+      controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    });
+    expect(() => sdk()).toThrow(message);
+  });
 });

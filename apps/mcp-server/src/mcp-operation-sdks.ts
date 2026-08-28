@@ -48,10 +48,10 @@ function requiredDelegationSecret(secret: string | undefined): string {
 }
 
 function controlPlaneBaseUrl(options: McpOperationSdkOptions): string {
+  const platformTarget = requirePlatformTarget(options.platformTarget);
   if (options.controlPlaneBaseUrl) {
     return options.controlPlaneBaseUrl;
   }
-  const platformTarget = requirePlatformTarget(options.platformTarget);
   if (isLocalPlatformTarget(platformTarget)) {
     return defaultControlPlaneBaseUrl;
   }

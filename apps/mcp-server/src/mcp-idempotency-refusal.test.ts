@@ -81,6 +81,7 @@ async function callTool(
       }),
     }),
     service,
+    platformTarget: "local",
     controlPlaneBaseUrl: "https://control-plane.test",
     controlPlaneFetch: async (input, init) => {
       const request = input instanceof Request ? input : new Request(input, init);

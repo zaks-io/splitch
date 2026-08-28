@@ -92,8 +92,8 @@ function protectedResourceResponse(
 }
 
 function authBaseUrl(configured: string | undefined, platformTarget: string | undefined): string {
-  if (configured) return new URL(configured).origin;
   const target = requirePlatformTarget(platformTarget);
+  if (configured) return new URL(configured).origin;
   if (isLocalPlatformTarget(target)) return defaultAuthBaseUrl;
   throw new Error(`mcp-server: AUTH_API_ORIGIN is required for ${target}`);
 }

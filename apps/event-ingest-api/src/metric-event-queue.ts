@@ -1,3 +1,4 @@
+import { requirePlatformTarget } from "@splitch/contracts";
 import { appendRawEvent, tinybirdDelivery } from "./tinybird";
 import type { Env } from "./types";
 
@@ -10,6 +11,7 @@ export async function handleMetricEventQueue(
   batch: MessageBatch<MetricEventRow>,
   env: Env,
 ): Promise<void> {
+  requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
   const delivery = tinybirdDelivery(env, "metric_events");
   await Promise.all(
     batch.messages.map(async (message) => {

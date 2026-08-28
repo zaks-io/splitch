@@ -232,8 +232,8 @@ async function dispatchMethod(
 }
 
 function authIssuer(configured: string | undefined, platformTarget: string | undefined): string {
-  if (configured) return new URL(configured).origin;
   const target = requirePlatformTarget(platformTarget);
+  if (configured) return new URL(configured).origin;
   if (isLocalPlatformTarget(target)) return "http://localhost:8791";
   throw new Error(`mcp-server: AUTH_API_ORIGIN is required for ${target}`);
 }
