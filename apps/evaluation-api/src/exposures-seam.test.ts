@@ -145,6 +145,22 @@ function makeEventIngestEnv() {
     SPLITCH_EVENT_INGEST_TOKEN: "internal_ingest_secret",
     TINYBIRD_API_URL: "https://tinybird.test",
     TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
+    INGEST_ADMISSION_GATE: allowAllAdmissionGate(),
+  };
+}
+
+function allowAllAdmissionGate() {
+  return {
+    idFromName(name: string) {
+      return name as unknown as DurableObjectId;
+    },
+    get() {
+      return {
+        async fetch() {
+          return Response.json({ allowed: true, retryAfterMs: 0 });
+        },
+      };
+    },
   };
 }
 
