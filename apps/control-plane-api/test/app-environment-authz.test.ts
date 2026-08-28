@@ -124,7 +124,6 @@ async function request(
 
 async function createDefaultApp(key = "checkout") {
   const res = await request("POST", `/orgs/${ORG.orgId}/apps`, await orgToken(), {
-    organizationId: ORG.orgId,
     name: key === "checkout" ? "Checkout" : `Checkout ${key}`,
     key,
   });

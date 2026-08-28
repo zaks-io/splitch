@@ -95,6 +95,33 @@ describe("control-plane Client Key rateLimitRps PATCH", () => {
     await expect(patched.json()).resolves.toMatchObject({ rateLimitRps: 30 });
     expect(await persistedRateLimit(keyMaterial)).toEqual({ d1: 30, kv: 30 });
   });
+
+  it("rejects an over-limit origin allowlist before any mutation", async () => {
+    const jwt = await token();
+    const provisioned = await clientKeyRequest("GET", jwt);
+    expect(provisioned.status).toBe(200);
+    const { keyMaterial } = (await provisioned.json()) as { keyMaterial: string };
+    const before = await persistedOrigins(keyMaterial);
+
+    const tooLong = await clientKeyRequest("PATCH", jwt, {
+      originAllowlist: [`https://example.com/${"a".repeat(2048)}`],
+    });
+    expect(tooLong.status).toBe(400);
+    await expect(tooLong.json()).resolves.toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { issues: [{ path: ["body", "originAllowlist", "0"] }] },
+    });
+
+    const tooMany = await clientKeyRequest("PATCH", jwt, {
+      originAllowlist: Array.from({ length: 101 }, (_, index) => `https://ex${index}.example`),
+    });
+    expect(tooMany.status).toBe(400);
+    await expect(tooMany.json()).resolves.toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { issues: [{ path: ["body", "originAllowlist"] }] },
+    });
+    expect(await persistedOrigins(keyMaterial)).toEqual(before);
+  });
 });
 
 async function token(): Promise<string> {
@@ -121,6 +148,22 @@ async function clientKeyRequest(
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+}
+
+async function persistedOrigins(keyMaterial: string): Promise<{ d1: string | null; kv: unknown }> {
+  const rows = (
+    await createRepository(h.bindings.d1).credentials.listClientKeys(
+      envScope(APP.appId, ENV.environmentId),
+    )
+  ).filter((row) => !row.revokedAt);
+  const raw = await h.bindings.credentialKv.get(
+    clientKeyCacheKey(await sha256Hex(keyMaterial)),
+    "text",
+  );
+  return {
+    d1: rows[0]?.originAllowlist ?? null,
+    kv: raw === null ? null : cacheEnvelope.parse(JSON.parse(raw)).data.originAllowlist,
+  };
 }
 
 async function persistedRateLimit(

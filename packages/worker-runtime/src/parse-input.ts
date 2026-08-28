@@ -1,5 +1,9 @@
 import { readBoundedRequestBytes, trustedContentLength } from "@splitch/bounded-body";
-import type { ErrorResponse, RawBodyByteLimit } from "@splitch/contracts";
+import {
+  incomingJsonBoundIssue,
+  type ErrorResponse,
+  type RawBodyByteLimit,
+} from "@splitch/contracts";
 import type { z } from "zod";
 
 /**
@@ -41,6 +45,18 @@ export async function parseInput<Schema extends z.ZodTypeAny>(
     body: body.value,
   };
 
+  const incomingBound = incomingJsonBoundIssue(raw);
+  if (incomingBound) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "request failed schema validation",
+        details: { issues: [incomingBound] },
+      },
+    };
+  }
+
   const result = schema.safeParse(raw);
   if (result.success) {
     return { ok: true, value: result.data, request: body.request };
@@ -52,13 +68,81 @@ export async function parseInput<Schema extends z.ZodTypeAny>(
       code: "VALIDATION_ERROR",
       message: "request failed schema validation",
       details: {
-        issues: result.error.issues.map((issue) => ({
-          path: issue.path.map(String),
-          message: issue.message,
-        })),
+        issues: validationIssues(result.error),
       },
     },
   };
+}
+
+function validationIssues(error: z.ZodError): Array<{ path: string[]; message: string }> {
+  return error.issues.flatMap(flattenValidationIssue);
+}
+
+function flattenValidationIssue(
+  issue: z.core.$ZodIssue,
+): Array<{ path: string[]; message: string }> {
+  if (issue.code === "unrecognized_keys") {
+    return issue.keys.map((key) => ({
+      path: [...issue.path.map(String), key],
+      message: `Unrecognized key: "${key}"`,
+    }));
+  }
+  if (issue.code === "invalid_union") {
+    const selected = issue.errors.filter(branchIsUnambiguouslySelected);
+    if (selected.length === 1) {
+      const selectedBranch = selected[0];
+      if (selectedBranch !== undefined) {
+        return uniqueValidationIssues(
+          selectedBranch.flatMap(flattenValidationIssue).map((nested) => ({
+            ...nested,
+            path: prefixIssuePath(issue.path, nested.path),
+          })),
+        );
+      }
+    }
+  }
+  return [{ path: issue.path.map(String), message: issue.message }];
+}
+
+function prefixIssuePath(parent: PropertyKey[], child: string[]): string[] {
+  const parentPath = parent.map(String);
+  if (
+    child.length >= parentPath.length &&
+    parentPath.every((part, index) => child[index] === part)
+  ) {
+    return child;
+  }
+  return [...parentPath, ...child];
+}
+
+function branchIsUnambiguouslySelected(branch: z.core.$ZodIssue[]): boolean {
+  return branch.length > 0 && !branch.some(isBranchRootTypeMismatch);
+}
+
+function isBranchRootTypeMismatch(issue: z.core.$ZodIssue): boolean {
+  if (isDiscriminatorMiss(issue)) return true;
+  const isRootOrType =
+    issue.path.length === 0 || (issue.path.length === 1 && issue.path[0] === "type");
+  if (!isRootOrType) return false;
+  return issue.code === "invalid_value" || issue.code === "invalid_type";
+}
+
+function isDiscriminatorMiss(issue: z.core.$ZodIssue): boolean {
+  return (
+    issue.code === "invalid_union" && "note" in issue && issue.note === "No matching discriminator"
+  );
+}
+
+function uniqueValidationIssues(
+  issues: Array<{ path: string[]; message: string }>,
+): Array<{ path: string[]; message: string }> {
+  const seen = new Set<string>();
+  return issues.filter((issue) => {
+    const key = `${issue.path.join("\0")}\0${issue.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function queryToRecord(request: Request): Record<string, string> {

@@ -68,6 +68,26 @@ describe("guard: input validation", () => {
     expect((await bodyOf(res)).code).toBe("VALIDATION_ERROR");
   });
 
+  it("returns VALIDATION_ERROR naming an unknown body field instead of stripping it", async () => {
+    const reg = createRegistrar(deps());
+    const app = new Hono();
+    reg.mount(app, route({ input: BodyInput }), okHandler);
+
+    const res = await app.request("/things", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "ok", extra: true }),
+    });
+
+    expect(res.status).toBe(400);
+    const err = await bodyOf(res);
+    expect(err.code).toBe("VALIDATION_ERROR");
+    if (err.code !== "VALIDATION_ERROR") return;
+    expect(err.details.issues).toEqual([
+      { path: ["body", "extra"], message: 'Unrecognized key: "extra"' },
+    ]);
+  });
+
   it("accepts a well-formed body and runs the handler", async () => {
     const reg = createRegistrar(deps());
     const app = new Hono();

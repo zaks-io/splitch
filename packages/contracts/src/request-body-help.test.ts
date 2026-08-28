@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { DraftAllocationSchema } from "./draft-allocation";
+import { PublishEventDefinitionVersionRequestSchema } from "./event-definition-write";
 import { EnvironmentPolicySchema } from "./leaf-schemas-runtime";
 import { EvaluateAllRequestSchema } from "./leaves/evaluate-all-wire";
 import { describeRequestBody, requestBodySchemaForOperation } from "./request-body-help";
@@ -9,11 +10,13 @@ import {
   PatchExperimentRequestSchema,
   StartRunRequestSchema,
 } from "./resource-envelopes-experiment";
+import { CreateFlagRequestSchema } from "./resource-envelopes-flag";
 import {
   PatchFlagConfigRequestSchema,
   ReplaceTargetingRulesRequestSchema,
 } from "./routes/route-shapes";
 import { ReviewApprovalRequestSchema } from "./routes/route-shapes-approval-request";
+import { WriteVariantValueSchema } from "./write-persisted-schemas";
 
 describe("requestBodySchemaForOperation", () => {
   it("returns the route body schema for known body operations", () => {
@@ -194,5 +197,30 @@ describe("describeRequestBody", () => {
       },
     });
     expect(() => describeRequestBody(cyclic)).toThrow(/max depth/);
+  });
+});
+
+describe("write Variant value help labels", () => {
+  it("labels the write Variant value schema by identity instead of unrolling JSON depth", () => {
+    const create = describeRequestBody(CreateFlagRequestSchema);
+    expect(create.fields.find((field) => field.name === "variants")?.typeLabel).toContain(
+      "boolean | string | number | Record<string, unknown>",
+    );
+    expect(CreateFlagRequestSchema.safeParse(create.example).success).toBe(true);
+
+    const renamed = describeRequestBody(z.object({ payload: WriteVariantValueSchema }));
+    expect(renamed.fields[0]?.typeLabel).toBe(
+      "boolean | string | number | Record<string, unknown>",
+    );
+  });
+});
+
+describe("Event Definition write help labels", () => {
+  it("labels Closed JSON as closed JSON Schema without a Zod transform", () => {
+    const help = describeRequestBody(PublishEventDefinitionVersionRequestSchema);
+    expect(help.fields.find((field) => field.name === "fields")?.typeLabel).toContain(
+      "closed JSON Schema",
+    );
+    expect(PublishEventDefinitionVersionRequestSchema.safeParse(help.example).success).toBe(true);
   });
 });

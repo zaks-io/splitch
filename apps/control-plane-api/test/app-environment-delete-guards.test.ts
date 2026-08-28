@@ -112,7 +112,6 @@ async function createDefaultApp(key = "checkout") {
     method: "POST",
     headers: { authorization: `Bearer ${await orgToken()}`, "content-type": "application/json" },
     body: JSON.stringify({
-      organizationId: ORG.orgId,
       name: key === "checkout" ? "Checkout" : `Checkout ${key}`,
       key,
     }),

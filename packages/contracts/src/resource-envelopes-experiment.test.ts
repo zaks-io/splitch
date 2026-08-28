@@ -43,6 +43,52 @@ describe("CreateExperimentRequestSchema (defaultVariantId is Worker-copied)", ()
     expect(req.idempotency_key).toBe("idem-1");
   });
 
+  it("rejects an unknown MetricRef field and an unknown Targeting Rule field", () => {
+    const metric = CreateExperimentRequestSchema.safeParse({
+      ...validCreateExperiment,
+      metrics: [{ metricId: "m_1", extra: true }],
+    });
+    expect(metric.success).toBe(false);
+    if (metric.success) return;
+    expect(metric.error.issues[0]).toMatchObject({
+      code: "unrecognized_keys",
+      keys: ["extra"],
+    });
+
+    const rule = CreateExperimentRequestSchema.safeParse({
+      ...validCreateExperiment,
+      targetingRules: [
+        {
+          id: "rule-1",
+          flagId: "flag_1",
+          priority: 0,
+          conditions: [{ attribute: "plan", operator: "eq", value: "pro" }],
+          variantId: "var_1",
+          extra: true,
+        },
+      ],
+    });
+    expect(rule.success).toBe(false);
+    if (rule.success) return;
+    expect(rule.error.issues[0]).toMatchObject({
+      code: "unrecognized_keys",
+      keys: ["extra"],
+    });
+  });
+
+  it("rejects an unknown field instead of stripping it", () => {
+    const result = CreateExperimentRequestSchema.safeParse({
+      ...validCreateExperiment,
+      extra: true,
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]).toMatchObject({
+      code: "unrecognized_keys",
+      keys: ["extra"],
+    });
+  });
+
   it("parses staged draft assignment fields without enforcing Start invariants", () => {
     const req = CreateExperimentRequestSchema.parse({
       ...validCreateExperiment,

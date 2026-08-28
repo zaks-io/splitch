@@ -110,8 +110,6 @@ export type {
   ResolvedTargetingRule,
   Segment,
   TargetingRule,
-  TargetingRuleInput,
-  TargetingRuleRolloutInput,
   Variant,
 } from "./leaf-schemas-flag";
 export {
@@ -122,8 +120,6 @@ export {
   PercentageRolloutSchema,
   ResolvedTargetingRuleSchema,
   SegmentSchema,
-  TargetingRuleInputSchema,
-  TargetingRuleRolloutInputSchema,
   TargetingRuleSchema,
   VariantSchema,
 } from "./leaf-schemas-flag";

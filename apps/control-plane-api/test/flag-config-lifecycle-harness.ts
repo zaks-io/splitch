@@ -112,7 +112,6 @@ export async function lifecycleCreateDefaultApp(h: LifecycleHarness) {
     `/orgs/${LIFECYCLE_ORG.orgId}/apps`,
     await lifecycleOrgToken(h),
     {
-      organizationId: LIFECYCLE_ORG.orgId,
       name: "Checkout",
       key: "checkout",
     },

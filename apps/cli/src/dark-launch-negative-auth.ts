@@ -107,8 +107,6 @@ export async function proveLocalNegativeAuth(
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          orgId: harness.foreignOrgId,
-          organizationId: harness.foreignOrgId,
           name: "Should Fail",
           key: crossKey,
         }),
@@ -257,12 +255,7 @@ async function createProbeApp(harness: QuickstartHarness, key: string) {
     app: { id: string };
     environments: { id: string; key: string }[];
     clientKeys: { environmentId: string; keyMaterial: string }[];
-  }>(
-    harness,
-    `/orgs/${harness.orgId}/apps`,
-    { organizationId: harness.orgId, name: `Probe ${key}`, key },
-    harness.orgAccessToken,
-  );
+  }>(harness, `/orgs/${harness.orgId}/apps`, { name: `Probe ${key}`, key }, harness.orgAccessToken);
 }
 
 async function expectAuthError(

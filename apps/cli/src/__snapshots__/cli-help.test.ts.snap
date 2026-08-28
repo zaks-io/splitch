@@ -726,7 +726,7 @@ Request body (--body-json):
   dimensions          optional; default []  string[]
   allocation          optional  Record<Variant name, number>
   salt                optional  string
-  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null; segmentId?: string }[]
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; segmentId?: string; percentageRollout?: { percentage: number; salt?: string } | null }[]
   segmentIds          optional  string[]
   idempotency_key     optional  string
   Example:
@@ -829,7 +829,7 @@ Request body (--body-json):
   allocation          optional  Record<Variant name, number>
   salt                optional  string
   variantSet          optional  { id: string; name: string; value: boolean | string | number | Record<string, unknown>; description?: string }[]
-  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null; segmentId?: string }[]
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; segmentId?: string; percentageRollout?: { percentage: number; salt?: string } | null }[]
   segmentIds          optional  string[]
   metrics             optional  { metricId: string }[]
   guardrailMetrics    optional  { metricId: string }[]

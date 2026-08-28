@@ -158,9 +158,28 @@ export async function request(
   });
 }
 
+/** Send a JSON body that `JSON.stringify` would rewrite (for example `1e400`). */
+export async function requestRawJson(
+  h: FlagDefinitionHarness,
+  method: string,
+  path: string,
+  jwt: string,
+  body: string,
+  idempotencyKey?: string,
+): Promise<Response> {
+  return h.app.request(path, {
+    method,
+    headers: {
+      authorization: `Bearer ${jwt}`,
+      "content-type": "application/json",
+      ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
+    },
+    body,
+  });
+}
+
 export async function createDefaultApp(h: FlagDefinitionHarness) {
   const res = await request(h, "POST", `/orgs/${ORG.orgId}/apps`, await orgToken(h), {
-    organizationId: ORG.orgId,
     name: "Checkout",
     key: "checkout",
   });

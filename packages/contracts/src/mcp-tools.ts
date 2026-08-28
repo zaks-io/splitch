@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ErrorResponseSchema } from "./errors";
 import { KILL_SWITCH_OFF_EXEMPTION } from "./kill-switch-off-exemption";
 import type { ApiRouteContract } from "./openapi-route";
+import { IdempotencyKeySchema } from "./persisted-field-limits";
 import { routeRegistry } from "./route-registry";
 
 /**
@@ -136,7 +137,7 @@ function withIdempotencyKeyField(route: ApiRouteContract, shape: z.ZodRawShape):
   if (route.idempotency !== "required" || shape.idempotency_key) {
     return shape;
   }
-  return { ...shape, idempotency_key: z.string().min(1) };
+  return { ...shape, idempotency_key: IdempotencyKeySchema };
 }
 
 function unwrapOptionalObject(schema: z.ZodTypeAny | undefined): z.ZodObject | undefined {

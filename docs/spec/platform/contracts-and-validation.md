@@ -96,6 +96,19 @@ different shapes (patch must reject assignment-config fields on a live Run).
 | D1 reads                   | Trusted — column schema + migrations enforce structure; no re-parse        |
 | Tinybird query results     | Parse at the control-plane endpoint before returning to callers            |
 
+External create and patch bodies are `.strict()`: an unknown key is `VALIDATION_ERROR` with that
+field's path, not a silent strip. Nested write schemas (Condition, Variant value, MetricRef,
+Targeting Rule, Event Definition publication, Client Key origins, and `runs_end`) are strict and
+bounded the same way. Persisted names, descriptions, identifiers, Condition values, Variant strings,
+salts, arrays, records, JSON depth, origins, telemetry enums, Experiment draft Segment refs, and
+Idempotency Keys share named bounds in `persisted-field-limits.ts`. Those bounds are absolute
+product limits, not data-dependent scales. Domain arrays that must exceed the generic 100-item
+product cap (telemetry enums, Experiment draft Segment refs) use their own named 256-item bound.
+Write-only schemas carry the bounds. Canonical response and storage leaves stay permissive so
+retained KV/D1 rows remain readable. Existing stored rows are not truncated; over-limit input fails
+at parse, before D1, KV, or Tinybird writes. Body and header Idempotency Keys share the same
+255-character printable-ASCII policy.
+
 **KV hot-path validation trade-off:** latency is accepted in exchange for loudness. A malformed
 KV blob fails loud (returns error, falls back to D1) rather than flowing a half-valid object into
 evaluation. Optimize only when measured (p99 latency data shows material impact).

@@ -101,6 +101,25 @@ describe("ConditionSchema", () => {
     expect(ConditionSchema.safeParse({ operator: "eq", value: 1 }).success).toBe(false);
   });
 
+  it("strips an unknown field so retained storage rows stay readable", () => {
+    const result = ConditionSchema.safeParse({ ...validCondition, extra: true });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data).toEqual(validCondition);
+  });
+
+  it("accepts historically long attribute and value strings", () => {
+    const result = ConditionSchema.safeParse({
+      attribute: "a".repeat(400),
+      operator: "eq",
+      value: "v".repeat(4000),
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.attribute).toHaveLength(400);
+    expect(result.data.value).toHaveLength(4000);
+  });
+
   it("rejects null or object elements inside an array Condition value", () => {
     expect(
       ConditionSchema.safeParse({

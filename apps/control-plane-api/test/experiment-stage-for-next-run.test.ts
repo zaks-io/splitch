@@ -12,7 +12,7 @@ import {
   startExperiment,
   type StartResponse,
 } from "../src/experiment-run-test-fixture";
-import { baseFlag, createFlag, errorBody, NOW_ISO } from "../src/flag-definition-test-harness";
+import { baseFlag, createFlag, errorBody } from "../src/flag-definition-test-harness";
 import { callPanelExperimentDetail } from "./panel-detail-request";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
@@ -115,9 +115,6 @@ describe("stageForNextRun never mutates the live Experiment row", () => {
         priority: 1,
         conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
         variantId: fx.flag.defaultVariantId,
-        enabled: true,
-        createdAt: NOW_ISO,
-        updatedAt: NOW_ISO,
       },
     ];
 

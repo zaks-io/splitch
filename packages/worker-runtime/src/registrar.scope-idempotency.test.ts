@@ -189,6 +189,40 @@ describe("guard: idempotency header validation", () => {
     expect((await bodyOf(res)).code).toBe("VALIDATION_ERROR");
   });
 
+  it("rejects a 256-character key on an optional route", async () => {
+    const reg = createRegistrar(deps());
+    const app = new Hono();
+    reg.mount(app, route({ idempotency: "optional" }), okHandler);
+
+    const res = await app.request("/things", {
+      method: "POST",
+      headers: { "idempotency-key": "k".repeat(256) },
+    });
+    expect(res.status).toBe(400);
+    const err = await bodyOf(res);
+    expect(err.code).toBe("VALIDATION_ERROR");
+    if (err.code !== "VALIDATION_ERROR") return;
+    expect(err.details.issues).toEqual([
+      {
+        path: ["headers", "idempotency-key"],
+        message: "Idempotency-Key header is malformed",
+      },
+    ]);
+  });
+
+  it("rejects a header key containing whitespace", async () => {
+    const reg = createRegistrar(deps());
+    const app = new Hono();
+    reg.mount(app, route({ idempotency: "optional" }), okHandler);
+
+    const res = await app.request("/things", {
+      method: "POST",
+      headers: { "idempotency-key": "abc 123" },
+    });
+    expect(res.status).toBe(400);
+    expect((await bodyOf(res)).code).toBe("VALIDATION_ERROR");
+  });
+
   it("allows an absent key on an optional route", async () => {
     const reg = createRegistrar(deps());
     const app = new Hono();

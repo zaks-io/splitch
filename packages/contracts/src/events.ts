@@ -3,6 +3,8 @@
 export * from "./event-definition";
 // biome-ignore lint/performance/noReExportAll: this domain barrel preserves the package's named event exports
 export * from "./event-definition-validation";
+// biome-ignore lint/performance/noReExportAll: write-only Event Definition envelopes stay with the event contract
+export * from "./event-definition-write";
 // biome-ignore lint/performance/noReExportAll: this domain barrel preserves the package's named event exports
 export * from "./metric-event";
 // biome-ignore lint/performance/noReExportAll: Event Definition routes are part of the event contract surface

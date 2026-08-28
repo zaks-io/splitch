@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { PERSISTED_ORIGIN_MAX_LENGTH, persistedArray } from "./persisted-field-limits";
 
 export const ClientOriginSchema = z
   .string()
   .min(1)
+  .max(PERSISTED_ORIGIN_MAX_LENGTH)
   .refine(
     (candidate) => {
       try {
@@ -15,7 +17,7 @@ export const ClientOriginSchema = z
     { message: "expected an HTTPS origin or localhost" },
   );
 
-export const OriginAllowlistSchema = z.array(ClientOriginSchema).min(1);
+export const OriginAllowlistSchema = persistedArray(ClientOriginSchema).min(1);
 
 export const NormalizedOriginAllowlistSchema =
   OriginAllowlistSchema.transform(normalizeClientOrigins);

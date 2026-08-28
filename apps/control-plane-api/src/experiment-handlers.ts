@@ -1,4 +1,4 @@
-import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
+import { boundListRead, LIST_READ_LIMIT, type TargetingRule } from "@splitch/contracts";
 import { type EnvScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
@@ -16,8 +16,15 @@ import {
   nullableString,
   requireWritableEnvironment,
   runningRunForExperiment,
+  withNormalizedDraftTargetingRules,
 } from "./experiment-handler-shared";
-import { experimentResponse, experimentUpdateResponse, json, jsonArray } from "./experiment-model";
+import {
+  experimentResponse,
+  experimentUpdateResponse,
+  json,
+  jsonArray,
+  jsonArrayOrNull,
+} from "./experiment-model";
 import { makeRunHandlers } from "./experiment-run-handlers";
 import { startExperiment } from "./experiment-start-handler";
 import {
@@ -26,6 +33,7 @@ import {
   validateCreateExperiment,
   validateExperimentPatch,
 } from "./experiment-update-plan";
+import { targetingRuleSaltRejected } from "./flag-config-errors";
 import { runningExperimentError } from "./flag-definition-errors";
 import { objectBody, pathParam } from "./handler-input";
 
@@ -70,6 +78,8 @@ async function createExperiment(
 
   const ready = await validateCreateExperiment(deps, scope, body, requestId);
   if (!ready.ok) return ready.response;
+  const draft = withNormalizedDraftTargetingRules(body, []);
+  if (!draft.ok) return targetingRuleSaltRejected(draft.callerSaltIndexes, requestId);
 
   const now = nowIso(deps);
   const row = await deps.repo.experiments.experiments.insert(scope, {
@@ -91,7 +101,7 @@ async function createExperiment(
     activationMetricId: nullableString(body.activationMetricId),
     conversionWindowMs: body.conversionWindowMs as number,
     dimensions: json(body.dimensions ?? []),
-    ...draftPatch(body),
+    ...draftPatch(draft.body),
     liveRunId: null,
     createdAt: now,
     updatedAt: now,
@@ -150,12 +160,18 @@ async function attemptExperimentUpdate(
 ): Promise<Response | null> {
   const context = await loadUpdateContext(deps, scope, args);
   if (!context.ok) return context.response;
+  const draft = withNormalizedDraftTargetingRules(
+    body,
+    jsonArrayOrNull<TargetingRule>(context.experiment.draftTargetingRules) ?? [],
+  );
+  if (!draft.ok) return targetingRuleSaltRejected(draft.callerSaltIndexes, args.requestId);
+  const writeBody = draft.body;
 
   const guard = await validateExperimentPatch(
     deps,
     scope,
     context.experiment,
-    body,
+    writeBody,
     args.requestId,
   );
   if (guard.response) return guard.response;
@@ -163,8 +179,15 @@ async function attemptExperimentUpdate(
   // The same Run the guard ruled on. A second read could return a different
   // answer, and then the patch would be built under rules the guard never
   // applied to it.
-  const runningRun = body.stageForNextRun === true ? guard.runningRun : null;
-  const patch = await prepareUpdatePatch(deps, scope, context.experiment, body, args, runningRun);
+  const runningRun = writeBody.stageForNextRun === true ? guard.runningRun : null;
+  const patch = await prepareUpdatePatch(
+    deps,
+    scope,
+    context.experiment,
+    writeBody,
+    args,
+    runningRun,
+  );
   if (!patch.ok) return patch.response;
 
   const updated = await deps.repo.experiments.updateExperiment(
@@ -178,7 +201,7 @@ async function attemptExperimentUpdate(
   // Staged assignment edits under a live Run leave evaluation on the frozen
   // snapshot. Name that Run and its frozen Targeting Rules so the operator
   // cannot mistake the draft write for a live change (SPL-307).
-  if (runningRun && stagedAssignmentFields(body).length > 0) {
+  if (runningRun && stagedAssignmentFields(writeBody).length > 0) {
     return Response.json(
       experimentUpdateResponse(updated, {
         runId: runningRun.id,

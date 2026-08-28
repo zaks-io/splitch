@@ -207,7 +207,7 @@ function baseAppsCreateRequest(key: string): Request {
   return new Request(`${AUDIENCE}/orgs/${ORG.orgId}/apps`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ organizationId: ORG.orgId, name: key, key }),
+    body: JSON.stringify({ name: key, key }),
   });
 }
 

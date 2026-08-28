@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DraftAllocationSchema } from "./draft-allocation";
+import { WriteVariantValueSchema } from "./write-persisted-schemas";
 
 export interface RequestBodyFieldHelp {
   readonly name: string;
@@ -75,10 +76,24 @@ function unwrapOne(
     return { nullable: true, inner: (schema as z.ZodNullable).unwrap() as z.ZodTypeAny };
   }
   if (type === "pipe") {
-    const pipeIn = zodDef(schema).in;
-    return pipeIn ? { inner: pipeIn as z.ZodTypeAny } : undefined;
+    return unwrapPipe(schema);
   }
   return undefined;
+}
+
+/**
+ * `z.preprocess` is a pipe whose `in` is a transform with no inner type. Help
+ * must read `out` so Event Definition `jsonSchema` stays "closed JSON Schema"
+ * instead of throwing `unsupported Zod type "transform"`.
+ */
+function unwrapPipe(schema: z.ZodTypeAny): { inner: z.ZodTypeAny } | undefined {
+  const def = zodDef(schema);
+  const pipeIn = def.in as z.ZodTypeAny | undefined;
+  const pipeOut = def.out as z.ZodTypeAny | undefined;
+  if (pipeIn && zodDefType(pipeIn) === "transform") {
+    return pipeOut ? { inner: pipeOut } : undefined;
+  }
+  return pipeIn ? { inner: pipeIn } : undefined;
 }
 
 export function zodDefType(schema: z.ZodTypeAny): string | undefined {
@@ -108,6 +123,9 @@ export function zodLiteralValues(schema: z.ZodTypeAny): unknown[] {
 }
 
 function typeLabel(schema: z.ZodTypeAny, depth = 0): string {
+  if (schema === WriteVariantValueSchema) {
+    return "boolean | string | number | Record<string, unknown>";
+  }
   if (depth >= MAX_TYPE_DEPTH) {
     throw new Error(
       `request-body-help: type label exceeded max depth ${MAX_TYPE_DEPTH} (self-referential schema?)`,

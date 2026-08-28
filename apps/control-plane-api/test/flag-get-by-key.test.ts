@@ -57,7 +57,6 @@ async function seedFlags(appId: string, count: number): Promise<void> {
 
 async function createSecondApp(): Promise<{ id: string }> {
   const res = await request(h, "POST", "/orgs/org_flag_definition_crud/apps", await orgToken(h), {
-    organizationId: "org_flag_definition_crud",
     name: "Other App",
     key: "other-app",
   });

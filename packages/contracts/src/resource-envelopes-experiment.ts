@@ -1,16 +1,26 @@
 import { z } from "zod";
 import { DraftAllocationSchema } from "./draft-allocation";
-import { ExperimentSchema, MetricRefSchema, RunSchema } from "./leaf-schemas-experiment";
+import { ExperimentSchema, RunSchema } from "./leaf-schemas-experiment";
 import {
   ResolvedTargetingRuleSchema,
   TargetingRuleSchema,
   VariantSchema,
 } from "./leaf-schemas-flag";
 import {
+  IdempotencyKeySchema,
+  PersistedDescriptionSchema,
+  PersistedIdentifierSchema,
+  PersistedNameSchema,
+  PersistedSaltSchema,
+  persistedArray,
+  persistedSegmentRefArray,
+} from "./persisted-field-limits";
+import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
 } from "./routes/route-shapes-approval-request";
 import { TargetingKeyTypeSchema } from "./targeting-key-type";
+import { TargetingRuleInputSchema, WriteMetricRefSchema } from "./write-persisted-schemas";
 
 /**
  * Create/patch/response wire envelopes for the Experiment and Experiment Run
@@ -47,30 +57,32 @@ export {
 // staged draft and returns domain errors such as ALLOCATION_INVALID.
 // ---------------------------------------------------------------------------
 
-export const CreateExperimentRequestSchema = z.object({
-  appId: z.string(),
-  environmentId: z.string(),
-  name: z.string(),
-  // Unique per (App, Environment).
-  key: z.string(),
-  flagId: z.string(),
-  // EC field + Entity type bucketed on; inherited by all Runs.
-  targetingKey: z.string(),
-  targetingKeyType: TargetingKeyTypeSchema,
-  description: z.string().optional(),
-  hypothesis: z.string().optional(),
-  confidenceLevel: ExperimentSchema.shape.confidenceLevel.default(0.95),
-  metrics: z.array(MetricRefSchema).min(0),
-  guardrailMetrics: z.array(MetricRefSchema).default([]),
-  activationMetricId: z.string().nullable().optional(),
-  conversionWindowMs: z.number().default(0),
-  dimensions: z.array(z.string()).default([]),
-  allocation: DraftAllocationSchema.optional(),
-  salt: z.string().optional(),
-  targetingRules: z.array(TargetingRuleSchema).optional(),
-  segmentIds: z.array(z.string()).optional(),
-  idempotency_key: z.string().optional(),
-});
+export const CreateExperimentRequestSchema = z
+  .object({
+    appId: PersistedIdentifierSchema,
+    environmentId: PersistedIdentifierSchema,
+    name: PersistedNameSchema,
+    // Unique per (App, Environment).
+    key: PersistedNameSchema,
+    flagId: PersistedIdentifierSchema,
+    // EC field + Entity type bucketed on; inherited by all Runs.
+    targetingKey: PersistedNameSchema,
+    targetingKeyType: TargetingKeyTypeSchema,
+    description: PersistedDescriptionSchema.optional(),
+    hypothesis: PersistedDescriptionSchema.optional(),
+    confidenceLevel: ExperimentSchema.shape.confidenceLevel.default(0.95),
+    metrics: persistedArray(WriteMetricRefSchema).min(0),
+    guardrailMetrics: persistedArray(WriteMetricRefSchema).default([]),
+    activationMetricId: PersistedIdentifierSchema.nullable().optional(),
+    conversionWindowMs: z.number().default(0),
+    dimensions: persistedArray(PersistedNameSchema).default([]),
+    allocation: DraftAllocationSchema.optional(),
+    salt: PersistedSaltSchema.optional(),
+    targetingRules: persistedArray(TargetingRuleInputSchema).optional(),
+    segmentIds: persistedSegmentRefArray().optional(),
+    idempotency_key: IdempotencyKeySchema.optional(),
+  })
+  .strict();
 export type CreateExperimentRequest = z.infer<typeof CreateExperimentRequestSchema>;
 
 // ---------------------------------------------------------------------------
@@ -85,30 +97,30 @@ export type CreateExperimentRequest = z.infer<typeof CreateExperimentRequestSche
 
 export const PatchExperimentRequestSchema = z
   .object({
-    name: z.string().optional(),
-    description: z.string().optional(),
-    hypothesis: z.string().optional(),
-    owner: z.string().optional(),
-    tags: z.array(z.string()).optional(),
-    flagId: z.string().optional(),
-    targetingKey: z.string().optional(),
+    name: PersistedNameSchema.optional(),
+    description: PersistedDescriptionSchema.optional(),
+    hypothesis: PersistedDescriptionSchema.optional(),
+    owner: PersistedNameSchema.optional(),
+    tags: persistedArray(PersistedNameSchema).optional(),
+    flagId: PersistedIdentifierSchema.optional(),
+    targetingKey: PersistedNameSchema.optional(),
     targetingKeyType: TargetingKeyTypeSchema.optional(),
-    activationMetricId: z.string().nullable().optional(),
+    activationMetricId: PersistedIdentifierSchema.nullable().optional(),
     allocation: DraftAllocationSchema.optional(),
-    salt: z.string().optional(),
+    salt: PersistedSaltSchema.optional(),
     // Accepted structurally, ALWAYS rejected by the Worker with a 400. A Run's
     // Variant set is derived at Start from the Flag's Variant catalog and the
     // staged allocation, so the Experiment has no column for it. It stays in the
     // schema only so the refusal can point at the Flag's Variant catalog instead
     // of `.strict()` answering "unrecognized key" — see
     // `variantSetNotPatchable` in the control-plane Worker.
-    variantSet: z.array(VariantSchema).optional(),
-    targetingRules: z.array(TargetingRuleSchema).optional(),
-    segmentIds: z.array(z.string()).optional(),
-    metrics: z.array(MetricRefSchema).optional(),
-    guardrailMetrics: z.array(MetricRefSchema).optional(),
+    variantSet: persistedArray(VariantSchema).optional(),
+    targetingRules: persistedArray(TargetingRuleInputSchema).optional(),
+    segmentIds: persistedSegmentRefArray().optional(),
+    metrics: persistedArray(WriteMetricRefSchema).optional(),
+    guardrailMetrics: persistedArray(WriteMetricRefSchema).optional(),
     conversionWindowMs: z.number().optional(),
-    dimensions: z.array(z.string()).optional(),
+    dimensions: persistedArray(PersistedNameSchema).optional(),
     confidenceLevel: z.number().optional(),
     // Assignment fields remain frozen on a running Run. This explicit marker
     // stages them for the next Run instead of pretending to edit the live one.
@@ -168,10 +180,10 @@ export type RunHorizon = z.infer<typeof RunHorizonSchema>;
 export const StartRunRequestSchema = z
   .object({
     review: InlineApproveAndApplyReviewSchema.optional(),
-    reason: z.string().optional(),
+    reason: PersistedDescriptionSchema.optional(),
     horizon: RunHorizonSchema.optional(),
     sampleSizeLocked: z.number().int().positive().nullable().optional(),
-    idempotency_key: z.string().min(1),
+    idempotency_key: IdempotencyKeySchema,
   })
   .strict();
 export type StartRunRequest = z.infer<typeof StartRunRequestSchema>;
@@ -208,9 +220,9 @@ export type StartRunResponse = z.infer<typeof StartRunResponseSchema>;
 
 export const PatchRunRequestSchema = z
   .object({
-    description: z.string().optional(),
-    owner: z.string().optional(),
-    tags: z.array(z.string()).optional(),
+    description: PersistedDescriptionSchema.optional(),
+    owner: PersistedNameSchema.optional(),
+    tags: persistedArray(PersistedNameSchema).optional(),
   })
   .strict();
 export type PatchRunRequest = z.infer<typeof PatchRunRequestSchema>;

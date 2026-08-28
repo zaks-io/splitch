@@ -115,6 +115,9 @@ describe("MCP error vocabulary", () => {
     vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
       logged.push(args);
     });
+    // Digit-leading UUIDs match the phone-like scrubber (`25670384-…` →
+    // `[Redacted]…`) and drop the correlation the caller is handed.
+    vi.spyOn(crypto, "randomUUID").mockReturnValue("a5670384-8956-441c-8ee9-1a46f7778f1c");
 
     const body = await call(
       { name: "organizations_get", arguments: { orgId: "org_local" } },

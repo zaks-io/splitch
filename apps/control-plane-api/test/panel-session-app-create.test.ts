@@ -145,7 +145,7 @@ describe("Control Panel delegation for apps_create", () => {
         [CONTROL_PANEL_DELEGATION_HEADER]: "not-a-delegation",
         "content-type": "application/json",
       },
-      body: JSON.stringify({ organizationId: PRIMARY.orgId, name: "bad", key: "bad" }),
+      body: JSON.stringify({ name: "bad", key: "bad" }),
     });
     expect(malformed.status).toBe(401);
   });
@@ -194,7 +194,7 @@ async function createAppRequest(
   targetApp = app,
   expiresAt = NOW_SECONDS + 30,
 ): Promise<Response> {
-  const body = JSON.stringify({ organizationId: orgId, name: key, key });
+  const body = JSON.stringify({ name: key, key });
   const request = new Request(`${AUDIENCE}/orgs/${orgId}/apps`, {
     method: "POST",
     headers: { "content-type": "application/json" },

@@ -141,7 +141,6 @@ export async function request(
 
 export async function createDefaultApp(key: string) {
   const res = await request("POST", `/orgs/${ORG.orgId}/apps`, await orgToken(), {
-    organizationId: ORG.orgId,
     name: `Credential Revoke ${key}`,
     key,
   });
