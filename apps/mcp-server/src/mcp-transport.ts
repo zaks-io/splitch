@@ -1,4 +1,8 @@
-import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
+import {
+  createHealthResponse,
+  isLocalPlatformTarget,
+  requirePlatformTarget,
+} from "@splitch/contracts";
 import type { JsonRpcResponse } from "./json-rpc";
 import type { McpSessionStore } from "./mcp-session-context";
 import { McpSessionNotFoundError } from "./mcp-session-store";
@@ -20,7 +24,7 @@ export async function routeTransportRequest(options: {
     return Response.json(
       createHealthResponse(
         options.service,
-        parsePlatformTarget(options.platformTarget),
+        requirePlatformTarget(options.platformTarget),
         options.deployedCommitSha,
       ),
     );
@@ -89,8 +93,8 @@ function protectedResourceResponse(
 
 function authBaseUrl(configured: string | undefined, platformTarget: string | undefined): string {
   if (configured) return new URL(configured).origin;
-  const target = parsePlatformTarget(platformTarget);
-  if (target === "local" || target === "pr-ci") return defaultAuthBaseUrl;
+  const target = requirePlatformTarget(platformTarget);
+  if (isLocalPlatformTarget(target)) return defaultAuthBaseUrl;
   throw new Error(`mcp-server: AUTH_API_ORIGIN is required for ${target}`);
 }
 

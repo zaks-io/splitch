@@ -47,7 +47,7 @@ interface CloudflareTurnstileOptions {
 
 const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const SITEVERIFY_TIMEOUT_MS = 5_000;
-const LOCAL_TEST_TARGETS = new Set<string | undefined>([undefined, "local", "pr-ci"]);
+const LOCAL_TEST_TARGETS = new Set<string | undefined>(["local", "pr-ci"]);
 const HOSTED_TARGETS = new Set<string | undefined>(["shared-preview", "production"]);
 
 /** The fixture's canonical passing token. */

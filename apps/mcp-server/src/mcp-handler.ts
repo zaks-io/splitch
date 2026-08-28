@@ -1,4 +1,4 @@
-import { parsePlatformTarget } from "@splitch/contracts";
+import { isLocalPlatformTarget, requirePlatformTarget } from "@splitch/contracts";
 import { type McpSpanRecorder, noopMcpSpanRecorder } from "@splitch/observability/mcp-spans";
 import {
   JSON_RPC_METHOD_NOT_FOUND,
@@ -233,8 +233,8 @@ async function dispatchMethod(
 
 function authIssuer(configured: string | undefined, platformTarget: string | undefined): string {
   if (configured) return new URL(configured).origin;
-  const target = parsePlatformTarget(platformTarget);
-  if (target === "local" || target === "pr-ci") return "http://localhost:8791";
+  const target = requirePlatformTarget(platformTarget);
+  if (isLocalPlatformTarget(target)) return "http://localhost:8791";
   throw new Error(`mcp-server: AUTH_API_ORIGIN is required for ${target}`);
 }
 

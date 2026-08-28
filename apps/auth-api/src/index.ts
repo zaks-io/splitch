@@ -1,4 +1,9 @@
-import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
+import {
+  createHealthResponse,
+  isHostedPlatformTarget,
+  isLocalPlatformTarget,
+  parsePlatformTarget,
+} from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import {
   createWorkerObservability,
@@ -25,6 +30,7 @@ import { makeFixtureWorkOs, makeHostedWorkOs } from "./workos";
 import { makeWorkOsAccessTokenVerifier } from "./workos-access-token";
 
 const service = "splitch-auth-api";
+const localAssertionSigningSecret = "local-dev-assertion-secret";
 
 const fixtureWorkos = makeFixtureWorkOs();
 const otp = makeFixtureOtp();
@@ -41,7 +47,7 @@ const handler = {
       env,
       workerObservabilityWithWaitUntil("auth-api", ctx),
     );
-    if (!hostedWorkOsConfigured(env) || !hostedClaimConfigured(env)) {
+    if (!authRuntimeConfigured(env)) {
       return Response.json(
         { error: "server_error", error_description: "hosted auth configuration is incomplete" },
         { status: 500 },
@@ -83,7 +89,7 @@ const handler = {
     const origin = env.AUTH_API_ORIGIN ?? url.origin;
     const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? "http://localhost:8787";
     const mcpAudience = env.MCP_ORIGIN;
-    const assertionSecret = env.ASSERTION_SIGNING_SECRET ?? "local-dev-assertion-secret";
+    const assertionSecret = assertionSigningSecret(env);
     const consentBaseUrl = env.CONTROL_PANEL_ORIGIN ?? "http://localhost:8787";
     const now = () => Date.now();
     const workos = hostedWorkOs(env);
@@ -161,7 +167,7 @@ function sharedPreviewSmokeClient(env: AuthApiEnv): SmokeClientCredentials | und
 }
 
 function hostedWorkOs(env: AuthApiEnv) {
-  if (!isHostedTarget(env.SPLITCH_PLATFORM_TARGET)) {
+  if (isLocalPlatformTarget(env.SPLITCH_PLATFORM_TARGET)) {
     return fixtureWorkos;
   }
   if (!env.WORKOS_API_KEY) {
@@ -171,7 +177,7 @@ function hostedWorkOs(env: AuthApiEnv) {
 }
 
 function makeDeviceFlow(env: AuthApiEnv) {
-  if (!isHostedTarget(env.SPLITCH_PLATFORM_TARGET) && !env.WORKOS_CLIENT_ID) {
+  if (isLocalPlatformTarget(env.SPLITCH_PLATFORM_TARGET) && !env.WORKOS_CLIENT_ID) {
     return makeFixtureDeviceFlow();
   }
   return makeWorkOsDeviceFlow({
@@ -181,22 +187,26 @@ function makeDeviceFlow(env: AuthApiEnv) {
   });
 }
 
-function isHostedTarget(target: string | undefined): boolean {
-  return target === "shared-preview" || target === "production";
-}
-
-function hostedWorkOsConfigured(env: AuthApiEnv): boolean {
+function authRuntimeConfigured(env: AuthApiEnv): boolean {
+  if (isLocalPlatformTarget(env.SPLITCH_PLATFORM_TARGET)) return true;
+  if (!isHostedPlatformTarget(env.SPLITCH_PLATFORM_TARGET)) return false;
   return (
-    !isHostedTarget(env.SPLITCH_PLATFORM_TARGET) ||
-    (Boolean(env.WORKOS_API_KEY) &&
-      Boolean(env.WORKOS_CLIENT_ID) &&
-      Boolean(env.WORKOS_JWKS_URI) &&
-      Boolean(env.WORKOS_ISSUER))
+    hostedWorkOsKeysPresent(env) &&
+    hostedClaimOriginConfigured(env) &&
+    hostedAssertionSigningSecretConfigured(env)
   );
 }
 
-function hostedClaimConfigured(env: AuthApiEnv): boolean {
-  if (!isHostedTarget(env.SPLITCH_PLATFORM_TARGET)) return true;
+function hostedWorkOsKeysPresent(env: AuthApiEnv): boolean {
+  return (
+    Boolean(env.WORKOS_API_KEY) &&
+    Boolean(env.WORKOS_CLIENT_ID) &&
+    Boolean(env.WORKOS_JWKS_URI) &&
+    Boolean(env.WORKOS_ISSUER)
+  );
+}
+
+function hostedClaimOriginConfigured(env: AuthApiEnv): boolean {
   if (!env.CONTROL_PANEL_ORIGIN) return false;
   try {
     const origin = new URL(env.CONTROL_PANEL_ORIGIN);
@@ -211,12 +221,25 @@ function hostedClaimConfigured(env: AuthApiEnv): boolean {
   }
 }
 
+function hostedAssertionSigningSecretConfigured(env: AuthApiEnv): boolean {
+  return (
+    Boolean(env.ASSERTION_SIGNING_SECRET) &&
+    env.ASSERTION_SIGNING_SECRET !== localAssertionSigningSecret
+  );
+}
+
+function assertionSigningSecret(env: AuthApiEnv): string {
+  if (isLocalPlatformTarget(env.SPLITCH_PLATFORM_TARGET)) {
+    return env.ASSERTION_SIGNING_SECRET ?? localAssertionSigningSecret;
+  }
+  if (!hostedAssertionSigningSecretConfigured(env) || !env.ASSERTION_SIGNING_SECRET) {
+    throw new Error("ASSERTION_SIGNING_SECRET is required for hosted targets");
+  }
+  return env.ASSERTION_SIGNING_SECRET;
+}
+
 function workosAccessTokenVerifier(env: AuthApiEnv) {
-  if (
-    env.SPLITCH_PLATFORM_TARGET !== "shared-preview" &&
-    env.SPLITCH_PLATFORM_TARGET !== "production"
-  )
-    return undefined;
+  if (!isHostedPlatformTarget(env.SPLITCH_PLATFORM_TARGET)) return undefined;
   if (!env.WORKOS_JWKS_URI || !env.WORKOS_ISSUER || !env.WORKOS_CLIENT_ID) return undefined;
   return makeWorkOsAccessTokenVerifier({
     jwksUri: env.WORKOS_JWKS_URI,
@@ -244,9 +267,9 @@ async function accessTokenSecret(env: AuthApiEnv): Promise<string> {
     }
     return env.ACCESS_TOKEN_SECRET;
   }
-  if (isHostedTarget(env.SPLITCH_PLATFORM_TARGET)) {
-    throw new Error("ACCESS_TOKEN_SECRET is required for hosted targets");
+  if (isLocalPlatformTarget(env.SPLITCH_PLATFORM_TARGET)) {
+    localAccessTokenSecret ??= makeEphemeralAccessTokenPrivateJwk();
+    return localAccessTokenSecret;
   }
-  localAccessTokenSecret ??= makeEphemeralAccessTokenPrivateJwk();
-  return localAccessTokenSecret;
+  throw new Error("ACCESS_TOKEN_SECRET is required for hosted targets");
 }

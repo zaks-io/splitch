@@ -41,6 +41,7 @@ beforeAll(async () => {
     AUTH_API_ORIGIN: "https://auth.splitch.test",
     CONTROL_PLANE_ORIGIN: "https://cp.splitch.test",
     CONTROL_PANEL_ORIGIN: "https://app.splitch.test",
+    SPLITCH_PLATFORM_TARGET: "local",
     ASSERTION_SIGNING_SECRET: "test-assertion-secret",
   };
 });
@@ -296,5 +297,71 @@ describe("index.ts: hosted ACCESS_TOKEN_SECRET signability is config, not a mint
     expect(res.status).toBe(200);
     const { keys } = (await res.json()) as { keys: Array<{ kty: string; alg: string }> };
     expect(keys[0]).toMatchObject({ kty: "RSA", alg: "RS256" });
+  });
+});
+
+describe("index.ts: hosted assertion secret and platform target fail closed", () => {
+  it.each([
+    "shared-preview",
+    "production",
+  ] as const)("%s refuses a missing ASSERTION_SIGNING_SECRET before serving a door", async (target) => {
+    const { ASSERTION_SIGNING_SECRET: _missing, ...withoutSecret } = hostedEnvWith({
+      SPLITCH_PLATFORM_TARGET: target,
+      ACCESS_TOKEN_SECRET: hostedAccessTokenSecret,
+    });
+    const beforeOrganizations = await rowCount("organizations");
+    const res = await call(
+      { turnstile_token: turnstileToken() },
+      target === "shared-preview" ? "198.51.100.96" : "198.51.100.97",
+      "/agent/identity",
+      withoutSecret,
+    );
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ error: "server_error" });
+    expect(await rowCount("organizations")).toBe(beforeOrganizations);
+  });
+
+  it("rejects the committed local assertion secret on hosted targets", async () => {
+    const beforeOrganizations = await rowCount("organizations");
+    const res = await call(
+      { turnstile_token: turnstileToken() },
+      "198.51.100.98",
+      "/agent/identity",
+      hostedEnvWith({
+        ACCESS_TOKEN_SECRET: hostedAccessTokenSecret,
+        ASSERTION_SIGNING_SECRET: "local-dev-assertion-secret",
+      }),
+    );
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ error: "server_error" });
+    expect(await rowCount("organizations")).toBe(beforeOrganizations);
+  });
+
+  it("does not treat an unset platform target as local", async () => {
+    const { SPLITCH_PLATFORM_TARGET: _missing, ...withoutTarget } = env;
+    const beforeOrganizations = await rowCount("organizations");
+    const res = await call(
+      { turnstile_token: turnstileToken() },
+      "198.51.100.99",
+      "/agent/identity",
+      withoutTarget,
+    );
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ error: "server_error" });
+    expect(await rowCount("organizations")).toBe(beforeOrganizations);
+  });
+
+  it.each([
+    "local",
+    "pr-ci",
+  ] as const)("%s still accepts the committed local assertion secret", async (target) => {
+    const { ASSERTION_SIGNING_SECRET: _defaultSecret, ...localEnv } = env;
+    const res = await call(
+      { turnstile_token: turnstileToken() },
+      target === "local" ? "198.51.100.100" : "198.51.100.101",
+      "/agent/identity",
+      { ...localEnv, SPLITCH_PLATFORM_TARGET: target },
+    );
+    expect(res.status).toBe(200);
   });
 });

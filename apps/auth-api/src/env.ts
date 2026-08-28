@@ -20,8 +20,9 @@ export interface AuthApiEnv {
   /** Control Panel browser origin used for hosted claim consent URLs. */
   CONTROL_PANEL_ORIGIN?: string;
   /**
-   * HMAC secret for the short-lived identity_assertion (local fixture). DELIBERATELY
-   * distinct from ACCESS_TOKEN_SECRET so an assertion can never verify as a Bearer.
+   * HMAC secret for the short-lived identity_assertion. Required on hosted
+   * targets; local/pr-ci may use the committed fixture. DELIBERATELY distinct
+   * from ACCESS_TOKEN_SECRET so an assertion can never verify as a Bearer.
    */
   ASSERTION_SIGNING_SECRET?: string;
   /** RSA private JWK for hosted access tokens; local/pr-ci generate an isolate-local fixture key. */

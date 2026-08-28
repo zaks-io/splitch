@@ -156,6 +156,7 @@ export function makeEnv(
   return {
     CONFIG_STORE: seededConfigStore() as unknown as KVNamespace,
     SPLITCH_EVENT_INGEST_TOKEN: "internal_ingest_secret",
+    SPLITCH_PLATFORM_TARGET: "local",
     TINYBIRD_API_URL: "https://tinybird.test",
     TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
     EVALUATION_USAGE_REPLAY_WINDOW: replayWindow,

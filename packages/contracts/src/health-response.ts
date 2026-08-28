@@ -28,9 +28,38 @@ export const HealthResponseSchema = z
   });
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;
 
+/**
+ * Coerce an env value to a platform target, defaulting unrecognized or missing
+ * values to `local`. That fallback is for health display and non-hosted callers.
+ * Hosted Auth, MCP, and Event Ingest entrypoints must use `requirePlatformTarget`
+ * / `isLocalPlatformTarget` instead — an unset target must not route traffic to
+ * localhost or unlock committed local secrets.
+ */
 export function parsePlatformTarget(value: string | undefined): PlatformTarget {
   const parsed = PlatformTargetSchema.safeParse(value);
   return parsed.success ? parsed.data : "local";
+}
+
+/** Explicit local or PR CI fixtures. Missing and invalid values are not local. */
+export function isLocalPlatformTarget(value: string | undefined): boolean {
+  return value === "local" || value === "pr-ci";
+}
+
+export function isHostedPlatformTarget(value: string | undefined): boolean {
+  return value === "shared-preview" || value === "production";
+}
+
+/** Fail closed: never silently substitute `local` for a missing or invalid target. */
+export function requirePlatformTarget(value: string | undefined): PlatformTarget {
+  const parsed = PlatformTargetSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(
+      value === undefined
+        ? "SPLITCH_PLATFORM_TARGET is required"
+        : `SPLITCH_PLATFORM_TARGET "${value}" is not a platform target`,
+    );
+  }
+  return parsed.data;
 }
 
 export function createHealthResponse(
