@@ -1,0 +1,95 @@
+import { describe, expect, it } from "vitest";
+import {
+  classFetchIsWrapped,
+  defaultExportIsWrapped,
+  proveDefaultExportWrapped,
+  WRAP_WORKER_HANDLER as WRAPPER,
+} from "./hosted-worker-wrap-gate";
+
+const RAW_HANDLER = `{
+  fetch() {
+    return new Response("raw");
+  },
+}`;
+
+function wrappedThen(statement: string, exportExpression = "wrapped"): string {
+  return `
+    import { ${WRAPPER} } from "@splitch/worker-runtime";
+    const raw = ${RAW_HANDLER};
+    let wrapped = ${WRAPPER}({
+      fetch() {
+        return new Response("wrapped");
+      },
+    });
+    ${statement}
+    export default ${exportExpression};
+  `;
+}
+
+describe("hosted Worker wrap-gate immutable proof", () => {
+  it.each([
+    ["fetch assignment", "wrapped.fetch = raw.fetch;"],
+    ["computed fetch assignment", 'wrapped["fetch"] = raw.fetch;'],
+    ["binding reassignment", "wrapped = raw;"],
+    ["binding update", "wrapped++;"],
+    ["property update", "wrapped.fetch++;"],
+    ["property deletion", "delete wrapped.fetch;"],
+    ["Object.assign", "Object.assign(wrapped, raw);"],
+    ["Object.defineProperty", 'Object.defineProperty(wrapped, "fetch", { value: raw.fetch });'],
+    ["unknown mutating call", "mutate(wrapped);"],
+  ])("fails after %s", (_name, statement) => {
+    const source = wrappedThen(statement);
+    expect(defaultExportIsWrapped(source)).toBe(false);
+    expect(proveDefaultExportWrapped(source, "mutated-worker.ts")).toMatchObject({
+      wrapped: false,
+    });
+  });
+
+  it("fails when an alias mutates a wrapped handler fetch", () => {
+    const source = wrappedThen("const alias = wrapped; alias.fetch = raw.fetch;");
+    expect(defaultExportIsWrapped(source)).toBe(false);
+  });
+
+  it("fails an exported class after its delegated wrapped fetch is replaced", () => {
+    const source = `
+      import { WorkerEntrypoint } from "cloudflare:workers";
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      const raw = ${RAW_HANDLER};
+      const wrapped = ${WRAPPER}(raw);
+      wrapped.fetch = raw.fetch;
+      export default ${WRAPPER}(raw);
+      export class MutatedDoor extends WorkerEntrypoint {
+        fetch(request: Request) {
+          return wrapped.fetch(request, this.env, this.ctx);
+        }
+      }
+    `;
+    expect(classFetchIsWrapped(source, "MutatedDoor")).toBe(false);
+  });
+
+  it("uses supplied arguments instead of a parameter default", () => {
+    const suppliedUnwrapped = `
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      const raw = ${RAW_HANDLER};
+      function choose(handler = ${WRAPPER}(raw)) {
+        return handler;
+      }
+      export default choose(raw);
+    `;
+    const omittedUsesDefault = suppliedUnwrapped.replace("choose(raw)", "choose()");
+
+    expect(defaultExportIsWrapped(suppliedUnwrapped)).toBe(false);
+    expect(defaultExportIsWrapped(omittedUsesDefault)).toBe(true);
+  });
+
+  it("proves an explicitly supplied wrapped argument", () => {
+    const source = `
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      function choose(handler: unknown) {
+        return handler;
+      }
+      export default choose(${WRAPPER}(${RAW_HANDLER}));
+    `;
+    expect(defaultExportIsWrapped(source)).toBe(true);
+  });
+});

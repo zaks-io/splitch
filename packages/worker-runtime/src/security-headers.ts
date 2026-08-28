@@ -6,6 +6,8 @@
  * existing and applied values so a weaker route CSP cannot re-enable framing.
  */
 
+import { strongerReferrerPolicy } from "./referrer-policy.js";
+
 export const WORKER_BASELINE_SECURITY_HEADERS = {
   "x-content-type-options": "nosniff",
   "referrer-policy": "strict-origin-when-cross-origin",
@@ -37,17 +39,6 @@ const PROTOCOL_HEADER_NAMES = new Set([
   "upgrade",
   "sec-websocket-accept",
 ]);
-
-const REFERRER_POLICY_STRENGTH: Record<string, number> = {
-  "unsafe-url": 0,
-  "no-referrer-when-downgrade": 1,
-  "origin-when-cross-origin": 2,
-  origin: 3,
-  "strict-origin-when-cross-origin": 4,
-  "strict-origin": 5,
-  "same-origin": 6,
-  "no-referrer": 7,
-};
 
 /**
  * Copy `baseline`, then add `extras` only for names the baseline does not
@@ -152,28 +143,6 @@ function strongerToken(
   strength: (value: string) => number,
 ): string {
   return strength(extra) > strength(current) ? extra : current;
-}
-
-/**
- * Referrer-Policy is an ordered token list. Browsers use the last recognized
- * token. Never replace a stronger effective final token with a weaker extra.
- */
-function strongerReferrerPolicy(current: string, extra: string): string {
-  return referrerPolicyStrength(extra) > referrerPolicyStrength(current) ? extra : current;
-}
-
-function referrerPolicyStrength(header: string): number {
-  const effective = lastRecognizedReferrerPolicy(header);
-  return effective === undefined ? 0 : (REFERRER_POLICY_STRENGTH[effective] ?? 0);
-}
-
-function lastRecognizedReferrerPolicy(header: string): string | undefined {
-  let recognized: string | undefined;
-  for (const token of header.split(",")) {
-    const normalized = token.trim().toLowerCase();
-    if (normalized in REFERRER_POLICY_STRENGTH) recognized = normalized;
-  }
-  return recognized;
 }
 
 function xFrameOptionsStrength(value: string): number {

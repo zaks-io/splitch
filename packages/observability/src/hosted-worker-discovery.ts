@@ -7,6 +7,7 @@ import {
   exportedWorkerEntrypoints,
   proveClassFetchWrapped,
   proveDefaultExportWrapped,
+  unsupportedExportedFetchFailures,
 } from "./hosted-worker-wrap-gate.js";
 
 interface WranglerServiceBinding {
@@ -104,6 +105,7 @@ export function omissionFailures(discovered: HostedWorker[]): string[] {
   const wrappedByService = wrappedEntrypointsByService(discovered);
   return discovered.flatMap((worker) => [
     ...unwrappedDefaultFailures(worker),
+    ...unsupportedExportedFetchFailures(worker.source, worker.mainPath),
     ...unwrappedClassFailures(worker),
     ...unwrappedBindingFailures(worker, wrappedByService),
   ]);

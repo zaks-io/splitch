@@ -7,15 +7,19 @@ import {
   isClassDeclaration,
   isExportAssignment,
   isFunctionDeclaration,
-  isIdentifier,
   isMethodDeclaration,
   type MethodDeclaration,
-  type PropertyName,
   ScriptKind,
   ScriptTarget,
   type SourceFile,
   SyntaxKind,
 } from "typescript";
+import {
+  exportedFetchClasses,
+  findExportedClass,
+  isFetchPropertyName,
+  unsupportedExportedFetchClasses,
+} from "./hosted-worker-entrypoints.js";
 import { blockPath, locationOf, type PathResult } from "./hosted-worker-wrap-ast.js";
 import {
   expressionIsWrappedFetch,
@@ -38,12 +42,16 @@ export function defaultExportIsWrapped(source: string, fileName = "worker.ts"): 
 
 export function exportedWorkerEntrypoints(source: string, fileName = "worker.ts"): string[] {
   const file = parseSource(source, fileName);
-  const names: string[] = [];
-  for (const statement of file.statements) {
-    if (!isClassDeclaration(statement) || !isExported(statement) || !statement.name) continue;
-    if (extendsWorkerEntrypoint(statement)) names.push(statement.name.text);
-  }
-  return names;
+  return exportedFetchClasses(file)
+    .filter((entry) => entry.workerEntrypoint)
+    .map((entry) => entry.exportName);
+}
+
+export function unsupportedExportedFetchFailures(source: string, fileName = "worker.ts"): string[] {
+  const file = parseSource(source, fileName);
+  return unsupportedExportedFetchClasses(file).map(
+    (entry) => `unsupported exported fetch-bearing class ${entry.exportName} (${entry.location})`,
+  );
 }
 
 export function classFetchIsWrapped(
@@ -71,10 +79,7 @@ export function proveClassFetchWrapped(
   fileName = "worker.ts",
 ): WrapProof {
   const file = parseSource(source, fileName);
-  const cls = file.statements.find(
-    (statement): statement is ClassDeclaration =>
-      isClassDeclaration(statement) && statement.name?.text === className,
-  );
+  const cls = findExportedClass(file, className);
   if (!cls) {
     return {
       wrapped: false,
@@ -110,10 +115,6 @@ function findDefaultExportedFunction(file: SourceFile): FunctionDeclaration | un
   );
 }
 
-function isExported(node: ClassDeclaration): boolean {
-  return Boolean(node.modifiers?.some((modifier) => modifier.kind === SyntaxKind.ExportKeyword));
-}
-
 function isDefaultExported(node: { modifiers?: ClassDeclaration["modifiers"] }): boolean {
   return Boolean(
     node.modifiers?.some((modifier) => modifier.kind === SyntaxKind.ExportKeyword) &&
@@ -121,24 +122,10 @@ function isDefaultExported(node: { modifiers?: ClassDeclaration["modifiers"] }):
   );
 }
 
-function extendsWorkerEntrypoint(cls: ClassDeclaration): boolean {
-  return (cls.heritageClauses ?? []).some(
-    (clause) =>
-      clause.token === SyntaxKind.ExtendsKeyword &&
-      clause.types.some(
-        (type) => isIdentifier(type.expression) && type.expression.text === "WorkerEntrypoint",
-      ),
-  );
-}
-
-function isFetchName(name: PropertyName): boolean {
-  return isIdentifier(name) && name.text === "fetch";
-}
-
 function classFetchProof(file: SourceFile, cls: ClassDeclaration): WrapProof {
   const fetch = cls.members.find(
     (member): member is MethodDeclaration =>
-      isMethodDeclaration(member) && isFetchName(member.name),
+      isMethodDeclaration(member) && isFetchPropertyName(member.name),
   );
   if (!fetch) {
     return {

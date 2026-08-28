@@ -110,12 +110,20 @@ not move queue or Tinybird ownership into `@splitch/worker-runtime`.
   every Worker fetch response. Hosted Workers may import the same-named wrapper from
   `@splitch/observability/worker`, which applies this baseline plus Sentry. The wrap
   gate proves that import binding; comments, strings, helpers, local functions, and
-  shadowed names do not count. Existing CORS, session, and redirect headers are never
-  overwritten. Applied security headers take the stronger value: a weaker
+  shadowed names do not count. A proven wrapped value must remain immutable: writes,
+  property mutation, reassignment, updates, and calls that can mutate or escape it fail
+  closed. Factory calls are checked against supplied arguments, not an unused parameter
+  default. Exported `WorkerEntrypoint` classes are discovered from the
+  `cloudflare:workers` import binding through import aliases and export lists;
+  unsupported exported fetch-bearing classes fail with their source location. Existing
+  CORS, session, and redirect headers are never overwritten. Applied security headers
+  take the unambiguously stronger value: a weaker
   `frame-ancestors` (including `https:`) is upgraded when a stronger policy is stamped.
   `Content-Security-Policy` is treated as a CSP3 policy list (comma-separated
   policies); each policy is upgraded so a comma cannot hide a weaker `frame-ancestors`
-  from a later deny. Duplicate `frame-ancestors` directives in one policy are
+  from a later deny. `Referrer-Policy` uses a request-context partial order across
+  same-origin, cross-origin, and downgrade requests; incomparable policies preserve the
+  existing route choice. Duplicate `frame-ancestors` directives in one policy are
   collapsed to the strongest value. Unrelated CSP directives are preserved.
 
 ## What the runtime does not own

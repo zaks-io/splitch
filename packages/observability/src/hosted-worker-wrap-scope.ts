@@ -41,6 +41,7 @@ import {
   type VariableDeclarationList,
 } from "typescript";
 import { unwrap } from "./hosted-worker-wrap-ast.js";
+import { bindingIntegrity } from "./hosted-worker-wrap-integrity.js";
 
 export const WRAP_WORKER_HANDLER = "wrapWorkerHandler";
 
@@ -49,11 +50,15 @@ const OFFICIAL_WRAP_WORKER_HANDLER_SPECIFIERS = [
   "@splitch/observability/worker",
 ] as const;
 
-type ResolvedBinding =
-  | { readonly kind: "official-wrap" }
-  | { readonly kind: "official-namespace" }
-  | { readonly kind: "value"; readonly value: Expression | FunctionDeclaration }
-  | { readonly kind: "unresolved" };
+export type ResolvedBinding =
+  | { readonly kind: "official-wrap"; readonly declaration: Node }
+  | { readonly kind: "official-namespace"; readonly declaration: Node }
+  | {
+      readonly kind: "value";
+      readonly value: Expression | FunctionDeclaration;
+      readonly declaration: Node;
+    }
+  | { readonly kind: "unresolved"; readonly declaration?: Node };
 
 export function resolveName(file: SourceFile, name: string, from: Node): ResolvedBinding {
   let current: Node | undefined = from.parent;
@@ -89,8 +94,13 @@ function denotesOfficialKind(
 ): boolean {
   if (!isIdentifier(node) || seen.has(node.text)) return false;
   const binding = resolveName(file, node.text, node);
-  if (binding.kind === kind) return true;
+  const allowedMethods =
+    kind === "official-namespace" ? new Set([WRAP_WORKER_HANDLER]) : new Set<string>();
+  if (binding.kind === kind) {
+    return bindingIntegrity(file, binding, resolveName, allowedMethods).immutable;
+  }
   if (binding.kind !== "value") return false;
+  if (!bindingIntegrity(file, binding, resolveName, allowedMethods).immutable) return false;
   const value = isFunctionDeclaration(binding.value) ? undefined : unwrap(binding.value);
   if (!value || !isIdentifier(value)) return false;
   const nextSeen = new Set(seen);
@@ -117,7 +127,7 @@ function functionLikeBinding(
   name: string,
 ): ResolvedBinding | undefined {
   if (fn.name && isIdentifier(fn.name) && fn.name.text === name) {
-    return { kind: "value", value: fn };
+    return { kind: "value", value: fn, declaration: fn };
   }
   const parameter = parameterBinding(fn.parameters, name);
   if (parameter) return parameter;
@@ -135,8 +145,8 @@ function parameterBinding(
   for (const parameter of parameters) {
     if (bindingNameHas(parameter.name, name)) {
       return parameter.initializer
-        ? { kind: "value", value: parameter.initializer }
-        : { kind: "unresolved" };
+        ? { kind: "value", value: parameter.initializer, declaration: parameter }
+        : { kind: "unresolved", declaration: parameter };
     }
   }
   return undefined;
@@ -162,7 +172,7 @@ function forBinding(
 function catchBinding(scope: Node, name: string): ResolvedBinding | undefined {
   if (!isCatchClause(scope) || !scope.variableDeclaration) return undefined;
   if (!bindingNameHas(scope.variableDeclaration.name, name)) return undefined;
-  return { kind: "unresolved" };
+  return { kind: "unresolved", declaration: scope.variableDeclaration };
 }
 
 function hoistedVarBinding(block: Block, name: string): ResolvedBinding | undefined {
@@ -194,10 +204,10 @@ function hoistedVarBinding(block: Block, name: string): ResolvedBinding | undefi
 
 function lexicalStatementBinding(statement: Statement, name: string): ResolvedBinding | undefined {
   if (isFunctionDeclaration(statement) && statement.name?.text === name) {
-    return { kind: "value", value: statement };
+    return { kind: "value", value: statement, declaration: statement };
   }
   if (isClassDeclaration(statement) && statement.name?.text === name) {
-    return { kind: "unresolved" };
+    return { kind: "unresolved", declaration: statement };
   }
   if (!isVariableStatement(statement)) return undefined;
   return declarationListBinding(statement.declarationList, name, false);
@@ -214,8 +224,8 @@ function declarationListBinding(
   for (const declaration of list.declarations) {
     if (!bindingNameHas(declaration.name, name)) continue;
     return declaration.initializer
-      ? { kind: "value", value: declaration.initializer }
-      : { kind: "unresolved" };
+      ? { kind: "value", value: declaration.initializer, declaration }
+      : { kind: "unresolved", declaration };
   }
   return undefined;
 }
@@ -246,7 +256,7 @@ function importStatementBinding(statement: Statement, name: string): ResolvedBin
   if (!bindings) return undefined;
   if (isNamespaceImport(bindings)) {
     return bindings.name.text === name
-      ? officialImportKind(statement.moduleSpecifier, "official-namespace")
+      ? officialImportKind(statement.moduleSpecifier, "official-namespace", bindings)
       : undefined;
   }
   if (!isNamedImports(bindings)) return undefined;
@@ -262,15 +272,21 @@ function namedImportBinding(
     if (element.name.text !== name) continue;
     const imported = (element.propertyName ?? element.name).text;
     if (imported === WRAP_WORKER_HANDLER && isOfficialWrapSpecifier(specifier)) {
-      return { kind: "official-wrap" };
+      return { kind: "official-wrap", declaration: element };
     }
-    return { kind: "unresolved" };
+    return { kind: "unresolved", declaration: element };
   }
   return undefined;
 }
 
-function officialImportKind(specifier: Expression, kind: "official-namespace"): ResolvedBinding {
-  return isOfficialWrapSpecifier(specifier) ? { kind } : { kind: "unresolved" };
+function officialImportKind(
+  specifier: Expression,
+  kind: "official-namespace",
+  declaration: Node,
+): ResolvedBinding {
+  return isOfficialWrapSpecifier(specifier)
+    ? { kind, declaration }
+    : { kind: "unresolved", declaration };
 }
 
 function isOfficialWrapSpecifier(specifier: Expression): boolean {
