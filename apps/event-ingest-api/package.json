@@ -17,6 +17,7 @@
   "dependencies": {
     "@splitch/contracts": "workspace:*",
     "@splitch/observability": "workspace:*",
+    "@splitch/privacy": "workspace:*",
     "@splitch/worker-runtime": "workspace:*"
   }
 }

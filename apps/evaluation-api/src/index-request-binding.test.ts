@@ -7,6 +7,60 @@ const emptyCtx = {
   passThroughOnException() {},
 } as unknown as ExecutionContext;
 
+describe("evaluationApiHandler hosted privacy startup", () => {
+  it("fails health when the platform target is missing", async () => {
+    await expect(
+      evaluationApiHandler.fetch(
+        new Request("https://evaluation.test/health") as Parameters<
+          typeof evaluationApiHandler.fetch
+        >[0],
+        {} as EvaluationApiEnv,
+        emptyCtx,
+      ),
+    ).rejects.toThrow(/SPLITCH_PLATFORM_TARGET is required/);
+  });
+
+  it("fails health when a hosted target has no privacy root salt", async () => {
+    await expect(
+      evaluationApiHandler.fetch(
+        new Request("https://evaluation.test/health") as Parameters<
+          typeof evaluationApiHandler.fetch
+        >[0],
+        { SPLITCH_PLATFORM_TARGET: "production" } as EvaluationApiEnv,
+        emptyCtx,
+      ),
+    ).rejects.toThrow(/EVALUATION_PRIVACY_SALT/);
+  });
+
+  it("serves hosted health when the root salt and deployed SHA are present", async () => {
+    const response = await evaluationApiHandler.fetch(
+      new Request("https://evaluation.test/health") as Parameters<
+        typeof evaluationApiHandler.fetch
+      >[0],
+      {
+        SPLITCH_PLATFORM_TARGET: "production",
+        EVALUATION_PRIVACY_SALT: "hosted-root-secret",
+        SPLITCH_DEPLOYED_COMMIT_SHA: "a".repeat(40),
+      } as EvaluationApiEnv,
+      emptyCtx,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, platformTarget: "production" });
+  });
+
+  it("serves health on an explicit local target without a hosted salt", async () => {
+    const response = await evaluationApiHandler.fetch(
+      new Request("https://evaluation.test/health") as Parameters<
+        typeof evaluationApiHandler.fetch
+      >[0],
+      { SPLITCH_PLATFORM_TARGET: "local" } as EvaluationApiEnv,
+      emptyCtx,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, platformTarget: "local" });
+  });
+});
+
 describe("evaluationApiHandler per-request claims binding", () => {
   it("throws when EXPOSURE_REDEMPTION_CLAIMS is missing on a non-health request", async () => {
     const env = {

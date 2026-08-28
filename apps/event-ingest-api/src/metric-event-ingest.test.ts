@@ -1,4 +1,5 @@
 import { eventDefinitionConfigKey } from "@splitch/contracts";
+import { computeTargetingKeyHash } from "@splitch/privacy";
 import { describe, expect, it, vi } from "vitest";
 import worker from "./index";
 import { ingestAdmissionScopeName } from "./ingest-admission-config";
@@ -12,8 +13,8 @@ import {
   metricEventBody,
   sendMetricEvent,
 } from "./metric-event.test-fixture";
+import { handleAuthorizedMetricEvent, makeMetricEventSaltStore } from "./metric-event-ingest";
 import { TestExecutionContext } from "./test-fixtures";
-import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 
 describe("Metric Event ingest", () => {
   it("accepts the Evaluation-authorized caller only through the binding entrypoint", async () => {
@@ -168,6 +169,27 @@ describe("Metric Event ingest", () => {
 
     expect(response.status).toBe(400);
     expect(getReader).not.toHaveBeenCalled();
+  });
+});
+
+describe("Metric Event privacy salts", () => {
+  it("hashes the same Targeting Key differently across Apps under one root", async () => {
+    const store = makeMetricEventSaltStore({
+      EVALUATION_PRIVACY_SALT: "test-root-secret-do-not-use",
+      SPLITCH_PLATFORM_TARGET: "production",
+    } as never);
+    const input = { idType: "user", targetingKey: "user-123" } as const;
+    const appA = await computeTargetingKeyHash(store, { ...input, appId: "app_1" });
+    const appB = await computeTargetingKeyHash(store, { ...input, appId: "app_2" });
+    expect(appA).toBe("v1:c3c8eb207113cce7a3c68d7091a8daf3f65b1a83fb164822c78114dc06f8f28b");
+    expect(appB).toBe("v1:a2903009a4ebba676f9a7b8231718dff12e45988a97981c26b07dbab480751d9");
+  });
+
+  it("rejects a missing hosted root salt or platform target", () => {
+    expect(() => makeMetricEventSaltStore({} as never)).toThrow(/SPLITCH_PLATFORM_TARGET/);
+    expect(() =>
+      makeMetricEventSaltStore({ SPLITCH_PLATFORM_TARGET: "production" } as never),
+    ).toThrow(/EVALUATION_PRIVACY_SALT/);
   });
 });
 

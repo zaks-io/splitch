@@ -18,24 +18,8 @@
  * prefix that lets export/delete recompute the right hash per active salt.
  */
 
-import type { KeyVersion, SaltBytes, SaltStore } from "./salt-store";
-
-const HMAC_PARAMS = { name: "HMAC", hash: "SHA-256" } as const;
-
-function toHex(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let hex = "";
-  for (const byte of bytes) {
-    hex += byte.toString(16).padStart(2, "0");
-  }
-  return hex;
-}
-
-async function hmacSha256Hex(salt: SaltBytes, message: string): Promise<string> {
-  const key = await crypto.subtle.importKey("raw", salt, HMAC_PARAMS, false, ["sign"]);
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
-  return toHex(signature);
-}
+import { hmacSha256Hex } from "./hmac";
+import type { KeyVersion, SaltStore } from "./salt-store";
 
 function validateIdType(idType: string): void {
   if (idType.length === 0) {

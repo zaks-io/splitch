@@ -3,7 +3,7 @@ import {
   type ConvexServerExposureItem,
   createHealthResponse,
   getRoute,
-  parsePlatformTarget,
+  requirePlatformTarget,
   routesDelegatedTo,
 } from "@splitch/contracts";
 import {
@@ -107,13 +107,11 @@ async function handleRequest(
   authority?: EvaluationRequestAuthority,
 ): Promise<Response> {
   const url = new URL(request.url);
+  const platformTarget = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+  const saltStore = makeEnvSaltStore(env);
   if (url.pathname === "/health" || url.pathname === "/") {
     return Response.json(
-      createHealthResponse(
-        service,
-        parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
-        env.SPLITCH_DEPLOYED_COMMIT_SHA,
-      ),
+      createHealthResponse(service, platformTarget, env.SPLITCH_DEPLOYED_COMMIT_SHA),
     );
   }
   const exposureRedemptionClaims = requiredExposureRedemptionClaimsBinding(
@@ -127,7 +125,6 @@ async function handleRequest(
     env,
     workerObservabilityWithWaitUntil("evaluation-api", ctx),
   );
-  const saltStore = makeEnvSaltStore(env);
   const app = createApp({
     door: authority ? "binding" : "public",
     authResolver: requestAuthResolver(env, url, authority),

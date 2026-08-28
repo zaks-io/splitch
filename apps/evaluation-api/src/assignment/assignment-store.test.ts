@@ -1,10 +1,11 @@
-import { AssignmentStoreValueSchema } from "@splitch/contracts";
-import { Miniflare } from "miniflare";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { AssignmentStoreValueSchema } from "@splitch/contracts";
+import { Miniflare } from "miniflare";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { makeEnvSaltStore } from "../local-salt-store";
 import {
   AssignmentStoreError,
   hashedAssignmentIdentity,
@@ -187,6 +188,29 @@ describe("KvAssignmentStore.put", () => {
 });
 
 describe("KvAssignmentStore isolation and validation", () => {
+  it("isolates two Apps that share one Evaluation privacy root secret", async () => {
+    const saltStore = makeEnvSaltStore({
+      EVALUATION_PRIVACY_SALT: "test-root-secret-do-not-use",
+      SPLITCH_PLATFORM_TARGET: "production",
+    });
+    const kv = new RecordingKv();
+    const appA = await hashedAssignmentIdentity(saltStore, basePut);
+    kv.putRaw(
+      appA.entityKey,
+      serializeAssignmentValue({ "exp-checkout": { runId: "run-1", variant: "control" } }),
+    );
+
+    const store = new KvAssignmentStore(kv, new RecordingWriterNamespace(), saltStore);
+    const appBHoldovers = await store.getAll({ ...basePut, appId: "app-B" });
+    const appB = await hashedAssignmentIdentity(saltStore, { ...basePut, appId: "app-B" });
+
+    expect(appBHoldovers.size).toBe(0);
+    expect(kv.getCalls).toEqual([appB.entityKey]);
+    expect(appB.entityKey).not.toBe(appA.entityKey);
+    expect(appA.targetingKeyHash).not.toBe(appB.targetingKeyHash);
+    expect(appA.targetingKeyHash).not.toContain(RAW_TARGETING_KEY);
+  });
+
   it("does not let App B read App A's Entity assignment key", async () => {
     const saltStore = new StaticSaltStore();
     const kv = new RecordingKv();

@@ -1,9 +1,16 @@
 import {
   EventDefinitionHotConfigSchema,
   eventDefinitionConfigKey,
+  isLocalPlatformTarget,
   kvEnvelope,
   MetricEventTrackRequestSchema,
+  requirePlatformTarget,
 } from "@splitch/contracts";
+import {
+  computeTargetingKeyHash,
+  makeDerivedSaltStore,
+  resolvePrivacyRootSecret,
+} from "@splitch/privacy";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
 import {
@@ -28,7 +35,11 @@ export async function handleAuthorizedMetricEvent(
   const limited = await enforceCredentialRateLimit(env, credential);
   if (limited) return limited;
 
-  const targetingKeyHash = await computeTargetingKeyHash(env, parsed.idType, parsed.targetingKey);
+  const targetingKeyHash = await computeTargetingKeyHash(makeMetricEventSaltStore(env), {
+    appId: credential.appId,
+    idType: parsed.idType,
+    targetingKey: parsed.targetingKey,
+  });
   const fingerprint = await sha256(
     canonicalJson({
       eventName: parsed.eventName,
@@ -172,31 +183,14 @@ async function loadDefinition(env: Env, appId: string, eventName: string) {
   }
 }
 
-function localSalt(target: string | undefined): string {
-  if (target === undefined || target === "local" || target === "pr-ci")
-    return "splitch-local-evaluation-salt";
-  throw new Error("EVALUATION_PRIVACY_SALT is required outside local targets");
-}
-
-async function computeTargetingKeyHash(
-  env: Env,
-  idType: string,
-  targetingKey: string,
-): Promise<string> {
-  const secret = env.EVALUATION_PRIVACY_SALT ?? localSalt(env.SPLITCH_PLATFORM_TARGET);
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const digest = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(`${idType}:${targetingKey}`),
-  );
-  return `v1:${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+export function makeMetricEventSaltStore(env: Env) {
+  const target = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+  return makeDerivedSaltStore({
+    rootSecret: resolvePrivacyRootSecret({
+      configuredSalt: env.EVALUATION_PRIVACY_SALT,
+      localFixtureAllowed: isLocalPlatformTarget(target),
+    }),
+  });
 }
 
 function validation(message: string, path: string[]) {

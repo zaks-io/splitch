@@ -7,6 +7,9 @@ export default defineConfig({
       "@splitch/contracts": fileURLToPath(
         new URL("../../packages/contracts/src/index.ts", import.meta.url),
       ),
+      "@splitch/privacy": fileURLToPath(
+        new URL("../../packages/privacy/src/index.ts", import.meta.url),
+      ),
       "@splitch/worker-runtime": fileURLToPath(
         new URL("../../packages/worker-runtime/src/index.ts", import.meta.url),
       ),
