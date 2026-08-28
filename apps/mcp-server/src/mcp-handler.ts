@@ -1,19 +1,10 @@
+import { parsePlatformTarget } from "@splitch/contracts";
+import { type McpSpanRecorder, noopMcpSpanRecorder } from "@splitch/observability/mcp-spans";
 import {
-  type ApiRouteContract,
-  getRoute,
-  parsePlatformTarget,
-  publicSurfaceFor,
-} from "@splitch/contracts";
-import { IdempotencyKeyRequiredError } from "@splitch/control-plane-sdk/idempotency-header";
-import { McpOperationInvalidParamsError } from "@splitch/control-plane-sdk/mcp-operation-adapter";
-import {
-  JSON_RPC_INVALID_PARAMS,
   JSON_RPC_METHOD_NOT_FOUND,
-  type JsonRpcId,
   type JsonRpcRequest,
   type JsonRpcResponse,
   jsonRpcError,
-  jsonRpcInternalError,
   jsonRpcResult,
 } from "./json-rpc";
 import {
@@ -21,28 +12,27 @@ import {
   type McpAccessTokenVerifier,
   makeHttpMcpAccessTokenVerifier,
 } from "./mcp-access-token";
-import {
-  createControlPlaneOperationSdk,
-  type OperationSdk,
-  type OperationSdkResolver,
-} from "./mcp-operation-sdks";
+import { localMcpFaultReporter, type McpFaultReporter } from "./mcp-fault";
+import { createControlPlaneOperationSdk, type OperationSdkResolver } from "./mcp-operation-sdks";
+import { PROMPT_DEFINITIONS } from "./mcp-prompt-types";
 import { getMcpPromptRpc, listMcpPrompts } from "./mcp-prompts";
 import { readJsonRpcRequest } from "./mcp-request";
-import { listMcpResources, readMcpResourceRpc } from "./mcp-resources";
+import { listMcpResources, MCP_RESOURCE_URIS, readMcpResourceRpc } from "./mcp-resources";
 import {
   type McpSessionContextValidator,
   type McpSessionStore,
   type McpSessionTransport,
   parseToolCall,
-  resolveScope,
-  setSessionContext,
 } from "./mcp-session-context";
-import { controlPlaneContextValidator } from "./mcp-session-context-validator";
+import { callTool, type McpToolCallFault } from "./mcp-tool-call";
 import { corsHeaders, jsonResponse, routeTransportRequest } from "./mcp-transport";
 import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
 
 const protocolVersion = "2025-06-18";
-const toolNames = new Set(MCP_TOOL_DEFINITIONS.map((tool) => tool.name));
+
+const TOOL_NAMES: ReadonlySet<string> = new Set(MCP_TOOL_DEFINITIONS.map((tool) => tool.name));
+const RESOURCE_URIS: ReadonlySet<string> = new Set(MCP_RESOURCE_URIS);
+const PROMPT_NAMES: ReadonlySet<string> = new Set(PROMPT_DEFINITIONS.map((prompt) => prompt.name));
 
 export interface McpRevocationReader {
   isRevoked(subject: string): Promise<boolean>;
@@ -63,6 +53,8 @@ export interface McpServerRequestOptions {
   readonly revocations?: McpRevocationReader;
   readonly fetchAuthMarkdown?: (authBaseUrl: string) => Promise<string>;
   readonly now?: () => number;
+  readonly spans?: McpSpanRecorder;
+  readonly reportFault?: McpFaultReporter;
 }
 
 export async function handleMcpServerRequest(options: McpServerRequestOptions): Promise<Response> {
@@ -107,6 +99,7 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
     sessionId,
     sessionStore,
     options,
+    options.reportFault ?? localMcpFaultReporter(),
   );
   const responseSessionId =
     request.value.method === "initialize"
@@ -120,6 +113,18 @@ function requiredRevocations(revocations: McpRevocationReader | undefined): McpR
   return revocations;
 }
 
+/**
+ * Every MCP method gets a span, not just `tools/call`. From an agent's side
+ * `resources/read` and `prompts/get` are the same kind of call and fail the same
+ * ways, and the span costs one wrapper either way -- instrumenting only tools
+ * would leave two thirds of the protocol surface as an undifferentiated
+ * `POST /mcp`.
+ *
+ * The subject (tool name, resource URI, prompt name) is resolved BEFORE dispatch
+ * so a span exists even for a call that then fails validation. `spanSubject`
+ * resolves it against a contract-derived closed set, so span names stay bounded
+ * in cardinality and carry no caller text.
+ */
 async function dispatch(
   request: JsonRpcRequest,
   controlPlane: OperationSdkResolver,
@@ -127,6 +132,63 @@ async function dispatch(
   sessionId: string | null,
   sessionStore: McpSessionStore,
   options: McpServerRequestOptions,
+  reportFault: McpFaultReporter,
+): Promise<JsonRpcResponse> {
+  const spans = options.spans ?? noopMcpSpanRecorder;
+  return spans.record(
+    { method: request.method, subject: spanSubject(request), sessionId },
+    (span) =>
+      dispatchMethod(request, controlPlane, actor, sessionId, sessionStore, options, {
+        reportFault,
+        span,
+      }),
+  );
+}
+
+/**
+ * The JSON-RPC id is deliberately NOT a span attribute. Sentry lists
+ * `mcp.request.id` as optional, and ours is caller-chosen: it is both an
+ * unbounded-cardinality tag and a channel a client could use to write arbitrary
+ * text into our span payloads.
+ *
+ * The subject is the same channel, so it is resolved against the registry it
+ * names instead of being read off the wire. `params.uri` and `params.name` are
+ * unvalidated caller strings at this point -- taken verbatim they would carry a
+ * Targeting Key straight into an allow-listed `mcp.resource.uri` attribute, and
+ * give the span name unbounded cardinality besides. An unrecognised subject
+ * yields `undefined`, so the call still gets a span named after its method alone.
+ */
+function spanSubject(request: JsonRpcRequest): string | undefined {
+  if (request.method === "tools/call") {
+    return knownSubject(TOOL_NAMES, parseToolCall(request.params)?.name);
+  }
+  if (request.method === "resources/read") {
+    return knownSubject(RESOURCE_URIS, stringParam(request.params, "uri"));
+  }
+  if (request.method === "prompts/get") {
+    return knownSubject(PROMPT_NAMES, stringParam(request.params, "name"));
+  }
+  return undefined;
+}
+
+function knownSubject(known: ReadonlySet<string>, subject: string | undefined): string | undefined {
+  return subject !== undefined && known.has(subject) ? subject : undefined;
+}
+
+function stringParam(params: unknown, key: string): string | undefined {
+  if (typeof params !== "object" || params === null) return undefined;
+  const value = (params as Record<string, unknown>)[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+async function dispatchMethod(
+  request: JsonRpcRequest,
+  controlPlane: OperationSdkResolver,
+  actor: McpAccessTokenActor,
+  sessionId: string | null,
+  sessionStore: McpSessionStore,
+  options: McpServerRequestOptions,
+  fault: McpToolCallFault,
 ): Promise<JsonRpcResponse> {
   const id = request.id ?? null;
   if (request.method === "initialize") {
@@ -142,6 +204,7 @@ async function dispatch(
       sessionStore,
       authBaseUrl: authIssuer(options.authBaseUrl, options.platformTarget),
       fetchAuthMarkdown: options.fetchAuthMarkdown,
+      reportFault: fault.reportFault,
     });
   }
   if (request.method === "prompts/list") {
@@ -162,80 +225,10 @@ async function dispatch(
       sessionId,
       sessionStore,
       options.sessionContextValidator,
+      fault,
     );
   }
   return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
-}
-
-async function callTool(
-  id: JsonRpcId,
-  params: unknown,
-  controlPlane: OperationSdkResolver,
-  actor: McpAccessTokenActor,
-  sessionId: string | null,
-  sessionStore: McpSessionStore,
-  sessionContextValidator: McpSessionContextValidator | undefined,
-): Promise<JsonRpcResponse> {
-  const call = parseToolCall(params);
-  if (!call || !toolNames.has(call.name)) {
-    return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
-  }
-  if (call.name === "context_use") {
-    try {
-      return await contextUse(
-        id,
-        call.arguments,
-        sessionId,
-        sessionStore,
-        sessionContextValidator ?? controlPlaneContextValidator(controlPlane, actor),
-      );
-    } catch (error) {
-      return toolCallFailure(id, error);
-    }
-  }
-  const route = getRoute(call.name);
-  if (!route) {
-    return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
-  }
-
-  try {
-    const sdk = controlPlaneSdkForRoute(controlPlane, route);
-    const input = await resolveScope(route.path, call.arguments, sessionId, sessionStore);
-    if (!input.ok) {
-      return jsonRpcResult(id, toolResult({ message: input.message }, { isError: true }));
-    }
-    const result = await sdk.callOperationById(call.name, input.value, {
-      delegation: { subject: actor.subject, scopes: actor.scopes, authDoor: actor.authDoor },
-    });
-    return jsonRpcResult(
-      id,
-      result.ok ? toolResult(result.data) : toolResult(result.error, { isError: true }),
-    );
-  } catch (error) {
-    return toolCallFailure(id, error);
-  }
-}
-
-/**
- * A missing idempotency key is a caller-fixable precondition, so it reaches the
- * agent as a typed `VALIDATION_ERROR` tool result — the same code and envelope the
- * Worker uses for that rule — rather than a protocol fault. `Internal error` stays
- * the last resort for genuinely unexpected throws (SPL-266).
- *
- * The promise is scoped to this rule: other refusals on this path (scope
- * resolution) still return an untyped message with no `code`.
- */
-function toolCallFailure(id: JsonRpcId, error: unknown): JsonRpcResponse {
-  if (error instanceof IdempotencyKeyRequiredError) {
-    return jsonRpcResult(id, toolResult(error.errorResponse, { isError: true }));
-  }
-  if (error instanceof McpOperationInvalidParamsError) {
-    return jsonRpcError(id, JSON_RPC_INVALID_PARAMS, "Invalid params", {
-      argument: error.argument,
-      message: error.message,
-    });
-  }
-  return jsonRpcInternalError(id, error);
 }
 
 function authIssuer(configured: string | undefined, platformTarget: string | undefined): string {
@@ -252,42 +245,6 @@ function sessionTransportFromActor(actor: McpAccessTokenActor): McpSessionTransp
   };
 }
 
-async function contextUse(
-  id: JsonRpcId,
-  arguments_: unknown,
-  sessionId: string | null,
-  sessionStore: McpSessionStore,
-  validate: McpSessionContextValidator,
-): Promise<JsonRpcResponse> {
-  const result = await setSessionContext(arguments_, sessionId, sessionStore, validate);
-  return jsonRpcResult(
-    id,
-    result.ok
-      ? toolResult(result.value)
-      : toolResult({ message: result.message }, { isError: true }),
-  );
-}
-
-/**
- * The one place an MCP tool call acquires a downstream, so there is one place to
- * check that it is the Control Plane. A management tool is addressed at the
- * surface its credential belongs to (ADR-0046); a derived tool whose route is
- * addressed anywhere else would be one the Control Plane's D1 membership,
- * Environment-scope, and Policy gates never see, so refuse it rather than send it.
- */
-export function controlPlaneSdkForRoute(
-  controlPlane: OperationSdkResolver,
-  route: ApiRouteContract,
-): OperationSdk {
-  const surface = publicSurfaceFor(route);
-  if (surface !== "control-plane-api") {
-    throw new Error(
-      `mcp-server: tool "${route.operationId}" is addressed at ${surface ?? "no public surface"}, not the Control Plane`,
-    );
-  }
-  return controlPlane();
-}
-
 function initializeResult(): Record<string, unknown> {
   return {
     protocolVersion,
@@ -297,14 +254,6 @@ function initializeResult(): Record<string, unknown> {
       prompts: { listChanged: false },
     },
     serverInfo: { name: "splitch-mcp-server", version: "0.0.0" },
-  };
-}
-
-function toolResult(value: unknown, options: { isError?: boolean } = {}): Record<string, unknown> {
-  return {
-    content: [{ type: "text", text: JSON.stringify(value) }],
-    structuredContent: value,
-    ...(options.isError ? { isError: true } : {}),
   };
 }
 

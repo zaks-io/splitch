@@ -3,6 +3,8 @@ import type { Observability } from "@splitch/worker-runtime";
 import {
   createScrubbedEmitter,
   createSentryBeforeSend,
+  createSentryBeforeSendSpan,
+  createSentryBeforeSendTransaction,
   type ScrubbedEmitter,
   secretsFromEnv,
 } from "./emitter.js";
@@ -12,6 +14,7 @@ import {
   reduceRequestError,
   shouldReportRequestErrorToSentry,
 } from "./request-error-sentry.js";
+import { loadSentry, type SentryCloudflare } from "./sentry-module.js";
 import type { ObservabilitySurfaceId } from "./surfaces.js";
 
 type WorkerEnv = {
@@ -20,8 +23,13 @@ type WorkerEnv = {
   SPLITCH_PLATFORM_TARGET?: string;
 };
 
-type SentryCloudflare = typeof import("@sentry/cloudflare");
 type SentryErrorEvent = import("@sentry/cloudflare").ErrorEvent;
+type SentrySpanJson = Parameters<
+  NonNullable<import("@sentry/cloudflare").CloudflareOptions["beforeSendSpan"]>
+>[0];
+type SentryTransactionEvent = Parameters<
+  NonNullable<import("@sentry/cloudflare").CloudflareOptions["beforeSendTransaction"]>
+>[0];
 
 export interface WorkerObservabilityOptions {
   readonly surface: ObservabilitySurfaceId;
@@ -39,23 +47,7 @@ export function workerObservabilityWithWaitUntil(
   };
 }
 
-let sentryModule: SentryCloudflare | undefined;
-let sentryModuleOverride: SentryCloudflare | undefined;
 const sentryHandlers = new WeakMap<object, ExportedHandler<WorkerEnv>>();
-
-/** @internal Injects a Sentry client for unit tests. */
-export function __setSentryModuleForTests(module: SentryCloudflare | undefined): void {
-  sentryModuleOverride = module;
-  sentryModule = module;
-}
-
-async function loadSentry(): Promise<SentryCloudflare> {
-  if (sentryModuleOverride) {
-    return sentryModuleOverride;
-  }
-  sentryModule ??= await import("@sentry/cloudflare");
-  return sentryModule;
-}
 
 function getSentryWrappedHandler<E extends WorkerEnv, QueueMessage = unknown>(
   handler: ExportedHandler<E, QueueMessage>,
@@ -85,12 +77,32 @@ export function workerSentryOptions(
 ) {
   const secrets = secretsFromEnv(env);
   const scrubbedBeforeSend = createSentryBeforeSend({ surface: options.surface });
+  const scrubbedBeforeSendSpan = createSentryBeforeSendSpan({ surface: options.surface });
+  const scrubbedBeforeSendTransaction = createSentryBeforeSendTransaction({
+    surface: options.surface,
+  });
   return {
     dsn: secrets.sentryDsn,
     environment: secrets.environment,
     release: env.SENTRY_RELEASE,
     tracesSampleRate: 1,
     enableRpcTracePropagation: true,
+    /**
+     * Sentry continues an incoming trace from `sentry-trace`/`baggage` by default,
+     * including one supplied by a stranger. Every Worker here is reachable from the
+     * public internet, and the MCP server takes requests from arbitrary agent
+     * clients, so an unauthenticated caller could otherwise choose our trace ids
+     * and graft synthetic spans onto our traces. This starts a fresh trace when
+     * the incoming baggage names a different org id than ours.
+     *
+     * `orgId` is deliberately not set: the SDK parses it from the DSN, so
+     * hardcoding it here would be a second source of truth that silently disables
+     * the check if it ever drifts. The corollary is that the check is only as
+     * strong as the DSN -- `shouldContinueTrace` refuses only on a MISMATCH, so a
+     * DSN host without an `o<orgid>` prefix leaves continuation wide open. Ours
+     * carries one.
+     */
+    strictTraceContinuation: true,
     /**
      * `@sentry/cloudflare` enables `consoleIntegration()` by default, which would
      * capture our own fault row (emitToWorkersLogs) as a breadcrumb and attach it
@@ -101,6 +113,29 @@ export function workerSentryOptions(
     integrations: (defaults: { name: string }[]) => defaults.filter((i) => i.name !== "Console"),
     beforeSend(event: SentryErrorEvent) {
       return scrubbedBeforeSend(event as unknown as SentryEventLike) as unknown as SentryErrorEvent;
+    },
+    /**
+     * `beforeSend` covers ERROR events only. With `tracesSampleRate: 1` above,
+     * every request also ships a transaction and its child spans -- auto-
+     * instrumented fetch spans carry the outbound URL, and our MCP spans carry
+     * protocol attributes. Without this hook that entire payload bypasses the
+     * redaction contract the event path enforces.
+     */
+    beforeSendSpan(span: SentrySpanJson) {
+      return scrubbedBeforeSendSpan(
+        span as unknown as SentryEventLike,
+      ) as unknown as SentrySpanJson;
+    },
+    /**
+     * `beforeSendSpan` only reaches the span slice of a transaction event. The
+     * envelope around it -- `request` (Authorization header, cookies, query
+     * string, courtesy of the default `requestDataIntegration`), `breadcrumbs`,
+     * `tags`, `extra` -- has no hook of its own, so it needs the event scrubber.
+     */
+    beforeSendTransaction(event: SentryTransactionEvent) {
+      return scrubbedBeforeSendTransaction(
+        event as unknown as SentryEventLike,
+      ) as unknown as SentryTransactionEvent;
     },
   };
 }
@@ -165,6 +200,26 @@ export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
   }
 
   return wrapped;
+}
+
+/**
+ * The id of the trace this request belongs to.
+ *
+ * Exists so a surface can hand a caller a reference that RESOLVES. A freshly
+ * minted UUID correlates with nothing: the operator receiving it has no query
+ * that finds it. The trace id opens the trace with the request transaction, the
+ * protocol spans, and every downstream call already attached.
+ *
+ * `undefined` without a DSN is not a fallback for missing data -- with tracing
+ * off there is genuinely no trace, and the caller decides what to say instead.
+ */
+export async function activeTraceId(env: WorkerEnv): Promise<string | undefined> {
+  if (!env.SENTRY_DSN) {
+    return undefined;
+  }
+  const Sentry = await loadSentry();
+  const span = Sentry.getActiveSpan();
+  return span ? Sentry.spanToJSON(span).trace_id : undefined;
 }
 
 /**
@@ -280,7 +335,7 @@ export function workerEmitter(
   options: WorkerObservabilityOptions,
   hooks: Pick<
     Parameters<typeof createScrubbedEmitter>[0],
-    "onSentryEvent" | "onStructuredLogEvents"
+    "onSentryEvent" | "onSentrySpan" | "onSentryTransaction" | "onStructuredLogEvents"
   > = {},
 ): ScrubbedEmitter {
   return createScrubbedEmitter({

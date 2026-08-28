@@ -16,6 +16,14 @@
     "./worker": {
       "types": "./src/worker.ts",
       "default": "./src/worker.ts"
+    },
+    "./mcp-spans": {
+      "types": "./src/mcp-spans.ts",
+      "default": "./src/mcp-spans.ts"
+    },
+    "./sentry-module": {
+      "types": "./src/sentry-module.ts",
+      "default": "./src/sentry-module.ts"
     }
   },
   "files": [

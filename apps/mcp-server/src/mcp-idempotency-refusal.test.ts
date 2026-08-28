@@ -52,7 +52,7 @@ describe("mcp missing-idempotency-key refusal", () => {
     expect(body.result).toBeUndefined();
     expect(body.error).toMatchObject({ code: -32603, message: "Internal error" });
     // The cause is the operator's, in full, and the caller only gets its handle.
-    expect(String(logged[0]?.[1])).toContain("upstream exploded");
+    expect(JSON.stringify(logged[0]?.[0])).toContain("upstream exploded");
     expect(body.error?.data?.message).not.toContain("upstream exploded");
     expect(body.error?.data?.reference).toMatch(/^[0-9a-f-]{36}$/);
   });

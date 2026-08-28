@@ -1,10 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { __setSentryModuleForTests } from "./sentry-module.js";
 import {
-  __setSentryModuleForTests,
   createWorkerObservability,
   workerEmitter,
   workerObservabilityWithWaitUntil,
-  workerSentryOptions,
   wrapWorkerHandler,
 } from "./worker.js";
 
@@ -259,42 +258,6 @@ describe("createWorkerObservability without a Sentry DSN", () => {
     expect(consoleWarn).not.toHaveBeenCalled();
     expect(consoleLog).not.toHaveBeenCalled();
     for (const spy of [consoleError, consoleWarn, consoleLog]) spy.mockRestore();
-  });
-});
-
-describe("workerSentryOptions", () => {
-  it("passes the deployed release through to Sentry", () => {
-    expect(
-      workerSentryOptions(
-        {
-          SENTRY_DSN: "https://example@sentry.io/1",
-          SENTRY_RELEASE: "splitch-auth-api@abc123",
-          SPLITCH_PLATFORM_TARGET: "production",
-        },
-        { surface: "auth-api" },
-        mockSentryModule(),
-      ),
-    ).toMatchObject({
-      environment: "production",
-      release: "splitch-auth-api@abc123",
-      enableRpcTracePropagation: true,
-      tracesSampleRate: 1,
-    });
-  });
-
-  it("drops Sentry's Console integration so fault rows are not double-sent", () => {
-    const options = workerSentryOptions(
-      { SENTRY_DSN: "https://example@sentry.io/1" },
-      { surface: "auth-api" },
-      mockSentryModule(),
-    );
-
-    // emitToWorkersLogs console.errors the fault row, and captureMessage sends
-    // the same row as `extra` immediately after. Left enabled, consoleIntegration
-    // would attach the console line as a breadcrumb on that very event.
-    const kept = options.integrations([{ name: "Console" }, { name: "Dedupe" }]);
-
-    expect(kept.map((i) => i.name)).toEqual(["Dedupe"]);
   });
 });
 

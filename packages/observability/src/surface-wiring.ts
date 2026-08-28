@@ -19,8 +19,12 @@ const WORKER_TEST_ENV = {
 
 type SurfaceEmitterFactory = (hooks: {
   onSentryEvent?: (event: Record<string, unknown>) => void;
+  onSentrySpan?: (span: Record<string, unknown>) => void;
+  onSentryTransaction?: (event: Record<string, unknown>) => void;
   onStructuredLogEvents?: (events: Record<string, unknown>[]) => void;
 }) => {
+  beforeSendSpan: (span: Record<string, unknown>) => Record<string, unknown>;
+  beforeSendTransaction: (event: Record<string, unknown>) => Record<string, unknown>;
   captureException: (error: unknown, extra?: Record<string, unknown>) => void;
   log: (
     level: "debug" | "info" | "warn" | "error",

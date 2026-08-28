@@ -6,13 +6,14 @@ import { getRoute } from "@splitch/contracts";
 import { parseConfigFileTextToJson } from "typescript";
 import { describe, expect, it } from "vitest";
 import { walkRepoFiles } from "../../../scripts/lib/repo-file-sweep.mjs";
-import { controlPlaneSdkForRoute, handleMcpServerRequest } from "./mcp-handler";
+import { handleMcpServerRequest } from "./mcp-handler";
 import type { OperationSdk } from "./mcp-operation-sdks";
 import {
   allowMcpRevocations,
   staticMcpTokenVerifier,
   TEST_MCP_DELEGATION_SECRET,
 } from "./mcp-test-verifier";
+import { controlPlaneSdkForRoute } from "./mcp-tool-call";
 
 /**
  * SPL-313: MCP dispatched by `route.owner`, so Analysis- and Evaluation-owned
@@ -175,7 +176,7 @@ describe("MCP has only the Control Plane downstream", () => {
     const sources = await readSources();
 
     // The scan is worthless if it misses the dispatch site, so name it.
-    const dispatch = sources.get("mcp-handler.ts");
+    const dispatch = sources.get("mcp-tool-call.ts");
     expect(dispatch).toBeDefined();
     expect(dispatch).toContain("controlPlaneSdkForRoute");
     expect(dispatch).toContain("callOperationById");

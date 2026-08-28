@@ -1,4 +1,3 @@
-import type { McpAccessTokenActor } from "./mcp-access-token";
 import {
   JSON_RPC_METHOD_NOT_FOUND,
   type JsonRpcId,
@@ -7,7 +6,9 @@ import {
   jsonRpcInternalError,
   jsonRpcResult,
 } from "./json-rpc";
+import type { McpAccessTokenActor } from "./mcp-access-token";
 import { buildCapabilitiesResource } from "./mcp-capabilities";
+import type { McpFaultReporter } from "./mcp-fault";
 import { CONTEXT_MD, QUICKSTART_MD } from "./mcp-resource-files.generated";
 import type { McpSessionContext, McpSessionStore } from "./mcp-session-context";
 
@@ -47,6 +48,7 @@ interface ReadMcpResourceContext {
   readonly sessionStore: McpSessionStore;
   readonly authBaseUrl: string;
   readonly fetchAuthMarkdown?: (authBaseUrl: string) => Promise<string>;
+  readonly reportFault: McpFaultReporter;
 }
 
 interface ReadMcpResourceOptions extends ReadMcpResourceContext {
@@ -106,7 +108,7 @@ export async function readMcpResourceRpc(
     }
     return jsonRpcResult(id, { contents: [content] });
   } catch (error) {
-    return jsonRpcInternalError(id, error);
+    return jsonRpcInternalError(id, error, context.reportFault);
   }
 }
 

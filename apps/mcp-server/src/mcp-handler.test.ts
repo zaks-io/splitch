@@ -166,7 +166,9 @@ describe("mcp server errors and config", () => {
 
     expect(body.error).toMatchObject({ code: -32603 });
     // Loud where an operator reads it, opaque where the agent does.
-    expect(String(logged[0]?.[1])).toContain("CONTROL_PLANE_API service binding is required");
+    expect(JSON.stringify(logged[0]?.[0])).toContain(
+      "CONTROL_PLANE_API service binding is required",
+    );
     expect(body.error.data?.message).not.toContain("CONTROL_PLANE_API");
     expect(body.error.data?.reference).toMatch(/^[0-9a-f-]{36}$/);
   });

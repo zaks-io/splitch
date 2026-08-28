@@ -1,9 +1,12 @@
 import { accessTokenRevocationKey } from "@splitch/contracts";
+import { createMcpSpanRecorder } from "@splitch/observability/mcp-spans";
 import {
+  activeTraceId,
   createWorkerObservability,
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
+import { mcpFaultReporter } from "./mcp-fault";
 import { handleMcpServerRequest } from "./mcp-handler";
 import { McpSessionDurableObject } from "./mcp-session-do";
 import { durableMcpSessionStore, type McpSessionDurableObjectNamespace } from "./mcp-session-store";
@@ -34,8 +37,13 @@ const handler = {
       workerObservabilityWithWaitUntil("mcp-server", ctx),
     );
     const url = new URL(request.url);
+    // Resolved once here, inside the request transaction `wrapWorkerHandler`
+    // opened, so the whole request shares one reference. Also the fallback for
+    // `x-request-id`: the literal that used to sit there made every untagged
+    // request indistinguishable in the logs, which is most of them.
+    const traceId = await activeTraceId(env);
     observability.onRequest?.({
-      requestId: request.headers.get("x-request-id") ?? "mcp-request",
+      requestId: request.headers.get("x-request-id") ?? traceId ?? "mcp-request",
       method: request.method,
       path: url.pathname,
     });
@@ -50,6 +58,8 @@ const handler = {
       controlPlaneDelegationSecret: env.MCP_CONTROL_PLANE_DELEGATION_SECRET,
       revocations: kvRevocations(requiredSessionStore(env.SESSION_STORE)),
       sessionStore: durableMcpSessionStore(env.MCP_SESSIONS),
+      spans: createMcpSpanRecorder(env),
+      reportFault: mcpFaultReporter(observability, traceId),
     });
   },
 } satisfies ExportedHandler<Env>;

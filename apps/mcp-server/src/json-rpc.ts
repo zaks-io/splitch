@@ -1,3 +1,5 @@
+import type { McpFaultReporter } from "./mcp-fault";
+
 export type JsonRpcId = string | number | null;
 
 export interface JsonRpcRequest {
@@ -68,12 +70,19 @@ const INTERNAL_ERROR_MESSAGE =
  * on none of it. The whole error, untruncated, goes to the Worker log, and the
  * caller gets a stable sentence plus the reference that ties its report to that
  * log line.
+ *
+ * `reportFault` owns BOTH the emission and the reference. It replaced a local
+ * `console.error(..., error)` that shipped the raw thrown value straight to
+ * Workers Logs -- past the redaction scrubber, and (because `workerSentryOptions`
+ * drops the Console integration) not even reaching Sentry as a breadcrumb.
  */
-export function jsonRpcInternalError(id: JsonRpcId, error: unknown): JsonRpcErrorResponse {
-  const reference = crypto.randomUUID();
-  console.error(`mcp-server internal error reference=${reference}`, error);
+export function jsonRpcInternalError(
+  id: JsonRpcId,
+  error: unknown,
+  reportFault: McpFaultReporter,
+): JsonRpcErrorResponse {
   return jsonRpcError(id, JSON_RPC_INTERNAL_ERROR, "Internal error", {
     message: INTERNAL_ERROR_MESSAGE,
-    reference,
+    reference: reportFault(error),
   });
 }

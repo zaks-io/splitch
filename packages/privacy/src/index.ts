@@ -7,5 +7,5 @@ export { redactValuePatterns } from "./value-patterns";
 export type { ValuePatternOptions } from "./value-patterns";
 export { scrubValue } from "./scrubber";
 export type { ScrubOptions } from "./scrubber";
-export { scrubSentryEvent } from "./sentry-scrubber";
+export { scrubSentryEvent, scrubSentrySpan, scrubSentryTransaction } from "./sentry-scrubber";
 export type { SentryEventLike } from "./sentry-scrubber";
