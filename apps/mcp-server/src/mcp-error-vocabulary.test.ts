@@ -128,8 +128,9 @@ describe("MCP error vocabulary", () => {
     expect(data.message).toContain("The arguments are not the problem");
     expect(data.reference).toMatch(/^[0-9a-f-]{36}$/);
     expect(logged).toHaveLength(1);
-    expect(String(logged[0]?.[0])).toContain(data.reference);
-    expect(String(logged[0]?.[1])).toContain("CONTROL_PLANE_API delegation secret is required");
+    const row = JSON.stringify(logged[0]?.[0]);
+    expect(row).toContain(data.reference);
+    expect(row).toContain("CONTROL_PLANE_API delegation secret is required");
   });
 });
 

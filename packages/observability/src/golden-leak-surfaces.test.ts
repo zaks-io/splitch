@@ -71,6 +71,106 @@ describe("golden-leak canary per observability surface", () => {
         expect(extra?.targeting).toBe("[Redacted]");
       });
 
+      it("scrubs span payloads before emit", () => {
+        const captured: Record<string, unknown>[] = [];
+        const emitter = createSurfaceEmitter(surface.id)({
+          onSentrySpan: (span) => {
+            captured.push(span);
+          },
+        });
+
+        const scrubbed = emitter.beforeSendSpan({
+          op: "mcp.server",
+          // An auto-instrumented fetch span is named after its URL, which is why
+          // `description` is scrubbed rather than allow-listed.
+          description: `GET https://api.splitch.dev/v1/flags?targetingKey=${CANARY_TARGETING_KEY}`,
+          span_id: "0123456789abcdef",
+          trace_id: "0123456789abcdef0123456789abcdef",
+          start_timestamp: 1,
+          data: {
+            "mcp.tool.name": "flag_update",
+            "mcp.method.name": "tools/call",
+            "mcp.tool.result.is_error": false,
+            // Present only to prove the fallthrough redacts it: the call site
+            // never sets `mcp.request.argument.*`.
+            "mcp.request.argument.targetingKey": CANARY_TARGETING_KEY,
+            "http.url": `https://api.splitch.dev/v1/flags?email=${CANARY_EMAIL}`,
+            "user.email": CANARY_EMAIL,
+          },
+        });
+
+        expect(captured).toHaveLength(1);
+        assertNoCanaryLeak(JSON.stringify(captured));
+        const data = scrubbed.data as Record<string, unknown>;
+        // Vouched-for attributes must survive, or the span is scrubbed into
+        // uselessness and the whole instrumentation buys nothing.
+        expect(data["mcp.tool.name"]).toBe("flag_update");
+        expect(data["mcp.method.name"]).toBe("tools/call");
+        expect(data["mcp.tool.result.is_error"]).toBe(false);
+        expect(data["mcp.request.argument.targetingKey"]).toBe(REDACTED);
+        expect(data["user.email"]).toBe(REDACTED);
+        expect(scrubbed.op).toBe("mcp.server");
+        expect(scrubbed.trace_id).toBe("0123456789abcdef0123456789abcdef");
+      });
+
+      /**
+       * `beforeSendSpan` reaches only the span slice of a transaction. The
+       * envelope around it -- `request`, `breadcrumbs`, `tags`, `extra` -- has no
+       * hook of its own, and `requestDataIntegration` puts the Authorization
+       * header and query string there on every surface.
+       */
+      it("scrubs transaction envelopes before emit", () => {
+        const captured: Record<string, unknown>[] = [];
+        const emitter = createSurfaceEmitter(surface.id)({
+          onSentryTransaction: (event) => {
+            captured.push(event);
+          },
+        });
+
+        const scrubbed = emitter.beforeSendTransaction({
+          type: "transaction",
+          transaction: "POST /mcp",
+          contexts: {
+            trace: { trace_id: "0123456789abcdef0123456789abcdef", span_id: "0123456789abcdef" },
+          },
+          spans: [{ span_id: "fedcba9876543210", data: { "mcp.tool.name": "flag_update" } }],
+          request: {
+            url: `https://api.splitch.dev/v1/flags?targetingKey=${CANARY_TARGETING_KEY}`,
+            headers: { authorization: "Bearer abcd1234efgh5678ijkl" },
+            cookies: { session: CANARY_EMAIL },
+          },
+          breadcrumbs: [{ message: `evaluated for ${CANARY_TARGETING_KEY}` }],
+          extra: plantedPayload(),
+        });
+
+        expect(captured).toHaveLength(1);
+        assertNoCanaryLeak(JSON.stringify(captured));
+        expect(JSON.stringify(scrubbed)).not.toContain("abcd1234efgh5678ijkl");
+        // The trace slice must survive, or the transaction is unusable.
+        const trace = (scrubbed.contexts as Record<string, unknown>).trace as Record<
+          string,
+          unknown
+        >;
+        expect(trace.trace_id).toBe("0123456789abcdef0123456789abcdef");
+        expect(scrubbed.spans).toEqual([
+          { span_id: "fedcba9876543210", data: { "mcp.tool.name": "flag_update" } },
+        ]);
+      });
+
+      it.each(CREDENTIAL_CANARIES)("scrubs %s out of a span attribute", (secret) => {
+        const emitter = createSurfaceEmitter(surface.id)({});
+
+        const scrubbed = emitter.beforeSendSpan({
+          op: "http.client",
+          span_id: "0123456789abcdef",
+          trace_id: "0123456789abcdef0123456789abcdef",
+          start_timestamp: 1,
+          data: { "http.request.header": `sent ${secret}` },
+        });
+
+        expect(JSON.stringify(scrubbed)).not.toContain(secret);
+      });
+
       it("scrubs structured logs before emit", () => {
         const captured: Record<string, unknown>[][] = [];
         const emitter = createSurfaceEmitter(surface.id)({

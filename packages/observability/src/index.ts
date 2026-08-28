@@ -2,6 +2,8 @@
 export {
   createScrubbedEmitter,
   createSentryBeforeSend,
+  createSentryBeforeSendSpan,
+  createSentryBeforeSendTransaction,
   secretsFromEnv,
   type LogLevel,
   type ObservabilitySecrets,

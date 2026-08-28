@@ -120,7 +120,7 @@ describe("MCP resource reads", () => {
 
     expect(body.error).toMatchObject({ code: -32603, message: "Internal error" });
     // The store's own words go to the Worker log; the caller gets its handle.
-    expect(String(logged[0]?.[1])).toContain("session store read failed");
+    expect(JSON.stringify(logged[0]?.[0])).toContain("session store read failed");
     expect(body.error.data).toMatchObject({ reference: expect.stringMatching(/^[0-9a-f-]{36}$/) });
   });
 

@@ -1,5 +1,5 @@
 import { routesDelegatedBy } from "@splitch/contracts";
-import { __setSentryModuleForTests } from "@splitch/observability/worker";
+import { __setSentryModuleForTests } from "@splitch/observability/sentry-module";
 import { delegatedRequest } from "@splitch/worker-runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EvaluationEntrypoint } from "./index";
