@@ -65,14 +65,16 @@ describe("evaluation-api mounts each door's routes and no others", () => {
     await expect(response.json()).resolves.toEqual({ deleted: true });
   });
 
-  it("preserves path params and body when the public edge delegates a route", async () => {
+  it("preserves delegated requests and adds CORS to an immutable response", async () => {
     let delegated: Request | undefined;
+    const delegatedResponse = await fetch("data:application/json,%7B%22ok%22%3Atrue%7D");
+    expect(() => delegatedResponse.headers.set("x-test", "immutable")).toThrow(TypeError);
     const { app } = await makeSdkRouteHarness({
       delegationBindings: {
         "control-plane-api": {
           fetch: async (input, init) => {
             delegated = new Request(input, init);
-            return Response.json({ ok: true });
+            return delegatedResponse;
           },
         },
       },
@@ -90,6 +92,8 @@ describe("evaluation-api mounts each door's routes and no others", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    await expect(response.json()).resolves.toEqual({ ok: true });
     if (!delegated) throw new Error("Control Plane delegation was not called");
     expect(new URL(delegated.url).pathname).toBe(
       `/api/integrations/convex/installations/${installationId}/secret-rotations`,
