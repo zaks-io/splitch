@@ -1,22 +1,31 @@
 import { SplitchCliError } from "./errors.js";
 
-/**
- * The resource a minted access token is bound to. One human approval mints a
- * durable session; each CLI invocation rebinds an access token to the App or
- * Organization its command targets via the refresh grant. No binding at all
- * ("" key) is the cold-start shape used by `orgs list` / `orgs create`.
- */
+export const MEMBERSHIP_WIDE_READ_AUTHORIZATION = "membership-wide-read" as const;
+
+/** The selector a minted access token is bound to through the refresh grant. */
 export interface TokenBinding {
   readonly kind: "app" | "org";
   readonly selector: string;
 }
 
-export function bindingKey(binding: TokenBinding | null): string {
-  return binding ? `${binding.kind}:${binding.selector}` : "";
+interface MembershipWideReadAuthorization {
+  readonly kind: typeof MEMBERSHIP_WIDE_READ_AUTHORIZATION;
 }
 
-export function bindingParams(binding: TokenBinding | null): Record<string, string> {
-  return binding ? { [binding.kind]: binding.selector } : {};
+export type TokenAuthorization = TokenBinding | MembershipWideReadAuthorization;
+
+export function bindingKey(authorization: TokenAuthorization | null): string {
+  if (!authorization) return "";
+  return authorization.kind === "membership-wide-read"
+    ? MEMBERSHIP_WIDE_READ_AUTHORIZATION
+    : `${authorization.kind}:${authorization.selector}`;
+}
+
+export function bindingParams(authorization: TokenAuthorization | null): Record<string, string> {
+  if (!authorization) return {};
+  return authorization.kind === "membership-wide-read"
+    ? { authorization: MEMBERSHIP_WIDE_READ_AUTHORIZATION }
+    : { [authorization.kind]: authorization.selector };
 }
 
 export interface OAuthFault {

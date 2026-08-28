@@ -1,4 +1,8 @@
-import type { ErrorResponse, RouteContract } from "@splitch/contracts";
+import {
+  type ErrorResponse,
+  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+  type RouteContract,
+} from "@splitch/contracts";
 import type { Principal } from "../principal";
 
 /**
@@ -15,17 +19,22 @@ export function enforceScopes(
   principal: Principal,
   params: Record<string, string>,
 ): ErrorResponse | null {
-  const held = new Set(principal.scopes);
-  const missing = contract.scopes.filter((scope) => !held.has(scope));
-  if (missing.length > 0) {
-    return {
-      code: "INSUFFICIENT_SCOPES",
-      message: "credential lacks required scopes",
-      details: {
-        requiredScopes: [...contract.scopes],
-        heldScopes: [...principal.scopes],
-      },
-    };
+  const authorizationError = membershipWideReadError(contract, principal);
+  if (authorizationError) return authorizationError;
+
+  if (principal.authorization !== MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+    const held = new Set(principal.scopes);
+    const missing = contract.scopes.filter((scope) => !held.has(scope));
+    if (missing.length > 0) {
+      return {
+        code: "INSUFFICIENT_SCOPES",
+        message: "credential lacks required scopes",
+        details: {
+          requiredScopes: [...contract.scopes],
+          heldScopes: [...principal.scopes],
+        },
+      };
+    }
   }
 
   // Org co-scope. The Org is the tenant boundary one level above the App, so a
@@ -37,7 +46,7 @@ export function enforceScopes(
   // already have run, but an org_id-less context never reaches the handler or an
   // Org resource repository call.
   const pathOrgId = params.orgId;
-  if (pathOrgId !== undefined && principal.orgId !== pathOrgId) {
+  if (pathOrgId !== undefined && !organizationAccessCovers(principal, pathOrgId)) {
     return forbidden("credential is not scoped to this organization");
   }
 
@@ -49,7 +58,7 @@ export function enforceScopes(
   // selector resolver may bind a null axis from one matching signed App scope;
   // otherwise it never reaches the handler or an App resource repository call.
   const pathAppId = params.appId;
-  if (pathAppId !== undefined && principal.appId !== pathAppId) {
+  if (pathAppId !== undefined && !appAccessCovers(principal, pathAppId)) {
     return forbidden("credential is not scoped to this app");
   }
 
@@ -68,6 +77,32 @@ export function enforceScopes(
   }
 
   return null;
+}
+
+function membershipWideReadError(
+  contract: RouteContract,
+  principal: Principal,
+): ErrorResponse | null {
+  if (principal.authorization !== MEMBERSHIP_WIDE_READ_AUTHORIZATION) return null;
+  if (contract.method !== "GET") return forbidden("credential grants read access only");
+  return principal.memberships ? null : forbidden("live membership is required");
+}
+
+function organizationAccessCovers(principal: Principal, organizationId: string): boolean {
+  if (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+    return (
+      principal.memberships?.organizations.some((membership) => membership.id === organizationId) ??
+      false
+    );
+  }
+  return principal.orgId === organizationId;
+}
+
+function appAccessCovers(principal: Principal, appId: string): boolean {
+  if (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+    return principal.memberships?.apps.some((membership) => membership.id === appId) ?? false;
+  }
+  return principal.appId === appId;
 }
 
 function forbidden(message: string): ErrorResponse {

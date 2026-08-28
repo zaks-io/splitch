@@ -2,8 +2,9 @@ import {
   bindingKey,
   describeOAuthFault,
   deviceAuthorizationError,
+  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
   readOAuthFault,
-  type TokenBinding,
+  type TokenAuthorization,
 } from "./auth-binding.js";
 import { openDeviceApproval } from "./auth-device-approval.js";
 import { ensurePrincipalEmail } from "./auth-email-backfill.js";
@@ -193,14 +194,18 @@ export async function logout(deps: AuthDeps): Promise<void> {
 export async function withAuthorizationRetry<T>(
   deps: AuthDeps,
   run: (authorization: string) => Promise<{ status: number; value: T }>,
-  binding?: TokenBinding,
+  binding?: TokenAuthorization,
 ): Promise<T> {
   // Refresh first when the principal lacks a real email so member-profile
   // backfill runs before any control-plane call (SPL-293). The command itself
   // only needs the credential; a swallowed unverified reason is `context`'s
   // concern, not this call's.
   const { session: stored } = await ensurePrincipalEmail(deps);
-  const usable = binding === undefined || storedBinding(stored) === bindingKey(binding);
+  const cachedBinding = storedBinding(stored);
+  const usable =
+    binding === undefined
+      ? cachedBinding !== MEMBERSHIP_WIDE_READ_AUTHORIZATION
+      : cachedBinding === bindingKey(binding);
   const current =
     usable && !isAccessTokenExpired(stored.credential.accessTokenExpiresAt)
       ? stored

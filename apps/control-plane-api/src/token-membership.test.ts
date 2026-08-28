@@ -165,6 +165,34 @@ describe("makeTokenMembershipAccess", () => {
     await access.authorize(USER, [{ axis: "app", id: APP, role: "member" }]);
     expect(getAppMembership).toHaveBeenCalledWith(appScope(APP), USER);
   });
+
+  it("resolves the complete live membership set without accepting memberships from a claim", async () => {
+    const access = makeTokenMembershipAccess({
+      identity: {
+        listOrgMembershipsForUser: async () => [
+          { orgId: ORG, role: "admin" },
+          { orgId: "org_other", role: "member" },
+        ],
+        listAppMembershipsWithAppForUser: async (_userId, orgIds) => {
+          expect(orgIds).toEqual([ORG, "org_other"]);
+          return [
+            {
+              role: "owner",
+              app: { id: APP, organizationId: ORG },
+            },
+          ];
+        },
+      },
+    } as unknown as Parameters<typeof makeTokenMembershipAccess>[0]);
+
+    await expect(access.resolve?.(USER)).resolves.toEqual({
+      organizations: [
+        { id: ORG, role: "admin" },
+        { id: "org_other", role: "member" },
+      ],
+      apps: [{ id: APP, organizationId: ORG, role: "owner" }],
+    });
+  });
 });
 
 function identity(options: {

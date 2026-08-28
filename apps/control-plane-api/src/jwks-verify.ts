@@ -1,4 +1,9 @@
-import { type AuthDoor, AuthDoorSchema } from "@splitch/contracts";
+import {
+  type AccessTokenAuthorization,
+  type AuthDoor,
+  AuthDoorSchema,
+  accessTokenAuthorizationFromClaim,
+} from "@splitch/contracts";
 import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
 
 /**
@@ -29,6 +34,8 @@ interface VerifiedToken {
    * cannot prove which door it came through must not be treated as identified.
    */
   authDoor: AuthDoor;
+  /** Structural read-only authority. Membership rows are never carried in the JWT. */
+  authorization?: AccessTokenAuthorization;
 }
 
 interface JwtHeader {
@@ -183,11 +190,26 @@ function actorFromClaims(
   if (typeof payload.sub !== "string" || payload.sub.length === 0) {
     return null;
   }
+  const scopes = Array.isArray(payload.scopes) ? (payload.scopes as string[]) : [];
+  const authorization = validAuthorization(payload.authorization, payload.scopes, scopes);
+  if (authorization === null) return null;
   return {
     sub: payload.sub,
-    scopes: Array.isArray(payload.scopes) ? (payload.scopes as string[]) : [],
+    scopes,
     authDoor: authDoorFromClaim(payload.auth_door),
+    ...(authorization ? { authorization } : {}),
   };
+}
+
+function validAuthorization(
+  claim: unknown,
+  scopeClaim: unknown,
+  scopes: readonly string[],
+): AccessTokenAuthorization | null | undefined {
+  const authorization = accessTokenAuthorizationFromClaim(claim);
+  if (claim !== undefined && authorization === undefined) return null;
+  if (authorization && (!Array.isArray(scopeClaim) || scopes.length !== 0)) return null;
+  return authorization;
 }
 
 /** Fail CLOSED: anything but a recognized door reads as the provisional one. */

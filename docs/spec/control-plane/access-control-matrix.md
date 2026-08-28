@@ -27,7 +27,8 @@ access tokens exist only in isolated unit-test fixtures; they are not the local 
   exp: number,             // unix timestamp
   iat: number,
   scopes: string[],        // e.g. ["app:app_abc123:admin"]
-  auth_door: string        // "id_jag" | "anonymous" | "device_flow" | "client_credentials"
+  auth_door: string,       // "id_jag" | "anonymous" | "device_flow" | "client_credentials"
+  authorization?: "membership-wide-read"
 }
 ```
 
@@ -36,6 +37,15 @@ the challenged endpoint (the MCP origin or its `/mcp` URL). A token for one is r
 other resource. `client_credentials` is reserved for the shared-preview smoke client. It mints a
 short-lived resource-bound token for the configured seeded smoke user and scopes; it is not a general
 user or agent onboarding path.
+
+`authorization: "membership-wide-read"` is a Control Plane-only, read-only grant. Its token must
+carry an explicitly empty `scopes` array and cannot be combined with an App or Organization
+selector. The claim carries no membership rows. On every request, the Control Plane resolves the
+principal's complete current Organization and App membership set from D1 and exposes that live set
+to the handler context. The registrar accepts the grant only for `GET`, applies path co-scope against
+the live set, and rejects every other method before the handler runs. Session revocation uses the
+same principal-keyed check as selector-bound tokens. The Auth API refuses this authorization for the
+MCP audience.
 
 **Scope format:** `app:{app_id}:{role}` where role is `owner`, `admin`, or `member`.
 A token may carry multiple App scopes (e.g. user is admin on two Apps). Org-level operations require
@@ -65,10 +75,14 @@ Organization route co-scopes on `:orgId` as usual.
    door after the delegation is verified (delegation copies minted scopes;
    live membership is still required). A removed or role-incompatible
    membership is refused before route scope checks. Tokens whose authority
-   does not derive from membership (API Key, Client Key, and tokens with no
-   `org:`/`app:` axes) keep their existing path.
-6. Extract `scopes`; match against required scope for the requested operation
-7. Extract `sub` as `user_id` for audit logging
+   does not derive from membership (API Key, Client Key, and ordinary tokens
+   with no `org:`/`app:` axes) keep their existing path.
+6. For `authorization: "membership-wide-read"`, require an empty `scopes` array,
+   resolve the complete membership set from live D1, refuse non-`GET` methods,
+   and co-scope any Organization or App path against that set.
+7. Otherwise, extract `scopes` and match against the required scope for the
+   requested operation.
+8. Extract `sub` as `user_id` for audit logging
 
 ## Trusted IdP allow-list
 

@@ -55,6 +55,63 @@ function refreshRequest(app: ReturnType<typeof routeApp>, extra: Record<string, 
   });
 }
 
+describe("OAuth membership-wide read refresh", () => {
+  it("mints membership-wide read authority without selector scopes or a stored App binding", async () => {
+    const minted: Array<{ scopes: string[]; authorization: string | undefined }> = [];
+    const app = routeApp({
+      tokenSigner: {
+        ...tokenSigner,
+        mintAccessToken: async (
+          _userId,
+          scopes,
+          _authDoor,
+          _nowSeconds,
+          _audience,
+          authorization,
+        ) => {
+          minted.push({ scopes: [...scopes], authorization });
+          return "membership-wide-read-token";
+        },
+      },
+      repo: memberRepo,
+      deviceFlow: refreshOnlyDeviceFlow("org_selected"),
+      deviceRefreshSessions: {
+        remember: async () => {},
+        lookup: async () => storedSession(),
+        rotate: async () => {},
+        forget: async () => {},
+      },
+    });
+
+    const res = await refreshRequest(app, { authorization: "membership-wide-read" });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ access_token: "membership-wide-read-token" });
+    expect(minted).toEqual([{ scopes: [], authorization: "membership-wide-read" }]);
+  });
+
+  it("rejects membership-wide read authority combined with a selector", async () => {
+    const app = routeApp({
+      repo: memberRepo,
+      deviceFlow: refreshOnlyDeviceFlow("org_selected"),
+      deviceRefreshSessions: {
+        remember: async () => {},
+        lookup: async () => storedSession(),
+        rotate: async () => {},
+        forget: async () => {},
+      },
+    });
+
+    const res = await refreshRequest(app, {
+      authorization: "membership-wide-read",
+      app: "app_selected",
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_request" });
+  });
+});
+
 describe("OAuth refresh token authority", () => {
   it("rotates refresh authority and mints only after live membership reintersection", async () => {
     const rotations: Array<{ previous: string; next: string; selector: string | null }> = [];

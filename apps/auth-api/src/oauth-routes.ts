@@ -1,3 +1,4 @@
+import type { AccessTokenAuthorization } from "@splitch/contracts";
 import { timingSafeEqualString } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { verifyAccessToken } from "./access-token";
@@ -159,15 +160,18 @@ function handleTokenRequest(
   nowSeconds: number,
 ): Response | Promise<Response> {
   const grantType = grantTypeOf(body);
-  const resolveAudience = (resource: string | undefined) => audienceForResource(deps, resource);
+  const resolveAccess = (
+    resource: string | undefined,
+    authorization: AccessTokenAuthorization | undefined,
+  ) => resolveRequestedAccess(deps, resource, authorization);
   if (grantType === ACCESS_TOKEN_GRANT) {
     return exchangeIdentityAssertion(deps, body, nowSeconds);
   }
   if (grantType === DEVICE_CODE_GRANT) {
-    return exchangeDeviceCode(deps, body, nowSeconds, resolveAudience);
+    return exchangeDeviceCode(deps, body, nowSeconds, resolveAccess);
   }
   if (grantType === REFRESH_TOKEN_GRANT) {
-    return exchangeRefreshToken(deps, body, nowSeconds, resolveAudience);
+    return exchangeRefreshToken(deps, body, nowSeconds, resolveAccess);
   }
   if (grantType === CLIENT_CREDENTIALS_GRANT && deps.smokeClientCredentials) {
     return exchangeClientCredentials(deps, body, nowSeconds);
@@ -235,15 +239,32 @@ async function exchangeIdentityAssertion(
     return renderOAuthError(new OAuthError("invalid_request", "malformed /oauth2/token body"));
   }
   try {
+    const access = resolveRequestedAccess(deps, parsed.data.resource, parsed.data.authorization);
     const accessToken = await deps.tokenSigner.exchangeForAccessToken(
       parsed.data.identity_assertion,
       nowSeconds,
-      audienceForResource(deps, parsed.data.resource),
+      access.audience,
+      access.authorization,
     );
     return tokenResponse(accessToken);
   } catch (cause) {
     return renderDoorFault(cause);
   }
+}
+
+function resolveRequestedAccess(
+  deps: Pick<OAuthRouteDeps, "controlPlaneAudience" | "mcpAudience">,
+  resource: string | undefined,
+  authorization: AccessTokenAuthorization | undefined,
+): { audience: string; authorization?: AccessTokenAuthorization } {
+  const audience = audienceForResource(deps, resource);
+  if (authorization && audience !== deps.controlPlaneAudience) {
+    throw new OAuthError(
+      "invalid_request",
+      "membership-wide read authorization is only valid for the control-plane resource",
+    );
+  }
+  return authorization ? { audience, authorization } : { audience };
 }
 
 export function audienceForResource(

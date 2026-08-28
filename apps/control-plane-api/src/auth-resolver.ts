@@ -1,4 +1,4 @@
-import type { AuthDoor } from "@splitch/contracts";
+import { type AuthDoor, MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
 import {
   CONTROL_PANEL_DELEGATION_HEADER,
   verifyControlPanelDelegation,
@@ -13,6 +13,7 @@ import type { PanelSessionStore, SessionStore } from "./session-store";
 import {
   authorizeBearerMembership,
   requireTokenMembershipAccess,
+  resolveBearerMemberships,
   type TokenMembershipAccess,
 } from "./token-membership";
 
@@ -152,6 +153,27 @@ async function resolveBearerPrincipal(
     verified.scopes,
   );
   if (membership) return membership;
+
+  if (verified.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+    const memberships = await resolveBearerMemberships(
+      requireTokenMembershipAccess(deps.membershipAccess),
+      verified.sub,
+    );
+    return {
+      ok: true as const,
+      principal: {
+        kind: "control-plane-token" as const,
+        id: verified.sub,
+        scopes: [],
+        orgId: null,
+        appId: null,
+        environmentId: null,
+        authDoor: verified.authDoor,
+        authorization: verified.authorization,
+        memberships,
+      },
+    };
+  }
 
   const binding = deriveBinding(verified.scopes);
   return {
