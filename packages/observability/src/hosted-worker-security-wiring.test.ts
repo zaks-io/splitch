@@ -1,4 +1,5 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseConfigFileTextToJson } from "typescript";
@@ -40,6 +41,10 @@ describe("hosted Worker security-header wiring", () => {
       "apps/marketing/wrangler.jsonc",
       "apps/mcp-server/wrangler.jsonc",
     ]);
+  });
+
+  it("reports no omitted hosted fetch or binding handlers", () => {
+    expect(omissionFailures(workers)).toEqual([]);
   });
 
   it("wraps each discovered default fetch export", () => {
@@ -92,7 +97,85 @@ describe("hosted Worker security-header wiring", () => {
     expect(unwrapped.includes(WRAPPER)).toBe(true);
     expect(defaultExportIsWrapped(unwrapped)).toBe(false);
   });
+
+  it("fails when a deployable wrangler.jsonc fixture ships an unwrapped fetch", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "unwrapped-worker-"));
+    try {
+      writeFileSync(
+        join(fixtureRoot, "wrangler.jsonc"),
+        `{
+          // deployable hosted Worker whose fetch is not wrapped
+          "name": "unwrapped-fixture",
+          "main": "index.ts",
+          "services": [{ "binding": "OTHER", "service": "other", "entrypoint": "LooseDoor" }]
+        }`,
+      );
+      writeFileSync(
+        join(fixtureRoot, "index.ts"),
+        `
+          import { WorkerEntrypoint } from "cloudflare:workers";
+          import { ${WRAPPER} } from "@splitch/observability/worker";
+          export default {
+            fetch() {
+              return new Response("ok");
+            },
+          };
+          export class LooseDoor extends WorkerEntrypoint {
+            fetch() {
+              return new Response("ok");
+            }
+          }
+        `,
+      );
+
+      const discovered = discoverHostedWorkers(fixtureRoot);
+      expect(discovered).toHaveLength(1);
+      expect(discovered[0]?.source.includes(WRAPPER)).toBe(true);
+      expect(omissionFailures(discovered).length).toBeGreaterThan(0);
+      expect(defaultExportIsWrapped(discovered[0]?.source ?? "")).toBe(false);
+      expect(classFetchIsWrapped(discovered[0]?.source ?? "", "LooseDoor")).toBe(false);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
 });
+
+function omissionFailures(discovered: HostedWorker[]): string[] {
+  const wrappedClasses = wrappedEntrypointNames(discovered);
+  return discovered.flatMap((worker) => [
+    ...unwrappedDefaultFailures(worker),
+    ...unwrappedClassFailures(worker),
+    ...unwrappedBindingFailures(worker, wrappedClasses),
+  ]);
+}
+
+function wrappedEntrypointNames(discovered: HostedWorker[]): Set<string> {
+  return new Set(
+    discovered.flatMap((worker) =>
+      exportedWorkerEntrypoints(worker.source).filter((className) =>
+        classFetchIsWrapped(worker.source, className),
+      ),
+    ),
+  );
+}
+
+function unwrappedDefaultFailures(worker: HostedWorker): string[] {
+  return defaultExportIsWrapped(worker.source)
+    ? []
+    : [`${worker.mainPath} default export is unwrapped`];
+}
+
+function unwrappedClassFailures(worker: HostedWorker): string[] {
+  return exportedWorkerEntrypoints(worker.source)
+    .filter((className) => !classFetchIsWrapped(worker.source, className))
+    .map((className) => `${worker.mainPath} ${className}.fetch is unwrapped`);
+}
+
+function unwrappedBindingFailures(worker: HostedWorker, wrappedClasses: Set<string>): string[] {
+  return worker.referencedEntrypoints
+    .filter((entrypoint) => !wrappedClasses.has(entrypoint))
+    .map((entrypoint) => `configured entrypoint ${entrypoint} is unwrapped`);
+}
 
 function discoverHostedWorkers(root: string): HostedWorker[] {
   const workers: HostedWorker[] = [];
