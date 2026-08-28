@@ -50,4 +50,28 @@ describe("parseInput unknown-key paths", () => {
       },
     });
   });
+
+  it("does not promote leftover keys from a type-mismatched union branch", async () => {
+    const parsed = await parseInput(
+      unionFieldSchema,
+      new Request("http://worker.test/event-definitions", {
+        method: "POST",
+        body: JSON.stringify({
+          fields: [{ name: "payload", type: "array", required: false, items: { type: "null" } }],
+        }),
+      }),
+      {},
+    );
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error.code).toBe("VALIDATION_ERROR");
+    if (parsed.error.code !== "VALIDATION_ERROR") return;
+    expect(parsed.error.details.issues.some((issue) => issue.message.includes("items"))).toBe(
+      false,
+    );
+    expect(parsed.error.details.issues).toEqual([
+      { path: ["body", "fields", "0"], message: expect.any(String) },
+    ]);
+  });
 });

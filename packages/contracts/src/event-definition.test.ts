@@ -1,8 +1,13 @@
 import { z } from "@hono/zod-openapi";
 import { describe, expect, it } from "vitest";
 import { EventDefinitionVersionSchema } from "./event-definition";
-import { PublishEventDefinitionVersionRequestSchema } from "./event-definition-write";
+import {
+  PublishEventDefinitionVersionRequestSchema,
+  WriteClosedJsonSchemaSchema,
+} from "./event-definition-write";
 import { PERSISTED_ARRAY_MAX_ITEMS, PERSISTED_JSON_MAX_DEPTH } from "./persisted-field-limits";
+import { describeRequestBody, requestBodySchemaForOperation } from "./request-body-help";
+import { unwrapField, zodDefType, zodElement, zodOptions } from "./request-body-help-unwrap";
 
 describe("Event Definition publication contracts", () => {
   it("allows an anonymous-only Web Event Definition Version", () => {
@@ -182,6 +187,24 @@ describe("Event Definition publication pre-refinement depth guard", () => {
 
   it("stays JSON-Schema-representable for MCP tool derivation", () => {
     expect(() => z.toJSONSchema(PublishEventDefinitionVersionRequestSchema)).not.toThrow();
+  });
+
+  it("keeps the derived request schema free of Zod transforms", () => {
+    const body = requestBodySchemaForOperation("event_definition_versions_create");
+    expect(body).toBe(PublishEventDefinitionVersionRequestSchema);
+    expect(() => describeRequestBody(PublishEventDefinitionVersionRequestSchema)).not.toThrow();
+
+    const fieldsSchema = PublishEventDefinitionVersionRequestSchema.shape.fields;
+    const fieldUnion = unwrapField(zodElement(fieldsSchema)).inner;
+    const jsonField = zodOptions(fieldUnion).find((option) => {
+      const inner = unwrapField(option).inner;
+      return inner instanceof z.ZodObject && "jsonSchema" in inner.shape;
+    });
+    expect(jsonField).toBeDefined();
+    if (!jsonField) return;
+    const jsonSchemaField = (unwrapField(jsonField).inner as z.ZodObject).shape.jsonSchema;
+    expect(zodDefType(unwrapField(jsonSchemaField).inner)).toBe("lazy");
+    expect(unwrapField(jsonSchemaField).inner).toBe(WriteClosedJsonSchemaSchema);
   });
 
   it("reports the exact unknown field key instead of the union member", () => {

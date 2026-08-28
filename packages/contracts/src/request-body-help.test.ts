@@ -216,10 +216,11 @@ describe("write Variant value help labels", () => {
 });
 
 describe("Event Definition write help labels", () => {
-  it("labels preprocess Closed JSON as closed JSON Schema, not transform", () => {
+  it("labels Closed JSON as closed JSON Schema without a Zod transform", () => {
     const help = describeRequestBody(PublishEventDefinitionVersionRequestSchema);
     expect(help.fields.find((field) => field.name === "fields")?.typeLabel).toContain(
       "closed JSON Schema",
     );
+    expect(PublishEventDefinitionVersionRequestSchema.safeParse(help.example).success).toBe(true);
   });
 });

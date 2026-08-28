@@ -144,41 +144,6 @@ export function persistedJsonDepth(value: unknown): number {
   return 1 + Math.max(...children.map(persistedJsonDepth));
 }
 
-/**
- * Walk Closed JSON `object.properties` / `array.items` without recursion so a
- * depth-2000 document cannot exhaust the parser stack before the named bound.
- */
-export function closedJsonSchemaDepthExceeds(value: unknown, maxDepth: number): boolean {
-  const stack: Array<{ value: unknown; depth: number }> = [{ value, depth: 1 }];
-  while (stack.length > 0) {
-    const frame = stack.pop();
-    if (!frame) continue;
-    if (frame.depth > maxDepth) return true;
-    pushClosedJsonChildren(stack, frame.value, frame.depth + 1);
-  }
-  return false;
-}
-
-function pushClosedJsonChildren(
-  stack: Array<{ value: unknown; depth: number }>,
-  value: unknown,
-  childDepth: number,
-): void {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return;
-  const node = value as Record<string, unknown>;
-  if (node.type === "array") {
-    stack.push({ value: node.items, depth: childDepth });
-    return;
-  }
-  if (node.type !== "object" || !node.properties || typeof node.properties !== "object") {
-    return;
-  }
-  if (Array.isArray(node.properties)) return;
-  for (const child of Object.values(node.properties as Record<string, unknown>)) {
-    stack.push({ value: child, depth: childDepth });
-  }
-}
-
 export function addClosedJsonWriteIssues(
   value: unknown,
   context: z.RefinementCtx,

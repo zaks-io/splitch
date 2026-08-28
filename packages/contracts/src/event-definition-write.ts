@@ -1,7 +1,7 @@
 import { z } from "@hono/zod-openapi";
 import {
   BooleanDefinitionSchema,
-  ClosedJsonSchemaSchema,
+  closedJsonSchemaAtDepth,
   EventDefinitionFamilySchema,
   NumberDefinitionSchema,
   ScalarDefinitionSchema,
@@ -18,7 +18,7 @@ import {
   PersistedNameSchema,
   persistedArray,
 } from "./persisted-field-limits";
-import { addClosedJsonWriteIssues, closedJsonSchemaDepthExceeds } from "./write-persisted-schemas";
+import { addClosedJsonWriteIssues } from "./write-persisted-schemas";
 
 const unique = <T>(values: readonly T[]) => new Set(values).size === values.length;
 
@@ -40,24 +40,21 @@ export const PatchEventDefinitionRequestSchema = z
   .strict();
 
 /**
- * `z.preprocess`, not `.transform`: MCP derives tool JSON Schema from this
- * request body. A transform cannot be represented and breaks tool derivation.
- * Overflow replaces the document with `null` so the lazy Closed JSON parser
- * never walks a 2000-deep tree.
+ * Lazy so CLI help prints "closed JSON Schema" instead of unrolling depth.
+ * The inner schema is finite (`closedJsonSchemaAtDepth`), not a preprocess or
+ * transform, so MCP JSON Schema and request-body help both stay representable.
+ * Overflow stops at the named bound and never walks a 2000-deep leftover tree.
  */
-function writeClosedJsonSchemaInput(value: unknown): unknown {
-  if (closedJsonSchemaDepthExceeds(value, PERSISTED_JSON_MAX_DEPTH)) {
-    return null;
-  }
-  return value;
-}
+export const WriteClosedJsonSchemaSchema = z
+  .lazy(() => closedJsonSchemaAtDepth(PERSISTED_JSON_MAX_DEPTH))
+  .openapi({ type: "object" });
 
 const WriteJsonFieldDefinitionSchema = z
   .object({
     name: z.string().min(1),
     type: z.literal("json"),
     required: z.boolean(),
-    jsonSchema: z.preprocess(writeClosedJsonSchemaInput, ClosedJsonSchemaSchema),
+    jsonSchema: WriteClosedJsonSchemaSchema,
   })
   .strict();
 

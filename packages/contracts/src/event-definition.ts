@@ -85,92 +85,135 @@ type ClosedJsonSchema =
   | { type: "boolean"; enum?: boolean[] }
   | { type: "null" };
 
-export const ClosedJsonSchemaSchema: z.ZodType<ClosedJsonSchema> = z
-  .lazy(() =>
-    z
-      .union([
-        z
-          .object({
-            type: z.literal("object"),
-            properties: z.record(z.string(), ClosedJsonSchemaSchema),
-            required: z.array(z.string()).refine(unique).optional(),
-            additionalProperties: z.literal(false),
-          })
-          .strict()
-          .superRefine((value, context) => {
-            for (const required of value.required ?? []) {
-              if (!(required in value.properties)) {
-                context.addIssue({
-                  code: "custom",
-                  path: ["required"],
-                  message: `required property "${required}" is not declared`,
-                });
-              }
-            }
-            validatePropertyNames(Object.keys(value.properties), context, ["properties"]);
-          }),
-        z
-          .object({
-            type: z.literal("array"),
-            items: ClosedJsonSchemaSchema,
-            minItems: z.number().int().nonnegative().optional(),
-            maxItems: z.number().int().nonnegative().optional(),
-          })
-          .strict()
-          .superRefine((value, context) => {
-            if (
-              value.minItems !== undefined &&
-              value.maxItems !== undefined &&
-              value.minItems > value.maxItems
-            ) {
-              context.addIssue({ code: "custom", message: "minItems must not exceed maxItems" });
-            }
-          }),
-        z
-          .object({
-            type: z.literal("string"),
-            enum: z
-              .array(TelemetryTokenSchema)
-              .min(1)
-              .max(PERSISTED_TELEMETRY_ENUM_MAX_ITEMS)
-              .refine(unique),
-          })
-          .strict(),
-        z
-          .object({
-            type: z.enum(["number", "integer"]),
-            numberKind: NumberKindSchema,
-            enum: z
-              .array(finiteNumber)
-              .min(1)
-              .max(PERSISTED_TELEMETRY_ENUM_MAX_ITEMS)
-              .refine(unique)
-              .optional(),
-            minimum: finiteNumber.optional(),
-            maximum: finiteNumber.optional(),
-          })
-          .strict()
-          .superRefine((value, context) =>
-            validateNumericDomain({ ...value, allowedValues: value.enum }, context),
-          ),
-        z
-          .object({
-            type: z.literal("boolean"),
-            enum: z.array(z.boolean()).min(1).max(2).refine(unique).optional(),
-          })
-          .strict(),
-        z.object({ type: z.literal("null") }).strict(),
-      ])
-      .superRefine((value, context) => {
-        if (value.type === "integer" && value.enum?.some((item) => !Number.isInteger(item))) {
+const ClosedJsonStringSchema = z
+  .object({
+    type: z.literal("string"),
+    enum: z
+      .array(TelemetryTokenSchema)
+      .min(1)
+      .max(PERSISTED_TELEMETRY_ENUM_MAX_ITEMS)
+      .refine(unique),
+  })
+  .strict();
+
+const ClosedJsonNumberSchema = z
+  .object({
+    type: z.enum(["number", "integer"]),
+    numberKind: NumberKindSchema,
+    enum: z
+      .array(finiteNumber)
+      .min(1)
+      .max(PERSISTED_TELEMETRY_ENUM_MAX_ITEMS)
+      .refine(unique)
+      .optional(),
+    minimum: finiteNumber.optional(),
+    maximum: finiteNumber.optional(),
+  })
+  .strict()
+  .superRefine((value, context) =>
+    validateNumericDomain({ ...value, allowedValues: value.enum }, context),
+  );
+
+const ClosedJsonBooleanSchema = z
+  .object({
+    type: z.literal("boolean"),
+    enum: z.array(z.boolean()).min(1).max(2).refine(unique).optional(),
+  })
+  .strict();
+
+const ClosedJsonNullSchema = z.object({ type: z.literal("null") }).strict();
+
+function refineClosedJsonIntegerEnum(value: ClosedJsonSchema, context: z.RefinementCtx): void {
+  if (value.type === "integer" && value.enum?.some((item) => !Number.isInteger(item))) {
+    context.addIssue({
+      code: "custom",
+      path: ["enum"],
+      message: "integer enum values must be integers",
+    });
+  }
+}
+
+function closedJsonObjectSchema(nested: z.ZodType<ClosedJsonSchema>) {
+  return z
+    .object({
+      type: z.literal("object"),
+      properties: z.record(z.string(), nested),
+      required: z.array(z.string()).refine(unique).optional(),
+      additionalProperties: z.literal(false),
+    })
+    .strict()
+    .superRefine((value, context) => {
+      for (const required of value.required ?? []) {
+        if (!(required in value.properties)) {
           context.addIssue({
             code: "custom",
-            path: ["enum"],
-            message: "integer enum values must be integers",
+            path: ["required"],
+            message: `required property "${required}" is not declared`,
           });
         }
-      }),
-  )
+      }
+      validatePropertyNames(Object.keys(value.properties), context, ["properties"]);
+    });
+}
+
+function closedJsonArraySchema(nested: z.ZodType<ClosedJsonSchema>) {
+  return z
+    .object({
+      type: z.literal("array"),
+      items: nested,
+      minItems: z.number().int().nonnegative().optional(),
+      maxItems: z.number().int().nonnegative().optional(),
+    })
+    .strict()
+    .superRefine((value, context) => {
+      if (
+        value.minItems !== undefined &&
+        value.maxItems !== undefined &&
+        value.minItems > value.maxItems
+      ) {
+        context.addIssue({ code: "custom", message: "minItems must not exceed maxItems" });
+      }
+    });
+}
+
+function closedJsonLeafUnion(): z.ZodType<ClosedJsonSchema> {
+  return z
+    .union([
+      ClosedJsonStringSchema,
+      ClosedJsonNumberSchema,
+      ClosedJsonBooleanSchema,
+      ClosedJsonNullSchema,
+    ])
+    .superRefine(refineClosedJsonIntegerEnum);
+}
+
+function closedJsonSchemaUnion(nested: z.ZodType<ClosedJsonSchema>): z.ZodType<ClosedJsonSchema> {
+  return z
+    .union([
+      closedJsonObjectSchema(nested),
+      closedJsonArraySchema(nested),
+      ClosedJsonStringSchema,
+      ClosedJsonNumberSchema,
+      ClosedJsonBooleanSchema,
+      ClosedJsonNullSchema,
+    ])
+    .superRefine(refineClosedJsonIntegerEnum);
+}
+
+/**
+ * Finite write-depth Closed JSON. Depth 1 is leaves only, so a 2000-deep
+ * document fails at the named bound without walking the leftover tree or
+ * using a preprocess/transform that derived CLI/MCP schemas cannot represent.
+ */
+export function closedJsonSchemaAtDepth(remainingDepth: number): z.ZodType<ClosedJsonSchema> {
+  if (remainingDepth <= 1) {
+    return closedJsonLeafUnion();
+  }
+  return closedJsonSchemaUnion(closedJsonSchemaAtDepth(remainingDepth - 1));
+}
+
+export const ClosedJsonSchemaSchema: z.ZodType<ClosedJsonSchema> = z
+  .lazy(() => closedJsonSchemaUnion(ClosedJsonSchemaSchema))
   .openapi({ type: "object" });
 
 const JsonFieldDefinitionSchema = z

@@ -73,6 +73,7 @@ function flattenValidationIssue(
   }
   if (issue.code === "invalid_union") {
     const unknownKeys = issue.errors
+      .filter(branchFailedOnlyFromUnknownKeys)
       .flat()
       .flatMap(flattenValidationIssue)
       .filter(isUnrecognizedKeyIssue)
@@ -100,6 +101,16 @@ function prefixIssuePath(parent: PropertyKey[], child: string[]): string[] {
 
 function isUnrecognizedKeyIssue(issue: { message: string }): boolean {
   return issue.message.startsWith("Unrecognized key: ");
+}
+
+function branchFailedOnlyFromUnknownKeys(branch: z.core.$ZodIssue[]): boolean {
+  return branch.length > 0 && branch.every(isUnknownKeyOnlyIssue);
+}
+
+function isUnknownKeyOnlyIssue(issue: z.core.$ZodIssue): boolean {
+  if (issue.code === "unrecognized_keys") return true;
+  if (issue.code !== "invalid_union") return false;
+  return issue.errors.some(branchFailedOnlyFromUnknownKeys);
 }
 
 function uniqueValidationIssues(
