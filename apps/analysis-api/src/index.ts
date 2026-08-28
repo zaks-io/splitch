@@ -46,21 +46,18 @@ const handler = {
 
 export default wrapWorkerHandler(handler, { surface: "analysis-api" });
 
-const controlPlaneHandler = wrapWorkerHandler(
-  {
-    async fetch(request, env, ctx): Promise<Response> {
-      const identity = delegatedIdentityFor(request, bindingRoutes);
-      if (!identity) return notDelegatedResponse(request);
-      return handleRequest(request, env, ctx, { kind: "control-plane", identity });
-    },
-  } satisfies ExportedHandler<AnalysisApiEnv>,
-  { surface: "analysis-api" },
-);
+const controlPlaneHandler = {
+  async fetch(request, env, ctx): Promise<Response> {
+    const identity = delegatedIdentityFor(request, bindingRoutes);
+    if (!identity) return notDelegatedResponse(request);
+    return handleRequest(request, env, ctx, { kind: "control-plane", identity });
+  },
+} satisfies ExportedHandler<AnalysisApiEnv>;
 
 /** Binding-only entrypoint for reads the Control Plane Worker already authorized. */
 export class ControlPlaneEntrypoint extends WorkerEntrypoint<AnalysisApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    return controlPlaneHandler.fetch(
+    return wrapWorkerHandler(controlPlaneHandler, { surface: "analysis-api" }).fetch(
       request as Parameters<typeof controlPlaneHandler.fetch>[0],
       this.env,
       this.ctx,

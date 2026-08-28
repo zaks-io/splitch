@@ -1,5 +1,9 @@
 import type { SentryEventLike } from "@splitch/privacy";
-import type { Observability } from "@splitch/worker-runtime";
+import {
+  applyResponseHeaders,
+  type Observability,
+  WORKER_BASELINE_SECURITY_HEADERS,
+} from "@splitch/worker-runtime";
 import {
   createScrubbedEmitter,
   createSentryBeforeSend,
@@ -159,14 +163,14 @@ export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
       ctx: ExecutionContext,
     ) {
       if (!env.SENTRY_DSN) {
-        return innerFetch(request, env, ctx);
+        return applyWorkerBaselineHeaders(await innerFetch(request, env, ctx));
       }
       const Sentry = await loadSentry();
       const sentryFetch = getSentryWrappedHandler(handler, options, Sentry).fetch;
       if (!sentryFetch) {
         throw new Error("observability: Sentry-wrapped handler is missing fetch");
       }
-      return sentryFetch(request, env, ctx);
+      return applyWorkerBaselineHeaders(await sentryFetch(request, env, ctx));
     },
   };
 
@@ -200,6 +204,11 @@ export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
   }
 
   return wrapped;
+}
+
+/** Stamp the shared baseline on every Worker fetch response, including health and faults. */
+function applyWorkerBaselineHeaders(response: Response): Response {
+  return applyResponseHeaders(response, WORKER_BASELINE_SECURITY_HEADERS);
 }
 
 /**

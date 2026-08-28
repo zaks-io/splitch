@@ -49,6 +49,8 @@ describe("guard: input validation", () => {
     expect(res.status).toBe(400);
     const err = await bodyOf(res);
     expect(err.code).toBe("VALIDATION_ERROR");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
     if (err.code === "VALIDATION_ERROR") {
       expect(err.details.issues.length).toBeGreaterThan(0);
     }

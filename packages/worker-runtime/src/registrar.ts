@@ -11,6 +11,11 @@ import { applyRateLimit } from "./steps/rate-limit-step";
 import { enforceScopes } from "./steps/scopes";
 import { emptyError, renderError } from "./respond";
 import { resolveRequestId } from "./request-id";
+import {
+  applyResponseHeaders,
+  mergeHeaderRecords,
+  WORKER_BASELINE_SECURITY_HEADERS,
+} from "./security-headers";
 
 /**
  * What a route handler receives: the validated input, the resolved principal, and
@@ -45,6 +50,7 @@ export function createRegistrar(deps: RegistrarDeps): Registrar {
   // call site has to remember (see contained-observability.ts).
   const contained: RegistrarDeps = {
     ...deps,
+    defaultHeaders: mergeHeaderRecords(WORKER_BASELINE_SECURITY_HEADERS, deps.defaultHeaders),
     observability: containObservability(deps.observability),
   };
   return {
@@ -156,19 +162,8 @@ function withDefaults(
   requestId: string,
   defaultHeaders: Record<string, string> | undefined,
 ): Response {
-  const headers = new Headers(response.headers);
-  for (const [key, value] of Object.entries(defaultHeaders ?? {})) {
-    if (!headers.has(key)) {
-      headers.set(key, value);
-    }
-  }
-  if (!headers.has("x-request-id")) {
-    headers.set("x-request-id", requestId);
-  }
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
+  return applyResponseHeaders(applyResponseHeaders(response, defaultHeaders), {
+    "x-request-id": requestId,
   });
 }
 

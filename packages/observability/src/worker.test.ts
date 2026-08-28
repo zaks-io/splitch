@@ -25,6 +25,12 @@ async function flushSentryHooks(): Promise<void> {
   await Promise.resolve();
 }
 
+type WorkerFetchRequest = Parameters<NonNullable<ExportedHandler["fetch"]>>[0];
+
+function workerFetchRequest(url: string): WorkerFetchRequest {
+  return new Request(url) as WorkerFetchRequest;
+}
+
 describe("createWorkerObservability onError", () => {
   beforeEach(() => {
     captureMessage.mockReset();
@@ -262,6 +268,55 @@ describe("createWorkerObservability without a Sentry DSN", () => {
 });
 
 describe("wrapWorkerHandler", () => {
+  it("stamps baseline security headers on success and error responses", async () => {
+    const wrapped = wrapWorkerHandler(
+      {
+        fetch: async (request) =>
+          request.url.endsWith("/boom")
+            ? new Response("fault", { status: 500 })
+            : Response.json({ ok: true }),
+      },
+      { surface: "auth-api" },
+    );
+    const ctx = {} as ExecutionContext;
+
+    const success = await wrapped.fetch(workerFetchRequest("https://worker.test/health"), {}, ctx);
+    const error = await wrapped.fetch(workerFetchRequest("https://worker.test/boom"), {}, ctx);
+
+    expect(success.status).toBe(200);
+    expect(success.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(success.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+    expect(error.status).toBe(500);
+    expect(error.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(error.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+  });
+
+  it("does not overwrite CORS or MCP session headers", async () => {
+    const wrapped = wrapWorkerHandler(
+      {
+        fetch: async () =>
+          new Response(null, {
+            status: 204,
+            headers: {
+              "access-control-allow-origin": "*",
+              "mcp-session-id": "sess_1",
+            },
+          }),
+      },
+      { surface: "mcp-server" },
+    );
+
+    const response = await wrapped.fetch(
+      workerFetchRequest("https://worker.test/mcp"),
+      {},
+      {} as ExecutionContext,
+    );
+
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(response.headers.get("mcp-session-id")).toBe("sess_1");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
   it("routes queue deliveries through the Sentry wrapper", async () => {
     const sentryQueue = vi.fn();
     __setSentryModuleForTests({

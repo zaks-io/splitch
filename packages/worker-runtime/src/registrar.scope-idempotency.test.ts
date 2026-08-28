@@ -1,4 +1,4 @@
-import { errorCodes, errorStatusByCode, type ErrorResponse } from "@splitch/contracts";
+import { type ErrorResponse, errorCodes, errorStatusByCode } from "@splitch/contracts";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { createRegistrar } from "./registrar";
@@ -267,6 +267,60 @@ describe("guard: fault path + response decoration", () => {
 
     const res = await app.request("/things", { method: "POST" });
     expect(res.headers.get("x-splitch")).toBe("on");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+  });
+
+  it("stamps the baseline on success when an app omits defaultHeaders", async () => {
+    const reg = createRegistrar(deps());
+    const app = new Hono();
+    reg.mount(app, route(), okHandler);
+
+    const res = await app.request("/things", { method: "POST" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+  });
+
+  it("upgrades a weaker route CSP frame-ancestors and keeps other directives", async () => {
+    const reg = createRegistrar(
+      deps({ defaultHeaders: { "content-security-policy": "frame-ancestors 'none'" } }),
+    );
+    const app = new Hono();
+    reg.mount(
+      app,
+      route(),
+      () =>
+        new Response("ok", {
+          headers: { "content-security-policy": "default-src 'self'; frame-ancestors https:" },
+        }),
+    );
+
+    const res = await app.request("/things", { method: "POST" });
+    expect(res.headers.get("content-security-policy")).toBe(
+      "default-src 'self'; frame-ancestors 'none'",
+    );
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
+  it("upgrades comma-delimited CSP policies so a later deny cannot be ignored", async () => {
+    const reg = createRegistrar(
+      deps({ defaultHeaders: { "content-security-policy": "frame-ancestors 'none'" } }),
+    );
+    const app = new Hono();
+    reg.mount(
+      app,
+      route(),
+      () =>
+        new Response("ok", {
+          headers: { "content-security-policy": "default-src https:, frame-ancestors https:" },
+        }),
+    );
+
+    const res = await app.request("/things", { method: "POST" });
+    expect(res.headers.get("content-security-policy")).toBe(
+      "default-src https:; frame-ancestors 'none', frame-ancestors 'none'",
+    );
   });
 });
 

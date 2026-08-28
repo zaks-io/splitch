@@ -44,6 +44,7 @@
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@splitch/contracts": "workspace:*",
     "@splitch/evaluation-core": "workspace:*",
+    "@splitch/worker-runtime": "workspace:*",
     "vitest": "^4.1.10"
   }
 }
