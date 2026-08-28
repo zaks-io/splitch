@@ -17,6 +17,19 @@
   expected_result: |
     {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_2","targeting_key_hash":"tk_other_run","variant":"control","first_exposure_ts":"2026-07-01 00:04:00.000","window_anchor":"2026-07-01 00:04:00.000"}
     {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_2","targeting_key_hash":"tk_other_run_tail","variant":"control","first_exposure_ts":"2026-07-05 05:00:00.000","window_anchor":"2026-07-05 05:00:00.000"}
+- name: delayed_convex_commit_time_wins_first_touch
+  description: A delayed trusted-adapter Exposure with an earlier encounter time beats a remote Exposure received first, and the Stats input carries that same anchor.
+  parameters: "app_id=app_delayed&environment_id=env_prod&experiment_id=exp_delayed&run_id=run_delayed"
+  expected_http_status: 200
+  expected_result: |
+    {"app_id":"app_delayed","environment_id":"env_prod","id_type":"user","run_id":"run_delayed","targeting_key_hash":"tk_delayed_convex","variant":"treatment","first_exposure_ts":"2026-07-05 06:00:00.000","window_anchor":"2026-07-05 06:00:00.000"}
+- name: retained_rows_keep_their_prior_first_touch_time
+  description: Rows written before exposure_at existed project server_received_at, while explicit encounter timestamps remain unchanged.
+  parameters: "app_id=app_compat&environment_id=env_compat&experiment_id=exp_compat&run_id=run_compat"
+  expected_http_status: 200
+  expected_result: |
+    {"app_id":"app_compat","environment_id":"env_compat","id_type":"user","run_id":"run_compat","targeting_key_hash":"compat_new","variant":"control","first_exposure_ts":"2026-07-09 23:59:00.000","window_anchor":"2026-07-09 23:59:00.000"}
+    {"app_id":"app_compat","environment_id":"env_compat","id_type":"user","run_id":"run_compat","targeting_key_hash":"compat_old","variant":"treatment","first_exposure_ts":"2026-07-10 00:00:00.000","window_anchor":"2026-07-10 00:00:00.000"}
 - name: another_tenant_sees_only_its_own_entities_under_identical_identifiers
   description: A second App using the same Run, Experiment, and Environment identifiers gets its own population and none of the first App's, in both the snapshot and the tail.
   parameters: "app_id=app_2&environment_id=env_prod&experiment_id=exp_1&run_id=run_1"
