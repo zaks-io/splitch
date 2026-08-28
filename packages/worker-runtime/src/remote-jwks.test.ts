@@ -27,6 +27,29 @@ describe("remote JWKS signature verification", () => {
     expect(fetchJwks).toHaveBeenCalledTimes(2);
   });
 
+  it("verifies against a streamed JWKS response", async () => {
+    const trusted = await keypair("streamed");
+    const body = new TextEncoder().encode(JSON.stringify(trusted.jwks));
+    const split = Math.floor(body.byteLength / 2);
+    const fetchJwks = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(body.slice(0, split));
+              controller.enqueue(body.slice(split));
+              controller.close();
+            },
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    const verifier = remoteJwksSignatureVerifier(uniqueJwksUri(), { fetch: fetchJwks });
+
+    await expect(verifier.verify(await sign(trusted, { sub: "streamed" }))).resolves.toBe(true);
+    expect(fetchJwks).toHaveBeenCalledOnce();
+  });
+
   it("contains attacker-controlled signature failures but leaves JWKS faults loud", async () => {
     const trusted = await keypair("trusted");
     const attacker = await keypair("attacker");
@@ -46,6 +69,59 @@ describe("remote JWKS signature verification", () => {
     await expect(unavailable.verify(await sign(trusted, { sub: "valid" }))).rejects.toThrow(
       "Expected 200 OK",
     );
+  });
+
+  it("does not reuse a resolver across two fetch implementations for the same URI", async () => {
+    const trusted = await keypair("shared");
+    const uri = uniqueJwksUri();
+    const fetchA = vi.fn(async () => Response.json(trusted.jwks));
+    const fetchB = vi.fn(async () => Response.json(trusted.jwks));
+    const token = await sign(trusted, { sub: "shared" });
+
+    await expect(remoteJwksSignatureVerifier(uri, { fetch: fetchA }).verify(token)).resolves.toBe(
+      true,
+    );
+    await expect(remoteJwksSignatureVerifier(uri, { fetch: fetchB }).verify(token)).resolves.toBe(
+      true,
+    );
+    expect(fetchA).toHaveBeenCalledOnce();
+    expect(fetchB).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the default fetch partition distinct from a custom fetch", async () => {
+    const trusted = await keypair("default-partition");
+    const uri = uniqueJwksUri();
+    const defaultFetch = vi.fn(async () => Response.json(trusted.jwks));
+    const customFetch = vi.fn(async () => Response.json(trusted.jwks));
+    vi.stubGlobal("fetch", defaultFetch);
+    const token = await sign(trusted, { sub: "default-partition" });
+
+    await expect(remoteJwksSignatureVerifier(uri).verify(token)).resolves.toBe(true);
+    await expect(
+      remoteJwksSignatureVerifier(uri, { fetch: customFetch }).verify(token),
+    ).resolves.toBe(true);
+    expect(defaultFetch).toHaveBeenCalledOnce();
+    expect(customFetch).toHaveBeenCalledOnce();
+  });
+
+  it("does not follow a JWKS redirect to another host", async () => {
+    const trusted = await keypair("trusted");
+    const fetchJwks = vi.fn(async () => {
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://169.254.169.254/jwks" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchJwks);
+    const verifier = remoteJwksSignatureVerifier(uniqueJwksUri());
+
+    await expect(verifier.verify(await sign(trusted, { sub: "valid" }))).rejects.toThrow(
+      "Expected 200 OK",
+    );
+    expect(fetchJwks).toHaveBeenCalledOnce();
+    const fetchedUrl = String(fetchJwks.mock.calls.at(0)?.at(0));
+    expect(fetchedUrl).toContain("jwks.test");
+    expect(fetchedUrl).not.toContain("169.254.169.254");
   });
 });
 

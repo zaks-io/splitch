@@ -1,4 +1,11 @@
-import { compactVerify, createRemoteJWKSet, errors, type RemoteJWKSet } from "jose";
+import {
+  compactVerify,
+  createRemoteJWKSet,
+  customFetch,
+  errors,
+  type FetchImplementation,
+  type RemoteJWKSet,
+} from "jose";
 
 const MAX_REMOTE_JWKS_RESOLVERS = 32;
 const rejectedCredentialCodes = new Set([
@@ -12,19 +19,29 @@ export interface RemoteJwksSignatureVerifier {
   verify(compactJws: string): Promise<boolean>;
 }
 
+export interface RemoteJwksSignatureVerifierOptions {
+  fetch?: FetchImplementation;
+}
+
 /**
- * Process-local remote JWKS resolvers keyed only by their trusted URI. A fresh
- * isolate refetches, which affects latency but never verification correctness.
- * The bound prevents a trusted-IdP catalog from growing isolate memory forever.
+ * Process-local remote JWKS resolvers keyed by normalized URI and fetch
+ * implementation. The default `fetch` shares one partition so first-party
+ * callers keep a stable cache. A custom fetch (tenant JWKS policy) must not
+ * inherit a resolver that was created with a different transport.
  */
 const remoteResolvers = new Map<string, RemoteJWKSet>();
+const fetchPartitions = new WeakMap<FetchImplementation, string>();
+let nextFetchPartition = 1;
 
 /**
  * Reuse jose's Cloudflare-aware remote resolver. It caches parsed keys, bounds
  * refreshes, refreshes after a new `kid`, and fails loud on transport faults.
  */
-export function remoteJwksSignatureVerifier(jwksUri: string): RemoteJwksSignatureVerifier {
-  const resolver = remoteResolver(jwksUri);
+export function remoteJwksSignatureVerifier(
+  jwksUri: string,
+  options?: RemoteJwksSignatureVerifierOptions,
+): RemoteJwksSignatureVerifier {
+  const resolver = remoteResolver(jwksUri, options?.fetch);
   return {
     async verify(compactJws) {
       try {
@@ -40,8 +57,9 @@ export function remoteJwksSignatureVerifier(jwksUri: string): RemoteJwksSignatur
   };
 }
 
-function remoteResolver(jwksUri: string): RemoteJWKSet {
-  const key = new URL(jwksUri).href;
+function remoteResolver(jwksUri: string, fetchImpl?: FetchImplementation): RemoteJWKSet {
+  const href = new URL(jwksUri).href;
+  const key = `${fetchPartition(fetchImpl)}\0${href}`;
   const existing = remoteResolvers.get(key);
   if (existing) {
     remoteResolvers.delete(key);
@@ -49,7 +67,10 @@ function remoteResolver(jwksUri: string): RemoteJWKSet {
     return existing;
   }
 
-  const resolver = createRemoteJWKSet(new URL(key));
+  const resolver = createRemoteJWKSet(
+    new URL(href),
+    fetchImpl === undefined ? undefined : { [customFetch]: fetchImpl },
+  );
   remoteResolvers.set(key, resolver);
   if (remoteResolvers.size > MAX_REMOTE_JWKS_RESOLVERS) {
     const oldest = remoteResolvers.keys().next().value;
@@ -58,4 +79,14 @@ function remoteResolver(jwksUri: string): RemoteJWKSet {
     }
   }
   return resolver;
+}
+
+function fetchPartition(fetchImpl?: FetchImplementation): string {
+  if (fetchImpl === undefined) return "default";
+  const existing = fetchPartitions.get(fetchImpl);
+  if (existing !== undefined) return existing;
+  const id = `custom:${nextFetchPartition}`;
+  nextFetchPartition += 1;
+  fetchPartitions.set(fetchImpl, id);
+  return id;
 }

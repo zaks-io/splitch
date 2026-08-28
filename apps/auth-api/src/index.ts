@@ -20,6 +20,7 @@ import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import type { AuthApiEnv } from "./env";
 import { makeJtiCache } from "./jti-cache";
+import { fetchTrustedJwks } from "./jwks-fetch";
 import type { SmokeClientCredentials } from "./oauth-routes";
 import { makeFixtureOtp, makeIdempotencyStore } from "./otp";
 import { makeRateLimiter } from "./rate-limit";
@@ -125,7 +126,7 @@ const handler = {
         jtiCache: makeJtiCache(env.JTI_CACHE),
         workos,
         verifyRemoteSignature: (jwksUri, compactJws) =>
-          remoteJwksSignatureVerifier(jwksUri).verify(compactJws),
+          remoteJwksSignatureVerifier(jwksUri, { fetch: fetchTrustedJwks }).verify(compactJws),
         authApiOrigin: origin,
       },
       register: { repo, turnstile, rateLimiter, workos, tokenSigner, now },

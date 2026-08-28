@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { jwksUrlError, normalizeJwksUrl } from "./jwks-url";
 
 /**
  * Request body schemas for the auth-door endpoints. Kept apart from the route
@@ -103,7 +104,14 @@ export const RevokeTokenRequestSchema = z.object({
 /** POST /orgs/:orgId/trusted-idps body (Org-owner CRUD). */
 export const CreateTrustedIdpRequestSchema = z.object({
   issuer: z.string().min(1),
-  jwks_uri: z.string().min(1),
+  jwks_uri: z
+    .string()
+    .min(1)
+    .superRefine((value, ctx) => {
+      const error = jwksUrlError(value);
+      if (error) ctx.addIssue({ code: "custom", message: error });
+    })
+    .transform((value) => normalizeJwksUrl(value)),
   client_ids: z.array(z.string()).min(1),
   enabled: z.boolean().optional(),
 });

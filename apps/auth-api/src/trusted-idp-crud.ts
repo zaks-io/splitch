@@ -1,4 +1,5 @@
 import type { Repository } from "@splitch/db";
+import { parseJwksUrl } from "./jwks-url";
 
 /**
  * Trusted-IdP CRUD — Org `owner` role only (access-control-matrix.md).
@@ -29,8 +30,8 @@ type CrudResult<T> =
   | { ok: true; value: T }
   | {
       ok: false;
-      status: 403 | 404;
-      code: "FORBIDDEN" | "ORGANIZATION_NOT_FOUND" | "CREDENTIAL_NOT_FOUND";
+      status: 400 | 403 | 404;
+      code: "VALIDATION_ERROR" | "FORBIDDEN" | "ORGANIZATION_NOT_FOUND" | "CREDENTIAL_NOT_FOUND";
     };
 
 async function assertOwner(
@@ -82,13 +83,17 @@ export function makeTrustedIdpCrud(repo: Repository, now: () => number): Trusted
       if (!owner.ok) {
         return owner;
       }
+      const jwks = parseJwksUrl(input.jwksUri);
+      if (!jwks.ok) {
+        return { ok: false, status: 400, code: "VALIDATION_ERROR" };
+      }
       // org_id is the AUTHZ'D org, never client-supplied: a tenant can only
       // create IdPs under its own Org (and never a global seed, org_id stays set).
       const row = await repo.privacy.createTrustedIdp({
         idpId: newIdpId(),
         orgId,
         issuer: input.issuer,
-        jwksUri: input.jwksUri,
+        jwksUri: jwks.href,
         clientIds: JSON.stringify(input.clientIds),
         enabled: input.enabled ?? true,
         createdAt: new Date(now()).toISOString(),

@@ -14,6 +14,7 @@ export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/door-b.test.ts",
   "src/door-c.test.ts",
   "src/hosted-assertion-forgery.test.ts",
+  "src/idjag-jwks-url.test.ts",
   "src/idjag.test.ts",
   "src/index.test.ts",
   "src/mcp-local-integration.test.ts",

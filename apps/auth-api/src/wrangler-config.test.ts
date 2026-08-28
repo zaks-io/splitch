@@ -5,6 +5,10 @@ import { describe, expect, it } from "vitest";
 const config = readWranglerConfig();
 
 describe("Auth Worker Wrangler runtime config", () => {
+  it("restricts global fetch to public Internet destinations", () => {
+    expect(config.compatibility_flags).toContain("global_fetch_strictly_public");
+  });
+
   it.each([
     ["shared-preview", config.env?.["shared-preview"], "0x4AAAAAADsCXVP9TRrC6c6N"],
     ["production", config.env?.production, "0x4AAAAAADsCY8JNBv2vrTFC"],
@@ -57,6 +61,7 @@ describe("Auth Worker Wrangler runtime config", () => {
 });
 
 interface WranglerConfig {
+  compatibility_flags?: string[];
   env?: Record<string, WranglerTarget | undefined>;
 }
 
