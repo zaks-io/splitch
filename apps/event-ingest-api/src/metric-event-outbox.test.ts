@@ -97,6 +97,26 @@ describe("Metric Event outbox Durable Object", () => {
     expect(outbox.stored()).not.toHaveProperty("row");
     expect(outbox.send).not.toHaveBeenCalled();
   });
+
+  it("does not let a queue send overwrite a concurrent suppression tombstone", async () => {
+    let releaseSend!: () => void;
+    const sendPaused = new Promise<void>((resolve) => {
+      releaseSend = resolve;
+    });
+    const outbox = makeOutbox(async () => sendPaused);
+
+    const claim = outbox.claim(row("entity-7"));
+    await vi.waitFor(() => expect(outbox.send).toHaveBeenCalledTimes(1));
+    const suppression = outbox.suppress(row("entity-7"));
+
+    await expect(
+      Promise.race([suppression.then(() => "done"), Promise.resolve("blocked")]),
+    ).resolves.toBe("blocked");
+    releaseSend();
+    await expect(claim).resolves.toMatchObject({ outcome: "accepted" });
+    await expect(suppression).resolves.toMatchObject({ deleted: true });
+    await expect(outbox.exported()).resolves.toEqual({ deleted: true, row: null });
+  });
 });
 
 interface ClaimInput {
@@ -116,9 +136,9 @@ function row(targetingKey: string): ClaimInput {
 }
 
 /** Durable Object storage round-trips through structured clone, so this does too. */
-function makeOutbox() {
+function makeOutbox(sendImpl: () => Promise<void> = async () => {}) {
   const storage = new Map<string, unknown>();
-  const send = vi.fn(async (_row: Record<string, unknown>) => {});
+  const send = vi.fn(async (_row: Record<string, unknown>) => sendImpl());
   const ctx = {
     storage: {
       async get<T>(key: string) {

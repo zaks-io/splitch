@@ -18,6 +18,10 @@ SQL >
             ingest_ts
         ) AS canonical_state
     FROM metric_events
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = metric_events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', metric_events.targeting_key_hash)[1]
+    WHERE generation_tombstones.app_id = ''
     GROUP BY
         app_id,
         environment_id,

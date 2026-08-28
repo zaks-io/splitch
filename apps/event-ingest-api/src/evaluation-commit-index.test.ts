@@ -79,10 +79,36 @@ describe("Evaluation commit ingest", () => {
     const first = await postEvaluationCommit({ env, exposures: [] });
     const retry = await postEvaluationCommit({ env, exposures: [] });
 
-    expect(first.response.status).toBe(202);
+    expect(first.response.status).toBe(503);
     expect(first.rows).toHaveLength(0);
-    expect(retry.response.status).toBe(202);
+    expect(retry.response.status).toBe(503);
     expect(retry.rows).toHaveLength(0);
+    expect(privacyDeleteAll).toHaveBeenCalledTimes(2);
+  });
+
+  it("purges a commit sealed while App reset takes the serialized inventory boundary", async () => {
+    const outbox = new MemoryEvaluationCommitOutbox();
+    const privacyDeleteAll = vi.spyOn(outbox, "privacyDeleteAll");
+    const env = makeEnv(new MemoryReplayWindow(), outbox);
+    let appInventoryCalls = 0;
+    env.ENTITY_METRIC_PRIVACY = {
+      idFromName: () => ({}) as DurableObjectId,
+      get: () => ({
+        fetch: vi.fn(async (input: RequestInfo | URL) => {
+          const path = new URL(String(input)).pathname;
+          if (path === "/register-app-evaluation") {
+            appInventoryCalls += 1;
+            return Response.json({ suppressed: appInventoryCalls === 2 });
+          }
+          return new Response("not found", { status: 404 });
+        }),
+      }),
+    };
+
+    const result = await postEvaluationCommit({ env, exposures: [] });
+
+    expect(result.response.status).toBe(503);
+    expect(result.rows).toHaveLength(0);
     expect(privacyDeleteAll).toHaveBeenCalledTimes(1);
   });
 });

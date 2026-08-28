@@ -1,5 +1,9 @@
 import { timingSafeEqualString } from "@splitch/worker-runtime";
-import { deliverAppEvaluationUsage, isEntityEventSuppressed } from "./entity-metric-privacy";
+import {
+  deliverAppIdentityRow,
+  identityVersionForRow,
+  isEntityEventSuppressed,
+} from "./entity-metric-privacy";
 import { emptyError, renderError, serviceUnavailable } from "./errors";
 import { evaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import { rejectIngestAdmission } from "./ingest-admission";
@@ -100,7 +104,18 @@ async function deliverExposure(
   // when the sink fails, so the SDK re-fires). ACKing 202 before Tinybird
   // durability would silently drop the row on an append failure.
   try {
-    await appendRawEvent(row, delivery);
+    if (env.SPLITCH_PLATFORM_TARGET === "local" || env.SPLITCH_PLATFORM_TARGET === "pr-ci") {
+      await appendRawEvent(row, delivery);
+    } else {
+      await deliverAppIdentityRow(
+        env.ENTITY_METRIC_PRIVACY,
+        event.appId,
+        identityVersionForRow(row),
+        "raw_events",
+        row,
+        env.SPLITCH_PLATFORM_TARGET,
+      );
+    }
     return null;
   } catch (error) {
     console.error("event-ingest-api Tinybird append failed", {
@@ -174,9 +189,11 @@ async function deliverStandaloneEvaluationUsage(
     await appendRawEvent(row, delivery.value);
     return null;
   }
-  await deliverAppEvaluationUsage(
+  await deliverAppIdentityRow(
     env.ENTITY_METRIC_PRIVACY,
     appId,
+    identityVersionForRow(row),
+    "raw_evaluations",
     row,
     env.SPLITCH_PLATFORM_TARGET,
   );

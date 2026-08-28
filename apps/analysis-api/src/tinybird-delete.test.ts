@@ -26,6 +26,8 @@ describe("Tinybird App identity reset", () => {
     const proof = await deleteAppIdentityData(
       { TINYBIRD_API_URL: API_URL, TINYBIRD_DELETE_TOKEN: "delete-token" },
       "app_1",
+      "app-v1",
+      "reset-1",
       { fetchFn },
     );
 
@@ -66,6 +68,8 @@ describe("Tinybird App identity reset", () => {
       deleteAppIdentityData(
         { TINYBIRD_API_URL: API_URL, TINYBIRD_DELETE_TOKEN: "delete-token" },
         "app_1",
+        "app-v1",
+        "reset-1",
         { fetchFn },
       ),
     ).rejects.toThrow("remaining_rows=2");
@@ -88,10 +92,12 @@ describe("Tinybird App identity reset", () => {
       deleteAppIdentityData(
         { TINYBIRD_API_URL: API_URL, TINYBIRD_DELETE_TOKEN: "delete-token" },
         "app_1",
+        "app-v1",
+        "reset-1",
         { fetchFn },
       ),
     ).rejects.toThrow("environment_exposure_status_deletions");
-    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(fetchFn).toHaveBeenCalledTimes(3);
   });
 
   it("uses authenticated zero-row queries rather than trusting completed jobs", async () => {
@@ -102,6 +108,8 @@ describe("Tinybird App identity reset", () => {
     await deleteAppIdentityData(
       { TINYBIRD_API_URL: API_URL, TINYBIRD_DELETE_TOKEN: "delete-token" },
       "app_1",
+      "app-v1",
+      "reset-1",
       { fetchFn },
     );
     const proofCalls = fetchFn.mock.calls.filter(
@@ -123,9 +131,12 @@ describe("Tinybird App identity reset", () => {
       .sort();
 
     expect([...APP_IDENTITY_RESET_DATASOURCES].sort()).toEqual(
-      appScoped.filter((name) => name !== "audit_log"),
+      appScoped.filter(
+        (name) => name !== "audit_log" && name !== "app_identity_generation_tombstones",
+      ),
     );
     expect(APP_IDENTITY_RESET_DATASOURCES).not.toContain("audit_log");
+    expect(APP_IDENTITY_RESET_DATASOURCES).not.toContain("app_identity_generation_tombstones");
     expect(
       readFileSync(
         resolve(import.meta.dirname, "../../../infra/tinybird/pipes/analysis_run_inputs.pipe"),

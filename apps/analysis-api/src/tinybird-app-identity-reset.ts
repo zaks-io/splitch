@@ -33,6 +33,8 @@ interface ResetOptions {
 export async function deleteAppIdentityData(
   env: AnalysisApiEnv,
   appId: string,
+  currentVersion: string,
+  resetId: string,
   options: ResetOptions = {},
 ): Promise<string> {
   const safeAppId = safeTenantId(appId, "appId");
@@ -48,6 +50,15 @@ export async function deleteAppIdentityData(
     timeoutMs,
   };
 
+  await appendGenerationTombstone(
+    fetchFn,
+    apiUrl,
+    token,
+    safeAppId,
+    safeTenantId(currentVersion, "currentVersion"),
+    safeTenantId(resetId, "resetId"),
+    timeoutMs,
+  );
   await appendDeletionSuppression(fetchFn, apiUrl, token, { appId: safeAppId }, timeoutMs);
   await requireRowCount(fetchFn, apiUrl, token, DELETION_DATASOURCE, safeAppId, timeoutMs, {
     environmentId: "",
@@ -80,6 +91,41 @@ export async function deleteAppIdentityData(
   });
   proofs.push(`${DELETION_DATASOURCE}=0`);
   return `tinybird-app-identity-reset:${proofs.join(",")}`;
+}
+
+async function appendGenerationTombstone(
+  fetchFn: typeof fetch,
+  apiUrl: string,
+  token: string,
+  appId: string,
+  targetingKeyVersion: string,
+  resetId: string,
+  timeoutMs: number,
+): Promise<void> {
+  const endpoint = new URL("/v0/events", apiUrl);
+  endpoint.searchParams.set("name", "app_identity_generation_tombstones");
+  endpoint.searchParams.set("wait", "true");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchFn(endpoint, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        app_id: appId,
+        targeting_key_version: targetingKeyVersion,
+        reset_id: resetId,
+        created_at: new Date().toISOString(),
+      }),
+      signal: controller.signal,
+    });
+    const body = response.ok ? ((await response.json()) as Record<string, unknown>) : null;
+    if (response.status !== 200 || body?.successful_rows !== 1 || body.quarantined_rows !== 0) {
+      throw new TinybirdDeleteError("Tinybird App generation tombstone was not acknowledged");
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function deleteDatasourceRows(

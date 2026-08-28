@@ -40,6 +40,7 @@ export function makeCachedEvaluationTelemetryHandler(deps: {
       false,
       idempotencyKey,
       scope.value,
+      await deps.exposureAssembly.saltStore.currentKeyVersion(scope.value.appId),
       { flagKey: body.flagKey, sdkRuntime: sdkRuntime(request) },
       deps,
       () => errorResponse("SERVICE_UNAVAILABLE", "Evaluation usage ingest is unavailable"),

@@ -1,4 +1,9 @@
-import { computeEntityFamilyHash, computeTargetingKeyHash, type SaltStore } from "@splitch/privacy";
+import {
+  computeEntityFamilyHash,
+  computeTargetingKeyHash,
+  keyVersionOf,
+  type SaltStore,
+} from "@splitch/privacy";
 import type { ExposureDecision } from "./evaluate-path-types";
 
 /**
@@ -26,6 +31,7 @@ export interface ExposureTicketPayload {
   readonly id_type: string;
   readonly targeting_key_hash: string;
   readonly entity_family_hash: string;
+  readonly identity_version: string;
   readonly issued_at: string;
 }
 
@@ -82,6 +88,7 @@ export async function mintExposureTicketWithIdentity(
     id_type: exposure.idType,
     targeting_key_hash: targetingKeyHash,
     entity_family_hash: entityFamilyHash,
+    identity_version: keyVersionOf(targetingKeyHash),
     issued_at: (deps.now ?? (() => new Date()))().toISOString(),
   };
   const encoded = bytesToBase64Url(new TextEncoder().encode(JSON.stringify(payload)));
@@ -97,6 +104,7 @@ export async function mintExposureTicketWithIdentity(
         id_type: payload.id_type,
         targeting_key_hash: payload.targeting_key_hash,
         entity_family_hash: payload.entity_family_hash,
+        identity_version: payload.identity_version,
       }),
     ),
   );
@@ -209,6 +217,7 @@ function decodePayload(encoded: string): ExposureTicketPayload | null {
       "id_type",
       "targeting_key_hash",
       "entity_family_hash",
+      "identity_version",
       "issued_at",
     ] as const;
     for (const field of required) {
@@ -224,6 +233,7 @@ function decodePayload(encoded: string): ExposureTicketPayload | null {
       id_type: record.id_type as string,
       targeting_key_hash: record.targeting_key_hash as string,
       entity_family_hash: record.entity_family_hash as string,
+      identity_version: record.identity_version as string,
       issued_at: record.issued_at as string,
     };
   } catch {

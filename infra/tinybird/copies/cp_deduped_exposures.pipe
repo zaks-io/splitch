@@ -25,8 +25,12 @@ SQL >
         now64(3) AS snapshot_ts,
         copy_watermark AS watermark_ts
     FROM raw_events
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = raw_events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', raw_events.targeting_key_hash)[1]
     WHERE type = 'exposure'
         AND ingest_ts <= copy_watermark
+        AND generation_tombstones.app_id = ''
     GROUP BY
         app_id,
         environment_id,

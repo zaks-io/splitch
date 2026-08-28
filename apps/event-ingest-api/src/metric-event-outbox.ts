@@ -31,12 +31,23 @@ interface ClaimState {
 const STATE_KEY = "metric-event-claim";
 
 export class MetricEventOutboxDurableObject {
+  private section = Promise.resolve();
+
   constructor(
     private readonly ctx: DurableObjectState,
     private readonly env: Env,
   ) {}
 
   async fetch(request: Request): Promise<Response> {
+    const run = this.section.then(() => this.handle(request));
+    this.section = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async handle(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
     if (request.method === "GET") return this.read(path);
     if (request.method === "POST") return this.write(path, request);

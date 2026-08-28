@@ -163,7 +163,27 @@ export async function callStorePrivacy(
       `control-plane-api: ${operationId} returned incomplete store proof`,
     );
   }
+  if (operationId === "entity_event_privacy_export") {
+    assertEventExportCardinality(body);
+  }
   return body;
+}
+
+function assertEventExportCardinality(body: EntityPrivacyStoreResult): void {
+  if (!Array.isArray(body.records) || !Array.isArray(body.proofs)) {
+    throw new EntityPrivacyConsumerError(
+      "control-plane-api: entity_event_privacy_export omitted records",
+    );
+  }
+  const counts = body.proofs.map((proof) => /^.+-inventory:rows=(\d+)$/u.exec(proof));
+  if (
+    counts.some((match) => match === null) ||
+    counts.reduce((sum, match) => sum + Number(match?.[1] ?? Number.NaN), 0) !== body.records.length
+  ) {
+    throw new EntityPrivacyConsumerError(
+      "control-plane-api: entity_event_privacy_export returned inconsistent cardinality proof",
+    );
+  }
 }
 
 export function assertStoreIdentity(
@@ -192,7 +212,7 @@ function assertAssignmentPrivacyProof(
     if (
       !Array.isArray(body.records) ||
       !Array.isArray(body.proofs) ||
-      body.proofs.length !== body.targetingKeyHashes.length ||
+      body.proofs.length !== body.targetingKeyHashes.length * 2 ||
       body.records.some(
         (record) => !isRecord(record.assignments) || !isRecord(record.assignmentWriterAssignments),
       )

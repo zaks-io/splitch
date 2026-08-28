@@ -14,8 +14,12 @@ SQL >
         environment_id,
         minMerge(first_exposure_state) AS first_exposure_at
     FROM environment_exposure_status_state
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = environment_exposure_status_state.app_id
+        AND generation_tombstones.targeting_key_version = environment_exposure_status_state.targeting_key_version
     WHERE app_id = {{String(app_id)}}
         AND environment_id = {{String(environment_id)}}
+        AND generation_tombstones.app_id = ''
         AND NOT EXISTS (
             SELECT 1
             FROM environment_exposure_status_deletions

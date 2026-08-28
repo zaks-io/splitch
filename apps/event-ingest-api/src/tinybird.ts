@@ -10,6 +10,7 @@ export interface EvaluationUsageEvent {
   readonly eventId: string;
   readonly organizationId: string;
   readonly appId: string;
+  readonly identityVersion: string;
   readonly environmentId: string;
   readonly flagKey: string;
   readonly sdkRuntime: string;
@@ -146,6 +147,7 @@ export function evaluationUsagePayload(
       idempotencyKey: dimensions.value.idempotencyKey,
       organizationId: scope.organizationId,
       appId: scope.appId,
+      identityVersion: dimensions.value.identityVersion,
       environmentId: scope.environmentId,
       flagKey: dimensions.value.flagKey,
       sdkRuntime: dimensions.value.sdkRuntime,
@@ -155,13 +157,18 @@ export function evaluationUsagePayload(
   };
 }
 
-function usageDimensions(
-  payload: Payload,
-): Outcome<{ idempotencyKey: string; flagKey: string; sdkRuntime: string }> {
+function usageDimensions(payload: Payload): Outcome<{
+  idempotencyKey: string;
+  identityVersion: string;
+  flagKey: string;
+  sdkRuntime: string;
+}> {
   const idempotencyKey = stringField(payload, "idempotencyKey");
+  const identityVersion = stringField(payload, "identityVersion");
   const flagKey = stringField(payload, "flagKey");
   const sdkRuntime = stringField(payload, "sdkRuntime");
   if (!idempotencyKey.ok) return idempotencyKey;
+  if (!identityVersion.ok) return identityVersion;
   if (!flagKey.ok) return flagKey;
   if (!sdkRuntime.ok) return sdkRuntime;
   if (idempotencyKey.value.length > 255) {
@@ -174,6 +181,7 @@ function usageDimensions(
     ok: true,
     value: {
       idempotencyKey: idempotencyKey.value,
+      identityVersion: identityVersion.value,
       flagKey: flagKey.value,
       sdkRuntime: sdkRuntime.value,
     },
@@ -211,6 +219,7 @@ export function toEvaluationUsageTinybirdRow(event: EvaluationUsageEvent): Recor
     event_id: event.eventId,
     organization_id: event.organizationId,
     app_id: event.appId,
+    identity_version: event.identityVersion,
     environment_id: event.environmentId,
     flag_key: event.flagKey,
     sdk_runtime: event.sdkRuntime,

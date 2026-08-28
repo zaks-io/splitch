@@ -8,7 +8,10 @@ import type { Env } from "./types";
 interface InventoryCommit {
   identity: string;
   outbox: EvaluationCommitOutbox;
-  payload: { usage: { appId: string }; exposureRows: readonly Record<string, unknown>[] };
+  payload: {
+    usage: { appId: string; identityVersion: string };
+    exposureRows: readonly Record<string, unknown>[];
+  };
 }
 
 export async function inventoryEvaluationCommit(
@@ -21,7 +24,11 @@ export async function inventoryEvaluationCommit(
   }
   const appSuppressed = await registerAppEvaluationCommit(
     env.ENTITY_METRIC_PRIVACY,
-    { appId: scopeAppId, commitIdentity: prepared.identity },
+    {
+      appId: scopeAppId,
+      commitIdentity: prepared.identity,
+      identityVersion: prepared.payload.usage.identityVersion,
+    },
     env.SPLITCH_PLATFORM_TARGET,
   );
   if (appSuppressed) {
@@ -37,6 +44,7 @@ export async function inventoryEvaluationCommit(
         appId: rowString(row, "app_id"),
         idType: rowString(row, "id_type"),
         entityFamilyHash: rowString(row, "entity_family_hash"),
+        identityVersion: identityVersion(rowString(row, "targeting_key_hash")),
       },
       {
         commitIdentity: prepared.identity,
@@ -51,6 +59,30 @@ export async function inventoryEvaluationCommit(
     await prepared.outbox.privacyDelete(prepared.identity, suppressedEventIds);
   }
   return false;
+}
+
+export async function confirmEvaluationCommitInventory(
+  prepared: InventoryCommit,
+  env: Env,
+): Promise<void> {
+  const suppressed = await registerAppEvaluationCommit(
+    env.ENTITY_METRIC_PRIVACY,
+    {
+      appId: prepared.payload.usage.appId,
+      commitIdentity: prepared.identity,
+      identityVersion: prepared.payload.usage.identityVersion,
+    },
+    env.SPLITCH_PLATFORM_TARGET,
+  );
+  if (!suppressed) return;
+  await prepared.outbox.privacyDeleteAll(prepared.identity);
+  throw new Error("Evaluation commit raced App identity reset");
+}
+
+function identityVersion(targetingKeyHash: string): string {
+  const separator = targetingKeyHash.indexOf(":");
+  if (separator <= 0) throw new Error("Evaluation commit targeting_key_hash is invalid");
+  return targetingKeyHash.slice(0, separator);
 }
 
 function rowString(row: Record<string, unknown>, field: string): string {

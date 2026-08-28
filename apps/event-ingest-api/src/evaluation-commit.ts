@@ -2,7 +2,10 @@ import type { ErrorResponse } from "@splitch/contracts";
 import { emptyError, renderError, serviceUnavailable, validationError } from "./errors";
 import { deliverSealedEvaluationCommit } from "./evaluation-commit-delivery";
 import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
-import { inventoryEvaluationCommit } from "./evaluation-commit-privacy";
+import {
+  confirmEvaluationCommitInventory,
+  inventoryEvaluationCommit,
+} from "./evaluation-commit-privacy";
 import { evaluationUsageScope, requiredIdentity } from "./ingest";
 import { ingestAdmissionDenial } from "./ingest-admission";
 import { loadRunScope } from "./kv-config";
@@ -74,8 +77,12 @@ async function prepareEvaluationCommit(
     const denied = await chargeNewEvaluationCommit(env, scope, payload);
     if (denied) return { ok: false, error: denied };
 
-    await inventoryEvaluationCommit({ identity, outbox, payload }, env);
+    const inventory = { identity, outbox, payload };
+    if (await inventoryEvaluationCommit(inventory, env)) {
+      throw new Error("Evaluation commit is suppressed by App identity reset");
+    }
     const sealed = await outbox.commit(identity, payload);
+    await confirmEvaluationCommitInventory(inventory, env);
     return preparedCommit(scope, identity, outbox, sealed);
   } catch {
     return { ok: false, error: serviceUnavailable("Evaluation commit outbox is unavailable") };

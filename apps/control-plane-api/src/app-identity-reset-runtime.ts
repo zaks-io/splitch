@@ -46,15 +46,27 @@ export function productionAppIdentityResetPurgers(
       }
       return `d1-runs-and-credentials:environments=${rows.length}`;
     }),
-    delivery: scoped(async (appId) => {
+    delivery: async ({ appId, currentVersion }) => {
+      if (resetAppId && resetAppId !== appId)
+        throw new Error("App identity purgers changed App scope");
+      resetAppId = appId;
       const configKeys =
         (await deleteKvPrefix(env.CONFIG_STORE, `app:${appId}:`)) +
         (await deleteKvPrefix(env.CONFIG_STORE, `live_run:${appId}:`));
-      const proof = await env.EVENT_INGEST_API.purgeAppIdentityDelivery(appId, resetId);
+      const proof = await env.EVENT_INGEST_API.purgeAppIdentityDelivery(
+        appId,
+        resetId,
+        currentVersion,
+      );
       return `delivery:config_keys=${configKeys};${proof}`;
-    }),
+    },
     assignments: scoped((appId) => env.EVALUATION_API.purgeAppIdentityAssignments(appId, resetId)),
-    analytics: scoped((appId) => env.ANALYSIS_API.purgeAppIdentityAnalytics(appId)),
+    analytics: async ({ appId, currentVersion }) => {
+      if (resetAppId && resetAppId !== appId)
+        throw new Error("App identity purgers changed App scope");
+      resetAppId = appId;
+      return env.ANALYSIS_API.purgeAppIdentityAnalytics(appId, currentVersion, resetId);
+    },
     retry_claims: scoped(async (appId) => {
       const rows = await environmentRows();
       return env.EVALUATION_API.purgeAppIdentityRetryClaims(
@@ -84,10 +96,11 @@ export async function completeProductionAppIdentityReset(
   env: ControlPlaneApiEnv,
   appId: string,
   resetId: string,
+  nextVersion: string,
 ): Promise<void> {
   await Promise.all([
     env.EVALUATION_API.completeAppIdentityReset(appId, resetId),
-    env.EVENT_INGEST_API.completeAppIdentityReset(appId, resetId),
+    env.EVENT_INGEST_API.completeAppIdentityReset(appId, resetId, nextVersion),
   ]);
 }
 

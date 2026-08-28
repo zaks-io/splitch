@@ -209,6 +209,7 @@ async function writeEvaluationCommit(
         idempotencyKey,
         organizationId: scope.organizationId,
         appId: scope.appId,
+        identityVersion: await deps.exposureAssembly.saltStore.currentKeyVersion(scope.appId),
         environmentId: scope.environmentId,
         flagKey: dimensions.flagKey,
         sdkRuntime: dimensions.sdkRuntime,

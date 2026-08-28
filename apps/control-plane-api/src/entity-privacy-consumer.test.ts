@@ -34,7 +34,10 @@ describe("createEntityPrivacyConsumer export", () => {
       service(() => ({
         ...IDENTITY,
         records: assignments,
-        proofs: [`assignment-kv:${HASH}`],
+        proofs: [
+          `${HASH}:assignment-do-winners-exported-v1`,
+          `${HASH}:assignment-and-holdover-exported-v1`,
+        ],
       })),
       service(() => ({
         ...IDENTITY,
@@ -50,8 +53,8 @@ describe("createEntityPrivacyConsumer export", () => {
         ...IDENTITY,
         records: events,
         proofs: [
-          `metric-event-outbox-inventory:${HASH}`,
-          `evaluation-commit-outbox-inventory:${HASH}`,
+          "metric-event-outbox-inventory:rows=1",
+          "evaluation-commit-outbox-inventory:rows=0",
         ],
       })),
     );
@@ -69,7 +72,14 @@ describe("createEntityPrivacyConsumer export", () => {
       schemaVersion: "entity-privacy-export-v1",
       ...IDENTITY,
       stores: [
-        { name: "assignments", records: assignments, proofs: [`assignment-kv:${HASH}`] },
+        {
+          name: "assignments",
+          records: assignments,
+          proofs: [
+            `${HASH}:assignment-do-winners-exported-v1`,
+            `${HASH}:assignment-and-holdover-exported-v1`,
+          ],
+        },
         {
           name: "analysis",
           records: analytics,
@@ -84,8 +94,8 @@ describe("createEntityPrivacyConsumer export", () => {
           name: "event-ingest",
           records: events,
           proofs: [
-            `metric-event-outbox-inventory:${HASH}`,
-            `evaluation-commit-outbox-inventory:${HASH}`,
+            "metric-event-outbox-inventory:rows=1",
+            "evaluation-commit-outbox-inventory:rows=0",
           ],
         },
       ],

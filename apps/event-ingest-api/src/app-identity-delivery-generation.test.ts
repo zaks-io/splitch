@@ -1,0 +1,112 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { EntityMetricPrivacyDurableObject } from "./entity-metric-privacy-store";
+import type { Env } from "./types";
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("App identity delivery generation", () => {
+  it("blocks Evaluation usage delivery while reset suppression is durable", async () => {
+    const fixture = makeFixture();
+    const append = vi.fn(async () => new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", append);
+    const row = { app_id: "app_1", identity_version: "app-v1", dedup_key: "usage" };
+
+    await expect(deliver(fixture, "app-v1", row)).resolves.toEqual({ suppressed: false });
+    await fixture.post("/reset-app", {
+      appId: "app_1",
+      resetId: "reset_usage",
+      currentVersion: "app-v1",
+    });
+    await expect(deliver(fixture, "app-v1", row)).resolves.toEqual({ suppressed: true });
+    expect(append).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases only the durably activated replacement generation", async () => {
+    const fixture = makeFixture();
+    const append = vi.fn(async () => new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", append);
+    const oldRow = { app_id: "app_1", identity_version: "app-v1", dedup_key: "old" };
+    await deliver(fixture, "app-v1", oldRow);
+    await fixture.post("/reset-app", {
+      appId: "app_1",
+      resetId: "reset_generation",
+      currentVersion: "app-v1",
+    });
+    const newRow = { ...oldRow, identity_version: "app-v2", dedup_key: "new" };
+    await expect(deliver(fixture, "app-v2", newRow)).resolves.toEqual({ suppressed: true });
+
+    await fixture.post("/complete-reset", {
+      resetId: "reset_generation",
+      nextVersion: "app-v2",
+    });
+    await expect(deliver(fixture, "app-v1", oldRow)).resolves.toEqual({ suppressed: true });
+    await expect(deliver(fixture, "app-v2", newRow)).resolves.toEqual({ suppressed: false });
+    expect(append).toHaveBeenCalledTimes(2);
+  });
+});
+
+function deliver(
+  fixture: ReturnType<typeof makeFixture>,
+  identityVersion: string,
+  row: Record<string, unknown>,
+) {
+  return fixture.post("/deliver-app-row", {
+    appId: "app_1",
+    identityVersion,
+    datasource: "raw_evaluations",
+    row,
+  });
+}
+
+function makeFixture() {
+  const values = new Map<string, unknown>();
+  const storage = {
+    get: async <T>(key: string) => values.get(key) as T | undefined,
+    put: async (key: string, value: unknown) => {
+      values.set(key, structuredClone(value));
+    },
+    delete: async (key: string | string[]) => {
+      if (Array.isArray(key))
+        return key.reduce((count, item) => count + Number(values.delete(item)), 0);
+      return values.delete(key);
+    },
+    list: async <T>({ prefix }: { prefix: string }) =>
+      new Map(
+        [...values.entries()].filter(([key]) => key.startsWith(prefix)) as Array<[string, T]>,
+      ),
+  } as unknown as DurableObjectStorage;
+  const object = new EntityMetricPrivacyDurableObject(
+    { storage } as DurableObjectState,
+    {
+      SPLITCH_PLATFORM_TARGET: "production",
+      TINYBIRD_API_URL: "https://tinybird.test",
+      TINYBIRD_INGEST_TOKEN: "test-token",
+      EVALUATION_COMMIT_OUTBOX: {
+        lookup: async () => null,
+        commit: async () => {
+          throw new Error("not used");
+        },
+        deliver: async () => {
+          throw new Error("not used");
+        },
+        acknowledge: async () => undefined,
+        privacyExport: async () => [],
+        privacyDelete: async () => 0,
+        privacyDeleteAll: async () => "evaluation-commit-outbox-purged-v1",
+      },
+    } as Env,
+  );
+  return {
+    async post(path: string, body: unknown) {
+      const response = await object.fetch(
+        new Request(`https://entity-privacy.local${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(response.status).toBe(200);
+      return response.json();
+    },
+  };
+}

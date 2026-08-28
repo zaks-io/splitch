@@ -69,6 +69,16 @@ export async function verifyTicketForScope(
   ) {
     return { ok: false, code: "EXPOSURE_TICKET_INVALID" };
   }
+  try {
+    if (
+      (await deps.exposureTicket.saltStore.currentKeyVersion(scope.appId)) !==
+      verified.payload.identity_version
+    ) {
+      return { ok: false, code: "EXPOSURE_TICKET_INVALID" };
+    }
+  } catch {
+    return { ok: false, code: RETRYABLE_EXPOSURE_REJECTION_CODE };
+  }
   return { ok: true, payload: verified.payload };
 }
 

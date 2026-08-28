@@ -55,6 +55,7 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
         idempotencyKey: expect.any(String),
         organizationId: "org_verify",
         appId: APP_ID,
+        identityVersion: "v1",
         environmentId: "env-1",
         flagKey: "checkout-banner",
         sdkRuntime: "unknown",

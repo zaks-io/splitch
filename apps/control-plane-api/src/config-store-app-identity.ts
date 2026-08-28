@@ -58,7 +58,7 @@ export function resetConfigStoreAppIdentity(
       appId,
       resetId,
       productionAppIdentityResetPurgers(env, resetId),
-      () => completeProductionAppIdentityReset(env, appId, resetId),
+      (active) => completeProductionAppIdentityReset(env, appId, resetId, active.currentVersion),
     );
     return record.currentVersion;
   });

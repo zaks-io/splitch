@@ -47,12 +47,16 @@ SQL >
         ON deletions.app_id = events.app_id
         AND deletions.id_type = events.id_type
         AND deletions.entity_family_hash = events.entity_family_hash
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', events.targeting_key_hash)[1]
     WHERE events.app_id = {{String(app_id)}}
         AND events.environment_id = {{String(environment_id)}}
         AND events.event_date >= toDate({{DateTime64(from_ts)}})
         AND events.event_date <= toDate({{DateTime64(to_ts)}})
         AND events.server_received_at >= {{DateTime64(from_ts)}}
         AND events.server_received_at < {{DateTime64(to_ts)}}
+        AND generation_tombstones.app_id = ''
         AND (deletions.delete_before_ts IS NULL OR events.server_received_at > deletions.delete_before_ts)
     GROUP BY events.app_id, events.environment_id, events.event_definition_id, events.id_type, events.targeting_key_hash, events.entity_family_hash, events.dedup_key
 

@@ -7,7 +7,6 @@
 import { isAppIdentityKeyVersion } from "./app-identity-key";
 import { HISTORICAL_SHARED_ROOT_KEY_VERSIONS } from "./derived-salt-store-versions";
 import { computeTargetingKeyHash, keyVersionOf } from "./hash";
-import { hmacSha256Hex } from "./hmac";
 import type { SaltStore } from "./salt-store";
 
 export interface EntityPrivacyInput {
@@ -58,7 +57,7 @@ export async function resolveEntityPrivacyIdentity(
     appId: input.appId,
     idType: input.idType,
     targetingKeyHashes,
-    entityFamilyHash: await entityFamilyHashForRetained(store, input, targetingKeyHashes),
+    entityFamilyHash: entityFamilyHashForRetained(targetingKeyHashes),
   };
 }
 
@@ -84,25 +83,17 @@ export async function computeEntityFamilyHash(
   store: SaltStore,
   input: EntityPrivacyInput,
 ): Promise<string> {
-  return entityFamilyHashForRetained(
-    store,
-    input,
-    await computeRetainedTargetingKeyHashes(store, input),
-  );
+  return entityFamilyHashForRetained(await computeRetainedTargetingKeyHashes(store, input));
 }
 
-async function entityFamilyHashForRetained(
-  store: SaltStore,
-  input: EntityPrivacyInput,
-  retainedHashes: readonly string[],
-): Promise<string> {
+function entityFamilyHashForRetained(retainedHashes: readonly string[]): string {
   const sharedAnchor = retainedHashes.find((hash) =>
     HISTORICAL_SHARED_ROOT_KEY_VERSIONS.includes(
       keyVersionOf(hash) as (typeof HISTORICAL_SHARED_ROOT_KEY_VERSIONS)[number],
     ),
   );
   if (sharedAnchor !== undefined) {
-    return compatibilityEntityFamilyHash(store, input, keyVersionOf(sharedAnchor));
+    return canonicalizeSharedRootTargetingKeyHash(sharedAnchor);
   }
   const appAnchor = retainedHashes.find((hash) => isAppIdentityKeyVersion(keyVersionOf(hash)));
   if (appAnchor !== undefined) return appAnchor;
@@ -110,21 +101,7 @@ async function entityFamilyHashForRetained(
   if (compatibilityAnchor === undefined) {
     throw new Error("privacy: no retained targeting_key_hash for Entity family");
   }
-  const version = keyVersionOf(compatibilityAnchor);
-  return compatibilityEntityFamilyHash(store, input, version);
-}
-
-async function compatibilityEntityFamilyHash(
-  store: SaltStore,
-  input: EntityPrivacyInput,
-  version: string,
-): Promise<string> {
-  const salt = await store.saltFor(input.appId, version);
-  const digest = await hmacSha256Hex(
-    salt,
-    `entity-family:${input.appId}:${input.idType}:${input.targetingKey}`,
-  );
-  return `${version}:${digest}`;
+  return canonicalizeSharedRootTargetingKeyHash(compatibilityAnchor);
 }
 
 /** Current-epoch hash when present; otherwise the newest retained hash. */

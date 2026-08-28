@@ -1,11 +1,15 @@
-import { isEntityEventSuppressed } from "./entity-metric-privacy";
+import {
+  deliverAppIdentityRow,
+  identityVersionForRow,
+  isEntityEventSuppressed,
+} from "./entity-metric-privacy";
 import {
   appendRawEvent,
   tinybirdDelivery,
   toEvaluationUsageTinybirdRow,
   type EvaluationUsageEventInput,
 } from "./tinybird";
-import type { Env } from "./types";
+import type { Env, TinybirdDelivery } from "./types";
 
 export interface SealedEvaluationCommitPayload {
   readonly usage: EvaluationUsageEventInput;
@@ -17,27 +21,60 @@ export async function deliverSealedEvaluationCommit(
   eventId: string,
   payload: SealedEvaluationCommitPayload,
 ): Promise<void> {
-  const usageDelivery = tinybirdDelivery(env, "raw_evaluations");
-  const exposureDelivery = payload.exposureRows.length > 0 ? tinybirdDelivery(env) : null;
-  if (!usageDelivery.ok) throw new Error(usageDelivery.error.message);
-  if (exposureDelivery !== null && !exposureDelivery.ok) {
-    throw new Error(exposureDelivery.error.message);
-  }
+  const usageDelivery = requireTinybirdDelivery(env, "raw_evaluations");
+  const exposureDelivery =
+    payload.exposureRows.length > 0 ? requireTinybirdDelivery(env) : undefined;
 
-  await appendRawEvent(
-    toEvaluationUsageTinybirdRow({ eventId, ...payload.usage }),
-    usageDelivery.value,
+  const usageRow = toEvaluationUsageTinybirdRow({ eventId, ...payload.usage });
+  await deliverUsage(env, payload, usageRow, usageDelivery);
+  if (exposureDelivery === undefined) return;
+  for (const row of payload.exposureRows) await deliverExposure(env, row, exposureDelivery);
+}
+
+function requireTinybirdDelivery(env: Env, datasource?: string): TinybirdDelivery {
+  const delivery = tinybirdDelivery(env, datasource);
+  if (!delivery.ok) throw new Error(delivery.error.message);
+  return delivery.value;
+}
+
+async function deliverUsage(
+  env: Env,
+  payload: SealedEvaluationCommitPayload,
+  row: Record<string, unknown>,
+  delivery: TinybirdDelivery,
+): Promise<void> {
+  if (isDirectDelivery(env)) return appendRawEvent(row, delivery);
+  await deliverAppIdentityRow(
+    env.ENTITY_METRIC_PRIVACY,
+    payload.usage.appId,
+    payload.usage.identityVersion,
+    "raw_evaluations",
+    row,
+    env.SPLITCH_PLATFORM_TARGET,
   );
-  if (exposureDelivery?.ok) {
-    for (const row of payload.exposureRows) {
-      const suppressed = await isEntityEventSuppressed(
-        env.ENTITY_METRIC_PRIVACY,
-        row,
-        env.SPLITCH_PLATFORM_TARGET,
-      );
-      if (!suppressed) await appendRawEvent(row, exposureDelivery.value);
-    }
+}
+
+async function deliverExposure(
+  env: Env,
+  row: Record<string, unknown>,
+  delivery: TinybirdDelivery,
+): Promise<void> {
+  if (await isEntityEventSuppressed(env.ENTITY_METRIC_PRIVACY, row, env.SPLITCH_PLATFORM_TARGET)) {
+    return;
   }
+  if (isDirectDelivery(env)) return appendRawEvent(row, delivery);
+  await deliverAppIdentityRow(
+    env.ENTITY_METRIC_PRIVACY,
+    String(row.app_id),
+    identityVersionForRow(row),
+    "raw_events",
+    row,
+    env.SPLITCH_PLATFORM_TARGET,
+  );
+}
+
+function isDirectDelivery(env: Env): boolean {
+  return env.SPLITCH_PLATFORM_TARGET === "local" || env.SPLITCH_PLATFORM_TARGET === "pr-ci";
 }
 
 export function parseSealedEvaluationCommitPayload(value: unknown): SealedEvaluationCommitPayload {

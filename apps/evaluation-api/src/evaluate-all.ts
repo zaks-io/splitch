@@ -236,6 +236,7 @@ async function writeBatchUsage(
       idempotencyKey,
       organizationId: scope.organizationId,
       appId: scope.appId,
+      identityVersion: await deps.exposureTicket.saltStore.currentKeyVersion(scope.appId),
       environmentId: scope.environmentId,
       flagKey: BATCH_USAGE_FLAG_KEY,
       sdkRuntime: sdkRuntime(request),

@@ -161,22 +161,31 @@ export class ControlPlaneEntrypoint extends WorkerEntrypoint<Env> {
     );
   }
 
-  purgeAppIdentityDelivery(appId: string, resetId: string): Promise<string> {
-    return purgeAppIdentityDelivery(this.env, appId, resetId);
+  purgeAppIdentityDelivery(
+    appId: string,
+    resetId: string,
+    currentVersion: string,
+  ): Promise<string> {
+    return purgeAppIdentityDelivery(this.env, appId, resetId, currentVersion);
   }
 
-  completeAppIdentityReset(appId: string, resetId: string): Promise<void> {
-    return completeAppIdentityReset(this.env, appId, resetId);
+  completeAppIdentityReset(appId: string, resetId: string, nextVersion: string): Promise<void> {
+    return completeAppIdentityReset(this.env, appId, resetId, nextVersion);
   }
 }
 
-async function purgeAppIdentityDelivery(env: Env, appId: string, resetId: string): Promise<string> {
+async function purgeAppIdentityDelivery(
+  env: Env,
+  appId: string,
+  resetId: string,
+  currentVersion: string,
+): Promise<string> {
   const response = await appIdentityPrivacyInventoryStub(env.ENTITY_METRIC_PRIVACY, appId).fetch(
     "https://entity-privacy.local/reset-app",
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ appId, resetId }),
+      body: JSON.stringify({ appId, resetId, currentVersion }),
     },
   );
   if (!response.ok) throw new Error(`Event delivery identity purge returned ${response.status}`);
@@ -186,13 +195,18 @@ async function purgeAppIdentityDelivery(env: Env, appId: string, resetId: string
   return body.proof;
 }
 
-async function completeAppIdentityReset(env: Env, appId: string, resetId: string): Promise<void> {
+async function completeAppIdentityReset(
+  env: Env,
+  appId: string,
+  resetId: string,
+  nextVersion: string,
+): Promise<void> {
   const response = await appIdentityPrivacyInventoryStub(env.ENTITY_METRIC_PRIVACY, appId).fetch(
     "https://entity-privacy.local/complete-reset",
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ resetId }),
+      body: JSON.stringify({ resetId, nextVersion }),
     },
   );
   if (!response.ok) throw new Error(`Event identity reset completion returned ${response.status}`);

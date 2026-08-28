@@ -2,6 +2,7 @@ export interface EvaluationUsageEvent {
   readonly idempotencyKey: string;
   readonly organizationId: string;
   readonly appId: string;
+  readonly identityVersion: string;
   readonly environmentId: string;
   readonly flagKey: string;
   readonly sdkRuntime: string;

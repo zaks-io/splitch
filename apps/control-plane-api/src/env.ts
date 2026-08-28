@@ -2,7 +2,11 @@ import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-
 import type { ConfigStoreDurableObjectNamespace } from "./config-store-access";
 
 interface AnalysisControlPlaneBinding extends Fetcher {
-  purgeAppIdentityAnalytics(appId: string): Promise<string>;
+  purgeAppIdentityAnalytics(
+    appId: string,
+    currentVersion: string,
+    resetId: string,
+  ): Promise<string>;
 }
 
 interface EvaluationControlPlaneBinding extends Fetcher {
@@ -12,8 +16,8 @@ interface EvaluationControlPlaneBinding extends Fetcher {
 }
 
 interface EventIngestControlPlaneBinding extends Fetcher {
-  purgeAppIdentityDelivery(appId: string, resetId: string): Promise<string>;
-  completeAppIdentityReset(appId: string, resetId: string): Promise<void>;
+  purgeAppIdentityDelivery(appId: string, resetId: string, currentVersion: string): Promise<string>;
+  completeAppIdentityReset(appId: string, resetId: string, nextVersion: string): Promise<void>;
 }
 
 import type { CredentialCacheBackfillDurableObjectNamespace } from "./credential-cache-backfill-do";

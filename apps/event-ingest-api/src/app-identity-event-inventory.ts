@@ -6,16 +6,18 @@ import type { Env } from "./types";
 const APP_ENTITY_PREFIX = "privacy:app-entity:";
 const APP_EVALUATION_PREFIX = "privacy:app-evaluation:";
 const APP_RESET_SUPPRESSION_KEY = "privacy:app-reset-suppression";
+const APP_ACTIVE_VERSION_KEY = "privacy:app-active-version";
 
 interface AppEntityRef {
   appId: string;
   idType: string;
   entityFamilyHash: string;
+  identityVersion: string;
 }
 
 interface AppResetSuppression {
   resetId: string;
-  completed?: true;
+  blockedVersion: string;
 }
 
 export async function registerAppEntity(
@@ -23,7 +25,7 @@ export async function registerAppEntity(
   request: Request,
 ): Promise<Response> {
   const ref = parseAppEntityRef(await request.json());
-  if (await appResetSuppressed(storage)) return suppressed();
+  if (!(await admitVersion(storage, ref.identityVersion))) return suppressed();
   await storage.put(`${APP_ENTITY_PREFIX}${ref.idType}:${ref.entityFamilyHash}`, ref);
   return Response.json({ suppressed: false });
 }
@@ -33,22 +35,28 @@ export async function registerAppEvaluation(
   request: Request,
 ): Promise<Response> {
   const ref = parseAppEvaluationRef(await request.json());
-  if (await appResetSuppressed(storage)) return suppressed();
+  if (!(await admitVersion(storage, ref.identityVersion))) return suppressed();
   await storage.put(`${APP_EVALUATION_PREFIX}${ref.commitIdentity}`, ref);
   return Response.json({ suppressed: false });
 }
 
-export async function deliverAppEvaluationUsage(
+export async function deliverAppIdentityRow(
   storage: DurableObjectStorage,
   env: Env,
   request: Request,
 ): Promise<Response> {
   const body = (await request.json()) as Record<string, unknown>;
-  if (!isRecord(body.row) || typeof body.appId !== "string" || body.row.app_id !== body.appId) {
-    throw new Error("App Evaluation usage delivery input is invalid");
+  if (
+    !isRecord(body.row) ||
+    typeof body.appId !== "string" ||
+    body.row.app_id !== body.appId ||
+    typeof body.identityVersion !== "string" ||
+    typeof body.datasource !== "string"
+  ) {
+    throw new Error("App identity delivery input is invalid");
   }
-  if (await appResetSuppressed(storage)) return suppressed();
-  const delivery = tinybirdDelivery(env, "raw_evaluations");
+  if (!(await admitVersion(storage, body.identityVersion))) return suppressed();
+  const delivery = tinybirdDelivery(env, body.datasource);
   if (!delivery.ok) throw new Error(delivery.error.message);
   await appendRawEvent(body.row, delivery.value);
   return Response.json({ suppressed: false });
@@ -60,14 +68,25 @@ export async function resetAppIdentityDelivery(
   request: Request,
 ): Promise<Response> {
   const body = (await request.json()) as Record<string, unknown>;
-  if (typeof body.appId !== "string" || typeof body.resetId !== "string") {
+  if (
+    typeof body.appId !== "string" ||
+    typeof body.resetId !== "string" ||
+    typeof body.currentVersion !== "string"
+  ) {
     throw new Error("App identity reset inventory input is invalid");
   }
   const existing = await storage.get<AppResetSuppression>(APP_RESET_SUPPRESSION_KEY);
-  if (existing && existing.completed !== true && existing.resetId !== body.resetId) {
+  if (existing && existing.resetId !== body.resetId) {
     throw new Error("a different App identity reset is already running");
   }
-  await storage.put(APP_RESET_SUPPRESSION_KEY, { resetId: body.resetId });
+  const activeVersion = await storage.get<string>(APP_ACTIVE_VERSION_KEY);
+  if (activeVersion !== undefined && activeVersion !== body.currentVersion) {
+    throw new Error("App identity reset current version does not match delivery generation");
+  }
+  await storage.put(APP_RESET_SUPPRESSION_KEY, {
+    resetId: body.resetId,
+    blockedVersion: body.currentVersion,
+  });
   const refs = await storage.list<AppEntityRef>({ prefix: APP_ENTITY_PREFIX });
   const commits = await storage.list<AppEvaluationCommitRef>({ prefix: APP_EVALUATION_PREFIX });
   await purgeEvaluationCommits(storage, env, commits);
@@ -83,10 +102,20 @@ export async function completeAppIdentityDeliveryReset(
 ): Promise<Response> {
   const body = (await request.json()) as Record<string, unknown>;
   const existing = await storage.get<AppResetSuppression>(APP_RESET_SUPPRESSION_KEY);
-  if (existing?.completed === true && existing.resetId === body.resetId) {
+  const activeVersion = await storage.get<string>(APP_ACTIVE_VERSION_KEY);
+  if (
+    existing === undefined &&
+    typeof body.nextVersion === "string" &&
+    activeVersion === body.nextVersion
+  ) {
     return Response.json({ completed: true });
   }
-  if (!existing || body.resetId !== existing.resetId) {
+  if (
+    !existing ||
+    body.resetId !== existing.resetId ||
+    typeof body.nextVersion !== "string" ||
+    body.nextVersion === existing.blockedVersion
+  ) {
     throw new Error("App identity reset completion does not match suppression");
   }
   const [entities, commits] = await Promise.all([
@@ -96,13 +125,22 @@ export async function completeAppIdentityDeliveryReset(
   if (entities.size > 0 || commits.size > 0) {
     throw new Error("App identity reset delivery inventory is not empty");
   }
-  await storage.put(APP_RESET_SUPPRESSION_KEY, { resetId: existing.resetId, completed: true });
+  await storage.put(APP_ACTIVE_VERSION_KEY, body.nextVersion);
+  await storage.delete(APP_RESET_SUPPRESSION_KEY);
   return Response.json({ completed: true });
 }
 
-async function appResetSuppressed(storage: DurableObjectStorage): Promise<boolean> {
-  const state = await storage.get<AppResetSuppression>(APP_RESET_SUPPRESSION_KEY);
-  return state !== undefined && state.completed !== true;
+async function admitVersion(
+  storage: DurableObjectStorage,
+  identityVersion: string,
+): Promise<boolean> {
+  if ((await storage.get(APP_RESET_SUPPRESSION_KEY)) !== undefined) return false;
+  const active = await storage.get<string>(APP_ACTIVE_VERSION_KEY);
+  if (active === undefined) {
+    await storage.put(APP_ACTIVE_VERSION_KEY, identityVersion);
+    return true;
+  }
+  return active === identityVersion;
 }
 
 async function purgeEvaluationCommits(
@@ -152,7 +190,8 @@ function parseAppEntityRef(value: unknown): AppEntityRef {
   if (
     typeof value.appId !== "string" ||
     typeof value.idType !== "string" ||
-    typeof value.entityFamilyHash !== "string"
+    typeof value.entityFamilyHash !== "string" ||
+    typeof value.identityVersion !== "string"
   ) {
     throw new Error("App Entity privacy inventory input is invalid");
   }
@@ -160,6 +199,7 @@ function parseAppEntityRef(value: unknown): AppEntityRef {
     appId: value.appId,
     idType: value.idType,
     entityFamilyHash: value.entityFamilyHash,
+    identityVersion: value.identityVersion,
   };
 }
 
@@ -169,11 +209,16 @@ function parseAppEvaluationRef(value: unknown): AppEvaluationCommitRef {
     typeof value.appId !== "string" ||
     value.appId.length === 0 ||
     typeof value.commitIdentity !== "string" ||
+    typeof value.identityVersion !== "string" ||
     !/^[a-f0-9]{64}$/u.test(value.commitIdentity)
   ) {
     throw new Error("App Evaluation privacy inventory input is invalid");
   }
-  return { appId: value.appId, commitIdentity: value.commitIdentity };
+  return {
+    appId: value.appId,
+    commitIdentity: value.commitIdentity,
+    identityVersion: value.identityVersion,
+  };
 }
 
 function suppressed(): Response {

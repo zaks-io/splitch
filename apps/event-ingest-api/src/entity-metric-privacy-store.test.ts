@@ -90,29 +90,41 @@ describe("Entity Metric privacy Durable Object", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+});
 
+describe("App identity delivery reset", () => {
   it("keeps every Evaluation commit in the App reset inventory, including zero-Exposure commits", async () => {
     const fixture = makeFixture();
     const commitIdentity = "b".repeat(64);
     await fixture.post("/register-app-evaluation", {
       appId: "app_1",
       commitIdentity,
+      identityVersion: "app-v1",
     });
 
     await expect(
-      fixture.post("/reset-app", { appId: "app_1", resetId: "reset_1" }),
+      fixture.post("/reset-app", {
+        appId: "app_1",
+        resetId: "reset_1",
+        currentVersion: "app-v1",
+      }),
     ).resolves.toEqual({ proof: "event-delivery:entities=0;evaluation_commits=1" });
     expect(fixture.evaluationOutbox.privacyDeleteAll).toHaveBeenCalledWith(commitIdentity);
-    await expect(fixture.post("/complete-reset", { resetId: "reset_1" })).resolves.toEqual({
+    await expect(
+      fixture.post("/complete-reset", { resetId: "reset_1", nextVersion: "app-v2" }),
+    ).resolves.toEqual({
       completed: true,
     });
     await expect(
       fixture.post("/register-app-evaluation", {
         appId: "app_1",
         commitIdentity: "e".repeat(64),
+        identityVersion: "app-v2",
       }),
     ).resolves.toEqual({ suppressed: false });
-    await expect(fixture.post("/complete-reset", { resetId: "reset_1" })).resolves.toEqual({
+    await expect(
+      fixture.post("/complete-reset", { resetId: "reset_1", nextVersion: "app-v2" }),
+    ).resolves.toEqual({
       completed: true,
     });
   });
@@ -120,17 +132,29 @@ describe("Entity Metric privacy Durable Object", () => {
   it("retains a failed Evaluation commit purge checkpoint across a Durable Object restart", async () => {
     const fixture = makeFixture();
     const commitIdentity = "c".repeat(64);
-    await fixture.post("/register-app-evaluation", { appId: "app_1", commitIdentity });
+    await fixture.post("/register-app-evaluation", {
+      appId: "app_1",
+      commitIdentity,
+      identityVersion: "app-v1",
+    });
     fixture.evaluationOutbox.privacyDeleteAll.mockRejectedValueOnce(
       new Error("forced purge failure"),
     );
 
     await expect(
-      fixture.post("/reset-app", { appId: "app_1", resetId: "reset_2" }),
+      fixture.post("/reset-app", {
+        appId: "app_1",
+        resetId: "reset_2",
+        currentVersion: "app-v1",
+      }),
     ).rejects.toThrow("forced purge failure");
     fixture.restart();
     await expect(
-      fixture.post("/reset-app", { appId: "app_1", resetId: "reset_2" }),
+      fixture.post("/reset-app", {
+        appId: "app_1",
+        resetId: "reset_2",
+        currentVersion: "app-v1",
+      }),
     ).resolves.toEqual({ proof: "event-delivery:entities=0;evaluation_commits=1" });
     expect(fixture.evaluationOutbox.privacyDeleteAll).toHaveBeenCalledTimes(2);
   });
@@ -142,9 +166,14 @@ describe("Entity Metric privacy Durable Object", () => {
     const registration = fixture.post("/register-app-evaluation", {
       appId: "app_1",
       commitIdentity,
+      identityVersion: "app-v1",
     });
     await gate.started;
-    const reset = fixture.post("/reset-app", { appId: "app_1", resetId: "reset_race" });
+    const reset = fixture.post("/reset-app", {
+      appId: "app_1",
+      resetId: "reset_race",
+      currentVersion: "app-v1",
+    });
     await Promise.resolve();
     expect(fixture.evaluationOutbox.privacyDeleteAll).not.toHaveBeenCalled();
 
@@ -154,23 +183,6 @@ describe("Entity Metric privacy Durable Object", () => {
       proof: "event-delivery:entities=0;evaluation_commits=1",
     });
     expect(fixture.evaluationOutbox.privacyDeleteAll).toHaveBeenCalledWith(commitIdentity);
-  });
-
-  it("blocks standalone Evaluation usage delivery while App reset suppression is durable", async () => {
-    const fixture = makeFixture();
-    const append = vi.fn(async () => new Response(null, { status: 202 }));
-    vi.stubGlobal("fetch", append);
-    const row = { app_id: "app_1", dedup_key: "sha256:usage" };
-
-    await expect(fixture.post("/deliver-app-evaluation", { appId: "app_1", row })).resolves.toEqual(
-      { suppressed: false },
-    );
-    await fixture.post("/reset-app", { appId: "app_1", resetId: "reset_usage" });
-    await expect(fixture.post("/deliver-app-evaluation", { appId: "app_1", row })).resolves.toEqual(
-      { suppressed: true },
-    );
-    expect(append).toHaveBeenCalledTimes(1);
-    vi.unstubAllGlobals();
   });
 });
 

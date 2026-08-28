@@ -42,10 +42,14 @@ SQL >
         ON deletions.app_id = exposures.app_id
         AND deletions.id_type = exposures.id_type
         AND deletions.entity_family_hash = exposures.entity_family_hash
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = exposures.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', exposures.targeting_key_hash)[1]
     WHERE exposures.app_id = {{String(app_id)}}
         AND exposures.environment_id = {{String(environment_id)}}
         AND exposures.experiment_id = {{String(experiment_id)}}
         AND exposures.run_id = {{String(run_id)}}
+        AND generation_tombstones.app_id = ''
         AND (deletions.delete_before_ts IS NULL OR exposures.first_exposure_ts > deletions.delete_before_ts)
 
 NODE tail_layer
@@ -70,11 +74,15 @@ SQL >
         ON deletions.app_id = events.app_id
         AND deletions.id_type = events.id_type
         AND deletions.entity_family_hash = events.entity_family_hash
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', events.targeting_key_hash)[1]
     WHERE events.type = 'exposure'
         AND events.app_id = {{String(app_id)}}
         AND events.environment_id = {{String(environment_id)}}
         AND events.experiment_id = {{String(experiment_id)}}
         AND events.run_id = {{String(run_id)}}
+        AND generation_tombstones.app_id = ''
         AND (deletions.delete_before_ts IS NULL OR events.server_received_at > deletions.delete_before_ts)
         -- Inclusive on both sides of the watermark: the Copy Pipe takes
         -- `ingest_ts <= copy_watermark`, so a row landing exactly on the boundary

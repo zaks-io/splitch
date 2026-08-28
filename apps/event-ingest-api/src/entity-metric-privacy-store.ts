@@ -1,6 +1,6 @@
 import {
   completeAppIdentityDeliveryReset,
-  deliverAppEvaluationUsage,
+  deliverAppIdentityRow,
   registerAppEntity,
   registerAppEvaluation,
   resetAppIdentityDelivery,
@@ -55,7 +55,7 @@ export class EntityMetricPrivacyDurableObject {
       "/delete": () => this.deleteRecords(),
       "/register-app-entity": () => this.registerAppEntity(request),
       "/register-app-evaluation": () => this.registerAppEvaluation(request),
-      "/deliver-app-evaluation": () => this.deliverAppEvaluation(request),
+      "/deliver-app-row": () => this.deliverAppRow(request),
       "/reset-app": () => this.resetApp(request),
       "/complete-reset": () => this.completeReset(request),
     };
@@ -70,8 +70,8 @@ export class EntityMetricPrivacyDurableObject {
     return registerAppEvaluation(this.ctx.storage, request);
   }
 
-  private async deliverAppEvaluation(request: Request): Promise<Response> {
-    return deliverAppEvaluationUsage(this.ctx.storage, this.env, request);
+  private async deliverAppRow(request: Request): Promise<Response> {
+    return deliverAppIdentityRow(this.ctx.storage, this.env, request);
   }
 
   private async resetApp(request: Request): Promise<Response> {
@@ -133,15 +133,14 @@ export class EntityMetricPrivacyDurableObject {
   private async exportRecords(): Promise<Response> {
     const metricEntries = await this.metricEntries();
     const evaluationEntries = await this.evaluationEntries();
-    const records = [
-      ...(await this.exportMetricRecords(metricEntries)),
-      ...(await this.exportEvaluationRecords(evaluationEntries)),
-    ];
+    const metricRecords = await this.exportMetricRecords(metricEntries);
+    const evaluationRecords = await this.exportEvaluationRecords(evaluationEntries);
+    const records = [...metricRecords, ...evaluationRecords];
     return Response.json({
       records,
       proofs: [
-        `metric-event-outbox-inventory:rows=${String(metricEntries.length)}`,
-        `evaluation-commit-outbox-inventory:rows=${String(evaluationEntries.length)}`,
+        `metric-event-outbox-inventory:rows=${String(metricRecords.length)}`,
+        `evaluation-commit-outbox-inventory:rows=${String(evaluationRecords.length)}`,
       ],
     });
   }
