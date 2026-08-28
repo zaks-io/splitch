@@ -7,7 +7,7 @@ SQL >
     SELECT
         app_id,
         environment_id,
-        minState(server_received_at) AS first_exposure_state
+        minState(exposure_at) AS first_exposure_state
     FROM raw_events
     WHERE type = 'exposure'
     GROUP BY app_id, environment_id

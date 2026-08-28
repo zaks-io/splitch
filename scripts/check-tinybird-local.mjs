@@ -11,7 +11,7 @@ const projectConfigPath = "tinybird.config.json";
 const tinybirdRoot = "infra/tinybird";
 const testsDir = join(tinybirdRoot, "tests");
 const FIRST_TOUCH_RULE =
-  /if\(\s*countIf\(isNull\(variant\)\)[\s\S]*?AS variant,\s*min\(server_received_at\) AS first_exposure_ts/;
+  /if\(\s*countIf\(isNull\(variant\)\)[\s\S]*?AS variant,\s*min\(exposure_at\) AS first_exposure_ts/;
 
 if (!existsSync(projectConfigPath)) {
   console.error("tinybird:local: tinybird.config.json is required.");

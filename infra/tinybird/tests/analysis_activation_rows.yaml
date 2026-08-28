@@ -11,6 +11,12 @@
   expected_http_status: 200
   expected_result: |
     {"targeting_key_hash":"tk_other_run","run_id":"run_2","activation_ts":"2026-07-02 00:00:00.000","counterfactual":0,"activated":1}
+- name: activation_after_commit_and_before_delayed_receipt_is_eligible
+  description: Activation ordering uses the delayed Convex encounter time, not the later Splitch receipt time.
+  parameters: "app_id=app_delayed&environment_id=env_prod&experiment_id=exp_delayed&run_id=run_delayed"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_delayed_convex","run_id":"run_delayed","activation_ts":"2026-07-05 06:30:00.000","counterfactual":0,"activated":1}
 - name: missing_environment_id_is_rejected
   description: A required scope parameter is never defaulted; the request fails loudly rather than reading across Environments.
   parameters: "app_id=app_1&experiment_id=exp_1&run_id=run_1"

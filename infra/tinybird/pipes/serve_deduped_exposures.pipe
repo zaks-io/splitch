@@ -45,7 +45,7 @@ SQL >
             '__multiple__',
             max(assumeNotNull(variant))
         ) AS variant,
-        min(server_received_at) AS first_exposure_ts
+        min(exposure_at) AS first_exposure_ts
     FROM raw_events
     WHERE type = 'exposure'
         AND app_id = {{String(app_id)}}

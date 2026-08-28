@@ -20,7 +20,7 @@ SQL >
             '__multiple__',
             max(assumeNotNull(variant))
         ) AS variant,
-        min(server_received_at) AS first_exposure_ts,
+        min(exposure_at) AS first_exposure_ts,
         now64(3) AS snapshot_ts,
         copy_watermark AS watermark_ts
     FROM raw_events
