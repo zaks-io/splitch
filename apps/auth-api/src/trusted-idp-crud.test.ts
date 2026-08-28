@@ -51,6 +51,7 @@ function buildApp() {
   return createApp({
     repo,
     accessSecret: ACCESS_SECRET,
+    issuer: ORIGIN,
     controlPlaneAudience: CP_AUDIENCE,
     now: () => NOW_MS,
     tokenSigner: signer,

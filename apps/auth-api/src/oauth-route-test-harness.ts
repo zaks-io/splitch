@@ -64,6 +64,7 @@ export function routeApp(params: {
     sessionStore: params.sessionStore ?? memoryKvNamespace(),
     revocations,
     accessSecret: "test-access-secret",
+    issuer: "http://localhost",
     controlPlaneAudience: "https://cp.splitch.test",
     now: () => 1_780_000_000_000,
     repo: params.repo ?? emptyMembershipRepo,

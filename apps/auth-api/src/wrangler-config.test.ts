@@ -58,11 +58,21 @@ describe("Auth Worker Wrangler runtime config", () => {
     expect(target?.vars?.CONTROL_PANEL_ORIGIN).toBe(origin);
     expect(target?.vars?.CONTROL_PANEL_ORIGIN).not.toBe(target?.vars?.CONTROL_PLANE_ORIGIN);
   });
+
+  it.each([
+    ["local", config, "http://localhost:8791"],
+    ["shared-preview", config.env?.["shared-preview"], "https://auth.preview.splitch.dev"],
+    ["production", config.env?.production, "https://auth.splitch.dev"],
+  ])("configures one canonical Auth API origin for %s", (_target, target, origin) => {
+    expect(target?.vars?.AUTH_API_ORIGIN).toBe(origin);
+    expect(new URL(origin).origin).toBe(origin);
+  });
 });
 
 interface WranglerConfig {
   compatibility_flags?: string[];
   env?: Record<string, WranglerTarget | undefined>;
+  vars?: Record<string, unknown>;
 }
 
 interface WranglerTarget {

@@ -40,6 +40,7 @@ export interface OAuthRouteDeps {
   sessionStore: KVNamespace;
   revocations: RevocationStore;
   accessSecret: string;
+  issuer: string;
   controlPlaneAudience: string;
   mcpAudience?: string;
   smokeClientCredentials?: SmokeClientCredentials;
@@ -50,23 +51,21 @@ export interface OAuthRouteDeps {
 export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
   const nowSeconds = () => Math.floor(deps.now() / 1000);
 
-  app.get("/.well-known/oauth-protected-resource", (c) => {
-    const issuer = new URL(c.req.raw.url).origin;
+  app.get("/.well-known/oauth-protected-resource", () => {
     return Response.json({
       resource: deps.controlPlaneAudience,
-      authorization_servers: [issuer],
+      authorization_servers: [deps.issuer],
     });
   });
 
-  app.get("/.well-known/oauth-authorization-server", (c) => {
-    const issuer = new URL(c.req.raw.url).origin;
+  app.get("/.well-known/oauth-authorization-server", () => {
     const smokeEnabled = deps.smokeClientCredentials !== undefined;
     return Response.json({
-      issuer,
-      jwks_uri: `${issuer}/.well-known/jwks.json`,
-      token_endpoint: `${issuer}/oauth2/token`,
-      revocation_endpoint: `${issuer}/oauth2/revoke`,
-      device_authorization_endpoint: `${issuer}/oauth2/device_authorization`,
+      issuer: deps.issuer,
+      jwks_uri: `${deps.issuer}/.well-known/jwks.json`,
+      token_endpoint: `${deps.issuer}/oauth2/token`,
+      revocation_endpoint: `${deps.issuer}/oauth2/revoke`,
+      device_authorization_endpoint: `${deps.issuer}/oauth2/device_authorization`,
       grant_types_supported: [
         ACCESS_TOKEN_GRANT,
         DEVICE_CODE_GRANT,
@@ -78,9 +77,9 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
         ...(smokeEnabled ? ["client_secret_post"] : []),
       ],
       agent_auth: {
-        skill: `${issuer}/auth.md`,
-        identity_endpoint: `${issuer}/agent/identity`,
-        claim_endpoint: `${issuer}/agent/identity/claim`,
+        skill: `${deps.issuer}/auth.md`,
+        identity_endpoint: `${deps.issuer}/agent/identity`,
+        claim_endpoint: `${deps.issuer}/agent/identity/claim`,
         identity_types_supported: ["anonymous", "device_flow"],
       },
     });
@@ -94,9 +93,8 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
     return Response.json(jwks);
   });
 
-  app.get("/auth.md", (c) => {
-    const issuer = new URL(c.req.raw.url).origin;
-    return new Response(authMarkdown(issuer, Boolean(deps.smokeClientCredentials)), {
+  app.get("/auth.md", () => {
+    return new Response(authMarkdown(deps.issuer, Boolean(deps.smokeClientCredentials)), {
       headers: { "content-type": "text/markdown; charset=utf-8" },
     });
   });
@@ -269,7 +267,7 @@ async function verifyRevocableAccessToken(deps: OAuthRouteDeps, token: string, n
   for (const audience of allowedAccessTokenAudiences(deps)) {
     const actor = await verifyAccessToken(
       `Bearer ${token}`,
-      { accessSecret: deps.accessSecret, controlPlaneAudience: audience },
+      { accessSecret: deps.accessSecret, issuer: deps.issuer, controlPlaneAudience: audience },
       nowSeconds,
     );
     if (actor) return actor;

@@ -15,6 +15,7 @@
  * must equal the control-plane audience.
  */
 
+import { isCanonicalHeldScopes } from "@splitch/contracts";
 import { type AccessTokenPublicJwk, accessTokenPublicJwkFromSecret } from "./access-token-key";
 
 export interface VerifiedActor {
@@ -125,11 +126,15 @@ async function signatureValid(
 
 function actorFromClaims(
   claims: Record<string, unknown>,
+  issuer: string,
   controlPlaneAudience: string,
   nowSeconds: number,
 ): VerifiedActor | null {
   // Must be a genuine access token, not an identity_assertion replayed as a Bearer.
   if (claims.typ !== "access_token" || typeof claims.sub !== "string") {
+    return null;
+  }
+  if (claims.iss !== issuer) {
     return null;
   }
   // aud must bind to the control-plane resource this Worker mints for.
@@ -140,9 +145,12 @@ function actorFromClaims(
   if (typeof claims.exp !== "number" || claims.exp < nowSeconds) {
     return null;
   }
+  if (!isCanonicalHeldScopes(claims.scopes)) {
+    return null;
+  }
   return {
     userId: claims.sub,
-    scopes: Array.isArray(claims.scopes) ? (claims.scopes as string[]) : [],
+    scopes: claims.scopes as string[],
     expiresAt: claims.exp,
   };
 }
@@ -150,9 +158,12 @@ function actorFromClaims(
 /** Verify a Bearer access token; return the actor, or null on any failure (fail-closed). */
 export async function verifyAccessToken(
   authorizationHeader: string | null,
-  opts: { accessSecret: string; controlPlaneAudience: string },
+  opts: { accessSecret: string; issuer: string; controlPlaneAudience: string },
   nowSeconds: number,
 ): Promise<VerifiedActor | null> {
+  if (typeof opts.issuer !== "string" || opts.issuer.length === 0) {
+    throw new Error("auth-api access-token issuer is required");
+  }
   if (!authorizationHeader?.startsWith("Bearer ")) {
     return null;
   }
@@ -176,5 +187,5 @@ export async function verifyAccessToken(
   if (!ok) {
     return null;
   }
-  return actorFromClaims(claims, opts.controlPlaneAudience, nowSeconds);
+  return actorFromClaims(claims, opts.issuer, opts.controlPlaneAudience, nowSeconds);
 }
