@@ -85,9 +85,10 @@ capability, and which runtime uses them. The glossary pins the language (CONTEXT
   **Non-secret by design** — shipped in client code. Capability is **evaluate-only, App-scoped**: resolve a
   flag value for the Targeting Key in the request, nothing more. It **cannot** return the full config / rule
   set / salt, cannot write, cannot mint keys, cannot reach another App. Blast radius if leaked is "someone
-  evaluates your flags as themselves" — bounded by design. Abuse is contained at the **edge** (origin/referrer
-  allow-list bound to the key, per-key rate limiting via the Cloudflare WAF already in use for ADR-0022's
-  anon-registration surface), **not** by hiding the value.
+  evaluates your flags as themselves" — bounded by design. Abuse is contained in the current Worker data
+  plane (origin/referrer allow-list bound to the key plus per-credential Cloudflare Workers Rate Limiting
+  binding), **not** by hiding the value. The Cloudflare Free WAF rule covers only exact path
+  `/agent/identity`; broader paid WAF controls remain deferred under ADR-0034.
 
 Two consequences this ADR now pins:
 
@@ -116,5 +117,8 @@ origin allow-list optional. **ADR-0034 sets the current contract for these edges
 - **Revocation fails loud and fast** — the revoke KV write-through is surfaced/retried on failure (not the
   "revoked keys may pass for up to ~5 min, accepted" of the original KV-cache wording) and the revoked key
   id is negative-cached.
-- Anonymous registration (ADR-0022) and the public evaluate surface add **Cloudflare Turnstile + global WAF
-  rate limiting** to the per-IP limit. All controls stay Cloudflare-native (ADR-0017).
+- Anonymous registration (ADR-0022) currently adds **Cloudflare Turnstile**, the in-app per-IP/global
+  limiter, and the partial Cloudflare Free source-IP burst rule for exact path `/agent/identity`.
+  Host/method scoping and an authoritative one-hour cross-IP/global WAF ceiling remain target-state
+  debt. Progressive challenge and per-credential header counters for public evaluation are deferred on
+  the same traffic-triggered paid-plan boundary (ADR-0034).

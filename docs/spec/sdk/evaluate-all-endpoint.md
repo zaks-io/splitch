@@ -147,10 +147,11 @@ supply their own. Ticket redemption bills zero ("Exposure side effects consume z
 
 ## Edge binding (ADR-0034)
 
-Identical to `evaluate`: Client Key requests pass the Cloudflare WAF (origin/referrer allow-list,
-per-key rate limiting, progressive challenge) before the Worker; API Key requests are rate-limited
-per key. One `evaluate-all` request is one request against the per-key counter. WAF rejections
-return `403`/`429` before the Worker is invoked.
+Identical to `evaluate`: current Client Key requests enforce the origin/referrer allow-list and
+per-credential Cloudflare Workers Rate Limiting binding in the Worker; API Key requests are
+rate-limited per key. One `evaluate-all` request is one request against the per-key counter. The live
+Cloudflare Free WAF rule protects only exact path `/agent/identity`. Host/method-scoped WAF rules,
+progressive challenge-before-block, and per-credential header counters remain target-state debt.
 
 ## Error responses (ADR-0025 shape)
 
