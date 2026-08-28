@@ -64,11 +64,20 @@ test("control-panel deploy scripts use the Vite-aware deploy wrapper", () => {
     "VITE_SENTRY_DSN",
     "VITE_SENTRY_RELEASE",
     "VITE_SPLITCH_PLATFORM_TARGET",
+    "CLOUDFLARE_WEB_ANALYTICS_TOKEN",
   ]) {
     assert.equal(
       turbo.tasks["@splitch/control-panel#build"].env.includes(name),
       true,
       `${name} must participate in the Control Panel build cache key`,
+    );
+  }
+  // Both configs import these, so an edit to the production gate has to move
+  // the build hash or a stale cached build ships instead.
+  for (const task of ["@splitch/control-panel#build", "@splitch/marketing#build"]) {
+    assert.ok(
+      turbo.tasks[task].inputs.includes("$TURBO_ROOT$/scripts/lib/vite-*.ts"),
+      `${task} must hash the shared Vite config helpers`,
     );
   }
   assert.deepEqual(

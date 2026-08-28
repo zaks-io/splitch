@@ -27,7 +27,7 @@
     "@splitch/control-panel#build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
-      "inputs": ["$TURBO_DEFAULT$"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/lib/vite-*.ts"],
       "env": [
         "SPLITCH_PLATFORM_TARGET",
         "CLOUDFLARE_ENV",
@@ -36,13 +36,14 @@
         "SENTRY_RELEASE_BASE",
         "VITE_SENTRY_DSN",
         "VITE_SENTRY_RELEASE",
-        "VITE_SPLITCH_PLATFORM_TARGET"
+        "VITE_SPLITCH_PLATFORM_TARGET",
+        "CLOUDFLARE_WEB_ANALYTICS_TOKEN"
       ]
     },
     "@splitch/marketing#build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
-      "inputs": ["$TURBO_DEFAULT$"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/lib/vite-*.ts"],
       "env": [
         "SPLITCH_PLATFORM_TARGET",
         "CLOUDFLARE_ENV",
@@ -51,7 +52,8 @@
         "SENTRY_RELEASE_BASE",
         "VITE_SENTRY_DSN",
         "VITE_SENTRY_RELEASE",
-        "VITE_SPLITCH_PLATFORM_TARGET"
+        "VITE_SPLITCH_PLATFORM_TARGET",
+        "CLOUDFLARE_WEB_ANALYTICS_TOKEN"
       ]
     },
     "@splitch/convex#build": {
