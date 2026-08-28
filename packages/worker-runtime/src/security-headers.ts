@@ -140,11 +140,23 @@ function mergeContentSecurityPolicy(current: string, extra: string): string {
   const currentPolicies = parseCspPolicyList(current);
   if (currentPolicies.length === 0) return serializeCspPolicyList(extraPolicies);
   const merged = currentPolicies.map((policy) => {
-    const directives = policy.map((directive) => ({ ...directive }));
+    const directives = firstDirectives(policy).map((directive) => ({ ...directive }));
     for (const extraPolicy of extraPolicies) mergeCspDirectives(directives, extraPolicy);
     return directives;
   });
   return serializeCspPolicyList(merged);
+}
+
+/** Keep the first occurrence of each directive name; later duplicates are ignored. */
+function firstDirectives(policy: CspPolicy): CspPolicy {
+  const seen = new Set<string>();
+  const unique: CspPolicy = [];
+  for (const directive of policy) {
+    if (seen.has(directive.name)) continue;
+    seen.add(directive.name);
+    unique.push(directive);
+  }
+  return unique;
 }
 
 function mergeCspDirectives(directives: CspPolicy, extraDirectives: CspPolicy): void {
