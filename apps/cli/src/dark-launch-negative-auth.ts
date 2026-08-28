@@ -107,8 +107,6 @@ export async function proveLocalNegativeAuth(
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          orgId: harness.foreignOrgId,
-          organizationId: harness.foreignOrgId,
           name: "Should Fail",
           key: crossKey,
         }),

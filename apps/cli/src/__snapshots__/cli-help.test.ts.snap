@@ -726,7 +726,7 @@ Request body (--body-json):
   dimensions          optional; default []  string[]
   allocation          optional  Record<Variant name, number>
   salt                optional  string
-  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null; segmentId?: string }[]
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; segmentId?: string; percentageRollout?: { percentage: number; salt?: string } | null }[]
   segmentIds          optional  string[]
   idempotency_key     optional  string
   Example:
@@ -829,7 +829,7 @@ Request body (--body-json):
   allocation          optional  Record<Variant name, number>
   salt                optional  string
   variantSet          optional  { id: string; name: string; value: boolean | string | number | Record<string, unknown>; description?: string }[]
-  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; percentageRollout?: { percentage: number; salt: string } | null; segmentId?: string }[]
+  targetingRules      optional  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; segmentId?: string; percentageRollout?: { percentage: number; salt?: string } | null }[]
   segmentIds          optional  string[]
   metrics             optional  { metricId: string }[]
   guardrailMetrics    optional  { metricId: string }[]
@@ -958,7 +958,7 @@ Request body (--body-json):
   appId            required  string
   flagId           required  string
   name             required  string
-  value            required  boolean | string | number | Record<string, unknown>
+  value            required  boolean | string | number | unknown[] | Record<string, unknown>
   isDefault        optional  boolean
   description      optional  string
   review           optional  { action: "approve_and_apply" }
@@ -1003,7 +1003,7 @@ Flags:
 
 Request body (--body-json):
   name             optional  string
-  value            optional  boolean | string | number | Record<string, unknown>
+  value            optional  boolean | string | number | unknown[] | Record<string, unknown>
   description      optional  string
   review           optional  { action: "approve_and_apply" }
   idempotency_key  required  string
@@ -1032,7 +1032,7 @@ Request body (--body-json):
   name             required  string
   key              required  string
   schema           optional  Record<string, unknown> | null
-  variants         required  { name: string; value: boolean | string | number | Record<string, unknown>; isDefault: boolean; description?: string }[]
+  variants         required  { name: string; value: boolean | string | number | unknown[] | Record<string, unknown>; isDefault: boolean; description?: string }[]
   description      optional  string
   idempotency_key  required  string
   Example:
