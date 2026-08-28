@@ -160,7 +160,6 @@ export async function request(
 
 export async function createDefaultApp(h: FlagDefinitionHarness) {
   const res = await request(h, "POST", `/orgs/${ORG.orgId}/apps`, await orgToken(h), {
-    organizationId: ORG.orgId,
     name: "Checkout",
     key: "checkout",
   });

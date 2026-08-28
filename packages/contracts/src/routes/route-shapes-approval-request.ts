@@ -1,6 +1,7 @@
 import { z } from "@hono/zod-openapi";
 import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "../approval-identifiers";
 import { ErrorCodeSchema, ErrorDetailsSchema } from "../errors";
+import { IdempotencyKeySchema, PersistedDescriptionSchema } from "../persisted-field-limits";
 import { PaginationQuerySchema } from "../wire-envelopes-core";
 import {
   ApprovalActorSchema,
@@ -178,8 +179,8 @@ export const ApprovalRequestSchema = z
 export const ReviewApprovalRequestSchema = z
   .object({
     action: ApprovalReviewActionSchema,
-    reason: z.string().optional(),
-    idempotency_key: z.string().min(1),
+    reason: PersistedDescriptionSchema.optional(),
+    idempotency_key: IdempotencyKeySchema,
   })
   .strict();
 

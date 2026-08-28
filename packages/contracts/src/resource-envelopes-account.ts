@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { MetricRefSchema, MetricSchema } from "./leaf-schemas-experiment";
 import {
+  IdempotencyKeySchema,
+  PersistedDescriptionSchema,
+  PersistedIdentifierSchema,
+  PersistedNameSchema,
+} from "./persisted-field-limits";
+import {
   APIKeySchema,
   AppSchema,
   ClientKeySchema,
@@ -50,19 +56,21 @@ const MetricAnalysisFields = {
   cupedCoverageThresholdPct: MetricSchema.shape.cupedCoverageThresholdPct,
 };
 
-export const CreateMetricRequestSchema = z.object({
-  appId: z.string(),
-  name: z.string(),
-  key: z.string(),
-  kind: MetricSchema.shape.kind,
-  eventDefinitionId: z.string().optional(),
-  eventFieldName: z.string().optional(),
-  numerator: MetricRefSchema.optional(),
-  denominator: MetricRefSchema.optional(),
-  description: z.string().optional(),
-  ...MetricAnalysisFields,
-  idempotency_key: z.string().optional(),
-});
+export const CreateMetricRequestSchema = z
+  .object({
+    appId: PersistedIdentifierSchema,
+    name: PersistedNameSchema,
+    key: PersistedNameSchema,
+    kind: MetricSchema.shape.kind,
+    eventDefinitionId: PersistedIdentifierSchema.optional(),
+    eventFieldName: PersistedNameSchema.optional(),
+    numerator: MetricRefSchema.optional(),
+    denominator: MetricRefSchema.optional(),
+    description: PersistedDescriptionSchema.optional(),
+    ...MetricAnalysisFields,
+    idempotency_key: IdempotencyKeySchema.optional(),
+  })
+  .strict();
 export type CreateMetricRequest = z.infer<typeof CreateMetricRequestSchema>;
 
 // All fields optional; Metric patches are measurement edits that recompute over
@@ -70,14 +78,14 @@ export type CreateMetricRequest = z.infer<typeof CreateMetricRequestSchema>;
 // IS patchable here per spec (unlike Flag/App key), so it is intentionally listed.
 export const PatchMetricRequestSchema = z
   .object({
-    name: z.string().optional(),
-    key: z.string().optional(),
+    name: PersistedNameSchema.optional(),
+    key: PersistedNameSchema.optional(),
     kind: MetricSchema.shape.kind.optional(),
-    eventDefinitionId: z.string().nullable().optional(),
-    eventFieldName: z.string().nullable().optional(),
+    eventDefinitionId: PersistedIdentifierSchema.nullable().optional(),
+    eventFieldName: PersistedNameSchema.nullable().optional(),
     numerator: MetricRefSchema.optional(),
     denominator: MetricRefSchema.optional(),
-    description: z.string().optional(),
+    description: PersistedDescriptionSchema.optional(),
     ...MetricAnalysisFields,
   })
   .strict();
@@ -101,15 +109,17 @@ export type MetricResponse = z.infer<typeof MetricResponseSchema>;
 // The owning Organization is the `:orgId` path parameter. It was once duplicated
 // here as `organizationId`, which existed only to be compared against the path
 // and discarded, and which every caller had to learn to send twice.
-export const CreateAppRequestSchema = z.object({
-  name: z.string(),
-  // Optional for the same reason an Organization's `slug` is: a caller who has a
-  // display name should not have to invent a handle to get started, and the two
-  // creation calls must not disagree about that. Derived from `name` when absent.
-  key: SlugSchema.optional(),
-  description: z.string().optional(),
-  idempotency_key: z.string().optional(),
-});
+export const CreateAppRequestSchema = z
+  .object({
+    name: PersistedNameSchema,
+    // Optional for the same reason an Organization's `slug` is: a caller who has a
+    // display name should not have to invent a handle to get started, and the two
+    // creation calls must not disagree about that. Derived from `name` when absent.
+    key: SlugSchema.optional(),
+    description: PersistedDescriptionSchema.optional(),
+    idempotency_key: IdempotencyKeySchema.optional(),
+  })
+  .strict();
 export type CreateAppRequest = z.infer<typeof CreateAppRequestSchema>;
 
 // `.strict()` rejects an immutable `id` or `organizationId` on patch. `key` IS
@@ -119,9 +129,9 @@ export type CreateAppRequest = z.infer<typeof CreateAppRequestSchema>;
 // `SlugSchema` creation uses and rejected on collision, never silently deduped.
 export const PatchAppRequestSchema = z
   .object({
-    name: z.string().optional(),
+    name: PersistedNameSchema.optional(),
     key: SlugSchema.optional(),
-    description: z.string().optional(),
+    description: PersistedDescriptionSchema.optional(),
   })
   .strict();
 export type PatchAppRequest = z.infer<typeof PatchAppRequestSchema>;
@@ -198,7 +208,7 @@ export type AppAttentionRollupResponse = z.infer<typeof AppAttentionRollupRespon
 
 export const PatchOrganizationRequestSchema = z
   .object({
-    name: z.string().optional(),
+    name: PersistedNameSchema.optional(),
     plan: OrganizationSchema.shape.plan.optional(),
   })
   .strict();
@@ -218,7 +228,7 @@ export type PatchOrganizationRequest = z.infer<typeof PatchOrganizationRequestSc
  */
 export const CreateOrganizationRequestSchema = z
   .object({
-    name: z.string().min(1).max(200),
+    name: PersistedNameSchema,
     slug: OrganizationSlugSchema.optional(),
   })
   .strict();

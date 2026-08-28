@@ -1,5 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { PersistedIdentifierSchema } from "../persisted-field-limits";
 import { AppParams, OrgParams, PrivacyRequestParams } from "./route-shapes";
 
 /**
@@ -47,10 +48,12 @@ const PrivacyStatusResponseSchema = z.object({
 });
 
 // Entity export/delete carry the raw Targeting Key; the Worker hashes it server-side.
-const EntityPrivacyRequestSchema = z.object({
-  idType: z.string(),
-  targetingKey: z.string(),
-});
+const EntityPrivacyRequestSchema = z
+  .object({
+    idType: PersistedIdentifierSchema,
+    targetingKey: PersistedIdentifierSchema,
+  })
+  .strict();
 
 export const privacyRoutes = [
   defineApiRoute({

@@ -2,6 +2,11 @@ import { createRoute, type RouteConfig, z } from "@hono/zod-openapi";
 import { errorStatusByCode } from "./error-status";
 import { type ErrorCode, ErrorResponseSchema } from "./errors";
 import {
+  IDEMPOTENCY_KEY_MAX_LENGTH,
+  IDEMPOTENCY_KEY_PATTERN,
+  IDEMPOTENCY_KEY_SHAPE_MESSAGE,
+} from "./persisted-field-limits";
+import {
   type AuthKind,
   defineRoute,
   type HttpMethod,
@@ -138,6 +143,8 @@ function idempotencyHeader(mode: IdempotencyMode) {
     [IDEMPOTENCY_HEADER]: z
       .string()
       .min(1)
+      .max(IDEMPOTENCY_KEY_MAX_LENGTH)
+      .regex(IDEMPOTENCY_KEY_PATTERN, IDEMPOTENCY_KEY_SHAPE_MESSAGE)
       .openapi({
         param: { name: IDEMPOTENCY_HEADER, in: "header", required: mode === "required" },
         example: "logical-evaluation-123",

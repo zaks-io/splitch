@@ -12,7 +12,7 @@ import type { RateLimiter } from "./rate-limit";
 
 /** A body-bearing input schema: requires `name` in the JSON body. */
 export const BodyInput = z.object({
-  body: z.object({ name: z.string() }),
+  body: z.object({ name: z.string() }).strict(),
 });
 
 /** A no-body input schema that tolerates any params/query/headers. */

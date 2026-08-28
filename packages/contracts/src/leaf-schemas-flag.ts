@@ -1,4 +1,14 @@
 import { z } from "zod";
+import {
+  PersistedConditionAttributeSchema,
+  PersistedConditionValueStringSchema,
+  PersistedDescriptionSchema,
+  PersistedNameSchema,
+  PersistedSaltSchema,
+  PersistedVariantValueStringSchema,
+  persistedArray,
+  persistedRecord,
+} from "./persisted-field-limits";
 
 /**
  * Canonical Zod leaf schemas for the flag-side glossary nouns.
@@ -35,15 +45,21 @@ export type ConditionOperator = z.infer<typeof ConditionOperatorSchema>;
 // `in`/`not_in` require an array value; all other operators accept a scalar or array.
 // Array elements are the same scalar union the Panel can render — a null or object
 // element is a write-time 400, not a 200 that poisons a later Panel list parse.
-const ScalarConditionValue = z.union([z.boolean(), z.string(), z.number()]);
-const ArrayConditionValue = z.array(ScalarConditionValue);
+const ScalarConditionValue = z.union([
+  z.boolean(),
+  PersistedConditionValueStringSchema,
+  z.number(),
+]);
+const ArrayConditionValue = persistedArray(ScalarConditionValue);
 const ConditionValue = z.union([ScalarConditionValue, ArrayConditionValue]);
 
-const BaseConditionSchema = z.object({
-  attribute: z.string(),
-  operator: ConditionOperatorSchema,
-  value: ConditionValue,
-});
+const BaseConditionSchema = z
+  .object({
+    attribute: PersistedConditionAttributeSchema,
+    operator: ConditionOperatorSchema,
+    value: ConditionValue,
+  })
+  .strict();
 
 // Array operators are validated as a discriminated refinement so the schema
 // rejects a non-array value for `in`/`not_in` loudly at parse time.
@@ -68,7 +84,7 @@ export const PercentageRolloutSchema = z
   .object({
     // 0–100 inclusive; fractional allowed
     percentage: z.number().min(0).max(100),
-    salt: z.string(),
+    salt: PersistedSaltSchema,
   })
   .strict();
 export type PercentageRollout = z.infer<typeof PercentageRolloutSchema>;
@@ -83,7 +99,7 @@ export type PercentageRollout = z.infer<typeof PercentageRolloutSchema>;
 export const TargetingRuleRolloutInputSchema = z
   .object({
     percentage: z.number().min(0).max(100),
-    salt: z.string().optional(),
+    salt: PersistedSaltSchema.optional(),
   })
   .strict();
 export type TargetingRuleRolloutInput = z.infer<typeof TargetingRuleRolloutInputSchema>;
@@ -94,9 +110,14 @@ export type TargetingRuleRolloutInput = z.infer<typeof TargetingRuleRolloutInput
 
 export const VariantSchema = z.object({
   id: z.string(),
-  name: z.string(),
-  value: z.union([z.boolean(), z.string(), z.number(), z.record(z.string(), z.unknown())]),
-  description: z.string().optional(),
+  name: PersistedNameSchema,
+  value: z.union([
+    z.boolean(),
+    PersistedVariantValueStringSchema,
+    z.number(),
+    persistedRecord(z.unknown()),
+  ]),
+  description: PersistedDescriptionSchema.optional(),
 });
 export type Variant = z.infer<typeof VariantSchema>;
 
@@ -109,7 +130,7 @@ const TargetingRuleCoreFields = {
   flagId: z.string(),
   // Integer ≥ 0; lower = evaluated first
   priority: z.number().int().min(0),
-  conditions: z.array(ConditionSchema),
+  conditions: persistedArray(ConditionSchema),
   variantId: z.string(),
 };
 
@@ -124,6 +145,7 @@ export const TargetingRuleInputSchema = z
     segmentId: z.string().optional(),
     percentageRollout: TargetingRuleRolloutInputSchema.nullable().optional(),
   })
+  .strict()
   .refine((rule) => rule.conditions.length > 0 || rule.segmentId !== undefined, {
     message: "a Targeting Rule requires direct Conditions or a Segment",
     path: ["conditions"],

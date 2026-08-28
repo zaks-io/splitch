@@ -28,6 +28,19 @@ describe("CreateApiKeyRequestSchema scope guard", () => {
     });
   });
 
+  it("rejects an unknown field instead of stripping it", () => {
+    const result = CreateApiKeyRequestSchema.safeParse({
+      scopes: ["data-plane:evaluate"],
+      extra: true,
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]).toMatchObject({
+      code: "unrecognized_keys",
+      keys: ["extra"],
+    });
+  });
+
   it("rejects an unknown scope with the allowed set in the issue message", () => {
     const result = CreateApiKeyRequestSchema.safeParse({ scopes: ["bogus"] });
     expect(result.success).toBe(false);

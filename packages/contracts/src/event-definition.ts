@@ -1,5 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { validateNumericDomain, validatePropertyNames } from "./event-definition-validation";
+import { IdempotencyKeySchema } from "./persisted-field-limits";
 import { listResponse } from "./wire-envelopes-core";
 
 export const eventDefinitionFamilies = ["metric", "web"] as const;
@@ -209,7 +210,7 @@ export const CreateEventDefinitionRequestSchema = z
     family: EventDefinitionFamilySchema,
     displayName: z.string().min(1),
     description: z.string().optional(),
-    idempotency_key: z.string().optional(),
+    idempotency_key: IdempotencyKeySchema.optional(),
   })
   .strict();
 
@@ -222,7 +223,7 @@ export const PublishEventDefinitionVersionRequestSchema = z
     entityType: z.string().min(1).nullable(),
     fields: z.array(EventFieldDefinitionSchema),
     dimensions: z.array(ScalarDefinitionSchema),
-    idempotency_key: z.string().optional(),
+    idempotency_key: IdempotencyKeySchema.optional(),
   })
   .strict()
   .superRefine((value, context) => {

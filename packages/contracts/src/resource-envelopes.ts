@@ -1,5 +1,7 @@
 // This is the bounded resource-envelope public surface, kept separate from the package entry point.
-// biome-ignore lint/performance/noBarrelFile lint/performance/noReExportAll: each source module owns a cohesive resource family
+// biome-ignore lint/performance/noBarrelFile lint/performance/noReExportAll: write-bound vocabulary is consumed with the envelopes
+export * from "./persisted-field-limits";
+// biome-ignore lint/performance/noReExportAll: each source module owns a cohesive resource family
 export * from "./resource-envelopes-account";
 // biome-ignore lint/performance/noReExportAll: each source module owns a cohesive resource family
 export * from "./resource-envelopes-experiment";

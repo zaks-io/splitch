@@ -1,5 +1,13 @@
 import { z } from "zod";
 import { FlagSchema, VariantSchema } from "./leaf-schemas-flag";
+import {
+  IdempotencyKeySchema,
+  PersistedDescriptionSchema,
+  PersistedIdentifierSchema,
+  PersistedNameSchema,
+  persistedArray,
+  persistedRecord,
+} from "./persisted-field-limits";
 import { SlugSchema } from "./slug";
 import { listResponse } from "./wire-envelopes-core";
 import {
@@ -33,25 +41,25 @@ import {
 
 const CreateVariantCatalogEntrySchema = z
   .object({
-    name: z.string(),
+    name: PersistedNameSchema,
     value: VariantSchema.shape.value,
     isDefault: z.boolean(),
-    description: z.string().optional(),
+    description: PersistedDescriptionSchema.optional(),
   })
   .strict();
 
 export const CreateFlagRequestSchema = z
   .object({
-    appId: z.string(),
-    name: z.string(),
+    appId: PersistedIdentifierSchema,
+    name: PersistedNameSchema,
     // Immutable after create (DEFINITION audit boundary). A Flag key is a
     // caller-chosen handle that appears in selectors and URLs, so it takes the
     // system's one slug shape — the same rule App keys and Org slugs follow.
     key: SlugSchema,
-    schema: FlagSchema.shape.schema,
-    variants: z.array(CreateVariantCatalogEntrySchema).min(1),
-    description: z.string().optional(),
-    idempotency_key: z.string().min(1),
+    schema: persistedRecord(z.unknown()).nullable().optional(),
+    variants: persistedArray(CreateVariantCatalogEntrySchema).min(1),
+    description: PersistedDescriptionSchema.optional(),
+    idempotency_key: IdempotencyKeySchema,
   })
   .strict();
 export type CreateFlagRequest = z.infer<typeof CreateFlagRequestSchema>;
@@ -65,9 +73,9 @@ export type CreateFlagRequest = z.infer<typeof CreateFlagRequestSchema>;
 
 export const PatchFlagRequestSchema = z
   .object({
-    name: z.string().optional(),
-    schema: FlagSchema.shape.schema,
-    description: z.string().optional(),
+    name: PersistedNameSchema.optional(),
+    schema: persistedRecord(z.unknown()).nullable().optional(),
+    description: PersistedDescriptionSchema.optional(),
   })
   .strict();
 export type PatchFlagRequest = z.infer<typeof PatchFlagRequestSchema>;
@@ -128,14 +136,14 @@ export type FlagListResponse = z.infer<typeof FlagListResponseSchema>;
 
 export const CreateVariantRequestSchema = z
   .object({
-    appId: z.string(),
-    flagId: z.string(),
-    name: z.string(),
+    appId: PersistedIdentifierSchema,
+    flagId: PersistedIdentifierSchema,
+    name: PersistedNameSchema,
     value: VariantSchema.shape.value,
     isDefault: z.boolean().optional(),
-    description: z.string().optional(),
+    description: PersistedDescriptionSchema.optional(),
     review: InlineApproveAndApplyReviewSchema.optional(),
-    idempotency_key: z.string().min(1),
+    idempotency_key: IdempotencyKeySchema,
   })
   .strict();
 export type CreateVariantRequest = z.infer<typeof CreateVariantRequestSchema>;
@@ -151,11 +159,11 @@ export type CreateVariantRequest = z.infer<typeof CreateVariantRequestSchema>;
 
 export const PatchVariantRequestSchema = z
   .object({
-    name: z.string().optional(),
+    name: PersistedNameSchema.optional(),
     value: VariantSchema.shape.value.optional(),
-    description: z.string().optional(),
+    description: PersistedDescriptionSchema.optional(),
     review: InlineApproveAndApplyReviewSchema.optional(),
-    idempotency_key: z.string().min(1),
+    idempotency_key: IdempotencyKeySchema,
   })
   .strict();
 export type PatchVariantRequest = z.infer<typeof PatchVariantRequestSchema>;

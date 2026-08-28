@@ -12,6 +12,16 @@ inferred or optional unless explicitly marked `no`.
 
 ## Wire conventions (all control-plane endpoints)
 
+**Unknown request keys fail loud.** External create and patch bodies use Zod `.strict()`. An
+unrecognized field is `VALIDATION_ERROR` with the field path (for example
+`["body", "organizationId"]`). Response and storage schemas may stay non-strict so forward-compatible
+fields can round-trip.
+
+**Persisted field bounds.** Write envelopes compose named limits from `persisted-field-limits.ts`
+(names 200, descriptions 2000, identifiers 128, Condition values 1024, Variant strings 4096, salts
+128, arrays 100 items, records 64 keys, Idempotency Keys 255 printable ASCII without whitespace).
+Over-limit values fail at parse. Stored values are not truncated.
+
 **Optional fields are present-with-null, never omitted.** A field marked optional (`no`) in any
 envelope or leaf schema appears in the JSON with a `null` value rather than being absent. Consumers
 never need `hasOwnProperty` checks; the field always exists, the value may be `null`. The only

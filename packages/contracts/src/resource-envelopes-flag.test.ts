@@ -27,6 +27,19 @@ describe("CreateFlagRequestSchema", () => {
     expect(req.variants.filter((variant) => variant.isDefault)).toHaveLength(1);
   });
 
+  it("rejects an unknown field instead of stripping it", () => {
+    const result = CreateFlagRequestSchema.safeParse({
+      ...validCreateFlag,
+      extra: true,
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]).toMatchObject({
+      code: "unrecognized_keys",
+      keys: ["extra"],
+    });
+  });
+
   // `flags_create` is an Idempotency-Key route, so a retried create cannot mint a
   // second definition for a key a gated delete just refused to free.
   it("rejects a request with no idempotency_key", () => {

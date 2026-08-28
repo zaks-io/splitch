@@ -96,11 +96,34 @@ describe("MetricResponseSchema", () => {
 describe("CreateAppRequestSchema / PatchAppRequestSchema", () => {
   it("parses a create request", () => {
     const req = CreateAppRequestSchema.parse({
-      organizationId: "org_1",
       name: "Checkout",
       key: "checkout",
     });
     expect(req.key).toBe("checkout");
+  });
+
+  it("rejects an unknown field instead of stripping it", () => {
+    const result = CreateAppRequestSchema.safeParse({
+      organizationId: "org_1",
+      name: "Checkout",
+      key: "checkout",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]).toMatchObject({
+      code: "unrecognized_keys",
+      keys: ["organizationId"],
+    });
+  });
+
+  it("rejects a name over the persisted bound", () => {
+    const result = CreateAppRequestSchema.safeParse({
+      name: "n".repeat(201),
+      key: "checkout",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]?.path).toEqual(["name"]);
   });
 
   it("rejects a key shaped like a canonical identifier", () => {
@@ -119,10 +142,7 @@ describe("CreateAppRequestSchema / PatchAppRequestSchema", () => {
       "checkout-",
       "check--out",
     ]) {
-      expect(
-        CreateAppRequestSchema.safeParse({ organizationId: "org_1", name: "Checkout", key })
-          .success,
-      ).toBe(false);
+      expect(CreateAppRequestSchema.safeParse({ name: "Checkout", key }).success).toBe(false);
     }
   });
 

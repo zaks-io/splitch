@@ -110,7 +110,6 @@ async function createDefaultApp(key: string) {
     method: "POST",
     headers: { authorization: `Bearer ${await orgToken()}`, "content-type": "application/json" },
     body: JSON.stringify({
-      organizationId: ORG.orgId,
       name: `Atomic ${key}`,
       key,
     }),

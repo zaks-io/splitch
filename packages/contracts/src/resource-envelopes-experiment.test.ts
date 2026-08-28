@@ -43,6 +43,19 @@ describe("CreateExperimentRequestSchema (defaultVariantId is Worker-copied)", ()
     expect(req.idempotency_key).toBe("idem-1");
   });
 
+  it("rejects an unknown field instead of stripping it", () => {
+    const result = CreateExperimentRequestSchema.safeParse({
+      ...validCreateExperiment,
+      extra: true,
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]).toMatchObject({
+      code: "unrecognized_keys",
+      keys: ["extra"],
+    });
+  });
+
   it("parses staged draft assignment fields without enforcing Start invariants", () => {
     const req = CreateExperimentRequestSchema.parse({
       ...validCreateExperiment,

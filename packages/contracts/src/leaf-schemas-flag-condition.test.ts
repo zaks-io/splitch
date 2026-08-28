@@ -101,6 +101,16 @@ describe("ConditionSchema", () => {
     expect(ConditionSchema.safeParse({ operator: "eq", value: 1 }).success).toBe(false);
   });
 
+  it("rejects an unknown field instead of stripping it", () => {
+    const result = ConditionSchema.safeParse({ ...validCondition, extra: true });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]).toMatchObject({
+      code: "unrecognized_keys",
+      keys: ["extra"],
+    });
+  });
+
   it("rejects null or object elements inside an array Condition value", () => {
     expect(
       ConditionSchema.safeParse({

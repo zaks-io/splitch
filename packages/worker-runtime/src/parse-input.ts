@@ -52,13 +52,22 @@ export async function parseInput<Schema extends z.ZodTypeAny>(
       code: "VALIDATION_ERROR",
       message: "request failed schema validation",
       details: {
-        issues: result.error.issues.map((issue) => ({
-          path: issue.path.map(String),
-          message: issue.message,
-        })),
+        issues: validationIssues(result.error),
       },
     },
   };
+}
+
+function validationIssues(error: z.ZodError): Array<{ path: string[]; message: string }> {
+  return error.issues.flatMap((issue) => {
+    if (issue.code === "unrecognized_keys") {
+      return issue.keys.map((key) => ({
+        path: [...issue.path.map(String), key],
+        message: `Unrecognized key: "${key}"`,
+      }));
+    }
+    return [{ path: issue.path.map(String), message: issue.message }];
+  });
 }
 
 function queryToRecord(request: Request): Record<string, string> {

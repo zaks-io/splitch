@@ -1,7 +1,6 @@
-import type { ErrorResponse, RouteContract } from "@splitch/contracts";
+import { type ErrorResponse, IdempotencyKeySchema, type RouteContract } from "@splitch/contracts";
 
 const IDEMPOTENCY_HEADER = "idempotency-key";
-const MAX_KEY_LENGTH = 255;
 
 /**
  * Step 6. Validate the Idempotency-Key header against the route's mode. The guard
@@ -26,15 +25,11 @@ export function checkIdempotency(contract: RouteContract, request: Request): Err
     return null;
   }
 
-  if (!isWellFormed(key)) {
+  if (!IdempotencyKeySchema.safeParse(key).success) {
     return invalid("Idempotency-Key header is malformed");
   }
 
   return null;
-}
-
-function isWellFormed(key: string): boolean {
-  return key.length > 0 && key.length <= MAX_KEY_LENGTH;
 }
 
 function invalid(message: string): ErrorResponse {

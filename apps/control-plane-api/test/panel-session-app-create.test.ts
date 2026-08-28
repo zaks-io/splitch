@@ -194,7 +194,7 @@ async function createAppRequest(
   targetApp = app,
   expiresAt = NOW_SECONDS + 30,
 ): Promise<Response> {
-  const body = JSON.stringify({ organizationId: orgId, name: key, key });
+  const body = JSON.stringify({ name: key, key });
   const request = new Request(`${AUDIENCE}/orgs/${orgId}/apps`, {
     method: "POST",
     headers: { "content-type": "application/json" },

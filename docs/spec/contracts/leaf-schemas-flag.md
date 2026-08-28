@@ -11,12 +11,12 @@ Any field addition here propagates to every envelope automatically.
 
 The possible value a Flag can return. `value` is frozen per Run because changing it is an assignment edit.
 
-| Field         | Type                                    | Required | Meaning                                                                                                              |
-| ------------- | --------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
-| `id`          | `string`                                | yes      | Unique per Flag                                                                                                      |
-| `name`        | `string`                                | yes      | Semantic label; used as the identifier in analysis and Exposure logs                                                 |
-| `value`       | `boolean \| string \| number \| object` | yes      | JSON value served at evaluation; type tag is `z.union([z.boolean(), z.string(), z.number(), z.record(z.unknown())])` |
-| `description` | `string`                                | no       | Human label                                                                                                          |
+| Field         | Type                                    | Required | Meaning                                                                                                                                                                                                             |
+| ------------- | --------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`          | `string`                                | yes      | Unique per Flag                                                                                                                                                                                                     |
+| `name`        | `string`                                | yes      | Semantic label; used as the identifier in analysis and Exposure logs. Write-bound: 200 characters.                                                                                                                  |
+| `value`       | `boolean \| string \| number \| object` | yes      | JSON value served at evaluation; type tag is `z.union([z.boolean(), z.string(), z.number(), z.record(z.unknown())])`. String values are write-bound to 4096 characters; object values to 64 keys of 128 characters. |
+| `description` | `string`                                | no       | Human label. Write-bound: 2000 characters.                                                                                                                                                                          |
 
 `assign()` returns the Variant **name** (string). The value/metadata lives on the Flag definition.
 Exposure logs the Variant name.
@@ -48,15 +48,15 @@ per-Environment (ADR-0027) and lives in separate Flag Configuration schemas.
 
 First-match over priority-ascending order.
 
-| Field               | Type                        | Required | Meaning                                                          |
-| ------------------- | --------------------------- | -------- | ---------------------------------------------------------------- |
-| `id`                | `string`                    | yes      | Stable UUID                                                      |
-| `flagId`            | `string`                    | yes      | Owning Flag                                                      |
-| `priority`          | `number`                    | yes      | Integer ≥ 0; lower = evaluated first                             |
-| `conditions`        | `Condition[]`               | yes      | Direct Conditions; combined with AND within the rule             |
-| `segmentId`         | `string`                    | no       | App-level Segment whose Conditions are AND-merged at publication |
-| `variantId`         | `string`                    | yes      | Served when all conditions match                                 |
-| `percentageRollout` | `PercentageRollout \| null` | no       | If set, only the declared percentage gets this Variant           |
+| Field               | Type                        | Required | Meaning                                                                       |
+| ------------------- | --------------------------- | -------- | ----------------------------------------------------------------------------- |
+| `id`                | `string`                    | yes      | Stable UUID                                                                   |
+| `flagId`            | `string`                    | yes      | Owning Flag                                                                   |
+| `priority`          | `number`                    | yes      | Integer ≥ 0; lower = evaluated first                                          |
+| `conditions`        | `Condition[]`               | yes      | Direct Conditions; combined with AND within the rule. Write-bound: 100 items. |
+| `segmentId`         | `string`                    | no       | App-level Segment whose Conditions are AND-merged at publication              |
+| `variantId`         | `string`                    | yes      | Served when all conditions match                                              |
+| `percentageRollout` | `PercentageRollout \| null` | no       | If set, only the declared percentage gets this Variant                        |
 
 A rule must carry at least one direct Condition or `segmentId`. The Segment must belong to the
 same App. `TargetingRule` is the authoring shape retained in D1. Publication resolves the referenced
@@ -67,10 +67,10 @@ the concrete AND-merged Conditions. KV and Run snapshots accept only the resolve
 
 ## PercentageRollout
 
-| Field        | Type     | Required | Meaning                                                                   |
-| ------------ | -------- | -------- | ------------------------------------------------------------------------- |
-| `percentage` | `number` | yes      | 0–100 (inclusive); fractional allowed                                     |
-| `salt`       | `string` | yes      | Deterministic bucketing salt for this rollout; distinct from the Run salt |
+| Field        | Type     | Required | Meaning                                                                                                 |
+| ------------ | -------- | -------- | ------------------------------------------------------------------------------------------------------- |
+| `percentage` | `number` | yes      | 0–100 (inclusive); fractional allowed                                                                   |
+| `salt`       | `string` | yes      | Deterministic bucketing salt for this rollout; distinct from the Run salt. Write-bound: 128 characters. |
 
 Used in two places: on a `TargetingRule` as `percentageRollout` (rolls the traffic that matched that
 rule), and on a Flag Configuration as the baseline `rollout` (rolls the traffic that matched **no**
@@ -90,11 +90,11 @@ reshuffling a live cohort is exactly the invisible-change failure ADR-0036 forbi
 
 ## Condition
 
-| Field       | Type                                       | Required | Meaning                               |
-| ----------- | ------------------------------------------ | -------- | ------------------------------------- |
-| `attribute` | `string`                                   | yes      | Key from EvaluationContext attributes |
-| `operator`  | `ConditionOperator`                        | yes      | See enum below                        |
-| `value`     | `boolean \| string \| number \| unknown[]` | yes      | Comparison target                     |
+| Field       | Type                                       | Required | Meaning                                                                                                   |
+| ----------- | ------------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------- |
+| `attribute` | `string`                                   | yes      | Key from EvaluationContext attributes. Write-bound: 128 characters.                                       |
+| `operator`  | `ConditionOperator`                        | yes      | See enum below                                                                                            |
+| `value`     | `boolean \| string \| number \| unknown[]` | yes      | Comparison target. String values are write-bound to 1024 characters; `in` / `not_in` arrays to 100 items. |
 
 `ConditionOperator` enum: `'eq' | 'neq' | 'gt' | 'lt' | 'gte' | 'lte' | 'in' | 'not_in' | 'matches' | 'not_matches'`
 

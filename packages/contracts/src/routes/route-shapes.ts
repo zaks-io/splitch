@@ -11,6 +11,13 @@ import {
 } from "../leaf-schemas-flag";
 import { EnvironmentPolicySchema, UserRoleSchema } from "../leaf-schemas-runtime";
 import {
+  IdempotencyKeySchema,
+  PersistedDescriptionSchema,
+  PersistedIdentifierSchema,
+  PersistedNameSchema,
+  persistedArray,
+} from "../persisted-field-limits";
+import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
 } from "./route-shapes-approval-request";
@@ -114,15 +121,17 @@ export const PrivacyRequestParams = z.object({ requestId: z.string() });
 // environments_get / environments_update (no separate policy endpoint).
 // ---------------------------------------------------------------------------
 
-export const CreateEnvironmentRequestSchema = z.object({
-  key: z.string(),
-  name: z.string().optional(),
-  policy: EnvironmentPolicySchema.optional(),
-});
+export const CreateEnvironmentRequestSchema = z
+  .object({
+    key: PersistedNameSchema,
+    name: PersistedNameSchema.optional(),
+    policy: EnvironmentPolicySchema.optional(),
+  })
+  .strict();
 
 export const PatchEnvironmentRequestSchema = z
   .object({
-    name: z.string().optional(),
+    name: PersistedNameSchema.optional(),
     policy: EnvironmentPolicySchema.optional(),
   })
   .strict();
@@ -131,10 +140,12 @@ export const PatchEnvironmentRequestSchema = z
 // Organization membership (no dedicated envelope).
 // ---------------------------------------------------------------------------
 
-export const AddMemberRequestSchema = z.object({
-  userId: z.string(),
-  role: UserRoleSchema,
-});
+export const AddMemberRequestSchema = z
+  .object({
+    userId: PersistedIdentifierSchema,
+    role: UserRoleSchema,
+  })
+  .strict();
 
 export const UpdateMemberRequestSchema = z.object({ role: UserRoleSchema }).strict();
 
@@ -145,7 +156,7 @@ export const UpdateMemberRequestSchema = z.object({ role: UserRoleSchema }).stri
 // ---------------------------------------------------------------------------
 
 export const AddAppMemberRequestSchema = z
-  .object({ userId: z.string(), role: UserRoleSchema })
+  .object({ userId: PersistedIdentifierSchema, role: UserRoleSchema })
   .strict();
 
 export const UpdateAppMemberRequestSchema = z.object({ role: UserRoleSchema }).strict();
@@ -175,7 +186,7 @@ export const FlagConfigResponseSchema = z.object({
 export const PatchFlagConfigRequestSchema = z
   .object({
     enabled: z.boolean().optional(),
-    availableVariantNames: z.array(z.string()).optional(),
+    availableVariantNames: persistedArray(PersistedNameSchema).optional(),
     // Percentage only, never a salt: the salt is minted server-side on the first
     // write that sets a non-null rollout and is never regenerated, so bucket
     // membership cannot silently reshuffle under a percentage change (ADR-0036).
@@ -186,7 +197,7 @@ export const PatchFlagConfigRequestSchema = z
       .nullable()
       .optional(),
     review: InlineApproveAndApplyReviewSchema.optional(),
-    idempotency_key: z.string().min(1),
+    idempotency_key: IdempotencyKeySchema,
   })
   .strict();
 
@@ -214,23 +225,25 @@ export function targetingRuleDuplicateIdIssues(
   return issues;
 }
 
-const TargetingRulesListSchema = z.array(TargetingRuleInputSchema).superRefine((rules, ctx) => {
-  for (const issue of targetingRuleDuplicateIdIssues(rules)) {
-    ctx.addIssue({
-      code: "custom",
-      // Paths from the helper are relative to the request body; this refine
-      // sits on the array, so drop the `targetingRules` prefix.
-      path: issue.path.slice(1),
-      message: issue.message,
-    });
-  }
-});
+const TargetingRulesListSchema = persistedArray(TargetingRuleInputSchema).superRefine(
+  (rules, ctx) => {
+    for (const issue of targetingRuleDuplicateIdIssues(rules)) {
+      ctx.addIssue({
+        code: "custom",
+        // Paths from the helper are relative to the request body; this refine
+        // sits on the array, so drop the `targetingRules` prefix.
+        path: issue.path.slice(1),
+        message: issue.message,
+      });
+    }
+  },
+);
 
 export const ReplaceTargetingRulesRequestSchema = z
   .object({
     targetingRules: TargetingRulesListSchema,
     review: InlineApproveAndApplyReviewSchema.optional(),
-    idempotency_key: z.string().min(1),
+    idempotency_key: IdempotencyKeySchema,
   })
   .strict();
 
@@ -252,14 +265,14 @@ export const PromoteRequestSchema = z
     fromEnvironmentId: z.string(),
     select: z
       .object({
-        availability: z.array(z.string()).optional(),
+        availability: persistedArray(PersistedNameSchema).optional(),
         targeting: z.literal(true).optional(),
         rollout: z.literal(true).optional(),
         enabled: z.literal(true).optional(),
       })
       .strict(),
     review: InlineApproveAndApplyReviewSchema.optional(),
-    idempotency_key: z.string().min(1),
+    idempotency_key: IdempotencyKeySchema,
   })
   .strict();
 
@@ -272,21 +285,23 @@ export const PromoteResponseSchema = FlagConfigResponseSchema.extend({
 // Segments (no create/patch envelope; compose from the Condition leaf).
 // ---------------------------------------------------------------------------
 
-export const CreateSegmentRequestSchema = z.object({
-  name: z.string(),
-  description: z.string().optional(),
-  conditions: z.array(ConditionSchema).min(1),
-  idempotency_key: z.string().optional(),
-});
+export const CreateSegmentRequestSchema = z
+  .object({
+    name: PersistedNameSchema,
+    description: PersistedDescriptionSchema.optional(),
+    conditions: persistedArray(ConditionSchema).min(1),
+    idempotency_key: IdempotencyKeySchema.optional(),
+  })
+  .strict();
 export type CreateSegmentRequest = z.infer<typeof CreateSegmentRequestSchema>;
 
 export const PatchSegmentRequestSchema = z
   .object({
-    name: z.string().optional(),
-    description: z.string().optional(),
-    conditions: z.array(ConditionSchema).min(1).optional(),
+    name: PersistedNameSchema.optional(),
+    description: PersistedDescriptionSchema.optional(),
+    conditions: persistedArray(ConditionSchema).min(1).optional(),
     review: InlineApproveAndApplyReviewSchema.optional(),
-    idempotency_key: z.string().min(1).optional(),
+    idempotency_key: IdempotencyKeySchema.optional(),
   })
   .strict();
 export type PatchSegmentRequest = z.infer<typeof PatchSegmentRequestSchema>;
@@ -302,10 +317,12 @@ export const PatchClientKeyRequestSchema = z
   })
   .strict();
 
-export const CreateApiKeyRequestSchema = z.object({
-  scopes: z.array(ApiKeyScopeSchema),
-  idempotency_key: z.string().optional(),
-});
+export const CreateApiKeyRequestSchema = z
+  .object({
+    scopes: persistedArray(ApiKeyScopeSchema),
+    idempotency_key: IdempotencyKeySchema.optional(),
+  })
+  .strict();
 
 export const RevokeApiKeyRequestSchema = z.object({}).strict();
 

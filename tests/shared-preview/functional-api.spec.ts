@@ -35,7 +35,6 @@ test.describe("shared-preview functional API workflow", () => {
       clientKeys: { environmentId: string; isOriginOpen: boolean }[];
     }>(accessToken, "apps_create", {
       orgId: smoke.config.smokeOrgId,
-      organizationId: smoke.config.smokeOrgId,
       name: `Playwright Smoke ${key}`,
       key,
       description: "Created by shared-preview Playwright smoke.",
