@@ -125,6 +125,7 @@ async function registerAnonymous(): Promise<Registration> {
   const response = await authFetch(
     new Request(`${AUTH_ORIGIN}/agent/identity`, {
       method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ turnstile_token: FIXTURE_TURNSTILE_TOKEN }),
     }),
   );
@@ -163,13 +164,6 @@ async function expectOwnerMemberships(registration: Registration): Promise<void>
   expect(app?.role).toBe("owner");
 }
 
-/**
- * Mirrors the Control Plane's own wiring (apps/control-plane-api/src/index.ts),
- * `membershipAccess` included: the bearer resolver rechecks live Org and App
- * membership before scope checks and throws when that port is missing, so a
- * resolver built without it answers every request with a blank 500 rather than
- * the 200/403 split this test is here to pin.
- */
 async function makeControlPlaneApp(): Promise<TestApp> {
   const [appModule, authModule, jwksModule, sessionModule, membershipModule] = await Promise.all([
     import(new URL("../../control-plane-api/src/app.ts", import.meta.url).href),

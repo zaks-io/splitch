@@ -94,6 +94,7 @@ detection.
 
 ```
 packages/
+  bounded-body/        @splitch/bounded-body        Shared raw-body byte/content-type gate
   contracts/           @splitch/contracts           Zod schemas, z.infer types, @hono/zod-openapi routes
   worker-runtime/      @splitch/worker-runtime      Contract-mounted Hono request guard and shared error/status helpers
   control-plane-sdk/   @splitch/control-plane-sdk   Hono hc transport SDK for control-plane consumers

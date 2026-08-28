@@ -1,5 +1,6 @@
 import { approveClaimConsent, type ClaimDeps, refuseClaimConsent } from "./claim";
 import { OAuthError, renderDoorFault, renderOAuthError } from "./oauth-errors";
+import { readJsonRequestBody } from "./read-request-body";
 import { ClaimConsentRequestSchema } from "./schemas";
 import type { WorkOsAccessTokenVerifier } from "./workos-access-token";
 
@@ -42,15 +43,15 @@ function bearerToken(value: string | null) {
 }
 
 async function consentDecision(request: Request): Promise<"approve" | "deny"> {
-  const text = await request.text();
-  if (!text.trim()) throw new OAuthError("invalid_request", "missing consent decision");
-  let body: unknown;
-  try {
-    body = JSON.parse(text) as unknown;
-  } catch {
-    throw new OAuthError("invalid_request", "malformed consent decision");
+  const json = await readJsonRequestBody(request);
+  if (!json.ok) {
+    throw new OAuthError(
+      "invalid_request",
+      json.reason === "too_large" ? "request body is too large" : "unsupported content type",
+    );
   }
-  const parsed = ClaimConsentRequestSchema.safeParse(body);
+  if (json.value === undefined) throw new OAuthError("invalid_request", "missing consent decision");
+  const parsed = ClaimConsentRequestSchema.safeParse(json.value);
   if (!parsed.success) throw new OAuthError("invalid_request", "malformed consent decision");
   return parsed.data.decision;
 }

@@ -12,6 +12,7 @@ import {
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { MembershipAuthorityRepo } from "./membership-authority";
 import { OAuthError, renderDoorFault, renderOAuthError } from "./oauth-errors";
+import { readOAuthRequestBody, renderAuthBodyError } from "./read-request-body";
 import type { RevocationStore } from "./revocation";
 import {
   ClientCredentialsRequestSchema,
@@ -101,43 +102,57 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
   });
 
   app.post("/oauth2/device_authorization", async (c) => {
-    return authorizeDevice(deps, await readBody(c.req.raw));
+    const body = await readOAuthRequestBody(c.req.raw);
+    if (!body.ok) return renderAuthBodyError(body.reason);
+    return authorizeDevice(deps, body.value);
   });
 
   app.post("/oauth2/token", async (c) => {
-    return handleTokenRequest(deps, await readBody(c.req.raw), nowSeconds());
+    const body = await readOAuthRequestBody(c.req.raw);
+    if (!body.ok) return renderAuthBodyError(body.reason);
+    return handleTokenRequest(deps, body.value, nowSeconds());
   });
 
   app.post("/oauth2/revoke", async (c) => {
-    const parsed = RevokeTokenRequestSchema.safeParse(await readBody(c.req.raw));
-    if (!parsed.success) {
-      return renderOAuthError(new OAuthError("invalid_request", "malformed /oauth2/revoke body"));
-    }
-
-    try {
-      // Every other OAuth endpoint identifies its caller; revoke is the one
-      // that destroys authority, so it holds the same first-party gate.
-      requireFirstPartyClient(parsed.data.client_id);
-      const actor = await verifyRevocableAccessToken(deps, parsed.data.token, nowSeconds());
-      if (actor) {
-        await deps.revocations.revoke(actor.userId, actor.expiresAt - nowSeconds());
-      } else {
-        const session = await deps.deviceRefreshSessions.lookup(parsed.data.token);
-        if (!session) {
-          throw new OAuthError("invalid_grant", "refresh token session is unknown");
-        }
-        await deps.deviceFlow.revokeProviderToken({
-          token: parsed.data.token,
-          sessionId: session.providerSessionId,
-        });
-        await deps.deviceRefreshSessions.forget(parsed.data.token);
-      }
-    } catch (cause) {
-      return renderDoorFault(cause);
-    }
-
-    return new Response(null, { status: 200 });
+    const body = await readOAuthRequestBody(c.req.raw);
+    if (!body.ok) return renderAuthBodyError(body.reason);
+    return revokeToken(deps, body.value, nowSeconds());
   });
+}
+
+async function revokeToken(
+  deps: OAuthRouteDeps,
+  body: unknown,
+  nowSeconds: number,
+): Promise<Response> {
+  const parsed = RevokeTokenRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return renderOAuthError(new OAuthError("invalid_request", "malformed /oauth2/revoke body"));
+  }
+
+  try {
+    // Every other OAuth endpoint identifies its caller; revoke is the one
+    // that destroys authority, so it holds the same first-party gate.
+    requireFirstPartyClient(parsed.data.client_id);
+    const actor = await verifyRevocableAccessToken(deps, parsed.data.token, nowSeconds);
+    if (actor) {
+      await deps.revocations.revoke(actor.userId, actor.expiresAt - nowSeconds);
+    } else {
+      const session = await deps.deviceRefreshSessions.lookup(parsed.data.token);
+      if (!session) {
+        throw new OAuthError("invalid_grant", "refresh token session is unknown");
+      }
+      await deps.deviceFlow.revokeProviderToken({
+        token: parsed.data.token,
+        sessionId: session.providerSessionId,
+      });
+      await deps.deviceRefreshSessions.forget(parsed.data.token);
+    }
+  } catch (cause) {
+    return renderDoorFault(cause);
+  }
+
+  return new Response(null, { status: 200 });
 }
 
 function handleTokenRequest(
@@ -269,18 +284,6 @@ function tokenResponse(accessToken: string, refreshToken?: string): Response {
     expires_in: 3600,
     ...(refreshToken ? { refresh_token: refreshToken } : {}),
   });
-}
-
-async function readBody(request: Request): Promise<unknown> {
-  const contentType = request.headers.get("content-type") ?? "";
-  if (contentType.includes("application/x-www-form-urlencoded")) {
-    return Object.fromEntries(new URLSearchParams(await request.text()));
-  }
-  try {
-    return await request.json();
-  } catch {
-    return undefined;
-  }
 }
 
 function grantTypeOf(body: unknown): string | undefined {

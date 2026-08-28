@@ -8,6 +8,7 @@ import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { verifyIdJag } from "./idjag-verify";
 import { OAuthError, renderDoorFault, renderOAuthError } from "./oauth-errors";
 import { audienceForResource, mountOAuthRoutes, type SmokeClientCredentials } from "./oauth-routes";
+import { readJsonRequestBody, renderAuthBodyError } from "./read-request-body";
 import { type RegisterDeps, registerAnonymous } from "./register";
 import type { RevocationStore } from "./revocation";
 import {
@@ -68,14 +69,16 @@ export function createApp(deps: AppDeps): Hono {
 
   // --- Door B + paused Door A: /agent/identity -------------------------------
   app.post("/agent/identity", async (c) => {
-    const body = await readJson(c.req.raw);
+    const body = await readJsonRequestBody(c.req.raw);
+    if (!body.ok) return renderAuthBodyError(body.reason);
+    const value = body.value;
     // Door B: an anonymous body carries no `id_jag` (auth-doors.md). Route there
     // BEFORE the Door A schema so a missing id_jag is the anonymous flow, not a
     // malformed Door A request.
-    if (isAnonymousBody(body)) {
-      return handleAnonymousRegister(deps, c.req.raw, body);
+    if (isAnonymousBody(value)) {
+      return handleAnonymousRegister(deps, c.req.raw, value);
     }
-    if (hasIdJag(body)) {
+    if (hasIdJag(value)) {
       return renderOAuthError(new OAuthError("invalid_request", "ID-JAG authentication is paused"));
     }
     return renderOAuthError(new OAuthError("invalid_request", "malformed /agent/identity body"));
@@ -106,7 +109,9 @@ export function createApp(deps: AppDeps): Hono {
 
   app.post("/orgs/:orgId/trusted-idps", async (c) =>
     withActor(c, deps, async (actor) => {
-      const parsed = CreateTrustedIdpRequestSchema.safeParse(await readJson(c.req.raw));
+      const json = await readJsonRequestBody(c.req.raw);
+      if (!json.ok) return errorResponse(400, "VALIDATION_ERROR");
+      const parsed = CreateTrustedIdpRequestSchema.safeParse(json.value);
       if (!parsed.success) {
         return errorResponse(400, "VALIDATION_ERROR");
       }
@@ -129,14 +134,6 @@ export function createApp(deps: AppDeps): Hono {
   );
 
   return app;
-}
-
-async function readJson(request: Request): Promise<unknown> {
-  try {
-    return await request.json();
-  } catch {
-    return undefined;
-  }
 }
 
 /** A /agent/identity body is the anonymous (Door B) flow iff it has no `id_jag`. */
@@ -181,7 +178,9 @@ async function handleAnonymousRegister(
  * one of them and always requires `idempotency_key`.
  */
 async function handleClaim(deps: AppDeps, request: Request): Promise<Response> {
-  const parsed = ClaimRequestSchema.safeParse(await readJson(request));
+  const json = await readJsonRequestBody(request);
+  if (!json.ok) return renderAuthBodyError(json.reason);
+  const parsed = ClaimRequestSchema.safeParse(json.value);
   if (!parsed.success) {
     return renderOAuthError(new OAuthError("invalid_request", "malformed /claim body"));
   }
