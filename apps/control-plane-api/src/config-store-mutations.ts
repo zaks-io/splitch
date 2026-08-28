@@ -66,6 +66,7 @@ export async function promoteFlagConfig(
     config: write.config,
     diff: { before: responseFromSnapshot(loaded.target), after: write.config },
     nudge: write.nudge,
+    snapshotRevision: write.snapshotRevision,
   };
 }
 
@@ -90,6 +91,7 @@ function promotionPreview(
     config: after,
     diff: { before, after },
     nudge: { type: "config.changed", entity: "flag", id: input.flagId, version: after.version },
+    snapshotRevision: null,
   };
 }
 

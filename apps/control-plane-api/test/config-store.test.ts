@@ -7,8 +7,11 @@ import {
 import { appScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeConfigStore } from "../src/config-store";
-import { controlPlaneFlagConfigKey } from "../src/config-store-kv";
-import { narrowSeededAvailability, startSeededExperiment } from "../src/config-store-fixture-data";
+import {
+  makeSnapshotRevisionCounter,
+  narrowSeededAvailability,
+  startSeededExperiment,
+} from "../src/config-store-fixture-data";
 import {
   authedPatch,
   faultingCommitRepo,
@@ -21,6 +24,7 @@ import {
   patchFlagConfig,
   token,
 } from "../src/config-store-harness-core";
+import { controlPlaneFlagConfigKey } from "../src/config-store-kv";
 import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -97,6 +101,7 @@ describe("config store write path", () => {
       repo: faultingCommitRepo(h.repo),
       kv: { get: h.kv.get.bind(h.kv), put: kvPut } as unknown as KVNamespace,
       broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
+      nextSnapshotRevision: makeSnapshotRevisionCounter(),
       now: () => new Date(NOW_MS),
     });
     const app = makeAuthedApp(h, store);
@@ -200,6 +205,7 @@ describe("config store variant catalog resync", () => {
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
+      nextSnapshotRevision: makeSnapshotRevisionCounter(),
       now: () => new Date(NOW_MS),
     });
     const key = flagConfigKey(ids.appId, ids.environmentId, ids.flagKey);
@@ -233,11 +239,12 @@ describe("config store variant catalog resync", () => {
     expect(after.data.variants.find((v) => v.name === "treatment")?.value).toBe("changed");
   });
 
-  it("deleteFlagConfig removes the KV snapshot and broadcasts invalidation", async () => {
+  it("deleteFlagConfig writes a control-plane tombstone and removes evaluation snapshots", async () => {
     const store = makeConfigStore({
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
+      nextSnapshotRevision: makeSnapshotRevisionCounter(),
       now: () => new Date(NOW_MS),
     });
     await store.resyncFlagConfig({
@@ -260,7 +267,7 @@ describe("config store variant catalog resync", () => {
     });
     expect(result.ok).toBe(true);
     expect(await h.kv.get(key, "text")).toBeNull();
-    expect(await h.kv.get(controlPlaneKey, "text")).toBeNull();
+    expect(await kvJson(h.kv, controlPlaneKey)).toMatchObject({ state: "deleted", revision: 2 });
     expect(h.nudges).toContainEqual(
       expect.objectContaining({
         type: "config.changed",
@@ -284,6 +291,7 @@ describe("config store variant catalog resync", () => {
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
+      nextSnapshotRevision: makeSnapshotRevisionCounter(),
       now: () => new Date(NOW_MS),
     });
 

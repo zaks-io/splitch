@@ -6,7 +6,13 @@ import { createApp } from "./app";
 import type { ApprovalArchiveStore } from "./approval-archive";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
-import { ids, NOW, NOW_MS, startSeededExperiment } from "./config-store-fixture-data";
+import {
+  ids,
+  makeSnapshotRevisionCounter,
+  NOW,
+  NOW_MS,
+  startSeededExperiment,
+} from "./config-store-fixture-data";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import { appAdminScope } from "./scope-binding";
@@ -60,6 +66,7 @@ export async function buildHarness(bindings: {
         nudges.push(nudge);
       },
     },
+    nextSnapshotRevision: makeSnapshotRevisionCounter(),
     logger: { warn: (...args: unknown[]) => warnings.push(args) },
     now: () => new Date(NOW_MS),
   });

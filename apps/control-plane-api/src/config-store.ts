@@ -1,10 +1,7 @@
-import { DeltaNudgeSchema } from "@splitch/contracts";
-import { appScope, type EnvScope, envScope } from "@splitch/db";
+import { type EnvScope, envScope } from "@splitch/db";
 import { applyApprovedFlagConfig } from "./config-store-approved-write";
 import { configPatchFreeze, targetingFreeze } from "./config-store-freeze";
-import { deleteFlagConfigSnapshot } from "./config-store-kv";
 import { promoteFlagConfig } from "./config-store-mutations";
-import { replaceTargetingRules } from "./config-store-targeting-rules";
 import { previewSnapshotResult, previewTargetingRules } from "./config-store-preview";
 import {
   type ApplyApprovedFlagConfigInput,
@@ -25,6 +22,14 @@ import {
   type Snapshot,
   writeSnapshotAndBroadcast,
 } from "./config-store-shared";
+import {
+  deleteFlagConfigFromStore,
+  type FlagConfigDeleteInput,
+  type FlagConfigDeleteResult,
+  type FlagConfigResyncInput,
+  repairFlagConfigSnapshot,
+} from "./config-store-snapshot-maintenance";
+import { replaceTargetingRules } from "./config-store-targeting-rules";
 import { baselineIsUnresolvable, nextBaselineRollout } from "./flag-config-rollout";
 import { SegmentNotFoundError } from "./targeting-rule-resolution";
 
@@ -35,6 +40,13 @@ export interface ConfigStoreWriter {
     input: Omit<PatchFlagConfigInput, "actor" | "enabled" | "availableVariantNames">,
   ): Promise<
     | { ok: true; config: FlagConfigResult }
+    | { ok: false; reason: "FLAG_NOT_FOUND" }
+    | { ok: false; reason: "SEGMENT_NOT_FOUND"; missingSegmentIds: string[] }
+  >;
+  repairFlagConfigSnapshot(
+    input: Omit<PatchFlagConfigInput, "actor" | "enabled" | "availableVariantNames">,
+  ): Promise<
+    | { ok: true; config: FlagConfigResult; snapshotRevision: number }
     | { ok: false; reason: "FLAG_NOT_FOUND" }
     | { ok: false; reason: "SEGMENT_NOT_FOUND"; missingSegmentIds: string[] }
   >;
@@ -62,27 +74,10 @@ export interface ConfigStoreWriter {
   deleteFlagConfig(input: FlagConfigDeleteInput): Promise<FlagConfigDeleteResult>;
 }
 
-interface FlagConfigDeleteInput {
-  appId: string;
-  environmentId: string;
-  flagId: string;
-  flagKey?: string;
-}
-
-type FlagConfigDeleteResult =
-  | { ok: true; nudge: import("@splitch/contracts").DeltaNudge }
-  | { ok: false; reason: "FLAG_NOT_FOUND" };
-
 interface ExperimentConfigSyncInput {
   appId: string;
   environmentId: string;
   experimentId: string;
-}
-
-interface FlagConfigResyncInput {
-  appId: string;
-  environmentId: string;
-  flagId: string;
 }
 
 export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
@@ -94,6 +89,10 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
         if (!snapshot) return { ok: false as const, reason: "FLAG_NOT_FOUND" as const };
         return { ok: true as const, config: responseFromSnapshot(snapshot) };
       });
+    },
+
+    async repairFlagConfigSnapshot(input) {
+      return catchSegmentNotFound(() => repairFlagConfigSnapshot(deps, input));
     },
 
     async writeFlagConfig(input) {
@@ -162,31 +161,6 @@ async function catchSegmentNotFound<T>(operation: () => Promise<T>) {
     }
     throw cause;
   }
-}
-
-async function deleteFlagConfigFromStore(
-  deps: ConfigStoreDeps,
-  input: FlagConfigDeleteInput,
-): Promise<FlagConfigDeleteResult> {
-  const scope = envScope(input.appId, input.environmentId);
-  const flag =
-    (input.flagKey
-      ? { key: input.flagKey }
-      : await deps.repo.flags.getFlag(appScope(input.appId), input.flagId)) ?? null;
-  if (!flag) return { ok: false, reason: "FLAG_NOT_FOUND" };
-
-  const existing = await readFlagSnapshot(deps, scope, input.flagId);
-  const experimentId = existing?.flag.experimentId ?? null;
-  await deleteFlagConfigSnapshot(deps.kv, scope, input.flagId, flag.key, experimentId);
-
-  const nudge = DeltaNudgeSchema.parse({
-    type: "config.changed",
-    entity: "flag",
-    id: input.flagId,
-    version: 0,
-  });
-  await deps.broadcaster.broadcast(nudge);
-  return { ok: true, nudge };
 }
 
 async function syncExperimentConfig(

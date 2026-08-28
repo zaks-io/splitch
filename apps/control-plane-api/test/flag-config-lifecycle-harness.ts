@@ -1,6 +1,7 @@
 import { appScope, createRepository, envScope } from "@splitch/db";
 import { expect } from "vitest";
 import { makeConfigStore } from "../src/config-store";
+import { makeSnapshotRevisionCounter } from "../src/config-store-fixture-data";
 import { makeFixtureSigner } from "../src/fixture-signer";
 import {
   type FlagDefinitionHarness,
@@ -59,6 +60,7 @@ export function configStoreAccess(bindings: PoolBindingsWithConfig) {
     repo,
     kv: bindings.configKv,
     broadcaster: { broadcast: (nudge) => void nudges.push(nudge) },
+    nextSnapshotRevision: makeSnapshotRevisionCounter(),
     now: () => new Date(Date.parse(NOW_ISO)),
   });
   return {

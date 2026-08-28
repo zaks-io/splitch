@@ -2,7 +2,10 @@ import { TARGETING_RULE_ID_DUPLICATE_MESSAGE } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeConfigStore } from "../src/config-store";
-import { narrowSeededAvailability } from "../src/config-store-fixture-data";
+import {
+  makeSnapshotRevisionCounter,
+  narrowSeededAvailability,
+} from "../src/config-store-fixture-data";
 import {
   type Harness,
   ids,
@@ -96,6 +99,7 @@ describe("Targeting Rule identity", () => {
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast() {} },
+      nextSnapshotRevision: makeSnapshotRevisionCounter(),
       now: () => new Date("2026-07-01T20:00:00.000Z"),
     });
     const conflict = await store.replaceTargetingRules({

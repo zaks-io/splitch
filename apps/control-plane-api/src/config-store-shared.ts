@@ -48,7 +48,13 @@ export async function readFlagSnapshot(
   const key = flagConfigKey(scope.appId, scope.environmentId, fromD1.flag.key);
   const raw = await deps.kv.get(key, "text");
   if (!raw) {
-    await writeSnapshot(deps.kv, scope, fromD1, responseFromSnapshot(fromD1));
+    await writeSnapshot(
+      deps.kv,
+      scope,
+      fromD1,
+      responseFromSnapshot(fromD1),
+      await deps.nextSnapshotRevision(),
+    );
     return fromD1;
   }
 
@@ -160,9 +166,10 @@ export async function writeSnapshotAndBroadcast(
   snapshot: Snapshot,
 ): Promise<FlagConfigWriteResult> {
   const result = flagConfigResult(flagId, snapshot);
-  await writeSnapshot(deps.kv, scope, snapshot, result.config);
+  const snapshotRevision = await deps.nextSnapshotRevision();
+  await writeSnapshot(deps.kv, scope, snapshot, result.config, snapshotRevision);
   await deps.broadcaster.broadcast(result.nudge);
-  return result;
+  return { ...result, snapshotRevision };
 }
 
 /**
@@ -181,7 +188,7 @@ export function flagConfigResult(
     id: flagId,
     version: snapshot.version,
   });
-  return { ok: true, config: responseFromSnapshot(snapshot), nudge };
+  return { ok: true, config: responseFromSnapshot(snapshot), nudge, snapshotRevision: null };
 }
 
 export function responseFromSnapshot(snapshot: Snapshot): FlagConfigResult {

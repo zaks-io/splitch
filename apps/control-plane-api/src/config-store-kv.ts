@@ -1,15 +1,15 @@
 import {
   CURRENT_KV_SCHEMA_VERSION,
   ExperimentConfigKVSchema,
-  FlagConfigKVSchema,
-  LiveRunKVSchema,
-  RunConfigKVSchema,
   experimentConfigKey,
+  type FlagConfigKV,
+  FlagConfigKVSchema,
   flagConfigKey,
   kvEnvelope,
+  LiveRunKVSchema,
   liveRunKey,
+  RunConfigKVSchema,
   runConfigKey,
-  type FlagConfigKV,
 } from "@splitch/contracts";
 import type { EnvScope } from "@splitch/db";
 import type { FlagConfigResult, Snapshot } from "./config-store-shared";
@@ -29,27 +29,31 @@ export function controlPlaneFlagConfigKey(scope: EnvScope, flagId: string): stri
   return `app:${scope.appId}:${scope.environmentId}:control-plane-flag-config:${flagId}`;
 }
 
-function parseControlPlaneFlagConfigEnvelope(raw: string): FlagConfigResult {
-  return ControlPlaneFlagConfigEnvelope.parse(JSON.parse(raw)).data as FlagConfigResult;
-}
+export type ControlPlaneFlagConfigSnapshot =
+  | { revision: number; state: "present"; config: FlagConfigResult }
+  | { revision: number; state: "deleted" };
 
 export async function readControlPlaneFlagConfigSnapshot(
   kv: KVNamespace,
   scope: EnvScope,
   flagId: string,
-): Promise<FlagConfigResult | null> {
+): Promise<ControlPlaneFlagConfigSnapshot | null> {
   const raw = await kv.get(controlPlaneFlagConfigKey(scope, flagId), "text");
-  return raw === null ? null : parseControlPlaneFlagConfigEnvelope(raw);
+  return raw === null ? null : parseControlPlaneFlagConfigSnapshot(raw);
 }
 
 export async function deleteFlagConfigSnapshot(
   kv: KVNamespace,
   scope: EnvScope,
   flagId: string,
+  revision: number,
   flagKey: string,
   experimentId?: string | null,
 ): Promise<void> {
-  await kv.delete(controlPlaneFlagConfigKey(scope, flagId));
+  await kv.put(
+    controlPlaneFlagConfigKey(scope, flagId),
+    serializeControlPlaneFlagConfigSnapshot({ revision, state: "deleted" }),
+  );
   await kv.delete(flagConfigKey(scope.appId, scope.environmentId, flagKey));
   if (experimentId) {
     await kv.delete(experimentConfigKey(scope.appId, scope.environmentId, experimentId));
@@ -62,10 +66,15 @@ export async function writeSnapshot(
   scope: EnvScope,
   snapshot: Snapshot,
   controlPlaneConfig: FlagConfigResult,
+  revision: number,
 ): Promise<void> {
   await kv.put(
     controlPlaneFlagConfigKey(scope, snapshot.flag.id),
-    envelope(ControlPlaneFlagConfigEnvelope, controlPlaneConfig),
+    serializeControlPlaneFlagConfigSnapshot({
+      revision,
+      state: "present",
+      config: controlPlaneConfig,
+    }),
   );
   await kv.put(
     flagConfigKey(scope.appId, scope.environmentId, snapshot.flag.key),
@@ -90,6 +99,52 @@ export async function writeSnapshot(
     );
   } else if (snapshot.experiment) {
     await kv.delete(liveRunKey(scope.appId, scope.environmentId, snapshot.experiment.id));
+  }
+}
+
+function parseControlPlaneFlagConfigSnapshot(raw: string): ControlPlaneFlagConfigSnapshot {
+  const value: unknown = JSON.parse(raw);
+  if (!isRecord(value))
+    throw new Error("control-plane Flag Configuration snapshot is not an object");
+  if (value.schemaVersion !== CURRENT_KV_SCHEMA_VERSION) {
+    throw new Error("control-plane Flag Configuration snapshot has an unknown schema version");
+  }
+  if (!Number.isSafeInteger(value.revision) || (value.revision as number) < 1) {
+    throw new Error("control-plane Flag Configuration snapshot has an invalid revision");
+  }
+  const revision = value.revision as number;
+  if (value.state === "deleted") {
+    requireKeys(value, ["revision", "schemaVersion", "state"]);
+    return { revision, state: "deleted" };
+  }
+  if (value.state === "present") {
+    requireKeys(value, ["data", "revision", "schemaVersion", "state"]);
+    return {
+      revision,
+      state: "present",
+      config: ControlPlaneFlagConfigEnvelope.shape.data.parse(value.data) as FlagConfigResult,
+    };
+  }
+  throw new Error("control-plane Flag Configuration snapshot has an invalid state");
+}
+
+function serializeControlPlaneFlagConfigSnapshot(snapshot: ControlPlaneFlagConfigSnapshot): string {
+  const base = {
+    schemaVersion: CURRENT_KV_SCHEMA_VERSION,
+    revision: snapshot.revision,
+    state: snapshot.state,
+  };
+  return JSON.stringify(snapshot.state === "present" ? { ...base, data: snapshot.config } : base);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function requireKeys(value: Record<string, unknown>, expected: string[]): void {
+  const actual = Object.keys(value).sort();
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
+    throw new Error("control-plane Flag Configuration snapshot has unknown fields");
   }
 }
 

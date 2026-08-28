@@ -10,6 +10,7 @@ import {
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import type { ConfigStoreAccess } from "./config-store-do";
+import { makeSnapshotRevisionCounter } from "./config-store-fixture-data";
 import {
   appToken,
   createDefaultApp,
@@ -290,6 +291,7 @@ export function configStoreAccess(
     repo,
     kv,
     broadcaster: { broadcast() {} },
+    nextSnapshotRevision: makeSnapshotRevisionCounter(),
     now: () => new Date(Date.parse(NOW_ISO)),
   });
   const controlledWriter: ConfigStoreWriter = {

@@ -1,7 +1,11 @@
 import type { ExperimentConfigKV, FlagConfigKV, RunConfigKV } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import type { ConfigStoreWriter } from "./config-store";
-import { controlPlaneFlagConfigKey, readControlPlaneFlagConfigSnapshot } from "./config-store-kv";
+import {
+  type ControlPlaneFlagConfigSnapshot,
+  controlPlaneFlagConfigKey,
+  readControlPlaneFlagConfigSnapshot,
+} from "./config-store-kv";
 import type { FlagConfigResult } from "./config-store-types";
 
 export interface ConfigStoreDurableObjectNamespace {
@@ -42,10 +46,10 @@ export interface ConfigStoreAccess extends FlagConfigRead {
 
 export interface ConfigStoreAccessOptions {
   logger?: Pick<Console, "warn">;
-  writeThrough?: Map<string, FlagConfigResult>;
+  writeThrough?: Map<string, ControlPlaneFlagConfigSnapshot>;
 }
 
-const isolateWriteThrough = new Map<string, FlagConfigResult>();
+const isolateWriteThrough = new Map<string, ControlPlaneFlagConfigSnapshot>();
 
 function configWriterName(appId: string, environmentId: string): string {
   return `${appId}:${environmentId}`;
@@ -66,13 +70,13 @@ export function durableConfigStoreAccess(
       const local = writeThrough.get(key);
 
       try {
-        const snapshot = await readControlPlaneFlagConfigSnapshot(kv, scope, input.flagId);
-        if (snapshot) {
-          if (!local || snapshot.version >= local.version) {
+        const remote = await readControlPlaneFlagConfigSnapshot(kv, scope, input.flagId);
+        if (remote) {
+          if (!local || remote.revision >= local.revision) {
             writeThrough.delete(key);
-            return { ok: true, config: snapshot };
+            return flagConfigReadResult(remote);
           }
-          return { ok: true, config: local };
+          return flagConfigReadResult(local);
         }
       } catch (cause) {
         logger.warn("config_store_kv_schema_mismatch", { key, cause });
@@ -87,20 +91,27 @@ export function durableConfigStoreAccess(
       });
       return namespace
         .getByName(configWriterName(input.appId, input.environmentId))
-        .readFlagConfig(input);
+        .repairFlagConfigSnapshot(input);
     },
 
     writerFor(appId, environmentId) {
       const writer = namespace.getByName(configWriterName(appId, environmentId));
       const remember = <T>(result: T): T => {
         if (!hasConfig(result)) return result;
+        const snapshotRevision = requireSnapshotRevision(result);
+        if (snapshotRevision === null) return result;
         const scope = envScope(appId, result.config.environmentId);
-        writeThrough.set(controlPlaneFlagConfigKey(scope, result.config.flagId), result.config);
+        writeThrough.set(controlPlaneFlagConfigKey(scope, result.config.flagId), {
+          revision: snapshotRevision,
+          state: "present",
+          config: result.config,
+        });
         return result;
       };
 
       return {
         readFlagConfig: (input) => writer.readFlagConfig(input),
+        repairFlagConfigSnapshot: (input) => writer.repairFlagConfigSnapshot(input).then(remember),
         writeFlagConfig: (input) => writer.writeFlagConfig(input).then(remember),
         replaceTargetingRules: (input) => writer.replaceTargetingRules(input).then(remember),
         promoteFlagConfig: (input) => writer.promoteFlagConfig(input).then(remember),
@@ -113,8 +124,12 @@ export function durableConfigStoreAccess(
         async deleteFlagConfig(input) {
           const result = await writer.deleteFlagConfig(input);
           if (isSuccessful(result)) {
-            writeThrough.delete(
+            writeThrough.set(
               controlPlaneFlagConfigKey(envScope(appId, environmentId), input.flagId),
+              {
+                revision: result.snapshotRevision,
+                state: "deleted",
+              },
             );
           }
           return result;
@@ -136,6 +151,25 @@ function hasConfig(value: unknown): value is { ok: true; config: FlagConfigResul
   return isSuccessful(value) && "config" in value;
 }
 
+function requireSnapshotRevision(value: object): number | null {
+  if (!("snapshotRevision" in value)) {
+    throw new Error("config-store: successful write omitted its snapshot revision");
+  }
+  if (value.snapshotRevision === null) {
+    return value.snapshotRevision;
+  }
+  if (Number.isSafeInteger(value.snapshotRevision) && (value.snapshotRevision as number) >= 1) {
+    return value.snapshotRevision as number;
+  }
+  throw new Error("config-store: successful write returned an invalid snapshot revision");
+}
+
 function isSuccessful(value: unknown): value is { ok: true } {
   return typeof value === "object" && value !== null && "ok" in value && value.ok === true;
+}
+
+function flagConfigReadResult(snapshot: ControlPlaneFlagConfigSnapshot) {
+  return snapshot.state === "present"
+    ? ({ ok: true, config: snapshot.config } as const)
+    : ({ ok: false, reason: "FLAG_NOT_FOUND" } as const);
 }
