@@ -30,7 +30,7 @@ afterEach(() => {
 describe("internal ingest authority", () => {
   it.each(
     INTERNAL_PATHS,
-  )("returns not found on the public hostname for %s before reading tenant headers", async (path) => {
+  )("returns not found on the public hostname for %s before reading Organization, App, and Environment scope headers", async (path) => {
     const fetch = mockTinybirdFetch();
     const ctx = new TestExecutionContext();
 
@@ -79,7 +79,7 @@ describe("internal ingest authority", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("rejects a missing binding token before reading tenant headers", async () => {
+  it("rejects a missing binding token before reading Organization, App, and Environment scope headers", async () => {
     const { response, fetch, ctx } = await binding("/api/internal/exposures", {
       authorization: null,
       body: "{",
@@ -94,7 +94,7 @@ describe("internal ingest authority", () => {
     expect(ctx.waits).toHaveLength(0);
   });
 
-  it("rejects a wrong binding token before reading tenant headers", async () => {
+  it("rejects a wrong binding token before reading Organization, App, and Environment scope headers", async () => {
     const { response, fetch, ctx } = await binding("/api/internal/exposures", {
       authorization: "Bearer wrong",
       body: "{",

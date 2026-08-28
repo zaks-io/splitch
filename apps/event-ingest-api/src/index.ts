@@ -33,10 +33,11 @@ const metricEventRoutes = routesDelegatedTo("event-ingest-api").filter(
 );
 
 /**
- * Binding-only writes the Evaluation Worker makes for its own account: sealed
- * Exposures, Evaluation commits and Evaluation usage. The public hostname never
- * mounts these paths. The shared token is defense in depth on the binding door,
- * not a public credential, and each handler re-derives tenant scope from the
+ * Binding-only writes the Evaluation Worker makes for its own App and
+ * Environment scope: sealed Exposures, Evaluation commits and Evaluation
+ * usage. The public hostname never mounts these paths. The shared token is
+ * defense in depth on the binding door, not a public credential, and each
+ * handler re-derives Organization, App, and Environment scope from the
  * request only after that compare succeeds.
  */
 const internalRoutes: Readonly<
