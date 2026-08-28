@@ -61,12 +61,14 @@ export interface AssignmentStoreReader {
     appId: string;
     idType: string;
     targetingKey: string;
+    identityVersion?: string;
   }): Promise<Map<string, AssignmentStoreEntry>>;
   put(input: {
     appId: string;
     experimentId: string;
     idType: string;
     targetingKey: string;
+    identityVersion?: string;
     runId: string;
     variant: string;
   }): Promise<{ status: "stored" | "existing"; assignment: AssignmentStoreEntry }>;
@@ -75,6 +77,7 @@ export interface AssignmentStoreReader {
     experimentId: string;
     idType: string;
     targetingKeyHash: string;
+    identityVersion?: string;
     runId: string;
     variant: string;
   }): Promise<{ status: "stored" | "existing"; assignment: AssignmentStoreEntry }>;

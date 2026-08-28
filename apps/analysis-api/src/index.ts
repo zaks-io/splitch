@@ -76,10 +76,10 @@ export class ControlPlaneEntrypoint extends WorkerEntrypoint<AnalysisApiEnv> {
 
   async purgeAppIdentityAnalytics(
     appId: string,
-    currentVersion: string,
+    destroyedVersions: readonly string[],
     resetId: string,
   ): Promise<string> {
-    return deleteAppIdentityData(this.env, appId, currentVersion, resetId);
+    return deleteAppIdentityData(this.env, appId, destroyedVersions, resetId);
   }
 }
 

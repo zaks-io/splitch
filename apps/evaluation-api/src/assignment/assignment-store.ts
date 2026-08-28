@@ -19,6 +19,7 @@ export interface AssignmentIdentity {
   appId: string;
   idType: string;
   targetingKey: string;
+  identityVersion?: string;
 }
 
 export interface AssignmentPutInput extends AssignmentIdentity {
@@ -32,6 +33,7 @@ export interface HashedAssignmentPutInput {
   experimentId: string;
   idType: string;
   targetingKeyHash: string;
+  identityVersion?: string;
   runId: string;
   variant: string;
 }
@@ -78,7 +80,10 @@ export async function hashedAssignmentIdentity(
   saltStore: SaltStore,
   input: AssignmentIdentity,
 ): Promise<{ entityKey: string; targetingKeyHash: string }> {
-  const targetingKeyHash = await computeTargetingKeyHash(saltStore, input);
+  const targetingKeyHash = await computeTargetingKeyHash(saltStore, {
+    ...input,
+    keyVersion: input.identityVersion,
+  });
   return {
     entityKey: assignmentKey(input.appId, input.idType, targetingKeyHash),
     targetingKeyHash,
@@ -93,6 +98,12 @@ export async function retainedAssignmentIdentities(
   saltStore: SaltStore,
   input: AssignmentIdentity,
 ): Promise<readonly { entityKey: string; targetingKeyHash: string }[]> {
+  if (
+    input.identityVersion !== undefined &&
+    (await saltStore.currentKeyVersion(input.appId)) !== input.identityVersion
+  ) {
+    throw new AssignmentStoreError("App identity generation changed during Assignment read");
+  }
   const hashes = await computeRetainedTargetingKeyHashes(saltStore, input);
   return hashes.map((targetingKeyHash) => ({
     targetingKeyHash,

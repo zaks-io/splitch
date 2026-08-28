@@ -53,19 +53,15 @@ export class KvAssignmentStore implements AssignmentStore {
       experimentId: input.experimentId,
       idType: input.idType,
       targetingKeyHash,
+      identityVersion: input.identityVersion,
       runId: input.runId,
       variant: input.variant,
     });
   }
 
-  async putHashed(input: {
-    appId: string;
-    experimentId: string;
-    idType: string;
-    targetingKeyHash: string;
-    runId: string;
-    variant: string;
-  }): Promise<AssignmentStorePutResult> {
+  async putHashed(
+    input: Parameters<AssignmentStore["putHashed"]>[0],
+  ): Promise<AssignmentStorePutResult> {
     const name = assignmentWriterName(input);
     const id = this.writerNamespace.idFromName(name);
     const stub = this.writerNamespace.get(id);

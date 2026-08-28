@@ -75,6 +75,21 @@ describe("App identity compromised reset", () => {
     expect(calls).toHaveLength(7);
   });
 
+  it("freezes every active, retained, and lookup epoch for destructive purgers", async () => {
+    const identityStore = makeMemoryAppIdentityStore();
+    await provisionAppIdentity(identityStore, input.appId, ROOT);
+    const observed: string[][] = [];
+    const purgers = successfulPurgers();
+    purgers.analytics = async ({ destroyedVersions }) => {
+      observed.push([...destroyedVersions]);
+      return "proof:analytics";
+    };
+
+    await resetCompromisedAppIdentity(identityStore, input.appId, "reset-versions", purgers);
+
+    expect(observed).toEqual([["local-v1", "v1", "app-v1"]]);
+  });
+
   it("releases remote suppression only after durable activation and retries release", async () => {
     const identityStore = makeMemoryAppIdentityStore();
     await provisionAppIdentity(identityStore, input.appId, ROOT);

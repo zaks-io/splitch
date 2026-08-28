@@ -4,7 +4,7 @@ import type { ConfigStoreDurableObjectNamespace } from "./config-store-access";
 interface AnalysisControlPlaneBinding extends Fetcher {
   purgeAppIdentityAnalytics(
     appId: string,
-    currentVersion: string,
+    destroyedVersions: readonly string[],
     resetId: string,
   ): Promise<string>;
 }

@@ -1,5 +1,6 @@
 import type { ErrorCode, ExposureBatchResult } from "@splitch/contracts";
 import { RETRYABLE_EXPOSURE_REJECTION_CODE } from "@splitch/contracts";
+import type { AppIdentityAdmission } from "./app-identity-traffic";
 import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import { errorCauseChain } from "./error-cause-chain";
 import {
@@ -47,6 +48,7 @@ export function ingestFailureCode(status: number | null): ErrorCode {
 export async function verifyTicketForScope(
   ticket: string,
   scope: CredentialScope,
+  admission: AppIdentityAdmission,
   deps: {
     readonly exposureTicket: MintExposureTicketDeps & { readonly previousTicketKey?: string };
     readonly now?: () => Date;
@@ -69,15 +71,8 @@ export async function verifyTicketForScope(
   ) {
     return { ok: false, code: "EXPOSURE_TICKET_INVALID" };
   }
-  try {
-    if (
-      (await deps.exposureTicket.saltStore.currentKeyVersion(scope.appId)) !==
-      verified.payload.identity_version
-    ) {
-      return { ok: false, code: "EXPOSURE_TICKET_INVALID" };
-    }
-  } catch {
-    return { ok: false, code: RETRYABLE_EXPOSURE_REJECTION_CODE };
+  if (admission.identityVersion !== verified.payload.identity_version) {
+    return { ok: false, code: "EXPOSURE_TICKET_INVALID" };
   }
   return { ok: true, payload: verified.payload };
 }

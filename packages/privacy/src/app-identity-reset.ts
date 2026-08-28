@@ -17,6 +17,7 @@ export const APP_IDENTITY_RESET_SUBJECT_REF = "redacted:app-identity-reset";
 export type AppIdentityResetPurger = (input: {
   appId: string;
   currentVersion: string;
+  destroyedVersions: readonly string[];
 }) => Promise<string>;
 
 export type AppIdentityResetPurgers = Record<AppIdentityResetStore, AppIdentityResetPurger>;
@@ -72,9 +73,14 @@ async function purgePendingStores(
   purgers: AppIdentityResetPurgers,
 ): Promise<AppIdentityRecord> {
   let current = initial;
+  const destroyedVersions = [...new Set(current.epochs.map((epoch) => epoch.version))];
   for (const surface of APP_IDENTITY_RESET_STORES) {
     if (current.lifecycle.proofs[surface] !== null) continue;
-    const proof = await purgers[surface]({ appId, currentVersion: current.currentVersion });
+    const proof = await purgers[surface]({
+      appId,
+      currentVersion: current.currentVersion,
+      destroyedVersions,
+    });
     current = {
       ...current,
       lifecycle: withAppIdentityResetProof(current.lifecycle, surface, proof),

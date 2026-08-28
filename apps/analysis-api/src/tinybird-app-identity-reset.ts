@@ -33,7 +33,7 @@ interface ResetOptions {
 export async function deleteAppIdentityData(
   env: AnalysisApiEnv,
   appId: string,
-  currentVersion: string,
+  destroyedVersions: readonly string[],
   resetId: string,
   options: ResetOptions = {},
 ): Promise<string> {
@@ -50,22 +50,34 @@ export async function deleteAppIdentityData(
     timeoutMs,
   };
 
-  await appendGenerationTombstone(
-    fetchFn,
-    apiUrl,
-    token,
-    safeAppId,
-    safeTenantId(currentVersion, "currentVersion"),
-    safeTenantId(resetId, "resetId"),
-    timeoutMs,
-  );
+  const versions = [
+    ...new Set(destroyedVersions.map((version) => safeTenantId(version, "version"))),
+  ];
+  if (versions.length === 0) {
+    throw new TinybirdDeleteError("Tinybird App identity reset has no destroyed generations");
+  }
+  for (const version of versions) {
+    await appendGenerationTombstone(
+      fetchFn,
+      apiUrl,
+      token,
+      safeAppId,
+      version,
+      safeTenantId(resetId, "resetId"),
+      timeoutMs,
+    );
+  }
   await appendDeletionSuppression(fetchFn, apiUrl, token, { appId: safeAppId }, timeoutMs);
   await requireRowCount(fetchFn, apiUrl, token, DELETION_DATASOURCE, safeAppId, timeoutMs, {
     environmentId: "",
     minimum: 1,
   });
 
-  const proofs = ["suppression=visible", "audit_log=retained"];
+  const proofs = [
+    `generation-tombstones=${versions.length}`,
+    "suppression=visible",
+    "audit_log=retained",
+  ];
   for (const datasource of APP_IDENTITY_RESET_DATASOURCES) {
     if (datasource === DELETION_DATASOURCE) continue;
     await deleteDatasourceRows(fetchFn, apiUrl, token, datasource, safeAppId, timeoutMs, wait);

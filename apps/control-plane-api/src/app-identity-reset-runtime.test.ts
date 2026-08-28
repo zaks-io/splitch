@@ -74,6 +74,29 @@ describe("App identity reset privacy ledger redaction", () => {
   });
 });
 
+describe("App identity reset analytics generation inventory", () => {
+  it("passes every frozen destroyed version unchanged to Analysis", async () => {
+    const purgeAppIdentityAnalytics = vi.fn(async () => "analysis-proof");
+    const purgers = productionAppIdentityResetPurgers(
+      { ANALYSIS_API: { purgeAppIdentityAnalytics } } as unknown as ControlPlaneApiEnv,
+      "reset_1",
+    );
+
+    await expect(
+      purgers.analytics({
+        appId: "app_a",
+        currentVersion: "app-v1",
+        destroyedVersions: ["local-v1", "v1", "app-v1"],
+      }),
+    ).resolves.toBe("analysis-proof");
+    expect(purgeAppIdentityAnalytics).toHaveBeenCalledWith(
+      "app_a",
+      ["local-v1", "v1", "app-v1"],
+      "reset_1",
+    );
+  });
+});
+
 function app(db: D1Database, appId: string, key: string): D1PreparedStatement {
   return db
     .prepare(

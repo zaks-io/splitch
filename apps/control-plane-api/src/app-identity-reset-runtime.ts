@@ -61,11 +61,11 @@ export function productionAppIdentityResetPurgers(
       return `delivery:config_keys=${configKeys};${proof}`;
     },
     assignments: scoped((appId) => env.EVALUATION_API.purgeAppIdentityAssignments(appId, resetId)),
-    analytics: async ({ appId, currentVersion }) => {
+    analytics: async ({ appId, destroyedVersions }) => {
       if (resetAppId && resetAppId !== appId)
         throw new Error("App identity purgers changed App scope");
       resetAppId = appId;
-      return env.ANALYSIS_API.purgeAppIdentityAnalytics(appId, currentVersion, resetId);
+      return env.ANALYSIS_API.purgeAppIdentityAnalytics(appId, destroyedVersions, resetId);
     },
     retry_claims: scoped(async (appId) => {
       const rows = await environmentRows();

@@ -52,6 +52,7 @@ describe("POST /api/sdk/evaluate", () => {
         appId: APP_ID,
         idType: "user",
         targetingKey: "user-1",
+        identityVersion: "v1",
         experimentId: EXPERIMENT_ID,
         runId: "run-42",
         variant: "treatment",

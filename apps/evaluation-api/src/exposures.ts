@@ -5,6 +5,11 @@ import {
   RETRYABLE_EXPOSURE_REJECTION_CODE,
 } from "@splitch/contracts";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
+import {
+  type AppIdentityAdmission,
+  appIdentityAdmissionValidationError,
+  tryAdmitAppIdentity,
+} from "./app-identity-traffic";
 import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import { errorCauseChain } from "./error-cause-chain";
 import { assembleExposureFromTicket } from "./evaluate/exposure-assembly";
@@ -40,13 +45,15 @@ export function makeExposuresHandler(deps: ExposuresRouteDeps) {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     const scope = credentialScope(principal);
     if (!scope.ok) return renderError(scope.error, { requestId });
+    const admitted = await tryAdmitAppIdentity(deps.exposureTicket.saltStore, scope.value.appId);
+    if (!admitted.ok) return renderError(admitted.error, { requestId });
 
     const body = exposureBatchBody(input);
     if (!body.ok) return renderError(body.error, { requestId });
 
     const results: ExposureBatchResult[] = [];
     for (const item of body.value.exposures) {
-      results.push(await redeemOne(item, scope.value, requestId, deps));
+      results.push(await redeemOne(item, scope.value, admitted.admission, requestId, deps));
     }
 
     return Response.json(ExposureBatchResponseSchema.parse({ results }), { status: 202 });
@@ -56,11 +63,14 @@ export function makeExposuresHandler(deps: ExposuresRouteDeps) {
 async function redeemOne(
   item: ExposureBatchRequest["exposures"][number],
   scope: CredentialScope,
+  admission: AppIdentityAdmission,
   requestId: string,
   deps: ExposuresRouteDeps,
 ): Promise<ExposureBatchResult> {
-  const verified = await verifyTicketForScope(item.exposureTicket, scope, deps);
+  const verified = await verifyTicketForScope(item.exposureTicket, scope, admission, deps);
   if (!verified.ok) return rejected(item.exposureId, verified.code);
+  const stale = await staleExposure(item.exposureId, admission);
+  if (stale !== null) return stale;
 
   const fingerprint = await ticketFingerprint(item.exposureTicket);
   const claimInput = {
@@ -84,6 +94,18 @@ async function redeemOne(
     );
   }
 
+  return completeClaim(claim, item, verified.payload, claimInput, scope, admission, deps);
+}
+
+async function completeClaim(
+  claim: Awaited<ReturnType<ExposureRedemptionClaimStore["claim"]>>,
+  item: ExposureBatchRequest["exposures"][number],
+  ticket: ExposureTicketPayload,
+  claimInput: RedemptionClaimContext,
+  scope: CredentialScope,
+  admission: AppIdentityAdmission,
+  deps: ExposuresRouteDeps,
+): Promise<ExposureBatchResult> {
   if (claim.status === "conflict") {
     return rejected(item.exposureId, "EVENT_ID_CONFLICT");
   }
@@ -91,14 +113,27 @@ async function redeemOne(
     return rejected(item.exposureId, RETRYABLE_EXPOSURE_REJECTION_CODE);
   }
   if (claim.status === "deduplicated") {
-    const holdoverFault = await ensureHoldoverWrite(verified.payload, scope, item.exposureId, deps);
-    if (holdoverFault) return holdoverFault;
-    return { exposureId: item.exposureId, status: "deduplicated", code: null };
+    return completeDeduplicated(item.exposureId, ticket, scope, admission, deps);
   }
   if (claim.status === "resume_ack") {
-    return completeAcknowledgeOnly(item.exposureId, claimInput, verified.payload, scope, deps);
+    return completeAcknowledgeOnly(item.exposureId, claimInput, ticket, scope, admission, deps);
   }
-  return sealIngestAndConfirm(item, verified.payload, claimInput, scope, deps);
+  return sealIngestAndConfirm(item, ticket, claimInput, scope, admission, deps);
+}
+
+async function completeDeduplicated(
+  exposureId: string,
+  ticket: ExposureTicketPayload,
+  scope: CredentialScope,
+  admission: AppIdentityAdmission,
+  deps: ExposuresRouteDeps,
+): Promise<ExposureBatchResult> {
+  const stale = await staleExposure(exposureId, admission);
+  if (stale !== null) return stale;
+  const holdoverFault = await ensureHoldoverWrite(ticket, scope, exposureId, deps);
+  if (holdoverFault) return holdoverFault;
+  const staleBeforeSuccess = await staleExposure(exposureId, admission);
+  return staleBeforeSuccess ?? { exposureId, status: "deduplicated", code: null };
 }
 
 async function completeAcknowledgeOnly(
@@ -106,12 +141,17 @@ async function completeAcknowledgeOnly(
   claimInput: RedemptionClaimContext,
   ticket: ExposureTicketPayload,
   scope: CredentialScope,
+  admission: AppIdentityAdmission,
   deps: ExposuresRouteDeps,
 ): Promise<ExposureBatchResult> {
+  const stale = await staleExposure(exposureId, admission);
+  if (stale !== null) return stale;
   try {
     const ack = await deps.exposureRedemptionClaims.acknowledge(claimInput);
     const holdoverFault = await ensureHoldoverWrite(ticket, scope, exposureId, deps);
     if (holdoverFault) return holdoverFault;
+    const staleBeforeSuccess = await staleExposure(exposureId, admission);
+    if (staleBeforeSuccess !== null) return staleBeforeSuccess;
     return {
       exposureId,
       status: ack.status === "already_accepted" ? "deduplicated" : "accepted",
@@ -135,8 +175,11 @@ async function sealIngestAndConfirm(
   ticket: ExposureTicketPayload,
   claimInput: RedemptionClaimContext,
   scope: CredentialScope,
+  admission: AppIdentityAdmission,
   deps: ExposuresRouteDeps,
 ): Promise<ExposureBatchResult> {
+  const stale = await staleExposure(item.exposureId, admission);
+  if (stale !== null) return stale;
   const exposure = await assembleExposureFromTicket({
     ticket,
     appId: claimInput.appId,
@@ -147,39 +190,24 @@ async function sealIngestAndConfirm(
     now: deps.now ?? deps.exposureTicket.now,
   });
 
-  try {
-    await deps.exposureIngestSink.write(exposure);
-  } catch (cause) {
-    await releaseClaimQuietly(claimInput, deps);
-    if (cause instanceof ExposureIngestSinkError) {
-      deps.logger?.error("exposure_ingest_sink_failed", {
-        requestId: claimInput.requestId,
-        status: cause.status,
-        appId: claimInput.appId,
-        environmentId: claimInput.environmentId,
-        exposureId: item.exposureId,
-        causeChain: errorCauseChain(cause),
-      });
-      return rejected(item.exposureId, ingestFailureCode(cause.status));
-    }
-    deps.logger?.error("exposure_ingest_sink_failed", {
-      requestId: claimInput.requestId,
-      appId: claimInput.appId,
-      environmentId: claimInput.environmentId,
-      exposureId: item.exposureId,
-      causeChain: errorCauseChain(cause),
-    });
-    // Deliberate: unclassified ingest throws are platform-side and retryable.
-    // Claim-store faults must not use this branch — they go through
-    // logAndRejectClaimStoreFault so taxonomy cannot regress per call site.
-    return rejected(item.exposureId, RETRYABLE_EXPOSURE_REJECTION_CODE);
-  }
+  const ingestFailure = await ingestExposure(
+    exposure,
+    item.exposureId,
+    claimInput,
+    admission,
+    deps,
+  );
+  if (ingestFailure !== null) return ingestFailure;
 
   try {
+    const staleBeforeConfirm = await staleExposure(item.exposureId, admission);
+    if (staleBeforeConfirm !== null) return staleBeforeConfirm;
     await deps.exposureRedemptionClaims.markSealed(claimInput);
     const ack = await deps.exposureRedemptionClaims.acknowledge(claimInput);
     const holdoverFault = await ensureHoldoverWrite(ticket, scope, item.exposureId, deps);
     if (holdoverFault) return holdoverFault;
+    const staleBeforeSuccess = await staleExposure(item.exposureId, admission);
+    if (staleBeforeSuccess !== null) return staleBeforeSuccess;
     return {
       exposureId: item.exposureId,
       status: ack.status === "already_accepted" ? "deduplicated" : "accepted",
@@ -206,4 +234,44 @@ async function sealIngestAndConfirm(
       deps,
     );
   }
+}
+
+async function ingestExposure(
+  exposure: Parameters<ExposuresRouteDeps["exposureIngestSink"]["write"]>[0],
+  exposureId: string,
+  claimInput: RedemptionClaimContext,
+  admission: AppIdentityAdmission,
+  deps: ExposuresRouteDeps,
+): Promise<ExposureBatchResult | null> {
+  const stale = await staleExposure(exposureId, admission);
+  if (stale !== null) return stale;
+  try {
+    await deps.exposureIngestSink.write(exposure);
+    return null;
+  } catch (cause) {
+    await releaseClaimQuietly(claimInput, deps);
+    deps.logger?.error("exposure_ingest_sink_failed", {
+      requestId: claimInput.requestId,
+      ...(cause instanceof ExposureIngestSinkError ? { status: cause.status } : {}),
+      appId: claimInput.appId,
+      environmentId: claimInput.environmentId,
+      exposureId,
+      causeChain: errorCauseChain(cause),
+    });
+    return rejected(
+      exposureId,
+      cause instanceof ExposureIngestSinkError
+        ? ingestFailureCode(cause.status)
+        : RETRYABLE_EXPOSURE_REJECTION_CODE,
+    );
+  }
+}
+
+async function staleExposure(
+  exposureId: string,
+  admission: AppIdentityAdmission,
+): Promise<ExposureBatchResult | null> {
+  return (await appIdentityAdmissionValidationError(admission)) === null
+    ? null
+    : rejected(exposureId, RETRYABLE_EXPOSURE_REJECTION_CODE);
 }

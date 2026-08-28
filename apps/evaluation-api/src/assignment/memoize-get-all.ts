@@ -12,7 +12,7 @@ export function memoizeGetAll(store: AssignmentStore): AssignmentStore {
   } | null = null;
   return {
     getAll(input) {
-      const key = `${input.appId}\0${input.idType}\0${input.targetingKey}`;
+      const key = `${input.appId}\0${input.idType}\0${input.targetingKey}\0${input.identityVersion ?? ""}`;
       if (cached?.key === key) return cached.value;
       const value = store.getAll(input);
       cached = { key, value };

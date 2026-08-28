@@ -4,7 +4,12 @@ import {
   type ErrorResponse,
 } from "@splitch/contracts";
 import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
-import { appIdentityTrafficError } from "./app-identity-traffic";
+import {
+  type AppIdentityAdmission,
+  admittedAssignmentStore,
+  appIdentityAdmissionValidationError,
+  tryAdmitAppIdentity,
+} from "./app-identity-traffic";
 import { evaluate } from "./evaluate/accessor-paths";
 import type { EvaluateResult } from "./evaluate/evaluate-path";
 import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
@@ -47,14 +52,14 @@ export function makeEvaluateHandler(deps: EvaluateRouteDeps) {
 
     const assertionError = appAssertionError(parsed.body.appId, scope.value.appId);
     if (assertionError !== null) return renderError(assertionError, { requestId });
-    const identityError = await appIdentityTrafficError(
-      deps.exposureAssembly.saltStore,
-      scope.value.appId,
-    );
-    if (identityError !== null) return renderError(identityError, { requestId });
+    const admitted = await tryAdmitAppIdentity(deps.exposureAssembly.saltStore, scope.value.appId);
+    if (!admitted.ok) return renderError(admitted.error, { requestId });
 
-    const evaluated = await evaluateWithCapture(parsed.body, scope.value, deps);
-    return evaluateResponse(evaluated, deps, requestId, request);
+    const requestDeps = admittedEvaluateDeps(deps, admitted.admission);
+    const evaluated = await evaluateWithCapture(parsed.body, scope.value, requestDeps);
+    const stale = await appIdentityAdmissionValidationError(admitted.admission);
+    if (stale !== null) return renderError(stale, { requestId });
+    return evaluateResponse(evaluated, requestDeps, admitted.admission, requestId, request);
   };
 }
 
@@ -106,6 +111,7 @@ async function evaluateWithCapture(
 async function evaluateResponse(
   evaluated: Awaited<ReturnType<typeof evaluateWithCapture>>,
   deps: EvaluateRouteDeps,
+  admission: AppIdentityAdmission,
   requestId: string,
   request: Request,
 ): Promise<Response> {
@@ -138,8 +144,12 @@ async function evaluateResponse(
     evaluated.scope,
     { flagKey: provider.flag.flagKey, sdkRuntime: sdkRuntime(request) },
     deps,
+    admission,
   );
   if (!commit.ok) return renderError(commit.error, { requestId });
+
+  const stale = await appIdentityAdmissionValidationError(admission);
+  if (stale !== null) return renderError(stale, { requestId });
 
   // Only record the holdover AFTER the Exposure is accepted by ingest. Writing it
   // first and then returning 503 would make the SDK retry hit holdover replay
@@ -202,14 +212,17 @@ async function writeEvaluationCommit(
   scope: EvaluationUsageScope,
   dimensions: { readonly flagKey: string; readonly sdkRuntime: string },
   deps: EvaluateRouteDeps,
+  admission: AppIdentityAdmission,
 ): Promise<{ ok: true } | { ok: false; error: ErrorResponse }> {
+  const stale = await appIdentityAdmissionValidationError(admission);
+  if (stale !== null) return { ok: false, error: stale };
   try {
     await deps.evaluationCommitSink.write({
       usage: {
         idempotencyKey,
         organizationId: scope.organizationId,
         appId: scope.appId,
-        identityVersion: await deps.exposureAssembly.saltStore.currentKeyVersion(scope.appId),
+        identityVersion: admission.identityVersion,
         environmentId: scope.environmentId,
         flagKey: dimensions.flagKey,
         sdkRuntime: dimensions.sdkRuntime,
@@ -244,6 +257,17 @@ async function writeEvaluationCommit(
       error: errorResponse("SERVICE_UNAVAILABLE", "Evaluation commit ingest is unavailable"),
     };
   }
+}
+
+function admittedEvaluateDeps(
+  deps: EvaluateRouteDeps,
+  admission: AppIdentityAdmission,
+): EvaluateRouteDeps {
+  return {
+    ...deps,
+    assignmentStore: admittedAssignmentStore(deps.assignmentStore, admission),
+    exposureAssembly: { ...deps.exposureAssembly, saltStore: admission.saltStore },
+  };
 }
 
 function evaluateInput(input: unknown): EvaluateInput {

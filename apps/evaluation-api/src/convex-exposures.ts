@@ -12,6 +12,12 @@ import {
 import { type EvaluatePathDeps, evaluatePath } from "@splitch/evaluation-core";
 import type { SaltStore } from "@splitch/privacy";
 import type { HandlerArgs, Principal } from "@splitch/worker-runtime";
+import {
+  type AppIdentityAdmission,
+  admittedEvaluatePathDeps,
+  appIdentityAdmissionValidationError,
+  tryAdmitAppIdentity,
+} from "./app-identity-traffic";
 import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import {
   EMPTY_CONVEX_ASSIGNMENTS,
@@ -48,6 +54,10 @@ interface ConvexExposureDeps extends EvaluatePathDeps {
   now?: () => Date;
 }
 
+type AdmittedConvexExposureDeps = ConvexExposureDeps & {
+  readonly identityAdmission: AppIdentityAdmission;
+};
+
 export function makeConvexExposuresHandler(deps: ConvexExposureDeps) {
   return (args: HandlerArgs<unknown>): Promise<Response> => handleBatch(args, deps);
 }
@@ -76,10 +86,19 @@ async function handleBatch(
       { status: 503 },
     );
   }
+  const admitted = await tryAdmitAppIdentity(deps.saltStore, principal.appId);
+  if (!admitted.ok) return Response.json(admitted.error, { status: 503 });
+  const requestDeps: AdmittedConvexExposureDeps = {
+    ...admittedEvaluatePathDeps(deps, admitted.admission),
+    saltStore: admitted.admission.saltStore,
+    identityAdmission: admitted.admission,
+  };
   const body = ConvexServerExposureRequestSchema.parse(inputBody(input));
   const results: ConvexServerExposureResponse["results"] = [];
   for (const item of body.exposures) {
-    results.push(await verifyAndIngest(resolver, sourceKind, principal, item, requestId, deps));
+    results.push(
+      await verifyAndIngest(resolver, sourceKind, principal, item, requestId, requestDeps),
+    );
   }
   return Response.json(ConvexServerExposureResponseSchema.parse({ results }), { status: 202 });
 }
@@ -90,22 +109,27 @@ async function verifyAndIngest(
   principal: Principal,
   item: ConvexServerExposureItem,
   requestId: string,
-  deps: ConvexExposureDeps,
+  deps: AdmittedConvexExposureDeps,
 ): Promise<ConvexServerExposureResponse["results"][number]> {
   const verification = await resolver.resolve(principal, item, requestId);
   if (verification.status === "installation_not_found")
     return rejected(item.exposureId, installationNotFoundCode(sourceKind), false);
   if (verification.status === "configuration_not_found")
     return rejected(item.exposureId, "STALE_CONFIGURATION", false);
+  if (verification.config.appId !== deps.identityAdmission.appId) {
+    return rejected(item.exposureId, "STALE_CONFIGURATION", false);
+  }
   return ingestOne(item, verification.config, deps);
 }
 
 async function ingestOne(
   item: ConvexServerExposureItem,
   config: ConvexExposureVerificationConfig,
-  deps: ConvexExposureDeps,
+  deps: AdmittedConvexExposureDeps,
 ): Promise<ConvexServerExposureResponse["results"][number]> {
   const now = (deps.now ?? (() => new Date()))();
+  const stale = await staleIntegration(item.exposureId, deps.identityAdmission);
+  if (stale !== null) return stale;
   if (!isConvexExposureTimeAccepted(item.exposureAt, config, now)) {
     return rejected(item.exposureId, "VALIDATION_ERROR", false);
   }
@@ -137,6 +161,8 @@ async function ingestOne(
     exposureId: item.exposureId,
     ticketFingerprint: fingerprint,
   };
+  const staleBeforeClaim = await staleIntegration(item.exposureId, deps.identityAdmission);
+  if (staleBeforeClaim !== null) return staleBeforeClaim;
   const claim = await deps.exposureRedemptionClaims.claim(claimInput);
   if (claim.status !== "acquired") {
     return completeExistingClaim(claim, claimInput, item, exposure.targetingKeyHash, config, deps);
@@ -151,7 +177,7 @@ async function completeExistingClaim(
   item: ConvexServerExposureItem,
   targetingKeyHash: string,
   config: ConvexExposureVerificationConfig,
-  deps: ConvexExposureDeps,
+  deps: AdmittedConvexExposureDeps,
 ): Promise<ConvexServerExposureResponse["results"][number]> {
   if (claim.status === "conflict") return rejected(item.exposureId, "EVENT_ID_CONFLICT", false);
   if (claim.status === "busy") return rejected(item.exposureId, "SERVICE_UNAVAILABLE", true);
@@ -160,8 +186,12 @@ async function completeExistingClaim(
     claim.status === "resume_ack"
       ? await deps.exposureRedemptionClaims.acknowledge(claimInput)
       : null;
+  const stale = await staleIntegration(item.exposureId, deps.identityAdmission);
+  if (stale !== null) return stale;
   const holdoverFault = await ensureConvexHoldover(item, targetingKeyHash, config, deps);
   if (holdoverFault) return holdoverFault;
+  const staleBeforeSuccess = await staleIntegration(item.exposureId, deps.identityAdmission);
+  if (staleBeforeSuccess !== null) return staleBeforeSuccess;
   return {
     exposureId: item.exposureId,
     status: acknowledged?.status === "accepted" ? "accepted" : "deduplicated",
@@ -173,8 +203,10 @@ async function ingestAcquiredClaim(
   item: ConvexServerExposureItem,
   exposure: ExposureEvent & { isHoldover: false },
   config: ConvexExposureVerificationConfig,
-  deps: ConvexExposureDeps,
+  deps: AdmittedConvexExposureDeps,
 ): Promise<ConvexServerExposureResponse["results"][number]> {
+  const stale = await staleIntegration(item.exposureId, deps.identityAdmission);
+  if (stale !== null) return stale;
   try {
     await deps.exposureIngestSink.write(exposure);
   } catch (cause) {
@@ -184,6 +216,8 @@ async function ingestAcquiredClaim(
   }
 
   try {
+    const staleBeforeConfirm = await staleIntegration(item.exposureId, deps.identityAdmission);
+    if (staleBeforeConfirm !== null) return staleBeforeConfirm;
     await deps.exposureRedemptionClaims.markSealed(claimInput);
     await deps.exposureRedemptionClaims.acknowledge(claimInput);
   } catch (cause) {
@@ -198,6 +232,8 @@ async function ingestAcquiredClaim(
 
   const holdoverFault = await ensureConvexHoldover(item, exposure.targetingKeyHash, config, deps);
   if (holdoverFault) return holdoverFault;
+  const staleBeforeSuccess = await staleIntegration(item.exposureId, deps.identityAdmission);
+  if (staleBeforeSuccess !== null) return staleBeforeSuccess;
   return { exposureId: item.exposureId, status: "accepted" };
 }
 
@@ -247,6 +283,15 @@ function inputBody(input: unknown): unknown {
 
 function rejected(exposureId: string, code: string, retryable: boolean) {
   return { exposureId, status: "rejected" as const, code, message: code, retryable };
+}
+
+async function staleIntegration(
+  exposureId: string,
+  admission: AppIdentityAdmission,
+): Promise<ConvexServerExposureResponse["results"][number] | null> {
+  return (await appIdentityAdmissionValidationError(admission)) === null
+    ? null
+    : rejected(exposureId, "SERVICE_UNAVAILABLE", true);
 }
 
 function installationNotFoundCode(kind: "convex" | "cloudflare"): string {

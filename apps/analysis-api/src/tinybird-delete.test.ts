@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -26,12 +26,12 @@ describe("Tinybird App identity reset", () => {
     const proof = await deleteAppIdentityData(
       { TINYBIRD_API_URL: API_URL, TINYBIRD_DELETE_TOKEN: "delete-token" },
       "app_1",
-      "app-v1",
+      ["local-v1", "v1", "app-v1"],
       "reset-1",
       { fetchFn },
     );
 
-    expect(proof).toContain("suppression=visible,audit_log=retained");
+    expect(proof).toContain("generation-tombstones=3,suppression=visible,audit_log=retained");
     expect(proof).toContain("status-stable=0");
     for (const datasource of APP_IDENTITY_RESET_DATASOURCES) {
       expect(proof).toContain(`${datasource}=0`);
@@ -42,7 +42,14 @@ describe("Tinybird App identity reset", () => {
     expect(deleteCalls.map(([input]) => new URL(String(input)).pathname)).toEqual(
       APP_IDENTITY_RESET_DATASOURCES.map((name) => `/v0/datasources/${name}/delete`),
     );
-    expect(new URL(String(fetchFn.mock.calls[0]?.[0])).pathname).toBe("/v0/events");
+    const eventCalls = fetchFn.mock.calls.filter(
+      ([input]) => new URL(String(input)).pathname === "/v0/events",
+    );
+    expect(eventCalls.slice(0, 3).map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
+      expect.objectContaining({ targeting_key_version: "local-v1", reset_id: "reset-1" }),
+      expect.objectContaining({ targeting_key_version: "v1", reset_id: "reset-1" }),
+      expect.objectContaining({ targeting_key_version: "app-v1", reset_id: "reset-1" }),
+    ]);
     expect(new URL(String(deleteCalls.at(-1)?.[0])).pathname).toBe(
       "/v0/datasources/environment_exposure_status_deletions/delete",
     );
@@ -68,7 +75,7 @@ describe("Tinybird App identity reset", () => {
       deleteAppIdentityData(
         { TINYBIRD_API_URL: API_URL, TINYBIRD_DELETE_TOKEN: "delete-token" },
         "app_1",
-        "app-v1",
+        ["app-v1"],
         "reset-1",
         { fetchFn },
       ),
@@ -92,7 +99,7 @@ describe("Tinybird App identity reset", () => {
       deleteAppIdentityData(
         { TINYBIRD_API_URL: API_URL, TINYBIRD_DELETE_TOKEN: "delete-token" },
         "app_1",
-        "app-v1",
+        ["app-v1"],
         "reset-1",
         { fetchFn },
       ),
@@ -108,7 +115,7 @@ describe("Tinybird App identity reset", () => {
     await deleteAppIdentityData(
       { TINYBIRD_API_URL: API_URL, TINYBIRD_DELETE_TOKEN: "delete-token" },
       "app_1",
-      "app-v1",
+      ["app-v1"],
       "reset-1",
       { fetchFn },
     );

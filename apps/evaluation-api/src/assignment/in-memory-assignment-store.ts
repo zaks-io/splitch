@@ -45,6 +45,7 @@ export class InMemoryAssignmentStore implements AssignmentStore {
       experimentId: input.experimentId,
       idType: input.idType,
       targetingKeyHash,
+      identityVersion: input.identityVersion,
       runId: input.runId,
       variant: input.variant,
     });
