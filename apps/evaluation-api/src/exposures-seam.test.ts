@@ -22,7 +22,7 @@ describe("POST /api/sdk/exposures: real Event Ingest seam", () => {
   it("accepts a batch whose sealed Exposure appends via /api/internal/exposures", async () => {
     const tinybird = mockTinybirdFetch();
     const eventIngest = await loadEventIngestWorker();
-    const env = makeEventIngestEnv();
+    const env = await makeEventIngestEnv();
     const ctx = new TestExecutionContext();
     const httpSink = makeHttpExposureIngestSink({
       token: "internal_ingest_secret",
@@ -86,6 +86,10 @@ class TestExecutionContext implements ExecutionContext {
   passThroughOnException(): void {}
 }
 
+function eventIngestModuleHref(fileName: string): string {
+  return pathToFileURL(join(process.cwd(), "../event-ingest-api/src", fileName)).href;
+}
+
 function mockTinybirdFetch() {
   const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status: 202 }));
   vi.stubGlobal("fetch", fetch);
@@ -95,7 +99,7 @@ function mockTinybirdFetch() {
 async function loadEventIngestWorker(): Promise<{
   fetch: (request: Request, env: unknown, ctx: ExecutionContext) => Promise<Response>;
 }> {
-  const href = pathToFileURL(join(process.cwd(), "../event-ingest-api/src/index.ts")).href;
+  const href = eventIngestModuleHref("index.ts");
   const mod = (await import(href)) as {
     EvaluationEntrypoint: new (
       ctx: ExecutionContext,
@@ -109,7 +113,11 @@ async function loadEventIngestWorker(): Promise<{
   };
 }
 
-function makeEventIngestEnv() {
+async function makeEventIngestEnv() {
+  const fixtureHref = eventIngestModuleHref("admission-test-fixture.ts");
+  const { localIngestRuntimeBindings } = (await import(fixtureHref)) as {
+    localIngestRuntimeBindings: () => Record<string, unknown>;
+  };
   const kv = new MemoryKV();
   kv.set(
     experimentConfigKey(APP_ID, ENVIRONMENT_ID, EXPERIMENT_ID),
@@ -141,26 +149,7 @@ function makeEventIngestEnv() {
   );
   return {
     CONFIG_STORE: kv as unknown as KVNamespace,
-    SPLITCH_PLATFORM_TARGET: "local",
-    SPLITCH_EVENT_INGEST_TOKEN: "internal_ingest_secret",
-    TINYBIRD_API_URL: "https://tinybird.test",
-    TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
-    INGEST_ADMISSION_GATE: allowAllAdmissionGate(),
-  };
-}
-
-function allowAllAdmissionGate() {
-  return {
-    idFromName(name: string) {
-      return name as unknown as DurableObjectId;
-    },
-    get() {
-      return {
-        async fetch() {
-          return Response.json({ allowed: true, retryAfterMs: 0 });
-        },
-      };
-    },
+    ...localIngestRuntimeBindings(),
   };
 }
 
