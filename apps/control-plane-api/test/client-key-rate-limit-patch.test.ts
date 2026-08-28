@@ -10,7 +10,8 @@ import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
-import { seedAppMember, seedEnvironment, seedOrgApp } from "../src/test-seeds";
+import { seedAppMember, seedEnvironment, seedOrgApp, seedOrgMember } from "../src/test-seeds";
+import { makeTokenMembershipAccess } from "../src/token-membership";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 const AUDIENCE = "https://cp.splitch.test";
@@ -38,6 +39,10 @@ let h: Harness;
 beforeAll(async () => {
   const bindings = await makeLocalBindings();
   await seedOrgApp(bindings.d1, APP);
+  // An App claim is only live while BOTH axes hold: the bearer resolver rechecks
+  // App membership and Org membership, so removing the Org row must invalidate an
+  // App-scoped token (see claimHolds in src/token-membership.ts).
+  await seedOrgMember(bindings.d1, { orgId: APP.orgId, userId: ADMIN, role: "admin" });
   await seedAppMember(bindings.d1, { appId: APP.appId, userId: ADMIN, role: "admin" });
   await seedEnvironment(bindings.d1, { appId: APP.appId, ...ENV });
 });
@@ -49,15 +54,17 @@ beforeEach(async () => {
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
+  const repo = createRepository(bindings.d1);
   h = {
     app: createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier,
         sessions: makeSessionStore(bindings.kv),
+        membershipAccess: makeTokenMembershipAccess(repo),
         now: () => NOW_MS,
       }),
       rateLimiter: allowLimiter,
-      repo: createRepository(bindings.d1),
+      repo,
       credentialStore: bindings.credentialKv,
       nowIso: () => new Date(NOW_MS).toISOString(),
     }),
