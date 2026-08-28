@@ -1,5 +1,6 @@
 import {
   type ArrowFunction,
+  type Block,
   type CallExpression,
   type ConditionalExpression,
   type Expression,
@@ -8,18 +9,23 @@ import {
   isArrowFunction,
   isBlock,
   isCallExpression,
+  isCatchClause,
   isClassDeclaration,
   isConditionalExpression,
+  isConstructorDeclaration,
   isFunctionDeclaration,
   isFunctionExpression,
   isIdentifier,
   isImportDeclaration,
+  isMethodDeclaration,
   isNamedImports,
   isNamespaceImport,
   isPropertyAccessExpression,
+  isSourceFile,
   isStringLiteral,
   isVariableStatement,
   type Node,
+  type ParameterDeclaration,
   type SourceFile,
   type Statement,
 } from "typescript";
@@ -108,7 +114,7 @@ function identifierWrapPath(
   seen: Set<string>,
   node: Node,
 ): PathResult {
-  if (isOfficialWrapBinding(file, name)) {
+  if (isOfficialWrapBinding(file, name, node)) {
     return fail(file, node, "wrapWorkerHandler itself is not a wrapped handler");
   }
   if (seen.has(name)) return fail(file, node, "circular wrap alias");
@@ -127,26 +133,77 @@ function isOfficialWrapCall(file: SourceFile, expression: Expression): boolean {
   const value = unwrap(expression);
   if (!isCallExpression(value)) return false;
   const callee = unwrap(value.expression);
-  if (isIdentifier(callee)) return isOfficialWrapBinding(file, callee.text);
+  if (isIdentifier(callee)) return isOfficialWrapBinding(file, callee.text, callee);
   if (
     isPropertyAccessExpression(callee) &&
     isIdentifier(callee.name) &&
     callee.name.text === WRAP_WORKER_HANDLER
   ) {
     const object = unwrap(callee.expression);
-    return isIdentifier(object) && isOfficialWrapNamespace(file, object.text);
+    return isIdentifier(object) && isOfficialWrapNamespace(file, object.text, object);
   }
   return false;
 }
 
-function isOfficialWrapBinding(file: SourceFile, name: string): boolean {
-  if (localModuleValueNames(file).has(name)) return false;
+function isOfficialWrapBinding(file: SourceFile, name: string, node: Node): boolean {
+  if (nameIsBoundInEnclosingScope(node, name) || localModuleValueNames(file).has(name)) {
+    return false;
+  }
   return officialImportedWrapNames(file).has(name);
 }
 
-function isOfficialWrapNamespace(file: SourceFile, name: string): boolean {
-  if (localModuleValueNames(file).has(name)) return false;
+function isOfficialWrapNamespace(file: SourceFile, name: string, node: Node): boolean {
+  if (nameIsBoundInEnclosingScope(node, name) || localModuleValueNames(file).has(name)) {
+    return false;
+  }
   return officialImportedWrapNamespaces(file).has(name);
+}
+
+function nameIsBoundInEnclosingScope(node: Node, name: string): boolean {
+  let current: Node | undefined = node.parent;
+  while (current && !isSourceFile(current)) {
+    if (scopeBindsName(current, name)) return true;
+    current = current.parent;
+  }
+  return false;
+}
+
+function scopeBindsName(scope: Node, name: string): boolean {
+  if (isFunctionDeclaration(scope) || isFunctionExpression(scope) || isArrowFunction(scope)) {
+    return functionLikeBindsName(scope, name);
+  }
+  if (isMethodDeclaration(scope) || isConstructorDeclaration(scope)) {
+    return parametersBindName(scope.parameters, name);
+  }
+  if (isBlock(scope)) return blockBindsName(scope, name);
+  return catchBindsName(scope, name);
+}
+
+function functionLikeBindsName(
+  fn: FunctionDeclaration | FunctionExpression | ArrowFunction,
+  name: string,
+): boolean {
+  if (fn.name && isIdentifier(fn.name) && fn.name.text === name) return true;
+  return parametersBindName(fn.parameters, name);
+}
+
+function parametersBindName(parameters: readonly ParameterDeclaration[], name: string): boolean {
+  return parameters.some(
+    (parameter) => isIdentifier(parameter.name) && parameter.name.text === name,
+  );
+}
+
+function blockBindsName(block: Block, name: string): boolean {
+  const names = new Set<string>();
+  for (const statement of block.statements) addLocalValueName(statement, names);
+  return names.has(name);
+}
+
+function catchBindsName(scope: Node, name: string): boolean {
+  if (!isCatchClause(scope) || !scope.variableDeclaration) return false;
+  return (
+    isIdentifier(scope.variableDeclaration.name) && scope.variableDeclaration.name.text === name
+  );
 }
 
 function officialImportedWrapNames(file: SourceFile): Set<string> {

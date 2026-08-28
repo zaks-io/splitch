@@ -53,6 +53,73 @@ describe("hosted Worker wrap-gate AST fixtures", () => {
     expect(proveDefaultExportWrapped(local, "local-wrap.ts").wrapped).toBe(false);
   });
 
+  it("fails when a nested const, function, or parameter shadows the official wrap", () => {
+    const nestedConst = `
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      function factory() {
+        const ${WRAPPER} = (handler: unknown) => handler;
+        return ${WRAPPER}({
+          fetch() {
+            return new Response("ok");
+          },
+        });
+      }
+      export default factory();
+    `;
+    const nestedFunction = `
+      import { ${WRAPPER} } from "@splitch/observability/worker";
+      export default function handler() {
+        function ${WRAPPER}(inner: unknown) {
+          return inner;
+        }
+        return ${WRAPPER}({
+          fetch() {
+            return new Response("ok");
+          },
+        });
+      }
+    `;
+    const parameterShadow = `
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      function factory(${WRAPPER}: (handler: unknown) => unknown) {
+        return ${WRAPPER}({
+          fetch() {
+            return new Response("ok");
+          },
+        });
+      }
+      export default factory((handler) => handler);
+    `;
+    expect(defaultExportIsWrapped(nestedConst)).toBe(false);
+    expect(defaultExportIsWrapped(nestedFunction)).toBe(false);
+    expect(defaultExportIsWrapped(parameterShadow)).toBe(false);
+  });
+
+  it("fails a throw-only factory and accepts a throw that a catch wraps", () => {
+    const thrown = `
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      export default function factory() {
+        throw new Error("nope");
+      }
+    `;
+    const caught = `
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      export default function factory() {
+        try {
+          throw new Error("nope");
+        } catch {
+          return ${WRAPPER}({
+            fetch() {
+              return new Response("ok");
+            },
+          });
+        }
+      }
+    `;
+    expect(defaultExportIsWrapped(thrown)).toBe(false);
+    expect(defaultExportIsWrapped(caught)).toBe(true);
+  });
+
   it("fails when a local function shadows the official wrapWorkerHandler import", () => {
     const shadowed = `
       import { ${WRAPPER} } from "@splitch/worker-runtime";

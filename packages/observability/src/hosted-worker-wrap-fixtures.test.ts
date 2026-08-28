@@ -133,6 +133,29 @@ describe("hosted Worker wrap-gate inventory fixtures", () => {
     expect(omissionFailures(discovered).length).toBeGreaterThan(0);
   });
 
+  it("fails when a nested or parameter wrapWorkerHandler shadows the official import", () => {
+    const discovered = discoverFixture({
+      wrangler: `{
+        "name": "nested-shadow-fixture",
+        "main": "index.ts"
+      }`,
+      source: `
+        import { ${WRAPPER} } from "@splitch/worker-runtime";
+        function factory(${WRAPPER}: (handler: unknown) => unknown) {
+          return ${WRAPPER}({
+            fetch() {
+              return new Response("ok");
+            },
+          });
+        }
+        export default factory((handler) => handler);
+      `,
+    });
+    expect(discovered).toHaveLength(1);
+    expect(defaultExportIsWrapped(discovered[0]?.source ?? "")).toBe(false);
+    expect(omissionFailures(discovered).length).toBeGreaterThan(0);
+  });
+
   it("fails an unwrapped switch return path", () => {
     const discovered = discoverFixture({
       wrangler: `{

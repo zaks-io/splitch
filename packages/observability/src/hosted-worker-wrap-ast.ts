@@ -50,10 +50,12 @@ import {
 export type PathResult =
   | { readonly kind: "returns" }
   | { readonly kind: "continues" }
+  | { readonly kind: "throws" }
   | { readonly kind: "fail"; readonly reason: string; readonly location: string };
 
 export const RETURNS: PathResult = { kind: "returns" };
 const CONTINUES: PathResult = { kind: "continues" };
+const THROWS: PathResult = { kind: "throws" };
 
 export function fail(file: SourceFile, node: Node, reason: string): PathResult {
   return { kind: "fail", reason, location: locationOf(file, node) };
@@ -114,7 +116,7 @@ function structuredStatementPath(
   predicate: (expression: Expression) => boolean,
 ): PathResult | undefined {
   if (isReturnStatement(statement)) return returnPath(file, statement, predicate);
-  if (isThrowStatement(statement)) return RETURNS;
+  if (isThrowStatement(statement)) return THROWS;
   if (isBlock(statement)) return blockPath(file, statement, predicate);
   if (isIfStatement(statement)) return ifPath(file, statement, predicate);
   if (isTryStatement(statement)) return tryPath(file, statement, predicate);
@@ -174,7 +176,8 @@ function ifPath(
   if (!statement.elseStatement) return CONTINUES;
   const elsePath = statementPath(file, statement.elseStatement, predicate);
   if (elsePath.kind === "fail") return elsePath;
-  return thenPath.kind === "returns" && elsePath.kind === "returns" ? RETURNS : CONTINUES;
+  if (thenPath.kind === "returns" && elsePath.kind === "returns") return RETURNS;
+  return thenPath.kind === "throws" && elsePath.kind === "throws" ? THROWS : CONTINUES;
 }
 
 function tryPath(
@@ -189,11 +192,23 @@ function tryPath(
   const finallyResult = statement.finallyBlock
     ? blockPath(file, statement.finallyBlock, predicate)
     : CONTINUES;
-  if (finallyResult.kind === "fail" || finallyResult.kind === "returns") return finallyResult;
+  return mergeTryCatchFinally(tryResult, catchResult, finallyResult);
+}
+
+function mergeTryCatchFinally(
+  tryResult: PathResult,
+  catchResult: PathResult | undefined,
+  finallyResult: PathResult,
+): PathResult {
+  if (finallyResult.kind !== "continues") return finallyResult;
   if (tryResult.kind === "fail") return tryResult;
   if (!catchResult) return tryResult;
   if (catchResult.kind === "fail") return catchResult;
-  return tryResult.kind === "returns" && catchResult.kind === "returns" ? RETURNS : CONTINUES;
+  if (tryResult.kind === "returns" && catchResult.kind === "returns") return RETURNS;
+  if (tryResult.kind === "throws") {
+    return catchResult.kind === "returns" ? RETURNS : catchResult;
+  }
+  return CONTINUES;
 }
 
 function switchPath(
