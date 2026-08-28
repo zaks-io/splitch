@@ -193,7 +193,7 @@ describe("Evaluation Worker to SDK metadata", () => {
       liveRun: true,
       runOverrides: { allocation: { control: 0, treatment: 100 }, targetingRules: [] },
     });
-    const { createSplitchClient } = await loadSdkClient();
+    const { createSplitchClient } = await import("@splitch/sdk");
     const telemetryRequests: Promise<Response>[] = [];
     const client = createSplitchClient({
       clientKey: CLIENT_KEY,
@@ -232,18 +232,6 @@ describe("Evaluation Worker to SDK metadata", () => {
     ]);
   });
 });
-
-async function loadSdkClient(): Promise<{
-  createSplitchClient(options: { clientKey: string; endpoint: string; fetch: typeof fetch }): {
-    evaluateDetails(
-      flagKey: string,
-      context: { targetingKey: string; idempotencyKey: string },
-    ): Promise<{ reason: string }>;
-  };
-}> {
-  const path = new URL("../../../packages/sdk/src/client.ts", import.meta.url).href;
-  return import(/* @vite-ignore */ path);
-}
 
 describe("POST /api/sdk/evaluate: non-exposing outcomes", () => {
   it("returns a holdover Variant without firing another Exposure", async () => {
