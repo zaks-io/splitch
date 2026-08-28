@@ -167,3 +167,38 @@ describe("POST /api/sdk/verify", () => {
     expect(assignmentStore.putCalls).toEqual([]);
   });
 });
+
+describe("POST /api/sdk/verify: Client Key validation errors", () => {
+  it("omits Experiment Entity type from a Client Key idType mismatch", async () => {
+    const { app } = await makeSdkRouteHarness({
+      experimentOverrides: { targetingKeyType: "workspace" },
+    });
+
+    const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
+    const body = (await res.json()) as ErrorResponse;
+    const raw = JSON.stringify(body);
+
+    expect(res.status).toBe(400);
+    expect(body).toEqual({
+      code: "VALIDATION_ERROR",
+      message: "idType does not match the Experiment",
+      details: { issues: [] },
+    });
+    expect(raw).not.toContain("workspace");
+    expect(raw).not.toContain("targetingKeyType");
+  });
+
+  it("keeps the Experiment Entity type on an API Key idType mismatch", async () => {
+    const { app } = await makeSdkRouteHarness({
+      experimentOverrides: { targetingKeyType: "workspace" },
+    });
+
+    const res = await app.request(PATH, sdkRouteInit(API_KEY));
+    const body = (await res.json()) as ErrorResponse;
+
+    expect(res.status).toBe(400);
+    expect(body.code).toBe("VALIDATION_ERROR");
+    expect(body.message).toContain("workspace");
+    expect(body.message).toContain("targetingKeyType");
+  });
+});

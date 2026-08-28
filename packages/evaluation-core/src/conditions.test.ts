@@ -1,5 +1,5 @@
 import type { Condition, EvaluationContext } from "@splitch/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { matchesConditions } from "./conditions";
 import { ConditionMatchError } from "./errors";
 
@@ -19,6 +19,32 @@ function match(
 describe("matchesConditions", () => {
   it("fails loud before an empty condition set can reach every", () => {
     expect(() => matchesConditions([], context({}))).toThrow(ConditionMatchError);
+  });
+
+  it("throws without embedding a configured regex and logs the pattern server-side", () => {
+    const logger = { warn: vi.fn() };
+    const pattern = "(unclosed";
+    expect(() =>
+      matchesConditions(
+        [{ attribute: "email", operator: "matches", value: pattern }],
+        context({ email: "ops@acme.com" }),
+        { logger, ruleId: "rule-regex" },
+      ),
+    ).toThrow(ConditionMatchError);
+    try {
+      matchesConditions(
+        [{ attribute: "email", operator: "matches", value: pattern }],
+        context({ email: "ops@acme.com" }),
+      );
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConditionMatchError);
+      expect((error as Error).message).toBe("Invalid regex condition");
+      expect((error as Error).message).not.toContain(pattern);
+    }
+    expect(logger.warn).toHaveBeenCalledWith("invalid_regex_condition", {
+      pattern,
+      ruleId: "rule-regex",
+    });
   });
 
   it("treats an absent or null attribute as a non-match", () => {

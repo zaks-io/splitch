@@ -46,7 +46,11 @@ export async function handleAuthorizedMetricEvent(
 
   const hot = await loadDefinition(env, credential.appId, parsed.eventName);
   if (hot instanceof Response) return hot;
-  const mismatch = schemaMismatch(parsed, hot);
+  const mismatch = schemaMismatch(
+    parsed,
+    hot,
+    credential.credentialKind === "api_key" ? "trusted" : "public",
+  );
   if (mismatch) return mismatch;
 
   return admitAndClaimMetricEvent(env, credential, parsed, {

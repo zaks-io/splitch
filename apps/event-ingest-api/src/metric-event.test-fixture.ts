@@ -101,7 +101,11 @@ export function metricEventBody(patch: Record<string, unknown> = {}) {
   };
 }
 
-export function hotConfig(versionId: string, version: number): string {
+export function hotConfig(
+  versionId: string,
+  version: number,
+  versionPatch: Record<string, unknown> = {},
+): string {
   return JSON.stringify({
     schemaVersion: CURRENT_KV_SCHEMA_VERSION,
     data: {
@@ -127,6 +131,7 @@ export function hotConfig(versionId: string, version: number): string {
           { name: "plan", type: "string", required: true, allowedValues: ["pro", "free"] },
         ],
         publishedAt: "2026-08-07T00:00:00.000Z",
+        ...versionPatch,
       },
     },
   });

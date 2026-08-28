@@ -73,6 +73,7 @@ export async function admitAndClaimMetricEvent(
 export function schemaMismatch(
   parsed: MetricEventTrackRequest,
   hot: { eventDefinition: { id: string }; version: Parameters<typeof validateMetricEvent>[1] },
+  disclosure: "public" | "trusted" = "public",
 ): Response | null {
   const issues = validateMetricEvent(parsed, hot.version);
   if (issues.length === 0) return null;
@@ -80,11 +81,14 @@ export function schemaMismatch(
     return renderError({
       code: "ENTITY_TYPE_MISMATCH",
       message: "Metric Event Entity type does not match the Event Definition Version",
-      details: {
-        expectedIdType: hot.version.entityType,
-        receivedIdType: parsed.idType,
-        eventDefinitionId: hot.eventDefinition.id,
-      },
+      details:
+        disclosure === "trusted"
+          ? {
+              expectedIdType: hot.version.entityType,
+              receivedIdType: parsed.idType,
+              eventDefinitionId: hot.eventDefinition.id,
+            }
+          : { receivedIdType: parsed.idType },
     });
   }
   return renderError({
@@ -92,10 +96,30 @@ export function schemaMismatch(
     message: "Metric Event does not match the Event Definition Version",
     details: {
       eventName: parsed.eventName,
-      eventDefinitionVersionId: hot.version.id,
-      issues,
+      ...(disclosure === "trusted" ? { eventDefinitionVersionId: hot.version.id } : {}),
+      issues: disclosure === "trusted" ? issues : issues.map(publicValidationIssue),
     },
   });
+}
+
+function publicValidationIssue(issue: { path: string[]; message: string }): {
+  path: string[];
+  message: string;
+} {
+  return { path: issue.path, message: publicIssueMessage(issue.message) };
+}
+
+function publicIssueMessage(message: string): string {
+  if (
+    message.startsWith("number must be at least") ||
+    message.startsWith("number must be at most")
+  ) {
+    return "number is out of range";
+  }
+  if (message.startsWith("expected Entity type")) {
+    return "idType does not match the Event Definition";
+  }
+  return message;
 }
 
 export function canonicalJson(value: unknown): string {
