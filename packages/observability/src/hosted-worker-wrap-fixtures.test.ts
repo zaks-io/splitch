@@ -57,10 +57,7 @@ describe("hosted Worker wrap-gate inventory fixtures", () => {
       source: `
         import { WorkerEntrypoint } from "cloudflare:workers";
         import { ${WRAPPER} } from "@splitch/observability/worker";
-        const wrapped = ${WRAPPER}(
-          { fetch() { return new Response("ok"); } },
-          { surface: "control-plane-api" },
-        );
+        const handler = { fetch() { return new Response("ok"); } };
         export default ${WRAPPER}(
           { fetch() { return new Response("ok"); } },
           { surface: "control-plane-api" },
@@ -68,7 +65,11 @@ describe("hosted Worker wrap-gate inventory fixtures", () => {
         export class MixedDoor extends WorkerEntrypoint {
           fetch(request: Request) {
             if (request.method === "GET") return new Response("ok");
-            return wrapped.fetch(request, this.env, this.ctx);
+            return ${WRAPPER}(handler, { surface: "control-plane-api" }).fetch(
+              request,
+              this.env,
+              this.ctx,
+            );
           }
         }
       `,
@@ -166,10 +167,7 @@ describe("hosted Worker wrap-gate inventory fixtures", () => {
       source: `
         import { WorkerEntrypoint } from "cloudflare:workers";
         import { ${WRAPPER} } from "@splitch/observability/worker";
-        const wrapped = ${WRAPPER}(
-          { fetch() { return new Response("ok"); } },
-          { surface: "control-plane-api" },
-        );
+        const handler = { fetch() { return new Response("ok"); } };
         export default ${WRAPPER}(
           { fetch() { return new Response("ok"); } },
           { surface: "control-plane-api" },
@@ -180,7 +178,11 @@ describe("hosted Worker wrap-gate inventory fixtures", () => {
               case "GET":
                 return new Response("ok");
               default:
-                return wrapped.fetch(request, this.env, this.ctx);
+                return ${WRAPPER}(handler, { surface: "control-plane-api" }).fetch(
+                  request,
+                  this.env,
+                  this.ctx,
+                );
             }
           }
         }

@@ -8,19 +8,15 @@ import {
 } from "./hosted-worker-wrap-gate";
 
 describe("hosted Worker entrypoint binding discovery", () => {
-  it("discovers an imported WorkerEntrypoint alias exported through an aliased export list", () => {
+  it("inventories but rejects an aliased WorkerEntrypoint export list", () => {
     const source = `
       import { WorkerEntrypoint as CloudflareEntrypoint } from "cloudflare:workers";
       import { ${WRAPPER} } from "@splitch/worker-runtime";
-      const wrapped = ${WRAPPER}({
-        fetch() {
-          return new Response("ok");
-        },
-      });
-      export default wrapped;
+      const handler = { fetch() { return new Response("ok"); } };
+      export default ${WRAPPER}(handler);
       class InternalDoor extends CloudflareEntrypoint {
         fetch(request: Request) {
-          return wrapped.fetch(request, this.env, this.ctx);
+          return ${WRAPPER}(handler).fetch(request, this.env, this.ctx);
         }
       }
       export { InternalDoor as PublicDoor };
@@ -37,24 +33,27 @@ describe("hosted Worker entrypoint binding discovery", () => {
     });
 
     expect(exportedWorkerEntrypoints(source)).toEqual(["PublicDoor"]);
-    expect(classFetchIsWrapped(source, "PublicDoor")).toBe(true);
-    expect(omissionFailures(discovered)).toEqual([]);
+    expect(classFetchIsWrapped(source, "PublicDoor")).toBe(false);
+    expect(omissionFailures(discovered)).toEqual([
+      expect.stringMatching(/PublicDoor\.fetch is unwrapped/),
+      expect.stringMatching(/configured entrypoint PublicDoor is unwrapped/),
+    ]);
   });
 
-  it("discovers a namespace-qualified WorkerEntrypoint binding", () => {
+  it("inventories but rejects a namespace-qualified WorkerEntrypoint binding", () => {
     const source = `
       import * as CloudflareWorkers from "cloudflare:workers";
       import { ${WRAPPER} } from "@splitch/worker-runtime";
-      const wrapped = ${WRAPPER}({ fetch() { return new Response("ok"); } });
-      export default wrapped;
+      const handler = { fetch() { return new Response("ok"); } };
+      export default ${WRAPPER}(handler);
       export class PublicDoor extends CloudflareWorkers.WorkerEntrypoint {
         fetch(request: Request) {
-          return wrapped.fetch(request, this.env, this.ctx);
+          return ${WRAPPER}(handler).fetch(request, this.env, this.ctx);
         }
       }
     `;
     expect(exportedWorkerEntrypoints(source)).toEqual(["PublicDoor"]);
-    expect(classFetchIsWrapped(source, "PublicDoor")).toBe(true);
+    expect(classFetchIsWrapped(source, "PublicDoor")).toBe(false);
   });
 
   it("fails closed on an unsupported exported fetch-bearing class with its location", () => {
@@ -65,11 +64,11 @@ describe("hosted Worker entrypoint binding discovery", () => {
       }`,
       source: `
         import { ${WRAPPER} } from "@splitch/worker-runtime";
-        const wrapped = ${WRAPPER}({ fetch() { return new Response("ok"); } });
-        export default wrapped;
+        const handler = { fetch() { return new Response("ok"); } };
+        export default ${WRAPPER}(handler);
         class UnknownDoor extends unknownEntrypoint() {
           ["fetch"](request: Request) {
-            return wrapped.fetch(request, this.env, this.ctx);
+            return ${WRAPPER}(handler).fetch(request, this.env, this.ctx);
           }
         }
         export { UnknownDoor };
@@ -86,11 +85,11 @@ describe("hosted Worker entrypoint binding discovery", () => {
     const source = `
       import { ${WRAPPER} } from "@splitch/worker-runtime";
       class WorkerEntrypoint {}
-      const wrapped = ${WRAPPER}({ fetch() { return new Response("ok"); } });
-      export default wrapped;
+      const handler = { fetch() { return new Response("ok"); } };
+      export default ${WRAPPER}(handler);
       export class FalseDoor extends WorkerEntrypoint {
         fetch(request: Request) {
-          return wrapped.fetch(request, this.env, this.ctx);
+          return ${WRAPPER}(handler).fetch(request, this.env, this.ctx);
         }
       }
     `;
@@ -109,11 +108,11 @@ describe("hosted Worker entrypoint binding discovery", () => {
     const source = `
       import { WorkerEntrypoint } from "cloudflare:workers";
       import { ${WRAPPER} } from "@splitch/worker-runtime";
-      const wrapped = ${WRAPPER}({ fetch() { return new Response("ok"); } });
-      export default wrapped;
+      const handler = { fetch() { return new Response("ok"); } };
+      export default ${WRAPPER}(handler);
       export const PublicDoor = class extends WorkerEntrypoint {
         fetch(request: Request) {
-          return wrapped.fetch(request, this.env, this.ctx);
+          return ${WRAPPER}(handler).fetch(request, this.env, this.ctx);
         }
       };
     `;
@@ -127,8 +126,8 @@ describe("hosted Worker entrypoint binding discovery", () => {
       wrangler: `{ "name": "class-expression", "main": "src/worker.ts" }`,
       source: `
         import { ${WRAPPER} } from "@splitch/worker-runtime";
-        const wrapped = ${WRAPPER}({ fetch() { return new Response("ok"); } });
-        export default wrapped;
+        const handler = { fetch() { return new Response("ok"); } };
+        export default ${WRAPPER}(handler);
         export const PublicDoor = class {
           fetch() {
             return new Response("unsupported");
@@ -148,11 +147,11 @@ describe("hosted Worker entrypoint binding discovery", () => {
     const source = `
       import { WorkerEntrypoint } from "cloudflare:workers";
       import { ${WRAPPER} } from "@splitch/worker-runtime";
-      const wrapped = ${WRAPPER}({ fetch() { return new Response("ok"); } });
-      export default wrapped;
+      const handler = { fetch() { return new Response("ok"); } };
+      export default ${WRAPPER}(handler);
       export let PublicDoor = class extends WorkerEntrypoint {
         fetch(request: Request) {
-          return wrapped.fetch(request, this.env, this.ctx);
+          return ${WRAPPER}(handler).fetch(request, this.env, this.ctx);
         }
       };
       PublicDoor = class extends WorkerEntrypoint {
@@ -181,12 +180,12 @@ describe("hosted Worker entrypoint binding discovery", () => {
     const source = `
       import { WorkerEntrypoint } from "cloudflare:workers";
       import { ${WRAPPER} } from "@splitch/worker-runtime";
-      const wrapped = ${WRAPPER}({ fetch() { return new Response("ok"); } });
+      const handler = { fetch() { return new Response("ok"); } };
       const rawFetch = () => new Response("raw");
-      export default wrapped;
+      export default ${WRAPPER}(handler);
       export class PublicDoor extends WorkerEntrypoint {
         fetch(request: Request) {
-          return wrapped.fetch(request, this.env, this.ctx);
+          return ${WRAPPER}(handler).fetch(request, this.env, this.ctx);
         }
       }
       ${mutation}
@@ -196,6 +195,63 @@ describe("hosted Worker entrypoint binding discovery", () => {
     expect(proveClassFetchWrapped(source, "PublicDoor", "prototype.ts")).toMatchObject({
       wrapped: false,
       location: expect.stringMatching(/prototype\.ts:\d+:\d+/),
+    });
+  });
+
+  it.each([
+    [
+      "prototype alias mutation",
+      `
+        export class PublicDoor extends WorkerEntrypoint {
+          fetch(request: Request) {
+            return ${WRAPPER}(handler).fetch(request, this.env, this.ctx);
+          }
+        }
+        const prototypeAlias = PublicDoor.prototype;
+        prototypeAlias.fetch = rawFetch;
+      `,
+    ],
+    [
+      "constructor fetch assignment",
+      `
+        export class PublicDoor extends WorkerEntrypoint {
+          constructor() {
+            super();
+            this.fetch = rawFetch;
+          }
+          fetch(request: Request) {
+            return ${WRAPPER}(handler).fetch(request, this.env, this.ctx);
+          }
+        }
+      `,
+    ],
+    [
+      "static fetch ambiguity",
+      `
+        export class PublicDoor extends WorkerEntrypoint {
+          static fetch(request: Request) {
+            return ${WRAPPER}(handler).fetch(request, this.env, this.ctx);
+          }
+          fetch() {
+            return rawFetch();
+          }
+        }
+      `,
+    ],
+  ])("fails the canonical class grammar on %s with a location", (_name, classSource) => {
+    const source = `
+      import { WorkerEntrypoint } from "cloudflare:workers";
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      const handler = { fetch() { return new Response("ok"); } };
+      const rawFetch = () => new Response("raw");
+      export default ${WRAPPER}(handler);
+      ${classSource}
+    `;
+
+    expect(classFetchIsWrapped(source, "PublicDoor")).toBe(false);
+    expect(proveClassFetchWrapped(source, "PublicDoor", "canonical-class.ts")).toMatchObject({
+      wrapped: false,
+      location: expect.stringMatching(/canonical-class\.ts:\d+:\d+/),
     });
   });
 });

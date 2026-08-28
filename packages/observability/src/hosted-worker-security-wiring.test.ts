@@ -66,6 +66,35 @@ describe("hosted Worker security-header wiring", () => {
     }
   });
 
+  it("keeps the complete current Worker entrypoint corpus inside the canonical grammar", () => {
+    expect(
+      workers
+        .map((worker) => [
+          relative(repoRoot, worker.mainPath),
+          exportedWorkerEntrypoints(worker.source).sort(),
+        ])
+        .sort(([left], [right]) => String(left).localeCompare(String(right))),
+    ).toEqual([
+      ["apps/analysis-api/src/index.ts", ["ControlPlaneEntrypoint"]],
+      ["apps/auth-api/src/index.ts", []],
+      ["apps/control-panel/src/server.ts", []],
+      [
+        "apps/control-plane-api/src/index.ts",
+        [
+          "ControlPanelEntrypoint",
+          "EvaluationEntrypoint",
+          "McpEntrypoint",
+          "SignedControlPanelEntrypoint",
+        ],
+      ],
+      ["apps/evaluation-api/src/index.ts", ["ControlPlaneEntrypoint"]],
+      ["apps/event-ingest-api/src/index.ts", ["EvaluationEntrypoint"]],
+      ["apps/marketing/src/server.ts", []],
+      ["apps/mcp-server/src/index.ts", []],
+      ["packages/cloudflare/src/worker.ts", ["SplitchCloudflareWorker"]],
+    ]);
+  });
+
   it("resolves every configured service entrypoint to a wrapped exported class", () => {
     const referenced = workers.flatMap((worker) => worker.referencedEntrypoints);
     expect(referenced.length).toBeGreaterThan(0);

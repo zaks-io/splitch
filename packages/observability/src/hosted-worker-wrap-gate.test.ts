@@ -95,7 +95,7 @@ describe("hosted Worker wrap-gate AST fixtures", () => {
     expect(defaultExportIsWrapped(parameterShadow)).toBe(false);
   });
 
-  it("fails a throw-only factory and accepts a throw that a catch wraps", () => {
+  it("rejects factory exports even when a catch returns an official wrapper", () => {
     const thrown = `
       import { ${WRAPPER} } from "@splitch/worker-runtime";
       export default function factory() {
@@ -117,7 +117,7 @@ describe("hosted Worker wrap-gate AST fixtures", () => {
       }
     `;
     expect(defaultExportIsWrapped(thrown)).toBe(false);
-    expect(defaultExportIsWrapped(caught)).toBe(true);
+    expect(defaultExportIsWrapped(caught)).toBe(false);
   });
 
   it("fails when a local function shadows the official wrapWorkerHandler import", () => {
@@ -140,10 +140,7 @@ describe("hosted Worker wrap-gate AST fixtures", () => {
     const switched = `
       import { WorkerEntrypoint } from "cloudflare:workers";
       import { ${WRAPPER} } from "@splitch/observability/worker";
-      const wrapped = ${WRAPPER}(
-        { fetch() { return new Response("ok"); } },
-        { surface: "fixture" },
-      );
+      const handler = { fetch() { return new Response("ok"); } };
       export default ${WRAPPER}(
         { fetch() { return new Response("ok"); } },
         { surface: "fixture" },
@@ -154,7 +151,7 @@ describe("hosted Worker wrap-gate AST fixtures", () => {
             case "GET":
               return new Response("ok");
             default:
-              return wrapped.fetch(request, this.env, this.ctx);
+              return ${WRAPPER}(handler, { surface: "fixture" }).fetch(request, this.env, this.ctx);
           }
         }
       }
@@ -192,31 +189,22 @@ describe("hosted Worker wrap-gate AST fixtures", () => {
     );
   });
 
-  it("accepts wrapped object, class, aliased, namespaced, and delegated entrypoints", () => {
+  it("accepts only direct canonical object and WorkerEntrypoint wrappers", () => {
     const wrapped = `
       import { WorkerEntrypoint } from "cloudflare:workers";
-      import { ${WRAPPER} as wrap } from "@splitch/observability/worker";
-      import * as runtime from "@splitch/worker-runtime";
+      import { ${WRAPPER} } from "@splitch/observability/worker";
       const handler = { fetch() { return new Response("ok"); } };
-      export default wrap(handler, { surface: "fixture" });
-      const delegated = runtime.${WRAPPER}(
-        { fetch() { return new Response("delegated"); } },
-      );
-      function bindingHandler() {
-        return wrap(
-          { fetch() { return new Response("bound"); } },
-          { surface: "fixture" },
-        );
-      }
-      const bound = bindingHandler();
+      const delegated = { fetch() { return new Response("delegated"); } };
+      const bound = { fetch() { return new Response("bound"); } };
+      export default ${WRAPPER}(handler, { surface: "fixture" });
       export class DelegatedDoor extends WorkerEntrypoint {
         fetch(request: Request) {
-          return delegated.fetch(request, this.env, this.ctx);
+          return ${WRAPPER}(delegated, { surface: "fixture" }).fetch(request, this.env, this.ctx);
         }
       }
       export class BoundDoor extends WorkerEntrypoint {
         fetch(request: Request) {
-          return bound.fetch(request, this.env, this.ctx);
+          return ${WRAPPER}(bound, { surface: "fixture" }).fetch(request, this.env, this.ctx);
         }
       }
     `;
@@ -229,14 +217,14 @@ describe("hosted Worker wrap-gate AST fixtures", () => {
     const cloudflare = `
       import { WorkerEntrypoint } from "cloudflare:workers";
       import { ${WRAPPER} } from "@splitch/worker-runtime";
-      const configurationHandler = ${WRAPPER}({
+      const configurationHandler = {
         fetch(request: Request, env: Env) {
           return new Response(env.ok);
         },
-      });
+      };
       export default class SplitchCloudflareWorker extends WorkerEntrypoint {
         fetch(request: Request) {
-          return configurationHandler.fetch(request, this.env, this.ctx);
+          return ${WRAPPER}(configurationHandler).fetch(request, this.env, this.ctx);
         }
       }
     `;
@@ -255,7 +243,36 @@ describe("hosted Worker wrap-gate AST fixtures", () => {
     `;
     const proof = proveDefaultExportWrapped(unsupported, "with.ts");
     expect(proof.wrapped).toBe(false);
-    expect(proof.reason).toMatch(/unsupported syntax/);
+    expect(proof.reason).toMatch(/non-canonical|unsupported syntax/);
     expect(proof.location).toMatch(/with\.ts:\d+:\d+/);
+  });
+
+  it.each([
+    ["eval", 'eval("handler.fetch = raw");'],
+    ["Function constructor", 'new Function("return handler")();'],
+    ["dynamic import", 'void import("./mutator");'],
+  ])("fails closed on %s with a source location", (_name, dynamic) => {
+    const source = `
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      const handler = { fetch() { return new Response("ok"); } };
+      ${dynamic}
+      export default ${WRAPPER}(handler);
+    `;
+    expect(proveDefaultExportWrapped(source, "dynamic.ts")).toMatchObject({
+      wrapped: false,
+      location: expect.stringMatching(/dynamic\.ts:\d+:\d+/),
+    });
+  });
+
+  it("rejects an unknown handler-producing call in the final wrapper", () => {
+    const source = `
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      const makeHandler = () => ({ fetch() { return new Response("ok"); } });
+      export default ${WRAPPER}(makeHandler());
+    `;
+    expect(proveDefaultExportWrapped(source, "unknown-handler.ts")).toMatchObject({
+      wrapped: false,
+      location: expect.stringMatching(/unknown-handler\.ts:\d+:\d+/),
+    });
   });
 });

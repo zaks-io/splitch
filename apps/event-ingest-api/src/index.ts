@@ -101,15 +101,11 @@ const delegatedHandler = {
   },
 } satisfies ExportedHandler<Env>;
 
-const wrappedDelegatedHandler = wrapWorkerHandler(delegatedHandler, {
-  surface: "event-ingest-api",
-});
-
 /** The public fetch must stay closed while Evaluation delegates over this binding. */
 export class EvaluationEntrypoint extends WorkerEntrypoint<Env> {
   override async fetch(request: Request): Promise<Response> {
-    return wrappedDelegatedHandler.fetch(
-      request as Parameters<typeof wrappedDelegatedHandler.fetch>[0],
+    return wrapWorkerHandler(delegatedHandler, { surface: "event-ingest-api" }).fetch(
+      request as Parameters<typeof delegatedHandler.fetch>[0],
       this.env,
       this.ctx,
     );

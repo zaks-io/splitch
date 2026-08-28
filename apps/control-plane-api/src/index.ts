@@ -70,7 +70,7 @@ const signedPanelHandler = bindingHandler("signed");
 /** Bounded bridge for the predecessor Panel's session-handle binding protocol. */
 export class ControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    return boundedPanelHandler.fetch(
+    return wrapWorkerHandler(boundedPanelHandler, { surface: "control-plane-api" }).fetch(
       request as Parameters<typeof boundedPanelHandler.fetch>[0],
       this.env,
       this.ctx,
@@ -81,14 +81,18 @@ export class ControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv>
 /** Binding-only entrypoint for one-operation MCP delegations. */
 export class McpEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    return mcpHandler.fetch(request as Parameters<typeof mcpHandler.fetch>[0], this.env, this.ctx);
+    return wrapWorkerHandler(mcpHandler, { surface: "control-plane-api" }).fetch(
+      request as Parameters<typeof mcpHandler.fetch>[0],
+      this.env,
+      this.ctx,
+    );
   }
 }
 
 /** Binding-only V2 entrypoint used by the Control Panel for signed least-privilege delegation. */
 export class SignedControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    return signedPanelHandler.fetch(
+    return wrapWorkerHandler(signedPanelHandler, { surface: "control-plane-api" }).fetch(
       request as Parameters<typeof signedPanelHandler.fetch>[0],
       this.env,
       this.ctx,
@@ -100,21 +104,18 @@ const evaluationDelegatedRoutes = routesDelegatedTo("control-plane-api").filter(
   (route) => route.auth === "api-key",
 );
 
-const evaluationHandler = wrapWorkerHandler(
-  {
-    async fetch(request, env, ctx): Promise<Response> {
-      const identity = delegatedIdentityFor(request, evaluationDelegatedRoutes);
-      if (!identity) return notDelegatedResponse(request);
-      return handleRequest(request, env, ctx, { kind: "evaluation", identity });
-    },
-  } satisfies ExportedHandler<ControlPlaneApiEnv>,
-  { surface: "control-plane-api" },
-);
+const evaluationHandler = {
+  async fetch(request, env, ctx): Promise<Response> {
+    const identity = delegatedIdentityFor(request, evaluationDelegatedRoutes);
+    if (!identity) return notDelegatedResponse(request);
+    return handleRequest(request, env, ctx, { kind: "evaluation", identity });
+  },
+} satisfies ExportedHandler<ControlPlaneApiEnv>;
 
 /** Binding-only entrypoint for API-Key Convex routes surfaced by Evaluation. */
 export class EvaluationEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    return evaluationHandler.fetch(
+    return wrapWorkerHandler(evaluationHandler, { surface: "control-plane-api" }).fetch(
       request as Parameters<typeof evaluationHandler.fetch>[0],
       this.env,
       this.ctx,
@@ -138,20 +139,17 @@ type PanelProtocol = "none" | "signed" | "bounded-session";
 type AuthMode = PanelProtocol | "mcp";
 
 function bindingHandler(authMode: Exclude<AuthMode, "none">) {
-  return wrapWorkerHandler(
-    {
-      async fetch(request, env, ctx): Promise<Response> {
-        if (authMode === "bounded-session" && !boundedPanelSessionEnabled(env)) {
-          return new Response("not found", { status: 404 });
-        }
-        if (authMode !== "mcp" && !parseControlPanelBindingOperation(request)) {
-          return new Response("not found", { status: 404 });
-        }
-        return handleRequest(request, env, ctx, authMode);
-      },
-    } satisfies ExportedHandler<ControlPlaneApiEnv>,
-    { surface: "control-plane-api" },
-  );
+  return {
+    async fetch(request, env, ctx): Promise<Response> {
+      if (authMode === "bounded-session" && !boundedPanelSessionEnabled(env)) {
+        return new Response("not found", { status: 404 });
+      }
+      if (authMode !== "mcp" && !parseControlPanelBindingOperation(request)) {
+        return new Response("not found", { status: 404 });
+      }
+      return handleRequest(request, env, ctx, authMode);
+    },
+  } satisfies ExportedHandler<ControlPlaneApiEnv>;
 }
 
 type BindingAuthority = { kind: "evaluation"; identity: DelegatedIdentity };

@@ -184,7 +184,7 @@ describe("hosted Worker wrap-gate immutable proof", () => {
     expect(classFetchIsWrapped(source, "MutatedDoor")).toBe(false);
   });
 
-  it("uses supplied arguments instead of a parameter default", () => {
+  it("rejects parameter-default wrapper factories for supplied and omitted arguments", () => {
     const suppliedUnwrapped = `
       import { ${WRAPPER} } from "@splitch/worker-runtime";
       const raw = ${RAW_HANDLER};
@@ -196,10 +196,10 @@ describe("hosted Worker wrap-gate immutable proof", () => {
     const omittedUsesDefault = suppliedUnwrapped.replace("choose(raw)", "choose()");
 
     expect(defaultExportIsWrapped(suppliedUnwrapped)).toBe(false);
-    expect(defaultExportIsWrapped(omittedUsesDefault)).toBe(true);
+    expect(defaultExportIsWrapped(omittedUsesDefault)).toBe(false);
   });
 
-  it("proves an explicitly supplied wrapped argument", () => {
+  it("rejects an explicitly supplied wrapped argument through a helper", () => {
     const source = `
       import { ${WRAPPER} } from "@splitch/worker-runtime";
       function choose(handler: unknown) {
@@ -207,6 +207,6 @@ describe("hosted Worker wrap-gate immutable proof", () => {
       }
       export default choose(${WRAPPER}(${RAW_HANDLER}));
     `;
-    expect(defaultExportIsWrapped(source)).toBe(true);
+    expect(defaultExportIsWrapped(source)).toBe(false);
   });
 });

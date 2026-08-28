@@ -38,15 +38,15 @@ describe("hosted Worker wrap-gate service-bound entrypoints", () => {
         source: `
           import { WorkerEntrypoint } from "cloudflare:workers";
           import { ${WRAPPER} } from "@splitch/worker-runtime";
-          const wrapped = ${WRAPPER}({
+          const handler = {
             fetch() {
               return new Response("ok");
             },
-          });
-          export default wrapped;
+          };
+          export default ${WRAPPER}(handler);
           export class SharedDoor extends WorkerEntrypoint {
             fetch(request: Request) {
-              return wrapped.fetch(request, this.env, this.ctx);
+              return ${WRAPPER}(handler).fetch(request, this.env, this.ctx);
             }
           }
         `,

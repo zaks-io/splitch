@@ -69,7 +69,7 @@ describe("hosted Worker wrap-gate lexical scope", () => {
     expect(classFetchIsWrapped(delegatedShadow, "ShadowDoor")).toBe(false);
   });
 
-  it("accepts official wrapWorkerHandler in root, nested, parameter, block, factory, and delegated scopes", () => {
+  it("accepts only the direct root wrapper call and rejects indirect official uses", () => {
     const root = `
       import { ${WRAPPER} } from "@splitch/worker-runtime";
       export default ${WRAPPER}({
@@ -149,16 +149,16 @@ describe("hosted Worker wrap-gate lexical scope", () => {
       }
     `;
     expect(defaultExportIsWrapped(root)).toBe(true);
-    expect(defaultExportIsWrapped(nested)).toBe(true);
-    expect(defaultExportIsWrapped(parameter)).toBe(true);
-    expect(defaultExportIsWrapped(block)).toBe(true);
-    expect(defaultExportIsWrapped(factory)).toBe(true);
-    expect(defaultExportIsWrapped(aliasedOfficial)).toBe(true);
-    expect(defaultExportIsWrapped(delegated)).toBe(true);
-    expect(classFetchIsWrapped(delegated, "OfficialDoor")).toBe(true);
+    expect(defaultExportIsWrapped(nested)).toBe(false);
+    expect(defaultExportIsWrapped(parameter)).toBe(false);
+    expect(defaultExportIsWrapped(block)).toBe(false);
+    expect(defaultExportIsWrapped(factory)).toBe(false);
+    expect(defaultExportIsWrapped(aliasedOfficial)).toBe(false);
+    expect(defaultExportIsWrapped(delegated)).toBe(false);
+    expect(classFetchIsWrapped(delegated, "OfficialDoor")).toBe(false);
   });
 
-  it("fails an unwrapped do...while(false) return because the body executes once", () => {
+  it("rejects do...while factory exports regardless of their return", () => {
     const unwrapped = `
       import { ${WRAPPER} } from "@splitch/worker-runtime";
       export default function factory() {
@@ -189,10 +189,10 @@ describe("hosted Worker wrap-gate lexical scope", () => {
       }
     `;
     expect(defaultExportIsWrapped(unwrapped)).toBe(false);
-    expect(defaultExportIsWrapped(wrapped)).toBe(true);
+    expect(defaultExportIsWrapped(wrapped)).toBe(false);
   });
 
-  it("accepts repeated valid aliases and fails a true alias cycle", () => {
+  it("rejects repeated aliases and true alias cycles", () => {
     const repeated = `
       import { ${WRAPPER} } from "@splitch/worker-runtime";
       const wrapped = ${WRAPPER}({
@@ -212,9 +212,9 @@ describe("hosted Worker wrap-gate lexical scope", () => {
       const b = a;
       export default a;
     `;
-    expect(defaultExportIsWrapped(repeated)).toBe(true);
+    expect(defaultExportIsWrapped(repeated)).toBe(false);
     expect(defaultExportIsWrapped(cycle)).toBe(false);
-    expect(proveDefaultExportWrapped(cycle, "cycle.ts").reason).toMatch(/circular wrap alias/);
+    expect(proveDefaultExportWrapped(cycle, "cycle.ts").reason).toMatch(/direct official wrapper/);
   });
 
   it.each([

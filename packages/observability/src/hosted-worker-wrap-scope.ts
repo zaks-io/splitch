@@ -40,9 +40,6 @@ import {
   type Statement,
   type VariableDeclarationList,
 } from "typescript";
-import { unwrap } from "./hosted-worker-wrap-ast.js";
-import { bindingIntegrity } from "./hosted-worker-wrap-integrity.js";
-
 export const WRAP_WORKER_HANDLER = "wrapWorkerHandler";
 
 const OFFICIAL_WRAP_WORKER_HANDLER_SPECIFIERS = [
@@ -68,44 +65,6 @@ export function resolveName(file: SourceFile, name: string, from: Node): Resolve
     current = current.parent;
   }
   return moduleBinding(file, name);
-}
-
-export function denotesOfficialWrap(
-  file: SourceFile,
-  node: Node,
-  seen: ReadonlySet<string>,
-): boolean {
-  return denotesOfficialKind(file, node, seen, "official-wrap");
-}
-
-export function denotesOfficialNamespace(
-  file: SourceFile,
-  node: Node,
-  seen: ReadonlySet<string>,
-): boolean {
-  return denotesOfficialKind(file, node, seen, "official-namespace");
-}
-
-function denotesOfficialKind(
-  file: SourceFile,
-  node: Node,
-  seen: ReadonlySet<string>,
-  kind: "official-wrap" | "official-namespace",
-): boolean {
-  if (!isIdentifier(node) || seen.has(node.text)) return false;
-  const binding = resolveName(file, node.text, node);
-  const allowedMethods =
-    kind === "official-namespace" ? new Set([WRAP_WORKER_HANDLER]) : new Set<string>();
-  if (binding.kind === kind) {
-    return bindingIntegrity(file, binding, resolveName, allowedMethods).immutable;
-  }
-  if (binding.kind !== "value") return false;
-  if (!bindingIntegrity(file, binding, resolveName, allowedMethods).immutable) return false;
-  const value = isFunctionDeclaration(binding.value) ? undefined : unwrap(binding.value);
-  if (!value || !isIdentifier(value)) return false;
-  const nextSeen = new Set(seen);
-  nextSeen.add(node.text);
-  return denotesOfficialKind(file, value, nextSeen, kind);
 }
 
 function bindingInScope(scope: Node, name: string): ResolvedBinding | undefined {
