@@ -203,7 +203,10 @@ HoldoverWriteOutboxDurableObject.prototype.fetch = async function (request) {
       Date.now = originalDateNow;
     }
   }
-  if (url.pathname === "/purge" && globalThis.__purgeFailsRemaining > 0) {
+  if (
+    (url.pathname === "/purge" || url.pathname === "/delete") &&
+    globalThis.__purgeFailsRemaining > 0
+  ) {
     globalThis.__purgeFailsRemaining -= 1;
     return Response.json({ error: "forced Entity purge failure" }, { status: 503 });
   }

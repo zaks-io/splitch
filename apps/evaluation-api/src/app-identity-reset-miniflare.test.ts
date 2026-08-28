@@ -1,0 +1,156 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Miniflare } from "miniflare";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { HoldoverWriteAppInventoryNamespace } from "./assignment/holdover-write-app-inventory";
+import { DurableHoldoverWriteAppInventoryClient } from "./assignment/holdover-write-app-inventory-client";
+import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store";
+import { KvAssignmentStore } from "./assignment/kv-assignment-store";
+import { bundleHoldoverWriteInventoryAndOutboxWorker } from "./assignment/holdover-write-miniflare-bundle";
+import {
+  DurableHoldoverWriteCoordinator,
+  type HoldoverWriteOutboxNamespace,
+} from "./assignment/holdover-write-outbox";
+import { completeAppIdentityReset, purgeAppIdentityAssignments } from "./app-identity-reset";
+import type { EvaluationApiEnv } from "./env";
+
+const APP_ID = "app-A";
+const RESET_ID = "reset-1";
+const PUT_A = {
+  appId: APP_ID,
+  experimentId: "exp-a",
+  idType: "user",
+  targetingKeyHash: "v1:hash-a",
+  runId: "run-a",
+  variant: "control",
+} as const;
+const PUT_B = {
+  ...PUT_A,
+  experimentId: "exp-b",
+  idType: "device",
+  targetingKeyHash: "v1:hash-b",
+  runId: "run-b",
+  variant: "treatment",
+} as const;
+
+let mf: Miniflare | undefined;
+let persistenceRoot: string | undefined;
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await mf?.dispose();
+  mf = undefined;
+  if (persistenceRoot) await rm(persistenceRoot, { recursive: true, force: true });
+  persistenceRoot = undefined;
+});
+
+describe("App identity reset with production Durable Objects", () => {
+  it("resumes writer-first multi-Entity purge after a DO restart without old-hash resurrection", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(9_000);
+    persistenceRoot = await mkdtemp(join(tmpdir(), "splitch-app-identity-reset-"));
+    mf = await startMiniflare(persistenceRoot, 1);
+    const first = await bindings(mf);
+    const coordinator = new DurableHoldoverWriteCoordinator(first.outboxes);
+    await expect(coordinator.ensure(PUT_A, { sourceCreatedAtMs: 8_000 })).resolves.toEqual({
+      status: "completed",
+    });
+    await expect(coordinator.ensure(PUT_B, { sourceCreatedAtMs: 8_100 })).resolves.toEqual({
+      status: "completed",
+    });
+
+    await expect(purgeAppIdentityAssignments(first.env, APP_ID, RESET_ID)).rejects.toThrow(
+      /outbox purge returned HTTP 503/u,
+    );
+    await expect(first.inventory.status(APP_ID)).resolves.toMatchObject({
+      generationId: RESET_ID,
+      suppressed: true,
+      sagaPhase: "prepared",
+      entities: expect.arrayContaining([
+        { idType: PUT_A.idType, targetingKeyHash: PUT_A.targetingKeyHash },
+        { idType: PUT_B.idType, targetingKeyHash: PUT_B.targetingKeyHash },
+      ]),
+    });
+
+    await mf.dispose();
+    mf = await startMiniflare(persistenceRoot, 0);
+    const restarted = await bindings(mf);
+    const assignmentStore = new KvAssignmentStore(restarted.kv, restarted.writers, {} as never);
+    const oldHashRetries = await Promise.allSettled([
+      assignmentStore.putHashed(PUT_A),
+      assignmentStore.putHashed(PUT_B),
+    ]);
+    const tombstoned = oldHashRetries.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    expect(tombstoned).toHaveLength(1);
+    expect(String(tombstoned[0]?.reason)).toMatch(/Entity assignments are deleted/u);
+
+    await expect(purgeAppIdentityAssignments(restarted.env, APP_ID, RESET_ID)).resolves.toBe(
+      "evaluation-assignments:kv=2;durable_inventory=empty;durable_objects=4",
+    );
+    await expect(restarted.inventory.status(APP_ID)).resolves.toMatchObject({
+      generationId: RESET_ID,
+      suppressed: true,
+      sagaPhase: "prepared",
+      entities: [],
+    });
+
+    await expect(
+      completeAppIdentityReset(restarted.env, APP_ID, RESET_ID),
+    ).resolves.toBeUndefined();
+    await expect(restarted.inventory.status(APP_ID)).resolves.toMatchObject({
+      generationId: null,
+      suppressed: false,
+      sagaPhase: null,
+      entities: [],
+    });
+  });
+});
+
+async function startMiniflare(
+  root: string,
+  outboxDeleteFailsRemaining: number,
+): Promise<Miniflare> {
+  return new Miniflare({
+    modules: true,
+    script: bundleHoldoverWriteInventoryAndOutboxWorker({
+      purgeFailsRemaining: outboxDeleteFailsRemaining,
+    }),
+    compatibilityDate: "2026-06-21",
+    compatibilityFlags: ["nodejs_compat"],
+    kvNamespaces: { ASSIGNMENTS_KV: "assignments" },
+    kvPersist: join(root, "kv"),
+    durableObjectsPersist: join(root, "durable-objects"),
+    durableObjects: {
+      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObject" },
+      HOLDOVER_WRITE_OUTBOX: { className: "HoldoverWriteOutboxDurableObject" },
+      HOLDOVER_WRITE_APP_INVENTORY: { className: "HoldoverWriteAppInventoryDurableObject" },
+    },
+  });
+}
+
+async function bindings(runtime: Miniflare) {
+  const kv = (await runtime.getKVNamespace("ASSIGNMENTS_KV")) as unknown as KVNamespace;
+  const writers = (await runtime.getDurableObjectNamespace(
+    "ASSIGNMENT_STORE_WRITER",
+  )) as unknown as AssignmentWriterNamespace;
+  const outboxes = (await runtime.getDurableObjectNamespace(
+    "HOLDOVER_WRITE_OUTBOX",
+  )) as unknown as HoldoverWriteOutboxNamespace;
+  const inventoryNamespace = (await runtime.getDurableObjectNamespace(
+    "HOLDOVER_WRITE_APP_INVENTORY",
+  )) as unknown as HoldoverWriteAppInventoryNamespace;
+  return {
+    kv,
+    writers,
+    outboxes,
+    inventory: new DurableHoldoverWriteAppInventoryClient(inventoryNamespace),
+    env: {
+      ASSIGNMENTS_KV: kv,
+      ASSIGNMENT_STORE_WRITER: writers,
+      HOLDOVER_WRITE_OUTBOX: outboxes,
+      HOLDOVER_WRITE_APP_INVENTORY: inventoryNamespace,
+    } as unknown as EvaluationApiEnv,
+  };
+}

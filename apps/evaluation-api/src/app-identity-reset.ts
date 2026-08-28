@@ -1,7 +1,5 @@
-import {
-  appHoldoverWriteSuppressKey,
-  holdoverWriteOutboxName,
-} from "./assignment/holdover-write-outbox-core";
+import type { HoldoverWriteAppInventoryStatus } from "./assignment/holdover-write-app-inventory";
+import { holdoverWriteOutboxName } from "./assignment/holdover-write-outbox-core";
 import { assignmentWriterName } from "./assignment/assignment-store";
 import { DurableHoldoverWriteAppInventoryClient } from "./assignment/holdover-write-app-inventory-client";
 import { exposureRedemptionClaimScopeName } from "./exposure-redemption-claim";
@@ -15,35 +13,37 @@ export async function purgeAppIdentityAssignments(
   const inventory = new DurableHoldoverWriteAppInventoryClient(
     required(env.HOLDOVER_WRITE_APP_INVENTORY, "HOLDOVER_WRITE_APP_INVENTORY"),
   );
-  const cutoff = Date.now();
-  const begun = await inventory.beginDeletion(appId, resetId, cutoff);
+  await inventory.beginDeletion(appId, resetId, Date.now());
+  const frozen = await frozenResetInventory(inventory, appId, resetId);
   let durableObjects = 0;
-  for (const ref of begun.entities) {
+  for (const ref of frozen.entities) {
     const identity = { appId, ...ref };
+    const writers = env.ASSIGNMENT_STORE_WRITER;
+    const writerResponse = await writers
+      .get(writers.idFromName(assignmentWriterName(identity)))
+      .fetch("https://assignment-store.local/delete", { method: "POST" });
+    await requireAssignmentWriterTombstone(writerResponse);
+
     const outbox = required(env.HOLDOVER_WRITE_OUTBOX, "HOLDOVER_WRITE_OUTBOX");
     const outboxResponse = await outbox
       .get(outbox.idFromName(holdoverWriteOutboxName(identity)))
       .fetch("https://holdover-write-outbox.local/delete", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...identity, deleteBeforeTsMs: cutoff }),
+        body: JSON.stringify({ ...identity, deleteBeforeTsMs: frozen.deleteBeforeTsMs }),
       });
-    if (!outboxResponse.ok) {
-      throw new Error(`App identity reset outbox purge returned HTTP ${outboxResponse.status}`);
-    }
-    const writers = env.ASSIGNMENT_STORE_WRITER;
-    const writerResponse = await writers
-      .get(writers.idFromName(assignmentWriterName(identity)))
-      .fetch("https://assignment-store.local/delete", { method: "POST" });
-    if (!writerResponse.ok) {
-      throw new Error(
-        `App identity reset Assignment writer purge returned HTTP ${writerResponse.status}`,
-      );
-    }
+    await requireOutboxPurged(outboxResponse);
     durableObjects += 2;
   }
+
+  const verified = await frozenResetInventory(inventory, appId, resetId);
+  if (verified.entities.length > 0) {
+    throw new Error(
+      `App identity reset Assignment inventory still contains ${String(verified.entities.length)} Entity checkpoint(s)`,
+    );
+  }
   const deletedKeys = await deleteKvPrefix(env.ASSIGNMENTS_KV, `assignment:${appId}:`);
-  return `evaluation-assignments:kv=${deletedKeys};durable_objects=${durableObjects}`;
+  return `evaluation-assignments:kv=${deletedKeys};durable_inventory=empty;durable_objects=${durableObjects}`;
 }
 
 export async function purgeAppIdentityRetryClaims(
@@ -71,11 +71,94 @@ export async function completeAppIdentityReset(
   const inventory = new DurableHoldoverWriteAppInventoryClient(
     required(env.HOLDOVER_WRITE_APP_INVENTORY, "HOLDOVER_WRITE_APP_INVENTORY"),
   );
-  await inventory.cancelDeletion(appId, resetId);
-  if (env.ASSIGNMENTS_KV.delete === undefined) {
-    throw new Error("ASSIGNMENTS_KV.delete is required to complete App identity reset");
+  const status = await inventory.status(appId);
+  assertResetCancellationReady(status, resetId);
+  const cancellation = await inventory.cancelDeletion(appId, resetId);
+  if (!cancellation.cancelled || !cancellation.done) {
+    throw new Error(
+      `App identity reset Assignment cancellation is incomplete in phase ${cancellation.sagaPhase ?? "idle"} with ${String(cancellation.entities.length)} Entity checkpoint(s) pending`,
+    );
   }
-  await env.ASSIGNMENTS_KV.delete(appHoldoverWriteSuppressKey(appId));
+  const restored = await inventory.status(appId);
+  if (!isIdleInventory(restored)) {
+    throw new Error("App identity reset Assignment cancellation did not restore idle inventory");
+  }
+}
+
+function assertResetCancellationReady(
+  status: HoldoverWriteAppInventoryStatus,
+  resetId: string,
+): void {
+  if (status.entities.length > 0) {
+    throw new Error(
+      `App identity reset cannot cancel Assignment suppression with ${String(status.entities.length)} Entity checkpoint(s) pending`,
+    );
+  }
+  if (!isIdleInventory(status) && !isResetCancellationInventory(status, resetId)) {
+    throw new Error("App identity reset Assignment inventory cannot be cancelled by this reset");
+  }
+}
+
+function isIdleInventory(status: HoldoverWriteAppInventoryStatus): boolean {
+  return (
+    status.generationId === null &&
+    !status.suppressed &&
+    !status.deletionComplete &&
+    status.deleteBeforeTsMs === null &&
+    status.entities.length === 0 &&
+    status.sagaPhase === null
+  );
+}
+
+function isResetCancellationInventory(
+  status: HoldoverWriteAppInventoryStatus,
+  resetId: string,
+): boolean {
+  return (
+    status.generationId === resetId &&
+    status.suppressed &&
+    !status.deletionComplete &&
+    status.deleteBeforeTsMs !== null &&
+    (status.sagaPhase === "prepared" || status.sagaPhase === "canceling")
+  );
+}
+
+async function frozenResetInventory(
+  inventory: DurableHoldoverWriteAppInventoryClient,
+  appId: string,
+  resetId: string,
+): Promise<HoldoverWriteAppInventoryStatus & { readonly deleteBeforeTsMs: number }> {
+  const status = await inventory.status(appId);
+  if (
+    status.generationId !== resetId ||
+    !status.suppressed ||
+    status.deletionComplete ||
+    status.sagaPhase !== "prepared" ||
+    status.deleteBeforeTsMs === null
+  ) {
+    throw new Error("App identity reset Assignment inventory is not frozen for this reset");
+  }
+  return { ...status, deleteBeforeTsMs: status.deleteBeforeTsMs };
+}
+
+async function requireAssignmentWriterTombstone(response: Response): Promise<void> {
+  if (!response.ok) {
+    throw new Error(`App identity reset Assignment writer purge returned HTTP ${response.status}`);
+  }
+  const body = await response.json().catch(() => null);
+  if (!isRecord(body) || body.deleted !== true || body.proof !== "assignment-do-tombstone-v1") {
+    throw new Error("App identity reset Assignment writer purge returned an invalid proof");
+  }
+}
+
+async function requireOutboxPurged(response: Response): Promise<void> {
+  if (!response.ok) {
+    throw new Error(`App identity reset outbox purge returned HTTP ${response.status}`);
+  }
+  const body = await response.json().catch(() => null);
+  if (!isRecord(body) || body.ok !== true || body.remainingJobs !== false) {
+    throw new Error("App identity reset outbox purge did not durably checkpoint the Entity");
+  }
 }
 
 async function deleteKvPrefix(kv: KVNamespace, prefix: string): Promise<number> {
@@ -96,4 +179,8 @@ async function deleteKvPrefix(kv: KVNamespace, prefix: string): Promise<number> 
 function required<T>(value: T | undefined, name: string): T {
   if (!value) throw new Error(`${name} is required for App identity reset`);
   return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
