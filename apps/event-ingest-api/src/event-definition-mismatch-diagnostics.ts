@@ -16,7 +16,11 @@ export interface EventDefinitionMismatchDiagnostic {
 
 export type EventDefinitionMismatchSink = (diagnostic: EventDefinitionMismatchDiagnostic) => void;
 
-/** Untruncated operator sink. Pass the object through so nothing is sliced. */
+/**
+ * Untruncated operator sink. Serialize the complete diagnostic as one JSON
+ * string so Workers logs cannot drop nested bounds, types, allowed values, or
+ * original issues the way `console.error(label, object)` inspect truncation can.
+ */
 export function recordEventDefinitionMismatch(diagnostic: EventDefinitionMismatchDiagnostic): void {
-  console.error("event-ingest-api event definition mismatch", diagnostic);
+  console.error("event-ingest-api event definition mismatch", JSON.stringify(diagnostic));
 }

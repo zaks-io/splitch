@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { EventDefinitionMismatchDiagnostic } from "./event-definition-mismatch-diagnostics";
 import { hotConfig, metricEventBody } from "./metric-event.test-fixture";
 import { schemaMismatch } from "./metric-event-admission";
+import { publicValidationIssues } from "./public-schema-mismatch";
 
 const PURCHASE_LIMIT = {
   fields: [
@@ -118,6 +119,15 @@ describe("schemaMismatch caller-owned probes", () => {
     expect(JSON.stringify(wrongType)).not.toContain("required value is missing");
   });
 
+  it("maps unknown issue copy to generic public text", () => {
+    expect(
+      publicValidationIssues(
+        [{ path: ["fields", "amount"], message: "secret bound 10 leaked from validator" }],
+        track({ fields: { amount: 1 }, dimensions: {} }),
+      ),
+    ).toEqual([{ path: ["fields", "amount"], message: "invalid value" }]);
+  });
+
   it("retains the full untruncated mismatch in the trusted diagnostic sink", async () => {
     const recorded: EventDefinitionMismatchDiagnostic[] = [];
     await jsonOf(
@@ -144,6 +154,7 @@ describe("schemaMismatch caller-owned probes", () => {
     expect(diagnostic.eventDefinitionVersionId).toBe("edv_1");
     expect(diagnostic.eventDefinition).toEqual(hot(PURCHASE_LIMIT).eventDefinition);
     expect(diagnostic.version).toEqual(hot(PURCHASE_LIMIT).version);
+    expect(JSON.stringify(diagnostic)).not.toMatch(/\.\.\./);
     expect(diagnostic.originalIssues).toEqual(
       expect.arrayContaining([
         { path: ["fields", "internal_purchase_limit"], message: "expected boolean" },

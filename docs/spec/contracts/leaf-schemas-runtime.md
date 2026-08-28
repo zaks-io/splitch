@@ -401,13 +401,13 @@ The Event Ingest Worker constructs this shape only after the complete request va
 `WebEventBatchResult` is the route response and the return type of `sdk.web.flush()`. The route
 returns it with `202`; an empty SDK queue returns the same shape locally without network I/O:
 
-| Field                                | Type                                      | Required | Meaning                                  |
-| ------------------------------------ | ----------------------------------------- | -------- | ---------------------------------------- |
-| `results[].eventId`                  | `string` (UUID)                           | yes      | Matches one input item                   |
-| `results[].status`                   | `'accepted' \| 'duplicate' \| 'rejected'` | yes      | Independent logical result               |
-| `results[].eventDefinitionId`        | `string`                                  | cond.    | Present for accepted and duplicate items |
-| `results[].eventDefinitionVersionId` | `string`                                  | cond.    | Originally accepting immutable version   |
-| `results[].error`                    | `ErrorResponse`                           | cond.    | Present only for a rejected item         |
+| Field                                | Type                                      | Required | Meaning                                       |
+| ------------------------------------ | ----------------------------------------- | -------- | --------------------------------------------- |
+| `results[].eventId`                  | `string` (UUID)                           | yes      | Matches one input item                        |
+| `results[].status`                   | `'accepted' \| 'duplicate' \| 'rejected'` | yes      | Independent logical result                    |
+| `results[].eventDefinitionId`        | `string`                                  | cond.    | Trusted API Key accepted/duplicate items only |
+| `results[].eventDefinitionVersionId` | `string`                                  | cond.    | Trusted API Key originally accepting version  |
+| `results[].error`                    | `ErrorResponse`                           | cond.    | Present only for a rejected item              |
 
 Results preserve input order. A rejected item creates no idempotency claim and no `web_events` row;
 valid sibling items remain independently accepted.

@@ -2,10 +2,15 @@ import {
   EventDefinitionHotConfigSchema,
   eventDefinitionConfigKey,
   kvEnvelope,
+  type MetricEventTrackRequest,
   MetricEventTrackRequestSchema,
 } from "@splitch/contracts";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
+import {
+  type EventDefinitionMismatchSink,
+  recordEventDefinitionMismatch,
+} from "./event-definition-mismatch-diagnostics";
 import {
   admitAndClaimMetricEvent,
   canonicalJson,
@@ -51,7 +56,7 @@ export async function handleAuthorizedMetricEvent(
   );
   if (replay) return replay;
 
-  const hot = await loadDefinition(env, credential.appId, parsed.eventName);
+  const hot = await loadDefinition(env, credential, parsed, disclosure);
   if (hot instanceof Response) return hot;
   const mismatch = schemaMismatch(parsed, hot, disclosure);
   if (mismatch) return mismatch;
@@ -150,10 +155,19 @@ function bodyTooLargeFromHeader(contentLength: string | null): boolean {
   return /^\d+$/u.test(contentLength ?? "") && Number(contentLength) > MAX_BODY_BYTES;
 }
 
-async function loadDefinition(env: Env, appId: string, eventName: string) {
+async function loadDefinition(
+  env: Env,
+  credential: MetricEventCredentialScope,
+  parsed: MetricEventTrackRequest,
+  disclosure: "public" | "trusted",
+  sink: EventDefinitionMismatchSink = recordEventDefinitionMismatch,
+) {
   if (!env.CONFIG_STORE)
     return renderError(serviceUnavailable("CONFIG_STORE binding is unavailable"));
-  const raw = await env.CONFIG_STORE.get(eventDefinitionConfigKey(appId, eventName), "text");
+  const raw = await env.CONFIG_STORE.get(
+    eventDefinitionConfigKey(credential.appId, parsed.eventName),
+    "text",
+  );
   if (raw === null)
     return renderError({
       code: "EVENT_DEFINITION_NOT_FOUND",
@@ -167,6 +181,32 @@ async function loadDefinition(env: Env, appId: string, eventName: string) {
         code: "EVENT_DEFINITION_NOT_FOUND",
         message: "Metric Event Definition not found",
         details: {},
+      });
+    }
+    if (
+      hot.eventDefinition.state !== "published" ||
+      hot.eventDefinition.currentPublishedVersionId === null
+    ) {
+      sink({
+        eventName: parsed.eventName,
+        eventDefinitionId: hot.eventDefinition.id,
+        eventDefinitionVersionId: hot.version.id,
+        eventDefinition: hot.eventDefinition,
+        version: hot.version,
+        originalIssues: [
+          {
+            path: [],
+            message: `Event Definition ${hot.eventDefinition.id} is ${hot.eventDefinition.state} with currentPublishedVersionId ${hot.eventDefinition.currentPublishedVersionId}`,
+          },
+        ],
+      });
+      return renderError({
+        code: "EVENT_DEFINITION_UNPUBLISHED",
+        message: "Metric Event Definition Version is not published",
+        details:
+          disclosure === "trusted"
+            ? { eventDefinitionId: hot.eventDefinition.id, eventName: parsed.eventName }
+            : { eventName: parsed.eventName },
       });
     }
     return hot;

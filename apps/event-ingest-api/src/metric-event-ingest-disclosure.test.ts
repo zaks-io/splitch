@@ -152,6 +152,31 @@ describe("Metric Event ingest Client Key probes", () => {
     expect(recorded).not.toMatch(/\.\.\./);
   });
 
+  it("omits Event Definition IDs from an unpublished Event Definition", async () => {
+    const fixture = await makeMetricEventFixture();
+    fixture.config.set(
+      eventDefinitionConfigKey(METRIC_APP_ID, METRIC_EVENT_NAME),
+      hotConfig("edv_1", 1, {}, { state: "draft", currentPublishedVersionId: null }),
+    );
+    const errors: unknown[] = [];
+    const error = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      errors.push(args);
+    });
+    const response = await sendMetricEvent(fixture, metricEventBody());
+    const body = await response.json();
+    error.mockRestore();
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({
+      code: "EVENT_DEFINITION_UNPUBLISHED",
+      message: "Metric Event Definition Version is not published",
+      details: { eventName: METRIC_EVENT_NAME },
+    });
+    expect(JSON.stringify(body)).not.toContain("ed_signed_up");
+    expect(JSON.stringify(errors)).toContain("ed_signed_up");
+    expect(JSON.stringify(errors)).not.toMatch(/\.\.\./);
+  });
+
   it("omits Event Definition IDs from Client Key first accept and replay", async () => {
     const fixture = await makeMetricEventFixture();
     const first = await sendMetricEvent(fixture, metricEventBody());
@@ -223,6 +248,19 @@ describe("Metric Event ingest API Key disclosure", () => {
       eventId: "123e4567-e89b-42d3-a456-426614174099",
       eventDefinitionId: "ed_signed_up",
       eventDefinitionVersionId: "edv_1",
+    });
+
+    fixture.config.set(
+      eventDefinitionConfigKey(METRIC_APP_ID, METRIC_EVENT_NAME),
+      hotConfig("edv_1", 1, {}, { state: "draft", currentPublishedVersionId: null }),
+    );
+    const unpublished = await sendMetricEvent(
+      fixture,
+      metricEventBody({ eventId: "123e4567-e89b-42d3-a456-426614174098" }),
+    );
+    expect(await unpublished.json()).toMatchObject({
+      code: "EVENT_DEFINITION_UNPUBLISHED",
+      details: { eventDefinitionId: "ed_signed_up", eventName: METRIC_EVENT_NAME },
     });
   });
 });

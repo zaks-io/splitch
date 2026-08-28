@@ -53,6 +53,19 @@ function childAt(current: unknown, segment: string): unknown {
   return (current as Record<string, unknown>)[segment];
 }
 
+const PUBLIC_ISSUE_MESSAGES = new Set([
+  "invalid value",
+  "number is out of range",
+  "number must be finite",
+  "value is not allowed",
+  "fields key is not declared",
+  "dimensions key is not declared",
+  "JSON key is not declared",
+  "array is too short",
+  "array is too long",
+  "idType does not match the Event Definition",
+]);
+
 function publicIssueMessage(message: string): string {
   if (
     message.startsWith("number must be at least") ||
@@ -73,5 +86,5 @@ function publicIssueMessage(message: string): string {
   ) {
     return "invalid value";
   }
-  return message;
+  return PUBLIC_ISSUE_MESSAGES.has(message) ? message : "invalid value";
 }
