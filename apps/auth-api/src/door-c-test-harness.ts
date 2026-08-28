@@ -50,6 +50,7 @@ export function setupDoorCHarness() {
     return createApp({
       repo,
       accessSecret: ACCESS_SECRET,
+      issuer: ORIGIN,
       controlPlaneAudience: CP_AUDIENCE,
       mcpAudience: "https://mcp.splitch.test",
       now: () => NOW_MS,

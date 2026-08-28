@@ -76,7 +76,11 @@ describe("MCP access-token verifier", () => {
       { ...validClaims, scopes: ["app::member"] },
       { ...validClaims, scopes: ["org:org_local:owner:extra"] },
       { ...validClaims, scopes: ["app:app_local:viewer"] },
-      { ...validClaims, scopes: Array.from({ length: 65 }, (_, index) => `scope:${index}`) },
+      {
+        ...validClaims,
+        scopes: Array.from({ length: 65 }, () => "app:app_local:member"),
+      },
+      { ...validClaims, scopes: [`app:${"x".repeat(507)}:member`] },
       { ...validClaims, sub: "x".repeat(257) },
       { ...validClaims, typ: "identity_assertion" },
     ]) {

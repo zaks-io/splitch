@@ -40,6 +40,7 @@ export interface OAuthRouteDeps {
   sessionStore: KVNamespace;
   revocations: RevocationStore;
   accessSecret: string;
+  issuer: string;
   controlPlaneAudience: string;
   mcpAudience?: string;
   smokeClientCredentials?: SmokeClientCredentials;
@@ -269,7 +270,7 @@ async function verifyRevocableAccessToken(deps: OAuthRouteDeps, token: string, n
   for (const audience of allowedAccessTokenAudiences(deps)) {
     const actor = await verifyAccessToken(
       `Bearer ${token}`,
-      { accessSecret: deps.accessSecret, controlPlaneAudience: audience },
+      { accessSecret: deps.accessSecret, issuer: deps.issuer, controlPlaneAudience: audience },
       nowSeconds,
     );
     if (actor) return actor;

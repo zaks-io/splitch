@@ -43,6 +43,8 @@ export interface AppDeps {
   workosAccessTokens?: WorkOsAccessTokenVerifier;
   /** Secret the control-plane access token is signed with (distinct from the assertion secret). */
   accessSecret: string;
+  /** Exact Auth API issuer stamped into and required from every access token. */
+  issuer: string;
   /** Audience the access token must bind to (control-plane protected-resource origin). */
   controlPlaneAudience: string;
   /** MCP protected-resource origin allowed by RFC 8707 resource selection. */
@@ -225,7 +227,11 @@ async function withActor(
 ): Promise<Response> {
   const actor = await verifyAccessToken(
     c.req.raw.headers.get("authorization"),
-    { accessSecret: deps.accessSecret, controlPlaneAudience: deps.controlPlaneAudience },
+    {
+      accessSecret: deps.accessSecret,
+      issuer: deps.issuer,
+      controlPlaneAudience: deps.controlPlaneAudience,
+    },
     Math.floor(deps.now() / 1000),
   );
   if (!actor) {

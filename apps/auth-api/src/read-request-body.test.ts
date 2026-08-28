@@ -158,6 +158,7 @@ function identityApp() {
   return createApp({
     repo: {} as AppDeps["repo"],
     accessSecret: "test-access-secret",
+    issuer: "https://auth.splitch.test",
     controlPlaneAudience: "https://cp.splitch.test",
     now: () => 1_780_000_000_000,
     idJag: {} as AppDeps["idJag"],

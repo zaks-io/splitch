@@ -81,6 +81,12 @@ export {
   platformTargets,
   requirePlatformTarget,
 } from "./health-response";
+export {
+  isCanonicalHeldScope,
+  isCanonicalHeldScopes,
+  MAX_HELD_SCOPE_COUNT,
+  MAX_HELD_SCOPE_LENGTH,
+} from "./held-scope";
 export type {
   Experiment,
   ExperimentStatus,

@@ -73,6 +73,7 @@ function buildApp() {
   return createApp({
     repo,
     accessSecret: ACCESS_SECRET,
+    issuer: ISSUER,
     controlPlaneAudience: CP_AUDIENCE,
     now: () => NOW_MS,
     idJag: buildVerifierDeps(),

@@ -77,6 +77,7 @@ function build(opts?: Parameters<typeof makeDoorBDeps>[2]): {
   const app = createApp({
     repo,
     accessSecret: ACCESS_SECRET,
+    issuer: ORIGIN,
     controlPlaneAudience: CP_AUDIENCE,
     now: () => NOW_MS,
     tokenSigner: signer,

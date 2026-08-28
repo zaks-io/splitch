@@ -90,6 +90,7 @@ function routeApp(params: {
     } as unknown as KVNamespace,
     revocations,
     accessSecret: params.accessSecret ?? "test-access-secret",
+    issuer: "http://localhost",
     controlPlaneAudience: "https://cp.splitch.test",
     mcpAudience: "https://mcp.splitch.test",
     smokeClientCredentials: params.smokeClientCredentials,

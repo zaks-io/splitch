@@ -10,6 +10,7 @@ import { makeTokenSigner } from "./token-exchange";
  */
 
 const ACCESS_SECRET = "guard-access-secret";
+const ISSUER = "https://auth.splitch.test";
 const CP_AUDIENCE = "https://cp.splitch.test";
 const NOW = 1_780_000_000;
 
@@ -55,12 +56,13 @@ async function privateRsaJwkSecret(): Promise<string> {
   return JSON.stringify({ ...jwk, kid: "test-access-key", alg: "RS256", use: "sig" });
 }
 
-const opts = { accessSecret: ACCESS_SECRET, controlPlaneAudience: CP_AUDIENCE };
+const opts = { accessSecret: ACCESS_SECRET, issuer: ISSUER, controlPlaneAudience: CP_AUDIENCE };
 
 function valid(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     typ: "access_token",
     sub: "user_x",
+    iss: ISSUER,
     aud: CP_AUDIENCE,
     exp: NOW + 3600,
     scopes: [],
@@ -149,7 +151,7 @@ describe("verifyAccessToken guards", () => {
 
     const actor = await verifyAccessToken(
       `Bearer ${token}`,
-      { accessSecret, controlPlaneAudience: CP_AUDIENCE },
+      { accessSecret, issuer: ISSUER, controlPlaneAudience: CP_AUDIENCE },
       NOW,
     );
 
@@ -184,7 +186,7 @@ describe("verifyAccessToken guards", () => {
     await expect(
       verifyAccessToken(
         `Bearer ${token}`,
-        { accessSecret: "{malformed", controlPlaneAudience: CP_AUDIENCE },
+        { accessSecret: "{malformed", issuer: ISSUER, controlPlaneAudience: CP_AUDIENCE },
         NOW,
       ),
     ).resolves.toBeNull();
@@ -210,6 +212,23 @@ describe("verifyAccessToken guards", () => {
   it("H1: rejects a mismatched aud", async () => {
     const token = await sign(valid({ aud: "https://evil.test" }), ACCESS_SECRET);
     expect(await verifyAccessToken(`Bearer ${token}`, opts, NOW)).toBeNull();
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["mismatched", "https://attacker.test"],
+  ])("rejects a token with a %s issuer", async (_case, issuer) => {
+    const token = await sign(valid({ iss: issuer }), ACCESS_SECRET);
+
+    await expect(verifyAccessToken(`Bearer ${token}`, opts, NOW)).resolves.toBeNull();
+  });
+
+  it("fails loud when the verifier issuer is missing", async () => {
+    const token = await sign(valid(), ACCESS_SECRET);
+
+    await expect(
+      verifyAccessToken(`Bearer ${token}`, { ...opts, issuer: "" }, NOW),
+    ).rejects.toThrow("auth-api access-token issuer is required");
   });
 
   it("rejects a token signed with the assertion secret (separate-key defense)", async () => {

@@ -1,4 +1,4 @@
-import { type AuthDoor, AuthDoorSchema } from "@splitch/contracts";
+import { type AuthDoor, AuthDoorSchema, isCanonicalHeldScopes } from "@splitch/contracts";
 import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
 
 export interface McpAccessTokenActor {
@@ -97,9 +97,7 @@ function actorFromClaims(
     typeof claims.sub !== "string" ||
     claims.sub.length === 0 ||
     claims.sub.length > 256 ||
-    !Array.isArray(claims.scopes) ||
-    claims.scopes.length > 64 ||
-    !claims.scopes.every(isCanonicalHeldScope)
+    !isCanonicalHeldScopes(claims.scopes)
   ) {
     return null;
   }
@@ -131,18 +129,6 @@ function transportFromClaims(
     authDoor,
     ...(demoExpiresAt ? { demoExpiresAt } : {}),
   };
-}
-
-function isCanonicalHeldScope(scope: unknown): scope is string {
-  if (typeof scope !== "string" || scope.length === 0 || scope.length > 512) return false;
-  const segments = scope.split(":");
-  if (segments.length !== 3) return false;
-  const [kind, id, role] = segments;
-  return (
-    (kind === "org" || kind === "app") &&
-    id !== "" &&
-    (role === "owner" || role === "admin" || role === "member")
-  );
 }
 
 function bearerToken(header: string | null): string | null {

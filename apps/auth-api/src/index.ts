@@ -117,6 +117,7 @@ const handler = {
     const app = createApp({
       repo,
       accessSecret,
+      issuer: origin,
       controlPlaneAudience,
       mcpAudience,
       now,
