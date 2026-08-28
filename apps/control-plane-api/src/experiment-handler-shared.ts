@@ -1,9 +1,10 @@
-import type { MetricRef } from "@splitch/contracts";
+import type { MetricRef, TargetingRule, TargetingRuleInput } from "@splitch/contracts";
 import { appScope, type EnvScope, envScope, type Repository } from "@splitch/db";
 import { requireAppWrite } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { type ExperimentRow, json, type RunRow } from "./experiment-model";
+import { normalizeTargetingRuleRollouts } from "./flag-config-rollout";
 import { flagNotFound, validationError } from "./flag-definition-errors";
 import { pathParam } from "./handler-input";
 import type { RunSnapshotDelivery } from "./run-snapshot";
@@ -75,6 +76,25 @@ export function draftPatch(body: Record<string, unknown>) {
       : {}),
     ...(body.segmentIds !== undefined ? { draftSegmentIds: json(body.segmentIds) } : {}),
   };
+}
+
+/**
+ * Mint or preserve server-owned Targeting Rule rollout salts before the
+ * Experiment draft is persisted. Canonical `ExperimentSchema` requires salt, so
+ * writing `{ percentage }` verbatim would make the mutation response and later
+ * reads fail after insert.
+ */
+export function withNormalizedDraftTargetingRules(
+  body: Record<string, unknown>,
+  current: readonly TargetingRule[],
+): { ok: true; body: Record<string, unknown> } | { ok: false; callerSaltIndexes: number[] } {
+  if (body.targetingRules === undefined) return { ok: true, body };
+  const normalized = normalizeTargetingRuleRollouts(
+    current,
+    body.targetingRules as TargetingRuleInput[],
+  );
+  if (!normalized.ok) return normalized;
+  return { ok: true, body: { ...body, targetingRules: normalized.targetingRules } };
 }
 
 export async function loadFlagConfig(
