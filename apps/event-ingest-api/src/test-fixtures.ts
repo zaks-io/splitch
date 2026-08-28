@@ -4,6 +4,7 @@ import {
   type AdmissionCharge,
   type AdmissionOption,
   admissionBinding,
+  localIngestRuntimeBindings,
 } from "./admission-test-fixture";
 import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
 import type { EvaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
@@ -17,7 +18,7 @@ import {
 import type { Env } from "./types";
 
 export type { AdmissionCharge, AdmissionOption };
-export { admissionBinding };
+export { admissionBinding, localIngestRuntimeBindings };
 
 export const appId = "app_credential";
 export const clientAppId = "app_from_client";
@@ -155,13 +156,9 @@ export function makeEnv(
 ) {
   return {
     CONFIG_STORE: seededConfigStore() as unknown as KVNamespace,
-    SPLITCH_EVENT_INGEST_TOKEN: "internal_ingest_secret",
-    SPLITCH_PLATFORM_TARGET: "local",
-    TINYBIRD_API_URL: "https://tinybird.test",
-    TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
     EVALUATION_USAGE_REPLAY_WINDOW: replayWindow,
     EVALUATION_COMMIT_OUTBOX: evaluationCommitOutbox,
-    ...admissionBinding(options.admission, options.admissionCharges ?? []),
+    ...localIngestRuntimeBindings(options),
   };
 }
 

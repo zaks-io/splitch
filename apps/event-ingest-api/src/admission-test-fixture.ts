@@ -19,6 +19,19 @@ export function admissionBinding(
   };
 }
 
+/** Local Event Ingest runtime bindings shared by ingest fixtures and consuming seams. */
+export function localIngestRuntimeBindings(
+  options: { admission?: AdmissionOption; admissionCharges?: AdmissionCharge[] } = {},
+) {
+  return {
+    SPLITCH_PLATFORM_TARGET: "local" as const,
+    SPLITCH_EVENT_INGEST_TOKEN: "internal_ingest_secret",
+    TINYBIRD_API_URL: "https://tinybird.test",
+    TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
+    ...admissionBinding(options.admission, options.admissionCharges ?? []),
+  };
+}
+
 function admissionStub(
   charges: AdmissionCharge[],
   decision: { allowed: boolean; retryAfterMs: number },
