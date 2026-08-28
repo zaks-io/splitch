@@ -114,7 +114,8 @@ function validateJson(
         issues.push({ path: [...path, required], message: "required JSON key is missing" });
     }
     for (const [key, child] of Object.entries(schema.properties)) {
-      if (Object.hasOwn(object, key)) validateJson(object[key], child, [...path, key], issues);
+      if (Object.hasOwn(object, key))
+        validateJson(ownValue(object, key), child, [...path, key], issues);
     }
     return;
   }

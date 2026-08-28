@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { TelemetryTokenSchema } from "./event-definition";
+import { OWN_PROTO_KEY, protoSafeRecord } from "./proto-safe-record";
+
+const PROTO_KEY_MESSAGE = `must not contain a "${OWN_PROTO_KEY}" key`;
 
 const MetricEventValueSchema = z.union([
   z.boolean(),
@@ -7,7 +10,7 @@ const MetricEventValueSchema = z.union([
   z.number().finite(),
   z.null(),
   z.array(z.unknown()),
-  z.record(z.string(), z.unknown()),
+  protoSafeRecord(z.unknown(), PROTO_KEY_MESSAGE),
 ]);
 
 export const MetricEventTrackRequestSchema = z
@@ -18,8 +21,11 @@ export const MetricEventTrackRequestSchema = z
     eventId: z
       .string()
       .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
-    fields: z.record(z.string(), MetricEventValueSchema),
-    dimensions: z.record(z.string(), z.union([z.boolean(), z.string(), z.number().finite()])),
+    fields: protoSafeRecord(MetricEventValueSchema, PROTO_KEY_MESSAGE),
+    dimensions: protoSafeRecord(
+      z.union([z.boolean(), z.string(), z.number().finite()]),
+      PROTO_KEY_MESSAGE,
+    ),
   })
   .strict();
 
