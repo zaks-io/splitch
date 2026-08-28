@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EvaluationEntrypoint } from "./index";
-import worker from "./index";
+import worker, { EvaluationEntrypoint } from "./index";
 import {
   appId,
   baseExposure,

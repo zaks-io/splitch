@@ -3,12 +3,12 @@ import { vi } from "vitest";
 import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
 import type { EvaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import type { ExposurePayload } from "./event-ingest-test-types";
+import type worker from "./index";
+import { EvaluationEntrypoint } from "./index";
 import {
   MemoryEvaluationCommitOutbox,
   MemoryReplayWindow,
 } from "./memory-replay-windows.test-fixture";
-import { EvaluationEntrypoint } from "./index";
-import type worker from "./index";
 import type { Env } from "./types";
 
 export const appId = "app_credential";
