@@ -167,3 +167,14 @@ test("platform release tracking reads its key from the production environment", 
   assert.match(releaseJob, /LINEAR_ACCESS_KEY is required to track platform releases/);
   assert.match(releaseJob, /needs: deploy/);
 });
+
+test("the Web Analytics site token is supplied and required for Worker deploys", () => {
+  assert.match(
+    workflow,
+    /CLOUDFLARE_WEB_ANALYTICS_TOKEN: \$\{\{ vars\.CLOUDFLARE_WEB_ANALYTICS_TOKEN \}\}/,
+  );
+  assert.match(
+    workflow,
+    /required\+=\(ACCESS_TOKEN_SECRET [^)]*\bCLOUDFLARE_WEB_ANALYTICS_TOKEN\b/,
+  );
+});

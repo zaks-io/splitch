@@ -36,7 +36,8 @@
         "SENTRY_RELEASE_BASE",
         "VITE_SENTRY_DSN",
         "VITE_SENTRY_RELEASE",
-        "VITE_SPLITCH_PLATFORM_TARGET"
+        "VITE_SPLITCH_PLATFORM_TARGET",
+        "CLOUDFLARE_WEB_ANALYTICS_TOKEN"
       ]
     },
     "@splitch/marketing#build": {
@@ -51,7 +52,8 @@
         "SENTRY_RELEASE_BASE",
         "VITE_SENTRY_DSN",
         "VITE_SENTRY_RELEASE",
-        "VITE_SPLITCH_PLATFORM_TARGET"
+        "VITE_SPLITCH_PLATFORM_TARGET",
+        "CLOUDFLARE_WEB_ANALYTICS_TOKEN"
       ]
     },
     "@splitch/convex#build": {

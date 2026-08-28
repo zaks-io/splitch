@@ -24,6 +24,10 @@
     "./sentry-module": {
       "types": "./src/sentry-module.ts",
       "default": "./src/sentry-module.ts"
+    },
+    "./cloudflare-web-analytics": {
+      "types": "./src/cloudflare-web-analytics.ts",
+      "default": "./src/cloudflare-web-analytics.ts"
     }
   },
   "files": [

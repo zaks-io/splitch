@@ -1,3 +1,4 @@
+import { cloudflareWebAnalyticsScripts } from "@splitch/observability/cloudflare-web-analytics";
 import { themeInitScript } from "@splitch/ui/components/theme-toggle";
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -17,7 +18,13 @@ export const Route = createRootRoute({
       },
     ],
     links: [{ rel: "stylesheet", href: appCss }],
-    scripts: [{ children: themeInitScript }],
+    scripts: [
+      { children: themeInitScript },
+      ...cloudflareWebAnalyticsScripts({
+        platformTarget: import.meta.env.VITE_SPLITCH_PLATFORM_TARGET,
+        siteToken: import.meta.env.VITE_CLOUDFLARE_WEB_ANALYTICS_TOKEN,
+      }),
+    ],
   }),
   shellComponent: RootDocument,
   component: RootLayout,

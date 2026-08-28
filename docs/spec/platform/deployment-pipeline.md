@@ -84,6 +84,9 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 - Runtime `SENTRY_DSN` is passed only to non-cacheable deploy tasks. The Control Panel client build
   uses the committed Wrangler DSN unless `VITE_SENTRY_DSN` explicitly overrides it, so an
   environment-scoped runtime secret cannot split otherwise identical build hashes.
+- `CLOUDFLARE_WEB_ANALYTICS_TOKEN` is declared on the Control Panel and Marketing build tasks and
+  supplied by the production deploy workflow from the repository variable of the same name. The
+  token is public and only inlined into production builds; a production build without it fails.
 - CI sets `TURBO_TOKEN`, `TURBO_TEAM`, and `TURBO_REMOTE_CACHE_SIGNATURE_KEY` for signed remote cache.
   Secrets used only by deploy/provision tasks are not part of cacheable task outputs.
 - After main verification succeeds, the production planner remains the sole authority for selecting

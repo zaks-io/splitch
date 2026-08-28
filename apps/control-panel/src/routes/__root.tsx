@@ -1,3 +1,4 @@
+import { cloudflareWebAnalyticsScripts } from "@splitch/observability/cloudflare-web-analytics";
 import { Toaster } from "@splitch/ui/components/sonner";
 import { TooltipProvider } from "@splitch/ui/components/tooltip";
 import { AppErrorPage } from "@splitch/ui/state/app-error-page";
@@ -20,6 +21,10 @@ export const Route = createRootRouteWithContext<ControlPanelRouterContext>()({
       },
     ],
     links: [{ rel: "stylesheet", href: appCss }],
+    scripts: cloudflareWebAnalyticsScripts({
+      platformTarget: import.meta.env.VITE_SPLITCH_PLATFORM_TARGET,
+      siteToken: import.meta.env.VITE_CLOUDFLARE_WEB_ANALYTICS_TOKEN,
+    }),
   }),
   errorComponent: () => <AppErrorPage />,
   onError: ({ error }) => {
