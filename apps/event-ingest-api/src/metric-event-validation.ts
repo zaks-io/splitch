@@ -38,7 +38,7 @@ function validateRecord(
       issues.push({ path: [root, key], message: `${root} key is not declared` });
   }
   for (const definition of definitions) {
-    const value = values[definition.name];
+    const value = ownValue(values, definition.name);
     if (value === undefined) {
       if (definition.required) {
         issues.push({ path: [root, definition.name], message: "required value is missing" });
@@ -50,6 +50,10 @@ function validateRecord(
 }
 
 type FieldDefinition = EventDefinitionVersion["fields"][number];
+
+function ownValue(record: object, key: string): unknown {
+  return Object.hasOwn(record, key) ? (record as Record<string, unknown>)[key] : undefined;
+}
 
 function validateValue(
   value: unknown,
@@ -102,15 +106,15 @@ function validateJson(
     }
     const object = value as Record<string, unknown>;
     for (const key of Object.keys(object)) {
-      if (!(key in schema.properties))
+      if (!Object.hasOwn(schema.properties, key))
         issues.push({ path: [...path, key], message: "JSON key is not declared" });
     }
     for (const required of schema.required ?? []) {
-      if (!(required in object))
+      if (!Object.hasOwn(object, required))
         issues.push({ path: [...path, required], message: "required JSON key is missing" });
     }
     for (const [key, child] of Object.entries(schema.properties)) {
-      if (key in object) validateJson(object[key], child, [...path, key], issues);
+      if (Object.hasOwn(object, key)) validateJson(object[key], child, [...path, key], issues);
     }
     return;
   }

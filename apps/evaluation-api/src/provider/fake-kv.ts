@@ -12,6 +12,7 @@ import type { KvReader } from "./kv-provider";
 export class FakeKv implements KvReader {
   private readonly store = new Map<string, string>();
   readonly getCalls: string[] = [];
+  getError: Error | undefined;
 
   /** Seed a raw JSON string under a key (caller controls the exact bytes). */
   putRaw(key: string, rawJson: string): this {
@@ -26,6 +27,7 @@ export class FakeKv implements KvReader {
 
   get(key: string): Promise<string | null> {
     this.getCalls.push(key);
+    if (this.getError !== undefined) return Promise.reject(this.getError);
     return Promise.resolve(this.store.get(key) ?? null);
   }
 
