@@ -145,7 +145,7 @@ export async function getFlag(
   // record: queryToRecord last-wins on duplicates, while the Panel claim parser
   // first-wins — `?by=id&by=key` would otherwise mint by:"id" and resolve as key.
   const flag =
-    !selector.startsWith("flag_") && flagLookupBy(request) === "key"
+    flagLookupBy(request) === "key"
       ? await deps.repo.flags.getFlagByKey(appScope(appId), selector)
       : await deps.repo.flags.getFlag(appScope(appId), selector);
   if (!flag) return flagNotFound(requestId);

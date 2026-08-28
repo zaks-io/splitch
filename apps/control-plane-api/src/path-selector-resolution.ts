@@ -12,8 +12,14 @@ const FLAG_ID_PREFIX = "flag_";
 
 /** Resolve human-readable path selectors inside the authenticated request. */
 export function makePathSelectorResolver(repo: Repository): AuthenticatedInputResolver {
-  return ({ input, params, principal }) =>
-    resolveControlPlanePathSelectors(repo, input, params, principal);
+  return ({ contract, input, params, principal, request }) =>
+    resolveControlPlanePathSelectors(
+      repo,
+      input,
+      params,
+      principal,
+      contract.id === "flags_get" && new URL(request.url).searchParams.has("by"),
+    );
 }
 
 export async function resolveControlPlanePathSelectors(
@@ -21,6 +27,7 @@ export async function resolveControlPlanePathSelectors(
   input: unknown,
   params: Record<string, string>,
   principal: Principal,
+  preserveFlagSelector = false,
 ): Promise<AuthenticatedInputResolution> {
   const resolvedParams = { ...params };
 
@@ -36,9 +43,11 @@ export async function resolveControlPlanePathSelectors(
   if (!target.ok) return target;
   assignResolved(resolvedParams, "targetEnvironmentId", target.environmentId);
 
-  const flag = await resolveFlag(repo, resolvedParams.appId, params.flagId);
-  if (!flag.ok) return flag;
-  assignResolved(resolvedParams, "flagId", flag.flagId);
+  if (!preserveFlagSelector) {
+    const flag = await resolveFlag(repo, resolvedParams.appId, params.flagId);
+    if (!flag.ok) return flag;
+    assignResolved(resolvedParams, "flagId", flag.flagId);
+  }
 
   return {
     ok: true,
