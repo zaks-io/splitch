@@ -177,7 +177,7 @@ async function deleteFlagConfigFromStore(
 
   const existing = await readFlagSnapshot(deps, scope, input.flagId);
   const experimentId = existing?.flag.experimentId ?? null;
-  await deleteFlagConfigSnapshot(deps.kv, scope, flag.key, experimentId);
+  await deleteFlagConfigSnapshot(deps.kv, scope, input.flagId, flag.key, experimentId);
 
   const nudge = DeltaNudgeSchema.parse({
     type: "config.changed",

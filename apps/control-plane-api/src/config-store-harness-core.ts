@@ -91,6 +91,7 @@ export function makeAuthedApp(
     ...(store
       ? {
           configStore: {
+            readFlagConfig: (input) => store.readFlagConfig(input),
             writerFor: () => store,
             liveUpdatesFor: () => ({
               connect: async () => new Response("test live updates unavailable", { status: 503 }),

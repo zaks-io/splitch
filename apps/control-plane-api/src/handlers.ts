@@ -58,9 +58,10 @@ export function makeHandlers(deps: HandlerDeps) {
       const appId = pathParam(input, "appId");
       const environmentId = pathParam(input, "environmentId");
       const flagId = pathParam(input, "flagId");
-      const result = await deps.configStore
-        .writerFor(appId, environmentId)
-        .readFlagConfig({ appId, environmentId, flagId });
+      // The direct KV read accepts Cloudflare KV's cross-colo propagation window:
+      // another colo may serve its cached previous version for 60 seconds or more.
+      // Same-isolate writes stay authoritative until KV confirms their version.
+      const result = await deps.configStore.readFlagConfig({ appId, environmentId, flagId });
 
       if (!result.ok) {
         return renderFlagConfigReadFailure(result, requestId);

@@ -48,7 +48,7 @@ export async function readFlagSnapshot(
   const key = flagConfigKey(scope.appId, scope.environmentId, fromD1.flag.key);
   const raw = await deps.kv.get(key, "text");
   if (!raw) {
-    await writeSnapshot(deps.kv, scope, fromD1);
+    await writeSnapshot(deps.kv, scope, fromD1, responseFromSnapshot(fromD1));
     return fromD1;
   }
 
@@ -56,8 +56,7 @@ export async function readFlagSnapshot(
     return { ...fromD1, flag: parseFlagConfigEnvelope(raw) };
   } catch (cause) {
     deps.logger?.warn("config_store_kv_schema_mismatch", { key, cause });
-    await writeSnapshot(deps.kv, scope, fromD1);
-    return fromD1;
+    throw cause;
   }
 }
 
@@ -160,8 +159,8 @@ export async function writeSnapshotAndBroadcast(
   flagId: string,
   snapshot: Snapshot,
 ): Promise<FlagConfigWriteResult> {
-  await writeSnapshot(deps.kv, scope, snapshot);
   const result = flagConfigResult(flagId, snapshot);
+  await writeSnapshot(deps.kv, scope, snapshot, result.config);
   await deps.broadcaster.broadcast(result.nudge);
   return result;
 }

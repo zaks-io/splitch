@@ -7,6 +7,7 @@ import {
 import { appScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeConfigStore } from "../src/config-store";
+import { controlPlaneFlagConfigKey } from "../src/config-store-kv";
 import { narrowSeededAvailability, startSeededExperiment } from "../src/config-store-fixture-data";
 import {
   authedPatch,
@@ -158,7 +159,7 @@ describe("config store write path", () => {
     expect(h.nudges).toEqual([]);
   });
 
-  it("falls back to D1 on an unknown KV schemaVersion and logs the mismatch", async () => {
+  it("fails loud on an unknown KV schemaVersion without repairing it", async () => {
     const key = flagConfigKey(ids.appId, ids.environmentId, ids.flagKey);
     await h.kv.put(
       key,
@@ -185,19 +186,11 @@ describe("config store write path", () => {
       { headers: { authorization: `Bearer ${jwt}` } },
     );
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
-      version: 1,
-      enabled: false,
-      availableVariantNames: ["control", "treatment"],
-    });
+    expect(res.status).toBe(500);
     expect(h.warnings).toHaveLength(1);
 
-    const rewritten = await kvJson(h.kv, key);
-    expect(rewritten).toMatchObject({
-      schemaVersion: CURRENT_KV_SCHEMA_VERSION,
-      data: { enabled: false, availableVariantNames: ["control", "treatment"] },
-    });
+    const preserved = await kvJson(h.kv, key);
+    expect(preserved).toMatchObject({ schemaVersion: 999, data: { enabled: true } });
   });
 });
 
@@ -253,7 +246,12 @@ describe("config store variant catalog resync", () => {
       flagId: ids.flagId,
     });
     const key = flagConfigKey(ids.appId, ids.environmentId, ids.flagKey);
+    const controlPlaneKey = controlPlaneFlagConfigKey(
+      { appId: ids.appId, environmentId: ids.environmentId },
+      ids.flagId,
+    );
     expect(await h.kv.get(key, "text")).toEqual(expect.any(String));
+    expect(await h.kv.get(controlPlaneKey, "text")).toEqual(expect.any(String));
 
     const result = await store.deleteFlagConfig({
       appId: ids.appId,
@@ -262,6 +260,7 @@ describe("config store variant catalog resync", () => {
     });
     expect(result.ok).toBe(true);
     expect(await h.kv.get(key, "text")).toBeNull();
+    expect(await h.kv.get(controlPlaneKey, "text")).toBeNull();
     expect(h.nudges).toContainEqual(
       expect.objectContaining({
         type: "config.changed",

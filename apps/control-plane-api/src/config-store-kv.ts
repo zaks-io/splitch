@@ -12,9 +12,11 @@ import {
   type FlagConfigKV,
 } from "@splitch/contracts";
 import type { EnvScope } from "@splitch/db";
-import type { Snapshot } from "./config-store-shared";
+import type { FlagConfigResult, Snapshot } from "./config-store-shared";
+import { controlPlaneRoute } from "./routes";
 
 const FlagConfigEnvelope = kvEnvelope(FlagConfigKVSchema);
+const ControlPlaneFlagConfigEnvelope = kvEnvelope(controlPlaneRoute("flag_config_get").output);
 const ExperimentConfigEnvelope = kvEnvelope(ExperimentConfigKVSchema);
 const RunConfigEnvelope = kvEnvelope(RunConfigKVSchema);
 const LiveRunEnvelope = kvEnvelope(LiveRunKVSchema);
@@ -23,12 +25,31 @@ export function parseFlagConfigEnvelope(raw: string): FlagConfigKV {
   return FlagConfigEnvelope.parse(JSON.parse(raw)).data;
 }
 
+export function controlPlaneFlagConfigKey(scope: EnvScope, flagId: string): string {
+  return `app:${scope.appId}:${scope.environmentId}:control-plane-flag-config:${flagId}`;
+}
+
+function parseControlPlaneFlagConfigEnvelope(raw: string): FlagConfigResult {
+  return ControlPlaneFlagConfigEnvelope.parse(JSON.parse(raw)).data as FlagConfigResult;
+}
+
+export async function readControlPlaneFlagConfigSnapshot(
+  kv: KVNamespace,
+  scope: EnvScope,
+  flagId: string,
+): Promise<FlagConfigResult | null> {
+  const raw = await kv.get(controlPlaneFlagConfigKey(scope, flagId), "text");
+  return raw === null ? null : parseControlPlaneFlagConfigEnvelope(raw);
+}
+
 export async function deleteFlagConfigSnapshot(
   kv: KVNamespace,
   scope: EnvScope,
+  flagId: string,
   flagKey: string,
   experimentId?: string | null,
 ): Promise<void> {
+  await kv.delete(controlPlaneFlagConfigKey(scope, flagId));
   await kv.delete(flagConfigKey(scope.appId, scope.environmentId, flagKey));
   if (experimentId) {
     await kv.delete(experimentConfigKey(scope.appId, scope.environmentId, experimentId));
@@ -40,7 +61,12 @@ export async function writeSnapshot(
   kv: KVNamespace,
   scope: EnvScope,
   snapshot: Snapshot,
+  controlPlaneConfig: FlagConfigResult,
 ): Promise<void> {
+  await kv.put(
+    controlPlaneFlagConfigKey(scope, snapshot.flag.id),
+    envelope(ControlPlaneFlagConfigEnvelope, controlPlaneConfig),
+  );
   await kv.put(
     flagConfigKey(scope.appId, scope.environmentId, snapshot.flag.key),
     envelope(FlagConfigEnvelope, snapshot.flag),

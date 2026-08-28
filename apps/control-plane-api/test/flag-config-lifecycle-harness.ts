@@ -62,6 +62,8 @@ export function configStoreAccess(bindings: PoolBindingsWithConfig) {
     now: () => new Date(Date.parse(NOW_ISO)),
   });
   return {
+    readFlagConfig: (input: Parameters<typeof store.readFlagConfig>[0]) =>
+      store.readFlagConfig(input),
     writerFor: (_appId: string, _environmentId: string) => store,
     liveUpdatesFor: () => ({
       connect: async () => new Response("test live updates unavailable", { status: 503 }),

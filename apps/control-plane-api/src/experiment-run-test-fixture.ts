@@ -303,6 +303,7 @@ export function configStoreAccess(
     },
   };
   return {
+    readFlagConfig: (input) => controlledWriter.readFlagConfig(input),
     writerFor(): ConfigStoreWriter {
       return controlledWriter;
     },

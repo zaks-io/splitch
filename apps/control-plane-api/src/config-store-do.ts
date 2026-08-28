@@ -2,72 +2,24 @@ import { DurableObject } from "cloudflare:workers";
 import {
   authorizesLiveUpdateConnection,
   type DeltaNudge,
-  type ExperimentConfigKV,
-  type FlagConfigKV,
   type LiveUpdateAuthorizationContext,
   type LiveUpdateConnectionContext,
   parseLiveUpdateConnectionContext,
-  type RunConfigKV,
 } from "@splitch/contracts";
 import { appScope, createRepository, envScope } from "@splitch/db";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import { buildSnapshotFromD1 } from "./config-store-shared";
 import type { ControlPlaneApiEnv } from "./env";
+import type { EvaluationFlagConfigRead, EvaluationFlagConfigSnapshot } from "./config-store-access";
 
-export interface ConfigStoreDurableObjectNamespace {
-  getByName(name: string): ConfigStoreDurableObjectStub;
-}
-
-interface ConfigStoreDurableObjectStub extends ConfigStoreWriter {
-  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
-  readFlagConfigForEvaluation(
-    input: EvaluationFlagConfigRead,
-  ): Promise<EvaluationFlagConfigSnapshot | null>;
-  setLiveUpdatesAvailable(available: boolean): Promise<void>;
-}
-
-export interface EvaluationFlagConfigRead {
-  appId: string;
-  environmentId: string;
-  flagKey: string;
-}
-
-export interface EvaluationFlagConfigSnapshot {
-  experiment: ExperimentConfigKV | null;
-  flag: FlagConfigKV;
-  run: RunConfigKV | null;
-  version: number;
-}
-
-interface ConfigStoreLiveUpdates {
-  connect(request: Request): Promise<Response>;
-}
-
-export interface ConfigStoreAccess {
-  writerFor(appId: string, environmentId: string): ConfigStoreWriter;
-  liveUpdatesFor(appId: string, environmentId: string): ConfigStoreLiveUpdates;
-}
-
-function configWriterName(appId: string, environmentId: string): string {
-  return `${appId}:${environmentId}`;
-}
-
-export function durableConfigStoreAccess(
-  namespace: ConfigStoreDurableObjectNamespace,
-): ConfigStoreAccess {
-  return {
-    writerFor(appId, environmentId) {
-      return namespace.getByName(configWriterName(appId, environmentId));
-    },
-    liveUpdatesFor(appId, environmentId) {
-      return {
-        connect(request) {
-          return namespace.getByName(configWriterName(appId, environmentId)).fetch(request);
-        },
-      };
-    },
-  };
-}
+// biome-ignore lint/performance/noBarrelFile: preserve the existing DO import surface while keeping the access seam in a small file
+export {
+  type ConfigStoreAccess,
+  type ConfigStoreDurableObjectNamespace,
+  durableConfigStoreAccess,
+  type EvaluationFlagConfigRead,
+  type EvaluationFlagConfigSnapshot,
+} from "./config-store-access";
 
 export class ConfigStoreDurableObject
   extends DurableObject<ControlPlaneApiEnv>
