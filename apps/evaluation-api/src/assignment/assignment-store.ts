@@ -1,17 +1,17 @@
 import {
-  assignmentKey,
   type AssignmentStoreEntry,
   type AssignmentStoreValue,
   AssignmentStoreValueSchema,
+  assignmentKey,
   CURRENT_KV_SCHEMA_VERSION,
   kvEnvelope,
 } from "@splitch/contracts";
+import { AssignmentStoreError } from "@splitch/evaluation-core";
 import {
   computeRetainedTargetingKeyHashes,
   computeTargetingKeyHash,
   type SaltStore,
 } from "@splitch/privacy";
-import { AssignmentStoreError } from "@splitch/evaluation-core";
 
 export type { AssignmentStoreEntry, AssignmentStoreValue } from "@splitch/contracts";
 
@@ -87,8 +87,7 @@ export async function hashedAssignmentIdentity(
 
 /**
  * Current and every retained-epoch Assignment Store key for this Entity.
- * Historical epochs come first so a holdover written before an identity-epoch
- * transition wins over a later empty or duplicate current-epoch write.
+ * Callers merge every compatible map and fail loud on conflicting values.
  */
 export async function retainedAssignmentIdentities(
   saltStore: SaltStore,
@@ -114,7 +113,7 @@ export function mergeRetainedAssignmentValues(
       }
       if (existing.runId !== entry.runId || existing.variant !== entry.variant) {
         throw new AssignmentStoreError(
-          `Conflicting retained-epoch Assignment for experiment "${experimentId}"`,
+          `Conflicting Assignment for Experiment "${experimentId}" across retained identity epochs`,
         );
       }
     }

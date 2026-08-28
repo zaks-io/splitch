@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { makeInProcessAppIdentityExclusive } from "./app-identity-exclusive";
 import {
   deriveAppIdentityKek,
   generateAppIdentityKey,
@@ -6,29 +7,26 @@ import {
   unwrapAppIdentityKey,
   wrapAppIdentityKey,
 } from "./app-identity-key";
+import { defaultAppEntityIdentityRecordKey } from "./app-identity-record";
 import {
   APP_IDENTITY_RESET_CHECKPOINTS,
-  resetAppIdentityAfterCheckpoints,
   type AppIdentityResetAttestation,
+  resetAppIdentityAfterCheckpoints,
 } from "./app-identity-reset";
-import { mintInitialAppIdentityRecord } from "./app-identity-record";
 import {
+  activateCompromisedAppIdentityEpoch,
   advanceAppIdentityEpoch,
-  defaultAppEntityIdentityRecordKey,
+  beginCompromisedAppIdentityRotation,
   makeKvAppIdentityStore,
   makeMemoryAppIdentityStore,
+  mintInitialAppIdentityRecord,
+  provisionAppIdentity,
+  recordAppIdentityLifecycleCheckpoint,
   rewrapKvAppIdentityRecord,
 } from "./app-identity-store";
 import { makeIdentitySaltStore } from "./derived-salt-store";
-import { computeRetainedTargetingKeyHashes } from "./entity-privacy";
 import { computeTargetingKeyHash } from "./hash";
 import { toHex } from "./hmac";
-
-function resetAttestation(): AppIdentityResetAttestation {
-  return Object.fromEntries(
-    APP_IDENTITY_RESET_CHECKPOINTS.map((checkpoint) => [checkpoint, true]),
-  ) as AppIdentityResetAttestation;
-}
 
 const ROOT = "test-root-secret-do-not-use";
 const NEXT_ROOT = "rotated-root-secret-do-not-use";
@@ -87,11 +85,14 @@ describe("app identity key wrap", () => {
 describe("App identity store", () => {
   const input = { appId: "app_1", idType: "user", targetingKey: "user-123" } as const;
 
-  it("keeps current hashes stable across routine root rewrap", async () => {
+  it("keeps local-v1, v1, app-v1, and current lookup hashes stable across root rewrap", async () => {
     const kv = memoryKv();
     const firstStore = makeKvAppIdentityStore({ kv, rootSecret: ROOT });
     const first = makeIdentitySaltStore({ rootSecret: ROOT, identityStore: firstStore });
-    const before = await computeTargetingKeyHash(first, input);
+    const beforeCurrent = await computeTargetingKeyHash(first, input);
+    const beforeLocal = await computeTargetingKeyHash(first, { ...input, keyVersion: "local-v1" });
+    const beforeV1 = await computeTargetingKeyHash(first, { ...input, keyVersion: "v1" });
+    const beforeApp = await computeTargetingKeyHash(first, { ...input, keyVersion: "app-v1" });
 
     await rewrapKvAppIdentityRecord({
       kv,
@@ -103,8 +104,60 @@ describe("App identity store", () => {
       rootSecret: NEXT_ROOT,
       identityStore: makeKvAppIdentityStore({ kv, rootSecret: NEXT_ROOT }),
     });
-    expect(await computeTargetingKeyHash(rotated, input)).toBe(before);
+    expect(await computeTargetingKeyHash(rotated, input)).toBe(beforeCurrent);
+    expect(await computeTargetingKeyHash(rotated, { ...input, keyVersion: "local-v1" })).toBe(
+      beforeLocal,
+    );
+    expect(await computeTargetingKeyHash(rotated, { ...input, keyVersion: "v1" })).toBe(beforeV1);
+    expect(await computeTargetingKeyHash(rotated, { ...input, keyVersion: "app-v1" })).toBe(
+      beforeApp,
+    );
     expect(kv.raw(defaultAppEntityIdentityRecordKey(input.appId))).toEqual(expect.any(String));
+  });
+
+  it("returns one canonical epoch when Evaluation and Event Ingest provision concurrently", async () => {
+    const kv = memoryKv();
+    const exclusive = makeInProcessAppIdentityExclusive();
+    const evaluation = makeKvAppIdentityStore({ kv, rootSecret: ROOT, exclusive });
+    const ingest = makeKvAppIdentityStore({ kv, rootSecret: ROOT, exclusive });
+    const [left, right] = await Promise.all([
+      provisionAppIdentity(evaluation, input.appId, ROOT),
+      provisionAppIdentity(ingest, input.appId, ROOT),
+    ]);
+    const leftActive = left.epochs.find((epoch) => epoch.role === "active")?.key;
+    const rightActive = right.epochs.find((epoch) => epoch.role === "active")?.key;
+    expect(leftActive).toBeDefined();
+    expect(rightActive).toBeDefined();
+    if (leftActive === undefined || rightActive === undefined) {
+      throw new Error("provisioned App identity record is missing its active epoch");
+    }
+    expect(toHex(leftActive)).toBe(toHex(rightActive));
+    expect(left.currentVersion).toBe("app-v1");
+    expect(right.currentVersion).toBe("app-v1");
+    expect(kv.raw(defaultAppEntityIdentityRecordKey(input.appId))).toEqual(expect.any(String));
+  });
+
+  it("does not activate a later mint over an already-provisioned record", async () => {
+    const kv = memoryKv();
+    const store = makeKvAppIdentityStore({ kv, rootSecret: ROOT });
+    const first = mintInitialAppIdentityRecord(ROOT);
+    const second = mintInitialAppIdentityRecord(ROOT);
+    const firstActive = first.epochs.find((epoch) => epoch.role === "active")?.key;
+    const secondActive = second.epochs.find((epoch) => epoch.role === "active")?.key;
+    expect(firstActive).toBeDefined();
+    expect(secondActive).toBeDefined();
+    if (firstActive === undefined || secondActive === undefined) {
+      throw new Error("minted App identity record is missing its active epoch");
+    }
+    expect(toHex(firstActive)).not.toBe(toHex(secondActive));
+    await store.save(input.appId, first);
+    const winner = await store.putIfAbsent(input.appId, second);
+    const loadedActive = winner.epochs.find((epoch) => epoch.role === "active")?.key;
+    expect(loadedActive).toBeDefined();
+    if (loadedActive === undefined) {
+      throw new Error("stored App identity record is missing its active epoch");
+    }
+    expect(toHex(loadedActive)).toBe(toHex(firstActive));
   });
 
   it("keeps memory-store keys stable for one App and unlinkable across Apps", async () => {
@@ -129,122 +182,54 @@ describe("App identity store", () => {
     ).rejects.toThrow(/no App identity record/);
   });
 
-  it("mints on first advance of an App with no record", async () => {
+  it("refuses to advance an unprovisioned App", async () => {
     const identityStore = makeMemoryAppIdentityStore();
-    const minted = await advanceAppIdentityEpoch(identityStore, "app_new");
-    expect(minted.currentVersion).toBe("app-v1");
-    expect(minted.epochs).toHaveLength(1);
+    await expect(advanceAppIdentityEpoch(identityStore, "app_new")).rejects.toThrow(
+      /unprovisioned/,
+    );
+  });
+
+  it("cannot activate a compromised rotation before every checkpoint", async () => {
+    const identityStore = makeMemoryAppIdentityStore();
+    await provisionAppIdentity(identityStore, input.appId, ROOT);
+    await beginCompromisedAppIdentityRotation(identityStore, input.appId);
+    await expect(activateCompromisedAppIdentityEpoch(identityStore, input.appId)).rejects.toThrow(
+      /cannot activate before/,
+    );
+    await recordAppIdentityLifecycleCheckpoint(identityStore, input.appId, {
+      runsEnded: true,
+      clientKeysRevoked: true,
+      purge: {
+        assignments: true,
+        analytics: true,
+        idempotency: true,
+        export: true,
+      },
+    });
+    await expect(activateCompromisedAppIdentityEpoch(identityStore, input.appId)).rejects.toThrow(
+      /deletion purge checkpoint/,
+    );
+    await recordAppIdentityLifecycleCheckpoint(identityStore, input.appId, {
+      purge: { deletion: true },
+    });
+    const activated = await activateCompromisedAppIdentityEpoch(identityStore, input.appId);
+    expect(activated.currentVersion).toBe("app-v2");
+    expect(activated.lifecycle.state).toBe("active");
   });
 });
 
-describe("App identity lifecycle", () => {
+function resetAttestation(): AppIdentityResetAttestation {
+  return Object.fromEntries(
+    APP_IDENTITY_RESET_CHECKPOINTS.map((checkpoint) => [checkpoint, true]),
+  ) as AppIdentityResetAttestation;
+}
+
+describe("App identity compromised reset", () => {
   const input = { appId: "app_1", idType: "user", targetingKey: "user-123" } as const;
-
-  it("keeps historical shared-root hashes after KEK/root rotation", async () => {
-    const kv = memoryKv();
-    const firstStore = makeKvAppIdentityStore({ kv, rootSecret: ROOT });
-    const first = makeIdentitySaltStore({ rootSecret: ROOT, identityStore: firstStore });
-    const historicalBefore = await computeTargetingKeyHash(first, {
-      ...input,
-      keyVersion: "v1",
-    });
-    const localBefore = await computeTargetingKeyHash(first, {
-      ...input,
-      keyVersion: "local-v1",
-    });
-
-    await rewrapKvAppIdentityRecord({
-      kv,
-      appId: input.appId,
-      oldRootSecret: ROOT,
-      newRootSecret: NEXT_ROOT,
-    });
-    const rotated = makeIdentitySaltStore({
-      rootSecret: NEXT_ROOT,
-      identityStore: makeKvAppIdentityStore({ kv, rootSecret: NEXT_ROOT }),
-    });
-    expect(await computeTargetingKeyHash(rotated, { ...input, keyVersion: "v1" })).toBe(
-      historicalBefore,
-    );
-    expect(await computeTargetingKeyHash(rotated, { ...input, keyVersion: "local-v1" })).toBe(
-      localBefore,
-    );
-    expect(historicalBefore).not.toBe(
-      await computeTargetingKeyHash(
-        makeIdentitySaltStore({
-          rootSecret: NEXT_ROOT,
-          identityStore: makeMemoryAppIdentityStore(),
-        }),
-        { ...input, keyVersion: "v1" },
-      ),
-    );
-  });
-
-  it("retains both first-mint keys when a later mint overwrites", async () => {
-    const kv = memoryKv();
-    const store = makeKvAppIdentityStore({ kv, rootSecret: ROOT });
-    const first = mintInitialAppIdentityRecord();
-    const second = mintInitialAppIdentityRecord();
-    const firstKey = first.epochs[0]?.key;
-    const secondKey = second.epochs[0]?.key;
-    expect(firstKey).toBeDefined();
-    expect(secondKey).toBeDefined();
-    if (firstKey === undefined || secondKey === undefined) {
-      throw new Error("minted App identity record is missing its first epoch");
-    }
-    expect(toHex(firstKey)).not.toBe(toHex(secondKey));
-    await store.save(input.appId, first, { merge: false });
-    const saltStore = makeIdentitySaltStore({ rootSecret: ROOT, identityStore: store });
-    const hashA = await computeTargetingKeyHash(saltStore, input);
-    await store.save(input.appId, second);
-    const loaded = await store.load(input.appId);
-    expect(loaded?.currentVersion).toBe("app-v1");
-    expect(loaded?.epochs.filter((epoch) => epoch.version === "app-v1")).toHaveLength(2);
-    const retained = await computeRetainedTargetingKeyHashes(saltStore, input);
-    expect(retained).toContain(hashA);
-    const hashB = await computeTargetingKeyHash(saltStore, {
-      ...input,
-      keyVersion: "app-v1",
-      salt: secondKey,
-    });
-    expect(retained).toContain(hashB);
-  });
-
-  it("converges two raced KV first-mints on one canonical current hash", async () => {
-    const kv = memoryKv();
-    const leftStore = makeKvAppIdentityStore({ kv, rootSecret: ROOT });
-    const rightStore = makeKvAppIdentityStore({ kv, rootSecret: ROOT });
-    const left = makeIdentitySaltStore({ rootSecret: ROOT, identityStore: leftStore });
-    const right = makeIdentitySaltStore({ rootSecret: ROOT, identityStore: rightStore });
-    await Promise.all([left.currentKeyVersion(input.appId), right.currentKeyVersion(input.appId)]);
-    const leftHash = await computeTargetingKeyHash(left, input);
-    const rightHash = await computeTargetingKeyHash(right, input);
-    expect(leftHash).toBe(rightHash);
-    expect(leftHash.startsWith("app-v1:")).toBe(true);
-    const historicalLeft = await computeTargetingKeyHash(left, { ...input, keyVersion: "v1" });
-    const historicalRight = await computeTargetingKeyHash(right, { ...input, keyVersion: "v1" });
-    expect(historicalLeft).toBe(historicalRight);
-    expect(historicalLeft.startsWith("v1:")).toBe(true);
-  });
-
-  it("serializes first provision so concurrent callers share one active epoch", async () => {
-    const identityStore = makeMemoryAppIdentityStore();
-    const saltStore = makeIdentitySaltStore({ rootSecret: ROOT, identityStore });
-    const [left, right] = await Promise.all([
-      saltStore.currentKeyVersion(input.appId),
-      saltStore.currentKeyVersion(input.appId),
-    ]);
-    expect(left).toBe("app-v1");
-    expect(right).toBe("app-v1");
-    const record = await identityStore.load(input.appId);
-    expect(record?.epochs.filter((epoch) => epoch.version === "app-v1")).toHaveLength(1);
-    expect(record?.epochs.filter((epoch) => epoch.version === "v1")).toHaveLength(1);
-  });
 
   it("refuses to replace the live key without ADR-0044 checkpoints", async () => {
     const identityStore = makeMemoryAppIdentityStore();
-    const saltStore = makeIdentitySaltStore({ rootSecret: ROOT, identityStore });
-    await saltStore.currentKeyVersion(input.appId);
+    await provisionAppIdentity(identityStore, input.appId, ROOT);
     const incomplete = resetAttestation();
     delete (incomplete as { verify_purge_checkpoints?: true }).verify_purge_checkpoints;
     await expect(

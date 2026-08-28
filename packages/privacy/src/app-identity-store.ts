@@ -4,63 +4,68 @@
  */
 
 import {
-  deriveAppIdentityKek,
+  type AppIdentityExclusive,
+  type AppIdentityKv,
+  makeInProcessAppIdentityExclusive,
+  putWrappedAppIdentityIfAbsent,
+} from "./app-identity-exclusive";
+import {
   generateAppIdentityKey,
+  INITIAL_APP_IDENTITY_KEY_VERSION,
   nextAppIdentityVersion,
-  unwrapAppIdentityKey,
-  type WrappedAppIdentityKey,
-  wrapAppIdentityKey,
 } from "./app-identity-key";
 import {
-  type AppIdentityEpoch,
+  ACTIVE_APP_IDENTITY_LIFECYCLE,
+  type AppIdentityLifecycle,
+  type AppIdentityLifecycleCheckpoint,
+  assertAppIdentityActivationAllowed,
+  beginCompromisedAppIdentityLifecycle,
+  withAppIdentityLifecycleCheckpoint,
+} from "./app-identity-lifecycle";
+import {
   type AppIdentityRecord,
-  APP_IDENTITY_RECORD_SCHEMA_VERSION,
+  assertCanonicalAppIdentityRecord,
   cloneAppIdentityRecord,
-  mergeAppIdentityRecords,
-  mintInitialAppIdentityRecord,
-  withHistoricalCompatibility,
+  copyAppIdentityKey,
+  defaultAppEntityIdentityRecordKey,
+  parseWrappedAppIdentityRecord,
+  unwrapAppIdentityRecord,
+  wrapAppIdentityRecord,
 } from "./app-identity-record";
-import type { KeyVersion, SaltBytes } from "./salt-store";
-
-export type { AppIdentityEpoch, AppIdentityRecord } from "./app-identity-record";
-
-/** Must match `appEntityIdentityKey` in @splitch/contracts. */
-export function defaultAppEntityIdentityRecordKey(appId: string): string {
-  return `app:${appId}:entity-identity`;
-}
-
-export interface WrappedAppIdentityEpoch {
-  version: KeyVersion;
-  wrappedKey: WrappedAppIdentityKey;
-}
-
-export interface WrappedAppIdentityRecord {
-  schemaVersion: typeof APP_IDENTITY_RECORD_SCHEMA_VERSION;
-  currentVersion: KeyVersion;
-  epochs: readonly WrappedAppIdentityEpoch[];
-}
-
-export interface AppIdentitySaveOptions {
-  /**
-   * When true (default), union incoming epochs with any record already stored
-   * for the App. A raced first mint keeps both keys under `app-v1` so hashes
-   * already emitted stay resolvable. Rewrap uses `{ merge: false }`.
-   */
-  merge?: boolean;
-}
+import { HISTORICAL_SHARED_ROOT_KEY_VERSIONS } from "./derived-salt-store-versions";
+import { utf8Bytes } from "./hmac";
+import type { SaltBytes } from "./salt-store";
 
 export interface AppIdentityStore {
   load(appId: string): Promise<AppIdentityRecord | null>;
-  save(appId: string, record: AppIdentityRecord, options?: AppIdentitySaveOptions): Promise<void>;
+  save(appId: string, record: AppIdentityRecord): Promise<void>;
+  runExclusive<T>(appId: string, fn: () => Promise<T>): Promise<T>;
+  putIfAbsent(appId: string, record: AppIdentityRecord): Promise<AppIdentityRecord>;
 }
 
-export interface AppIdentityKv {
-  get(key: string): Promise<string | null>;
-  put(key: string, value: string): Promise<void>;
+export function mintInitialAppIdentityRecord(rootSecret: string | SaltBytes): AppIdentityRecord {
+  const compatibility = rootSecretBytes(rootSecret);
+  return {
+    currentVersion: INITIAL_APP_IDENTITY_KEY_VERSION,
+    lifecycle: ACTIVE_APP_IDENTITY_LIFECYCLE,
+    epochs: [
+      ...HISTORICAL_SHARED_ROOT_KEY_VERSIONS.map((version) => ({
+        version,
+        role: "lookup" as const,
+        key: copyAppIdentityKey(compatibility),
+      })),
+      {
+        version: INITIAL_APP_IDENTITY_KEY_VERSION,
+        role: "active" as const,
+        key: generateAppIdentityKey(),
+      },
+    ],
+  };
 }
 
 export function makeMemoryAppIdentityStore(
   initial?: ReadonlyMap<string, AppIdentityRecord>,
+  exclusive: AppIdentityExclusive = makeInProcessAppIdentityExclusive(),
 ): AppIdentityStore {
   const records = new Map<string, AppIdentityRecord>();
   if (initial) {
@@ -73,13 +78,22 @@ export function makeMemoryAppIdentityStore(
       const record = records.get(appId);
       return record === undefined ? null : cloneAppIdentityRecord(record);
     },
-    async save(appId, record, options) {
-      const existing = options?.merge === false ? undefined : records.get(appId);
-      const next =
-        existing === undefined
-          ? cloneAppIdentityRecord(record)
-          : mergeAppIdentityRecords(existing, record);
-      records.set(appId, next);
+    async save(appId, record) {
+      records.set(appId, cloneAppIdentityRecord(record));
+    },
+    runExclusive(appId, fn) {
+      return exclusive.runExclusive(appId, fn);
+    },
+    putIfAbsent(appId, record) {
+      return exclusive.runExclusive(appId, async () => {
+        const existing = records.get(appId);
+        if (existing !== undefined) {
+          return cloneAppIdentityRecord(existing);
+        }
+        const minted = cloneAppIdentityRecord(record);
+        records.set(appId, minted);
+        return cloneAppIdentityRecord(minted);
+      });
     },
   };
 }
@@ -88,76 +102,140 @@ export function makeKvAppIdentityStore(options: {
   kv: AppIdentityKv;
   rootSecret: string | SaltBytes;
   recordKey?: (appId: string) => string;
+  exclusive?: AppIdentityExclusive;
+  putIfAbsent?: (recordKey: string, value: string) => Promise<string>;
 }): AppIdentityStore {
   const recordKey = options.recordKey ?? defaultAppEntityIdentityRecordKey;
+  const exclusive = options.exclusive ?? makeInProcessAppIdentityExclusive();
   return {
     async load(appId) {
       const raw = await options.kv.get(recordKey(appId));
       if (raw === null) return null;
       return unwrapAppIdentityRecord(parseWrappedAppIdentityRecord(raw), options.rootSecret, appId);
     },
-    async save(appId, record, saveOptions) {
-      const existing = saveOptions?.merge === false ? null : await this.load(appId);
-      const next = existing === null ? record : mergeAppIdentityRecords(existing, record);
-      const wrapped = await wrapAppIdentityRecord(next, options.rootSecret, appId);
+    async save(appId, record) {
+      const wrapped = await wrapAppIdentityRecord(record, options.rootSecret, appId);
       await options.kv.put(recordKey(appId), JSON.stringify(wrapped));
+    },
+    runExclusive(appId, fn) {
+      return exclusive.runExclusive(appId, fn);
+    },
+    async putIfAbsent(appId, record) {
+      return exclusive.runExclusive(appId, async () => {
+        const wrapped = JSON.stringify(
+          await wrapAppIdentityRecord(record, options.rootSecret, appId),
+        );
+        const winner =
+          options.putIfAbsent === undefined
+            ? await putWrappedAppIdentityIfAbsent(options.kv, recordKey(appId), wrapped)
+            : await options.putIfAbsent(recordKey(appId), wrapped);
+        return unwrapAppIdentityRecord(
+          parseWrappedAppIdentityRecord(winner),
+          options.rootSecret,
+          appId,
+        );
+      });
     },
   };
 }
 
+export async function provisionAppIdentity(
+  store: AppIdentityStore,
+  appId: string,
+  rootSecret: string | SaltBytes,
+): Promise<AppIdentityRecord> {
+  const existing = await store.load(appId);
+  if (existing !== null) {
+    return assertCanonicalAppIdentityRecord(existing);
+  }
+  return assertCanonicalAppIdentityRecord(
+    await store.putIfAbsent(appId, mintInitialAppIdentityRecord(rootSecret)),
+  );
+}
+
+export async function requireAppIdentityRecord(
+  store: AppIdentityStore,
+  appId: string,
+): Promise<AppIdentityRecord> {
+  const loaded = await store.load(appId);
+  if (loaded === null) {
+    throw new Error("privacy: App identity is unprovisioned");
+  }
+  return assertCanonicalAppIdentityRecord(loaded);
+}
+
+export async function beginCompromisedAppIdentityRotation(
+  store: AppIdentityStore,
+  appId: string,
+): Promise<AppIdentityRecord> {
+  return store.runExclusive(appId, async () => {
+    const current = await requireAppIdentityRecord(store, appId);
+    if (current.lifecycle.state !== "active") {
+      return current;
+    }
+    const updated = withLifecycle(current, beginCompromisedAppIdentityLifecycle());
+    await store.save(appId, updated);
+    return updated;
+  });
+}
+
+export async function recordAppIdentityLifecycleCheckpoint(
+  store: AppIdentityStore,
+  appId: string,
+  checkpoint: AppIdentityLifecycleCheckpoint,
+): Promise<AppIdentityRecord> {
+  return store.runExclusive(appId, async () => {
+    const current = await requireAppIdentityRecord(store, appId);
+    const updated = withLifecycle(
+      current,
+      withAppIdentityLifecycleCheckpoint(current.lifecycle, checkpoint),
+    );
+    await store.save(appId, updated);
+    return updated;
+  });
+}
+
+export async function activateCompromisedAppIdentityEpoch(
+  store: AppIdentityStore,
+  appId: string,
+): Promise<AppIdentityRecord> {
+  return store.runExclusive(appId, async () => {
+    const current = await requireAppIdentityRecord(store, appId);
+    assertAppIdentityActivationAllowed(current.lifecycle);
+    const nextVersion = nextAppIdentityVersion(current.currentVersion);
+    const updated: AppIdentityRecord = {
+      currentVersion: nextVersion,
+      lifecycle: ACTIVE_APP_IDENTITY_LIFECYCLE,
+      epochs: [
+        ...current.epochs.map((epoch) =>
+          epoch.role === "active" ? { ...epoch, role: "retained" as const } : epoch,
+        ),
+        { version: nextVersion, role: "active", key: generateAppIdentityKey() },
+      ],
+    };
+    await store.save(appId, updated);
+    return updated;
+  });
+}
+
+/** Completes the compromised lifecycle with every required checkpoint. */
 export async function advanceAppIdentityEpoch(
   store: AppIdentityStore,
   appId: string,
 ): Promise<AppIdentityRecord> {
-  const current = await store.load(appId);
-  if (current === null) {
-    const minted = mintInitialAppIdentityRecord();
-    await store.save(appId, minted);
-    return minted;
-  }
-  const nextVersion = nextAppIdentityVersion(current.currentVersion);
-  const updated: AppIdentityRecord = {
-    currentVersion: nextVersion,
-    epochs: [...current.epochs, { version: nextVersion, key: generateAppIdentityKey() }],
-  };
-  await store.save(appId, updated);
-  return updated;
-}
-
-export async function wrapAppIdentityRecord(
-  record: AppIdentityRecord,
-  rootSecret: string | SaltBytes,
-  appId: string,
-): Promise<WrappedAppIdentityRecord> {
-  const kek = await deriveAppIdentityKek(rootSecret, appId);
-  const epochs: WrappedAppIdentityEpoch[] = [];
-  for (const epoch of record.epochs) {
-    epochs.push({
-      version: epoch.version,
-      wrappedKey: await wrapAppIdentityKey(kek, epoch.key),
-    });
-  }
-  return {
-    schemaVersion: APP_IDENTITY_RECORD_SCHEMA_VERSION,
-    currentVersion: record.currentVersion,
-    epochs,
-  };
-}
-
-export async function unwrapAppIdentityRecord(
-  wrapped: WrappedAppIdentityRecord,
-  rootSecret: string | SaltBytes,
-  appId: string,
-): Promise<AppIdentityRecord> {
-  const kek = await deriveAppIdentityKek(rootSecret, appId);
-  const epochs: AppIdentityEpoch[] = [];
-  for (const epoch of wrapped.epochs) {
-    epochs.push({
-      version: epoch.version,
-      key: await unwrapAppIdentityKey(kek, epoch.wrappedKey),
-    });
-  }
-  return { currentVersion: wrapped.currentVersion, epochs };
+  await beginCompromisedAppIdentityRotation(store, appId);
+  await recordAppIdentityLifecycleCheckpoint(store, appId, {
+    runsEnded: true,
+    clientKeysRevoked: true,
+    purge: {
+      assignments: true,
+      analytics: true,
+      idempotency: true,
+      export: true,
+      deletion: true,
+    },
+  });
+  return activateCompromisedAppIdentityEpoch(store, appId);
 }
 
 export async function rewrapKvAppIdentityRecord(options: {
@@ -166,54 +244,43 @@ export async function rewrapKvAppIdentityRecord(options: {
   oldRootSecret: string | SaltBytes;
   newRootSecret: string | SaltBytes;
   recordKey?: (appId: string) => string;
+  exclusive?: AppIdentityExclusive;
 }): Promise<void> {
   const previous = makeKvAppIdentityStore({
     kv: options.kv,
     rootSecret: options.oldRootSecret,
     recordKey: options.recordKey,
+    exclusive: options.exclusive,
   });
-  const loaded = await previous.load(options.appId);
-  if (loaded === null) {
+  const record = await previous.load(options.appId);
+  if (record === null) {
     throw new Error("privacy: no App identity record to rewrap");
   }
-  const record = withHistoricalCompatibility(loaded, options.oldRootSecret);
   const next = makeKvAppIdentityStore({
     kv: options.kv,
     rootSecret: options.newRootSecret,
     recordKey: options.recordKey,
+    exclusive: options.exclusive,
   });
-  await next.save(options.appId, record, { merge: false });
+  await next.save(options.appId, record);
 }
 
-export function parseWrappedAppIdentityRecord(raw: string): WrappedAppIdentityRecord {
-  let json: unknown;
-  try {
-    json = JSON.parse(raw);
-  } catch (cause) {
-    throw new Error("privacy: malformed App identity record JSON", { cause });
-  }
-  if (!isWrappedAppIdentityRecord(json)) {
-    throw new Error("privacy: invalid App identity record");
-  }
-  return json;
+function withLifecycle(
+  record: AppIdentityRecord,
+  lifecycle: AppIdentityLifecycle,
+): AppIdentityRecord {
+  return { currentVersion: record.currentVersion, epochs: record.epochs, lifecycle };
 }
 
-function isWrappedAppIdentityRecord(value: unknown): value is WrappedAppIdentityRecord {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  if (record.schemaVersion !== APP_IDENTITY_RECORD_SCHEMA_VERSION) return false;
-  if (typeof record.currentVersion !== "string" || record.currentVersion.length === 0) {
-    return false;
+function rootSecretBytes(rootSecret: string | SaltBytes): SaltBytes {
+  if (typeof rootSecret === "string") {
+    if (rootSecret.length === 0) {
+      throw new Error("privacy: empty root privacy secret");
+    }
+    return utf8Bytes(rootSecret);
   }
-  if (!Array.isArray(record.epochs) || record.epochs.length === 0) return false;
-  return record.epochs.every(isWrappedAppIdentityEpoch);
-}
-
-function isWrappedAppIdentityEpoch(value: unknown): value is WrappedAppIdentityEpoch {
-  if (typeof value !== "object" || value === null) return false;
-  const epoch = value as Record<string, unknown>;
-  if (typeof epoch.version !== "string" || epoch.version.length === 0) return false;
-  if (typeof epoch.wrappedKey !== "object" || epoch.wrappedKey === null) return false;
-  const wrapped = epoch.wrappedKey as Record<string, unknown>;
-  return typeof wrapped.iv === "string" && typeof wrapped.ciphertext === "string";
+  if (rootSecret.length === 0) {
+    throw new Error("privacy: empty root privacy secret");
+  }
+  return rootSecret;
 }

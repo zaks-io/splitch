@@ -1,4 +1,10 @@
+export type { AppIdentityKv } from "./app-identity-exclusive";
 // biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the privacy surface is intentionally aggregated here
+export {
+  makeDurableAppIdentityPutIfAbsent,
+  putWrappedAppIdentityIfAbsent,
+} from "./app-identity-exclusive";
+export type { WrappedAppIdentityKey } from "./app-identity-key";
 export {
   deriveAppIdentityKek,
   generateAppIdentityKey,
@@ -8,36 +14,34 @@ export {
   unwrapAppIdentityKey,
   wrapAppIdentityKey,
 } from "./app-identity-key";
-export type { WrappedAppIdentityKey } from "./app-identity-key";
+export type {
+  AppIdentityEpoch,
+  AppIdentityRecord,
+  WrappedAppIdentityEpoch,
+  WrappedAppIdentityRecord,
+} from "./app-identity-record";
 export {
   APP_IDENTITY_RECORD_SCHEMA_VERSION,
-  mintInitialAppIdentityRecord,
+  defaultAppEntityIdentityRecordKey,
+  parseWrappedAppIdentityRecord,
+  unwrapAppIdentityRecord,
+  wrapAppIdentityRecord,
 } from "./app-identity-record";
+export type { AppIdentityResetAttestation, AppIdentityResetCheckpoint } from "./app-identity-reset";
 export {
   APP_IDENTITY_RESET_CHECKPOINTS,
   APP_IDENTITY_RESET_SUBJECT_REF,
   resetAppIdentityAfterCheckpoints,
 } from "./app-identity-reset";
-export type { AppIdentityResetAttestation, AppIdentityResetCheckpoint } from "./app-identity-reset";
+export type { AppIdentityStore } from "./app-identity-store";
 export {
   advanceAppIdentityEpoch,
-  defaultAppEntityIdentityRecordKey,
   makeKvAppIdentityStore,
   makeMemoryAppIdentityStore,
-  parseWrappedAppIdentityRecord,
+  mintInitialAppIdentityRecord,
   rewrapKvAppIdentityRecord,
-  unwrapAppIdentityRecord,
-  wrapAppIdentityRecord,
 } from "./app-identity-store";
-export type {
-  AppIdentityEpoch,
-  AppIdentityKv,
-  AppIdentityRecord,
-  AppIdentitySaveOptions,
-  AppIdentityStore,
-  WrappedAppIdentityEpoch,
-  WrappedAppIdentityRecord,
-} from "./app-identity-store";
+export type { DerivedSaltStoreOptions, IdentitySaltStoreOptions } from "./derived-salt-store";
 export {
   DEFAULT_PRIVACY_KEY_VERSION,
   HISTORICAL_SHARED_ROOT_KEY_VERSIONS,
@@ -47,16 +51,16 @@ export {
   makeIdentitySaltStore,
   resolvePrivacyRootSecret,
 } from "./derived-salt-store";
-export type { DerivedSaltStoreOptions, IdentitySaltStoreOptions } from "./derived-salt-store";
+export type { EntityPrivacyIdentity, EntityPrivacyInput } from "./entity-privacy";
 export {
   analysisRowsForEntity,
   canonicalizeAnalysisEntityHash,
   canonicalizeAnalysisRows,
   canonicalizeSharedRootTargetingKeyHash,
   computeRetainedTargetingKeyHashes,
+  joinMetricEventsToExposures,
   resolveEntityPrivacyIdentity,
 } from "./entity-privacy";
-export type { EntityPrivacyIdentity, EntityPrivacyInput } from "./entity-privacy";
 export type { TargetingKeyHashInput } from "./hash";
 export { computeTargetingKeyHash, keyVersionOf } from "./hash";
 export { isContainerKey, isLeafPiiKey, isPiiKey, REDACTED } from "./redaction-rules";

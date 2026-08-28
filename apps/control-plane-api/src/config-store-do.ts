@@ -10,6 +10,7 @@ import {
   type RunConfigKV,
 } from "@splitch/contracts";
 import { appScope, createRepository, envScope } from "@splitch/db";
+import { putWrappedAppIdentityIfAbsent } from "@splitch/privacy";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import { buildSnapshotFromD1 } from "./config-store-shared";
 import type { ControlPlaneApiEnv } from "./env";
@@ -24,6 +25,7 @@ interface ConfigStoreDurableObjectStub extends ConfigStoreWriter {
     input: EvaluationFlagConfigRead,
   ): Promise<EvaluationFlagConfigSnapshot | null>;
   setLiveUpdatesAvailable(available: boolean): Promise<void>;
+  putAppIdentityIfAbsent(recordKey: string, value: string): Promise<string>;
 }
 
 export interface EvaluationFlagConfigRead {
@@ -205,6 +207,23 @@ export class ConfigStoreDurableObject
     for (const socket of this.ctx.getWebSockets()) {
       socket.close(SERVICE_RESTART_CLOSE_CODE, "live update server unavailable");
     }
+  }
+
+  /**
+   * Serialized first provision of one App identity record. Evaluation and Event
+   * Ingest call this on `app-identity:${appId}` so both planes share one winner.
+   */
+  async putAppIdentityIfAbsent(recordKey: string, value: string): Promise<string> {
+    return this.ctx.blockConcurrencyWhile(() =>
+      putWrappedAppIdentityIfAbsent(
+        {
+          get: async (key) => (await this.env.CONFIG_STORE.get(key)) ?? null,
+          put: (key, wrapped) => this.env.CONFIG_STORE.put(key, wrapped),
+        },
+        recordKey,
+        value,
+      ),
+    );
   }
 
   private store(): ConfigStoreWriter {

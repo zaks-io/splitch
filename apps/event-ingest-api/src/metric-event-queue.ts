@@ -1,5 +1,5 @@
 import { requirePlatformTarget } from "@splitch/contracts";
-import { makeMetricEventSaltStore } from "./metric-event-ingest";
+import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import { appendRawEvent, tinybirdDelivery } from "./tinybird";
 import type { Env } from "./types";
 

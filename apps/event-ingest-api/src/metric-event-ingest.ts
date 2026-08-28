@@ -1,19 +1,10 @@
 import {
   EventDefinitionHotConfigSchema,
   eventDefinitionConfigKey,
-  isLocalPlatformTarget,
   kvEnvelope,
   MetricEventTrackRequestSchema,
-  requirePlatformTarget,
 } from "@splitch/contracts";
-import {
-  computeRetainedTargetingKeyHashes,
-  computeTargetingKeyHash,
-  makeIdentitySaltStore,
-  makeKvAppIdentityStore,
-  makeMemoryAppIdentityStore,
-  resolvePrivacyRootSecret,
-} from "@splitch/privacy";
+import { computeRetainedTargetingKeyHashes, computeTargetingKeyHash } from "@splitch/privacy";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
 import {
@@ -23,6 +14,7 @@ import {
   schemaMismatch,
 } from "./metric-event-admission";
 import { checkMetricEventRateLimit } from "./metric-event-rate-limit";
+import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import type { Env } from "./types";
 
 const MAX_BODY_BYTES = 32_768;
@@ -200,34 +192,6 @@ async function loadDefinition(env: Env, appId: string, eventName: string) {
       details: {},
     });
   }
-}
-
-export function makeMetricEventSaltStore(env: Env) {
-  const target = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
-  const rootSecret = resolvePrivacyRootSecret({
-    configuredSalt: env.EVALUATION_PRIVACY_SALT,
-    localFixtureAllowed: isLocalPlatformTarget(target),
-  });
-  const configStore = env.CONFIG_STORE;
-  if (configStore) {
-    return makeIdentitySaltStore({
-      rootSecret,
-      identityStore: makeKvAppIdentityStore({
-        kv: {
-          get: async (key) => (await configStore.get(key, "text")) ?? null,
-          put: (key, value) => configStore.put(key, value),
-        },
-        rootSecret,
-      }),
-    });
-  }
-  if (isLocalPlatformTarget(target)) {
-    return makeIdentitySaltStore({
-      rootSecret,
-      identityStore: makeMemoryAppIdentityStore(),
-    });
-  }
-  throw new Error("CONFIG_STORE is required outside local targets");
 }
 
 export async function metricEventDedupKey(

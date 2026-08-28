@@ -4,8 +4,9 @@
  */
 
 import { generateAppIdentityKey, nextAppIdentityVersion } from "./app-identity-key";
+import { ACTIVE_APP_IDENTITY_LIFECYCLE } from "./app-identity-lifecycle";
 import type { AppIdentityRecord } from "./app-identity-record";
-import type { AppIdentityStore } from "./app-identity-store";
+import { type AppIdentityStore, requireAppIdentityRecord } from "./app-identity-store";
 
 export const APP_IDENTITY_RESET_CHECKPOINTS = [
   "block_app_traffic",
@@ -45,15 +46,13 @@ export async function resetAppIdentityAfterCheckpoints(
   attestation: AppIdentityResetAttestation,
 ): Promise<AppIdentityRecord> {
   assertAppIdentityResetCheckpoints(attestation);
-  const current = await store.load(appId);
-  if (current === null) {
-    throw new Error("privacy: cannot reset an App with no identity record");
-  }
+  const current = await requireAppIdentityRecord(store, appId);
   const nextVersion = nextAppIdentityVersion(current.currentVersion);
   const replaced: AppIdentityRecord = {
     currentVersion: nextVersion,
-    epochs: [{ version: nextVersion, key: generateAppIdentityKey() }],
+    lifecycle: ACTIVE_APP_IDENTITY_LIFECYCLE,
+    epochs: [{ version: nextVersion, role: "active", key: generateAppIdentityKey() }],
   };
-  await store.save(appId, replaced, { merge: false });
+  await store.save(appId, replaced);
   return replaced;
 }

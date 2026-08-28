@@ -7,6 +7,7 @@ import {
   canonicalizeAnalysisRows,
   canonicalizeSharedRootTargetingKeyHash,
   computeRetainedTargetingKeyHashes,
+  joinMetricEventsToExposures,
   resolveEntityPrivacyIdentity,
 } from "./entity-privacy";
 import { computeTargetingKeyHash } from "./hash";
@@ -54,6 +55,21 @@ describe("entity privacy consumers", () => {
     expect(hashes).toContain(v1);
     expect(hashes).toContain(current);
     expect(hashes).toContain(next);
+
+    const joined = joinMetricEventsToExposures(
+      [
+        { targeting_key_hash: current, experiment: "exp-a" },
+        { targeting_key_hash: "app-v1:other-app", experiment: "exp-other" },
+      ],
+      [
+        { targeting_key_hash: v1, metric: "signup" },
+        { targeting_key_hash: next, metric: "refund" },
+        { targeting_key_hash: "app-v1:other-app", metric: "leak" },
+      ],
+      hashes,
+    );
+    expect(joined.exposures.map((row) => row.experiment)).toEqual(["exp-a"]);
+    expect(joined.metricEvents.map((row) => row.metric)).toEqual(["signup", "refund"]);
   });
 
   it("fails loud when analysis is asked to canonicalize an empty hash set", () => {

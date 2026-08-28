@@ -186,7 +186,7 @@ describe("KvAssignmentStore.put", () => {
   });
 });
 
-describe("KvAssignmentStore isolation and validation", () => {
+describe("KvAssignmentStore key isolation", () => {
   it("does not let App B read App A's Entity assignment key", async () => {
     const saltStore = new StaticSaltStore();
     const kv = new RecordingKv();

@@ -1,15 +1,15 @@
 import type { SaltStore } from "@splitch/privacy";
 import {
   type AssignmentIdentity,
-  type AssignmentStoreEntry,
-  assignmentValueToMap,
-  assignmentWriterName,
   type AssignmentKv,
   type AssignmentPutInput,
   type AssignmentStore,
+  type AssignmentStoreEntry,
   AssignmentStoreError,
   type AssignmentStoreLogger,
   type AssignmentStorePutResult,
+  assignmentValueToMap,
+  assignmentWriterName,
   hashedAssignmentIdentity,
   mergeRetainedAssignmentValues,
   readAssignmentValue,
@@ -43,6 +43,10 @@ export class KvAssignmentStore implements AssignmentStore {
   }
 
   async put(input: AssignmentPutInput): Promise<AssignmentStorePutResult> {
+    const existing = (await this.getAll(input)).get(input.experimentId);
+    if (existing !== undefined) {
+      return { status: "existing", assignment: existing };
+    }
     const { targetingKeyHash } = await hashedAssignmentIdentity(this.saltStore, input);
     return this.putHashed({
       appId: input.appId,

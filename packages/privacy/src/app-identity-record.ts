@@ -1,136 +1,241 @@
 /**
- * App identity record shape and mint/merge helpers. Historical shared-root
- * epochs are lookup-only compatibility material pinned at first provision.
+ * Canonical App identity record shape, wrap/unwrap, and schema parsing.
  */
 
-import { generateAppIdentityKey, INITIAL_APP_IDENTITY_KEY_VERSION } from "./app-identity-key";
-import { toHex, utf8Bytes } from "./hmac";
+import {
+  deriveAppIdentityKek,
+  isAppIdentityKeyVersion,
+  unwrapAppIdentityKey,
+  type WrappedAppIdentityKey,
+  wrapAppIdentityKey,
+} from "./app-identity-key";
+import { type AppIdentityLifecycle, parseAppIdentityLifecycle } from "./app-identity-lifecycle";
+import { HISTORICAL_SHARED_ROOT_KEY_VERSIONS } from "./derived-salt-store-versions";
 import type { KeyVersion, SaltBytes } from "./salt-store";
 
-/**
- * Pre-App-identity prefixes. HMAC key material is the shared-root bytes pinned
- * at first provision so retained `v1:` / `local-v1:` rows stay comparable.
- */
-export const HISTORICAL_SHARED_ROOT_KEY_VERSIONS = ["local-v1", "v1"] as const;
+export const APP_IDENTITY_RECORD_SCHEMA_VERSION = 2;
 
-export const APP_IDENTITY_RECORD_SCHEMA_VERSION = 1;
+/** Must match `appEntityIdentityKey` in @splitch/contracts. */
+export function defaultAppEntityIdentityRecordKey(appId: string): string {
+  return `app:${appId}:entity-identity`;
+}
+
+type AppIdentityEpochRole = "lookup" | "retained" | "active";
 
 export interface AppIdentityEpoch {
   version: KeyVersion;
   key: SaltBytes;
+  role: AppIdentityEpochRole;
 }
 
 export interface AppIdentityRecord {
   currentVersion: KeyVersion;
   epochs: readonly AppIdentityEpoch[];
+  lifecycle: AppIdentityLifecycle;
 }
 
-function historicalCompatibilityKey(rootSecret: string | SaltBytes): SaltBytes {
-  if (typeof rootSecret === "string") {
-    if (rootSecret.length === 0) {
-      throw new Error("privacy: empty root privacy secret");
-    }
-    return utf8Bytes(rootSecret);
-  }
-  if (rootSecret.length === 0) {
-    throw new Error("privacy: empty root privacy secret");
-  }
-  return new Uint8Array(rootSecret) as SaltBytes;
+export interface WrappedAppIdentityEpoch {
+  version: KeyVersion;
+  role: AppIdentityEpochRole;
+  wrappedKey: WrappedAppIdentityKey;
 }
 
-function historicalCompatibilityEpochs(rootSecret: string | SaltBytes): AppIdentityEpoch[] {
-  const key = historicalCompatibilityKey(rootSecret);
-  return HISTORICAL_SHARED_ROOT_KEY_VERSIONS.map((version) => ({
-    version,
-    key: new Uint8Array(key) as SaltBytes,
-  }));
+export interface WrappedAppIdentityRecord {
+  schemaVersion: typeof APP_IDENTITY_RECORD_SCHEMA_VERSION;
+  currentVersion: KeyVersion;
+  epochs: readonly WrappedAppIdentityEpoch[];
+  lifecycle: AppIdentityLifecycle;
 }
 
-/**
- * First provision: pin lookup-only historical shared-root material and mint one
- * random active App epoch. Omit `rootSecret` only in tests that seed App epochs
- * without compatibility keys.
- */
-export function mintInitialAppIdentityRecord(rootSecret?: string | SaltBytes): AppIdentityRecord {
-  const epochs: AppIdentityEpoch[] = [];
-  if (rootSecret !== undefined) {
-    epochs.push(...historicalCompatibilityEpochs(rootSecret));
-  }
-  epochs.push({
-    version: INITIAL_APP_IDENTITY_KEY_VERSION,
-    key: generateAppIdentityKey(),
-  });
-  return { currentVersion: INITIAL_APP_IDENTITY_KEY_VERSION, epochs };
-}
-
-function recordHasHistoricalCompatibility(record: AppIdentityRecord): boolean {
-  const versions = new Set(record.epochs.map((epoch) => epoch.version));
-  return HISTORICAL_SHARED_ROOT_KEY_VERSIONS.every((version) => versions.has(version));
-}
-
-export function withHistoricalCompatibility(
-  record: AppIdentityRecord,
-  rootSecret: string | SaltBytes,
-): AppIdentityRecord {
-  if (recordHasHistoricalCompatibility(record)) return cloneAppIdentityRecord(record);
-  return mergeAppIdentityRecords(record, {
-    currentVersion: record.currentVersion,
-    epochs: historicalCompatibilityEpochs(rootSecret),
-  });
-}
-
-/** Deterministic current write key when a raced mint retained extra `app-vN` keys. */
-export function canonicalCurrentKey(record: AppIdentityRecord): SaltBytes {
-  const keys = record.epochs
-    .filter((epoch) => epoch.version === record.currentVersion)
-    .map((epoch) => epoch.key);
-  const first = keys[0];
-  if (first === undefined) {
-    throw new Error(
-      `privacy: App identity record is missing current epoch ${record.currentVersion}`,
-    );
-  }
-  return keys.reduce((canonical, key) => (toHex(key) < toHex(canonical) ? key : canonical), first);
-}
-
-export function mergeAppIdentityRecords(
-  existing: AppIdentityRecord,
-  incoming: AppIdentityRecord,
-): AppIdentityRecord {
-  const epochs = existing.epochs.map(cloneEpoch);
-  const seen = new Set(existing.epochs.map(epochIdentity));
-  for (const epoch of incoming.epochs) {
-    const identity = epochIdentity(epoch);
-    if (seen.has(identity)) continue;
-    epochs.push(cloneEpoch(epoch));
-    seen.add(identity);
-  }
-  return {
-    currentVersion: newerCurrentVersion(existing.currentVersion, incoming.currentVersion),
-    epochs,
-  };
+export function copyAppIdentityKey(key: SaltBytes): SaltBytes {
+  return new Uint8Array(key) as SaltBytes;
 }
 
 export function cloneAppIdentityRecord(record: AppIdentityRecord): AppIdentityRecord {
+  return assertCanonicalAppIdentityRecord(record);
+}
+
+export async function wrapAppIdentityRecord(
+  record: AppIdentityRecord,
+  rootSecret: string | SaltBytes,
+  appId: string,
+): Promise<WrappedAppIdentityRecord> {
+  const canonical = assertCanonicalAppIdentityRecord(record);
+  const kek = await deriveAppIdentityKek(rootSecret, appId);
+  const epochs: WrappedAppIdentityEpoch[] = [];
+  for (const epoch of canonical.epochs) {
+    epochs.push({
+      version: epoch.version,
+      role: epoch.role,
+      wrappedKey: await wrapAppIdentityKey(kek, epoch.key),
+    });
+  }
   return {
-    currentVersion: record.currentVersion,
-    epochs: record.epochs.map(cloneEpoch),
+    schemaVersion: APP_IDENTITY_RECORD_SCHEMA_VERSION,
+    currentVersion: canonical.currentVersion,
+    epochs,
+    lifecycle: canonical.lifecycle,
   };
 }
 
-function cloneEpoch(epoch: AppIdentityEpoch): AppIdentityEpoch {
-  return { version: epoch.version, key: new Uint8Array(epoch.key) as SaltBytes };
-}
-
-function epochIdentity(epoch: AppIdentityEpoch): string {
-  return `${epoch.version}:${toHex(epoch.key)}`;
-}
-
-function newerCurrentVersion(existing: KeyVersion, incoming: KeyVersion): KeyVersion {
-  const existingNumber = Number.parseInt(existing.replace(/^app-v/u, ""), 10);
-  const incomingNumber = Number.parseInt(incoming.replace(/^app-v/u, ""), 10);
-  if (Number.isFinite(incomingNumber) && Number.isFinite(existingNumber)) {
-    return incomingNumber > existingNumber ? incoming : existing;
+export async function unwrapAppIdentityRecord(
+  wrapped: WrappedAppIdentityRecord,
+  rootSecret: string | SaltBytes,
+  appId: string,
+): Promise<AppIdentityRecord> {
+  const kek = await deriveAppIdentityKek(rootSecret, appId);
+  const epochs: AppIdentityEpoch[] = [];
+  for (const epoch of wrapped.epochs) {
+    epochs.push({
+      version: epoch.version,
+      role: epoch.role,
+      key: await unwrapAppIdentityKey(kek, epoch.wrappedKey),
+    });
   }
-  return existing;
+  return assertCanonicalAppIdentityRecord({
+    currentVersion: wrapped.currentVersion,
+    epochs,
+    lifecycle: wrapped.lifecycle,
+  });
+}
+
+export function parseWrappedAppIdentityRecord(raw: string): WrappedAppIdentityRecord {
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error("privacy: malformed App identity record JSON", { cause });
+  }
+  const normalized = normalizeWrappedAppIdentityRecord(json);
+  if (normalized === null) {
+    throw new Error("privacy: invalid App identity record");
+  }
+  return normalized;
+}
+
+export function assertCanonicalAppIdentityRecord(record: AppIdentityRecord): AppIdentityRecord {
+  if (record.epochs.length === 0) {
+    throw new Error("privacy: App identity record has no epochs");
+  }
+  if (!isAppIdentityKeyVersion(record.currentVersion)) {
+    throw new Error("privacy: current App identity version must be an app-vN epoch");
+  }
+  const activeVersion = assertUniqueEpochs(record.epochs);
+  if (activeVersion !== record.currentVersion) {
+    throw new Error("privacy: App identity record must have exactly one active current epoch");
+  }
+  return {
+    currentVersion: record.currentVersion,
+    epochs: record.epochs.map((epoch) => ({
+      version: epoch.version,
+      role: epoch.role,
+      key: copyAppIdentityKey(epoch.key),
+    })),
+    lifecycle: parseAppIdentityLifecycle(record.lifecycle),
+  };
+}
+
+function assertUniqueEpochs(epochs: readonly AppIdentityEpoch[]): KeyVersion {
+  const versions = new Set<string>();
+  const active: KeyVersion[] = [];
+  for (const epoch of epochs) {
+    assertEpochShape(epoch, versions);
+    if (epoch.role === "active") {
+      active.push(epoch.version);
+    }
+  }
+  if (active.length !== 1 || active[0] === undefined) {
+    throw new Error("privacy: App identity record must have exactly one active current epoch");
+  }
+  return active[0];
+}
+
+function assertEpochShape(epoch: AppIdentityEpoch, versions: Set<string>): void {
+  if (versions.has(epoch.version)) {
+    throw new Error(`privacy: ambiguous App identity epoch ${epoch.version}`);
+  }
+  versions.add(epoch.version);
+  if (epoch.role === "lookup" && isAppIdentityKeyVersion(epoch.version)) {
+    throw new Error(`privacy: App identity epoch ${epoch.version} cannot be lookup-only`);
+  }
+  if (
+    epoch.role !== "lookup" &&
+    (HISTORICAL_SHARED_ROOT_KEY_VERSIONS as readonly string[]).includes(epoch.version)
+  ) {
+    throw new Error(`privacy: historical shared-root epoch ${epoch.version} is lookup-only`);
+  }
+  if (epoch.key.length === 0) {
+    throw new Error(`privacy: empty App identity key for ${epoch.version}`);
+  }
+}
+
+function normalizeWrappedAppIdentityRecord(value: unknown): WrappedAppIdentityRecord | null {
+  if (typeof value !== "object" || value === null) return null;
+  const record = value as Record<string, unknown>;
+  if (!isSupportedAppIdentitySchema(record.schemaVersion)) return null;
+  if (typeof record.currentVersion !== "string" || record.currentVersion.length === 0) {
+    return null;
+  }
+  const epochs = normalizeWrappedEpochs(record.epochs, record.currentVersion);
+  if (epochs === null) return null;
+  try {
+    return {
+      schemaVersion: APP_IDENTITY_RECORD_SCHEMA_VERSION,
+      currentVersion: record.currentVersion,
+      epochs,
+      lifecycle: parseAppIdentityLifecycle(record.lifecycle),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isSupportedAppIdentitySchema(schemaVersion: unknown): boolean {
+  return schemaVersion === APP_IDENTITY_RECORD_SCHEMA_VERSION || schemaVersion === 1;
+}
+
+function normalizeWrappedEpochs(
+  value: unknown,
+  currentVersion: string,
+): WrappedAppIdentityEpoch[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const epochs: WrappedAppIdentityEpoch[] = [];
+  for (const epoch of value) {
+    const normalized = normalizeWrappedAppIdentityEpoch(epoch, currentVersion);
+    if (normalized === null) return null;
+    epochs.push(normalized);
+  }
+  return epochs;
+}
+
+function normalizeWrappedAppIdentityEpoch(
+  value: unknown,
+  currentVersion: string,
+): WrappedAppIdentityEpoch | null {
+  if (typeof value !== "object" || value === null) return null;
+  const epoch = value as Record<string, unknown>;
+  if (typeof epoch.version !== "string" || epoch.version.length === 0) return null;
+  if (typeof epoch.wrappedKey !== "object" || epoch.wrappedKey === null) return null;
+  const wrapped = epoch.wrappedKey as Record<string, unknown>;
+  if (typeof wrapped.iv !== "string" || typeof wrapped.ciphertext !== "string") return null;
+  const role = inferEpochRole(epoch.role, epoch.version, currentVersion);
+  if (role === null) return null;
+  return {
+    version: epoch.version,
+    role,
+    wrappedKey: { iv: wrapped.iv, ciphertext: wrapped.ciphertext },
+  };
+}
+
+function inferEpochRole(
+  role: unknown,
+  version: string,
+  currentVersion: string,
+): AppIdentityEpochRole | null {
+  if (role === "lookup" || role === "retained" || role === "active") return role;
+  if (role !== undefined) return null;
+  if ((HISTORICAL_SHARED_ROOT_KEY_VERSIONS as readonly string[]).includes(version)) {
+    return "lookup";
+  }
+  return version === currentVersion ? "active" : "retained";
 }

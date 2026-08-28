@@ -16,21 +16,23 @@ import {
 } from "./assignment-store-test-fixtures";
 import { KvAssignmentStore } from "./kv-assignment-store";
 
+const ROOT = "test-root-secret-do-not-use";
+
 function hostedIdentitySaltStore() {
   return makeEnvSaltStore({
-    EVALUATION_PRIVACY_SALT: "test-root-secret-do-not-use",
+    EVALUATION_PRIVACY_SALT: ROOT,
     SPLITCH_PLATFORM_TARGET: "production",
     identityStore: makeMemoryAppIdentityStore(),
   });
 }
 
-describe("KvAssignmentStore first-mint identity merge", () => {
-  it("keeps a first-mint holdover visible after a later mint is merged", async () => {
+describe("KvAssignmentStore first-mint identity", () => {
+  it("does not activate a later mint over an already-provisioned record", async () => {
     const identityStore = makeMemoryAppIdentityStore();
-    const first = mintInitialAppIdentityRecord();
-    await identityStore.save(basePut.appId, first, { merge: false });
+    const first = mintInitialAppIdentityRecord(ROOT);
+    await identityStore.save(basePut.appId, first);
     const saltStore = makeIdentitySaltStore({
-      rootSecret: "test-root-secret-do-not-use",
+      rootSecret: ROOT,
       identityStore,
     });
     const firstHash = await computeTargetingKeyHash(saltStore, {
@@ -44,7 +46,18 @@ describe("KvAssignmentStore first-mint identity merge", () => {
       firstKey,
       serializeAssignmentValue({ "exp-checkout": { runId: "run-first", variant: "control" } }),
     );
-    await identityStore.save(basePut.appId, mintInitialAppIdentityRecord());
+    const winner = await identityStore.putIfAbsent(
+      basePut.appId,
+      mintInitialAppIdentityRecord(ROOT),
+    );
+    const winnerActive = winner.epochs.find((epoch) => epoch.role === "active")?.key;
+    const firstActive = first.epochs.find((epoch) => epoch.role === "active")?.key;
+    expect(winnerActive).toBeDefined();
+    expect(firstActive).toBeDefined();
+    if (winnerActive === undefined || firstActive === undefined) {
+      throw new Error("provisioned App identity record is missing its active epoch");
+    }
+    expect([...winnerActive]).toEqual([...firstActive]);
 
     const store = new KvAssignmentStore(kv, new RecordingWriterNamespace(), saltStore);
     const holdovers = await store.getAll(basePut);
@@ -139,7 +152,9 @@ describe("KvAssignmentStore first-mint identity merge", () => {
       assignmentKey(basePut.appId, basePut.idType, historicalHash),
       serializeAssignmentValue({ "exp-new": { runId: "run-other", variant: "control" } }),
     );
-    await expect(store.getAll(basePut)).rejects.toThrow(/Conflicting retained-epoch Assignment/);
+    await expect(store.getAll(basePut)).rejects.toThrow(
+      /Conflicting Assignment for Experiment "exp-new"/,
+    );
   });
 
   it("writes a new Experiment under the active epoch only", async () => {

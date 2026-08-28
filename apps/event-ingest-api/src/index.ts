@@ -17,10 +17,11 @@ import { EvaluationCommitOutboxDurableObject } from "./evaluation-commit-outbox"
 import { EvaluationUsageReplayWindowDurableObject } from "./evaluation-usage-replay-window";
 import { handleEvaluationIngest, handleIngest } from "./ingest";
 import { IngestAdmissionGateDurableObject } from "./ingest-admission-gate";
-import { handleAuthorizedMetricEvent, makeMetricEventSaltStore } from "./metric-event-ingest";
+import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
 import { handleMetricEventQueue } from "./metric-event-queue";
 import { MetricEventRateLimitDurableObject } from "./metric-event-rate-limit";
+import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import type { Env } from "./types";
 
 const service = "splitch-event-ingest-api";

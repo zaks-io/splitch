@@ -13,6 +13,11 @@ import type { MetricEventRateLimitNamespace } from "./metric-event-rate-limit";
 
 export type Env = {
   CONFIG_STORE?: KVNamespace;
+  CONFIG_STORE_WRITER?: {
+    getByName(name: string): {
+      putAppIdentityIfAbsent?(recordKey: string, value: string): Promise<string>;
+    };
+  };
   CREDENTIAL_STORE?: KVNamespace;
   EVALUATION_PRIVACY_SALT?: string;
   INGEST_ADMISSION_GATE?: IngestAdmissionGateNamespace;

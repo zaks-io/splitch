@@ -4,7 +4,7 @@
  * only and are never returned as durable identifiers.
  */
 
-import { HISTORICAL_SHARED_ROOT_KEY_VERSIONS } from "./app-identity-record";
+import { HISTORICAL_SHARED_ROOT_KEY_VERSIONS } from "./derived-salt-store-versions";
 import { computeTargetingKeyHash, keyVersionOf } from "./hash";
 import type { SaltStore } from "./salt-store";
 
@@ -72,6 +72,28 @@ export function analysisRowsForEntity<T extends { targeting_key_hash: string }>(
 ): T[] {
   const hashes = new Set(retainedHashes);
   return rows.filter((row) => hashes.has(row.targeting_key_hash));
+}
+
+/**
+ * Join one Entity's Exposures to its Metric Events across every retained
+ * identity epoch. Rows whose hash is not in this Entity's canonical set are
+ * dropped, so a second App cannot contribute.
+ */
+export function joinMetricEventsToExposures<
+  Exposure extends { targeting_key_hash: string },
+  MetricEvent extends { targeting_key_hash: string },
+>(
+  exposures: readonly Exposure[],
+  metricEvents: readonly MetricEvent[],
+  retainedHashes: readonly string[],
+): { exposures: Exposure[]; metricEvents: MetricEvent[] } {
+  if (retainedHashes.length === 0) {
+    throw new Error("privacy: no retained targeting_key_hash for analysis join");
+  }
+  return {
+    exposures: analysisRowsForEntity(exposures, retainedHashes),
+    metricEvents: analysisRowsForEntity(metricEvents, retainedHashes),
+  };
 }
 
 /**

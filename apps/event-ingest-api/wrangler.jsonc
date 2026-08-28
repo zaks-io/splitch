@@ -51,6 +51,11 @@
   "durable_objects": {
     "bindings": [
       {
+        "name": "CONFIG_STORE_WRITER",
+        "class_name": "ConfigStoreDurableObject",
+        "script_name": "splitch-control-plane-api"
+      },
+      {
         "name": "EVALUATION_USAGE_REPLAY_WINDOW",
         "class_name": "EvaluationUsageReplayWindowDurableObject"
       },
@@ -140,6 +145,11 @@
       },
       "durable_objects": {
         "bindings": [
+          {
+            "name": "CONFIG_STORE_WRITER",
+            "class_name": "ConfigStoreDurableObject",
+            "script_name": "splitch-control-plane-api-shared-preview"
+          },
           {
             "name": "EVALUATION_USAGE_REPLAY_WINDOW",
             "class_name": "EvaluationUsageReplayWindowDurableObject"
@@ -231,6 +241,11 @@
       },
       "durable_objects": {
         "bindings": [
+          {
+            "name": "CONFIG_STORE_WRITER",
+            "class_name": "ConfigStoreDurableObject",
+            "script_name": "splitch-control-plane-api"
+          },
           {
             "name": "EVALUATION_USAGE_REPLAY_WINDOW",
             "class_name": "EvaluationUsageReplayWindowDurableObject"
