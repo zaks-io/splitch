@@ -145,16 +145,10 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
       { turnstile_token: `${FIXTURE_TURNSTILE_TOKEN}-hosted` },
       "198.51.100.86",
       "/agent/identity",
-      {
-        ...env,
+      hostedEnvWith({
         SPLITCH_PLATFORM_TARGET: "shared-preview",
         ACCESS_TOKEN_SECRET: hostedAccessTokenSecret,
-        TURNSTILE_SECRET: "test-turnstile-secret",
-        WORKOS_API_KEY: "test-workos-api-key",
-        WORKOS_CLIENT_ID: "test-workos-client-id",
-        WORKOS_JWKS_URI: "https://api.workos.test/jwks",
-        WORKOS_ISSUER: "https://api.workos.test",
-      },
+      }),
     );
 
     expect(res.status).toBe(403);
@@ -169,16 +163,15 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
     "production",
   ])("%s fails closed without WORKOS_API_KEY instead of using fixture WorkOS", async (target) => {
     const beforeOrganizations = await rowCount("organizations");
+    const { WORKOS_API_KEY: _missing, ...withoutWorkosKey } = hostedEnvWith({
+      SPLITCH_PLATFORM_TARGET: target,
+      WORKOS_CLIENT_ID: "workos-client",
+    });
     const res = await call(
       { turnstile_token: turnstileToken() },
       `198.51.100.${target === "shared-preview" ? "90" : "91"}`,
       "/agent/identity",
-      {
-        ...env,
-        SPLITCH_PLATFORM_TARGET: target,
-        WORKOS_CLIENT_ID: "workos-client",
-        TURNSTILE_SECRET: "test-turnstile-secret",
-      },
+      withoutWorkosKey,
     );
 
     expect(res.status).toBe(500);
@@ -188,20 +181,12 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
 
   it("hosted claims fail closed when the Control Panel origin is missing", async () => {
     const beforeOrganizations = await rowCount("organizations");
-    const { CONTROL_PANEL_ORIGIN: _missing, ...withoutPanelOrigin } = env;
+    const { CONTROL_PANEL_ORIGIN: _missing, ...withoutPanelOrigin } = hostedEnvWith({});
     const res = await call(
       { turnstile_token: turnstileToken() },
       "198.51.100.92",
       "/agent/identity",
-      {
-        ...withoutPanelOrigin,
-        SPLITCH_PLATFORM_TARGET: "production",
-        WORKOS_API_KEY: "test-workos-api-key",
-        WORKOS_CLIENT_ID: "test-workos-client-id",
-        WORKOS_JWKS_URI: "https://api.workos.test/jwks",
-        WORKOS_ISSUER: "https://api.workos.test",
-        TURNSTILE_SECRET: "test-turnstile-secret",
-      },
+      withoutPanelOrigin,
     );
 
     expect(res.status).toBe(500);
@@ -213,15 +198,7 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
     "WORKOS_ISSUER",
   ] as const)("hosted claims fail closed when %s is missing", async (missingBinding) => {
     const beforeOrganizations = await rowCount("organizations");
-    const hostedEnv: AuthApiEnv = {
-      ...env,
-      SPLITCH_PLATFORM_TARGET: "production",
-      WORKOS_API_KEY: "test-workos-api-key",
-      WORKOS_CLIENT_ID: "test-workos-client-id",
-      WORKOS_JWKS_URI: "https://api.workos.test/jwks",
-      WORKOS_ISSUER: "https://api.workos.test",
-      TURNSTILE_SECRET: "test-turnstile-secret",
-    };
+    const hostedEnv = hostedEnvWith({});
     delete hostedEnv[missingBinding];
 
     const res = await call(
