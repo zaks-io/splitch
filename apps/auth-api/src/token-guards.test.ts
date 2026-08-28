@@ -101,9 +101,34 @@ describe("verifyAccessToken guards", () => {
     });
   });
 
-  it("accepts a well-formed access token (control)", async () => {
-    const token = await sign(valid(), ACCESS_SECRET);
-    expect(await verifyAccessToken(`Bearer ${token}`, opts, NOW)).not.toBeNull();
+  it("accepts canonical scopes without changing the verified actor", async () => {
+    const claims = valid({
+      scopes: ["app:app_demo:admin", "org:org_demo:member"],
+    });
+    const token = await sign(claims, ACCESS_SECRET);
+
+    await expect(verifyAccessToken(`Bearer ${token}`, opts, NOW)).resolves.toEqual({
+      userId: "user_x",
+      scopes: ["app:app_demo:admin", "org:org_demo:member"],
+      expiresAt: NOW + 3600,
+    });
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["a non-array", "app:app_demo:member"],
+    ["an object", [{}]],
+    ["a number", [42]],
+    ["an empty string", [""]],
+    ["an unknown value", ["bogus"]],
+    ["an empty identifier", ["app::member"]],
+    ["an unknown role", ["app:app_demo:viewer"]],
+    ["more than 64 entries", Array.from({ length: 65 }, () => "app:app_demo:member")],
+    ["an entry longer than 512 characters", [`app:${"x".repeat(507)}:member`]],
+  ])("rejects scopes containing %s", async (_case, scopes) => {
+    const token = await sign(valid({ scopes }), ACCESS_SECRET);
+
+    await expect(verifyAccessToken(`Bearer ${token}`, opts, NOW)).resolves.toBeNull();
   });
 
   it("accepts an RS256 access token when ACCESS_TOKEN_SECRET is an RSA private JWK", async () => {

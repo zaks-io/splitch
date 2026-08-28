@@ -140,11 +140,30 @@ function actorFromClaims(
   if (typeof claims.exp !== "number" || claims.exp < nowSeconds) {
     return null;
   }
+  if (
+    !Array.isArray(claims.scopes) ||
+    claims.scopes.length > 64 ||
+    !claims.scopes.every(isCanonicalHeldScope)
+  ) {
+    return null;
+  }
   return {
     userId: claims.sub,
-    scopes: Array.isArray(claims.scopes) ? (claims.scopes as string[]) : [],
+    scopes: claims.scopes as string[],
     expiresAt: claims.exp,
   };
+}
+
+function isCanonicalHeldScope(scope: unknown): scope is string {
+  if (typeof scope !== "string" || scope.length === 0 || scope.length > 512) return false;
+  const segments = scope.split(":");
+  if (segments.length !== 3) return false;
+  const [kind, id, role] = segments;
+  return (
+    (kind === "org" || kind === "app") &&
+    id !== "" &&
+    (role === "owner" || role === "admin" || role === "member")
+  );
 }
 
 /** Verify a Bearer access token; return the actor, or null on any failure (fail-closed). */
