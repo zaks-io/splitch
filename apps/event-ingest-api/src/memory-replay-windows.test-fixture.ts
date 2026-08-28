@@ -51,6 +51,43 @@ export class MemoryEvaluationCommitOutbox implements EvaluationCommitOutbox {
     if (existing === undefined) throw new Error("commit not found");
     existing.delivered = true;
   }
+
+  async privacyExport(identity: string, eventIds: readonly string[]) {
+    const existing = await this.lookup(identity);
+    return existing === null ? [] : selectedExposureRows(existing.payload, eventIds);
+  }
+
+  async privacyDelete(identity: string, eventIds: readonly string[]): Promise<number> {
+    const existing = await this.lookup(identity);
+    if (existing === null) return 0;
+    const selected = new Set(eventIds);
+    const rows = selectedExposureRows(existing.payload, eventIds);
+    const payload = existing.payload as Record<string, unknown>;
+    existing.payload = {
+      ...payload,
+      exposureRows: (payload.exposureRows as Record<string, unknown>[]).filter(
+        (row) => typeof row.event_id !== "string" || !selected.has(row.event_id),
+      ),
+    };
+    return rows.length;
+  }
+}
+
+function selectedExposureRows(
+  payload: unknown,
+  eventIds: readonly string[],
+): readonly Record<string, unknown>[] {
+  if (typeof payload !== "object" || payload === null) return [];
+  const rows = (payload as { exposureRows?: unknown }).exposureRows;
+  if (!Array.isArray(rows)) return [];
+  const selected = new Set(eventIds);
+  return rows.filter(
+    (row): row is Record<string, unknown> =>
+      typeof row === "object" &&
+      row !== null &&
+      typeof (row as Record<string, unknown>).event_id === "string" &&
+      selected.has((row as Record<string, unknown>).event_id as string),
+  );
 }
 
 async function eventIdFor(identity: string, now: number): Promise<string> {

@@ -49,8 +49,9 @@ describe("entity assignment privacy consumers", () => {
     ]);
     expect(JSON.stringify(exported)).not.toContain(RAW_TARGETING_KEY);
 
-    const deleted = await deleteEntityAssignments(kv, saltStore, identity);
+    const deleted = await deleteEntityAssignments(kv, assignmentWriters(), saltStore, identity);
     expect(deleted.deletedKeyCount).toBe(deleted.targetingKeyHashes.length);
+    expect(deleted.deletedWriterCount).toBe(deleted.targetingKeyHashes.length);
     expect(kv.has(assignmentKey(identity.appId, identity.idType, historical))).toBe(false);
     expect(kv.has(assignmentKey(identity.appId, identity.idType, current))).toBe(false);
     expect(JSON.stringify(deleted)).not.toContain(RAW_TARGETING_KEY);
@@ -68,3 +69,12 @@ describe("entity assignment privacy consumers", () => {
     expect(canonicalizeAnalysisEntityHash(hashes)).toBe(current);
   });
 });
+
+function assignmentWriters() {
+  return {
+    idFromName: (name: string) => name as unknown as DurableObjectId,
+    get: () => ({
+      fetch: async () => Response.json({ deleted: true, proof: "assignment-do-tombstone-v1" }),
+    }),
+  };
+}

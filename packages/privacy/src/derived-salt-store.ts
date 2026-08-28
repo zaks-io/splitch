@@ -78,6 +78,7 @@ export function makeIdentitySaltStore(options: IdentitySaltStoreOptions): SaltSt
     async saltFor(appId, keyVersion) {
       assertAllowed(keyVersion);
       const record = await provisioned(appId);
+      assertAppIdentityTrafficAllowed(record.lifecycle);
       if (isHistoricalSharedRootKeyVersion(keyVersion) || isAppIdentityKeyVersion(keyVersion)) {
         const epoch = record.epochs.find((candidate) => candidate.version === keyVersion);
         if (!epoch) {
@@ -97,6 +98,7 @@ export function makeIdentitySaltStore(options: IdentitySaltStoreOptions): SaltSt
         }
         throw cause;
       });
+      assertAppIdentityTrafficAllowed(record.lifecycle);
       const versions = record.epochs.map((epoch) => epoch.version);
       return allowed ? versions.filter((version) => allowed.has(version)) : versions;
     },

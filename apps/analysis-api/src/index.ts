@@ -31,7 +31,16 @@ const allowLimiter: RateLimiter = () => ({ limited: false });
 const delegatedRoutes = routesDelegatedTo("analysis-api");
 const cleanupRoute = getRoute("environment_exposure_status_delete");
 if (!cleanupRoute) throw new Error("analysis-api: Exposure status cleanup route is not registered");
-const bindingRoutes = [...delegatedRoutes, cleanupRoute];
+const entityPrivacyRoutes = [
+  "entity_analysis_privacy_export",
+  "entity_analysis_privacy_suppress",
+  "entity_analysis_privacy_delete",
+].map((operationId) => {
+  const route = getRoute(operationId);
+  if (!route) throw new Error(`analysis-api: ${operationId} route is not registered`);
+  return route;
+});
+const bindingRoutes = [...delegatedRoutes, cleanupRoute, ...entityPrivacyRoutes];
 const service = "splitch-analysis-api";
 
 const handler = {

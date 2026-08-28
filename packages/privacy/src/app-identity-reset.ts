@@ -1,58 +1,76 @@
-/**
- * Compromised App identity-key reset (ADR-0044). Routine rotation rewraps; this
- * path is the only way to replace the live key after first provision.
- */
+/** One resumable, serialized ADR-0044 compromised-key reset workflow. */
 
 import { generateAppIdentityKey, nextAppIdentityVersion } from "./app-identity-key";
-import { ACTIVE_APP_IDENTITY_LIFECYCLE } from "./app-identity-lifecycle";
+import {
+  ACTIVE_APP_IDENTITY_LIFECYCLE,
+  APP_IDENTITY_RESET_STORES,
+  type AppIdentityResetStore,
+  assertAppIdentityResetProved,
+  blockedAppIdentityLifecycle,
+  withAppIdentityResetProof,
+} from "./app-identity-lifecycle";
 import type { AppIdentityRecord } from "./app-identity-record";
 import { type AppIdentityStore, requireAppIdentityRecord } from "./app-identity-store";
 
-export const APP_IDENTITY_RESET_CHECKPOINTS = [
-  "block_app_traffic",
-  "end_runs_and_revoke_credentials",
-  "purge_queues_and_outboxes",
-  "purge_entity_stores",
-  "redact_privacy_request_subject_refs",
-  "verify_purge_checkpoints",
-  "mint_replacement_epoch",
-] as const;
-
-export type AppIdentityResetCheckpoint = (typeof APP_IDENTITY_RESET_CHECKPOINTS)[number];
-
-export type AppIdentityResetAttestation = Record<AppIdentityResetCheckpoint, true>;
-
 export const APP_IDENTITY_RESET_SUBJECT_REF = "redacted:app-identity-reset";
 
-function assertAppIdentityResetCheckpoints(attestation: AppIdentityResetAttestation): void {
-  const missing = APP_IDENTITY_RESET_CHECKPOINTS.filter(
-    (checkpoint) => attestation[checkpoint] !== true,
-  );
-  if (missing.length > 0) {
-    throw new Error(
-      `privacy: App identity reset requires ADR-0044 checkpoints; missing ${missing.join(", ")}`,
-    );
-  }
-}
+export type AppIdentityResetPurger = (input: {
+  appId: string;
+  currentVersion: string;
+}) => Promise<string>;
 
-/**
- * Destroy every retained epoch (rows were purged) and mint the next random
- * active key. Historical compatibility material is not re-pinned: those rows
- * were part of the mandatory App-wide purge.
- */
-export async function resetAppIdentityAfterCheckpoints(
+export type AppIdentityResetPurgers = Record<AppIdentityResetStore, AppIdentityResetPurger>;
+
+export async function resetCompromisedAppIdentity(
   store: AppIdentityStore,
   appId: string,
-  attestation: AppIdentityResetAttestation,
+  resetId: string,
+  purgers: AppIdentityResetPurgers,
 ): Promise<AppIdentityRecord> {
-  assertAppIdentityResetCheckpoints(attestation);
-  const current = await requireAppIdentityRecord(store, appId);
+  return store.runExclusive(appId, () => runReset(store, appId, resetId, purgers));
+}
+
+async function runReset(
+  store: AppIdentityStore,
+  appId: string,
+  resetId: string,
+  purgers: AppIdentityResetPurgers,
+): Promise<AppIdentityRecord> {
+  let current = await requireAppIdentityRecord(store, appId);
+  if (current.lifecycle.state === "active" && current.lifecycle.resetId === resetId) return current;
+  if (current.lifecycle.state === "active") {
+    current = { ...current, lifecycle: blockedAppIdentityLifecycle(resetId) };
+    await store.save(appId, current);
+  } else if (current.lifecycle.resetId !== resetId) {
+    throw new Error("privacy: a different App identity reset is already running");
+  }
+  current = await purgePendingStores(store, appId, current, purgers);
+  assertAppIdentityResetProved(current.lifecycle);
   const nextVersion = nextAppIdentityVersion(current.currentVersion);
   const replaced: AppIdentityRecord = {
     currentVersion: nextVersion,
-    lifecycle: ACTIVE_APP_IDENTITY_LIFECYCLE,
+    lifecycle: { ...ACTIVE_APP_IDENTITY_LIFECYCLE, resetId },
     epochs: [{ version: nextVersion, role: "active", key: generateAppIdentityKey() }],
   };
   await store.save(appId, replaced);
   return replaced;
+}
+
+async function purgePendingStores(
+  store: AppIdentityStore,
+  appId: string,
+  initial: AppIdentityRecord,
+  purgers: AppIdentityResetPurgers,
+): Promise<AppIdentityRecord> {
+  let current = initial;
+  for (const surface of APP_IDENTITY_RESET_STORES) {
+    if (current.lifecycle.proofs[surface] !== null) continue;
+    const proof = await purgers[surface]({ appId, currentVersion: current.currentVersion });
+    current = {
+      ...current,
+      lifecycle: withAppIdentityResetProof(current.lifecycle, surface, proof),
+    };
+    await store.save(appId, current);
+  }
+  return current;
 }

@@ -32,6 +32,11 @@
       "binding": "EVALUATION_API",
       "service": "splitch-evaluation-api",
       "entrypoint": "ControlPlaneEntrypoint"
+    },
+    {
+      "binding": "EVENT_INGEST_API",
+      "service": "splitch-event-ingest-api",
+      "entrypoint": "ControlPlaneEntrypoint"
     }
   ],
   "d1_databases": [
@@ -122,6 +127,11 @@
           "binding": "EVALUATION_API",
           "service": "splitch-evaluation-api-shared-preview",
           "entrypoint": "ControlPlaneEntrypoint"
+        },
+        {
+          "binding": "EVENT_INGEST_API",
+          "service": "splitch-event-ingest-api-shared-preview",
+          "entrypoint": "ControlPlaneEntrypoint"
         }
       ],
       "secrets": {
@@ -202,6 +212,11 @@
         {
           "binding": "EVALUATION_API",
           "service": "splitch-evaluation-api",
+          "entrypoint": "ControlPlaneEntrypoint"
+        },
+        {
+          "binding": "EVENT_INGEST_API",
+          "service": "splitch-event-ingest-api",
           "entrypoint": "ControlPlaneEntrypoint"
         }
       ],

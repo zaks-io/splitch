@@ -11,7 +11,11 @@ import { D1_TEST_FILES } from "./vitest.d1-tests";
  * reads as "no such service is defined", which names Miniflare rather than the
  * route that was added.
  */
-const DELEGATION_TARGETS = ["splitch-analysis-api", "splitch-evaluation-api"];
+const DELEGATION_TARGETS = [
+  "splitch-analysis-api",
+  "splitch-evaluation-api",
+  "splitch-event-ingest-api",
+];
 
 export default defineConfig(async () => {
   const migrations = await readD1Migrations(

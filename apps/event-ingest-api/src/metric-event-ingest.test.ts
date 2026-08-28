@@ -277,48 +277,6 @@ describe("Metric Event retained-epoch retry", () => {
   });
 });
 
-describe("Metric Event privacy salts", () => {
-  it("hashes the same Targeting Key differently across Apps under one root", async () => {
-    const values = new Map<string, string>();
-    const store = makeMetricEventSaltStore({
-      EVALUATION_PRIVACY_SALT: "test-root-secret-do-not-use",
-      SPLITCH_PLATFORM_TARGET: "production",
-      CONFIG_STORE: {
-        get: async (key: string) => values.get(key) ?? null,
-        put: async (key: string, value: string) => {
-          values.set(key, value);
-        },
-      },
-    } as never);
-    const input = { idType: "user", targetingKey: "user-123" } as const;
-    const appA = await computeTargetingKeyHash(store, { ...input, appId: "app_1" });
-    const appB = await computeTargetingKeyHash(store, { ...input, appId: "app_2" });
-    expect(appA.startsWith("app-v1:")).toBe(true);
-    expect(appB.startsWith("app-v1:")).toBe(true);
-    expect(appA).not.toBe(appB);
-    const historical = await computeTargetingKeyHash(store, {
-      ...input,
-      appId: "app_1",
-      keyVersion: "v1",
-    });
-    expect(historical).toBe("v1:485bdba84f840c9627db32bcc99a6f00722b5253754e513ff473c90a8febc588");
-    expect(historical).not.toBe(appA);
-  });
-
-  it("rejects a missing hosted root salt or platform target", () => {
-    expect(() => makeMetricEventSaltStore({} as never)).toThrow(/SPLITCH_PLATFORM_TARGET/);
-    expect(() =>
-      makeMetricEventSaltStore({ SPLITCH_PLATFORM_TARGET: "production" } as never),
-    ).toThrow(/EVALUATION_PRIVACY_SALT/);
-    expect(() =>
-      makeMetricEventSaltStore({
-        EVALUATION_PRIVACY_SALT: "hosted-root-secret",
-        SPLITCH_PLATFORM_TARGET: "production",
-      } as never),
-    ).toThrow(/CONFIG_STORE is required/);
-  });
-});
-
 describe("Metric Event ingest admission", () => {
   it("rejects a malformed allow decision before creating a claim", async () => {
     const fixture = await makeMetricEventFixture({}, "client_key", {

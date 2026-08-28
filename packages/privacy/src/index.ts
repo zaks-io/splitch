@@ -27,15 +27,19 @@ export {
   unwrapAppIdentityRecord,
   wrapAppIdentityRecord,
 } from "./app-identity-record";
-export type { AppIdentityResetAttestation, AppIdentityResetCheckpoint } from "./app-identity-reset";
+export type { AppIdentityResetPurger, AppIdentityResetPurgers } from "./app-identity-reset";
 export {
-  APP_IDENTITY_RESET_CHECKPOINTS,
   APP_IDENTITY_RESET_SUBJECT_REF,
-  resetAppIdentityAfterCheckpoints,
+  resetCompromisedAppIdentity,
 } from "./app-identity-reset";
+export type {
+  AppIdentityLifecycle,
+  AppIdentityResetProofs,
+  AppIdentityResetStore,
+} from "./app-identity-lifecycle";
+export { APP_IDENTITY_RESET_STORES } from "./app-identity-lifecycle";
 export type { AppIdentityStore } from "./app-identity-store";
 export {
-  advanceAppIdentityEpoch,
   makeKvAppIdentityStore,
   makeMemoryAppIdentityStore,
   mintInitialAppIdentityRecord,
@@ -57,7 +61,9 @@ export {
   canonicalizeAnalysisEntityHash,
   canonicalizeAnalysisRows,
   canonicalizeSharedRootTargetingKeyHash,
+  computeEntityFamilyHash,
   computeRetainedTargetingKeyHashes,
+  entityFamilyHash,
   joinMetricEventsToExposures,
   resolveEntityPrivacyIdentity,
 } from "./entity-privacy";

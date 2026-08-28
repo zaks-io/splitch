@@ -18,6 +18,7 @@ export interface EntityPrivacyIdentity {
   appId: string;
   idType: string;
   targetingKeyHashes: readonly string[];
+  entityFamilyHash: string;
 }
 
 /**
@@ -50,11 +51,45 @@ export async function resolveEntityPrivacyIdentity(
   store: SaltStore,
   input: EntityPrivacyInput,
 ): Promise<EntityPrivacyIdentity> {
+  const targetingKeyHashes = await computeRetainedTargetingKeyHashes(store, input);
   return {
     appId: input.appId,
     idType: input.idType,
-    targetingKeyHashes: await computeRetainedTargetingKeyHashes(store, input),
+    targetingKeyHashes,
+    entityFamilyHash: entityFamilyHash(input.appId, input.idType, targetingKeyHashes),
   };
+}
+
+/**
+ * App-scoped join key shared by every retained physical hash for one Entity.
+ * Historical rows can derive the same value from their stored shared-root hash;
+ * current rows persist it while the raw Targeting Key is still in memory.
+ */
+export function entityFamilyHash(
+  _appId: string,
+  _idType: string,
+  retainedHashes: readonly string[],
+): string {
+  const historical = retainedHashes.find((hash) => {
+    const version = keyVersionOf(hash);
+    return (HISTORICAL_SHARED_ROOT_KEY_VERSIONS as readonly string[]).includes(version);
+  });
+  const anchor = historical ?? retainedHashes.at(-1);
+  if (anchor === undefined) {
+    throw new Error("privacy: no retained targeting_key_hash for Entity family");
+  }
+  return canonicalizeSharedRootTargetingKeyHash(anchor);
+}
+
+export async function computeEntityFamilyHash(
+  store: SaltStore,
+  input: EntityPrivacyInput,
+): Promise<string> {
+  return entityFamilyHash(
+    input.appId,
+    input.idType,
+    await computeRetainedTargetingKeyHashes(store, input),
+  );
 }
 
 /** Current-epoch hash when present; otherwise the newest retained hash. */

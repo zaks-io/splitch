@@ -57,7 +57,11 @@ export async function handleControlPlaneAppRequest(input: {
     },
     approvalArchiveStore: approvalArchiveStoreFromEnv(env),
     holdoverWriteOutboxCleanup: createHoldoverWriteOutboxCleanup(env.EVALUATION_API),
-    entityPrivacy: createEntityPrivacyConsumer(env.EVALUATION_API),
+    entityPrivacy: createEntityPrivacyConsumer(
+      env.EVALUATION_API,
+      env.ANALYSIS_API,
+      env.EVENT_INGEST_API,
+    ),
     sentry: {
       secretKek: env.INTEGRATION_SECRET_KEK,
       secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,

@@ -12,10 +12,12 @@ import {
 // The DO is per-ENTITY (assignmentWriterName), so storage keys carry the
 // experimentId: one entity can hold a first-touch winner per Experiment.
 const STORAGE_KEY_PREFIX = "assignment:";
+const ENTITY_DELETED_KEY = "privacy:entity-deleted";
 
 export interface AssignmentWriterStorage {
   get<T>(key: string): Promise<T | undefined>;
   put<T>(key: string, value: T): Promise<void>;
+  deleteAll?(): Promise<void>;
 }
 
 export type WaitUntil = (promise: Promise<unknown>) => void;
@@ -34,6 +36,9 @@ export class AssignmentStoreWriter {
   }
 
   async put(input: HashedAssignmentPutInput): Promise<AssignmentStorePutResult> {
+    if ((await this.storage.get<boolean>(ENTITY_DELETED_KEY)) === true) {
+      throw new Error("assignment-store: Entity assignments are deleted");
+    }
     const storageKey = `${STORAGE_KEY_PREFIX}${input.experimentId}`;
     const existing = await this.storage.get<StoredAssignment>(storageKey);
     if (existing !== undefined) {
@@ -48,6 +53,15 @@ export class AssignmentStoreWriter {
     await this.storage.put(storageKey, input);
     await this.writeThrough(input);
     return { status: "stored", assignment: entryFrom(input) };
+  }
+
+  async deleteEntity(): Promise<string> {
+    if (this.storage.deleteAll === undefined) {
+      throw new Error("assignment-store: Durable Object deleteAll is unavailable");
+    }
+    await this.storage.deleteAll();
+    await this.storage.put(ENTITY_DELETED_KEY, true);
+    return "assignment-do-tombstone-v1";
   }
 
   private async writeThrough(input: HashedAssignmentPutInput): Promise<void> {

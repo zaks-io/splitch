@@ -8,6 +8,7 @@ import {
 import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
 import type { EvaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import type { ExposurePayload } from "./event-ingest-test-types";
+import { entityMetricPrivacyFixtureFetch } from "./entity-metric-privacy.test-fixture";
 import type worker from "./index";
 import { EvaluationEntrypoint } from "./index";
 import {
@@ -153,14 +154,29 @@ export function makeEnv(
     admissionCharges?: AdmissionCharge[];
   } = {},
 ) {
+  const configStore = seededConfigStore() as unknown as KVNamespace;
   return {
-    CONFIG_STORE: seededConfigStore() as unknown as KVNamespace,
+    CONFIG_STORE: configStore,
+    CONFIG_STORE_WRITER: {
+      getByName: () => ({
+        async putAppIdentityIfAbsent(key: string, value: string) {
+          const winner = (await configStore.get(key)) as string | null;
+          if (winner !== null) return winner;
+          await configStore.put(key, value);
+          return value;
+        },
+      }),
+    },
     SPLITCH_EVENT_INGEST_TOKEN: "internal_ingest_secret",
     SPLITCH_PLATFORM_TARGET: "local",
     TINYBIRD_API_URL: "https://tinybird.test",
     TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
     EVALUATION_USAGE_REPLAY_WINDOW: replayWindow,
     EVALUATION_COMMIT_OUTBOX: evaluationCommitOutbox,
+    ENTITY_METRIC_PRIVACY: {
+      idFromName: () => ({}) as DurableObjectId,
+      get: () => ({ fetch: entityMetricPrivacyFixtureFetch }),
+    },
     ...admissionBinding(options.admission, options.admissionCharges ?? []),
   };
 }
@@ -226,6 +242,7 @@ export function baseExposure(): ExposurePayload {
     runId: liveRunId,
     idType: "user",
     targetingKeyHash: "hmac:targeting-key",
+    entityFamilyHash: "v1:targeting-key",
     variantName: "treatment",
     type: "exposure",
     sourceId: "pop-sjc",

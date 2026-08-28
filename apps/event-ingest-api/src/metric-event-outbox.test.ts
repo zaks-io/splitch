@@ -82,6 +82,21 @@ describe("Metric Event outbox Durable Object", () => {
     expect(outbox.send).not.toHaveBeenCalled();
     expect(outbox.stored()).toEqual(first);
   });
+
+  it("redacts the payload and keeps a payload-free claim that suppresses stale retries", async () => {
+    const outbox = makeOutbox();
+    outbox.seed({ ...row("entity-7"), queued: true });
+
+    const deleted = await outbox.suppress(row("entity-7"));
+    const replay = await outbox.claim(row("entity-7"));
+    const exported = await outbox.exported();
+
+    expect(deleted).toEqual({ deleted: true, proof: "metric-event-outbox-redacted-v1" });
+    expect(replay.outcome).toBe("duplicate");
+    expect(exported).toEqual({ deleted: true, row: null });
+    expect(outbox.stored()).not.toHaveProperty("row");
+    expect(outbox.send).not.toHaveBeenCalled();
+  });
 });
 
 interface ClaimInput {
@@ -140,6 +155,22 @@ function makeOutbox() {
       return object.fetch(
         new Request("https://metric-event-outbox.local/lookup", { method: "GET" }),
       );
+    },
+    async suppress(input: ClaimInput) {
+      const response = await object.fetch(
+        new Request("https://metric-event-outbox.local/suppress", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      );
+      expect(response.status).toBe(200);
+      return response.json();
+    },
+    async exported() {
+      const response = await object.fetch(new Request("https://metric-event-outbox.local/export"));
+      expect(response.status).toBe(200);
+      return response.json();
     },
   };
 }

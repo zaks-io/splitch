@@ -11,6 +11,7 @@ SQL >
         id_type,
         server_received_at,
         targeting_key_hash,
+        entity_family_hash,
         dedup_key,
         argMinState(
             tuple(event_id, event_definition_version_id, event_name, fields, dimensions, server_received_at, ingest_ts),
@@ -25,6 +26,7 @@ SQL >
         id_type,
         server_received_at,
         targeting_key_hash,
+        entity_family_hash,
         dedup_key
 
 TYPE MATERIALIZED

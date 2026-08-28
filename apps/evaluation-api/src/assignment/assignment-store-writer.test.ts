@@ -190,6 +190,16 @@ describe("InMemoryAssignmentStore retained epochs", () => {
 });
 
 describe("AssignmentStoreWriter", () => {
+  it("tombstones the Entity before purge and prevents retry resurrection", async () => {
+    const kv = new RecordingKv();
+    const writer = new AssignmentStoreWriter(new MapStorage(), kv, () => undefined);
+    const input = { ...basePut, targetingKeyHash: "v1:hash-deleted" };
+    await writer.put(input);
+
+    await expect(writer.deleteEntity()).resolves.toBe("assignment-do-tombstone-v1");
+    await expect(writer.put(input)).rejects.toThrow(/Entity assignments are deleted/);
+  });
+
   it("write-through merges the stored winner into the Entity KV value before put returns", async () => {
     const kv = new RecordingKv();
     const writer = new AssignmentStoreWriter(new MapStorage(), kv, () => undefined);

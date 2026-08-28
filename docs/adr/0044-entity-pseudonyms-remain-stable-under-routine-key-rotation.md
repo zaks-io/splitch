@@ -60,14 +60,14 @@ requester, and per-store completion evidence for audit, but no old pseudonym.
 
 ## Implementation boundary
 
-`@splitch/privacy` stores a random immutable per-App `app_entity_identity_key` per identity epoch
-and rewraps it under a KEK derived from the deployment root. Routine wrapper/root rotation does not
-change the underlying key, epoch, or pseudonym. A compromised App can advance to a new random epoch
-while retained epochs stay resolvable for Assignment holdovers, Metric Event retries, export,
-deletion, and analysis joins. Durable rows still carry a non-secret version prefix so those
-consumers can address every retained epoch. Historical `v1:` and `local-v1:` prefixes stay pinned
-to the shared root until those rows expire. Destructive App-wide purge after compromise remains a
-separate workflow.
+`@splitch/privacy` stores a random immutable per-App `app_entity_identity_key` and rewraps it under a
+KEK derived from the deployment root. Routine wrapper/root rotation does not change the underlying
+key, epoch, or pseudonym. Compromised-key replacement uses one serialized reset workflow. It blocks
+current and retained identity reads, persists a non-empty proof from every named store, and destroys
+all old epochs before activating the replacement. Callers cannot self-attest those checkpoints or
+advance an epoch outside that workflow. Durable rows carry a non-secret version prefix while they
+exist. Historical `v1:` and `local-v1:` prefixes stay pinned only until verified purge removes the
+rows that reference them.
 
 ## Consequences
 

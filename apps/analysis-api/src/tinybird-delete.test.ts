@@ -106,3 +106,45 @@ describe("Tinybird Environment Exposure status deletion", () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("Tinybird Entity privacy deletion", () => {
+  it("commits every retained-hash cutoff before deleting all raw and derived stores", async () => {
+    const hashA = `v1:${"a".repeat(64)}`;
+    const hashB = `app-v1:${"b".repeat(64)}`;
+    const fetchFn = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/v0/events") {
+        return Response.json({ successful_rows: 2, quarantined_rows: 0 });
+      }
+      return Response.json({ status: "done" });
+    });
+    const transport = createTinybirdDeleteTransport(
+      { TINYBIRD_API_URL: API_URL, TINYBIRD_DELETE_TOKEN: "delete-token" },
+      { fetchFn },
+    );
+    const scope = {
+      appId: "app_1",
+      idType: "user",
+      targetingKeyHashes: [hashA, hashB],
+      entityFamilyHash: hashA,
+      deleteBeforeTs: "2026-08-28T12:00:00.000Z",
+    };
+
+    const suppression = await transport.suppressEntity?.(scope);
+    const proofs = await transport.deleteEntity?.(scope);
+
+    expect(suppression).toEqual(["entity_deletions:successful_rows=2"]);
+    expect(proofs).toEqual([
+      "tinybird:raw_events:done",
+      "tinybird:metric_events:done",
+      "tinybird:deduped_exposures:done",
+      "tinybird:deduped_metric_events_state:done",
+    ]);
+    const suppressionCall = fetchFn.mock.calls[0];
+    expect(String(suppressionCall?.[0])).toBe(
+      `${API_URL}/v0/events?name=entity_deletions&wait=true`,
+    );
+    expect(String(suppressionCall?.[1]?.body)).not.toContain("targetingKey");
+    expect(fetchFn).toHaveBeenCalledTimes(5);
+  });
+});

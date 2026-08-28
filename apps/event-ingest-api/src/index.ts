@@ -1,5 +1,10 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { createHealthResponse, requirePlatformTarget, routesDelegatedTo } from "@splitch/contracts";
+import {
+  createHealthResponse,
+  getRoute,
+  requirePlatformTarget,
+  routesDelegatedTo,
+} from "@splitch/contracts";
 import {
   createWorkerObservability,
   workerObservabilityWithWaitUntil,
@@ -10,6 +15,11 @@ import {
   notDelegatedResponse,
   type Observability,
 } from "@splitch/worker-runtime";
+import {
+  handleEntityMetricPrivacy,
+  requireEntityMetricPrivacyBinding,
+} from "./entity-metric-privacy-handler";
+import { EntityMetricPrivacyDurableObject } from "./entity-metric-privacy-store";
 import { authenticateDelegatedDataPlaneCredential } from "./client-key-auth";
 import { renderError } from "./errors";
 import { handleEvaluationCommit } from "./evaluation-commit";
@@ -32,6 +42,16 @@ const metricEventPath = "/api/sdk/events";
 const metricEventRoutes = routesDelegatedTo("event-ingest-api").filter(
   (route) => route.operationId === "sdk_track",
 );
+const entityPrivacyOperations = [
+  "entity_event_privacy_export",
+  "entity_event_privacy_suppress",
+  "entity_event_privacy_delete",
+] as const;
+const entityPrivacyRoutes = entityPrivacyOperations.map((operationId) => {
+  const route = getRoute(operationId);
+  if (!route) throw new Error(`event-ingest-api: ${operationId} route is not registered`);
+  return route;
+});
 
 /**
  * Binding-only writes the Evaluation Worker makes for its own App and
@@ -64,6 +84,7 @@ const internalRoutes: Readonly<
 const handler = {
   async fetch(request, env): Promise<Response> {
     const platformTarget = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+    requireEntityMetricPrivacyBinding(env);
     const url = new URL(request.url);
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) {
       return healthResponse(env, platformTarget);
@@ -118,12 +139,42 @@ export class EvaluationEntrypoint extends WorkerEntrypoint<Env> {
   }
 }
 
+const controlPlaneHandler = wrapWorkerHandler(
+  {
+    async fetch(request, env): Promise<Response> {
+      requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+      requireEntityMetricPrivacyBinding(env);
+      const identity = delegatedIdentityFor(request, entityPrivacyRoutes);
+      if (!identity) return notDelegatedResponse(request);
+      const operationId = identity.operation;
+      const operation = operationId.endsWith("_export")
+        ? "export"
+        : operationId.endsWith("_suppress")
+          ? "suppress"
+          : "delete";
+      return handleEntityMetricPrivacy(request, env, identity, operation);
+    },
+  } satisfies ExportedHandler<Env>,
+  { surface: "event-ingest-api" },
+);
+
+export class ControlPlaneEntrypoint extends WorkerEntrypoint<Env> {
+  override async fetch(request: Request): Promise<Response> {
+    return controlPlaneHandler.fetch(
+      request as Parameters<typeof controlPlaneHandler.fetch>[0],
+      this.env,
+      this.ctx,
+    );
+  }
+}
+
 export default wrapWorkerHandler(handler, { surface: "event-ingest-api" });
 
 function healthResponse(
   env: Env,
   platformTarget = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
 ): Response {
+  requireEntityMetricPrivacyBinding(env);
   makeMetricEventSaltStore(env);
   return Response.json(
     createHealthResponse(service, platformTarget, env.SPLITCH_DEPLOYED_COMMIT_SHA),
@@ -166,4 +217,5 @@ export {
   IngestAdmissionGateDurableObject,
   MetricEventOutboxDurableObject,
   MetricEventRateLimitDurableObject,
+  EntityMetricPrivacyDurableObject,
 };

@@ -41,6 +41,12 @@ const NON_TOOL_OPERATION_IDS = [
   "holdover_write_outbox_delete",
   "entity_assignment_privacy_export",
   "entity_assignment_privacy_delete",
+  "entity_analysis_privacy_export",
+  "entity_analysis_privacy_suppress",
+  "entity_analysis_privacy_delete",
+  "entity_event_privacy_export",
+  "entity_event_privacy_suppress",
+  "entity_event_privacy_delete",
   "organizations_delete",
   "current_user_privacy_export",
   "current_user_delete",
@@ -71,6 +77,12 @@ describe("mcp tools: surface isolation (CRITICAL)", () => {
     expect(toolNames.has("holdover_write_outbox_delete")).toBe(false);
     expect(toolNames.has("entity_assignment_privacy_export")).toBe(false);
     expect(toolNames.has("entity_assignment_privacy_delete")).toBe(false);
+    expect(toolNames.has("entity_analysis_privacy_export")).toBe(false);
+    expect(toolNames.has("entity_analysis_privacy_suppress")).toBe(false);
+    expect(toolNames.has("entity_analysis_privacy_delete")).toBe(false);
+    expect(toolNames.has("entity_event_privacy_export")).toBe(false);
+    expect(toolNames.has("entity_event_privacy_suppress")).toBe(false);
+    expect(toolNames.has("entity_event_privacy_delete")).toBe(false);
   });
 
   it("derives NO tool for operations without a backing workflow", () => {

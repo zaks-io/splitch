@@ -135,6 +135,7 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
     exposureAssembly: {
       saltStore: {
         currentKeyVersion: () => Promise.resolve("quickstart-v1"),
+        retainedKeyVersions: () => Promise.resolve(["quickstart-v1"]),
         saltFor: (requestedAppId: string) => {
           if (requestedAppId !== appId) {
             throw new Error(`quickstart harness: missing salt for ${requestedAppId}`);

@@ -36,6 +36,8 @@ export interface ControlPlaneApiEnv {
   ANALYSIS_API: Fetcher;
   /** Binding-only ControlPlaneEntrypoint on the Evaluation Worker (ADR-0046). */
   EVALUATION_API: Fetcher;
+  /** Binding-only ControlPlaneEntrypoint on Event Ingest for Entity suppression and outbox purge. */
+  EVENT_INGEST_API: Fetcher;
   /** CI-only bearer token for the hosted credential-cache rollout gate. */
   SPLITCH_DEPLOY_GATE_TOKEN?: string;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */

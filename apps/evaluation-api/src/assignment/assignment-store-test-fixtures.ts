@@ -142,6 +142,11 @@ export class MapStorage implements AssignmentWriterStorage {
     this.values.set(key, value);
     return Promise.resolve();
   }
+
+  deleteAll(): Promise<void> {
+    this.values.clear();
+    return Promise.resolve();
+  }
 }
 
 export class RecordingAssignmentLogger implements AssignmentStoreLogger {

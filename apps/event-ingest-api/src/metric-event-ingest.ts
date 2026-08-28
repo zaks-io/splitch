@@ -4,7 +4,11 @@ import {
   kvEnvelope,
   MetricEventTrackRequestSchema,
 } from "@splitch/contracts";
-import { computeRetainedTargetingKeyHashes, computeTargetingKeyHash } from "@splitch/privacy";
+import {
+  computeRetainedTargetingKeyHashes,
+  computeTargetingKeyHash,
+  entityFamilyHash,
+} from "@splitch/privacy";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
 import {
@@ -36,6 +40,12 @@ export async function handleAuthorizedMetricEvent(
     idType: parsed.idType,
     targetingKey: parsed.targetingKey,
   });
+  const retainedHashes = await computeRetainedTargetingKeyHashes(saltStore, {
+    appId: credential.appId,
+    idType: parsed.idType,
+    targetingKey: parsed.targetingKey,
+  });
+  const entityFamily = entityFamilyHash(credential.appId, parsed.idType, retainedHashes);
   const fingerprint = await metricEventPayloadFingerprint({
     eventName: parsed.eventName,
     idType: parsed.idType,
@@ -43,11 +53,9 @@ export async function handleAuthorizedMetricEvent(
     fields: parsed.fields,
     dimensions: parsed.dimensions,
   });
-  const retainedFingerprints = await retainedMetricEventFingerprints(saltStore, {
-    appId: credential.appId,
+  const retainedFingerprints = await retainedMetricEventFingerprints(retainedHashes, {
     eventName: parsed.eventName,
     idType: parsed.idType,
-    targetingKey: parsed.targetingKey,
     targetingKeyHash,
     fields: parsed.fields,
     dimensions: parsed.dimensions,
@@ -73,6 +81,7 @@ export async function handleAuthorizedMetricEvent(
 
   return admitAndClaimMetricEvent(env, credential, parsed, {
     targetingKeyHash,
+    entityFamilyHash: entityFamily,
     fingerprint,
     dedupKey,
     eventDefinitionId: hot.eventDefinition.id,
@@ -221,22 +230,15 @@ export async function metricEventPayloadFingerprint(input: {
 }
 
 async function retainedMetricEventFingerprints(
-  saltStore: ReturnType<typeof makeMetricEventSaltStore>,
+  hashes: readonly string[],
   input: {
-    appId: string;
     eventName: string;
     idType: string;
-    targetingKey: string;
     targetingKeyHash: string;
     fields: unknown;
     dimensions: unknown;
   },
 ): Promise<readonly string[]> {
-  const hashes = await computeRetainedTargetingKeyHashes(saltStore, {
-    appId: input.appId,
-    idType: input.idType,
-    targetingKey: input.targetingKey,
-  });
   const fingerprints = [];
   for (const hash of hashes) {
     if (hash === input.targetingKeyHash) continue;

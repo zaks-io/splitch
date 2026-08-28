@@ -47,7 +47,7 @@ describe("evaluationApiHandler hosted privacy startup", () => {
     ).rejects.toThrow(/CONFIG_STORE is required/);
   });
 
-  it("serves hosted health when the root salt, CONFIG_STORE, and deployed SHA are present", async () => {
+  it("serves hosted health when the root salt, CONFIG_STORE writer, and deployed SHA are present", async () => {
     const response = await evaluationApiHandler.fetch(
       new Request("https://evaluation.test/health") as Parameters<
         typeof evaluationApiHandler.fetch
@@ -59,6 +59,11 @@ describe("evaluationApiHandler hosted privacy startup", () => {
         CONFIG_STORE: {
           get: async () => null,
           put: async () => undefined,
+        },
+        CONFIG_STORE_WRITER: {
+          getByName: () => ({
+            putAppIdentityIfAbsent: async (_key: string, value: string) => value,
+          }),
         },
       } as unknown as EvaluationApiEnv,
       emptyCtx,

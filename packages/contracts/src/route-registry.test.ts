@@ -149,6 +149,12 @@ const CANONICAL_OPERATION_IDS = [
   "holdover_write_outbox_delete",
   "entity_assignment_privacy_export",
   "entity_assignment_privacy_delete",
+  "entity_analysis_privacy_export",
+  "entity_analysis_privacy_suppress",
+  "entity_analysis_privacy_delete",
+  "entity_event_privacy_export",
+  "entity_event_privacy_suppress",
+  "entity_event_privacy_delete",
   "organization_usage_get",
   "openapi_document_get",
   // Privacy

@@ -7,6 +7,7 @@ export interface ExposurePayload {
   runId: string;
   idType: string;
   targetingKeyHash: string;
+  entityFamilyHash: string;
   variantName: string;
   type: "exposure" | "activation";
   sourceId: string;

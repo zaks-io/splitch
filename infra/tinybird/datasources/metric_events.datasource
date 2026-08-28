@@ -11,6 +11,7 @@ SCHEMA >
     `event_name` String `json:$.event_name`,
     `id_type` LowCardinality(String) `json:$.id_type`,
     `targeting_key_hash` String `json:$.targeting_key_hash`,
+    `entity_family_hash` String `json:$.entity_family_hash` DEFAULT if(startsWith(targeting_key_hash, 'local-v1:'), concat('v1:', substring(targeting_key_hash, 10)), targeting_key_hash),
     `fields` String `json:$.fields`,
     `dimensions` String `json:$.dimensions`,
     `server_received_at` DateTime64(3) `json:$.server_received_at`,

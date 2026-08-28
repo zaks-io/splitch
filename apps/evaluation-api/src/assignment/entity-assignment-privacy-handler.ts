@@ -2,10 +2,15 @@ import type { ErrorResponse } from "@splitch/contracts";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import type { SaltStore } from "@splitch/privacy";
 import type { AssignmentKv } from "./assignment-store";
-import { deleteEntityAssignments, exportEntityAssignments } from "./entity-assignment-privacy";
+import {
+  type AssignmentWriterNamespace,
+  deleteEntityAssignments,
+  exportEntityAssignments,
+} from "./entity-assignment-privacy";
 
 export interface EntityAssignmentPrivacyHandlerDeps {
   assignmentsKv: AssignmentKv;
+  assignmentWriters: AssignmentWriterNamespace;
   saltStore: SaltStore;
 }
 
@@ -25,7 +30,12 @@ export function makeEntityAssignmentPrivacyDeleteHandler(deps: EntityAssignmentP
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     try {
       const scope = entityPrivacyScope(input, principal.appId);
-      const deleted = await deleteEntityAssignments(deps.assignmentsKv, deps.saltStore, scope);
+      const deleted = await deleteEntityAssignments(
+        deps.assignmentsKv,
+        deps.assignmentWriters,
+        deps.saltStore,
+        scope,
+      );
       return Response.json(deleted);
     } catch (cause) {
       return renderError(entityPrivacyError(cause), { requestId });

@@ -5,12 +5,20 @@ import {
   type SaltStore,
 } from "@splitch/privacy";
 import type { AssignmentKv, AssignmentStoreLogger, AssignmentStoreValue } from "./assignment-store";
-import { readAssignmentValue } from "./assignment-store";
+import { assignmentWriterName, readAssignmentValue } from "./assignment-store";
+
+export interface AssignmentWriterNamespace {
+  idFromName(name: string): DurableObjectId;
+  get(id: DurableObjectId): {
+    fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  };
+}
 
 export interface EntityAssignmentExport {
   appId: string;
   idType: string;
   targetingKeyHashes: readonly string[];
+  entityFamilyHash: string;
   records: readonly {
     targetingKeyHash: string;
     assignments: AssignmentStoreValue;
@@ -21,7 +29,10 @@ export interface EntityAssignmentDeleteResult {
   appId: string;
   idType: string;
   targetingKeyHashes: readonly string[];
+  entityFamilyHash: string;
   deletedKeyCount: number;
+  deletedWriterCount: number;
+  proofs: readonly string[];
 }
 
 export async function exportEntityAssignments(
@@ -47,6 +58,7 @@ export async function exportEntityAssignments(
 
 export async function deleteEntityAssignments(
   kv: AssignmentKv,
+  writers: AssignmentWriterNamespace,
   saltStore: SaltStore,
   input: { appId: string; idType: string; targetingKey: string },
 ): Promise<EntityAssignmentDeleteResult> {
@@ -55,7 +67,24 @@ export async function deleteEntityAssignments(
   }
   const identity = await resolveEntityPrivacyIdentity(saltStore, input);
   let deletedKeyCount = 0;
+  const proofs = [];
   for (const targetingKeyHash of identity.targetingKeyHashes) {
+    const writerName = assignmentWriterName({
+      appId: input.appId,
+      idType: input.idType,
+      targetingKeyHash,
+    });
+    const writer = writers.get(writers.idFromName(writerName));
+    const response = await writer.fetch("https://assignment-store.internal/delete", {
+      method: "POST",
+    });
+    if (!response.ok)
+      throw new Error(`Assignment writer delete failed with HTTP ${response.status}`);
+    const result = (await response.json()) as { deleted?: unknown; proof?: unknown };
+    if (result.deleted !== true || typeof result.proof !== "string" || result.proof.length === 0) {
+      throw new Error("Assignment writer delete returned an invalid proof");
+    }
+    proofs.push(`${targetingKeyHash}:${result.proof}`);
     await kv.delete(assignmentKey(input.appId, input.idType, targetingKeyHash));
     deletedKeyCount += 1;
   }
@@ -63,7 +92,10 @@ export async function deleteEntityAssignments(
     appId: identity.appId,
     idType: identity.idType,
     targetingKeyHashes: identity.targetingKeyHashes,
+    entityFamilyHash: identity.entityFamilyHash,
     deletedKeyCount,
+    deletedWriterCount: proofs.length,
+    proofs,
   };
 }
 
@@ -75,6 +107,7 @@ function exportedIdentity(
     appId: identity.appId,
     idType: identity.idType,
     targetingKeyHashes: identity.targetingKeyHashes,
+    entityFamilyHash: identity.entityFamilyHash,
     records,
   };
 }

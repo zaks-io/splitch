@@ -172,11 +172,13 @@ function assertEpochShape(epoch: AppIdentityEpoch, versions: Set<string>): void 
 function normalizeWrappedAppIdentityRecord(value: unknown): WrappedAppIdentityRecord | null {
   if (typeof value !== "object" || value === null) return null;
   const record = value as Record<string, unknown>;
-  if (!isSupportedAppIdentitySchema(record.schemaVersion)) return null;
+  if (!hasExactKeys(record, ["schemaVersion", "currentVersion", "epochs", "lifecycle"]))
+    return null;
+  if (record.schemaVersion !== APP_IDENTITY_RECORD_SCHEMA_VERSION) return null;
   if (typeof record.currentVersion !== "string" || record.currentVersion.length === 0) {
     return null;
   }
-  const epochs = normalizeWrappedEpochs(record.epochs, record.currentVersion);
+  const epochs = normalizeWrappedEpochs(record.epochs);
   if (epochs === null) return null;
   try {
     return {
@@ -190,52 +192,51 @@ function normalizeWrappedAppIdentityRecord(value: unknown): WrappedAppIdentityRe
   }
 }
 
-function isSupportedAppIdentitySchema(schemaVersion: unknown): boolean {
-  return schemaVersion === APP_IDENTITY_RECORD_SCHEMA_VERSION || schemaVersion === 1;
-}
-
-function normalizeWrappedEpochs(
-  value: unknown,
-  currentVersion: string,
-): WrappedAppIdentityEpoch[] | null {
+function normalizeWrappedEpochs(value: unknown): WrappedAppIdentityEpoch[] | null {
   if (!Array.isArray(value) || value.length === 0) return null;
   const epochs: WrappedAppIdentityEpoch[] = [];
   for (const epoch of value) {
-    const normalized = normalizeWrappedAppIdentityEpoch(epoch, currentVersion);
+    const normalized = normalizeWrappedAppIdentityEpoch(epoch);
     if (normalized === null) return null;
     epochs.push(normalized);
   }
   return epochs;
 }
 
-function normalizeWrappedAppIdentityEpoch(
-  value: unknown,
-  currentVersion: string,
-): WrappedAppIdentityEpoch | null {
+function normalizeWrappedAppIdentityEpoch(value: unknown): WrappedAppIdentityEpoch | null {
   if (typeof value !== "object" || value === null) return null;
   const epoch = value as Record<string, unknown>;
+  if (!hasExactKeys(epoch, ["version", "role", "wrappedKey"])) return null;
   if (typeof epoch.version !== "string" || epoch.version.length === 0) return null;
-  if (typeof epoch.wrappedKey !== "object" || epoch.wrappedKey === null) return null;
-  const wrapped = epoch.wrappedKey as Record<string, unknown>;
-  if (typeof wrapped.iv !== "string" || typeof wrapped.ciphertext !== "string") return null;
-  const role = inferEpochRole(epoch.role, epoch.version, currentVersion);
+  const wrappedKey = normalizeWrappedKey(epoch.wrappedKey);
+  if (wrappedKey === null) return null;
+  const role = inferEpochRole(epoch.role);
   if (role === null) return null;
   return {
     version: epoch.version,
     role,
-    wrappedKey: { iv: wrapped.iv, ciphertext: wrapped.ciphertext },
+    wrappedKey,
   };
 }
 
-function inferEpochRole(
-  role: unknown,
-  version: string,
-  currentVersion: string,
-): AppIdentityEpochRole | null {
+function normalizeWrappedKey(value: unknown): WrappedAppIdentityKey | null {
+  if (typeof value !== "object" || value === null) return null;
+  const wrapped = value as Record<string, unknown>;
+  if (!hasExactKeys(wrapped, ["iv", "ciphertext"])) return null;
+  if (typeof wrapped.iv !== "string" || typeof wrapped.ciphertext !== "string") return null;
+  return { iv: wrapped.iv, ciphertext: wrapped.ciphertext };
+}
+
+function inferEpochRole(role: unknown): AppIdentityEpochRole | null {
   if (role === "lookup" || role === "retained" || role === "active") return role;
-  if (role !== undefined) return null;
-  if ((HISTORICAL_SHARED_ROOT_KEY_VERSIONS as readonly string[]).includes(version)) {
-    return "lookup";
-  }
-  return version === currentVersion ? "active" : "retained";
+  return null;
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return (
+    actual.length === sortedExpected.length &&
+    actual.every((key, index) => key === sortedExpected[index])
+  );
 }

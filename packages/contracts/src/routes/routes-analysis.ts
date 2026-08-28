@@ -11,6 +11,14 @@ import {
   ExperimentParams,
   OrgParams,
 } from "./route-shapes";
+import {
+  EntityAssignmentPrivacyDeleteSchema,
+  EntityAssignmentPrivacyExportSchema,
+  EntityAssignmentPrivacyRequestSchema,
+  EntityStorePrivacyExportSchema,
+  EntityStorePrivacyMutationSchema,
+  EntityStorePrivacyRequestSchema,
+} from "./routes-analysis-privacy";
 
 /**
  * Control-plane-AUTHORIZED reads that do not all live on the Control Plane Worker:
@@ -40,34 +48,6 @@ const HoldoverWriteOutboxDeleteQuerySchema = z
     phase: z.enum(["prepare", "finalize", "cancel", "mark-d1-deleted"]).optional(),
   })
   .strict();
-const EntityAssignmentPrivacyRequestSchema = z
-  .object({
-    idType: z.string().min(1),
-    targetingKey: z.string().min(1),
-  })
-  .strict();
-const EntityAssignmentPrivacyExportSchema = z
-  .object({
-    appId: z.string(),
-    idType: z.string(),
-    targetingKeyHashes: z.array(z.string()),
-    records: z.array(
-      z.object({
-        targetingKeyHash: z.string(),
-        assignments: z.record(z.string(), z.object({ runId: z.string(), variant: z.string() })),
-      }),
-    ),
-  })
-  .strict();
-const EntityAssignmentPrivacyDeleteSchema = z
-  .object({
-    appId: z.string(),
-    idType: z.string(),
-    targetingKeyHashes: z.array(z.string()),
-    deletedKeyCount: z.number().int().nonnegative(),
-  })
-  .strict();
-
 export const analysisRoutes = [
   defineApiRoute({
     operationId: "flags_test_eval",
@@ -160,6 +140,84 @@ export const analysisRoutes = [
     summary: "Delete durable Exposure status when an App or Environment is deleted.",
     request: { params: AppParams, query: ExposureStatusDeleteQuerySchema },
     response: z.object({ deleted: z.literal(true) }).strict(),
+    auth: "internal-worker",
+    rateLimit: "none",
+    idempotency: "none",
+    errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
+  }),
+  defineApiRoute({
+    operationId: "entity_analysis_privacy_export",
+    owner: "analysis-api",
+    method: "POST",
+    path: "/internal/apps/:appId/entity-analysis/export",
+    summary: "Export retained-epoch Tinybird records for one Entity.",
+    request: { params: AppParams, body: EntityStorePrivacyRequestSchema },
+    response: EntityStorePrivacyExportSchema,
+    auth: "internal-worker",
+    rateLimit: "none",
+    idempotency: "none",
+    errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
+  }),
+  defineApiRoute({
+    operationId: "entity_analysis_privacy_suppress",
+    owner: "analysis-api",
+    method: "POST",
+    path: "/internal/apps/:appId/entity-analysis/suppress",
+    summary: "Commit the Tinybird Entity deletion cutoff before physical purge.",
+    request: { params: AppParams, body: EntityStorePrivacyRequestSchema },
+    response: EntityStorePrivacyMutationSchema,
+    auth: "internal-worker",
+    rateLimit: "none",
+    idempotency: "none",
+    errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
+  }),
+  defineApiRoute({
+    operationId: "entity_analysis_privacy_delete",
+    owner: "analysis-api",
+    method: "POST",
+    path: "/internal/apps/:appId/entity-analysis/delete",
+    summary: "Delete retained-epoch Tinybird records and derived states for one Entity.",
+    request: { params: AppParams, body: EntityStorePrivacyRequestSchema },
+    response: EntityStorePrivacyMutationSchema,
+    auth: "internal-worker",
+    rateLimit: "none",
+    idempotency: "none",
+    errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
+  }),
+  defineApiRoute({
+    operationId: "entity_event_privacy_export",
+    owner: "event-ingest-api",
+    method: "POST",
+    path: "/internal/apps/:appId/entity-events/export",
+    summary: "Export pending Metric Event claims for one Entity.",
+    request: { params: AppParams, body: EntityStorePrivacyRequestSchema },
+    response: EntityStorePrivacyExportSchema,
+    auth: "internal-worker",
+    rateLimit: "none",
+    idempotency: "none",
+    errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
+  }),
+  defineApiRoute({
+    operationId: "entity_event_privacy_suppress",
+    owner: "event-ingest-api",
+    method: "POST",
+    path: "/internal/apps/:appId/entity-events/suppress",
+    summary: "Commit the Event Ingest cutoff before queue and outbox purge.",
+    request: { params: AppParams, body: EntityStorePrivacyRequestSchema },
+    response: EntityStorePrivacyMutationSchema,
+    auth: "internal-worker",
+    rateLimit: "none",
+    idempotency: "none",
+    errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
+  }),
+  defineApiRoute({
+    operationId: "entity_event_privacy_delete",
+    owner: "event-ingest-api",
+    method: "POST",
+    path: "/internal/apps/:appId/entity-events/delete",
+    summary: "Redact Metric Event outboxes and prove queue suppression for one Entity.",
+    request: { params: AppParams, body: EntityStorePrivacyRequestSchema },
+    response: EntityStorePrivacyMutationSchema,
     auth: "internal-worker",
     rateLimit: "none",
     idempotency: "none",

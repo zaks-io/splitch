@@ -9,6 +9,7 @@ SCHEMA >
     `id_type` LowCardinality(String) `json:$.id_type`,
     `server_received_at` DateTime64(3) `json:$.server_received_at`,
     `targeting_key_hash` String `json:$.targeting_key_hash`,
+    `entity_family_hash` String `json:$.entity_family_hash` DEFAULT if(startsWith(targeting_key_hash, 'local-v1:'), concat('v1:', substring(targeting_key_hash, 10)), targeting_key_hash),
     `dedup_key` String `json:$.dedup_key`,
     `canonical_state` AggregateFunction(argMin, Tuple(String, String, String, String, String, DateTime64(3), DateTime64(6)), DateTime64(6)) `json:$.canonical_state`
 

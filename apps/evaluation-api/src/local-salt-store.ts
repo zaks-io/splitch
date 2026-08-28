@@ -51,7 +51,11 @@ function resolveIdentityStore(
     return makeKvAppIdentityStore({
       kv: asAppIdentityKv(env.CONFIG_STORE),
       rootSecret,
-      putIfAbsent: appIdentityPutIfAbsent(env.CONFIG_STORE, env.CONFIG_STORE_WRITER),
+      putIfAbsent: appIdentityPutIfAbsent(
+        asAppIdentityKv(env.CONFIG_STORE),
+        target,
+        env.CONFIG_STORE_WRITER,
+      ),
     });
   }
   if (isLocalPlatformTarget(target)) {
@@ -62,6 +66,7 @@ function resolveIdentityStore(
 
 function appIdentityPutIfAbsent(
   kv: AppIdentityKv,
+  target: ReturnType<typeof requirePlatformTarget>,
   writer:
     | {
         getByName(name: string): {
@@ -71,8 +76,10 @@ function appIdentityPutIfAbsent(
     | undefined,
 ): (recordKey: string, value: string) => Promise<string> {
   if (writer === undefined) {
-    return (recordKey, value) =>
-      putWrappedAppIdentityIfAbsent(asAppIdentityKv(kv), recordKey, value);
+    if (!isLocalPlatformTarget(target)) {
+      throw new Error("CONFIG_STORE_WRITER is required outside local targets");
+    }
+    return (recordKey, value) => putWrappedAppIdentityIfAbsent(kv, recordKey, value);
   }
   const durable = makeDurableAppIdentityPutIfAbsent({
     getByName(name) {
@@ -83,16 +90,7 @@ function appIdentityPutIfAbsent(
       return { putAppIdentityIfAbsent: stub.putAppIdentityIfAbsent.bind(stub) };
     },
   });
-  return async (recordKey, value) => {
-    try {
-      return await durable(recordKey, value);
-    } catch (cause) {
-      if (cause instanceof Error && /coordinator is unavailable/u.test(cause.message)) {
-        return putWrappedAppIdentityIfAbsent(asAppIdentityKv(kv), recordKey, value);
-      }
-      throw cause;
-    }
-  };
+  return durable;
 }
 
 function asAppIdentityKv(kv: AppIdentityKv): AppIdentityKv {

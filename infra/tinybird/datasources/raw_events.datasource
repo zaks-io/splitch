@@ -6,6 +6,7 @@ SCHEMA >
     `run_id` String `json:$.run_id`,
     `id_type` String `json:$.id_type`,
     `targeting_key_hash` String `json:$.targeting_key_hash`,
+    `entity_family_hash` String `json:$.entity_family_hash` DEFAULT if(startsWith(targeting_key_hash, 'local-v1:'), concat('v1:', substring(targeting_key_hash, 10)), targeting_key_hash),
     `variant` Nullable(String) `json:$.variant`,
     `type` LowCardinality(String) `json:$.type`,
     `event_id` String `json:$.event_id`,

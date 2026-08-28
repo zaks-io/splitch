@@ -26,7 +26,7 @@ export function makeMetricEventSaltStore(env: Env) {
       identityStore: makeKvAppIdentityStore({
         kv,
         rootSecret,
-        putIfAbsent: metricEventAppIdentityPutIfAbsent(kv, env.CONFIG_STORE_WRITER),
+        putIfAbsent: metricEventAppIdentityPutIfAbsent(kv, target, env.CONFIG_STORE_WRITER),
       }),
     });
   }
@@ -41,9 +41,13 @@ export function makeMetricEventSaltStore(env: Env) {
 
 function metricEventAppIdentityPutIfAbsent(
   kv: { get(key: string): Promise<string | null>; put(key: string, value: string): Promise<void> },
+  target: ReturnType<typeof requirePlatformTarget>,
   writer: Env["CONFIG_STORE_WRITER"],
 ): (recordKey: string, value: string) => Promise<string> {
   if (writer === undefined) {
+    if (!isLocalPlatformTarget(target)) {
+      throw new Error("CONFIG_STORE_WRITER is required outside local targets");
+    }
     return (recordKey, value) => putWrappedAppIdentityIfAbsent(kv, recordKey, value);
   }
   const durable = makeDurableAppIdentityPutIfAbsent({
@@ -55,14 +59,5 @@ function metricEventAppIdentityPutIfAbsent(
       return { putAppIdentityIfAbsent: stub.putAppIdentityIfAbsent.bind(stub) };
     },
   });
-  return async (recordKey, value) => {
-    try {
-      return await durable(recordKey, value);
-    } catch (cause) {
-      if (cause instanceof Error && /coordinator is unavailable/u.test(cause.message)) {
-        return putWrappedAppIdentityIfAbsent(kv, recordKey, value);
-      }
-      throw cause;
-    }
-  };
+  return durable;
 }

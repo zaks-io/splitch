@@ -1,0 +1,8 @@
+- name: retained_epoch_entity_records
+  description: Export raw and derived records by canonical Entity family without crossing App or Entity type.
+  parameters: app_id=app_epoch&id_type=user&entity_family_hash=v1%3Aaaaaaaaa
+  expected_http_status: 200
+  expected_result: |
+    {"store":"deduped_metric_events_state","record_id":"epoch-family-metric","targeting_key_hash":"v1:aaaaaaaa","entity_family_hash":"v1:aaaaaaaa","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\"}"}
+    {"store":"metric_events","record_id":"epoch-family-metric","targeting_key_hash":"v1:aaaaaaaa","entity_family_hash":"v1:aaaaaaaa","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\",\"event_definition_version_id\":\"event_definition_epoch_v1\",\"event_name\":\"epoch_metric\",\"fields\":\"{\\\"count\\\":2,\\\"denom\\\":4}\",\"dimensions\":\"{}\"}"}
+    {"store":"raw_events","record_id":"epoch-family-exposure","targeting_key_hash":"local-v1:aaaaaaaa","entity_family_hash":"v1:aaaaaaaa","server_received_at":"2026-07-02 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"experiment_id\":\"exp_epoch\",\"run_id\":\"run_epoch\",\"type\":\"exposure\",\"event_id\":\"ev-epoch-family\",\"variant\":\"control\"}"}

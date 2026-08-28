@@ -9,19 +9,8 @@ import {
   makeInProcessAppIdentityExclusive,
   putWrappedAppIdentityIfAbsent,
 } from "./app-identity-exclusive";
-import {
-  generateAppIdentityKey,
-  INITIAL_APP_IDENTITY_KEY_VERSION,
-  nextAppIdentityVersion,
-} from "./app-identity-key";
-import {
-  ACTIVE_APP_IDENTITY_LIFECYCLE,
-  type AppIdentityLifecycle,
-  type AppIdentityLifecycleCheckpoint,
-  assertAppIdentityActivationAllowed,
-  beginCompromisedAppIdentityLifecycle,
-  withAppIdentityLifecycleCheckpoint,
-} from "./app-identity-lifecycle";
+import { generateAppIdentityKey, INITIAL_APP_IDENTITY_KEY_VERSION } from "./app-identity-key";
+import { ACTIVE_APP_IDENTITY_LIFECYCLE } from "./app-identity-lifecycle";
 import {
   type AppIdentityRecord,
   assertCanonicalAppIdentityRecord,
@@ -164,80 +153,6 @@ export async function requireAppIdentityRecord(
   return assertCanonicalAppIdentityRecord(loaded);
 }
 
-export async function beginCompromisedAppIdentityRotation(
-  store: AppIdentityStore,
-  appId: string,
-): Promise<AppIdentityRecord> {
-  return store.runExclusive(appId, async () => {
-    const current = await requireAppIdentityRecord(store, appId);
-    if (current.lifecycle.state !== "active") {
-      return current;
-    }
-    const updated = withLifecycle(current, beginCompromisedAppIdentityLifecycle());
-    await store.save(appId, updated);
-    return updated;
-  });
-}
-
-export async function recordAppIdentityLifecycleCheckpoint(
-  store: AppIdentityStore,
-  appId: string,
-  checkpoint: AppIdentityLifecycleCheckpoint,
-): Promise<AppIdentityRecord> {
-  return store.runExclusive(appId, async () => {
-    const current = await requireAppIdentityRecord(store, appId);
-    const updated = withLifecycle(
-      current,
-      withAppIdentityLifecycleCheckpoint(current.lifecycle, checkpoint),
-    );
-    await store.save(appId, updated);
-    return updated;
-  });
-}
-
-export async function activateCompromisedAppIdentityEpoch(
-  store: AppIdentityStore,
-  appId: string,
-): Promise<AppIdentityRecord> {
-  return store.runExclusive(appId, async () => {
-    const current = await requireAppIdentityRecord(store, appId);
-    assertAppIdentityActivationAllowed(current.lifecycle);
-    const nextVersion = nextAppIdentityVersion(current.currentVersion);
-    const updated: AppIdentityRecord = {
-      currentVersion: nextVersion,
-      lifecycle: ACTIVE_APP_IDENTITY_LIFECYCLE,
-      epochs: [
-        ...current.epochs.map((epoch) =>
-          epoch.role === "active" ? { ...epoch, role: "retained" as const } : epoch,
-        ),
-        { version: nextVersion, role: "active", key: generateAppIdentityKey() },
-      ],
-    };
-    await store.save(appId, updated);
-    return updated;
-  });
-}
-
-/** Completes the compromised lifecycle with every required checkpoint. */
-export async function advanceAppIdentityEpoch(
-  store: AppIdentityStore,
-  appId: string,
-): Promise<AppIdentityRecord> {
-  await beginCompromisedAppIdentityRotation(store, appId);
-  await recordAppIdentityLifecycleCheckpoint(store, appId, {
-    runsEnded: true,
-    clientKeysRevoked: true,
-    purge: {
-      assignments: true,
-      analytics: true,
-      idempotency: true,
-      export: true,
-      deletion: true,
-    },
-  });
-  return activateCompromisedAppIdentityEpoch(store, appId);
-}
-
 export async function rewrapKvAppIdentityRecord(options: {
   kv: AppIdentityKv;
   appId: string;
@@ -263,13 +178,6 @@ export async function rewrapKvAppIdentityRecord(options: {
     exclusive: options.exclusive,
   });
   await next.save(options.appId, record);
-}
-
-function withLifecycle(
-  record: AppIdentityRecord,
-  lifecycle: AppIdentityLifecycle,
-): AppIdentityRecord {
-  return { currentVersion: record.currentVersion, epochs: record.epochs, lifecycle };
 }
 
 function rootSecretBytes(rootSecret: string | SaltBytes): SaltBytes {

@@ -57,10 +57,24 @@ export async function makeMetricEventFixture(
     ...base,
     CREDENTIAL_STORE: kv(credential),
     CONFIG_STORE: mergedConfigStore(base.CONFIG_STORE, config),
+    CONFIG_STORE_WRITER: base.CONFIG_STORE_WRITER ?? appIdentityWriter(config),
     METRIC_EVENT_OUTBOX: outboxStub(claims),
     ...admissionBinding(options.admission, admissionCharges),
   } as unknown as Env;
   return { env, config, claims, admissionCharges, hash, credentialKind };
+}
+
+function appIdentityWriter(values: Map<string, string>): NonNullable<Env["CONFIG_STORE_WRITER"]> {
+  return {
+    getByName: () => ({
+      async putAppIdentityIfAbsent(key: string, value: string) {
+        const winner = values.get(key);
+        if (winner !== undefined) return winner;
+        values.set(key, value);
+        return value;
+      },
+    }),
+  };
 }
 
 /** The live path: what the Evaluation Worker hands over the EVENT_INGEST binding. */

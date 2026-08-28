@@ -127,10 +127,23 @@ describe("makeEnvSaltStore", () => {
         values.set(key, value);
       },
     };
+    const configStoreWriter = {
+      getByName() {
+        return {
+          async putAppIdentityIfAbsent(key: string, value: string) {
+            const winner = values.get(key);
+            if (winner !== undefined) return winner;
+            values.set(key, value);
+            return value;
+          },
+        };
+      },
+    };
     const first = makeEnvSaltStore({
       EVALUATION_PRIVACY_SALT: ROOT,
       SPLITCH_PLATFORM_TARGET: "production",
       CONFIG_STORE: configStore,
+      CONFIG_STORE_WRITER: configStoreWriter,
     });
     const input = { appId: "app_1", idType: "user", targetingKey: TARGETING_KEY };
     const hash = await computeTargetingKeyHash(first, input);
@@ -138,6 +151,7 @@ describe("makeEnvSaltStore", () => {
       EVALUATION_PRIVACY_SALT: ROOT,
       SPLITCH_PLATFORM_TARGET: "production",
       CONFIG_STORE: configStore,
+      CONFIG_STORE_WRITER: configStoreWriter,
     });
     expect(await computeTargetingKeyHash(second, input)).toBe(hash);
     expect(values.size).toBe(1);
@@ -174,5 +188,28 @@ describe("makeEnvSaltStore hosted fail-closed", () => {
         SPLITCH_PLATFORM_TARGET: "shared-preview",
       }),
     ).toThrow(/CONFIG_STORE is required/);
+    expect(() =>
+      makeEnvSaltStore({
+        EVALUATION_PRIVACY_SALT: ROOT,
+        SPLITCH_PLATFORM_TARGET: "production",
+        CONFIG_STORE: { get: async () => null, put: async () => undefined },
+      }),
+    ).toThrow(/CONFIG_STORE_WRITER is required/);
+  });
+
+  it("fails closed when the hosted writer does not expose the atomic RPC", async () => {
+    const store = makeEnvSaltStore({
+      EVALUATION_PRIVACY_SALT: ROOT,
+      SPLITCH_PLATFORM_TARGET: "production",
+      CONFIG_STORE: { get: async () => null, put: async () => undefined },
+      CONFIG_STORE_WRITER: { getByName: () => ({}) },
+    });
+    await expect(
+      computeTargetingKeyHash(store, {
+        appId: "app_1",
+        idType: "user",
+        targetingKey: TARGETING_KEY,
+      }),
+    ).rejects.toThrow(/coordinator is unavailable/);
   });
 });

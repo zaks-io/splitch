@@ -78,12 +78,16 @@ async function completeEntityPrivacy(
       orgId: args.principal.orgId,
       requestId: args.requestId,
     };
-    const storeResult =
-      kind === "export"
-        ? await consumer.exportEntity(storeInput)
-        : await consumer.deleteEntity(storeInput);
-    if (kind === "delete") {
-      await insertEntityDeletions(deps, appId, idType, storeResult.targetingKeyHashes);
+    let storeResult: Awaited<ReturnType<EntityPrivacyConsumer["exportEntity"]>>;
+    if (kind === "export") {
+      storeResult = await consumer.exportEntity(storeInput);
+    } else {
+      const identity = await consumer.exportEntity(storeInput);
+      const deleteBeforeTs = deps.nowIso?.() ?? new Date().toISOString();
+      await consumer.suppressEntity(storeInput, identity, deleteBeforeTs);
+      await insertEntityDeletions(deps, appId, idType, identity.targetingKeyHashes, deleteBeforeTs);
+      storeResult = await consumer.deleteEntity(storeInput, identity, deleteBeforeTs);
+      assertSameHashes(identity.targetingKeyHashes, storeResult.targetingKeyHashes);
     }
     return Response.json(await recordPrivacyCompletion(deps, app, kind, args, storeResult));
   } catch (cause) {
@@ -94,6 +98,14 @@ async function completeEntityPrivacy(
       );
     }
     throw cause;
+  }
+}
+
+function assertSameHashes(expected: readonly string[], actual: readonly string[]): void {
+  if (expected.length !== actual.length || expected.some((hash, index) => hash !== actual[index])) {
+    throw new EntityPrivacyConsumerError(
+      "control-plane-api: Entity identity changed between suppression and purge",
+    );
   }
 }
 
@@ -140,19 +152,19 @@ async function recordPrivacyCompletion(
 }
 
 async function insertEntityDeletions(
-  deps: { repo: Repository; nowIso?: () => string },
+  deps: { repo: Repository },
   appId: string,
   idType: string,
   targetingKeyHashes: readonly string[],
+  deleteBeforeTs: string,
 ): Promise<void> {
-  const now = deps.nowIso?.() ?? new Date().toISOString();
   for (const targetingKeyHash of targetingKeyHashes) {
     await deps.repo.privacy.entityDeletions.insert(appScope(appId), {
       appId,
       idType,
       targetingKeyHash,
-      deleteBeforeTs: now,
-      requestedAt: now,
+      deleteBeforeTs,
+      requestedAt: deleteBeforeTs,
     });
   }
 }

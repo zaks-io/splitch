@@ -1,6 +1,7 @@
 import { timingSafeEqualString } from "@splitch/worker-runtime";
 import { emptyError, renderError, serviceUnavailable } from "./errors";
 import { evaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
+import { isEntityEventSuppressed } from "./entity-metric-privacy";
 import { rejectIngestAdmission } from "./ingest-admission";
 import { loadRunScope } from "./kv-config";
 import { readJsonObject, stringField } from "./payload";
@@ -70,29 +71,53 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
   );
   if (denied) return denied;
 
-  // The append is AWAITED before the ACK: the upstream Evaluation Worker treats
-  // this response as the at-least-once delivery receipt (it 503s the evaluate
-  // when the sink fails, so the SDK re-fires). ACKing 202 before Tinybird
-  // durability would silently drop the row on an append failure.
-  try {
-    await appendRawEvent(row, delivery.value);
-  } catch (error) {
-    console.error("event-ingest-api Tinybird append failed", {
-      appId: event.value.appId,
-      environmentId: event.value.environmentId,
-      experimentId: event.value.experimentId,
-      runId: event.value.runId,
-      eventId: event.value.eventId,
-      type: event.value.type,
-      errorMessage: error instanceof Error ? error.message : "non-error rejection",
-    });
-    return renderError(serviceUnavailable("raw event append failed"));
-  }
+  const failed = await deliverExposure(row, event.value, delivery.value, env);
+  if (failed) return failed;
 
   return Response.json(
     { ok: true, eventId: event.value.eventId, runId: event.value.runId },
     { status: 202 },
   );
+}
+
+async function deliverExposure(
+  row: Record<string, unknown>,
+  event: {
+    appId: string;
+    environmentId: string;
+    experimentId: string;
+    runId: string;
+    eventId: string;
+    type: string;
+  },
+  delivery: { url: string; token: string },
+  env: Env,
+): Promise<Response | null> {
+  if (await exposureSuppressed(row, env)) return null;
+
+  // The append is AWAITED before the ACK: the upstream Evaluation Worker treats
+  // this response as the at-least-once delivery receipt (it 503s the evaluate
+  // when the sink fails, so the SDK re-fires). ACKing 202 before Tinybird
+  // durability would silently drop the row on an append failure.
+  try {
+    await appendRawEvent(row, delivery);
+    return null;
+  } catch (error) {
+    console.error("event-ingest-api Tinybird append failed", {
+      appId: event.appId,
+      environmentId: event.environmentId,
+      experimentId: event.experimentId,
+      runId: event.runId,
+      eventId: event.eventId,
+      type: event.type,
+      errorMessage: error instanceof Error ? error.message : "non-error rejection",
+    });
+    return renderError(serviceUnavailable("raw event append failed"));
+  }
+}
+
+function exposureSuppressed(row: Record<string, unknown>, env: Env): Promise<boolean> {
+  return isEntityEventSuppressed(env.ENTITY_METRIC_PRIVACY, row, env.SPLITCH_PLATFORM_TARGET);
 }
 
 export async function handleEvaluationIngest(request: Request, env: Env): Promise<Response> {

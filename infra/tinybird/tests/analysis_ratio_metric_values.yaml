@@ -22,3 +22,9 @@
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_id=metric_errors_per_request&metric_type=ratio&denominator_metric_type=count&denominator_event_definition_id=event_definition_llm&denominator_event_field_name=request_count&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
   expected_http_status: 400
   expected_result: "numerator_event_definition_id is required"
+- name: retained_epoch_family_joins_both_ratio_operands_before_aggregation
+  description: Ratio operands join an Exposure across a retained App identity epoch family without matching physical hashes.
+  parameters: "app_id=app_epoch&environment_id=env_prod&experiment_id=exp_epoch&run_id=run_epoch&metric_id=ratio_epoch&metric_type=ratio&numerator_metric_type=count&numerator_event_definition_id=event_definition_epoch&numerator_event_field_name=count&denominator_metric_type=count&denominator_event_definition_id=event_definition_epoch&denominator_event_field_name=denom&window_duration_ms=259200000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"local-v1:aaaaaaaa","run_id":"run_epoch","metric_id":"ratio_epoch","metric_type":"ratio","value":0,"num_value":2,"denom_value":4,"in_window":1}

@@ -173,6 +173,15 @@ function parseRows(body: { data?: unknown }): readonly unknown[] {
 }
 
 function assertScoped(params: PipeParams): void {
+  if (params.entity_family_hash !== undefined || params.id_type !== undefined) {
+    requiredParam(params.app_id, "app_id");
+    requiredParam(params.id_type, "id_type");
+    requiredParam(params.entity_family_hash, "entity_family_hash");
+    if (params.environment_id !== undefined || params.organization_id !== undefined) {
+      throw new TinybirdReadError("Tinybird Entity pipe scope cannot mix tenant axes");
+    }
+    return;
+  }
   if (
     params.organization_id !== undefined ||
     params.period_start !== undefined ||

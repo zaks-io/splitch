@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { advanceAppIdentityEpoch, makeMemoryAppIdentityStore } from "./app-identity-store";
+import { resetCompromisedAppIdentity } from "./app-identity-reset";
+import { makeMemoryAppIdentityStore } from "./app-identity-store";
 import {
   DEFAULT_PRIVACY_KEY_VERSION,
   HISTORICAL_SHARED_ROOT_KEY_VERSIONS,
@@ -70,26 +71,31 @@ describe("privacy identity epoch", () => {
     expect(await computeTargetingKeyHash(reconstructed, INPUT)).toBe(first);
   });
 
-  it("advances one App independently without changing another App or historical rows", async () => {
+  it("destructively resets one App only after old rows are purged", async () => {
     const beforeA = await computeTargetingKeyHash(store, INPUT);
     const beforeB = await computeTargetingKeyHash(store, { ...INPUT, appId: "app_2" });
-    const historical = await computeTargetingKeyHash(store, { ...INPUT, keyVersion: "v1" });
-
-    await advanceAppIdentityEpoch(identityStore, INPUT.appId);
+    await resetCompromisedAppIdentity(identityStore, INPUT.appId, "reset-1", {
+      runs_and_credentials: async () => "runs-proof",
+      delivery: async () => "delivery-proof",
+      assignments: async () => "assignments-proof",
+      analytics: async () => "analytics-proof",
+      retry_claims: async () => "retry-proof",
+      entity_deletions: async () => "deletion-proof",
+      privacy_subject_refs: async () => "subject-proof",
+    });
     const afterA = await computeTargetingKeyHash(store, INPUT);
     const afterB = await computeTargetingKeyHash(store, { ...INPUT, appId: "app_2" });
 
     expect(afterA.startsWith("app-v2:")).toBe(true);
     expect(afterA).not.toBe(beforeA);
     expect(afterB).toBe(beforeB);
-    expect(await computeTargetingKeyHash(store, { ...INPUT, keyVersion: "app-v1" })).toBe(beforeA);
-    expect(await computeTargetingKeyHash(store, { ...INPUT, keyVersion: "v1" })).toBe(historical);
-    expect(await store.retainedKeyVersions(INPUT.appId)).toEqual([
-      "local-v1",
-      "v1",
-      "app-v1",
-      "app-v2",
-    ]);
+    await expect(
+      computeTargetingKeyHash(store, { ...INPUT, keyVersion: "app-v1" }),
+    ).rejects.toThrow(/unknown salt version/);
+    await expect(computeTargetingKeyHash(store, { ...INPUT, keyVersion: "v1" })).rejects.toThrow(
+      /unknown salt version/,
+    );
+    expect(await store.retainedKeyVersions(INPUT.appId)).toEqual(["app-v2"]);
   });
 });
 

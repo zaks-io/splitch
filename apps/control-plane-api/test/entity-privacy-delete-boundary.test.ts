@@ -65,6 +65,7 @@ describe("entity privacy delete route availability", () => {
             appId: PRIMARY.appId,
             idType: "user",
             targetingKeyHashes: hashes,
+            entityFamilyHash: hashes[0],
             records: [
               {
                 targetingKeyHash: hashes[0],
@@ -73,12 +74,16 @@ describe("entity privacy delete route availability", () => {
             ],
           };
         },
+        async suppressEntity() {},
         async deleteEntity() {
           return {
             appId: PRIMARY.appId,
             idType: "user",
             targetingKeyHashes: hashes,
+            entityFamilyHash: hashes[0],
             deletedKeyCount: hashes.length,
+            deletedWriterCount: hashes.length,
+            proofs: hashes.map((hash) => `${hash}:assignment-do-tombstone-v1`),
           };
         },
       },

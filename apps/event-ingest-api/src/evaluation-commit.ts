@@ -1,6 +1,8 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { emptyError, renderError, serviceUnavailable, validationError } from "./errors";
 import { evaluationCommitOutbox } from "./evaluation-commit-outbox";
+import { inventoryEvaluationExposures } from "./evaluation-commit-privacy";
+import { isEntityEventSuppressed } from "./entity-metric-privacy";
 import { evaluationUsageScope, requiredIdentity } from "./ingest";
 import { ingestAdmissionDenial } from "./ingest-admission";
 import { loadRunScope } from "./kv-config";
@@ -33,6 +35,12 @@ const EVALUATION_COMMIT_USAGE_BYTE_COST_EVENT_ID = `sha256:${"0".repeat(64)}`;
 export async function handleEvaluationCommit(request: Request, env: Env): Promise<Response> {
   const prepared = await prepareEvaluationCommit(request, env);
   if (!prepared.ok) return renderError(prepared.error);
+
+  try {
+    await inventoryEvaluationExposures(prepared.value, env);
+  } catch {
+    return renderError(serviceUnavailable("Evaluation commit privacy inventory is unavailable"));
+  }
 
   const { commit } = prepared.value;
   if (commit.delivered)
@@ -184,11 +192,8 @@ async function deliverEvaluationCommit(
       toEvaluationUsageTinybirdRow({ eventId: commit.eventId, ...commit.payload.usage }),
       usageDelivery.value,
     );
-    if (exposureDelivery?.ok) {
-      for (const row of commit.payload.exposureRows) {
-        await appendRawEvent(row, exposureDelivery.value);
-      }
-    }
+    if (exposureDelivery?.ok)
+      await appendEvaluationExposures(commit.payload.exposureRows, exposureDelivery.value, env);
     await outbox.acknowledge(identity);
   } catch (error) {
     console.error("event-ingest-api Evaluation commit delivery failed", {
@@ -201,6 +206,21 @@ async function deliverEvaluationCommit(
   }
 
   return Response.json({ ok: true, eventId: commit.eventId }, { status: 202 });
+}
+
+async function appendEvaluationExposures(
+  rows: readonly Record<string, unknown>[],
+  delivery: { url: string; token: string },
+  env: Env,
+): Promise<void> {
+  for (const row of rows) {
+    const suppressed = await isEntityEventSuppressed(
+      env.ENTITY_METRIC_PRIVACY,
+      row,
+      env.SPLITCH_PLATFORM_TARGET,
+    );
+    if (!suppressed) await appendRawEvent(row, delivery);
+  }
 }
 
 interface EvaluationCommitPayload {

@@ -92,6 +92,7 @@ export const ExposureEventSchema = z.object({
   runId: z.string(),
   idType: z.string(),
   targetingKeyHash: z.string(),
+  entityFamilyHash: z.string(),
   variantName: z.string(),
   type: ExposureTypeSchema,
   sourceId: z.string(),

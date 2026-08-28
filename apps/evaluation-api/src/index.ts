@@ -162,6 +162,7 @@ async function handleRequest(
     },
     entityAssignmentPrivacy: {
       assignmentsKv: env.ASSIGNMENTS_KV,
+      assignmentWriters: env.ASSIGNMENT_STORE_WRITER,
       saltStore,
     },
     exposureAssembly: {

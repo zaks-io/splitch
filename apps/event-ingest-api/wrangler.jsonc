@@ -74,6 +74,10 @@
       {
         "name": "INGEST_ADMISSION_GATE",
         "class_name": "IngestAdmissionGateDurableObject"
+      },
+      {
+        "name": "ENTITY_METRIC_PRIVACY",
+        "class_name": "EntityMetricPrivacyDurableObject"
       }
     ]
   },
@@ -93,6 +97,10 @@
     {
       "tag": "v4_ingest_admission_gate",
       "new_sqlite_classes": ["IngestAdmissionGateDurableObject"]
+    },
+    {
+      "tag": "v5_entity_metric_privacy",
+      "new_sqlite_classes": ["EntityMetricPrivacyDurableObject"]
     }
   ],
   "env": {
@@ -169,6 +177,10 @@
           {
             "name": "INGEST_ADMISSION_GATE",
             "class_name": "IngestAdmissionGateDurableObject"
+          },
+          {
+            "name": "ENTITY_METRIC_PRIVACY",
+            "class_name": "EntityMetricPrivacyDurableObject"
           }
         ]
       },
@@ -191,6 +203,10 @@
         {
           "tag": "v4_ingest_admission_gate",
           "new_sqlite_classes": ["IngestAdmissionGateDurableObject"]
+        },
+        {
+          "tag": "v5_entity_metric_privacy",
+          "new_sqlite_classes": ["EntityMetricPrivacyDurableObject"]
         }
       ]
     },
@@ -265,6 +281,10 @@
           {
             "name": "INGEST_ADMISSION_GATE",
             "class_name": "IngestAdmissionGateDurableObject"
+          },
+          {
+            "name": "ENTITY_METRIC_PRIVACY",
+            "class_name": "EntityMetricPrivacyDurableObject"
           }
         ]
       },
@@ -287,6 +307,10 @@
         {
           "tag": "v4_ingest_admission_gate",
           "new_sqlite_classes": ["IngestAdmissionGateDurableObject"]
+        },
+        {
+          "tag": "v5_entity_metric_privacy",
+          "new_sqlite_classes": ["EntityMetricPrivacyDurableObject"]
         }
       ]
     }

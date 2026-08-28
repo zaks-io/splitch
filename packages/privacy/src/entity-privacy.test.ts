@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceAppIdentityEpoch, makeMemoryAppIdentityStore } from "./app-identity-store";
+import { makeMemoryAppIdentityStore } from "./app-identity-store";
 import { makeIdentitySaltStore } from "./derived-salt-store";
 import {
   analysisRowsForEntity,
@@ -37,24 +37,20 @@ describe("entity privacy consumers", () => {
     const store = makeIdentitySaltStore({ rootSecret: ROOT, identityStore });
     const v1 = await computeTargetingKeyHash(store, { ...INPUT, keyVersion: "v1" });
     const current = await computeTargetingKeyHash(store, INPUT);
-    await advanceAppIdentityEpoch(identityStore, INPUT.appId);
-    const next = await computeTargetingKeyHash(store, INPUT);
     const hashes = await computeRetainedTargetingKeyHashes(store, INPUT);
 
     const rows = analysisRowsForEntity(
       [
         { targeting_key_hash: v1, metric: "signup" },
         { targeting_key_hash: current, metric: "checkout" },
-        { targeting_key_hash: next, metric: "refund" },
         { targeting_key_hash: "app-v1:deadbeef", metric: "other-entity" },
       ],
       hashes,
     );
 
-    expect(rows.map((row) => row.metric)).toEqual(["signup", "checkout", "refund"]);
+    expect(rows.map((row) => row.metric)).toEqual(["signup", "checkout"]);
     expect(hashes).toContain(v1);
     expect(hashes).toContain(current);
-    expect(hashes).toContain(next);
 
     const joined = joinMetricEventsToExposures(
       [
@@ -63,13 +59,12 @@ describe("entity privacy consumers", () => {
       ],
       [
         { targeting_key_hash: v1, metric: "signup" },
-        { targeting_key_hash: next, metric: "refund" },
         { targeting_key_hash: "app-v1:other-app", metric: "leak" },
       ],
       hashes,
     );
     expect(joined.exposures.map((row) => row.experiment)).toEqual(["exp-a"]);
-    expect(joined.metricEvents.map((row) => row.metric)).toEqual(["signup", "refund"]);
+    expect(joined.metricEvents.map((row) => row.metric)).toEqual(["signup"]);
   });
 
   it("fails loud when analysis is asked to canonicalize an empty hash set", () => {

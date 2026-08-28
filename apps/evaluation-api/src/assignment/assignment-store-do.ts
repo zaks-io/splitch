@@ -9,16 +9,20 @@ export interface AssignmentStoreEnv {
 export class AssignmentStoreDurableObject extends DurableObject<AssignmentStoreEnv> {
   override async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    if (request.method !== "POST" || url.pathname !== "/put") {
+    if (request.method !== "POST" || (url.pathname !== "/put" && url.pathname !== "/delete")) {
       return Response.json({ error: "not found" }, { status: 404 });
     }
 
-    const input = parsePutRequest(await request.json());
-    const result = await this.ctx.blockConcurrencyWhile(() =>
-      new AssignmentStoreWriter(this.ctx.storage, this.env.ASSIGNMENTS_KV, (promise) =>
-        this.ctx.waitUntil(promise),
-      ).put(input),
+    const writer = new AssignmentStoreWriter(this.ctx.storage, this.env.ASSIGNMENTS_KV, (promise) =>
+      this.ctx.waitUntil(promise),
     );
+    if (url.pathname === "/delete") {
+      const proof = await this.ctx.blockConcurrencyWhile(() => writer.deleteEntity());
+      return Response.json({ deleted: true, proof });
+    }
+
+    const input = parsePutRequest(await request.json());
+    const result = await this.ctx.blockConcurrencyWhile(() => writer.put(input));
     return Response.json(result);
   }
 }

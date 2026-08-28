@@ -85,6 +85,7 @@ export function toTinybirdRow(event: ExposureEvent, payload: Payload): Record<st
     run_id: event.runId,
     id_type: event.idType,
     targeting_key_hash: event.targetingKeyHash,
+    entity_family_hash: event.entityFamilyHash,
     variant: event.variantName,
     type: event.type,
     event_id: event.eventId,

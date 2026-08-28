@@ -4,7 +4,7 @@ import type {
   ExposureEvent,
 } from "@splitch/contracts";
 import type { ExperimentConfig, FlagConfig, Provider } from "@splitch/evaluation-core";
-import { computeTargetingKeyHash, type SaltStore } from "@splitch/privacy";
+import { computeEntityFamilyHash, computeTargetingKeyHash, type SaltStore } from "@splitch/privacy";
 
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000;
 const MAX_EXPOSURE_AGE_MS = 24 * 60 * 60 * 1_000;
@@ -95,11 +95,15 @@ export async function makeConvexExposureEvent(
   environmentId: string,
   deps: { saltStore: SaltStore; now?: () => Date; sourceKind?: "convex" | "cloudflare" },
 ): Promise<ExposureEvent & { isHoldover: false }> {
-  const targetingKeyHash = await computeTargetingKeyHash(deps.saltStore, {
+  const identity = {
     appId,
     idType: item.evaluationContext.idType,
     targetingKey: item.evaluationContext.targetingKey,
-  });
+  };
+  const [targetingKeyHash, entityFamilyHash] = await Promise.all([
+    computeTargetingKeyHash(deps.saltStore, identity),
+    computeEntityFamilyHash(deps.saltStore, identity),
+  ]);
   const sourceId = `${deps.sourceKind ?? "convex"}:${item.installationId}`;
   const dedupKey = `sha256:${await sha256Hex(
     [
@@ -120,6 +124,7 @@ export async function makeConvexExposureEvent(
     runId: item.runId,
     idType: item.evaluationContext.idType,
     targetingKeyHash,
+    entityFamilyHash,
     variantName: item.variantName,
     type: "exposure",
     eventId: item.exposureId,

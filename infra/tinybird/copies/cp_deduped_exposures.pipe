@@ -14,7 +14,8 @@ SQL >
         experiment_id,
         run_id,
         id_type,
-        targeting_key_hash,
+        argMin(targeting_key_hash, server_received_at) AS targeting_key_hash,
+        entity_family_hash,
         if(
             countIf(isNull(variant)) > 0 OR countDistinct(variant) > 1,
             '__multiple__',
@@ -32,7 +33,7 @@ SQL >
         experiment_id,
         run_id,
         id_type,
-        targeting_key_hash
+        entity_family_hash
 
 TYPE COPY
 TARGET_DATASOURCE deduped_exposures

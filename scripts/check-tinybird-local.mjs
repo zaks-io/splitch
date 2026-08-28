@@ -11,7 +11,7 @@ const projectConfigPath = "tinybird.config.json";
 const tinybirdRoot = "infra/tinybird";
 const testsDir = join(tinybirdRoot, "tests");
 const FIRST_TOUCH_RULE =
-  /if\(\s*countIf\(isNull\(variant\)\)[\s\S]*?AS variant,\s*min\(server_received_at\) AS first_exposure_ts/;
+  /if\(\s*countIf\(isNull\(variant\)\)[\s\S]*?AS variant,\s*min\(server_received_at\) AS (?:first_exposure_ts|encounter_ts)/;
 
 if (!existsSync(projectConfigPath)) {
   console.error("tinybird:local: tinybird.config.json is required.");
@@ -126,7 +126,7 @@ function validateSplitchDatasourceContracts(root) {
   ]);
   requireInstruction(
     dedupedExposures,
-    /^ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, run_id, variant, targeting_key_hash"$/m,
+    /^ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, run_id, variant, entity_family_hash"$/m,
     "deduped_exposures sorting key must be app_id-first",
   );
 
@@ -205,7 +205,7 @@ function requireIdenticalFirstTouchRule(root) {
     if (!match) {
       fail(`missing first-touch dedup rule in ${path}`);
     }
-    return match[0].replace(/\s+/g, " ");
+    return match[0].replace(/encounter_ts/g, "first_exposure_ts").replace(/\s+/g, " ");
   });
   if (rules[0] !== rules[1]) {
     fail(

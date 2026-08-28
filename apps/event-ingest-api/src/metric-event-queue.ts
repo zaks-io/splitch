@@ -1,4 +1,5 @@
 import { requirePlatformTarget } from "@splitch/contracts";
+import { isEntityEventSuppressed } from "./entity-metric-privacy";
 import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import { appendRawEvent, tinybirdDelivery } from "./tinybird";
 import type { Env } from "./types";
@@ -15,29 +16,42 @@ export async function handleMetricEventQueue(
   requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
   makeMetricEventSaltStore(env);
   const delivery = tinybirdDelivery(env, "metric_events");
-  await Promise.all(
-    batch.messages.map(async (message) => {
-      try {
-        if (!delivery.ok) throw new Error(delivery.error.message);
-        await appendRawEvent(message.body, delivery.value);
-        message.ack();
-      } catch (error) {
-        const finalAttempt = message.attempts > METRIC_EVENT_MAX_RETRIES;
-        console.error(
-          finalAttempt
-            ? "event-ingest-api Metric Event discarded after final delivery attempt"
-            : "event-ingest-api Metric Event delivery failed",
-          {
-            queueMessageId: message.id,
-            attempts: message.attempts,
-            maxRetries: METRIC_EVENT_MAX_RETRIES,
-            ...metricEventIdentity(message.body),
-            errorMessage: error instanceof Error ? error.message : "non-error rejection",
-          },
-        );
-        message.retry();
-      }
-    }),
+  await Promise.all(batch.messages.map((message) => deliverMetricEvent(message, env, delivery)));
+}
+
+async function deliverMetricEvent(
+  message: Message<MetricEventRow>,
+  env: Env,
+  delivery: ReturnType<typeof tinybirdDelivery>,
+): Promise<void> {
+  try {
+    if (!delivery.ok) throw new Error(delivery.error.message);
+    const suppressed = await isEntityEventSuppressed(
+      env.ENTITY_METRIC_PRIVACY,
+      message.body,
+      env.SPLITCH_PLATFORM_TARGET,
+    );
+    if (!suppressed) await appendRawEvent(message.body, delivery.value);
+    message.ack();
+  } catch (error) {
+    logMetricEventFailure(message, error);
+    message.retry();
+  }
+}
+
+function logMetricEventFailure(message: Message<MetricEventRow>, error: unknown): void {
+  const finalAttempt = message.attempts > METRIC_EVENT_MAX_RETRIES;
+  console.error(
+    finalAttempt
+      ? "event-ingest-api Metric Event discarded after final delivery attempt"
+      : "event-ingest-api Metric Event delivery failed",
+    {
+      queueMessageId: message.id,
+      attempts: message.attempts,
+      maxRetries: METRIC_EVENT_MAX_RETRIES,
+      ...metricEventIdentity(message.body),
+      errorMessage: error instanceof Error ? error.message : "non-error rejection",
+    },
   );
 }
 
