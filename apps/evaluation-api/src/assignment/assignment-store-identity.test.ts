@@ -119,7 +119,9 @@ describe("KvAssignmentStore first-mint identity", () => {
     expect(kv.getCalls).toContain(historicalKey);
     expect(kv.getCalls).toContain(current.entityKey);
   });
+});
 
+describe("KvAssignmentStore retained epoch merge", () => {
   it("merges compatible epoch maps and fails loud on a conflict", async () => {
     const saltStore = hostedIdentitySaltStore();
     const historicalHash = await computeTargetingKeyHash(saltStore, {
