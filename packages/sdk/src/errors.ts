@@ -1,4 +1,4 @@
-import { type ErrorCode, ErrorCodeSchema } from "./generated/contract-surface.js";
+import { type ErrorCode, errorCodes } from "./generated/contract-surface.js";
 
 export const sdkClientErrorCodes = [
   "SDK_CREDENTIAL_CONFIGURATION_INVALID",
@@ -27,10 +27,12 @@ export const sdkClientErrorCodes = [
 export type SdkClientErrorCode = (typeof sdkClientErrorCodes)[number];
 export type SplitchSdkErrorCode = ErrorCode | SdkClientErrorCode;
 
-export const sdkErrorCodes: readonly SplitchSdkErrorCode[] = [
-  ...ErrorCodeSchema.options,
-  ...sdkClientErrorCodes,
-];
+// `concat` + `@__PURE__` (not an array-literal spread) so bundlers drop this
+// binding — and with it the server code table — when a consumer never imports
+// it; the browser payload budget assumes that.
+export const sdkErrorCodes: readonly SplitchSdkErrorCode[] = /* @__PURE__ */ (
+  errorCodes as readonly SplitchSdkErrorCode[]
+).concat(sdkClientErrorCodes);
 
 export interface ActionableErrorDetail<Code extends string = SplitchSdkErrorCode> {
   readonly code: Code;

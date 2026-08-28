@@ -51,7 +51,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 // Zod's `datetime({ offset: true })`: requires a timezone offset (`Z` or ±HH:MM).
 const OFFSET_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
-const exposureBatchResultStatusSet: ReadonlySet<string> = new Set(exposureBatchResultStatuses);
+const exposureBatchResultStatusSet: ReadonlySet<string> = /* @__PURE__ */ new Set(
+  exposureBatchResultStatuses,
+);
 
 function parseUuid(value: unknown, path: string): string {
   if (typeof value !== "string" || !UUID_RE.test(value)) {
@@ -96,7 +98,7 @@ function parseExposureBatchResponse(input: unknown): ExposureBatchResponse {
   };
 }
 
-export const ExposureBatchResponseSchema: Schema<ExposureBatchResponse> = asSchema(
+export const ExposureBatchResponseSchema: Schema<ExposureBatchResponse> = /* @__PURE__ */ asSchema(
   parseExposureBatchResponse,
 );
 
@@ -134,4 +136,4 @@ function parseExposureBatchRequest(input: unknown): ExposureBatchRequest {
 }
 
 export const ExposureBatchRequestSchema: Schema<ExposureBatchRequest> =
-  asSchema(parseExposureBatchRequest);
+  /* @__PURE__ */ asSchema(parseExposureBatchRequest);

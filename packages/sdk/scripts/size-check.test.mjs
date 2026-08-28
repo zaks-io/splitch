@@ -16,25 +16,26 @@ import {
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = join(packageRoot, "../..");
 
-test("ENTRY_MAX_BYTES is anchored near the measured ~23 KiB consumer bundle", () => {
-  assert.equal(ENTRY_MAX_BYTES, 28 * 1024);
-  assert.ok(ENTRY_MAX_BYTES > 22_828);
+test("ENTRY_MAX_BYTES is anchored near the measured ~19 KiB consumer bundle", () => {
+  assert.equal(ENTRY_MAX_BYTES, 24 * 1024);
+  assert.ok(ENTRY_MAX_BYTES > 19_445);
   assert.ok(ENTRY_MAX_BYTES < 50 * 1024);
 });
 
 test("the React entry has its own narrow budget", () => {
-  assert.equal(REACT_ENTRY_MAX_BYTES, 12 * 1024);
+  assert.equal(REACT_ENTRY_MAX_BYTES, 4 * 1024);
+  assert.ok(REACT_ENTRY_MAX_BYTES > 2_577);
   assert.ok(REACT_ENTRY_MAX_BYTES < ENTRY_MAX_BYTES);
 });
 
 test("the stateful browser entry has its own measured budget", () => {
-  assert.equal(BROWSER_ENTRY_MAX_BYTES, 40 * 1024);
-  assert.ok(BROWSER_ENTRY_MAX_BYTES > 32_233);
+  assert.equal(BROWSER_ENTRY_MAX_BYTES, 34 * 1024);
+  assert.ok(BROWSER_ENTRY_MAX_BYTES > 27_775);
   assert.ok(BROWSER_ENTRY_MAX_BYTES < 50 * 1024);
 });
 
 test("the Sentry reporter's budget stays smaller than the client entries", () => {
-  assert.equal(SENTRY_ENTRY_MAX_BYTES, 8 * 1024);
+  assert.equal(SENTRY_ENTRY_MAX_BYTES, 2 * 1024);
   // Measured 868 bytes with @sentry/core external. Anything approaching this
   // ceiling means the reporter stopped being a value mapping.
   assert.ok(SENTRY_ENTRY_MAX_BYTES > 868);

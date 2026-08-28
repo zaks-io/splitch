@@ -24,25 +24,26 @@ const repoRoot = resolve(packageRoot, "../..");
 
 /**
  * Minified consumer+SDK budget per published entry.
- * Measured 22_828 bytes after the SPL-398/SPL-399 public-surface fixes; that
- * figure is toolchain-dependent
+ * Measured 19_445 bytes after the contract-surface schemas went `@__PURE__`
+ * and `ErrorCodeSchema` went shape-only (the server code table tree-shakes out
+ * of consumer bundles); that figure is toolchain-dependent
  * (it moves with the bundle contents and the esbuild version).
- * `size-check.test.mjs` documents the floor (`ENTRY_MAX_BYTES > 22_828`) rather
- * than gating on the exact measurement. Ceiling is 28 KiB (~25% headroom over
+ * `size-check.test.mjs` documents the floor (`ENTRY_MAX_BYTES > 19_445`) rather
+ * than gating on the exact measurement. Ceiling is 24 KiB (~26% headroom over
  * that figure) for intentional SDK growth (new accessors / wire fields) short
  * of re-vendoring zod (~300 KiB), which this budget alone is meant to reject.
  */
-export const ENTRY_MAX_BYTES = 28 * 1024;
-/** Measured 32_233 bytes after adding held evaluations and revalidation; 40 KiB keeps ~27% headroom. */
-export const BROWSER_ENTRY_MAX_BYTES = 40 * 1024;
-/** Measured 9_718 bytes at SPL-334; 12 KiB keeps roughly 25% growth headroom. */
-export const REACT_ENTRY_MAX_BYTES = 12 * 1024;
+export const ENTRY_MAX_BYTES = 24 * 1024;
+/** Measured 27_775 bytes after the shape-only ErrorCodeSchema shed the code table; 34 KiB keeps ~25% headroom. */
+export const BROWSER_ENTRY_MAX_BYTES = 34 * 1024;
+/** Measured 2_577 bytes after the shape-only ErrorCodeSchema shed the code table; 4 KiB keeps ~59% headroom. */
+export const REACT_ENTRY_MAX_BYTES = 4 * 1024;
 /**
  * The Sentry reporter is a value mapping over ResolutionDetails with `@sentry/core`
- * external, so it should stay near-trivial. 8 KiB is the tripwire for it quietly
+ * external, so it should stay near-trivial. 2 KiB is the tripwire for it quietly
  * growing a second bundled SDK.
  */
-export const SENTRY_ENTRY_MAX_BYTES = 8 * 1024;
+export const SENTRY_ENTRY_MAX_BYTES = 2 * 1024;
 /** Measured 128,996 bytes with schema/transport dependencies external; 168 KiB keeps ~33% headroom. */
 export const CONTROL_PLANE_ENTRY_MAX_BYTES = 168 * 1024;
 /** Measured 18,078 bytes with zod external; 24 KiB keeps ~36% headroom. */

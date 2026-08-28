@@ -33,7 +33,12 @@ function assertKnownResultStatus(row: ExposureResultRow): void {
   }
 }
 
-/** Fail loud on rejected+null / unknown code; return whether the item stays queued. */
+/**
+ * Fail loud on rejected+null / malformed code; return whether the item stays
+ * queued. A well-formed code outside this build's `ErrorCode` union (a newer
+ * server) is a non-retryable rejection: the drain logs every rejected item, so
+ * dropping it is server-directed and observable, not silent.
+ */
 function shouldRetainRejected(row: ExposureResultRow): boolean {
   if (row.code === null) {
     throw new Error(
@@ -43,7 +48,7 @@ function shouldRetainRejected(row: ExposureResultRow): boolean {
   const parsed = ErrorCodeSchema.safeParse(row.code);
   if (!parsed.success) {
     throw new Error(
-      `Unrecognized Exposure rejection code for ${row.exposureId}: ${JSON.stringify(row.code)}`,
+      `Malformed Exposure rejection code for ${row.exposureId}: ${JSON.stringify(row.code)}`,
     );
   }
   return isRetryableExposureRejection(parsed.data);
@@ -54,7 +59,8 @@ function shouldRetainRejected(row: ExposureResultRow): boolean {
  * and non-retryable rejections leave the queue; retryable rejections and missing
  * rows are retained with the same exposureId.
  *
- * Unrecognized status or rejection code throws (ADR-0036) — never silently drop.
+ * Unrecognized status or malformed rejection code throws (ADR-0036) — never
+ * silently drop.
  */
 export function retainRetryableExposures<T extends { readonly exposureId: string }>(
   pending: readonly T[],
