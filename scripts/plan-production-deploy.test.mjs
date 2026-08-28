@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyProductionChanges } from "./lib/production-deploy-plan.mjs";
+import { classifyProductionChanges, readWorkspacePackages } from "./lib/production-deploy-plan.mjs";
 import {
   createProductionDeployPlan,
   resolveLatestSuccessfulProductionSha,
@@ -29,21 +29,36 @@ test("documentation and non-deployable application changes skip production mutat
 });
 
 /**
- * `packages/sdk` and `apps/cli` were both in the case above until two edges
+ * `packages/sdk` and `apps/cli` were both in the case above until three edges
  * appeared. SPL-123 made `@splitch/sdk` a runtime dependency of the Control
  * Panel: `apps/control-panel/src/lib/panel-verify.ts` imports
  * `createSplitchClient` and the built Worker bundle inlines it. SPL-247 then
  * made the marketing site depend on both packages so `/docs/error/{code}`
  * covers every code the SDK and CLI can emit, and the compiler fails the build
- * on an undocumented one. Asserting the real edges is worth more than the old
- * assumption, and it fails loudly if either dependency is ever dropped.
+ * on an undocumented one. SPL-494 declared `@splitch/sdk` as a workspace
+ * dependency of Evaluation API because the Worker tests already rely on it;
+ * the planner follows `devDependencies`, so SDK source changes must deploy
+ * that Worker. Asserting the real edges is worth more than the old
+ * assumption, and it fails loudly if any of these dependencies is ever dropped.
  */
 test("SDK source changes deploy the Workers that depend on the SDK", () => {
+  const evaluationApi = readWorkspacePackages(process.cwd()).find(
+    (workspacePackage) => workspacePackage.name === "@splitch/evaluation-api",
+  );
+  assert.ok(
+    evaluationApi?.dependencies.includes("@splitch/sdk"),
+    "Evaluation API must keep declaring @splitch/sdk so SDK changes deploy that Worker",
+  );
+
   const plan = classifyProductionChanges(["packages/sdk/src/index.ts"]);
 
   assert.equal(plan.shouldDeploy, true);
   assert.equal(plan.workers, true);
-  assert.deepEqual(plan.workerPackages, ["@splitch/control-panel", "@splitch/marketing"]);
+  assert.deepEqual(plan.workerPackages, [
+    "@splitch/control-panel",
+    "@splitch/evaluation-api",
+    "@splitch/marketing",
+  ]);
   assert.equal(plan.tinybird, false);
   assert.equal(plan.d1, false);
 });
