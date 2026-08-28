@@ -99,6 +99,9 @@ targeting_key_hash = HMAC_SHA256(app_entity_identity_key, id_type + ":" + target
 Rules:
 
 - `app_entity_identity_key` is random, secret, App-scoped, and stored outside Tinybird.
+- The App-scoped Config Store Durable Object is the sole authority for the wrapped identity atom,
+  lifecycle, and reset checkpoints. Hosted Evaluation and Event Ingest read it through that
+  Durable Object and never accept a CONFIG_STORE replica for identity decisions.
 - The identity key is immutable for one App identity epoch so Exposures, Assignments, Metric Events,
   and Entity-identified Web Events continue to join across retries and retention windows.
 - Routine secret rotation rotates or rewraps the key-encryption key while preserving the underlying
@@ -223,7 +226,8 @@ Every delete job must record per-store status for:
 - D1: Organization/App/config/membership/credential metadata/privacy ledgers, including destructive
   reset purge of old-epoch `entity_deletions` and irreversible Entity `subject_ref` redaction.
 - KV: sessions, credential caches, config cache, liveRun keys, Assignment Store read keys.
-- Durable Objects: per-App live-update state, Assignment Store writer rows, ingest claims/outbox
+- Durable Objects: per-App identity atoms and live-update state, Assignment Store writer rows,
+  ingest claims/outbox
   payloads, Admission Gate state, write-ahead Tinybird attempts, indeterminate records, and
   `poison_pending`/`poison_transferred` records.
 - Customer Convex Component: synced configuration, integration token, local holdovers, pending

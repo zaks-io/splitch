@@ -2,6 +2,8 @@ import {
   computeTargetingKeyHash,
   LOCAL_PRIVACY_SALT_FIXTURE,
   makeMemoryAppIdentityStore,
+  mintInitialAppIdentityRecord,
+  wrapAppIdentityRecord,
 } from "@splitch/privacy";
 import { describe, expect, it } from "vitest";
 import { hashedAssignmentIdentity } from "./assignment/assignment-store";
@@ -117,7 +119,7 @@ describe("makeEnvSaltStore", () => {
     );
   });
 
-  it("persists the current App identity key in CONFIG_STORE across store instances", async () => {
+  it("persists the current App identity key in the coordinator across store instances", async () => {
     const values = new Map<string, string>();
     const configStore = {
       async get(key: string) {
@@ -130,7 +132,11 @@ describe("makeEnvSaltStore", () => {
     const configStoreWriter = {
       getByName() {
         return {
-          async putAppIdentityIfAbsent(key: string, value: string) {
+          async readAppIdentity(appId: string) {
+            return values.get(`app:${appId}:entity-identity`) ?? null;
+          },
+          async putAppIdentityIfAbsent(appId: string, value: string) {
+            const key = `app:${appId}:entity-identity`;
             const winner = values.get(key);
             if (winner !== undefined) return winner;
             values.set(key, value);
@@ -159,6 +165,58 @@ describe("makeEnvSaltStore", () => {
 });
 
 describe("makeEnvSaltStore hosted fail-closed", () => {
+  it("rejects a stale KV identity while the authoritative reset state is blocked", async () => {
+    const appId = "app_1";
+    const active = mintInitialAppIdentityRecord(ROOT);
+    const stale = JSON.stringify(await wrapAppIdentityRecord(active, ROOT, appId));
+    const blocked = JSON.stringify(
+      await wrapAppIdentityRecord(
+        {
+          ...active,
+          lifecycle: {
+            state: "blocked",
+            trafficBlocked: true,
+            resetId: "reset-1",
+            proofs: {
+              runs_and_credentials: null,
+              delivery: null,
+              assignments: null,
+              analytics: null,
+              retry_claims: null,
+              entity_deletions: null,
+              privacy_subject_refs: null,
+            },
+          },
+        },
+        ROOT,
+        appId,
+      ),
+    );
+    let kvReads = 0;
+    const store = makeEnvSaltStore({
+      EVALUATION_PRIVACY_SALT: ROOT,
+      SPLITCH_PLATFORM_TARGET: "production",
+      CONFIG_STORE: {
+        get: async () => {
+          kvReads += 1;
+          return stale;
+        },
+        put: async () => undefined,
+      },
+      CONFIG_STORE_WRITER: {
+        getByName: () => ({
+          readAppIdentity: async () => blocked,
+          putAppIdentityIfAbsent: async () => blocked,
+        }),
+      },
+    });
+
+    await expect(
+      computeTargetingKeyHash(store, { appId, idType: "user", targetingKey: TARGETING_KEY }),
+    ).rejects.toThrow(/App identity traffic is blocked/);
+    expect(kvReads).toBe(0);
+  });
+
   it("fails closed when the platform target, hosted root salt, or CONFIG_STORE is missing", () => {
     expect(() => makeEnvSaltStore({})).toThrow(/SPLITCH_PLATFORM_TARGET is required/);
     expect(() => makeEnvSaltStore({ SPLITCH_PLATFORM_TARGET: "staging" })).toThrow(

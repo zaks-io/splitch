@@ -67,7 +67,11 @@ export async function makeMetricEventFixture(
 function appIdentityWriter(values: Map<string, string>): NonNullable<Env["CONFIG_STORE_WRITER"]> {
   return {
     getByName: () => ({
-      async putAppIdentityIfAbsent(key: string, value: string) {
+      async readAppIdentity(appId: string) {
+        return values.get(`app:${appId}:entity-identity`) ?? null;
+      },
+      async putAppIdentityIfAbsent(appId: string, value: string) {
+        const key = `app:${appId}:entity-identity`;
         const winner = values.get(key);
         if (winner !== undefined) return winner;
         values.set(key, value);

@@ -25,7 +25,10 @@ authoritative Config Store DO; control-plane readers rebuild KV from D1 (see
 | `ck:{keyMaterialHash}` / `ak:{keyHash}`                 | `CredentialCacheKV`  | active: none; revoked: 5m    | Mutable credential entry; prefixes distinguish Client Keys from API Keys                     |
 | `revoked:{credentialCacheKey}`                          | presence marker      | none                         | Terminal revocation marker; checked before the mutable credential entry                      |
 | `member-profile:{userId}`                               | `{ email }`          | none                         | SESSION_STORE identity cache for Org member email; written at login, never in D1             |
-| `app:{appId}:entity-identity`                           | wrapped epochs       | none                         | CONFIG_STORE AES-GCM wrap of each App `app_entity_identity_key` epoch (ADR-0044)             |
+
+App identity is not a KV read model. The App-scoped Config Store Durable Object stores the
+AES-GCM-wrapped `app:{appId}:entity-identity` atom in strongly consistent DO storage and owns
+provision, lifecycle checkpoints, reset, and every hosted data-plane read (ADR-0044).
 
 ### FlagConfigKV
 

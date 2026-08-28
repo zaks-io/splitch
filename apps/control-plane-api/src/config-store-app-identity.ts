@@ -1,10 +1,12 @@
 import {
   assertAppIdentityTrafficAllowed,
+  defaultAppEntityIdentityRecordKey,
   makeKvAppIdentityStore,
-  putWrappedAppIdentityIfAbsent,
+  parseWrappedAppIdentityRecord,
   requireAppIdentityRecord,
   resetCompromisedAppIdentity,
   resolvePrivacyRootSecret,
+  unwrapAppIdentityRecord,
 } from "@splitch/privacy";
 import {
   completeProductionAppIdentityReset,
@@ -15,19 +17,32 @@ import type { ControlPlaneApiEnv } from "./env";
 export function putConfigStoreAppIdentityIfAbsent(
   ctx: DurableObjectState,
   env: ControlPlaneApiEnv,
-  recordKey: string,
+  appId: string,
   value: string,
 ): Promise<string> {
-  return ctx.blockConcurrencyWhile(() =>
-    putWrappedAppIdentityIfAbsent(
-      {
-        get: async (key) => (await env.CONFIG_STORE.get(key)) ?? null,
-        put: (key, wrapped) => env.CONFIG_STORE.put(key, wrapped),
-      },
-      recordKey,
-      value,
-    ),
-  );
+  assertAppIdentityScope(ctx, appId);
+  return ctx.blockConcurrencyWhile(async () => {
+    await unwrapAppIdentityRecord(
+      parseWrappedAppIdentityRecord(value),
+      privacyRootSecret(env),
+      appId,
+    );
+    const key = defaultAppEntityIdentityRecordKey(appId);
+    const existing = await ctx.storage.get<string>(key);
+    if (existing !== undefined) return existing;
+    await ctx.storage.put(key, value);
+    return value;
+  });
+}
+
+export function readConfigStoreAppIdentity(
+  ctx: DurableObjectState,
+  appId: string,
+): Promise<string | null> {
+  assertAppIdentityScope(ctx, appId);
+  return ctx.storage
+    .get<string>(defaultAppEntityIdentityRecordKey(appId))
+    .then((value) => value ?? null);
 }
 
 export function resetConfigStoreAppIdentity(
@@ -36,9 +51,10 @@ export function resetConfigStoreAppIdentity(
   appId: string,
   resetId: string,
 ): Promise<string> {
+  assertAppIdentityScope(ctx, appId);
   return ctx.blockConcurrencyWhile(async () => {
     const record = await resetCompromisedAppIdentity(
-      configStoreAppIdentityStore(env),
+      configStoreAppIdentityStore(ctx, env),
       appId,
       resetId,
       productionAppIdentityResetPurgers(env, resetId),
@@ -49,25 +65,36 @@ export function resetConfigStoreAppIdentity(
 }
 
 export async function assertConfigStoreAppIdentityTrafficAllowed(
+  ctx: DurableObjectState,
   env: ControlPlaneApiEnv,
   appId: string,
 ): Promise<void> {
-  const record = await requireAppIdentityRecord(configStoreAppIdentityStore(env), appId);
+  assertAppIdentityScope(ctx, appId);
+  const record = await requireAppIdentityRecord(configStoreAppIdentityStore(ctx, env), appId);
   assertAppIdentityTrafficAllowed(record.lifecycle);
 }
 
-function configStoreAppIdentityStore(env: ControlPlaneApiEnv) {
-  const rootSecret = resolvePrivacyRootSecret({
-    configuredSalt: env.EVALUATION_PRIVACY_SALT,
-    localFixtureAllowed: env.SPLITCH_PLATFORM_TARGET === "local",
-  });
+function configStoreAppIdentityStore(ctx: DurableObjectState, env: ControlPlaneApiEnv) {
   return makeKvAppIdentityStore({
     kv: {
-      get: async (key) => (await env.CONFIG_STORE.get(key, "text")) ?? null,
-      put: (key, value) => env.CONFIG_STORE.put(key, value),
+      get: async (key) => (await ctx.storage.get<string>(key)) ?? null,
+      put: (key, value) => ctx.storage.put(key, value),
     },
-    rootSecret,
+    rootSecret: privacyRootSecret(env),
     durablySerializedReset: true,
     exclusive: { runExclusive: (_appId, run) => run() },
   });
+}
+
+function privacyRootSecret(env: ControlPlaneApiEnv): string {
+  return resolvePrivacyRootSecret({
+    configuredSalt: env.EVALUATION_PRIVACY_SALT,
+    localFixtureAllowed: env.SPLITCH_PLATFORM_TARGET === "local",
+  });
+}
+
+function assertAppIdentityScope(ctx: DurableObjectState, appId: string): void {
+  if (ctx.id.name !== `app-identity:${appId}`) {
+    throw new Error("config-store: App identity coordinator scope mismatch");
+  }
 }

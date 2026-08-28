@@ -20,7 +20,8 @@ interface ConfigStoreStub {
     environmentId: string;
     flagKey: string;
   }): Promise<EvaluationConfigSnapshot | null>;
-  putAppIdentityIfAbsent?(recordKey: string, value: string): Promise<string>;
+  readAppIdentity?(appId: string): Promise<string | null>;
+  putAppIdentityIfAbsent?(appId: string, value: string): Promise<string>;
 }
 
 export interface ConfigStoreNamespace {

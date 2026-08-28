@@ -1,10 +1,9 @@
 import { isLocalPlatformTarget, requirePlatformTarget } from "@splitch/contracts";
 import {
-  makeDurableAppIdentityPutIfAbsent,
+  makeDurableAppIdentityStore,
   makeIdentitySaltStore,
   makeKvAppIdentityStore,
   makeMemoryAppIdentityStore,
-  putWrappedAppIdentityIfAbsent,
   resolvePrivacyRootSecret,
 } from "@splitch/privacy";
 import type { Env } from "./types";
@@ -16,18 +15,14 @@ export function makeMetricEventSaltStore(env: Env) {
     localFixtureAllowed: isLocalPlatformTarget(target),
   });
   const configStore = env.CONFIG_STORE;
-  if (configStore) {
+  if (configStore && isLocalPlatformTarget(target)) {
     const kv = {
       get: async (key: string) => (await configStore.get(key, "text")) ?? null,
       put: (key: string, value: string) => configStore.put(key, value),
     };
     return makeIdentitySaltStore({
       rootSecret,
-      identityStore: makeKvAppIdentityStore({
-        kv,
-        rootSecret,
-        putIfAbsent: metricEventAppIdentityPutIfAbsent(kv, target, env.CONFIG_STORE_WRITER),
-      }),
+      identityStore: makeKvAppIdentityStore({ kv, rootSecret }),
     });
   }
   if (isLocalPlatformTarget(target)) {
@@ -36,28 +31,17 @@ export function makeMetricEventSaltStore(env: Env) {
       identityStore: makeMemoryAppIdentityStore(),
     });
   }
-  throw new Error("CONFIG_STORE is required outside local targets");
-}
-
-function metricEventAppIdentityPutIfAbsent(
-  kv: { get(key: string): Promise<string | null>; put(key: string, value: string): Promise<void> },
-  target: ReturnType<typeof requirePlatformTarget>,
-  writer: Env["CONFIG_STORE_WRITER"],
-): (recordKey: string, value: string) => Promise<string> {
-  if (writer === undefined) {
-    if (!isLocalPlatformTarget(target)) {
-      throw new Error("CONFIG_STORE_WRITER is required outside local targets");
-    }
-    return (recordKey, value) => putWrappedAppIdentityIfAbsent(kv, recordKey, value);
+  if (!configStore) {
+    throw new Error("CONFIG_STORE is required outside local targets");
   }
-  const durable = makeDurableAppIdentityPutIfAbsent({
-    getByName(name) {
-      const stub = writer.getByName(name);
-      if (typeof stub.putAppIdentityIfAbsent !== "function") {
-        throw new Error("event-ingest-api: App identity coordinator is unavailable");
-      }
-      return { putAppIdentityIfAbsent: stub.putAppIdentityIfAbsent.bind(stub) };
-    },
+  if (!env.CONFIG_STORE_WRITER) {
+    throw new Error("CONFIG_STORE_WRITER is required outside local targets");
+  }
+  return makeIdentitySaltStore({
+    rootSecret,
+    identityStore: makeDurableAppIdentityStore({
+      namespace: env.CONFIG_STORE_WRITER,
+      rootSecret,
+    }),
   });
-  return durable;
 }

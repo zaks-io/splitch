@@ -1,4 +1,6 @@
+import { mintInitialAppIdentityRecord, wrapAppIdentityRecord } from "@splitch/privacy";
 import { describe, expect, it } from "vitest";
+import { putConfigStoreAppIdentityIfAbsent } from "../src/config-store-app-identity.js";
 import {
   type ConfigStoreDurableObjectNamespace,
   durableAppIdentityResetAccess,
@@ -34,4 +36,57 @@ describe("durableAppIdentityResetAccess", () => {
       { appId: "app-checkout", resetId: "reset-compromised" },
     ]);
   });
+
+  it("returns one winner for serialized provisions even when CONFIG_STORE reads stay stale", async () => {
+    const rootSecret = "test-root-secret-do-not-use";
+    const appId = "app-checkout";
+    const first = JSON.stringify(
+      await wrapAppIdentityRecord(mintInitialAppIdentityRecord(rootSecret), rootSecret, appId),
+    );
+    const second = JSON.stringify(
+      await wrapAppIdentityRecord(mintInitialAppIdentityRecord(rootSecret), rootSecret, appId),
+    );
+    const staleKvWrites: string[] = [];
+    const ctx = memoryDurableObjectState();
+    const env = {
+      EVALUATION_PRIVACY_SALT: rootSecret,
+      SPLITCH_PLATFORM_TARGET: "production",
+      CONFIG_STORE: {
+        get: async () => null,
+        put: async (_key: string, value: string) => {
+          staleKvWrites.push(value);
+        },
+      },
+    } as never;
+
+    await expect(
+      Promise.all([
+        putConfigStoreAppIdentityIfAbsent(ctx, env, appId, first),
+        putConfigStoreAppIdentityIfAbsent(ctx, env, appId, second),
+      ]),
+    ).resolves.toEqual([first, first]);
+    expect(staleKvWrites).toEqual([]);
+  });
 });
+
+function memoryDurableObjectState(): DurableObjectState {
+  const values = new Map<string, unknown>();
+  let tail = Promise.resolve();
+  return {
+    id: { name: "app-identity:app-checkout" },
+    storage: {
+      get: async <T>(key: string) => values.get(key) as T | undefined,
+      put: async (key: string, value: unknown) => {
+        values.set(key, value);
+      },
+    },
+    blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T> {
+      const result = tail.then(callback);
+      tail = result.then(
+        () => undefined,
+        () => undefined,
+      );
+      return result;
+    },
+  } as unknown as DurableObjectState;
+}

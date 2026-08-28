@@ -1,4 +1,8 @@
-import { computeTargetingKeyHash } from "@splitch/privacy";
+import {
+  computeTargetingKeyHash,
+  mintInitialAppIdentityRecord,
+  wrapAppIdentityRecord,
+} from "@splitch/privacy";
 import { describe, expect, it } from "vitest";
 import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 
@@ -7,7 +11,11 @@ describe("Metric Event privacy salts", () => {
     const values = new Map<string, string>();
     const writer = {
       getByName: () => ({
-        async putAppIdentityIfAbsent(key: string, value: string) {
+        async readAppIdentity(appId: string) {
+          return values.get(`app:${appId}:entity-identity`) ?? null;
+        },
+        async putAppIdentityIfAbsent(appId: string, value: string) {
+          const key = `app:${appId}:entity-identity`;
           const winner = values.get(key);
           if (winner !== undefined) return winner;
           values.set(key, value);
@@ -39,6 +47,59 @@ describe("Metric Event privacy salts", () => {
     });
     expect(historical).toBe("v1:485bdba84f840c9627db32bcc99a6f00722b5253754e513ff473c90a8febc588");
     expect(historical).not.toBe(appA);
+  });
+
+  it("rejects a stale KV identity while the authoritative reset state is blocked", async () => {
+    const rootSecret = "test-root-secret-do-not-use";
+    const appId = "app_1";
+    const active = mintInitialAppIdentityRecord(rootSecret);
+    const stale = JSON.stringify(await wrapAppIdentityRecord(active, rootSecret, appId));
+    const blocked = JSON.stringify(
+      await wrapAppIdentityRecord(
+        {
+          ...active,
+          lifecycle: {
+            state: "blocked",
+            trafficBlocked: true,
+            resetId: "reset-1",
+            proofs: {
+              runs_and_credentials: null,
+              delivery: null,
+              assignments: null,
+              analytics: null,
+              retry_claims: null,
+              entity_deletions: null,
+              privacy_subject_refs: null,
+            },
+          },
+        },
+        rootSecret,
+        appId,
+      ),
+    );
+    let kvReads = 0;
+    const store = makeMetricEventSaltStore({
+      EVALUATION_PRIVACY_SALT: rootSecret,
+      SPLITCH_PLATFORM_TARGET: "production",
+      CONFIG_STORE: {
+        get: async () => {
+          kvReads += 1;
+          return stale;
+        },
+        put: async () => undefined,
+      },
+      CONFIG_STORE_WRITER: {
+        getByName: () => ({
+          readAppIdentity: async () => blocked,
+          putAppIdentityIfAbsent: async () => blocked,
+        }),
+      },
+    } as never);
+
+    await expect(
+      computeTargetingKeyHash(store, { appId, idType: "user", targetingKey: "user-123" }),
+    ).rejects.toThrow(/App identity traffic is blocked/);
+    expect(kvReads).toBe(0);
   });
 
   it("rejects missing hosted identity configuration", () => {

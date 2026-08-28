@@ -13,6 +13,7 @@ import { appScope, createRepository, envScope } from "@splitch/db";
 import {
   assertConfigStoreAppIdentityTrafficAllowed,
   putConfigStoreAppIdentityIfAbsent,
+  readConfigStoreAppIdentity,
   resetConfigStoreAppIdentity,
 } from "./config-store-app-identity";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
@@ -29,7 +30,8 @@ interface ConfigStoreDurableObjectStub extends ConfigStoreWriter {
     input: EvaluationFlagConfigRead,
   ): Promise<EvaluationFlagConfigSnapshot | null>;
   setLiveUpdatesAvailable(available: boolean): Promise<void>;
-  putAppIdentityIfAbsent(recordKey: string, value: string): Promise<string>;
+  readAppIdentity(appId: string): Promise<string | null>;
+  putAppIdentityIfAbsent(appId: string, value: string): Promise<string>;
   resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string>;
   assertAppIdentityTrafficAllowed(appId: string): Promise<void>;
 }
@@ -239,8 +241,12 @@ export class ConfigStoreDurableObject
    * Serialized first provision of one App identity record. Evaluation and Event
    * Ingest call this on `app-identity:${appId}` so both planes share one winner.
    */
-  async putAppIdentityIfAbsent(recordKey: string, value: string): Promise<string> {
-    return putConfigStoreAppIdentityIfAbsent(this.ctx, this.env, recordKey, value);
+  readAppIdentity(appId: string): Promise<string | null> {
+    return readConfigStoreAppIdentity(this.ctx, appId);
+  }
+
+  async putAppIdentityIfAbsent(appId: string, value: string): Promise<string> {
+    return putConfigStoreAppIdentityIfAbsent(this.ctx, this.env, appId, value);
   }
 
   async resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string> {
@@ -248,7 +254,7 @@ export class ConfigStoreDurableObject
   }
 
   async assertAppIdentityTrafficAllowed(appId: string): Promise<void> {
-    return assertConfigStoreAppIdentityTrafficAllowed(this.env, appId);
+    return assertConfigStoreAppIdentityTrafficAllowed(this.ctx, this.env, appId);
   }
 
   private store(): ConfigStoreWriter {

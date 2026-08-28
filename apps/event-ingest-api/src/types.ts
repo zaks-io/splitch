@@ -16,7 +16,8 @@ export type Env = {
   CONFIG_STORE?: KVNamespace;
   CONFIG_STORE_WRITER?: {
     getByName(name: string): {
-      putAppIdentityIfAbsent?(recordKey: string, value: string): Promise<string>;
+      readAppIdentity?(appId: string): Promise<string | null>;
+      putAppIdentityIfAbsent?(appId: string, value: string): Promise<string>;
     };
   };
   CREDENTIAL_STORE?: KVNamespace;

@@ -48,7 +48,7 @@ export function productionAppIdentityResetPurgers(
     }),
     delivery: scoped(async (appId) => {
       const configKeys =
-        (await deleteKvPrefix(env.CONFIG_STORE, `app:${appId}:`, `app:${appId}:entity-identity`)) +
+        (await deleteKvPrefix(env.CONFIG_STORE, `app:${appId}:`)) +
         (await deleteKvPrefix(env.CONFIG_STORE, `live_run:${appId}:`));
       const proof = await env.EVENT_INGEST_API.purgeAppIdentityDelivery(appId, resetId);
       return `delivery:config_keys=${configKeys};${proof}`;
@@ -90,13 +90,12 @@ export async function completeProductionAppIdentityReset(
   ]);
 }
 
-async function deleteKvPrefix(kv: KVNamespace, prefix: string, except?: string): Promise<number> {
+async function deleteKvPrefix(kv: KVNamespace, prefix: string): Promise<number> {
   let cursor: string | undefined;
   let deleted = 0;
   do {
     const page = await kv.list({ prefix, ...(cursor ? { cursor } : {}) });
     for (const key of page.keys) {
-      if (key.name === except) continue;
       await kv.delete(key.name);
       deleted += 1;
     }

@@ -1,9 +1,6 @@
 export type { AppIdentityKv } from "./app-identity-exclusive";
 // biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the privacy surface is intentionally aggregated here
-export {
-  makeDurableAppIdentityPutIfAbsent,
-  putWrappedAppIdentityIfAbsent,
-} from "./app-identity-exclusive";
+export { putWrappedAppIdentityIfAbsent } from "./app-identity-exclusive";
 export type { WrappedAppIdentityKey } from "./app-identity-key";
 export {
   deriveAppIdentityKek,
@@ -41,8 +38,12 @@ export {
   APP_IDENTITY_RESET_STORES,
   assertAppIdentityTrafficAllowed,
 } from "./app-identity-lifecycle";
-export type { AppIdentityStore } from "./app-identity-store";
+export type {
+  AppIdentityCoordinatorNamespace,
+  AppIdentityStore,
+} from "./app-identity-store";
 export {
+  makeDurableAppIdentityStore,
   makeKvAppIdentityStore,
   makeMemoryAppIdentityStore,
   mintInitialAppIdentityRecord,

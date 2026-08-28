@@ -159,7 +159,11 @@ export function makeEnv(
     CONFIG_STORE: configStore,
     CONFIG_STORE_WRITER: {
       getByName: () => ({
-        async putAppIdentityIfAbsent(key: string, value: string) {
+        async readAppIdentity(appId: string) {
+          return (await configStore.get(`app:${appId}:entity-identity`)) as string | null;
+        },
+        async putAppIdentityIfAbsent(appId: string, value: string) {
+          const key = `app:${appId}:entity-identity`;
           const winner = (await configStore.get(key)) as string | null;
           if (winner !== null) return winner;
           await configStore.put(key, value);

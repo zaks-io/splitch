@@ -1,10 +1,6 @@
 import { env } from "cloudflare:workers";
 import { appScope, createRepository, envScope } from "@splitch/db";
-import {
-  defaultAppEntityIdentityRecordKey,
-  mintInitialAppIdentityRecord,
-  wrapAppIdentityRecord,
-} from "@splitch/privacy";
+import { mintInitialAppIdentityRecord, wrapAppIdentityRecord } from "@splitch/privacy";
 import { expect } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { McpEntrypoint } from "../src/index.js";
@@ -89,8 +85,8 @@ async function seedTenant(d1: D1Database, tenant: TenantFixture, owner: string):
     rootSecret,
     tenant.appId,
   );
-  await env.CONFIG_STORE.put(
-    defaultAppEntityIdentityRecordKey(tenant.appId),
+  await env.CONFIG_STORE_WRITER.getByName(`app-identity:${tenant.appId}`).putAppIdentityIfAbsent(
+    tenant.appId,
     JSON.stringify(identity),
   );
 

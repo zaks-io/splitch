@@ -37,10 +37,6 @@ export function makeInProcessAppIdentityExclusive(): AppIdentityExclusive {
   };
 }
 
-function appIdentityCoordinatorName(appId: string): string {
-  return `app-identity:${appId}`;
-}
-
 function isAppEntityIdentityRecordKey(recordKey: string): boolean {
   return /^app:[^:]+:entity-identity$/u.test(recordKey);
 }
@@ -59,20 +55,4 @@ export async function putWrappedAppIdentityIfAbsent(
   }
   await kv.put(recordKey, value);
   return value;
-}
-
-export function makeDurableAppIdentityPutIfAbsent(namespace: {
-  getByName(name: string): {
-    putAppIdentityIfAbsent(recordKey: string, value: string): Promise<string>;
-  };
-}): (recordKey: string, value: string) => Promise<string> {
-  return (recordKey, value) => {
-    if (!isAppEntityIdentityRecordKey(recordKey)) {
-      throw new Error("privacy: invalid App identity record key");
-    }
-    const appId = recordKey.slice("app:".length, -":entity-identity".length);
-    return namespace
-      .getByName(appIdentityCoordinatorName(appId))
-      .putAppIdentityIfAbsent(recordKey, value);
-  };
 }

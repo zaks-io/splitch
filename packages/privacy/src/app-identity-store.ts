@@ -34,6 +34,13 @@ export interface AppIdentityStore {
   putIfAbsent(appId: string, record: AppIdentityRecord): Promise<AppIdentityRecord>;
 }
 
+export interface AppIdentityCoordinatorNamespace {
+  getByName(name: string): {
+    readAppIdentity?(appId: string): Promise<string | null>;
+    putAppIdentityIfAbsent?(appId: string, value: string): Promise<string>;
+  };
+}
+
 export function mintInitialAppIdentityRecord(rootSecret: string | SaltBytes): AppIdentityRecord {
   const compatibility = rootSecretBytes(rootSecret);
   return {
@@ -130,6 +137,64 @@ export function makeKvAppIdentityStore(options: {
         );
       });
     },
+  };
+}
+
+/** Hosted data-plane store backed only by the App-scoped authoritative coordinator. */
+export function makeDurableAppIdentityStore(options: {
+  namespace: AppIdentityCoordinatorNamespace;
+  rootSecret: string | SaltBytes;
+}): AppIdentityStore {
+  const exclusive = makeInProcessAppIdentityExclusive();
+  return {
+    resetSerialization: "process-local",
+    async load(appId) {
+      const raw = await coordinatorFor(options.namespace, appId).readAppIdentity(appId);
+      if (raw === null) return null;
+      return unwrapAppIdentityRecord(parseWrappedAppIdentityRecord(raw), options.rootSecret, appId);
+    },
+    async save() {
+      throw new Error("privacy: hosted data-plane App identity store is read-only");
+    },
+    runExclusive(appId, fn) {
+      return exclusive.runExclusive(appId, fn);
+    },
+    putIfAbsent(appId, record) {
+      return exclusive.runExclusive(appId, async () => {
+        const wrapped = JSON.stringify(
+          await wrapAppIdentityRecord(record, options.rootSecret, appId),
+        );
+        const winner = await coordinatorFor(options.namespace, appId).putAppIdentityIfAbsent(
+          appId,
+          wrapped,
+        );
+        return unwrapAppIdentityRecord(
+          parseWrappedAppIdentityRecord(winner),
+          options.rootSecret,
+          appId,
+        );
+      });
+    },
+  };
+}
+
+function coordinatorFor(
+  namespace: AppIdentityCoordinatorNamespace,
+  appId: string,
+): {
+  readAppIdentity(appId: string): Promise<string | null>;
+  putAppIdentityIfAbsent(appId: string, value: string): Promise<string>;
+} {
+  const stub = namespace.getByName(`app-identity:${appId}`);
+  if (
+    typeof stub.readAppIdentity !== "function" ||
+    typeof stub.putAppIdentityIfAbsent !== "function"
+  ) {
+    throw new Error("privacy: App identity coordinator is unavailable");
+  }
+  return {
+    readAppIdentity: stub.readAppIdentity.bind(stub),
+    putAppIdentityIfAbsent: stub.putAppIdentityIfAbsent.bind(stub),
   };
 }
 
