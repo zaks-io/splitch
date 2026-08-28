@@ -7,8 +7,10 @@
  *   HMAC_SHA256(root_secret, "app-privacy-salt:" + key_version + ":" + appId)
  *
  * Version stays in the message so a later key-version bump is a new identity
- * epoch without rotating the deployment secret. The raw Targeting Key is never
- * an input here.
+ * epoch without rotating the deployment secret. Historical shared-root prefixes
+ * (`v1`, `local-v1`) are not derived here; the salt store serves the raw root
+ * for those versions so retained rows stay comparable. The raw Targeting Key is
+ * never an input here.
  */
 
 import { hmacSha256, utf8Bytes } from "./hmac";

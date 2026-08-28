@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AssignmentStoreValueSchema } from "@splitch/contracts";
+import { assignmentKey, AssignmentStoreValueSchema } from "@splitch/contracts";
+import { computeTargetingKeyHash } from "@splitch/privacy";
 import { Miniflare } from "miniflare";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
@@ -209,6 +210,36 @@ describe("KvAssignmentStore isolation and validation", () => {
     expect(appB.entityKey).not.toBe(appA.entityKey);
     expect(appA.targetingKeyHash).not.toBe(appB.targetingKeyHash);
     expect(appA.targetingKeyHash).not.toContain(RAW_TARGETING_KEY);
+  });
+
+  it("does not treat a historical shared-root holdover as the current identity", async () => {
+    const saltStore = makeEnvSaltStore({
+      EVALUATION_PRIVACY_SALT: "test-root-secret-do-not-use",
+      SPLITCH_PLATFORM_TARGET: "production",
+    });
+    const historicalHash = await computeTargetingKeyHash(saltStore, {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+      keyVersion: "local-v1",
+    });
+    const historicalKey = assignmentKey(basePut.appId, basePut.idType, historicalHash);
+    const kv = new RecordingKv();
+    kv.putRaw(
+      historicalKey,
+      serializeAssignmentValue({ "exp-checkout": { runId: "run-old", variant: "control" } }),
+    );
+
+    const store = new KvAssignmentStore(kv, new RecordingWriterNamespace(), saltStore);
+    const current = await hashedAssignmentIdentity(saltStore, basePut);
+    const holdovers = await store.getAll(basePut);
+
+    expect(historicalHash.startsWith("local-v1:")).toBe(true);
+    expect(current.targetingKeyHash.startsWith("app-v1:")).toBe(true);
+    expect(current.targetingKeyHash).not.toBe(historicalHash);
+    expect(current.entityKey).not.toBe(historicalKey);
+    expect(holdovers.size).toBe(0);
+    expect(kv.getCalls).toEqual([current.entityKey]);
   });
 
   it("does not let App B read App A's Entity assignment key", async () => {

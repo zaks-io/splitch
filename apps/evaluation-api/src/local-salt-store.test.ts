@@ -17,7 +17,7 @@ describe("makeEnvSaltStore", () => {
       await computeTargetingKeyHash(store, input),
     );
     expect(await computeTargetingKeyHash(store, input)).toBe(
-      "v1:c3c8eb207113cce7a3c68d7091a8daf3f65b1a83fb164822c78114dc06f8f28b",
+      "app-v1:45f18403be72b778d418f62c9a0283fc4ab44bee3bc6fba1a5927543e021c01a",
     );
   });
 
@@ -37,10 +37,10 @@ describe("makeEnvSaltStore", () => {
       targetingKey: TARGETING_KEY,
     });
     expect(appA.targetingKeyHash).toBe(
-      "v1:c3c8eb207113cce7a3c68d7091a8daf3f65b1a83fb164822c78114dc06f8f28b",
+      "app-v1:45f18403be72b778d418f62c9a0283fc4ab44bee3bc6fba1a5927543e021c01a",
     );
     expect(appB.targetingKeyHash).toBe(
-      "v1:a2903009a4ebba676f9a7b8231718dff12e45988a97981c26b07dbab480751d9",
+      "app-v1:faeb3e98503b6d0a3d4c3174c6bf9090cd0222b823cdc95d8a3a9a16c9c24450",
     );
     expect(appA.entityKey).not.toBe(appB.entityKey);
     expect(appA.targetingKeyHash).not.toContain(TARGETING_KEY);
@@ -57,7 +57,17 @@ describe("makeEnvSaltStore", () => {
       idType: "user",
       targetingKey: TARGETING_KEY,
     });
-    expect(current.startsWith("v1:")).toBe(true);
+    expect(current.startsWith("app-v1:")).toBe(true);
+    const historical = await computeTargetingKeyHash(store, {
+      appId: "app_1",
+      idType: "user",
+      targetingKey: TARGETING_KEY,
+      keyVersion: "local-v1",
+    });
+    expect(historical).toBe(
+      "local-v1:485bdba84f840c9627db32bcc99a6f00722b5253754e513ff473c90a8febc588",
+    );
+    expect(historical).not.toBe(current);
     await expect(
       computeTargetingKeyHash(store, {
         appId: "app_1",

@@ -8,6 +8,10 @@
  *     key_version + ":" + HMAC_SHA256(app_privacy_salt[key_version],
  *                                     id_type + ":" + targetingKey)
  *
+ * Current writes use identity epoch `app-v1` (App-derived salt). Historical
+ * `v1:` and `local-v1:` prefixes stay pinned to the shared-root algorithm so
+ * retained rows remain comparable. A new epoch never reuses those prefixes.
+ *
  * WHY Web Crypto (crypto.subtle), not node:crypto: this runs on the Cloudflare
  * Worker edge runtime, which exposes the WebCrypto API and not Node's crypto.
  * subtle.sign is async, so the public API is async — callers await it.

@@ -85,6 +85,7 @@ const handler = {
 const delegatedHandler = {
   async fetch(request, env, ctx): Promise<Response> {
     requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+    makeMetricEventSaltStore(env);
     const url = new URL(request.url);
     const observability = observabilityFor(env, ctx);
     const internal = await handleInternalRoute(request, env, observability, url);

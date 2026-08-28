@@ -2,6 +2,8 @@
 export { deriveAppPrivacySalt } from "./derive-app-salt";
 export {
   DEFAULT_PRIVACY_KEY_VERSION,
+  HISTORICAL_SHARED_ROOT_KEY_VERSIONS,
+  isHistoricalSharedRootKeyVersion,
   LOCAL_PRIVACY_SALT_FIXTURE,
   makeDerivedSaltStore,
   resolvePrivacyRootSecret,

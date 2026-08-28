@@ -15,9 +15,9 @@ const VECTORS = {
   saltApp1V1: "c2c6a7099fb4bb90c940cdebddf5780871fa3dcd59c5d5effddf3ebdbf0c6e3a",
   saltApp2V1: "3e38a3ca690b6a34b3a2af293634e6b85a539d08f9d41a9b23d607e5cfe75c75",
   saltApp1V2: "384e0d8ddb66ff8d57684348a6363c5d1111161a8c0883d181694748c5e6b89a",
-  hashApp1V1: "v1:c3c8eb207113cce7a3c68d7091a8daf3f65b1a83fb164822c78114dc06f8f28b",
-  hashApp2V1: "v1:a2903009a4ebba676f9a7b8231718dff12e45988a97981c26b07dbab480751d9",
-  hashApp1V2: "v2:aaa495c63d334b3772f9dfb524a17864c279b0f6b98627799405ba5129258069",
+  hashApp1Current: "app-v1:45f18403be72b778d418f62c9a0283fc4ab44bee3bc6fba1a5927543e021c01a",
+  hashApp2Current: "app-v1:faeb3e98503b6d0a3d4c3174c6bf9090cd0222b823cdc95d8a3a9a16c9c24450",
+  hashApp1Next: "app-v2:586e48f427b16fccc92d83edf23636a5321321fc32f3526bcad8074b32bc12c7",
 } as const;
 
 describe("deriveAppPrivacySalt", () => {
@@ -71,14 +71,14 @@ describe("deriveAppPrivacySalt", () => {
 describe("makeDerivedSaltStore", () => {
   const store = makeDerivedSaltStore({
     rootSecret: ROOT,
-    currentKeyVersion: "v1",
-    allowedKeyVersions: ["v1", "v2"],
+    currentKeyVersion: "app-v1",
+    allowedKeyVersions: ["app-v1", "app-v2", "v1", "local-v1"],
   });
 
   it("hashes the same Targeting Key identically within one App", async () => {
     const input = { appId: "app_1", idType: "user", targetingKey: "user-123" } as const;
-    expect(await computeTargetingKeyHash(store, input)).toBe(VECTORS.hashApp1V1);
-    expect(await computeTargetingKeyHash(store, input)).toBe(VECTORS.hashApp1V1);
+    expect(await computeTargetingKeyHash(store, input)).toBe(VECTORS.hashApp1Current);
+    expect(await computeTargetingKeyHash(store, input)).toBe(VECTORS.hashApp1Current);
   });
 
   it("hashes the same Targeting Key differently across Apps under one root", async () => {
@@ -92,28 +92,28 @@ describe("makeDerivedSaltStore", () => {
       idType: "user",
       targetingKey: "user-123",
     });
-    expect(a).toBe(VECTORS.hashApp1V1);
-    expect(b).toBe(VECTORS.hashApp2V1);
+    expect(a).toBe(VECTORS.hashApp1Current);
+    expect(b).toBe(VECTORS.hashApp2Current);
     expect(a).not.toBe(b);
   });
 
-  it("proves key-version behavior: pinned historical versions stay resolvable and distinct", async () => {
-    const v1 = await computeTargetingKeyHash(store, {
+  it("proves key-version behavior: pinned derived versions stay resolvable and distinct", async () => {
+    const current = await computeTargetingKeyHash(store, {
       appId: "app_1",
       idType: "user",
       targetingKey: "user-123",
-      keyVersion: "v1",
+      keyVersion: "app-v1",
     });
-    const v2 = await computeTargetingKeyHash(store, {
+    const next = await computeTargetingKeyHash(store, {
       appId: "app_1",
       idType: "user",
       targetingKey: "user-123",
-      keyVersion: "v2",
+      keyVersion: "app-v2",
     });
-    expect(v1).toBe(VECTORS.hashApp1V1);
-    expect(v2).toBe(VECTORS.hashApp1V2);
-    expect(v1).not.toBe(v2);
-    expect(await store.currentKeyVersion("app_1")).toBe("v1");
+    expect(current).toBe(VECTORS.hashApp1Current);
+    expect(next).toBe(VECTORS.hashApp1Next);
+    expect(current).not.toBe(next);
+    expect(await store.currentKeyVersion("app_1")).toBe("app-v1");
   });
 
   it("fails loud on an unknown salt version", async () => {
@@ -127,9 +127,19 @@ describe("makeDerivedSaltStore", () => {
     ).rejects.toThrow(/unknown salt version/);
   });
 
-  it("defaults the current version to v1", async () => {
+  it("defaults the current version to the App-derived identity epoch", async () => {
     const defaulted = makeDerivedSaltStore({ rootSecret: ROOT });
     expect(await defaulted.currentKeyVersion("app_1")).toBe(DEFAULT_PRIVACY_KEY_VERSION);
+    expect(DEFAULT_PRIVACY_KEY_VERSION).toBe("app-v1");
+  });
+
+  it("rejects making a historical shared-root prefix the current write epoch", () => {
+    expect(() => makeDerivedSaltStore({ rootSecret: ROOT, currentKeyVersion: "v1" })).toThrow(
+      /historical shared-root/,
+    );
+    expect(() => makeDerivedSaltStore({ rootSecret: ROOT, currentKeyVersion: "local-v1" })).toThrow(
+      /historical shared-root/,
+    );
   });
 });
 
