@@ -25,6 +25,7 @@ authoritative Config Store DO; control-plane readers rebuild KV from D1 (see
 | `ck:{keyMaterialHash}` / `ak:{keyHash}`                 | `CredentialCacheKV`  | active: none; revoked: 5m    | Mutable credential entry; prefixes distinguish Client Keys from API Keys                     |
 | `revoked:{credentialCacheKey}`                          | presence marker      | none                         | Terminal revocation marker; checked before the mutable credential entry                      |
 | `member-profile:{userId}`                               | `{ email }`          | none                         | SESSION_STORE identity cache for Org member email; written at login, never in D1             |
+| `app:{appId}:entity-identity`                           | wrapped identity key | none                         | AES-GCM wrapped `app_entity_identity_key` plus epoch id (ADR-0044); CONFIG_STORE only        |
 
 ### FlagConfigKV
 

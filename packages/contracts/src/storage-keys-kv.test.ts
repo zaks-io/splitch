@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   apiKeyCacheKey,
+  appIdentityKeyRecordKey,
   assignmentKey,
   clientKeyCacheKey,
   credentialRevocationCacheKey,
@@ -52,6 +53,12 @@ describe("credential cache key-pattern constructors", () => {
 describe("member profile identity-cache key", () => {
   it("memberProfileCacheKey produces member-profile:{userId}", () => {
     expect(memberProfileCacheKey("user_01ABC")).toBe("member-profile:user_01ABC");
+  });
+});
+
+describe("App identity-key record (ADR-0044)", () => {
+  it("appIdentityKeyRecordKey produces app:{appId}:entity-identity", () => {
+    expect(appIdentityKeyRecordKey("app_1")).toBe("app:app_1:entity-identity");
   });
 });
 

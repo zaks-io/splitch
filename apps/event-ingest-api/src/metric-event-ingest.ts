@@ -1,4 +1,5 @@
 import {
+  appIdentityKeyRecordKey,
   EventDefinitionHotConfigSchema,
   eventDefinitionConfigKey,
   isLocalPlatformTarget,
@@ -7,17 +8,21 @@ import {
   requirePlatformTarget,
 } from "@splitch/contracts";
 import {
-  computeTargetingKeyHash,
-  makeDerivedSaltStore,
+  INGEST_IDENTITY_EPOCH,
+  makeKvIdentityKeyPersist,
+  makeMemoryIdentityKeyPersist,
+  makePersistedIdentitySaltStore,
   resolvePrivacyRootSecret,
+  targetingKeyHashesForLookup,
 } from "@splitch/privacy";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
 import {
   admitAndClaimMetricEvent,
-  canonicalJson,
+  fingerprintMetricEvent,
   replayExistingMetricEvent,
   schemaMismatch,
+  sha256Prefixed,
 } from "./metric-event-admission";
 import { checkMetricEventRateLimit } from "./metric-event-rate-limit";
 import type { Env } from "./types";
@@ -35,24 +40,42 @@ export async function handleAuthorizedMetricEvent(
   const limited = await enforceCredentialRateLimit(env, credential);
   if (limited) return limited;
 
-  const targetingKeyHash = await computeTargetingKeyHash(makeMetricEventSaltStore(env), {
+  const hashes = await targetingKeyHashesForLookup(makeMetricEventSaltStore(env), {
     appId: credential.appId,
     idType: parsed.idType,
     targetingKey: parsed.targetingKey,
   });
-  const fingerprint = await sha256(
-    canonicalJson({
-      eventName: parsed.eventName,
-      idType: parsed.idType,
-      targetingKeyHash,
-      fields: parsed.fields,
-      dimensions: parsed.dimensions,
-    }),
+  const targetingKeyHash = hashes[0];
+  if (targetingKeyHash === undefined) {
+    return renderError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Metric Event identity hash is unavailable",
+      details: {},
+    });
+  }
+  const fingerprints = await Promise.all(
+    hashes.map((hash) =>
+      fingerprintMetricEvent({
+        eventName: parsed.eventName,
+        idType: parsed.idType,
+        targetingKeyHash: hash,
+        fields: parsed.fields,
+        dimensions: parsed.dimensions,
+      }),
+    ),
   );
-  const dedupKey = await sha256(
+  const fingerprint = fingerprints[0];
+  if (fingerprint === undefined) {
+    return renderError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Metric Event identity hash is unavailable",
+      details: {},
+    });
+  }
+  const dedupKey = await sha256Prefixed(
     `metric:${credential.appId}:${credential.environmentId}:${parsed.eventId}`,
   );
-  const replay = await replayExistingMetricEvent(env, parsed.eventId, dedupKey, fingerprint);
+  const replay = await replayExistingMetricEvent(env, parsed.eventId, dedupKey, fingerprints);
   if (replay) return replay;
 
   const hot = await loadDefinition(env, credential.appId, parsed.eventName);
@@ -185,19 +208,20 @@ async function loadDefinition(env: Env, appId: string, eventName: string) {
 
 export function makeMetricEventSaltStore(env: Env) {
   const target = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
-  return makeDerivedSaltStore({
-    rootSecret: resolvePrivacyRootSecret({
-      configuredSalt: env.EVALUATION_PRIVACY_SALT,
-      localFixtureAllowed: isLocalPlatformTarget(target),
-    }),
+  const rootSecret = resolvePrivacyRootSecret({
+    configuredSalt: env.EVALUATION_PRIVACY_SALT,
+    localFixtureAllowed: isLocalPlatformTarget(target),
+  });
+  const persist = env.CONFIG_STORE
+    ? makeKvIdentityKeyPersist(env.CONFIG_STORE, appIdentityKeyRecordKey)
+    : makeMemoryIdentityKeyPersist();
+  return makePersistedIdentitySaltStore({
+    persist,
+    rootSecret,
+    currentKeyVersion: INGEST_IDENTITY_EPOCH,
   });
 }
 
 function validation(message: string, path: string[]) {
   return { code: "VALIDATION_ERROR" as const, message, details: { issues: [{ path, message }] } };
-}
-
-async function sha256(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return `sha256:${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }

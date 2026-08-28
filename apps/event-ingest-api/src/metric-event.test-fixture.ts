@@ -160,6 +160,9 @@ function mergedConfigStore(base: KVNamespace | undefined, values: Map<string, st
     async get(key: string) {
       return values.get(key) ?? (base ? ((await base.get(key)) as string | null) : null);
     },
+    async put(key: string, value: string) {
+      values.set(key, value);
+    },
   } as KVNamespace;
 }
 

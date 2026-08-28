@@ -1,10 +1,17 @@
-import { computeTargetingKeyHash, LOCAL_PRIVACY_SALT_FIXTURE } from "@splitch/privacy";
+import {
+  computeTargetingKeyHash,
+  LOCAL_PRIVACY_SALT_FIXTURE,
+  makeMemoryIdentityKeyPersist,
+  makePersistedIdentitySaltStore,
+  mintAppIdentityEpoch,
+} from "@splitch/privacy";
 import { describe, expect, it } from "vitest";
 import { hashedAssignmentIdentity } from "./assignment/assignment-store";
 import { makeEnvSaltStore } from "./local-salt-store";
 
 const ROOT = "test-root-secret-do-not-use";
 const TARGETING_KEY = "user-123";
+const HISTORICAL = "local-v1:485bdba84f840c9627db32bcc99a6f00722b5253754e513ff473c90a8febc588";
 
 describe("makeEnvSaltStore", () => {
   it("hashes the same Targeting Key identically within one App", async () => {
@@ -16,12 +23,10 @@ describe("makeEnvSaltStore", () => {
     expect(await computeTargetingKeyHash(store, input)).toBe(
       await computeTargetingKeyHash(store, input),
     );
-    expect(await computeTargetingKeyHash(store, input)).toBe(
-      "app-v1:45f18403be72b778d418f62c9a0283fc4ab44bee3bc6fba1a5927543e021c01a",
-    );
+    expect(await computeTargetingKeyHash(store, input)).toBe(HISTORICAL);
   });
 
-  it("hashes the same Targeting Key differently in two Apps under one deployment secret", async () => {
+  it("bootstraps a shared-root compat epoch until each App identity key is minted", async () => {
     const store = makeEnvSaltStore({
       EVALUATION_PRIVACY_SALT: ROOT,
       SPLITCH_PLATFORM_TARGET: "shared-preview",
@@ -36,18 +41,47 @@ describe("makeEnvSaltStore", () => {
       idType: "user",
       targetingKey: TARGETING_KEY,
     });
-    expect(appA.targetingKeyHash).toBe(
-      "app-v1:45f18403be72b778d418f62c9a0283fc4ab44bee3bc6fba1a5927543e021c01a",
-    );
-    expect(appB.targetingKeyHash).toBe(
-      "app-v1:faeb3e98503b6d0a3d4c3174c6bf9090cd0222b823cdc95d8a3a9a16c9c24450",
-    );
+    expect(appA.targetingKeyHash).toBe(HISTORICAL);
+    expect(appB.targetingKeyHash).toBe(HISTORICAL);
     expect(appA.entityKey).not.toBe(appB.entityKey);
     expect(appA.targetingKeyHash).not.toContain(TARGETING_KEY);
-    expect(appB.targetingKeyHash).not.toContain(TARGETING_KEY);
   });
 
-  it("keeps pinned key versions distinct and rejects unknown versions", async () => {
+  it("isolates two Apps after minting independent identity keys under one KEK", async () => {
+    const persist = makeMemoryIdentityKeyPersist();
+    await mintAppIdentityEpoch({
+      persist,
+      appId: "app_1",
+      kekMaterial: ROOT,
+      epochId: "epoch-a",
+    });
+    await mintAppIdentityEpoch({
+      persist,
+      appId: "app_2",
+      kekMaterial: ROOT,
+      epochId: "epoch-b",
+    });
+    const store = makePersistedIdentitySaltStore({
+      persist,
+      rootSecret: ROOT,
+      currentKeyVersion: "local-v1",
+    });
+    const appA = await hashedAssignmentIdentity(store, {
+      appId: "app_1",
+      idType: "user",
+      targetingKey: TARGETING_KEY,
+    });
+    const appB = await hashedAssignmentIdentity(store, {
+      appId: "app_2",
+      idType: "user",
+      targetingKey: TARGETING_KEY,
+    });
+    expect(appA.targetingKeyHash).not.toBe(appB.targetingKeyHash);
+    expect(appA.targetingKeyHash.startsWith("epoch-a:")).toBe(true);
+    expect(appB.targetingKeyHash.startsWith("epoch-b:")).toBe(true);
+  });
+
+  it("keeps historical prefixes resolvable and rejects unknown versions", async () => {
     const store = makeEnvSaltStore({
       EVALUATION_PRIVACY_SALT: ROOT,
       SPLITCH_PLATFORM_TARGET: "production",
@@ -57,17 +91,17 @@ describe("makeEnvSaltStore", () => {
       idType: "user",
       targetingKey: TARGETING_KEY,
     });
-    expect(current.startsWith("app-v1:")).toBe(true);
-    const historical = await computeTargetingKeyHash(store, {
+    expect(current).toBe(HISTORICAL);
+    const leftover = await computeTargetingKeyHash(store, {
       appId: "app_1",
       idType: "user",
       targetingKey: TARGETING_KEY,
-      keyVersion: "local-v1",
+      keyVersion: "app-v1",
     });
-    expect(historical).toBe(
-      "local-v1:485bdba84f840c9627db32bcc99a6f00722b5253754e513ff473c90a8febc588",
+    expect(leftover).toBe(
+      "app-v1:45f18403be72b778d418f62c9a0283fc4ab44bee3bc6fba1a5927543e021c01a",
     );
-    expect(historical).not.toBe(current);
+    expect(leftover).not.toBe(current);
     await expect(
       computeTargetingKeyHash(store, {
         appId: "app_1",
@@ -89,6 +123,7 @@ describe("makeEnvSaltStore", () => {
     const localHash = await computeTargetingKeyHash(localStore, input);
     expect(localHash).toBe(await computeTargetingKeyHash(prCiStore, input));
     expect(localHash).toBe(await computeTargetingKeyHash(configuredLocal, input));
+    expect(localHash.startsWith("local-v1:")).toBe(true);
     expect(localHash).not.toBe(
       await computeTargetingKeyHash(
         makeEnvSaltStore({

@@ -1,5 +1,10 @@
 import { eventDefinitionConfigKey } from "@splitch/contracts";
-import { computeTargetingKeyHash } from "@splitch/privacy";
+import {
+  computeTargetingKeyHash,
+  makeMemoryIdentityKeyPersist,
+  makePersistedIdentitySaltStore,
+  mintAppIdentityEpoch,
+} from "@splitch/privacy";
 import { describe, expect, it, vi } from "vitest";
 import worker from "./index";
 import { ingestAdmissionScopeName } from "./ingest-admission-config";
@@ -13,6 +18,7 @@ import {
   metricEventBody,
   sendMetricEvent,
 } from "./metric-event.test-fixture";
+import { fingerprintMetricEvent, sha256Prefixed } from "./metric-event-admission";
 import { handleAuthorizedMetricEvent, makeMetricEventSaltStore } from "./metric-event-ingest";
 import { TestExecutionContext } from "./test-fixtures";
 
@@ -172,24 +178,95 @@ describe("Metric Event ingest", () => {
   });
 });
 
+describe("Metric Event identity retries", () => {
+  it("accepts an exact retry whose claim used a leftover app-v1 Targeting Key hash", async () => {
+    const fixture = await makeMetricEventFixture();
+    const body = metricEventBody();
+    const leftoverHash = await computeTargetingKeyHash(makeMetricEventSaltStore(fixture.env), {
+      appId: METRIC_APP_ID,
+      idType: String(body.idType),
+      targetingKey: String(body.targetingKey),
+      keyVersion: "app-v1",
+    });
+    const fingerprint = await fingerprintMetricEvent({
+      eventName: String(body.eventName),
+      idType: String(body.idType),
+      targetingKeyHash: leftoverHash,
+      fields: body.fields,
+      dimensions: body.dimensions,
+    });
+    fixture.claims.set(
+      await sha256Prefixed(
+        `metric:${METRIC_APP_ID}:${METRIC_ENVIRONMENT_ID}:${String(body.eventId)}`,
+      ),
+      {
+        fingerprint,
+        eventDefinitionId: "edv_1",
+        eventDefinitionVersionId: "edv_1",
+      },
+    );
+
+    const retry = await sendMetricEvent(fixture, body);
+
+    expect(leftoverHash.startsWith("app-v1:")).toBe(true);
+    expect(retry.status).toBe(202);
+    expect(await retry.json()).toMatchObject({
+      duplicate: true,
+      eventDefinitionVersionId: "edv_1",
+    });
+    expect(fixture.claims.size).toBe(1);
+    expect(fixture.admissionCharges).toHaveLength(0);
+  });
+});
+
 describe("Metric Event privacy salts", () => {
-  it("hashes the same Targeting Key differently across Apps under one root", async () => {
+  it("bootstraps retained v1 hashes and keeps leftover app-v1 resolvable", async () => {
     const store = makeMetricEventSaltStore({
       EVALUATION_PRIVACY_SALT: "test-root-secret-do-not-use",
       SPLITCH_PLATFORM_TARGET: "production",
     } as never);
     const input = { idType: "user", targetingKey: "user-123" } as const;
-    const appA = await computeTargetingKeyHash(store, { ...input, appId: "app_1" });
-    const appB = await computeTargetingKeyHash(store, { ...input, appId: "app_2" });
-    expect(appA).toBe("app-v1:45f18403be72b778d418f62c9a0283fc4ab44bee3bc6fba1a5927543e021c01a");
-    expect(appB).toBe("app-v1:faeb3e98503b6d0a3d4c3174c6bf9090cd0222b823cdc95d8a3a9a16c9c24450");
-    const historical = await computeTargetingKeyHash(store, {
+    const current = await computeTargetingKeyHash(store, { ...input, appId: "app_1" });
+    const otherApp = await computeTargetingKeyHash(store, { ...input, appId: "app_2" });
+    const leftover = await computeTargetingKeyHash(store, {
       ...input,
       appId: "app_1",
-      keyVersion: "v1",
+      keyVersion: "app-v1",
     });
-    expect(historical).toBe("v1:485bdba84f840c9627db32bcc99a6f00722b5253754e513ff473c90a8febc588");
-    expect(historical).not.toBe(appA);
+    expect(current).toBe("v1:485bdba84f840c9627db32bcc99a6f00722b5253754e513ff473c90a8febc588");
+    expect(otherApp).toBe(current);
+    expect(leftover).toBe(
+      "app-v1:45f18403be72b778d418f62c9a0283fc4ab44bee3bc6fba1a5927543e021c01a",
+    );
+    expect(leftover).not.toBe(current);
+  });
+
+  it("isolates two Apps after minting independent identity keys under one KEK", async () => {
+    const persist = makeMemoryIdentityKeyPersist();
+    const rootSecret = "test-root-secret-do-not-use";
+    await mintAppIdentityEpoch({
+      persist,
+      appId: "app_1",
+      kekMaterial: rootSecret,
+      epochId: "epoch-a",
+    });
+    await mintAppIdentityEpoch({
+      persist,
+      appId: "app_2",
+      kekMaterial: rootSecret,
+      epochId: "epoch-b",
+    });
+    const store = makePersistedIdentitySaltStore({
+      persist,
+      rootSecret,
+      currentKeyVersion: "v1",
+    });
+    const input = { idType: "user", targetingKey: "user-123" } as const;
+    const appA = await computeTargetingKeyHash(store, { ...input, appId: "app_1" });
+    const appB = await computeTargetingKeyHash(store, { ...input, appId: "app_2" });
+    expect(appA).not.toBe(appB);
+    expect(appA.startsWith("epoch-a:")).toBe(true);
+    expect(appB.startsWith("epoch-b:")).toBe(true);
   });
 
   it("rejects a missing hosted root salt or platform target", () => {

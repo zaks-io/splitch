@@ -6,18 +6,36 @@ import { claimMetricEvent, lookupMetricEvent } from "./metric-event-outbox";
 import { validateMetricEvent } from "./metric-event-validation";
 import type { Env } from "./types";
 
+export async function fingerprintMetricEvent(input: {
+  eventName: string;
+  idType: string;
+  targetingKeyHash: string;
+  fields: unknown;
+  dimensions: unknown;
+}): Promise<string> {
+  return sha256Prefixed(
+    canonicalJson({
+      eventName: input.eventName,
+      idType: input.idType,
+      targetingKeyHash: input.targetingKeyHash,
+      fields: input.fields,
+      dimensions: input.dimensions,
+    }),
+  );
+}
+
 export async function replayExistingMetricEvent(
   env: Env,
   eventId: string,
   dedupKey: string,
-  fingerprint: string,
+  compatibleFingerprints: readonly string[],
 ): Promise<Response | null> {
   try {
     const existing = await lookupMetricEvent(env.METRIC_EVENT_OUTBOX, dedupKey);
     if (existing === null) return null;
-    if (existing.fingerprint !== fingerprint) return eventIdConflict(eventId);
+    if (!compatibleFingerprints.includes(existing.fingerprint)) return eventIdConflict(eventId);
     const replay = await claimMetricEvent(env.METRIC_EVENT_OUTBOX, dedupKey, {
-      fingerprint,
+      fingerprint: existing.fingerprint,
       eventDefinitionId: existing.eventDefinitionId,
       eventDefinitionVersionId: existing.eventDefinitionVersionId,
       row: {},
@@ -98,7 +116,7 @@ export function schemaMismatch(
   });
 }
 
-export function canonicalJson(value: unknown): string {
+function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value as Record<string, unknown>)
@@ -124,6 +142,11 @@ async function chargeNewMetricEvent(
     [row],
     "Metric Event ingest admission capacity exceeded",
   );
+}
+
+export async function sha256Prefixed(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return `sha256:${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
 function eventIdConflict(eventId: string): Response {

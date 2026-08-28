@@ -6,7 +6,7 @@ import {
   CURRENT_KV_SCHEMA_VERSION,
   kvEnvelope,
 } from "@splitch/contracts";
-import { computeTargetingKeyHash, type SaltStore } from "@splitch/privacy";
+import { targetingKeyHashesForLookup, type SaltStore } from "@splitch/privacy";
 import { AssignmentStoreError } from "@splitch/evaluation-core";
 
 export type { AssignmentStoreEntry } from "@splitch/contracts";
@@ -74,11 +74,41 @@ export async function hashedAssignmentIdentity(
   saltStore: SaltStore,
   input: AssignmentIdentity,
 ): Promise<{ entityKey: string; targetingKeyHash: string }> {
-  const targetingKeyHash = await computeTargetingKeyHash(saltStore, input);
+  const hashes = await targetingKeyHashesForLookup(saltStore, input);
+  const targetingKeyHash = hashes[0];
+  if (targetingKeyHash === undefined) {
+    throw new AssignmentStoreError("privacy: no Targeting Key hash for assignment identity");
+  }
   return {
     entityKey: assignmentKey(input.appId, input.idType, targetingKeyHash),
     targetingKeyHash,
   };
+}
+
+export async function resolveAssignmentHoldover(
+  kv: Pick<AssignmentKv, "get">,
+  saltStore: SaltStore,
+  input: AssignmentIdentity,
+  logger?: AssignmentStoreLogger,
+): Promise<{
+  entityKey: string;
+  targetingKeyHash: string;
+  assignments: AssignmentStoreValue;
+}> {
+  const hashes = await targetingKeyHashesForLookup(saltStore, input);
+  let fallback: { entityKey: string; targetingKeyHash: string } | undefined;
+  for (const targetingKeyHash of hashes) {
+    const entityKey = assignmentKey(input.appId, input.idType, targetingKeyHash);
+    const assignments = await readAssignmentValue(kv, entityKey, logger);
+    if (Object.keys(assignments).length > 0) {
+      return { entityKey, targetingKeyHash, assignments };
+    }
+    fallback ??= { entityKey, targetingKeyHash };
+  }
+  if (fallback === undefined) {
+    throw new AssignmentStoreError("privacy: no Targeting Key hash for assignment identity");
+  }
+  return { ...fallback, assignments: {} };
 }
 
 export function assignmentWriterName(

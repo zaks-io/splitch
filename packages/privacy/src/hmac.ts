@@ -28,3 +28,7 @@ export async function hmacSha256Hex(key: SaltBytes, message: string): Promise<st
 export function utf8Bytes(value: string): SaltBytes {
   return new TextEncoder().encode(value) as SaltBytes;
 }
+
+export async function sha256Bytes(data: BufferSource): Promise<SaltBytes> {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", data)) as SaltBytes;
+}

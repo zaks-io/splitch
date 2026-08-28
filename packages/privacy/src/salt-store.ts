@@ -27,15 +27,25 @@ export type SaltBytes = Uint8Array<ArrayBuffer>;
  */
 export interface SaltStore {
   /**
-   * The salt version to stamp on NEW hashes for this App (the latest active
-   * version). Lazy rotation means this can advance without rewriting old rows.
+   * The identity epoch to stamp on NEW hashes for this App. Routine KEK
+   * rotation must not change this value or the underlying identity key.
    */
   currentKeyVersion(appId: string): Promise<KeyVersion>;
 
   /**
-   * The raw secret salt bytes for `(appId, keyVersion)`. MUST throw if the
-   * version is unknown for the App — a wrong or empty salt silently corrupts
-   * every derived hash and breaks export/delete matching.
+   * The HMAC key for `(appId, keyVersion)`. MUST throw if the version is
+   * unknown for the App — a wrong or empty key silently corrupts every derived
+   * hash and breaks export/delete matching.
    */
   saltFor(appId: string, keyVersion: KeyVersion): Promise<SaltBytes>;
+
+  /**
+   * Current write hash plus retained-epoch hashes that must still join, retry,
+   * export, or delete. Optional on test fakes that only have one epoch.
+   */
+  compatibleTargetingKeyHashes?(input: {
+    appId: string;
+    idType: string;
+    targetingKey: string;
+  }): Promise<string[]>;
 }
