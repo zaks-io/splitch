@@ -163,12 +163,20 @@ async function expectOwnerMemberships(registration: Registration): Promise<void>
   expect(app?.role).toBe("owner");
 }
 
+/**
+ * Mirrors the Control Plane's own wiring (apps/control-plane-api/src/index.ts),
+ * `membershipAccess` included: the bearer resolver rechecks live Org and App
+ * membership before scope checks and throws when that port is missing, so a
+ * resolver built without it answers every request with a blank 500 rather than
+ * the 200/403 split this test is here to pin.
+ */
 async function makeControlPlaneApp(): Promise<TestApp> {
-  const [appModule, authModule, jwksModule, sessionModule] = await Promise.all([
+  const [appModule, authModule, jwksModule, sessionModule, membershipModule] = await Promise.all([
     import(new URL("../../control-plane-api/src/app.ts", import.meta.url).href),
     import(new URL("../../control-plane-api/src/auth-resolver.ts", import.meta.url).href),
     import(new URL("../../control-plane-api/src/jwks-verify.ts", import.meta.url).href),
     import(new URL("../../control-plane-api/src/session-store.ts", import.meta.url).href),
+    import(new URL("../../control-plane-api/src/token-membership.ts", import.meta.url).href),
   ]);
   const verifier = jwksModule.makeJwksVerifier({
     fetchJwks: async () => {
@@ -177,13 +185,15 @@ async function makeControlPlaneApp(): Promise<TestApp> {
     },
     controlPlaneAudience: CONTROL_PLANE_ORIGIN,
   });
+  const repo = createRepository(local.d1);
   return appModule.createApp({
     authResolver: authModule.makeControlPlaneAuthResolver({
       verifier,
       sessions: sessionModule.makeSessionStore(local.sessionKv),
+      membershipAccess: membershipModule.makeTokenMembershipAccess(repo),
     }),
     rateLimiter: () => ({ limited: false }),
-    repo: createRepository(local.d1),
+    repo,
   });
 }
 
