@@ -75,6 +75,7 @@ describe("cross-surface observability wiring", () => {
             indexSource.includes("wrapWorkerHandler") ||
             indexSource.includes("workerObservabilityWithWaitUntil"),
         ).toBe(true);
+        expect(indexSource.includes("wrapWorkerHandler")).toBe(true);
         return;
       }
       if (surface.id === "cli") {
@@ -95,4 +96,14 @@ describe("cross-surface observability wiring", () => {
       expect(surfaceKindFor(surface.id)).toBe(surface.kind);
     });
   }
+
+  it("applies the shared Worker baseline from wrapWorkerHandler so a new Worker cannot omit it", () => {
+    const wrapperSource = readFileSync(
+      join(repoRoot, "packages/observability/src/worker.ts"),
+      "utf8",
+    );
+    expect(wrapperSource).toContain("applyResponseHeaders");
+    expect(wrapperSource).toContain("WORKER_BASELINE_SECURITY_HEADERS");
+    expect(wrapperSource).toContain("applyWorkerBaselineHeaders");
+  });
 });

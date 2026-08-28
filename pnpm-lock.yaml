@@ -178,6 +178,9 @@ importers:
       '@splitch/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@splitch/worker-runtime':
+        specifier: workspace:*
+        version: link:../../packages/worker-runtime
       '@tanstack/react-query':
         specifier: ^5.101.4
         version: 5.101.4(react@19.2.8)

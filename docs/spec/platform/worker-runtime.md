@@ -104,7 +104,10 @@ not move queue or Tinybird ownership into `@splitch/worker-runtime`.
 - Route-declared rate-limit class application
 - Idempotency header validation and replay hook plumbing
 - Shared `ErrorResponse` status mapping and JSON response helpers
-- Request ID propagation and safe default headers
+- Request ID propagation and safe default headers (`X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`). The registrar always merges this
+  baseline; `wrapWorkerHandler` stamps it on every Worker fetch response. Existing
+  CORS, session, redirect, and route-specific security headers are never overwritten.
 
 ## What the runtime does not own
 

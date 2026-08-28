@@ -25,6 +25,10 @@ export interface RegistrarDeps {
   authResolvers: Partial<Record<ResolvableAuthKind, AuthResolver>>;
   rateLimiter: RateLimiter;
   observability?: Observability;
-  /** Headers merged onto every response the guard renders (e.g. security headers). */
+  /**
+   * Extra headers merged onto every response the guard renders. The baseline
+   * security policy is always applied; these only add names the baseline does
+   * not already carry.
+   */
   defaultHeaders?: Record<string, string>;
 }
