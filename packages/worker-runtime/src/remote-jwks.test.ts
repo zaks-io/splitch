@@ -27,6 +27,29 @@ describe("remote JWKS signature verification", () => {
     expect(fetchJwks).toHaveBeenCalledTimes(2);
   });
 
+  it("verifies against a streamed JWKS response", async () => {
+    const trusted = await keypair("streamed");
+    const body = new TextEncoder().encode(JSON.stringify(trusted.jwks));
+    const split = Math.floor(body.byteLength / 2);
+    const fetchJwks = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(body.slice(0, split));
+              controller.enqueue(body.slice(split));
+              controller.close();
+            },
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    const verifier = remoteJwksSignatureVerifier(uniqueJwksUri(), { fetch: fetchJwks });
+
+    await expect(verifier.verify(await sign(trusted, { sub: "streamed" }))).resolves.toBe(true);
+    expect(fetchJwks).toHaveBeenCalledOnce();
+  });
+
   it("contains attacker-controlled signature failures but leaves JWKS faults loud", async () => {
     const trusted = await keypair("trusted");
     const attacker = await keypair("attacker");

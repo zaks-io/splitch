@@ -6,12 +6,10 @@
  * grant network reachability: an unvalidated host would let stored tenant input
  * become SSRF when ID-JAG resumes.
  *
- * Create-time parsing rejects unsafe URL shape and non-global IP literals.
- * Hostnames are re-checked on the live connection before any HTTP is sent:
- * see `fetchTrustedJwks`. A legacy D1 row cannot bypass either gate.
+ * Create-time parsing rejects unsafe URL shape and every IP literal. The same
+ * parser runs again immediately before fetch, so a legacy D1 row cannot bypass
+ * the boundary.
  */
-
-import { isGlobalIPv4, isGlobalIPv6, parseIPv4, parseIPv6 } from "./jwks-ip";
 
 export type JwksUrlParse = { ok: true; href: string } | { ok: false; error: string };
 
@@ -58,15 +56,12 @@ function hostError(url: URL): JwksUrlParse | null {
   if (host === "localhost" || host.endsWith(".localhost")) {
     return fail("jwks_uri host is not allowed");
   }
-  const ipv4 = parseIPv4(host);
-  if (ipv4 !== null) {
-    return isGlobalIPv4(ipv4) ? null : fail("jwks_uri host is not allowed");
-  }
-  const ipv6 = parseIPv6(host);
-  if (ipv6 !== null) {
-    return isGlobalIPv6(ipv6) ? null : fail("jwks_uri host is not allowed");
-  }
-  return host.includes(":") ? fail("jwks_uri host is not allowed") : null;
+  return isIpLiteral(host) ? fail("jwks_uri host is not allowed") : null;
+}
+
+function isIpLiteral(host: string): boolean {
+  const unbracketed = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+  return unbracketed.includes(":") || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(unbracketed);
 }
 
 function hasExplicitAuthorityPort(raw: string): boolean {

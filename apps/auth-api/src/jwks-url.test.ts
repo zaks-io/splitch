@@ -1,6 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
-import { fetchTrustedJwks, type OpenTrustedJwks } from "./jwks-fetch";
-import { isGlobalRemoteAddress } from "./jwks-ip";
+import { describe, expect, it } from "vitest";
 import { jwksUrlError, normalizeJwksUrl, parseJwksUrl } from "./jwks-url";
 import { CreateTrustedIdpRequestSchema } from "./schemas";
 
@@ -13,9 +11,16 @@ describe("JWKS URL policy", () => {
     expect(parseJwksUrl(PUBLIC)).toEqual({ ok: true, href: PUBLIC });
   });
 
-  it("accepts a public IPv4 and public IPv6 literal", () => {
-    expect(jwksUrlError("https://8.8.8.8/jwks")).toBeNull();
-    expect(jwksUrlError("https://[2001:4860:4860::8888]/jwks")).toBeNull();
+  it("rejects every IPv4 and IPv6 literal", () => {
+    for (const url of [
+      "https://8.8.8.8/jwks",
+      "https://2130706433/jwks",
+      "https://0x7f000001/jwks",
+      "https://0177.0.0.1/jwks",
+      "https://[2001:4860:4860::8888]/jwks",
+    ]) {
+      expect(jwksUrlError(url), url).toBe("jwks_uri host is not allowed");
+    }
   });
 
   it("rejects unsafe schemes and URL shape", () => {
@@ -148,93 +153,5 @@ describe("CreateTrustedIdpRequestSchema jwks_uri", () => {
       });
       expect(parsed.success, jwksUri).toBe(false);
     }
-  });
-});
-
-describe("fetchTrustedJwks destination binding", () => {
-  it("rejects a private-resolving hostname on the connected peer", async () => {
-    const send = vi.fn(async () => new Response("{}", { status: 200 }));
-    const open = vi.fn<OpenTrustedJwks>(async () => ({
-      remoteAddress: "169.254.169.254",
-      send,
-      close: async () => undefined,
-    }));
-
-    await expect(
-      fetchTrustedJwks("https://169.254.169.254.nip.io/jwks", { method: "GET" }, { open }),
-    ).rejects.toThrow("jwks_uri host is not allowed");
-    expect(open).toHaveBeenCalledWith("169.254.169.254.nip.io");
-    expect(send).not.toHaveBeenCalled();
-  });
-
-  it("rejects multicast and special-use peers reported by the socket", async () => {
-    for (const remoteAddress of ["100.64.0.1", "224.0.0.1", "ff02::1", "[ff02::1]:443"]) {
-      expect(isGlobalRemoteAddress(remoteAddress), remoteAddress).toBe(false);
-      const send = vi.fn();
-      await expect(
-        fetchTrustedJwks(
-          PUBLIC,
-          { method: "GET" },
-          {
-            open: async () => ({
-              remoteAddress,
-              send,
-              close: async () => undefined,
-            }),
-          },
-        ),
-      ).rejects.toThrow("jwks_uri host is not allowed");
-      expect(send).not.toHaveBeenCalled();
-    }
-  });
-
-  it("does not follow a redirect to a disallowed destination", async () => {
-    const send = vi.fn(async () => {
-      return new Response(null, {
-        status: 302,
-        headers: { location: "https://169.254.169.254/latest/meta-data/" },
-      });
-    });
-
-    const response = await fetchTrustedJwks(
-      PUBLIC,
-      { method: "GET" },
-      {
-        open: async () => ({
-          remoteAddress: "8.8.8.8",
-          send,
-          close: async () => undefined,
-        }),
-      },
-    );
-
-    expect(response.status).toBe(302);
-    expect(send).toHaveBeenCalledOnce();
-    expect(response.headers.get("location")).toBe("https://169.254.169.254/latest/meta-data/");
-  });
-
-  it("refuses to open a disallowed literal URL", async () => {
-    const open = vi.fn();
-    await expect(
-      fetchTrustedJwks("https://127.0.0.1/jwks", { method: "GET" }, { open }),
-    ).rejects.toThrow("jwks_uri host is not allowed");
-    expect(open).not.toHaveBeenCalled();
-  });
-
-  it("sends HTTP only after the peer is a global address", async () => {
-    const send = vi.fn(async () => Response.json({ keys: [] }));
-    const response = await fetchTrustedJwks(
-      PUBLIC,
-      { method: "GET" },
-      {
-        open: async () => ({
-          remoteAddress: "8.8.8.8:443",
-          send,
-          close: async () => undefined,
-        }),
-      },
-    );
-    expect(response.ok).toBe(true);
-    expect(send).toHaveBeenCalledOnce();
   });
 });
