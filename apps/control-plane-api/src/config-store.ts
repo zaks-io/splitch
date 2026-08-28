@@ -29,6 +29,7 @@ import {
   type FlagConfigResyncInput,
   repairFlagConfigSnapshot,
 } from "./config-store-snapshot-maintenance";
+import { DeletedFlagConfigSnapshotError } from "./config-store-snapshot-revision";
 import { replaceTargetingRules } from "./config-store-targeting-rules";
 import { baselineIsUnresolvable, nextBaselineRollout } from "./flag-config-rollout";
 import { SegmentNotFoundError } from "./targeting-rule-resolution";
@@ -92,7 +93,14 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
     },
 
     async repairFlagConfigSnapshot(input) {
-      return catchSegmentNotFound(() => repairFlagConfigSnapshot(deps, input));
+      try {
+        return await catchSegmentNotFound(() => repairFlagConfigSnapshot(deps, input));
+      } catch (cause) {
+        if (cause instanceof DeletedFlagConfigSnapshotError) {
+          return { ok: false, reason: "FLAG_NOT_FOUND" };
+        }
+        throw cause;
+      }
     },
 
     async writeFlagConfig(input) {

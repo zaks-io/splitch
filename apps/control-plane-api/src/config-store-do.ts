@@ -10,6 +10,7 @@ import { appScope, createRepository, envScope } from "@splitch/db";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import type { EvaluationFlagConfigRead, EvaluationFlagConfigSnapshot } from "./config-store-access";
 import { buildSnapshotFromD1 } from "./config-store-shared";
+import { makeDurableSnapshotRevisionAllocator } from "./config-store-snapshot-revision";
 import type { ControlPlaneApiEnv } from "./env";
 
 // biome-ignore lint/performance/noBarrelFile: preserve the existing DO import surface while keeping the access seam in a small file
@@ -170,7 +171,7 @@ export class ConfigStoreDurableObject
       repo: createRepository(this.env.DB),
       kv: this.env.CONFIG_STORE,
       broadcaster: { broadcast: (nudge) => this.broadcast(nudge) },
-      nextSnapshotRevision: () => nextSnapshotRevision(this.ctx.storage),
+      nextSnapshotRevision: makeDurableSnapshotRevisionAllocator(this.ctx.storage),
       logger: console,
     });
   }
@@ -223,20 +224,10 @@ export class ConfigStoreDurableObject
 }
 
 export const LIVE_UPDATE_CONTEXT_HEADER = "x-splitch-live-update-context";
-const SNAPSHOT_REVISION_KEY = "control-plane-snapshot-revision";
 const AUTHORIZATION_POLICY_CLOSE_CODE = 1008;
 
 const PANEL_SESSION_KEY_PREFIX = "session:";
 
-async function nextSnapshotRevision(storage: DurableObjectStorage): Promise<number> {
-  const current = (await storage.get<number>(SNAPSHOT_REVISION_KEY)) ?? 0;
-  if (!Number.isSafeInteger(current) || current < 0 || current === Number.MAX_SAFE_INTEGER) {
-    throw new Error("config-store: invalid snapshot revision state");
-  }
-  const next = current + 1;
-  await storage.put(SNAPSHOT_REVISION_KEY, next);
-  return next;
-}
 const SESSION_REVALIDATION_INTERVAL_MS = 60_000;
 const LIVE_UPDATES_AVAILABLE_KEY = "liveUpdatesAvailable";
 const SERVICE_RESTART_CLOSE_CODE = 1012;

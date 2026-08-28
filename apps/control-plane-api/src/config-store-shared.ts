@@ -53,7 +53,7 @@ export async function readFlagSnapshot(
       scope,
       fromD1,
       responseFromSnapshot(fromD1),
-      await deps.nextSnapshotRevision(),
+      await deps.nextSnapshotRevision({ flagId, operation: "repair" }),
     );
     return fromD1;
   }
@@ -166,7 +166,7 @@ export async function writeSnapshotAndBroadcast(
   snapshot: Snapshot,
 ): Promise<FlagConfigWriteResult> {
   const result = flagConfigResult(flagId, snapshot);
-  const snapshotRevision = await deps.nextSnapshotRevision();
+  const snapshotRevision = await deps.nextSnapshotRevision({ flagId, operation: "write" });
   await writeSnapshot(deps.kv, scope, snapshot, result.config, snapshotRevision);
   await deps.broadcaster.broadcast(result.nudge);
   return { ...result, snapshotRevision };

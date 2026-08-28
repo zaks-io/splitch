@@ -1,6 +1,6 @@
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type ConfigStoreWriter, makeConfigStore } from "../src/config-store";
+import { type ConfigStoreDeps, type ConfigStoreWriter, makeConfigStore } from "../src/config-store";
 import {
   type ConfigStoreAccess,
   type ConfigStoreDurableObjectNamespace,
@@ -19,6 +19,7 @@ import {
   type ControlPlaneFlagConfigSnapshot,
   controlPlaneFlagConfigKey,
 } from "../src/config-store-kv";
+import { makeDurableSnapshotRevisionAllocator } from "../src/config-store-snapshot-revision";
 import { makePoolHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -128,9 +129,28 @@ describe("flag_config_get read-your-writes", () => {
     expect((await getFlagConfig(convergedAccess)).status).toBe(404);
     expect(writeThrough.size).toBe(0);
   });
+
+  it("refuses stale-null repair after another isolate records a delete", async () => {
+    const store = makeStore(durableRevisionAllocator());
+    expect(await store.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
+    const key = controlPlaneFlagConfigKey(scope(), ids.flagId);
+
+    expect(await store.deleteFlagConfig(configIdentity())).toMatchObject({
+      ok: true,
+      snapshotRevision: 2,
+    });
+    const otherIsolate = accessFor(store, missingSnapshotKv(h.kv, key), new Map());
+    expect((await getFlagConfig(otherIsolate)).status).toBe(404);
+    expect(JSON.parse(await requiredSnapshot(key))).toMatchObject({
+      revision: 2,
+      state: "deleted",
+    });
+  });
 });
 
-function makeStore(nextSnapshotRevision: () => number): ConfigStoreWriter {
+function makeStore(
+  nextSnapshotRevision: ConfigStoreDeps["nextSnapshotRevision"],
+): ConfigStoreWriter {
   return makeConfigStore({
     repo: h.repo,
     kv: h.kv,
@@ -206,4 +226,28 @@ function staleSnapshotKv(base: KVNamespace, key: string, stale: string): KVNames
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
+}
+
+function missingSnapshotKv(base: KVNamespace, key: string): KVNamespace {
+  return new Proxy(base, {
+    get(target, property) {
+      if (property === "get") {
+        return async (requestedKey: string, ...args: unknown[]) =>
+          requestedKey === key ? null : target.get(requestedKey, ...(args as ["text"]));
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+function durableRevisionAllocator(): ConfigStoreDeps["nextSnapshotRevision"] {
+  const values = new Map<string, unknown>();
+  const storage = {
+    get: async (key: string) => values.get(key),
+    put: async (entries: Record<string, unknown>) => {
+      for (const [key, value] of Object.entries(entries)) values.set(key, value);
+    },
+  } as unknown as DurableObjectStorage;
+  return makeDurableSnapshotRevisionAllocator(storage);
 }

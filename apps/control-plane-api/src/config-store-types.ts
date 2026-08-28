@@ -166,11 +166,16 @@ export type PromoteFlagConfigResult =
     }
   | FlagConfigWriteFailure;
 
+export interface SnapshotRevisionRequest {
+  flagId: string;
+  operation: "write" | "repair" | "delete";
+}
+
 export interface ConfigStoreDeps {
   repo: Repository;
   kv: KVNamespace;
   broadcaster: { broadcast(nudge: DeltaNudge): Promise<void> | void };
-  nextSnapshotRevision(): Promise<number> | number;
+  nextSnapshotRevision(request: SnapshotRevisionRequest): Promise<number> | number;
   logger?: Pick<Console, "warn">;
   now?: () => Date;
 }

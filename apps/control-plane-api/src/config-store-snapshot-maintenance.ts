@@ -34,7 +34,10 @@ export async function repairFlagConfigSnapshot(
   const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
   if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
   const config = responseFromSnapshot(snapshot);
-  const snapshotRevision = await deps.nextSnapshotRevision();
+  const snapshotRevision = await deps.nextSnapshotRevision({
+    flagId: input.flagId,
+    operation: "repair",
+  });
   await writeSnapshot(deps.kv, scope, snapshot, config, snapshotRevision);
   return { ok: true, config, snapshotRevision };
 }
@@ -52,7 +55,10 @@ export async function deleteFlagConfigFromStore(
 
   const existing = await readFlagSnapshot(deps, scope, input.flagId);
   const experimentId = existing?.flag.experimentId ?? null;
-  const snapshotRevision = await deps.nextSnapshotRevision();
+  const snapshotRevision = await deps.nextSnapshotRevision({
+    flagId: input.flagId,
+    operation: "delete",
+  });
   await deleteFlagConfigSnapshot(
     deps.kv,
     scope,
