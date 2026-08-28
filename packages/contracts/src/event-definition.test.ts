@@ -183,4 +183,19 @@ describe("Event Definition publication pre-refinement depth guard", () => {
   it("stays JSON-Schema-representable for MCP tool derivation", () => {
     expect(() => z.toJSONSchema(PublishEventDefinitionVersionRequestSchema)).not.toThrow();
   });
+
+  it("reports the exact unknown field key instead of the union member", () => {
+    const parsed = PublishEventDefinitionVersionRequestSchema.safeParse({
+      entityType: "user",
+      fields: [{ name: "x", type: "boolean", required: false, extra: true }],
+      dimensions: [],
+    });
+    expect(parsed.success).toBe(false);
+    if (parsed.success) return;
+    expect(parsed.error.issues[0]).toMatchObject({
+      code: "unrecognized_keys",
+      keys: ["extra"],
+      path: ["fields", 0],
+    });
+  });
 });

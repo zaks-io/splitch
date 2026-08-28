@@ -59,14 +59,58 @@ export async function parseInput<Schema extends z.ZodTypeAny>(
 }
 
 function validationIssues(error: z.ZodError): Array<{ path: string[]; message: string }> {
-  return error.issues.flatMap((issue) => {
-    if (issue.code === "unrecognized_keys") {
-      return issue.keys.map((key) => ({
-        path: [...issue.path.map(String), key],
-        message: `Unrecognized key: "${key}"`,
+  return error.issues.flatMap(flattenValidationIssue);
+}
+
+function flattenValidationIssue(
+  issue: z.core.$ZodIssue,
+): Array<{ path: string[]; message: string }> {
+  if (issue.code === "unrecognized_keys") {
+    return issue.keys.map((key) => ({
+      path: [...issue.path.map(String), key],
+      message: `Unrecognized key: "${key}"`,
+    }));
+  }
+  if (issue.code === "invalid_union") {
+    const unknownKeys = issue.errors
+      .flat()
+      .flatMap(flattenValidationIssue)
+      .filter(isUnrecognizedKeyIssue)
+      .map((nested) => ({
+        ...nested,
+        path: prefixIssuePath(issue.path, nested.path),
       }));
+    if (unknownKeys.length > 0) {
+      return uniqueValidationIssues(unknownKeys);
     }
-    return [{ path: issue.path.map(String), message: issue.message }];
+  }
+  return [{ path: issue.path.map(String), message: issue.message }];
+}
+
+function prefixIssuePath(parent: PropertyKey[], child: string[]): string[] {
+  const parentPath = parent.map(String);
+  if (
+    child.length >= parentPath.length &&
+    parentPath.every((part, index) => child[index] === part)
+  ) {
+    return child;
+  }
+  return [...parentPath, ...child];
+}
+
+function isUnrecognizedKeyIssue(issue: { message: string }): boolean {
+  return issue.message.startsWith("Unrecognized key: ");
+}
+
+function uniqueValidationIssues(
+  issues: Array<{ path: string[]; message: string }>,
+): Array<{ path: string[]; message: string }> {
+  const seen = new Set<string>();
+  return issues.filter((issue) => {
+    const key = `${issue.path.join("\0")}\0${issue.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 

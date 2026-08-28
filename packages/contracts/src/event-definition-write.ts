@@ -1,8 +1,11 @@
 import { z } from "@hono/zod-openapi";
 import {
+  BooleanDefinitionSchema,
   ClosedJsonSchemaSchema,
   EventDefinitionFamilySchema,
+  NumberDefinitionSchema,
   ScalarDefinitionSchema,
+  StringDefinitionSchema,
   TelemetryTokenSchema,
 } from "./event-definition";
 import { validatePropertyNames } from "./event-definition-validation";
@@ -58,8 +61,10 @@ const WriteJsonFieldDefinitionSchema = z
   })
   .strict();
 
-const WriteEventFieldDefinitionSchema = z.union([
-  ScalarDefinitionSchema,
+const WriteEventFieldDefinitionSchema = z.discriminatedUnion("type", [
+  BooleanDefinitionSchema,
+  StringDefinitionSchema,
+  NumberDefinitionSchema,
   WriteJsonFieldDefinitionSchema,
 ]);
 

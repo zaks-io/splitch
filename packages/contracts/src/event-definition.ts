@@ -26,7 +26,7 @@ export const TelemetryTokenSchema = z
 const finiteNumber = z.number().finite();
 const unique = <T>(values: readonly T[]) => new Set(values).size === values.length;
 
-const BooleanDefinitionSchema = z
+export const BooleanDefinitionSchema = z
   .object({
     name: z.string().min(1),
     type: z.literal("boolean"),
@@ -35,7 +35,7 @@ const BooleanDefinitionSchema = z
   })
   .strict();
 
-const StringDefinitionSchema = z
+export const StringDefinitionSchema = z
   .object({
     name: z.string().min(1),
     type: z.literal("string"),
@@ -48,7 +48,7 @@ const StringDefinitionSchema = z
   })
   .strict();
 
-const NumberDefinitionSchema = z
+export const NumberDefinitionSchema = z
   .object({
     name: z.string().min(1),
     type: z.literal("number"),
