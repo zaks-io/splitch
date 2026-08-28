@@ -57,14 +57,14 @@ SQL >
         events.experiment_id AS experiment_id,
         events.run_id AS run_id,
         events.id_type AS id_type,
-        argMin(targeting_key_hash, server_received_at) AS targeting_key_hash,
+        argMin(targeting_key_hash, exposure_at) AS targeting_key_hash,
         events.entity_family_hash AS entity_family_hash,
         if(
             countIf(isNull(variant)) > 0 OR countDistinct(variant) > 1,
             '__multiple__',
             max(assumeNotNull(variant))
         ) AS variant,
-        min(server_received_at) AS encounter_ts
+        min(exposure_at) AS encounter_ts
     FROM raw_events AS events
     LEFT JOIN entity_deletion_cutoffs AS deletions
         ON deletions.app_id = events.app_id

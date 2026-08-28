@@ -14,14 +14,14 @@ SQL >
         experiment_id,
         run_id,
         id_type,
-        argMin(targeting_key_hash, server_received_at) AS targeting_key_hash,
+        argMin(targeting_key_hash, exposure_at) AS targeting_key_hash,
         entity_family_hash,
         if(
             countIf(isNull(variant)) > 0 OR countDistinct(variant) > 1,
             '__multiple__',
             max(assumeNotNull(variant))
         ) AS variant,
-        min(server_received_at) AS first_exposure_ts,
+        min(exposure_at) AS first_exposure_ts,
         now64(3) AS snapshot_ts,
         copy_watermark AS watermark_ts
     FROM raw_events

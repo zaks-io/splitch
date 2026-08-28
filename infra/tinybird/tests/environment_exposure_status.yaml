@@ -9,6 +9,12 @@
   parameters: "app_id=app_status&environment_id=env_eval_only"
   expected_http_status: 200
   expected_result: ""
+- name: delayed_convex_encounter_time_is_the_environment_first_exposure
+  description: Environment status reports encounter order even when a trusted-adapter Exposure arrives after a later remote Exposure.
+  parameters: "app_id=app_delayed&environment_id=env_prod"
+  expected_http_status: 200
+  expected_result: |
+    {"app_id":"app_delayed","environment_id":"env_prod","first_exposure_at":"2026-07-05 06:00:00.000"}
 - name: another_environment_is_isolated
   description: The App and Environment predicates are both required tenant boundaries.
   parameters: "app_id=app_status&environment_id=env_other"
