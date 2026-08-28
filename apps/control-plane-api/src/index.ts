@@ -100,12 +100,25 @@ const evaluationDelegatedRoutes = routesDelegatedTo("control-plane-api").filter(
   (route) => route.auth === "api-key",
 );
 
+const evaluationHandler = wrapWorkerHandler(
+  {
+    async fetch(request, env, ctx): Promise<Response> {
+      const identity = delegatedIdentityFor(request, evaluationDelegatedRoutes);
+      if (!identity) return notDelegatedResponse(request);
+      return handleRequest(request, env, ctx, { kind: "evaluation", identity });
+    },
+  } satisfies ExportedHandler<ControlPlaneApiEnv>,
+  { surface: "control-plane-api" },
+);
+
 /** Binding-only entrypoint for API-Key Convex routes surfaced by Evaluation. */
 export class EvaluationEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    const identity = delegatedIdentityFor(request, evaluationDelegatedRoutes);
-    if (!identity) return notDelegatedResponse(request);
-    return handleRequest(request, this.env, this.ctx, { kind: "evaluation", identity });
+    return evaluationHandler.fetch(
+      request as Parameters<typeof evaluationHandler.fetch>[0],
+      this.env,
+      this.ctx,
+    );
   }
 
   async loadConvexExposureVerificationConfig(

@@ -107,7 +107,9 @@ not move queue or Tinybird ownership into `@splitch/worker-runtime`.
 - Request ID propagation and safe default headers (`X-Content-Type-Options: nosniff`,
   `Referrer-Policy: strict-origin-when-cross-origin`). The registrar always merges this
   baseline; `wrapWorkerHandler` stamps it on every Worker fetch response. Existing
-  CORS, session, redirect, and route-specific security headers are never overwritten.
+  CORS, session, and redirect headers are never overwritten. Applied security headers
+  take the stronger value: a weaker `frame-ancestors` (including `https:`) is upgraded
+  when a stronger policy is stamped, and unrelated CSP directives are preserved.
 
 ## What the runtime does not own
 

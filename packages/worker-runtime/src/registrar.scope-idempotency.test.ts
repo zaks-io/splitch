@@ -1,4 +1,4 @@
-import { errorCodes, errorStatusByCode, type ErrorResponse } from "@splitch/contracts";
+import { type ErrorResponse, errorCodes, errorStatusByCode } from "@splitch/contracts";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { createRegistrar } from "./registrar";
@@ -282,7 +282,7 @@ describe("guard: fault path + response decoration", () => {
     expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
   });
 
-  it("does not let defaultHeaders weaken a route-specific security header", async () => {
+  it("upgrades a weaker route CSP frame-ancestors and keeps other directives", async () => {
     const reg = createRegistrar(
       deps({ defaultHeaders: { "content-security-policy": "frame-ancestors 'none'" } }),
     );
@@ -291,11 +291,15 @@ describe("guard: fault path + response decoration", () => {
       app,
       route(),
       () =>
-        new Response("ok", { headers: { "content-security-policy": "frame-ancestors 'self'" } }),
+        new Response("ok", {
+          headers: { "content-security-policy": "default-src 'self'; frame-ancestors https:" },
+        }),
     );
 
     const res = await app.request("/things", { method: "POST" });
-    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
+    expect(res.headers.get("content-security-policy")).toBe(
+      "default-src 'self'; frame-ancestors 'none'",
+    );
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
   });
 });

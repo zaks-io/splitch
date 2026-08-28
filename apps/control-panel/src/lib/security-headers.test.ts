@@ -43,14 +43,18 @@ describe("Control Panel anti-framing and baseline headers", () => {
     expectPanelSecurity(rejectedUpgrade);
   });
 
-  it("does not weaken a route that already set a framing header", () => {
+  it("upgrades a permissive frame-ancestors https: CSP and keeps other directives", () => {
     const response = withControlPanelSecurityHeaders(
       new Response("ok", {
-        headers: { "content-security-policy": "frame-ancestors 'self'" },
+        headers: {
+          "content-security-policy": "default-src 'self'; frame-ancestors https:",
+        },
       }),
     );
 
-    expect(response.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
+    expect(response.headers.get("content-security-policy")).toBe(
+      "default-src 'self'; frame-ancestors 'none'",
+    );
     expect(response.headers.get("x-frame-options")).toBe("DENY");
   });
 

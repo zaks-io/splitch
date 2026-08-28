@@ -58,7 +58,7 @@ describe("applyResponseHeaders", () => {
     expectBaseline(error);
   });
 
-  it("does not overwrite CORS, session, redirect, or route security headers", () => {
+  it("keeps CORS, session, and redirect headers while upgrading a weaker CSP", () => {
     const response = applyResponseHeaders(
       new Response(null, {
         status: 302,
@@ -66,7 +66,7 @@ describe("applyResponseHeaders", () => {
           location: "https://auth.splitch.dev/login",
           "access-control-allow-origin": "*",
           "mcp-session-id": "sess_1",
-          "content-security-policy": "frame-ancestors 'self'",
+          "content-security-policy": "default-src 'self'; frame-ancestors https:",
           "x-content-type-options": "nosniff",
         },
       }),
@@ -80,8 +80,21 @@ describe("applyResponseHeaders", () => {
     expect(response.headers.get("location")).toBe("https://auth.splitch.dev/login");
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
     expect(response.headers.get("mcp-session-id")).toBe("sess_1");
-    expect(response.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
+    expect(response.headers.get("content-security-policy")).toBe(
+      "default-src 'self'; frame-ancestors 'none'",
+    );
     expect(response.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+  });
+
+  it("does not weaken an existing frame-ancestors 'none' when extras are looser", () => {
+    const response = applyResponseHeaders(
+      new Response("ok", {
+        headers: { "content-security-policy": "frame-ancestors 'none'" },
+      }),
+      { "content-security-policy": "frame-ancestors 'self'" },
+    );
+
+    expect(response.headers.get("content-security-policy")).toBe("frame-ancestors 'none'");
   });
 
   it("leaves an unread stream readable", async () => {
