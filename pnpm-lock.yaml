@@ -292,6 +292,9 @@ importers:
         specifier: ^4.12.32
         version: 4.12.32
     devDependencies:
+      '@splitch/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       miniflare:
         specifier: ^4.20260722.0
         version: 4.20260722.0

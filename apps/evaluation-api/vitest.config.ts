@@ -8,6 +8,7 @@ const sharedAlias = {
   "@splitch/privacy": fileURLToPath(
     new URL("../../packages/privacy/src/index.ts", import.meta.url),
   ),
+  "@splitch/sdk": fileURLToPath(new URL("../../packages/sdk/src/index.ts", import.meta.url)),
   "@splitch/worker-runtime": fileURLToPath(
     new URL("../../packages/worker-runtime/src/index.ts", import.meta.url),
   ),

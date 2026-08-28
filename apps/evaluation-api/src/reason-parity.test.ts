@@ -1,5 +1,4 @@
 import type {
-  EvaluateAllEntry,
   EvaluateAllReason,
   EvaluateAllResponse,
   FlagConfigKV,
@@ -127,26 +126,11 @@ describe("data-plane reason parity", () => {
 });
 
 async function sdkClientFor(app: Awaited<ReturnType<typeof makeSdkRouteHarness>>["app"]) {
-  const path = new URL("../../../packages/sdk/src/client.ts", import.meta.url).href;
-  const { createSplitchClient } = (await import(/* @vite-ignore */ path)) as {
-    createSplitchClient(options: { clientKey: string; endpoint: string; fetch: typeof fetch }): {
-      evaluate(flagKey: string, context: EvaluationContext): Promise<Variant["value"]>;
-      evaluateDetails(flagKey: string, context: EvaluationContext): Promise<ResolutionDetails>;
-      evaluateAll(context: EvaluationContext): Promise<{
-        evaluations: Readonly<Record<string, EvaluateAllEntry>>;
-      }>;
-      verify(flagKey: string, context: EvaluationContext): Promise<ResolutionDetails>;
-    };
-  };
+  const { createSplitchClient } = await import("@splitch/sdk");
   return createSplitchClient({
     clientKey: CLIENT_KEY,
     endpoint: "https://evaluation.test",
     fetch: ((input: URL | RequestInfo, init?: RequestInit) =>
       app.request(String(input), init)) as typeof fetch,
   });
-}
-
-interface EvaluationContext {
-  readonly targetingKey: string;
-  readonly idempotencyKey: string;
 }

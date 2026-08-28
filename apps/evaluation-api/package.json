@@ -23,6 +23,7 @@
     "hono": "^4.12.32"
   },
   "devDependencies": {
+    "@splitch/sdk": "workspace:*",
     "miniflare": "^4.20260722.0"
   }
 }
