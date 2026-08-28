@@ -1,6 +1,7 @@
 import { timingSafeEqualString } from "@splitch/worker-runtime";
 import { emptyError, renderError, serviceUnavailable } from "./errors";
 import { evaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
+import { rejectIngestAdmission } from "./ingest-admission";
 import { loadRunScope } from "./kv-config";
 import { readJsonObject, stringField } from "./payload";
 import {
@@ -56,12 +57,25 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
   const delivery = tinybirdDelivery(env);
   if (!delivery.ok) return renderError(delivery.error);
 
+  const row = toTinybirdRow(event.value, payload.value);
+  const denied = await rejectIngestAdmission(
+    env.INGEST_ADMISSION_GATE,
+    {
+      appId: credential.value.appId,
+      environmentId: credential.value.environmentId,
+      ingestStream: "raw_events",
+    },
+    [row],
+    "Exposure ingest admission capacity exceeded",
+  );
+  if (denied) return denied;
+
   // The append is AWAITED before the ACK: the upstream Evaluation Worker treats
   // this response as the at-least-once delivery receipt (it 503s the evaluate
   // when the sink fails, so the SDK re-fires). ACKing 202 before Tinybird
   // durability would silently drop the row on an append failure.
   try {
-    await appendRawEvent(toTinybirdRow(event.value, payload.value), delivery.value);
+    await appendRawEvent(row, delivery.value);
   } catch (error) {
     console.error("event-ingest-api Tinybird append failed", {
       appId: event.value.appId,
@@ -98,8 +112,21 @@ export async function handleEvaluationIngest(request: Request, env: Env): Promis
   const delivery = tinybirdDelivery(env, "raw_evaluations");
   if (!delivery.ok) return renderError(delivery.error);
 
+  const row = toEvaluationUsageTinybirdRow(event.value);
+  const denied = await rejectIngestAdmission(
+    env.INGEST_ADMISSION_GATE,
+    {
+      appId: scope.value.appId,
+      environmentId: scope.value.environmentId,
+      ingestStream: "raw_evaluations",
+    },
+    [row],
+    "Evaluation usage ingest admission capacity exceeded",
+  );
+  if (denied) return denied;
+
   try {
-    await appendRawEvent(toEvaluationUsageTinybirdRow(event.value), delivery.value);
+    await appendRawEvent(row, delivery.value);
   } catch (error) {
     console.error("event-ingest-api Tinybird Evaluation append failed", {
       organizationId: event.value.organizationId,

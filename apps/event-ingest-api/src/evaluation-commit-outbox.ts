@@ -1,6 +1,7 @@
 const EVALUATION_COMMIT_REPLAY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export interface EvaluationCommitOutbox {
+  lookup(identity: string): Promise<EvaluationCommit | null>;
   commit(identity: string, payload: unknown): Promise<EvaluationCommit>;
   acknowledge(identity: string): Promise<void>;
 }
@@ -40,6 +41,9 @@ export class EvaluationCommitOutboxDurableObject {
     const identity = await requestIdentity(request);
     if (identity === null) return new Response("invalid commit identity", { status: 400 });
 
+    if (request.method === "POST" && path === "/lookup") {
+      return this.lookup();
+    }
     if (request.method === "POST" && path === "/commit") {
       return this.commit(identity, request);
     }
@@ -54,6 +58,14 @@ export class EvaluationCommitOutboxDurableObject {
     if (state !== undefined && state.expiresAt <= Date.now()) {
       await this.ctx.storage.delete(STATE_KEY);
     }
+  }
+
+  private async lookup(): Promise<Response> {
+    const existing = await this.ctx.storage.get<OutboxState>(STATE_KEY);
+    if (existing === undefined || existing.expiresAt <= Date.now()) {
+      return new Response("commit not found", { status: 404 });
+    }
+    return Response.json(asResponse(existing));
   }
 
   private async commit(identity: string, request: Request): Promise<Response> {
@@ -88,6 +100,19 @@ export class EvaluationCommitOutboxDurableObject {
   }
 }
 
+function parseEvaluationCommit(body: unknown): EvaluationCommit {
+  const commit = body as Partial<EvaluationCommit>;
+  if (
+    typeof commit.eventId !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/.test(commit.eventId) ||
+    commit.payload === undefined ||
+    typeof commit.delivered !== "boolean"
+  ) {
+    throw new Error("Evaluation commit outbox returned an invalid commit");
+  }
+  return commit as EvaluationCommit;
+}
+
 function asResponse(state: OutboxState): EvaluationCommit {
   return {
     eventId: state.eventId,
@@ -100,6 +125,20 @@ function durableEvaluationCommitOutbox(
   namespace: EvaluationCommitOutboxNamespace,
 ): EvaluationCommitOutbox {
   return {
+    async lookup(identity) {
+      const response = await namespace
+        .get(namespace.idFromName(identity))
+        .fetch("https://evaluation-commit-outbox.local/lookup", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ identity }),
+        });
+      if (response.status === 404) return null;
+      if (!response.ok) {
+        throw new Error(`Evaluation commit outbox lookup returned HTTP ${response.status}`);
+      }
+      return parseEvaluationCommit(await response.json());
+    },
     async commit(identity, payload) {
       const response = await namespace
         .get(namespace.idFromName(identity))
@@ -110,16 +149,7 @@ function durableEvaluationCommitOutbox(
         });
       if (!response.ok)
         throw new Error(`Evaluation commit outbox returned HTTP ${response.status}`);
-      const body = (await response.json()) as Partial<EvaluationCommit>;
-      if (
-        typeof body.eventId !== "string" ||
-        !/^sha256:[a-f0-9]{64}$/.test(body.eventId) ||
-        body.payload === undefined ||
-        typeof body.delivered !== "boolean"
-      ) {
-        throw new Error("Evaluation commit outbox returned an invalid commit");
-      }
-      return body as EvaluationCommit;
+      return parseEvaluationCommit(await response.json());
     },
     async acknowledge(identity) {
       const response = await namespace

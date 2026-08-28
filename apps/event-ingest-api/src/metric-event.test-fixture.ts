@@ -7,7 +7,12 @@ import {
 } from "@splitch/contracts";
 import { delegatedRequest } from "@splitch/worker-runtime";
 import { EvaluationEntrypoint } from "./index";
-import { TestExecutionContext } from "./test-fixtures";
+import {
+  type AdmissionCharge,
+  type AdmissionOption,
+  admissionBinding,
+  TestExecutionContext,
+} from "./test-fixtures";
 import type { Env } from "./types";
 
 export const METRIC_APP_ID = "app_shop";
@@ -20,12 +25,6 @@ interface Claim {
   fingerprint: string;
   eventDefinitionId: string;
   eventDefinitionVersionId: string;
-}
-
-interface AdmissionCharge {
-  readonly scope: string;
-  readonly rowCost: number;
-  readonly byteCost: number;
 }
 
 export interface MetricEventFixture {
@@ -42,7 +41,7 @@ export async function makeMetricEventFixture(
   base: Partial<Env> = {},
   credentialKind: "api_key" | "client_key" = "client_key",
   options: {
-    admission?: false | "throw" | { allowed: boolean; retryAfterMs: number };
+    admission?: AdmissionOption;
   } = {},
 ): Promise<MetricEventFixture> {
   const hash = await sha256Hex(METRIC_CLIENT_KEY);
@@ -59,17 +58,7 @@ export async function makeMetricEventFixture(
     CREDENTIAL_STORE: kv(credential),
     CONFIG_STORE: mergedConfigStore(base.CONFIG_STORE, config),
     METRIC_EVENT_OUTBOX: outboxStub(claims),
-    ...(options.admission === false
-      ? { INGEST_ADMISSION_GATE: undefined }
-      : {
-          INGEST_ADMISSION_GATE:
-            options.admission === "throw"
-              ? throwingAdmissionStub()
-              : admissionStub(
-                  admissionCharges,
-                  options.admission ?? { allowed: true, retryAfterMs: 0 },
-                ),
-        }),
+    ...admissionBinding(options.admission, admissionCharges),
   } as unknown as Env;
   return { env, config, claims, admissionCharges, hash, credentialKind };
 }
@@ -185,48 +174,6 @@ function outboxStub(claims: Map<string, Claim>) {
           return requestMethod(input, init) === "GET"
             ? lookupClaim(claims, String(id))
             : claimOrConflict(claims, String(id), JSON.parse(String(init?.body)) as Claim);
-        },
-      };
-    },
-  };
-}
-
-function admissionStub(
-  charges: AdmissionCharge[],
-  decision: { allowed: boolean; retryAfterMs: number },
-) {
-  return {
-    idFromName(name: string) {
-      return name as unknown as DurableObjectId;
-    },
-    get(id: DurableObjectId) {
-      return {
-        async fetch(_input: RequestInfo | URL, init?: RequestInit) {
-          const body = JSON.parse(String(init?.body)) as {
-            rowCost: number;
-            byteCost: number;
-          };
-          charges.push({
-            scope: String(id),
-            rowCost: body.rowCost,
-            byteCost: body.byteCost,
-          });
-          return Response.json(decision);
-        },
-      };
-    },
-  };
-}
-
-function throwingAdmissionStub() {
-  return {
-    idFromName(_name: string) {
-      return _name as unknown as DurableObjectId;
-    },
-    get() {
-      return {
-        async fetch(): Promise<Response> {
-          throw new Error("Ingest Admission Gate is unavailable");
         },
       };
     },
