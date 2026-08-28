@@ -26,8 +26,12 @@ import {
   type SourceFile,
   SyntaxKind,
 } from "typescript";
-import { locationOf, unwrap } from "./hosted-worker-wrap-ast.js";
+import { locationOf } from "./hosted-worker-wrap-ast.js";
 import type { ResolvedBinding } from "./hosted-worker-wrap-scope.js";
+import {
+  expressionAliasesKnownBinding,
+  unsupportedValueFlow,
+} from "./hosted-worker-wrap-value-flow.js";
 
 export type BindingIntegrity =
   | { readonly immutable: true }
@@ -65,7 +69,7 @@ function referenceMutation(
   if (!isIdentifier(node)) return undefined;
   const resolved = resolveBinding(file, node.text, node);
   if (!resolved.declaration || !declarations.has(resolved.declaration)) return undefined;
-  return mutationOfBindingReference(file, node, allowedMethods);
+  return mutationOfBindingReference(file, node, declarations, allowedMethods);
 }
 
 function aliasDeclarations(
@@ -99,15 +103,15 @@ function aliasOfKnownBinding(
   if (!isVariableDeclaration(node) || !isIdentifier(node.name) || !node.initializer) {
     return undefined;
   }
-  const source = unwrap(node.initializer);
-  if (!isIdentifier(source)) return undefined;
-  const resolved = resolveBinding(file, source.text, source);
-  return resolved.declaration && declarations.has(resolved.declaration) ? node : undefined;
+  return expressionAliasesKnownBinding(file, node.initializer, declarations, resolveBinding)
+    ? node
+    : undefined;
 }
 
 function mutationOfBindingReference(
   file: SourceFile,
   reference: Node,
+  declarations: ReadonlySet<Node>,
   allowedMethods: ReadonlySet<string>,
 ): BindingIntegrity | undefined {
   const assignment = containingAssignmentTarget(reference);
@@ -124,6 +128,9 @@ function mutationOfBindingReference(
   const constructorEscape = containingConstructorArgument(reference);
   if (constructorEscape)
     return mutated(file, constructorEscape, "wrapped handler escapes through a constructor");
+  const unsupportedFlow = unsupportedValueFlow(reference, declarations);
+  if (unsupportedFlow)
+    return mutated(file, unsupportedFlow, "wrapped handler escapes through unsupported value flow");
   return unsupportedMethodCall(file, reference, allowedMethods);
 }
 

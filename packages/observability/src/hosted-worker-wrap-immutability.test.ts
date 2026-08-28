@@ -51,6 +51,31 @@ describe("hosted Worker wrap-gate immutable proof", () => {
   });
 
   it.each([
+    ["conditional", "const alias = true ? wrapped : wrapped; alias.fetch = raw.fetch;"],
+    ["comma", "const alias = (0, wrapped); alias.fetch = raw.fetch;"],
+  ])("fails when a %s alias mutates a wrapped handler fetch", (_name, statement) => {
+    expect(defaultExportIsWrapped(wrappedThen(statement))).toBe(false);
+  });
+
+  it("fails when a helper-returned wrapped handler is mutated", () => {
+    const source = wrappedThen(`
+      function getWrapped() {
+        return wrapped;
+      }
+      getWrapped().fetch = raw.fetch;
+    `);
+    expect(defaultExportIsWrapped(source)).toBe(false);
+  });
+
+  it("fails when an arrow-returned wrapped handler is passed to Object.defineProperty", () => {
+    const source = wrappedThen(`
+      const getWrapped = () => wrapped;
+      Object.defineProperty(getWrapped(), "fetch", { value: raw.fetch });
+    `);
+    expect(defaultExportIsWrapped(source)).toBe(false);
+  });
+
+  it.each([
     ["object property", "const holder = { value: wrapped }; holder.value.fetch = raw.fetch;"],
     ["array element", "const holder = [wrapped]; holder[0].fetch = raw.fetch;"],
   ])("fails when %s storage hides a wrapped handler mutation", (_name, statement) => {
