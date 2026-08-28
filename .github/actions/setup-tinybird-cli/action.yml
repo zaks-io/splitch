@@ -1,13 +1,14 @@
 name: Setup Tinybird CLI
 description: Install a pinned Tinybird CLI (`tb`) and put it on PATH.
 
-# `curl https://tinybird.co | sh` always resolves to the latest release, so an
+# The Tinybird installer URL always resolves to the latest release, so an
 # upstream publish could turn CI or a deploy red with no repo change, and CI
 # could validate a different `tb` than the one that deploys minutes later. This
 # pins the artifact and gives the version one owner instead of six copies
-# drifting apart. uv is the installer rather than the thing under test, so it
-# stays floating; the `tb --version` call at the end is the fail-loud proof that
-# the pin actually produced a working binary.
+# drifting apart. Python and uv are installed through SHA-pinned actions at
+# exact versions and checked before uv installs `tb`. uv is forbidden from
+# downloading its own Python. The `tb --version` call at the end is the
+# fail-loud proof that the pin actually produced a working binary.
 
 inputs:
   version:
@@ -18,14 +19,44 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Install pinned Python
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: "3.11.16"
+
+    - name: Install pinned uv
+      uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      env:
+        UV_PYTHON_DOWNLOADS: never
+      with:
+        version: "0.12.4"
+        enable-cache: false
+
     - name: Install pinned Tinybird CLI
       shell: bash
       env:
         TINYBIRD_CLI_VERSION: ${{ inputs.version }}
+        PYTHON_VERSION: 3.11.16
+        UV_VERSION: 0.12.4
+        UV_PYTHON_DOWNLOADS: never
       run: |
         set -euo pipefail
-        curl -LsSf --max-time 120 https://astral.sh/uv/install.sh | sh
-        export PATH="$HOME/.local/bin:$PATH"
-        uv tool install --force --python 3.11 "tinybird==${TINYBIRD_CLI_VERSION}"
+        python_version="$(python --version)"
+        case "$python_version" in
+          "Python ${PYTHON_VERSION}") ;;
+          *)
+            echo "::error::python reports '${python_version}', expected ${PYTHON_VERSION}"
+            exit 1
+            ;;
+        esac
+        uv_version="$(uv --version)"
+        case "$uv_version" in
+          *" ${UV_VERSION}"*) ;;
+          *)
+            echo "::error::uv reports '${uv_version}', expected ${UV_VERSION}"
+            exit 1
+            ;;
+        esac
+        uv tool install --force --python "${PYTHON_VERSION}" "tinybird==${TINYBIRD_CLI_VERSION}"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         tb --no-version-warning --version
