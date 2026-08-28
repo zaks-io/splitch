@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DraftAllocationSchema } from "./draft-allocation";
+import { WriteVariantValueSchema } from "./write-persisted-schemas";
 
 export interface RequestBodyFieldHelp {
   readonly name: string;
@@ -108,6 +109,9 @@ export function zodLiteralValues(schema: z.ZodTypeAny): unknown[] {
 }
 
 function typeLabel(schema: z.ZodTypeAny, depth = 0): string {
+  if (schema === WriteVariantValueSchema) {
+    return "boolean | string | number | unknown[] | Record<string, unknown>";
+  }
   if (depth >= MAX_TYPE_DEPTH) {
     throw new Error(
       `request-body-help: type label exceeded max depth ${MAX_TYPE_DEPTH} (self-referential schema?)`,

@@ -9,6 +9,8 @@ import {
   PatchExperimentRequestSchema,
   StartRunRequestSchema,
 } from "./resource-envelopes-experiment";
+import { CreateFlagRequestSchema } from "./resource-envelopes-flag";
+import { WriteVariantValueSchema } from "./write-persisted-schemas";
 import {
   PatchFlagConfigRequestSchema,
   ReplaceTargetingRulesRequestSchema,
@@ -194,5 +196,20 @@ describe("describeRequestBody", () => {
       },
     });
     expect(() => describeRequestBody(cyclic)).toThrow(/max depth/);
+  });
+});
+
+describe("write Variant value help labels", () => {
+  it("labels the write Variant value schema by identity instead of unrolling JSON depth", () => {
+    const create = describeRequestBody(CreateFlagRequestSchema);
+    expect(create.fields.find((field) => field.name === "variants")?.typeLabel).toContain(
+      "boolean | string | number | unknown[] | Record<string, unknown>",
+    );
+    expect(CreateFlagRequestSchema.safeParse(create.example).success).toBe(true);
+
+    const renamed = describeRequestBody(z.object({ payload: WriteVariantValueSchema }));
+    expect(renamed.fields[0]?.typeLabel).toBe(
+      "boolean | string | number | unknown[] | Record<string, unknown>",
+    );
   });
 });
