@@ -111,8 +111,9 @@ not move queue or Tinybird ownership into `@splitch/worker-runtime`.
   take the stronger value: a weaker `frame-ancestors` (including `https:`) is upgraded
   when a stronger policy is stamped. `Content-Security-Policy` is treated as a CSP3
   policy list (comma-separated policies); each policy is upgraded so a comma cannot
-  hide a weaker `frame-ancestors` from a later deny. Unrelated CSP directives are
-  preserved.
+  hide a weaker `frame-ancestors` from a later deny. Duplicate `frame-ancestors`
+  directives in the same policy collapse to the strongest value so a later weaker
+  duplicate cannot survive. Unrelated CSP directives are preserved.
 
 ## What the runtime does not own
 

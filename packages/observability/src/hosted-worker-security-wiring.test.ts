@@ -14,9 +14,6 @@ import {
 const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 const WRAPPER = WRAP_WORKER_HANDLER;
 
-/** Customer-installable Worker, not a hosted Splitch surface. */
-const NON_HOSTED_WRANGLER = new Set(["packages/cloudflare/wrangler.jsonc"]);
-
 interface WranglerConfig {
   name?: string;
   main?: string;
@@ -46,6 +43,7 @@ describe("hosted Worker security-header wiring", () => {
       "apps/event-ingest-api/wrangler.jsonc",
       "apps/marketing/wrangler.jsonc",
       "apps/mcp-server/wrangler.jsonc",
+      "packages/cloudflare/wrangler.jsonc",
     ]);
   });
 
@@ -237,14 +235,12 @@ function unwrappedBindingFailures(worker: HostedWorker, wrappedClasses: Set<stri
 function discoverHostedWorkers(root: string): HostedWorker[] {
   const workers: HostedWorker[] = [];
   for (const configPath of listWranglerConfigs(root)) {
-    const rel = relative(root, configPath);
-    if (NON_HOSTED_WRANGLER.has(rel)) continue;
     const config = readWranglerConfig(configPath);
     if (!config.main) continue;
     const mainPath = join(dirname(configPath), config.main);
     workers.push({
       configPath,
-      name: config.name ?? rel,
+      name: config.name ?? relative(root, configPath),
       mainPath,
       source: readFileSync(mainPath, "utf8"),
       referencedEntrypoints: collectReferencedEntrypoints(config),

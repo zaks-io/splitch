@@ -441,6 +441,10 @@ importers:
   packages/bounded-body: {}
 
   packages/cloudflare:
+    dependencies:
+      '@splitch/worker-runtime':
+        specifier: workspace:*
+        version: link:../worker-runtime
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.22.0

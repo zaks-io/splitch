@@ -147,16 +147,29 @@ function mergeContentSecurityPolicy(current: string, extra: string): string {
   return serializeCspPolicyList(merged);
 }
 
-/** Keep the first occurrence of each directive name; later duplicates are ignored. */
+/**
+ * One directive per name. `frame-ancestors` keeps the strongest value so a later
+ * weaker duplicate cannot survive; other names keep the first (CSP first-wins).
+ */
 function firstDirectives(policy: CspPolicy): CspPolicy {
-  const seen = new Set<string>();
-  const unique: CspPolicy = [];
+  const byName = new Map<string, CspDirective>();
+  const order: string[] = [];
   for (const directive of policy) {
-    if (seen.has(directive.name)) continue;
-    seen.add(directive.name);
-    unique.push(directive);
+    const existing = byName.get(directive.name);
+    if (!existing) {
+      byName.set(directive.name, { ...directive });
+      order.push(directive.name);
+      continue;
+    }
+    if (directive.name === "frame-ancestors") {
+      existing.value = strongerFrameAncestors(existing.value, directive.value);
+    }
   }
-  return unique;
+  return order.map((name) => {
+    const directive = byName.get(name);
+    if (!directive) throw new Error(`csp: missing collapsed directive ${name}`);
+    return directive;
+  });
 }
 
 function mergeCspDirectives(directives: CspPolicy, extraDirectives: CspPolicy): void {

@@ -144,6 +144,26 @@ describe("applyResponseHeaders", () => {
     );
   });
 
+  it("collapses duplicate frame-ancestors so a later weaker value cannot survive", () => {
+    const response = applyResponseHeaders(
+      new Response("ok", {
+        headers: {
+          "content-security-policy":
+            "default-src 'self'; frame-ancestors 'none'; frame-ancestors https:, script-src 'none'; frame-ancestors https:; frame-ancestors 'self'",
+        },
+      }),
+      { "content-security-policy": "frame-ancestors 'none'" },
+    );
+
+    expect(response.headers.get("content-security-policy")).toBe(
+      "default-src 'self'; frame-ancestors 'none', script-src 'none'; frame-ancestors 'none'",
+    );
+    expect(
+      cspHasDuplicateFrameAncestors(response.headers.get("content-security-policy") ?? ""),
+    ).toBe(false);
+    expect(cspAllowsFraming(response.headers.get("content-security-policy") ?? "")).toBe(false);
+  });
+
   it("does not weaken an existing frame-ancestors 'none' when extras are looser", () => {
     const response = applyResponseHeaders(
       new Response("ok", {

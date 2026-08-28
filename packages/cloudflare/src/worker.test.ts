@@ -65,6 +65,18 @@ describe("Splitch Cloudflare Worker", () => {
     });
   });
 
+  it("stamps the Worker baseline on configuration-push success and error responses", async () => {
+    const missing = await SELF.fetch("https://worker.test/missing", { method: "GET" });
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(missing.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+
+    const accepted = await push(baseSnapshot, "00000000-0000-4000-8000-000000000015");
+    expect(accepted.status).toBe(204);
+    expect(accepted.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(accepted.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+  });
+
   it("rejects invalid signatures and cross-scope snapshots", async () => {
     const invalid = await SELF.fetch(`https://worker.test/integrations/splitch/configuration`, {
       method: "POST",
