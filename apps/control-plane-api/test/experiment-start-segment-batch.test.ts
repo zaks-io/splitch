@@ -12,11 +12,10 @@ import { NOW_ISO } from "../src/flag-definition-test-harness";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 /**
- * `segmentIds` on a draft has no length cap in the contract and is written
- * straight from the request body, so the id set Start resolves is
- * caller-controlled. D1 refuses a statement carrying more than 100 bound
- * parameters, which made a large draft fail with `too many SQL variables`
- * instead of starting.
+ * Draft `segmentIds` use the named domain bound
+ * `PERSISTED_SEGMENT_REF_MAX_ITEMS` (256), not the generic array product cap
+ * of 100. D1 refuses a statement carrying more than 100 bound parameters, which
+ * made a large draft fail with `too many SQL variables` instead of starting.
  */
 let ctx: ExperimentRunHarness;
 

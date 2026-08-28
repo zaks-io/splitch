@@ -1,3 +1,4 @@
+import { PERSISTED_SEGMENT_REF_MAX_ITEMS } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -133,6 +134,40 @@ describe("control-plane nested Experiment write bounds", () => {
       started.run.id,
     );
     expect(run).toMatchObject({ status: "running", endedAt: null });
+  });
+
+  it("rejects over-limit draft Segment refs before any Experiment write", async () => {
+    const fx = await experimentFixture(ctx);
+    const before = await experimentCount(fx.appId);
+    const res = await request(
+      ctx.h,
+      "POST",
+      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments`,
+      fx.jwt,
+      {
+        appId: fx.appId,
+        environmentId: fx.environmentId,
+        name: "too-many-segments",
+        key: "too-many-segments",
+        flagId: fx.flag.id,
+        targetingKey: "userId",
+        targetingKeyType: "user",
+        metrics: [{ metricId: fx.metricId }],
+        segmentIds: Array.from(
+          { length: PERSISTED_SEGMENT_REF_MAX_ITEMS + 1 },
+          (_, index) => `seg_${index}`,
+        ),
+      },
+    );
+
+    expect(res.status).toBe(400);
+    const err = await errorBody(res);
+    expect(err.code).toBe("VALIDATION_ERROR");
+    if (err.code !== "VALIDATION_ERROR") return;
+    expect(err.details.issues.some((issue) => issue.path.join(".") === "body.segmentIds")).toBe(
+      true,
+    );
+    expect(await experimentCount(fx.appId)).toBe(before);
   });
 });
 

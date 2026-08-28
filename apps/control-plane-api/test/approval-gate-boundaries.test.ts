@@ -50,7 +50,6 @@ describe("a failed apply on the targeting-rule path rolls back completely", () =
             {
               id: "rule_attack_c5",
               flagId: ids.flagId,
-              environmentId: ids.environmentId,
               priority: 0,
               conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
               variantId: ids.treatmentVariantId,

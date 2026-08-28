@@ -21,8 +21,8 @@ KV/D1 rows remain readable.
 **Persisted field bounds.** Write envelopes compose named limits from `persisted-field-limits.ts`
 (names 200, descriptions 2000, identifiers 128, Condition values 1024, Variant strings 4096, salts
 128, arrays 100 items, records 64 keys, JSON depth 8, Client Key origins 2048, telemetry enums 256,
-Idempotency Keys 255 printable ASCII without whitespace). Over-limit values fail at parse. Stored
-values are not truncated.
+Experiment draft Segment refs 256, Idempotency Keys 255 printable ASCII without whitespace).
+Over-limit values fail at parse. Stored values are not truncated.
 
 **Optional fields are present-with-null, never omitted.** A field marked optional (`no`) in any
 envelope or leaf schema appears in the JSON with a `null` value rather than being absent. Consumers

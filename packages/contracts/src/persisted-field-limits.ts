@@ -22,6 +22,8 @@ export const PERSISTED_JSON_MAX_DEPTH = 8;
 export const PERSISTED_ORIGIN_MAX_LENGTH = 2048;
 /** Maximum items in a telemetry enum / allowlist (named domain bound, not the array product cap). */
 export const PERSISTED_TELEMETRY_ENUM_MAX_ITEMS = 256;
+/** Maximum Segment ids on an Experiment draft (named domain bound; must exceed D1's 100-parameter IN cap). */
+export const PERSISTED_SEGMENT_REF_MAX_ITEMS = 256;
 
 export const IDEMPOTENCY_KEY_MAX_LENGTH = 255;
 /** Printable ASCII excluding space and control characters. */
@@ -52,6 +54,10 @@ export const IdempotencyKeySchema = z
 
 export function persistedArray<Schema extends z.ZodType>(schema: Schema) {
   return z.array(schema).max(PERSISTED_ARRAY_MAX_ITEMS);
+}
+
+export function persistedSegmentRefArray() {
+  return z.array(PersistedIdentifierSchema).max(PERSISTED_SEGMENT_REF_MAX_ITEMS);
 }
 
 export function persistedRecord<Value extends z.ZodType>(valueSchema: Value) {

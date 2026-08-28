@@ -13,6 +13,7 @@ import {
   PersistedNameSchema,
   PersistedSaltSchema,
   persistedArray,
+  persistedSegmentRefArray,
 } from "./persisted-field-limits";
 import {
   ApprovalRequestSchema,
@@ -78,7 +79,7 @@ export const CreateExperimentRequestSchema = z
     allocation: DraftAllocationSchema.optional(),
     salt: PersistedSaltSchema.optional(),
     targetingRules: persistedArray(TargetingRuleInputSchema).optional(),
-    segmentIds: persistedArray(PersistedIdentifierSchema).optional(),
+    segmentIds: persistedSegmentRefArray().optional(),
     idempotency_key: IdempotencyKeySchema.optional(),
   })
   .strict();
@@ -115,7 +116,7 @@ export const PatchExperimentRequestSchema = z
     // `variantSetNotPatchable` in the control-plane Worker.
     variantSet: persistedArray(VariantSchema).optional(),
     targetingRules: persistedArray(TargetingRuleInputSchema).optional(),
-    segmentIds: persistedArray(PersistedIdentifierSchema).optional(),
+    segmentIds: persistedSegmentRefArray().optional(),
     metrics: persistedArray(WriteMetricRefSchema).optional(),
     guardrailMetrics: persistedArray(WriteMetricRefSchema).optional(),
     conversionWindowMs: z.number().optional(),

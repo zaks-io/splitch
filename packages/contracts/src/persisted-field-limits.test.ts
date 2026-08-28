@@ -6,9 +6,11 @@ import {
   PERSISTED_ARRAY_MAX_ITEMS,
   PERSISTED_NAME_MAX_LENGTH,
   PERSISTED_RECORD_MAX_KEYS,
+  PERSISTED_SEGMENT_REF_MAX_ITEMS,
   PersistedNameSchema,
   persistedArray,
   persistedRecord,
+  persistedSegmentRefArray,
 } from "./persisted-field-limits";
 import { requestBodySchemaForOperation } from "./request-body-help";
 
@@ -34,6 +36,16 @@ describe("persisted field limits", () => {
     expect(
       persistedRecord(PersistedNameSchema).safeParse({ ...record, overflow: "v64" }).success,
     ).toBe(false);
+  });
+
+  it("caps Experiment draft Segment refs at the named domain bound, not the array product cap", () => {
+    const ids = Array.from(
+      { length: PERSISTED_SEGMENT_REF_MAX_ITEMS },
+      (_, index) => `seg_${index}`,
+    );
+    expect(persistedSegmentRefArray().safeParse(ids).success).toBe(true);
+    expect(persistedSegmentRefArray().safeParse([...ids, "seg_overflow"]).success).toBe(false);
+    expect(PERSISTED_SEGMENT_REF_MAX_ITEMS).toBeGreaterThan(PERSISTED_ARRAY_MAX_ITEMS);
   });
 
   it("shares the header idempotency bound and printable-ASCII policy", () => {
