@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   classFetchIsWrapped,
   defaultExportIsWrapped,
+  proveClassFetchWrapped,
+  proveDefaultExportWrapped,
   WRAP_WORKER_HANDLER as WRAPPER,
 } from "./hosted-worker-wrap-gate";
 
@@ -36,18 +38,105 @@ describe("hosted Worker wrap-gate AST fixtures", () => {
     expect(defaultExportIsWrapped(mentioned)).toBe(false);
   });
 
-  it("accepts wrapped object, class, and delegated entrypoints", () => {
-    const wrapped = `
+  it("fails a local wrapWorkerHandler that is not the official import binding", () => {
+    const local = `
+      function ${WRAPPER}(handler: unknown) {
+        return handler;
+      }
+      export default ${WRAPPER}({
+        fetch() {
+          return new Response("ok");
+        },
+      }, { surface: "fixture" });
+    `;
+    expect(defaultExportIsWrapped(local)).toBe(false);
+    expect(proveDefaultExportWrapped(local, "local-wrap.ts").wrapped).toBe(false);
+  });
+
+  it("fails when a local function shadows the official wrapWorkerHandler import", () => {
+    const shadowed = `
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      function ${WRAPPER}(handler: unknown) {
+        return handler;
+      }
+      export default ${WRAPPER}({
+        fetch() {
+          return new Response("ok");
+        },
+      });
+    `;
+    expect(shadowed.includes(`from "@splitch/worker-runtime"`)).toBe(true);
+    expect(defaultExportIsWrapped(shadowed)).toBe(false);
+  });
+
+  it("fails an unwrapped switch return path", () => {
+    const switched = `
       import { WorkerEntrypoint } from "cloudflare:workers";
       import { ${WRAPPER} } from "@splitch/observability/worker";
-      const handler = { fetch() { return new Response("ok"); } };
-      export default ${WRAPPER}(handler, { surface: "fixture" });
-      const delegated = ${WRAPPER}(
-        { fetch() { return new Response("delegated"); } },
+      const wrapped = ${WRAPPER}(
+        { fetch() { return new Response("ok"); } },
         { surface: "fixture" },
       );
+      export default ${WRAPPER}(
+        { fetch() { return new Response("ok"); } },
+        { surface: "fixture" },
+      );
+      export class SwitchDoor extends WorkerEntrypoint {
+        fetch(request: Request) {
+          switch (request.method) {
+            case "GET":
+              return new Response("ok");
+            default:
+              return wrapped.fetch(request, this.env, this.ctx);
+          }
+        }
+      }
+    `;
+    expect(defaultExportIsWrapped(switched)).toBe(true);
+    expect(classFetchIsWrapped(switched, "SwitchDoor")).toBe(false);
+    expect(proveClassFetchWrapped(switched, "SwitchDoor", "switch.ts").location).toMatch(
+      /switch\.ts:\d+:\d+/,
+    );
+  });
+
+  it("fails when finally returns an unwrapped response", () => {
+    const finalized = `
+      import { WorkerEntrypoint } from "cloudflare:workers";
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      const wrapped = ${WRAPPER}({
+        fetch() {
+          return new Response("ok");
+        },
+      });
+      export default class FinallyDoor extends WorkerEntrypoint {
+        fetch(request: Request) {
+          try {
+            return wrapped.fetch(request, this.env, this.ctx);
+          } finally {
+            return new Response("ok");
+          }
+        }
+      }
+    `;
+    expect(defaultExportIsWrapped(finalized)).toBe(false);
+    expect(classFetchIsWrapped(finalized, "FinallyDoor")).toBe(false);
+    expect(proveDefaultExportWrapped(finalized, "finally.ts").location).toMatch(
+      /finally\.ts:\d+:\d+/,
+    );
+  });
+
+  it("accepts wrapped object, class, aliased, namespaced, and delegated entrypoints", () => {
+    const wrapped = `
+      import { WorkerEntrypoint } from "cloudflare:workers";
+      import { ${WRAPPER} as wrap } from "@splitch/observability/worker";
+      import * as runtime from "@splitch/worker-runtime";
+      const handler = { fetch() { return new Response("ok"); } };
+      export default wrap(handler, { surface: "fixture" });
+      const delegated = runtime.${WRAPPER}(
+        { fetch() { return new Response("delegated"); } },
+      );
       function bindingHandler() {
-        return ${WRAPPER}(
+        return wrap(
           { fetch() { return new Response("bound"); } },
           { surface: "fixture" },
         );
@@ -69,123 +158,37 @@ describe("hosted Worker wrap-gate AST fixtures", () => {
     expect(classFetchIsWrapped(wrapped, "BoundDoor")).toBe(true);
   });
 
-  it("fails a local wrapWorkerHandler that shadows the official import name", () => {
-    const shadowed = `
-      function ${WRAPPER}(handler: { fetch(): Response }) {
-        return handler;
-      }
-      export default ${WRAPPER}({ fetch() { return new Response("ok"); } });
-    `;
-    expect(shadowed.includes(`${WRAPPER}(`)).toBe(true);
-    expect(defaultExportIsWrapped(shadowed)).toBe(false);
-  });
-
-  it("fails wrapWorkerHandler imported from a non-official module", () => {
-    const localImport = `
-      import { ${WRAPPER} } from "./local-wrapper";
-      export default ${WRAPPER}({ fetch() { return new Response("ok"); } }, { surface: "fixture" });
-    `;
-    expect(defaultExportIsWrapped(localImport)).toBe(false);
-  });
-
-  it("fails a switch fetch path that returns one unwrapped response", () => {
-    const mixed = `
+  it("accepts a default-exported class that delegates fetch to the official wrap", () => {
+    const cloudflare = `
       import { WorkerEntrypoint } from "cloudflare:workers";
-      import { ${WRAPPER} } from "@splitch/observability/worker";
-      const wrapped = ${WRAPPER}(
-        { fetch() { return new Response("ok"); } },
-        { surface: "fixture" },
-      );
-      export class SwitchDoor extends WorkerEntrypoint {
-        fetch(request: Request) {
-          switch (request.method) {
-            case "GET":
-              return new Response("ok");
-            default:
-              return wrapped.fetch(request, this.env, this.ctx);
-          }
-        }
-      }
-    `;
-    expect(classFetchIsWrapped(mixed, "SwitchDoor")).toBe(false);
-  });
-
-  it("fails when finally returns an unwrapped response over a wrapped try", () => {
-    const leaked = `
-      import { WorkerEntrypoint } from "cloudflare:workers";
-      import { ${WRAPPER} } from "@splitch/observability/worker";
-      const wrapped = ${WRAPPER}(
-        { fetch() { return new Response("ok"); } },
-        { surface: "fixture" },
-      );
-      export class FinallyDoor extends WorkerEntrypoint {
-        fetch(request: Request) {
-          try {
-            return wrapped.fetch(request, this.env, this.ctx);
-          } finally {
-            return new Response("ok");
-          }
-        }
-      }
-    `;
-    expect(classFetchIsWrapped(leaked, "FinallyDoor")).toBe(false);
-  });
-
-  it("accepts switch and try/catch/finally when every reachable path is wrapped", () => {
-    const covered = `
-      import { WorkerEntrypoint } from "cloudflare:workers";
-      import { ${WRAPPER} } from "@splitch/observability/worker";
-      const wrapped = ${WRAPPER}(
-        { fetch() { return new Response("ok"); } },
-        { surface: "fixture" },
-      );
-      export class CoveredDoor extends WorkerEntrypoint {
-        fetch(request: Request) {
-          switch (request.method) {
-            case "GET":
-              return wrapped.fetch(request, this.env, this.ctx);
-            default:
-              try {
-                return wrapped.fetch(request, this.env, this.ctx);
-              } catch {
-                return wrapped.fetch(request, this.env, this.ctx);
-              } finally {
-                void request;
-              }
-          }
-        }
-      }
-    `;
-    expect(classFetchIsWrapped(covered, "CoveredDoor")).toBe(true);
-  });
-
-  it("fails an unwrapped default WorkerEntrypoint class like packages/cloudflare", () => {
-    const unwrapped = `
-      import { WorkerEntrypoint } from "cloudflare:workers";
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      const configurationHandler = ${WRAPPER}({
+        fetch(request: Request, env: Env) {
+          return new Response(env.ok);
+        },
+      });
       export default class SplitchCloudflareWorker extends WorkerEntrypoint {
         fetch(request: Request) {
-          return handleConfigurationPush(request, this.env);
+          return configurationHandler.fetch(request, this.env, this.ctx);
         }
       }
     `;
-    expect(defaultExportIsWrapped(unwrapped)).toBe(false);
-    expect(classFetchIsWrapped(unwrapped, "SplitchCloudflareWorker")).toBe(false);
+    expect(defaultExportIsWrapped(cloudflare)).toBe(true);
+    expect(classFetchIsWrapped(cloudflare, "SplitchCloudflareWorker")).toBe(true);
   });
 
-  it("accepts a default WorkerEntrypoint class that applies the official baseline", () => {
-    const wrapped = `
-      import { WorkerEntrypoint } from "cloudflare:workers";
-      import { applyResponseHeaders, WORKER_BASELINE_SECURITY_HEADERS } from "@splitch/worker-runtime";
-      export default class SplitchCloudflareWorker extends WorkerEntrypoint {
-        async fetch(request: Request) {
-          return applyResponseHeaders(
-            await handleConfigurationPush(request, this.env),
-            WORKER_BASELINE_SECURITY_HEADERS,
-          );
+  it("fails closed on unsupported syntax with a file location", () => {
+    const unsupported = `
+      import { ${WRAPPER} } from "@splitch/worker-runtime";
+      export default function handler() {
+        with (globalThis) {
+          return ${WRAPPER}({ fetch() { return new Response("ok"); } });
         }
       }
     `;
-    expect(defaultExportIsWrapped(wrapped)).toBe(true);
-    expect(classFetchIsWrapped(wrapped, "SplitchCloudflareWorker")).toBe(true);
+    const proof = proveDefaultExportWrapped(unsupported, "with.ts");
+    expect(proof.wrapped).toBe(false);
+    expect(proof.reason).toMatch(/unsupported syntax/);
+    expect(proof.location).toMatch(/with\.ts:\d+:\d+/);
   });
 });

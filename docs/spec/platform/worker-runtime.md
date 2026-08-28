@@ -106,14 +106,17 @@ not move queue or Tinybird ownership into `@splitch/worker-runtime`.
 - Shared `ErrorResponse` status mapping and JSON response helpers
 - Request ID propagation and safe default headers (`X-Content-Type-Options: nosniff`,
   `Referrer-Policy: strict-origin-when-cross-origin`). The registrar always merges this
-  baseline; `wrapWorkerHandler` stamps it on every Worker fetch response. Existing
-  CORS, session, and redirect headers are never overwritten. Applied security headers
-  take the stronger value: a weaker `frame-ancestors` (including `https:`) is upgraded
-  when a stronger policy is stamped. `Content-Security-Policy` is treated as a CSP3
-  policy list (comma-separated policies); each policy is upgraded so a comma cannot
-  hide a weaker `frame-ancestors` from a later deny. Duplicate `frame-ancestors`
-  directives in the same policy collapse to the strongest value so a later weaker
-  duplicate cannot survive. Unrelated CSP directives are preserved.
+  baseline; the official `@splitch/worker-runtime` `wrapWorkerHandler` stamps it on
+  every Worker fetch response. Hosted Workers may import the same-named wrapper from
+  `@splitch/observability/worker`, which applies this baseline plus Sentry. The wrap
+  gate proves that import binding; comments, strings, helpers, local functions, and
+  shadowed names do not count. Existing CORS, session, and redirect headers are never
+  overwritten. Applied security headers take the stronger value: a weaker
+  `frame-ancestors` (including `https:`) is upgraded when a stronger policy is stamped.
+  `Content-Security-Policy` is treated as a CSP3 policy list (comma-separated
+  policies); each policy is upgraded so a comma cannot hide a weaker `frame-ancestors`
+  from a later deny. Duplicate `frame-ancestors` directives in one policy are
+  collapsed to the strongest value. Unrelated CSP directives are preserved.
 
 ## What the runtime does not own
 

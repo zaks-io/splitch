@@ -37,6 +37,26 @@ describe("Splitch Cloudflare Worker", () => {
   beforeEach(() => vi.useRealTimers());
   afterEach(() => vi.unstubAllGlobals());
 
+  it("stamps the Worker baseline on configuration-push success and rejection responses", async () => {
+    const missing = await SELF.fetch("https://worker.test/not-configuration");
+    const accepted = await push(baseSnapshot, "00000000-0000-4000-8000-000000000014");
+    const unauthorized = await SELF.fetch(
+      `https://worker.test/integrations/splitch/configuration`,
+      {
+        method: "POST",
+        headers: await signedHeaders("{}", "00000000-0000-4000-8000-000000000015", "invalid"),
+        body: "{}",
+      },
+    );
+
+    expect(missing.status).toBe(404);
+    expectBaseline(missing);
+    expect(accepted.status).toBe(204);
+    expectBaseline(accepted);
+    expect(unauthorized.status).toBe(401);
+    expectBaseline(unauthorized);
+  });
+
   it("accepts signed monotonic snapshots and evaluates Flags and Experiments locally", async () => {
     await expect(push(baseSnapshot, "00000000-0000-4000-8000-000000000001")).resolves.toMatchObject(
       {
@@ -63,18 +83,6 @@ describe("Splitch Cloudflare Worker", () => {
       appliedEnvironmentVersion: 2,
       pendingExposureCount: 1,
     });
-  });
-
-  it("stamps the Worker baseline on configuration-push success and error responses", async () => {
-    const missing = await SELF.fetch("https://worker.test/missing", { method: "GET" });
-    expect(missing.status).toBe(404);
-    expect(missing.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(missing.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
-
-    const accepted = await push(baseSnapshot, "00000000-0000-4000-8000-000000000015");
-    expect(accepted.status).toBe(204);
-    expect(accepted.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(accepted.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
   });
 
   it("rejects invalid signatures and cross-scope snapshots", async () => {
@@ -241,6 +249,11 @@ describe("Splitch Cloudflare Worker retention", () => {
     });
   });
 });
+
+function expectBaseline(response: Response): void {
+  expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  expect(response.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+}
 
 async function makePendingExposuresDue(state: DurableObjectStub): Promise<void> {
   await runInDurableObject(state, (_instance, durableState) => {

@@ -1,210 +1,204 @@
 import {
   type ArrowFunction,
+  type CallExpression,
+  type ConditionalExpression,
   type Expression,
   type FunctionDeclaration,
   type FunctionExpression,
   isArrowFunction,
-  isAsExpression,
-  isAwaitExpression,
   isBlock,
   isCallExpression,
+  isClassDeclaration,
+  isConditionalExpression,
   isFunctionDeclaration,
   isFunctionExpression,
   isIdentifier,
   isImportDeclaration,
   isNamedImports,
   isNamespaceImport,
-  isNonNullExpression,
-  isObjectLiteralExpression,
-  isParenthesizedExpression,
   isPropertyAccessExpression,
-  isSatisfiesExpression,
-  isSpreadAssignment,
   isStringLiteral,
-  isTypeAssertionExpression,
   isVariableStatement,
-  type MethodDeclaration,
   type Node,
   type SourceFile,
   type Statement,
 } from "typescript";
-import { blockPath } from "./hosted-worker-wrap-path";
+import { blockPath, fail, type PathResult, RETURNS, unwrap } from "./hosted-worker-wrap-ast.js";
 
 export const WRAP_WORKER_HANDLER = "wrapWorkerHandler";
-const APPLY_RESPONSE_HEADERS = "applyResponseHeaders";
-const WORKER_BASELINE = "WORKER_BASELINE_SECURITY_HEADERS";
-const OFFICIAL_WRAPPER_MODULE = "@splitch/observability/worker";
-const OFFICIAL_HEADERS_MODULE = "@splitch/worker-runtime";
 
-export type FunctionLike =
-  | FunctionDeclaration
-  | ArrowFunction
-  | FunctionExpression
-  | MethodDeclaration;
+const OFFICIAL_WRAP_WORKER_HANDLER_SPECIFIERS = [
+  "@splitch/worker-runtime",
+  "@splitch/observability/worker",
+] as const;
 
-export function fetchReturnIsWrapped(
-  file: SourceFile,
-  expression: Expression,
-  fn: FunctionLike,
-): boolean {
-  return (
-    expressionIsWrappedFetch(file, expression, fn) || expressionAppliesBaseline(file, expression)
-  );
+function expressionIsWrap(file: SourceFile, expression: Expression, seen: Set<string>): boolean {
+  return expressionWrapPath(file, expression, seen).kind === "returns";
 }
 
-export function expressionIsWrap(
+export function expressionWrapPath(
   file: SourceFile,
   expression: Expression,
   seen: Set<string>,
-  fn?: FunctionLike,
-): boolean {
+): PathResult {
   const value = unwrap(expression);
   if (isArrowFunction(value) || isFunctionExpression(value)) {
-    return functionReturnsWrap(file, value, seen);
+    return functionWrapPath(file, value, seen);
   }
-  if (isCallExpression(value)) {
-    return calleeIsOfficialWrap(file, unwrap(value.expression), seen, fn);
-  }
-  return isIdentifier(value) ? identifierIsWrap(file, value.text, seen, fn) : false;
+  if (isConditionalExpression(value)) return bothBranchesWrap(file, value, seen);
+  if (isCallExpression(value)) return callWrapPath(file, value, seen);
+  if (isIdentifier(value)) return identifierWrapPath(file, value.text, seen, value);
+  return fail(file, value, "default export is not the official wrapWorkerHandler binding");
 }
 
-function calleeIsOfficialWrap(
-  file: SourceFile,
-  callee: Expression,
-  seen: Set<string>,
-  fn?: FunctionLike,
-): boolean {
-  if (isOfficialPropertyAccess(file, callee, WRAP_WORKER_HANDLER, OFFICIAL_WRAPPER_MODULE)) {
-    return true;
-  }
-  return isIdentifier(callee) ? identifierIsWrap(file, callee.text, seen, fn) : false;
-}
-
-function identifierIsWrap(
-  file: SourceFile,
-  name: string,
-  seen: Set<string>,
-  fn?: FunctionLike,
-): boolean {
-  if (seen.has(name)) return false;
-  const local = fn ? findLocalBinding(fn, name) : undefined;
-  if (local !== undefined) {
-    seen.add(name);
-    return isFunctionDeclaration(local)
-      ? functionReturnsWrap(file, local, seen)
-      : expressionIsWrap(file, local, seen, fn);
-  }
-  if (importedNameIs(file, name, WRAP_WORKER_HANDLER, OFFICIAL_WRAPPER_MODULE)) return true;
-  seen.add(name);
-  const binding = findModuleBinding(file, name);
-  if (!binding) return false;
-  if (isFunctionDeclaration(binding)) return functionReturnsWrap(file, binding, seen);
-  return expressionIsWrap(file, binding, seen);
-}
-
-function functionReturnsWrap(
+export function functionWrapPath(
   file: SourceFile,
   fn: FunctionDeclaration | ArrowFunction | FunctionExpression,
   seen: Set<string>,
-): boolean {
-  if (!fn.body) return false;
-  if (!isBlock(fn.body)) return expressionIsWrap(file, fn.body, seen, fn);
-  return (
-    blockPath(fn.body, (expression) => expressionIsWrap(file, expression, seen, fn)) === "returns"
-  );
+): PathResult {
+  if (!fn.body) return fail(file, fn, "function has no body");
+  if (!isBlock(fn.body)) return expressionWrapPath(file, fn.body, seen);
+  const path = blockPath(file, fn.body, (expression) => expressionIsWrap(file, expression, seen));
+  if (path.kind === "returns" || path.kind === "fail") return path;
+  return fail(file, fn.body, "not every reachable path returns a wrapped handler");
 }
 
-function expressionIsWrappedFetch(
-  file: SourceFile,
-  expression: Expression,
-  fn: FunctionLike,
-): boolean {
+export function expressionIsWrappedFetch(file: SourceFile, expression: Expression): boolean {
   const value = unwrap(expression);
+  if (isConditionalExpression(value)) {
+    return (
+      expressionIsWrappedFetch(file, value.whenTrue) &&
+      expressionIsWrappedFetch(file, value.whenFalse)
+    );
+  }
   if (!isCallExpression(value) || !isPropertyAccessExpression(value.expression)) return false;
   if (value.expression.name.text !== "fetch") return false;
   const target = unwrap(value.expression.expression);
-  if (isCallExpression(target)) return expressionIsWrap(file, target, new Set(), fn);
-  return isIdentifier(target) ? identifierIsWrap(file, target.text, new Set(), fn) : false;
+  if (isCallExpression(target)) return expressionIsWrap(file, target, new Set());
+  return isIdentifier(target) ? identifierIsWrap(file, target.text, new Set()) : false;
 }
 
-function expressionAppliesBaseline(file: SourceFile, expression: Expression): boolean {
+function bothBranchesWrap(
+  file: SourceFile,
+  value: ConditionalExpression,
+  seen: Set<string>,
+): PathResult {
+  const whenTrue = requireWrapped(file, value.whenTrue, seen);
+  if (whenTrue.kind !== "returns") return whenTrue;
+  return requireWrapped(file, value.whenFalse, seen);
+}
+
+function requireWrapped(file: SourceFile, expression: Expression, seen: Set<string>): PathResult {
+  const path = expressionWrapPath(file, expression, seen);
+  return path.kind === "returns" || path.kind === "fail"
+    ? path
+    : fail(file, expression, "unwrapped response path");
+}
+
+function callWrapPath(file: SourceFile, value: CallExpression, seen: Set<string>): PathResult {
+  if (isOfficialWrapCall(file, value)) return RETURNS;
+  const callee = unwrap(value.expression);
+  if (isIdentifier(callee)) return identifierWrapPath(file, callee.text, seen, callee);
+  return fail(file, value, "unwrapped response path");
+}
+
+function identifierWrapPath(
+  file: SourceFile,
+  name: string,
+  seen: Set<string>,
+  node: Node,
+): PathResult {
+  if (isOfficialWrapBinding(file, name)) {
+    return fail(file, node, "wrapWorkerHandler itself is not a wrapped handler");
+  }
+  if (seen.has(name)) return fail(file, node, "circular wrap alias");
+  seen.add(name);
+  const binding = findModuleBinding(file, name);
+  if (!binding) return fail(file, node, `unresolved identifier ${name}`);
+  if (isFunctionDeclaration(binding)) return functionWrapPath(file, binding, seen);
+  return expressionWrapPath(file, binding, seen);
+}
+
+function identifierIsWrap(file: SourceFile, name: string, seen: Set<string>): boolean {
+  return identifierWrapPath(file, name, seen, file).kind === "returns";
+}
+
+function isOfficialWrapCall(file: SourceFile, expression: Expression): boolean {
   const value = unwrap(expression);
   if (!isCallExpression(value)) return false;
-  const headers = value.arguments[1];
-  if (headers === undefined) return false;
   const callee = unwrap(value.expression);
-  const officialCall =
-    isOfficialPropertyAccess(file, callee, APPLY_RESPONSE_HEADERS, OFFICIAL_HEADERS_MODULE) ||
-    (isIdentifier(callee) &&
-      importedNameIs(file, callee.text, APPLY_RESPONSE_HEADERS, OFFICIAL_HEADERS_MODULE));
-  return officialCall && argumentIsOfficialBaseline(file, headers);
+  if (isIdentifier(callee)) return isOfficialWrapBinding(file, callee.text);
+  if (
+    isPropertyAccessExpression(callee) &&
+    isIdentifier(callee.name) &&
+    callee.name.text === WRAP_WORKER_HANDLER
+  ) {
+    const object = unwrap(callee.expression);
+    return isIdentifier(object) && isOfficialWrapNamespace(file, object.text);
+  }
+  return false;
 }
 
-function argumentIsOfficialBaseline(file: SourceFile, argument: Expression): boolean {
-  const value = unwrap(argument);
-  if (isIdentifier(value)) {
-    return importedNameIs(file, value.text, WORKER_BASELINE, OFFICIAL_HEADERS_MODULE);
+function isOfficialWrapBinding(file: SourceFile, name: string): boolean {
+  if (localModuleValueNames(file).has(name)) return false;
+  return officialImportedWrapNames(file).has(name);
+}
+
+function isOfficialWrapNamespace(file: SourceFile, name: string): boolean {
+  if (localModuleValueNames(file).has(name)) return false;
+  return officialImportedWrapNamespaces(file).has(name);
+}
+
+function officialImportedWrapNames(file: SourceFile): Set<string> {
+  const names = new Set<string>();
+  for (const statement of file.statements) addOfficialNamedWrapImports(statement, names);
+  return names;
+}
+
+function addOfficialNamedWrapImports(statement: Statement, names: Set<string>): void {
+  if (!isImportDeclaration(statement) || !isOfficialWrapSpecifier(statement.moduleSpecifier)) {
+    return;
   }
-  if (!isObjectLiteralExpression(value) || value.properties.length !== 1) return false;
-  const only = value.properties[0];
-  if (!only || !isSpreadAssignment(only)) return false;
-  const spread = unwrap(only.expression);
+  const bindings = statement.importClause?.namedBindings;
+  if (!bindings || !isNamedImports(bindings)) return;
+  for (const element of bindings.elements) {
+    const imported = (element.propertyName ?? element.name).text;
+    if (imported === WRAP_WORKER_HANDLER) names.add(element.name.text);
+  }
+}
+
+function officialImportedWrapNamespaces(file: SourceFile): Set<string> {
+  const names = new Set<string>();
+  for (const statement of file.statements) {
+    if (!isImportDeclaration(statement) || !isOfficialWrapSpecifier(statement.moduleSpecifier)) {
+      continue;
+    }
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings && isNamespaceImport(bindings)) names.add(bindings.name.text);
+  }
+  return names;
+}
+
+function isOfficialWrapSpecifier(specifier: Expression): boolean {
   return (
-    isIdentifier(spread) &&
-    importedNameIs(file, spread.text, WORKER_BASELINE, OFFICIAL_HEADERS_MODULE)
+    isStringLiteral(specifier) &&
+    (OFFICIAL_WRAP_WORKER_HANDLER_SPECIFIERS as readonly string[]).includes(specifier.text)
   );
 }
 
-function importedNameIs(
-  file: SourceFile,
-  localName: string,
-  exported: string,
-  moduleName: string,
-): boolean {
-  return file.statements.some((statement) =>
-    namedImportMatches(statement, localName, exported, moduleName),
-  );
+function localModuleValueNames(file: SourceFile): Set<string> {
+  const names = new Set<string>();
+  for (const statement of file.statements) addLocalValueName(statement, names);
+  return names;
 }
 
-function namedImportMatches(
-  statement: Statement,
-  localName: string,
-  exported: string,
-  moduleName: string,
-): boolean {
-  if (!isImportDeclaration(statement) || !isModule(statement.moduleSpecifier, moduleName)) {
-    return false;
+function addLocalValueName(statement: Statement, names: Set<string>): void {
+  if (isFunctionDeclaration(statement) && statement.name) names.add(statement.name.text);
+  if (isClassDeclaration(statement) && statement.name) names.add(statement.name.text);
+  if (!isVariableStatement(statement)) return;
+  for (const declaration of statement.declarationList.declarations) {
+    if (isIdentifier(declaration.name)) names.add(declaration.name.text);
   }
-  const bindings = statement.importClause?.namedBindings;
-  if (!bindings || !isNamedImports(bindings)) return false;
-  return bindings.elements.some((spec) => {
-    const imported = spec.propertyName?.text ?? spec.name.text;
-    return imported === exported && spec.name.text === localName;
-  });
-}
-
-function isOfficialPropertyAccess(
-  file: SourceFile,
-  expression: Expression,
-  exported: string,
-  moduleName: string,
-): boolean {
-  if (!isPropertyAccessExpression(expression) || expression.name.text !== exported) return false;
-  const object = unwrap(expression.expression);
-  if (!isIdentifier(object)) return false;
-  return file.statements.some((statement) => namespaceImportIs(statement, object.text, moduleName));
-}
-
-function namespaceImportIs(statement: Statement, localName: string, moduleName: string): boolean {
-  if (!isImportDeclaration(statement) || !isModule(statement.moduleSpecifier, moduleName)) {
-    return false;
-  }
-  const bindings = statement.importClause?.namedBindings;
-  return Boolean(bindings && isNamespaceImport(bindings) && bindings.name.text === localName);
-}
-
-function isModule(specifier: Node, moduleName: string): boolean {
-  return isStringLiteral(specifier) && specifier.text === moduleName;
 }
 
 function findModuleBinding(
@@ -214,29 +208,6 @@ function findModuleBinding(
   for (const statement of file.statements) {
     const found = bindingFromStatement(statement, name);
     if (found) return found;
-  }
-  return undefined;
-}
-
-function findLocalBinding(
-  fn: FunctionLike,
-  name: string,
-): Expression | FunctionDeclaration | undefined {
-  if (!fn.body || !isBlock(fn.body)) return undefined;
-  return findBindingInStatements(fn.body.statements, name);
-}
-
-function findBindingInStatements(
-  statements: readonly Statement[],
-  name: string,
-): Expression | FunctionDeclaration | undefined {
-  for (const statement of statements) {
-    const found = bindingFromStatement(statement, name);
-    if (found) return found;
-    if (isBlock(statement)) {
-      const nested = findBindingInStatements(statement.statements, name);
-      if (nested) return nested;
-    }
   }
   return undefined;
 }
@@ -252,23 +223,5 @@ function bindingFromStatement(
       return declaration.initializer;
     }
   }
-  return undefined;
-}
-
-function unwrap(expression: Expression): Expression {
-  let current = expression;
-  for (;;) {
-    const next = unwrapOnce(current);
-    if (!next) return current;
-    current = next;
-  }
-}
-
-function unwrapOnce(expression: Expression): Expression | undefined {
-  if (isParenthesizedExpression(expression)) return expression.expression;
-  if (isAsExpression(expression) || isSatisfiesExpression(expression)) return expression.expression;
-  if (isNonNullExpression(expression) || isAwaitExpression(expression))
-    return expression.expression;
-  if (isTypeAssertionExpression(expression)) return expression.expression;
   return undefined;
 }

@@ -1,6 +1,6 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import type { VariantValue } from "@splitch/contracts";
-import { applyResponseHeaders, WORKER_BASELINE_SECURITY_HEADERS } from "@splitch/worker-runtime";
+import { wrapWorkerHandler } from "@splitch/worker-runtime";
 import type {
   CloudflareEvaluationContext,
   CloudflareResolutionDetails,
@@ -11,12 +11,15 @@ import { handleConfigurationPush } from "./push";
 // biome-ignore lint/performance/noBarrelFile: Wrangler requires the Durable Object class exported from the Worker entrypoint.
 export { SplitchState } from "./state";
 
+const configurationHandler = wrapWorkerHandler({
+  fetch(request: Request, env: Env) {
+    return handleConfigurationPush(request, env);
+  },
+});
+
 export default class SplitchCloudflareWorker extends WorkerEntrypoint<Env> {
-  override async fetch(request: Request): Promise<Response> {
-    return applyResponseHeaders(
-      await handleConfigurationPush(request, this.env),
-      WORKER_BASELINE_SECURITY_HEADERS,
-    );
+  override fetch(request: Request): Promise<Response> {
+    return configurationHandler.fetch(request, this.env, this.ctx);
   }
 
   async evaluate(flagKey: string, context: CloudflareEvaluationContext): Promise<VariantValue> {

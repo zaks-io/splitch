@@ -5,6 +5,11 @@ import {
   mergeHeaderRecords,
   WORKER_BASELINE_SECURITY_HEADERS,
 } from "./security-headers";
+import {
+  cspAllowsFraming,
+  cspHasDuplicateFrameAncestors,
+  expectBaseline,
+} from "./security-headers-test-support";
 
 describe("baseline security header policy", () => {
   it("names nosniff and a restrictive referrer policy", () => {
@@ -144,26 +149,6 @@ describe("applyResponseHeaders", () => {
     );
   });
 
-  it("collapses duplicate frame-ancestors so a later weaker value cannot survive", () => {
-    const response = applyResponseHeaders(
-      new Response("ok", {
-        headers: {
-          "content-security-policy":
-            "default-src 'self'; frame-ancestors 'none'; frame-ancestors https:, script-src 'none'; frame-ancestors https:; frame-ancestors 'self'",
-        },
-      }),
-      { "content-security-policy": "frame-ancestors 'none'" },
-    );
-
-    expect(response.headers.get("content-security-policy")).toBe(
-      "default-src 'self'; frame-ancestors 'none', script-src 'none'; frame-ancestors 'none'",
-    );
-    expect(
-      cspHasDuplicateFrameAncestors(response.headers.get("content-security-policy") ?? ""),
-    ).toBe(false);
-    expect(cspAllowsFraming(response.headers.get("content-security-policy") ?? "")).toBe(false);
-  });
-
   it("does not weaken an existing frame-ancestors 'none' when extras are looser", () => {
     const response = applyResponseHeaders(
       new Response("ok", {
@@ -216,65 +201,3 @@ describe("applyResponseHeaders", () => {
     expect(applied.headers.get("x-content-type-options")).toBeNull();
   });
 });
-
-function expectBaseline(response: Response): void {
-  expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-  expect(response.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
-}
-
-/**
- * Browser CSP policy-list + first-directive-wins. Independent of production
- * serialization so the exact-header regression cannot pass by echoing text.
- */
-function cspAllowsFraming(header: string): boolean {
-  let allowed: "all" | "none" | Set<string> = "all";
-  for (const policyText of header.split(",")) {
-    const policyAllowed = policyFrameAncestors(policyText);
-    if (!policyAllowed) continue;
-    allowed = intersectAllowedAncestors(allowed, policyAllowed);
-  }
-  return allowed !== "none";
-}
-
-function policyFrameAncestors(policyText: string): "none" | Set<string> | undefined {
-  const frameAncestors = firstPolicyDirectives(policyText).get("frame-ancestors");
-  if (frameAncestors === undefined) return undefined;
-  const sources = frameAncestors.toLowerCase().split(/\s+/).filter(Boolean);
-  return sources.length === 0 || sources.includes("'none'") ? "none" : new Set(sources);
-}
-
-function firstPolicyDirectives(policyText: string): Map<string, string> {
-  const directives = new Map<string, string>();
-  for (const part of policyText.split(";")) {
-    const parsed = parseDirectivePart(part);
-    if (parsed && !directives.has(parsed.name)) directives.set(parsed.name, parsed.value);
-  }
-  return directives;
-}
-
-function parseDirectivePart(part: string): { name: string; value: string } | undefined {
-  const trimmed = part.trim();
-  if (!trimmed) return undefined;
-  const space = trimmed.search(/\s/);
-  if (space === -1) return { name: trimmed.toLowerCase(), value: "" };
-  return { name: trimmed.slice(0, space).toLowerCase(), value: trimmed.slice(space).trim() };
-}
-
-function intersectAllowedAncestors(
-  left: "all" | "none" | Set<string>,
-  right: "none" | Set<string>,
-): "all" | "none" | Set<string> {
-  if (left === "all") return right;
-  if (left === "none" || right === "none") return "none";
-  const intersection = [...left].filter((source) => right.has(source));
-  return intersection.length === 0 ? "none" : new Set(intersection);
-}
-
-function cspHasDuplicateFrameAncestors(header: string): boolean {
-  return header.split(",").some((policyText) => {
-    const count = policyText
-      .split(";")
-      .filter((part) => part.trim().toLowerCase().startsWith("frame-ancestors")).length;
-    return count > 1;
-  });
-}

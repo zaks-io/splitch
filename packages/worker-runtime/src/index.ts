@@ -28,10 +28,11 @@ export type { RemoteJwksSignatureVerifier } from "./remote-jwks";
 export { remoteJwksSignatureVerifier } from "./remote-jwks";
 export type { EmptyDetailCode } from "./respond";
 export { emptyError, renderError } from "./respond";
+export { timingSafeEqualString } from "./secret-compare";
 export {
   applyResponseHeaders,
   CONTROL_PANEL_SECURITY_HEADERS,
   mergeHeaderRecords,
   WORKER_BASELINE_SECURITY_HEADERS,
+  wrapWorkerHandler,
 } from "./security-headers";
-export { timingSafeEqualString } from "./secret-compare";

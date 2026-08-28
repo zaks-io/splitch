@@ -80,6 +80,13 @@ export function applyResponseHeaders(response: Response, extra?: Record<string, 
   if (!extra) return response;
   if (response.webSocket) return response;
   const headers = new Headers(response.headers);
+  const extrasChanged = applyExtraHeaders(headers, extra);
+  const cspChanged = normalizeExistingCsp(headers);
+  if (!extrasChanged && !cspChanged) return response;
+  return cloneResponse(response, headers);
+}
+
+function applyExtraHeaders(headers: Headers, extra: Record<string, string>): boolean {
   let changed = false;
   for (const [key, value] of Object.entries(extra)) {
     const current = headers.get(key);
@@ -94,8 +101,35 @@ export function applyResponseHeaders(response: Response, extra?: Record<string, 
       changed = true;
     }
   }
-  if (!changed) return response;
-  return cloneResponse(response, headers);
+  return changed;
+}
+
+function normalizeExistingCsp(headers: Headers): boolean {
+  const csp = headers.get("content-security-policy");
+  if (csp === null) return false;
+  const normalized = normalizeCspHeader(csp);
+  if (normalized === csp) return false;
+  headers.set("content-security-policy", normalized);
+  return true;
+}
+
+/**
+ * Official fetch wrapper: stamp the Worker baseline on every response path.
+ * Hosted Workers may instead import `wrapWorkerHandler` from
+ * `@splitch/observability/worker`, which applies this same baseline plus Sentry.
+ */
+export function wrapWorkerHandler<E = unknown>(handler: {
+  fetch(request: Request, env: E, ctx: ExecutionContext): Response | Promise<Response>;
+}): {
+  fetch(request: Request, env: E, ctx: ExecutionContext): Promise<Response>;
+} {
+  return {
+    async fetch(request, env, ctx) {
+      return applyResponseHeaders(await handler.fetch(request, env, ctx), {
+        ...WORKER_BASELINE_SECURITY_HEADERS,
+      });
+    },
+  };
 }
 
 function mergeHeaderValue(name: string, current: string, extra: string): string {
@@ -136,40 +170,42 @@ type CspDirective = { name: string; value: string };
 type CspPolicy = CspDirective[];
 
 function mergeContentSecurityPolicy(current: string, extra: string): string {
-  const extraPolicies = parseCspPolicyList(extra);
-  const currentPolicies = parseCspPolicyList(current);
+  const extraPolicies = parseCspPolicyList(extra).map(normalizeCspPolicy);
+  const currentPolicies = parseCspPolicyList(current).map(normalizeCspPolicy);
   if (currentPolicies.length === 0) return serializeCspPolicyList(extraPolicies);
   const merged = currentPolicies.map((policy) => {
-    const directives = firstDirectives(policy).map((directive) => ({ ...directive }));
+    const directives = policy.map((directive) => ({ ...directive }));
     for (const extraPolicy of extraPolicies) mergeCspDirectives(directives, extraPolicy);
-    return directives;
+    return normalizeCspPolicy(directives);
   });
   return serializeCspPolicyList(merged);
 }
 
+function normalizeCspHeader(header: string): string {
+  return serializeCspPolicyList(parseCspPolicyList(header).map(normalizeCspPolicy));
+}
+
 /**
- * One directive per name. `frame-ancestors` keeps the strongest value so a later
- * weaker duplicate cannot survive; other names keep the first (CSP first-wins).
+ * Collapse duplicate directives. `frame-ancestors` keeps the strongest value so
+ * a later weaker source list cannot survive. Other names keep the first value.
  */
-function firstDirectives(policy: CspPolicy): CspPolicy {
-  const byName = new Map<string, CspDirective>();
-  const order: string[] = [];
+function normalizeCspPolicy(policy: CspPolicy): CspPolicy {
+  const unique: CspPolicy = [];
+  const indexByName = new Map<string, number>();
   for (const directive of policy) {
-    const existing = byName.get(directive.name);
-    if (!existing) {
-      byName.set(directive.name, { ...directive });
-      order.push(directive.name);
+    const existingIndex = indexByName.get(directive.name);
+    if (existingIndex === undefined) {
+      indexByName.set(directive.name, unique.length);
+      unique.push({ ...directive });
       continue;
     }
+    const existing = unique[existingIndex];
+    if (!existing) continue;
     if (directive.name === "frame-ancestors") {
       existing.value = strongerFrameAncestors(existing.value, directive.value);
     }
   }
-  return order.map((name) => {
-    const directive = byName.get(name);
-    if (!directive) throw new Error(`csp: missing collapsed directive ${name}`);
-    return directive;
-  });
+  return unique;
 }
 
 function mergeCspDirectives(directives: CspPolicy, extraDirectives: CspPolicy): void {
