@@ -189,6 +189,36 @@ describe("chargeIngestAdmission", () => {
     ).rejects.toThrow("INGEST_ADMISSION_GATE binding is unavailable");
   });
 
+  it.each([
+    { allowed: true, retryAfterMs: -1 },
+    { allowed: true, retryAfterMs: 50 },
+    { allowed: false, retryAfterMs: 0 },
+    { allowed: false, retryAfterMs: -1 },
+    { allowed: true, retryAfterMs: Number.POSITIVE_INFINITY },
+    { allowed: true },
+    { retryAfterMs: 0 },
+    null,
+  ])("fails closed on malformed decision %j", async (decision) => {
+    await expect(
+      chargeIngestAdmission(
+        {
+          idFromName(name: string) {
+            return name as unknown as DurableObjectId;
+          },
+          get() {
+            return {
+              async fetch() {
+                return Response.json(decision);
+              },
+            };
+          },
+        },
+        { appId: "app_shop", environmentId: "env_prod", ingestStream: "metric_events" },
+        { rowCost: 1, byteCost: 8 },
+      ),
+    ).rejects.toThrow("Ingest Admission Gate returned an invalid decision");
+  });
+
   it("counts serialized queue-payload bytes", () => {
     expect(queuePayloadBytes({ event_name: "signed_up" })).toBe(
       new TextEncoder().encode(JSON.stringify({ event_name: "signed_up" })).byteLength,

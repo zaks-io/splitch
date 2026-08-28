@@ -1,7 +1,7 @@
 import type { MetricEventTrackRequest } from "@splitch/contracts";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
-import { chargeIngestAdmission, queuePayloadBytes } from "./ingest-admission-gate";
+import { rejectIngestAdmission } from "./ingest-admission";
 import { claimMetricEvent, lookupMetricEvent } from "./metric-event-outbox";
 import { validateMetricEvent } from "./metric-event-validation";
 import type { Env } from "./types";
@@ -114,29 +114,16 @@ async function chargeNewMetricEvent(
   credential: MetricEventCredentialScope,
   row: Record<string, unknown>,
 ): Promise<Response | null> {
-  try {
-    const admission = await chargeIngestAdmission(
-      env.INGEST_ADMISSION_GATE,
-      {
-        appId: credential.appId,
-        environmentId: credential.environmentId,
-        ingestStream: "metric_events",
-      },
-      { rowCost: 1, byteCost: queuePayloadBytes(row) },
-    );
-    if (admission.allowed) return null;
-    return renderError({
-      code: "RATE_LIMITED",
-      message: "Metric Event ingest admission capacity exceeded",
-      details: { retryAfterMs: admission.retryAfterMs },
-    });
-  } catch {
-    return renderError({
-      code: "RATE_LIMITED",
-      message: "Ingest Admission Gate is unavailable",
-      details: { retryAfterMs: 1_000 },
-    });
-  }
+  return rejectIngestAdmission(
+    env.INGEST_ADMISSION_GATE,
+    {
+      appId: credential.appId,
+      environmentId: credential.environmentId,
+      ingestStream: "metric_events",
+    },
+    [row],
+    "Metric Event ingest admission capacity exceeded",
+  );
 }
 
 function eventIdConflict(eventId: string): Response {

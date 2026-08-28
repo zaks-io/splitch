@@ -1,6 +1,8 @@
-import { emptyError, renderError, serviceUnavailable } from "./errors";
+import type { ErrorResponse } from "@splitch/contracts";
+import { emptyError, renderError, serviceUnavailable, validationError } from "./errors";
 import { evaluationCommitOutbox } from "./evaluation-commit-outbox";
 import { evaluationUsageScope, requiredIdentity } from "./ingest";
+import { ingestAdmissionDenial } from "./ingest-admission";
 import { loadRunScope } from "./kv-config";
 import { readJsonObject } from "./payload";
 import {
@@ -13,6 +15,16 @@ import {
   toTinybirdRow,
 } from "./tinybird";
 import type { Env, EvaluationUsageScope, Outcome } from "./types";
+
+/**
+ * Absolute Exposure count for one Evaluation commit. One evaluate emits at most
+ * one Exposure; this cap rejects an unbounded `exposures` array before
+ * per-item Run-scope work.
+ */
+export const EVALUATION_COMMIT_MAX_EXPOSURES = 25;
+
+/** Fixed-width stand-in: sealed usage event IDs are `sha256:` plus 64 hex chars. */
+const EVALUATION_COMMIT_USAGE_BYTE_COST_EVENT_ID = `sha256:${"0".repeat(64)}`;
 
 /**
  * Seals a remote Evaluation's usage row and any Exposure rows before delivery.
@@ -55,25 +67,76 @@ async function prepareEvaluationCommit(
   const identity = await evaluationCommitIdentity(scope, payload.usage.idempotencyKey);
 
   try {
-    const sealed = await outbox.commit(identity, payload);
-    if (!isEvaluationCommitPayload(sealed.payload)) {
-      return {
-        ok: false,
-        error: serviceUnavailable("Evaluation commit outbox returned invalid payload"),
-      };
+    const existing = await outbox.lookup(identity);
+    if (existing !== null) {
+      return preparedCommit(scope, identity, outbox, existing);
     }
-    return {
-      ok: true,
-      value: {
-        scope,
-        identity,
-        outbox,
-        commit: { eventId: sealed.eventId, payload: sealed.payload, delivered: sealed.delivered },
-      },
-    };
+
+    const denied = await chargeNewEvaluationCommit(env, scope, payload);
+    if (denied) return { ok: false, error: denied };
+
+    const sealed = await outbox.commit(identity, payload);
+    return preparedCommit(scope, identity, outbox, sealed);
   } catch {
     return { ok: false, error: serviceUnavailable("Evaluation commit outbox is unavailable") };
   }
+}
+
+function preparedCommit(
+  scope: EvaluationUsageScope,
+  identity: string,
+  outbox: NonNullable<ReturnType<typeof evaluationCommitOutbox>>,
+  sealed: { eventId: string; payload: unknown; delivered: boolean },
+): Outcome<PreparedEvaluationCommit> {
+  if (!isEvaluationCommitPayload(sealed.payload)) {
+    return {
+      ok: false,
+      error: serviceUnavailable("Evaluation commit outbox returned invalid payload"),
+    };
+  }
+  return {
+    ok: true,
+    value: {
+      scope,
+      identity,
+      outbox,
+      commit: { eventId: sealed.eventId, payload: sealed.payload, delivered: sealed.delivered },
+    },
+  };
+}
+
+async function chargeNewEvaluationCommit(
+  env: Env,
+  scope: EvaluationUsageScope,
+  payload: EvaluationCommitPayload,
+): Promise<ErrorResponse | null> {
+  const usageDenied = await ingestAdmissionDenial(
+    env.INGEST_ADMISSION_GATE,
+    {
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      ingestStream: "raw_evaluations",
+    },
+    [
+      toEvaluationUsageTinybirdRow({
+        eventId: EVALUATION_COMMIT_USAGE_BYTE_COST_EVENT_ID,
+        ...payload.usage,
+      }),
+    ],
+    "Evaluation usage ingest admission capacity exceeded",
+  );
+  if (usageDenied) return usageDenied;
+
+  return ingestAdmissionDenial(
+    env.INGEST_ADMISSION_GATE,
+    {
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      ingestStream: "raw_events",
+    },
+    payload.exposureRows,
+    "Exposure ingest admission capacity exceeded",
+  );
 }
 
 async function evaluationCommitInput(
@@ -155,6 +218,15 @@ async function evaluationCommitExposureRows(
     return {
       ok: false,
       error: emptyError("INTERNAL_SERVER_ERROR", "Evaluation commit exposures are required"),
+    };
+  }
+  if (exposures.length > EVALUATION_COMMIT_MAX_EXPOSURES) {
+    return {
+      ok: false,
+      error: validationError(
+        `Evaluation commit exposures exceed ${EVALUATION_COMMIT_MAX_EXPOSURES}`,
+        ["exposures"],
+      ),
     };
   }
 

@@ -1,5 +1,10 @@
 import { CURRENT_KV_SCHEMA_VERSION, experimentConfigKey, runConfigKey } from "@splitch/contracts";
 import { vi } from "vitest";
+import {
+  type AdmissionCharge,
+  type AdmissionOption,
+  admissionBinding,
+} from "./admission-test-fixture";
 import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
 import type { EvaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import type { ExposurePayload } from "./event-ingest-test-types";
@@ -10,6 +15,9 @@ import {
   MemoryReplayWindow,
 } from "./memory-replay-windows.test-fixture";
 import type { Env } from "./types";
+
+export type { AdmissionCharge, AdmissionOption };
+export { admissionBinding };
 
 export const appId = "app_credential";
 export const clientAppId = "app_from_client";
@@ -24,12 +32,13 @@ export async function postExposure(
     payload?: Partial<ExposurePayload>;
     tinybirdStatus?: number;
     awaitWaits?: boolean;
+    env?: ReturnType<typeof makeEnv>;
   } = {},
 ) {
   vi.spyOn(Date, "now").mockReturnValue(new Date(fixedNow).getTime());
   const fetch = mockTinybirdFetch(options.tinybirdStatus);
   const ctx = new TestExecutionContext();
-  const response = await new EvaluationEntrypoint(ctx, makeEnv() as Env).fetch(
+  const response = await new EvaluationEntrypoint(ctx, (options.env ?? makeEnv()) as Env).fetch(
     workerRequest("https://splitch-event-ingest.internal/api/internal/exposures", {
       method: "POST",
       headers: {
@@ -103,6 +112,7 @@ export async function postEvaluationAt(
 export async function postEvaluationCommit(
   options: {
     payload?: Partial<ExposurePayload>;
+    exposures?: unknown[];
     statuses?: readonly number[];
     env?: ReturnType<typeof makeEnv>;
   } = {},
@@ -128,7 +138,7 @@ export async function postEvaluationCommit(
         flagKey: "checkout",
         sdkRuntime: "javascript",
         idempotencyKey: "eval-request-1",
-        exposures: [{ ...baseExposure(), ...options.payload }],
+        exposures: options.exposures ?? [{ ...baseExposure(), ...options.payload }],
       }),
     }),
   );
@@ -138,6 +148,10 @@ export async function postEvaluationCommit(
 export function makeEnv(
   replayWindow: EvaluationUsageReplayWindow = new MemoryReplayWindow(),
   evaluationCommitOutbox: EvaluationCommitOutbox = new MemoryEvaluationCommitOutbox(),
+  options: {
+    admission?: AdmissionOption;
+    admissionCharges?: AdmissionCharge[];
+  } = {},
 ) {
   return {
     CONFIG_STORE: seededConfigStore() as unknown as KVNamespace,
@@ -146,6 +160,7 @@ export function makeEnv(
     TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
     EVALUATION_USAGE_REPLAY_WINDOW: replayWindow,
     EVALUATION_COMMIT_OUTBOX: evaluationCommitOutbox,
+    ...admissionBinding(options.admission, options.admissionCharges ?? []),
   };
 }
 
