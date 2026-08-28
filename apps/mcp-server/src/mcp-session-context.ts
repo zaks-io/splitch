@@ -9,11 +9,11 @@ export interface McpSessionTransport {
 }
 
 export interface McpSessionStore {
-  create(transport?: McpSessionTransport): Promise<string>;
-  get(id: string): Promise<McpSessionContext | undefined>;
-  getTransport(id: string): Promise<McpSessionTransport | undefined>;
-  set(id: string, context: McpSessionContext): Promise<void>;
-  end(id: string): Promise<void>;
+  create(subject: string, transport?: McpSessionTransport): Promise<string>;
+  get(id: string, subject: string): Promise<McpSessionContext | undefined>;
+  getTransport(id: string, subject: string): Promise<McpSessionTransport | undefined>;
+  set(id: string, context: McpSessionContext, subject: string): Promise<void>;
+  end(id: string, subject: string): Promise<void>;
 }
 
 type McpSessionContextValidation = { ok: true } | { ok: false; message: string };
@@ -52,6 +52,7 @@ export async function setSessionContext(
   sessionId: string | null,
   sessionStore: McpSessionStore,
   validate: McpSessionContextValidator,
+  subject: string,
 ): Promise<{ ok: true; value: McpSessionContext } | { ok: false; message: string }> {
   if (!sessionId) {
     return { ok: false, message: "MCP session is required before calling context_use." };
@@ -66,7 +67,7 @@ export async function setSessionContext(
   // internal-error path instead.
   const validation = await validate(context);
   if (!validation.ok) return validation;
-  await sessionStore.set(sessionId, context);
+  await sessionStore.set(sessionId, context, subject);
   return { ok: true, value: context };
 }
 
@@ -75,11 +76,12 @@ export async function resolveScope(
   arguments_: unknown,
   sessionId: string | null,
   sessionStore: McpSessionStore,
+  subject: string,
 ): Promise<{ ok: true; value: Record<string, unknown> } | { ok: false; message: string }> {
   const input = inputRecord(arguments_);
   // A session store that throws is an outage, not an unresolved scope: it
   // propagates to the internal-error path rather than posing as a caller fix.
-  const context = sessionId ? await sessionStore.get(sessionId) : undefined;
+  const context = sessionId ? await sessionStore.get(sessionId, subject) : undefined;
   return resolveRouteScope(path, input, context);
 }
 

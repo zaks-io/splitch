@@ -95,7 +95,7 @@ describe("MCP resources discovery", () => {
       source: "session",
       demoExpiresAt,
     });
-    expect(await sessionStore.getTransport(sessionId)).toEqual({
+    expect(await sessionStore.getTransport(sessionId, anonymousActor.subject)).toEqual({
       authDoor: "anonymous",
       demoExpiresAt,
     });

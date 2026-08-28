@@ -214,31 +214,42 @@ async function bootServer(
 export function memorySessionStore(): McpSessionStore {
   const sessions = new Map<
     string,
-    { context?: McpSessionContext; transport?: McpSessionTransport }
+    { subject: string; context?: McpSessionContext; transport?: McpSessionTransport }
   >();
   return {
-    async create(transport) {
+    async create(subject, transport) {
       const id = crypto.randomUUID();
-      sessions.set(id, { transport });
+      sessions.set(id, { subject, transport });
       return id;
     },
-    async get(id) {
-      if (!sessions.has(id)) throw new McpSessionNotFoundError();
-      return sessions.get(id)?.context;
+    async get(id, subject) {
+      return ownedSession(sessions, id, subject).context;
     },
-    async getTransport(id) {
-      if (!sessions.has(id)) throw new McpSessionNotFoundError();
-      return sessions.get(id)?.transport;
+    async getTransport(id, subject) {
+      return ownedSession(sessions, id, subject).transport;
     },
-    async set(id, context) {
-      if (!sessions.has(id)) throw new McpSessionNotFoundError();
-      const record = sessions.get(id);
+    async set(id, context, subject) {
+      const record = ownedSession(sessions, id, subject);
       sessions.set(id, { ...record, context });
     },
-    async end(id) {
+    async end(id, subject) {
+      ownedSession(sessions, id, subject);
       sessions.delete(id);
     },
   };
+}
+
+function ownedSession(
+  sessions: Map<
+    string,
+    { subject: string; context?: McpSessionContext; transport?: McpSessionTransport }
+  >,
+  id: string,
+  subject: string,
+): { subject: string; context?: McpSessionContext; transport?: McpSessionTransport } {
+  const session = sessions.get(id);
+  if (!session || session.subject !== subject) throw new McpSessionNotFoundError();
+  return session;
 }
 
 function writeJson(response: ServerResponse, status: number, body: unknown): void {

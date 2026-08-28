@@ -17,6 +17,7 @@ import type {
   McpSessionStore,
   McpSessionTransport,
 } from "./mcp-session-context";
+import { McpSessionNotFoundError } from "./mcp-session-store";
 import {
   allowMcpRevocations,
   staticMcpTokenVerifier,
@@ -219,35 +220,46 @@ async function mcp(
 function trackingSessionStore(): McpSessionStore & { writes: number } {
   const sessions = new Map<
     string,
-    { context?: McpSessionContext; transport?: McpSessionTransport }
+    { subject: string; context?: McpSessionContext; transport?: McpSessionTransport }
   >();
   return {
     writes: 0,
-    async create(transport) {
+    async create(subject, transport) {
       this.writes += 1;
       const id = crypto.randomUUID();
-      sessions.set(id, { transport });
+      sessions.set(id, { subject, transport });
       return id;
     },
-    async get(id) {
-      if (!sessions.has(id)) throw new Error("mcp-server: MCP session is unknown or expired");
-      return sessions.get(id)?.context;
+    async get(id, subject) {
+      return ownedSession(sessions, id, subject).context;
     },
-    async getTransport(id) {
-      if (!sessions.has(id)) throw new Error("mcp-server: MCP session is unknown or expired");
-      return sessions.get(id)?.transport;
+    async getTransport(id, subject) {
+      return ownedSession(sessions, id, subject).transport;
     },
-    async set(id, context) {
+    async set(id, context, subject) {
       this.writes += 1;
-      if (!sessions.has(id)) throw new Error("mcp-server: MCP session is unknown or expired");
-      const record = sessions.get(id);
+      const record = ownedSession(sessions, id, subject);
       sessions.set(id, { ...record, context });
     },
-    async end(id) {
+    async end(id, subject) {
       this.writes += 1;
+      ownedSession(sessions, id, subject);
       sessions.delete(id);
     },
   };
+}
+
+function ownedSession(
+  sessions: Map<
+    string,
+    { subject: string; context?: McpSessionContext; transport?: McpSessionTransport }
+  >,
+  id: string,
+  subject: string,
+): { subject: string; context?: McpSessionContext; transport?: McpSessionTransport } {
+  const session = sessions.get(id);
+  if (!session || session.subject !== subject) throw new McpSessionNotFoundError();
+  return session;
 }
 
 interface JsonRpcSuccess<T> {

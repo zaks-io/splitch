@@ -34,7 +34,7 @@ export async function callWithThrowingSessionStore(): Promise<ThrowingSessionSto
       throw new Error("mcp-server: session store outage");
     },
   };
-  const sessionId = await store.create({ authDoor: "id_jag" });
+  const sessionId = await store.create("user_local_test", { authDoor: "id_jag" });
 
   const response = await handleMcpServerRequest({
     request: new Request("https://mcp.test/mcp", {

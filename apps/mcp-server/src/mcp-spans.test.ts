@@ -129,7 +129,7 @@ describe("MCP protocol spans", () => {
 
   it("carries the session id when the call runs inside a session", async () => {
     const spans = recordingSpans();
-    const sessionId = await sessionStore.create({ authDoor: "id_jag" });
+    const sessionId = await sessionStore.create("user_local_test", { authDoor: "id_jag" });
     await rpc("tools/list", {}, { spans, sessionId });
 
     expect(spans.recorded[0]?.attributes["mcp.session.id"]).toBe(sessionId);

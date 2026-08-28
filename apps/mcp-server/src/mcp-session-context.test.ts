@@ -11,6 +11,7 @@ import {
 
 const service = "splitch-mcp-server";
 const defaultAuthorization = "Bearer local-test-token";
+const sessionSubject = "user_local_test";
 const sessionStore = memorySessionStore();
 
 describe("MCP session context", () => {
@@ -35,7 +36,7 @@ describe("MCP session context", () => {
       "/apps/app_session",
       "/apps/app_session/envs/env_session",
     ]);
-    await expect(sessionStore.get(sessionId)).resolves.toEqual({
+    await expect(sessionStore.get(sessionId, sessionSubject)).resolves.toEqual({
       appId: "app_session",
       environmentId: "env_session",
     });
@@ -73,7 +74,7 @@ describe("MCP session context", () => {
 
     expect(await errorMessage(response)).toBe(testCase.message);
     expect(seen.map((request) => new URL(request.url).pathname)).toEqual(testCase.paths);
-    await expect(sessionStore.get(sessionId)).resolves.toBeUndefined();
+    await expect(sessionStore.get(sessionId, sessionSubject)).resolves.toBeUndefined();
   });
 
   it("inherits session scope, lets explicit scope override it, and delegates without the bearer", async () => {
