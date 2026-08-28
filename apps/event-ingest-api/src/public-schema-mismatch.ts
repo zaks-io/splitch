@@ -47,14 +47,17 @@ function childAt(current: unknown, segment: string): unknown {
     const index = Number(segment);
     return Number.isInteger(index) && index >= 0 && index in current ? current[index] : undefined;
   }
-  if (current === null || typeof current !== "object" || !(segment in current)) return undefined;
+  if (current === null || typeof current !== "object" || !Object.hasOwn(current, segment)) {
+    return undefined;
+  }
   return (current as Record<string, unknown>)[segment];
 }
 
 function publicIssueMessage(message: string): string {
   if (
     message.startsWith("number must be at least") ||
-    message.startsWith("number must be at most")
+    message.startsWith("number must be at most") ||
+    message === "number must be finite"
   ) {
     return "number is out of range";
   }
@@ -64,7 +67,9 @@ function publicIssueMessage(message: string): string {
   if (
     message.startsWith("expected ") ||
     message === "required value is missing" ||
-    message === "required JSON key is missing"
+    message === "required JSON key is missing" ||
+    message === "array is too short" ||
+    message === "array is too long"
   ) {
     return "invalid value";
   }
