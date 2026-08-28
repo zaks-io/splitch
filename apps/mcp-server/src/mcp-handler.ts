@@ -18,10 +18,10 @@ import { PROMPT_DEFINITIONS } from "./mcp-prompt-types";
 import { getMcpPromptRpc, listMcpPrompts } from "./mcp-prompts";
 import { readJsonRpcRequest } from "./mcp-request";
 import { listMcpResources, MCP_RESOURCE_URIS, readMcpResourceRpc } from "./mcp-resources";
+import { createBoundSession, unconfiguredSessionStore } from "./mcp-session-binding";
 import {
   type McpSessionContextValidator,
   type McpSessionStore,
-  type McpSessionTransport,
   parseToolCall,
 } from "./mcp-session-context";
 import { callTool, type McpToolCallFault } from "./mcp-tool-call";
@@ -75,7 +75,7 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
       if (actor && (await requiredRevocations(options.revocations).isRevoked(actor.subject))) {
         actor = null;
       }
-      return actor !== null;
+      return actor?.subject ?? null;
     },
   });
   if (transportResponse) return transportResponse;
@@ -103,7 +103,7 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
   );
   const responseSessionId =
     request.value.method === "initialize"
-      ? await sessionStore.create(sessionTransportFromActor(actor))
+      ? await createBoundSession(sessionStore, actor)
       : undefined;
   return jsonResponse(response, 200, responseSessionId);
 }
@@ -238,13 +238,6 @@ function authIssuer(configured: string | undefined, platformTarget: string | und
   throw new Error(`mcp-server: AUTH_API_ORIGIN is required for ${target}`);
 }
 
-function sessionTransportFromActor(actor: McpAccessTokenActor): McpSessionTransport {
-  return {
-    authDoor: actor.authDoor,
-    ...(actor.demoExpiresAt ? { demoExpiresAt: actor.demoExpiresAt } : {}),
-  };
-}
-
 function initializeResult(): Record<string, unknown> {
   return {
     protocolVersion,
@@ -256,21 +249,3 @@ function initializeResult(): Record<string, unknown> {
     serverInfo: { name: "splitch-mcp-server", version: "0.0.0" },
   };
 }
-
-const unconfiguredSessionStore: McpSessionStore = {
-  async create() {
-    throw new Error("mcp-server: MCP session store is not configured");
-  },
-  async get() {
-    return undefined;
-  },
-  async getTransport() {
-    return undefined;
-  },
-  async set() {
-    throw new Error("mcp-server: MCP session store is not configured");
-  },
-  async end() {
-    throw new Error("mcp-server: MCP session store is not configured");
-  },
-};

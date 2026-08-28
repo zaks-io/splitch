@@ -6,18 +6,38 @@ import type {
 
 const MCP_SESSION_TTL_MS = 24 * 60 * 60 * 1_000;
 
+export const MCP_SESSION_UNKNOWN_MESSAGE = "mcp-server: MCP session is unknown or expired";
+
 interface McpSessionDurableObjectStub {
-  initialize(expiresAt: number, transport?: McpSessionTransport): Promise<McpSessionResult<void>>;
-  getContext(now: number): Promise<McpSessionResult<McpSessionContext | undefined>>;
-  getTransport(now: number): Promise<McpSessionResult<McpSessionTransport | undefined>>;
-  setContext(context: McpSessionContext, now: number): Promise<McpSessionResult<void>>;
-  end(): Promise<void>;
+  initialize(
+    expiresAt: number,
+    subject: string,
+    transport?: McpSessionTransport,
+  ): Promise<McpSessionResult<void>>;
+  getContext(
+    now: number,
+    subject: string,
+  ): Promise<McpSessionResult<McpSessionContext | undefined>>;
+  getTransport(
+    now: number,
+    subject: string,
+  ): Promise<McpSessionResult<McpSessionTransport | undefined>>;
+  setContext(
+    context: McpSessionContext,
+    now: number,
+    subject: string,
+  ): Promise<McpSessionResult<void>>;
+  endForSubject(now: number, subject: string): Promise<McpSessionResult<void>>;
 }
 
 export class McpSessionNotFoundError extends Error {
   constructor() {
-    super("mcp-server: MCP session is unknown or expired");
+    super(MCP_SESSION_UNKNOWN_MESSAGE);
   }
+}
+
+export function isSessionSubject(subject: string): boolean {
+  return subject.length > 0;
 }
 
 export type McpSessionResult<T> =
@@ -35,26 +55,26 @@ export function durableMcpSessionStore(
   const now = options.now ?? Date.now;
   const ttlMs = options.ttlMs ?? MCP_SESSION_TTL_MS;
   return {
-    async create(transport) {
+    async create(subject, transport) {
       const id = crypto.randomUUID();
-      unwrap(await namespace.getByName(id).initialize(now() + ttlMs, transport));
+      unwrap(await namespace.getByName(id).initialize(now() + ttlMs, subject, transport));
       return id;
     },
-    async get(id) {
-      const result = await namespace.getByName(id).getContext(now());
+    async get(id, subject) {
+      const result = await namespace.getByName(id).getContext(now(), subject);
       if (!result.ok) throw new McpSessionNotFoundError();
       return result.value;
     },
-    async getTransport(id) {
-      const result = await namespace.getByName(id).getTransport(now());
+    async getTransport(id, subject) {
+      const result = await namespace.getByName(id).getTransport(now(), subject);
       if (!result.ok) throw new McpSessionNotFoundError();
       return result.value;
     },
-    async set(id, context) {
-      unwrap(await namespace.getByName(id).setContext(context, now()));
+    async set(id, context, subject) {
+      unwrap(await namespace.getByName(id).setContext(context, now(), subject));
     },
-    end(id) {
-      return namespace.getByName(id).end();
+    async end(id, subject) {
+      unwrap(await namespace.getByName(id).endForSubject(now(), subject));
     },
   };
 }

@@ -66,6 +66,7 @@ export async function callTool(
           sessionId,
           sessionStore,
           sessionContextValidator ?? controlPlaneContextValidator(controlPlane, actor),
+          actor.subject,
         ),
       );
     } catch (error) {
@@ -82,7 +83,13 @@ export async function callTool(
 
   try {
     const sdk = controlPlaneSdkForRoute(controlPlane, route);
-    const input = await resolveScope(route.path, call.arguments, sessionId, sessionStore);
+    const input = await resolveScope(
+      route.path,
+      call.arguments,
+      sessionId,
+      sessionStore,
+      actor.subject,
+    );
     if (!input.ok) {
       return recordToolResult(
         fault.span,
@@ -161,8 +168,9 @@ async function contextUse(
   sessionId: string | null,
   sessionStore: McpSessionStore,
   validate: McpSessionContextValidator,
+  subject: string,
 ): Promise<JsonRpcResponse> {
-  const result = await setSessionContext(arguments_, sessionId, sessionStore, validate);
+  const result = await setSessionContext(arguments_, sessionId, sessionStore, validate, subject);
   return jsonRpcResult(
     id,
     result.ok

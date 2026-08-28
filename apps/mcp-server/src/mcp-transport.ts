@@ -13,7 +13,7 @@ export async function routeTransportRequest(options: {
   platformTarget?: string;
   authBaseUrl?: string;
   sessionStore?: McpSessionStore;
-  authenticateBearer?: (authorization: string, audience: string) => Promise<boolean>;
+  authenticateBearer?: (authorization: string, audience: string) => Promise<string | null>;
 }): Promise<Response | undefined> {
   const url = new URL(options.request.url);
   if (isHealthRequest(options.request, url)) {
@@ -31,31 +31,33 @@ export async function routeTransportRequest(options: {
   if (options.request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders() });
   }
-  const authenticationFailure = await authenticateRequest(options, url);
-  if (authenticationFailure) return authenticationFailure;
+  const authentication = await authenticateRequest(options, url);
+  if (!authentication.ok) return authentication.response;
   if (options.request.method === "DELETE" && isMcpPath(url)) {
-    return endSession(options.request, options.sessionStore);
+    return endSession(options.request, options.sessionStore, authentication.subject);
   }
   if (options.request.method !== "POST" || !isMcpPath(url)) {
     return new Response("not found", { status: 404 });
   }
-  return validateSession(options.request, options.sessionStore);
+  return validateSession(options.request, options.sessionStore, authentication.subject);
 }
 
 async function authenticateRequest(
   options: {
     request: Request;
-    authenticateBearer?: (authorization: string, audience: string) => Promise<boolean>;
+    authenticateBearer?: (authorization: string, audience: string) => Promise<string | null>;
   },
   url: URL,
-): Promise<Response | null> {
-  if (!requiresBearer(options.request, url)) return null;
+): Promise<{ ok: true; subject?: string } | { ok: false; response: Response }> {
+  if (!requiresBearer(options.request, url)) return { ok: true };
+  if (!options.authenticateBearer) {
+    throw new Error("mcp-server: authenticateBearer is required");
+  }
   const authorization = bearerAuthorization(options.request);
-  if (!authorization) return unauthorizedResponse(url);
-  if (!options.authenticateBearer) return null;
-  return (await options.authenticateBearer(authorization, protectedResource(url)))
-    ? null
-    : unauthorizedResponse(url);
+  if (!authorization) return { ok: false, response: unauthorizedResponse(url) };
+  const subject = await options.authenticateBearer(authorization, protectedResource(url));
+  if (!subject) return { ok: false, response: unauthorizedResponse(url) };
+  return { ok: true, subject };
 }
 
 function requiresBearer(request: Request, url: URL): boolean {
@@ -121,25 +123,38 @@ export function jsonResponse(body: JsonRpcResponse, status = 200, sessionId?: st
 async function endSession(
   request: Request,
   sessionStore: McpSessionStore | undefined,
+  subject: string | undefined,
 ): Promise<Response> {
   const sessionId = request.headers.get("mcp-session-id");
   if (!sessionId) return new Response("MCP session ID is required", { status: 400 });
-  const invalidSession = await validateSession(request, sessionStore);
+  const invalidSession = await validateSession(request, sessionStore, subject);
   if (invalidSession) return invalidSession;
   if (!sessionStore) throw new Error("mcp-server: MCP session store is not configured");
-  await sessionStore.end(sessionId);
+  if (!subject) {
+    throw new Error("mcp-server: MCP session operations require an authenticated subject");
+  }
+  try {
+    await sessionStore.end(sessionId, subject);
+  } catch (error) {
+    if (error instanceof McpSessionNotFoundError) return deadSessionResponse();
+    throw error;
+  }
   return new Response(null, { status: 204, headers: corsHeaders() });
 }
 
 async function validateSession(
   request: Request,
   sessionStore: McpSessionStore | undefined,
+  subject: string | undefined,
 ): Promise<Response | undefined> {
   const sessionId = request.headers.get("mcp-session-id");
   if (!sessionId) return undefined;
   if (!sessionStore) throw new Error("mcp-server: MCP session store is not configured");
+  if (!subject) {
+    throw new Error("mcp-server: MCP session operations require an authenticated subject");
+  }
   try {
-    await sessionStore.get(sessionId);
+    await sessionStore.get(sessionId, subject);
     return undefined;
   } catch (error) {
     if (error instanceof McpSessionNotFoundError) return deadSessionResponse();

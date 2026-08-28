@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handleMcpServerRequest, type McpServerRequestOptions } from "./mcp-handler";
 import { missingAnalysisBindingCall } from "./mcp-control-plane-dispatch.test-fixture";
+import { handleMcpServerRequest, type McpServerRequestOptions } from "./mcp-handler";
 import { memorySessionStore } from "./mcp-oauth-prm-harness";
 import { failingSessionStore } from "./mcp-resources-harness";
 import type { McpSessionStore } from "./mcp-session-context";
@@ -252,7 +252,7 @@ async function contextUseWithoutDelegationSecret(): Promise<unknown> {
 }
 
 async function initializeSession(): Promise<string> {
-  return await sessionStore.create({ authDoor: "id_jag" });
+  return await sessionStore.create("user_local_test", { authDoor: "id_jag" });
 }
 
 /** The session store throws mid-request, after the transport accepted the id. */
@@ -261,7 +261,7 @@ async function failingSessionStoreRead(): Promise<unknown> {
   return rpc(
     "resources/read",
     { uri: "splitch://active-context" },
-    { sessionId: await store.create(), sessionStore: store },
+    { sessionId: await store.create("user_local_test"), sessionStore: store },
   );
 }
 
