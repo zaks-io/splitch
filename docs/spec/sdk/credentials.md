@@ -95,14 +95,16 @@ revocation is effective at the next request.
 
 ## Seam: Client Key edge binding
 
-Client Key requests additionally pass through Cloudflare WAF before reaching the Worker:
+Current Client Key controls are enforced in the Worker:
 
-- **Origin/referrer allow-list**: configured per Client Key on the WAF; requests from
-  unlisted origins are rejected at the edge, never reaching the SDK Worker.
-- **Per-key rate limiting**: WAF-enforced; SDK code has no awareness of WAF rejections.
-- Failure mode: WAF rejection returns an HTTP 403/429 before the Worker is invoked.
-  SDK documentation must state this — a Client Key failure may be a WAF error, not a
-  Worker-level error.
+- **Origin/referrer allow-list**: `data-plane-auth.ts` rejects an unlisted origin for the Client Key.
+- **Per-key rate limiting**: `evaluation-rate-limit.ts` uses the Cloudflare Workers Rate Limiting
+  binding, keyed on the credential hash plus route class.
+- Failure mode: the Worker returns HTTP `403` or `429`; SDK documentation must handle both explicitly.
+
+The live Cloudflare Free WAF rule covers only exact path `/agent/identity`, so it does not enforce
+Client Key controls. Host/method-scoped WAF rules, progressive challenge-before-block, and
+per-credential header counters remain paid target-state debt under ADR-0034.
 
 Client Keys are **auto-provisioned open to all origins** (`origin_allowlist = null`) so the public SDK
 works with zero setup; the open state is never silent — it is loudly surfaced (`is_origin_open` flag +
