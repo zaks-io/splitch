@@ -1,4 +1,7 @@
-import { PublishEventDefinitionVersionRequestSchema } from "@splitch/contracts";
+import {
+  PublishEventDefinitionVersionRequestSchema,
+  WriteClosedJsonSchemaSchema,
+} from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { parseInput } from "./parse-input";
@@ -34,6 +37,13 @@ const unionFieldSchema = z.object({
       ]),
     ),
   }),
+});
+
+const closedJsonBodySchema = z.object({
+  params: z.record(z.string(), z.string()),
+  query: z.record(z.string(), z.string()),
+  headers: z.record(z.string(), z.string()),
+  body: WriteClosedJsonSchemaSchema,
 });
 
 describe("parseInput unknown-key paths", () => {
@@ -121,6 +131,32 @@ describe("parseInput unknown-key paths", () => {
     ]);
   });
 
+  it("lifts only extra from a legitimate Closed JSON object", async () => {
+    const parsed = await parseInput(
+      closedJsonBodySchema,
+      new Request("http://worker.test/event-definitions", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "object",
+          properties: { foo: { type: "null" } },
+          additionalProperties: false,
+          extra: true,
+        }),
+      }),
+      {},
+    );
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: {
+        issues: [{ path: ["body", "extra"], message: 'Unrecognized key: "extra"' }],
+      },
+    });
+    expect(JSON.stringify(parsed.error.details)).not.toContain("properties");
+    expect(JSON.stringify(parsed.error.details)).not.toContain("additionalProperties");
+  });
+
   it("keeps invalid Closed JSON discriminator issues instead of a leftover key", async () => {
     const parsed = await parseInput(
       publishInputSchema,
@@ -156,4 +192,51 @@ describe("parseInput unknown-key paths", () => {
       { path: ["body", "fields", "0", "jsonSchema"], message: expect.any(String) },
     ]);
   });
+
+  it("keeps the invalid Closed JSON discriminator instead of an unrelated key", async () => {
+    const parsed = await parseInput(
+      closedJsonBodySchema,
+      new Request("http://worker.test/event-definitions", {
+        method: "POST",
+        body: JSON.stringify({ type: "c", a: "value" }),
+      }),
+      {},
+    );
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error.code).toBe("VALIDATION_ERROR");
+    if (parsed.error.code !== "VALIDATION_ERROR") return;
+    expect(parsed.error.details.issues.some((issue) => issue.path.includes("a"))).toBe(false);
+    expect(parsed.error.details.issues).toEqual([
+      { path: ["body", "type"], message: expect.stringMatching(/discriminator|Invalid/i) },
+    ]);
+  });
+
+  it("rejects a depth-2000 type:null properties chain with 400 and never throws", async () => {
+    const parsed = await parseInput(
+      closedJsonBodySchema,
+      new Request("http://worker.test/event-definitions", {
+        method: "POST",
+        body: JSON.stringify(nestClosedJsonProperties(2000, { type: "null" })),
+      }),
+      {},
+    );
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error.code).toBe("VALIDATION_ERROR");
+    if (parsed.error.code !== "VALIDATION_ERROR") return;
+    expect(parsed.error.details.issues[0]?.path[0]).toBe("body");
+    expect(parsed.error.details.issues[0]?.message).toMatch(/incoming depth/);
+  });
 });
+
+function nestClosedJsonProperties(
+  depth: number,
+  leaf: Record<string, unknown>,
+): Record<string, unknown> {
+  let node: Record<string, unknown> = leaf;
+  for (let index = 0; index < depth; index += 1) {
+    node = { type: leaf.type, properties: { child: node } };
+  }
+  return node;
+}

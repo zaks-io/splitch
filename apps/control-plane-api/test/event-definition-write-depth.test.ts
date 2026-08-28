@@ -60,30 +60,65 @@ describe("Event Definition publication depth guard", () => {
     expect(published?.current_published_version_id).toBeNull();
   });
 
-  it("rejects a type:null + properties chain at depth 2000 with 400 before auth", async () => {
-    let jsonSchema: Record<string, unknown> = { type: "null" };
-    for (let depth = 0; depth < 2000; depth += 1) {
-      jsonSchema = { type: "null", properties: { child: jsonSchema } };
-    }
-    const response = await h.app.request(
-      `/apps/${appId}/event-definitions/${DEFINITION_ID}/versions`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          entityType: "user",
-          fields: [{ name: "payload", type: "json", required: false, jsonSchema }],
-          dimensions: [],
-        }),
-      },
-    );
+  it("rejects a depth-2000 type:null properties chain before auth without 500", async () => {
+    const jsonSchema = nestClosedJsonProperties(2000, { type: "null" });
+    const response = await unauthenticatedPublish(jsonSchema);
     expect(response.status).toBe(400);
+    expect(response.status).not.toBe(500);
     expect(await response.json()).toMatchObject({
       code: "VALIDATION_ERROR",
-      details: { issues: [{ path: expect.arrayContaining(["body", "fields"]) }] },
+      details: {
+        issues: [
+          {
+            path: expect.arrayContaining(["body"]),
+            message: expect.stringMatching(/incoming depth/),
+          },
+        ],
+      },
+    });
+  });
+
+  it("rejects a depth-2000 invalid-discriminator properties chain before auth without 500", async () => {
+    const jsonSchema = nestClosedJsonProperties(2000, { type: "c" });
+    const response = await unauthenticatedPublish(jsonSchema);
+    expect(response.status).toBe(400);
+    expect(response.status).not.toBe(500);
+    expect(await response.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: {
+        issues: [
+          {
+            path: expect.arrayContaining(["body"]),
+            message: expect.stringMatching(/incoming depth/),
+          },
+        ],
+      },
     });
   });
 });
+
+function nestClosedJsonProperties(
+  depth: number,
+  leaf: Record<string, unknown>,
+): Record<string, unknown> {
+  let node: Record<string, unknown> = leaf;
+  for (let index = 0; index < depth; index += 1) {
+    node = { type: leaf.type, properties: { child: node } };
+  }
+  return node;
+}
+
+async function unauthenticatedPublish(jsonSchema: Record<string, unknown>): Promise<Response> {
+  return h.app.request(`/apps/${appId}/event-definitions/${DEFINITION_ID}/versions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      entityType: "user",
+      fields: [{ name: "payload", type: "json", required: false, jsonSchema }],
+      dimensions: [],
+    }),
+  });
+}
 
 async function seedDefinition(repo: Repository, targetAppId: string): Promise<void> {
   await repo.eventDefinitions.definitions.insert(appScope(targetAppId), {

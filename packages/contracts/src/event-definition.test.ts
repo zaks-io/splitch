@@ -1,11 +1,12 @@
 import { z } from "@hono/zod-openapi";
 import { describe, expect, it } from "vitest";
-import { EventDefinitionVersionSchema } from "./event-definition";
+import { ClosedJsonSchemaSchema, EventDefinitionVersionSchema } from "./event-definition";
 import {
   PublishEventDefinitionVersionRequestSchema,
   WriteClosedJsonSchemaSchema,
 } from "./event-definition-write";
 import { PERSISTED_ARRAY_MAX_ITEMS, PERSISTED_JSON_MAX_DEPTH } from "./persisted-field-limits";
+import { incomingJsonBoundIssue } from "./incoming-json-bound";
 import { describeRequestBody, requestBodySchemaForOperation } from "./request-body-help";
 import { unwrapField, zodDefType, zodElement, zodOptions } from "./request-body-help-unwrap";
 
@@ -221,4 +222,70 @@ describe("Event Definition publication pre-refinement depth guard", () => {
       path: ["fields", 0],
     });
   });
+
+  it("rejects a depth-2000 type:null properties chain without throwing", () => {
+    const jsonSchema = nestClosedJsonProperties(2000, { type: "null" });
+    expect(incomingJsonBoundIssue(jsonSchema)).not.toBeNull();
+    const body = publishJsonField(jsonSchema);
+    expect(() => PublishEventDefinitionVersionRequestSchema.safeParse(body)).not.toThrow();
+    expect(() => ClosedJsonSchemaSchema.safeParse(jsonSchema)).not.toThrow();
+    const parsed = PublishEventDefinitionVersionRequestSchema.safeParse(body);
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects a depth-2000 invalid-discriminator properties chain without throwing", () => {
+    const jsonSchema = nestClosedJsonProperties(2000, { type: "c" });
+    expect(incomingJsonBoundIssue(jsonSchema)).not.toBeNull();
+    const body = publishJsonField(jsonSchema);
+    expect(() => PublishEventDefinitionVersionRequestSchema.safeParse(body)).not.toThrow();
+    expect(() => ClosedJsonSchemaSchema.safeParse(jsonSchema)).not.toThrow();
+    const parsed = PublishEventDefinitionVersionRequestSchema.safeParse(body);
+    expect(parsed.success).toBe(false);
+  });
+
+  it("reports only extra on a legitimate Closed JSON object", () => {
+    const parsed = WriteClosedJsonSchemaSchema.safeParse({
+      type: "object",
+      properties: { foo: { type: "null" } },
+      additionalProperties: false,
+      extra: true,
+    });
+    expect(parsed.success).toBe(false);
+    if (parsed.success) return;
+    expect(parsed.error.issues).toEqual([
+      expect.objectContaining({ code: "unrecognized_keys", keys: ["extra"] }),
+    ]);
+    expect(JSON.stringify(parsed.error.issues)).not.toContain("properties");
+    expect(JSON.stringify(parsed.error.issues)).not.toContain("additionalProperties");
+  });
+
+  it("reports the invalid discriminator instead of an unrelated key", () => {
+    const parsed = WriteClosedJsonSchemaSchema.safeParse({ type: "c", a: "value" });
+    expect(parsed.success).toBe(false);
+    if (parsed.success) return;
+    expect(parsed.error.issues[0]).toMatchObject({
+      code: "invalid_union",
+      path: ["type"],
+    });
+    expect(JSON.stringify(parsed.error.issues)).not.toContain('"a"');
+  });
 });
+
+function nestClosedJsonProperties(
+  depth: number,
+  leaf: Record<string, unknown>,
+): Record<string, unknown> {
+  let node: Record<string, unknown> = leaf;
+  for (let index = 0; index < depth; index += 1) {
+    node = { type: leaf.type, properties: { child: node } };
+  }
+  return node;
+}
+
+function publishJsonField(jsonSchema: Record<string, unknown>) {
+  return {
+    entityType: "user",
+    fields: [{ name: "payload", type: "json", required: false, jsonSchema }],
+    dimensions: [],
+  };
+}

@@ -18,6 +18,14 @@ export const PERSISTED_RECORD_MAX_KEYS = 64;
 export const PERSISTED_RECORD_KEY_MAX_LENGTH = 128;
 /** Maximum nesting depth of persisted JSON objects and arrays, including the root. */
 export const PERSISTED_JSON_MAX_DEPTH = 8;
+/**
+ * Parser-safety cap on the complete incoming JSON tree, including keys a later
+ * union will reject. Distinct from {@link PERSISTED_JSON_MAX_DEPTH}: Closed JSON
+ * at the product bound encodes as multiple raw levels per schema node. This cap
+ * is walked iteratively before any recursive Zod parse.
+ */
+export const PERSISTED_JSON_MAX_INCOMING_DEPTH = 64;
+export const PERSISTED_JSON_INCOMING_DEPTH_MESSAGE = `exceeds persisted JSON incoming depth of ${PERSISTED_JSON_MAX_INCOMING_DEPTH}`;
 /** Maximum UTF-16 code units in a persisted client-key origin URL. */
 export const PERSISTED_ORIGIN_MAX_LENGTH = 2048;
 /** Maximum items in a telemetry enum / allowlist (named domain bound, not the array product cap). */

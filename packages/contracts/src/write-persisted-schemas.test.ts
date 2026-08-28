@@ -6,15 +6,17 @@ import {
   PERSISTED_CONDITION_VALUE_MAX_LENGTH,
   PERSISTED_DESCRIPTION_MAX_LENGTH,
   PERSISTED_IDENTIFIER_MAX_LENGTH,
+  PERSISTED_JSON_INCOMING_DEPTH_MESSAGE,
   PERSISTED_JSON_MAX_DEPTH,
+  PERSISTED_JSON_MAX_INCOMING_DEPTH,
   PERSISTED_NAME_MAX_LENGTH,
   PERSISTED_RECORD_KEY_MAX_LENGTH,
   PERSISTED_RECORD_MAX_KEYS,
   PERSISTED_VARIANT_VALUE_STRING_MAX_LENGTH,
 } from "./persisted-field-limits";
+import { incomingJsonBoundIssue, persistedJsonDepth } from "./incoming-json-bound";
 import {
   EndRunRequestSchema,
-  persistedJsonDepth,
   TargetingRuleInputSchema,
   WriteConditionSchema,
   WriteFlagJsonSchemaSchema,
@@ -228,6 +230,34 @@ describe("EndRunRequestSchema", () => {
         .success,
     ).toBe(false);
     expect(EndRunRequestSchema.safeParse({ reason: "done" }).success).toBe(true);
+  });
+});
+
+describe("incoming JSON structure bound", () => {
+  it("walks every key iteratively and never throws on a depth-2000 chain", () => {
+    let nested: Record<string, unknown> = { type: "null" };
+    for (let depth = 0; depth < 2000; depth += 1) {
+      nested = { type: "null", properties: { child: nested } };
+    }
+    expect(() => persistedJsonDepth(nested)).not.toThrow();
+    expect(persistedJsonDepth(nested)).toBeGreaterThan(PERSISTED_JSON_MAX_INCOMING_DEPTH);
+    const overflow = incomingJsonBoundIssue(nested, ["jsonSchema"]);
+    expect(overflow).toMatchObject({
+      message: PERSISTED_JSON_INCOMING_DEPTH_MESSAGE,
+      path: expect.arrayContaining(["jsonSchema", "properties"]),
+    });
+  });
+
+  it("accepts a document at the incoming bound and rejects one level over", () => {
+    let atBound: unknown = "leaf";
+    for (let depth = 1; depth < PERSISTED_JSON_MAX_INCOMING_DEPTH; depth += 1) {
+      atBound = { child: atBound };
+    }
+    expect(persistedJsonDepth(atBound)).toBe(PERSISTED_JSON_MAX_INCOMING_DEPTH);
+    expect(incomingJsonBoundIssue(atBound)).toBeNull();
+    expect(incomingJsonBoundIssue({ overflow: atBound })).toMatchObject({
+      message: PERSISTED_JSON_INCOMING_DEPTH_MESSAGE,
+    });
   });
 });
 

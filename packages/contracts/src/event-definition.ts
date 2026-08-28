@@ -178,7 +178,7 @@ function closedJsonArraySchema(nested: z.ZodType<ClosedJsonSchema>) {
 
 function closedJsonLeafUnion(): z.ZodType<ClosedJsonSchema> {
   return z
-    .union([
+    .discriminatedUnion("type", [
       ClosedJsonStringSchema,
       ClosedJsonNumberSchema,
       ClosedJsonBooleanSchema,
@@ -189,7 +189,7 @@ function closedJsonLeafUnion(): z.ZodType<ClosedJsonSchema> {
 
 function closedJsonSchemaUnion(nested: z.ZodType<ClosedJsonSchema>): z.ZodType<ClosedJsonSchema> {
   return z
-    .union([
+    .discriminatedUnion("type", [
       closedJsonObjectSchema(nested),
       closedJsonArraySchema(nested),
       ClosedJsonStringSchema,

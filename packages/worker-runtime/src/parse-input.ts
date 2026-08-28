@@ -1,5 +1,9 @@
 import { readBoundedRequestBytes, trustedContentLength } from "@splitch/bounded-body";
-import type { ErrorResponse, RawBodyByteLimit } from "@splitch/contracts";
+import {
+  incomingJsonBoundIssue,
+  type ErrorResponse,
+  type RawBodyByteLimit,
+} from "@splitch/contracts";
 import type { z } from "zod";
 
 /**
@@ -41,14 +45,14 @@ export async function parseInput<Schema extends z.ZodTypeAny>(
     body: body.value,
   };
 
-  const structure = jsonStructureBound(raw.body);
-  if (structure) {
+  const incomingBound = incomingJsonBoundIssue(raw);
+  if (incomingBound) {
     return {
       ok: false,
       error: {
         code: "VALIDATION_ERROR",
         message: "request failed schema validation",
-        details: { issues: [structure] },
+        details: { issues: [incomingBound] },
       },
     };
   }
@@ -84,18 +88,16 @@ function flattenValidationIssue(
     }));
   }
   if (issue.code === "invalid_union") {
-    const selected = issue.errors.filter(branchFailedOnlyFromUnknownKeys);
-    const selectedBranch = selected[0];
-    if (selected.length === 1 && selectedBranch) {
-      const unknownKeys = selectedBranch
-        .flatMap(flattenValidationIssue)
-        .filter(isUnrecognizedKeyIssue)
-        .map((nested) => ({
-          ...nested,
-          path: prefixIssuePath(issue.path, nested.path),
-        }));
-      if (unknownKeys.length > 0) {
-        return uniqueValidationIssues(unknownKeys);
+    const selected = issue.errors.filter(branchIsUnambiguouslySelected);
+    if (selected.length === 1) {
+      const selectedBranch = selected[0];
+      if (selectedBranch !== undefined) {
+        return uniqueValidationIssues(
+          selectedBranch.flatMap(flattenValidationIssue).map((nested) => ({
+            ...nested,
+            path: prefixIssuePath(issue.path, nested.path),
+          })),
+        );
       }
     }
   }
@@ -113,64 +115,22 @@ function prefixIssuePath(parent: PropertyKey[], child: string[]): string[] {
   return [...parentPath, ...child];
 }
 
-function isUnrecognizedKeyIssue(issue: { message: string }): boolean {
-  return issue.message.startsWith("Unrecognized key: ");
+function branchIsUnambiguouslySelected(branch: z.core.$ZodIssue[]): boolean {
+  return branch.length > 0 && !branch.some(isBranchRootTypeMismatch);
 }
 
-function branchFailedOnlyFromUnknownKeys(branch: z.core.$ZodIssue[]): boolean {
-  return branch.length > 0 && branch.every(isUnknownKeyOnlyIssue);
+function isBranchRootTypeMismatch(issue: z.core.$ZodIssue): boolean {
+  if (isDiscriminatorMiss(issue)) return true;
+  const isRootOrType =
+    issue.path.length === 0 || (issue.path.length === 1 && issue.path[0] === "type");
+  if (!isRootOrType) return false;
+  return issue.code === "invalid_value" || issue.code === "invalid_type";
 }
 
-function isUnknownKeyOnlyIssue(issue: z.core.$ZodIssue): boolean {
-  if (issue.code === "unrecognized_keys") return true;
-  if (issue.code !== "invalid_union") return false;
-  return issue.errors.filter(branchFailedOnlyFromUnknownKeys).length === 1;
-}
-
-/**
- * Envelope + persisted JSON (depth 8) is well under this. A 2000-deep
- * discriminator-invalid tree is rejected here iteratively, before Zod can
- * walk a leftover recursive alternative and overflow the stack.
- */
-const REQUEST_JSON_STRUCTURE_MAX_DEPTH = 32;
-
-function jsonStructureBound(body: unknown): { path: string[]; message: string } | null {
-  const overflow = firstJsonStructureOverflow(body, REQUEST_JSON_STRUCTURE_MAX_DEPTH);
-  if (!overflow) return null;
-  return {
-    path: ["body", ...overflow],
-    message: `exceeds request JSON structure depth of ${REQUEST_JSON_STRUCTURE_MAX_DEPTH}`,
-  };
-}
-
-function firstJsonStructureOverflow(value: unknown, maxDepth: number): string[] | null {
-  const stack: Array<{ value: unknown; depth: number; path: string[] }> = [
-    { value, depth: 1, path: [] },
-  ];
-  while (stack.length > 0) {
-    const frame = stack.pop();
-    if (!frame) return null;
-    if (frame.depth > maxDepth) {
-      return frame.path;
-    }
-    pushJsonStructureChildren(stack, frame);
-  }
-  return null;
-}
-
-function pushJsonStructureChildren(
-  stack: Array<{ value: unknown; depth: number; path: string[] }>,
-  frame: { value: unknown; depth: number; path: string[] },
-): void {
-  if (frame.value === null || typeof frame.value !== "object") {
-    return;
-  }
-  const entries = Array.isArray(frame.value)
-    ? frame.value.map((child, index) => [String(index), child] as const)
-    : Object.entries(frame.value);
-  for (const [key, child] of entries) {
-    stack.push({ value: child, depth: frame.depth + 1, path: [...frame.path, key] });
-  }
+function isDiscriminatorMiss(issue: z.core.$ZodIssue): boolean {
+  return (
+    issue.code === "invalid_union" && "note" in issue && issue.note === "No matching discriminator"
+  );
 }
 
 function uniqueValidationIssues(

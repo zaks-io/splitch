@@ -57,6 +57,77 @@ describe("Event Definition publication unknown-key paths", () => {
       .first<{ current_published_version_id: string | null }>();
     expect(published?.current_published_version_id).toBeNull();
   });
+
+  it("reports only extra on a legitimate Closed JSON object", async () => {
+    const response = await request(
+      h,
+      "POST",
+      `/apps/${appId}/event-definitions/${DEFINITION_ID}/versions`,
+      jwt,
+      {
+        entityType: "user",
+        fields: [
+          {
+            name: "payload",
+            type: "json",
+            required: false,
+            jsonSchema: {
+              type: "object",
+              properties: { foo: { type: "null" } },
+              additionalProperties: false,
+              extra: true,
+            },
+          },
+        ],
+        dimensions: [],
+      },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: {
+        issues: [
+          {
+            path: ["body", "fields", "0", "jsonSchema", "extra"],
+            message: 'Unrecognized key: "extra"',
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain("properties");
+    expect(JSON.stringify(body)).not.toContain("additionalProperties");
+  });
+
+  it("reports the invalid discriminator instead of an unrelated Closed JSON key", async () => {
+    const response = await request(
+      h,
+      "POST",
+      `/apps/${appId}/event-definitions/${DEFINITION_ID}/versions`,
+      jwt,
+      {
+        entityType: "user",
+        fields: [
+          {
+            name: "payload",
+            type: "json",
+            required: false,
+            jsonSchema: { type: "c", a: "value" },
+          },
+        ],
+        dimensions: [],
+      },
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: {
+        issues: [{ path: ["body", "fields", "0", "jsonSchema", "type"] }],
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain('"a"');
+  });
 });
 
 async function seedDefinition(repo: Repository, targetAppId: string): Promise<void> {
