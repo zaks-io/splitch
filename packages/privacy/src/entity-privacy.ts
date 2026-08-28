@@ -4,7 +4,8 @@
  * only and are never returned as durable identifiers.
  */
 
-import { computeTargetingKeyHash } from "./hash";
+import { HISTORICAL_SHARED_ROOT_KEY_VERSIONS } from "./app-identity-record";
+import { computeTargetingKeyHash, keyVersionOf } from "./hash";
 import type { SaltStore } from "./salt-store";
 
 export interface EntityPrivacyInput {
@@ -71,4 +72,39 @@ export function analysisRowsForEntity<T extends { targeting_key_hash: string }>(
 ): T[] {
   const hashes = new Set(retainedHashes);
   return rows.filter((row) => hashes.has(row.targeting_key_hash));
+}
+
+/**
+ * Historical Evaluation (`local-v1:`) and Metric Event (`v1:`) hashes share one
+ * digest under the pinned shared-root key. Analysis joins them as one Entity.
+ */
+export function canonicalizeSharedRootTargetingKeyHash(hash: string): string {
+  if (!hash.includes(":")) return hash;
+  const version = keyVersionOf(hash);
+  if (version === HISTORICAL_SHARED_ROOT_KEY_VERSIONS[0]) {
+    return `${HISTORICAL_SHARED_ROOT_KEY_VERSIONS[1]}:${hash.slice(version.length + 1)}`;
+  }
+  return hash;
+}
+
+export function canonicalizeAnalysisRows<T extends { targeting_key_hash?: unknown }>(
+  rows: readonly T[],
+  retainedGroups: readonly (readonly string[])[] = [],
+): T[] {
+  const alias = new Map<string, string>();
+  for (const group of retainedGroups) {
+    if (group.length === 0) continue;
+    const canonical = canonicalizeAnalysisEntityHash(group);
+    for (const hash of group) {
+      alias.set(hash, canonical);
+    }
+  }
+  return rows.map((row) => {
+    if (typeof row.targeting_key_hash !== "string" || !row.targeting_key_hash.includes(":")) {
+      return row;
+    }
+    const grouped = alias.get(row.targeting_key_hash);
+    const hash = grouped ?? canonicalizeSharedRootTargetingKeyHash(row.targeting_key_hash);
+    return hash === row.targeting_key_hash ? row : { ...row, targeting_key_hash: hash };
+  });
 }

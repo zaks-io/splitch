@@ -77,6 +77,9 @@ importers:
       '@splitch/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@splitch/privacy':
+        specifier: workspace:*
+        version: link:../../packages/privacy
       '@splitch/stats':
         specifier: workspace:*
         version: link:../../packages/stats

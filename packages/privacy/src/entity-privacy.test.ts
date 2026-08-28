@@ -4,6 +4,8 @@ import { makeIdentitySaltStore } from "./derived-salt-store";
 import {
   analysisRowsForEntity,
   canonicalizeAnalysisEntityHash,
+  canonicalizeAnalysisRows,
+  canonicalizeSharedRootTargetingKeyHash,
   computeRetainedTargetingKeyHashes,
   resolveEntityPrivacyIdentity,
 } from "./entity-privacy";
@@ -56,5 +58,20 @@ describe("entity privacy consumers", () => {
 
   it("fails loud when analysis is asked to canonicalize an empty hash set", () => {
     expect(() => canonicalizeAnalysisEntityHash([])).toThrow(/no retained/);
+  });
+
+  it("joins historical shared-root prefixes that share one digest", () => {
+    const digest = "485bdba84f840c9627db32bcc99a6f00722b5253754e513ff473c90a8febc588";
+    const rows = canonicalizeAnalysisRows([
+      { targeting_key_hash: `local-v1:${digest}`, metric: "exposure" },
+      { targeting_key_hash: `v1:${digest}`, metric: "metric" },
+      { targeting_key_hash: "app-v1:other", metric: "other" },
+    ]);
+    expect(canonicalizeSharedRootTargetingKeyHash(`local-v1:${digest}`)).toBe(`v1:${digest}`);
+    expect(rows.map((row) => row.targeting_key_hash)).toEqual([
+      `v1:${digest}`,
+      `v1:${digest}`,
+      "app-v1:other",
+    ]);
   });
 });

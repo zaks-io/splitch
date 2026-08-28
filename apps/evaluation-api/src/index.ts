@@ -58,7 +58,17 @@ const holdoverWriteOutboxCleanupRoute = getRoute("holdover_write_outbox_delete")
 if (!holdoverWriteOutboxCleanupRoute) {
   throw new Error("evaluation-api: holdover write outbox cleanup route is not registered");
 }
-const bindingRoutes = [...delegatedRoutes, holdoverWriteOutboxCleanupRoute];
+const entityAssignmentPrivacyExportRoute = getRoute("entity_assignment_privacy_export");
+const entityAssignmentPrivacyDeleteRoute = getRoute("entity_assignment_privacy_delete");
+if (!entityAssignmentPrivacyExportRoute || !entityAssignmentPrivacyDeleteRoute) {
+  throw new Error("evaluation-api: entity assignment privacy routes are not registered");
+}
+const bindingRoutes = [
+  ...delegatedRoutes,
+  holdoverWriteOutboxCleanupRoute,
+  entityAssignmentPrivacyExportRoute,
+  entityAssignmentPrivacyDeleteRoute,
+];
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -149,6 +159,10 @@ async function handleRequest(
       assignmentsKv: env.ASSIGNMENTS_KV,
       holdoverWriteOutbox,
       holdoverWriteAppInventory,
+    },
+    entityAssignmentPrivacy: {
+      assignmentsKv: env.ASSIGNMENTS_KV,
+      saltStore,
     },
     exposureAssembly: {
       saltStore,

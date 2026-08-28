@@ -39,6 +39,8 @@ const NON_TOOL_OPERATION_IDS = [
   "openapi_document_get",
   "environment_exposure_status_delete",
   "holdover_write_outbox_delete",
+  "entity_assignment_privacy_export",
+  "entity_assignment_privacy_delete",
   "organizations_delete",
   "current_user_privacy_export",
   "current_user_delete",
@@ -67,6 +69,8 @@ describe("mcp tools: surface isolation (CRITICAL)", () => {
   it("derives NO tool for binding-only analytics cleanup", () => {
     expect(toolNames.has("environment_exposure_status_delete")).toBe(false);
     expect(toolNames.has("holdover_write_outbox_delete")).toBe(false);
+    expect(toolNames.has("entity_assignment_privacy_export")).toBe(false);
+    expect(toolNames.has("entity_assignment_privacy_delete")).toBe(false);
   });
 
   it("derives NO tool for operations without a backing workflow", () => {

@@ -6,6 +6,7 @@ import {
   StatsInputSchema,
   StatsOutputSchema,
 } from "@splitch/contracts";
+import { canonicalizeAnalysisRows } from "@splitch/privacy";
 import { StatsEngine as DefaultStatsEngine } from "@splitch/stats";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import {
@@ -121,7 +122,9 @@ export async function readStatsInputFromTinybird(
   const params = scopedPipeParams({ ...scope, runId: run.run_id });
 
   const exposureRows = await pipeRows(tinybird, EXPOSURES_PIPE, params);
-  const exposures = exposureRows.map((row) => materializeExposure(row, scope));
+  const exposures = canonicalizeAnalysisRows(
+    exposureRows.map((row) => materializeExposure(row, scope)),
+  );
   // An empty Exposure denominator is a healthy collecting state. Stop here so
   // a fresh Run does not query Metric pipes before any Entity can have a value.
   if (exposures.length === 0) {
@@ -140,7 +143,7 @@ export async function readStatsInputFromTinybird(
         pipeRows(tinybird, ACTIVATION_PIPE, params),
       ])
     : [[], [], await pipeRows(tinybird, ACTIVATION_PIPE, params)];
-  const metric_values = metricRows.map(materializeMetricRow);
+  const metric_values = canonicalizeAnalysisRows(metricRows.map(materializeMetricRow));
   assertAnalysisInputsPresent({
     run_id: run.run_id,
     control_variant: run.control_variant,
@@ -154,10 +157,14 @@ export async function readStatsInputFromTinybird(
     exposures,
     metric_values,
     ...(prePeriodRows.length > 0
-      ? { pre_period_covariates: prePeriodRows.map((row) => rowObject(row)) }
+      ? {
+          pre_period_covariates: canonicalizeAnalysisRows(
+            prePeriodRows.map((row) => rowObject(row)),
+          ),
+        }
       : {}),
     ...(activationRows.length > 0
-      ? { activation_rows: activationRows.map(materializeActivationRow) }
+      ? { activation_rows: canonicalizeAnalysisRows(activationRows.map(materializeActivationRow)) }
       : {}),
   });
 

@@ -4,33 +4,29 @@
  */
 
 import {
-  appIdentityVersionNumber,
   deriveAppIdentityKek,
   generateAppIdentityKey,
-  INITIAL_APP_IDENTITY_KEY_VERSION,
   nextAppIdentityVersion,
   unwrapAppIdentityKey,
   type WrappedAppIdentityKey,
   wrapAppIdentityKey,
 } from "./app-identity-key";
-import { toHex } from "./hmac";
+import {
+  type AppIdentityEpoch,
+  type AppIdentityRecord,
+  APP_IDENTITY_RECORD_SCHEMA_VERSION,
+  cloneAppIdentityRecord,
+  mergeAppIdentityRecords,
+  mintInitialAppIdentityRecord,
+  withHistoricalCompatibility,
+} from "./app-identity-record";
 import type { KeyVersion, SaltBytes } from "./salt-store";
 
-export const APP_IDENTITY_RECORD_SCHEMA_VERSION = 1;
+export type { AppIdentityEpoch, AppIdentityRecord } from "./app-identity-record";
 
 /** Must match `appEntityIdentityKey` in @splitch/contracts. */
 export function defaultAppEntityIdentityRecordKey(appId: string): string {
   return `app:${appId}:entity-identity`;
-}
-
-export interface AppIdentityEpoch {
-  version: KeyVersion;
-  key: SaltBytes;
-}
-
-export interface AppIdentityRecord {
-  currentVersion: KeyVersion;
-  epochs: readonly AppIdentityEpoch[];
 }
 
 export interface WrappedAppIdentityEpoch {
@@ -61,13 +57,6 @@ export interface AppIdentityStore {
 export interface AppIdentityKv {
   get(key: string): Promise<string | null>;
   put(key: string, value: string): Promise<void>;
-}
-
-export function mintInitialAppIdentityRecord(): AppIdentityRecord {
-  return {
-    currentVersion: INITIAL_APP_IDENTITY_KEY_VERSION,
-    epochs: [{ version: INITIAL_APP_IDENTITY_KEY_VERSION, key: generateAppIdentityKey() }],
-  };
 }
 
 export function makeMemoryAppIdentityStore(
@@ -183,10 +172,11 @@ export async function rewrapKvAppIdentityRecord(options: {
     rootSecret: options.oldRootSecret,
     recordKey: options.recordKey,
   });
-  const record = await previous.load(options.appId);
-  if (record === null) {
+  const loaded = await previous.load(options.appId);
+  if (loaded === null) {
     throw new Error("privacy: no App identity record to rewrap");
   }
+  const record = withHistoricalCompatibility(loaded, options.oldRootSecret);
   const next = makeKvAppIdentityStore({
     kv: options.kv,
     rootSecret: options.newRootSecret,
@@ -226,38 +216,4 @@ function isWrappedAppIdentityEpoch(value: unknown): value is WrappedAppIdentityE
   if (typeof epoch.wrappedKey !== "object" || epoch.wrappedKey === null) return false;
   const wrapped = epoch.wrappedKey as Record<string, unknown>;
   return typeof wrapped.iv === "string" && typeof wrapped.ciphertext === "string";
-}
-
-function mergeAppIdentityRecords(
-  existing: AppIdentityRecord,
-  incoming: AppIdentityRecord,
-): AppIdentityRecord {
-  const epochs = existing.epochs.map((epoch) => ({
-    version: epoch.version,
-    key: new Uint8Array(epoch.key) as SaltBytes,
-  }));
-  const seen = new Set(existing.epochs.map((epoch) => toHex(epoch.key)));
-  for (const epoch of incoming.epochs) {
-    const hex = toHex(epoch.key);
-    if (seen.has(hex)) continue;
-    epochs.push({ version: epoch.version, key: new Uint8Array(epoch.key) as SaltBytes });
-    seen.add(hex);
-  }
-  const existingNumber = appIdentityVersionNumber(existing.currentVersion) ?? 0;
-  const incomingNumber = appIdentityVersionNumber(incoming.currentVersion) ?? 0;
-  return {
-    currentVersion:
-      incomingNumber > existingNumber ? incoming.currentVersion : existing.currentVersion,
-    epochs,
-  };
-}
-
-function cloneAppIdentityRecord(record: AppIdentityRecord): AppIdentityRecord {
-  return {
-    currentVersion: record.currentVersion,
-    epochs: record.epochs.map((epoch) => ({
-      version: epoch.version,
-      key: new Uint8Array(epoch.key) as SaltBytes,
-    })),
-  };
 }

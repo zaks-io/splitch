@@ -40,6 +40,33 @@ const HoldoverWriteOutboxDeleteQuerySchema = z
     phase: z.enum(["prepare", "finalize", "cancel", "mark-d1-deleted"]).optional(),
   })
   .strict();
+const EntityAssignmentPrivacyRequestSchema = z
+  .object({
+    idType: z.string().min(1),
+    targetingKey: z.string().min(1),
+  })
+  .strict();
+const EntityAssignmentPrivacyExportSchema = z
+  .object({
+    appId: z.string(),
+    idType: z.string(),
+    targetingKeyHashes: z.array(z.string()),
+    records: z.array(
+      z.object({
+        targetingKeyHash: z.string(),
+        assignments: z.record(z.string(), z.object({ runId: z.string(), variant: z.string() })),
+      }),
+    ),
+  })
+  .strict();
+const EntityAssignmentPrivacyDeleteSchema = z
+  .object({
+    appId: z.string(),
+    idType: z.string(),
+    targetingKeyHashes: z.array(z.string()),
+    deletedKeyCount: z.number().int().nonnegative(),
+  })
+  .strict();
 
 export const analysisRoutes = [
   defineApiRoute({
@@ -147,6 +174,32 @@ export const analysisRoutes = [
       "Freeze, finalize, or cancel Assignment Store holdover-write outbox state on App deletion; suppress+purge on Entity deletion.",
     request: { params: AppParams, query: HoldoverWriteOutboxDeleteQuerySchema },
     response: z.object({ deleted: z.literal(true) }).strict(),
+    auth: "internal-worker",
+    rateLimit: "none",
+    idempotency: "none",
+    errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
+  }),
+  defineApiRoute({
+    operationId: "entity_assignment_privacy_export",
+    owner: "evaluation-api",
+    method: "POST",
+    path: "/internal/apps/:appId/entity-assignments/export",
+    summary: "Export every retained-epoch Assignment Store blob for one Entity.",
+    request: { params: AppParams, body: EntityAssignmentPrivacyRequestSchema },
+    response: EntityAssignmentPrivacyExportSchema,
+    auth: "internal-worker",
+    rateLimit: "none",
+    idempotency: "none",
+    errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
+  }),
+  defineApiRoute({
+    operationId: "entity_assignment_privacy_delete",
+    owner: "evaluation-api",
+    method: "POST",
+    path: "/internal/apps/:appId/entity-assignments/delete",
+    summary: "Delete every retained-epoch Assignment Store blob for one Entity.",
+    request: { params: AppParams, body: EntityAssignmentPrivacyRequestSchema },
+    response: EntityAssignmentPrivacyDeleteSchema,
     auth: "internal-worker",
     rateLimit: "none",
     idempotency: "none",

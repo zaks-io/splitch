@@ -44,7 +44,8 @@ describe("entity privacy delete route availability", () => {
 
   afterEach(async () => bindings.dispose());
 
-  it("stays fail-loud unavailable even when holdover cleanup is wired", async () => {
+  it("exports and deletes every retained-epoch hash without echoing the Targeting Key", async () => {
+    const hashes = ["local-v1:abc", "app-v1:def"] as const;
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
@@ -57,21 +58,28 @@ describe("entity privacy delete route availability", () => {
       }),
       rateLimiter: allowLimiter,
       repo: createRepository(bindings.d1),
-      holdoverWriteOutboxCleanup: {
-        async prepare() {
-          throw new Error("entity privacy must not claim queued deletion");
+      nowIso: () => NOW_ISO,
+      entityPrivacy: {
+        async exportEntity() {
+          return {
+            appId: PRIMARY.appId,
+            idType: "user",
+            targetingKeyHashes: hashes,
+            records: [
+              {
+                targetingKeyHash: hashes[0],
+                assignments: { "exp-old": { runId: "run-old", variant: "control" } },
+              },
+            ],
+          };
         },
-        async markD1Deleted() {
-          throw new Error("entity privacy must not claim queued deletion");
-        },
-        async finalize() {
-          throw new Error("entity privacy must not claim queued deletion");
-        },
-        async cancel() {
-          throw new Error("entity privacy must not claim queued deletion");
-        },
-        async delete() {
-          throw new Error("entity privacy must not claim queued deletion");
+        async deleteEntity() {
+          return {
+            appId: PRIMARY.appId,
+            idType: "user",
+            targetingKeyHashes: hashes,
+            deletedKeyCount: hashes.length,
+          };
         },
       },
     });
@@ -84,7 +92,15 @@ describe("entity privacy delete route availability", () => {
       exp: Math.floor(NOW_MS / 1000) + 3600,
       scopes: [appAdminScope(PRIMARY.appId)],
     });
-    const response = await app.request(`/apps/${PRIMARY.appId}/privacy/entities/delete`, {
+    const exported = await app.request(`/apps/${PRIMARY.appId}/privacy/entities/export`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ idType: "user", targetingKey: "subject_entity_privacy" }),
+    });
+    const deleted = await app.request(`/apps/${PRIMARY.appId}/privacy/entities/delete`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${jwt}`,
@@ -93,10 +109,18 @@ describe("entity privacy delete route availability", () => {
       body: JSON.stringify({ idType: "user", targetingKey: "subject_entity_privacy" }),
     });
 
-    expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({
-      code: "SERVICE_UNAVAILABLE",
-      message: "operation is not available yet",
+    expect(exported.status).toBe(200);
+    expect(deleted.status).toBe(200);
+    const exportBody = await exported.json();
+    const deleteBody = await deleted.json();
+    expect(exportBody).toMatchObject({
+      request: { requestType: "export", subjectType: "entity", status: "completed" },
+      job: { kind: "export", status: "completed" },
     });
+    expect(deleteBody).toMatchObject({
+      request: { requestType: "delete", subjectType: "entity", status: "completed" },
+      job: { kind: "delete", status: "completed" },
+    });
+    expect(JSON.stringify({ exportBody, deleteBody })).not.toContain("subject_entity_privacy");
   });
 });

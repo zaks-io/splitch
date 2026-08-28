@@ -38,7 +38,7 @@ export function nextAppIdentityVersion(current: KeyVersion): KeyVersion {
 }
 
 /** Numeric suffix of `app-vN`, or null when the label is not an App epoch. */
-export function appIdentityVersionNumber(version: KeyVersion): number | null {
+function appIdentityVersionNumber(version: KeyVersion): number | null {
   const match = APP_IDENTITY_VERSION_PATTERN.exec(version);
   return match ? Number(match[1]) : null;
 }

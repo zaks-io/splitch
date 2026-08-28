@@ -15,9 +15,9 @@ import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
 import { createApp, type EvaluationDoor } from "./app";
 import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import { makeDataPlaneAuthResolver, sha256Hex } from "./data-plane-auth";
+import { stubEntityAssignmentPrivacy } from "./sdk-route-entity-privacy-fixture";
 import {
   APP_ID,
-  baseInput,
   ENVIRONMENT_ID,
   EXPERIMENT_ID,
   FLAG_KEY,
@@ -215,6 +215,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     holdoverWrite: options.holdoverWrite,
     holdoverWriteOutboxCleanup:
       options.door === "binding" ? stubHoldoverWriteOutboxCleanup() : undefined,
+    entityAssignmentPrivacy: options.door === "binding" ? stubEntityAssignmentPrivacy() : undefined,
     exposureAssembly: {
       saltStore: new StaticSaltStore(),
       sourceId: "pop-route-test",
@@ -245,49 +246,8 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
   };
 }
 
-export function sdkRouteInit(
-  credential?: string,
-  extraHeaders: Record<string, string> = {},
-  bodyOverrides: Record<string, unknown> = {},
-): RequestInit {
-  return {
-    method: "POST",
-    headers: {
-      ...(credential === undefined ? {} : { authorization: `Bearer ${credential}` }),
-      "content-type": "application/json",
-      "idempotency-key": "test-logical-evaluation",
-      ...extraHeaders,
-    },
-    body: JSON.stringify({
-      flagKey: FLAG_KEY,
-      targetingKey: baseInput().evaluationContext.targetingKey,
-      idType: baseInput().evaluationContext.idType,
-      attributes: baseInput().evaluationContext.attributes,
-      ...bodyOverrides,
-    }),
-  };
-}
-
-/** evaluate-all request body: DataPlaneEvaluateRequest minus flagKey. */
-export function evaluateAllRouteInit(
-  credential?: string,
-  extraHeaders: Record<string, string> = {},
-  bodyOverrides: Record<string, unknown> = {},
-): RequestInit {
-  const { flagKey: _flagKey, ...body } = JSON.parse(
-    String(sdkRouteInit(credential, extraHeaders, bodyOverrides).body),
-  ) as Record<string, unknown>;
-  return {
-    method: "POST",
-    headers: {
-      ...(credential === undefined ? {} : { authorization: `Bearer ${credential}` }),
-      "content-type": "application/json",
-      "idempotency-key": "test-logical-evaluate-all",
-      ...extraHeaders,
-    },
-    body: JSON.stringify(body),
-  };
-}
+// biome-ignore lint/performance/noBarrelFile: compatibility export preserves existing test imports
+export { evaluateAllRouteInit, sdkRouteInit } from "./sdk-route-request-init";
 
 export class RecordingExposureSink {
   readonly writes: AssembledExposure[] = [];

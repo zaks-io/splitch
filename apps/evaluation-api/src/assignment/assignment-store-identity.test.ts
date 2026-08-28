@@ -106,4 +106,61 @@ describe("KvAssignmentStore first-mint identity merge", () => {
     expect(kv.getCalls).toContain(historicalKey);
     expect(kv.getCalls).toContain(current.entityKey);
   });
+
+  it("merges compatible epoch maps and fails loud on a conflict", async () => {
+    const saltStore = hostedIdentitySaltStore();
+    const historicalHash = await computeTargetingKeyHash(saltStore, {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+      keyVersion: "local-v1",
+    });
+    const current = await hashedAssignmentIdentity(saltStore, basePut);
+    const kv = new RecordingKv();
+    kv.putRaw(
+      assignmentKey(basePut.appId, basePut.idType, historicalHash),
+      serializeAssignmentValue({ "exp-old": { runId: "run-old", variant: "control" } }),
+    );
+    kv.putRaw(
+      current.entityKey,
+      serializeAssignmentValue({ "exp-new": { runId: "run-new", variant: "treatment" } }),
+    );
+
+    const store = new KvAssignmentStore(kv, new RecordingWriterNamespace(), saltStore);
+    const merged = await store.getAll(basePut);
+    expect(merged).toEqual(
+      new Map([
+        ["exp-old", { runId: "run-old", variant: "control" }],
+        ["exp-new", { runId: "run-new", variant: "treatment" }],
+      ]),
+    );
+
+    kv.putRaw(
+      assignmentKey(basePut.appId, basePut.idType, historicalHash),
+      serializeAssignmentValue({ "exp-new": { runId: "run-other", variant: "control" } }),
+    );
+    await expect(store.getAll(basePut)).rejects.toThrow(/Conflicting retained-epoch Assignment/);
+  });
+
+  it("writes a new Experiment under the active epoch only", async () => {
+    const saltStore = hostedIdentitySaltStore();
+    const historicalHash = await computeTargetingKeyHash(saltStore, {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+      keyVersion: "v1",
+    });
+    const writer = new RecordingWriterNamespace();
+    const store = new KvAssignmentStore(new RecordingKv(), writer, saltStore);
+    await store.put({ ...basePut, experimentId: "exp-new" });
+    const current = await hashedAssignmentIdentity(saltStore, basePut);
+    expect(writer.names[0]).toContain(current.targetingKeyHash);
+    expect(writer.names[0]).not.toContain(historicalHash);
+    expect(writer.bodies).toEqual([
+      expect.objectContaining({
+        experimentId: "exp-new",
+        targetingKeyHash: current.targetingKeyHash,
+      }),
+    ]);
+  });
 });

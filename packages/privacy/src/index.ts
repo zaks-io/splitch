@@ -10,12 +10,20 @@ export {
 } from "./app-identity-key";
 export type { WrappedAppIdentityKey } from "./app-identity-key";
 export {
-  advanceAppIdentityEpoch,
   APP_IDENTITY_RECORD_SCHEMA_VERSION,
+  mintInitialAppIdentityRecord,
+} from "./app-identity-record";
+export {
+  APP_IDENTITY_RESET_CHECKPOINTS,
+  APP_IDENTITY_RESET_SUBJECT_REF,
+  resetAppIdentityAfterCheckpoints,
+} from "./app-identity-reset";
+export type { AppIdentityResetAttestation, AppIdentityResetCheckpoint } from "./app-identity-reset";
+export {
+  advanceAppIdentityEpoch,
   defaultAppEntityIdentityRecordKey,
   makeKvAppIdentityStore,
   makeMemoryAppIdentityStore,
-  mintInitialAppIdentityRecord,
   parseWrappedAppIdentityRecord,
   rewrapKvAppIdentityRecord,
   unwrapAppIdentityRecord,
@@ -43,6 +51,8 @@ export type { DerivedSaltStoreOptions, IdentitySaltStoreOptions } from "./derive
 export {
   analysisRowsForEntity,
   canonicalizeAnalysisEntityHash,
+  canonicalizeAnalysisRows,
+  canonicalizeSharedRootTargetingKeyHash,
   computeRetainedTargetingKeyHashes,
   resolveEntityPrivacyIdentity,
 } from "./entity-privacy";

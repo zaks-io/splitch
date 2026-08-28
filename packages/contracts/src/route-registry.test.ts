@@ -147,6 +147,8 @@ const CANONICAL_OPERATION_IDS = [
   "environment_exposure_status_get",
   "environment_exposure_status_delete",
   "holdover_write_outbox_delete",
+  "entity_assignment_privacy_export",
+  "entity_assignment_privacy_delete",
   "organization_usage_get",
   "openapi_document_get",
   // Privacy

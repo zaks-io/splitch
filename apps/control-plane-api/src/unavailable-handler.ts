@@ -140,6 +140,9 @@ export function mountUnavailableControlPlaneRoutes(
   repo: Repository,
 ): void {
   for (const operationId of unavailableControlPlaneOperationIds) {
+    if (operationId === "entity_privacy_export" || operationId === "entity_privacy_delete") {
+      continue;
+    }
     registrar.mount(
       app,
       controlPlaneRoute(operationId),

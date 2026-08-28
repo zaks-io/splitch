@@ -3,32 +3,34 @@
  *
  * Current-epoch HMAC keys are random `app_entity_identity_key` values stored
  * (and rewrapped) per App. Historical shared-root versions stay resolvable so
- * retained `v1:` / `local-v1:` rows remain comparable. The root is never the
- * current Targeting Key HMAC key.
+ * retained `v1:` / `local-v1:` rows remain comparable. The live root is never
+ * the current Targeting Key HMAC key and is not used to recompute historical
+ * hashes after provision.
  */
 
-import { isAppIdentityKeyVersion } from "./app-identity-key";
+import {
+  canonicalCurrentKey,
+  HISTORICAL_SHARED_ROOT_KEY_VERSIONS as historicalSharedRootKeyVersions,
+  mintInitialAppIdentityRecord,
+  withHistoricalCompatibility,
+} from "./app-identity-record";
+import { toHex } from "./hmac";
 import {
   type AppIdentityRecord,
   type AppIdentityStore,
   makeMemoryAppIdentityStore,
-  mintInitialAppIdentityRecord,
 } from "./app-identity-store";
-import { utf8Bytes } from "./hmac";
 import type { KeyVersion, SaltBytes, SaltStore } from "./salt-store";
 
 /** Current write-path identity epoch label for a newly minted App. */
 export const DEFAULT_PRIVACY_KEY_VERSION: KeyVersion = "app-v1";
 
-/**
- * Pre-App-identity prefixes. HMAC key material is the raw root secret so
- * retained Evaluation (`local-v1:`) and Metric Event (`v1:`) rows stay
- * recomputable. Current writes must not emit these prefixes.
- */
-export const HISTORICAL_SHARED_ROOT_KEY_VERSIONS = ["local-v1", "v1"] as const;
+export const HISTORICAL_SHARED_ROOT_KEY_VERSIONS = historicalSharedRootKeyVersions;
 
 /** Committed local/pr-ci fixture. Never a hosted fallback. */
 export const LOCAL_PRIVACY_SALT_FIXTURE = "splitch-local-evaluation-salt";
+
+const provisionLocks = new WeakMap<AppIdentityStore, Map<string, Promise<AppIdentityRecord>>>();
 
 export interface IdentitySaltStoreOptions {
   rootSecret: string | SaltBytes;
@@ -55,19 +57,6 @@ export function isHistoricalSharedRootKeyVersion(keyVersion: KeyVersion): boolea
   return (HISTORICAL_SHARED_ROOT_KEY_VERSIONS as readonly string[]).includes(keyVersion);
 }
 
-function rootSecretBytes(rootSecret: string | SaltBytes): SaltBytes {
-  if (typeof rootSecret === "string") {
-    if (rootSecret.length === 0) {
-      throw new Error("privacy: empty root privacy secret");
-    }
-    return utf8Bytes(rootSecret);
-  }
-  if (rootSecret.length === 0) {
-    throw new Error("privacy: empty root privacy secret");
-  }
-  return rootSecret;
-}
-
 export function makeIdentitySaltStore(options: IdentitySaltStoreOptions): SaltStore {
   const allowed = options.allowedKeyVersions ? new Set(options.allowedKeyVersions) : null;
   const rootSecret = options.rootSecret;
@@ -80,25 +69,47 @@ export function makeIdentitySaltStore(options: IdentitySaltStoreOptions): SaltSt
   }
 
   async function ensureCurrent(appId: string): Promise<AppIdentityRecord> {
+    let locks = provisionLocks.get(identityStore);
+    if (locks === undefined) {
+      locks = new Map();
+      provisionLocks.set(identityStore, locks);
+    }
+    const inflight = locks.get(appId);
+    if (inflight) return inflight;
+    const pending = provisionAppIdentity(appId).finally(() => {
+      if (locks.get(appId) === pending) locks.delete(appId);
+    });
+    locks.set(appId, pending);
+    return pending;
+  }
+
+  async function provisionAppIdentity(appId: string): Promise<AppIdentityRecord> {
     const existing = await identityStore.load(appId);
-    if (existing) return existing;
-    const minted = mintInitialAppIdentityRecord();
+    if (existing) {
+      const complete = withHistoricalCompatibility(existing, rootSecret);
+      if (complete.epochs.length !== existing.epochs.length) {
+        await identityStore.save(appId, complete);
+        return (await identityStore.load(appId)) ?? complete;
+      }
+      return existing;
+    }
+    const minted = mintInitialAppIdentityRecord(rootSecret);
     await identityStore.save(appId, minted);
-    const stored = await identityStore.load(appId);
-    return stored ?? minted;
+    return (await identityStore.load(appId)) ?? minted;
   }
 
   async function saltsForVersion(appId: string, keyVersion: KeyVersion): Promise<SaltBytes[]> {
     assertAllowed(keyVersion);
-    if (isHistoricalSharedRootKeyVersion(keyVersion)) {
-      return [rootSecretBytes(rootSecret)];
+    const record = await ensureCurrent(appId);
+    const keys = record.epochs
+      .filter((epoch) => epoch.version === keyVersion)
+      .map((epoch) => epoch.key);
+    if (keyVersion === record.currentVersion && keys.length > 1) {
+      const canonical = canonicalCurrentKey(record);
+      const canonicalHex = toHex(canonical);
+      return [canonical, ...keys.filter((key) => toHex(key) !== canonicalHex)];
     }
-    if (!isAppIdentityKeyVersion(keyVersion)) {
-      return [];
-    }
-    const loaded = await identityStore.load(appId);
-    const record = loaded ?? (await ensureCurrent(appId));
-    return record.epochs.filter((epoch) => epoch.version === keyVersion).map((epoch) => epoch.key);
+    return keys;
   }
 
   return {
@@ -123,7 +134,7 @@ export function makeIdentitySaltStore(options: IdentitySaltStoreOptions): SaltSt
     async retainedKeyVersions(appId) {
       const loaded = await identityStore.load(appId);
       const appVersions: KeyVersion[] = [];
-      const seen = new Set<string>();
+      const seen = new Set<string>(HISTORICAL_SHARED_ROOT_KEY_VERSIONS);
       for (const epoch of loaded?.epochs ?? []) {
         if (seen.has(epoch.version)) continue;
         seen.add(epoch.version);

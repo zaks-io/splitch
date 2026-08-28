@@ -12,6 +12,7 @@ import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { durableConfigStoreAccess } from "./config-store-do";
 import { durableCredentialCacheWriterAccess } from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
+import { createEntityPrivacyConsumer } from "./entity-privacy-consumer";
 import { createHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { rateLimiterForTarget } from "./rate-limit";
@@ -56,6 +57,7 @@ export async function handleControlPlaneAppRequest(input: {
     },
     approvalArchiveStore: approvalArchiveStoreFromEnv(env),
     holdoverWriteOutboxCleanup: createHoldoverWriteOutboxCleanup(env.EVALUATION_API),
+    entityPrivacy: createEntityPrivacyConsumer(env.EVALUATION_API),
     sentry: {
       secretKek: env.INTEGRATION_SECRET_KEK,
       secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,

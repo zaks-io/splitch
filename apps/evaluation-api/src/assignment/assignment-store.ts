@@ -107,8 +107,15 @@ export function mergeRetainedAssignmentValues(
   const merged: AssignmentStoreValue = {};
   for (const value of values) {
     for (const [experimentId, entry] of Object.entries(value)) {
-      if (merged[experimentId] === undefined) {
+      const existing = merged[experimentId];
+      if (existing === undefined) {
         merged[experimentId] = entry;
+        continue;
+      }
+      if (existing.runId !== entry.runId || existing.variant !== entry.variant) {
+        throw new AssignmentStoreError(
+          `Conflicting retained-epoch Assignment for experiment "${experimentId}"`,
+        );
       }
     }
   }

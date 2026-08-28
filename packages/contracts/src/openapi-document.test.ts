@@ -138,7 +138,9 @@ describe("openapi document: full route coverage", () => {
       cleanupOperations: operations.filter(
         ({ operationId }) =>
           operationId === "environment_exposure_status_delete" ||
-          operationId === "holdover_write_outbox_delete",
+          operationId === "holdover_write_outbox_delete" ||
+          operationId === "entity_assignment_privacy_export" ||
+          operationId === "entity_assignment_privacy_delete",
       ),
     }).toEqual({ internalPaths: [], cleanupOperations: [] });
   });
