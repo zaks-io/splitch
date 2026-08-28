@@ -7,11 +7,7 @@ import {
 } from "./turnstile";
 
 describe("runtime Turnstile verifier selection", () => {
-  it.each([
-    undefined,
-    "local",
-    "pr-ci",
-  ])("keeps the fixture verifier for %s", async (platformTarget) => {
+  it.each(["local", "pr-ci"])("keeps the fixture verifier for %s", async (platformTarget) => {
     const verifier = makeRuntimeTurnstile({
       fixture: makeFixtureTurnstile(),
       platformTarget,
@@ -34,14 +30,19 @@ describe("runtime Turnstile verifier selection", () => {
     ).toThrow("auth-api: TURNSTILE_SECRET is required outside local/test targets");
   });
 
-  it("fails closed for unknown explicit targets", () => {
+  it.each([
+    undefined,
+    "staging",
+  ])("fails closed for missing or unknown targets (%s)", (platformTarget) => {
     expect(() =>
       makeRuntimeTurnstile({
         fixture: makeFixtureTurnstile(),
-        platformTarget: "staging",
+        platformTarget,
         secret: "turnstile-secret",
       }),
-    ).toThrow("auth-api: unsupported SPLITCH_PLATFORM_TARGET for Turnstile verifier: staging");
+    ).toThrow(
+      `auth-api: unsupported SPLITCH_PLATFORM_TARGET for Turnstile verifier: ${platformTarget}`,
+    );
   });
 
   it("routes hosted fixture-prefixed tokens through siteverify, not the fixture verifier", async () => {

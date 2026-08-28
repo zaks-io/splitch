@@ -74,9 +74,12 @@ export {
   createHealthResponse,
   FullCommitShaSchema,
   HealthResponseSchema,
+  isHostedPlatformTarget,
+  isLocalPlatformTarget,
   PlatformTargetSchema,
   parsePlatformTarget,
   platformTargets,
+  requirePlatformTarget,
 } from "./health-response";
 export type {
   Experiment,

@@ -230,7 +230,12 @@ export function tinybirdDelivery(
     return { ok: false, error: serviceUnavailable("Tinybird ingest token is unavailable") };
   }
 
-  const url = new URL("/v0/events", env.TINYBIRD_API_URL ?? "https://api.tinybird.co");
+  const apiUrl = env.TINYBIRD_API_URL;
+  if (!apiUrl) {
+    return { ok: false, error: serviceUnavailable("Tinybird API URL is unavailable") };
+  }
+
+  const url = new URL("/v0/events", apiUrl);
   url.searchParams.set("name", datasource);
   return { ok: true, value: { url: url.toString(), token } };
 }

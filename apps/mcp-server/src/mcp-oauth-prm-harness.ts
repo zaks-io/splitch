@@ -74,6 +74,7 @@ export async function request(
     controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
     revocations: allowMcpRevocations(),
     controlPlaneFetch: options.controlPlaneBaseUrl ? fetch : undefined,
+    platformTarget: "local",
     ...options,
   });
 }

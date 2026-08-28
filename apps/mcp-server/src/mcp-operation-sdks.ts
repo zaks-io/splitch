@@ -1,4 +1,4 @@
-import { parsePlatformTarget } from "@splitch/contracts";
+import { isLocalPlatformTarget, requirePlatformTarget } from "@splitch/contracts";
 import { createMcpOperationAdapter } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 
 /**
@@ -48,11 +48,11 @@ function requiredDelegationSecret(secret: string | undefined): string {
 }
 
 function controlPlaneBaseUrl(options: McpOperationSdkOptions): string {
+  const platformTarget = requirePlatformTarget(options.platformTarget);
   if (options.controlPlaneBaseUrl) {
     return options.controlPlaneBaseUrl;
   }
-  const platformTarget = parsePlatformTarget(options.platformTarget);
-  if (platformTarget === "local" || platformTarget === "pr-ci") {
+  if (isLocalPlatformTarget(platformTarget)) {
     return defaultControlPlaneBaseUrl;
   }
   throw new Error(`mcp-server: CONTROL_PLANE_API_ORIGIN is required for ${platformTarget}`);

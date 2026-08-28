@@ -24,6 +24,7 @@ beforeAll(async () => {
     CONTROL_PLANE_ORIGIN,
     MCP_ORIGIN: "https://mcp.splitch.test",
     CONTROL_PANEL_ORIGIN: "https://app.splitch.test",
+    SPLITCH_PLATFORM_TARGET: "local",
     ASSERTION_SIGNING_SECRET: "test-assertion-secret",
   };
 });

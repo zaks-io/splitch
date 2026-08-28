@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { makeEphemeralAccessTokenPrivateJwk } from "./access-token-key";
 import type { AuthApiEnv } from "./env";
-import worker from "./index";
+import worker, { committedAssertionSigningSecrets } from "./index";
 import { FIXTURE_OTP } from "./otp";
 import { makePoolBindings } from "./test-bindings-pool";
 import type { LocalBindings } from "./test-fixtures";
@@ -30,9 +30,15 @@ let env: AuthApiEnv;
  * shape production actually shipped in.
  */
 let hostedAccessTokenSecret: string;
+/**
+ * Unique per isolate so hosted fixtures never inherit a committed known HMAC
+ * key. The reviewer reproduction used the inherited `test-assertion-secret`.
+ */
+let hostedAssertionSigningSecret: string;
 
 beforeAll(async () => {
   hostedAccessTokenSecret = await makeEphemeralAccessTokenPrivateJwk();
+  hostedAssertionSigningSecret = `hosted-uncommitted-${crypto.randomUUID()}`;
   local = await makePoolBindings();
   env = {
     DB: local.d1,
@@ -41,6 +47,7 @@ beforeAll(async () => {
     AUTH_API_ORIGIN: "https://auth.splitch.test",
     CONTROL_PLANE_ORIGIN: "https://cp.splitch.test",
     CONTROL_PANEL_ORIGIN: "https://app.splitch.test",
+    SPLITCH_PLATFORM_TARGET: "local",
     ASSERTION_SIGNING_SECRET: "test-assertion-secret",
   };
 });
@@ -138,16 +145,10 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
       { turnstile_token: `${FIXTURE_TURNSTILE_TOKEN}-hosted` },
       "198.51.100.86",
       "/agent/identity",
-      {
-        ...env,
+      hostedEnvWith({
         SPLITCH_PLATFORM_TARGET: "shared-preview",
         ACCESS_TOKEN_SECRET: hostedAccessTokenSecret,
-        TURNSTILE_SECRET: "test-turnstile-secret",
-        WORKOS_API_KEY: "test-workos-api-key",
-        WORKOS_CLIENT_ID: "test-workos-client-id",
-        WORKOS_JWKS_URI: "https://api.workos.test/jwks",
-        WORKOS_ISSUER: "https://api.workos.test",
-      },
+      }),
     );
 
     expect(res.status).toBe(403);
@@ -162,16 +163,15 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
     "production",
   ])("%s fails closed without WORKOS_API_KEY instead of using fixture WorkOS", async (target) => {
     const beforeOrganizations = await rowCount("organizations");
+    const { WORKOS_API_KEY: _missing, ...withoutWorkosKey } = hostedEnvWith({
+      SPLITCH_PLATFORM_TARGET: target,
+      WORKOS_CLIENT_ID: "workos-client",
+    });
     const res = await call(
       { turnstile_token: turnstileToken() },
       `198.51.100.${target === "shared-preview" ? "90" : "91"}`,
       "/agent/identity",
-      {
-        ...env,
-        SPLITCH_PLATFORM_TARGET: target,
-        WORKOS_CLIENT_ID: "workos-client",
-        TURNSTILE_SECRET: "test-turnstile-secret",
-      },
+      withoutWorkosKey,
     );
 
     expect(res.status).toBe(500);
@@ -181,20 +181,12 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
 
   it("hosted claims fail closed when the Control Panel origin is missing", async () => {
     const beforeOrganizations = await rowCount("organizations");
-    const { CONTROL_PANEL_ORIGIN: _missing, ...withoutPanelOrigin } = env;
+    const { CONTROL_PANEL_ORIGIN: _missing, ...withoutPanelOrigin } = hostedEnvWith({});
     const res = await call(
       { turnstile_token: turnstileToken() },
       "198.51.100.92",
       "/agent/identity",
-      {
-        ...withoutPanelOrigin,
-        SPLITCH_PLATFORM_TARGET: "production",
-        WORKOS_API_KEY: "test-workos-api-key",
-        WORKOS_CLIENT_ID: "test-workos-client-id",
-        WORKOS_JWKS_URI: "https://api.workos.test/jwks",
-        WORKOS_ISSUER: "https://api.workos.test",
-        TURNSTILE_SECRET: "test-turnstile-secret",
-      },
+      withoutPanelOrigin,
     );
 
     expect(res.status).toBe(500);
@@ -206,15 +198,7 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
     "WORKOS_ISSUER",
   ] as const)("hosted claims fail closed when %s is missing", async (missingBinding) => {
     const beforeOrganizations = await rowCount("organizations");
-    const hostedEnv: AuthApiEnv = {
-      ...env,
-      SPLITCH_PLATFORM_TARGET: "production",
-      WORKOS_API_KEY: "test-workos-api-key",
-      WORKOS_CLIENT_ID: "test-workos-client-id",
-      WORKOS_JWKS_URI: "https://api.workos.test/jwks",
-      WORKOS_ISSUER: "https://api.workos.test",
-      TURNSTILE_SECRET: "test-turnstile-secret",
-    };
+    const hostedEnv = hostedEnvWith({});
     delete hostedEnv[missingBinding];
 
     const res = await call(
@@ -239,6 +223,7 @@ function hostedEnvWith(overrides: Partial<AuthApiEnv>): AuthApiEnv {
     WORKOS_JWKS_URI: "https://api.workos.test/jwks",
     WORKOS_ISSUER: "https://api.workos.test",
     TURNSTILE_SECRET: "test-turnstile-secret",
+    ASSERTION_SIGNING_SECRET: hostedAssertionSigningSecret,
     ...overrides,
   };
 }
@@ -296,5 +281,73 @@ describe("index.ts: hosted ACCESS_TOKEN_SECRET signability is config, not a mint
     expect(res.status).toBe(200);
     const { keys } = (await res.json()) as { keys: Array<{ kty: string; alg: string }> };
     expect(keys[0]).toMatchObject({ kty: "RSA", alg: "RS256" });
+  });
+});
+
+describe("index.ts: hosted assertion secret and platform target fail closed", () => {
+  it.each([
+    "shared-preview",
+    "production",
+  ] as const)("%s refuses a missing ASSERTION_SIGNING_SECRET before serving a door", async (target) => {
+    const { ASSERTION_SIGNING_SECRET: _missing, ...withoutSecret } = hostedEnvWith({
+      SPLITCH_PLATFORM_TARGET: target,
+      ACCESS_TOKEN_SECRET: hostedAccessTokenSecret,
+    });
+    const beforeOrganizations = await rowCount("organizations");
+    const res = await call(
+      { turnstile_token: turnstileToken() },
+      target === "shared-preview" ? "198.51.100.96" : "198.51.100.97",
+      "/agent/identity",
+      withoutSecret,
+    );
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ error: "server_error" });
+    expect(await rowCount("organizations")).toBe(beforeOrganizations);
+  });
+
+  it.each(
+    committedAssertionSigningSecrets,
+  )("rejects committed assertion secret %s on hosted targets", async (secret) => {
+    const beforeOrganizations = await rowCount("organizations");
+    const res = await call(
+      { turnstile_token: turnstileToken() },
+      "198.51.100.98",
+      "/agent/identity",
+      hostedEnvWith({
+        ACCESS_TOKEN_SECRET: hostedAccessTokenSecret,
+        ASSERTION_SIGNING_SECRET: secret,
+      }),
+    );
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ error: "server_error" });
+    expect(await rowCount("organizations")).toBe(beforeOrganizations);
+  });
+
+  it("does not treat an unset platform target as local", async () => {
+    const { SPLITCH_PLATFORM_TARGET: _missing, ...withoutTarget } = env;
+    const beforeOrganizations = await rowCount("organizations");
+    const res = await call(
+      { turnstile_token: turnstileToken() },
+      "198.51.100.99",
+      "/agent/identity",
+      withoutTarget,
+    );
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ error: "server_error" });
+    expect(await rowCount("organizations")).toBe(beforeOrganizations);
+  });
+
+  it.each([
+    "local",
+    "pr-ci",
+  ] as const)("%s still accepts the committed local assertion secret", async (target) => {
+    const { ASSERTION_SIGNING_SECRET: _defaultSecret, ...localEnv } = env;
+    const res = await call(
+      { turnstile_token: turnstileToken() },
+      target === "local" ? "198.51.100.100" : "198.51.100.101",
+      "/agent/identity",
+      { ...localEnv, SPLITCH_PLATFORM_TARGET: target },
+    );
+    expect(res.status).toBe(200);
   });
 });

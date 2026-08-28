@@ -1,5 +1,5 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { createHealthResponse, parsePlatformTarget, routesDelegatedTo } from "@splitch/contracts";
+import { createHealthResponse, requirePlatformTarget, routesDelegatedTo } from "@splitch/contracts";
 import {
   createWorkerObservability,
   workerObservabilityWithWaitUntil,
@@ -62,9 +62,10 @@ const internalRoutes: Readonly<
 
 const handler = {
   async fetch(request, env): Promise<Response> {
+    const platformTarget = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
     const url = new URL(request.url);
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) {
-      return healthResponse(env);
+      return healthResponse(env, platformTarget);
     }
     return new Response("not found", { status: 404 });
   },
@@ -83,6 +84,7 @@ const handler = {
  */
 const delegatedHandler = {
   async fetch(request, env, ctx): Promise<Response> {
+    requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
     const url = new URL(request.url);
     const observability = observabilityFor(env, ctx);
     const internal = await handleInternalRoute(request, env, observability, url);
@@ -116,13 +118,12 @@ export class EvaluationEntrypoint extends WorkerEntrypoint<Env> {
 
 export default wrapWorkerHandler(handler, { surface: "event-ingest-api" });
 
-function healthResponse(env: Env): Response {
+function healthResponse(
+  env: Env,
+  platformTarget = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
+): Response {
   return Response.json(
-    createHealthResponse(
-      service,
-      parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
-      env.SPLITCH_DEPLOYED_COMMIT_SHA,
-    ),
+    createHealthResponse(service, platformTarget, env.SPLITCH_DEPLOYED_COMMIT_SHA),
   );
 }
 

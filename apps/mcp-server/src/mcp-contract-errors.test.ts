@@ -60,6 +60,7 @@ async function callTool(
       }),
     }),
     service,
+    platformTarget: "local",
     controlPlaneBaseUrl: "https://control-plane.test",
     controlPlaneFetch,
     controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,

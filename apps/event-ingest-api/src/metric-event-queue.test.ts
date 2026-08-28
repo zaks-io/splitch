@@ -113,7 +113,7 @@ describe("Metric Event queue delivery", () => {
     const second = queueMessage("message-2", metricEvent("event-2"));
     const batch = messageBatch([first, second]);
 
-    await deliver(batch, {});
+    await deliver(batch, { SPLITCH_PLATFORM_TARGET: "local" });
 
     expect(fetch).not.toHaveBeenCalled();
     expect(first.ack).not.toHaveBeenCalled();
@@ -190,6 +190,7 @@ function messageBatch(messages: readonly ReturnType<typeof queueMessage>[]) {
 
 function deliveryEnv(): Env {
   return {
+    SPLITCH_PLATFORM_TARGET: "local",
     TINYBIRD_API_URL: "https://tinybird.test",
     TINYBIRD_INGEST_TOKEN: "test-token",
   };
