@@ -92,30 +92,20 @@ describe("parseInput unknown-key paths", () => {
       { path: ["body", "fields", "0"], message: expect.any(String) },
     ]);
   });
+});
 
+describe("parseInput Closed JSON union errors", () => {
   it("reports only extra on a Closed JSON object, not sibling schema keys", async () => {
     const parsed = await parseInput(
       publishInputSchema,
-      new Request("http://worker.test/event-definitions", {
-        method: "POST",
-        body: JSON.stringify({
-          entityType: "user",
-          fields: [
-            {
-              name: "payload",
-              type: "json",
-              required: false,
-              jsonSchema: {
-                type: "object",
-                properties: { foo: { type: "string", enum: ["a"] } },
-                additionalProperties: false,
-                extra: true,
-              },
-            },
-          ],
-          dimensions: [],
+      jsonRequest(
+        publishJsonField({
+          type: "object",
+          properties: { foo: { type: "string", enum: ["a"] } },
+          additionalProperties: false,
+          extra: true,
         }),
-      }),
+      ),
       {},
     );
 
@@ -160,21 +150,7 @@ describe("parseInput unknown-key paths", () => {
   it("keeps invalid Closed JSON discriminator issues instead of a leftover key", async () => {
     const parsed = await parseInput(
       publishInputSchema,
-      new Request("http://worker.test/event-definitions", {
-        method: "POST",
-        body: JSON.stringify({
-          entityType: "user",
-          fields: [
-            {
-              name: "payload",
-              type: "json",
-              required: false,
-              jsonSchema: { type: "c", a: "value" },
-            },
-          ],
-          dimensions: [],
-        }),
-      }),
+      jsonRequest(publishJsonField({ type: "c", a: "value" })),
       {},
     );
 
@@ -189,7 +165,10 @@ describe("parseInput unknown-key paths", () => {
       false,
     );
     expect(parsed.error.details.issues).toEqual([
-      { path: ["body", "fields", "0", "jsonSchema"], message: expect.any(String) },
+      {
+        path: ["body", "fields", "0", "jsonSchema", "type"],
+        message: expect.stringMatching(/discriminator|Invalid/i),
+      },
     ]);
   });
 
@@ -211,7 +190,9 @@ describe("parseInput unknown-key paths", () => {
       { path: ["body", "type"], message: expect.stringMatching(/discriminator|Invalid/i) },
     ]);
   });
+});
 
+describe("parseInput incoming JSON bound", () => {
   it("rejects a depth-2000 type:null properties chain with 400 and never throws", async () => {
     const parsed = await parseInput(
       closedJsonBodySchema,
@@ -229,6 +210,21 @@ describe("parseInput unknown-key paths", () => {
     expect(parsed.error.details.issues[0]?.message).toMatch(/incoming depth/);
   });
 });
+
+function jsonRequest(body: unknown): Request {
+  return new Request("http://worker.test/event-definitions", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+function publishJsonField(jsonSchema: Record<string, unknown>) {
+  return {
+    entityType: "user",
+    fields: [{ name: "payload", type: "json", required: false, jsonSchema }],
+    dimensions: [],
+  };
+}
 
 function nestClosedJsonProperties(
   depth: number,
