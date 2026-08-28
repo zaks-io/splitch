@@ -1,12 +1,11 @@
 /**
- * Shared raw-body gate for surfaces that cannot go through the registrar:
- * Auth doors, MCP JSON-RPC, internal Event Ingest, and the Convex webhook.
+ * Dependency-safe raw-body gate. Content-type is checked before any buffering.
+ * A trusted Content-Length above the cap is rejected without reading. A chunked
+ * or lying Content-Length stream stops at the first over-cap byte and cancels
+ * the remainder. Successful reads return the exact bytes so HMAC and form
+ * parsers see the same payload the client sent.
  *
- * Content-type is checked before any buffering. A trusted Content-Length above
- * the cap is rejected without reading. A chunked or lying Content-Length stream
- * stops at the first over-cap byte and cancels the remainder. Successful reads
- * return the exact bytes so HMAC and form parsers see the same payload the
- * client sent.
+ * Surfaces keep their own media-type lists, byte caps, and error translation.
  */
 
 export type BoundedBodyFailureReason = "unsupported_content_type" | "too_large";

@@ -1,7 +1,7 @@
 // biome-ignore-all lint/performance/noBarrelFile: package public API entry intentionally aggregates the worker runtime surface
 
-export type { BoundedBodyFailureReason, BoundedBodyResult } from "./bounded-body";
-export { mediaTypeOf, readBoundedRequestBody } from "./bounded-body";
+export type { BoundedBodyFailureReason, BoundedBodyResult } from "@splitch/bounded-body";
+export { mediaTypeOf, readBoundedRequestBody } from "@splitch/bounded-body";
 export type { DelegatedIdentity, DelegatedInput } from "./delegation";
 export {
   DELEGATED_IDENTITY_HEADER,

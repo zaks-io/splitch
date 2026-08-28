@@ -4,7 +4,7 @@ import {
   mediaTypeOf,
   readBoundedRequestBody,
   trustedContentLength,
-} from "./bounded-body";
+} from "./index";
 
 afterEach(() => {
   vi.restoreAllMocks();

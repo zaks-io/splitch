@@ -1,6 +1,8 @@
+import { readBoundedRequestBody } from "@splitch/bounded-body";
 import { ConvexConfigChangedSchema } from "@splitch/sdk/local-evaluation";
-import { CONVEX_WEBHOOK_MAX_BODY_BYTES, readBoundedRequestBody } from "./bounded-body";
 import { constantTimeEqual, hmacHex } from "./crypto";
+
+export const CONVEX_WEBHOOK_MAX_BODY_BYTES = 32 * 1024;
 
 interface ConfigurationWebhookIntegration {
   readonly webhookSecret: string;
@@ -22,7 +24,10 @@ export async function handleConfigurationWebhook(
   request: Request,
   deps: ConfigurationWebhookDeps,
 ): Promise<Response> {
-  const bounded = await readBoundedRequestBody(request, CONVEX_WEBHOOK_MAX_BODY_BYTES);
+  const bounded = await readBoundedRequestBody(request, {
+    maxBytes: CONVEX_WEBHOOK_MAX_BODY_BYTES,
+    allowedMediaTypes: ["application/json"],
+  });
   if (!bounded.ok) return new Response("invalid body", { status: 400 });
 
   const timestamp = request.headers.get("splitch-timestamp");

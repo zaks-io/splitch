@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CONVEX_WEBHOOK_MAX_BODY_BYTES } from "./bounded-body";
-import { handleConfigurationWebhook } from "./configuration-webhook";
+import { CONVEX_WEBHOOK_MAX_BODY_BYTES, handleConfigurationWebhook } from "./configuration-webhook";
 import { hmacHex } from "./crypto";
 
 const SECRET = "webhook-secret-for-tests";

@@ -1,5 +1,11 @@
+import { readBoundedRequestBody } from "@splitch/bounded-body";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CONVEX_WEBHOOK_MAX_BODY_BYTES, readBoundedRequestBody } from "./bounded-body";
+import { CONVEX_WEBHOOK_MAX_BODY_BYTES } from "./configuration-webhook";
+
+const convexWebhookBodyOptions = {
+  maxBytes: CONVEX_WEBHOOK_MAX_BODY_BYTES,
+  allowedMediaTypes: ["application/json"],
+} as const;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -13,6 +19,7 @@ describe("Convex webhook bounded reader", () => {
         "content-type": "application/json",
         "content-length": String(CONVEX_WEBHOOK_MAX_BODY_BYTES + 1),
       }),
+      convexWebhookBodyOptions,
     );
 
     expect(result).toEqual({ ok: false, reason: "too_large" });
@@ -27,6 +34,7 @@ describe("Convex webhook bounded reader", () => {
         "content-type": "application/json",
         "content-length": "not-a-number",
       }),
+      convexWebhookBodyOptions,
     );
 
     expect(result).toEqual({ ok: false, reason: "too_large" });
@@ -42,6 +50,7 @@ describe("Convex webhook bounded reader", () => {
         headers: { "content-type": "application/json; charset=utf-8" },
         body: raw,
       }),
+      convexWebhookBodyOptions,
     );
 
     expect(result.ok).toBe(true);
@@ -54,6 +63,7 @@ describe("Convex webhook bounded reader", () => {
     const body = controlledBody(["must-not-be-read"]);
     const result = await readBoundedRequestBody(
       requestWithBody(body.stream, { "content-type": "text/plain" }),
+      convexWebhookBodyOptions,
     );
 
     expect(result).toEqual({ ok: false, reason: "unsupported_content_type" });

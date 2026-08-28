@@ -1,6 +1,6 @@
+import { readBoundedRequestBytes, trustedContentLength } from "@splitch/bounded-body";
 import type { ErrorResponse, RawBodyByteLimit } from "@splitch/contracts";
 import type { z } from "zod";
-import { readBoundedRequestBytes, trustedContentLength } from "./bounded-body";
 
 /**
  * The raw request surface assembled before Zod validation. A route's `input`
