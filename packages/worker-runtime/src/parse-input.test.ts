@@ -1,4 +1,6 @@
 import {
+  incomingJsonBoundVisited,
+  PERSISTED_JSON_MAX_INCOMING_DEPTH,
   PublishEventDefinitionVersionRequestSchema,
   WriteClosedJsonSchemaSchema,
 } from "@splitch/contracts";
@@ -44,6 +46,13 @@ const closedJsonBodySchema = z.object({
   query: z.record(z.string(), z.string()),
   headers: z.record(z.string(), z.string()),
   body: WriteClosedJsonSchemaSchema,
+});
+
+const wideShallowBodySchema = z.object({
+  params: z.record(z.string(), z.string()),
+  query: z.record(z.string(), z.string()),
+  headers: z.record(z.string(), z.string()),
+  body: z.unknown(),
 });
 
 describe("parseInput unknown-key paths", () => {
@@ -209,6 +218,31 @@ describe("parseInput incoming JSON bound", () => {
     expect(parsed.error.details.issues[0]?.path[0]).toBe("body");
     expect(parsed.error.details.issues[0]?.message).toMatch(/incoming depth/);
   });
+
+  it("walks a 250k-element body at the pre-auth seam with one visit per node", async () => {
+    const body = Array.from({ length: 250_000 }, () => 0);
+    const payload = JSON.stringify(body);
+    expect(payload.length).toBe(500_001);
+    expect(payload.length).toBeLessThan(1024 * 1024);
+    expect(incomingJsonBoundVisited(body)).toBe(250_001);
+
+    const parsed = await parseInput(wideShallowBodySchema, jsonRequest(body), {});
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(Array.isArray(parsed.value.body)).toBe(true);
+    expect((parsed.value.body as unknown[]).length).toBe(250_000);
+  });
+
+  it("finds a depth overflow after a wide shallow prefix", async () => {
+    const body: unknown[] = Array.from({ length: 250_000 }, () => 0);
+    body[249_999] = nestToIncomingOverflow();
+    const parsed = await parseInput(wideShallowBodySchema, jsonRequest(body), {});
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error.code).toBe("VALIDATION_ERROR");
+    if (parsed.error.code !== "VALIDATION_ERROR") return;
+    expect(parsed.error.details.issues[0]?.message).toMatch(/incoming depth/);
+  });
 });
 
 function jsonRequest(body: unknown): Request {
@@ -224,6 +258,14 @@ function publishJsonField(jsonSchema: Record<string, unknown>) {
     fields: [{ name: "payload", type: "json", required: false, jsonSchema }],
     dimensions: [],
   };
+}
+
+function nestToIncomingOverflow(): unknown {
+  let node: unknown = "leaf";
+  for (let depth = 1; depth <= PERSISTED_JSON_MAX_INCOMING_DEPTH; depth += 1) {
+    node = { child: node };
+  }
+  return node;
 }
 
 function nestClosedJsonProperties(

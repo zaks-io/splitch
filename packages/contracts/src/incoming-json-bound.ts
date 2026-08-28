@@ -19,6 +19,11 @@ export function persistedJsonDepth(value: unknown): number {
 
 export type IncomingJsonBoundIssue = { path: string[]; message: string };
 
+type IncomingJsonBoundWalk = {
+  issue: IncomingJsonBoundIssue | null;
+  visited: number;
+};
+
 /**
  * Walk every key of a JSON value iteratively. Returns the first node deeper
  * than {@link PERSISTED_JSON_MAX_INCOMING_DEPTH}, independent of discriminator
@@ -28,16 +33,32 @@ export function incomingJsonBoundIssue(
   value: unknown,
   rootPath: readonly string[] = [],
 ): IncomingJsonBoundIssue | null {
+  return walkIncomingJsonBound(value, rootPath).issue;
+}
+
+/** Nodes visited by {@link incomingJsonBoundIssue}, including the root. */
+export function incomingJsonBoundVisited(value: unknown, rootPath: readonly string[] = []): number {
+  return walkIncomingJsonBound(value, rootPath).visited;
+}
+
+function walkIncomingJsonBound(value: unknown, rootPath: readonly string[]): IncomingJsonBoundWalk {
   const queue: IncomingJsonFrame[] = [{ node: value, path: [...rootPath], depth: 1 }];
-  while (queue.length > 0) {
-    const frame = queue.shift();
+  let cursor = 0;
+  let visited = 0;
+  while (cursor < queue.length) {
+    const frame = queue[cursor];
+    cursor += 1;
     if (frame === undefined) break;
+    visited += 1;
     if (frame.depth > PERSISTED_JSON_MAX_INCOMING_DEPTH) {
-      return { path: frame.path, message: PERSISTED_JSON_INCOMING_DEPTH_MESSAGE };
+      return {
+        issue: { path: frame.path, message: PERSISTED_JSON_INCOMING_DEPTH_MESSAGE },
+        visited,
+      };
     }
     enqueueJsonChildren(queue, frame);
   }
-  return null;
+  return { issue: null, visited };
 }
 
 function pushJsonChildren(

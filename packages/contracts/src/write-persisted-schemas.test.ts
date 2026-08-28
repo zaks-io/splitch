@@ -14,7 +14,11 @@ import {
   PERSISTED_RECORD_MAX_KEYS,
   PERSISTED_VARIANT_VALUE_STRING_MAX_LENGTH,
 } from "./persisted-field-limits";
-import { incomingJsonBoundIssue, persistedJsonDepth } from "./incoming-json-bound";
+import {
+  incomingJsonBoundIssue,
+  incomingJsonBoundVisited,
+  persistedJsonDepth,
+} from "./incoming-json-bound";
 import {
   EndRunRequestSchema,
   TargetingRuleInputSchema,
@@ -258,6 +262,13 @@ describe("incoming JSON structure bound", () => {
     expect(incomingJsonBoundIssue({ overflow: atBound })).toMatchObject({
       message: PERSISTED_JSON_INCOMING_DEPTH_MESSAGE,
     });
+  });
+
+  it("visits each node of a wide shallow array exactly once", () => {
+    const wide = Array.from({ length: 250_000 }, () => 0);
+    expect(incomingJsonBoundIssue(wide)).toBeNull();
+    expect(incomingJsonBoundVisited(wide)).toBe(250_001);
+    expect(incomingJsonBoundVisited(wide.slice(0, 125_000))).toBe(125_001);
   });
 });
 
