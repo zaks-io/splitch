@@ -164,17 +164,19 @@ SRM-invisible read under a public key is an allocation oracle. This public endpo
 
 ## Edge binding
 
-Client Key requests pass through Cloudflare WAF before reaching the Worker (ADR-0018, ADR-0034):
+Current Client Key requests enforce the following controls in the Worker (ADR-0018, ADR-0034):
 
-- Origin/referrer allow-list enforcement (per-key, WAF-level). Auto-provisioned Client Keys start
+- Origin/referrer allow-list enforcement per key. Auto-provisioned Client Keys start
   **open** (`origin_allowlist = null`) with loud open-state surfacing; locking to origins is an
   explicit one-action choice (see [credentials-and-keys.md](../control-plane/credentials-and-keys.md)
   and ADR-0034 §1).
-- Per-key rate limiting (WAF-level), counter keyed on the Client Key value
-- Progressive rules (challenge before block) layered over the per-key counter
+- Per-key rate limiting through the Cloudflare Workers Rate Limiting binding, keyed on the credential
+  hash plus route class.
 
-WAF rejection returns a 403/429 before the Worker is invoked. The SDK client must handle
-these as non-retryable (403) or back-off (429) errors.
+The live Cloudflare Free WAF rule is a source-IP burst block for exact path `/agent/identity`; it does
+not protect this endpoint. Host/method-scoped WAF enforcement, progressive challenge-before-block, and
+per-credential header counters remain paid target-state debt. The SDK client must handle a current
+Worker or future WAF rejection as non-retryable (`403`) or back-off (`429`).
 
 ## Error responses (ADR-0025 shape)
 

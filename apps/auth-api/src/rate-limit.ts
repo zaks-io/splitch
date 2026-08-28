@@ -10,13 +10,12 @@ import { OAuthError } from "./oauth-errors";
  * HONEST SCOPE (H1): the maps below are PER-ISOLATE. A Workers deployment runs
  * many isolates, so this in-Worker counter is NOT a true global ceiling and the
  * per-IP cap is only as global as the isolate that happened to serve the request.
- * The REAL global bound is the Cloudflare WAF rate-limit rule at the edge (the
- * authoritative control per ADR-0034); a precise in-app global ceiling would need
- * a shared atomic counter (a Durable Object or D1). This layer is therefore a
- * fail-loud local-test substrate + a coarse per-isolate backstop, not the global
- * guarantee — do not read it as one. The window is a fixed counter reset on
- * roll-over (the exact value is deliberately approximate; the point is the bound
- * exists, enforced authoritatively at the edge).
+ * The Cloudflare Free rule is also source-IP scoped and only provides a short
+ * burst block for `/agent/identity`; it is not an authoritative global bound.
+ * The paid cross-IP/global WAF ceiling remains explicit debt in ADR-0034. A
+ * precise in-app global ceiling would need a shared atomic counter (a Durable
+ * Object or D1). This layer is therefore a coarse per-isolate backstop, not a
+ * global guarantee. The window is a fixed counter reset on roll-over.
  */
 
 const HOUR_MS = 60 * 60 * 1000;

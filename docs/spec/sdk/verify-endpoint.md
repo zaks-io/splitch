@@ -124,10 +124,13 @@ is what makes it a faithful setup check.
 
 `verify` is rate-limited and origin-bound exactly like `evaluate`:
 
-- Client Key requests pass through Cloudflare WAF (origin/referrer allow-list, per-key rate
-  limiting) before reaching the Worker. Client Keys are auto-provisioned open and locked down via
+- Client Key requests enforce the origin/referrer allow-list and per-credential Cloudflare Workers
+  Rate Limiting binding in the Worker. Client Keys are auto-provisioned open and locked down via
   `PATCH …/client-key`.
 - API Key requests are rate-limited per key.
+
+The live Cloudflare Free WAF rule protects only exact path `/agent/identity`. Host/method-scoped WAF
+rules, progressive challenge-before-block, and per-credential header counters remain target-state debt.
 
 Because `verify` carries no richer information than `evaluate` already does (the Variant value is
 public; the reason is tiered), it is **not** a silent allocation oracle — the same reasoning that
