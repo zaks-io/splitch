@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { DraftAllocationSchema } from "./draft-allocation";
+import { PublishEventDefinitionVersionRequestSchema } from "./event-definition-write";
 import { EnvironmentPolicySchema } from "./leaf-schemas-runtime";
 import { EvaluateAllRequestSchema } from "./leaves/evaluate-all-wire";
 import { describeRequestBody, requestBodySchemaForOperation } from "./request-body-help";
@@ -210,6 +211,15 @@ describe("write Variant value help labels", () => {
     const renamed = describeRequestBody(z.object({ payload: WriteVariantValueSchema }));
     expect(renamed.fields[0]?.typeLabel).toBe(
       "boolean | string | number | Record<string, unknown>",
+    );
+  });
+});
+
+describe("Event Definition write help labels", () => {
+  it("labels preprocess Closed JSON as closed JSON Schema, not transform", () => {
+    const help = describeRequestBody(PublishEventDefinitionVersionRequestSchema);
+    expect(help.fields.find((field) => field.name === "fields")?.typeLabel).toContain(
+      "closed JSON Schema",
     );
   });
 });
