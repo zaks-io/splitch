@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FOREIGN_APP,
   makePrincipalFlagHarness,
+  MEMBER_ORG_NONMEMBER_APP,
   PRINCIPAL_APPS,
   type PrincipalFlagHarness,
 } from "./principal-flag-list-fixture";
@@ -33,6 +34,8 @@ describe("principal-scoped GET /flags", () => {
     expect(new Set(body.items.map((row) => row.key)).size).toBe(3);
     expect(JSON.stringify(body)).not.toContain(FOREIGN_APP.flagId);
     expect(JSON.stringify(body)).not.toContain(FOREIGN_APP.appId);
+    expect(JSON.stringify(body)).not.toContain(MEMBER_ORG_NONMEMBER_APP.flagId);
+    expect(JSON.stringify(body)).not.toContain(MEMBER_ORG_NONMEMBER_APP.appId);
   });
 
   it("is field-identical to each per-App list for a member-role principal", async () => {

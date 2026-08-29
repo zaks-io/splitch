@@ -204,16 +204,10 @@ export async function withAuthorizationRetry<T>(
   const { session: stored } = await ensurePrincipalEmail(deps);
   const cachedBinding = storedBinding(stored);
   const usable = cachedAuthorizationUsable(binding, cachedBinding);
-  const refreshBinding = refreshBindingFor(binding);
   const current =
     usable && !isAccessTokenExpired(stored.credential.accessTokenExpiresAt)
       ? stored
-      : await refreshAccessToken(
-          deps,
-          stored,
-          refreshBinding ?? null,
-          refreshBinding !== undefined,
-        );
+      : await refreshAccessToken(deps, stored, binding ?? null, binding !== undefined);
   const first = await run(`Bearer ${current.credential.accessToken}`);
   if (first.status !== 401) {
     return first.value;
@@ -222,12 +216,7 @@ export async function withAuthorizationRetry<T>(
   if (!latest) {
     throw sessionExpiredError("the stored credential disappeared");
   }
-  const refreshed = await refreshAccessToken(
-    deps,
-    latest,
-    refreshBinding ?? null,
-    refreshBinding !== undefined,
-  );
+  const refreshed = await refreshAccessToken(deps, latest, binding ?? null, binding !== undefined);
   const retry = await run(`Bearer ${refreshed.credential.accessToken}`);
   if (retry.status === 401) {
     throw sessionExpiredError("the control plane rejected a freshly minted token");
@@ -244,12 +233,6 @@ function cachedAuthorizationUsable(
   }
   if (binding === undefined) return cachedBinding !== MEMBERSHIP_WIDE_READ_AUTHORIZATION;
   return cachedBinding === bindingKey(binding);
-}
-
-function refreshBindingFor(
-  binding: TokenAuthorization | undefined,
-): TokenAuthorization | undefined {
-  return binding;
 }
 
 /**

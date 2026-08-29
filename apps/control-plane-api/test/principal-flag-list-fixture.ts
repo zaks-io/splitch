@@ -14,6 +14,7 @@ const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 7, 28, 12, 0, 0);
 const NOW = new Date(NOW_MS).toISOString();
 const USER_ID = "user_principal_flags_member";
+const OTHER_USER_ID = "user_zzaudit_other";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 
 export const PRINCIPAL_APPS = [
@@ -56,6 +57,16 @@ export const FOREIGN_APP = {
   environmentId: "env_principal_foreign_admin_prod",
 } as const;
 
+export const MEMBER_ORG_NONMEMBER_APP = {
+  orgId: "org_principal_alpha",
+  orgSlug: "alpha-co",
+  appId: "app_principal_alpha_private",
+  appKey: "private",
+  flagId: "flag_principal_alpha_private_internal",
+  flagKey: "internal-access",
+  environmentId: "env_principal_alpha_private_prod",
+} as const;
+
 export interface PrincipalFlagHarness {
   app: ReturnType<typeof createApp>;
   bindings: LocalBindings;
@@ -82,7 +93,15 @@ export async function makePrincipalFlagHarness(additionalFlags = 0): Promise<Pri
       .bind(row.appId, USER_ID, "member", NOW)
       .run();
   }
-  for (const row of [...PRINCIPAL_APPS, FOREIGN_APP]) await seedFlag(repo, row);
+  for (const row of [MEMBER_ORG_NONMEMBER_APP, FOREIGN_APP]) {
+    await bindings.d1
+      .prepare("INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)")
+      .bind(row.appId, OTHER_USER_ID, "member", NOW)
+      .run();
+  }
+  for (const row of [...PRINCIPAL_APPS, MEMBER_ORG_NONMEMBER_APP, FOREIGN_APP]) {
+    await seedFlag(repo, row);
+  }
   for (let index = 0; index < additionalFlags; index += 1) {
     const suffix = String(index).padStart(4, "0");
     await seedFlag(repo, {
@@ -127,7 +146,7 @@ export async function makePrincipalFlagHarness(additionalFlags = 0): Promise<Pri
 }
 
 async function seedRoots(d1: D1Database): Promise<void> {
-  const rows = [...PRINCIPAL_APPS, FOREIGN_APP];
+  const rows = [...PRINCIPAL_APPS, MEMBER_ORG_NONMEMBER_APP, FOREIGN_APP];
   const organizations = new Map(rows.map((row) => [row.orgId, row]));
   for (const row of organizations.values()) {
     await d1
@@ -149,7 +168,11 @@ async function seedRoots(d1: D1Database): Promise<void> {
 
 async function seedFlag(
   repo: ReturnType<typeof createRepository>,
-  row: (typeof PRINCIPAL_APPS)[number] | typeof FOREIGN_APP | Record<string, string>,
+  row:
+    | (typeof PRINCIPAL_APPS)[number]
+    | typeof MEMBER_ORG_NONMEMBER_APP
+    | typeof FOREIGN_APP
+    | Record<string, string>,
 ): Promise<void> {
   const scope = appScope(row.appId);
   const environment = envScope(row.appId, row.environmentId);

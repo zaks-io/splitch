@@ -7,13 +7,7 @@ import {
   PrincipalFlagResponseSchema,
 } from "@splitch/contracts";
 import { multiAppScope } from "@splitch/db";
-import {
-  appAccessCovers,
-  type HandlerArgs,
-  organizationAccessCovers,
-  renderError,
-  requireWideMemberships,
-} from "@splitch/worker-runtime";
+import { type HandlerArgs, renderError, requireWideMemberships } from "@splitch/worker-runtime";
 import type { FlagDefinitionDeps } from "./flag-definition-handler-utils";
 import { composeHydratedFlags } from "./flag-definition-hydration";
 import { flagFrom } from "./flag-definition-model";
@@ -37,13 +31,9 @@ export async function listPrincipalFlags(
   }
 
   const memberships = requireWideMemberships(principal);
-  const appIds = memberships.apps
-    .filter(
-      (membership) =>
-        organizationAccessCovers(principal, membership.organizationId) &&
-        appAccessCovers(principal, membership.id),
-    )
-    .map((membership) => membership.id);
+  // resolveBearerMemberships establishes this boundary through
+  // listAppMembershipsWithAppForUser; this is already the principal's live App set.
+  const appIds = memberships.apps.map((membership) => membership.id);
   const scope = multiAppScope(appIds);
   const [descriptors, scanned] = await Promise.all([
     deps.repo.flags.listAppDescriptors(scope),
