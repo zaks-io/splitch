@@ -30,6 +30,7 @@ const TINYBIRD_INPUTS = new Set([
   "scripts/check-tinybird-local.mjs",
   "scripts/lib/tinybird-metric-stub-tripwire.mjs",
   "scripts/lib/tinybird-process.mjs",
+  "scripts/lib/tinybird-retained-family-migration-contract.mjs",
   "scripts/machine-lock.mjs",
   "tinybird.config.json",
 ]);
