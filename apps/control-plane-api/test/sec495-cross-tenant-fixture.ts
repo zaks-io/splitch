@@ -19,6 +19,7 @@ import { resetOrganizationGraph } from "../src/test-seeds";
 import { seedSecurityTenants, type Tenant } from "./sec495-cross-tenant-seed";
 
 const AUDIENCE = "https://cp.splitch.test";
+const ISSUER = "https://auth.splitch.test";
 const NOW = "2026-07-01T20:00:00.000Z";
 const NOW_MS = Date.parse(NOW);
 
@@ -96,6 +97,7 @@ export function makeWorld(
   const app = createApp({
     authResolver: makeControlPlaneAuthResolver({
       verifier: makeJwksVerifier({
+        issuer: ISSUER,
         fetchJwks: async () => signer.jwks,
         controlPlaneAudience: AUDIENCE,
       }),
@@ -159,7 +161,7 @@ export async function get(
 ): Promise<Response> {
   const jwt = await signer.sign({
     sub: actor.userId,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: Math.floor(NOW_MS / 1000),
     exp: Math.floor(NOW_MS / 1000) + 3600,
