@@ -3,6 +3,7 @@ import { Button } from "@splitch/ui/components/button";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { cliDoc } from "../docs/cli";
 import { documentedErrorCodes } from "../docs/errors";
+import { codeAgentsDoc } from "../docs/code-agents";
 import { flagsDoc } from "../docs/flags";
 import { type SdkTopic, sdkGuideTopics, sdkIntegrationTopics } from "../docs/sdk";
 
@@ -90,6 +91,25 @@ function DocsIndexRoute() {
               </Link>
               <span className="text-muted-foreground text-sm leading-relaxed">
                 {cliDoc.summary}
+              </span>
+            </li>
+          </ul>
+        </section>
+
+        <section className="grid gap-4" id="code-agents">
+          <h2 className="font-display font-semibold text-2xl text-foreground tracking-tight">
+            Code agents
+          </h2>
+          <ul className="grid gap-3">
+            <li className="grid gap-1">
+              <Link
+                className="font-medium text-foreground underline underline-offset-4"
+                to="/docs/code-agents"
+              >
+                {codeAgentsDoc.title}
+              </Link>
+              <span className="text-muted-foreground text-sm leading-relaxed">
+                {codeAgentsDoc.summary}
               </span>
             </li>
           </ul>

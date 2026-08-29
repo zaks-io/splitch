@@ -6,6 +6,7 @@ import { SectionPending } from "#components/section-pending";
 import { SectionUnavailable } from "#components/section-unavailable";
 import { scopedHref } from "#lib/app-shell-navigation";
 import { loadControlPanelFlagDetail } from "#lib/control-plane-flag-functions";
+import { loadControlPanelSettings } from "#lib/control-plane-settings-functions";
 import { isFlagDetailNotFound } from "#lib/flag-detail-data";
 import { AccessDeniedError } from "#lib/loader-context";
 import { loginRedirect } from "#lib/login-redirect";
@@ -24,14 +25,17 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey")({
 
     // flags_get resolves the key inside this App's scope, so a key from another
     // App is simply absent here rather than readable.
-    const result = await loadControlPanelFlagDetail({
-      data: {
-        appId: scoped.context.scope.appId,
-        env: scoped.context.scope.env,
-        environmentId: scoped.context.scope.environmentId,
-        flagKey: params.flagKey,
-      },
-    });
+    const [result, settings] = await Promise.all([
+      loadControlPanelFlagDetail({
+        data: {
+          appId: scoped.context.scope.appId,
+          env: scoped.context.scope.env,
+          environmentId: scoped.context.scope.environmentId,
+          flagKey: params.flagKey,
+        },
+      }),
+      loadControlPanelSettings({ data: scoped.context.scope }),
+    ]);
     if (!result.ok) throw new Error(result.error.message);
     const sources = promotionSources(
       scoped.context.navigation,
@@ -40,6 +44,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey")({
     );
     return {
       detail: result.data,
+      clientKey: settings.ok ? settings.data.clientKey.keyMaterial : undefined,
       scope: scoped.context.scope,
       promotionSourceEnv: sources[0]?.env,
     };
@@ -53,7 +58,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey")({
 });
 
 function FlagDetailRoute() {
-  const { detail, scope, promotionSourceEnv } = Route.useLoaderData();
+  const { clientKey, detail, scope, promotionSourceEnv } = Route.useLoaderData();
 
   if (isFlagDetailNotFound(detail)) {
     // Keyed flags_get is exact within the App, so a miss is absence — not an
@@ -72,6 +77,7 @@ function FlagDetailRoute() {
     <PanelPageBody>
       <FlagDetailPage
         appId={scope.appId}
+        clientKey={clientKey}
         environmentId={scope.environmentId}
         promotionSourceEnv={promotionSourceEnv}
         scopeHref={scopedHref(scope)}

@@ -47,8 +47,9 @@ function experimentDetail(): PanelExperimentDetailOutput {
       draftSegmentIds: [],
       liveRunId: null,
     },
-    flag: { id: "flag_1", name: "New Checkout" },
+    flag: { id: "flag_1", key: "new-checkout", name: "New Checkout" },
     metrics: [],
+    eventDefinitions: [],
     variants: [
       { id: "variant_control", name: "control" },
       { id: "variant_treatment", name: "treatment" },

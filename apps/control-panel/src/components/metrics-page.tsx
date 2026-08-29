@@ -1,26 +1,44 @@
 import type { Metric } from "@splitch/contracts";
+import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@splitch/ui/components/dialog";
 import { EmptyState } from "@splitch/ui/state/empty-state";
 import { useRouter } from "@tanstack/react-router";
+import { useState } from "react";
+import { renderMetricImplementationPrompt } from "#lib/implementation-prompt";
 import { parityHint } from "#lib/parity-hints";
 import { CatalogTruncatedNotice } from "./catalog-truncated-notice";
+import { CodeAgentPrompt } from "./code-agent-prompt";
 import { MetricEditorDialog } from "./metric-editor-dialog";
 import { ParityNote } from "./parity-note";
 import { MetricsTable } from "./metrics-table";
 
 export function MetricsPage({
   appId,
+  clientKey,
+  environment,
   environmentId,
+  eventDefinitions,
   metrics,
   readLimit,
   readTruncated,
 }: {
   appId: string;
+  clientKey?: string;
+  environment?: string;
   environmentId: string;
+  eventDefinitions: Array<{ id: string; name: string }>;
   metrics: Metric[];
   readLimit: number;
   readTruncated: boolean;
 }) {
   const router = useRouter();
+  const [implementationMetric, setImplementationMetric] = useState<Metric>();
 
   /*
    * Re-read, never patch: `metrics` is route-loader data with no React Query
@@ -32,6 +50,11 @@ export function MetricsPage({
    */
   async function reread() {
     await router.invalidate();
+  }
+
+  async function rereadAndShowPrompt(metric: Metric) {
+    await router.invalidate();
+    setImplementationMetric(metric);
   }
 
   return (
@@ -55,7 +78,7 @@ export function MetricsPage({
             environmentId={environmentId}
             metrics={metrics}
             onDeleted={reread}
-            onSaved={reread}
+            onSaved={rereadAndShowPrompt}
           />
         ) : null}
       </header>
@@ -76,7 +99,7 @@ export function MetricsPage({
           environmentId={environmentId}
           metrics={metrics}
           onDeleted={reread}
-          onSaved={reread}
+          onSaved={rereadAndShowPrompt}
         />
       ) : (
         <EmptyState
@@ -86,7 +109,7 @@ export function MetricsPage({
               environmentId={environmentId}
               metrics={metrics}
               onDeleted={reread}
-              onSaved={reread}
+              onSaved={rereadAndShowPrompt}
             />
           }
           description="A Metric combines an event fact with a Binomial, Count, Revenue, or Ratio aggregation."
@@ -94,6 +117,44 @@ export function MetricsPage({
           title="Create your first Metric"
         />
       )}
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) setImplementationMetric(undefined);
+        }}
+        open={implementationMetric !== undefined}
+      >
+        <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-2xl">
+          {implementationMetric ? (
+            <div className="grid gap-5" data-testid="metric-code-agent-success">
+              <DialogHeader>
+                <DialogTitle>Implement {implementationMetric.name}</DialogTitle>
+              </DialogHeader>
+              {clientKey ? (
+                <CodeAgentPrompt
+                  prompt={renderMetricImplementationPrompt({
+                    clientKey,
+                    environment,
+                    eventDefinitions,
+                    metric: implementationMetric,
+                    metrics,
+                  })}
+                  testId="metric-code-agent-prompt"
+                />
+              ) : (
+                <Alert variant="destructive">
+                  <AlertTitle>Code-agent prompt unavailable</AlertTitle>
+                  <AlertDescription>
+                    The Metric was saved, but the public Client Key could not be loaded. Reload this
+                    page or copy it from Environment settings before implementing the Metric.
+                  </AlertDescription>
+                </Alert>
+              )}
+              <DialogFooter showCloseButton />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

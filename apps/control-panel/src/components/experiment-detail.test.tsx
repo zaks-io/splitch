@@ -58,8 +58,9 @@ describe("ExperimentDetail", () => {
 function detail(overrides: Partial<PanelExperimentDetailOutput> = {}): PanelExperimentDetailOutput {
   return {
     experiment: experiment(),
-    flag: { id: "flag_1", name: "New Checkout" },
+    flag: { id: "flag_1", key: "new-checkout", name: "New Checkout" },
     metrics: [],
+    eventDefinitions: [],
     variants: [
       { id: "variant_control", name: "control" },
       { id: "variant_treatment", name: "treatment" },
@@ -113,6 +114,10 @@ function run(runNumber: 1 | 2): PanelExperimentRun {
       { id: "variant_treatment", name: "treatment", value: true },
     ]),
     targetingRulesJson: "[]",
+    targetN: null,
+    decisionFamilyJson: "[]",
+    guardrailDecisionsJson: "[]",
+    metricVarianceConfigJson: "[]",
     decisionMetricIds: [],
     decisionGuardrailMetricIds: [],
     confidenceLevel: 0.95,

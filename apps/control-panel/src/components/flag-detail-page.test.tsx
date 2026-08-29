@@ -158,8 +158,8 @@ describe("Flag detail page", () => {
         ...firstRule,
         segmentId: "segment_paid",
         segmentName: "Paid plan",
-        conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
-        segmentConditions: [{ attribute: "tier", operator: "eq", value: "paid" }],
+        conditions: [{ attribute: "plan", operator: "eq" as const, value: "paid" }],
+        segmentConditions: [{ attribute: "tier", operator: "eq" as const, value: "paid" }],
       },
     ];
 
@@ -174,7 +174,13 @@ describe("Flag detail page", () => {
 
 function render(next: FlagDetailView): string {
   return renderToStaticMarkup(
-    <FlagDetailPage appId="app_1" environmentId="env_dev" scopeHref={scopeHref} view={next} />,
+    <FlagDetailPage
+      appId="app_1"
+      clientKey="pk_test_dev"
+      environmentId="env_dev"
+      scopeHref={scopeHref}
+      view={next}
+    />,
   );
 }
 
@@ -210,6 +216,7 @@ function view(overrides: Partial<FlagDetailView> = {}): FlagDetailView {
       },
     ],
     availableVariantCount: 1,
+    availableVariantNames: ["control"],
     availabilityNarrowed: true,
     defaultVariantName: "control",
     targetingRules: [

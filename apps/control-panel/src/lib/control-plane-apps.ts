@@ -2,6 +2,7 @@ import {
   type ApprovalsClient,
   type AppsClient,
   createControlPlaneSdk,
+  type EventDefinitionsClient,
   type FlagsClient,
   type OrganizationsClient,
 } from "@splitch/control-plane-sdk";
@@ -89,6 +90,26 @@ export function createControlPanelFlagsClient(
   }).flags;
 }
 
+/** Server-only typed Event Definitions client over the Control Plane Worker binding. */
+export function createControlPanelEventDefinitionsClient(
+  controlPlane: Fetcher,
+  actor: ControlPanelActor,
+  environmentId: string,
+  delegationSecret: string,
+  delegationOptions?: DelegationOptions,
+): EventDefinitionsClient {
+  return createControlPlaneSdk({
+    baseUrl: CONTROL_PLANE_INTERNAL_ORIGIN,
+    fetch: panelDelegationFetch(
+      controlPlane,
+      actor,
+      delegationSecret,
+      environmentId,
+      delegationOptions,
+    ),
+  }).eventDefinitions;
+}
+
 /**
  * Server-only typed Approvals client over the Control Plane Worker binding.
  *
@@ -159,8 +180,17 @@ export function panelDelegationFetch(
       }),
     );
     // Default fetch follows 3xx and replays every header, including this signed
-    // delegation, onto Location. The SDK wrap runs before this header exists and
-    // does not treat it as a credential, so the refusal has to happen here.
-    return controlPlane.fetch(new Request(request, { headers, redirect: "error" }));
+    // delegation, onto Location. Cloudflare accepts `manual`, not `error`, so
+    // refuse the returned redirect before the SDK can observe or follow it.
+    return refuseBindingRedirect(
+      await controlPlane.fetch(new Request(request, { headers, redirect: "manual" })),
+    );
   };
+}
+
+function refuseBindingRedirect(response: Response): Response {
+  if (response.status >= 300 && response.status < 400) {
+    throw new Error("control-panel binding refused a redirect");
+  }
+  return response;
 }

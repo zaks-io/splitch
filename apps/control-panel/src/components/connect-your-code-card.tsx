@@ -5,6 +5,11 @@ import {
   SDK_INSTALL_COMMAND,
 } from "#lib/connect-snippet";
 import { parityHint } from "#lib/parity-hints";
+import {
+  type FlagImplementationInput,
+  renderFlagImplementationPrompt,
+} from "#lib/implementation-prompt";
+import { CodeAgentPrompt } from "./code-agent-prompt";
 import { CopyableCode } from "./copyable-code";
 
 const CLIENT_KEY_PARITY = parityHint("client_key_get");
@@ -20,10 +25,12 @@ const CLIENT_KEY_PARITY = parityHint("client_key_get");
  */
 export function ConnectYourCodeCard({
   clientKey,
+  flag,
   flagKey,
   settingsHref,
 }: {
   clientKey: ClientKey;
+  flag?: FlagImplementationInput["flag"];
   flagKey: string;
   settingsHref: string;
 }) {
@@ -35,6 +42,16 @@ export function ConnectYourCodeCard({
         value={clientKey.keyMaterial}
         wrap
       />
+
+      {flag ? (
+        <CodeAgentPrompt
+          prompt={renderFlagImplementationPrompt({
+            clientKey: clientKey.keyMaterial,
+            flag,
+          })}
+          testId="flag-code-agent-prompt"
+        />
+      ) : null}
 
       <CopyableCode label="Install" testId="connect-install" value={SDK_INSTALL_COMMAND} />
 

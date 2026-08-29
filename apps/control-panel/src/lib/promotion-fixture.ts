@@ -40,6 +40,7 @@ export function promotionView(overrides: Partial<FlagDetailView> = {}): FlagDeta
       },
     ],
     availableVariantCount: 1,
+    availableVariantNames: ["control"],
     availabilityNarrowed: true,
     defaultVariantName: "control",
     targetingRules: [],
@@ -56,6 +57,7 @@ export function stagingView(overrides: Partial<FlagDetailView> = {}): FlagDetail
     env: "staging",
     enabled: true,
     availableVariantCount: 2,
+    availableVariantNames: ["control", "beta"],
     catalog: promotionView().catalog.map((variant) =>
       variant.name === "beta" ? { ...variant, availability: "available" as const } : variant,
     ),

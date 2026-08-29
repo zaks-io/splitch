@@ -34,8 +34,16 @@ type TargetingRuleView = {
   priority: number;
   /** Catalog name of the served Variant, or the raw id if it left the catalog. */
   variantName: string;
-  conditions: Array<{ attribute: string; operator: string; value: Condition["value"] }>;
-  segmentConditions: Array<{ attribute: string; operator: string; value: Condition["value"] }>;
+  conditions: Array<{
+    attribute: string;
+    operator: Condition["operator"];
+    value: Condition["value"];
+  }>;
+  segmentConditions: Array<{
+    attribute: string;
+    operator: Condition["operator"];
+    value: Condition["value"];
+  }>;
   rolloutPercentage: number | null;
   segmentId: string | null;
   segmentName: string | null;
@@ -67,6 +75,7 @@ export type FlagDetailView = {
   enabled: boolean;
   catalog: CatalogVariantView[];
   availableVariantCount: number;
+  availableVariantNames: string[];
   availabilityNarrowed: boolean;
   defaultVariantName: string;
   targetingRules: TargetingRuleView[];
@@ -103,6 +112,7 @@ export function flagDetailView(
       availability: availabilityOf(variant, config === null, narrowed, available),
     })),
     availableVariantCount: available.length,
+    availableVariantNames: available,
     availabilityNarrowed: narrowed,
     defaultVariantName: variantName(catalog, data.definition.defaultVariantId),
     targetingRules: (config?.targetingRules ?? [])

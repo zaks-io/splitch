@@ -16,6 +16,8 @@ import { Route as QuickstartRouteImport } from './routes/quickstart'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as DocsCliRouteImport } from './routes/docs.cli'
 import { Route as DocsCliDotmdRouteImport } from './routes/docs.cli[.]md'
+import { Route as DocsCodeAgentsRouteImport } from './routes/docs.code-agents'
+import { Route as DocsCodeAgentsDotmdRouteImport } from './routes/docs.code-agents[.]md'
 import { Route as DocsErrorsRouteImport } from './routes/docs.errors'
 import { Route as DocsErrorsDotmdRouteImport } from './routes/docs.errors[.]md'
 import { Route as DocsFlagsRouteImport } from './routes/docs.flags'
@@ -58,6 +60,16 @@ const DocsCliDotmdRoute = DocsCliDotmdRouteImport.update({
   path: '/docs/cli.md',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocsCodeAgentsRoute = DocsCodeAgentsRouteImport.update({
+  id: '/docs/code-agents',
+  path: '/docs/code-agents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsCodeAgentsDotmdRoute = DocsCodeAgentsDotmdRouteImport.update({
+  id: '/docs/code-agents.md',
+  path: '/docs/code-agents.md',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocsErrorsRoute = DocsErrorsRouteImport.update({
   id: '/docs/errors',
   path: '/docs/errors',
@@ -96,6 +108,8 @@ export interface FileRoutesByFullPath {
   '/quickstart': typeof QuickstartRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
+  '/docs/code-agents': typeof DocsCodeAgentsRoute
+  '/docs/code-agents.md': typeof DocsCodeAgentsDotmdRoute
   '/docs/errors': typeof DocsErrorsRoute
   '/docs/errors.md': typeof DocsErrorsDotmdRoute
   '/docs/flags': typeof DocsFlagsRoute
@@ -111,6 +125,8 @@ export interface FileRoutesByTo {
   '/quickstart': typeof QuickstartRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
+  '/docs/code-agents': typeof DocsCodeAgentsRoute
+  '/docs/code-agents.md': typeof DocsCodeAgentsDotmdRoute
   '/docs/errors': typeof DocsErrorsRoute
   '/docs/errors.md': typeof DocsErrorsDotmdRoute
   '/docs/flags': typeof DocsFlagsRoute
@@ -127,6 +143,8 @@ export interface FileRoutesById {
   '/quickstart': typeof QuickstartRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
+  '/docs/code-agents': typeof DocsCodeAgentsRoute
+  '/docs/code-agents.md': typeof DocsCodeAgentsDotmdRoute
   '/docs/errors': typeof DocsErrorsRoute
   '/docs/errors.md': typeof DocsErrorsDotmdRoute
   '/docs/flags': typeof DocsFlagsRoute
@@ -144,6 +162,8 @@ export interface FileRouteTypes {
     | '/quickstart'
     | '/docs/cli'
     | '/docs/cli.md'
+    | '/docs/code-agents'
+    | '/docs/code-agents.md'
     | '/docs/errors'
     | '/docs/errors.md'
     | '/docs/flags'
@@ -159,6 +179,8 @@ export interface FileRouteTypes {
     | '/quickstart'
     | '/docs/cli'
     | '/docs/cli.md'
+    | '/docs/code-agents'
+    | '/docs/code-agents.md'
     | '/docs/errors'
     | '/docs/errors.md'
     | '/docs/flags'
@@ -174,6 +196,8 @@ export interface FileRouteTypes {
     | '/quickstart'
     | '/docs/cli'
     | '/docs/cli.md'
+    | '/docs/code-agents'
+    | '/docs/code-agents.md'
     | '/docs/errors'
     | '/docs/errors.md'
     | '/docs/flags'
@@ -190,6 +214,8 @@ export interface RootRouteChildren {
   QuickstartRoute: typeof QuickstartRoute
   DocsCliRoute: typeof DocsCliRoute
   DocsCliDotmdRoute: typeof DocsCliDotmdRoute
+  DocsCodeAgentsRoute: typeof DocsCodeAgentsRoute
+  DocsCodeAgentsDotmdRoute: typeof DocsCodeAgentsDotmdRoute
   DocsErrorsRoute: typeof DocsErrorsRoute
   DocsErrorsDotmdRoute: typeof DocsErrorsDotmdRoute
   DocsFlagsRoute: typeof DocsFlagsRoute
@@ -250,6 +276,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsCliDotmdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/docs/code-agents': {
+      id: '/docs/code-agents'
+      path: '/docs/code-agents'
+      fullPath: '/docs/code-agents'
+      preLoaderRoute: typeof DocsCodeAgentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/code-agents.md': {
+      id: '/docs/code-agents.md'
+      path: '/docs/code-agents.md'
+      fullPath: '/docs/code-agents.md'
+      preLoaderRoute: typeof DocsCodeAgentsDotmdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/docs/errors': {
       id: '/docs/errors'
       path: '/docs/errors'
@@ -302,6 +342,8 @@ const rootRouteChildren: RootRouteChildren = {
   QuickstartRoute: QuickstartRoute,
   DocsCliRoute: DocsCliRoute,
   DocsCliDotmdRoute: DocsCliDotmdRoute,
+  DocsCodeAgentsRoute: DocsCodeAgentsRoute,
+  DocsCodeAgentsDotmdRoute: DocsCodeAgentsDotmdRoute,
   DocsErrorsRoute: DocsErrorsRoute,
   DocsErrorsDotmdRoute: DocsErrorsDotmdRoute,
   DocsFlagsRoute: DocsFlagsRoute,

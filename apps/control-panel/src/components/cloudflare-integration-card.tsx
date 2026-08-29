@@ -14,6 +14,8 @@ import {
   cloudflareInstallationsQuery,
   refreshCloudflareInstallations,
 } from "#lib/cloudflare-query";
+import { renderCloudflareIntegrationPrompt } from "#lib/implementation-prompt";
+import { CodeAgentPrompt } from "./code-agent-prompt";
 import { CopyableCode } from "./copyable-code";
 import { PushInstallationsTable, type PushInstallationRow } from "./push-installations-table";
 
@@ -142,6 +144,11 @@ function CloudflareSetupSteps({ environmentKey }: { environmentKey: string }) {
         label="Set up Cloudflare"
         testId="cloudflare-setup-command"
         value={`${CLOUDFLARE_SETUP_COMMAND} --env ${environmentKey}`}
+      />
+      <CodeAgentPrompt
+        prompt={renderCloudflareIntegrationPrompt(environmentKey)}
+        testId="cloudflare-code-agent-prompt"
+        title="Implement Cloudflare with your code agent"
       />
     </div>
   );

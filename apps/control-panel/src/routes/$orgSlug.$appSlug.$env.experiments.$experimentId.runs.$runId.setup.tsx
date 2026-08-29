@@ -15,6 +15,7 @@ function PinnedRunSetupTab() {
     <ExperimentSetup
       appId={route.scope.appId}
       data={route.data}
+      environment={route.scope.env}
       environmentId={route.scope.environmentId}
       selectedRun={run}
     />

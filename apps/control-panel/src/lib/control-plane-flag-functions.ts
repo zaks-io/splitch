@@ -7,6 +7,8 @@ import { controlPanelBindings } from "./bindings";
 import { draftIssues, FlagDraftSchema, flagCreateInput } from "./create-flag-model";
 import { type FlagDetailNotFound, isFlagDetailNotFound, readFlagDetail } from "./flag-detail-data";
 import { type FlagDetailView, flagDetailView } from "./flag-detail-view";
+import { flagImplementationConfiguration } from "./flag-implementation-configuration";
+import type { FlagImplementationInput } from "./implementation-prompt";
 import {
   assertMatrixEnvironments,
   type FlagsMatrixData,
@@ -22,7 +24,8 @@ import {
 
 type FlagsPageScope = { appId: string; environmentId: string };
 type FlagsMatrixScope = { appId: string; environmentIds: string[] };
-type CreateFlagResult = ControlPlaneOperationResult<{ key: string }>;
+export type CreatedFlagHandoff = FlagImplementationInput["flag"];
+type CreateFlagResult = ControlPlaneOperationResult<CreatedFlagHandoff>;
 
 const CreateFlagInputSchema = z.object({
   appId: z.string(),
@@ -113,7 +116,7 @@ export const createControlPanelFlag = createServerFn({ method: "POST" })
     }
     const data = parsed.data;
 
-    const authorized = await authorizedFlagsClient(data.environmentId);
+    const authorized = await authorizedFlagDetailClients(data.environmentId);
     if (!authorized.ok) return authorized.result;
 
     // The client validates to render inline errors; the server revalidates
@@ -127,10 +130,41 @@ export const createControlPanelFlag = createServerFn({ method: "POST" })
         issues.map((issue) => ({ path: issue.path.split("."), message: issue.message })),
       );
     }
-    const result = await authorized.client.create(
+    const result = await authorized.client.flags.create(
       flagCreateInput(data.appId, data.draft, data.idempotencyKey),
     );
-    return result.ok ? { ok: true, status: result.status, data: { key: result.data.key } } : result;
+    if (!result.ok) return result;
+
+    const detail = await readFlagDetail(
+      authorized.client.flags,
+      { appId: data.appId, environmentId: data.environmentId },
+      result.data.key,
+    );
+    if (!detail.ok) return detail;
+    if (isFlagDetailNotFound(detail.data)) {
+      throw new Error(`Created Flag could not be read back: ${result.data.key}`);
+    }
+
+    const segmentList = detail.data.configuration
+      ? await authorized.client.segments.list({ appId: data.appId })
+      : null;
+    if (segmentList && !segmentList.ok) return segmentList;
+
+    return {
+      ok: true,
+      status: result.status,
+      data: flagImplementationConfiguration(
+        detail.data,
+        segmentList?.data ?? {
+          items: [],
+          unparseable: [],
+          affectedEnvironmentIds: {},
+          readLimit: 200,
+          readTruncated: false,
+          cursor: null,
+        },
+      ),
+    };
   });
 
 function validationError(

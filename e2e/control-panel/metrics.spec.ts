@@ -27,6 +27,36 @@ test.describe("App-level Metrics", () => {
     await expect(page.locator("[data-metric-key='checkout-reliability']")).toBeVisible();
   });
 
+  test("generates a code-agent prompt after creating a Ratio Metric", async ({
+    page,
+  }, testInfo) => {
+    const key = `prompt-ratio-${testInfo.retry}`;
+    await page.goto("/acme-labs/checkout-api/dev/metrics");
+    await waitForHydration(page);
+
+    await page.getByRole("button", { name: "Create Metric" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Metric name").fill("Prompt ratio");
+    await dialog.getByLabel("Metric key").fill(key);
+    await dialog.getByLabel("Aggregation type").click();
+    await page.getByRole("option", { name: "Ratio" }).click();
+    await dialog.getByLabel("Numerator Metric").click();
+    await page.getByRole("option", { name: "Checkout reliability" }).click();
+    await dialog.getByLabel("Denominator Metric").click();
+    await page.getByRole("option", { name: "Checkout errors" }).click();
+    await dialog.getByRole("button", { name: "Create Metric" }).click();
+
+    const prompt = page.getByTestId("metric-code-agent-prompt-text");
+    await expect(prompt).toContainText(`"key": "${key}"`);
+    await expect(prompt).toContainText('"eventName": "checkout_succeeded"');
+    await expect(prompt).toContainText('"eventName": "checkout_error"');
+    await expect(prompt).toContainText("do not send an event for the ratio itself");
+    await page
+      .getByTestId("metric-code-agent-success")
+      .getByRole("button", { name: "Close" })
+      .click();
+  });
+
   test("round-trips every aggregation and surfaces Worker validation", async ({
     page,
   }, testInfo) => {
@@ -92,6 +122,9 @@ test.describe("App-level Metrics", () => {
     await expect(page.locator(`[data-metric-key='${countKey}']`)).toContainText(
       `Completed items ${suffix}`,
     );
+    const editSuccess = page.getByTestId("metric-code-agent-success");
+    await expect(editSuccess).toBeVisible();
+    await editSuccess.getByRole("button", { name: "Close" }).click();
 
     await page
       .locator(`[data-metric-key='${revenueKey}']`)
@@ -148,6 +181,8 @@ async function createMetric(page: import("@playwright/test").Page, input: Metric
     await page.getByRole("option", { name: input.denominator }).click();
   }
   await dialog.getByRole("button", { name: "Create Metric" }).click();
-  await expect(dialog).toBeHidden();
   await expect(page.locator(`[data-metric-key='${input.key}']`)).toBeVisible();
+  const success = page.getByTestId("metric-code-agent-success");
+  await expect(success).toBeVisible();
+  await success.getByRole("button", { name: "Close" }).click();
 }

@@ -34,7 +34,7 @@ describe("Control Panel Apps transport", () => {
 
     const request = capturedRequest;
     expect(request).toBeInstanceOf(Request);
-    expect(request?.redirect).toBe("error");
+    expect(request?.redirect).toBe("manual");
     expect(request?.headers.get("x-splitch-panel-session")).toBeNull();
     expect(request?.headers.get("authorization")).toBeNull();
     expect(request?.headers.get("cookie")).toBeNull();

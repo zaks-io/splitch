@@ -6,6 +6,7 @@ import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments
 import {
   analysisEnvelope,
   experimentRow,
+  metricRow,
   type PanelExperimentIds,
   runRow,
   statsOutput,
@@ -179,7 +180,8 @@ describe("panel Experiments composite read", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       experiment: { id: EXPERIMENT_ID, status: "running", liveRunId: RUN_ID },
-      flag: { id: "flag_panel_list", name: "Checkout Flag" },
+      flag: { id: "flag_panel_list", key: "checkout-flag", name: "Checkout Flag" },
+      eventDefinitions: [{ id: "signed_up", name: "signed_up" }],
       runs: [
         {
           id: RUN_ID,
@@ -239,7 +241,11 @@ function repository(
       getEnvironment: vi.fn(async () => environment),
     },
     flags: {
-      flags: { findMany: vi.fn(async () => [{ id: "flag_panel_list", name: "Checkout Flag" }]) },
+      flags: {
+        findMany: vi.fn(async () => [
+          { id: "flag_panel_list", key: "checkout-flag", name: "Checkout Flag" },
+        ]),
+      },
       listVariants: vi.fn(async () => [
         { id: "variant_control", name: "control" },
         { id: "variant_treatment", name: "treatment" },
@@ -248,9 +254,12 @@ function repository(
         availableVariantNames: JSON.stringify(["control", "treatment"]),
       })),
     },
+    eventDefinitions: {
+      get: vi.fn(async (_scope, id) => ({ id, name: id })),
+    },
     experiments: {
       metrics: {
-        findMany: vi.fn(async () => [{ id: "metric_signup", name: "Signup" }]),
+        findMany: vi.fn(async () => [metricRow(APP_ID)]),
       },
       listExperiments: vi.fn(async () => [experimentRow(ids)]),
       getExperiment: vi.fn(async () => experimentRow(ids)),

@@ -76,8 +76,9 @@ describe("Control Panel Experiments transport", () => {
               draftSegmentIds: [],
               liveRunId: null,
             },
-            flag: { id: "flag_1", name: "Checkout Flag" },
+            flag: { id: "flag_1", key: "checkout-flag", name: "Checkout Flag" },
             metrics: [],
+            eventDefinitions: [],
             variants: [],
             runs: [],
           });

@@ -173,6 +173,7 @@ the glossary, `splitch://capabilities` for what the current token can do).
 
 - [Quickstart](https://splitch.dev/quickstart) — zero to a resolving Flag
 - [Flags](https://splitch.dev/docs/flags) — Configuration, rollouts, Targeting Rules
+- [Code agents](https://splitch.dev/docs/code-agents) — implement panel changes in a consumer repo
 - [SDK guide](https://splitch.dev/docs/sdk/install) — install, credentials, methods, browser, React, Convex
 - [Error catalog](https://splitch.dev/docs/errors) — every code, its cause, and its fix. Append `.md` to any page for plain markdown.
 

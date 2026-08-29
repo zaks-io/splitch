@@ -2,6 +2,7 @@ import { Button } from "@splitch/ui/components/button";
 import { Dialog, DialogContent, DialogTrigger } from "@splitch/ui/components/dialog";
 import { useRouter } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
+import type { CreatedFlagHandoff } from "#lib/control-plane-flag-functions";
 import { CreateFlagForm } from "./create-flag-form";
 import { CreateFlagSuccess } from "./create-flag-success";
 
@@ -24,7 +25,7 @@ export function CreateFlagDialog({
 }) {
   const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
-  const [createdKey, setCreatedKey] = useState<string>();
+  const [createdFlag, setCreatedFlag] = useState<CreatedFlagHandoff>();
   const isControlled = controlledOpen !== undefined;
   if (isControlled && !onOpenChange) {
     throw new Error("Controlled CreateFlagDialog requires onOpenChange");
@@ -37,14 +38,14 @@ export function CreateFlagDialog({
       setInternalOpen(nextOpen);
       onOpenChange?.(nextOpen);
     }
-    if (nextOpen || !createdKey) return;
+    if (nextOpen || !createdFlag) return;
 
-    const key = createdKey;
+    const key = createdFlag.key;
     try {
       await router.invalidate();
       onClosedAfterCreate?.(key);
     } finally {
-      setCreatedKey(undefined);
+      setCreatedFlag(undefined);
     }
   }
 
@@ -52,15 +53,15 @@ export function CreateFlagDialog({
     <Dialog onOpenChange={(nextOpen) => void changeOpen(nextOpen)} open={open}>
       {trigger}
       <DialogContent className="sm:max-w-lg">
-        {createdKey ? (
+        {createdFlag ? (
           <CreateFlagSuccess
             appId={appId}
             environmentId={environmentId}
-            flagKey={createdKey}
+            flag={createdFlag}
             settingsHref={settingsHref}
           />
         ) : (
-          <CreateFlagForm appId={appId} environmentId={environmentId} onCreated={setCreatedKey} />
+          <CreateFlagForm appId={appId} environmentId={environmentId} onCreated={setCreatedFlag} />
         )}
       </DialogContent>
     </Dialog>

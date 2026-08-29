@@ -1,5 +1,6 @@
 import { blocksToMarkdown } from "./blocks";
 import { cliDoc } from "./cli";
+import { codeAgentsDoc } from "./code-agents";
 import {
   type DocumentedErrorCode,
   documentedCodesBySurface,
@@ -40,6 +41,15 @@ export function cliDocMarkdown(): string {
     cliDoc.summary,
     blocksToMarkdown(cliDoc.blocks),
     `Source: ${DOCS_ORIGIN}${docsPath.cli()}`,
+  ].join("\n\n");
+}
+
+export function codeAgentsDocMarkdown(): string {
+  return [
+    `# ${codeAgentsDoc.title}`,
+    codeAgentsDoc.summary,
+    blocksToMarkdown(codeAgentsDoc.blocks),
+    `Source: ${DOCS_ORIGIN}${docsPath.codeAgents()}`,
   ].join("\n\n");
 }
 
@@ -115,6 +125,8 @@ export function llmsTxt(): string {
     "## CLI",
     `- [${cliDoc.title}](${DOCS_ORIGIN}${docsPath.cliMarkdown()}): ${cliDoc.summary}`,
     "Every command accepts `--json` (one line on stdout, failures included) and `--help`. Policy-gated changes take `--confirm`.",
+    "## Code-agent implementation",
+    `- [${codeAgentsDoc.title}](${DOCS_ORIGIN}${docsPath.codeAgentsMarkdown()}): ${codeAgentsDoc.summary}`,
     "## Integrations",
     "One guide per runtime, each from `npm install` to a first resolving Flag. `@splitch/sdk` covers Node, browsers, and React; Convex and Cloudflare Workers each ship their own package.",
     sdkIntegrationTopics.map(topicLine).join("\n"),

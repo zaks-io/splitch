@@ -4,6 +4,7 @@ import { PanelPageBody } from "#components/panel-page-body";
 import { SectionPending } from "#components/section-pending";
 import { SectionUnavailable } from "#components/section-unavailable";
 import { loadControlPanelMetrics } from "#lib/control-plane-metric-functions";
+import { loadControlPanelSettings } from "#lib/control-plane-settings-functions";
 import { AccessDeniedError } from "#lib/loader-context";
 import { loginRedirect } from "#lib/login-redirect";
 import { reportRouteError } from "#lib/panel-observability";
@@ -18,10 +19,15 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/metrics")({
     if (scoped.kind === "forbidden") throw new AccessDeniedError();
     if (scoped.kind === "notFound") throw notFound();
 
-    const result = await loadControlPanelMetrics({ data: scoped.context.scope });
+    const [result, settings] = await Promise.all([
+      loadControlPanelMetrics({ data: scoped.context.scope }),
+      loadControlPanelSettings({ data: scoped.context.scope }),
+    ]);
     if (!result.ok) throw new Error(result.error.message);
     return {
       metrics: result.data.items,
+      eventDefinitions: result.data.eventDefinitions,
+      clientKey: settings.ok ? settings.data.clientKey.keyMaterial : undefined,
       readLimit: result.data.readLimit,
       readTruncated: result.data.readTruncated,
       scope: scoped.context.scope,
@@ -36,12 +42,16 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/metrics")({
 });
 
 function MetricsSectionRoute() {
-  const { metrics, readLimit, readTruncated, scope } = Route.useLoaderData();
+  const { clientKey, eventDefinitions, metrics, readLimit, readTruncated, scope } =
+    Route.useLoaderData();
   return (
     <PanelPageBody>
       <MetricsPage
         appId={scope.appId}
+        clientKey={clientKey}
+        environment={scope.env}
         environmentId={scope.environmentId}
+        eventDefinitions={eventDefinitions}
         metrics={metrics}
         readLimit={readLimit}
         readTruncated={readTruncated}

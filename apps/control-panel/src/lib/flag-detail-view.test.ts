@@ -2,6 +2,10 @@ import type { FlagConfigGetOutput } from "@splitch/control-plane-sdk";
 import { describe, expect, it } from "vitest";
 import type { FlagDetailData } from "./flag-detail-data";
 import { flagDetailView as buildFlagDetailView, isLocked } from "./flag-detail-view";
+import {
+  flagImplementationConfiguration,
+  flagImplementationConfigurationFromView,
+} from "./flag-implementation-configuration";
 
 const NO_SEGMENTS = {
   items: [],
@@ -106,6 +110,20 @@ describe("Flag detail view model", () => {
       segmentConditions: [{ attribute: "tier", operator: "eq", value: "paid" }],
       conditions: [{ attribute: "plan", operator: "eq", value: "pro" }],
     });
+    expect(flagImplementationConfigurationFromView(view)).toMatchObject({
+      key: "new-checkout",
+      availableVariantNames: ["disabled", "enabled"],
+      targetingRules: [
+        {
+          variant: "enabled",
+          segment: {
+            id: "segment_paid",
+            name: "Paid plan",
+            conditions: [{ attribute: "tier", operator: "eq", value: "paid" }],
+          },
+        },
+      ],
+    });
   });
 
   it("names the offending Segment id when Segment detail data is inconsistent", () => {
@@ -158,6 +176,39 @@ describe("Flag detail view model", () => {
     expect(
       flagDetailView({ ...data, definition: { ...data.definition, schema: null } }, "dev").schema,
     ).toBeNull();
+  });
+});
+
+describe("Flag implementation configuration", () => {
+  it("refuses incomplete Variant references", () => {
+    const missingDefault = detail(devConfig());
+    missingDefault.definition.defaultVariantId = "var_missing";
+    expect(() => flagImplementationConfiguration(missingDefault, NO_SEGMENTS)).toThrow(
+      "Default references an unavailable Variant: var_missing",
+    );
+
+    expect(() =>
+      flagImplementationConfiguration(
+        detail({ ...devConfig(), availableVariantNames: ["missing"] }),
+        NO_SEGMENTS,
+      ),
+    ).toThrow("marks an unavailable Variant as available: missing");
+
+    expect(() =>
+      flagImplementationConfiguration(
+        detail({ ...devConfig(), targetingRules: [rule("rule_missing", 0, "var_missing")] }),
+        NO_SEGMENTS,
+      ),
+    ).toThrow("Targeting Rule rule_missing references an unavailable Variant: var_missing");
+  });
+
+  it("refuses unavailable Variant names preserved by the detail view", () => {
+    const view = flagDetailView(detail(devConfig()), "dev");
+    view.availableVariantNames = ["removed"];
+
+    expect(() => flagImplementationConfigurationFromView(view)).toThrow(
+      "marks an unavailable Variant as available: removed",
+    );
   });
 });
 
