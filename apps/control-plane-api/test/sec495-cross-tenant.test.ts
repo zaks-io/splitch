@@ -129,7 +129,7 @@ describe("SPL-526 warm KV read tenant isolation failure paths", () => {
     const result = await world.access.writerFor(ALPHA.appId, ALPHA.envId).deleteFlagConfig({
       appId: ALPHA.appId,
       environmentId: ALPHA.envId,
-      experimentId: null,
+      experimentIds: [],
       flagId: BRAVO.flagId,
     });
 

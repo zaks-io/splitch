@@ -16,6 +16,20 @@ type LiveUpdateSocket = {
 };
 type SocketFactory = (url: string) => LiveUpdateSocket;
 type Timer = ReturnType<typeof setTimeout>;
+type NudgeOptions = {
+  isCancelled?: () => boolean;
+  onFreshData?: () => void;
+  onStaleData?: () => void;
+  random?: () => number;
+  refetchRoute?: () => Promise<void>;
+};
+type RetryOptions = {
+  delaysMs?: readonly number[];
+  isCancelled?: () => boolean;
+  isFresh?: () => boolean;
+  onRetry?: (failure: { attempt: number; nextRetryMs: number }) => void;
+  random?: () => number;
+};
 
 export type LiveUpdateConnectionOptions = {
   readonly createSocket?: SocketFactory;
@@ -77,6 +91,7 @@ export class LiveUpdateConnection {
       const isCurrent = () =>
         generation === this.nudgeGenerations.get(target) && socket === this.socket && !this.stopped;
       void handleParsedNudge(nudge, this.options.scope, this.options.queryClient, {
+        isCancelled: () => !isCurrent(),
         onStaleData: () => {
           if (!isCurrent()) return;
           this.staleNudgeTargets.add(target);
@@ -87,6 +102,7 @@ export class LiveUpdateConnection {
           this.staleNudgeTargets.delete(target);
           this.options.onStaleDataChange?.(this.staleNudgeTargets.size > 0);
         },
+        random: this.options.random,
         refetchRoute: this.options.refetchRoute,
       });
     };
@@ -107,16 +123,16 @@ export class LiveUpdateConnection {
   }
 
   private async recoverAfterConnect(socket: LiveUpdateSocket): Promise<void> {
-    const recovered = await this.refreshScope();
+    const recovered = await this.refreshScope(() => socket === this.socket && !this.stopped);
     if (socket !== this.socket || this.stopped) return;
     this.options.onStaleDataChange?.(!recovered);
   }
 
-  private async refreshScope(): Promise<boolean> {
+  private async refreshScope(isCurrent = () => !this.stopped): Promise<boolean> {
     return invalidateWithRetry(
       this.options.queryClient,
       queryKeys.app.root(this.options.scope.appId, this.options.scope.environmentId),
-      {},
+      { isCancelled: () => !isCurrent(), random: this.options.random },
       this.options.refetchRoute,
     );
   }
@@ -126,11 +142,7 @@ export async function handleNudge(
   rawPayload: unknown,
   scope: AppEnvironmentScope,
   queryClient: QueryClient,
-  options: {
-    onFreshData?: () => void;
-    onStaleData?: () => void;
-    refetchRoute?: () => Promise<void>;
-  } = {},
+  options: NudgeOptions = {},
 ): Promise<void> {
   const parsed = parseNudge(rawPayload);
   if (!parsed) return;
@@ -142,15 +154,16 @@ async function handleParsedNudge(
   parsed: DeltaNudge,
   scope: AppEnvironmentScope,
   queryClient: QueryClient,
-  options: {
-    onFreshData?: () => void;
-    onStaleData?: () => void;
-    refetchRoute?: () => Promise<void>;
-  },
+  options: NudgeOptions,
 ): Promise<void> {
+  if (options.isCancelled?.()) return;
   const detailKey = nudgeDetailKey(parsed, scope);
   const detail = detailKey ? queryClient.getQueryData<{ version?: number }>(detailKey) : undefined;
-  if (detail?.version !== undefined && detail.version >= parsed.version) {
+  if (
+    parsed.deleted !== true &&
+    detail?.version !== undefined &&
+    detail.version >= parsed.version
+  ) {
     options.onFreshData?.();
     return;
   }
@@ -159,7 +172,7 @@ async function handleParsedNudge(
     parsed,
     scope,
     queryClient,
-    detail?.version === undefined ? null : detailKey,
+    parsed.deleted === true || detail?.version === undefined ? null : detailKey,
     options,
   );
 }
@@ -173,8 +186,12 @@ export function liveUpdateUrl(scope: { orgSlug: string; appSlug: string; env: st
   return url.toString();
 }
 
-function jitteredReconnectDelay(attempt: number, random = Math.random): number {
-  const baseDelay = reconnectDelaysMs[Math.min(attempt, reconnectDelaysMs.length - 1)] ?? 8_000;
+function jitteredReconnectDelay(
+  attempt: number,
+  random = Math.random,
+  delaysMs: readonly number[] = reconnectDelaysMs,
+): number {
+  const baseDelay = delaysMs[Math.min(attempt, delaysMs.length - 1)] ?? 8_000;
   return Math.round(baseDelay * (0.8 + random() * 0.4));
 }
 
@@ -183,11 +200,7 @@ async function invalidateNudgeWithRetry(
   scope: AppEnvironmentScope,
   queryClient: QueryClient,
   detailKey: readonly string[] | null,
-  options: {
-    onFreshData?: () => void;
-    onStaleData?: () => void;
-    refetchRoute?: () => Promise<void>;
-  },
+  options: NudgeOptions,
 ): Promise<void> {
   const prefix = nudgeInvalidationPrefix[nudge.entity](scope.appId, scope.environmentId);
   const reportFailure = createNudgeRefetchFailureHandler({
@@ -208,38 +221,59 @@ async function invalidateNudgeWithRetry(
           }
         : undefined,
       onRetry: reportFailure,
+      isCancelled: options.isCancelled,
+      random: options.random,
     },
     options.refetchRoute,
   );
-  if (converged) options.onFreshData?.();
+  if (converged && nudge.deleted !== true) options.onFreshData?.();
 }
 
 async function invalidateWithRetry(
   queryClient: QueryClient,
   queryKey: ReturnType<(typeof nudgeInvalidationPrefix)[DeltaNudge["entity"]]>,
-  options: {
-    delaysMs?: readonly number[];
-    isFresh?: () => boolean;
-    onRetry?: (failure: { attempt: number; nextRetryMs: number }) => void;
-  } = {},
+  options: RetryOptions = {},
   refetchRoute?: () => Promise<void>,
 ): Promise<boolean> {
   const delaysMs = options.delaysMs ?? reconnectDelaysMs;
   for (let retry = 0; retry <= delaysMs.length; retry += 1) {
-    try {
-      await queryClient.invalidateQueries({ queryKey, refetchType: "all" }, { throwOnError: true });
-      await refetchRoute?.();
-      if (options.isFresh?.() !== false) return true;
-    } catch {
-      // A failed refetch and a successful stale refetch both leave the cache unconfirmed.
-    }
-    if (retry === delaysMs.length) return false;
-    const nextRetryMs = delaysMs[retry];
-    if (nextRetryMs === undefined) return false;
-    options.onRetry?.({ attempt: retry + 1, nextRetryMs });
-    await wait(nextRetryMs);
+    const result = await invalidateOnce(queryClient, queryKey, options, refetchRoute);
+    if (result === "fresh") return true;
+    if (result === "cancelled") return false;
+    if (!(await waitForRetry(retry, delaysMs, options))) return false;
   }
   return false;
+}
+
+async function waitForRetry(
+  retry: number,
+  delaysMs: readonly number[],
+  options: Pick<RetryOptions, "isCancelled" | "onRetry" | "random">,
+): Promise<boolean> {
+  const nextRetryMs = delaysMs[retry];
+  if (nextRetryMs === undefined) return false;
+  options.onRetry?.({ attempt: retry + 1, nextRetryMs });
+  if (options.isCancelled?.()) return false;
+  await wait(jitteredReconnectDelay(retry, options.random, delaysMs));
+  return options.isCancelled?.() !== true;
+}
+
+async function invalidateOnce(
+  queryClient: QueryClient,
+  queryKey: ReturnType<(typeof nudgeInvalidationPrefix)[DeltaNudge["entity"]]>,
+  options: Pick<RetryOptions, "isCancelled" | "isFresh">,
+  refetchRoute?: () => Promise<void>,
+): Promise<"cancelled" | "fresh" | "stale"> {
+  if (options.isCancelled?.()) return "cancelled";
+  try {
+    await queryClient.invalidateQueries({ queryKey, refetchType: "all" }, { throwOnError: true });
+    if (options.isCancelled?.()) return "cancelled";
+    await refetchRoute?.();
+    if (options.isCancelled?.()) return "cancelled";
+    return options.isFresh?.() === false ? "stale" : "fresh";
+  } catch {
+    return options.isCancelled?.() ? "cancelled" : "stale";
+  }
 }
 
 function nudgeDetailKey(nudge: DeltaNudge, scope: AppEnvironmentScope): readonly string[] | null {

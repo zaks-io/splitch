@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 describe("nudge convergence", () => {
-  it("retries failed refetches through the Workers KV convergence window", async () => {
+  it("jitters failed refetches through the Workers KV convergence window", async () => {
     vi.useFakeTimers();
     const attempts: number[] = [];
     const queryClient = queryClientStub();
@@ -28,11 +28,13 @@ describe("nudge convergence", () => {
       return Promise.reject(new Error("read API unavailable"));
     });
 
-    const pending = handleNudge(message("flag_1", 1).data, scope, queryClient.client);
-    await vi.advanceTimersByTimeAsync(62_000);
+    const pending = handleNudge(message("flag_1", 1).data, scope, queryClient.client, {
+      random: () => 0,
+    });
+    await vi.advanceTimersByTimeAsync(49_600);
     await pending;
 
-    expect(attempts.map((at) => at - startedAt)).toEqual([0, 2_000, 6_000, 14_000, 30_000, 62_000]);
+    expect(attempts.map((at) => at - startedAt)).toEqual([0, 1_600, 4_800, 11_200, 24_000, 49_600]);
   });
 
   it("keeps stale asserted until the refetched version reaches the nudge", async () => {
@@ -52,6 +54,7 @@ describe("nudge convergence", () => {
     const pending = handleNudge(message("flag_1", 6).data, scope, queryClient.client, {
       onFreshData,
       onStaleData,
+      random: () => 0.5,
     });
     await vi.advanceTimersByTimeAsync(30_000);
     expect(onStaleData).toHaveBeenCalledTimes(5);
@@ -72,6 +75,7 @@ describe("nudge convergence", () => {
     const pending = handleNudge(message("flag_1", 6).data, scope, queryClient.client, {
       onFreshData,
       onStaleData,
+      random: () => 0.5,
     });
     await vi.advanceTimersByTimeAsync(62_000);
     await pending;
@@ -158,9 +162,39 @@ describe("nudge convergence coordination", () => {
     await vi.advanceTimersByTimeAsync(62_000);
     expect(stale).toHaveBeenLastCalledWith(false);
   });
+
+  it("stops invalidating when the owning connection is cancelled", async () => {
+    vi.useFakeTimers();
+    const refetchRoute = vi.fn(() => Promise.resolve());
+    const { connection, queryClient, sockets } = connectionHarness({ refetchRoute });
+    connection.start();
+    await vi.advanceTimersByTimeAsync(0);
+    queryClient.invalidateQueries.mockClear();
+    refetchRoute.mockClear();
+    queryClient.getQueryData.mockReturnValue({ version: 1 });
+    const firstInvalidation = deferred<void>();
+    let nudgeInvalidations = 0;
+    queryClient.invalidateQueries.mockImplementation((filters) => {
+      if (filters && "refetchType" in filters) {
+        nudgeInvalidations += 1;
+        if (nudgeInvalidations === 1) return firstInvalidation.promise;
+      }
+      return Promise.resolve();
+    });
+
+    socketAt(sockets, 0).onmessage?.(message("flag_1", 2));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(nudgeInvalidations).toBe(1);
+    connection.stop();
+    firstInvalidation.resolve();
+    await vi.advanceTimersByTimeAsync(62_000);
+
+    expect(nudgeInvalidations).toBe(1);
+    expect(refetchRoute).not.toHaveBeenCalled();
+  });
 });
 
-function connectionHarness() {
+function connectionHarness(options: { refetchRoute?: () => Promise<void> } = {}) {
   const sockets: FakeSocket[] = [];
   const stale = vi.fn();
   const queryClient = queryClientStub();
@@ -172,6 +206,8 @@ function connectionHarness() {
     },
     onStaleDataChange: stale,
     queryClient: queryClient.client,
+    random: () => 0.5,
+    refetchRoute: options.refetchRoute,
     scope,
     url: "ws://panel.test/acme/app/dev/live",
   });
@@ -207,7 +243,9 @@ function entityMessage(entity: "flag" | "segment", id: string, version: number):
 function queryClientStub(cachedValue?: unknown) {
   const client = {
     getQueryData: vi.fn((_key?: readonly unknown[]) => cachedValue),
-    invalidateQueries: vi.fn(() => Promise.resolve()),
+    invalidateQueries: vi.fn((_filters?: Parameters<QueryClient["invalidateQueries"]>[0]) =>
+      Promise.resolve(),
+    ),
   };
   return { ...client, client: client as unknown as QueryClient };
 }

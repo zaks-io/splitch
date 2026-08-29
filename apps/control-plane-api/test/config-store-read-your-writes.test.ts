@@ -122,7 +122,7 @@ describe("flag_config_get read-your-writes", () => {
     expect(
       await staleAccess
         .writerFor(ids.appId, ids.environmentId)
-        .deleteFlagConfig({ ...configIdentity(), experimentId: null }),
+        .deleteFlagConfig({ ...configIdentity(), experimentIds: [] }),
     ).toMatchObject({ ok: true, snapshotRevision: 2 });
     expect((await getFlagConfig(staleAccess)).status).toBe(404);
 
@@ -137,12 +137,10 @@ describe("flag_config_get read-your-writes", () => {
     const key = controlPlaneFlagConfigKey(ids.appId, ids.environmentId, ids.flagId);
     await h.repo.flags.removeFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId);
 
-    expect(await store.deleteFlagConfig({ ...configIdentity(), experimentId: null })).toMatchObject(
-      {
-        ok: true,
-        snapshotRevision: 2,
-      },
-    );
+    expect(await store.deleteFlagConfig({ ...configIdentity(), experimentIds: [] })).toMatchObject({
+      ok: true,
+      snapshotRevision: 2,
+    });
     const otherIsolate = accessFor(store, missingSnapshotKv(h.kv, key), new Map());
     expect((await getFlagConfig(otherIsolate)).status).toBe(404);
     expect(JSON.parse(await requiredSnapshot(key))).toMatchObject({

@@ -125,6 +125,35 @@ describe("Flag Configuration KV purge retries", () => {
       });
     }
   });
+
+  it("preserves a re-created Flag's key when KV still shows the deleted owner", async () => {
+    const fixture = await seedDeletedFlagWithSnapshots();
+    const pausedEnvironmentId = fixture.environmentIds[0];
+    if (!pausedEnvironmentId) throw new Error("expected an Environment");
+    const deletedOwnerSnapshot = await snapshot(fixture, pausedEnvironmentId);
+    expect(deletedOwnerSnapshot).not.toBeNull();
+    const paused = pausingDeleteAccess(fixture.access, pausedEnvironmentId);
+    const purge = purgeFlagConfigsKvForKey(
+      { repo: fixture.repo, configStore: paused.access },
+      fixture.appId,
+      fixture.flagId,
+      fixture.flagKey,
+      fixture.purgeTargets,
+    );
+    await paused.entered;
+
+    const recreated = await createFlag(h, fixture.appId, fixture.jwt);
+    expect(recreated.id).not.toBe(fixture.flagId);
+    if (deletedOwnerSnapshot === null) throw new Error("expected the deleted owner's snapshot");
+    await h.bindings.configKv.put(
+      flagConfigKey(fixture.appId, pausedEnvironmentId, fixture.flagKey),
+      deletedOwnerSnapshot,
+    );
+    paused.release();
+    await expect(purge).resolves.toBeUndefined();
+
+    expect(await snapshot(fixture, pausedEnvironmentId)).toBe(deletedOwnerSnapshot);
+  });
 });
 
 async function seedDeletedFlagWithSnapshots() {

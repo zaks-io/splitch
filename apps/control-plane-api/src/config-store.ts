@@ -24,6 +24,7 @@ import {
   type PatchFlagConfigInput,
   type PromoteFlagConfigInput,
   type PromoteFlagConfigResult,
+  readFlagConfigPurgeTarget,
   type ReplaceTargetingRulesInput,
   readFlagSnapshot,
   responseFromSnapshot,
@@ -52,7 +53,7 @@ export interface ConfigStoreWriter {
   readFlagConfigPurgeTarget(
     input: Omit<PatchFlagConfigInput, "actor" | "enabled" | "availableVariantNames">,
   ): Promise<
-    | { ok: true; experimentId: string | null }
+    | { ok: true; experimentIds: string[] }
     | { ok: false; reason: "FLAG_NOT_FOUND" }
     | { ok: false; reason: "SEGMENT_NOT_FOUND"; missingSegmentIds: string[] }
   >;
@@ -105,9 +106,9 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
     async readFlagConfigPurgeTarget(input) {
       return catchConfigStoreFailure(runtimeDeps, async () => {
         const scope = envScope(input.appId, input.environmentId);
-        const snapshot = await readFlagSnapshot(runtimeDeps, scope, input.flagId);
-        if (!snapshot) return { ok: false as const, reason: "FLAG_NOT_FOUND" as const };
-        return { ok: true as const, experimentId: snapshot.flag.experimentId };
+        const target = await readFlagConfigPurgeTarget(runtimeDeps, scope, input.flagId);
+        if (!target) return { ok: false as const, reason: "FLAG_NOT_FOUND" as const };
+        return { ok: true as const, experimentIds: target.experimentIds };
       });
     },
 

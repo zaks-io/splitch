@@ -1,12 +1,10 @@
 import {
   CURRENT_KV_SCHEMA_VERSION,
-  controlPlaneFlagConfigKey,
   experimentConfigKey,
   flagConfigKey,
-  liveRunKey,
   runConfigKey,
 } from "@splitch/contracts";
-import { appScope, envScope } from "@splitch/db";
+import { appScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeConfigStore } from "../src/config-store";
 import {
@@ -239,86 +237,9 @@ describe("config store variant catalog resync", () => {
     };
     expect(after.data.variants.find((v) => v.name === "treatment")?.value).toBe("changed");
   });
+});
 
-  it("deleteFlagConfig removes an archived Experiment's evaluation snapshots", async () => {
-    const store = makeConfigStore({
-      repo: h.repo,
-      kv: h.kv,
-      broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
-      nextSnapshotRevision: makeSnapshotRevisionCounter(),
-      now: () => new Date(NOW_MS),
-    });
-    await store.resyncFlagConfig({
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      flagId: ids.flagId,
-    });
-    await startSeededExperiment(h.d1);
-    await store.syncExperimentConfig({
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      experimentId: ids.experimentId,
-    });
-    const key = flagConfigKey(ids.appId, ids.environmentId, ids.flagKey);
-    const controlPlaneKey = controlPlaneFlagConfigKey(ids.appId, ids.environmentId, ids.flagId);
-    const experimentKey = experimentConfigKey(ids.appId, ids.environmentId, ids.experimentId);
-    const liveKey = liveRunKey(ids.appId, ids.environmentId, ids.experimentId);
-    expect(await h.kv.get(key, "text")).toEqual(expect.any(String));
-    expect(await h.kv.get(controlPlaneKey, "text")).toEqual(expect.any(String));
-    expect(await h.kv.get(experimentKey, "text")).toEqual(expect.any(String));
-    expect(await h.kv.get(liveKey, "text")).toEqual(expect.any(String));
-    await h.d1
-      .prepare("UPDATE experiments SET status = 'archived', live_run_id = NULL WHERE id = ?")
-      .bind(ids.experimentId)
-      .run();
-    expect(
-      await h.repo.experiments.findRunningExperimentForFlag(
-        envScope(ids.appId, ids.environmentId),
-        ids.flagId,
-      ),
-    ).toBeNull();
-    const captured = await store.readFlagConfigPurgeTarget({
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      flagId: ids.flagId,
-    });
-    expect(captured).toMatchObject({
-      ok: true,
-      experimentId: ids.experimentId,
-    });
-    if (!captured.ok) throw new Error("expected the stored Flag Configuration");
-    await h.repo.flags.removeFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId);
-
-    const result = await store.deleteFlagConfig({
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      experimentId: captured.experimentId,
-      flagId: ids.flagId,
-    });
-    expect(result.ok).toBe(true);
-    expect(await h.kv.get(key, "text")).toBeNull();
-    expect(await h.kv.get(experimentKey, "text")).toBeNull();
-    expect(await h.kv.get(liveKey, "text")).toBeNull();
-    expect(await kvJson(h.kv, controlPlaneKey)).toMatchObject({ state: "deleted", revision: 3 });
-    expect(h.nudges).toContainEqual(
-      expect.objectContaining({
-        type: "config.changed",
-        entity: "flag",
-        id: ids.flagId,
-        version: 0,
-      }),
-    );
-
-    const retry = await store.deleteFlagConfig({
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      experimentId: null,
-      flagId: ids.flagId,
-      flagKey: ids.flagKey,
-    });
-    expect(retry.ok).toBe(true);
-  });
-
+describe("config store missing resync", () => {
   it("resyncFlagConfig reports FLAG_NOT_FOUND when the Environment has no config for the Flag", async () => {
     const store = makeConfigStore({
       repo: h.repo,

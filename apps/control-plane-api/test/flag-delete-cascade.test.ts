@@ -58,6 +58,42 @@ describe("flag delete cascade cleanup", () => {
     }
   });
 
+  it("deletes a Flag when one Environment has no Flag Configuration", async () => {
+    const createdApp = await lifecycleCreateDefaultApp(h);
+    const jwt = await lifecycleAppToken(h, createdApp.app.id);
+    await allowAllPolicies(h, createdApp.app.id);
+    const flag = await createFlag(h, createdApp.app.id, jwt);
+    const repo = createRepository(h.bindings.d1);
+    const missingEnvironment = createdApp.environments[0];
+    if (!missingEnvironment) throw new Error("expected an Environment");
+    const missingScope = envScope(createdApp.app.id, missingEnvironment.id);
+    await repo.flags.removeFlagConfig(missingScope, flag.id);
+    await h.bindings.configKv.delete(
+      flagConfigKey(createdApp.app.id, missingEnvironment.id, flag.key),
+    );
+
+    const del = await request(
+      h,
+      "DELETE",
+      `/apps/${createdApp.app.id}/flags/${flag.id}`,
+      jwt,
+      undefined,
+      `idem-delete-incomplete-flag-${crypto.randomUUID()}`,
+    );
+
+    expect(del.status).toBe(200);
+    expect(await del.json()).toEqual({ deleted: true });
+    expect(await repo.flags.getFlag(appScope(createdApp.app.id), flag.id)).toBeNull();
+    for (const environment of createdApp.environments) {
+      expect(
+        await h.bindings.configKv.get(
+          flagConfigKey(createdApp.app.id, environment.id, flag.key),
+          "text",
+        ),
+      ).toBeNull();
+    }
+  });
+
   it("rolls back every D1 delete when an Experiment races into the delete transaction", async () => {
     const createdApp = await lifecycleCreateDefaultApp(h);
     const jwt = await lifecycleAppToken(h, createdApp.app.id);

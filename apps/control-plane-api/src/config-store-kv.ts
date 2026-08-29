@@ -98,7 +98,8 @@ export async function deleteFlagConfigSnapshot(
   flagId: string,
   revision: number,
   flagKey: string,
-  experimentId: string | null,
+  experimentIds: readonly string[],
+  deleteEvaluationSnapshot: boolean,
 ): Promise<void> {
   await kv.put(
     controlPlaneFlagConfigKey(scope.appId, scope.environmentId, flagId),
@@ -111,11 +112,8 @@ export async function deleteFlagConfigSnapshot(
     }),
   );
   const evaluationKey = flagConfigKey(scope.appId, scope.environmentId, flagKey);
-  const storedFlag = await kv.get(evaluationKey, "text");
-  if (storedFlag !== null && parseFlagConfigEnvelope(storedFlag).id === flagId) {
-    await kv.delete(evaluationKey);
-  }
-  if (experimentId) {
+  if (deleteEvaluationSnapshot) await kv.delete(evaluationKey);
+  for (const experimentId of experimentIds) {
     await kv.delete(experimentConfigKey(scope.appId, scope.environmentId, experimentId));
     await kv.delete(liveRunKey(scope.appId, scope.environmentId, experimentId));
   }

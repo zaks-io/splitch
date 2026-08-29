@@ -25,7 +25,7 @@ interface FlagConfigPurgeFailure {
 
 export interface FlagConfigPurgeTarget {
   environmentId: string;
-  experimentId: string | null;
+  experimentIds: string[];
 }
 
 export class FlagConfigPurgeIncompleteError extends Error {
@@ -119,7 +119,7 @@ export async function purgeFlagConfigsKvForKey(
           target.environmentId,
           flagId,
           flagKey,
-          target.experimentId,
+          target.experimentIds,
         );
         break;
       } catch (cause) {
@@ -148,25 +148,27 @@ export async function captureFlagConfigPurgeTargets(
     // An omitted Config Store means this runtime has no KV snapshots to purge.
     return environments.map((environment) => ({
       environmentId: environment.id,
-      experimentId: null,
+      experimentIds: [],
     }));
   }
-  return Promise.all(
+  const targets = await Promise.all(
     environments.map(async (environment) => {
       const result = await configStore
         .writerFor(appId, environment.id)
         .readFlagConfigPurgeTarget({ appId, environmentId: environment.id, flagId });
       if (!result.ok) {
+        if (result.reason === "FLAG_NOT_FOUND") return null;
         throw new Error(
           `flag-config lifecycle: cannot capture purge target for flag ${flagId} in ${environment.id}`,
         );
       }
       return {
         environmentId: environment.id,
-        experimentId: result.experimentId,
+        experimentIds: result.experimentIds,
       };
     }),
   );
+  return targets.filter((target) => target !== null);
 }
 
 export async function deleteFlagD1Cascade(
@@ -219,7 +221,7 @@ async function removeFlagConfigAt(
   const scope = envScope(appId, environmentId);
   await deps.repo.flags.removeTargetingRules(scope, flagId);
   await deps.repo.flags.removeFlagConfig(scope, flagId);
-  await purgeFlagConfigKv(deps, appId, environmentId, flagId, flagKey, null);
+  await purgeFlagConfigKv(deps, appId, environmentId, flagId, flagKey, []);
 }
 
 async function ensureInitialFlagConfig(
@@ -270,7 +272,7 @@ async function purgeFlagConfigKv(
   environmentId: string,
   flagId: string,
   flagKey: string,
-  experimentId: string | null,
+  experimentIds: readonly string[],
 ): Promise<void> {
   if (!deps.configStore) return;
   const result = await deps.configStore.writerFor(appId, environmentId).deleteFlagConfig({
@@ -278,7 +280,7 @@ async function purgeFlagConfigKv(
     environmentId,
     flagId,
     flagKey,
-    experimentId,
+    experimentIds,
   });
   if (!result.ok) {
     throw new Error(

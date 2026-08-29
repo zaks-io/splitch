@@ -52,6 +52,30 @@ describe("live updates", () => {
     expect(refetchRoute).toHaveBeenCalledOnce();
   });
 
+  it("always invalidates a deleted Flag without reporting fresh data", async () => {
+    const queryClient = queryClientStub({ version: 99 });
+    const onFreshData = vi.fn();
+
+    await handleNudge(
+      JSON.stringify({
+        type: "config.changed",
+        entity: "flag",
+        id: "flag_1",
+        version: 0,
+        deleted: true,
+      }),
+      scope,
+      queryClient.client,
+      { onFreshData },
+    );
+
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith(
+      { queryKey: queryKeys.flag.prefix(scope.appId, scope.environmentId), refetchType: "all" },
+      { throwOnError: true },
+    );
+    expect(onFreshData).not.toHaveBeenCalled();
+  });
+
   it("invalidates the Experiment prefix for a canonical Run nudge", async () => {
     const queryClient = queryClientStub();
 
