@@ -64,7 +64,7 @@ function applyContextFields(
   context: ResolvedContext,
   input: Record<string, unknown>,
 ): void {
-  if (command.needsApp && context.appId) {
+  if (context.appId && usesAppContext(command)) {
     input.appId = context.appId;
   }
   if (!context.environmentId) {
@@ -87,6 +87,10 @@ function applyContextFields(
   if (context.environmentSource === "flag" && operationInputHasEnvironmentId(command.operationId)) {
     input.environmentId = context.environmentId;
   }
+}
+
+function usesAppContext(command: CliCommandDefinition): boolean {
+  return command.needsApp || command.alternateOperationIds?.includes("flags_list") === true;
 }
 
 function applyOrgFlag(flags: ParsedGlobalFlags, input: Record<string, unknown>): void {
@@ -216,7 +220,13 @@ function applyFlagReadFields(
   context: ResolvedContext,
   input: Record<string, unknown>,
 ): void {
-  if (command.operationId !== "flags_list" && command.operationId !== "flags_get") return;
+  if (
+    command.operationId !== "principal_flags_list" &&
+    command.operationId !== "flags_list" &&
+    command.operationId !== "flags_get"
+  ) {
+    return;
+  }
   if (invocation.flags.summary) {
     if (command.operationId === "flags_list" && invocation.flags.env) {
       input.environmentId = context.environmentId;

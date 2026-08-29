@@ -3,13 +3,23 @@ import {
   PercentageRolloutSchema,
   type TargetingRule,
 } from "@splitch/contracts";
-import { appScope } from "@splitch/db";
+import { appScope, type Repository } from "@splitch/db";
 import { toTargetingRule } from "./config-store-shared";
 import type { FlagDefinitionDeps } from "./flag-definition-handler-utils";
 import { flagFrom } from "./flag-definition-model";
 
 type FlagRow = NonNullable<Awaited<ReturnType<FlagDefinitionDeps["repo"]["flags"]["getFlag"]>>>;
 type VariantCatalogs = ReturnType<FlagDefinitionDeps["repo"]["flags"]["listVariantsForFlags"]>;
+type EnvironmentRow = Awaited<
+  ReturnType<Repository["flags"]["listEnvironmentsAcrossApps"]>
+>[number];
+type ConfigRow = Awaited<ReturnType<Repository["flags"]["listFlagConfigsAcrossApps"]>>[number];
+type TargetingRuleRow = Awaited<
+  ReturnType<Repository["flags"]["listTargetingRulesAcrossApps"]>
+>[number];
+type ExperimentRow = Awaited<
+  ReturnType<Repository["flags"]["listRunningExperimentsAcrossApps"]>
+>[number];
 
 export class FlagConfigurationMissingError extends Error {
   readonly flagId: string;
@@ -48,6 +58,35 @@ export async function hydrateFlags(
     ),
   ]);
 
+  return composeHydratedFlags(
+    rows,
+    catalogs,
+    environments,
+    configs,
+    targetingRules,
+    experiments,
+    requestedEnvironmentIds,
+  );
+}
+
+/** Compose the shared hydrated wire shape after either App or multi-App reads. */
+export function composeHydratedFlags(
+  rows: readonly FlagRow[],
+  catalogs: Awaited<VariantCatalogs>,
+  environments: readonly EnvironmentRow[],
+  configs: readonly ConfigRow[],
+  targetingRules: readonly TargetingRuleRow[],
+  experiments: readonly ExperimentRow[],
+  requestedEnvironmentIds?: readonly string[],
+) {
+  const requested = requestedEnvironmentIds ? new Set(requestedEnvironmentIds) : null;
+  const environmentIdsByApp = new Map<string, string[]>();
+  for (const environment of environments) {
+    if (requested && !requested.has(environment.id)) continue;
+    const ids = environmentIdsByApp.get(environment.appId) ?? [];
+    ids.push(environment.id);
+    environmentIdsByApp.set(environment.appId, ids);
+  }
   const configByScope = new Map(configs.map((config) => [scopeKey(config), config]));
   const rulesByScope = groupTargetingRules(targetingRules);
   const experimentByScope = new Map<string, { id: string; key: string }>();
@@ -64,7 +103,7 @@ export async function hydrateFlags(
   return rows.map((row) =>
     HydratedFlagResponseSchema.parse({
       ...flagFrom(row, catalogs.get(row.id) ?? []),
-      configurations: environmentIds.map((environmentId) => {
+      configurations: (environmentIdsByApp.get(row.appId) ?? []).map((environmentId) => {
         const key = scopeKey({ environmentId, flagId: row.id });
         const config = configByScope.get(key);
         if (!config) {
@@ -86,11 +125,7 @@ export async function hydrateFlags(
   );
 }
 
-function groupTargetingRules(
-  rows: Awaited<
-    ReturnType<FlagDefinitionDeps["repo"]["flags"]["listTargetingRulesByFlagIdsAcrossEnvironments"]>
-  >,
-) {
+function groupTargetingRules(rows: readonly TargetingRuleRow[]) {
   const grouped = new Map<string, TargetingRule[]>();
   for (const row of rows) {
     const key = scopeKey(row);

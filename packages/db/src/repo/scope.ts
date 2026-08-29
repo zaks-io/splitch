@@ -1,5 +1,5 @@
 import type { SQL, SQLWrapper } from "drizzle-orm";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 /**
@@ -21,6 +21,7 @@ import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 declare const tenantBrand: unique symbol;
 declare const envBrand: unique symbol;
+declare const multiAppBrand: unique symbol;
 
 export type TenantScope = {
   readonly appId: string;
@@ -30,6 +31,11 @@ export type TenantScope = {
 export type EnvScope = TenantScope & {
   readonly environmentId: string;
   readonly [envBrand]: true;
+};
+
+export type MultiAppScope = {
+  readonly appIds: readonly string[];
+  readonly [multiAppBrand]: true;
 };
 
 /**
@@ -46,6 +52,7 @@ export type EnvScope = TenantScope & {
  * forged scope fails loud instead of silently scoping (fail-loud, ADR-0036).
  */
 const MINTED = new WeakSet<object>();
+const MINTED_MULTI_APP = new WeakSet<object>();
 
 function brandScope<T extends object>(scope: T): T {
   MINTED.add(scope);
@@ -81,6 +88,22 @@ export function envScope(appId: string, environmentId: string): EnvScope {
     throw new Error("envScope: both appId and environmentId are required and non-empty");
   }
   return brandScope({ appId, environmentId }) as EnvScope;
+}
+
+/** Mint the explicit App set for an intentional cross-App read. */
+export function multiAppScope(appIds: readonly string[]): MultiAppScope {
+  if (appIds.some((appId) => !appId)) {
+    throw new Error("multiAppScope: every appId is required and must be non-empty");
+  }
+  const scope = Object.freeze({ appIds: Object.freeze([...new Set(appIds)]) });
+  MINTED_MULTI_APP.add(scope);
+  return scope as MultiAppScope;
+}
+
+export function assertMintedMultiAppScope(scope: MultiAppScope): void {
+  if (!MINTED_MULTI_APP.has(scope)) {
+    throw new Error("scope: multi-App scope was not minted by multiAppScope");
+  }
 }
 
 /**
@@ -137,4 +160,24 @@ export function withScope(columns: ScopeColumns, scope: TenantScope, extra?: SQL
 export function withTenantScope(columns: ScopeColumns, scope: TenantScope, extra: SQL): SQL {
   assertMintedScope(scope);
   return and(eq(columns.appId, scope.appId), extra) as SQL;
+}
+
+/**
+ * Mandatory predicate for a deliberate cross-App read.
+ *
+ * Empty sets fail before SQL construction. Repository callers return an empty
+ * result for that case, so an empty principal can never degrade into an
+ * unscoped statement.
+ */
+export function withMultiAppScope(
+  appIdColumn: SQLiteColumn,
+  scope: MultiAppScope,
+  extra?: SQL,
+): SQL {
+  assertMintedMultiAppScope(scope);
+  if (scope.appIds.length === 0) {
+    throw new Error("withMultiAppScope: an empty App set cannot produce SQL");
+  }
+  const base = inArray(appIdColumn, [...scope.appIds]);
+  return extra ? (and(base, extra) as SQL) : base;
 }

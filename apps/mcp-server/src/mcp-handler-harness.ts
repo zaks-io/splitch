@@ -17,7 +17,7 @@ import {
  */
 
 export const service = "splitch-mcp-server";
-export const token = "Bearer local-test-token";
+const token = "Bearer local-test-token";
 
 const upstreamFlagPage = {
   ...flagPage,

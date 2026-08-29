@@ -194,7 +194,6 @@ export async function exchangeRefreshToken(
     const stored = await deps.deviceRefreshSessions.lookup(parsed.data.refresh_token);
     if (!stored?.userId || !stored.providerSessionId)
       throw new OAuthError("invalid_grant", "refresh token authority is unknown");
-    assertCompatibleDeviceAuthorization(parsed.data.authorization, stored.selectedAppSelector);
     // Resolve the binding BEFORE touching the provider: WorkOS refresh tokens
     // are single-use, so an unresolvable app/org selector must fail this one
     // request, not consume the token and strand the whole session.
@@ -276,9 +275,11 @@ function requireUnchangedProviderAuthority(
 
 /**
  * Which resource should this mint bind? An explicit `app`/`org` on the
- * request wins (the CLI rescoping for one command); otherwise the session's
- * login-time App if it has one; otherwise unbound. Every path resolves
- * against live membership at mint time — removed membership fails loud here.
+ * request wins (the CLI rescoping for one command); wide read authority
+ * temporarily suppresses the session default; otherwise the session's
+ * login-time App if it has one; otherwise unbound. Every selector path
+ * resolves against live membership at mint time — removed membership fails
+ * loud here.
  */
 async function resolveRefreshBinding(
   repo: MembershipAuthorityRepo,

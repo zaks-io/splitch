@@ -24,18 +24,21 @@ const EnvironmentSelectorsQuerySchema = z
     (selectors) => selectors.split(",").length <= FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT,
     `envs accepts at most ${FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT} Environment selectors`,
   );
+const FlagHydrationQueryShape = {
+  include: z
+    .literal("config")
+    .optional()
+    .describe(
+      "Include complete per-Environment Flag Configurations; CLI and MCP reads use this by default.",
+    ),
+  envs: EnvironmentSelectorsQuerySchema.optional().describe(
+    "Comma-separated Environment IDs or keys to hydrate; omission hydrates every Environment in the App.",
+  ),
+};
 export const FlagListQuerySchema = z
   .object({
     environmentId: z.string().min(1).optional(),
-    include: z
-      .literal("config")
-      .optional()
-      .describe(
-        "Include complete per-Environment Flag Configurations; CLI and MCP reads use this by default.",
-      ),
-    envs: EnvironmentSelectorsQuerySchema.optional().describe(
-      "Comma-separated Environment IDs or keys to hydrate; omission hydrates every Environment in the App.",
-    ),
+    ...FlagHydrationQueryShape,
   })
   .strict()
   .superRefine((query, ctx) => {
@@ -48,6 +51,19 @@ export const FlagListQuerySchema = z
         path: ["environmentId"],
         message: "environmentId cannot be combined with include=config; use envs",
       });
+    }
+  });
+export const PrincipalFlagListQuerySchema = z
+  .object({
+    ...FlagHydrationQueryShape,
+    envs: EnvironmentSelectorsQuerySchema.optional().describe(
+      "Comma-separated Environment IDs or keys to hydrate; a key hydrates the Environment it names in every readable App, and omission hydrates every Environment.",
+    ),
+  })
+  .strict()
+  .superRefine((query, ctx) => {
+    if (query.envs && query.include !== "config") {
+      ctx.addIssue({ code: "custom", path: ["envs"], message: "envs requires include=config" });
     }
   });
 export const AppMemberParams = z.object({ appId: AppSelectorSchema, userId: z.string() });

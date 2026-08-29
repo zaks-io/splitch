@@ -51,6 +51,7 @@ export function cliCommandPath(operationId: string): readonly string[] {
  * types by hand is exactly the divergence this map exists to prevent.
  */
 export const CLI_PRESENTATION_ALIAS_PATHS = {
+  principal_flags_list: ["flags", "list"],
   environments_get: ["env-policy", "get"],
   environments_update: ["env-policy", "set"],
   sdk_verify: ["flags", "verify"],

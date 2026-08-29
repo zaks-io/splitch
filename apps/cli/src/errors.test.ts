@@ -116,7 +116,12 @@ describe("CLI fatal stderr contract", () => {
   it("emits a stable scope code", async () => {
     const { dir, credentialPath } = await makeTempHome();
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await runCli(["flags", "list"], { cwd: dir, credentialPath })).toBe(EXIT_SCOPE);
+    expect(
+      await runCli(["flags", "create", "--key", "checkout", "--variants", "on,off"], {
+        cwd: dir,
+        credentialPath,
+      }),
+    ).toBe(EXIT_SCOPE);
     expect(error).toHaveBeenCalledWith(expect.stringContaining("CLI_SCOPE_UNRESOLVED"));
   });
 

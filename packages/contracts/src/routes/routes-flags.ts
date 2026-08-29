@@ -9,6 +9,7 @@ import {
   FlagResponseSchema,
   PatchFlagRequestSchema,
   PatchVariantRequestSchema,
+  PrincipalFlagListReadResponseSchema,
 } from "../resource-envelopes-flag";
 import {
   AppParams,
@@ -21,6 +22,7 @@ import {
   FlagVariantParams,
   PatchFlagConfigRequestSchema,
   PromoteParams,
+  PrincipalFlagListQuerySchema,
   PromoteRequestSchema,
   PromoteResponseSchema,
   ReplaceTargetingRulesRequestSchema,
@@ -253,5 +255,19 @@ export const flagRoutes = [
       ...APPROVAL_WRITE_ERRORS,
       "VALIDATION_ERROR",
     ],
+  }),
+  defineApiRoute({
+    operationId: "principal_flags_list",
+    owner: OWNER,
+    method: "GET",
+    path: "/flags",
+    summary:
+      "List every readable Flag across the principal's Apps, ordered by App then Flag key (bounded; reports its own truncation).",
+    request: { query: PrincipalFlagListQuerySchema },
+    response: PrincipalFlagListReadResponseSchema,
+    auth: AUTH,
+    rateLimit: RATE,
+    idempotency: "none",
+    errors: ["ENVIRONMENT_NOT_FOUND", "FORBIDDEN", "INTERNAL_SERVER_ERROR"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

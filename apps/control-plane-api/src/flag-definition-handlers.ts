@@ -5,10 +5,12 @@ import { getFlag, listFlags, updateFlag } from "./flag-definition-flag-handlers"
 import type { FlagDefinitionDeps } from "./flag-definition-handler-utils";
 import { createVariant, deleteVariant } from "./flag-definition-variant-catalog";
 import { updateVariant } from "./flag-definition-variant-handlers";
+import { listPrincipalFlags } from "./principal-flag-list-handler";
 
 export function makeFlagDefinitionHandlers(deps: FlagDefinitionDeps) {
   return {
     listFlags: (args: HandlerArgs<unknown>) => listFlags(deps, args),
+    listPrincipalFlags: (args: HandlerArgs<unknown>) => listPrincipalFlags(deps, args),
     createFlag: (args: HandlerArgs<unknown>) => createFlag(deps, args),
     getFlag: (args: HandlerArgs<unknown>) => getFlag(deps, args),
     updateFlag: (args: HandlerArgs<unknown>) => updateFlag(deps, args),

@@ -72,6 +72,7 @@ const CANONICAL_OPERATION_IDS = [
   "approval_request_reviews_create",
   // Flags
   "flags_list",
+  "principal_flags_list",
   "flags_create",
   "flags_get",
   "flags_update",

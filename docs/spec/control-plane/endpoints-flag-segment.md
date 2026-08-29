@@ -23,6 +23,41 @@ on any affected route.
 
 ## Flag definition endpoints (App-level — the catalog, defined once)
 
+### `GET /flags`
+
+Returns every Flag the authenticated principal can read across all of their Organizations and Apps.
+This is the deliberate cross-App read surface. Its App set is reconstructed from live Organization
+and App memberships in D1 on every request, then passed into the repository as one minted multi-App
+scope. Request input cannot add an App. Every App-scoped table statement binds that set with an
+explicit `app_id IN (...)` predicate; an empty membership set returns an empty bounded envelope
+without issuing App-scoped SQL.
+
+Rows are deterministically ordered by App, then Flag key. The repository uses the canonical App ID
+for the first ordering axis and the Flag ID as the final tie-breaker. Each row adds its owning scope
+inline while preserving field parity with the corresponding `flags_list` row:
+
+```typescript
+FlagResponse &
+  {
+    org: { id: string, slug: string },
+    app: { id: string, key: string },
+  };
+```
+
+`?include=config` and the optional `envs={environment_selector},{environment_selector}` subset
+have the same hydration contract and validation as `GET /apps/{app_id}/flags`. A selector is an
+Environment ID or key; because Environment keys are unique within an App, a key hydrates the
+Environment it names in every readable App, while an ID hydrates only its owning App. A selector
+that names no readable Environment anywhere returns `ENVIRONMENT_NOT_FOUND` rather than hydrating
+nothing. Hydration remains batched across the
+membership App set, and every hydrated row remains field-identical to the same principal's per-App
+read after removing the inline `org` and `app` fields.
+
+The bounded envelope applies once to the complete cross-App result, not once per App. If the
+principal can read more Flags than `readLimit`, `readTruncated` is `true`, `cursor` remains `null`,
+and the omitted rows are not completable through that response. `splitch flags list` reports this
+and tells the operator to narrow the read with `--app`.
+
 ### `GET /apps/{app_id}/flags`
 
 The optional query `?include=config` returns each Flag definition with its full per-Environment

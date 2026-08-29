@@ -6,18 +6,20 @@ import type { CliCredentialFile } from "./credentials.js";
 import { operationAuthorization } from "./execute-operations.js";
 import { storedCredential } from "./test-fixtures.js";
 
-describe("principal-keyed Organization discovery token reuse", () => {
-  it("marks only selector-free Control Plane reads as compatible with the cached token", () => {
+describe("membership-wide Flag read authorization", () => {
+  it("requests wide authority only for the principal Flag route", () => {
     const organizationsList = getRoute("organizations_list");
     const cloudflareInstallationGet = getRoute("cloudflare_installations_get");
     const appGet = getRoute("apps_get");
-    if (!organizationsList || !cloudflareInstallationGet || !appGet) {
+    const principalFlags = getRoute("principal_flags_list");
+    if (!organizationsList || !cloudflareInstallationGet || !appGet || !principalFlags) {
       throw new Error("expected authorization test routes to be registered");
     }
 
-    expect(operationAuthorization(organizationsList, {})).toEqual({
+    expect(operationAuthorization(principalFlags, {})).toEqual({
       kind: MEMBERSHIP_WIDE_READ_AUTHORIZATION,
     });
+    expect(operationAuthorization(organizationsList, {})).toBeUndefined();
     expect(operationAuthorization(cloudflareInstallationGet, {})).toBeUndefined();
     expect(operationAuthorization(appGet, { appId: "app_1" })).toEqual({
       kind: "app",
@@ -25,7 +27,7 @@ describe("principal-keyed Organization discovery token reuse", () => {
     });
   });
 
-  it("reuses a cached selector token for principal-keyed Organization discovery", async () => {
+  it("replaces a cached selector token with membership-wide read authority", async () => {
     let stored: CliCredentialFile | null = {
       ...storedCredential(),
       credential: {
@@ -34,7 +36,16 @@ describe("principal-keyed Organization discovery token reuse", () => {
         accessTokenBinding: "app:app_1",
       },
     };
-    const fetchImpl = vi.fn();
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = new URLSearchParams(String(init?.body));
+      expect(body.get("authorization")).toBe(MEMBERSHIP_WIDE_READ_AUTHORIZATION);
+      return Response.json({
+        access_token: "wide-access-token",
+        refresh_token: "rotated-refresh-token",
+        expires_in: 3600,
+        authorization: MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+      });
+    });
     const credentialStore = {
       load: async () => stored,
       save: async (next: CliCredentialFile) => {
@@ -54,9 +65,9 @@ describe("principal-keyed Organization discovery token reuse", () => {
 
     await expect(withAuthorizationRetry(deps, run, authorization)).resolves.toBe("ok");
 
-    expect(fetchImpl).not.toHaveBeenCalled();
-    expect(run).toHaveBeenCalledWith("Bearer selector-access-token");
-    expect(stored?.credential.accessTokenBinding).toBe("app:app_1");
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(run).toHaveBeenCalledWith("Bearer wide-access-token");
+    expect(stored?.credential.accessTokenBinding).toBe(MEMBERSHIP_WIDE_READ_AUTHORIZATION);
   });
 
   it("refreshes the session default when the cached discovery token is expired", async () => {
@@ -70,14 +81,12 @@ describe("principal-keyed Organization discovery token reuse", () => {
     };
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = new URLSearchParams(String(init?.body));
-      // SPL-530 will make the CLI request wide authority. Until then discovery
-      // refreshes the session default and never sends the authorization marker.
-      expect(body.has("authorization")).toBe(false);
+      expect(body.get("authorization")).toBe(MEMBERSHIP_WIDE_READ_AUTHORIZATION);
       return Response.json({
-        access_token: "selector-access-token",
+        access_token: "wide-access-token",
         refresh_token: "rotated-refresh-token",
         expires_in: 3600,
-        app_id: "app_1",
+        authorization: MEMBERSHIP_WIDE_READ_AUTHORIZATION,
       });
     });
     const credentialStore = {
@@ -101,9 +110,9 @@ describe("principal-keyed Organization discovery token reuse", () => {
     await expect(withAuthorizationRetry(deps, run, authorization)).resolves.toBe("ok");
 
     expect(fetchImpl).toHaveBeenCalledOnce();
-    expect(run).toHaveBeenNthCalledWith(1, "Bearer selector-access-token");
-    expect(run).toHaveBeenNthCalledWith(2, "Bearer selector-access-token");
-    expect(stored?.credential.accessTokenBinding).toBe("app:app_1");
+    expect(run).toHaveBeenNthCalledWith(1, "Bearer wide-access-token");
+    expect(run).toHaveBeenNthCalledWith(2, "Bearer wide-access-token");
+    expect(stored?.credential.accessTokenBinding).toBe(MEMBERSHIP_WIDE_READ_AUTHORIZATION);
   });
 
   it("does not reuse a cached wide token for a scope-free mutation", async () => {

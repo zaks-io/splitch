@@ -141,7 +141,8 @@ export function assertDerivedMcpSchemaParity({ derivedSchemas, publishedSchemas 
 }
 
 export function assertFlagReadSummaryParity({ cliHelp, mcpInputSchemas }) {
-  for (const operationId of ["flags_list", "flags_get"]) {
+  const operationIds = ["principal_flags_list", "flags_list", "flags_get"];
+  for (const operationId of operationIds) {
     const help = cliHelp.get(operationId);
     if (typeof help !== "string" || !help.includes("--summary")) {
       throw new Error(`cli-mcp-parity: ${operationId} CLI is missing --summary`);
@@ -152,5 +153,5 @@ export function assertFlagReadSummaryParity({ cliHelp, mcpInputSchemas }) {
       throw new Error(`cli-mcp-parity: ${operationId} MCP is missing boolean summary`);
     }
   }
-  return 2;
+  return operationIds.length;
 }

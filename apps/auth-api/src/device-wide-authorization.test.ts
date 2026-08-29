@@ -13,9 +13,10 @@ const stored: DeviceRefreshSession = {
 };
 
 describe("membership-wide refresh authorization", () => {
-  it("refuses a wide grant when the device session has an App selection", async () => {
+  it("mints a wide grant when the device session has an App selection", async () => {
     const refreshProviderToken = vi.fn();
-    const mintAccessToken = vi.fn();
+    const mintAccessToken = vi.fn(async () => "membership-wide-read-token");
+    const rotatedSelectors: Array<string | null> = [];
     const app = routeApp({
       tokenSigner: { ...tokenSigner, mintAccessToken },
       repo: membershipRepo(),
@@ -23,7 +24,9 @@ describe("membership-wide refresh authorization", () => {
       deviceRefreshSessions: {
         remember: async () => {},
         lookup: async () => stored,
-        rotate: async () => {},
+        rotate: async (_previous, _next, session) => {
+          rotatedSelectors.push(session.selectedAppSelector);
+        },
         forget: async () => {},
       },
     });
@@ -39,14 +42,23 @@ describe("membership-wide refresh authorization", () => {
       }),
     });
 
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: "invalid_request",
-      error_description:
-        "membership-wide read authorization cannot be combined with an App selection",
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      access_token: "membership-wide-read-token",
+      refresh_token: "refresh_rotated",
     });
-    expect(refreshProviderToken).not.toHaveBeenCalled();
-    expect(mintAccessToken).not.toHaveBeenCalled();
+    expect(body).not.toHaveProperty("app_id");
+    expect(rotatedSelectors).toEqual([SELECTED_APP]);
+    expect(refreshProviderToken).toHaveBeenCalledOnce();
+    expect(mintAccessToken).toHaveBeenCalledWith(
+      "user_device",
+      [],
+      "device_flow",
+      expect.any(Number),
+      expect.any(String),
+      "membership-wide-read",
+    );
   });
 });
 
@@ -62,6 +74,13 @@ function membershipRepo(): MembershipAuthorityRepo {
 }
 
 function deviceFlow(refreshProviderToken: ReturnType<typeof vi.fn>): DeviceFlowPort {
+  refreshProviderToken.mockResolvedValue({
+    userId: "user_device",
+    email: "device@splitch.test",
+    organizationId: "org_selected",
+    refreshToken: "refresh_rotated",
+    providerSessionId: "session_selected",
+  });
   return {
     authorizeDevice: async () => {
       throw new Error("not used");
