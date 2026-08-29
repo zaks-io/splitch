@@ -4,6 +4,7 @@ import { proveAnalysisScopePredicates } from "./lib/tinybird-analysis-scope-proo
 import { assertEnvironmentExposureStatusContract } from "./lib/tinybird-exposure-status-contract.mjs";
 import { assertMetricStubsRetiredWhenMetricEventsExist } from "./lib/tinybird-metric-stub-tripwire.mjs";
 import { output, quietExitCode, quietExitCodeWithInput, run } from "./lib/tinybird-process.mjs";
+import { assertRetainedFamilyMigrationContract } from "./lib/tinybird-retained-family-migration-contract.mjs";
 import { acquireMachineLock } from "./machine-lock.mjs";
 
 const projectDir = ".";
@@ -12,8 +13,6 @@ const tinybirdRoot = "infra/tinybird";
 const testsDir = join(tinybirdRoot, "tests");
 const FIRST_TOUCH_RULE =
   /if\(\s*countIf\(isNull\(variant\)\)[\s\S]*?AS variant,\s*min\(exposure_at\) AS (?:first_exposure_ts|encounter_ts)/;
-const RETAINED_FAMILY_PROJECTION =
-  "if(startsWith(targeting_key_hash, 'local-v1:'), concat('v1:', substring(targeting_key_hash, 10)), targeting_key_hash) AS entity_family_hash";
 
 if (!existsSync(projectConfigPath)) {
   console.error("tinybird:local: tinybird.config.json is required.");
@@ -126,18 +125,7 @@ function validateSplitchDatasourceContracts(root) {
     /^ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, run_id, variant, entity_family_hash"$/m,
     "deduped_exposures sorting key must be app_id-first",
   );
-  for (const [name, datasource] of [
-    ["raw_events", rawEvents],
-    ["deduped_exposures", dedupedExposures],
-    ["metric_events", readDatasource(root, "metric_events")],
-  ]) {
-    const query = datasource.match(/^FORWARD_QUERY >\s+([^\n]+)$/m)?.[1];
-    if (!query?.startsWith("SELECT ") || !query.includes(RETAINED_FAMILY_PROJECTION)) {
-      fail(
-        `${name} must carry its one-release retained-family migration until production promotion`,
-      );
-    }
-  }
+  assertRetainedFamilyMigrationContract(root, fail);
 
   requireIdenticalFirstTouchRule(root);
   assertEnvironmentExposureStatusContract(root, fail);
