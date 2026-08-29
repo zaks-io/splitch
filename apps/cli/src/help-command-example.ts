@@ -38,7 +38,7 @@ function simpleCommandExample(command: CliCommandDefinition): string | undefined
     case "flags create":
       return "splitch flags create --key checkout --variants on,off --json";
     case "flags list":
-      return "splitch flags list --with-config --env prod --json";
+      return "splitch flags list --json";
     case "flags update":
       return 'splitch flags update <flag-id-or-key> --name "Checkout" --json';
     case "flag-config update":

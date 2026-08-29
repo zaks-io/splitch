@@ -37,6 +37,16 @@ export function twoAxisIdBatches<A, B>(
   );
 }
 
+/**
+ * Batches for one id set bound on TWO columns of the SAME statement, such as an
+ * `or(inArray(id, xs), inArray(key, xs))` selector lookup. Every element costs
+ * two bindings, so the batch is half `idBatches`, with the same headroom left
+ * for the tenant scope column.
+ */
+export function twoColumnIdBatches<T>(ids: readonly T[]): T[][] {
+  return batchesOf(ids, D1_TWO_AXIS_BATCH_SIZE);
+}
+
 function batchesOf<T>(ids: readonly T[], size: number): T[][] {
   const batches: T[][] = [];
   for (let start = 0; start < ids.length; start += size) {

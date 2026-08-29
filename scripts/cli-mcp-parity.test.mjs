@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertCliMcpParity, assertPublicAgentSurface } from "./lib/cli-mcp-parity.mjs";
+import {
+  assertCliMcpParity,
+  assertFlagReadSummaryParity,
+  assertPublicAgentSurface,
+} from "./lib/cli-mcp-parity.mjs";
 import { findRepoInternalReference } from "../apps/cli/scripts/published-agent-surface.mjs";
 
 const completeFixture = {
@@ -33,6 +37,23 @@ test("fails loud when a contract route and CLI capability are missing from MCP",
   assert.throws(
     () => assertCliMcpParity(driftedFixture),
     /cli-mcp-parity: missing MCP tools: fixture_operation/,
+  );
+});
+
+test("fails loud when a Flag-read summary field is missing from MCP", () => {
+  assert.throws(
+    () =>
+      assertFlagReadSummaryParity({
+        cliHelp: new Map([
+          ["flags_list", "--summary"],
+          ["flags_get", "--summary"],
+        ]),
+        mcpInputSchemas: new Map([
+          ["flags_list", { properties: { summary: { type: "boolean" } } }],
+          ["flags_get", { properties: {} }],
+        ]),
+      }),
+    /cli-mcp-parity: flags_get MCP is missing boolean summary/,
   );
 });
 

@@ -109,6 +109,17 @@ async function seedTenant(d1: D1Database, tenant: TenantFixture, owner: string):
     createdAt: now,
   });
   const scope = envScope(tenant.appId, tenant.environmentId);
+  await repo.flags.flagConfigs.insert(scope, {
+    id: `${tenant.flagId}_config`,
+    appId: tenant.appId,
+    environmentId: tenant.environmentId,
+    flagId: tenant.flagId,
+    enabled: true,
+    availableVariantNames: JSON.stringify(["control"]),
+    defaultVariantId: controlVariantId,
+    createdAt: now,
+    updatedAt: now,
+  });
   await repo.experiments.experiments.insert(scope, {
     id: tenant.experimentId,
     appId: tenant.appId,

@@ -26,6 +26,40 @@ afterEach(async () => {
 });
 
 describe("flags verify transport", () => {
+  it("refuses --summary before any control-plane call", async () => {
+    const { credentialPath } = await makeTempHome();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    let called = false;
+
+    const code = await runCli(
+      [
+        "flags",
+        "verify",
+        "checkout",
+        "--app",
+        "app_1",
+        "--env",
+        "env_1",
+        "--targeting-key",
+        "user-1",
+        "--summary",
+      ],
+      {
+        credentialPath,
+        fetch: async () => {
+          called = true;
+          return Response.json({});
+        },
+      },
+    );
+
+    expect(code).toBe(EXIT_USAGE);
+    expect(called).toBe(false);
+    expect(error.mock.calls.join(" ")).toContain(
+      "--summary is not accepted by splitch flags verify",
+    );
+  });
+
   it("names the positional as a Flag key in the coded usage error", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -69,10 +103,16 @@ describe("flags verify transport", () => {
     });
 
     expect(code).toBe(EXIT_OK);
-    const clientKeyCall = transport.requests.find((request) => request.url.includes("/client-key"));
-    const verifyCall = transport.requests.find((request) =>
+    const controlPlaneCalls = transport.requests.filter((request) =>
+      new URL(request.url).pathname.startsWith("/apps/"),
+    );
+    const dataPlaneCalls = transport.requests.filter((request) =>
       request.url.includes("/api/sdk/verify"),
     );
+    expect(controlPlaneCalls).toHaveLength(1);
+    expect(dataPlaneCalls).toHaveLength(1);
+    const clientKeyCall = controlPlaneCalls[0];
+    const verifyCall = dataPlaneCalls[0];
     expect(clientKeyCall?.authorization).toBe(authHeader());
     expect(new URL(clientKeyCall?.url ?? "https://invalid.test").searchParams.get("by")).toBe("id");
     expect(verifyCall?.authorization).toBe(`Bearer ${clientKeyMaterial}`);

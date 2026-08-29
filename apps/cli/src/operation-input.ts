@@ -40,6 +40,7 @@ export function buildOperationInput(
   applyExplicitIdempotencyKey(invocation.flags, input);
   applyDefaultIdempotencyKey(command, input);
   applyCommandSpecificFields(command, invocation, input);
+  applyFlagReadFields(command, invocation, context, input);
   return input;
 }
 
@@ -206,6 +207,25 @@ function applyCommandSpecificFields(
       variants: invocation.flags.variants,
     });
     assertContractValidFlagsCreateInput(input);
+  }
+}
+
+function applyFlagReadFields(
+  command: CliCommandDefinition,
+  invocation: ParsedInvocation,
+  context: ResolvedContext,
+  input: Record<string, unknown>,
+): void {
+  if (command.operationId !== "flags_list" && command.operationId !== "flags_get") return;
+  if (invocation.flags.summary) {
+    if (command.operationId === "flags_list" && invocation.flags.env) {
+      input.environmentId = context.environmentId;
+    }
+    return;
+  }
+  input.include = "config";
+  if (invocation.flags.env) {
+    input.envs = context.environmentId;
   }
 }
 

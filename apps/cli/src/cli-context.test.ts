@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { SCOPE_REMEDY } from "./context.js";
-import { EXIT_AUTH, EXIT_OK, EXIT_SCOPE } from "./exit-codes.js";
+import { EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
 import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import { FakeCliTransport, flagListPage, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
@@ -61,7 +61,10 @@ describe("context resolution", () => {
       {
         match: (request) => request.url.includes("/apps/app_flag/flags"),
         status: 200,
-        body: flagListPage,
+        body: {
+          ...flagListPage,
+          items: flagListPage.items.map((flag) => ({ ...flag, configurations: [] })),
+        },
       },
     ]);
 
@@ -88,6 +91,16 @@ describe("context resolution", () => {
  * `{}` at exit 0 with no session, which reads as a successful resolution.
  */
 describe("splitch context reports the session, never an empty success", () => {
+  it("refuses --summary before running the meta command", async () => {
+    const { dir, credentialPath } = await makeTempHome();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli(["context", "--summary"], { credentialPath, cwd: dir });
+
+    expect(code).toBe(EXIT_USAGE);
+    expect(error.mock.calls.join(" ")).toContain("--summary is not accepted by splitch context");
+  });
+
   it("fails loud with the login remedy when no session exists", async () => {
     const { dir, credentialPath } = await makeTempHome();
     const log = vi.spyOn(console, "log").mockImplementation(() => {});

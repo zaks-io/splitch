@@ -256,13 +256,19 @@ describe("mcp tools: derived input and output schemas", () => {
 
     const list = tools.find((tool) => tool.name === "flags_list");
     const listShape = objectShape(list?.inputSchema);
-    expect(Object.keys(listShape)).toEqual(expect.arrayContaining(["appId", "include", "envs"]));
+    expect(Object.keys(listShape)).toEqual(
+      expect.arrayContaining(["appId", "include", "envs", "summary"]),
+    );
+    expect(list?.inputSchema.safeParse({ appId: "app_1", summary: true }).success).toBe(true);
     expect(
       list?.inputSchema.safeParse({ appId: "app_1", include: "config", envs: "env_dev,env_prod" })
         .success,
     ).toBe(true);
+    expect(list?.description).toContain("complete per-Environment Flag Configurations");
+    expect(list?.description).toContain("by default");
 
     const get = tools.find((tool) => tool.name === "flags_get");
+    expect(Object.keys(objectShape(get?.inputSchema))).toContain("summary");
     expect(
       get?.inputSchema.safeParse({
         appId: "app_1",
@@ -271,6 +277,9 @@ describe("mcp tools: derived input and output schemas", () => {
         envs: "env_prod",
       }).success,
     ).toBe(true);
+    expect(get?.description).toContain(
+      "running Experiment references for every Environment in the App by default",
+    );
 
     const update = tools.find((tool) => tool.name === "flags_update");
     const updateShape = objectShape(update?.inputSchema);

@@ -139,3 +139,18 @@ export function assertDerivedMcpSchemaParity({ derivedSchemas, publishedSchemas 
   }
   return derivedOperations.length;
 }
+
+export function assertFlagReadSummaryParity({ cliHelp, mcpInputSchemas }) {
+  for (const operationId of ["flags_list", "flags_get"]) {
+    const help = cliHelp.get(operationId);
+    if (typeof help !== "string" || !help.includes("--summary")) {
+      throw new Error(`cli-mcp-parity: ${operationId} CLI is missing --summary`);
+    }
+    const schema = mcpInputSchemas.get(operationId);
+    const summary = schema?.properties?.summary;
+    if (!summary || summary.type !== "boolean") {
+      throw new Error(`cli-mcp-parity: ${operationId} MCP is missing boolean summary`);
+    }
+  }
+  return 2;
+}
