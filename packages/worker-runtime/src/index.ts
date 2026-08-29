@@ -35,7 +35,7 @@ export type {
   RemoteJwksSignatureVerifier,
   RemoteJwksSignatureVerifierOptions,
 } from "./remote-jwks";
-export { remoteJwksSignatureVerifier } from "./remote-jwks";
+export { JWKS_SHARED_CACHE_TTL_SECONDS, remoteJwksSignatureVerifier } from "./remote-jwks";
 export type { EmptyDetailCode } from "./respond";
 export { emptyError, renderError } from "./respond";
 export { timingSafeEqualString } from "./secret-compare";
