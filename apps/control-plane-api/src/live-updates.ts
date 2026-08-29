@@ -10,6 +10,7 @@ import {
   type AuthResolver,
   type Principal,
   type RateLimiter,
+  requireWideMemberships,
 } from "@splitch/worker-runtime";
 import type { Context, Hono } from "hono";
 import type { ConfigStoreAccess } from "./config-store-do";
@@ -133,10 +134,10 @@ function liveScopeError(
   appId: string,
   environmentId: string,
 ): ErrorResponse | null {
-  const hasApp =
-    principal.appId === appId ||
-    (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION &&
-      principal.memberships?.apps.some((membership) => membership.id === appId));
+  let hasApp = principal.appId === appId;
+  if (!hasApp && principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+    hasApp = requireWideMemberships(principal).apps.some((membership) => membership.id === appId);
+  }
   if (!hasApp) {
     return emptyError("FORBIDDEN", "credential is not scoped to this app");
   }

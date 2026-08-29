@@ -194,10 +194,13 @@ request. The route registrar accepts that structural grant only for `GET` and re
 before its handler runs. Internal delegation carries the grant and request-live membership set,
 binds only axes the surface registrar already authorized, and reruns Organization/App co-scope in
 the owner Worker. The CLI reuses any unexpired device-flow token for principal-keyed Organization
-discovery; when it must refresh, it requests and caches wide authority. Selector-scoped commands
-continue to mint selector-bound tokens. Both device-code exchange and refresh refuse wide authority
-when the session has a selected App. The authorization is refused for MCP resources, does not change
-token TTL, and uses the same session revocation check as every other access token.
+discovery. When it must refresh, it refreshes the session default without requesting wide authority;
+`organizations_list` already returns the principal's complete live Organization membership set for
+device-flow principals. The CLI-side request and cache path for wide authority lands in SPL-530, where
+selector-free App reads consume it. Selector-scoped commands continue to mint selector-bound tokens.
+Both device-code exchange and refresh refuse wide authority when the session has a selected App. The
+authorization is refused for MCP resources, does not change token TTL, and uses the same session
+revocation check as every other access token.
 
 **Selector resolution is two-pass, ID before key.** An App ID is globally unique; an App key is
 unique per Organization only, and any user may add another user to an Organization they own. So a

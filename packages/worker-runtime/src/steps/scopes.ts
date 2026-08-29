@@ -87,7 +87,7 @@ function membershipWideReadError(
   return null;
 }
 
-function requireWideMemberships(principal: Principal): PrincipalMemberships {
+export function requireWideMemberships(principal: Principal): PrincipalMemberships {
   if (!principal.memberships) {
     throw new Error("worker-runtime: membership-wide principal has no live memberships");
   }

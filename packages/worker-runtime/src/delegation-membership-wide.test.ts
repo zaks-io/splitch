@@ -86,6 +86,36 @@ describe("membership-wide delegation", () => {
       code: "FORBIDDEN",
     });
   });
+
+  it("rejects a delegated App axis absent from the carried live memberships", () => {
+    const route = requiredRoute("experiment_results_get");
+    const params = { appId: APP, environmentId: ENVIRONMENT, experimentId: "exp_1" };
+    const identity = delegatedIdentityFrom(route, wide, params);
+    const memberships = wide.memberships;
+    if (!memberships) throw new Error("wide test principal has no memberships");
+    const missingApp = {
+      ...identity,
+      memberships: {
+        organizations: memberships.organizations,
+        apps: [{ id: OTHER_APP, organizationId: ORG, role: "member" as const }],
+      },
+    };
+
+    expect(
+      delegatedIdentityFor(delegatedRequest(route, missingApp, { params }), [route]),
+    ).toBeNull();
+  });
+
+  it("rejects wide authority combined with selector scopes", () => {
+    const route = requiredRoute("experiment_results_get");
+    const params = { appId: APP, environmentId: ENVIRONMENT, experimentId: "exp_1" };
+    const identity = {
+      ...delegatedIdentityFrom(route, wide, params),
+      scopes: [`app:${APP}:admin`],
+    };
+
+    expect(delegatedIdentityFor(delegatedRequest(route, identity, { params }), [route])).toBeNull();
+  });
 });
 
 function requiredRoute(operationId: string) {

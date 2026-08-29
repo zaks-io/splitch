@@ -33,15 +33,13 @@ export function delegatedAxisCovers(
   value: string,
 ): boolean {
   if (identity[axis] !== value) return false;
-  if (identity.authorization !== MEMBERSHIP_WIDE_READ_AUTHORIZATION) return true;
+  if (identity.authorization !== MEMBERSHIP_WIDE_READ_AUTHORIZATION || axis === "environmentId") {
+    return true;
+  }
   const memberships = requireDelegatedMemberships(identity);
-  if (axis === "orgId") {
-    return memberships.organizations.some((membership) => membership.id === value);
-  }
-  if (axis === "appId") {
-    return memberships.apps.some((membership) => membership.id === value);
-  }
-  return identity.environmentId === value;
+  return axis === "orgId"
+    ? memberships.organizations.some((membership) => membership.id === value)
+    : memberships.apps.some((membership) => membership.id === value);
 }
 
 function requireDelegatedMemberships(identity: DelegatedIdentity): PrincipalMemberships {
@@ -68,6 +66,8 @@ function hasCompatibleWideAuthority(candidate: Record<string, unknown>): boolean
   if (candidate.authorization === undefined && candidate.memberships === undefined) return true;
   return (
     candidate.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION &&
+    isStringArray(candidate.scopes) &&
+    candidate.scopes.length === 0 &&
     isPrincipalMemberships(candidate.memberships)
   );
 }

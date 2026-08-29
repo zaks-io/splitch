@@ -71,9 +71,6 @@ export async function resolveBearerMemberships(
   access: TokenMembershipAccess,
   userId: string,
 ): Promise<PrincipalMemberships> {
-  if (!access.resolve) {
-    throw new Error("control-plane: membershipAccess.resolve is required");
-  }
   return access.resolve(userId);
 }
 

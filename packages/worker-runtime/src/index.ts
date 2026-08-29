@@ -39,6 +39,7 @@ export { remoteJwksSignatureVerifier } from "./remote-jwks";
 export type { EmptyDetailCode } from "./respond";
 export { emptyError, renderError } from "./respond";
 export { timingSafeEqualString } from "./secret-compare";
+export { requireWideMemberships } from "./steps/scopes";
 export {
   applyResponseHeaders,
   CONTROL_PANEL_SECURITY_HEADERS,

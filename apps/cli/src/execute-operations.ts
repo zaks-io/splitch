@@ -227,8 +227,8 @@ function requireOperationRoute(operationId: string): NonNullable<ReturnType<type
 
 /**
  * Path selectors bind to their App or Organization. Selector-free Control
- * Plane reads request membership-wide authority; mutations keep the session's
- * existing selector authority.
+ * Plane reads use the wide marker only for cached-token reuse; refresh mints
+ * the session default. SPL-530 adds the wide request; mutations keep existing authority.
  */
 export function operationAuthorization(
   route: NonNullable<ReturnType<typeof getRoute>>,

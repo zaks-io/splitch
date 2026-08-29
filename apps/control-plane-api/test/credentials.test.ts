@@ -18,7 +18,6 @@ import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedAppMember, seedEnvironment, seedOrgApp } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
-import { membershipAccessWithoutWideResolution } from "./token-membership-access-fixture";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
@@ -35,6 +34,7 @@ const MEMBER = "user_member_37ad";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
 const cacheEnvelope = kvEnvelope(CredentialCacheKVSchema);
+const rejectWideRead = () => Promise.reject<never>(new Error("memberships unavailable"));
 
 interface Harness {
   app: Hono;
@@ -74,7 +74,7 @@ function makeApp(bindings: LocalBindings, signer: FixtureSigner, credentialStore
     authResolver: makeControlPlaneAuthResolver({
       verifier,
       sessions: makeSessionStore(bindings.kv),
-      membershipAccess: membershipAccessWithoutWideResolution,
+      membershipAccess: { authorize: async () => true, resolve: rejectWideRead },
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,
