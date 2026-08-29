@@ -12,12 +12,13 @@ export function flagImplementationConfiguration(
   const catalog = data.definition.variants;
   const available = config?.availableVariantNames ?? [];
   const narrowed = available.length > 0;
+  assertAvailableVariants(catalog, available);
 
   return {
     key: data.definition.key,
     configured: config !== null,
     enabled: config?.enabled ?? false,
-    defaultVariant: variantName(catalog, data.definition.defaultVariantId),
+    defaultVariant: requiredVariantName(catalog, data.definition.defaultVariantId, "Default"),
     availableVariantNames: available,
     variants: catalog.map((variant) => ({
       name: variant.name,
@@ -35,7 +36,7 @@ export function flagImplementationConfiguration(
         return {
           id: rule.id,
           priority: rule.priority,
-          variant: variantName(catalog, rule.variantId),
+          variant: requiredVariantName(catalog, rule.variantId, `Targeting Rule ${rule.id}`),
           conditions: implementationConditions(rule.conditions),
           segment: segment
             ? {
@@ -54,6 +55,20 @@ export function flagImplementationConfiguration(
 export function flagImplementationConfigurationFromView(
   view: FlagDetailView,
 ): FlagImplementationInput["flag"] {
+  const catalogNames = new Set(view.catalog.map((variant) => variant.name));
+  if (!catalogNames.has(view.defaultVariantName)) {
+    throw new Error(
+      `Default Variant is unavailable from the Flag catalog: ${view.defaultVariantName}`,
+    );
+  }
+  for (const rule of view.targetingRules) {
+    if (!catalogNames.has(rule.variantName)) {
+      throw new Error(
+        `Targeting Rule ${rule.id} references an unavailable Variant: ${rule.variantName}`,
+      );
+    }
+  }
+
   return {
     key: view.key,
     configured: view.configured,
@@ -100,8 +115,20 @@ function availabilityOf(
   return available.includes(variant.name) ? "available" : "unavailable";
 }
 
-function variantName(catalog: Variant[], variantId: string): string {
-  return catalog.find((variant) => variant.id === variantId)?.name ?? variantId;
+function requiredVariantName(catalog: Variant[], variantId: string, source: string): string {
+  const variant = catalog.find((candidate) => candidate.id === variantId);
+  if (!variant) {
+    throw new Error(`${source} references an unavailable Variant: ${variantId}`);
+  }
+  return variant.name;
+}
+
+function assertAvailableVariants(catalog: Variant[], available: string[]): void {
+  const catalogNames = new Set(catalog.map((variant) => variant.name));
+  const missing = available.find((name) => !catalogNames.has(name));
+  if (missing) {
+    throw new Error(`Flag Configuration marks an unavailable Variant as available: ${missing}`);
+  }
 }
 
 function referencedSegment(segments: Segment[], segmentId: string): Segment {

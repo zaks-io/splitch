@@ -122,6 +122,9 @@ test.describe("App-level Metrics", () => {
     await expect(page.locator(`[data-metric-key='${countKey}']`)).toContainText(
       `Completed items ${suffix}`,
     );
+    const editSuccess = page.getByTestId("metric-code-agent-success");
+    await expect(editSuccess).toBeVisible();
+    await editSuccess.getByRole("button", { name: "Close" }).click();
 
     await page
       .locator(`[data-metric-key='${revenueKey}']`)

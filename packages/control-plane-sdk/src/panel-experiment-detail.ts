@@ -20,6 +20,10 @@ export interface PanelExperimentRun {
   controlVariantId: string;
   variantsJson: string;
   targetingRulesJson: string;
+  targetN: number | null;
+  decisionFamilyJson: string;
+  guardrailDecisionsJson: string;
+  metricVarianceConfigJson: string;
   decisionMetricIds: string[];
   decisionGuardrailMetricIds: string[];
   /** The decision spec this Run froze at Start (ADR-0003). Never editable after. */
@@ -132,6 +136,10 @@ function parsePanelExperimentRun(input: unknown): PanelExperimentRun | null {
     !isNonEmptyString(input.controlVariantId) ||
     !isVariantArrayJson(input.variantsJson) ||
     !isJsonArray(input.targetingRulesJson) ||
+    !(input.targetN === null || (Number.isInteger(input.targetN) && Number(input.targetN) >= 0)) ||
+    !isJsonArray(input.decisionFamilyJson) ||
+    !isJsonArray(input.guardrailDecisionsJson) ||
+    !isJsonArray(input.metricVarianceConfigJson) ||
     !isStringArray(input.decisionMetricIds) ||
     !isStringArray(input.decisionGuardrailMetricIds) ||
     typeof input.confidenceLevel !== "number" ||
@@ -160,6 +168,10 @@ function parsePanelExperimentRun(input: unknown): PanelExperimentRun | null {
     controlVariantId: input.controlVariantId,
     variantsJson: input.variantsJson,
     targetingRulesJson: input.targetingRulesJson,
+    targetN: input.targetN === null ? null : Number(input.targetN),
+    decisionFamilyJson: input.decisionFamilyJson,
+    guardrailDecisionsJson: input.guardrailDecisionsJson,
+    metricVarianceConfigJson: input.metricVarianceConfigJson,
     decisionMetricIds: input.decisionMetricIds,
     decisionGuardrailMetricIds: input.decisionGuardrailMetricIds,
     confidenceLevel: input.confidenceLevel,
