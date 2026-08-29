@@ -1,3 +1,4 @@
+import { MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { verifyAccessToken } from "./access-token";
 import { makeTokenSigner } from "./token-exchange";
@@ -80,6 +81,52 @@ function decodePayload(token: string): Record<string, unknown> {
   return JSON.parse(atob(padded)) as Record<string, unknown>;
 }
 
+describe("membership-wide read access token claims", () => {
+  it("mints a structural membership-wide read claim with no selector scopes", async () => {
+    const signer = makeTokenSigner({
+      assertionSecret: "test-assertion-secret",
+      accessSecret: ACCESS_SECRET,
+      issuer: ISSUER,
+      controlPlaneAudience: CP_AUDIENCE,
+    });
+
+    const token = await signer.mintAccessToken(
+      "user_wide_read",
+      [],
+      "device_flow",
+      NOW,
+      CP_AUDIENCE,
+      MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+    );
+
+    expect(decodePayload(token)).toMatchObject({
+      sub: "user_wide_read",
+      scopes: [],
+      authorization: MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+    });
+  });
+
+  it("refuses to combine membership-wide read authority with selector scopes", async () => {
+    const signer = makeTokenSigner({
+      assertionSecret: "test-assertion-secret",
+      accessSecret: ACCESS_SECRET,
+      issuer: ISSUER,
+      controlPlaneAudience: CP_AUDIENCE,
+    });
+
+    await expect(
+      signer.mintAccessToken(
+        "user_wide_read",
+        ["app:app_demo:member"],
+        "device_flow",
+        NOW,
+        CP_AUDIENCE,
+        MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+      ),
+    ).rejects.toThrow("membership-wide read tokens cannot carry selector scopes");
+  });
+});
+
 describe("verifyAccessToken guards", () => {
   it("binds the anonymous Door B audit identity through assertion exchange", async () => {
     const signer = makeTokenSigner({
@@ -116,6 +163,34 @@ describe("verifyAccessToken guards", () => {
     });
   });
 
+  it("keeps selector-bound token claims unchanged", async () => {
+    const signer = makeTokenSigner({
+      assertionSecret: "test-assertion-secret",
+      accessSecret: ACCESS_SECRET,
+      issuer: ISSUER,
+      controlPlaneAudience: CP_AUDIENCE,
+    });
+    const token = await signer.mintAccessToken(
+      "user_selector_bound",
+      ["app:app_demo:member"],
+      "device_flow",
+      NOW,
+    );
+
+    expect(decodePayload(token)).toEqual({
+      typ: "access_token",
+      sub: "user_selector_bound",
+      iss: ISSUER,
+      aud: CP_AUDIENCE,
+      iat: NOW,
+      exp: NOW + 3600,
+      scopes: ["app:app_demo:member"],
+      auth_door: "device_flow",
+    });
+  });
+});
+
+describe("verifyAccessToken malformed claim guards", () => {
   it.each([
     ["missing", undefined],
     ["a non-array", "app:app_demo:member"],

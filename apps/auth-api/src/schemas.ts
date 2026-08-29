@@ -1,3 +1,4 @@
+import { MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
 import { z } from "zod";
 import { jwksUrlError, normalizeJwksUrl } from "./jwks-url";
 
@@ -45,6 +46,7 @@ export const TokenExchangeRequestSchema = z.object({
   grant_type: z.string(),
   identity_assertion: z.string().min(1),
   resource: z.url().optional(),
+  authorization: z.literal(MEMBERSHIP_WIDE_READ_AUTHORIZATION).optional(),
 });
 
 /** POST /oauth2/device_authorization: starts Door C's device-code flow. */
@@ -66,6 +68,7 @@ export const DeviceTokenRequestSchema = z.object({
   client_id: z.string().min(1).optional(),
   scope: z.string().min(1).optional(),
   resource: z.url().optional(),
+  authorization: z.literal(MEMBERSHIP_WIDE_READ_AUTHORIZATION).optional(),
 });
 
 /**
@@ -82,8 +85,12 @@ export const RefreshTokenRequestSchema = z
     resource: z.url().optional(),
     app: z.string().min(1).optional(),
     org: z.string().min(1).optional(),
+    authorization: z.literal(MEMBERSHIP_WIDE_READ_AUTHORIZATION).optional(),
   })
-  .refine((value) => value.app === undefined || value.org === undefined);
+  .refine(
+    (value) =>
+      [value.app, value.org, value.authorization].filter((part) => part !== undefined).length <= 1,
+  );
 
 /** POST /oauth2/token: shared-preview smoke client_credentials grant. */
 export const ClientCredentialsRequestSchema = z.object({

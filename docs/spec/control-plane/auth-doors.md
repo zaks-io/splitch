@@ -187,6 +187,21 @@ membership fails `invalid_grant`, and a grant's App selection cannot be widened 
 The binding is resolved **before** the provider is called: WorkOS refresh tokens are single-use, so
 an unresolvable selector must fail the one request rather than burn the session.
 
+A Control Plane token request may instead set `authorization=membership-wide-read`. This option is
+mutually exclusive with `app`, `org`, and a device grant's selected App. It mints no selector scopes;
+the Control Plane reconstructs the principal's complete live membership set from D1 on every
+request. The route registrar accepts that structural grant only for `GET` and rejects every mutation
+before its handler runs. Internal delegation carries the grant and request-live membership set,
+binds only axes the surface registrar already authorized, and reruns Organization/App co-scope in
+the owner Worker. The CLI reuses any unexpired device-flow token for principal-keyed Organization
+discovery. When it must refresh, it refreshes the session default without requesting wide authority;
+`organizations_list` already returns the principal's complete live Organization membership set for
+device-flow principals. The CLI-side request and cache path for wide authority lands in SPL-530, where
+selector-free App reads consume it. Selector-scoped commands continue to mint selector-bound tokens.
+Both device-code exchange and refresh refuse wide authority when the session has a selected App. The
+authorization is refused for MCP resources, does not change token TTL, and uses the same session
+revocation check as every other access token.
+
 **Selector resolution is two-pass, ID before key.** An App ID is globally unique; an App key is
 unique per Organization only, and any user may add another user to an Organization they own. So a
 selector is matched against the canonical ID across every reachable App first, and only then

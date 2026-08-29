@@ -1,6 +1,6 @@
 import { type UserRole, UserRoleSchema } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
-import type { AuthResolver, AuthResult } from "@splitch/worker-runtime";
+import type { AuthResolver, AuthResult, PrincipalMemberships } from "@splitch/worker-runtime";
 import {
   type MembershipClaim,
   type MembershipRole,
@@ -19,6 +19,7 @@ import {
 
 export interface TokenMembershipAccess {
   authorize(userId: string, claims: readonly MembershipClaim[]): Promise<boolean>;
+  resolve(userId: string): Promise<PrincipalMemberships>;
 }
 
 const ROLE_RANK: Record<UserRole, number> = {
@@ -45,7 +46,32 @@ export function makeTokenMembershipAccess(
       const results = await Promise.all(claims.map((claim) => claimHolds(repo, userId, claim)));
       return results.every(Boolean);
     },
+    async resolve(userId) {
+      const organizations = await repo.identity.listOrgMembershipsForUser(userId);
+      const apps = await repo.identity.listAppMembershipsWithAppForUser(
+        userId,
+        organizations.map((membership) => membership.orgId),
+      );
+      return {
+        organizations: organizations.map((membership) => ({
+          id: membership.orgId,
+          role: UserRoleSchema.parse(membership.role),
+        })),
+        apps: apps.map((membership) => ({
+          id: membership.app.id,
+          organizationId: membership.app.organizationId,
+          role: UserRoleSchema.parse(membership.role),
+        })),
+      };
+    },
   };
+}
+
+export async function resolveBearerMemberships(
+  access: TokenMembershipAccess,
+  userId: string,
+): Promise<PrincipalMemberships> {
+  return access.resolve(userId);
 }
 
 /** Fail loud when the bearer resolver is constructed without a membership port. */

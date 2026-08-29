@@ -181,6 +181,7 @@ export function createApp(deps: AppDeps): Hono {
     repo: deps.repo,
     configStore: deps.configStore,
     defaultHeaders: deps.defaultHeaders,
+    observability: deps.observability,
   });
 
   registrar.mount(app, controlPlaneRoute("apps_list"), appEnvironmentHandlers.listApps);

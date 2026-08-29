@@ -1,4 +1,9 @@
-import { type AuthDoor, AuthDoorSchema } from "@splitch/contracts";
+import {
+  type AccessTokenAuthorization,
+  type AuthDoor,
+  AuthDoorSchema,
+  accessTokenAuthorizationFromClaim,
+} from "@splitch/contracts";
 import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
 
 /**
@@ -6,8 +11,8 @@ import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
  *
  * The control-plane token is the short-lived bearer the auth-api mints
  * (access-control-matrix.md "Token validation": verify signature against the
- * issuer JWKS, assert `aud`, assert `exp`). This module owns ONLY signature +
- * aud + exp. Scope derivation and session revocation are separate concerns.
+ * issuer JWKS, assert `iss`, `typ`, `aud`, and `exp`). Scope derivation and
+ * session revocation are separate concerns.
  *
  * The signature is the entire trust root, so a bad/absent/non-RS256 signature is
  * a loud failure, never a skipped check. `alg: none` and any non-RS256 alg are
@@ -29,6 +34,8 @@ interface VerifiedToken {
    * cannot prove which door it came through must not be treated as identified.
    */
   authDoor: AuthDoor;
+  /** Structural read-only authority. Membership rows are never carried in the JWT. */
+  authorization?: AccessTokenAuthorization;
 }
 
 interface JwtHeader {
@@ -64,7 +71,8 @@ export function makeHttpJwksFetcher(jwksUri: string): JwksFetcher {
 export interface JwksVerifier {
   /**
    * Verify a compact JWT and return its actor claims, or `null` on ANY
-   * verification failure (bad signature, wrong aud, expired, malformed). A null
+   * verification failure (bad signature, issuer/type/audience mismatch, expired,
+   * malformed). A null
    * is an authentication failure the resolver maps to UNAUTHORIZED; it never
    * throws for the ordinary bad-token case. A genuine fault in the fetcher
    * (e.g. JWKS unreachable) is allowed to throw — the guard maps it to 500.
@@ -78,11 +86,12 @@ export function makeCachedJwksVerifier(options: {
   controlPlaneAudience: string;
 }): JwksVerifier {
   const signatures = remoteJwksSignatureVerifier(options.jwksUri);
+  const issuer = new URL(options.jwksUri).origin;
   return {
     async verify(token, nowSeconds) {
       const parsed = parseJwt(token);
       if (!parsed || !(await signatures.verify(token))) return null;
-      return actorFromClaims(parsed.payload, options.controlPlaneAudience, nowSeconds);
+      return actorFromClaims(parsed.payload, issuer, options.controlPlaneAudience, nowSeconds);
     },
   };
 }
@@ -166,12 +175,16 @@ async function signatureValid(parsed: ParsedJwt, fetchJwks: JwksFetcher): Promis
   );
 }
 
-/** Assert aud + exp + sub on a signature-verified payload, returning the actor. */
+/** Assert issuer, token type, audience, expiry, and subject on a verified payload. */
 function actorFromClaims(
   payload: Record<string, unknown>,
+  issuer: string,
   controlPlaneAudience: string,
   nowSeconds: number,
 ): VerifiedToken | null {
+  if (payload.iss !== issuer || payload.typ !== "access_token") {
+    return null;
+  }
   // aud must bind to this control-plane resource (matrix.md step 2).
   if (payload.aud !== controlPlaneAudience) {
     return null;
@@ -183,11 +196,26 @@ function actorFromClaims(
   if (typeof payload.sub !== "string" || payload.sub.length === 0) {
     return null;
   }
+  const scopes = Array.isArray(payload.scopes) ? (payload.scopes as string[]) : [];
+  const authorization = validAuthorization(payload.authorization, payload.scopes, scopes);
+  if (authorization === null) return null;
   return {
     sub: payload.sub,
-    scopes: Array.isArray(payload.scopes) ? (payload.scopes as string[]) : [],
+    scopes,
     authDoor: authDoorFromClaim(payload.auth_door),
+    ...(authorization ? { authorization } : {}),
   };
+}
+
+function validAuthorization(
+  claim: unknown,
+  scopeClaim: unknown,
+  scopes: readonly string[],
+): AccessTokenAuthorization | null | undefined {
+  const authorization = accessTokenAuthorizationFromClaim(claim);
+  if (claim !== undefined && authorization === undefined) return null;
+  if (authorization && (!Array.isArray(scopeClaim) || scopes.length !== 0)) return null;
+  return authorization;
 }
 
 /** Fail CLOSED: anything but a recognized door reads as the provisional one. */
@@ -202,6 +230,7 @@ function authDoorFromClaim(claim: unknown): AuthDoor {
  */
 export function makeJwksVerifier(opts: {
   fetchJwks: JwksFetcher;
+  issuer: string;
   controlPlaneAudience: string;
 }): JwksVerifier {
   return {
@@ -213,7 +242,7 @@ export function makeJwksVerifier(opts: {
       if (!(await signatureValid(parsed, opts.fetchJwks))) {
         return null;
       }
-      return actorFromClaims(parsed.payload, opts.controlPlaneAudience, nowSeconds);
+      return actorFromClaims(parsed.payload, opts.issuer, opts.controlPlaneAudience, nowSeconds);
     },
   };
 }
