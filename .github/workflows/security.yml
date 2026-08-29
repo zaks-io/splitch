@@ -1,10 +1,18 @@
 name: security
 
-# PARKED until the app is built. Pre-build, these scans only block docs/spec PRs
-# on noise (transitive dev-dep CVEs, SAST over scaffolding). Re-enable the
-# pull_request + push + schedule triggers once there is real application code to
-# protect — the jobs below are unchanged and ready.
+# Runs daily and reports; it does not gate merges. The `alert` job turns a
+# failed scan into a single deduped GitHub issue, which the GitHub<->Linear sync
+# mirrors into the Splitch team.
+#
+# The pull_request + push triggers stay off deliberately. Every job here already
+# branches on the event, so adding them arms the merge gates (`pnpm audit`,
+# Semgrep `--error`) — and a transitive dev-dep advisory that has nothing to do
+# with the branch would then block an unrelated PR. Turn them on in the
+# dependency lockdown pass, once the tree is settled enough that a finding is
+# signal about the change in flight.
 on:
+  schedule:
+    - cron: "23 8 * * *"
   workflow_dispatch:
 
 permissions:
