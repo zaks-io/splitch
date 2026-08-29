@@ -1,41 +1,43 @@
+/* The first screen has to answer "what does this thing do" without a glossary,
+   so the figure states the outcome in plain words. Confidence intervals,
+   p-values, and SRM live in the rigor section, where there is room to say what
+   they mean. The rates are consistent: 4.8% lifted 4.2% is 5.0%. */
 const arms = [
   {
-    label: "Control",
+    role: "Control",
+    name: "Old checkout",
+    rate: "4.8%",
     dotClass: "bg-arm-control",
-    allocation: "50%",
-    exposures: "6,241 exposures",
   },
   {
-    label: "Treatment",
+    role: "Treatment",
+    name: "New checkout",
+    rate: "5.0%",
     dotClass: "bg-arm-treatment",
-    allocation: "50%",
-    exposures: "6,208 exposures",
   },
 ] as const;
 
-/* The Split: one track of traffic becomes two arms. This is the only place
-   both brand hues go loud, always at full saturation on bounded shapes. */
 export function SplitVisual() {
   return (
     <figure
-      aria-label="One traffic track splitting into a Control arm and a Treatment arm"
+      aria-label="A Flag called new-checkout splits traffic evenly. 4.8% of users on the old checkout purchased, against 5.0% on the new one, so the new checkout wins by 4.2%."
       className="grid min-w-0 gap-5 rounded-xl border border-border bg-card p-5 shadow-md sm:p-6"
     >
       <div className="flex items-center justify-between gap-3 font-mono text-xs">
-        <span className="text-foreground">flag.checkout-cta</span>
-        <span className="flex items-center gap-1.5 text-muted-foreground uppercase tracking-wide">
+        <span className="text-foreground">new-checkout</span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
           <span aria-hidden="true" className="size-1.5 rounded-full bg-success" />
-          Run #7 · live
+          Live · 12,449 users
         </span>
       </div>
 
       <svg
         aria-hidden="true"
         className="h-auto w-full max-w-full"
-        preserveAspectRatio="xMidYMid meet"
         fill="none"
+        preserveAspectRatio="xMidYMid meet"
         role="presentation"
-        viewBox="0 0 560 240"
+        viewBox="0 40 560 160"
       >
         <path
           className="split-draw stroke-border"
@@ -64,23 +66,21 @@ export function SplitVisual() {
 
       <div className="grid gap-3 sm:grid-cols-2">
         {arms.map((arm) => (
-          <div className="rounded-lg border border-border bg-background p-4" key={arm.label}>
+          <div className="rounded-lg border border-border bg-background p-4" key={arm.role}>
             <p className="flex items-center gap-2 font-mono text-muted-foreground text-xs uppercase tracking-wide">
               <span aria-hidden="true" className={`size-2 rounded-sm ${arm.dotClass}`} />
-              {arm.label}
+              {arm.role}
             </p>
-            <p className="mt-2 font-display font-semibold text-2xl text-foreground">
-              {arm.allocation}
-            </p>
-            <p className="mt-1 font-mono text-muted-foreground text-xs">{arm.exposures}</p>
+            <p className="mt-2 font-medium text-foreground text-sm">{arm.name}</p>
+            <p className="mt-2 font-display font-semibold text-2xl text-foreground">{arm.rate}</p>
+            <p className="text-muted-foreground text-xs">purchased</p>
           </div>
         ))}
       </div>
 
-      <figcaption className="rounded-lg bg-muted px-4 py-3 font-mono text-sm">
-        <span className="text-arm-treatment-foreground">+4.2%</span>
-        <span className="text-muted-foreground"> [1.1, 7.3] · p=0.003 · </span>
-        <span className="text-success-foreground">SRM healthy</span>
+      <figcaption className="rounded-lg bg-muted px-4 py-3 text-sm leading-relaxed">
+        <span className="font-medium text-arm-treatment-foreground">New checkout wins.</span>{" "}
+        <span className="text-muted-foreground">4.2% more purchases.</span>
       </figcaption>
     </figure>
   );

@@ -139,7 +139,7 @@ export function llmsTxt(): string {
     "## Optional",
     [
       `- [Quickstart](${DOCS_ORIGIN}/quickstart): zero to a resolving Flag with the CLI.`,
-      "- [MCP server](https://mcp.splitch.dev): the same capabilities in-band for agents.",
+      "- MCP server: add it to your agent with `claude mcp add --transport http splitch https://mcp.splitch.dev`. It is a tool endpoint, and the agent authenticates on its first tool call.",
       "- [Control Panel](https://app.splitch.dev)",
     ].join("\n"),
   ].join("\n\n");
