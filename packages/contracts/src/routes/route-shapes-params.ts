@@ -32,6 +32,15 @@ export const FlagParams = z.object({ appId: AppSelectorSchema, flagId: FlagSelec
  */
 export const FlagGetQuerySchema = z.object({ by: z.enum(["id", "key"]).optional() }).strict();
 
+export const CanonicalEnvironmentSelectorQuerySchema = z
+  .object({
+    by: z
+      .literal("id")
+      .optional()
+      .describe("Force a canonical Environment ID when a legacy key has the same value."),
+  })
+  .strict();
+
 export const FlagVariantParams = z.object({
   appId: AppSelectorSchema,
   flagId: FlagSelectorSchema,

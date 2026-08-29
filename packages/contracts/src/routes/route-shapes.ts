@@ -24,6 +24,7 @@ export {
   AppMemberParams,
   AppParams,
   ApprovalRequestParams,
+  CanonicalEnvironmentSelectorQuerySchema,
   EnvFlagKeyParams,
   EnvFlagParams,
   EnvParams,

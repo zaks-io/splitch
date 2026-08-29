@@ -16,6 +16,7 @@ import {
   type RouteContract,
   type RouteOwner,
 } from "./route-contract";
+import { CanonicalEnvironmentSelectorQuerySchema } from "./routes/route-shapes-params";
 
 /**
  * One authored shape per HTTP endpoint that serves BOTH consumers from a single
@@ -234,11 +235,6 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
   };
 }
 
-const CanonicalEnvironmentSelectorQuery = z
-  .literal("id")
-  .optional()
-  .describe("Force a canonical Environment ID when a legacy key has the same value.");
-
 /** Environment ambiguity must expose a declared escape hatch on every affected route. */
 function selectorAwareRequest(input: DefineApiRouteInput): ApiRouteRequest | undefined {
   if (
@@ -253,8 +249,8 @@ function selectorAwareRequest(input: DefineApiRouteInput): ApiRouteRequest | und
   return {
     ...request,
     query: query
-      ? query.extend({ by: CanonicalEnvironmentSelectorQuery })
-      : z.object({ by: CanonicalEnvironmentSelectorQuery }).strict(),
+      ? query.extend(CanonicalEnvironmentSelectorQuerySchema.shape)
+      : CanonicalEnvironmentSelectorQuerySchema,
   };
 }
 

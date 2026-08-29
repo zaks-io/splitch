@@ -85,6 +85,20 @@ describe("control plane sdk Environments client", () => {
     expect(result.ok && result.data.policy.enabledState).toBe("confirm");
   });
 
+  it("selects a canonical Environment ID when a legacy key collides", async () => {
+    const { sdk, requests } = sdkWith(() => Response.json(environment));
+
+    await sdk.environments.get({
+      appId: "app_checkout",
+      environmentId: "env_staging",
+      by: "id",
+    });
+
+    expect(requests[0]?.url).toBe(
+      "https://control-plane.test/apps/app_checkout/envs/env_staging?by=id",
+    );
+  });
+
   it("patches an Environment without sending the path params in the body", async () => {
     const { sdk, requests } = sdkWith(() => Response.json(environment));
 
@@ -98,6 +112,22 @@ describe("control plane sdk Environments client", () => {
     await expect(requests[0]?.json()).resolves.toEqual({ name: "Staging" });
   });
 
+  it("keeps the Environment selector override out of PATCH bodies", async () => {
+    const { sdk, requests } = sdkWith(() => Response.json(environment));
+
+    await sdk.environments.update({
+      appId: "app_checkout",
+      environmentId: "env_staging",
+      by: "id",
+      name: "Staging",
+    });
+
+    expect(requests[0]?.url).toBe(
+      "https://control-plane.test/apps/app_checkout/envs/env_staging?by=id",
+    );
+    await expect(requests[0]?.json()).resolves.toEqual({ name: "Staging" });
+  });
+
   it("deletes an Environment", async () => {
     const { sdk, requests } = sdkWith(() => Response.json({ deleted: true }));
 
@@ -108,6 +138,20 @@ describe("control plane sdk Environments client", () => {
 
     expect(requests[0]?.method).toBe("DELETE");
     expect(result).toEqual({ ok: true, status: 200, data: { deleted: true } });
+  });
+
+  it("forwards the Environment selector override when deleting", async () => {
+    const { sdk, requests } = sdkWith(() => Response.json({ deleted: true }));
+
+    await sdk.environments.delete({
+      appId: "app_checkout",
+      environmentId: "env_staging",
+      by: "id",
+    });
+
+    expect(requests[0]?.url).toBe(
+      "https://control-plane.test/apps/app_checkout/envs/env_staging?by=id",
+    );
   });
 
   it("surfaces the Worker's typed refusal when deleting the last Environment", async () => {

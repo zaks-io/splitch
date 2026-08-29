@@ -11,12 +11,7 @@ import type {
   PatchEventDefinitionRequestSchema,
   PublishEventDefinitionVersionRequestSchema,
 } from "./event-definition-write";
-import {
-  AppMemberSchema,
-  AppSchema,
-  type ClientKeySchema,
-  EnvironmentSchema,
-} from "./leaf-schemas-runtime";
+import { AppMemberSchema, AppSchema, type ClientKeySchema } from "./leaf-schemas-runtime";
 import type {
   ResourceDeleteModeQuerySchema,
   ResourceDeleteResponseSchema,
@@ -26,7 +21,6 @@ import type {
   CreateAppRequestSchema,
   CreateAppResponseSchema,
   CreateCredentialResponseSchema,
-  CreateEnvironmentResponseSchema,
   CreateOrganizationRequestSchema,
   ListCredentialsResponseSchema,
   OrganizationResponseSchema,
@@ -49,6 +43,7 @@ import type {
   PatchFlagRequestSchema,
   PatchVariantRequestSchema,
 } from "./resource-envelopes-flag";
+import type * as EnvironmentRoutes from "./route-types-environment";
 import type {
   AddAppMemberRequestSchema,
   ApiKeyParams,
@@ -58,7 +53,6 @@ import type {
   ApprovalRequestParams,
   ClientKeyRotateResponseSchema,
   CreateApiKeyRequestSchema,
-  CreateEnvironmentRequestSchema,
   EnvFlagParams,
   EnvParams,
   ExperimentParams,
@@ -70,7 +64,6 @@ import type {
   FlagVariantParams,
   OrgAppsParams,
   PatchClientKeyRequestSchema,
-  PatchEnvironmentRequestSchema,
   PatchFlagConfigRequestSchema,
   PromoteParams,
   PromoteRequestSchema,
@@ -78,6 +71,9 @@ import type {
   ReplaceTargetingRulesRequestSchema,
   UpdateAppMemberRequestSchema,
 } from "./routes/route-shapes";
+
+export type * from "./route-types-environment";
+
 import {
   type ApprovalRequestListQuerySchema,
   ApprovalRequestSchema,
@@ -176,7 +172,6 @@ export type FlagsPromoteInput = z.infer<typeof PromoteParams> &
 export type FlagsPromoteOutput = z.infer<typeof PromoteResponseSchema>;
 
 const AppListResponseSchema = listResponse(AppSchema);
-const EnvironmentListResponseSchema = listResponse(EnvironmentSchema);
 const AppMemberListResponseSchema = listResponse(AppMemberSchema);
 
 // No path params: the Org does not exist yet, so the body is the whole input.
@@ -208,19 +203,6 @@ export type AppMembersRemoveOutput = { deleted: true };
 
 export type AppAttentionRollupGetInput = z.infer<typeof AppParams>;
 export type AppAttentionRollupGetOutput = z.infer<typeof AppAttentionRollupResponseSchema>;
-
-export type EnvironmentsListInput = z.infer<typeof AppParams>;
-export type EnvironmentsListOutput = z.infer<typeof EnvironmentListResponseSchema>;
-export type EnvironmentsCreateInput = z.infer<typeof AppParams> &
-  z.infer<typeof CreateEnvironmentRequestSchema>;
-export type EnvironmentsCreateOutput = z.infer<typeof CreateEnvironmentResponseSchema>;
-export type EnvironmentsGetInput = z.infer<typeof EnvParams>;
-export type EnvironmentsGetOutput = z.infer<typeof EnvironmentSchema>;
-export type EnvironmentsUpdateInput = z.infer<typeof EnvParams> &
-  z.infer<typeof PatchEnvironmentRequestSchema>;
-export type EnvironmentsUpdateOutput = z.infer<typeof EnvironmentSchema>;
-export type EnvironmentsDeleteInput = z.infer<typeof EnvParams>;
-export type EnvironmentsDeleteOutput = z.infer<typeof DeletedResponseSchema>;
 
 export type ClientKeyGetInput = z.infer<typeof EnvParams>;
 export type ClientKeyGetOutput = z.infer<typeof ClientKeySchema>;
@@ -288,11 +270,26 @@ export interface RouteTypeMap {
     output: AppAttentionRollupGetOutput;
   };
 
-  environments_list: { input: EnvironmentsListInput; output: EnvironmentsListOutput };
-  environments_create: { input: EnvironmentsCreateInput; output: EnvironmentsCreateOutput };
-  environments_get: { input: EnvironmentsGetInput; output: EnvironmentsGetOutput };
-  environments_update: { input: EnvironmentsUpdateInput; output: EnvironmentsUpdateOutput };
-  environments_delete: { input: EnvironmentsDeleteInput; output: EnvironmentsDeleteOutput };
+  environments_list: {
+    input: EnvironmentRoutes.EnvironmentsListInput;
+    output: EnvironmentRoutes.EnvironmentsListOutput;
+  };
+  environments_create: {
+    input: EnvironmentRoutes.EnvironmentsCreateInput;
+    output: EnvironmentRoutes.EnvironmentsCreateOutput;
+  };
+  environments_get: {
+    input: EnvironmentRoutes.EnvironmentsGetInput;
+    output: EnvironmentRoutes.EnvironmentsGetOutput;
+  };
+  environments_update: {
+    input: EnvironmentRoutes.EnvironmentsUpdateInput;
+    output: EnvironmentRoutes.EnvironmentsUpdateOutput;
+  };
+  environments_delete: {
+    input: EnvironmentRoutes.EnvironmentsDeleteInput;
+    output: EnvironmentRoutes.EnvironmentsDeleteOutput;
+  };
 
   approval_requests_list: {
     input: ApprovalRequestsListInput;
