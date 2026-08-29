@@ -14,7 +14,8 @@ export function formatFlagRead(operationId: string, payload: unknown, summary: b
   if (operationId === "flags_list") {
     const parsed = HydratedFlagListResponseSchema.safeParse(payload);
     if (!parsed.success) throw flagReadContractError(operationId, "hydrated");
-    return parsed.data.items.map(formatHydratedFlag).join("\n\n");
+    if (parsed.data.items.length === 0) return withListBound(EMPTY_CATALOG, parsed.data);
+    return withListBound(parsed.data.items.map(formatHydratedFlag).join("\n\n"), parsed.data);
   }
   const parsed = HydratedFlagResponseSchema.safeParse(payload);
   if (!parsed.success) throw flagReadContractError(operationId, "hydrated");
@@ -27,9 +28,28 @@ function formatFlagSummary(operationId: string, payload: unknown): string {
       ? FlagListResponseSchema.safeParse(payload)
       : FlagResponseSchema.safeParse(payload);
   if (!parsed.success) throw flagReadContractError(operationId, "summary");
-  return operationId === "flags_list"
-    ? formatFlagSummaryList((parsed.data as { items: SummaryFlag[] }).items)
-    : formatFlagSummaryList([parsed.data as SummaryFlag]);
+  if (operationId !== "flags_list") return formatFlagSummaryList([parsed.data as SummaryFlag]);
+  const list = parsed.data as ListBound & { items: SummaryFlag[] };
+  if (list.items.length === 0) return withListBound(EMPTY_CATALOG, list);
+  return withListBound(formatFlagSummaryList(list.items), list);
+}
+
+const EMPTY_CATALOG = "No Flags in this App.";
+
+interface ListBound {
+  readonly readLimit: number;
+  readonly readTruncated: boolean;
+}
+
+/**
+ * The Flag catalog read is bounded and is not paginable, so `readTruncated` is
+ * the only signal that `items` is a page rather than the catalog. `--json`
+ * carries it in the envelope; human output has to say it out loud or an
+ * operator reads a truncated list as complete.
+ */
+function withListBound(rendered: string, list: ListBound): string {
+  if (!list.readTruncated) return rendered;
+  return `${rendered}\n\nTruncated: this App holds more than ${list.readLimit} Flags; the newest ${list.readLimit} are shown.`;
 }
 
 export function assertHydratedFlagRead(operationId: string, payload: unknown): void {

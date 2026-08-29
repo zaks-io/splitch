@@ -10,7 +10,7 @@
  * - EXIT_SCOPE (3): CLI_SCOPE_UNRESOLVED, CLI_TOKEN_BINDING_REFUSED
  * - EXIT_API (4): control-plane ErrorResponse codes except SELECTOR_AMBIGUOUS,
  *   including INTERNAL_SERVER_ERROR for a server contract violation (and
- *   CLI_DATA_PLANE_ERROR_CODE_MISSING on the data-plane path)
+ *   CLI_SERVER_CODE_UNRECOGNIZED / CLI_DATA_PLANE_ERROR_CODE_MISSING on that path)
  * - EXIT_SELECTOR_AMBIGUOUS (5): SELECTOR_AMBIGUOUS, so scripts can distinguish an
  *   actionable choice from a missing resource
  */

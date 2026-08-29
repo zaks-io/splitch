@@ -125,7 +125,14 @@ function withFlagReadDefaults(
 ): Record<string, unknown> {
   if (operationId !== "flags_list" && operationId !== "flags_get") return input;
   const { summary, ...requestInput } = input;
-  if (summary === true) return requestInput;
+  if (summary === true) {
+    // `envs` is only accepted alongside `include=config`, so dropping `include`
+    // while keeping `envs` would hand the Worker a request it must reject. Both
+    // fields contradict `summary`; say so instead of silently picking a winner.
+    const conflict = ["include", "envs"].find((field) => requestInput[field] !== undefined);
+    if (conflict) throw new McpFlagReadUsageError(operationId, conflict);
+    return requestInput;
+  }
   if (requestInput.include !== undefined) return requestInput;
   if (
     operationId === "flags_list" &&
@@ -153,6 +160,27 @@ function assertHydratedFlagResult(
     return;
   }
   throw new McpFlagReadContractError(operationId);
+}
+
+/**
+ * `summary` is the compact-response opt-out, so pairing it with a hydration
+ * field is a contradiction the caller controls. It reaches the agent as the
+ * same typed `VALIDATION_ERROR` tool result the idempotency rule uses, naming
+ * the field to drop (SPL-266, ADR-0036).
+ */
+class McpFlagReadUsageError extends Error {
+  readonly errorResponse: Record<string, unknown>;
+
+  constructor(operationId: string, conflictingField: string) {
+    const detail = `${operationId} cannot combine summary with ${conflictingField}: drop ${conflictingField} for the compact response, or drop summary for complete Flag Configurations`;
+    super(detail);
+    this.name = "McpFlagReadUsageError";
+    this.errorResponse = {
+      code: "VALIDATION_ERROR",
+      message: detail,
+      details: { issues: [{ path: [conflictingField], message: "conflicts with summary" }] },
+    };
+  }
 }
 
 class McpFlagReadContractError extends Error {
@@ -220,6 +248,12 @@ function toolCallFailure(id: JsonRpcId, error: unknown, fault: McpToolCallFault)
         argument: error.argument,
         message: error.message,
       }),
+    );
+  }
+  if (error instanceof McpFlagReadUsageError) {
+    return recordToolResult(
+      fault.span,
+      jsonRpcResult(id, toolResult(error.errorResponse, { isError: true })),
     );
   }
   if (error instanceof McpFlagReadContractError) {

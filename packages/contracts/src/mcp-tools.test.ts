@@ -261,7 +261,9 @@ describe("mcp tools: derived input and output schemas", () => {
         envs: "env_prod",
       }).success,
     ).toBe(true);
-    expect(get?.description).toContain("running Experiment references by default");
+    expect(get?.description).toContain(
+      "running Experiment references for every Environment in the App by default",
+    );
 
     const update = tools.find((tool) => tool.name === "flags_update");
     const updateShape = objectShape(update?.inputSchema);

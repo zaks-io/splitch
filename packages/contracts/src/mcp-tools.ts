@@ -189,7 +189,7 @@ function deriveTool(route: ApiRouteContract): McpToolDefinition {
  */
 function toolDescription(route: ApiRouteContract): string {
   if (route.operationId === "flags_list" || route.operationId === "flags_get") {
-    return `${route.summary} Returns complete per-Environment Flag Configurations and running Experiment references by default; omit envs for every Environment in the App.`;
+    return `${route.summary} Returns complete per-Environment Flag Configurations and running Experiment references for every Environment in the App by default.`;
   }
   if (route.operationId === "flag_config_update") {
     return `${route.summary} ${KILL_SWITCH_OFF_EXEMPTION}`;

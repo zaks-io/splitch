@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { appMemberships, apps, environments, organizations, orgMemberships } from "../schema/index";
 import type { Db } from "./client";
+import { twoColumnIdBatches } from "./id-batches";
 import type { TenantScope } from "./scope";
 
 export interface AppSelectorCandidate {
@@ -57,24 +58,32 @@ export function makeIdentitySelectorReads(db: Db) {
         .orderBy(asc(environments.id));
     },
 
-    findEnvironmentSelectorCandidatesForSelectors(
+    /**
+     * Batched because D1 caps bound parameters per statement; see
+     * `twoColumnIdBatches` — each selector binds on both `id` and `key`.
+     */
+    async findEnvironmentSelectorCandidatesForSelectors(
       scope: TenantScope,
       selectors: readonly string[],
     ): Promise<EnvironmentSelectorCandidate[]> {
-      if (selectors.length === 0) return Promise.resolve([]);
-      return db
-        .select({
-          environmentId: environments.id,
-          environmentKey: environments.key,
-        })
-        .from(environments)
-        .where(
-          and(
-            eq(environments.appId, scope.appId),
-            or(inArray(environments.id, [...selectors]), inArray(environments.key, [...selectors])),
-          ),
-        )
-        .orderBy(asc(environments.id));
+      const batches = await Promise.all(
+        twoColumnIdBatches(selectors).map((batch) =>
+          db
+            .select({
+              environmentId: environments.id,
+              environmentKey: environments.key,
+            })
+            .from(environments)
+            .where(
+              and(
+                eq(environments.appId, scope.appId),
+                or(inArray(environments.id, [...batch]), inArray(environments.key, [...batch])),
+              ),
+            )
+            .orderBy(asc(environments.id)),
+        ),
+      );
+      return batches.flat();
     },
   };
 }

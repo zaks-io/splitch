@@ -251,3 +251,71 @@ describe("flags list --summary", () => {
     expect(transport.requests.filter((request) => request.url.includes("/flags"))).toHaveLength(1);
   });
 });
+
+describe("bounded Flag catalog in human output", () => {
+  it.each([
+    { args: ["flags", "list", "--app", "app_1"], page: hydratedPage, label: "hydrated" },
+    {
+      args: ["flags", "list", "--app", "app_1", "--summary"],
+      page: flagListPage,
+      label: "summary",
+    },
+  ])("says the catalog was truncated in $label output", async ({ args, page }) => {
+    const credentials = await credentialPath();
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => new URL(request.url).pathname === "/apps/app_1/flags",
+        status: 200,
+        body: { ...page, readTruncated: true },
+      },
+    ]);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const code = await runCli(args, { credentialPath: credentials, fetch: transport.fetch });
+
+    expect(code).toBe(EXIT_OK);
+    expect(log.mock.calls.join("\n")).toContain(
+      "Truncated: this App holds more than 200 Flags; the newest 200 are shown.",
+    );
+  });
+
+  it("stays silent about truncation when the catalog is complete", async () => {
+    const credentials = await credentialPath();
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => new URL(request.url).pathname === "/apps/app_1/flags",
+        status: 200,
+        body: hydratedPage,
+      },
+    ]);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const code = await runCli(["flags", "list", "--app", "app_1"], {
+      credentialPath: credentials,
+      fetch: transport.fetch,
+    });
+
+    expect(code).toBe(EXIT_OK);
+    expect(log.mock.calls.join("\n")).not.toContain("Truncated");
+  });
+
+  it("names an empty catalog instead of printing a blank line", async () => {
+    const credentials = await credentialPath();
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => new URL(request.url).pathname === "/apps/app_1/flags",
+        status: 200,
+        body: { ...hydratedPage, items: [] },
+      },
+    ]);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const code = await runCli(["flags", "list", "--app", "app_1"], {
+      credentialPath: credentials,
+      fetch: transport.fetch,
+    });
+
+    expect(code).toBe(EXIT_OK);
+    expect(log.mock.calls.join("\n")).toBe("No Flags in this App.");
+  });
+});

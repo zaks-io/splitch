@@ -1087,7 +1087,7 @@ Behavior:
 
 Example:
   splitch flags delete <flag-id-or-key> --json",
-    "flags get": "Get a Flag definition by canonical ID or key. Returns complete per-Environment Flag Configurations and running Experiment references by default; omit envs for every Environment in the App.
+    "flags get": "Get a Flag definition by canonical ID or key. Returns complete per-Environment Flag Configurations and running Experiment references for every Environment in the App by default.
 
 Usage:
   splitch flags get <flag-id-or-key> [flags]
@@ -1102,7 +1102,7 @@ Flags:
 
 Example:
   splitch flags get <flag-id-or-key> --json",
-    "flags list": "List Flag definitions in an App (bounded; reports its own truncation). Returns complete per-Environment Flag Configurations and running Experiment references by default; omit envs for every Environment in the App.
+    "flags list": "List Flag definitions in an App (bounded; reports its own truncation). Returns complete per-Environment Flag Configurations and running Experiment references for every Environment in the App by default.
 
 Usage:
   splitch flags list [flags]
@@ -1953,9 +1953,9 @@ Usage:
   splitch flags <action> [arguments] [flags]
 
 Commands:
-  list            List Flag definitions in an App (bounded; reports its own truncation). Returns complete per-Environment Flag Configurations and running Experiment references by default; omit envs for every Environment in the App.
+  list            List Flag definitions in an App (bounded; reports its own truncation). Returns complete per-Environment Flag Configurations and running Experiment references for every Environment in the App by default.
   create          Create a Flag definition (key, schema, Variant catalog).
-  get             Get a Flag definition by canonical ID or key. Returns complete per-Environment Flag Configurations and running Experiment references by default; omit envs for every Environment in the App.
+  get             Get a Flag definition by canonical ID or key. Returns complete per-Environment Flag Configurations and running Experiment references for every Environment in the App by default.
   update          Update a Flag definition's name/description/schema.
   delete          Delete a Flag (blocked if referenced by a running Experiment).
   promote         Promote selected Flag Configuration field-groups between Environments.
