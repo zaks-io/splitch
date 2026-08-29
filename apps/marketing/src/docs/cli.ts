@@ -124,6 +124,7 @@ export const cliDoc = {
         ["2", "Not authenticated, session expired, or email unverified."],
         ["3", "App or Environment scope unresolved, or the token refused the requested binding."],
         ["4", "The API refused the request; the `code` field names which failure."],
+        ["5", "An App or Environment matched multiple candidates; retry as listed."],
       ],
     },
     { kind: "heading", text: "Command reference" },

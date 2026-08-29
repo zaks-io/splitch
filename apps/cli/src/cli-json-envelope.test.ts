@@ -165,11 +165,10 @@ describe("CLI --json envelopes (SPL-451)", () => {
   it("flags get stays a bare Flag (no resource wrapper)", async () => {
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
-      flagsListStub({ flags: [{ id: flagRecord.id, key: flagRecord.key, name: flagRecord.name }] }),
       {
         match: (request) =>
           request.method === "GET" &&
-          new URL(request.url).pathname === `/apps/app_1/flags/${flagRecord.id}`,
+          new URL(request.url).pathname === `/apps/app_1/flags/${flagRecord.key}`,
         status: 200,
         body: flagRecord,
       },

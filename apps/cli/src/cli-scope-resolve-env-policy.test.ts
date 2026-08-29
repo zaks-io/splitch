@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/sdk/control-plane";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
-import { EXIT_OK, EXIT_SCOPE } from "./exit-codes.js";
+import { EXIT_API, EXIT_OK } from "./exit-codes.js";
 import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
-import { FakeCliTransport, storedCredential } from "./test-fixtures.js";
+import { FakeCliTransport, jsonError, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
 afterEach(async () => {
@@ -30,8 +30,8 @@ const environmentGetBody = {
   updatedAt: "2026-07-03T00:00:00.000Z",
 };
 
-describe("env-policy get --app/--env slug resolution", () => {
-  it("resolves --env prod against a config-stored App ID", async () => {
+describe("env-policy get server-side selector resolution", () => {
+  it("forwards --env prod with a config-stored App ID", async () => {
     const { dir, credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const configDir = join(dir, "project");
@@ -44,7 +44,7 @@ describe("env-policy get --app/--env slug resolution", () => {
       ...scopeResolutionStubs(),
       {
         match: (request) =>
-          request.method === "GET" && new URL(request.url).pathname === "/apps/app_1/envs/env_prod",
+          request.method === "GET" && new URL(request.url).pathname === "/apps/app_1/envs/prod",
         status: 200,
         body: environmentGetBody,
       },
@@ -61,19 +61,19 @@ describe("env-policy get --app/--env slug resolution", () => {
     expect(JSON.parse(log.mock.calls.join(""))).toEqual({ policy: envPolicy });
     expect(
       transport.requests.some(
-        (request) => new URL(request.url).pathname === "/apps/app_1/envs/env_prod",
+        (request) => new URL(request.url).pathname === "/apps/app_1/envs/prod",
       ),
     ).toBe(true);
   });
 
-  it("accepts an Environment slug and returns the policy for the resolved ID", async () => {
+  it("returns the server-resolved Environment policy", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
       {
         match: (request) =>
-          request.method === "GET" && new URL(request.url).pathname === "/apps/app_1/envs/env_prod",
+          request.method === "GET" && new URL(request.url).pathname === "/apps/app_1/envs/prod",
         status: 200,
         body: environmentGetBody,
       },
@@ -89,7 +89,7 @@ describe("env-policy get --app/--env slug resolution", () => {
     expect(JSON.parse(log.mock.calls.join(""))).toEqual({ policy: envPolicy });
     expect(
       transport.requests.some(
-        (request) => new URL(request.url).pathname === "/apps/app_1/envs/env_prod",
+        (request) => new URL(request.url).pathname === "/apps/app_1/envs/prod",
       ),
     ).toBe(true);
   });
@@ -158,10 +158,17 @@ describe("env-policy canonical selector recovery", () => {
     expect(request?.body).toEqual({ policy: envPolicy });
   });
 
-  it("fails with CLI_SCOPE_UNRESOLVED naming the unknown Environment slug", async () => {
+  it("lets the server refuse an unknown Environment", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
-    const transport = new FakeCliTransport([...scopeResolutionStubs()]);
+    const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
+      {
+        match: (request) => new URL(request.url).pathname === "/apps/app_1/envs/nosuch",
+        status: 404,
+        body: jsonError("APP_NOT_FOUND", "app not found"),
+      },
+    ]);
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const code = await runCli(
@@ -172,12 +179,10 @@ describe("env-policy canonical selector recovery", () => {
       },
     );
 
-    expect(code).toBe(EXIT_SCOPE);
+    expect(code).toBe(EXIT_API);
     const message = error.mock.calls.join(" ");
-    expect(message).toContain("CLI_SCOPE_UNRESOLVED");
-    expect(message).toContain("nosuch");
-    expect(message).toContain("app_1");
-    expect(message).not.toContain("APP_NOT_FOUND");
+    expect(message).toContain("APP_NOT_FOUND");
+    expect(message).not.toContain("CLI_SCOPE_UNRESOLVED");
   });
 
   it("states the kill-switch-off exemption when enabledState is confirm (SPL-312)", async () => {
@@ -193,7 +198,7 @@ describe("env-policy canonical selector recovery", () => {
       ...scopeResolutionStubs(),
       {
         match: (request) =>
-          request.method === "GET" && new URL(request.url).pathname === "/apps/app_1/envs/env_prod",
+          request.method === "GET" && new URL(request.url).pathname === "/apps/app_1/envs/prod",
         status: 200,
         body: { ...environmentGetBody, policy: confirmPolicy },
       },

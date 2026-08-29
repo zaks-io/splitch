@@ -1,8 +1,8 @@
 import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
-import { EXIT_API, EXIT_SCOPE } from "./exit-codes.js";
-import { flagsListStub, scopeResolutionStubs } from "./scope-resolution-fixtures.js";
+import { EXIT_API } from "./exit-codes.js";
+import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import { FakeCliTransport, jsonError, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
@@ -11,21 +11,19 @@ afterEach(async () => {
   await cleanupTempHomes();
 });
 
-const checkoutBannerFlags = [
-  {
-    id: "flag_checkout_banner",
-    key: "checkout-banner",
-    name: "Checkout banner",
-  },
-] as const;
-
 describe("flags get unresolved selectors", () => {
-  it("fails with CLI_SCOPE_UNRESOLVED when the catalog is complete and the key is missing", async () => {
+  it("lets the server return FLAG_NOT_FOUND for a missing key", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
-      flagsListStub({ flags: checkoutBannerFlags }),
+      {
+        match: (request) =>
+          request.method === "GET" &&
+          new URL(request.url).pathname === "/apps/app_1/flags/missing-banner",
+        status: 404,
+        body: jsonError("FLAG_NOT_FOUND", "flag not found"),
+      },
     ]);
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -34,17 +32,15 @@ describe("flags get unresolved selectors", () => {
       fetch: transport.fetch,
     });
 
-    expect(code).toBe(EXIT_SCOPE);
+    expect(code).toBe(EXIT_API);
     const message = error.mock.calls.join(" ");
-    expect(message).toContain("CLI_SCOPE_UNRESOLVED");
-    expect(message).toContain("missing-banner");
-    expect(message).toContain("app_1");
-    expect(message).not.toContain("FLAG_NOT_FOUND");
+    expect(message).toContain("FLAG_NOT_FOUND");
+    expect(message).not.toContain("CLI_SCOPE_UNRESOLVED");
     expect(
       transport.requests.some((request) =>
         new URL(request.url).pathname.includes("/flags/missing-banner"),
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("passes an id-shaped selector verbatim when the catalog is truncated", async () => {
@@ -52,11 +48,6 @@ describe("flags get unresolved selectors", () => {
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
-      flagsListStub({
-        flags: [{ id: "flag_other", key: "other-flag" }],
-        readTruncated: true,
-        readLimit: 200,
-      }),
       {
         match: (request) =>
           request.method === "GET" &&
@@ -90,11 +81,6 @@ describe("flags get unresolved selectors", () => {
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
-      flagsListStub({
-        flags: [{ id: "flag_other", key: "other-flag" }],
-        readTruncated: true,
-        readLimit: 200,
-      }),
       {
         match: (request) =>
           request.method === "GET" &&
