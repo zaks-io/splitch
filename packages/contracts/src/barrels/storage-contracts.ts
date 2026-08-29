@@ -3,6 +3,7 @@ export {
   apiKeyCacheKey,
   assignmentKey,
   clientKeyCacheKey,
+  controlPlaneFlagConfigKey,
   credentialRevocationCacheKey,
   eventDefinitionConfigKey,
   experimentConfigKey,

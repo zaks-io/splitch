@@ -2,7 +2,10 @@ import { flagConfigKey, runConfigKey } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeConfigStore } from "../src/config-store";
-import { startSeededExperiment } from "../src/config-store-fixture-data";
+import {
+  makeSnapshotRevisionCounter,
+  startSeededExperiment,
+} from "../src/config-store-fixture-data";
 import {
   type Harness,
   ids,
@@ -212,6 +215,7 @@ describe("published KV stays consistent with the frozen allocation", () => {
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: () => undefined },
+      nextSnapshotRevision: makeSnapshotRevisionCounter(),
       now: () => new Date(NOW_MS),
     });
     const synced = await store.syncExperimentConfig({

@@ -44,6 +44,7 @@ DeltaNudge {
   entity:  'flag' | 'experiment' | 'run' | 'segment'  // required
   id:      string                    // required — entity id
   version: number                    // required — monotonic version for self-edit skip
+  deleted?: true                    // explicit deletion; version is not a deletion sentinel
 }
 ```
 

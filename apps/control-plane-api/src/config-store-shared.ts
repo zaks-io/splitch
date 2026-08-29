@@ -14,6 +14,7 @@ import { parseFlagConfigEnvelope, writeSnapshot } from "./config-store-kv";
 import type {
   ApplyApprovedFlagConfigInput,
   ConfigStoreDeps,
+  ConfigStoreRuntimeDeps,
   FlagConfigResult,
   FlagConfigWriteResult,
   PatchFlagConfigInput,
@@ -28,6 +29,7 @@ import { requireResolvedTargetingRules, resolveTargetingRules } from "./targetin
 export type {
   ApplyApprovedFlagConfigInput,
   ConfigStoreDeps,
+  ConfigStoreRuntimeDeps,
   FlagConfigResult,
   FlagConfigWriteResult,
   PatchFlagConfigInput,
@@ -38,7 +40,7 @@ export type {
 };
 
 export async function readFlagSnapshot(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   scope: EnvScope,
   flagId: string,
 ): Promise<Snapshot | null> {
@@ -48,17 +50,40 @@ export async function readFlagSnapshot(
   const key = flagConfigKey(scope.appId, scope.environmentId, fromD1.flag.key);
   const raw = await deps.kv.get(key, "text");
   if (!raw) {
-    await writeSnapshot(deps.kv, scope, fromD1);
-    return fromD1;
+    return deps.snapshotMutations.run(async () => {
+      const repair = await buildSnapshotFromD1(deps.repo, scope, flagId);
+      if (!repair) return null;
+      await writeSnapshot(
+        deps.kv,
+        scope,
+        repair,
+        responseFromSnapshot(repair),
+        await deps.nextSnapshotRevision({ flagId, operation: "repair" }),
+      );
+      return repair;
+    });
   }
 
   try {
     return { ...fromD1, flag: parseFlagConfigEnvelope(raw) };
   } catch (cause) {
     deps.logger?.warn("config_store_kv_schema_mismatch", { key, cause });
-    await writeSnapshot(deps.kv, scope, fromD1);
-    return fromD1;
+    throw cause;
   }
+}
+
+export async function readFlagConfigPurgeTarget(
+  deps: ConfigStoreRuntimeDeps,
+  scope: EnvScope,
+  flagId: string,
+): Promise<{ experimentIds: string[] } | null> {
+  const [flag, experiments] = await Promise.all([
+    deps.repo.flags.getFlag(appScope(scope.appId), flagId),
+    deps.repo.experiments.listExperimentsForFlag(scope, flagId),
+  ]);
+  if (!flag) return null;
+
+  return { experimentIds: experiments.map((experiment) => experiment.id) };
 }
 
 export async function buildSnapshotFromD1(
@@ -154,18 +179,6 @@ export async function loadFlagConfigWriteContext(
   return { flag, config, variants };
 }
 
-export async function writeSnapshotAndBroadcast(
-  deps: ConfigStoreDeps,
-  scope: EnvScope,
-  flagId: string,
-  snapshot: Snapshot,
-): Promise<FlagConfigWriteResult> {
-  await writeSnapshot(deps.kv, scope, snapshot);
-  const result = flagConfigResult(flagId, snapshot);
-  await deps.broadcaster.broadcast(result.nudge);
-  return result;
-}
-
 /**
  * The same successful shape, for a write that turned out to change nothing: no
  * D1 row, no KV blob, no nudge. The `version` reported is the CURRENT one, which
@@ -182,7 +195,7 @@ export function flagConfigResult(
     id: flagId,
     version: snapshot.version,
   });
-  return { ok: true, config: responseFromSnapshot(snapshot), nudge };
+  return { ok: true, config: responseFromSnapshot(snapshot), nudge, snapshotRevision: null };
 }
 
 export function responseFromSnapshot(snapshot: Snapshot): FlagConfigResult {

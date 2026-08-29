@@ -2,77 +2,32 @@ import { DurableObject } from "cloudflare:workers";
 import {
   authorizesLiveUpdateConnection,
   type DeltaNudge,
-  type ExperimentConfigKV,
-  type FlagConfigKV,
   type LiveUpdateAuthorizationContext,
   type LiveUpdateConnectionContext,
   parseLiveUpdateConnectionContext,
-  type RunConfigKV,
 } from "@splitch/contracts";
 import { appScope, createRepository, envScope } from "@splitch/db";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
+import type { EvaluationFlagConfigRead, EvaluationFlagConfigSnapshot } from "./config-store-access";
 import { buildSnapshotFromD1 } from "./config-store-shared";
+import { makeDurableSnapshotRevisionAllocator } from "./config-store-snapshot-revision";
 import type { ControlPlaneApiEnv } from "./env";
 
-export interface ConfigStoreDurableObjectNamespace {
-  getByName(name: string): ConfigStoreDurableObjectStub;
-}
-
-interface ConfigStoreDurableObjectStub extends ConfigStoreWriter {
-  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
-  readFlagConfigForEvaluation(
-    input: EvaluationFlagConfigRead,
-  ): Promise<EvaluationFlagConfigSnapshot | null>;
-  setLiveUpdatesAvailable(available: boolean): Promise<void>;
-}
-
-export interface EvaluationFlagConfigRead {
-  appId: string;
-  environmentId: string;
-  flagKey: string;
-}
-
-export interface EvaluationFlagConfigSnapshot {
-  experiment: ExperimentConfigKV | null;
-  flag: FlagConfigKV;
-  run: RunConfigKV | null;
-  version: number;
-}
-
-interface ConfigStoreLiveUpdates {
-  connect(request: Request): Promise<Response>;
-}
-
-export interface ConfigStoreAccess {
-  writerFor(appId: string, environmentId: string): ConfigStoreWriter;
-  liveUpdatesFor(appId: string, environmentId: string): ConfigStoreLiveUpdates;
-}
-
-function configWriterName(appId: string, environmentId: string): string {
-  return `${appId}:${environmentId}`;
-}
-
-export function durableConfigStoreAccess(
-  namespace: ConfigStoreDurableObjectNamespace,
-): ConfigStoreAccess {
-  return {
-    writerFor(appId, environmentId) {
-      return namespace.getByName(configWriterName(appId, environmentId));
-    },
-    liveUpdatesFor(appId, environmentId) {
-      return {
-        connect(request) {
-          return namespace.getByName(configWriterName(appId, environmentId)).fetch(request);
-        },
-      };
-    },
-  };
-}
+// biome-ignore lint/performance/noBarrelFile: preserve the existing DO import surface while keeping the access seam in a small file
+export {
+  type ConfigStoreAccess,
+  type ConfigStoreDurableObjectNamespace,
+  durableConfigStoreAccess,
+  type EvaluationFlagConfigRead,
+  type EvaluationFlagConfigSnapshot,
+} from "./config-store-access";
 
 export class ConfigStoreDurableObject
   extends DurableObject<ControlPlaneApiEnv>
   implements ConfigStoreWriter
 {
+  #configStore: ConfigStoreWriter | undefined;
+
   async readFlagConfigForEvaluation(
     input: EvaluationFlagConfigRead,
   ): Promise<EvaluationFlagConfigSnapshot | null> {
@@ -98,6 +53,18 @@ export class ConfigStoreDurableObject
     input: Parameters<ConfigStoreWriter["readFlagConfig"]>[0],
   ): ReturnType<ConfigStoreWriter["readFlagConfig"]> {
     return this.store().readFlagConfig(input);
+  }
+
+  readFlagConfigPurgeTarget(
+    input: Parameters<ConfigStoreWriter["readFlagConfigPurgeTarget"]>[0],
+  ): ReturnType<ConfigStoreWriter["readFlagConfigPurgeTarget"]> {
+    return this.store().readFlagConfigPurgeTarget(input);
+  }
+
+  repairFlagConfigSnapshot(
+    input: Parameters<ConfigStoreWriter["repairFlagConfigSnapshot"]>[0],
+  ): ReturnType<ConfigStoreWriter["repairFlagConfigSnapshot"]> {
+    return this.store().repairFlagConfigSnapshot(input);
   }
 
   writeFlagConfig(
@@ -208,12 +175,14 @@ export class ConfigStoreDurableObject
   }
 
   private store(): ConfigStoreWriter {
-    return makeConfigStore({
+    this.#configStore ??= makeConfigStore({
       repo: createRepository(this.env.DB),
       kv: this.env.CONFIG_STORE,
       broadcaster: { broadcast: (nudge) => this.broadcast(nudge) },
+      nextSnapshotRevision: makeDurableSnapshotRevisionAllocator(this.ctx.storage),
       logger: console,
     });
+    return this.#configStore;
   }
 
   private broadcast(nudge: DeltaNudge): void {
@@ -267,6 +236,7 @@ export const LIVE_UPDATE_CONTEXT_HEADER = "x-splitch-live-update-context";
 const AUTHORIZATION_POLICY_CLOSE_CODE = 1008;
 
 const PANEL_SESSION_KEY_PREFIX = "session:";
+
 const SESSION_REVALIDATION_INTERVAL_MS = 60_000;
 const LIVE_UPDATES_AVAILABLE_KEY = "liveUpdatesAvailable";
 const SERVICE_RESTART_CLOSE_CODE = 1012;

@@ -70,6 +70,10 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
 
     findRunningExperimentsForFlag,
 
+    listExperimentsForFlag(scope: EnvScope, flagId: string) {
+      return experimentsTable.findMany(scope, eq(experiments.flagId, flagId));
+    },
+
     async findRunningExperimentForFlag(scope: EnvScope, flagId: string) {
       const rows = await findRunningExperimentsForFlag(scope, flagId);
       if (rows.length > 1) {

@@ -1,6 +1,7 @@
 import { appScope, createRepository, envScope } from "@splitch/db";
 import { expect } from "vitest";
 import { makeConfigStore } from "../src/config-store";
+import { makeSnapshotRevisionCounter } from "../src/config-store-fixture-data";
 import { makeFixtureSigner } from "../src/fixture-signer";
 import {
   type FlagDefinitionHarness,
@@ -55,14 +56,26 @@ export async function setup(): Promise<LifecycleHarness> {
 export function configStoreAccess(bindings: PoolBindingsWithConfig) {
   const repo = createRepository(bindings.d1);
   const nudges: unknown[] = [];
-  const store = makeConfigStore({
-    repo,
-    kv: bindings.configKv,
-    broadcaster: { broadcast: (nudge) => void nudges.push(nudge) },
-    now: () => new Date(Date.parse(NOW_ISO)),
-  });
+  const stores = new Map<string, ReturnType<typeof makeConfigStore>>();
+  const writerFor = (appId: string, environmentId: string) => {
+    const name = `${appId}:${environmentId}`;
+    let store = stores.get(name);
+    if (!store) {
+      store = makeConfigStore({
+        repo,
+        kv: bindings.configKv,
+        broadcaster: { broadcast: (nudge) => void nudges.push(nudge) },
+        nextSnapshotRevision: makeSnapshotRevisionCounter(),
+        now: () => new Date(Date.parse(NOW_ISO)),
+      });
+      stores.set(name, store);
+    }
+    return store;
+  };
   return {
-    writerFor: (_appId: string, _environmentId: string) => store,
+    readFlagConfig: (input: Parameters<ReturnType<typeof makeConfigStore>["readFlagConfig"]>[0]) =>
+      writerFor(input.appId, input.environmentId).readFlagConfig(input),
+    writerFor,
     liveUpdatesFor: () => ({
       connect: async () => new Response("test live updates unavailable", { status: 503 }),
     }),

@@ -1,16 +1,21 @@
-import { DeltaNudgeSchema } from "@splitch/contracts";
-import { appScope, type EnvScope, envScope } from "@splitch/db";
+import { type EnvScope, envScope } from "@splitch/db";
 import { applyApprovedFlagConfig } from "./config-store-approved-write";
+import { catchConfigStoreFailure } from "./config-store-failure";
 import { configPatchFreeze, targetingFreeze } from "./config-store-freeze";
-import { deleteFlagConfigSnapshot } from "./config-store-kv";
+import { makeConfigStoreMutationQueue } from "./config-store-mutation-queue";
 import { promoteFlagConfig } from "./config-store-mutations";
-import { replaceTargetingRules } from "./config-store-targeting-rules";
 import { previewSnapshotResult, previewTargetingRules } from "./config-store-preview";
 import {
+  type ExperimentConfigSyncInput,
+  resyncFlagConfig,
+  syncExperimentConfig,
+  writeFlagConfigSnapshot,
+} from "./config-store-snapshot-write";
+import {
   type ApplyApprovedFlagConfigInput,
-  buildExperimentSnapshotFromD1,
   buildSnapshotFromD1,
   type ConfigStoreDeps,
+  type ConfigStoreRuntimeDeps,
   type FlagConfigResult,
   type FlagConfigWriteResult,
   json,
@@ -19,14 +24,21 @@ import {
   type PatchFlagConfigInput,
   type PromoteFlagConfigInput,
   type PromoteFlagConfigResult,
+  readFlagConfigPurgeTarget,
   type ReplaceTargetingRulesInput,
   readFlagSnapshot,
   responseFromSnapshot,
   type Snapshot,
-  writeSnapshotAndBroadcast,
 } from "./config-store-shared";
+import {
+  deleteFlagConfigFromStore,
+  type FlagConfigDeleteInput,
+  type FlagConfigDeleteResult,
+  type FlagConfigResyncInput,
+  repairFlagConfigSnapshot,
+} from "./config-store-snapshot-maintenance";
+import { replaceTargetingRules } from "./config-store-targeting-rules";
 import { baselineIsUnresolvable, nextBaselineRollout } from "./flag-config-rollout";
-import { SegmentNotFoundError } from "./targeting-rule-resolution";
 
 export type { ConfigStoreDeps } from "./config-store-shared";
 
@@ -35,6 +47,20 @@ export interface ConfigStoreWriter {
     input: Omit<PatchFlagConfigInput, "actor" | "enabled" | "availableVariantNames">,
   ): Promise<
     | { ok: true; config: FlagConfigResult }
+    | { ok: false; reason: "FLAG_NOT_FOUND" }
+    | { ok: false; reason: "SEGMENT_NOT_FOUND"; missingSegmentIds: string[] }
+  >;
+  readFlagConfigPurgeTarget(
+    input: Omit<PatchFlagConfigInput, "actor" | "enabled" | "availableVariantNames">,
+  ): Promise<
+    | { ok: true; experimentIds: string[] }
+    | { ok: false; reason: "FLAG_NOT_FOUND" }
+    | { ok: false; reason: "SEGMENT_NOT_FOUND"; missingSegmentIds: string[] }
+  >;
+  repairFlagConfigSnapshot(
+    input: Omit<PatchFlagConfigInput, "actor" | "enabled" | "availableVariantNames">,
+  ): Promise<
+    | { ok: true; config: FlagConfigResult; snapshotRevision: number }
     | { ok: false; reason: "FLAG_NOT_FOUND" }
     | { ok: false; reason: "SEGMENT_NOT_FOUND"; missingSegmentIds: string[] }
   >;
@@ -62,145 +88,86 @@ export interface ConfigStoreWriter {
   deleteFlagConfig(input: FlagConfigDeleteInput): Promise<FlagConfigDeleteResult>;
 }
 
-interface FlagConfigDeleteInput {
-  appId: string;
-  environmentId: string;
-  flagId: string;
-  flagKey?: string;
-}
-
-type FlagConfigDeleteResult =
-  | { ok: true; nudge: import("@splitch/contracts").DeltaNudge }
-  | { ok: false; reason: "FLAG_NOT_FOUND" };
-
-interface ExperimentConfigSyncInput {
-  appId: string;
-  environmentId: string;
-  experimentId: string;
-}
-
-interface FlagConfigResyncInput {
-  appId: string;
-  environmentId: string;
-  flagId: string;
-}
-
 export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
+  const runtimeDeps: ConfigStoreRuntimeDeps = {
+    ...deps,
+    snapshotMutations: makeConfigStoreMutationQueue(),
+  };
   return {
     async readFlagConfig(input) {
-      return catchSegmentNotFound(async () => {
+      return catchConfigStoreFailure(runtimeDeps, async () => {
         const scope = envScope(input.appId, input.environmentId);
-        const snapshot = await readFlagSnapshot(deps, scope, input.flagId);
+        const snapshot = await readFlagSnapshot(runtimeDeps, scope, input.flagId);
         if (!snapshot) return { ok: false as const, reason: "FLAG_NOT_FOUND" as const };
         return { ok: true as const, config: responseFromSnapshot(snapshot) };
       });
     },
 
+    async readFlagConfigPurgeTarget(input) {
+      return catchConfigStoreFailure(runtimeDeps, async () => {
+        const scope = envScope(input.appId, input.environmentId);
+        const target = await readFlagConfigPurgeTarget(runtimeDeps, scope, input.flagId);
+        if (!target) return { ok: false as const, reason: "FLAG_NOT_FOUND" as const };
+        return { ok: true as const, experimentIds: target.experimentIds };
+      });
+    },
+
+    async repairFlagConfigSnapshot(input) {
+      return catchConfigStoreFailure(runtimeDeps, () =>
+        repairFlagConfigSnapshot(runtimeDeps, input),
+      );
+    },
+
     async writeFlagConfig(input) {
-      return catchSegmentNotFound(() => writeFlagConfig(deps, input));
+      return catchConfigStoreFailure(runtimeDeps, () => writeFlagConfig(runtimeDeps, input));
     },
 
     async replaceTargetingRules(input) {
-      return catchSegmentNotFound(() => replaceTargetingRules(deps, input));
+      return catchConfigStoreFailure(runtimeDeps, () => replaceTargetingRules(runtimeDeps, input));
     },
 
     async promoteFlagConfig(input) {
-      return promoteFlagConfig(deps, input);
+      return catchConfigStoreFailure(runtimeDeps, () => promoteFlagConfig(runtimeDeps, input));
     },
 
     async previewFlagConfig(input) {
-      return catchSegmentNotFound(() => previewFlagConfig(deps, input));
+      return catchConfigStoreFailure(runtimeDeps, () => previewFlagConfig(runtimeDeps, input));
     },
 
     async previewTargetingRules(input) {
-      return catchSegmentNotFound(() => previewTargetingRules(deps, input));
+      return catchConfigStoreFailure(runtimeDeps, () => previewTargetingRules(runtimeDeps, input));
     },
 
     async previewPromotion(input) {
-      return promoteFlagConfig(deps, { ...input, preview: true });
+      return catchConfigStoreFailure(runtimeDeps, () =>
+        promoteFlagConfig(runtimeDeps, { ...input, preview: true }),
+      );
     },
 
     async applyApprovedFlagConfig(input) {
-      return catchSegmentNotFound(() => applyApprovedFlagConfig(deps, input));
+      return catchConfigStoreFailure(runtimeDeps, () =>
+        applyApprovedFlagConfig(runtimeDeps, input),
+      );
     },
 
     async syncExperimentConfig(input) {
-      return catchSegmentNotFound(() => syncExperimentConfig(deps, input));
+      return syncExperimentConfig(runtimeDeps, input);
     },
 
     async resyncFlagConfig(input) {
-      const frozen = await targetingFreeze(deps, input);
+      const frozen = await targetingFreeze(runtimeDeps, input);
       if (frozen) return frozen;
-      return resyncFromD1(deps, input);
+      return resyncFlagConfig(runtimeDeps, input);
     },
 
     async deleteFlagConfig(input) {
-      return deleteFlagConfigFromStore(deps, input);
+      return deleteFlagConfigFromStore(runtimeDeps, input);
     },
   };
 }
 
-async function resyncFromD1(deps: ConfigStoreDeps, input: FlagConfigResyncInput) {
-  return catchSegmentNotFound(async () => {
-    const scope = envScope(input.appId, input.environmentId);
-    const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
-    if (!snapshot) return { ok: false as const, reason: "FLAG_NOT_FOUND" as const };
-    return writeSnapshotAndBroadcast(deps, scope, snapshot.flag.id, snapshot);
-  });
-}
-
-async function catchSegmentNotFound<T>(operation: () => Promise<T>) {
-  try {
-    return await operation();
-  } catch (cause) {
-    if (cause instanceof SegmentNotFoundError) {
-      return {
-        ok: false as const,
-        reason: "SEGMENT_NOT_FOUND" as const,
-        missingSegmentIds: cause.missingSegmentIds,
-      };
-    }
-    throw cause;
-  }
-}
-
-async function deleteFlagConfigFromStore(
-  deps: ConfigStoreDeps,
-  input: FlagConfigDeleteInput,
-): Promise<FlagConfigDeleteResult> {
-  const scope = envScope(input.appId, input.environmentId);
-  const flag =
-    (input.flagKey
-      ? { key: input.flagKey }
-      : await deps.repo.flags.getFlag(appScope(input.appId), input.flagId)) ?? null;
-  if (!flag) return { ok: false, reason: "FLAG_NOT_FOUND" };
-
-  const existing = await readFlagSnapshot(deps, scope, input.flagId);
-  const experimentId = existing?.flag.experimentId ?? null;
-  await deleteFlagConfigSnapshot(deps.kv, scope, flag.key, experimentId);
-
-  const nudge = DeltaNudgeSchema.parse({
-    type: "config.changed",
-    entity: "flag",
-    id: input.flagId,
-    version: 0,
-  });
-  await deps.broadcaster.broadcast(nudge);
-  return { ok: true, nudge };
-}
-
-async function syncExperimentConfig(
-  deps: ConfigStoreDeps,
-  input: ExperimentConfigSyncInput,
-): Promise<FlagConfigWriteResult> {
-  const scope = envScope(input.appId, input.environmentId);
-  const snapshot = await buildExperimentSnapshotFromD1(deps.repo, scope, input.experimentId);
-  if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  return writeSnapshotAndBroadcast(deps, scope, snapshot.flag.id, snapshot);
-}
-
 async function writeFlagConfig(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: PatchFlagConfigInput,
 ): Promise<FlagConfigWriteResult> {
   const frozen = await configPatchFreeze(deps, input);
@@ -246,13 +213,13 @@ async function writeFlagConfig(
     return { ok: false, reason: "ROLLOUT_AMBIGUOUS", availableVariantNames: available };
   }
 
-  const commit = await commitFlagConfigPatch(deps, scope, input, snapshot);
-  if (!commit) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  return writeSnapshotAndBroadcast(deps, scope, input.flagId, commit);
+  const committed = await commitFlagConfigPatch(deps, scope, input, snapshot);
+  if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
+  return writeFlagConfigSnapshot(deps, scope, input.flagId);
 }
 
 async function previewFlagConfig(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: PatchFlagConfigInput,
 ): Promise<FlagConfigWriteResult> {
   // The preview is what the Policy gate turns into an Approval Request, so it is
@@ -315,11 +282,11 @@ function validateFlagConfigPatch(
 }
 
 async function commitFlagConfigPatch(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   scope: EnvScope,
   input: PatchFlagConfigInput,
   current: Snapshot,
-): Promise<Snapshot | null> {
+): Promise<boolean> {
   // Resolved against the CURRENT stored rollout so an existing salt survives a
   // percentage change (see flag-config-rollout.ts); `undefined` leaves it alone.
   const rollout = nextBaselineRollout(current.flag.rollout, input.rollout);
@@ -338,5 +305,5 @@ async function commitFlagConfigPatch(
     },
     input.approval,
   );
-  return updated ? buildSnapshotFromD1(deps.repo, scope, input.flagId) : null;
+  return updated !== null;
 }

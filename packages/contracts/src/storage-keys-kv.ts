@@ -18,6 +18,15 @@ export function flagConfigKey(appId: string, environmentId: string, flagKey: str
   return `app:${appId}:${environmentId}:flag:${flagKey}`;
 }
 
+/** `app:{appId}:{environmentId}:control-plane-flag-config:{flagId}` — control-plane Flag Configuration read. */
+export function controlPlaneFlagConfigKey(
+  appId: string,
+  environmentId: string,
+  flagId: string,
+): string {
+  return `app:${appId}:${environmentId}:control-plane-flag-config:${flagId}`;
+}
+
 /** `app:{appId}:{environmentId}:run:{runId}` — hot-path RunConfigKV read. */
 export function runConfigKey(appId: string, environmentId: string, runId: string): string {
   return `app:${appId}:${environmentId}:run:${runId}`;
