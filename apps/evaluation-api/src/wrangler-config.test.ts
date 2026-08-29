@@ -107,8 +107,8 @@ describe("Evaluation Worker service bindings", () => {
       ),
     ).toBe(false);
     const worker = readFileSync(fileURLToPath(new URL("./index.ts", import.meta.url)), "utf8");
-    expect(worker).toContain("AssignmentStoreDurableObjectV2");
-    expect(worker).not.toMatch(/\bAssignmentStoreDurableObject\b/u);
+    expect(worker).toMatch(/^\s*AssignmentStoreDurableObjectV2,$/mu);
+    expect(worker).toMatch(/^\s*AssignmentStoreDurableObject,$/mu);
   });
 
   /**
