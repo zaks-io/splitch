@@ -129,6 +129,10 @@
       "inputs": ["docs/spec/**", "scripts/spec-lint.mjs"],
       "outputs": []
     },
+    "//#docs:lint": {
+      "inputs": ["$TURBO_DEFAULT$"],
+      "outputs": []
+    },
     "//#check:cli-mcp-parity": {
       "dependsOn": ["@splitch/sdk#build"],
       "inputs": [

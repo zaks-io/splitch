@@ -168,7 +168,7 @@ async function executeCommand(
     input = buildOperationInput(scopedCommand, invocation, context);
     assertPathParamsPresent(scopedCommand, input);
   } catch (error) {
-    return handleInputError(error, invocation, io);
+    return handleInputError(error, io);
   }
   const outputFile = invocation.flags.outputFile;
   return executeApiOperation(
@@ -264,7 +264,7 @@ function validateRequiredPositionals(
     const conflict = conflictingSuppliedPositional(command, invocation);
     if (conflict) {
       writeCliError(io, excessPositionalError(conflict));
-      io.log(`Usage:\n  ${commandUsageLine(command)}`);
+      writeUsageUnlessJson(io, command);
       return { exitCode: EXIT_USAGE };
     }
     const missing = missingRequiredPositional(command, invocation);
@@ -272,22 +272,33 @@ function validateRequiredPositionals(
       return null;
     }
     writeCliError(io, missingPositionalError(missing));
-    io.log(`Usage:\n  ${commandUsageLine(command)}`);
+    writeUsageUnlessJson(io, command);
     return { exitCode: EXIT_USAGE };
   } catch (error) {
     // Malformed --body-json throws from the gate's JSON parse.
     if (error instanceof SplitchCliError) {
       writeCliError(io, error);
-      io.log(`Usage:\n  ${commandUsageLine(command)}`);
+      writeUsageUnlessJson(io, command);
       return { exitCode: EXIT_USAGE };
     }
     throw error;
   }
 }
 
-function handleInputError(error: unknown, invocation: ParsedInvocation, io: CliIo): CliResult {
+/**
+ * Under `--json` stdout carries the one failure object and nothing else; the
+ * usage line appended after it made the combined stream unparseable by `jq`
+ * (the same rule `cli.ts` applies to the root usage block).
+ */
+function writeUsageUnlessJson(io: CliIo, command: CliCommandDefinition): void {
+  if (io.json) return;
+  io.log(`Usage:\n  ${commandUsageLine(command)}`);
+}
+
+function handleInputError(error: unknown, io: CliIo): CliResult {
   if (error instanceof CliInputError) {
-    emit(io, invocation.flags.json, error.payload);
+    // The offending field rides `details` on the one error object rather than a
+    // second JSON document on stdout, so `--json` stays a single parseable value.
     writeCliError(io, error);
     return { exitCode: EXIT_USAGE, payload: error.payload };
   }

@@ -25,7 +25,7 @@ export const Route = createFileRoute("/docs/error/$code")({
         if (code === null) return next();
         if (!isDocumentedErrorCode(code)) {
           return markdownNotFound(
-            `"${code}" is not a splitch error code. Full index: ${DOCS_ORIGIN}/llms.txt`,
+            `"${code}" is not a splitch error code. Full index: ${DOCS_ORIGIN}${docsPath.errorsMarkdown()}`,
           );
         }
         return markdownResponse(errorMarkdown(code));
@@ -47,8 +47,9 @@ export const Route = createFileRoute("/docs/error/$code")({
       : {},
   notFoundComponent: () => (
     <DocNotFound
+      body="Every code the API, SDK, and CLI can emit has a page. If a shipped build printed this one, it is newer than this site: check the catalog for the closest match."
+      secondary={{ href: docsPath.errors(), label: "Error catalog" }}
       title="No such error code"
-      body="Every code the API, SDK, and CLI can emit has a page. If a shipped build printed this one, it is newer than this site: check the machine-readable index."
     />
   ),
   component: ErrorCodeRoute,

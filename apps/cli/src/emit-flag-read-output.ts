@@ -1,3 +1,4 @@
+import { cliCommandPath } from "@splitch/sdk/control-plane";
 import { emit } from "./execute-io.js";
 import type { CliIo } from "./execute-types.js";
 import {
@@ -5,6 +6,7 @@ import {
   assertHydratedPrincipalFlagRead,
   formatFlagRead,
 } from "./format-flag-read.js";
+import { humanizeLabel } from "./format-payload.js";
 import { formatPrincipalFlags } from "./format-principal-flags.js";
 import type { ParsedInvocation } from "./parse-args.js";
 
@@ -14,6 +16,16 @@ import type { ParsedInvocation } from "./parse-args.js";
  * code lines); the Flag reads are the only operations whose output shape
  * depends on more than `--json`.
  */
+
+/**
+ * The plural the empty and truncated notices name, taken from the command's own
+ * resource group so `splitch api-keys list` reports "No API Keys found." rather
+ * than a generic noun the operator has to map back to what they asked for.
+ */
+function resourceNoun(operationId: string): string {
+  const group = cliCommandPath(operationId)[0];
+  return group ? humanizeLabel(group) : "Results";
+}
 
 export function emitApiOutput(
   io: CliIo,
@@ -26,7 +38,7 @@ export function emitApiOutput(
     return;
   }
   if (operationId !== "flags_list" && operationId !== "flags_get") {
-    emit(io, invocation.flags.json, payload);
+    emit(io, invocation.flags.json, payload, resourceNoun(operationId));
     return;
   }
   if (invocation.flags.json) {
@@ -45,5 +57,5 @@ function emitPrincipalFlagOutput(io: CliIo, payload: unknown, invocation: Parsed
   }
   const groupedFlags = formatPrincipalFlags(payload);
   if (groupedFlags) io.log(groupedFlags);
-  else emit(io, false, payload);
+  else emit(io, false, payload, resourceNoun("principal_flags_list"));
 }

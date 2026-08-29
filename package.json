@@ -4,6 +4,13 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.8.0",
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=24",
+      "onFail": "error"
+    }
+  },
   "scripts": {
     "build": "turbo run build",
     "check:cli-mcp-parity": "pnpm --filter @splitch/cli exec tsx ../../scripts/check-cli-mcp-parity.ts",
@@ -13,6 +20,7 @@
     "d1:migrate:populated": "node scripts/check-d1-populated.mjs",
     "dev": "turbo run dev --parallel",
     "dev:api": "turbo run dev --parallel --filter=@splitch/analysis-api --filter=@splitch/auth-api --filter=@splitch/control-plane-api --filter=@splitch/evaluation-api --filter=@splitch/event-ingest-api --filter=@splitch/mcp-server",
+    "docs:lint": "node scripts/docs-link-lint.mjs",
     "duplicates": "jscpd --config .jscpd.json --exit-code --no-tips --no-colors apps packages scripts",
     "format:check": "biome format . && prettier --check \"**/*.md\"",
     "format:write": "biome format --write . && prettier --write \"**/*.md\"",
@@ -86,7 +94,7 @@
     "workers:secrets:production": "node scripts/sync-worker-secrets.mjs production",
     "workers:secrets:shared-preview": "node scripts/sync-worker-secrets.mjs shared-preview",
     "typecheck": "turbo run typecheck",
-    "verify:ci": "turbo run //#depcruise //#knip //#format:check //#spec:lint //#check:cli-mcp-parity //#test:scripts lint typecheck test test:connect-snippet stats:golden stats:property build",
+    "verify:ci": "turbo run //#depcruise //#knip //#format:check //#spec:lint //#docs:lint //#check:cli-mcp-parity //#test:scripts lint typecheck test test:connect-snippet stats:golden stats:property build",
     "verify:commit": "turbo run //#knip //#format:check //#secrets:staged lint typecheck",
     "verify:push": "turbo run //#knip //#format:check //#secrets:range //#tinybird:local //#d1:migrate:local //#d1:migrate:populated lint typecheck"
   },

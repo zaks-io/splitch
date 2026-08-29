@@ -62,11 +62,14 @@ Security is an enforced product contract here, not an afterthought. See
 [`docs/spec/platform/security-model.md`](docs/spec/platform/security-model.md)
 for the trust boundaries and threat model.
 
-> **Enforcement status.** The platform is built and shipping, but the dependency, CVE, and SAST
-> battery is still **parked behind manual dispatch** pending a one-time audit of the final
-> dependency set. Re-enabling it is a single explicit lockdown milestone and a launch prerequisite,
-> not an incremental per-PR effort ([ADR-0035](docs/adr/0035-security-automation-and-supply-chain-integrity-are-an-enforced-ci-contract.md)).
-> What runs today and what does not is listed below in full, so nobody has to infer it from a badge.
+> **Enforcement status.** The dependency, CVE, and SAST battery now runs **daily and reports**: a
+> finding opens a deduped tracking issue rather than blocking a merge. Making those same scans
+> _gate_ a pull request is still one explicit lockdown milestone and a launch prerequisite, pending
+> a one-time audit of the final dependency set
+> ([ADR-0035](docs/adr/0035-security-automation-and-supply-chain-integrity-are-an-enforced-ci-contract.md)).
+> Until then a transitive advisory unrelated to a branch would block that branch, which trains
+> people to bypass the gate. What runs today and what does not is listed below in full, so nobody
+> has to infer it from a badge.
 
 ### Enforced on every pull request and push to `main`
 
@@ -80,18 +83,29 @@ for the trust boundaries and threat model.
   requests for npm and GitHub Actions.
 - **Private disclosure** — GitHub Private Vulnerability Reporting is enabled on this repository.
 
+### Scanned daily, reported but not gating
+
+`.github/workflows/security.yml` runs at 08:23 UTC every day. Results upload to the
+[Security tab](../../security/code-scanning) as SARIF, and any failure opens or updates a single
+deduped GitHub issue that the GitHub↔Linear sync mirrors into the Splitch team. None of these block
+a merge; the same jobs already carry the gating branches for when the lockdown milestone lands.
+
+- **SAST** — Semgrep with the OSS default ruleset plus repo-local rules for splitch-specific
+  invariants in `.semgrep/`.
+- **Dependency and CVE scanning** — OSV-Scanner across the workspace, plus a Trivy filesystem scan
+  for HIGH and CRITICAL.
+- **Posture** — OpenSSF Scorecard, published so the badge fills in.
+
 ### Configured but not yet enforcing
 
 Each of these is written, SHA-pinned, and runnable today via **Run workflow** on the Actions tab, or
 locally with `pnpm security:full`. None of them run on a schedule or gate a merge yet.
 
-- **SAST** — CodeQL (security-extended) in `.github/workflows/codeql.yml`; Semgrep, including
-  repo-local rules for splitch-specific invariants in `.semgrep/`, in `.github/workflows/security.yml`.
-- **Dependency and CVE scanning** — OSV-Scanner and `pnpm audit`, plus a Trivy filesystem scan, in
-  `.github/workflows/security.yml`.
-- **Posture** — OpenSSF Scorecard, and the alert job that opens a deduped tracking issue when any
-  scan flips, both in `.github/workflows/security.yml`. Because Scorecard has not published a run,
-  the Scorecard badge is currently blank.
+- **CodeQL** — security-extended in `.github/workflows/codeql.yml`, dispatch-only. It is the
+  slowest scan in the battery and overlaps Semgrep's coverage, so it waits for the lockdown pass
+  rather than running nightly alongside it.
+- **`pnpm audit`** — wired into the daily workflow but gated to `pull_request`/`push`, so it is
+  inert until those triggers turn on. OSV-Scanner covers the same lockfile in the meantime.
 - **Install-time supply-chain quarantine** — `minimumReleaseAge` and `blockExoticSubdeps` are
   present but commented out in `pnpm-workspace.yaml`.
 - **SHA-pin verification** — `pnpm pins:check` (pinact) verifies the pins by hand; it is not wired

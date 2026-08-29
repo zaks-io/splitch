@@ -2,7 +2,7 @@ import { cliClientErrorCodes } from "@splitch/cli";
 import { errorCodes } from "@splitch/contracts";
 import { resolveErrorDocsUrl, sdkClientErrorCodes } from "@splitch/sdk";
 import { describe, expect, it } from "vitest";
-import { errorMarkdown } from "../markdown";
+import { errorIndexMarkdown, errorMarkdown, llmsTxt } from "../markdown";
 import { DOCS_ORIGIN, docsPath } from "../site";
 import {
   documentedErrorCodes,
@@ -94,6 +94,31 @@ describe("error catalog", () => {
     }
     for (const code of cliClientErrorCodes) {
       expect(errorMarkdown(code), code).not.toContain("## Remediation");
+    }
+  });
+
+  it("lists every code on the error index page, grouped by surface", () => {
+    const markdown = errorIndexMarkdown();
+    for (const code of documentedErrorCodes) {
+      expect(markdown, code).toContain(
+        `- [${code}](${DOCS_ORIGIN}${docsPath.errorCodeMarkdown(code)}): `,
+      );
+    }
+    for (const heading of ["## API", "## SDK", "## CLI"]) {
+      expect(markdown).toContain(heading);
+    }
+  });
+
+  /**
+   * llms.txt is read on every task and the catalog only when something failed.
+   * Inlining 80-odd causes there made the entry point mostly error copy, so it
+   * links the index instead.
+   */
+  it("links the error index from llms.txt without inlining the catalog", () => {
+    const index = llmsTxt();
+    expect(index).toContain(`${DOCS_ORIGIN}${docsPath.errorsMarkdown()}`);
+    for (const code of documentedErrorCodes) {
+      expect(index, code).not.toContain(code);
     }
   });
 

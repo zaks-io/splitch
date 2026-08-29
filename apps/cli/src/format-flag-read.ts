@@ -7,6 +7,7 @@ import {
   HydratedPrincipalFlagListResponseSchema,
 } from "@splitch/sdk/control-plane";
 import { SplitchCliError } from "./errors.js";
+import { cellValue, formatTable, truncationNotice } from "./format-payload.js";
 
 export function formatFlagRead(operationId: string, payload: unknown, summary: boolean): string {
   if (summary) {
@@ -35,7 +36,7 @@ function formatFlagSummary(operationId: string, payload: unknown): string {
   return withListBound(formatFlagSummaryList(list.items), list);
 }
 
-const EMPTY_CATALOG = "No Flags in this App.";
+const EMPTY_CATALOG = "No Flags found.";
 
 interface ListBound {
   readonly readLimit: number;
@@ -50,7 +51,7 @@ interface ListBound {
  */
 function withListBound(rendered: string, list: ListBound): string {
   if (!list.readTruncated) return rendered;
-  return `${rendered}\n\nTruncated: this App holds more than ${list.readLimit} Flags; the newest ${list.readLimit} are shown.`;
+  return `${rendered}\n\n${truncationNotice(list.readLimit, "Flags")}`;
 }
 
 export function assertHydratedFlagRead(operationId: string, payload: unknown): void {
@@ -92,9 +93,9 @@ function formatFlagSummaryList(flags: readonly SummaryFlag[]): string {
       flag.id,
       flag.key,
       flag.name,
-      reported(flag.flagConfiguration?.enabled),
-      reported(flag.flagConfiguration?.rollout),
-      reported(flag.flagConfiguration?.defaultVariant),
+      cellValue(flag.flagConfiguration?.enabled),
+      cellValue(flag.flagConfiguration?.rollout),
+      cellValue(flag.flagConfiguration?.defaultVariant),
     ]),
   );
 }
@@ -106,7 +107,9 @@ function formatHydratedFlag(flag: HydratedFlagResponse): string {
     `App: ${flag.appId}`,
     `Key: ${flag.key}`,
     ...(flag.description === undefined ? [] : [`Description: ${flag.description}`]),
-    `Schema: ${reported(flag.schema)}`,
+    // The Flag schema is a JSON Schema document, so its compact JSON is the
+    // value rather than a stand-in for one.
+    `Schema: ${flag.schema === null ? "(none)" : JSON.stringify(flag.schema)}`,
     `Default Variant ID: ${flag.defaultVariantId}`,
     `Created: ${flag.createdAt}`,
     `Updated: ${flag.updatedAt}`,
@@ -116,8 +119,8 @@ function formatHydratedFlag(flag: HydratedFlagResponse): string {
     flag.variants.map((variant) => [
       variant.id,
       variant.name,
-      reported(variant.value),
-      reported(variant.description),
+      cellValue(variant.value),
+      cellValue(variant.description),
     ]),
   );
   const configurations = flag.configurations.map(formatConfiguration).join("\n\n");
@@ -127,26 +130,51 @@ function formatHydratedFlag(flag: HydratedFlagResponse): string {
 function formatConfiguration(
   configuration: HydratedFlagResponse["configurations"][number],
 ): string {
-  const targetingRules = formatTable(
-    ["RULE ID", "PRIORITY", "CONDITIONS", "VARIANT ID", "SEGMENT ID", "ROLLOUT"],
-    configuration.targetingRules.map((rule) => [
-      rule.id,
-      reported(rule.priority),
-      reported(rule.conditions),
-      rule.variantId,
-      reported(rule.segmentId),
-      reported(rule.percentageRollout),
-    ]),
-  );
   return [
     `Environment: ${configuration.environmentId}`,
-    `Enabled: ${reported(configuration.enabled)}`,
-    `Available Variants: ${reported(configuration.availableVariantNames)}`,
-    `Rollout: ${reported(configuration.rollout)}`,
-    `Experiment: ${reported(configuration.experiment)}`,
-    "Targeting Rules",
-    targetingRules,
+    `Enabled: ${configuration.enabled}`,
+    `Available Variants: ${nameList(configuration.availableVariantNames)}`,
+    `Rollout: ${formatRollout(configuration.rollout)}`,
+    `Experiment: ${formatExperimentRef(configuration.experiment)}`,
+    ...formatTargetingRules(configuration.targetingRules),
   ].join("\n");
+}
+
+/**
+ * A bare header row over no rows reads as a rendering failure, so an
+ * Environment with no rules says so on the label line instead.
+ */
+function formatTargetingRules(
+  rules: HydratedFlagResponse["configurations"][number]["targetingRules"],
+): string[] {
+  if (rules.length === 0) return ["Targeting Rules: (none)"];
+  return [
+    "Targeting Rules",
+    formatTable(
+      ["RULE ID", "PRIORITY", "CONDITIONS", "VARIANT ID", "SEGMENT ID", "ROLLOUT"],
+      rules.map((rule) => [
+        rule.id,
+        cellValue(rule.priority),
+        // Conditions are a predicate tree; their JSON is the readable form.
+        cellValue(rule.conditions),
+        rule.variantId,
+        cellValue(rule.segmentId),
+        cellValue(rule.percentageRollout),
+      ]),
+    ),
+  ];
+}
+
+function nameList(names: readonly string[]): string {
+  return names.length === 0 ? "(none)" : names.join(", ");
+}
+
+function formatRollout(rollout: { percentage: number; salt: string } | null): string {
+  return rollout === null ? "(none)" : `${rollout.percentage}% (salt ${rollout.salt})`;
+}
+
+function formatExperimentRef(experiment: { id: string; key: string } | null): string {
+  return experiment === null ? "(none)" : `${experiment.key} (${experiment.id})`;
 }
 
 interface SummaryFlag {
@@ -158,24 +186,4 @@ interface SummaryFlag {
     readonly rollout: number | null;
     readonly defaultVariant: string;
   };
-}
-
-function reported(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value === undefined) return "";
-  return JSON.stringify(value);
-}
-
-function formatTable(headers: readonly string[], rows: readonly (readonly string[])[]): string {
-  const widths = headers.map((header, index) =>
-    Math.max(header.length, ...rows.map((row) => row[index]?.length ?? 0)),
-  );
-  return [headers, ...rows]
-    .map((row) =>
-      row
-        .map((cell, index) => cell.padEnd(widths[index] ?? 0))
-        .join("  ")
-        .trimEnd(),
-    )
-    .join("\n");
 }

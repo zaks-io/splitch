@@ -93,7 +93,8 @@ export async function executeFlagsVerify(
       operationBinding({ appId: context.appId }),
     );
     if (!clientKeyResult.ok) {
-      emit(io, invocation.flags.json, clientKeyResult.error);
+      // `writeServerError` owns both channels; emitting the raw wire error here
+      // too would put a second JSON document on the same `--json` stdout.
       writeServerError(io, clientKeyResult.error, "client_key_get", invocation);
       return {
         exitCode: exitCodeForServerError(clientKeyResult.error),

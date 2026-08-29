@@ -155,7 +155,7 @@ export const failuresTopic: SdkTopic = {
     },
     {
       kind: "prose",
-      text: "The full catalog is at [/docs/error](/docs#errors), and the machine-readable index is at [/llms.txt](/llms.txt).",
+      text: "The full catalog is at [/docs/errors](/docs/errors), and the machine-readable index is at [/llms.txt](/llms.txt).",
     },
   ],
 };

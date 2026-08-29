@@ -86,7 +86,7 @@ describe("hydrated Flag reads", () => {
       ID: flag_checkout
       App: app_local
       Key: checkout
-      Schema: null
+      Schema: (none)
       Default Variant ID: var_on
       Created: 2026-07-03T00:00:00.000Z
       Updated: 2026-07-03T00:00:00.000Z
@@ -98,17 +98,16 @@ describe("hydrated Flag reads", () => {
       Configurations
       Environment: env_dev
       Enabled: true
-      Available Variants: ["on"]
-      Rollout: {"percentage":25,"salt":"dev-salt"}
-      Experiment: null
-      Targeting Rules
-      RULE ID  PRIORITY  CONDITIONS  VARIANT ID  SEGMENT ID  ROLLOUT
+      Available Variants: on
+      Rollout: 25% (salt dev-salt)
+      Experiment: (none)
+      Targeting Rules: (none)
 
       Environment: env_prod
       Enabled: false
-      Available Variants: ["on"]
-      Rollout: null
-      Experiment: {"id":"exp_checkout","key":"checkout-copy"}
+      Available Variants: on
+      Rollout: (none)
+      Experiment: checkout-copy (exp_checkout)
       Targeting Rules
       RULE ID          PRIORITY  CONDITIONS                                                   VARIANT ID  SEGMENT ID  ROLLOUT
       rule_enterprise  0         [{"attribute":"plan","operator":"eq","value":"enterprise"}]  var_on"
@@ -275,7 +274,7 @@ describe("bounded Flag catalog in human output", () => {
 
     expect(code).toBe(EXIT_OK);
     expect(log.mock.calls.join("\n")).toContain(
-      "Truncated: this App holds more than 200 Flags; the newest 200 are shown.",
+      "Truncated: more than 200 Flags exist; 200 are shown.",
     );
   });
 
@@ -316,6 +315,6 @@ describe("bounded Flag catalog in human output", () => {
     });
 
     expect(code).toBe(EXIT_OK);
-    expect(log.mock.calls.join("\n")).toBe("No Flags in this App.");
+    expect(log.mock.calls.join("\n")).toBe("No Flags found.");
   });
 });

@@ -6,7 +6,7 @@ put the resulting Exposure or Metric Event into a transactional outbox alongside
 writes. It installs `@splitch/sdk`, which owns the shared local evaluator and contract types.
 
 - Full guide: <https://splitch.dev/docs/sdk/convex>
-- Every failure code, with its cause and its fix: <https://splitch.dev/docs#errors>
+- Every failure code, with its cause and its fix: <https://splitch.dev/docs/errors>
 
 ## Install
 
@@ -253,5 +253,5 @@ Metric Event cannot survive a write that rolled back.
 
 - Convex guide: <https://splitch.dev/docs/sdk/convex>
 - SDK guide: <https://splitch.dev/docs/sdk/install>
-- Error catalog: <https://splitch.dev/docs#errors>
+- Error catalog: <https://splitch.dev/docs/errors>
 - Machine-readable index: <https://splitch.dev/llms.txt>
