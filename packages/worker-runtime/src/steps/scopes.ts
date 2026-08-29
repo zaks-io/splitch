@@ -94,7 +94,7 @@ export function requireWideMemberships(principal: Principal): PrincipalMembershi
   return principal.memberships;
 }
 
-function organizationAccessCovers(principal: Principal, organizationId: string): boolean {
+export function organizationAccessCovers(principal: Principal, organizationId: string): boolean {
   if (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
     return requireWideMemberships(principal).organizations.some(
       (membership) => membership.id === organizationId,
@@ -103,7 +103,7 @@ function organizationAccessCovers(principal: Principal, organizationId: string):
   return principal.orgId === organizationId;
 }
 
-function appAccessCovers(principal: Principal, appId: string): boolean {
+export function appAccessCovers(principal: Principal, appId: string): boolean {
   if (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
     return requireWideMemberships(principal).apps.some((membership) => membership.id === appId);
   }

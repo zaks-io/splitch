@@ -1,17 +1,13 @@
-import {
-  type ErrorResponse,
-  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
-  type ServerAuthenticatedLiveUpdateContext,
-} from "@splitch/contracts";
+import type { ErrorResponse, ServerAuthenticatedLiveUpdateContext } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import {
-  emptyError,
-  renderError,
   type AuthResolver,
+  appAccessCovers,
+  emptyError,
   type Observability,
   type Principal,
   type RateLimiter,
-  requireWideMemberships,
+  renderError,
 } from "@splitch/worker-runtime";
 import type { Context, Hono } from "hono";
 import type { ConfigStoreAccess } from "./config-store-do";
@@ -142,11 +138,10 @@ function liveScopeError(
   appId: string,
   environmentId: string,
 ): ErrorResponse | null {
-  let hasApp = principal.appId === appId;
-  if (!hasApp && principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
-    hasApp = requireWideMemberships(principal).apps.some((membership) => membership.id === appId);
-  }
-  if (!hasApp) {
+  // This route is mounted by hand, so the registrar's scope step never runs and
+  // this is the only App check on it. It asks `appAccessCovers` so the rule has
+  // one definition rather than a second copy that can drift from the registrar's.
+  if (!appAccessCovers(principal, appId)) {
     return emptyError("FORBIDDEN", "credential is not scoped to this app");
   }
   if (principal.environmentId !== null && principal.environmentId !== environmentId) {

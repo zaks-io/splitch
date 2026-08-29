@@ -60,6 +60,28 @@ describe("membership-wide live-update authorization", () => {
     expect(await response.json()).toMatchObject({ code: "FORBIDDEN" });
   });
 
+  // The other cases here are all rejections, so on their own they are satisfied by
+  // a guard that forbids every wide token. This one pins the other direction: a
+  // wide principal holding the App reaches past the App check and fails later, on
+  // the missing Environment, rather than at authorization.
+  it("lets a wide principal through the App check for an App it holds", async () => {
+    const app = createApp({
+      authResolver: () => ({
+        ok: true,
+        principal: widePrincipal(),
+      }),
+      rateLimiter: () => ({ limited: false }),
+      repo: createRepository(env.DB),
+    });
+
+    const response = await app.request("/apps/app_own/envs/env_own/live", {
+      headers: { upgrade: "websocket" },
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ code: "APP_NOT_FOUND" });
+  });
+
   it("rejects a principal bound to a different Environment", async () => {
     const app = createApp({
       authResolver: () => ({

@@ -39,7 +39,6 @@ export { remoteJwksSignatureVerifier } from "./remote-jwks";
 export type { EmptyDetailCode } from "./respond";
 export { emptyError, renderError } from "./respond";
 export { timingSafeEqualString } from "./secret-compare";
-export { requireWideMemberships } from "./steps/scopes";
 export {
   applyResponseHeaders,
   CONTROL_PANEL_SECURITY_HEADERS,
@@ -47,3 +46,4 @@ export {
   WORKER_BASELINE_SECURITY_HEADERS,
   wrapWorkerHandler,
 } from "./security-headers";
+export { appAccessCovers, organizationAccessCovers, requireWideMemberships } from "./steps/scopes";
