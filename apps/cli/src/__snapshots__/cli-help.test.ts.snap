@@ -11,6 +11,7 @@ Usage:
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>              [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --output-file <path>     [type: string; default: none] Write the once-only secret to a new 0600 file instead of stdout; the payload reports valueWrittenTo.
@@ -36,6 +37,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -52,6 +54,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
@@ -277,6 +280,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -293,6 +297,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -309,6 +314,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
@@ -368,6 +374,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -381,6 +388,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -394,6 +402,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -407,6 +416,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -420,6 +430,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -437,6 +448,7 @@ Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --name <name>        [type: string; default: none] Resource name.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
@@ -462,6 +474,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -497,6 +510,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -510,6 +524,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -536,6 +551,7 @@ Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --name <name>        [type: string; default: none] Resource name.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
@@ -669,6 +685,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -682,6 +699,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
@@ -703,6 +721,7 @@ Flags:
   --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --name <name>            [type: string; default: none] Resource name.
   --key <key>              [type: string; default: none] Resource key.
+  --by <mode>              [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
@@ -742,6 +761,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -755,6 +775,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -768,6 +789,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -781,6 +803,7 @@ Usage:
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>              [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
@@ -812,6 +835,7 @@ Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --name <name>        [type: string; default: none] Resource name.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
@@ -855,6 +879,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -868,6 +893,7 @@ Usage:
 Flags:
   --app <app>               [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>       [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>               [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --enabled <boolean>       [type: boolean; default: current value] Set the Flag enabled state.
   --rollout <percent|none>  [type: number | none; default: current value] Set or clear the baseline rollout.
   --body-json <json>        [type: JSON object; default: none] Request body fields; see Request body below.
@@ -895,6 +921,7 @@ Usage:
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>              [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --when <attr=value>      [type: string (repeatable); default: none] String equality Condition. Repeat to AND more. Number or boolean values require replace --body-json.
   --serve <variant>        [type: string; default: none] Catalog Variant name to serve when the Conditions match.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
@@ -919,6 +946,7 @@ Usage:
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>              [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
@@ -1066,6 +1094,7 @@ Usage:
 
 Flags:
   --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --by <mode>  [type: id | key; default: automatic] Resolve a canonical-looking selector explicitly.
   --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help   [type: boolean; default: false] Show help and exit.
 
@@ -1093,6 +1122,7 @@ Usage:
 Flags:
   --app <app>                 [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>         [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>                 [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --from-environment-id <id>  [type: string; default: none] Source Environment ID.
   --body-json <json>          [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>     [type: string; default: generated] Stable retry key for this mutation.
@@ -1118,6 +1148,7 @@ Usage:
 Flags:
   --app <app>            [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>    [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>            [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --targeting-key <key>  [type: string; default: none] Entity Targeting Key.
   --context-json <json>  [type: JSON object; default: {"attributes":{}}] Evaluation Context fields.
   --body-json <json>     [type: JSON object; default: none] Request body fields; see Request body below.
@@ -1416,6 +1447,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
@@ -1435,6 +1467,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -1448,6 +1481,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 

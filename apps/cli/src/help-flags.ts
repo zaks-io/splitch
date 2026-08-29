@@ -1,5 +1,5 @@
 import { API_KEY_CREATE_OPERATION_ID } from "./api-key-output.js";
-import { type CliCommandDefinition, META_COMMANDS } from "./command-registry.js";
+import type { CliCommandDefinition, META_COMMANDS } from "./command-registry.js";
 import { commandHasBodyJson } from "./help-body-json.js";
 import { toolByOperation } from "./help-command-description.js";
 import { deleteModeHelpFlags } from "./help-delete-flags.js";
@@ -82,7 +82,19 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
     const description = command.operationId === "flags_create" ? "Flag KEY." : "Resource key.";
     flags.push(flag("--key <key>", "string", "none", description));
   }
+  flags.push(...selectorFlags(command, fields));
   return flags;
+}
+
+function selectorFlags(
+  command: CliCommandDefinition,
+  fields: ReadonlySet<string>,
+): readonly HelpFlag[] {
+  if (!fields.has("by")) return [];
+  const type = command.operationId === "flags_get" ? "id | key" : "id";
+  return [
+    flag("--by <mode>", type, "automatic", "Resolve a canonical-looking selector explicitly."),
+  ];
 }
 
 function operationFlags(command: CliCommandDefinition): HelpFlag[] {

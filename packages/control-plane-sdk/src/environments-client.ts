@@ -10,6 +10,7 @@ import type {
   EnvironmentsUpdateInput,
   EnvironmentsUpdateOutput,
 } from "@splitch/contracts/route-types";
+import { environmentSelectorQuery } from "./environment-selector-query";
 import {
   type ControlPlaneHcOptions,
   createEnvironmentsHcClient,
@@ -75,7 +76,7 @@ export function createEnvironmentsClient(
         hcClient.apps[":appId"].envs[":environmentId"].$get(
           {
             param: { appId: input.appId, environmentId: input.environmentId },
-            ...(input.by ? { query: { by: input.by } } : {}),
+            ...environmentSelectorQuery(input),
           } as never,
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),
@@ -86,7 +87,7 @@ export function createEnvironmentsClient(
         hcClient.apps[":appId"].envs[":environmentId"].$patch(
           {
             param: { appId, environmentId },
-            ...(by ? { query: { by } } : {}),
+            ...environmentSelectorQuery({ by }),
             json: body,
           } as never,
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
@@ -98,7 +99,7 @@ export function createEnvironmentsClient(
         hcClient.apps[":appId"].envs[":environmentId"].$delete(
           {
             param: { appId: input.appId, environmentId: input.environmentId },
-            ...(input.by ? { query: { by: input.by } } : {}),
+            ...environmentSelectorQuery(input),
           } as never,
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),

@@ -133,6 +133,9 @@ function applyNamedFlags(
   if (flags.key) {
     input.key = flags.key;
   }
+  if (flags.by) {
+    input.by = flags.by;
+  }
   if (command.supportsConfirm && flags.confirm) {
     input.review = { action: "approve_and_apply" };
   }
