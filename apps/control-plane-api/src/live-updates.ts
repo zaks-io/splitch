@@ -1,11 +1,13 @@
 import type { ErrorResponse, ServerAuthenticatedLiveUpdateContext } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import {
-  emptyError,
-  renderError,
   type AuthResolver,
+  appAccessCovers,
+  emptyError,
+  type Observability,
   type Principal,
   type RateLimiter,
+  renderError,
 } from "@splitch/worker-runtime";
 import type { Context, Hono } from "hono";
 import type { ConfigStoreAccess } from "./config-store-do";
@@ -21,6 +23,7 @@ export interface LiveUpdateDeps {
   configStore?: ConfigStoreAccess;
   repo: Repository;
   defaultHeaders?: Record<string, string>;
+  observability?: Observability;
 }
 
 export function mountLiveUpdateRoute(app: Hono, deps: LiveUpdateDeps): void {
@@ -89,7 +92,13 @@ async function handleLiveUpdate(c: Context, deps: LiveUpdateDeps): Promise<Respo
     return deps.configStore
       .liveUpdatesFor(appId, environmentId)
       .connect(serverAuthenticatedLiveUpdateRequest(resolved.principal, appId, environmentId));
-  } catch {
+  } catch (cause) {
+    deps.observability?.onError?.({
+      requestId,
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+      cause,
+    });
     return renderError(emptyError("INTERNAL_SERVER_ERROR", "unhandled runtime fault"), {
       requestId,
       defaultHeaders: deps.defaultHeaders,
@@ -129,7 +138,10 @@ function liveScopeError(
   appId: string,
   environmentId: string,
 ): ErrorResponse | null {
-  if (principal.appId !== appId) {
+  // This route is mounted by hand, so the registrar's scope step never runs and
+  // this is the only App check on it. It asks `appAccessCovers` so the rule has
+  // one definition rather than a second copy that can drift from the registrar's.
+  if (!appAccessCovers(principal, appId)) {
     return emptyError("FORBIDDEN", "credential is not scoped to this app");
   }
   if (principal.environmentId !== null && principal.environmentId !== environmentId) {

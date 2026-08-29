@@ -2,7 +2,11 @@ import { createSplitchClient } from "@splitch/sdk";
 import { getRoute } from "@splitch/sdk/control-plane";
 import { warnStaleApprovalDiscard } from "./approval-stale-warn.js";
 import { withAuthorizationRetry } from "./auth.js";
-import type { TokenBinding } from "./auth-binding.js";
+import {
+  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+  type TokenAuthorization,
+  type TokenBinding,
+} from "./auth-binding.js";
 import { missingPositionalError } from "./command-positionals.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
@@ -151,8 +155,8 @@ export function validateFlagsVerifyUsage(
 /**
  * The token binding an operation needs, derived from the same identifiers its
  * route path carries: an App-scoped path needs an app-bound token, an
- * Org-scoped path an org-bound one, and everything else (orgs list/create —
- * the cold-start surface) runs on whatever session token exists.
+ * Org-scoped path an org-bound one. Scope-free reads use membership-wide
+ * authority; scope-free mutations retain the session's selector-bound token.
  */
 function operationBinding(input: Record<string, unknown>): TokenBinding | undefined {
   if (typeof input.appId === "string" && input.appId) {
@@ -173,23 +177,17 @@ export async function executeApiOperation(
   project?: (data: unknown) => unknown | Promise<unknown>,
 ): Promise<CliResult> {
   try {
+    const route = requireOperationRoute(operationId);
+    const tokenAuthorization = operationAuthorization(route, input);
     const payload = await withAuthorizationRetry(
       deps,
       async (authorization) => {
-        const route = getRoute(operationId);
-        if (!route) {
-          throw new SplitchCliError({
-            code: "CLI_OPERATION_UNKNOWN",
-            causeSummary: `The operation ${operationId} is not registered`,
-            remediation: "Use a command backed by a registered operation",
-          });
-        }
         const sdks = createOperationSdks(deps);
         const sdk = sdkForRoute(sdks, route);
         const result = await sdk.callOperationById(operationId, input, { authorization });
         return { status: result.ok ? 200 : result.status, value: result };
       },
-      operationBinding(input),
+      tokenAuthorization,
     );
     if (!payload.ok) {
       // `writeServerError` owns both channels: the enriched JSON on stdout and
@@ -219,6 +217,32 @@ export async function executeApiOperation(
   } catch (error) {
     return handleExecutionError(error, io);
   }
+}
+
+function requireOperationRoute(operationId: string): NonNullable<ReturnType<typeof getRoute>> {
+  const route = getRoute(operationId);
+  if (route) return route;
+  throw new SplitchCliError({
+    code: "CLI_OPERATION_UNKNOWN",
+    causeSummary: `The operation ${operationId} is not registered`,
+    remediation: "Use a command backed by a registered operation",
+  });
+}
+
+/**
+ * Path selectors bind to their App or Organization. Selector-free Control
+ * Plane reads use the wide marker only for cached-token reuse; refresh mints
+ * the session default. SPL-530 adds the wide request; mutations keep existing authority.
+ */
+export function operationAuthorization(
+  route: NonNullable<ReturnType<typeof getRoute>>,
+  input: Record<string, unknown>,
+): TokenAuthorization | undefined {
+  const selectorBinding = operationBinding(input);
+  if (selectorBinding) return selectorBinding;
+  return route.method === "GET" && route.auth === "control-plane-token"
+    ? { kind: MEMBERSHIP_WIDE_READ_AUTHORIZATION }
+    : undefined;
 }
 
 async function clearScopeAfterAppDelete(

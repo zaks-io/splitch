@@ -222,6 +222,7 @@ export async function makeCascadeHarness(): Promise<CascadeHarness> {
   const bindings = await makeLocalBindings();
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({
+    issuer: "https://auth.splitch.test",
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -229,7 +230,12 @@ export async function makeCascadeHarness(): Promise<CascadeHarness> {
     authResolver: makeControlPlaneAuthResolver({
       verifier,
       sessions: makeSessionStore(bindings.kv),
-      membershipAccess: { authorize: async () => true },
+      membershipAccess: {
+        authorize: async () => true,
+        resolve: async () => {
+          throw new Error("test fixture has no wide membership resolver");
+        },
+      },
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,

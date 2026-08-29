@@ -98,6 +98,7 @@ export function makeAuthedApp(
   scopedWriterFor?: (appId: string, environmentId: string) => ConfigStoreWriter,
 ): Hono {
   const verifier = makeJwksVerifier({
+    issuer: "https://auth.splitch.test",
     fetchJwks: async () => h.signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -107,7 +108,12 @@ export function makeAuthedApp(
       sessions: makeSessionStore(
         h.sessions ?? ({ get: async () => null } as unknown as KVNamespace),
       ),
-      membershipAccess: { authorize: async () => true },
+      membershipAccess: {
+        authorize: async () => true,
+        resolve: async () => {
+          throw new Error("config-store harness has no wide membership fixture");
+        },
+      },
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,

@@ -55,7 +55,8 @@ export async function makeFixtureSigner(): Promise<FixtureSigner> {
   return {
     jwks: { keys: [{ kty: publicJwk.kty, kid: KID, n: publicJwk.n, e: publicJwk.e }] },
     async sign(claims) {
-      const signingInput = `${encodeSegment({ alg: "RS256", typ: "JWT", kid: KID })}.${encodeSegment(claims)}`;
+      const payload = { typ: "access_token", ...claims };
+      const signingInput = `${encodeSegment({ alg: "RS256", typ: "JWT", kid: KID })}.${encodeSegment(payload)}`;
       const signature = await crypto.subtle.sign(
         "RSASSA-PKCS1-v1_5",
         pair.privateKey,

@@ -12,7 +12,7 @@ interface JwksVerifier {
   verify(token: string, nowSeconds: number): Promise<VerifiedToken | null>;
 }
 
-export function makeCachedJwksVerifier(options: {
+export function makeEvaluationControlPlaneJwksVerifier(options: {
   jwksUri: string;
   controlPlaneAudience: string;
 }): JwksVerifier {
@@ -21,7 +21,7 @@ export function makeCachedJwksVerifier(options: {
     async verify(token, nowSeconds) {
       const parsed = parseJwt(token);
       if (!parsed || !(await signatures.verify(token))) return null;
-      return actorFromClaims(parsed.payload, options.controlPlaneAudience, nowSeconds);
+      return evaluationActorFromClaims(parsed.payload, options.controlPlaneAudience, nowSeconds);
     },
   };
 }
@@ -138,7 +138,7 @@ function parseJwt(token: string): ParsedJwt | null {
   }
 }
 
-function actorFromClaims(
+function evaluationActorFromClaims(
   payload: Record<string, unknown>,
   controlPlaneAudience: string,
   nowSeconds: number,

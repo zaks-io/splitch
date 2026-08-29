@@ -79,6 +79,7 @@ beforeEach(async () => {
   const app = createApp({
     authResolver: makeControlPlaneAuthResolver({
       verifier: makeJwksVerifier({
+        issuer: "https://auth.splitch.test",
         fetchJwks: async () => signer.jwks,
         controlPlaneAudience: AUDIENCE,
       }),
@@ -96,7 +97,11 @@ afterEach(async () => {
   await h.bindings.dispose();
 });
 
-function token(sub: string, scopes: string[]): Promise<string> {
+function token(
+  sub: string,
+  scopes: string[],
+  authorization?: "membership-wide-read",
+): Promise<string> {
   return h.signer.sign({
     sub,
     iss: "https://auth.splitch.test",
@@ -105,6 +110,7 @@ function token(sub: string, scopes: string[]): Promise<string> {
     exp: nowSeconds() + 3600,
     scopes,
     auth_door: "id_jag",
+    ...(authorization ? { authorization } : {}),
   });
 }
 
@@ -113,6 +119,22 @@ function get(path: string, jwt: string): Promise<Response> {
 }
 
 describe("bearer token live membership recheck", () => {
+  it("rebuilds wide read authority from D1 and refuses the same JWT after membership removal", async () => {
+    const jwt = await token(ALICE, [], "membership-wide-read");
+
+    expect((await get(`/apps/${PAYMENTS.appId}`, jwt)).status).toBe(200);
+    expect((await get(`/apps/${ANALYTICS.appId}`, jwt)).status).toBe(403);
+
+    await h.repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
+
+    const refused = await get(`/apps/${PAYMENTS.appId}`, jwt);
+    expect(refused.status).toBe(403);
+    expect((await refused.json()) as ErrorResponse).toMatchObject({
+      code: "FORBIDDEN",
+      message: "credential is not scoped to this app",
+    });
+  });
+
   it("keeps an App-scoped token working while membership exists, then refuses the same JWT after App removal", async () => {
     const jwt = await token(ALICE, [appAdminScope(PAYMENTS.appId)]);
 
@@ -184,6 +206,7 @@ describe("bearer token live membership recheck", () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
+          issuer: "https://auth.splitch.test",
           fetchJwks: async () => h.signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
@@ -210,6 +233,7 @@ describe("bearer token live membership recheck", () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
+          issuer: "https://auth.splitch.test",
           fetchJwks: async () => h.signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
@@ -217,6 +241,9 @@ describe("bearer token live membership recheck", () => {
         now: () => NOW_MS,
         membershipAccess: {
           authorize: async () => {
+            throw new Error("d1 membership read failed");
+          },
+          resolve: async () => {
             throw new Error("d1 membership read failed");
           },
         },
