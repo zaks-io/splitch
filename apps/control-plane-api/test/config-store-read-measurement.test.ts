@@ -26,7 +26,7 @@ afterEach(async () => {
 });
 
 describe("flag_config_get direct KV reads", () => {
-  it("issues zero D1 queries and zero DO subrequests on a warm read", async () => {
+  it("issues zero config-store D1 queries and zero DO subrequests on a warm read", async () => {
     const seeded = makeConfigStore({
       repo: h.repo,
       kv: h.kv,
@@ -35,23 +35,26 @@ describe("flag_config_get direct KV reads", () => {
     });
     expect(await seeded.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
 
-    const counted = countingD1(h.d1);
-    const repo = createRepository(counted.db);
+    const resolverD1 = countingD1(h.d1);
+    const configStoreD1 = countingD1(h.d1);
+    const repo = createRepository(resolverD1.db);
+    const configStoreRepo = createRepository(configStoreD1.db);
     const target = namespaceFor(
       makeConfigStore({
-        repo,
+        repo: configStoreRepo,
         kv: h.kv,
         broadcaster: { broadcast: () => undefined },
         nextSnapshotRevision: makeSnapshotRevisionCounter(),
       }),
     );
     const access = durableConfigStoreAccess(target.namespace, h.kv, {
-      repo,
+      repo: configStoreRepo,
       waitUntil: (promise) => void promise,
       writeThrough: new Map(),
     });
     const app = appFor(repo, access);
-    counted.reset();
+    resolverD1.reset();
+    configStoreD1.reset();
     target.reset();
     const authorization = `Bearer ${await token(h.signer)}`;
 
@@ -61,11 +64,14 @@ describe("flag_config_get direct KV reads", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ flagId: ids.flagId, version: 1 });
-    expect(counted.queries()).toBe(0);
+    // SPL-524 checks for legacy Environment-key collisions; SPL-541 removes the duplicate read.
+    expect(resolverD1.queries()).toBe(1);
+    expect(configStoreD1.queries()).toBe(0);
     expect(target.subrequests()).toBe(0);
     console.info("flag_config_get_measurement", {
       path: "direct-kv-warm",
-      queries: counted.queries(),
+      resolverD1Queries: resolverD1.queries(),
+      configStoreD1Queries: configStoreD1.queries(),
       durableObjectSubrequests: target.subrequests(),
       durationMs,
     });
@@ -88,10 +94,12 @@ describe("flag_config_get KV miss reads", () => {
       await h.kv.get(flagConfigKey(ids.appId, ids.environmentId, ids.flagKey), "text"),
     ).toEqual(expect.any(String));
 
-    const counted = countingD1(h.d1);
-    const repo = createRepository(counted.db);
+    const resolverD1 = countingD1(h.d1);
+    const configStoreD1 = countingD1(h.d1);
+    const repo = createRepository(resolverD1.db);
+    const configStoreRepo = createRepository(configStoreD1.db);
     const writer = makeConfigStore({
-      repo,
+      repo: configStoreRepo,
       kv: h.kv,
       broadcaster: { broadcast: () => undefined },
       nextSnapshotRevision: revisions,
@@ -101,7 +109,7 @@ describe("flag_config_get KV miss reads", () => {
     const backgroundTasks: Promise<unknown>[] = [];
     const access = durableConfigStoreAccess(target.namespace, missingSnapshotKv(h.kv, key), {
       logger: { error: vi.fn(), warn },
-      repo,
+      repo: configStoreRepo,
       waitUntil: (promise) => {
         backgroundTasks.push(promise);
       },
@@ -109,14 +117,16 @@ describe("flag_config_get KV miss reads", () => {
     });
     const app = appFor(repo, access);
     expect(await h.kv.get(key, "text")).toBeNull();
-    counted.reset();
+    resolverD1.reset();
+    configStoreD1.reset();
     target.reset();
 
     const response = await getFlagConfig(app);
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ flagId: ids.flagId, enabled: false });
-    expect(counted.queries()).toBeGreaterThan(0);
+    expect(resolverD1.queries()).toBe(1);
+    expect(configStoreD1.queries()).toBeGreaterThan(0);
     expect(target.subrequests()).toBe(1);
     expect(backgroundTasks).toHaveLength(1);
     expect(warn).toHaveBeenCalledWith(
@@ -130,10 +140,13 @@ describe("flag_config_get KV miss reads", () => {
     await Promise.all(backgroundTasks);
     expect(await h.kv.get(key, "text")).toEqual(expect.any(String));
 
-    counted.reset();
+    resolverD1.reset();
+    configStoreD1.reset();
     target.reset();
     expect((await getFlagConfig(app)).status).toBe(200);
-    expect(counted.queries()).toBe(0);
+    // SPL-524 checks for legacy Environment-key collisions; SPL-541 removes the duplicate read.
+    expect(resolverD1.queries()).toBe(1);
+    expect(configStoreD1.queries()).toBe(0);
     expect(target.subrequests()).toBe(0);
   });
 
@@ -173,12 +186,14 @@ describe("flag_config_get KV miss reads", () => {
 });
 
 describe("flag_config_get snapshot failures", () => {
-  it("fails loud on a malformed control-plane snapshot without a DO or D1 fallback", async () => {
-    const counted = countingD1(h.d1);
-    const repo = createRepository(counted.db);
+  it("fails loud on a malformed snapshot without a DO or config-store D1 fallback", async () => {
+    const resolverD1 = countingD1(h.d1);
+    const configStoreD1 = countingD1(h.d1);
+    const repo = createRepository(resolverD1.db);
+    const configStoreRepo = createRepository(configStoreD1.db);
     const target = namespaceFor(
       makeConfigStore({
-        repo,
+        repo: configStoreRepo,
         kv: h.kv,
         broadcaster: { broadcast: () => undefined },
         nextSnapshotRevision: makeSnapshotRevisionCounter(),
@@ -187,7 +202,7 @@ describe("flag_config_get snapshot failures", () => {
     const error = vi.fn();
     const access = durableConfigStoreAccess(target.namespace, h.kv, {
       logger: { error, warn: vi.fn() },
-      repo,
+      repo: configStoreRepo,
       waitUntil: (promise) => void promise,
       writeThrough: new Map(),
     });
@@ -205,13 +220,16 @@ describe("flag_config_get snapshot failures", () => {
         data: { flagId: ids.flagId, environmentId: ids.environmentId, version: "broken" },
       }),
     );
-    counted.reset();
+    resolverD1.reset();
+    configStoreD1.reset();
     target.reset();
 
     const response = await getFlagConfig(app);
 
     expect(response.status).toBe(500);
-    expect(counted.queries()).toBe(0);
+    // SPL-524 checks for legacy Environment-key collisions; SPL-541 removes the duplicate read.
+    expect(resolverD1.queries()).toBe(1);
+    expect(configStoreD1.queries()).toBe(0);
     expect(target.subrequests()).toBe(0);
     expect(error).toHaveBeenCalledWith(
       "config_store_kv_schema_mismatch",
