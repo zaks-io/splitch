@@ -109,8 +109,12 @@ export class ControlPlaneEntrypoint extends WorkerEntrypoint<EvaluationApiEnv> {
     );
   }
 
-  purgeAppIdentityAssignments(appId: string, resetId: string): Promise<string> {
-    return purgeAppIdentityAssignments(this.env, appId, resetId);
+  purgeAppIdentityAssignments(
+    appId: string,
+    resetId: string,
+    destroyedVersions: readonly string[],
+  ): Promise<string> {
+    return purgeAppIdentityAssignments(this.env, appId, resetId, destroyedVersions);
   }
 
   purgeAppIdentityRetryClaims(appId: string, environmentIds: readonly string[]): Promise<string> {

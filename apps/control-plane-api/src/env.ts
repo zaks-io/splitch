@@ -10,7 +10,11 @@ interface AnalysisControlPlaneBinding extends Fetcher {
 }
 
 interface EvaluationControlPlaneBinding extends Fetcher {
-  purgeAppIdentityAssignments(appId: string, resetId: string): Promise<string>;
+  purgeAppIdentityAssignments(
+    appId: string,
+    resetId: string,
+    destroyedVersions: readonly string[],
+  ): Promise<string>;
   purgeAppIdentityRetryClaims(appId: string, environmentIds: readonly string[]): Promise<string>;
   completeAppIdentityReset(appId: string, resetId: string, identityVersion: string): Promise<void>;
 }

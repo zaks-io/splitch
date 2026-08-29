@@ -210,7 +210,9 @@ HoldoverWriteOutboxDurableObject.prototype.fetch = async function (request) {
     }
   }
   if (
-    (url.pathname === "/purge" || url.pathname === "/delete") &&
+    (url.pathname === "/purge" ||
+      url.pathname === "/delete" ||
+      url.pathname === "/reset-app") &&
     globalThis.__purgeFailsRemaining > 0
   ) {
     globalThis.__purgeFailsRemaining -= 1;

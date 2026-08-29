@@ -1,3 +1,4 @@
+import { isAppIdentityVersionReset } from "./app-identity-reset-fence";
 import type { HashedAssignmentPutInput } from "./assignment-store";
 import type { HoldoverWriteAppInventoryRegisterResult } from "./holdover-write-app-inventory";
 import {
@@ -48,14 +49,8 @@ export async function ensureHoldoverWriteJob(
   inventory?: HoldoverWriteInventoryRegisterPort,
 ): Promise<HoldoverWriteEnsureResult> {
   const sourceCreatedAtMs = options?.sourceCreatedAtMs ?? nowMs;
-  // App freeze/suppress must not destroy recoverable durable jobs — only block puts.
-  if (suppression && (await suppression.isAppSuppressed(input.appId))) {
-    return { status: "suppressed" };
-  }
-  if (await isStaleUnderEntityCutoff(storage, sourceCreatedAtMs)) {
-    await purgeStaleJobs(storage, sourceCreatedAtMs);
-    return { status: "suppressed" };
-  }
+  const suppressed = await preflightSuppression(storage, input, sourceCreatedAtMs, suppression);
+  if (suppressed) return suppressed;
 
   // Confirm App inventory registration on every ensure until acknowledged.
   // Register before sealing a new local job so a transport failure cannot leave
@@ -90,6 +85,27 @@ export async function ensureHoldoverWriteJob(
   }
 
   return attemptHoldoverWriteJob(storage, putPort, job, nowMs, logger, suppression);
+}
+
+async function preflightSuppression(
+  storage: HoldoverWriteOutboxStorage,
+  input: HashedAssignmentPutInput,
+  sourceCreatedAtMs: number,
+  suppression?: HoldoverWriteSuppressionPort,
+): Promise<HoldoverWriteEnsureResult | undefined> {
+  if (
+    input.identityVersion !== undefined &&
+    (await isAppIdentityVersionReset(storage, input.identityVersion))
+  ) {
+    return { status: "suppressed" };
+  }
+  // App freeze/suppress must not destroy recoverable durable jobs — only block puts.
+  if (suppression && (await suppression.isAppSuppressed(input.appId))) {
+    return { status: "suppressed" };
+  }
+  if (!(await isStaleUnderEntityCutoff(storage, sourceCreatedAtMs))) return undefined;
+  await purgeStaleJobs(storage, sourceCreatedAtMs);
+  return { status: "suppressed" };
 }
 
 async function resultForDeferredExistingJob(
@@ -161,6 +177,14 @@ async function attemptHoldoverWriteJob(
   logger?: HoldoverWriteOutboxLogger,
   suppression?: HoldoverWriteSuppressionPort,
 ): Promise<HoldoverWriteEnsureResult> {
+  if (
+    job.identityVersion !== undefined &&
+    (await isAppIdentityVersionReset(storage, job.identityVersion))
+  ) {
+    await storage.delete(holdoverWriteJobKey(job.experimentId));
+    await reschedulePendingHoldoverWriteAlarm(storage);
+    return { status: "suppressed" };
+  }
   if (suppression && (await suppression.isAppSuppressed(job.appId))) {
     await storage.setAlarm(nowMs + APP_SUPPRESSION_RECHECK_MS);
     return { status: "suppressed" };

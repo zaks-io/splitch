@@ -19,16 +19,16 @@ describe("App identity Assignment reset", () => {
     reset.kv.set(`assignment:${APP_ID}:user:${ENTITY_A.targetingKeyHash}`, "a");
     reset.kv.set(`assignment:${APP_ID}:device:${ENTITY_B.targetingKeyHash}`, "b");
 
-    await expect(purgeAppIdentityAssignments(reset.env(), APP_ID, RESET_ID)).resolves.toBe(
+    await expect(purgeAppIdentityAssignments(reset.env(), APP_ID, RESET_ID, ["v1"])).resolves.toBe(
       "evaluation-assignments:kv=0;durable_inventory=empty;durable_objects=4",
     );
 
     expect(reset.entities).toEqual([]);
     expect(reset.calls).toEqual([
-      `writer:delete:${entityName(ENTITY_A)}`,
-      `outbox:delete:${entityName(ENTITY_A)}:9000`,
-      `writer:delete:${entityName(ENTITY_B)}`,
-      `outbox:delete:${entityName(ENTITY_B)}:9000`,
+      `writer:reset:${entityName(ENTITY_A)}`,
+      `outbox:reset:${entityName(ENTITY_A)}`,
+      `writer:reset:${entityName(ENTITY_B)}`,
+      `outbox:reset:${entityName(ENTITY_B)}`,
     ]);
   });
 
@@ -37,13 +37,13 @@ describe("App identity Assignment reset", () => {
     const reset = new ResetHarness([]);
     reset.kv.set(`assignment:${APP_ID}:account:${ENTITY_C.targetingKeyHash}`, "winner");
 
-    await expect(purgeAppIdentityAssignments(reset.env(), APP_ID, RESET_ID)).resolves.toBe(
+    await expect(purgeAppIdentityAssignments(reset.env(), APP_ID, RESET_ID, ["v1"])).resolves.toBe(
       "evaluation-assignments:kv=0;durable_inventory=empty;durable_objects=2",
     );
 
     expect(reset.calls).toEqual([
-      `writer:delete:${entityName(ENTITY_C)}`,
-      `outbox:delete:${entityName(ENTITY_C)}:9000`,
+      `writer:reset:${entityName(ENTITY_C)}`,
+      `outbox:reset:${entityName(ENTITY_C)}`,
     ]);
     expect(reset.tombstonedWriters).toContain(entityName(ENTITY_C));
   });
@@ -53,20 +53,20 @@ describe("App identity Assignment reset", () => {
     const reset = new ResetHarness([ENTITY_A, ENTITY_B]);
     reset.writerDeleteFailures.set(entityName(ENTITY_B), 1);
 
-    await expect(purgeAppIdentityAssignments(reset.env(), APP_ID, RESET_ID)).rejects.toThrow(
-      /Assignment writer purge returned HTTP 503/u,
-    );
+    await expect(
+      purgeAppIdentityAssignments(reset.env(), APP_ID, RESET_ID, ["v1"]),
+    ).rejects.toThrow(/Assignment writer purge returned HTTP 503/u);
     expect(reset.entities).toEqual([ENTITY_B]);
-    expect(reset.calls).not.toContain(`outbox:delete:${entityName(ENTITY_B)}:9000`);
+    expect(reset.calls).not.toContain(`outbox:reset:${entityName(ENTITY_B)}`);
 
     reset.calls.length = 0;
     const restartedEnv = reset.env();
-    await expect(purgeAppIdentityAssignments(restartedEnv, APP_ID, RESET_ID)).resolves.toContain(
-      "durable_inventory=empty",
-    );
+    await expect(
+      purgeAppIdentityAssignments(restartedEnv, APP_ID, RESET_ID, ["v1"]),
+    ).resolves.toContain("durable_inventory=empty");
     expect(reset.calls).toEqual([
-      `writer:delete:${entityName(ENTITY_B)}`,
-      `outbox:delete:${entityName(ENTITY_B)}:9000`,
+      `writer:reset:${entityName(ENTITY_B)}`,
+      `outbox:reset:${entityName(ENTITY_B)}`,
     ]);
   });
 
@@ -75,23 +75,23 @@ describe("App identity Assignment reset", () => {
     const reset = new ResetHarness([ENTITY_A]);
     reset.outboxDeleteFailures.set(entityName(ENTITY_A), 1);
 
-    await expect(purgeAppIdentityAssignments(reset.env(), APP_ID, RESET_ID)).rejects.toThrow(
-      /outbox purge returned HTTP 503/u,
-    );
+    await expect(
+      purgeAppIdentityAssignments(reset.env(), APP_ID, RESET_ID, ["v1"]),
+    ).rejects.toThrow(/outbox purge returned HTTP 503/u);
     expect(reset.entities).toEqual([ENTITY_A]);
     expect(reset.calls).toEqual([
-      `writer:delete:${entityName(ENTITY_A)}`,
-      `outbox:delete:${entityName(ENTITY_A)}:9000`,
+      `writer:reset:${entityName(ENTITY_A)}`,
+      `outbox:reset:${entityName(ENTITY_A)}`,
     ]);
     await expect(reset.putOldAssignment(ENTITY_A)).resolves.toMatchObject({ status: 409 });
 
     reset.calls.length = 0;
-    await expect(purgeAppIdentityAssignments(reset.env(), APP_ID, RESET_ID)).resolves.toContain(
-      "durable_inventory=empty",
-    );
+    await expect(
+      purgeAppIdentityAssignments(reset.env(), APP_ID, RESET_ID, ["v1"]),
+    ).resolves.toContain("durable_inventory=empty");
     expect(reset.calls).toEqual([
-      `writer:delete:${entityName(ENTITY_A)}`,
-      `outbox:delete:${entityName(ENTITY_A)}:9000`,
+      `writer:reset:${entityName(ENTITY_A)}`,
+      `outbox:reset:${entityName(ENTITY_A)}`,
     ]);
   });
 

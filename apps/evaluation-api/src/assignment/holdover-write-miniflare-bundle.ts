@@ -36,6 +36,7 @@ export function bundleHoldoverWriteInventoryAndOutboxWorker(
 
 function readWorkerSources() {
   return {
+    identityResetFence: readSource("app-identity-reset-fence.ts"),
     inventory: readSource("holdover-write-app-inventory.ts"),
     deletionInput: readSource("holdover-write-app-deletion-input.ts"),
     sagaStorage: stripImport(
@@ -101,15 +102,17 @@ function readWorkerSources() {
       "./holdover-write-outbox",
       "./holdover-write-outbox-core",
     ]),
-    core: readSource("holdover-write-outbox-core.ts"),
+    core: stripImport(readSource("holdover-write-outbox-core.ts"), "./app-identity-reset-fence"),
     ensure: stripImports(readSource("holdover-write-outbox-ensure.ts"), [
       "./assignment-store",
+      "./app-identity-reset-fence",
       "./holdover-write-app-inventory",
       "./holdover-write-outbox-core",
     ]),
     fetchHandler: stripIsRecordHelpers(
       stripImports(readSource("holdover-write-outbox-fetch.ts"), [
         "./assignment-store",
+        "./app-identity-reset-fence",
         "./holdover-write-app-inventory",
         "./holdover-write-app-inventory-client",
         "./holdover-write-outbox-core",
@@ -135,11 +138,15 @@ function readWorkerSources() {
       "./holdover-write-outbox-fetch",
       "./holdover-write-outbox-binding",
     ]),
-    writer: stripImport(readSource("assignment-store-writer.ts"), "./assignment-store"),
+    writer: stripImports(readSource("assignment-store-writer.ts"), [
+      "./assignment-store",
+      "./app-identity-reset-fence",
+    ]),
     assignmentDo: stripIsRecordHelpers(
       stripImports(readSource("assignment-store-do.ts"), [
         "cloudflare:workers",
         "./assignment-store",
+        "./app-identity-reset-fence",
         "./assignment-store-input",
         "./assignment-store-writer",
       ]),
@@ -152,6 +159,7 @@ function renderWorkerSource(
   options: Required<HoldoverWriteMiniflareOptions>,
 ): string {
   const {
+    identityResetFence,
     inventory,
     deletionInput,
     sagaStorage,
@@ -208,6 +216,7 @@ ${holdoverWriteInventoryClientStubs(
   pausePreparedAlarmAfterSnapshot,
   pauseAssignmentWriterPut,
 )}
+${stripExport(identityResetFence)}
 ${stripExport(inventory)}
 ${stripExport(deletionInput)}
 ${stripExport(sagaStorage)}

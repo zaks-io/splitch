@@ -26,6 +26,10 @@ export class MemoryEvaluationCommitOutbox implements EvaluationCommitOutbox {
     { eventId: string; payload: unknown; delivered: boolean; expiresAt: number }
   >();
 
+  identities(): readonly string[] {
+    return [...this.commits.keys()];
+  }
+
   async lookup(identity: string) {
     const now = Date.now();
     const existing = this.commits.get(identity);

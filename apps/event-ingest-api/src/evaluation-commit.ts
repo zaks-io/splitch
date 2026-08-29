@@ -66,7 +66,11 @@ async function prepareEvaluationCommit(
     return { ok: false, error: serviceUnavailable("Evaluation commit outbox is unavailable") };
   }
   const { scope, payload } = input.value;
-  const identity = await evaluationCommitIdentity(scope, payload.usage.idempotencyKey);
+  const identity = await evaluationCommitIdentity(
+    scope,
+    payload.usage.identityVersion,
+    payload.usage.idempotencyKey,
+  );
 
   try {
     const existing = await outbox.lookup(identity);
@@ -276,12 +280,14 @@ function isEvaluationCommitPayload(value: unknown): value is EvaluationCommitPay
 
 async function evaluationCommitIdentity(
   scope: EvaluationUsageScope,
+  identityVersion: string,
   idempotencyKey: string,
 ): Promise<string> {
   const material = [
     scope.organizationId,
     scope.appId,
     scope.environmentId,
+    identityVersion,
     "remote",
     idempotencyKey,
   ].join("\u001f");

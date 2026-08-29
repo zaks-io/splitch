@@ -17,6 +17,9 @@ In the current checkout:
 - each implemented row is sent in its own JSON request by
   `apps/event-ingest-api/src/tinybird.ts`;
 - an Evaluation commit loops over Exposure rows and appends them sequentially;
+- remote Evaluation commit idempotency is scoped to Organization, App, Environment, the admitted
+  App identity version, and the caller's key, so a replacement identity cannot replay a destroyed
+  generation's redacted commit;
 - `apps/event-ingest-api/wrangler.jsonc` declares no Cloudflare Queue producer or consumer binding;
 - Metric Event and Web Event intake are specified but not implemented.
 

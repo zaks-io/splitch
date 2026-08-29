@@ -20,14 +20,17 @@ export function bundleOutboxAssignmentWorker(failFirstKvPut: boolean): string {
 
 function readWorkerSources() {
   return {
-    core: readSource("holdover-write-outbox-core.ts"),
+    identityResetFence: readSource("app-identity-reset-fence.ts"),
+    core: stripImports(readSource("holdover-write-outbox-core.ts"), ["./app-identity-reset-fence"]),
     ensure: stripImports(readSource("holdover-write-outbox-ensure.ts"), [
       "./assignment-store",
+      "./app-identity-reset-fence",
       "./holdover-write-outbox-core",
     ]),
     fetchHandler: stripIsRecordHelpers(
       stripImports(readSource("holdover-write-outbox-fetch.ts"), [
         "./assignment-store",
+        "./app-identity-reset-fence",
         "./holdover-write-app-inventory",
         "./holdover-write-app-inventory-client",
         "./holdover-write-outbox-core",
@@ -49,10 +52,16 @@ function readWorkerSources() {
       "./holdover-write-outbox-ensure",
       "./holdover-write-outbox-fetch",
     ]),
-    writer: stripImports(readSource("assignment-store-writer.ts"), ["./assignment-store"]),
+    writer: stripImports(readSource("assignment-store-writer.ts"), [
+      "@splitch/contracts",
+      "@splitch/privacy",
+      "./app-identity-reset-fence",
+      "./assignment-store",
+    ]),
     assignmentDo: stripIsRecordHelpers(
       stripImports(readSource("assignment-store-do.ts"), [
         "cloudflare:workers",
+        "./app-identity-reset-fence",
         "./assignment-store",
         "./assignment-store-input",
         "./assignment-store-writer",
@@ -77,6 +86,11 @@ function assignmentWriterName(input) {
 }
 function assignmentKey(appId, idType, targetingKeyHash) {
   return "assignment:" + appId + ":" + idType + ":" + targetingKeyHash;
+}
+function keyVersionOf(targetingKeyHash) {
+  const separator = targetingKeyHash.indexOf(":");
+  if (separator <= 0) throw new Error("privacy: invalid Targeting Key hash");
+  return targetingKeyHash.slice(0, separator);
 }
 function mergeAssignmentValue(value, input) {
   if (value[input.experimentId] !== undefined) return value;
@@ -128,6 +142,7 @@ function inventoryRegisterPortForApp(client, appId) {
   return { registerEntity: (ref) => client.registerEntity(appId, ref) };
 }
 ${stripExport(sources.assignmentInput)}
+${stripExport(sources.identityResetFence)}
 ${stripExport(sources.core)}
 ${stripExport(sources.ensure)}
 ${stripExport(sources.fetchHandler)}

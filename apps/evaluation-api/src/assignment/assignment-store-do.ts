@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { requireDestroyedIdentityVersions } from "./app-identity-reset-fence";
 import type { AssignmentKv } from "./assignment-store";
 import { parseHashedAssignmentPut } from "./assignment-store-input";
 import { AssignmentStoreWriter } from "./assignment-store-writer";
@@ -11,46 +12,61 @@ export class AssignmentStoreDurableObjectV2 extends DurableObject<AssignmentStor
   override async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/export") {
-      const writer = new AssignmentStoreWriter(
-        this.ctx.storage,
-        this.env.ASSIGNMENTS_KV,
-        (promise) => this.ctx.waitUntil(promise),
+      return Response.json(
+        await this.ctx.blockConcurrencyWhile(() => this.writer().exportEntity()),
       );
-      return Response.json(await this.ctx.blockConcurrencyWhile(() => writer.exportEntity()));
     }
-    if (request.method !== "POST" || (url.pathname !== "/put" && url.pathname !== "/delete")) {
+    if (request.method === "POST") return this.post(url.pathname, request);
+    return Response.json({ error: "not found" }, { status: 404 });
+  }
+
+  private async post(path: string, request: Request): Promise<Response> {
+    if (path === "/put") {
+      const input = parseHashedAssignmentPut(await request.json());
+      const result = await this.ctx.blockConcurrencyWhile(() => this.writer().put(input));
+      return Response.json(result);
+    }
+    if (path !== "/delete" && path !== "/reset-app") {
       return Response.json({ error: "not found" }, { status: 404 });
     }
+    return this.delete(path, (await request.json()) as Record<string, unknown>);
+  }
 
-    const writer = new AssignmentStoreWriter(this.ctx.storage, this.env.ASSIGNMENTS_KV, (promise) =>
+  private async delete(path: string, body: Record<string, unknown>): Promise<Response> {
+    const identity = assignmentIdentity(body);
+    if (identity === null) {
+      return Response.json({ error: "Assignment identity is required" }, { status: 400 });
+    }
+    if (path === "/reset-app") {
+      const proof = await this.ctx.blockConcurrencyWhile(() =>
+        this.writer().resetApp(identity, requireDestroyedIdentityVersions(body.destroyedVersions)),
+      );
+      return Response.json({ deleted: true, ...proof });
+    }
+    if (typeof body.deleteBeforeTsMs !== "number" || !Number.isFinite(body.deleteBeforeTsMs)) {
+      return Response.json({ error: "deleteBeforeTsMs is required" }, { status: 400 });
+    }
+    const proof = await this.ctx.blockConcurrencyWhile(() =>
+      this.writer().deleteEntity(identity, body.deleteBeforeTsMs as number),
+    );
+    return Response.json({ deleted: true, proof });
+  }
+
+  private writer(): AssignmentStoreWriter {
+    return new AssignmentStoreWriter(this.ctx.storage, this.env.ASSIGNMENTS_KV, (promise) =>
       this.ctx.waitUntil(promise),
     );
-    if (url.pathname === "/delete") {
-      const body = (await request.json()) as Record<string, unknown>;
-      if (
-        typeof body.appId !== "string" ||
-        typeof body.idType !== "string" ||
-        typeof body.targetingKeyHash !== "string" ||
-        typeof body.deleteBeforeTsMs !== "number" ||
-        !Number.isFinite(body.deleteBeforeTsMs)
-      ) {
-        return Response.json({ error: "deleteBeforeTsMs is required" }, { status: 400 });
-      }
-      const proof = await this.ctx.blockConcurrencyWhile(() =>
-        writer.deleteEntity(
-          {
-            appId: body.appId as string,
-            idType: body.idType as string,
-            targetingKeyHash: body.targetingKeyHash as string,
-          },
-          body.deleteBeforeTsMs as number,
-        ),
-      );
-      return Response.json({ deleted: true, proof });
-    }
-
-    const input = parseHashedAssignmentPut(await request.json());
-    const result = await this.ctx.blockConcurrencyWhile(() => writer.put(input));
-    return Response.json(result);
   }
+}
+
+function assignmentIdentity(body: Record<string, unknown>): {
+  appId: string;
+  idType: string;
+  targetingKeyHash: string;
+} | null {
+  return typeof body.appId === "string" &&
+    typeof body.idType === "string" &&
+    typeof body.targetingKeyHash === "string"
+    ? { appId: body.appId, idType: body.idType, targetingKeyHash: body.targetingKeyHash }
+    : null;
 }

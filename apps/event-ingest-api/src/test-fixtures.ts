@@ -5,10 +5,10 @@ import {
   type AdmissionOption,
   admissionBinding,
 } from "./admission-test-fixture";
+import { entityMetricPrivacyFixtureFetch } from "./entity-metric-privacy.test-fixture";
 import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
 import type { EvaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import type { ExposurePayload } from "./event-ingest-test-types";
-import { entityMetricPrivacyFixtureFetch } from "./entity-metric-privacy.test-fixture";
 import type worker from "./index";
 import { EvaluationEntrypoint } from "./index";
 import {
@@ -115,6 +115,8 @@ export async function postEvaluationCommit(
   options: {
     payload?: Partial<ExposurePayload>;
     exposures?: unknown[];
+    identityVersion?: string;
+    idempotencyKey?: string;
     statuses?: readonly number[];
     env?: ReturnType<typeof makeEnv>;
   } = {},
@@ -139,8 +141,8 @@ export async function postEvaluationCommit(
         hasExposure: true,
         flagKey: "checkout",
         sdkRuntime: "javascript",
-        idempotencyKey: "eval-request-1",
-        identityVersion: "app-v1",
+        idempotencyKey: options.idempotencyKey ?? "eval-request-1",
+        identityVersion: options.identityVersion ?? "app-v1",
         exposures: options.exposures ?? [{ ...baseExposure(), ...options.payload }],
       }),
     }),

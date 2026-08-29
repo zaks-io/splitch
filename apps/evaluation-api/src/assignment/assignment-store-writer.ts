@@ -1,4 +1,10 @@
 import { assignmentKey } from "@splitch/contracts";
+import { keyVersionOf } from "@splitch/privacy";
+import {
+  extendAppIdentityResetFence,
+  isAppIdentityVersionReset,
+  readAppIdentityResetFence,
+} from "./app-identity-reset-fence";
 import type { AssignmentStoreEntry, AssignmentStoreValue } from "./assignment-store";
 import {
   type AssignmentKv,
@@ -31,6 +37,12 @@ export interface AssignmentWriterExport {
   proof: "assignment-do-winners-exported-v1";
 }
 
+export interface AssignmentWriterAppResetProof {
+  assignments: AssignmentStoreValue;
+  fencedIdentityVersions: readonly string[];
+  proof: "assignment-do-app-reset-v1";
+}
+
 interface EntityDeletionCutoff {
   readonly deleteBeforeTsMs: number;
 }
@@ -49,6 +61,10 @@ export class AssignmentStoreWriter {
   async put(input: HashedAssignmentPutInput): Promise<AssignmentStorePutResult> {
     if (input.sourceCreatedAtMs === undefined || !Number.isFinite(input.sourceCreatedAtMs)) {
       throw new Error("assignment-store: sourceCreatedAtMs is required");
+    }
+    const identityVersion = input.identityVersion ?? keyVersionOf(input.targetingKeyHash);
+    if (await isAppIdentityVersionReset(this.storage, identityVersion)) {
+      throw new Error("assignment-store: App identity generation was reset");
     }
     const cutoff = await this.storage.get<EntityDeletionCutoff>(ENTITY_DELETION_CUTOFF_KEY);
     if (cutoff !== undefined && input.sourceCreatedAtMs <= cutoff.deleteBeforeTsMs) {
@@ -93,6 +109,24 @@ export class AssignmentStoreWriter {
     return "assignment-do-cutoff-tombstone-v2";
   }
 
+  async resetApp(
+    identity: Pick<HashedAssignmentPutInput, "appId" | "idType" | "targetingKeyHash">,
+    destroyedVersions: readonly string[],
+  ): Promise<AssignmentWriterAppResetProof> {
+    const fencedIdentityVersions = await extendAppIdentityResetFence(
+      this.storage,
+      destroyedVersions,
+    );
+    const stored = await this.storage.list<StoredAssignment>({ prefix: STORAGE_KEY_PREFIX });
+    for (const key of stored.keys()) await this.storage.delete(key);
+    await this.rewriteKvFromDurableWinners(identity);
+    const assignments = (await this.exportEntity()).assignments;
+    if (Object.keys(assignments).length > 0) {
+      throw new Error("assignment-store: App reset winner purge proof is not empty");
+    }
+    return { assignments, fencedIdentityVersions, proof: "assignment-do-app-reset-v1" };
+  }
+
   async exportEntity(): Promise<AssignmentWriterExport> {
     const stored = await this.storage.list<StoredAssignment>({ prefix: STORAGE_KEY_PREFIX });
     const assignments: AssignmentStoreValue = {};
@@ -106,7 +140,8 @@ export class AssignmentStoreWriter {
     return {
       assignments,
       tombstoned:
-        (await this.storage.get<EntityDeletionCutoff>(ENTITY_DELETION_CUTOFF_KEY)) !== undefined,
+        (await this.storage.get<EntityDeletionCutoff>(ENTITY_DELETION_CUTOFF_KEY)) !== undefined ||
+        (await readAppIdentityResetFence(this.storage)).length > 0,
       proof: "assignment-do-winners-exported-v1",
     };
   }

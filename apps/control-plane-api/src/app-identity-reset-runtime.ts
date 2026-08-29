@@ -64,7 +64,12 @@ export function productionAppIdentityResetPurgers(
       );
       return `delivery:config_keys=${configKeys};${proof}`;
     },
-    assignments: scoped((appId) => env.EVALUATION_API.purgeAppIdentityAssignments(appId, resetId)),
+    assignments: async ({ appId, destroyedVersions }) => {
+      if (resetAppId && resetAppId !== appId)
+        throw new Error("App identity purgers changed App scope");
+      resetAppId = appId;
+      return env.EVALUATION_API.purgeAppIdentityAssignments(appId, resetId, destroyedVersions);
+    },
     analytics: async ({ appId, destroyedVersions }) => {
       if (resetAppId && resetAppId !== appId)
         throw new Error("App identity purgers changed App scope");

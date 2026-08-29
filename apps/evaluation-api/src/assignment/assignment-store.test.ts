@@ -23,6 +23,7 @@ import { KvAssignmentStore } from "./kv-assignment-store";
 
 function productionAssignmentStoreScript(): string {
   const root = dirname(fileURLToPath(import.meta.url));
+  const identityResetFence = readFileSync(join(root, "app-identity-reset-fence.ts"), "utf8");
   const writer = readFileSync(join(root, "assignment-store-writer.ts"), "utf8").replace(
     /^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m,
     "",
@@ -39,6 +40,11 @@ function productionAssignmentStoreScript(): string {
 const CURRENT_KV_SCHEMA_VERSION = 1;
 function assignmentKey(appId, idType, targetingKeyHash) {
   return "assignment:" + appId + ":" + idType + ":" + targetingKeyHash;
+}
+function keyVersionOf(targetingKeyHash) {
+  const separator = targetingKeyHash.indexOf(":");
+  if (separator <= 0) throw new Error("privacy: invalid Targeting Key hash");
+  return targetingKeyHash.slice(0, separator);
 }
 function mergeAssignmentValue(value, input) {
   if (value[input.experimentId] !== undefined) return value;
@@ -60,6 +66,7 @@ async function readAssignmentValue(kv, key) {
 import { DurableObject } from "cloudflare:workers";
 ${stubs}
 ${assignmentInput}
+${stripExport(identityResetFence)}
 ${stripExport(writer)}
 ${assignmentDo}
 export default { async fetch() { return new Response("ok"); } };

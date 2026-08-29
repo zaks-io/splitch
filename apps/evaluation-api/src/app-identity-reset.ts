@@ -1,3 +1,4 @@
+import { requireDestroyedIdentityVersions } from "./assignment/app-identity-reset-fence";
 import { assignmentWriterName } from "./assignment/assignment-store";
 import type { HoldoverWriteAppInventoryStatus } from "./assignment/holdover-write-app-inventory";
 import { DurableHoldoverWriteAppInventoryClient } from "./assignment/holdover-write-app-inventory-client";
@@ -9,7 +10,9 @@ export async function purgeAppIdentityAssignments(
   env: EvaluationApiEnv,
   appId: string,
   resetId: string,
+  destroyedVersions: readonly string[],
 ): Promise<string> {
+  const resetVersions = requireDestroyedIdentityVersions(destroyedVersions);
   const inventory = new DurableHoldoverWriteAppInventoryClient(
     required(env.HOLDOVER_WRITE_APP_INVENTORY, "HOLDOVER_WRITE_APP_INVENTORY"),
   );
@@ -25,22 +28,23 @@ export async function purgeAppIdentityAssignments(
     const writers = env.ASSIGNMENT_STORE_WRITER;
     const writerResponse = await writers
       .get(writers.idFromName(assignmentWriterName(identity)))
-      .fetch("https://assignment-store.local/delete", {
+      .fetch("https://assignment-store.local/reset-app", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...identity, deleteBeforeTsMs: frozen.deleteBeforeTsMs }),
+        body: JSON.stringify({ ...identity, destroyedVersions: resetVersions }),
       });
-    await requireAssignmentWriterTombstone(writerResponse);
+    await requireAssignmentWriterReset(writerResponse, resetVersions);
 
     const outbox = required(env.HOLDOVER_WRITE_OUTBOX, "HOLDOVER_WRITE_OUTBOX");
     const outboxResponse = await outbox
       .get(outbox.idFromName(holdoverWriteOutboxName(identity)))
-      .fetch("https://holdover-write-outbox.local/delete", {
+      .fetch("https://holdover-write-outbox.local/reset-app", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...identity, deleteBeforeTsMs: frozen.deleteBeforeTsMs }),
+        body: JSON.stringify({ destroyedVersions: resetVersions }),
       });
-    await requireOutboxPurged(outboxResponse);
+    await requireOutboxReset(outboxResponse, resetVersions);
+    await inventory.markEntityPurged(appId, ref);
     durableObjects += 2;
   }
 
@@ -160,7 +164,10 @@ async function frozenResetInventory(
   return { ...status, deleteBeforeTsMs: status.deleteBeforeTsMs };
 }
 
-async function requireAssignmentWriterTombstone(response: Response): Promise<void> {
+async function requireAssignmentWriterReset(
+  response: Response,
+  destroyedVersions: readonly string[],
+): Promise<void> {
   if (!response.ok) {
     throw new Error(`App identity reset Assignment writer purge returned HTTP ${response.status}`);
   }
@@ -168,20 +175,43 @@ async function requireAssignmentWriterTombstone(response: Response): Promise<voi
   if (
     !isRecord(body) ||
     body.deleted !== true ||
-    body.proof !== "assignment-do-cutoff-tombstone-v2"
+    !isEmptyRecord(body.assignments) ||
+    !includesVersions(body.fencedIdentityVersions, destroyedVersions) ||
+    body.proof !== "assignment-do-app-reset-v1"
   ) {
     throw new Error("App identity reset Assignment writer purge returned an invalid proof");
   }
 }
 
-async function requireOutboxPurged(response: Response): Promise<void> {
+async function requireOutboxReset(
+  response: Response,
+  destroyedVersions: readonly string[],
+): Promise<void> {
   if (!response.ok) {
     throw new Error(`App identity reset outbox purge returned HTTP ${response.status}`);
   }
   const body = await response.json().catch(() => null);
-  if (!isRecord(body) || body.ok !== true || body.remainingJobs !== false) {
+  if (
+    !isRecord(body) ||
+    !Array.isArray(body.jobs) ||
+    body.jobs.length > 0 ||
+    !includesVersions(body.fencedIdentityVersions, destroyedVersions) ||
+    body.proof !== "holdover-write-outbox-app-reset-v1"
+  ) {
     throw new Error("App identity reset outbox purge did not durably checkpoint the Entity");
   }
+}
+
+function isEmptyRecord(value: unknown): boolean {
+  return isRecord(value) && Object.keys(value).length === 0;
+}
+
+function includesVersions(value: unknown, expected: readonly string[]): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every((version) => typeof version === "string") &&
+    expected.every((version) => value.includes(version))
+  );
 }
 
 async function deleteKvPrefix(kv: KVNamespace, prefix: string): Promise<number> {

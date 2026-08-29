@@ -1,3 +1,4 @@
+import { requireDestroyedIdentityVersions } from "./app-identity-reset-fence";
 import type { HashedAssignmentPutInput } from "./assignment-store";
 import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
 import {
@@ -14,6 +15,7 @@ import {
   type HoldoverWriteSuppressionPort,
   purgeEntityOutboxState,
   readEntitySuppression,
+  resetAppOutboxState,
   suppressEntityOutbox,
 } from "./holdover-write-outbox-core";
 import {
@@ -55,6 +57,15 @@ const outboxPostRoutes: Record<string, OutboxHandler> = {
       parseDeleteBeforeTsMs(body, Number.POSITIVE_INFINITY),
     );
     return Response.json({ ok: true, ...result });
+  },
+  "/reset-app": async (storage, _put, request) => {
+    const body = await request.json().catch(() => ({}));
+    return Response.json(
+      await resetAppOutboxState(
+        storage,
+        requireDestroyedIdentityVersions(isRecord(body) ? body.destroyedVersions : undefined),
+      ),
+    );
   },
   "/ensure": async (storage, putPort, request, ctx) =>
     ensureResponse(storage, putPort, await request.json(), ctx),

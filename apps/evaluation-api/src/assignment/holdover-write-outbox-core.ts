@@ -1,3 +1,4 @@
+import { extendAppIdentityResetFence } from "./app-identity-reset-fence";
 import { assignmentWriterName, type HashedAssignmentPutInput } from "./assignment-store";
 
 /** Max put attempts after durable ownership (including the first). */
@@ -22,6 +23,12 @@ export interface HoldoverWriteEnsureResult {
 
 export interface HoldoverWriteOutboxPurgeResult {
   readonly remainingJobs: boolean;
+}
+
+export interface HoldoverWriteOutboxAppResetProof {
+  readonly jobs: readonly HoldoverWriteJob[];
+  readonly fencedIdentityVersions: readonly string[];
+  readonly proof: "holdover-write-outbox-app-reset-v1";
 }
 
 export interface HoldoverWriteOutboxStorage {
@@ -144,6 +151,24 @@ export async function deleteEntityOutbox(
 ): Promise<HoldoverWriteOutboxPurgeResult> {
   await suppressEntityOutbox(storage, deleteBeforeTsMs);
   return purgeEntityOutboxState(storage, deleteBeforeTsMs);
+}
+
+export async function resetAppOutboxState(
+  storage: HoldoverWriteOutboxStorage,
+  destroyedVersions: readonly string[],
+): Promise<HoldoverWriteOutboxAppResetProof> {
+  const fencedIdentityVersions = await extendAppIdentityResetFence(storage, destroyedVersions);
+  const jobs = await storage.list<HoldoverWriteJob>({ prefix: HOLDOVER_WRITE_JOB_PREFIX });
+  for (const key of jobs.keys()) await storage.delete(key);
+  await storage.deleteAlarm();
+  const remaining = await storage.list<HoldoverWriteJob>({ prefix: HOLDOVER_WRITE_JOB_PREFIX });
+  if (remaining.size > 0)
+    throw new Error("holdover-write-outbox: App reset purge proof is not empty");
+  return {
+    jobs: [...remaining.values()],
+    fencedIdentityVersions,
+    proof: "holdover-write-outbox-app-reset-v1",
+  };
 }
 
 export async function purgeStaleJobs(

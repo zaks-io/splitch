@@ -92,11 +92,22 @@ export class ResetHarness {
     const path = new URL(requestUrl(input)).pathname;
     if (path === "/register") return this.registerEntity(init);
     if (path === "/begin-deletion") return this.beginDeletion(init);
+    if (path === "/mark-entity-purged") return this.markEntityPurged(init);
     if (path === "/status") return Response.json(this.status());
     if (path === "/cancel-deletion" || path === "/complete-identity-reset") {
       return this.cancelFetch(path === "/complete-identity-reset");
     }
     return Response.json({ error: "not found" }, { status: 404 });
+  }
+
+  private async markEntityPurged(init?: RequestInit): Promise<Response> {
+    const body = await requestBody(init);
+    const ref = {
+      idType: requireString(body, "idType"),
+      targetingKeyHash: requireString(body, "targetingKeyHash"),
+    };
+    this.entities = this.entities.filter((entity) => entityName(entity) !== entityName(ref));
+    return Response.json({ ok: true });
   }
 
   private async registerEntity(init?: RequestInit): Promise<Response> {
@@ -175,7 +186,7 @@ export class ResetHarness {
           ? Response.json({ error: "Entity assignments are deleted" }, { status: 409 })
           : Response.json({ status: "stored" });
       }
-      this.calls.push(`writer:delete:${name}`);
+      this.calls.push(`writer:reset:${name}`);
       if (consumeFailure(this.writerDeleteFailures, name)) {
         return Response.json({ error: "forced writer failure" }, { status: 503 });
       }
@@ -184,23 +195,31 @@ export class ResetHarness {
         `assignment:${requireString(body, "appId")}:${requireString(body, "idType")}:${requireString(body, "targetingKeyHash")}`,
       );
       this.tombstonedWriters.add(name);
-      return Response.json({ deleted: true, proof: "assignment-do-cutoff-tombstone-v2" });
+      return Response.json({
+        deleted: true,
+        assignments: {},
+        fencedIdentityVersions: ["v1"],
+        proof: "assignment-do-app-reset-v1",
+      });
     });
   }
 
   private outboxNamespace(): HoldoverWriteOutboxNamespace {
     return namespace(async (request, init) => {
       const name = request.name;
-      const body = await requestBody(init);
-      this.calls.push(`outbox:delete:${name}:${String(requireNumber(body, "deleteBeforeTsMs"))}`);
+      await requestBody(init);
+      this.calls.push(`outbox:reset:${name}`);
       if (!this.tombstonedWriters.has(name)) {
         return Response.json({ error: "writer is not tombstoned" }, { status: 409 });
       }
       if (consumeFailure(this.outboxDeleteFailures, name)) {
         return Response.json({ error: "forced outbox failure" }, { status: 503 });
       }
-      this.entities = this.entities.filter((ref) => entityName(ref) !== name);
-      return Response.json({ ok: true, remainingJobs: false });
+      return Response.json({
+        jobs: [],
+        fencedIdentityVersions: ["v1"],
+        proof: "holdover-write-outbox-app-reset-v1",
+      });
     });
   }
 }
