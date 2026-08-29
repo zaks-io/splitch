@@ -188,7 +188,14 @@ async function handleRequest(
   });
 
   const repo = createRepository(env.DB);
-  const membershipAccess = makeTokenMembershipAccess(repo);
+  // A membership mutation can invalidate the same user authenticated by this
+  // request. Skipping the cold fill avoids two writes to one KV key inside its
+  // one-write-per-second limit; the mutation's delete remains fail-loud.
+  const membershipAccess = makeTokenMembershipAccess(
+    repo,
+    env.SESSION_STORE,
+    request.method === "GET" || request.method === "HEAD",
+  );
   const panelProtocol: PanelProtocol =
     typeof authMode === "object" || authMode === "mcp" ? "none" : authMode;
   const panelAuthResolver = makeControlPlaneAuthResolver(

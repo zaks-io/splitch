@@ -139,7 +139,15 @@ const handler = {
           remoteJwksSignatureVerifier(jwksUri, { fetch: fetchTrustedJwks }).verify(compactJws),
         authApiOrigin: origin,
       },
-      register: { repo, turnstile, rateLimiter, workos, tokenSigner, now },
+      register: {
+        repo,
+        turnstile,
+        rateLimiter,
+        workos,
+        tokenSigner,
+        now,
+        sessionStore: env.SESSION_STORE,
+      },
       claim: {
         repo,
         workos,

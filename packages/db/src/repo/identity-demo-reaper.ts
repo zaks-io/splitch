@@ -9,6 +9,31 @@ export interface DemoReaperResult {
 
 export function makeDemoReaper(db: Db, d1: D1Database) {
   return {
+    async listExpiredProvisionalMembershipUserIds(nowIso: string): Promise<string[]> {
+      const result = await d1
+        .prepare(
+          `
+            SELECT memberships.user_id
+            FROM org_memberships AS memberships
+            INNER JOIN organizations AS organization ON organization.id = memberships.org_id
+            WHERE organization.is_provisional = 1
+              AND organization.demo_expires_at IS NOT NULL
+              AND organization.demo_expires_at < ?
+            UNION
+            SELECT memberships.user_id
+            FROM app_memberships AS memberships
+            INNER JOIN apps AS app ON app.id = memberships.app_id
+            INNER JOIN organizations AS organization ON organization.id = app.organization_id
+            WHERE organization.is_provisional = 1
+              AND organization.demo_expires_at IS NOT NULL
+              AND organization.demo_expires_at < ?
+          `,
+        )
+        .bind(nowIso, nowIso)
+        .all<{ user_id: string }>();
+      return result.results.map(({ user_id }) => user_id);
+    },
+
     async reapExpiredProvisionalOrganizations(nowIso: string): Promise<DemoReaperResult> {
       const candidates = await db
         .select({ id: organizations.id })

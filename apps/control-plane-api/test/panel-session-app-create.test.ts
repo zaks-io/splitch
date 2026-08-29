@@ -12,6 +12,7 @@ import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { makePanelSessionAccess } from "../src/panel-session-access";
 import { makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
+import { makeMembershipCacheInvalidator } from "../src/membership-cache";
 import type { PanelDelegationReplayStore } from "../src/panel-identity-replay";
 import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
@@ -82,6 +83,7 @@ beforeEach(async () => {
   const appDeps = {
     rateLimiter: allowLimiter,
     repo,
+    membershipCache: makeMembershipCacheInvalidator(bindings.kv),
     credentialStore: bindings.credentialKv,
     memberProfileResolver: () => null,
     nowIso: () => new Date(NOW_MS).toISOString(),

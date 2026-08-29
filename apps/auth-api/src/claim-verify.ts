@@ -14,6 +14,7 @@ import {
   tokenize,
 } from "./claim-verify-support";
 import { OAuthError } from "./oauth-errors";
+import { invalidateMembershipCache } from "./membership-cache";
 
 const IN_FLIGHT_LEASE_MS = 5 * 60 * 1000;
 const COMPLETED_REPLAY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -214,17 +215,12 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
         }
       }
     }
-    if (await deps.repo.claim.completeClaim(transfer)) {
-      const persistedResource = await completedReservationResource(
-        deps,
-        identityHashes,
-        keyHash,
-        requestedResource,
-        nowIso,
-      );
-      return tokenize(deps, claimant, verifiedUserId, now, persistedResource);
-    }
-    if (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso })) {
+    await invalidateMembershipCache(deps.sessionStore, [claimant.userId, verifiedUserId]);
+    const transferred = await deps.repo.claim.completeClaim(transfer);
+    const completed =
+      transferred ||
+      (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso }));
+    if (completed) {
       const persistedResource = await completedReservationResource(
         deps,
         identityHashes,

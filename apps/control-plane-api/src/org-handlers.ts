@@ -14,6 +14,7 @@ import { makeCreateOrganizationHandler } from "./org-create-handler";
 import { makeListOrganizationsHandler } from "./org-list-handler";
 import { organizationResponse } from "./org-response";
 import { membershipConflict } from "./membership-conflict";
+import { type MembershipCacheInvalidator, invalidateMembershipCache } from "./membership-cache";
 
 export interface MemberProfile {
   email: string;
@@ -28,6 +29,7 @@ export type MemberProfileResolver = (args: {
 interface OrgHandlerDeps {
   repo: Repository;
   memberProfileResolver?: MemberProfileResolver;
+  membershipCache?: MembershipCacheInvalidator;
   nowIso?: () => string;
 }
 
@@ -109,6 +111,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       const profile = await resolveNewMemberProfile(deps, orgId, userId, request, requestId);
       if (profile instanceof Response) return profile;
 
+      await invalidateMembershipCache(deps.membershipCache, [userId]);
       const row = await deps.repo.identity.createOrgMembership({
         orgId,
         userId,
@@ -134,6 +137,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       const profile = await resolveProfile(deps, orgId, userId, request, requestId);
       if (profile instanceof Response) return profile;
 
+      await invalidateMembershipCache(deps.membershipCache, [userId]);
       const updated = await deps.repo.identity.updateOrgMembershipRole(orgId, userId, role);
       if (!updated) return failedMemberUpdate(current, role, orgId, requestId);
       return Response.json(memberFromMembership(updated, profile));
@@ -151,6 +155,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       const lastOwner = await rejectLastOwnerRemoval(deps, orgId, current, null, requestId);
       if (lastOwner) return lastOwner;
 
+      await invalidateMembershipCache(deps.membershipCache, [userId]);
       const deleted = await deps.repo.identity.deleteOrgMembership(orgId, userId);
       if (deleted === 0) return failedMemberDelete(current, orgId, requestId);
       return Response.json({ deleted: true });

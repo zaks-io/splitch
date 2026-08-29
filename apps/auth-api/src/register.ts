@@ -3,6 +3,7 @@ import type { RateLimiter } from "./rate-limit";
 import type { TokenSigner } from "./token-exchange";
 import type { TurnstilePort } from "./turnstile";
 import type { WorkOsPort } from "./workos";
+import { invalidateMembershipCache } from "./membership-cache";
 
 /**
  * Door B: anonymous / pre-claim register (auth-doors.md, ADR-0034).
@@ -37,6 +38,7 @@ export interface RegisterDeps {
   rateLimiter: RateLimiter;
   workos: WorkOsPort;
   tokenSigner: TokenSigner;
+  sessionStore: KVNamespace;
   now: () => number;
 }
 
@@ -82,6 +84,7 @@ export async function registerAnonymous(
   // The slug is the Org id: a provisional Organization has no user-chosen name to
   // derive from, and every one of them would otherwise slugify identically.
   // The claim ceremony is where a real handle gets picked.
+  await invalidateMembershipCache(deps.sessionStore, [userId]);
   const created = await deps.repo.identity.createOrganization({
     organization: {
       id: orgId,

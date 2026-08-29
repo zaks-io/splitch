@@ -10,6 +10,7 @@ import type { ConfigStoreAccess } from "./config-store-do";
 import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
+import { makeMembershipCacheInvalidator } from "./membership-cache";
 import type { RunSnapshotDelivery } from "./run-snapshot";
 import { makeSessionStore } from "./session-store";
 import type { LocalBindings } from "./test-fixtures";
@@ -106,6 +107,7 @@ export function makeAppForRepo(
     }),
     rateLimiter: allowLimiter,
     repo,
+    membershipCache: makeMembershipCacheInvalidator(h.bindings.kv),
     configStore,
     runSnapshotDelivery,
     credentialStore,

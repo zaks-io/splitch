@@ -14,6 +14,7 @@ import type { ConfigStoreAccess } from "./config-store-do";
 import { type CredentialCacheWriterAccess, randomHex } from "./credential-cache";
 import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
+import type { MembershipCacheInvalidator } from "./membership-cache";
 
 export interface AppEnvironmentDeps {
   repo: Repository;
@@ -22,6 +23,7 @@ export interface AppEnvironmentDeps {
   configStore?: ConfigStoreAccess;
   exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
   holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
+  membershipCache?: MembershipCacheInvalidator;
   nowIso?: () => string;
 }
 

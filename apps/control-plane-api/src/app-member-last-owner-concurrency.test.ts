@@ -23,7 +23,10 @@ beforeEach(async () => {
   dispose = local.dispose;
   await seedTwoOwners(local.d1);
   repo = createRepository(local.d1);
-  handlers = makeAppMemberHandlers({ repo });
+  handlers = makeAppMemberHandlers({
+    repo,
+    membershipCache: { invalidate: async () => undefined },
+  });
 });
 
 afterEach(async () => {

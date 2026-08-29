@@ -18,6 +18,7 @@ import {
   type HoldoverWriteOutboxCleanup,
   HoldoverWriteOutboxCleanupError,
 } from "./holdover-write-outbox-cleanup";
+import { invalidateMembershipCache } from "./membership-cache";
 
 export function renderAppDeleteCleanupError(cause: unknown, requestId: string): Response | null {
   if (cause instanceof EnvironmentExposureStatusCleanupError) {
@@ -104,18 +105,23 @@ async function prepareAndCrossAppDeletionBoundary(
   cleanup: HoldoverWriteOutboxCleanup,
   input: Parameters<HoldoverWriteOutboxCleanup["prepare"]>[0],
 ): Promise<void> {
-  try {
-    await cleanup.prepare(input);
-    for (const environment of environments) {
-      await revokeEnvironmentCredentialsForAppDelete(deps, appId, environment.id);
-    }
-    await deps.repo.identity.deleteAppCascade(appScope(appId), {
+  const recover = (cause: unknown) =>
+    recoverFailedAppDeletionBoundary(deps, appId, saga, cleanup, input, cause);
+  await cleanup.prepare(input).catch(recover);
+  for (const environment of environments) {
+    await revokeEnvironmentCredentialsForAppDelete(deps, appId, environment.id).catch(recover);
+  }
+  const affectedMemberships = await deps.repo.identity.listAppMembers(appScope(appId));
+  await invalidateMembershipCache(
+    deps.membershipCache,
+    affectedMemberships.map(({ userId }) => userId),
+  ).catch(recover);
+  await deps.repo.identity
+    .deleteAppCascade(appScope(appId), {
       ...saga,
       updatedAt: nowIso(deps),
-    });
-  } catch (cause) {
-    await recoverFailedAppDeletionBoundary(deps, appId, saga, cleanup, input, cause);
-  }
+    })
+    .catch(recover);
 }
 
 async function recoverFailedAppDeletionBoundary(

@@ -32,7 +32,11 @@ beforeAll(async () => {
   const local = await seedTwoTenants();
   dispose = local.dispose;
   repo = createRepository(local.d1);
-  handlers = makeAppMemberHandlers({ repo, nowIso: () => "2026-08-07T00:00:00.000Z" });
+  handlers = makeAppMemberHandlers({
+    repo,
+    membershipCache: { invalidate: async () => undefined },
+    nowIso: () => "2026-08-07T00:00:00.000Z",
+  });
 });
 
 afterAll(async () => {

@@ -13,6 +13,7 @@ import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { sha256Hex, writeApiKeyCache } from "./credential-cache";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
+import { makeMembershipCacheInvalidator } from "./membership-cache";
 import { makeSessionStore } from "./session-store";
 import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import type { LocalBindings } from "./test-fixtures";
@@ -100,6 +101,7 @@ export function makeApp(
     }),
     rateLimiter: allowLimiter,
     repo: createRepository(bindings.d1),
+    membershipCache: makeMembershipCacheInvalidator(bindings.kv),
     credentialStore,
     exposureStatusCleanup: noOpExposureStatusCleanup,
     holdoverWriteOutboxCleanup: noOpHoldoverWriteOutboxCleanup,

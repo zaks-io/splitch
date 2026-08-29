@@ -11,6 +11,7 @@ import { requireAppAdmin, requireAppDelete, requireAppMember } from "./app-authz
 import { appNotFound } from "./app-environment-model";
 import { objectBody, pathParam } from "./handler-input";
 import { membershipConflict } from "./membership-conflict";
+import { type MembershipCacheInvalidator, invalidateMembershipCache } from "./membership-cache";
 import type { MemberProfileResolver } from "./org-handlers";
 
 /**
@@ -26,6 +27,7 @@ import type { MemberProfileResolver } from "./org-handlers";
 export interface AppMemberHandlerDeps {
   repo: Repository;
   memberProfileResolver?: MemberProfileResolver;
+  membershipCache?: MembershipCacheInvalidator;
   nowIso?: () => string;
 }
 
@@ -83,6 +85,7 @@ export function makeAppMemberHandlers(deps: AppMemberHandlerDeps) {
       if (existing)
         return membershipConflict(UserRoleSchema.parse(existing.role), "app", requestId);
 
+      await invalidateMembershipCache(deps.membershipCache, [userId]);
       const row = await deps.repo.identity.createAppMembership(scope, {
         userId,
         role,
@@ -105,6 +108,7 @@ export function makeAppMemberHandlers(deps: AppMemberHandlerDeps) {
       if (!current) return userNotFound(requestId);
 
       const role = UserRoleSchema.parse(objectBody(input).role);
+      await invalidateMembershipCache(deps.membershipCache, [userId]);
       const updated = await deps.repo.identity.updateAppMembership(scope, userId, { role });
       if (!updated) return failedOwnerMutation(current, role, appId, requestId);
       return Response.json(await appMemberResponse(deps, updated, app.organizationId, request));
@@ -123,6 +127,7 @@ export function makeAppMemberHandlers(deps: AppMemberHandlerDeps) {
       const current = await deps.repo.identity.getAppMembership(scope, userId);
       if (!current) return userNotFound(requestId);
 
+      await invalidateMembershipCache(deps.membershipCache, [userId]);
       const deleted = await deps.repo.identity.deleteAppMembership(scope, userId);
       if (deleted === 0) return failedOwnerMutation(current, null, appId, requestId);
       return Response.json({ deleted: true });

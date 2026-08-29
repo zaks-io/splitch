@@ -6,6 +6,7 @@ import {
   EnvironmentExposureStatusCleanupError,
   type EnvironmentExposureStatusCleanupInput,
 } from "./environment-exposure-status-cleanup";
+import { makeMembershipCacheInvalidator } from "./membership-cache";
 import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
 
 const APP_ID = "app_cleanup";
@@ -209,6 +210,7 @@ function app(
     authResolver,
     rateLimiter,
     repo: createRepository(bindings.d1),
+    membershipCache: makeMembershipCacheInvalidator(bindings.kv),
     credentialStore: bindings.credentialKv,
     exposureStatusCleanup: {
       delete: cleanup,

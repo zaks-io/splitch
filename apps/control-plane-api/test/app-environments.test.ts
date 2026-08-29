@@ -1,6 +1,5 @@
 import { deriveMcpTools, getRoute } from "@splitch/contracts";
 import { appScope, createRepository, envScope } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
@@ -8,6 +7,7 @@ import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { createRequestHash } from "../src/create-idempotency";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
+import { makeMembershipCacheInvalidator } from "../src/membership-cache";
 import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
@@ -17,7 +17,6 @@ import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
-const NOW_ISO = new Date(NOW_MS).toISOString();
 const ORG = {
   orgId: "org_app_env_crud",
   orgName: "App Env CRUD Co",
@@ -27,7 +26,7 @@ const ORG = {
 };
 const OWNER = "user_app_env_owner";
 
-const allowLimiter: RateLimiter = () => ({ limited: false });
+const allowLimiter = () => ({ limited: false as const });
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
 const rejectWideRead = () => Promise.reject<never>(new Error("memberships unavailable"));
 
@@ -72,10 +71,11 @@ beforeEach(async () => {
       }),
       rateLimiter: allowLimiter,
       repo: createRepository(bindings.d1),
+      membershipCache: makeMembershipCacheInvalidator(bindings.kv),
       credentialStore: bindings.credentialKv,
       exposureStatusCleanup: noOpExposureStatusCleanup,
       holdoverWriteOutboxCleanup: noOpHoldoverWriteOutboxCleanup,
-      nowIso: () => NOW_ISO,
+      nowIso: () => new Date(NOW_MS).toISOString(),
     }),
     signer,
     bindings,
@@ -200,8 +200,8 @@ describe("control-plane App and Environment CRUD", () => {
       key: body.key,
       createIdempotencyKey: body.idempotency_key,
       createRequestHash: await createRequestHash({ name: body.name, key: body.key }),
-      createdAt: NOW_ISO,
-      updatedAt: NOW_ISO,
+      createdAt: new Date(NOW_MS).toISOString(),
+      updatedAt: new Date(NOW_MS).toISOString(),
       createdBy: OWNER,
     });
 

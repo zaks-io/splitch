@@ -95,7 +95,7 @@ beforeEach(async () => {
     authResolver: makeControlPlaneAuthResolver({
       verifier,
       sessions: makeSessionStore(bindings.kv),
-      membershipAccess: makeTokenMembershipAccess(repo),
+      membershipAccess: makeTokenMembershipAccess(repo, bindings.kv),
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,
@@ -344,7 +344,7 @@ describe("control-plane auth middleware: fail-loud KV fault", () => {
       authResolver: makeControlPlaneAuthResolver({
         verifier,
         sessions: makeSessionStore(faultingKv),
-        membershipAccess: makeTokenMembershipAccess(createRepository(h.bindings.d1)),
+        membershipAccess: makeTokenMembershipAccess(createRepository(h.bindings.d1), h.bindings.kv),
         now: () => NOW_MS,
       }),
       rateLimiter: allowLimiter,

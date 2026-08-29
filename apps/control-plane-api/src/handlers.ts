@@ -20,6 +20,7 @@ import { makePromotionHandlers } from "./flag-config-promotion-handler";
 import { flagConfigFreezeRefusal, targetingFreezeRefusal } from "./flag-config-run-freeze";
 import { objectBody, pathParam } from "./handler-input";
 import { type MemberProfileResolver, makeOrgHandlers } from "./org-handlers";
+import type { MembershipCacheInvalidator } from "./membership-cache";
 
 /**
  * Minimal-but-real control-plane handlers for the mounted routes. They run AFTER
@@ -43,6 +44,7 @@ interface HandlerDeps {
   repo: Repository;
   configStore?: ConfigStoreAccess;
   memberProfileResolver?: MemberProfileResolver;
+  membershipCache?: MembershipCacheInvalidator;
   nowIso?: () => string;
 }
 

@@ -1,42 +1,27 @@
 import { buildOpenApiDocument } from "@splitch/contracts";
-import type { Repository } from "@splitch/db";
-import {
-  type AuthResolver,
-  createRegistrar,
-  type RateLimiter,
-  type Registrar,
-  type RegistrarDeps,
-} from "@splitch/worker-runtime";
+import { createRegistrar, type Registrar, type RegistrarDeps } from "@splitch/worker-runtime";
 import { Hono } from "hono";
+import type { AppDeps } from "./app-deps";
 import { appEnvironmentCleanupDeps } from "./app-environment-cleanup-deps";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
 import { makeAppMemberHandlers } from "./app-member-handlers";
 import { makeOtherApprovalApplication } from "./approval-application";
 import { makeApprovalHandlers } from "./approval-handlers";
-import type { AnalysisResultsReader } from "./attention-analysis-reader";
 import { unavailableAnalysisResults } from "./attention-analysis-reader";
 import { makeAttentionRollupHandler } from "./attention-rollup";
-import type { CloudflareHandlerDeps } from "./cloudflare-handlers";
 import { mountCloudflareRoutes } from "./cloudflare-route-mounting";
-import type { ConfigStoreAccess } from "./config-store-do";
-import type { ConvexHandlerDeps } from "./convex-handlers";
 import { mountConvexRoutes } from "./convex-route-mounting";
-import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
-import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
-import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
+import { mountDelegatedRoutes } from "./delegated-routes";
 import { registerEventDefinitionRoutes } from "./event-definition-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
 import { diagnosableHandlers } from "./flag-config-policy";
 import { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
 import { makeHandlers } from "./handlers";
-import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
 import { mountLiveUpdateRoute } from "./live-updates";
 import { makeMetricSegmentHandlers } from "./metric-segment-handlers";
-import type { MemberProfileResolver } from "./org-handlers";
 import { makePathSelectorResolver } from "./path-selector-resolution";
 import { controlPlaneRoute } from "./routes";
-import type { SentryHandlerDeps } from "./sentry-handlers";
 import { mountSentryRoutes } from "./sentry-route-mounting";
 import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
 
@@ -60,31 +45,6 @@ import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
  * routes also layer live D1 membership checks in their owning handler module
  * (ADR-0022).
  */
-
-export interface AppDeps {
-  door?: "public" | "binding";
-  authResolver: AuthResolver;
-  rateLimiter: RateLimiter;
-  repo: Repository;
-  credentialStore?: KVNamespace;
-  credentialCacheWriter?: CredentialCacheWriterAccess;
-  configStore?: ConfigStoreAccess;
-  eventDefinitionStore?: KVNamespace;
-  runSnapshotDelivery?: import("./run-snapshot").RunSnapshotDelivery;
-  memberProfileResolver?: MemberProfileResolver;
-  nowIso?: () => string;
-  defaultHeaders?: Record<string, string>;
-  observability?: RegistrarDeps["observability"];
-  logger?: Pick<Console, "warn">;
-  analysisResults?: AnalysisResultsReader;
-  delegationBindings?: DelegationBindings;
-  approvalArchiveStore?: import("./approval-archive").ApprovalArchiveStore;
-  exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
-  holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
-  convex?: Omit<ConvexHandlerDeps, "repo">;
-  cloudflare?: Omit<CloudflareHandlerDeps, "repo">;
-  sentry?: Omit<SentryHandlerDeps, "repo">;
-}
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
 export function controlPlaneRegistrar(deps: AppDeps): Registrar {
@@ -111,6 +71,7 @@ export function createApp(deps: AppDeps): Hono {
       repo: deps.repo,
       configStore: deps.configStore,
       memberProfileResolver: deps.memberProfileResolver,
+      membershipCache: deps.membershipCache,
       nowIso: deps.nowIso,
     }),
   );
@@ -146,6 +107,7 @@ export function createApp(deps: AppDeps): Hono {
     credentialStore: deps.credentialStore,
     credentialCacheWriter: deps.credentialCacheWriter,
     configStore: deps.configStore,
+    membershipCache: deps.membershipCache,
     ...appEnvironmentCleanupDeps(deps),
     nowIso: deps.nowIso,
   });
@@ -291,6 +253,7 @@ function mountAppMemberRoutes(app: Hono, registrar: Registrar, deps: AppDeps): v
   const handlers = makeAppMemberHandlers({
     repo: deps.repo,
     ...(deps.memberProfileResolver ? { memberProfileResolver: deps.memberProfileResolver } : {}),
+    ...(deps.membershipCache ? { membershipCache: deps.membershipCache } : {}),
     ...(deps.nowIso ? { nowIso: deps.nowIso } : {}),
   });
   registrar.mount(app, controlPlaneRoute("app_members_list"), handlers.listAppMembers);

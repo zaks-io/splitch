@@ -8,6 +8,7 @@ import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { appAdminScope } from "../src/scope-binding";
 import { makeSessionStore } from "../src/session-store";
+import { makeMembershipCacheInvalidator } from "../src/membership-cache";
 import type { LocalBindings } from "../src/test-fixtures";
 import {
   resetOrganizationGraph,
@@ -20,9 +21,9 @@ import { makeTokenMembershipAccess } from "../src/token-membership";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 /**
- * SPL-482: a signed App-scoped token is rechecked against live membership on
- * every request. Removal between two requests with the same JWT must fail
- * closed without leaking whether the App exists.
+ * SPL-482/SPL-532: a signed App-scoped token is checked against the current
+ * membership set. Writers invalidate the shared KV entry; Workers KV's roughly
+ * one-minute propagation window is pinned explicitly below.
  */
 
 const AUDIENCE = "https://cp.splitch.test";
@@ -46,6 +47,7 @@ const ANALYTICS = {
 
 const ALICE = "user_membership_revocation_alice";
 const BOB = "user_membership_revocation_bob";
+const OWNER = "user_membership_revocation_owner";
 const ENV = "env_membership_revocation_pay";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
@@ -70,8 +72,10 @@ beforeEach(async () => {
     key: "prod",
   });
   await seedOrgMember(bindings.d1, { orgId: PAYMENTS.orgId, userId: ALICE, role: "admin" });
+  await seedOrgMember(bindings.d1, { orgId: PAYMENTS.orgId, userId: OWNER, role: "owner" });
   await seedOrgMember(bindings.d1, { orgId: ANALYTICS.orgId, userId: BOB, role: "member" });
   await seedAppMember(bindings.d1, { appId: PAYMENTS.appId, userId: ALICE, role: "admin" });
+  await seedAppMember(bindings.d1, { appId: PAYMENTS.appId, userId: OWNER, role: "owner" });
   await seedAppMember(bindings.d1, { appId: ANALYTICS.appId, userId: BOB, role: "member" });
 
   const signer = await makeFixtureSigner();
@@ -84,11 +88,12 @@ beforeEach(async () => {
         controlPlaneAudience: AUDIENCE,
       }),
       sessions: makeSessionStore(bindings.kv),
-      membershipAccess: makeTokenMembershipAccess(repo),
+      membershipAccess: makeTokenMembershipAccess(repo, bindings.kv),
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,
     repo,
+    membershipCache: makeMembershipCacheInvalidator(bindings.kv),
   });
   h = { app, signer, bindings, repo };
 });
@@ -126,6 +131,7 @@ describe("bearer token live membership recheck", () => {
     expect((await get(`/apps/${ANALYTICS.appId}`, jwt)).status).toBe(403);
 
     await h.repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
+    await makeMembershipCacheInvalidator(h.bindings.kv).invalidate(ALICE);
 
     const refused = await get(`/apps/${PAYMENTS.appId}`, jwt);
     expect(refused.status).toBe(403);
@@ -143,6 +149,7 @@ describe("bearer token live membership recheck", () => {
     expect(await allowed.json()).toMatchObject({ id: PAYMENTS.appId });
 
     await h.repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
+    await makeMembershipCacheInvalidator(h.bindings.kv).invalidate(ALICE);
 
     const refused = await get(`/apps/${PAYMENTS.appId}`, jwt);
     expect(refused.status).toBe(403);
@@ -160,6 +167,7 @@ describe("bearer token live membership recheck", () => {
     const removed = await h.repo.identity.deleteOrgMembership(PAYMENTS.orgId, ALICE);
     expect(removed).toBe(1);
     expect(await h.repo.identity.getAppMembership(appScope(PAYMENTS.appId), ALICE)).not.toBeNull();
+    await makeMembershipCacheInvalidator(h.bindings.kv).invalidate(ALICE);
 
     const refused = await get(`/apps/${PAYMENTS.appId}`, jwt);
     expect(refused.status).toBe(403);
@@ -171,6 +179,7 @@ describe("bearer token live membership recheck", () => {
     expect((await get(`/apps/${PAYMENTS.appId}`, jwt)).status).toBe(200);
 
     await h.repo.identity.updateAppMembership(appScope(PAYMENTS.appId), ALICE, { role: "member" });
+    await makeMembershipCacheInvalidator(h.bindings.kv).invalidate(ALICE);
 
     const refused = await get(`/apps/${PAYMENTS.appId}`, jwt);
     expect(refused.status).toBe(403);
@@ -186,6 +195,7 @@ describe("bearer token live membership recheck", () => {
     expect((await get(`/apps/${ANALYTICS.appId}`, bobJwt)).status).toBe(200);
 
     await h.repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
+    await makeMembershipCacheInvalidator(h.bindings.kv).invalidate(ALICE);
 
     expect((await get(`/apps/${PAYMENTS.appId}`, aliceJwt)).status).toBe(403);
     const stillAllowed = await get(`/apps/${ANALYTICS.appId}`, bobJwt);
@@ -199,6 +209,32 @@ describe("bearer token live membership recheck", () => {
     const serviceBody = (await service.json()) as ErrorResponse;
     expect(serviceBody.code).toBe("FORBIDDEN");
     expect(serviceBody.message).not.toBe("live membership is required");
+  });
+
+  it("invalidates a removed member so the next request is refused", async () => {
+    const memberJwt = await token(ALICE, [appAdminScope(PAYMENTS.appId)]);
+    const ownerJwt = await token(OWNER, [`app:${PAYMENTS.appId}:owner`]);
+    expect((await get(`/apps/${PAYMENTS.appId}`, memberJwt)).status).toBe(200);
+
+    const removed = await h.app.request(`/apps/${PAYMENTS.appId}/members/${ALICE}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${ownerJwt}` },
+    });
+    expect(removed.status).toBe(200);
+
+    const refused = await get(`/apps/${PAYMENTS.appId}`, memberJwt);
+    expect(refused.status).toBe(403);
+    expect(((await refused.json()) as ErrorResponse).message).toBe("live membership is required");
+  });
+
+  it("documents the bounded stale window by allowing a value whose invalidation is not visible", async () => {
+    const jwt = await token(ALICE, [appAdminScope(PAYMENTS.appId)]);
+    expect((await get(`/apps/${PAYMENTS.appId}`, jwt)).status).toBe(200);
+
+    await h.repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
+
+    const insideWindow = await get(`/apps/${PAYMENTS.appId}`, jwt);
+    expect(insideWindow.status).toBe(200);
   });
 
   it("fails loud with 500 when membershipAccess is unwired and never returns a principal", async () => {
@@ -267,6 +303,7 @@ describe("bearer token live membership recheck", () => {
     expect((await get(`/apps/${PAYMENTS.appId}/envs`, jwt)).status).toBe(200);
 
     await h.repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
+    await makeMembershipCacheInvalidator(h.bindings.kv).invalidate(ALICE);
 
     const missingApp = await get("/apps/app_does_not_exist", jwt);
     const removedMember = await get(`/apps/${PAYMENTS.appId}/envs`, jwt);

@@ -116,13 +116,22 @@ export function makeDoorBDeps(
   const turnstile = makeFixtureTurnstile();
   const rateLimiter = makeRateLimiter(opts.rateLimits);
   const idempotency = makeIdempotencyStore();
+  const sessionStore = opts.sessionStore ?? memoryKvNamespace();
   return {
     repo,
     workos,
     otp,
     idempotency,
     tokenSigner,
-    register: { repo, turnstile, rateLimiter, workos, tokenSigner, now },
+    register: {
+      repo,
+      turnstile,
+      rateLimiter,
+      workos,
+      tokenSigner,
+      now,
+      sessionStore,
+    },
     claim: {
       repo,
       workos,
@@ -133,7 +142,7 @@ export function makeDoorBDeps(
       consentBaseUrl: opts.consentBaseUrl ?? "https://cp.splitch.test",
       defaultResource: "https://cp.splitch.test",
       now,
-      sessionStore: opts.sessionStore ?? memoryKvNamespace(),
+      sessionStore,
     },
   };
 }

@@ -186,7 +186,7 @@ async function makeControlPlaneApp(): Promise<TestApp> {
     authResolver: authModule.makeControlPlaneAuthResolver({
       verifier,
       sessions: sessionModule.makeSessionStore(local.sessionKv),
-      membershipAccess: membershipModule.makeTokenMembershipAccess(repo),
+      membershipAccess: membershipModule.makeTokenMembershipAccess(repo, local.sessionKv),
     }),
     rateLimiter: () => ({ limited: false }),
     repo,

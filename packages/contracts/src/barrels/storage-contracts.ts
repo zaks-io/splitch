@@ -1,5 +1,11 @@
 // biome-ignore lint/performance/noBarrelFile: keeps the public entry point below the repository size limit
 export {
+  MEMBERSHIP_CACHE_TTL_SECONDS,
+  type MembershipSet,
+  MembershipSetSchema,
+  membershipCacheKey,
+} from "../membership-set";
+export {
   apiKeyCacheKey,
   assignmentKey,
   clientKeyCacheKey,

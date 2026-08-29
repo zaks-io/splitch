@@ -7,6 +7,7 @@ import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
+import { makeMembershipCacheInvalidator } from "../src/membership-cache";
 import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
@@ -139,6 +140,7 @@ export async function setup(): Promise<void> {
     }),
     rateLimiter: allowLimiter,
     repo: createRepository(bindings.d1),
+    membershipCache: makeMembershipCacheInvalidator(bindings.kv),
     memberProfileResolver: ({ userId, request }) => {
       if (request.headers.get("x-test-profile-failure-user") === userId) {
         throw new Error("profile store unavailable");

@@ -271,6 +271,7 @@ function createTestApp(
         }
       : repo,
     credentialStore: bindings.credentialKv,
+    membershipCache: { invalidate: async () => undefined },
     exposureStatusCleanup: {
       delete: async (input) => {
         exposures.push(input);

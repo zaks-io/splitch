@@ -11,6 +11,7 @@ import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
+import { makeMembershipCacheInvalidator } from "../src/membership-cache";
 import type { PanelDelegationReplayStore } from "../src/panel-identity-replay";
 import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
@@ -62,6 +63,7 @@ beforeEach(async () => {
   const appDeps = {
     rateLimiter: allowLimiter,
     repo: createRepository(bindings.d1),
+    membershipCache: makeMembershipCacheInvalidator(bindings.kv),
     credentialStore: bindings.credentialKv,
     nowIso: () => new Date(NOW_MS).toISOString(),
   };

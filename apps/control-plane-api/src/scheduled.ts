@@ -10,6 +10,7 @@ import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
 import type { ControlPlaneApiEnv } from "./env";
 import { runCredentialCacheBackfill } from "./internal-routes";
+import { invalidateMembershipCache, makeMembershipCacheInvalidator } from "./membership-cache";
 import { dispatchSentryWebhooks } from "./sentry-webhook-dispatch";
 
 const service = "splitch-control-plane-api";
@@ -155,6 +156,11 @@ async function runDemoReaper(
 ): Promise<void> {
   const now = new Date(event.scheduledTime).toISOString();
   const repo = createRepository(env.DB);
+  const affectedUserIds = await repo.identity.listExpiredProvisionalMembershipUserIds(now);
+  await invalidateMembershipCache(
+    makeMembershipCacheInvalidator(env.SESSION_STORE),
+    affectedUserIds,
+  );
   const result = await repo.identity.reapExpiredProvisionalOrganizations(now);
   const claimArtifacts = await repo.claim.purgeExpiredClaimArtifacts({ now, limit: 100 });
   workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(

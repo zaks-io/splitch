@@ -65,7 +65,7 @@ beforeEach(async () => {
         controlPlaneAudience: AUDIENCE,
       }),
       sessions: makeSessionStore(bindings.kv),
-      membershipAccess: makeTokenMembershipAccess(repo),
+      membershipAccess: makeTokenMembershipAccess(repo, bindings.kv),
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,

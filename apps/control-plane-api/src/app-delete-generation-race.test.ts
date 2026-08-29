@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
+import { makeMembershipCacheInvalidator } from "./membership-cache";
 import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
 
 const APP_ID = "app_generation_race";
@@ -229,6 +230,7 @@ function createTestApp(
     authResolver,
     rateLimiter,
     repo,
+    membershipCache: makeMembershipCacheInvalidator(bindings.kv),
     credentialStore: bindings.credentialKv,
     exposureStatusCleanup: { async delete() {} },
     holdoverWriteOutboxCleanup: holdover,

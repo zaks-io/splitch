@@ -3,6 +3,7 @@ import { appScope, createRepository } from "@splitch/db";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { McpEntrypoint } from "../src/index.js";
+import { makeMembershipCacheInvalidator } from "../src/membership-cache.js";
 import { seedAppMember, seedOrgApp, seedOrgMember } from "../src/test-seeds.js";
 import {
   MCP_DELEGATION_SECRET,
@@ -46,6 +47,7 @@ describe("index.ts: MCP door rechecks live membership", () => {
 
     const repo = createRepository(testEnv.DB);
     await repo.identity.deleteAppMembership(appScope(REVOKE.appId), ACTOR);
+    await makeMembershipCacheInvalidator(testEnv.SESSION_STORE).invalidate(ACTOR);
 
     const refused = await callAppsGet(ACTOR, [`app:${REVOKE.appId}:admin`]);
     expect(refused.status).toBe(200);
@@ -74,6 +76,7 @@ describe("index.ts: MCP door rechecks live membership", () => {
     const repo = createRepository(testEnv.DB);
     expect(await repo.identity.deleteOrgMembership(REVOKE.orgId, orgActor)).toBe(1);
     expect(await repo.identity.getAppMembership(appScope(REVOKE.appId), orgActor)).not.toBeNull();
+    await makeMembershipCacheInvalidator(testEnv.SESSION_STORE).invalidate(orgActor);
 
     const refused = await callAppsGet(orgActor, [`app:${REVOKE.appId}:admin`]);
     expect(refused.body).toMatchObject({

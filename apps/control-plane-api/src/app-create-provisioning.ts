@@ -9,6 +9,7 @@ import {
   nowIso,
   provisionEnvironmentClientKeys,
 } from "./app-environment-model";
+import { invalidateMembershipCache } from "./membership-cache";
 
 export async function provisionAppCreateState(
   deps: AppEnvironmentDeps,
@@ -31,16 +32,20 @@ async function ensureOwnerMembership(
   scope: TenantScope,
   actorId: string,
 ): Promise<void> {
-  if (await deps.repo.identity.getAppMembership(scope, actorId)) return;
-  try {
-    await deps.repo.identity.createAppMembership(scope, {
+  if (await deps.repo.identity.getAppMembership(scope, actorId)) {
+    await invalidateMembershipCache(deps.membershipCache, [actorId]);
+    return;
+  }
+  await invalidateMembershipCache(deps.membershipCache, [actorId]);
+  await deps.repo.identity
+    .createAppMembership(scope, {
       userId: actorId,
       role: "owner",
       createdAt: nowIso(deps),
+    })
+    .catch(async (cause) => {
+      if (!(await deps.repo.identity.getAppMembership(scope, actorId))) throw cause;
     });
-  } catch (cause) {
-    if (!(await deps.repo.identity.getAppMembership(scope, actorId))) throw cause;
-  }
 }
 
 async function ensureEnvironment(

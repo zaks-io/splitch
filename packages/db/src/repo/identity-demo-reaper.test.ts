@@ -24,6 +24,9 @@ describe("demo reaper", () => {
     const future = await seedDemoGraph(local.d1, "future", true, FUTURE);
     const claimed = await seedDemoGraph(local.d1, "claimed", false, EXPIRED);
 
+    await expect(repo.identity.listExpiredProvisionalMembershipUserIds(NOW)).resolves.toEqual([
+      expired.userId,
+    ]);
     await expect(repo.identity.reapExpiredProvisionalOrganizations(NOW)).resolves.toEqual({
       candidates: 1,
       reaped: 1,
@@ -46,7 +49,7 @@ async function seedDemoGraph(
     ...identityRows(ids, provisional, demoExpiresAt),
     ...flagCredentialRows(ids),
   ]);
-  return { refs: rowRefs(ids) };
+  return { refs: rowRefs(ids), userId: ids.userId };
 }
 
 function demoIds(suffix: string): DemoIds {
@@ -205,6 +208,7 @@ async function execMany(d1: D1Database, rows: SqlRow[]): Promise<void> {
 
 interface SeededGraph {
   refs: RowRef[];
+  userId: string;
 }
 
 interface DemoIds {

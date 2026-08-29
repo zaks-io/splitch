@@ -9,6 +9,7 @@ import { renderError } from "@splitch/worker-runtime";
 import { randomHex } from "./credential-cache";
 import { objectBody } from "./handler-input";
 import { organizationResponse } from "./org-response";
+import { type MembershipCacheInvalidator, invalidateMembershipCache } from "./membership-cache";
 
 /**
  * `organizations_create` (SPL-171).
@@ -33,6 +34,7 @@ import { organizationResponse } from "./org-response";
 
 interface OrgCreateDeps {
   repo: Repository;
+  membershipCache?: MembershipCacheInvalidator;
   nowIso?: () => string;
 }
 
@@ -47,6 +49,7 @@ export function makeCreateOrganizationHandler(deps: OrgCreateDeps) {
     if (!slug) return unusableSlug(name, requestId);
 
     const now = deps.nowIso?.() ?? new Date().toISOString();
+    await invalidateMembershipCache(deps.membershipCache, [principal.id]);
     const created = await deps.repo.identity.createOrganization({
       organization: {
         id: `org_${randomHex(12)}`,

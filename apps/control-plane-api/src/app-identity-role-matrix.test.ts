@@ -43,6 +43,7 @@ beforeAll(async () => {
   repo = createRepository(local.d1);
   handlers = makeAppHandlers({
     repo,
+    membershipCache: { invalidate: async () => undefined },
     nowIso: () => "2026-08-07T00:00:00.000Z",
     // Force-delete runs Exposure status cleanup after the D1 cascade (main);
     // unit fixtures use a no-op so Tinybird is never required.

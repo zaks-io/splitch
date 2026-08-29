@@ -1,7 +1,7 @@
-import { appScope } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   authorizeBearerMembership,
+  authorizeResolvedBearerMembership,
   makeTokenMembershipAccess,
   requireTokenMembershipAccess,
   withBearerMembershipCheck,
@@ -73,6 +73,20 @@ describe("authorizeBearerMembership", () => {
   });
 });
 
+describe("authorizeResolvedBearerMembership", () => {
+  it("refuses a surviving App row when its Organization membership is absent", () => {
+    expect(
+      authorizeResolvedBearerMembership(
+        {
+          organizations: [],
+          apps: [{ id: APP, organizationId: ORG, role: "admin" }],
+        },
+        [`app:${APP}:admin`],
+      ),
+    ).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+  });
+});
+
 describe("withBearerMembershipCheck", () => {
   it("leaves an already-refused resolver result alone", async () => {
     const authorize = vi.fn(async () => false);
@@ -117,6 +131,7 @@ describe("makeTokenMembershipAccess", () => {
         appRole: "admin",
         orgForApp: { role: "member" },
       }),
+      emptyCache(),
     );
     await expect(access.authorize(USER, [{ axis: "app", id: APP, role: "admin" }])).resolves.toBe(
       true,
@@ -129,6 +144,7 @@ describe("makeTokenMembershipAccess", () => {
         appRole: "admin",
         orgForApp: null,
       }),
+      emptyCache(),
     );
     await expect(access.authorize(USER, [{ axis: "app", id: APP, role: "admin" }])).resolves.toBe(
       false,
@@ -141,6 +157,7 @@ describe("makeTokenMembershipAccess", () => {
         appRole: "member",
         orgForApp: { role: "member" },
       }),
+      emptyCache(),
     );
     await expect(access.authorize(USER, [{ axis: "app", id: APP, role: "admin" }])).resolves.toBe(
       false,
@@ -148,49 +165,55 @@ describe("makeTokenMembershipAccess", () => {
   });
 
   it("rejects a missing Org claim", async () => {
-    const access = makeTokenMembershipAccess(identity({ orgRole: null }));
+    const access = makeTokenMembershipAccess(identity({ orgRole: null }), emptyCache());
     await expect(access.authorize(USER, [{ axis: "org", id: ORG, role: "admin" }])).resolves.toBe(
       false,
     );
   });
 
   it("accepts an Org claim when live role still covers the minted role", async () => {
-    const access = makeTokenMembershipAccess(identity({ orgRole: "owner" }));
+    const access = makeTokenMembershipAccess(identity({ orgRole: "owner" }), emptyCache());
     await expect(access.authorize(USER, [{ axis: "org", id: ORG, role: "admin" }])).resolves.toBe(
       true,
     );
   });
 
-  it("looks up App membership through the tenant scope, never a bare app id", async () => {
-    const getAppMembership = vi.fn(async () => ({ role: "member" }));
+  it("resolves App memberships only through the user's live Organization ids", async () => {
+    const listAppMembershipsWithAppForUser = vi.fn(async () => [
+      { role: "member", app: { id: APP, organizationId: ORG } },
+    ]);
     const access = makeTokenMembershipAccess(
       identity({
-        getAppMembership,
+        listAppMembershipsWithAppForUser,
         orgForApp: { role: "member" },
       }),
+      emptyCache(),
     );
     await access.authorize(USER, [{ axis: "app", id: APP, role: "member" }]);
-    expect(getAppMembership).toHaveBeenCalledWith(appScope(APP), USER);
+    expect(listAppMembershipsWithAppForUser).toHaveBeenCalledWith(USER, [ORG]);
   });
 
   it("resolves the complete live membership set for the User", async () => {
-    const access = makeTokenMembershipAccess({
-      identity: {
-        listOrgMembershipsForUser: async () => [
-          { orgId: ORG, role: "admin" },
-          { orgId: "org_other", role: "member" },
-        ],
-        listAppMembershipsWithAppForUser: async (_userId, orgIds) => {
-          expect(orgIds).toEqual([ORG, "org_other"]);
-          return [
-            {
-              role: "owner",
-              app: { id: APP, organizationId: ORG },
-            },
-          ];
+    const access = makeTokenMembershipAccess(
+      {
+        identity: {
+          listOrgMembershipsForUser: async () => [
+            { orgId: ORG, role: "admin" },
+            { orgId: "org_other", role: "member" },
+          ],
+          listAppMembershipsWithAppForUser: async (_userId, orgIds) => {
+            expect(orgIds).toEqual([ORG, "org_other"]);
+            return [
+              {
+                role: "owner",
+                app: { id: APP, organizationId: ORG },
+              },
+            ];
+          },
         },
-      },
-    } as unknown as Parameters<typeof makeTokenMembershipAccess>[0]);
+      } as unknown as Parameters<typeof makeTokenMembershipAccess>[0],
+      emptyCache(),
+    );
 
     await expect(access.resolve(USER)).resolves.toEqual({
       organizations: [
@@ -216,21 +239,31 @@ function identity(options: {
   appRole?: string | null;
   orgRole?: string | null;
   orgForApp?: { role: string } | null;
-  getAppMembership?: (
-    scope: ReturnType<typeof appScope>,
+  listAppMembershipsWithAppForUser?: (
     userId: string,
-  ) => Promise<{ role: string } | null>;
+    orgIds: readonly string[],
+  ) => Promise<{ role: string; app: { id: string; organizationId: string } }[]>;
 }) {
   return {
     identity: {
-      getOrgMembership: async () =>
-        options.orgRole === undefined || options.orgRole === null
-          ? null
-          : { role: options.orgRole },
-      getOrgMembershipForApp: async () => options.orgForApp ?? null,
-      getAppMembership:
-        options.getAppMembership ??
-        (async () => (options.appRole ? { role: options.appRole } : null)),
+      listOrgMembershipsForUser: async () => {
+        if (options.orgRole) return [{ orgId: ORG, role: options.orgRole }];
+        if (options.orgForApp) return [{ orgId: ORG, role: options.orgForApp.role }];
+        return [];
+      },
+      listAppMembershipsWithAppForUser:
+        options.listAppMembershipsWithAppForUser ??
+        (async (_userId: string, orgIds: readonly string[]) =>
+          options.appRole && orgIds.includes(ORG)
+            ? [{ role: options.appRole, app: { id: APP, organizationId: ORG } }]
+            : []),
     },
-  };
+  } as unknown as Parameters<typeof makeTokenMembershipAccess>[0];
+}
+
+function emptyCache(): KVNamespace {
+  return {
+    get: async () => null,
+    put: async () => undefined,
+  } as unknown as KVNamespace;
 }

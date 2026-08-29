@@ -1,6 +1,7 @@
-import { type UserRole, UserRoleSchema } from "@splitch/contracts";
-import { appScope, type Repository } from "@splitch/db";
+import { type MembershipSet, type UserRole, UserRoleSchema } from "@splitch/contracts";
+import type { Repository } from "@splitch/db";
 import type { AuthResolver, AuthResult, PrincipalMemberships } from "@splitch/worker-runtime";
+import { resolveCachedMemberships } from "./membership-cache";
 import {
   type MembershipClaim,
   type MembershipRole,
@@ -8,18 +9,20 @@ import {
 } from "./scope-binding";
 
 /**
- * Live D1 membership recheck for human/agent bearer tokens (SPL-482).
+ * Membership recheck for human/agent bearer tokens (SPL-482).
  *
- * Token scopes are minted from membership at issue time. Removal or demotion
- * must fail the next request, so this port reads current Org and App rows
- * before the registrar's scope checks. Tokens that carry no membership axes
- * (service credentials whose authority does not derive from membership) skip
- * the read.
+ * Token scopes are minted from membership at issue time. This port resolves the
+ * current Org and App membership set before the registrar's scope checks; KV
+ * invalidation bounds how long another location can retain the prior set.
+ * Tokens that carry no membership axes (service credentials whose authority
+ * does not derive from membership) skip the read.
  */
 
 export interface TokenMembershipAccess {
   authorize(userId: string, claims: readonly MembershipClaim[]): Promise<boolean>;
   resolve(userId: string): Promise<PrincipalMemberships>;
+  /** Cache-capable adapters expose the request read so auth can start it beside revocation. */
+  resolveForRequest?: (userId: string) => Promise<PrincipalMemberships>;
 }
 
 const ROLE_RANK: Record<UserRole, number> = {
@@ -40,30 +43,45 @@ const MEMBERSHIP_REFUSED: AuthResult = {
 
 export function makeTokenMembershipAccess(
   repo: Pick<Repository, "identity">,
+  kv: KVNamespace,
+  writeOnMiss = true,
 ): TokenMembershipAccess {
+  const resolve = (userId: string) =>
+    resolveCachedMemberships(
+      kv,
+      userId,
+      () => resolveLiveMemberships(repo, userId),
+      console,
+      writeOnMiss,
+    );
   return {
     async authorize(userId, claims) {
-      const results = await Promise.all(claims.map((claim) => claimHolds(repo, userId, claim)));
-      return results.every(Boolean);
+      return claimsHold(await resolve(userId), claims);
     },
-    async resolve(userId) {
-      const organizations = await repo.identity.listOrgMembershipsForUser(userId);
-      const apps = await repo.identity.listAppMembershipsWithAppForUser(
-        userId,
-        organizations.map((membership) => membership.orgId),
-      );
-      return {
-        organizations: organizations.map((membership) => ({
-          id: membership.orgId,
-          role: UserRoleSchema.parse(membership.role),
-        })),
-        apps: apps.map((membership) => ({
-          id: membership.app.id,
-          organizationId: membership.app.organizationId,
-          role: UserRoleSchema.parse(membership.role),
-        })),
-      };
-    },
+    resolve,
+    resolveForRequest: resolve,
+  };
+}
+
+async function resolveLiveMemberships(
+  repo: Pick<Repository, "identity">,
+  userId: string,
+): Promise<MembershipSet> {
+  const organizations = await repo.identity.listOrgMembershipsForUser(userId);
+  const apps = await repo.identity.listAppMembershipsWithAppForUser(
+    userId,
+    organizations.map((membership) => membership.orgId),
+  );
+  return {
+    organizations: organizations.map((membership) => ({
+      id: membership.orgId,
+      role: UserRoleSchema.parse(membership.role),
+    })),
+    apps: apps.map((membership) => ({
+      id: membership.app.id,
+      organizationId: membership.app.organizationId,
+      role: UserRoleSchema.parse(membership.role),
+    })),
   };
 }
 
@@ -95,6 +113,15 @@ export async function authorizeBearerMembership(
   return (await access.authorize(userId, claims)) ? null : MEMBERSHIP_REFUSED;
 }
 
+export function authorizeResolvedBearerMembership(
+  memberships: PrincipalMemberships,
+  scopes: readonly string[],
+): AuthResult | null {
+  const claims = membershipClaimsInScopes(scopes);
+  if (claims.length === 0) return null;
+  return claimsHold(memberships, claims) ? null : MEMBERSHIP_REFUSED;
+}
+
 /**
  * Recheck live membership after another resolver has accepted the request.
  * Used by the MCP Control Plane door, which copies minted scopes from the
@@ -114,23 +141,32 @@ export function withBearerMembershipCheck(
   };
 }
 
-async function claimHolds(
-  repo: Pick<Repository, "identity">,
-  userId: string,
+function claimsHold(
+  memberships: PrincipalMemberships,
+  claims: readonly MembershipClaim[],
+): boolean {
+  const organizationRoles = new Map(
+    memberships.organizations.map(({ id, role }) => [id, role] as const),
+  );
+  const appMemberships = new Map(memberships.apps.map((membership) => [membership.id, membership]));
+  return claims.every((claim) => claimHolds(organizationRoles, appMemberships, claim));
+}
+
+function claimHolds(
+  organizationRoles: ReadonlyMap<string, UserRole>,
+  appMemberships: ReadonlyMap<string, PrincipalMemberships["apps"][number]>,
   claim: MembershipClaim,
-): Promise<boolean> {
+): boolean {
   if (claim.axis === "org") {
-    const membership = await repo.identity.getOrgMembership(claim.id, userId);
-    return roleCovers(membership?.role, claim.role);
+    return roleCovers(organizationRoles.get(claim.id), claim.role);
   }
 
-  // App access is derived from both axes: Org removal must invalidate the
-  // App-scoped token even if the App row is still present.
-  const [appMembership, orgMembership] = await Promise.all([
-    repo.identity.getAppMembership(appScope(claim.id), userId),
-    repo.identity.getOrgMembershipForApp(claim.id, userId),
-  ]);
-  return roleCovers(appMembership?.role, claim.role) && orgMembership !== null;
+  const appMembership = appMemberships.get(claim.id);
+  return (
+    roleCovers(appMembership?.role, claim.role) &&
+    appMembership !== undefined &&
+    organizationRoles.has(appMembership.organizationId)
+  );
 }
 
 function roleCovers(actual: string | undefined, claimed: MembershipRole): boolean {

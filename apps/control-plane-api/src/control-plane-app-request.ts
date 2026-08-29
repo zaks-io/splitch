@@ -14,6 +14,7 @@ import { durableCredentialCacheWriterAccess } from "./credential-cache-writer-do
 import type { ControlPlaneApiEnv } from "./env";
 import { createHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
+import { makeMembershipCacheInvalidator } from "./membership-cache";
 import { rateLimiterForTarget } from "./rate-limit";
 import { runSnapshotDeliveryFromEnv } from "./run-snapshot";
 import { reportRunSnapshotFault } from "./run-snapshot-fault";
@@ -45,6 +46,7 @@ export async function handleControlPlaneAppRequest(input: {
     },
     logger: console,
     memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
+    membershipCache: makeMembershipCacheInvalidator(env.SESSION_STORE),
     observability: createWorkerObservability(
       env,
       workerObservabilityWithWaitUntil("control-plane-api", ctx),

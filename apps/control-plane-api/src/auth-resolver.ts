@@ -1,21 +1,14 @@
-import { type AuthDoor, MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
+import type { AuthDoor } from "@splitch/contracts";
 import {
   CONTROL_PANEL_DELEGATION_HEADER,
   verifyControlPanelDelegation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import type { AuthResolver } from "@splitch/worker-runtime";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
-import type { JwksVerifier } from "./jwks-verify";
+import { type BearerAuthDeps, resolveBearerPrincipal } from "./bearer-principal";
 import type { PanelDelegationReplayStore } from "./panel-identity-replay";
 import type { PanelSessionAccess } from "./panel-session-access";
-import { deriveBinding } from "./scope-binding";
-import type { PanelSessionStore, SessionStore } from "./session-store";
-import {
-  authorizeBearerMembership,
-  requireTokenMembershipAccess,
-  resolveBearerMemberships,
-  type TokenMembershipAccess,
-} from "./token-membership";
+import type { PanelSessionStore } from "./session-store";
 
 /**
  * Control-plane auth resolver (the `control-plane-token` AuthKind).
@@ -36,16 +29,18 @@ import {
  *      UNAUTHORIZED. (The verifier returns null for every bad-token case and only
  *      throws on a genuine fault, e.g. JWKS unreachable, which the guard maps to
  *      500 — never a silent allow.)
- *   3. Session-validation hot read: a revoked session → CREDENTIAL_REVOKED. A KV
- *      fault throws (guard → 500), never a silent pass.
- *   4. Hot-validate every Organization and App membership axis the token carries.
+ *   3. Start the session-revocation and membership-set KV reads concurrently.
+ *      A revoked session → CREDENTIAL_REVOKED. A revocation KV fault throws
+ *      (guard → 500); a membership KV fault falls through to the complete D1
+ *      resolve. Neither becomes a silent pass.
+ *   4. Validate every Organization and App membership axis the token carries.
  *      A removed or role-incompatible membership is refused before route scope
  *      checks. Tokens with no membership axes (service credentials whose
  *      authority does not derive from membership) skip this read. A missing
  *      membership port or a thrown D1 membership read fails loud (guard → 500)
  *      and never produces a principal.
  *   5. For membership-wide read authority, require empty scopes and resolve the
- *      complete live Organization and App membership set from D1.
+ *      complete current Organization and App membership set.
  *   6. Success → Principal: `id` = `sub`; selector-bound Org/App/Environment
  *      axes derive from scopes, while wide principals carry live memberships.
  *
@@ -55,7 +50,6 @@ import {
  * (steps/scopes.ts); this resolver only produces the Principal it feeds them.
  */
 
-const BEARER_PREFIX = "Bearer ";
 export const PANEL_SESSION_HEADER = "x-splitch-panel-session";
 
 /**
@@ -70,15 +64,12 @@ export const PANEL_SESSION_HEADER = "x-splitch-panel-session";
  */
 const PANEL_AUTH_DOOR: AuthDoor = "id_jag";
 
-export interface ControlPlaneAuthDeps {
-  verifier: JwksVerifier;
-  sessions: SessionStore;
+export interface ControlPlaneAuthDeps extends BearerAuthDeps {
   /**
    * Live Org/App membership recheck for human/agent access tokens. Required on
    * every resolver. Tokens with no membership axes skip the read; a missing
    * port throws instead of minting a principal.
    */
-  membershipAccess: TokenMembershipAccess;
   /** Clock seam (seconds since epoch); defaults to wall clock. */
   now?: () => number;
 }
@@ -92,14 +83,6 @@ export interface ControlPlaneAuthOptions {
   /** Temporary predecessor bridge. The deployment workflow disables it after V2 is live. */
   allowBoundedPanelSession?: boolean;
   boundedPanelSessions?: PanelSessionStore;
-}
-
-function extractBearer(header: string | null): string | null {
-  if (!header?.startsWith(BEARER_PREFIX)) {
-    return null;
-  }
-  const token = header.slice(BEARER_PREFIX.length).trim();
-  return token.length > 0 ? token : null;
 }
 
 export function makeControlPlaneAuthResolver(
@@ -125,70 +108,6 @@ export function makeControlPlaneAuthResolver(
       if (panelPrincipal) return panelPrincipal;
     }
     return resolveBearerPrincipal(request, deps, nowSeconds());
-  };
-}
-
-async function resolveBearerPrincipal(
-  request: Request,
-  deps: ControlPlaneAuthDeps,
-  nowSeconds: number,
-) {
-  const token = extractBearer(request.headers.get("authorization"));
-  if (!token) {
-    return { ok: false as const, reason: "UNAUTHORIZED" as const };
-  }
-
-  const verified = await deps.verifier.verify(token, nowSeconds);
-  if (!verified) {
-    return { ok: false as const, reason: "UNAUTHORIZED" as const };
-  }
-
-  // Session-validation hot read keyed on the actor's session (`sub`). A
-  // revoked session is rejected even though the signature/exp still pass.
-  if (await deps.sessions.isRevoked(verified.sub)) {
-    return { ok: false as const, reason: "CREDENTIAL_REVOKED" as const };
-  }
-
-  const membership = await authorizeBearerMembership(
-    requireTokenMembershipAccess(deps.membershipAccess),
-    verified.sub,
-    verified.scopes,
-  );
-  if (membership) return membership;
-
-  if (verified.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
-    const memberships = await resolveBearerMemberships(
-      requireTokenMembershipAccess(deps.membershipAccess),
-      verified.sub,
-    );
-    return {
-      ok: true as const,
-      principal: {
-        kind: "control-plane-token" as const,
-        id: verified.sub,
-        scopes: [],
-        orgId: null,
-        appId: null,
-        environmentId: null,
-        authDoor: verified.authDoor,
-        authorization: verified.authorization,
-        memberships,
-      },
-    };
-  }
-
-  const binding = deriveBinding(verified.scopes);
-  return {
-    ok: true as const,
-    principal: {
-      kind: "control-plane-token" as const,
-      id: verified.sub,
-      scopes: verified.scopes,
-      orgId: binding.orgId,
-      appId: binding.appId,
-      environmentId: binding.environmentId,
-      authDoor: verified.authDoor,
-    },
   };
 }
 
