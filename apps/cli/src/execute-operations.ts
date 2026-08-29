@@ -1,5 +1,5 @@
 import { createSplitchClient } from "@splitch/sdk";
-import { getRoute } from "@splitch/sdk/control-plane";
+import { cliCommandPath, getRoute } from "@splitch/sdk/control-plane";
 import { warnStaleApprovalDiscard } from "./approval-stale-warn.js";
 import { withAuthorizationRetry } from "./auth.js";
 import {
@@ -21,6 +21,7 @@ import { emit } from "./execute-io.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
 import { assertHydratedFlagRead, formatFlagRead } from "./format-flag-read.js";
+import { humanizeLabel } from "./format-payload.js";
 import { environmentSelectorOverride, parseEvaluationContext } from "./operation-input.js";
 import { emitOperationNotices } from "./operation-notices.js";
 import type { ParsedInvocation } from "./parse-args.js";
@@ -93,7 +94,8 @@ export async function executeFlagsVerify(
       operationBinding({ appId: context.appId }),
     );
     if (!clientKeyResult.ok) {
-      emit(io, invocation.flags.json, clientKeyResult.error);
+      // `writeServerError` owns both channels; emitting the raw wire error here
+      // too would put a second JSON document on the same `--json` stdout.
       writeServerError(io, clientKeyResult.error, "client_key_get", invocation);
       return {
         exitCode: exitCodeForServerError(clientKeyResult.error),
@@ -220,6 +222,16 @@ export async function executeApiOperation(
   }
 }
 
+/**
+ * The plural the empty and truncated notices name, taken from the command's own
+ * resource group so `splitch api-keys list` reports "No API Keys found." rather
+ * than a generic noun the operator has to map back to what they asked for.
+ */
+function resourceNoun(operationId: string): string {
+  const group = cliCommandPath(operationId)[0];
+  return group ? humanizeLabel(group) : "Results";
+}
+
 function emitApiOutput(
   io: CliIo,
   operationId: string,
@@ -227,7 +239,7 @@ function emitApiOutput(
   invocation: ParsedInvocation,
 ): void {
   if (operationId !== "flags_list" && operationId !== "flags_get") {
-    emit(io, invocation.flags.json, payload);
+    emit(io, invocation.flags.json, payload, resourceNoun(operationId));
     return;
   }
   if (invocation.flags.json) {

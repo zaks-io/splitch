@@ -1,4 +1,5 @@
 import { type EnvironmentPolicy, KILL_SWITCH_OFF_EXEMPTION } from "@splitch/sdk/control-plane";
+import { humanizeLabel } from "./format-payload.js";
 
 /**
  * Human-readable Environment Policy for CLI `env-policy get` / `set` when
@@ -7,12 +8,17 @@ import { type EnvironmentPolicy, KILL_SWITCH_OFF_EXEMPTION } from "@splitch/sdk/
  */
 export function formatEnvironmentPolicy(policy: EnvironmentPolicy): string {
   return [
-    `variantAvailability: ${policy.variantAvailability}`,
-    `targetingRolloutValue: ${policy.targetingRolloutValue}`,
-    `enabledState: ${policy.enabledState}`,
+    level("variantAvailability", policy.variantAvailability),
+    level("targetingRolloutValue", policy.targetingRolloutValue),
+    level("enabledState", policy.enabledState),
     `  ${KILL_SWITCH_OFF_EXEMPTION}`,
-    `startExperimentRun: ${policy.startExperimentRun}`,
+    level("startExperimentRun", policy.startExperimentRun),
   ].join("\n");
+}
+
+/** Change types are labelled the way every other CLI field is. */
+function level(changeType: keyof EnvironmentPolicy, value: string): string {
+  return `${humanizeLabel(changeType)}: ${value}`;
 }
 
 export function isEnvironmentPolicy(value: unknown): value is EnvironmentPolicy {

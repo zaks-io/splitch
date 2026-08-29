@@ -10,7 +10,7 @@ describe("formatEnvironmentPolicy", () => {
       enabledState: "confirm",
       startExperimentRun: "confirm",
     });
-    expect(rendered).toContain("enabledState: confirm");
+    expect(rendered).toContain("Enabled State: confirm");
     expect(rendered).toContain(`  ${KILL_SWITCH_OFF_EXEMPTION}`);
     expect(rendered.indexOf("enabledState")).toBeLessThan(
       rendered.indexOf(KILL_SWITCH_OFF_EXEMPTION),

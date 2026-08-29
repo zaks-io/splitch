@@ -105,7 +105,7 @@ describe("splitch envs create surfaces the auto-provisioned Client Key", () => {
 
     expect(code).toBe(EXIT_OK);
     const output = log.mock.calls.flat().join("\n");
-    expect(output).toContain("clientKey");
+    expect(output).toContain("Client Key");
     expect(output).toContain("pk_qa_client_key");
     expect(output).not.toContain("sk_");
     expect(output).not.toContain("scopes");

@@ -155,6 +155,6 @@ describe("SPL-307 CLI frozen targeting notices", () => {
 
     expect(result.exitCode).toBe(EXIT_OK);
     expect(errors.some((line) => line.includes("Frozen targeting rules for run_1"))).toBe(true);
-    expect(logs.some((line) => line.includes("frozenTargetingRules"))).toBe(true);
+    expect(logs.some((line) => line.includes("Frozen Targeting Rules"))).toBe(true);
   });
 });
