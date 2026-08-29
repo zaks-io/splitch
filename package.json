@@ -4,6 +4,13 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.8.0",
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=24",
+      "onFail": "error"
+    }
+  },
   "scripts": {
     "build": "turbo run build",
     "check:cli-mcp-parity": "pnpm --filter @splitch/cli exec tsx ../../scripts/check-cli-mcp-parity.ts",

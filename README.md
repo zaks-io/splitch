@@ -238,9 +238,10 @@ Please do not open a public issue for a security report.
 
 Enforced on every pull request and push to `main`: gitleaks secret scanning, the full
 contract and correctness gate, Harden-Runner egress auditing, and every GitHub Action
-pinned to a commit SHA. The CodeQL, Semgrep, OSV-Scanner, Trivy, and Scorecard battery is
-written and SHA-pinned but still parked behind manual dispatch pending a one-time audit of
-the final dependency set. `SECURITY.md` lists exactly what runs and what does not.
+pinned to a commit SHA. Semgrep, OSV-Scanner, Trivy, and Scorecard run daily and report
+into the Security tab, opening a tracking issue on a finding rather than blocking a merge;
+making them gate a pull request waits on a one-time audit of the final dependency set.
+`SECURITY.md` lists exactly what runs and what does not.
 
 ## Contributing
 
