@@ -1,8 +1,8 @@
 import { Badge } from "@splitch/ui/components/badge";
 import { Button } from "@splitch/ui/components/button";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ErrorCodeIndex } from "../components/error-code-index";
 import { cliDoc } from "../docs/cli";
+import { documentedErrorCodes } from "../docs/errors";
 import { flagsDoc } from "../docs/flags";
 import { type SdkTopic, sdkGuideTopics, sdkIntegrationTopics } from "../docs/sdk";
 
@@ -109,7 +109,25 @@ function DocsIndexRoute() {
           topics={sdkGuideTopics}
         />
 
-        <ErrorCodeIndex />
+        <section className="grid gap-4" id="errors">
+          <h2 className="font-display font-semibold text-2xl text-foreground tracking-tight">
+            Errors
+          </h2>
+          <ul className="grid gap-3">
+            <li className="grid gap-1">
+              <Link
+                className="font-medium text-foreground underline underline-offset-4"
+                to="/docs/errors"
+              >
+                Error codes
+              </Link>
+              <span className="text-muted-foreground text-sm leading-relaxed">
+                All {documentedErrorCodes.length} codes the API, SDK, and CLI can emit, each with
+                its cause and a page carrying its fix.
+              </span>
+            </li>
+          </ul>
+        </section>
       </div>
     </main>
   );

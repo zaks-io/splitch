@@ -14,7 +14,7 @@ const columns = [
     links: [
       ["/docs", "Docs"],
       ["/docs/sdk/install", "SDK guide"],
-      ["/docs#errors", "Error catalog"],
+      ["/docs/errors", "Error catalog"],
       ["/llms.txt", "llms.txt"],
     ],
   },

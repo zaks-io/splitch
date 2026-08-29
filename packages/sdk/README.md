@@ -8,7 +8,7 @@ always observable, never a silently disguised default.
 - Platform quickstart (create an App, mint keys, first Flag):
   <https://splitch.dev/quickstart>
 - Every failure code, with its cause and its fix:
-  <https://splitch.dev/docs#errors>
+  <https://splitch.dev/docs/errors>
 
 ## Install
 
@@ -631,7 +631,7 @@ A `convex-test` fixture under `fixtures/convex-sdk-consumer/` is exercised by
 ## Links
 
 - SDK guide: <https://splitch.dev/docs/sdk/install>
-- Error catalog: <https://splitch.dev/docs#errors>
+- Error catalog: <https://splitch.dev/docs/errors>
 - Quickstart: <https://splitch.dev/quickstart>
 - Machine-readable index: <https://splitch.dev/llms.txt>
 - Platform: <https://splitch.dev>

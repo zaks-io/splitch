@@ -16,6 +16,8 @@ import { Route as QuickstartRouteImport } from './routes/quickstart'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as DocsCliRouteImport } from './routes/docs.cli'
 import { Route as DocsCliDotmdRouteImport } from './routes/docs.cli[.]md'
+import { Route as DocsErrorsRouteImport } from './routes/docs.errors'
+import { Route as DocsErrorsDotmdRouteImport } from './routes/docs.errors[.]md'
 import { Route as DocsFlagsRouteImport } from './routes/docs.flags'
 import { Route as DocsFlagsDotmdRouteImport } from './routes/docs.flags[.]md'
 import { Route as DocsErrorCodeRouteImport } from './routes/docs.error.$code'
@@ -56,6 +58,16 @@ const DocsCliDotmdRoute = DocsCliDotmdRouteImport.update({
   path: '/docs/cli.md',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocsErrorsRoute = DocsErrorsRouteImport.update({
+  id: '/docs/errors',
+  path: '/docs/errors',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsErrorsDotmdRoute = DocsErrorsDotmdRouteImport.update({
+  id: '/docs/errors.md',
+  path: '/docs/errors.md',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocsFlagsRoute = DocsFlagsRouteImport.update({
   id: '/docs/flags',
   path: '/docs/flags',
@@ -84,6 +96,8 @@ export interface FileRoutesByFullPath {
   '/quickstart': typeof QuickstartRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
+  '/docs/errors': typeof DocsErrorsRoute
+  '/docs/errors.md': typeof DocsErrorsDotmdRoute
   '/docs/flags': typeof DocsFlagsRoute
   '/docs/flags.md': typeof DocsFlagsDotmdRoute
   '/docs/': typeof DocsIndexRoute
@@ -97,6 +111,8 @@ export interface FileRoutesByTo {
   '/quickstart': typeof QuickstartRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
+  '/docs/errors': typeof DocsErrorsRoute
+  '/docs/errors.md': typeof DocsErrorsDotmdRoute
   '/docs/flags': typeof DocsFlagsRoute
   '/docs/flags.md': typeof DocsFlagsDotmdRoute
   '/docs': typeof DocsIndexRoute
@@ -111,6 +127,8 @@ export interface FileRoutesById {
   '/quickstart': typeof QuickstartRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
+  '/docs/errors': typeof DocsErrorsRoute
+  '/docs/errors.md': typeof DocsErrorsDotmdRoute
   '/docs/flags': typeof DocsFlagsRoute
   '/docs/flags.md': typeof DocsFlagsDotmdRoute
   '/docs/': typeof DocsIndexRoute
@@ -126,6 +144,8 @@ export interface FileRouteTypes {
     | '/quickstart'
     | '/docs/cli'
     | '/docs/cli.md'
+    | '/docs/errors'
+    | '/docs/errors.md'
     | '/docs/flags'
     | '/docs/flags.md'
     | '/docs/'
@@ -139,6 +159,8 @@ export interface FileRouteTypes {
     | '/quickstart'
     | '/docs/cli'
     | '/docs/cli.md'
+    | '/docs/errors'
+    | '/docs/errors.md'
     | '/docs/flags'
     | '/docs/flags.md'
     | '/docs'
@@ -152,6 +174,8 @@ export interface FileRouteTypes {
     | '/quickstart'
     | '/docs/cli'
     | '/docs/cli.md'
+    | '/docs/errors'
+    | '/docs/errors.md'
     | '/docs/flags'
     | '/docs/flags.md'
     | '/docs/'
@@ -166,6 +190,8 @@ export interface RootRouteChildren {
   QuickstartRoute: typeof QuickstartRoute
   DocsCliRoute: typeof DocsCliRoute
   DocsCliDotmdRoute: typeof DocsCliDotmdRoute
+  DocsErrorsRoute: typeof DocsErrorsRoute
+  DocsErrorsDotmdRoute: typeof DocsErrorsDotmdRoute
   DocsFlagsRoute: typeof DocsFlagsRoute
   DocsFlagsDotmdRoute: typeof DocsFlagsDotmdRoute
   DocsIndexRoute: typeof DocsIndexRoute
@@ -224,6 +250,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsCliDotmdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/docs/errors': {
+      id: '/docs/errors'
+      path: '/docs/errors'
+      fullPath: '/docs/errors'
+      preLoaderRoute: typeof DocsErrorsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs/errors.md': {
+      id: '/docs/errors.md'
+      path: '/docs/errors.md'
+      fullPath: '/docs/errors.md'
+      preLoaderRoute: typeof DocsErrorsDotmdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/docs/flags': {
       id: '/docs/flags'
       path: '/docs/flags'
@@ -262,6 +302,8 @@ const rootRouteChildren: RootRouteChildren = {
   QuickstartRoute: QuickstartRoute,
   DocsCliRoute: DocsCliRoute,
   DocsCliDotmdRoute: DocsCliDotmdRoute,
+  DocsErrorsRoute: DocsErrorsRoute,
+  DocsErrorsDotmdRoute: DocsErrorsDotmdRoute,
   DocsFlagsRoute: DocsFlagsRoute,
   DocsFlagsDotmdRoute: DocsFlagsDotmdRoute,
   DocsIndexRoute: DocsIndexRoute,

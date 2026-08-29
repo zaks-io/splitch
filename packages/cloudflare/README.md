@@ -10,7 +10,7 @@ that is happy with a network round-trip should use the ordinary server client
 ([`@splitch/sdk`](https://www.npmjs.com/package/@splitch/sdk)) instead.
 
 - Full guide: <https://splitch.dev/docs/sdk/cloudflare>
-- Every failure code, with its cause and its fix: <https://splitch.dev/docs#errors>
+- Every failure code, with its cause and its fix: <https://splitch.dev/docs/errors>
 
 ## Install
 
@@ -122,5 +122,5 @@ You do not import `/worker` by hand. `splitch cloudflare setup` generates the en
 
 - Cloudflare guide: <https://splitch.dev/docs/sdk/cloudflare>
 - CLI reference: <https://splitch.dev/docs/cli>
-- Error catalog: <https://splitch.dev/docs#errors>
+- Error catalog: <https://splitch.dev/docs/errors>
 - Machine-readable index: <https://splitch.dev/llms.txt>

@@ -31,6 +31,15 @@ export const surfaceLabels: Record<ErrorSurface, string> = {
   cli: "CLI",
 };
 
+/** The order the catalog is presented in, on the page and in Markdown. */
+export const errorSurfaces: readonly ErrorSurface[] = ["api", "sdk", "cli"];
+
+export const surfaceBlurbs: Record<ErrorSurface, string> = {
+  api: "Returned by the splitch API, with an HTTP status.",
+  sdk: "Thrown by @splitch/sdk at construction, before any request goes out.",
+  cli: "Raised by splitch itself. Each one carries the process exit code it returns.",
+};
+
 /**
  * The wire families alone. `satisfies Record<ErrorCode, ErrorDoc & { remediation: string }>`
  * is the second gate: a new wire code has to arrive with its terminal sentence,
@@ -90,11 +99,19 @@ export function httpStatusForDocumentedCode(code: DocumentedErrorCode): number |
   return wireCodes.has(code) ? httpStatusForError(code as ErrorCode) : null;
 }
 
-export function documentedCodesBySurface(): {
-  api: DocumentedErrorCode[];
-  sdk: DocumentedErrorCode[];
-  cli: DocumentedErrorCode[];
-} {
+/**
+ * The one-token fact that ranks a code at a glance: the HTTP status it arrives
+ * with, or the process exit code the CLI returns. `null` for the SDK family,
+ * which has neither.
+ */
+export function errorCodeMarker(code: DocumentedErrorCode): string | null {
+  const status = httpStatusForDocumentedCode(code);
+  if (status !== null) return String(status);
+  const exitCode = errorDocs[code].exitCode;
+  return exitCode === undefined ? null : `exit ${exitCode}`;
+}
+
+export function documentedCodesBySurface(): Record<ErrorSurface, DocumentedErrorCode[]> {
   return {
     api: documentedErrorCodes.filter((code) => surfaceForCode(code) === "api"),
     sdk: documentedErrorCodes.filter((code) => surfaceForCode(code) === "sdk"),
