@@ -50,16 +50,18 @@ export async function readFlagSnapshot(
   const key = flagConfigKey(scope.appId, scope.environmentId, fromD1.flag.key);
   const raw = await deps.kv.get(key, "text");
   if (!raw) {
-    await deps.snapshotMutations.run(async () => {
+    return deps.snapshotMutations.run(async () => {
+      const repair = await buildSnapshotFromD1(deps.repo, scope, flagId);
+      if (!repair) return null;
       await writeSnapshot(
         deps.kv,
         scope,
-        fromD1,
-        responseFromSnapshot(fromD1),
+        repair,
+        responseFromSnapshot(repair),
         await deps.nextSnapshotRevision({ flagId, operation: "repair" }),
       );
+      return repair;
     });
-    return fromD1;
   }
 
   try {
@@ -161,21 +163,6 @@ export async function loadFlagConfigWriteContext(
     ...(v.description ? { description: v.description } : {}),
   }));
   return { flag, config, variants };
-}
-
-export async function writeSnapshotAndBroadcast(
-  deps: ConfigStoreRuntimeDeps,
-  scope: EnvScope,
-  flagId: string,
-  snapshot: Snapshot,
-): Promise<FlagConfigWriteResult> {
-  return deps.snapshotMutations.run(async () => {
-    const result = flagConfigResult(flagId, snapshot);
-    const snapshotRevision = await deps.nextSnapshotRevision({ flagId, operation: "write" });
-    await writeSnapshot(deps.kv, scope, snapshot, result.config, snapshotRevision);
-    await deps.broadcaster.broadcast(result.nudge);
-    return { ...result, snapshotRevision };
-  });
 }
 
 /**

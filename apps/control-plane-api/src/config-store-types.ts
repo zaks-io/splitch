@@ -176,7 +176,7 @@ export interface ConfigStoreDeps {
   kv: KVNamespace;
   broadcaster: { broadcast(nudge: DeltaNudge): Promise<void> | void };
   nextSnapshotRevision(request: SnapshotRevisionRequest): Promise<number> | number;
-  logger?: Pick<Console, "warn">;
+  logger?: Pick<Console, "error" | "warn">;
   now?: () => Date;
 }
 

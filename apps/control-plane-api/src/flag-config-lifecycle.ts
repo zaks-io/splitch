@@ -54,16 +54,6 @@ export async function initializeFlagConfigsForEnvironment(
   }
 }
 
-export async function purgeFlagConfigsKvForFlag(
-  deps: FlagConfigLifecycleDeps,
-  appId: string,
-  flagId: string,
-): Promise<void> {
-  const flag = await deps.repo.flags.getFlag(appScope(appId), flagId);
-  if (!flag) return;
-  await purgeFlagConfigsKvForKey(deps, appId, flagId, flag.key);
-}
-
 /**
  * The same purge with the Flag key supplied by the caller, for the path that
  * deletes the D1 rows first (an approved delete) and so cannot look the key up
@@ -128,10 +118,10 @@ async function removeFlagConfigAt(
   flagId: string,
   flagKey: string,
 ): Promise<void> {
-  await purgeFlagConfigKv(deps, appId, environmentId, flagId, flagKey);
   const scope = envScope(appId, environmentId);
   await deps.repo.flags.removeTargetingRules(scope, flagId);
   await deps.repo.flags.removeFlagConfig(scope, flagId);
+  await purgeFlagConfigKv(deps, appId, environmentId, flagId, flagKey);
 }
 
 async function ensureInitialFlagConfig(

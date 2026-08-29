@@ -4,7 +4,7 @@ import {
   flagConfigKey,
   runConfigKey,
 } from "@splitch/contracts";
-import { appScope } from "@splitch/db";
+import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeConfigStore } from "../src/config-store";
 import {
@@ -259,6 +259,8 @@ describe("config store variant catalog resync", () => {
     );
     expect(await h.kv.get(key, "text")).toEqual(expect.any(String));
     expect(await h.kv.get(controlPlaneKey, "text")).toEqual(expect.any(String));
+    await h.kv.put(key, "corrupt evaluation snapshot");
+    await h.repo.flags.removeFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId);
 
     const result = await store.deleteFlagConfig({
       appId: ids.appId,

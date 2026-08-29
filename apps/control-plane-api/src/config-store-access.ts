@@ -2,8 +2,11 @@ import type { ExperimentConfigKV, FlagConfigKV, RunConfigKV } from "@splitch/con
 import { envScope } from "@splitch/db";
 import type { ConfigStoreWriter } from "./config-store";
 import {
+  assertControlPlaneFlagConfigSnapshotScope,
   type ControlPlaneFlagConfigSnapshot,
+  ControlPlaneFlagConfigSnapshotScopeError,
   controlPlaneFlagConfigKey,
+  InvalidControlPlaneFlagConfigSnapshotError,
   readControlPlaneFlagConfigSnapshot,
 } from "./config-store-kv";
 import type { FlagConfigResult } from "./config-store-types";
@@ -45,7 +48,7 @@ export interface ConfigStoreAccess extends FlagConfigRead {
 }
 
 export interface ConfigStoreAccessOptions {
-  logger?: Pick<Console, "warn">;
+  logger?: Pick<Console, "error" | "warn">;
   writeThrough?: Map<string, ControlPlaneFlagConfigSnapshot>;
 }
 
@@ -65,68 +68,41 @@ export function durableConfigStoreAccess(
 
   return {
     async readFlagConfig(input) {
-      const scope = envScope(input.appId, input.environmentId);
-      const key = controlPlaneFlagConfigKey(scope, input.flagId);
-      const local = writeThrough.get(key);
-
-      try {
-        const remote = await readControlPlaneFlagConfigSnapshot(kv, scope, input.flagId);
-        if (remote) {
-          if (!local || remote.revision >= local.revision) {
-            writeThrough.delete(key);
-            return flagConfigReadResult(remote);
-          }
-          return flagConfigReadResult(local);
-        }
-      } catch (cause) {
-        logger.warn("config_store_kv_schema_mismatch", { key, cause });
-        throw cause;
-      }
-
-      logger.warn("config_store_kv_snapshot_miss", {
-        key,
-        appId: input.appId,
-        environmentId: input.environmentId,
-        flagId: input.flagId,
-      });
-      return namespace
-        .getByName(configWriterName(input.appId, input.environmentId))
-        .repairFlagConfigSnapshot(input);
+      return readFlagConfigFromKv(namespace, kv, logger, writeThrough, input);
     },
 
     writerFor(appId, environmentId) {
       const writer = namespace.getByName(configWriterName(appId, environmentId));
-      const remember = <T>(result: T): T => {
-        if (!hasConfig(result)) return result;
-        const snapshotRevision = requireSnapshotRevision(result);
-        if (snapshotRevision === null) return result;
-        const scope = envScope(appId, result.config.environmentId);
-        writeThrough.set(controlPlaneFlagConfigKey(scope, result.config.flagId), {
-          revision: snapshotRevision,
-          state: "present",
-          config: result.config,
-        });
-        return result;
-      };
+      const remember = <T>(result: T, flagId?: string): T =>
+        rememberSnapshot(writeThrough, appId, environmentId, result, flagId);
 
       return {
         readFlagConfig: (input) => writer.readFlagConfig(input),
-        repairFlagConfigSnapshot: (input) => writer.repairFlagConfigSnapshot(input).then(remember),
-        writeFlagConfig: (input) => writer.writeFlagConfig(input).then(remember),
-        replaceTargetingRules: (input) => writer.replaceTargetingRules(input).then(remember),
-        promoteFlagConfig: (input) => writer.promoteFlagConfig(input).then(remember),
+        repairFlagConfigSnapshot: (input) =>
+          writer.repairFlagConfigSnapshot(input).then((result) => remember(result, input.flagId)),
+        writeFlagConfig: (input) =>
+          writer.writeFlagConfig(input).then((result) => remember(result, input.flagId)),
+        replaceTargetingRules: (input) =>
+          writer.replaceTargetingRules(input).then((result) => remember(result, input.flagId)),
+        promoteFlagConfig: (input) =>
+          writer.promoteFlagConfig(input).then((result) => remember(result, input.flagId)),
         previewFlagConfig: (input) => writer.previewFlagConfig(input),
         previewTargetingRules: (input) => writer.previewTargetingRules(input),
         previewPromotion: (input) => writer.previewPromotion(input),
-        applyApprovedFlagConfig: (input) => writer.applyApprovedFlagConfig(input).then(remember),
+        applyApprovedFlagConfig: (input) =>
+          writer.applyApprovedFlagConfig(input).then((result) => remember(result, input.flagId)),
         syncExperimentConfig: (input) => writer.syncExperimentConfig(input).then(remember),
-        resyncFlagConfig: (input) => writer.resyncFlagConfig(input).then(remember),
+        resyncFlagConfig: (input) =>
+          writer.resyncFlagConfig(input).then((result) => remember(result, input.flagId)),
         async deleteFlagConfig(input) {
           const result = await writer.deleteFlagConfig(input);
           if (isSuccessful(result)) {
             writeThrough.set(
               controlPlaneFlagConfigKey(envScope(appId, environmentId), input.flagId),
               {
+                appId,
+                environmentId,
+                flagId: input.flagId,
                 revision: result.snapshotRevision,
                 state: "deleted",
               },
@@ -145,6 +121,95 @@ export function durableConfigStoreAccess(
       };
     },
   };
+}
+
+async function readFlagConfigFromKv(
+  namespace: ConfigStoreDurableObjectNamespace,
+  kv: KVNamespace,
+  logger: Pick<Console, "error" | "warn">,
+  writeThrough: Map<string, ControlPlaneFlagConfigSnapshot>,
+  input: Parameters<ConfigStoreWriter["readFlagConfig"]>[0],
+): ReturnType<ConfigStoreWriter["readFlagConfig"]> {
+  const scope = envScope(input.appId, input.environmentId);
+  const key = controlPlaneFlagConfigKey(scope, input.flagId);
+  const local = writeThrough.get(key);
+  let remote: ControlPlaneFlagConfigSnapshot | null;
+  try {
+    remote = await readControlPlaneFlagConfigSnapshot(kv, scope, input.flagId);
+  } catch (cause) {
+    reportSnapshotReadFailure(logger, key, input, cause);
+    throw cause;
+  }
+  if (remote) {
+    if (!local || remote.revision >= local.revision) {
+      writeThrough.delete(key);
+      return flagConfigReadResult(remote);
+    }
+    assertControlPlaneFlagConfigSnapshotScope(local, scope, input.flagId);
+    return flagConfigReadResult(local);
+  }
+  if (local) {
+    assertControlPlaneFlagConfigSnapshotScope(local, scope, input.flagId);
+    return flagConfigReadResult(local);
+  }
+  logger.warn("config_store_kv_snapshot_miss", { key, ...input });
+  const result = await namespace
+    .getByName(configWriterName(input.appId, input.environmentId))
+    .repairFlagConfigSnapshot(input);
+  rememberSnapshot(writeThrough, input.appId, input.environmentId, result, input.flagId);
+  return result;
+}
+
+function reportSnapshotReadFailure(
+  logger: Pick<Console, "error">,
+  key: string,
+  input: Parameters<ConfigStoreWriter["readFlagConfig"]>[0],
+  cause: unknown,
+): void {
+  let event = "config_store_kv_read_failed";
+  if (cause instanceof InvalidControlPlaneFlagConfigSnapshotError) {
+    event = "config_store_kv_schema_mismatch";
+  } else if (cause instanceof ControlPlaneFlagConfigSnapshotScopeError) {
+    event = "config_store_kv_snapshot_scope_mismatch";
+  }
+  logger.error(event, {
+    key,
+    ...input,
+    ...(cause instanceof ControlPlaneFlagConfigSnapshotScopeError
+      ? { mismatchAxes: cause.mismatchAxes }
+      : {}),
+    cause,
+  });
+}
+
+function rememberSnapshot<T>(
+  writeThrough: Map<string, ControlPlaneFlagConfigSnapshot>,
+  appId: string,
+  environmentId: string,
+  result: T,
+  expectedFlagId?: string,
+): T {
+  if (!hasConfig(result)) return result;
+  const snapshotRevision = requireSnapshotRevision(result);
+  if (snapshotRevision === null) return result;
+  if (result.config.environmentId !== environmentId) {
+    throw new Error("config-store: writer returned a Flag Configuration for another Environment");
+  }
+  if (expectedFlagId !== undefined && result.config.flagId !== expectedFlagId) {
+    throw new Error("config-store: writer returned a Flag Configuration for another Flag");
+  }
+  const scope = envScope(appId, environmentId);
+  const snapshot: ControlPlaneFlagConfigSnapshot = {
+    appId,
+    environmentId,
+    flagId: result.config.flagId,
+    revision: snapshotRevision,
+    state: "present",
+    config: result.config,
+  };
+  assertControlPlaneFlagConfigSnapshotScope(snapshot, scope, result.config.flagId);
+  writeThrough.set(controlPlaneFlagConfigKey(scope, result.config.flagId), snapshot);
+  return result;
 }
 
 function hasConfig(value: unknown): value is { ok: true; config: FlagConfigResult } {

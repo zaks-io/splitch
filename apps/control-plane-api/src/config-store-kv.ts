@@ -30,8 +30,35 @@ export function controlPlaneFlagConfigKey(scope: EnvScope, flagId: string): stri
 }
 
 export type ControlPlaneFlagConfigSnapshot =
-  | { revision: number; state: "present"; config: FlagConfigResult }
-  | { revision: number; state: "deleted" };
+  | {
+      appId: string;
+      environmentId: string;
+      flagId: string;
+      revision: number;
+      state: "present";
+      config: FlagConfigResult;
+    }
+  | {
+      appId: string;
+      environmentId: string;
+      flagId: string;
+      revision: number;
+      state: "deleted";
+    };
+
+export class InvalidControlPlaneFlagConfigSnapshotError extends Error {
+  constructor(options: ErrorOptions) {
+    super("control-plane Flag Configuration snapshot is malformed", options);
+    this.name = "InvalidControlPlaneFlagConfigSnapshotError";
+  }
+}
+
+export class ControlPlaneFlagConfigSnapshotScopeError extends Error {
+  constructor(readonly mismatchAxes: readonly string[]) {
+    super("control-plane Flag Configuration snapshot does not match its requested scope");
+    this.name = "ControlPlaneFlagConfigSnapshotScopeError";
+  }
+}
 
 export async function readControlPlaneFlagConfigSnapshot(
   kv: KVNamespace,
@@ -39,7 +66,30 @@ export async function readControlPlaneFlagConfigSnapshot(
   flagId: string,
 ): Promise<ControlPlaneFlagConfigSnapshot | null> {
   const raw = await kv.get(controlPlaneFlagConfigKey(scope, flagId), "text");
-  return raw === null ? null : parseControlPlaneFlagConfigSnapshot(raw);
+  if (raw === null) return null;
+  const snapshot = parseControlPlaneFlagConfigSnapshot(raw);
+  assertControlPlaneFlagConfigSnapshotScope(snapshot, scope, flagId);
+  return snapshot;
+}
+
+export function assertControlPlaneFlagConfigSnapshotScope(
+  snapshot: ControlPlaneFlagConfigSnapshot,
+  scope: EnvScope,
+  flagId: string,
+): void {
+  const mismatchAxes: string[] = [];
+  if (snapshot.appId !== scope.appId) mismatchAxes.push("appId");
+  if (snapshot.environmentId !== scope.environmentId) mismatchAxes.push("environmentId");
+  if (snapshot.flagId !== flagId) mismatchAxes.push("flagId");
+  if (snapshot.state === "present") {
+    if (snapshot.config.environmentId !== scope.environmentId) {
+      mismatchAxes.push("config.environmentId");
+    }
+    if (snapshot.config.flagId !== flagId) mismatchAxes.push("config.flagId");
+  }
+  if (mismatchAxes.length > 0) {
+    throw new ControlPlaneFlagConfigSnapshotScopeError(mismatchAxes);
+  }
 }
 
 export async function deleteFlagConfigSnapshot(
@@ -52,7 +102,13 @@ export async function deleteFlagConfigSnapshot(
 ): Promise<void> {
   await kv.put(
     controlPlaneFlagConfigKey(scope, flagId),
-    serializeControlPlaneFlagConfigSnapshot({ revision, state: "deleted" }),
+    serializeControlPlaneFlagConfigSnapshot({
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      flagId,
+      revision,
+      state: "deleted",
+    }),
   );
   await kv.delete(flagConfigKey(scope.appId, scope.environmentId, flagKey));
   if (experimentId) {
@@ -71,6 +127,9 @@ export async function writeSnapshot(
   await kv.put(
     controlPlaneFlagConfigKey(scope, snapshot.flag.id),
     serializeControlPlaneFlagConfigSnapshot({
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      flagId: snapshot.flag.id,
       revision,
       state: "present",
       config: controlPlaneConfig,
@@ -103,23 +162,38 @@ export async function writeSnapshot(
 }
 
 function parseControlPlaneFlagConfigSnapshot(raw: string): ControlPlaneFlagConfigSnapshot {
-  const value: unknown = JSON.parse(raw);
+  try {
+    return parseControlPlaneFlagConfigSnapshotValue(JSON.parse(raw));
+  } catch (cause) {
+    if (cause instanceof InvalidControlPlaneFlagConfigSnapshotError) throw cause;
+    throw new InvalidControlPlaneFlagConfigSnapshotError({ cause });
+  }
+}
+
+function parseControlPlaneFlagConfigSnapshotValue(value: unknown): ControlPlaneFlagConfigSnapshot {
   if (!isRecord(value))
     throw new Error("control-plane Flag Configuration snapshot is not an object");
   if (value.schemaVersion !== CURRENT_KV_SCHEMA_VERSION) {
     throw new Error("control-plane Flag Configuration snapshot has an unknown schema version");
   }
-  if (!Number.isSafeInteger(value.revision) || (value.revision as number) < 1) {
-    throw new Error("control-plane Flag Configuration snapshot has an invalid revision");
-  }
-  const revision = value.revision as number;
+  const scope = parseSnapshotScope(value);
+  const revision = parseSnapshotRevision(value.revision);
   if (value.state === "deleted") {
-    requireKeys(value, ["revision", "schemaVersion", "state"]);
-    return { revision, state: "deleted" };
+    requireKeys(value, ["appId", "environmentId", "flagId", "revision", "schemaVersion", "state"]);
+    return { ...scope, revision, state: "deleted" };
   }
   if (value.state === "present") {
-    requireKeys(value, ["data", "revision", "schemaVersion", "state"]);
+    requireKeys(value, [
+      "appId",
+      "data",
+      "environmentId",
+      "flagId",
+      "revision",
+      "schemaVersion",
+      "state",
+    ]);
     return {
+      ...scope,
       revision,
       state: "present",
       config: ControlPlaneFlagConfigEnvelope.shape.data.parse(value.data) as FlagConfigResult,
@@ -128,9 +202,32 @@ function parseControlPlaneFlagConfigSnapshot(raw: string): ControlPlaneFlagConfi
   throw new Error("control-plane Flag Configuration snapshot has an invalid state");
 }
 
+function parseSnapshotScope(value: Record<string, unknown>) {
+  if (typeof value.appId !== "string" || value.appId.length === 0) {
+    throw new Error("control-plane Flag Configuration snapshot has an invalid App id");
+  }
+  if (typeof value.environmentId !== "string" || value.environmentId.length === 0) {
+    throw new Error("control-plane Flag Configuration snapshot has an invalid Environment id");
+  }
+  if (typeof value.flagId !== "string" || value.flagId.length === 0) {
+    throw new Error("control-plane Flag Configuration snapshot has an invalid Flag id");
+  }
+  return { appId: value.appId, environmentId: value.environmentId, flagId: value.flagId };
+}
+
+function parseSnapshotRevision(value: unknown): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 1) {
+    throw new Error("control-plane Flag Configuration snapshot has an invalid revision");
+  }
+  return value as number;
+}
+
 function serializeControlPlaneFlagConfigSnapshot(snapshot: ControlPlaneFlagConfigSnapshot): string {
   const base = {
     schemaVersion: CURRENT_KV_SCHEMA_VERSION,
+    appId: snapshot.appId,
+    environmentId: snapshot.environmentId,
+    flagId: snapshot.flagId,
     revision: snapshot.revision,
     state: snapshot.state,
   };

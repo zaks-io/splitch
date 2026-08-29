@@ -1,6 +1,7 @@
 import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
 import { type EnvScope, envScope } from "@splitch/db";
 import { promotionFreeze } from "./config-store-freeze";
+import { publishFlagConfigSnapshot } from "./config-store-publication";
 import {
   buildSnapshotFromD1,
   type ConfigStoreRuntimeDeps,
@@ -14,7 +15,6 @@ import {
   responseFromSnapshot,
   type Snapshot,
   targetingRuleRows,
-  writeSnapshotAndBroadcast,
 } from "./config-store-shared";
 import { targetingRulePersistFailure } from "./config-store-targeting-rules";
 import { baselineIsUnresolvable, mintSalt } from "./flag-config-rollout";
@@ -301,9 +301,7 @@ async function commitPromotion(
     return { ok: false, reason: "FLAG_NOT_FOUND" };
   }
 
-  const committed = await buildSnapshotFromD1(deps.repo, targetScope, input.flagId);
-  if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  return writeSnapshotAndBroadcast(deps, targetScope, input.flagId, committed);
+  return publishFlagConfigSnapshot(deps, targetScope, input.flagId);
 }
 
 function copySelectedAvailability(

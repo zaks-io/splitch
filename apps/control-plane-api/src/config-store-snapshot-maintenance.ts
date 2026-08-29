@@ -5,7 +5,6 @@ import {
   buildSnapshotFromD1,
   type ConfigStoreRuntimeDeps,
   type FlagConfigResult,
-  readFlagSnapshot,
   responseFromSnapshot,
 } from "./config-store-shared";
 
@@ -31,10 +30,10 @@ export async function repairFlagConfigSnapshot(
   | { ok: false; reason: "FLAG_NOT_FOUND" }
 > {
   const scope = envScope(input.appId, input.environmentId);
-  const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
-  if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  const config = responseFromSnapshot(snapshot);
   return deps.snapshotMutations.run(async () => {
+    const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
+    if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
+    const config = responseFromSnapshot(snapshot);
     const snapshotRevision = await deps.nextSnapshotRevision({
       flagId: input.flagId,
       operation: "repair",
@@ -55,21 +54,18 @@ export async function deleteFlagConfigFromStore(
       : await deps.repo.flags.getFlag(appScope(input.appId), input.flagId)) ?? null;
   if (!flag) return { ok: false, reason: "FLAG_NOT_FOUND" };
 
-  const existing = await readFlagSnapshot(deps, scope, input.flagId);
-  const experimentId = existing?.flag.experimentId ?? null;
   return deps.snapshotMutations.run(async () => {
+    const existing = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
+    if (existing) {
+      throw new Error(
+        `config-store: refusing to delete a snapshot while Flag Configuration ${input.flagId} exists in D1`,
+      );
+    }
     const snapshotRevision = await deps.nextSnapshotRevision({
       flagId: input.flagId,
       operation: "delete",
     });
-    await deleteFlagConfigSnapshot(
-      deps.kv,
-      scope,
-      input.flagId,
-      snapshotRevision,
-      flag.key,
-      experimentId,
-    );
+    await deleteFlagConfigSnapshot(deps.kv, scope, input.flagId, snapshotRevision, flag.key, null);
 
     const nudge = DeltaNudgeSchema.parse({
       type: "config.changed",

@@ -1,8 +1,8 @@
 import type { TargetingRule } from "@splitch/contracts";
 import { type EnvScope, envScope, type ReplaceTargetingRulesResult } from "@splitch/db";
 import { targetingFreeze } from "./config-store-freeze";
+import { publishFlagConfigSnapshot } from "./config-store-publication";
 import {
-  buildSnapshotFromD1,
   type ConfigStoreRuntimeDeps,
   type FlagConfigWriteResult,
   loadFlagConfigWriteContext,
@@ -10,7 +10,6 @@ import {
   type ReplaceTargetingRulesInput,
   targetingRuleRows,
   toTargetingRule,
-  writeSnapshotAndBroadcast,
 } from "./config-store-shared";
 import { normalizeTargetingRuleRollouts } from "./flag-config-rollout";
 import { resolveTargetingRules } from "./targeting-rule-resolution";
@@ -110,7 +109,5 @@ async function commitTargetingRules(
     return targetingRulePersistFailure(replaced, input.targetingRules, "FLAG_NOT_FOUND");
   }
 
-  const committed = await buildSnapshotFromD1(deps.repo, scope, flagId);
-  if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  return writeSnapshotAndBroadcast(deps, scope, flagId, committed);
+  return publishFlagConfigSnapshot(deps, scope, flagId);
 }

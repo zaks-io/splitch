@@ -287,28 +287,34 @@ export function configStoreAccess(
   kv: KVNamespace,
   syncFailures?: SyncFailureControl,
 ): ConfigStoreAccess {
-  const writer = makeConfigStore({
-    repo,
-    kv,
-    broadcaster: { broadcast() {} },
-    nextSnapshotRevision: makeSnapshotRevisionCounter(),
-    now: () => new Date(Date.parse(NOW_ISO)),
-  });
-  const controlledWriter: ConfigStoreWriter = {
-    ...writer,
-    async syncExperimentConfig(input) {
-      if (syncFailures && syncFailures.remaining > 0) {
-        syncFailures.remaining -= 1;
-        throw new Error("injected syncExperimentConfig failure");
-      }
-      return writer.syncExperimentConfig(input);
-    },
+  const writers = new Map<string, ConfigStoreWriter>();
+  const writerFor = (appId: string, environmentId: string): ConfigStoreWriter => {
+    const name = `${appId}:${environmentId}`;
+    const existing = writers.get(name);
+    if (existing) return existing;
+    const writer = makeConfigStore({
+      repo,
+      kv,
+      broadcaster: { broadcast() {} },
+      nextSnapshotRevision: makeSnapshotRevisionCounter(),
+      now: () => new Date(Date.parse(NOW_ISO)),
+    });
+    const controlled: ConfigStoreWriter = {
+      ...writer,
+      async syncExperimentConfig(input) {
+        if (syncFailures && syncFailures.remaining > 0) {
+          syncFailures.remaining -= 1;
+          throw new Error("injected syncExperimentConfig failure");
+        }
+        return writer.syncExperimentConfig(input);
+      },
+    };
+    writers.set(name, controlled);
+    return controlled;
   };
   return {
-    readFlagConfig: (input) => controlledWriter.readFlagConfig(input),
-    writerFor(): ConfigStoreWriter {
-      return controlledWriter;
-    },
+    readFlagConfig: (input) => writerFor(input.appId, input.environmentId).readFlagConfig(input),
+    writerFor,
     liveUpdatesFor: () => ({
       connect: async () => new Response("test live updates unavailable", { status: 503 }),
     }),

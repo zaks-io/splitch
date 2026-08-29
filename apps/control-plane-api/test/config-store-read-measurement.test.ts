@@ -91,8 +91,8 @@ describe("flag_config_get direct KV reads", () => {
     });
     const target = namespaceFor(writer);
     const warn = vi.fn();
-    const access = durableConfigStoreAccess(target.namespace, h.kv, {
-      logger: { warn },
+    const access = durableConfigStoreAccess(target.namespace, missingSnapshotKv(h.kv, key), {
+      logger: { error: vi.fn(), warn },
       writeThrough: new Map(),
     });
     const app = appFor(repo, access);
@@ -134,9 +134,9 @@ describe("flag_config_get direct KV reads", () => {
         nextSnapshotRevision: makeSnapshotRevisionCounter(),
       }),
     );
-    const warn = vi.fn();
+    const error = vi.fn();
     const access = durableConfigStoreAccess(target.namespace, h.kv, {
-      logger: { warn },
+      logger: { error, warn: vi.fn() },
       writeThrough: new Map(),
     });
     const app = appFor(repo, access);
@@ -145,6 +145,9 @@ describe("flag_config_get direct KV reads", () => {
       key,
       JSON.stringify({
         schemaVersion: CURRENT_KV_SCHEMA_VERSION,
+        appId: ids.appId,
+        environmentId: ids.environmentId,
+        flagId: ids.flagId,
         revision: 1,
         state: "present",
         data: { flagId: ids.flagId, environmentId: ids.environmentId, version: "broken" },
@@ -158,7 +161,7 @@ describe("flag_config_get direct KV reads", () => {
     expect(response.status).toBe(500);
     expect(counted.queries()).toBe(0);
     expect(target.subrequests()).toBe(0);
-    expect(warn).toHaveBeenCalledWith(
+    expect(error).toHaveBeenCalledWith(
       "config_store_kv_schema_mismatch",
       expect.objectContaining({ key, cause: expect.anything() }),
     );
@@ -195,8 +198,10 @@ function scope() {
 
 function namespaceFor(writer: ConfigStoreWriter) {
   let calls = 0;
+  const expectedName = `${ids.appId}:${ids.environmentId}`;
   const namespace = {
-    getByName() {
+    getByName(name: string) {
+      expect(name).toBe(expectedName);
       calls += 1;
       return writer;
     },
@@ -208,6 +213,24 @@ function namespaceFor(writer: ConfigStoreWriter) {
       calls = 0;
     },
   };
+}
+
+function missingSnapshotKv(base: KVNamespace, key: string): KVNamespace {
+  return new Proxy(base, {
+    get(target, property) {
+      if (property === "get") {
+        return async (requestedKey: string, ...args: unknown[]) => {
+          if (requestedKey === key) return null;
+          return (target.get as (...parameters: unknown[]) => Promise<unknown>)(
+            requestedKey,
+            ...args,
+          );
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
 }
 
 function countingD1(db: D1Database) {

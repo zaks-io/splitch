@@ -1,4 +1,5 @@
 export interface ConfigStoreMutationQueue {
+  /** Operations must not call `run` again on this queue; nesting self-deadlocks. */
   run<T>(operation: () => Promise<T>): Promise<T>;
 }
 

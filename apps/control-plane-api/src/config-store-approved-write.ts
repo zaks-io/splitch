@@ -1,5 +1,6 @@
 import { envScope } from "@splitch/db";
 import { approvedProposalFreeze } from "./config-store-freeze";
+import { publishFlagConfigSnapshot } from "./config-store-publication";
 import {
   type ApplyApprovedFlagConfigInput,
   buildSnapshotFromD1,
@@ -10,7 +11,6 @@ import {
   missingRuleVariantNames,
   type Snapshot,
   targetingRuleRows,
-  writeSnapshotAndBroadcast,
 } from "./config-store-shared";
 import { targetingRulePersistFailure } from "./config-store-targeting-rules";
 import { baselineIsUnresolvable } from "./flag-config-rollout";
@@ -74,9 +74,7 @@ export async function applyApprovedFlagConfig(
   ) {
     return { ok: false, reason: "APPROVAL_NOT_APPLIED" };
   }
-  const committed = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
-  if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  return writeSnapshotAndBroadcast(deps, scope, input.flagId, committed);
+  return publishFlagConfigSnapshot(deps, scope, input.flagId);
 }
 
 /** Patch keys whose JSON Pointer appears in `diff.entries` (plus `updatedAt`). */

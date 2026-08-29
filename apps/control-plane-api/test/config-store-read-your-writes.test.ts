@@ -119,6 +119,7 @@ describe("flag_config_get read-your-writes", () => {
     const present = await requiredSnapshot(key);
     const writeThrough = new Map();
     const staleAccess = accessFor(store, staleSnapshotKv(h.kv, key, present), writeThrough);
+    await h.repo.flags.removeFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId);
 
     expect(
       await staleAccess.writerFor(ids.appId, ids.environmentId).deleteFlagConfig(configIdentity()),
@@ -134,6 +135,7 @@ describe("flag_config_get read-your-writes", () => {
     const store = makeStore(durableRevisionAllocator());
     expect(await store.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
     const key = controlPlaneFlagConfigKey(scope(), ids.flagId);
+    await h.repo.flags.removeFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId);
 
     expect(await store.deleteFlagConfig(configIdentity())).toMatchObject({
       ok: true,
@@ -164,7 +166,13 @@ function accessFor(
   kv: KVNamespace,
   writeThrough: Map<string, ControlPlaneFlagConfigSnapshot>,
 ): ConfigStoreAccess {
-  const namespace = { getByName: () => writer } as unknown as ConfigStoreDurableObjectNamespace;
+  const expectedName = `${ids.appId}:${ids.environmentId}`;
+  const namespace = {
+    getByName(name: string) {
+      expect(name).toBe(expectedName);
+      return writer;
+    },
+  } as unknown as ConfigStoreDurableObjectNamespace;
   return durableConfigStoreAccess(namespace, kv, { writeThrough });
 }
 
