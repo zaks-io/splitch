@@ -3,7 +3,7 @@ import { type ApprovalCommit, appScope, type Repository } from "@splitch/db";
 import { applyExperimentStart } from "./approval-application-experiment-start";
 import type { ApplicationOutcome } from "./approval-service-types";
 import type { ConfigStoreAccess } from "./config-store-do";
-import { purgeFlagConfigsKvForKey } from "./flag-config-lifecycle";
+import { captureFlagConfigPurgeTargets, purgeFlagConfigsKvForKey } from "./flag-config-lifecycle";
 import {
   type VariantDeleteRefusal,
   type VariantWriteRefusal,
@@ -329,6 +329,7 @@ async function applyFlagDelete(
     };
   }
   const environments = await deps.repo.identity.listEnvironments(appScope(request.appId));
+  const purgeTargets = await captureFlagConfigPurgeTargets(deps, request.appId, flagId);
   const deleted = await deps.repo.flags.deleteFlagCascade(
     appScope(request.appId),
     flagId,
@@ -336,7 +337,7 @@ async function applyFlagDelete(
     { approval: commit },
   );
   if (!deleted) return notApplied();
-  await purgeFlagConfigsKvForKey(deps, request.appId, flagId, flag.key);
+  await purgeFlagConfigsKvForKey(deps, request.appId, flagId, flag.key, purgeTargets);
   return { ok: true as const };
 }
 

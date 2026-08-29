@@ -3,7 +3,10 @@ import type { ApprovalCommit } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type ConfigStoreWriter, makeConfigStore } from "../src/config-store";
 import { ConfigStoreDurableObject } from "../src/config-store-do";
-import { narrowSeededAvailability } from "../src/config-store-fixture-data";
+import {
+  makeSnapshotRevisionCounter,
+  narrowSeededAvailability,
+} from "../src/config-store-fixture-data";
 import {
   type Harness,
   ids,
@@ -53,6 +56,8 @@ const APPROVAL: ApprovalCommit = {
  */
 const EXEMPT_WRITERS: Record<string, string> = {
   readFlagConfig: "read-only",
+  readFlagConfigPurgeTarget: "reads the stored evaluation owner before deletion",
+  repairFlagConfigSnapshot: "repairs derived KV state without changing D1",
   syncExperimentConfig: "republishes D1 to KV; writes no Flag Configuration row",
   deleteFlagConfig: "removes the KV snapshot after the Flag rows are already gone",
 };
@@ -65,6 +70,7 @@ beforeEach(async () => {
     repo: h.repo,
     kv: h.kv,
     broadcaster: { broadcast: () => undefined },
+    nextSnapshotRevision: makeSnapshotRevisionCounter(),
     now: () => new Date(NOW_MS),
   });
 });

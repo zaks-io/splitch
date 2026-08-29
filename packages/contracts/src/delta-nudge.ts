@@ -28,6 +28,9 @@ export const DeltaNudgeSchema = z
     // Monotonic version on the entity; lets a subscriber skip a self-edit it
     // already has (`nudge.version <= cached_version`).
     version: z.number().int().min(0),
+    // Explicit deletion marker. A deleted entity has no version a subscriber
+    // can compare for freshness, so version zero must not carry this meaning.
+    deleted: z.literal(true).optional(),
   })
   .strict();
 export type DeltaNudge = z.infer<typeof DeltaNudgeSchema>;

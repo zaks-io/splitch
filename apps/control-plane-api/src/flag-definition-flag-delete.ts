@@ -8,7 +8,11 @@ import {
   environmentPolicyContexts,
   requiresReview,
 } from "./approval-target";
-import { deleteFlagD1Cascade, purgeFlagConfigsKvForFlag } from "./flag-config-lifecycle";
+import {
+  captureFlagConfigPurgeTargets,
+  deleteFlagD1Cascade,
+  purgeFlagConfigsKvForKey,
+} from "./flag-config-lifecycle";
 import { resourceNotEmpty, runningExperimentError } from "./flag-definition-errors";
 import { experimentReferencingFlag } from "./flag-definition-guards";
 import {
@@ -79,8 +83,19 @@ export async function deleteFlag(
     return Response.json({ deleted: true });
   }
 
-  await purgeFlagConfigsKvForFlag(deps, loaded.value.appId, loaded.value.flag.id);
+  const purgeTargets = await captureFlagConfigPurgeTargets(
+    deps,
+    loaded.value.appId,
+    loaded.value.flag.id,
+  );
   await deleteFlagD1Cascade(deps, loaded.value.appId, loaded.value.flag.id);
+  await purgeFlagConfigsKvForKey(
+    deps,
+    loaded.value.appId,
+    loaded.value.flag.id,
+    loaded.value.flag.key,
+    purgeTargets,
+  );
   return Response.json({ deleted: true });
 }
 

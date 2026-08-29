@@ -1,7 +1,10 @@
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeConfigStore } from "../src/config-store";
-import { startSeededExperiment } from "../src/config-store-fixture-data";
+import {
+  makeSnapshotRevisionCounter,
+  startSeededExperiment,
+} from "../src/config-store-fixture-data";
 import {
   type Harness,
   ids,
@@ -59,6 +62,7 @@ describe("Promotion that selects no field group", () => {
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: () => undefined },
+      nextSnapshotRevision: makeSnapshotRevisionCounter(),
     });
 
     const preview = await store.previewPromotion({

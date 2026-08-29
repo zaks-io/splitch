@@ -1,9 +1,10 @@
 import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
 import { type EnvScope, envScope } from "@splitch/db";
 import { promotionFreeze } from "./config-store-freeze";
+import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import {
   buildSnapshotFromD1,
-  type ConfigStoreDeps,
+  type ConfigStoreRuntimeDeps,
   type FlagConfigWriteResult,
   flagConfigResult,
   json,
@@ -14,7 +15,6 @@ import {
   responseFromSnapshot,
   type Snapshot,
   targetingRuleRows,
-  writeSnapshotAndBroadcast,
 } from "./config-store-shared";
 import { targetingRulePersistFailure } from "./config-store-targeting-rules";
 import { baselineIsUnresolvable, mintSalt } from "./flag-config-rollout";
@@ -29,7 +29,7 @@ interface PreparedPromotion {
 }
 
 export async function promoteFlagConfig(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: PromoteFlagConfigInput,
 ): Promise<PromoteFlagConfigResult> {
   // Covers the preview too, and deliberately: `previewPromotion` is what the
@@ -66,6 +66,7 @@ export async function promoteFlagConfig(
     config: write.config,
     diff: { before: responseFromSnapshot(loaded.target), after: write.config },
     nudge: write.nudge,
+    snapshotRevision: write.snapshotRevision,
   };
 }
 
@@ -90,10 +91,11 @@ function promotionPreview(
     config: after,
     diff: { before, after },
     nudge: { type: "config.changed", entity: "flag", id: input.flagId, version: after.version },
+    snapshotRevision: null,
   };
 }
 
-async function loadPromotionSnapshots(deps: ConfigStoreDeps, input: PromoteFlagConfigInput) {
+async function loadPromotionSnapshots(deps: ConfigStoreRuntimeDeps, input: PromoteFlagConfigInput) {
   const targetScope = envScope(input.appId, input.targetEnvironmentId);
   const sourceScope = envScope(input.appId, input.fromEnvironmentId);
   const source = await buildSnapshotFromD1(deps.repo, sourceScope, input.flagId);
@@ -261,7 +263,7 @@ function promotionSelectsNothing(input: PromoteFlagConfigInput): boolean {
 }
 
 async function commitPromotion(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: PromoteFlagConfigInput,
   targetScope: EnvScope,
   prepared: PreparedPromotion,
@@ -299,9 +301,7 @@ async function commitPromotion(
     return { ok: false, reason: "FLAG_NOT_FOUND" };
   }
 
-  const committed = await buildSnapshotFromD1(deps.repo, targetScope, input.flagId);
-  if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  return writeSnapshotAndBroadcast(deps, targetScope, input.flagId, committed);
+  return writeFlagConfigSnapshot(deps, targetScope, input.flagId);
 }
 
 function copySelectedAvailability(

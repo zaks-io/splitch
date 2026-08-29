@@ -6,7 +6,13 @@ import { createApp } from "./app";
 import type { ApprovalArchiveStore } from "./approval-archive";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
-import { ids, NOW, NOW_MS, startSeededExperiment } from "./config-store-fixture-data";
+import {
+  ids,
+  makeSnapshotRevisionCounter,
+  NOW,
+  NOW_MS,
+  startSeededExperiment,
+} from "./config-store-fixture-data";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import { appAdminScope } from "./scope-binding";
@@ -26,6 +32,7 @@ export interface Harness {
   signer: FixtureSigner;
   dispose: () => Promise<void>;
   nudges: DeltaNudge[];
+  errors: unknown[][];
   warnings: unknown[][];
   events: string[];
 }
@@ -49,29 +56,46 @@ export async function buildHarness(bindings: {
   const repo = createRepository(d1);
   const signer = await makeFixtureSigner();
   const nudges: DeltaNudge[] = [];
+  const errors: unknown[][] = [];
   const warnings: unknown[][] = [];
   const events: string[] = [];
-  const store = makeConfigStore({
-    repo,
-    kv: recordingKv(kv, repo, events),
-    broadcaster: {
-      broadcast(nudge) {
-        events.push("broadcast");
-        nudges.push(nudge);
-      },
-    },
-    logger: { warn: (...args: unknown[]) => warnings.push(args) },
-    now: () => new Date(NOW_MS),
-  });
+  const recordedKv = recordingKv(kv, repo, events);
+  const stores = new Map<string, ConfigStoreWriter>();
+  const writerFor = (appId: string, environmentId: string): ConfigStoreWriter => {
+    const name = `${appId}:${environmentId}`;
+    let store = stores.get(name);
+    if (!store) {
+      store = makeConfigStore({
+        repo,
+        kv: recordedKv,
+        broadcaster: {
+          broadcast(nudge) {
+            events.push("broadcast");
+            nudges.push(nudge);
+          },
+        },
+        nextSnapshotRevision: makeSnapshotRevisionCounter(),
+        logger: {
+          error: (...args: unknown[]) => errors.push(args),
+          warn: (...args: unknown[]) => warnings.push(args),
+        },
+        now: () => new Date(NOW_MS),
+      });
+      stores.set(name, store);
+    }
+    return store;
+  };
+  const store = writerFor(ids.appId, ids.environmentId);
 
-  const app = makeAuthedApp({ repo, signer, sessions }, store);
-  return { app, d1, kv, repo, signer, nudges, warnings, events, dispose: bindings.dispose };
+  const app = makeAuthedApp({ repo, signer, sessions }, store, undefined, writerFor);
+  return { app, d1, kv, repo, signer, nudges, errors, warnings, events, dispose: bindings.dispose };
 }
 
 export function makeAuthedApp(
   h: Pick<Harness, "repo" | "signer"> & { sessions?: KVNamespace },
   store?: ConfigStoreWriter,
   approvalArchiveStore?: ApprovalArchiveStore,
+  scopedWriterFor?: (appId: string, environmentId: string) => ConfigStoreWriter,
 ): Hono {
   const verifier = makeJwksVerifier({
     issuer: "https://auth.splitch.test",
@@ -97,7 +121,15 @@ export function makeAuthedApp(
     ...(store
       ? {
           configStore: {
-            writerFor: () => store,
+            readFlagConfig: (input) => store.readFlagConfig(input),
+            writerFor:
+              scopedWriterFor ??
+              ((appId, environmentId) => {
+                if (appId !== ids.appId || environmentId !== ids.environmentId) {
+                  throw new Error("config-store harness received an unexpected writer scope");
+                }
+                return store;
+              }),
             liveUpdatesFor: () => ({
               connect: async () => new Response("test live updates unavailable", { status: 503 }),
             }),
