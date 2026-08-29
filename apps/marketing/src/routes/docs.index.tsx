@@ -34,7 +34,7 @@ function DocsIndexRoute() {
               </a>
             </Badge>
           </p>
-          <h1 className="font-bold font-display text-4xl text-foreground tracking-tight sm:text-5xl">
+          <h1 className="text-balance font-bold font-display text-4xl text-foreground tracking-tight sm:text-5xl">
             Everything a failure can tell you<span className="text-arm-control">.</span>
           </h1>
           <p className="max-w-2xl text-lg text-muted-foreground leading-relaxed">
@@ -43,9 +43,11 @@ function DocsIndexRoute() {
             <a className="text-arm-control underline underline-offset-4" href="/llms.txt">
               /llms.txt
             </a>{" "}
-            indexes all of them. Building with an agent? Point it at{" "}
-            <span className="font-mono text-foreground">mcp.splitch.dev</span> and it gets the same
-            material without leaving the tools it already has.
+            indexes all of them. Building with an agent? Run{" "}
+            <span className="font-mono text-foreground">
+              claude mcp add --transport http splitch https://mcp.splitch.dev
+            </span>{" "}
+            and it gets this material plus the tools to act on it.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button render={<Link to="/quickstart" />}>Quickstart</Button>
