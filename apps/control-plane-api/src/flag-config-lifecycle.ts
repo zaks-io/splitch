@@ -18,6 +18,43 @@ interface InitialFlagConfigInput {
   defaultVariantId: string;
 }
 
+interface FlagConfigPurgeFailure {
+  environmentId: string;
+  causes: readonly unknown[];
+}
+
+export class FlagConfigPurgeIncompleteError extends Error {
+  readonly appId: string;
+  readonly flagId: string;
+  readonly flagKey: string;
+  readonly environmentIds: readonly string[];
+  readonly failures: readonly FlagConfigPurgeFailure[];
+  readonly causes: readonly unknown[];
+
+  constructor(
+    appId: string,
+    flagId: string,
+    flagKey: string,
+    failures: readonly FlagConfigPurgeFailure[],
+  ) {
+    const environmentIds = failures.map((failure) => failure.environmentId);
+    const causes = failures.flatMap((failure) => failure.causes);
+    const message = `flag-config lifecycle: KV purge incomplete for appId=${appId}, flagId=${flagId}, flagKey=${flagKey}; environmentIds=${JSON.stringify(environmentIds)}`;
+    super(message, {
+      cause: new AggregateError(causes, message),
+    });
+    this.name = "FlagConfigPurgeIncompleteError";
+    this.appId = appId;
+    this.flagId = flagId;
+    this.flagKey = flagKey;
+    this.environmentIds = environmentIds;
+    this.failures = failures;
+    this.causes = causes;
+  }
+}
+
+const FLAG_CONFIG_PURGE_ATTEMPTS = 3;
+
 export async function initializeFlagConfigsForFlag(
   deps: FlagConfigLifecycleDeps,
   input: InitialFlagConfigInput,
@@ -66,8 +103,25 @@ export async function purgeFlagConfigsKvForKey(
   flagKey: string,
 ): Promise<void> {
   const environments = await deps.repo.identity.listEnvironments(appScope(appId));
+  const failures: FlagConfigPurgeFailure[] = [];
   for (const environment of environments) {
-    await purgeFlagConfigKv(deps, appId, environment.id, flagId, flagKey);
+    const causes: unknown[] = [];
+    for (let attempt = 0; attempt < FLAG_CONFIG_PURGE_ATTEMPTS; attempt += 1) {
+      try {
+        await purgeFlagConfigKv(deps, appId, environment.id, flagId, flagKey);
+        break;
+      } catch (cause) {
+        causes.push(cause);
+      }
+    }
+    if (causes.length === FLAG_CONFIG_PURGE_ATTEMPTS) {
+      failures.push({ environmentId: environment.id, causes });
+    }
+  }
+  if (failures.length > 0) {
+    // In-request retries cannot guarantee cleanup after this request ends.
+    // SPL-540 owns durable, resumable cleanup across requests.
+    throw new FlagConfigPurgeIncompleteError(appId, flagId, flagKey, failures);
   }
 }
 
