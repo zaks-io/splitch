@@ -59,7 +59,8 @@ would return an empty list and deadlock the first step of every agent journey.
 The scope filter is dropped for the `device_flow` door and for membership-wide authority. Device
 flow can rebind to any current Organization; the structural grant names the complete cached
 membership reach regardless of its auth door. Other refresh-less access tokens remain narrowed by
-scopes. Every Organization route with an `:orgId` path performs an uncached D1 Organization
+scopes. Live membership is the floor for every door: a scope naming an Organization the
+principal does not belong to never widens the result. Every Organization route with an `:orgId` path performs an uncached D1 Organization
 membership check in its handler. `GET /orgs` and Organization-scoped App listing read D1 directly.
 
 **Token validation at the selected protected resource:**
@@ -75,7 +76,9 @@ membership check in its handler. `GET /orgs` and Organization-scoped App listing
    mutations delete the affected key before the D1 write and again after commit. A cache entry
    expires after 60 seconds even if either delete is not yet visible at another Cloudflare location.
    This runs on the public bearer path and again on the MCP Control Plane door after delegation is
-   verified. Tokens whose authority does not derive from membership keep their existing path.
+   verified. A removed or role-incompatible membership is refused before route scope checks.
+   Tokens whose authority does not derive from membership (API Key, Client Key, and ordinary
+   tokens with no `org:`/`app:` axes) keep their existing path.
 7. For `authorization: "membership-wide-read"`, require an empty `scopes` array,
    resolve the complete membership set through the same cache, refuse non-`GET` methods, and
    co-scope any Organization or App path against that set. Internal delegation carries the grant

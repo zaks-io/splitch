@@ -1,5 +1,5 @@
 import { type MembershipSet, type UserRole, UserRoleSchema } from "@splitch/contracts";
-import type { Repository } from "@splitch/db";
+import { appScope, type Repository } from "@splitch/db";
 import type { AuthResolver, AuthResult, PrincipalMemberships } from "@splitch/worker-runtime";
 import { requireMembershipCacheBinding, resolveCachedMemberships } from "./membership-cache";
 import {

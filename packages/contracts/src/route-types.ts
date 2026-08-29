@@ -27,8 +27,9 @@ import type {
 import type {
   CreateFlagRequestSchema,
   CreateVariantRequestSchema,
-  FlagListResponseSchema,
+  FlagListReadResponseSchema,
   FlagMutationResponseSchema,
+  FlagReadResponseSchema,
   FlagResponseSchema,
   PatchFlagRequestSchema,
   PatchVariantRequestSchema,
@@ -88,11 +89,11 @@ export type EventDefinitionVersionsGetInput = EventDefinitionVersionPath;
 export type EventDefinitionVersionsGetOutput = z.infer<typeof EventDefinitionVersionSchema>;
 
 export type FlagsListInput = z.infer<typeof AppParams> & z.infer<typeof FlagListQuerySchema>;
-export type FlagsListOutput = z.infer<typeof FlagListResponseSchema>;
+export type FlagsListOutput = z.infer<typeof FlagListReadResponseSchema>;
 export type FlagsCreateInput = z.infer<typeof AppParams> & z.infer<typeof CreateFlagRequestSchema>;
 export type FlagsCreateOutput = z.infer<typeof FlagResponseSchema>;
 export type FlagsGetInput = z.infer<typeof FlagParams> & z.infer<typeof FlagGetQuerySchema>;
-export type FlagsGetOutput = z.infer<typeof FlagResponseSchema>;
+export type FlagsGetOutput = z.infer<typeof FlagReadResponseSchema>;
 export type FlagsUpdateInput = z.infer<typeof FlagParams> & z.infer<typeof PatchFlagRequestSchema>;
 export type FlagsUpdateOutput = z.infer<typeof FlagResponseSchema>;
 export type FlagsDeleteInput = z.infer<typeof FlagParams>;

@@ -89,7 +89,7 @@ describe("flags list --with-config", () => {
       {
         match: (request) =>
           new URL(request.url).pathname === "/apps/app_1/flags" &&
-          new URL(request.url).searchParams.get("environmentId") === "env_prod",
+          new URL(request.url).searchParams.get("environmentId") === "prod",
         status: 200,
         body: configuredPage,
       },

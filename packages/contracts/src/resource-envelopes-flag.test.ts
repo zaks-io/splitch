@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CreateFlagRequestSchema,
   CreateVariantRequestSchema,
+  HydratedFlagResponseSchema,
   FlagListResponseSchema,
   FlagResponseSchema,
   PatchFlagRequestSchema,
@@ -189,6 +190,80 @@ describe("FlagListResponseSchema", () => {
     };
     expect(FlagListResponseSchema.parse(response)).toEqual(response);
     expect(response.items[0]?.flagConfiguration).not.toHaveProperty("targetingRules");
+  });
+});
+
+describe("HydratedFlagResponseSchema", () => {
+  it("requires the distinct full per-Environment Configuration envelope", () => {
+    const response = {
+      id: "flag_1",
+      appId: "app_1",
+      key: "feature-x",
+      name: "Feature X",
+      schema: null,
+      variants: [{ id: "var_1", name: "control", value: false }],
+      defaultVariantId: "var_1",
+      createdAt: "2026-06-28T00:00:00.000Z",
+      updatedAt: "2026-06-28T00:00:00.000Z",
+      configurations: [
+        {
+          environmentId: "env_prod",
+          enabled: true,
+          availableVariantNames: ["control"],
+          targetingRules: [
+            {
+              id: "rule_paid",
+              flagId: "flag_1",
+              priority: 0,
+              conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
+              variantId: "var_1",
+            },
+          ],
+          rollout: { percentage: 25, salt: "prod-salt" },
+          experiment: { id: "exp_checkout", key: "checkout-conversion" },
+        },
+      ],
+    };
+
+    expect(HydratedFlagResponseSchema.parse(response)).toEqual(response);
+    expect(FlagResponseSchema.safeParse(response).success).toBe(false);
+  });
+
+  it("rejects storage-only Configuration and Experiment fields", () => {
+    const configuration = {
+      environmentId: "env_prod",
+      enabled: false,
+      availableVariantNames: [],
+      targetingRules: [],
+      rollout: null,
+      experiment: null,
+    };
+    const flag = {
+      id: "flag_1",
+      appId: "app_1",
+      key: "feature-x",
+      name: "Feature X",
+      schema: null,
+      variants: [{ id: "var_1", name: "control", value: false }],
+      defaultVariantId: "var_1",
+      createdAt: "2026-06-28T00:00:00.000Z",
+      updatedAt: "2026-06-28T00:00:00.000Z",
+    };
+
+    expect(
+      HydratedFlagResponseSchema.safeParse({
+        ...flag,
+        configurations: [{ ...configuration, appId: "app_1", updatedBy: "user_1" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      HydratedFlagResponseSchema.safeParse({
+        ...flag,
+        configurations: [
+          { ...configuration, experiment: { id: "exp_1", key: "checkout", name: "Checkout" } },
+        ],
+      }).success,
+    ).toBe(false);
   });
 });
 

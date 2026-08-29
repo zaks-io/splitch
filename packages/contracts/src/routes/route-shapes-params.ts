@@ -14,9 +14,29 @@ const FlagSelectorSchema = z
 export const OrgParams = z.object({ orgId: z.string() });
 export const OrgMemberParams = z.object({ orgId: z.string(), userId: z.string() });
 export const AppParams = z.object({ appId: AppSelectorSchema });
+const EnvironmentIdsQuerySchema = z
+  .string()
+  .min(1)
+  .regex(/^[^,]+(?:,[^,]+)*$/, "envs must be a comma-separated list of Environment IDs");
 export const FlagListQuerySchema = z
-  .object({ environmentId: z.string().min(1).optional() })
-  .strict();
+  .object({
+    environmentId: z.string().min(1).optional(),
+    include: z.literal("config").optional(),
+    envs: EnvironmentIdsQuerySchema.optional(),
+  })
+  .strict()
+  .superRefine((query, ctx) => {
+    if (query.envs && query.include !== "config") {
+      ctx.addIssue({ code: "custom", path: ["envs"], message: "envs requires include=config" });
+    }
+    if (query.environmentId && query.include === "config") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["environmentId"],
+        message: "environmentId cannot be combined with include=config; use envs",
+      });
+    }
+  });
 export const AppMemberParams = z.object({ appId: AppSelectorSchema, userId: z.string() });
 export const OrgAppsParams = z.object({ orgId: z.string() });
 export const EnvParams = z.object({
@@ -30,7 +50,18 @@ export const FlagParams = z.object({ appId: AppSelectorSchema, flagId: FlagSelec
  * canonical-looking value as an ID unless `by=key` explicitly selects the key
  * collision, then hands one canonical ID to the handler (SPL-236/SPL-524).
  */
-export const FlagGetQuerySchema = z.object({ by: z.enum(["id", "key"]).optional() }).strict();
+export const FlagGetQuerySchema = z
+  .object({
+    by: z.enum(["id", "key"]).optional(),
+    include: z.literal("config").optional(),
+    envs: EnvironmentIdsQuerySchema.optional(),
+  })
+  .strict()
+  .superRefine((query, ctx) => {
+    if (query.envs && query.include !== "config") {
+      ctx.addIssue({ code: "custom", path: ["envs"], message: "envs requires include=config" });
+    }
+  });
 
 export const CanonicalEnvironmentSelectorQuerySchema = z
   .object({
