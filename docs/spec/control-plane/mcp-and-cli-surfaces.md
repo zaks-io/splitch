@@ -132,7 +132,8 @@ splitch apps list --org <org_id>
 splitch apps create --org <org_id> --name <name>   # provisions dev + prod Environments (DX default)
 splitch envs list [--app <app_id>]                  # [ctx]
 splitch envs create [--app <app_id>] --key <key> [--name <name>]  # [ctx]
-splitch flags list [--app <app_id>] [--with-config --env <environment_id>]  # [ctx]
+splitch flags list [--app <app_id>] [--env <environment_id>] [--summary]  # [ctx]
+splitch flags get [--app <app_id>] [--env <environment_id>] <flag_id_or_key> [--summary]  # [ctx]
 splitch flags create [--app <app_id>] --key <key> ...                       # [ctx] App-level definition
 splitch flags promote [--app <app_id>] [--env <environment_id>] <flag_id>   # [ctx] move Flag Configuration into an Env (ADR-0028)
 splitch event-definitions list [--app <app_id>]                              # [ctx] App-level
@@ -163,12 +164,13 @@ are App/Env scoped accordingly. Environment-level writes that the Environment Po
 require a `--confirm` affordance (ADR-0029); it submits the canonical
 `review.action = "approve_and_apply"` and never creates a separate confirmation pipeline.
 
-`splitch flags list` is an App-level catalog read by default. `--with-config` adds each Flag's exact
-Configuration summary (`enabled`, baseline `rollout`, and `defaultVariant`) for one Environment and
-therefore requires a non-empty Environment resolved from `--env`, `SPLITCH_ENV`, or active config.
-The CLI passes that Environment as `flags_list.environmentId`; it fails before the request when
-`--with-config` has no resolved Environment. `--env` without `--with-config` does not change the
-App-level response.
+`splitch flags list` and `splitch flags get` send `include=config` by default, returning each Flag's
+complete per-Environment Configurations and running Experiment reference in the same request. An
+explicit `--env` is resolved to its canonical Environment ID and sent as `envs`; when `--env` is
+absent the CLI omits `envs`, so the server hydrates every Environment in the App. Active
+`SPLITCH_ENV` or config context does not silently narrow an App-level read. `--summary` selects
+compact human columns and does not request hydration. `flags list --summary --env` uses the
+one-Environment `environmentId` summary; `flags get --summary` has no Environment selector.
 
 `--json` envelopes are verb-class consistent: a get returns the resource bare, and the matching
 write returns those same fields at the same paths with `approvalRequest` alongside (never wrapped
@@ -178,9 +180,10 @@ complete page from a truncated one.
 
 **Output and scripting:** every command accepts `--json` for machine-readable output (the same
 shape the MCP tool returns), so the CLI is pipe-able and an agent shelling out to the CLI parses one
-contract. Default output is indented, human-readable JSON plus exit codes. When a required scope is
-unresolved, the CLI fails loud with the exact `splitch use` / `--app` remedy — never a silent
-default.
+contract. Flag reads preserve the complete hydrated envelope under `--json`; their default human
+output uses the established aligned-column and labeled-section patterns without truncating values.
+When a required scope is unresolved, the CLI fails loud with the exact `splitch use` / `--app`
+remedy, never a silent default.
 
 ## MCP server
 
@@ -267,7 +270,8 @@ endpoint skins. The full design is in [mcp-discovery.md](./mcp-discovery.md).
 A capability available through the CLI must be available through an MCP tool and vice versa.
 Divergence only in presentation:
 
-- CLI: indented JSON by default, compact JSON with `--json`, and exit codes
+- CLI: labeled sections for hydrated Flag reads, aligned columns under `--summary`, compact JSON
+  with `--json`, indented JSON for other human output, and exit codes
 - MCP: structured JSON, typed error responses, discriminated union reasons
 
 ## Invariants live in the Worker, not the skins

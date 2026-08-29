@@ -75,12 +75,13 @@ describe("published CLI help", () => {
     expect(health).toContain("splitch health --json");
   });
 
-  it("documents the Environment-aware Flag dashboard mode with an example", () => {
+  it("documents hydrated Flag reads and the compact human summary", () => {
     const help = renderHelp(["flags", "list", "--help"]);
 
-    expect(help).toContain("--with-config");
-    expect(help).toContain("enabled, rollout, and Default Variant");
-    expect(help).toContain("splitch flags list --with-config --env prod --json");
+    expect(help).toContain("complete per-Environment Flag Configurations");
+    expect(help).toContain("--summary");
+    expect(help).not.toContain("--with-config");
+    expect(help).toContain("splitch flags list --json");
   });
 
   it("surfaces the kill-switch-off exemption on flag-config update and env-policy help (SPL-312)", () => {

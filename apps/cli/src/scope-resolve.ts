@@ -58,11 +58,7 @@ export async function resolveContextSelectors(
     appId = (await resolveAppSelector(deps, appId)).id;
   }
 
-  const needsEnvResolution =
-    command.needsEnvironment ||
-    (command.operationId !== "flags_list" &&
-      operationInputHasEnvironmentId(command.operationId) &&
-      context.environmentSource === "flag");
+  const needsEnvResolution = needsEnvironmentResolution(command, context);
   if (needsEnvResolution && environmentId && isLiveSelector(context.environmentSource)) {
     if (!appId) {
       throw new SplitchCliError({
@@ -78,6 +74,16 @@ export async function resolveContextSelectors(
     return context;
   }
   return { ...context, appId, environmentId };
+}
+
+function needsEnvironmentResolution(
+  command: Pick<CliCommandDefinition, "needsEnvironment" | "operationId">,
+  context: ResolvedContext,
+): boolean {
+  if (command.needsEnvironment) return true;
+  if (context.environmentSource !== "flag") return false;
+  if (command.operationId === "flags_list" || command.operationId === "flags_get") return true;
+  return operationInputHasEnvironmentId(command.operationId);
 }
 
 function isLiveSelector(source: ResolvedContext["appSource"]): boolean {

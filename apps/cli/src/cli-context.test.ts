@@ -66,7 +66,10 @@ describe("context resolution", () => {
       {
         match: (request) => request.url.includes("/apps/app_flag/flags"),
         status: 200,
-        body: flagListPage,
+        body: {
+          ...flagListPage,
+          items: flagListPage.items.map((flag) => ({ ...flag, configurations: [] })),
+        },
       },
     ]);
 

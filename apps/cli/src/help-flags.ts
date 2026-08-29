@@ -56,13 +56,13 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
     flags.push(
       flag("--env <environment>", "string", "SPLITCH_ENV or config", "Environment ID or key."),
     );
-  } else if (command.operationId === "flags_list") {
+  } else if (command.operationId === "flags_list" || command.operationId === "flags_get") {
     flags.push(
       flag(
         "--env <environment>",
         "string",
-        "SPLITCH_ENV or config",
-        "Environment ID or key used with --with-config.",
+        "none",
+        "Limit hydrated Configurations to one Environment; flags list --summary selects its compact Configuration.",
       ),
     );
   } else if (fields.has("environmentId")) {
@@ -121,12 +121,13 @@ function operationFlags(command: CliCommandDefinition): HelpFlag[] {
   }
   switch (command.operationId) {
     case "flags_list":
+    case "flags_get":
       return [
         flag(
-          "--with-config",
+          "--summary",
           "boolean",
           "false",
-          "Include enabled, rollout, and Default Variant for one Environment.",
+          "Print compact human columns instead of complete per-Environment Configurations; cannot be combined with --json.",
         ),
       ];
     case "flags_create":

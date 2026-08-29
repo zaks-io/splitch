@@ -29,6 +29,7 @@ import {
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { CliInputError } from "./flag-create-input.js";
+import { validateFlagReadUsage } from "./flag-read-usage.js";
 import { executeFlagTargetingRulesAdd } from "./flag-targeting-rules-add.js";
 import { validateFlagTargetingRulesAddUsage } from "./flag-targeting-rules-add-input.js";
 import { buildOperationInput } from "./operation-input.js";
@@ -125,7 +126,6 @@ async function executeCommand(
   deps: CliDeps,
   io: CliIo,
 ): Promise<CliResult> {
-  const scopedCommand = commandForInvocation(command, invocation);
   // Positionals before scope / SDK so misuse never reaches control-plane-sdk
   // path building (and never needs credentials to learn the argument is required).
   const positionalError = validateRequiredPositionals(command, invocation, io);
@@ -139,7 +139,7 @@ async function executeCommand(
     cwd: deps.cwd,
   });
 
-  const scopeError = validateCommandScope(scopedCommand, context, io);
+  const scopeError = validateCommandScope(command, context, io);
   if (scopeError) {
     return scopeError;
   }
@@ -152,7 +152,7 @@ async function executeCommand(
   }
 
   try {
-    context = await resolveContextSelectors(deps, context, scopedCommand);
+    context = await resolveContextSelectors(deps, context, command);
   } catch (error) {
     return handleExecutionError(error, io);
   }
@@ -164,7 +164,7 @@ async function executeCommand(
 
   let input: Record<string, unknown>;
   try {
-    input = buildOperationInput(scopedCommand, invocation, context);
+    input = buildOperationInput(command, invocation, context);
     assertPathParamsPresent(command, input);
     input = await resolveFlagIdInInput(deps, command, context, input);
   } catch (error) {
@@ -231,23 +231,13 @@ function validateSpecializedUsage(
   if (command.kind === "flag_targeting_rules_add") {
     return validateFlagTargetingRulesAddUsage(invocation, io);
   }
-  return null;
+  return validateFlagReadUsage(command, invocation, io);
 }
 
 function isCloudflareCommand(command: CliCommandDefinition): command is CliCommandDefinition & {
   kind: "cloudflare_setup" | "cloudflare_status" | "cloudflare_remove";
 } {
   return command.kind.startsWith("cloudflare_");
-}
-
-function commandForInvocation(
-  command: CliCommandDefinition,
-  invocation: ParsedInvocation,
-): CliCommandDefinition {
-  if (command.operationId !== "flags_list" || !invocation.flags.withConfig) {
-    return command;
-  }
-  return { ...command, needsEnvironment: true };
 }
 
 function validateRequiredPositionals(
@@ -291,6 +281,9 @@ async function resolveFlagIdInInput(
   context: ResolvedContext,
   input: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
+  if (command.operationId === "flags_get") {
+    return input;
+  }
   const routePath = getRoute(command.operationId)?.path ?? "";
   if (!routePath.includes(":flagId")) {
     return input;

@@ -21,8 +21,15 @@ const EnvironmentIdsQuerySchema = z
 export const FlagListQuerySchema = z
   .object({
     environmentId: z.string().min(1).optional(),
-    include: z.literal("config").optional(),
-    envs: EnvironmentIdsQuerySchema.optional(),
+    include: z
+      .literal("config")
+      .optional()
+      .describe(
+        "Include complete per-Environment Flag Configurations; CLI and MCP reads use this by default.",
+      ),
+    envs: EnvironmentIdsQuerySchema.optional().describe(
+      "Comma-separated Environment IDs to hydrate; omission hydrates every Environment in the App.",
+    ),
   })
   .strict()
   .superRefine((query, ctx) => {
@@ -53,8 +60,15 @@ export const FlagParams = z.object({ appId: AppSelectorSchema, flagId: FlagSelec
 export const FlagGetQuerySchema = z
   .object({
     by: z.enum(["id", "key"]).optional(),
-    include: z.literal("config").optional(),
-    envs: EnvironmentIdsQuerySchema.optional(),
+    include: z
+      .literal("config")
+      .optional()
+      .describe(
+        "Include complete per-Environment Flag Configurations; CLI and MCP reads use this by default.",
+      ),
+    envs: EnvironmentIdsQuerySchema.optional().describe(
+      "Comma-separated Environment IDs to hydrate; omission hydrates every Environment in the App.",
+    ),
   })
   .strict()
   .superRefine((query, ctx) => {

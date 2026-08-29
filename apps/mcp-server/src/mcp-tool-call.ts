@@ -5,7 +5,13 @@
  * here; the handler owns routing, auth, sessions, and transport.
  */
 
-import { type ApiRouteContract, getRoute, publicSurfaceFor } from "@splitch/contracts";
+import {
+  type ApiRouteContract,
+  getRoute,
+  HydratedFlagListResponseSchema,
+  HydratedFlagResponseSchema,
+  publicSurfaceFor,
+} from "@splitch/contracts";
 import { IdempotencyKeyRequiredError } from "@splitch/control-plane-sdk/idempotency-header";
 import { McpOperationInvalidParamsError } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 import type { McpSpanHandle } from "@splitch/observability/mcp-spans";
@@ -96,9 +102,11 @@ export async function callTool(
         jsonRpcResult(id, toolResult({ message: input.message }, { isError: true })),
       );
     }
-    const result = await sdk.callOperationById(call.name, input.value, {
+    const operationInput = withFlagReadDefaults(call.name, input.value);
+    const result = await sdk.callOperationById(call.name, operationInput, {
       delegation: { subject: actor.subject, scopes: actor.scopes, authDoor: actor.authDoor },
     });
+    assertHydratedFlagResult(call.name, result);
     return recordToolResult(
       fault.span,
       jsonRpcResult(
@@ -109,6 +117,37 @@ export async function callTool(
   } catch (error) {
     return toolCallFailure(id, error, fault);
   }
+}
+
+function withFlagReadDefaults(
+  operationId: string,
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  if (
+    (operationId === "flags_list" || operationId === "flags_get") &&
+    input.include === undefined
+  ) {
+    return { ...input, include: "config" };
+  }
+  return input;
+}
+
+function assertHydratedFlagResult(
+  operationId: string,
+  result: { ok: true; data: unknown } | { ok: false },
+): void {
+  if (!result.ok) return;
+  const payload = result.data;
+  if (operationId === "flags_list") {
+    if (HydratedFlagListResponseSchema.safeParse(payload).success) return;
+  } else if (operationId === "flags_get") {
+    if (HydratedFlagResponseSchema.safeParse(payload).success) return;
+  } else {
+    return;
+  }
+  throw new Error(
+    `${operationId} requested complete Flag Configurations but received an unhydrated response`,
+  );
 }
 
 /**

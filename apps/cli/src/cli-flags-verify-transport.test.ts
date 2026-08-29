@@ -78,6 +78,7 @@ describe("flags verify transport", () => {
     expect(verifyCall?.authorization).toBe(`Bearer ${clientKeyMaterial}`);
     expect(verifyCall?.authorization).not.toBe(authHeader());
     expect(verifyCall?.body).toMatchObject({ flagKey: "checkout" });
+    expect(transport.requests).toHaveLength(3);
   });
 
   it("returns EXIT_API when the SDK reason is ERROR", async () => {

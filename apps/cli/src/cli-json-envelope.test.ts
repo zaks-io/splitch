@@ -18,6 +18,19 @@ afterEach(async () => {
 });
 
 const FLAG_1 = [{ id: "flag_1", key: "flag-1", name: "Flag 1" }] as const;
+const hydratedFlagRecord = {
+  ...flagRecord,
+  configurations: [
+    {
+      environmentId: "env_1",
+      enabled: true,
+      availableVariantNames: ["on"],
+      targetingRules: [],
+      rollout: null,
+      experiment: null,
+    },
+  ],
+};
 
 async function jsonStdout(args: string[], transport: FakeCliTransport): Promise<unknown> {
   const { credentialPath } = await makeTempHome();
@@ -126,11 +139,11 @@ describe("CLI --json envelopes (SPL-451)", () => {
   it.each([
     {
       args: ["flags", "list", "--json", "--app", "app_1"],
-      body: flagListPage,
+      body: { ...flagListPage, items: [hydratedFlagRecord] },
       match: (request: { url: string; method: string }) =>
         request.method === "GET" &&
         new URL(request.url).pathname === "/apps/app_1/flags" &&
-        !new URL(request.url).searchParams.has("environmentId"),
+        new URL(request.url).searchParams.get("include") === "config",
     },
     {
       args: ["api-keys", "list", "--json", "--app", "app_1", "--env", "env_1"],
@@ -165,13 +178,13 @@ describe("CLI --json envelopes (SPL-451)", () => {
   it("flags get stays a bare Flag (no resource wrapper)", async () => {
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
-      flagsListStub({ flags: [{ id: flagRecord.id, key: flagRecord.key, name: flagRecord.name }] }),
       {
         match: (request) =>
           request.method === "GET" &&
-          new URL(request.url).pathname === `/apps/app_1/flags/${flagRecord.id}`,
+          new URL(request.url).pathname === `/apps/app_1/flags/${flagRecord.key}` &&
+          new URL(request.url).searchParams.get("include") === "config",
         status: 200,
-        body: flagRecord,
+        body: hydratedFlagRecord,
       },
     ]);
     const got = await jsonStdout(
@@ -179,6 +192,7 @@ describe("CLI --json envelopes (SPL-451)", () => {
       transport,
     );
     expect(got).toMatchObject({ id: flagRecord.id, key: flagRecord.key });
+    expect(got).toEqual(hydratedFlagRecord);
     expect(got).not.toHaveProperty("flag");
   });
 });

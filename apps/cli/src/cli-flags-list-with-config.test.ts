@@ -2,14 +2,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
-import { EXIT_OK } from "./exit-codes.js";
+import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
-import {
-  FakeCliTransport,
-  flagListPage,
-  oauthTokenMint,
-  storedCredential,
-} from "./test-fixtures.js";
+import { FakeCliTransport, flagListPage, flagRecord, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
 afterEach(async () => {
@@ -17,113 +12,144 @@ afterEach(async () => {
   await cleanupTempHomes();
 });
 
-const configuredPage = {
-  ...flagListPage,
-  items: [
+const hydratedFlag = {
+  ...flagRecord,
+  configurations: [
     {
-      ...flagListPage.items[0],
-      flagConfiguration: configuredFlag(true, 25),
+      environmentId: "env_dev",
+      enabled: true,
+      availableVariantNames: ["on"],
+      targetingRules: [],
+      rollout: { percentage: 25, salt: "dev-salt" },
+      experiment: null,
     },
     {
-      ...flagListPage.items[0],
-      id: "flag_search",
-      key: "search",
-      name: "Search",
-      flagConfiguration: configuredFlag(false, null),
+      environmentId: "env_prod",
+      enabled: false,
+      availableVariantNames: ["on"],
+      targetingRules: [
+        {
+          id: "rule_enterprise",
+          flagId: flagRecord.id,
+          priority: 0,
+          conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
+          variantId: "var_on",
+        },
+      ],
+      rollout: null,
+      experiment: { id: "exp_checkout", key: "checkout-copy" },
     },
   ],
 };
 
-function configuredFlag(enabled: boolean, rollout: number | null) {
-  return {
-    enabled,
-    rollout,
-    defaultVariant: "on",
-    availableVariantNames: ["on"],
-    targetingRuleRolloutPercentages: rollout === null ? [] : [rollout],
-    experiment: null,
-  };
+const hydratedPage = { ...flagListPage, items: [hydratedFlag] };
+
+async function credentialPath(): Promise<string> {
+  const home = await makeTempHome();
+  await writeFile(home.credentialPath, `${JSON.stringify(storedCredential())}\n`);
+  return home.credentialPath;
 }
 
-async function selectedScope(environmentId = "env_dev") {
-  const { dir, credentialPath } = await makeTempHome();
-  await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
-  await mkdir(join(dir, ".splitch"), { recursive: true });
+async function selectedScope() {
+  const home = await makeTempHome();
+  await writeFile(home.credentialPath, `${JSON.stringify(storedCredential())}\n`);
+  await mkdir(join(home.dir, ".splitch"), { recursive: true });
   await writeFile(
-    join(dir, ".splitch", "config.json"),
-    `${JSON.stringify({ version: 1, app: "app_1", environment: environmentId })}\n`,
+    join(home.dir, ".splitch", "config.json"),
+    `${JSON.stringify({ version: 1, app: "app_1", environment: "env_dev" })}\n`,
   );
-  return { dir, credentialPath };
+  return home;
 }
 
-describe("flags list --with-config", () => {
-  it("uses the selected Environment and writes the enriched machine-readable shape", async () => {
-    const scope = await selectedScope();
+describe("hydrated Flag reads", () => {
+  it("renders every Configuration and the running Experiment from one flags get request", async () => {
+    const credentials = await credentialPath();
     const transport = new FakeCliTransport([
-      oauthTokenMint(),
       {
-        match: (request) =>
-          new URL(request.url).pathname === "/apps/app_1/flags" &&
-          new URL(request.url).searchParams.get("environmentId") === "env_dev",
+        match: (request) => {
+          const url = new URL(request.url);
+          return url.pathname === "/apps/app_1/flags/checkout" && url.search === "?include=config";
+        },
         status: 200,
-        body: configuredPage,
+        body: hydratedFlag,
       },
     ]);
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    const code = await runCli(["flags", "list", "--with-config", "--json"], {
-      ...scope,
-      cwd: scope.dir,
+    const code = await runCli(["flags", "get", "--app", "app_1", "checkout"], {
+      credentialPath: credentials,
       fetch: transport.fetch,
     });
 
     expect(code).toBe(EXIT_OK);
-    expect(JSON.parse(log.mock.calls.join(""))).toEqual(configuredPage);
+    expect(log.mock.calls.join("\n")).toMatchInlineSnapshot(`
+      "Flag: Checkout
+      ID: flag_checkout
+      App: app_local
+      Key: checkout
+      Schema: null
+      Default Variant ID: var_on
+      Created: 2026-07-03T00:00:00.000Z
+      Updated: 2026-07-03T00:00:00.000Z
+
+      Variants
+      VARIANT ID  NAME  VALUE  DESCRIPTION
+      var_on      on    true
+
+      Configurations
+      Environment: env_dev
+      Enabled: true
+      Available Variants: ["on"]
+      Rollout: {"percentage":25,"salt":"dev-salt"}
+      Experiment: null
+      Targeting Rules
+      RULE ID  PRIORITY  CONDITIONS  VARIANT ID  SEGMENT ID  ROLLOUT
+
+      Environment: env_prod
+      Enabled: false
+      Available Variants: ["on"]
+      Rollout: null
+      Experiment: {"id":"exp_checkout","key":"checkout-copy"}
+      Targeting Rules
+      RULE ID          PRIORITY  CONDITIONS                                                   VARIANT ID  SEGMENT ID  ROLLOUT
+      rule_enterprise  0         [{"attribute":"plan","operator":"eq","value":"enterprise"}]  var_on"
+    `);
+    expect(transport.requests.filter((request) => request.url.includes("/flags/"))).toHaveLength(1);
+  });
+
+  it("writes the complete hydrated list envelope unchanged under --json", async () => {
+    const credentials = await credentialPath();
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => new URL(request.url).search === "?include=config",
+        status: 200,
+        body: hydratedPage,
+      },
+    ]);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const code = await runCli(["flags", "list", "--app", "app_1", "--json"], {
+      credentialPath: credentials,
+      fetch: transport.fetch,
+    });
+
+    expect(code).toBe(EXIT_OK);
+    expect(JSON.parse(String(log.mock.calls.at(-1)?.[0]))).toEqual(hydratedPage);
     expect(transport.requests.filter((request) => request.url.includes("/flags"))).toHaveLength(1);
   });
 
-  it("renders both Flags for humans and honors an --env override", async () => {
-    const scope = await selectedScope("env_dev");
-    const transport = new FakeCliTransport([
-      ...scopeResolutionStubs({ appId: "app_1" }),
-      {
-        match: (request) =>
-          new URL(request.url).pathname === "/apps/app_1/flags" &&
-          new URL(request.url).searchParams.get("environmentId") === "env_prod",
-        status: 200,
-        body: configuredPage,
-      },
-    ]);
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
-
-    const code = await runCli(["flags", "list", "--with-config", "--env", "prod"], {
-      ...scope,
-      cwd: scope.dir,
-      fetch: transport.fetch,
-    });
-
-    expect(code).toBe(EXIT_OK);
-    const human = log.mock.calls.join("\n");
-    expect(human).toContain('"key": "checkout"');
-    expect(human).toContain('"key": "search"');
-    expect(human).toContain('"enabled": true');
-    expect(human).toContain('"rollout": 25');
-    expect(human).toContain('"defaultVariant": "on"');
-  });
-
-  it("keeps bare flags list JSON unchanged even when an Environment is selected", async () => {
+  it("omits envs when --env is absent, even when active config selects an Environment", async () => {
     const scope = await selectedScope();
     const transport = new FakeCliTransport([
-      oauthTokenMint(),
       {
-        match: (request) =>
-          new URL(request.url).pathname === "/apps/app_1/flags" &&
-          !new URL(request.url).searchParams.has("environmentId"),
+        match: (request) => {
+          const url = new URL(request.url);
+          return url.searchParams.get("include") === "config" && !url.searchParams.has("envs");
+        },
         status: 200,
-        body: flagListPage,
+        body: hydratedPage,
       },
     ]);
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
     const code = await runCli(["flags", "list", "--json"], {
       ...scope,
@@ -132,6 +158,78 @@ describe("flags list --with-config", () => {
     });
 
     expect(code).toBe(EXIT_OK);
-    expect(JSON.parse(log.mock.calls.join(""))).toEqual(flagListPage);
+    expect(transport.requests.filter((request) => request.url.includes("/flags"))).toHaveLength(1);
+  });
+
+  it("resolves an explicit --env and sends it through envs on the hydrated request", async () => {
+    const credentials = await credentialPath();
+    const transport = new FakeCliTransport([
+      ...scopeResolutionStubs({ appId: "app_1" }),
+      {
+        match: (request) => {
+          const url = new URL(request.url);
+          return (
+            url.pathname === "/apps/app_1/flags" && url.searchParams.get("envs") === "env_prod"
+          );
+        },
+        status: 200,
+        body: {
+          ...hydratedPage,
+          items: [{ ...hydratedFlag, configurations: [hydratedFlag.configurations[1]] }],
+        },
+      },
+    ]);
+
+    const code = await runCli(["flags", "list", "--app", "app_1", "--env", "prod", "--json"], {
+      credentialPath: credentials,
+      fetch: transport.fetch,
+    });
+
+    expect(code).toBe(EXIT_OK);
+    expect(transport.requests.filter((request) => request.url.includes("/flags"))).toHaveLength(1);
+  });
+
+  it("fails loudly when a hydrated response omits Configurations", async () => {
+    const credentials = await credentialPath();
+    const transport = new FakeCliTransport([
+      { match: (request) => request.url.includes("/flags"), status: 200, body: flagListPage },
+    ]);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli(["flags", "list", "--app", "app_1"], {
+      credentialPath: credentials,
+      fetch: transport.fetch,
+    });
+
+    expect(code).toBe(EXIT_USAGE);
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("server returned an unhydrated response"),
+    );
+  });
+});
+
+describe("flags list --summary", () => {
+  it("uses the compact list-table pattern without requesting hydration", async () => {
+    const credentials = await credentialPath();
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => !new URL(request.url).searchParams.has("include"),
+        status: 200,
+        body: flagListPage,
+      },
+    ]);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const code = await runCli(["flags", "list", "--app", "app_1", "--summary"], {
+      credentialPath: credentials,
+      fetch: transport.fetch,
+    });
+
+    expect(code).toBe(EXIT_OK);
+    expect(log.mock.calls.join("\n")).toMatchInlineSnapshot(`
+      "ID             KEY       NAME
+      flag_checkout  checkout  Checkout"
+    `);
+    expect(transport.requests.filter((request) => request.url.includes("/flags"))).toHaveLength(1);
   });
 });

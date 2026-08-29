@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { deriveMcpProtocolTools, type ErrorResponse } from "@splitch/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { flagPage } from "./mcp-flag-fixtures";
+import { flagDefinition, flagPage } from "./mcp-flag-fixtures";
 import { handleMcpServerRequest } from "./mcp-handler";
 import {
   allowMcpRevocations,
@@ -20,7 +20,7 @@ const upstreamFlagPage = {
 };
 
 const updatedFlag = {
-  ...flagPage.items[0],
+  ...flagDefinition,
   name: "Checkout v2",
   description: "Updated checkout",
   updatedAt: "2026-07-03T01:00:00.000Z",
@@ -71,7 +71,7 @@ describe("mcp server Streamable HTTP transport", () => {
     expect(seen).toEqual([
       {
         method: "GET",
-        path: "/apps/app_local/flags",
+        path: "/apps/app_local/flags?include=config",
         authorization: null,
         body: "",
       },
@@ -301,7 +301,7 @@ async function handleControlPlaneRequest(
 }
 
 function controlPlaneResponse(request: IncomingMessage): { status: number; body: unknown } {
-  if (request.method === "GET" && request.url === "/apps/app_local/flags") {
+  if (request.method === "GET" && request.url === "/apps/app_local/flags?include=config") {
     return { status: 200, body: upstreamFlagPage };
   }
   if (request.method === "PATCH" && request.url === "/apps/app_local/flags/flag_checkout") {
