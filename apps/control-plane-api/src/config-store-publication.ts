@@ -45,7 +45,7 @@ export function publishFlagConfigSnapshot(
   return publishSnapshot(deps, scope, () => buildSnapshotFromD1(deps.repo, scope, flagId));
 }
 
-export function publishExperimentConfigSnapshot(
+function publishExperimentConfigSnapshot(
   deps: ConfigStoreRuntimeDeps,
   scope: EnvScope,
   experimentId: string,
