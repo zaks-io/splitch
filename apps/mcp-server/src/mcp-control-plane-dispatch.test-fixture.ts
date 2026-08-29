@@ -92,6 +92,9 @@ function controlPlaneFetchMissingAnalysisBinding(): NonNullable<
     rateLimiter: () => ({ limited: false }),
     repo: {
       identity: {
+        // SPL-532 rechecks live App membership on every tenant-scoped route, so
+        // the delegated actor needs the membership row its scopes claim.
+        getAppMembership: async () => ({ appId: MISSING_BINDING_APP_ID, role: "admin" }),
         getEnvironment: async () => ({ id: MISSING_BINDING_ENV_ID }),
         findEnvironmentSelectorCandidates: async () => [
           {
