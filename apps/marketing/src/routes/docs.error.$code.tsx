@@ -25,7 +25,7 @@ export const Route = createFileRoute("/docs/error/$code")({
         if (code === null) return next();
         if (!isDocumentedErrorCode(code)) {
           return markdownNotFound(
-            `"${code}" is not a splitch error code. Full index: ${DOCS_ORIGIN}/llms.txt`,
+            `"${code}" is not a splitch error code. Full index: ${DOCS_ORIGIN}${docsPath.errorsMarkdown()}`,
           );
         }
         return markdownResponse(errorMarkdown(code));
