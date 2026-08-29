@@ -1,6 +1,6 @@
 import { createSplitchClient } from "@splitch/sdk";
-import { ErrorCodeSchema, type ErrorResponse, getRoute } from "@splitch/sdk/control-plane";
-import { remediationForServerError, warnStaleApprovalDiscard } from "./approval-stale-warn.js";
+import { getRoute } from "@splitch/sdk/control-plane";
+import { warnStaleApprovalDiscard } from "./approval-stale-warn.js";
 import { withAuthorizationRetry } from "./auth.js";
 import {
   MEMBERSHIP_WIDE_READ_AUTHORIZATION,
@@ -8,7 +8,7 @@ import {
   type TokenBinding,
 } from "./auth-binding.js";
 import { missingPositionalError } from "./command-positionals.js";
-import { type CliCommandDefinition, commandSupportsConfirm } from "./command-registry.js";
+import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { requireAppScope, requireEnvironmentScope } from "./context.js";
 import {
@@ -25,6 +25,7 @@ import { environmentSelectorOverride, parseEvaluationContext } from "./operation
 import { emitOperationNotices } from "./operation-notices.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { createOperationSdks, resolveDataPlaneBaseUrl, sdkForRoute } from "./sdks.js";
+import { exitCodeForServerError, writeServerError } from "./server-errors.js";
 
 export function validateCommandScope(
   command: CliCommandDefinition,
@@ -93,8 +94,11 @@ export async function executeFlagsVerify(
     );
     if (!clientKeyResult.ok) {
       emit(io, invocation.flags.json, clientKeyResult.error);
-      writeServerError(io, clientKeyResult.error, "client_key_get");
-      return { exitCode: EXIT_API, payload: clientKeyResult.error };
+      writeServerError(io, clientKeyResult.error, "client_key_get", invocation);
+      return {
+        exitCode: exitCodeForServerError(clientKeyResult.error),
+        payload: clientKeyResult.error,
+      };
     }
     const clientKey = clientKeyResult.data as { keyMaterial: string };
     const evaluationContext = parseEvaluationContext(
@@ -190,8 +194,8 @@ export async function executeApiOperation(
       // `writeServerError` owns both channels: the enriched JSON on stdout and
       // the prose on stderr. Emitting `payload.error` here too would put the
       // raw wire shape and the enriched one on the same stream.
-      writeServerError(io, payload.error, operationId);
-      return { exitCode: EXIT_API, payload: payload.error };
+      writeServerError(io, payload.error, operationId, invocation);
+      return { exitCode: exitCodeForServerError(payload.error), payload: payload.error };
     }
     const projected = project ? await project(payload.data) : payload.data;
     emitOperationOutput(operationId, projected, invocation.flags.json, io);
@@ -296,25 +300,4 @@ export function handleExecutionError(error: unknown, io: CliIo): CliResult {
     return { exitCode: EXIT_SCOPE };
   }
   return { exitCode: EXIT_USAGE };
-}
-
-export function writeServerError(io: CliIo, error: ErrorResponse, operationId: string): void {
-  const parsedCode = ErrorCodeSchema.safeParse(error.code);
-  if (!parsedCode.success) {
-    writeCliError(io, {
-      code: "CLI_SERVER_CODE_UNRECOGNIZED",
-      causeSummary: `The server returned unrecognized error code "${String(error.code)}": ${error.message}`,
-      remediation: "Update the CLI or report the server code before retrying the command",
-    });
-    return;
-  }
-  writeCliError(io, {
-    code: parsedCode.data,
-    causeSummary: error.message,
-    remediation: remediationForServerError(error, commandSupportsConfirm(operationId)),
-    // `details` carries the fields a caller has to act on (approvalRequestId,
-    // frozenFields, policyContexts). Prose can only name some of them, so the
-    // whole object travels and `--json` surfaces it verbatim.
-    details: error.details,
-  });
 }

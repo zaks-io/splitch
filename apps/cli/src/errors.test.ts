@@ -11,11 +11,11 @@ import {
   SplitchCliError,
   writeCliError,
 } from "./errors.js";
-import { writeServerError } from "./execute-operations.js";
 import { EXIT_API, EXIT_AUTH, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
 import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import { FakeCliTransport, jsonError, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
+import { writeServerError } from "./server-errors.js";
 
 afterEach(async () => {
   vi.restoreAllMocks();
