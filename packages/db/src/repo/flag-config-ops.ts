@@ -15,6 +15,7 @@ import {
   referencedVariantMustExist,
   targetingRuleWriteFailure,
 } from "./flag-config-variant-refs";
+import { makeFlagConfigCrossEnvironmentReads } from "./flag-config-cross-environment-reads";
 import { idBatches } from "./id-batches";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
@@ -38,6 +39,8 @@ export function makeFlagConfigOps(
   targetingRulesTable: ScopedTable<typeof targetingRules>,
 ) {
   return {
+    ...makeFlagConfigCrossEnvironmentReads(flagConfigsTable, targetingRulesTable),
+
     getFlagConfig(scope: EnvScope, flagId: string) {
       return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
     },

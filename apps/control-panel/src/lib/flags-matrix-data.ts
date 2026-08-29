@@ -62,9 +62,15 @@ export async function readFlagsMatrix(
   if (!catalog?.ok) throw new Error("Flags matrix catalog result is missing");
   const configurations = listed.map((column) => {
     if (!column.result.ok) throw new Error("Flags matrix Environment result is missing");
+    const items = column.result.data.items.map((item) => {
+      if ("configurations" in item) {
+        throw new Error("Flags matrix received hydrated data without requesting include=config");
+      }
+      return item;
+    });
     return {
       environmentId: column.environmentId,
-      items: new Map(column.result.data.items.map((item) => [item.id, item])),
+      items: new Map(items.map((item) => [item.id, item])),
     };
   });
 

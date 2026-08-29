@@ -64,6 +64,26 @@ describe("control plane sdk flags.get wire shape", () => {
     expect(requests[0]?.url).toBe("https://control-plane.test/apps/app_a/flags/flag_checkout");
   });
 
+  it("forwards hydration and Environment subset alongside selector mode", async () => {
+    const hydrated = { ...flag, configurations: [] };
+    const { sdk, requests } = flagsSdk(() => Response.json(hydrated));
+
+    await expect(
+      sdk.flags.get({
+        appId: "app_a",
+        flagId: "new-checkout",
+        by: "key",
+        include: "config",
+        envs: "env_prod",
+      }),
+    ).resolves.toEqual({ ok: true, status: 200, data: hydrated });
+
+    const url = new URL(requests[0]?.url ?? "");
+    expect(url.searchParams.get("by")).toBe("key");
+    expect(url.searchParams.get("include")).toBe("config");
+    expect(url.searchParams.get("envs")).toBe("env_prod");
+  });
+
   it.each([
     "",
     ".",

@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, isNull, ne } from "drizzle-orm";
 import { experiments, metrics, runs } from "../schema/index";
 import type { Db } from "./client";
-import { idBatches } from "./id-batches";
+import { makeExperimentBatchReads } from "./experiment-batch-reads";
 import { makePurgeArchivedExperimentsInEnvironment } from "./experiment-archive-purge";
 import { makeEndRun } from "./experiment-end-run";
 import { makeStartRun } from "./experiment-start-run";
@@ -40,6 +40,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       and(eq(experiments.flagId, flagId), eq(experiments.status, "running")),
     );
   const lookups = makeExperimentLookups(experimentsTable);
+  const batchReads = makeExperimentBatchReads(experimentsTable);
 
   return {
     experiments: experimentsTable,
@@ -56,6 +57,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
     },
 
     ...lookups,
+    ...batchReads,
 
     /**
      * Compare-and-set on `liveRunId`, the same token `startRun` and `endRun`
@@ -97,19 +99,6 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
      */
     listRunningExperiments(scope: EnvScope, options?: ReadOptions) {
       return experimentsTable.findMany(scope, eq(experiments.status, "running"), options);
-    },
-
-    async listRunningExperimentsForFlags(scope: EnvScope, flagIds: readonly string[]) {
-      if (flagIds.length === 0) return [] as (typeof experiments.$inferSelect)[];
-      const pages = await Promise.all(
-        idBatches(flagIds).map((batch) =>
-          experimentsTable.findMany(
-            scope,
-            and(eq(experiments.status, "running"), inArray(experiments.flagId, [...batch])),
-          ),
-        ),
-      );
-      return pages.flat();
     },
 
     /**
