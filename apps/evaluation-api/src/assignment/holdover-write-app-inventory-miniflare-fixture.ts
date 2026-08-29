@@ -36,7 +36,7 @@ export function miniflareWithInventoryAndOutbox(options: HoldoverWriteMiniflareO
     compatibilityFlags: ["nodejs_compat"],
     kvNamespaces: { ASSIGNMENTS_KV: "assignments" },
     durableObjects: {
-      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObject" },
+      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObjectV2" },
       HOLDOVER_WRITE_OUTBOX: { className: "HoldoverWriteOutboxDurableObject" },
       HOLDOVER_WRITE_APP_INVENTORY: { className: "HoldoverWriteAppInventoryDurableObject" },
     },

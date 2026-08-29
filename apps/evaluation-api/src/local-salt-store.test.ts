@@ -186,6 +186,7 @@ describe("makeEnvSaltStore hosted fail-closed", () => {
               entity_deletions: null,
               privacy_subject_refs: null,
             },
+            releaseProofs: { evaluation: null, event_ingest: null },
           },
         },
         ROOT,

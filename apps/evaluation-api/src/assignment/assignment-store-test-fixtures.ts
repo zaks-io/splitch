@@ -11,6 +11,7 @@ export const basePut: AssignmentPutInput = {
   idType: "user",
   targetingKey: RAW_TARGETING_KEY,
   runId: "run-1",
+  sourceCreatedAtMs: 1_000,
   variant: "control",
 };
 
@@ -151,6 +152,10 @@ export class MapStorage implements AssignmentWriterStorage {
           .map(([key, value]) => [key, value as T]),
       ),
     );
+  }
+
+  delete(key: string): Promise<boolean> {
+    return Promise.resolve(this.values.delete(key));
   }
 
   deleteAll(): Promise<void> {

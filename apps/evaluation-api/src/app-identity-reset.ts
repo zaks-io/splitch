@@ -25,7 +25,11 @@ export async function purgeAppIdentityAssignments(
     const writers = env.ASSIGNMENT_STORE_WRITER;
     const writerResponse = await writers
       .get(writers.idFromName(assignmentWriterName(identity)))
-      .fetch("https://assignment-store.local/delete", { method: "POST" });
+      .fetch("https://assignment-store.local/delete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...identity, deleteBeforeTsMs: frozen.deleteBeforeTsMs }),
+      });
     await requireAssignmentWriterTombstone(writerResponse);
 
     const outbox = required(env.HOLDOVER_WRITE_OUTBOX, "HOLDOVER_WRITE_OUTBOX");
@@ -161,7 +165,11 @@ async function requireAssignmentWriterTombstone(response: Response): Promise<voi
     throw new Error(`App identity reset Assignment writer purge returned HTTP ${response.status}`);
   }
   const body = await response.json().catch(() => null);
-  if (!isRecord(body) || body.deleted !== true || body.proof !== "assignment-do-tombstone-v1") {
+  if (
+    !isRecord(body) ||
+    body.deleted !== true ||
+    body.proof !== "assignment-do-cutoff-tombstone-v2"
+  ) {
     throw new Error("App identity reset Assignment writer purge returned an invalid proof");
   }
 }

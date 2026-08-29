@@ -151,7 +151,7 @@ async function evaluateResponse(
   // without another Exposure, dropping the event. Writing it last lets retries
   // re-attempt the Exposure.
   try {
-    await writeHoldoverAssignment(output.result, deps);
+    await writeHoldoverAssignment(output.result, output.exposures, deps);
   } catch (cause) {
     deps.logger?.error("assignment_store_put_failed", { cause });
     return renderError(
@@ -188,16 +188,22 @@ async function evaluateResponse(
  */
 async function writeHoldoverAssignment(
   result: EvaluateResult,
+  exposures: readonly AssembledExposure[],
   deps: EvaluateRouteDeps,
 ): Promise<void> {
   const exposure = result.kind === "error" ? null : result.exposure;
   if (exposure === null) return;
+  const sourceCreatedAtMs = Date.parse(exposures[0]?.exposureAt ?? "");
+  if (!Number.isFinite(sourceCreatedAtMs)) {
+    throw new Error("Assignment source timestamp is unavailable");
+  }
   await deps.assignmentStore.put({
     appId: exposure.appId,
     idType: exposure.idType,
     targetingKey: exposure.targetingKey,
     experimentId: exposure.experimentId,
     runId: exposure.liveRunId,
+    sourceCreatedAtMs,
     variant: exposure.variant,
   });
 }

@@ -58,6 +58,7 @@ export class KvAssignmentStore implements AssignmentStore {
       targetingKeyHash,
       identityVersion: input.identityVersion,
       runId: input.runId,
+      sourceCreatedAtMs: input.sourceCreatedAtMs,
       variant: input.variant,
     });
   }
@@ -65,6 +66,9 @@ export class KvAssignmentStore implements AssignmentStore {
   async putHashed(
     input: Parameters<AssignmentStore["putHashed"]>[0],
   ): Promise<AssignmentStorePutResult> {
+    if (input.sourceCreatedAtMs === undefined || !Number.isFinite(input.sourceCreatedAtMs)) {
+      throw new AssignmentStoreError("Assignment sourceCreatedAtMs is required");
+    }
     if (this.appInventory) {
       if (input.identityVersion === undefined) {
         throw new AssignmentStoreError("Assignment identityVersion is required");
@@ -88,6 +92,7 @@ export class KvAssignmentStore implements AssignmentStore {
         targetingKeyHash: input.targetingKeyHash,
         identityVersion: input.identityVersion ?? keyVersionOf(input.targetingKeyHash),
         runId: input.runId,
+        sourceCreatedAtMs: input.sourceCreatedAtMs,
         variant: input.variant,
       }),
     });

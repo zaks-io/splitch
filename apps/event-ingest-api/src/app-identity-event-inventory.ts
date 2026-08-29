@@ -1,4 +1,8 @@
-import { type AppEvaluationCommitRef, entityStub } from "./entity-metric-privacy";
+import {
+  type AppEvaluationCommitRef,
+  entityStub,
+  identityVersionForRow,
+} from "./entity-metric-privacy";
 import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
 import { appendRawEvent, tinybirdDelivery } from "./tinybird";
 import type { Env } from "./types";
@@ -51,6 +55,7 @@ export async function deliverAppIdentityRow(
     typeof body.appId !== "string" ||
     body.row.app_id !== body.appId ||
     typeof body.identityVersion !== "string" ||
+    identityVersionForRow(body.row) !== body.identityVersion ||
     typeof body.datasource !== "string"
   ) {
     throw new Error("App identity delivery input is invalid");
@@ -60,6 +65,46 @@ export async function deliverAppIdentityRow(
   if (!delivery.ok) throw new Error(delivery.error.message);
   await appendRawEvent(body.row, delivery.value);
   return Response.json({ suppressed: false });
+}
+
+export async function deliverEntityIdentityRow(
+  storage: DurableObjectStorage,
+  env: Env,
+  request: Request,
+): Promise<Response> {
+  const body = (await request.json()) as Record<string, unknown>;
+  if (
+    !isRecord(body.row) ||
+    typeof body.appId !== "string" ||
+    body.row.app_id !== body.appId ||
+    typeof body.idType !== "string" ||
+    body.row.id_type !== body.idType ||
+    typeof body.entityFamilyHash !== "string" ||
+    body.row.entity_family_hash !== body.entityFamilyHash ||
+    typeof body.identityVersion !== "string" ||
+    identityVersionForRow(body.row) !== body.identityVersion ||
+    typeof body.datasource !== "string"
+  ) {
+    throw new Error("Entity identity delivery input is invalid");
+  }
+  if (!(await admitVersion(storage, body.identityVersion))) return suppressed();
+  const ref: AppEntityRef = {
+    appId: body.appId,
+    idType: body.idType,
+    entityFamilyHash: body.entityFamilyHash,
+    identityVersion: body.identityVersion,
+  };
+  await storage.put(`${APP_ENTITY_PREFIX}${ref.idType}:${ref.entityFamilyHash}`, ref);
+  const response = await entityStub(env.ENTITY_METRIC_PRIVACY, ref).fetch(
+    "https://entity-privacy.local/deliver-row",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ datasource: body.datasource, row: body.row }),
+    },
+  );
+  if (!response.ok) throw new Error(`Entity identity delivery returned ${response.status}`);
+  return Response.json(await response.json());
 }
 
 export async function resetAppIdentityDelivery(

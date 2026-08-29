@@ -10,14 +10,19 @@ export const APP_IDENTITY_RESET_STORES = [
   "privacy_subject_refs",
 ] as const;
 
+export const APP_IDENTITY_RESET_RELEASES = ["evaluation", "event_ingest"] as const;
+
 export type AppIdentityResetStore = (typeof APP_IDENTITY_RESET_STORES)[number];
 export type AppIdentityResetProofs = Record<AppIdentityResetStore, string | null>;
+export type AppIdentityResetRelease = (typeof APP_IDENTITY_RESET_RELEASES)[number];
+export type AppIdentityResetReleaseProofs = Record<AppIdentityResetRelease, string | null>;
 
 export interface AppIdentityLifecycle {
-  readonly state: "active" | "blocked" | "purging";
+  readonly state: "active" | "blocked" | "purging" | "activation_pending";
   readonly trafficBlocked: boolean;
   readonly resetId: string | null;
   readonly proofs: AppIdentityResetProofs;
+  readonly releaseProofs: AppIdentityResetReleaseProofs;
 }
 
 const EMPTY_APP_IDENTITY_RESET_PROOFS: AppIdentityResetProofs = {
@@ -30,11 +35,17 @@ const EMPTY_APP_IDENTITY_RESET_PROOFS: AppIdentityResetProofs = {
   privacy_subject_refs: null,
 };
 
+const EMPTY_APP_IDENTITY_RESET_RELEASE_PROOFS: AppIdentityResetReleaseProofs = {
+  evaluation: null,
+  event_ingest: null,
+};
+
 export const ACTIVE_APP_IDENTITY_LIFECYCLE: AppIdentityLifecycle = {
   state: "active",
   trafficBlocked: false,
   resetId: null,
   proofs: EMPTY_APP_IDENTITY_RESET_PROOFS,
+  releaseProofs: EMPTY_APP_IDENTITY_RESET_RELEASE_PROOFS,
 };
 
 export function blockedAppIdentityLifecycle(resetId: string): AppIdentityLifecycle {
@@ -44,6 +55,7 @@ export function blockedAppIdentityLifecycle(resetId: string): AppIdentityLifecyc
     trafficBlocked: true,
     resetId,
     proofs: { ...EMPTY_APP_IDENTITY_RESET_PROOFS },
+    releaseProofs: { ...EMPTY_APP_IDENTITY_RESET_RELEASE_PROOFS },
   };
 }
 
@@ -63,7 +75,43 @@ export function withAppIdentityResetProof(
     trafficBlocked: true,
     resetId: lifecycle.resetId,
     proofs: { ...lifecycle.proofs, [store]: proof },
+    releaseProofs: lifecycle.releaseProofs,
   };
+}
+
+export function activationPendingAppIdentityLifecycle(
+  lifecycle: AppIdentityLifecycle,
+): AppIdentityLifecycle {
+  assertAppIdentityResetProved(lifecycle);
+  return {
+    state: "activation_pending",
+    trafficBlocked: true,
+    resetId: lifecycle.resetId,
+    proofs: lifecycle.proofs,
+    releaseProofs: lifecycle.releaseProofs,
+  };
+}
+
+export function withAppIdentityResetReleaseProof(
+  lifecycle: AppIdentityLifecycle,
+  release: AppIdentityResetRelease,
+  proof: string,
+): AppIdentityLifecycle {
+  if (lifecycle.state !== "activation_pending" || !lifecycle.trafficBlocked) {
+    throw new Error("privacy: cannot record reset release before activation is pending");
+  }
+  if (proof.trim().length === 0) {
+    throw new Error(`privacy: ${release} reset release proof is empty`);
+  }
+  return {
+    ...lifecycle,
+    releaseProofs: { ...lifecycle.releaseProofs, [release]: proof },
+  };
+}
+
+export function activeAppIdentityLifecycle(lifecycle: AppIdentityLifecycle): AppIdentityLifecycle {
+  assertAppIdentityResetReleased(lifecycle);
+  return { ...lifecycle, state: "active", trafficBlocked: false };
 }
 
 export function assertAppIdentityResetProved(lifecycle: AppIdentityLifecycle): void {
@@ -74,21 +122,37 @@ export function assertAppIdentityResetProved(lifecycle: AppIdentityLifecycle): v
   }
 }
 
+function assertAppIdentityResetReleased(lifecycle: AppIdentityLifecycle): void {
+  for (const release of APP_IDENTITY_RESET_RELEASES) {
+    if (lifecycle.releaseProofs[release] === null) {
+      throw new Error(`privacy: cannot activate before ${release} release proof`);
+    }
+  }
+}
+
 export function parseAppIdentityLifecycle(value: unknown): AppIdentityLifecycle {
   if (typeof value !== "object" || value === null) {
     throw new Error("privacy: ambiguous App identity lifecycle");
   }
   const raw = value as Record<string, unknown>;
-  assertExactKeys(raw, ["state", "trafficBlocked", "resetId", "proofs"]);
+  assertExactKeys(raw, ["state", "trafficBlocked", "resetId", "proofs", "releaseProofs"]);
   const header = parseLifecycleHeader(raw);
   return {
     ...header,
     proofs: parseProofs(raw.proofs),
+    releaseProofs: parseReleaseProofs(raw.releaseProofs),
   };
 }
 
-function parseLifecycleHeader(raw: Record<string, unknown>): Omit<AppIdentityLifecycle, "proofs"> {
-  if (raw.state !== "active" && raw.state !== "blocked" && raw.state !== "purging") {
+function parseLifecycleHeader(
+  raw: Record<string, unknown>,
+): Omit<AppIdentityLifecycle, "proofs" | "releaseProofs"> {
+  if (
+    raw.state !== "active" &&
+    raw.state !== "blocked" &&
+    raw.state !== "purging" &&
+    raw.state !== "activation_pending"
+  ) {
     throw new Error("privacy: ambiguous App identity lifecycle state");
   }
   if (typeof raw.trafficBlocked !== "boolean") {
@@ -108,6 +172,23 @@ function parseLifecycleHeader(raw: Record<string, unknown>): Omit<AppIdentityLif
     trafficBlocked: raw.trafficBlocked,
     resetId: raw.resetId as string | null,
   };
+}
+
+function parseReleaseProofs(value: unknown): AppIdentityResetReleaseProofs {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("privacy: ambiguous App identity reset release proofs");
+  }
+  const raw = value as Record<string, unknown>;
+  assertExactKeys(raw, APP_IDENTITY_RESET_RELEASES);
+  const proofs = { ...EMPTY_APP_IDENTITY_RESET_RELEASE_PROOFS };
+  for (const release of APP_IDENTITY_RESET_RELEASES) {
+    const proof = raw[release];
+    if (proof !== null && (typeof proof !== "string" || proof.trim().length === 0)) {
+      throw new Error(`privacy: ambiguous ${release} reset release proof`);
+    }
+    proofs[release] = proof as string | null;
+  }
+  return proofs;
 }
 
 export function assertAppIdentityTrafficAllowed(lifecycle: AppIdentityLifecycle): void {

@@ -71,6 +71,7 @@ describe("Metric Event privacy salts", () => {
               entity_deletions: null,
               privacy_subject_refs: null,
             },
+            releaseProofs: { evaluation: null, event_ingest: null },
           },
         },
         rootSecret,

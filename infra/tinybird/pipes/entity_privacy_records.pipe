@@ -1,5 +1,19 @@
 DESCRIPTION Tenant-scoped raw and derived Tinybird records for one Entity identity family.
 
+NODE entity_deletion_cutoffs
+SQL >
+    %
+    SELECT
+        app_id,
+        id_type,
+        entity_family_hash,
+        max(delete_before_ts) AS delete_before_ts
+    FROM entity_deletions
+    WHERE app_id = {{String(app_id)}}
+        AND id_type = {{String(id_type)}}
+        AND entity_family_hash = {{String(entity_family_hash)}}
+    GROUP BY app_id, id_type, entity_family_hash
+
 NODE entity_records_union
 SQL >
     %
@@ -15,9 +29,9 @@ SQL >
     SELECT
         'raw_events' AS store,
         dedup_key AS record_id,
-        targeting_key_hash,
-        entity_family_hash,
-        server_received_at,
+        events.targeting_key_hash,
+        events.entity_family_hash AS entity_family_hash,
+        events.server_received_at,
         toJSONString(map(
             'environment_id', environment_id,
             'experiment_id', experiment_id,
@@ -30,17 +44,22 @@ SQL >
     LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
         ON generation_tombstones.app_id = events.app_id
         AND generation_tombstones.targeting_key_version = splitByChar(':', events.targeting_key_hash)[1]
+    LEFT JOIN entity_deletion_cutoffs AS deletions
+        ON deletions.app_id = events.app_id
+        AND deletions.id_type = events.id_type
+        AND deletions.entity_family_hash = events.entity_family_hash
     WHERE events.app_id = {{String(app_id)}}
         AND events.id_type = {{String(id_type)}}
         AND events.entity_family_hash = {{String(entity_family_hash)}}
         AND generation_tombstones.app_id = ''
+        AND (deletions.delete_before_ts IS NULL OR events.server_received_at > deletions.delete_before_ts)
     UNION ALL
     SELECT
         'metric_events' AS store,
         dedup_key AS record_id,
-        targeting_key_hash,
-        entity_family_hash,
-        server_received_at,
+        events.targeting_key_hash,
+        events.entity_family_hash AS entity_family_hash,
+        events.server_received_at,
         toJSONString(map(
             'environment_id', environment_id,
             'event_definition_id', event_definition_id,
@@ -53,17 +72,22 @@ SQL >
     LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
         ON generation_tombstones.app_id = events.app_id
         AND generation_tombstones.targeting_key_version = splitByChar(':', events.targeting_key_hash)[1]
+    LEFT JOIN entity_deletion_cutoffs AS deletions
+        ON deletions.app_id = events.app_id
+        AND deletions.id_type = events.id_type
+        AND deletions.entity_family_hash = events.entity_family_hash
     WHERE events.app_id = {{String(app_id)}}
         AND events.id_type = {{String(id_type)}}
         AND events.entity_family_hash = {{String(entity_family_hash)}}
         AND generation_tombstones.app_id = ''
+        AND (deletions.delete_before_ts IS NULL OR events.server_received_at > deletions.delete_before_ts)
     UNION ALL
     SELECT
         'deduped_exposures' AS store,
         concat(environment_id, ':', experiment_id, ':', run_id, ':', targeting_key_hash) AS record_id,
-        targeting_key_hash,
-        entity_family_hash,
-        first_exposure_ts AS server_received_at,
+        exposures.targeting_key_hash,
+        exposures.entity_family_hash AS entity_family_hash,
+        exposures.first_exposure_ts AS server_received_at,
         toJSONString(map(
             'environment_id', environment_id,
             'experiment_id', experiment_id,
@@ -74,17 +98,22 @@ SQL >
     LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
         ON generation_tombstones.app_id = exposures.app_id
         AND generation_tombstones.targeting_key_version = splitByChar(':', exposures.targeting_key_hash)[1]
+    LEFT JOIN entity_deletion_cutoffs AS deletions
+        ON deletions.app_id = exposures.app_id
+        AND deletions.id_type = exposures.id_type
+        AND deletions.entity_family_hash = exposures.entity_family_hash
     WHERE exposures.app_id = {{String(app_id)}}
         AND exposures.id_type = {{String(id_type)}}
         AND exposures.entity_family_hash = {{String(entity_family_hash)}}
         AND generation_tombstones.app_id = ''
+        AND (deletions.delete_before_ts IS NULL OR exposures.first_exposure_ts > deletions.delete_before_ts)
     UNION ALL
     SELECT
         'deduped_metric_events_state' AS store,
         dedup_key AS record_id,
-        targeting_key_hash,
-        entity_family_hash,
-        server_received_at,
+        events.targeting_key_hash,
+        events.entity_family_hash AS entity_family_hash,
+        events.server_received_at,
         toJSONString(map(
             'environment_id', environment_id,
             'event_definition_id', event_definition_id
@@ -93,10 +122,15 @@ SQL >
     LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
         ON generation_tombstones.app_id = events.app_id
         AND generation_tombstones.targeting_key_version = splitByChar(':', events.targeting_key_hash)[1]
+    LEFT JOIN entity_deletion_cutoffs AS deletions
+        ON deletions.app_id = events.app_id
+        AND deletions.id_type = events.id_type
+        AND deletions.entity_family_hash = events.entity_family_hash
     WHERE events.app_id = {{String(app_id)}}
         AND events.id_type = {{String(id_type)}}
         AND events.entity_family_hash = {{String(entity_family_hash)}}
         AND generation_tombstones.app_id = ''
+        AND (deletions.delete_before_ts IS NULL OR events.server_received_at > deletions.delete_before_ts)
 
 NODE entity_records
 SQL >

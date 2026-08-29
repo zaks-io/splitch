@@ -75,7 +75,7 @@
       },
       {
         "name": "ASSIGNMENT_STORE_WRITER",
-        "class_name": "AssignmentStoreDurableObject"
+        "class_name": "AssignmentStoreDurableObjectV2"
       },
       {
         "name": "MCP_DELEGATION_REPLAY",
@@ -115,6 +115,14 @@
     {
       "tag": "v5_holdover_write_app_inventory",
       "new_sqlite_classes": ["HoldoverWriteAppInventoryDurableObject"]
+    },
+    {
+      "tag": "v6_assignment_store_writer_v2",
+      "new_sqlite_classes": ["AssignmentStoreDurableObjectV2"]
+    },
+    {
+      "tag": "v7_retire_assignment_store_writer_v1",
+      "deleted_classes": ["AssignmentStoreDurableObject"]
     }
   ],
   "env": {
@@ -171,7 +179,7 @@
           },
           {
             "name": "ASSIGNMENT_STORE_WRITER",
-            "class_name": "AssignmentStoreDurableObject"
+            "class_name": "AssignmentStoreDurableObjectV2"
           },
           {
             "name": "MCP_DELEGATION_REPLAY",
@@ -211,6 +219,14 @@
         {
           "tag": "v5_holdover_write_app_inventory",
           "new_sqlite_classes": ["HoldoverWriteAppInventoryDurableObject"]
+        },
+        {
+          "tag": "v6_assignment_store_writer_v2",
+          "new_sqlite_classes": ["AssignmentStoreDurableObjectV2"]
+        },
+        {
+          "tag": "v7_retire_assignment_store_writer_v1",
+          "deleted_classes": ["AssignmentStoreDurableObject"]
         }
       ],
       "services": [
@@ -279,7 +295,7 @@
           },
           {
             "name": "ASSIGNMENT_STORE_WRITER",
-            "class_name": "AssignmentStoreDurableObject"
+            "class_name": "AssignmentStoreDurableObjectV2"
           },
           {
             "name": "MCP_DELEGATION_REPLAY",
@@ -319,6 +335,14 @@
         {
           "tag": "v5_holdover_write_app_inventory",
           "new_sqlite_classes": ["HoldoverWriteAppInventoryDurableObject"]
+        },
+        {
+          "tag": "v6_assignment_store_writer_v2",
+          "new_sqlite_classes": ["AssignmentStoreDurableObjectV2"]
+        },
+        {
+          "tag": "v7_retire_assignment_store_writer_v1",
+          "deleted_classes": ["AssignmentStoreDurableObject"]
         }
       ],
       "services": [

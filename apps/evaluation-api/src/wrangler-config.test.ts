@@ -84,6 +84,32 @@ describe("Evaluation Worker service bindings", () => {
     ).toBe(true);
   });
 
+  it.each(
+    targets,
+  )("retires every legacy Assignment writer and binds the cutoff-aware namespace for %s", (_target, target) => {
+    // Cloudflare's class Delete migration deletes every object and all stored
+    // data for that class: https://developers.cloudflare.com/durable-objects/reference/durable-object-class-migrations-legacy/
+    expect(
+      target?.durable_objects?.bindings?.find(
+        (candidate) => candidate.name === "ASSIGNMENT_STORE_WRITER",
+      ),
+    ).toEqual({
+      name: "ASSIGNMENT_STORE_WRITER",
+      class_name: "AssignmentStoreDurableObjectV2",
+    });
+    expect(target?.migrations).toContainEqual({
+      tag: "v6_assignment_store_writer_v2",
+      new_sqlite_classes: ["AssignmentStoreDurableObjectV2"],
+    });
+    expect(target?.migrations).toContainEqual({
+      tag: "v7_retire_assignment_store_writer_v1",
+      deleted_classes: ["AssignmentStoreDurableObject"],
+    });
+    const worker = readFileSync(fileURLToPath(new URL("./index.ts", import.meta.url)), "utf8");
+    expect(worker).toContain("AssignmentStoreDurableObjectV2");
+    expect(worker).not.toMatch(/\bAssignmentStoreDurableObject\b/u);
+  });
+
   /**
    * The binding is shared, so the entrypoint behind it has to answer every sink
    * this Worker addresses. A second binding would only give the same caller a
@@ -161,7 +187,12 @@ interface WranglerTarget {
   durable_objects?: {
     bindings?: Array<{ name?: string; class_name?: string; script_name?: string }>;
   };
-  migrations?: Array<{ tag?: string; new_sqlite_classes?: string[]; new_classes?: string[] }>;
+  migrations?: Array<{
+    tag?: string;
+    new_sqlite_classes?: string[];
+    new_classes?: string[];
+    deleted_classes?: string[];
+  }>;
   env?: Record<string, WranglerTarget | undefined>;
   services?: Array<{ binding?: string; service?: string; entrypoint?: string }>;
   secrets?: { required?: string[] };

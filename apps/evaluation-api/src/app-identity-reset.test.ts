@@ -20,7 +20,7 @@ describe("App identity Assignment reset", () => {
     reset.kv.set(`assignment:${APP_ID}:device:${ENTITY_B.targetingKeyHash}`, "b");
 
     await expect(purgeAppIdentityAssignments(reset.env(), APP_ID, RESET_ID)).resolves.toBe(
-      "evaluation-assignments:kv=2;durable_inventory=empty;durable_objects=4",
+      "evaluation-assignments:kv=0;durable_inventory=empty;durable_objects=4",
     );
 
     expect(reset.entities).toEqual([]);
@@ -38,7 +38,7 @@ describe("App identity Assignment reset", () => {
     reset.kv.set(`assignment:${APP_ID}:account:${ENTITY_C.targetingKeyHash}`, "winner");
 
     await expect(purgeAppIdentityAssignments(reset.env(), APP_ID, RESET_ID)).resolves.toBe(
-      "evaluation-assignments:kv=1;durable_inventory=empty;durable_objects=2",
+      "evaluation-assignments:kv=0;durable_inventory=empty;durable_objects=2",
     );
 
     expect(reset.calls).toEqual([

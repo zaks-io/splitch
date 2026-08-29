@@ -190,14 +190,25 @@ describe("InMemoryAssignmentStore retained epochs", () => {
 });
 
 describe("AssignmentStoreWriter", () => {
-  it("tombstones the Entity before purge and prevents retry resurrection", async () => {
+  it("rejects stale retries after deletion and accepts post-cutoff assignments", async () => {
     const kv = new RecordingKv();
     const writer = new AssignmentStoreWriter(new MapStorage(), kv, () => undefined);
     const input = { ...basePut, targetingKeyHash: "v1:hash-deleted" };
     await writer.put(input);
 
-    await expect(writer.deleteEntity()).resolves.toBe("assignment-do-tombstone-v1");
-    await expect(writer.put(input)).rejects.toThrow(/Entity assignments are deleted/);
+    await expect(
+      writer.deleteEntity(
+        { appId: input.appId, idType: input.idType, targetingKeyHash: input.targetingKeyHash },
+        1_000,
+      ),
+    ).resolves.toBe("assignment-do-cutoff-tombstone-v2");
+    await expect(writer.put(input)).rejects.toThrow(/predates Entity deletion cutoff/);
+    await expect(
+      writer.put({ ...input, experimentId: "exp-after", sourceCreatedAtMs: 1_001 }),
+    ).resolves.toMatchObject({ status: "stored" });
+    expect(
+      JSON.parse(kv.raw(assignmentKey("app-A", "user", "v1:hash-deleted")) as string).data,
+    ).toEqual({ "exp-after": { runId: "run-1", variant: "control" } });
   });
 
   it("write-through merges the stored winner into the Entity KV value before put returns", async () => {
@@ -237,7 +248,7 @@ describe("AssignmentStoreWriter", () => {
     });
   });
 
-  it("fails the put when write-through fails, then re-asserts KV on the next put", async () => {
+  it("leaves a rejected DO-only winner after KV failure for namespace retirement", async () => {
     const key = assignmentKey("app-A", "user", "v1:hash-a");
     const kv = new RecordingKv({ failPuts: true });
     const storage = new MapStorage();
@@ -258,8 +269,8 @@ describe("AssignmentStoreWriter", () => {
       proof: "assignment-do-winners-exported-v1",
     });
 
-    // Second put for the same assignment: still "existing", but the KV entry is
-    // re-asserted so the holdover becomes visible to getAll.
+    // V2 self-heals this ordinary retry. The deploy-time V1 class retirement
+    // covers the pre-inventory legacy instance when no retry arrives.
     kv.failPuts = false;
     await expect(writer.put({ ...basePut, targetingKeyHash: "v1:hash-a" })).resolves.toMatchObject({
       status: "existing",

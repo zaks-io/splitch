@@ -182,6 +182,7 @@ async function attemptHoldoverWriteJob(
       targetingKeyHash: job.targetingKeyHash,
       identityVersion: job.identityVersion,
       runId: job.runId,
+      sourceCreatedAtMs: job.createdAtMs,
       variant: job.variant,
     });
     await storage.delete(jobKey);

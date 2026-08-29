@@ -39,7 +39,7 @@ describe("entity assignment privacy consumers", () => {
     const deletionCalls: string[] = [];
     const deleteBodies: unknown[] = [];
     const outboxes = holdoverOutboxes({ historical, deletionCalls, deleteBodies });
-    const writers = assignmentWriters(deletionCalls, {
+    const writers = assignmentWriters(deletionCalls, kv, {
       [current]: { "exp-writer-only": { runId: "run-writer", variant: "treatment" } },
     });
     const exported = await exportEntityAssignments(kv, writers, outboxes, saltStore, identity);
@@ -70,7 +70,6 @@ describe("entity assignment privacy consumers", () => {
     expect(JSON.stringify(exported)).not.toContain(RAW_TARGETING_KEY);
 
     const deleted = await deleteEntityAssignments(
-      kv,
       writers,
       outboxes,
       saltStore,
@@ -119,7 +118,6 @@ describe("entity assignment privacy consumers", () => {
 
     await expect(
       deleteEntityAssignments(
-        new RecordingKv(),
         failingAssignmentWriters(calls),
         holdoverOutboxes({ historical: "none", deletionCalls: calls, deleteBodies: [] }),
         saltStore,
@@ -133,12 +131,13 @@ describe("entity assignment privacy consumers", () => {
 
 function assignmentWriters(
   calls: string[],
+  kv: RecordingKv,
   exports: Record<string, Record<string, { runId: string; variant: string }>> = {},
 ) {
   return {
     idFromName: (name: string) => name as unknown as DurableObjectId,
     get: (id: DurableObjectId) => ({
-      fetch: async (request: RequestInfo | URL) => {
+      fetch: async (request: RequestInfo | URL, init?: RequestInit) => {
         const hash = targetingHashFromName(String(id));
         if (new URL(String(request)).pathname === "/export") {
           return Response.json({
@@ -148,7 +147,13 @@ function assignmentWriters(
           });
         }
         calls.push(`writer:${hash}`);
-        return Response.json({ deleted: true, proof: "assignment-do-tombstone-v1" });
+        const body = JSON.parse(String(init?.body)) as {
+          appId: string;
+          idType: string;
+          targetingKeyHash: string;
+        };
+        await kv.delete(assignmentKey(body.appId, body.idType, body.targetingKeyHash));
+        return Response.json({ deleted: true, proof: "assignment-do-cutoff-tombstone-v2" });
       },
     }),
   };

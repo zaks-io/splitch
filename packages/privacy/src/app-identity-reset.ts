@@ -2,12 +2,16 @@
 
 import { generateAppIdentityKey, nextAppIdentityVersion } from "./app-identity-key";
 import {
-  ACTIVE_APP_IDENTITY_LIFECYCLE,
+  APP_IDENTITY_RESET_RELEASES,
   APP_IDENTITY_RESET_STORES,
+  type AppIdentityResetRelease,
   type AppIdentityResetStore,
+  activationPendingAppIdentityLifecycle,
+  activeAppIdentityLifecycle,
   assertAppIdentityResetProved,
   blockedAppIdentityLifecycle,
   withAppIdentityResetProof,
+  withAppIdentityResetReleaseProof,
 } from "./app-identity-lifecycle";
 import type { AppIdentityRecord } from "./app-identity-record";
 import { type AppIdentityStore, requireAppIdentityRecord } from "./app-identity-store";
@@ -21,18 +25,22 @@ export type AppIdentityResetPurger = (input: {
 }) => Promise<string>;
 
 export type AppIdentityResetPurgers = Record<AppIdentityResetStore, AppIdentityResetPurger>;
+export type AppIdentityResetReleasers = Record<
+  AppIdentityResetRelease,
+  (record: AppIdentityRecord) => Promise<string>
+>;
 
 export async function resetCompromisedAppIdentity(
   store: AppIdentityStore,
   appId: string,
   resetId: string,
   purgers: AppIdentityResetPurgers,
-  afterActivate?: (record: AppIdentityRecord) => Promise<void>,
+  releasers: AppIdentityResetReleasers,
 ): Promise<AppIdentityRecord> {
   if (store.resetSerialization === "process-local") {
     throw new Error("privacy: compromised App identity reset requires a durable serialized owner");
   }
-  return store.runExclusive(appId, () => runReset(store, appId, resetId, purgers, afterActivate));
+  return store.runExclusive(appId, () => runReset(store, appId, resetId, purgers, releasers));
 }
 
 async function runReset(
@@ -40,11 +48,10 @@ async function runReset(
   appId: string,
   resetId: string,
   purgers: AppIdentityResetPurgers,
-  afterActivate?: (record: AppIdentityRecord) => Promise<void>,
+  releasers: AppIdentityResetReleasers,
 ): Promise<AppIdentityRecord> {
   let current = await requireAppIdentityRecord(store, appId);
   if (current.lifecycle.state === "active" && current.lifecycle.resetId === resetId) {
-    await afterActivate?.(current);
     return current;
   }
   if (current.lifecycle.state === "active") {
@@ -53,17 +60,40 @@ async function runReset(
   } else if (current.lifecycle.resetId !== resetId) {
     throw new Error("privacy: a different App identity reset is already running");
   }
-  current = await purgePendingStores(store, appId, current, purgers);
-  assertAppIdentityResetProved(current.lifecycle);
-  const nextVersion = nextAppIdentityVersion(current.currentVersion);
-  const replaced: AppIdentityRecord = {
-    currentVersion: nextVersion,
-    lifecycle: { ...ACTIVE_APP_IDENTITY_LIFECYCLE, resetId },
-    epochs: [{ version: nextVersion, role: "active", key: generateAppIdentityKey() }],
-  };
-  await store.save(appId, replaced);
-  await afterActivate?.(replaced);
-  return replaced;
+  if (current.lifecycle.state !== "activation_pending") {
+    current = await purgePendingStores(store, appId, current, purgers);
+    assertAppIdentityResetProved(current.lifecycle);
+    const nextVersion = nextAppIdentityVersion(current.currentVersion);
+    current = {
+      currentVersion: nextVersion,
+      lifecycle: activationPendingAppIdentityLifecycle(current.lifecycle),
+      epochs: [{ version: nextVersion, role: "active", key: generateAppIdentityKey() }],
+    };
+    await store.save(appId, current);
+  }
+  current = await releasePendingSinks(store, appId, current, releasers);
+  current = { ...current, lifecycle: activeAppIdentityLifecycle(current.lifecycle) };
+  await store.save(appId, current);
+  return current;
+}
+
+async function releasePendingSinks(
+  store: AppIdentityStore,
+  appId: string,
+  initial: AppIdentityRecord,
+  releasers: AppIdentityResetReleasers,
+): Promise<AppIdentityRecord> {
+  let current = initial;
+  for (const release of APP_IDENTITY_RESET_RELEASES) {
+    if (current.lifecycle.releaseProofs[release] !== null) continue;
+    const proof = await releasers[release](current);
+    current = {
+      ...current,
+      lifecycle: withAppIdentityResetReleaseProof(current.lifecycle, release, proof),
+    };
+    await store.save(appId, current);
+  }
+  return current;
 }
 
 async function purgePendingStores(

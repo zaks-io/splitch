@@ -25,6 +25,7 @@ export interface AssignmentIdentity {
 export interface AssignmentPutInput extends AssignmentIdentity {
   experimentId: string;
   runId: string;
+  sourceCreatedAtMs?: number;
   variant: string;
 }
 
@@ -35,6 +36,7 @@ export interface HashedAssignmentPutInput {
   targetingKeyHash: string;
   identityVersion?: string;
   runId: string;
+  sourceCreatedAtMs?: number;
   variant: string;
 }
 

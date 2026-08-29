@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeInProcessAppIdentityExclusive } from "./app-identity-exclusive";
-import type { AppIdentityResetPurgers } from "./app-identity-reset";
+import type { AppIdentityResetPurgers, AppIdentityResetReleasers } from "./app-identity-reset";
 import { resetCompromisedAppIdentity } from "./app-identity-reset";
 import { makeKvAppIdentityStore, provisionAppIdentity } from "./app-identity-store";
 import { toHex } from "./hmac";
@@ -42,7 +42,13 @@ describe("App identity reset serialization", () => {
     const store = makeKvAppIdentityStore({ kv, rootSecret: ROOT });
     await provisionAppIdentity(store, APP_ID, ROOT);
     await expect(
-      resetCompromisedAppIdentity(store, APP_ID, "reset-1", successfulPurgers()),
+      resetCompromisedAppIdentity(
+        store,
+        APP_ID,
+        "reset-1",
+        successfulPurgers(),
+        successfulReleasers(),
+      ),
     ).rejects.toThrow(/durable serialized owner/);
   });
 
@@ -56,7 +62,13 @@ describe("App identity reset serialization", () => {
     const purgers = successfulPurgers(calls);
     const reset = (store: typeof first) =>
       durableOwner.runExclusive(APP_ID, () =>
-        resetCompromisedAppIdentity(store, APP_ID, "reset-durable", purgers),
+        resetCompromisedAppIdentity(
+          store,
+          APP_ID,
+          "reset-durable",
+          purgers,
+          successfulReleasers(calls),
+        ),
       );
 
     const [left, right] = await Promise.all([reset(first), reset(second)]);
@@ -65,7 +77,20 @@ describe("App identity reset serialization", () => {
     expect(leftKey).toBeDefined();
     expect(rightKey).toBeDefined();
     expect(toHex(leftKey ?? new Uint8Array())).toBe(toHex(rightKey ?? new Uint8Array()));
-    expect(calls).toHaveLength(7);
+    expect(calls).toHaveLength(9);
     expect((await first.load(APP_ID))?.currentVersion).toBe("app-v2");
   });
 });
+
+function successfulReleasers(calls: string[] = []): AppIdentityResetReleasers {
+  return {
+    evaluation: async () => {
+      calls.push("evaluation");
+      return "evaluation-release";
+    },
+    event_ingest: async () => {
+      calls.push("event_ingest");
+      return "event-ingest-release";
+    },
+  };
+}

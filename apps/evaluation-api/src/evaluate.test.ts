@@ -55,6 +55,7 @@ describe("POST /api/sdk/evaluate", () => {
         identityVersion: "v1",
         experimentId: EXPERIMENT_ID,
         runId: "run-42",
+        sourceCreatedAtMs: Date.parse("2026-07-03T00:00:00.000Z"),
         variant: "treatment",
       },
     ]);

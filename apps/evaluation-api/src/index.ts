@@ -27,7 +27,7 @@ import {
   purgeAppIdentityAssignments,
   purgeAppIdentityRetryClaims,
 } from "./app-identity-reset";
-import { AssignmentStoreDurableObject } from "./assignment/assignment-store-do";
+import { AssignmentStoreDurableObjectV2 } from "./assignment/assignment-store-do";
 import { DurableHoldoverWriteAppInventoryClient } from "./assignment/holdover-write-app-inventory-client";
 import { HoldoverWriteAppInventoryDurableObject } from "./assignment/holdover-write-app-inventory-do";
 import { DurableHoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
@@ -285,7 +285,7 @@ function requestAuthResolver(
  * `deleted_classes` migration.
  */
 export {
-  AssignmentStoreDurableObject,
+  AssignmentStoreDurableObjectV2,
   ExposureRedemptionClaimDurableObject,
   HoldoverWriteAppInventoryDurableObject,
   HoldoverWriteOutboxDurableObject,

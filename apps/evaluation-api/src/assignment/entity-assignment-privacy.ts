@@ -96,24 +96,19 @@ export async function exportEntityAssignments(
 }
 
 export async function deleteEntityAssignments(
-  kv: AssignmentKv,
   writers: AssignmentWriterNamespace,
   outboxes: AssignmentWriterNamespace,
   saltStore: SaltStore,
   input: { appId: string; idType: string; targetingKey: string },
   deleteBeforeTs: string,
 ): Promise<EntityAssignmentDeleteResult> {
-  if (kv.delete === undefined) {
-    throw new Error("Assignment KV delete is unavailable");
-  }
   const identity = await resolveEntityPrivacyIdentity(saltStore, input);
   const proofs = [];
   for (const targetingKeyHash of identity.targetingKeyHashes) {
     proofs.push(
-      await deleteAssignmentWriter(writers, input, targetingKeyHash),
+      await deleteAssignmentWriter(writers, input, targetingKeyHash, deleteBeforeTs),
       await deleteHoldoverOutbox(outboxes, input, targetingKeyHash, deleteBeforeTs),
     );
-    await kv.delete(assignmentKey(input.appId, input.idType, targetingKeyHash));
   }
   const deletedStoreCount = identity.targetingKeyHashes.length;
   return {
@@ -206,6 +201,7 @@ async function deleteAssignmentWriter(
   writers: AssignmentWriterNamespace,
   input: { appId: string; idType: string },
   targetingKeyHash: string,
+  deleteBeforeTs: string,
 ): Promise<string> {
   const name = assignmentWriterName({
     appId: input.appId,
@@ -215,6 +211,13 @@ async function deleteAssignmentWriter(
   const writer = writers.get(writers.idFromName(name));
   const response = await writer.fetch("https://assignment-store.internal/delete", {
     method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      appId: input.appId,
+      idType: input.idType,
+      targetingKeyHash,
+      deleteBeforeTsMs: Date.parse(deleteBeforeTs),
+    }),
   });
   if (!response.ok) {
     throw new Error(`Assignment writer delete failed with HTTP ${response.status}`);

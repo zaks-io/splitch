@@ -42,7 +42,6 @@ export function makeEntityAssignmentPrivacyDeleteHandler(deps: EntityAssignmentP
         throw new Error("entity assignment privacy delete is missing deleteBeforeTs");
       }
       const deleted = await deleteEntityAssignments(
-        deps.assignmentsKv,
         deps.assignmentWriters,
         deps.holdoverWriteOutboxes,
         deps.saltStore,

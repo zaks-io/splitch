@@ -167,7 +167,7 @@ export class ResetHarness {
   }
 
   private writerNamespace(): AssignmentWriterNamespace {
-    return namespace(async (request) => {
+    return namespace(async (request, init) => {
       const name = request.name;
       const path = new URL(requestUrl(request)).pathname;
       if (path === "/put") {
@@ -179,8 +179,12 @@ export class ResetHarness {
       if (consumeFailure(this.writerDeleteFailures, name)) {
         return Response.json({ error: "forced writer failure" }, { status: 503 });
       }
+      const body = await requestBody(init);
+      this.kv.delete(
+        `assignment:${requireString(body, "appId")}:${requireString(body, "idType")}:${requireString(body, "targetingKeyHash")}`,
+      );
       this.tombstonedWriters.add(name);
-      return Response.json({ deleted: true, proof: "assignment-do-tombstone-v1" });
+      return Response.json({ deleted: true, proof: "assignment-do-cutoff-tombstone-v2" });
     });
   }
 

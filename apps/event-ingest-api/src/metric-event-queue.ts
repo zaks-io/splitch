@@ -1,9 +1,6 @@
 import { requirePlatformTarget } from "@splitch/contracts";
-import {
-  deliverAppIdentityRow,
-  identityVersionForRow,
-  isEntityEventSuppressed,
-} from "./entity-metric-privacy";
+import { deliverEntityIdentityRow } from "./entity-identity-row-delivery";
+import { identityVersionForRow } from "./entity-metric-privacy";
 import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import { appendRawEvent, tinybirdDelivery } from "./tinybird";
 import type { Env } from "./types";
@@ -30,24 +27,19 @@ async function deliverMetricEvent(
 ): Promise<void> {
   try {
     if (!delivery.ok) throw new Error(delivery.error.message);
-    const suppressed = await isEntityEventSuppressed(
-      env.ENTITY_METRIC_PRIVACY,
-      message.body,
-      env.SPLITCH_PLATFORM_TARGET,
-    );
-    if (!suppressed) {
-      if (env.SPLITCH_PLATFORM_TARGET === "local" || env.SPLITCH_PLATFORM_TARGET === "pr-ci") {
-        await appendRawEvent(message.body, delivery.value);
-      } else {
-        await deliverAppIdentityRow(
-          env.ENTITY_METRIC_PRIVACY,
-          String(message.body.app_id),
-          identityVersionForRow(message.body),
-          "metric_events",
-          message.body,
-          env.SPLITCH_PLATFORM_TARGET,
-        );
-      }
+    if (
+      !env.ENTITY_METRIC_PRIVACY &&
+      (env.SPLITCH_PLATFORM_TARGET === "local" || env.SPLITCH_PLATFORM_TARGET === "pr-ci")
+    ) {
+      await appendRawEvent(message.body, delivery.value);
+    } else {
+      await deliverEntityIdentityRow(
+        env.ENTITY_METRIC_PRIVACY,
+        identityVersionForRow(message.body),
+        "metric_events",
+        message.body,
+        env.SPLITCH_PLATFORM_TARGET,
+      );
     }
     message.ack();
   } catch (error) {

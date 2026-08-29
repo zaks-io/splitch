@@ -9,7 +9,7 @@ import {
   unwrapAppIdentityRecord,
 } from "@splitch/privacy";
 import {
-  completeProductionAppIdentityReset,
+  productionAppIdentityResetReleasers,
   productionAppIdentityResetPurgers,
 } from "./app-identity-reset-runtime";
 import type { ControlPlaneApiEnv } from "./env";
@@ -58,7 +58,7 @@ export function resetConfigStoreAppIdentity(
       appId,
       resetId,
       productionAppIdentityResetPurgers(env, resetId),
-      (active) => completeProductionAppIdentityReset(env, appId, resetId, active.currentVersion),
+      productionAppIdentityResetReleasers(env, appId, resetId),
     );
     return record.currentVersion;
   });

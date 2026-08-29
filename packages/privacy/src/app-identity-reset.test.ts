@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { type AppIdentityResetPurgers, resetCompromisedAppIdentity } from "./app-identity-reset";
+import {
+  type AppIdentityResetPurgers,
+  type AppIdentityResetReleasers,
+  resetCompromisedAppIdentity,
+} from "./app-identity-reset";
 import { makeMemoryAppIdentityStore, provisionAppIdentity } from "./app-identity-store";
 import { makeIdentitySaltStore } from "./derived-salt-store";
 import { computeTargetingKeyHash } from "./hash";
@@ -15,6 +19,7 @@ describe("App identity compromised reset", () => {
         "app_new",
         "reset-1",
         successfulPurgers(),
+        successfulReleasers(),
       ),
     ).rejects.toThrow(/unprovisioned/);
   });
@@ -30,7 +35,13 @@ describe("App identity compromised reset", () => {
       throw new Error("analytics purge unavailable");
     };
     await expect(
-      resetCompromisedAppIdentity(identityStore, input.appId, "reset-1", first),
+      resetCompromisedAppIdentity(
+        identityStore,
+        input.appId,
+        "reset-1",
+        first,
+        successfulReleasers(),
+      ),
     ).rejects.toThrow(/analytics purge unavailable/);
     await expect(saltStore.retainedKeyVersions(input.appId)).rejects.toThrow(/traffic is blocked/);
 
@@ -40,6 +51,7 @@ describe("App identity compromised reset", () => {
       input.appId,
       "reset-1",
       successfulPurgers(resumedCalls),
+      successfulReleasers(),
     );
     expect(replaced.currentVersion).toBe("app-v2");
     expect(resumedCalls).toEqual([
@@ -60,6 +72,7 @@ describe("App identity compromised reset", () => {
       input.appId,
       "reset-1",
       successfulPurgers(calls),
+      successfulReleasers(calls),
     );
     expect(replaced.currentVersion).toBe("app-v2");
     expect(replaced.epochs).toHaveLength(1);
@@ -70,11 +83,14 @@ describe("App identity compromised reset", () => {
       input.appId,
       "reset-1",
       successfulPurgers(calls),
+      successfulReleasers(calls),
     );
     expect(retry.currentVersion).toBe("app-v2");
-    expect(calls).toHaveLength(7);
+    expect(calls).toHaveLength(9);
   });
+});
 
+describe("App identity reset activation", () => {
   it("freezes every active, retained, and lookup epoch for destructive purgers", async () => {
     const identityStore = makeMemoryAppIdentityStore();
     await provisionAppIdentity(identityStore, input.appId, ROOT);
@@ -85,7 +101,13 @@ describe("App identity compromised reset", () => {
       return "proof:analytics";
     };
 
-    await resetCompromisedAppIdentity(identityStore, input.appId, "reset-versions", purgers);
+    await resetCompromisedAppIdentity(
+      identityStore,
+      input.appId,
+      "reset-versions",
+      purgers,
+      successfulReleasers(),
+    );
 
     expect(observed).toEqual([["local-v1", "v1", "app-v1"]]);
   });
@@ -93,15 +115,24 @@ describe("App identity compromised reset", () => {
   it("releases remote suppression only after durable activation and retries release", async () => {
     const identityStore = makeMemoryAppIdentityStore();
     await provisionAppIdentity(identityStore, input.appId, ROOT);
-    let suppressed = true;
-    let releases = 0;
-    const release = async () => {
-      releases += 1;
+    const calls: string[] = [];
+    let eventSuppressed = true;
+    const releasers = successfulReleasers(calls);
+    releasers.event_ingest = async () => {
+      calls.push("event_ingest");
       const durable = await identityStore.load(input.appId);
-      expect(durable?.lifecycle).toMatchObject({ state: "active", resetId: "reset-release" });
+      expect(durable?.lifecycle).toMatchObject({
+        state: "activation_pending",
+        trafficBlocked: true,
+        resetId: "reset-release",
+        releaseProofs: { evaluation: "release:evaluation", event_ingest: null },
+      });
       expect(durable?.currentVersion).toBe("app-v2");
-      if (releases === 1) throw new Error("second service unavailable");
-      suppressed = false;
+      if (calls.filter((call) => call === "event_ingest").length === 1) {
+        throw new Error("second service unavailable");
+      }
+      eventSuppressed = false;
+      return "release:event_ingest";
     };
 
     await expect(
@@ -110,10 +141,11 @@ describe("App identity compromised reset", () => {
         input.appId,
         "reset-release",
         successfulPurgers(),
-        release,
+        releasers,
       ),
     ).rejects.toThrow(/second service unavailable/);
-    expect(suppressed).toBe(true);
+    expect(eventSuppressed).toBe(true);
+    expect(calls).toEqual(["evaluation", "event_ingest"]);
 
     await expect(
       resetCompromisedAppIdentity(
@@ -121,11 +153,11 @@ describe("App identity compromised reset", () => {
         input.appId,
         "reset-release",
         successfulPurgers(),
-        release,
+        releasers,
       ),
     ).resolves.toMatchObject({ currentVersion: "app-v2" });
-    expect(releases).toBe(2);
-    expect(suppressed).toBe(false);
+    expect(calls).toEqual(["evaluation", "event_ingest", "event_ingest"]);
+    expect(eventSuppressed).toBe(false);
   });
 });
 
@@ -143,4 +175,12 @@ function successfulPurgers(calls: string[] = []): AppIdentityResetPurgers {
     entity_deletions: purge("entity_deletions"),
     privacy_subject_refs: purge("privacy_subject_refs"),
   };
+}
+
+function successfulReleasers(calls: string[] = []): AppIdentityResetReleasers {
+  const release = (sink: "evaluation" | "event_ingest") => async () => {
+    calls.push(sink);
+    return `release:${sink}`;
+  };
+  return { evaluation: release("evaluation"), event_ingest: release("event_ingest") };
 }

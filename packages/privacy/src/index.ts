@@ -24,7 +24,11 @@ export {
   unwrapAppIdentityRecord,
   wrapAppIdentityRecord,
 } from "./app-identity-record";
-export type { AppIdentityResetPurger, AppIdentityResetPurgers } from "./app-identity-reset";
+export type {
+  AppIdentityResetPurger,
+  AppIdentityResetPurgers,
+  AppIdentityResetReleasers,
+} from "./app-identity-reset";
 export {
   APP_IDENTITY_RESET_SUBJECT_REF,
   resetCompromisedAppIdentity,
@@ -32,9 +36,12 @@ export {
 export type {
   AppIdentityLifecycle,
   AppIdentityResetProofs,
+  AppIdentityResetRelease,
+  AppIdentityResetReleaseProofs,
   AppIdentityResetStore,
 } from "./app-identity-lifecycle";
 export {
+  APP_IDENTITY_RESET_RELEASES,
   APP_IDENTITY_RESET_STORES,
   assertAppIdentityTrafficAllowed,
 } from "./app-identity-lifecycle";

@@ -12,13 +12,13 @@ import {
 // The DO is per-ENTITY (assignmentWriterName), so storage keys carry the
 // experimentId: one entity can hold a first-touch winner per Experiment.
 const STORAGE_KEY_PREFIX = "assignment:";
-const ENTITY_DELETED_KEY = "privacy:entity-deleted";
+const ENTITY_DELETION_CUTOFF_KEY = "privacy:entity-deletion-cutoff";
 
 export interface AssignmentWriterStorage {
   get<T>(key: string): Promise<T | undefined>;
   put<T>(key: string, value: T): Promise<void>;
+  delete(key: string): Promise<boolean | undefined>;
   list<T>(options: { prefix: string }): Promise<Map<string, T>>;
-  deleteAll?(): Promise<void>;
 }
 
 export type WaitUntil = (promise: Promise<unknown>) => void;
@@ -29,6 +29,10 @@ export interface AssignmentWriterExport {
   assignments: AssignmentStoreValue;
   tombstoned: boolean;
   proof: "assignment-do-winners-exported-v1";
+}
+
+interface EntityDeletionCutoff {
+  readonly deleteBeforeTsMs: number;
 }
 
 export class AssignmentStoreWriter {
@@ -43,8 +47,12 @@ export class AssignmentStoreWriter {
   }
 
   async put(input: HashedAssignmentPutInput): Promise<AssignmentStorePutResult> {
-    if ((await this.storage.get<boolean>(ENTITY_DELETED_KEY)) === true) {
-      throw new Error("assignment-store: Entity assignments are deleted");
+    if (input.sourceCreatedAtMs === undefined || !Number.isFinite(input.sourceCreatedAtMs)) {
+      throw new Error("assignment-store: sourceCreatedAtMs is required");
+    }
+    const cutoff = await this.storage.get<EntityDeletionCutoff>(ENTITY_DELETION_CUTOFF_KEY);
+    if (cutoff !== undefined && input.sourceCreatedAtMs <= cutoff.deleteBeforeTsMs) {
+      throw new Error("assignment-store: Assignment predates Entity deletion cutoff");
     }
     const storageKey = `${STORAGE_KEY_PREFIX}${input.experimentId}`;
     const existing = await this.storage.get<StoredAssignment>(storageKey);
@@ -62,13 +70,27 @@ export class AssignmentStoreWriter {
     return { status: "stored", assignment: entryFrom(input) };
   }
 
-  async deleteEntity(): Promise<string> {
-    if (this.storage.deleteAll === undefined) {
-      throw new Error("assignment-store: Durable Object deleteAll is unavailable");
+  async deleteEntity(
+    identity: Pick<HashedAssignmentPutInput, "appId" | "idType" | "targetingKeyHash">,
+    deleteBeforeTsMs: number,
+  ): Promise<string> {
+    if (!Number.isFinite(deleteBeforeTsMs)) {
+      throw new Error("assignment-store: deleteBeforeTsMs must be finite");
     }
-    await this.storage.deleteAll();
-    await this.storage.put(ENTITY_DELETED_KEY, true);
-    return "assignment-do-tombstone-v1";
+    const previous = await this.storage.get<EntityDeletionCutoff>(ENTITY_DELETION_CUTOFF_KEY);
+    const cutoff = Math.max(
+      previous?.deleteBeforeTsMs ?? Number.NEGATIVE_INFINITY,
+      deleteBeforeTsMs,
+    );
+    const stored = await this.storage.list<StoredAssignment>({ prefix: STORAGE_KEY_PREFIX });
+    for (const [key, assignment] of stored) {
+      if (assignment.sourceCreatedAtMs === undefined || assignment.sourceCreatedAtMs <= cutoff) {
+        await this.storage.delete(key);
+      }
+    }
+    await this.storage.put(ENTITY_DELETION_CUTOFF_KEY, { deleteBeforeTsMs: cutoff });
+    await this.rewriteKvFromDurableWinners(identity);
+    return "assignment-do-cutoff-tombstone-v2";
   }
 
   async exportEntity(): Promise<AssignmentWriterExport> {
@@ -83,7 +105,8 @@ export class AssignmentStoreWriter {
     }
     return {
       assignments,
-      tombstoned: (await this.storage.get<boolean>(ENTITY_DELETED_KEY)) === true,
+      tombstoned:
+        (await this.storage.get<EntityDeletionCutoff>(ENTITY_DELETION_CUTOFF_KEY)) !== undefined,
       proof: "assignment-do-winners-exported-v1",
     };
   }
@@ -96,6 +119,20 @@ export class AssignmentStoreWriter {
       return; // already visible in KV — nothing to re-assert
     }
     await this.kv.put(key, serializeAssignmentValue(next));
+  }
+
+  private async rewriteKvFromDurableWinners(
+    identity: Pick<HashedAssignmentPutInput, "appId" | "idType" | "targetingKeyHash">,
+  ): Promise<void> {
+    if (this.kv.delete === undefined) {
+      throw new Error("assignment-store: Assignment KV delete is unavailable");
+    }
+    const stored = await this.storage.list<StoredAssignment>({ prefix: STORAGE_KEY_PREFIX });
+    let value: AssignmentStoreValue = {};
+    for (const assignment of stored.values()) value = mergeAssignmentValue(value, assignment);
+    const key = assignmentKey(identity.appId, identity.idType, identity.targetingKeyHash);
+    if (Object.keys(value).length === 0) await this.kv.delete(key);
+    else await this.kv.put(key, serializeAssignmentValue(value));
   }
 }
 

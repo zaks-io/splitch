@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AppIdentityResetPurgers } from "./app-identity-reset";
+import type { AppIdentityResetPurgers, AppIdentityResetReleasers } from "./app-identity-reset";
 import { resetCompromisedAppIdentity } from "./app-identity-reset";
 import { makeMemoryAppIdentityStore, provisionAppIdentity } from "./app-identity-store";
 import { makeIdentitySaltStore } from "./derived-salt-store";
@@ -23,7 +23,13 @@ describe("App identity compromised lifecycle", () => {
       await new Promise(() => undefined);
       return "unreachable";
     };
-    void resetCompromisedAppIdentity(identityStore, INPUT.appId, "reset-1", purgers);
+    void resetCompromisedAppIdentity(
+      identityStore,
+      INPUT.appId,
+      "reset-1",
+      purgers,
+      successfulReleasers(),
+    );
     await assignmentStarted;
 
     await expect(store.currentKeyVersion(INPUT.appId)).rejects.toThrow(/traffic is blocked/);
@@ -40,7 +46,13 @@ describe("App identity compromised lifecycle", () => {
     const purgers = successfulPurgers();
     purgers.assignments = async () => "";
     await expect(
-      resetCompromisedAppIdentity(identityStore, INPUT.appId, "reset-1", purgers),
+      resetCompromisedAppIdentity(
+        identityStore,
+        INPUT.appId,
+        "reset-1",
+        purgers,
+        successfulReleasers(),
+      ),
     ).rejects.toThrow(/assignments reset proof is empty/);
   });
 });
@@ -54,5 +66,12 @@ function successfulPurgers(): AppIdentityResetPurgers {
     retry_claims: async () => "retry-proof",
     entity_deletions: async () => "deletion-proof",
     privacy_subject_refs: async () => "subject-proof",
+  };
+}
+
+function successfulReleasers(): AppIdentityResetReleasers {
+  return {
+    evaluation: async () => "evaluation-release",
+    event_ingest: async () => "event-ingest-release",
   };
 }

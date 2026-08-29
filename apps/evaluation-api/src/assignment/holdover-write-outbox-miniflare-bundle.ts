@@ -164,8 +164,8 @@ HoldoverWriteOutboxDurableObject.prototype.fetch = async function (request) {
   }
   return __prodOutboxFetch.call(this, request);
 };
-const __prodAssignmentFetch = AssignmentStoreDurableObject.prototype.fetch;
-AssignmentStoreDurableObject.prototype.fetch = async function (request) {
+const __prodAssignmentFetch = AssignmentStoreDurableObjectV2.prototype.fetch;
+AssignmentStoreDurableObjectV2.prototype.fetch = async function (request) {
   const originalKv = this.env.ASSIGNMENTS_KV;
   this.env.ASSIGNMENTS_KV = failOnceKv(originalKv);
   try {

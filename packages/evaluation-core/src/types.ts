@@ -70,6 +70,7 @@ export interface AssignmentStoreReader {
     targetingKey: string;
     identityVersion?: string;
     runId: string;
+    sourceCreatedAtMs?: number;
     variant: string;
   }): Promise<{ status: "stored" | "existing"; assignment: AssignmentStoreEntry }>;
   putHashed(input: {
@@ -79,6 +80,7 @@ export interface AssignmentStoreReader {
     targetingKeyHash: string;
     identityVersion?: string;
     runId: string;
+    sourceCreatedAtMs?: number;
     variant: string;
   }): Promise<{ status: "stored" | "existing"; assignment: AssignmentStoreEntry }>;
 }

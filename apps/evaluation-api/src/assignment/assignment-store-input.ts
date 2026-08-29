@@ -11,6 +11,7 @@ export function parseHashedAssignmentPut(value: unknown): HashedAssignmentPutInp
     targetingKeyHash: requireString(value, "targetingKeyHash"),
     identityVersion: requireString(value, "identityVersion"),
     runId: requireString(value, "runId"),
+    sourceCreatedAtMs: requireFiniteNumber(value, "sourceCreatedAtMs"),
     variant: requireString(value, "variant"),
   };
   const extra = Object.keys(value).filter((key) => !(key in input));
@@ -18,6 +19,14 @@ export function parseHashedAssignmentPut(value: unknown): HashedAssignmentPutInp
     throw new TypeError(`assignment-store: unexpected payload keys ${extra.join(",")}`);
   }
   return input;
+}
+
+function requireFiniteNumber(value: Record<string, unknown>, key: string): number {
+  const field = value[key];
+  if (typeof field !== "number" || !Number.isFinite(field)) {
+    throw new TypeError(`assignment-store: ${key} must be a finite number`);
+  }
+  return field;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

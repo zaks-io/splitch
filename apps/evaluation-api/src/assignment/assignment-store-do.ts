@@ -7,7 +7,7 @@ export interface AssignmentStoreEnv {
   ASSIGNMENTS_KV: AssignmentKv;
 }
 
-export class AssignmentStoreDurableObject extends DurableObject<AssignmentStoreEnv> {
+export class AssignmentStoreDurableObjectV2 extends DurableObject<AssignmentStoreEnv> {
   override async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/export") {
@@ -26,7 +26,26 @@ export class AssignmentStoreDurableObject extends DurableObject<AssignmentStoreE
       this.ctx.waitUntil(promise),
     );
     if (url.pathname === "/delete") {
-      const proof = await this.ctx.blockConcurrencyWhile(() => writer.deleteEntity());
+      const body = (await request.json()) as Record<string, unknown>;
+      if (
+        typeof body.appId !== "string" ||
+        typeof body.idType !== "string" ||
+        typeof body.targetingKeyHash !== "string" ||
+        typeof body.deleteBeforeTsMs !== "number" ||
+        !Number.isFinite(body.deleteBeforeTsMs)
+      ) {
+        return Response.json({ error: "deleteBeforeTsMs is required" }, { status: 400 });
+      }
+      const proof = await this.ctx.blockConcurrencyWhile(() =>
+        writer.deleteEntity(
+          {
+            appId: body.appId as string,
+            idType: body.idType as string,
+            targetingKeyHash: body.targetingKeyHash as string,
+          },
+          body.deleteBeforeTsMs as number,
+        ),
+      );
       return Response.json({ deleted: true, proof });
     }
 

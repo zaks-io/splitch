@@ -19,6 +19,7 @@ const PUT = {
   targetingKeyHash: "v1:hash-entity-1",
   identityVersion: "v1",
   runId: "run-42",
+  sourceCreatedAtMs: 1_000,
   variant: "treatment",
 } as const;
 const GENERATION_ID = "generation-A";

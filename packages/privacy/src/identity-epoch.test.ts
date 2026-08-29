@@ -74,15 +74,24 @@ describe("privacy identity epoch", () => {
   it("destructively resets one App only after old rows are purged", async () => {
     const beforeA = await computeTargetingKeyHash(store, INPUT);
     const beforeB = await computeTargetingKeyHash(store, { ...INPUT, appId: "app_2" });
-    await resetCompromisedAppIdentity(identityStore, INPUT.appId, "reset-1", {
-      runs_and_credentials: async () => "runs-proof",
-      delivery: async () => "delivery-proof",
-      assignments: async () => "assignments-proof",
-      analytics: async () => "analytics-proof",
-      retry_claims: async () => "retry-proof",
-      entity_deletions: async () => "deletion-proof",
-      privacy_subject_refs: async () => "subject-proof",
-    });
+    await resetCompromisedAppIdentity(
+      identityStore,
+      INPUT.appId,
+      "reset-1",
+      {
+        runs_and_credentials: async () => "runs-proof",
+        delivery: async () => "delivery-proof",
+        assignments: async () => "assignments-proof",
+        analytics: async () => "analytics-proof",
+        retry_claims: async () => "retry-proof",
+        entity_deletions: async () => "deletion-proof",
+        privacy_subject_refs: async () => "subject-proof",
+      },
+      {
+        evaluation: async () => "evaluation-release",
+        event_ingest: async () => "event-ingest-release",
+      },
+    );
     const afterA = await computeTargetingKeyHash(store, INPUT);
     const afterB = await computeTargetingKeyHash(store, { ...INPUT, appId: "app_2" });
 

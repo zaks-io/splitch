@@ -1,9 +1,6 @@
 import { timingSafeEqualString } from "@splitch/worker-runtime";
-import {
-  deliverAppIdentityRow,
-  identityVersionForRow,
-  isEntityEventSuppressed,
-} from "./entity-metric-privacy";
+import { deliverAppIdentityRow, identityVersionForRow } from "./entity-metric-privacy";
+import { deliverEntityIdentityRow } from "./entity-identity-row-delivery";
 import { emptyError, renderError, serviceUnavailable } from "./errors";
 import { evaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import { rejectIngestAdmission } from "./ingest-admission";
@@ -97,8 +94,6 @@ async function deliverExposure(
   delivery: { url: string; token: string },
   env: Env,
 ): Promise<Response | null> {
-  if (await exposureSuppressed(row, env)) return null;
-
   // The append is AWAITED before the ACK: the upstream Evaluation Worker treats
   // this response as the at-least-once delivery receipt (it 503s the evaluate
   // when the sink fails, so the SDK re-fires). ACKing 202 before Tinybird
@@ -107,9 +102,8 @@ async function deliverExposure(
     if (env.SPLITCH_PLATFORM_TARGET === "local" || env.SPLITCH_PLATFORM_TARGET === "pr-ci") {
       await appendRawEvent(row, delivery);
     } else {
-      await deliverAppIdentityRow(
+      await deliverEntityIdentityRow(
         env.ENTITY_METRIC_PRIVACY,
-        event.appId,
         identityVersionForRow(row),
         "raw_events",
         row,
@@ -129,10 +123,6 @@ async function deliverExposure(
     });
     return renderError(serviceUnavailable("raw event append failed"));
   }
-}
-
-function exposureSuppressed(row: Record<string, unknown>, env: Env): Promise<boolean> {
-  return isEntityEventSuppressed(env.ENTITY_METRIC_PRIVACY, row, env.SPLITCH_PLATFORM_TARGET);
 }
 
 export async function handleEvaluationIngest(request: Request, env: Env): Promise<Response> {

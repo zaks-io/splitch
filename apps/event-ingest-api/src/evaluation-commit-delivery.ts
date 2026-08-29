@@ -1,8 +1,5 @@
-import {
-  deliverAppIdentityRow,
-  identityVersionForRow,
-  isEntityEventSuppressed,
-} from "./entity-metric-privacy";
+import { deliverAppIdentityRow, identityVersionForRow } from "./entity-metric-privacy";
+import { deliverEntityIdentityRow } from "./entity-identity-row-delivery";
 import {
   appendRawEvent,
   tinybirdDelivery,
@@ -59,13 +56,9 @@ async function deliverExposure(
   row: Record<string, unknown>,
   delivery: TinybirdDelivery,
 ): Promise<void> {
-  if (await isEntityEventSuppressed(env.ENTITY_METRIC_PRIVACY, row, env.SPLITCH_PLATFORM_TARGET)) {
-    return;
-  }
   if (isDirectDelivery(env)) return appendRawEvent(row, delivery);
-  await deliverAppIdentityRow(
+  await deliverEntityIdentityRow(
     env.ENTITY_METRIC_PRIVACY,
-    String(row.app_id),
     identityVersionForRow(row),
     "raw_events",
     row,

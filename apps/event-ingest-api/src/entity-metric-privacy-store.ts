@@ -1,6 +1,7 @@
 import {
   completeAppIdentityDeliveryReset,
   deliverAppIdentityRow,
+  deliverEntityIdentityRow,
   registerAppEntity,
   registerAppEvaluation,
   resetAppIdentityDelivery,
@@ -16,6 +17,7 @@ import {
   parseEvaluationEntry,
 } from "./entity-metric-privacy";
 import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
+import { deliverEntityRowAtAuthority } from "./entity-identity-row-delivery";
 import type { Env } from "./types";
 
 const SUPPRESSION_KEY = "privacy:suppression";
@@ -56,6 +58,8 @@ export class EntityMetricPrivacyDurableObject {
       "/register-app-entity": () => this.registerAppEntity(request),
       "/register-app-evaluation": () => this.registerAppEvaluation(request),
       "/deliver-app-row": () => this.deliverAppRow(request),
+      "/deliver-entity-row": () => this.deliverEntityRow(request),
+      "/deliver-row": () => this.deliverRow(request),
       "/reset-app": () => this.resetApp(request),
       "/complete-reset": () => this.completeReset(request),
     };
@@ -72,6 +76,14 @@ export class EntityMetricPrivacyDurableObject {
 
   private async deliverAppRow(request: Request): Promise<Response> {
     return deliverAppIdentityRow(this.ctx.storage, this.env, request);
+  }
+
+  private async deliverEntityRow(request: Request): Promise<Response> {
+    return deliverEntityIdentityRow(this.ctx.storage, this.env, request);
+  }
+
+  private async deliverRow(request: Request): Promise<Response> {
+    return deliverEntityRowAtAuthority(this.ctx.storage, this.env, request);
   }
 
   private async resetApp(request: Request): Promise<Response> {

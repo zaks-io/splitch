@@ -24,6 +24,7 @@ const PUT_A = {
   targetingKeyHash: "v1:hash-a",
   identityVersion: "v1",
   runId: "run-a",
+  sourceCreatedAtMs: 8_000,
   variant: "control",
 } as const;
 const PUT_B = {
@@ -102,10 +103,10 @@ describe("App identity reset with production Durable Objects", () => {
       (result): result is PromiseRejectedResult => result.status === "rejected",
     );
     expect(tombstoned).toHaveLength(1);
-    expect(String(tombstoned[0]?.reason)).toMatch(/Entity assignments are deleted/u);
+    expect(String(tombstoned[0]?.reason)).toMatch(/predates Entity deletion cutoff/u);
 
     await expect(purgeAppIdentityAssignments(restarted.env, APP_ID, RESET_ID)).resolves.toBe(
-      "evaluation-assignments:kv=3;durable_inventory=empty;durable_objects=6",
+      "evaluation-assignments:kv=0;durable_inventory=empty;durable_objects=6",
     );
     await expect(restarted.inventory.status(APP_ID)).resolves.toMatchObject({
       generationId: RESET_ID,
@@ -123,6 +124,25 @@ describe("App identity reset with production Durable Objects", () => {
       sagaPhase: null,
       entities: [],
     });
+    const replacementStore = new KvAssignmentStore(
+      restarted.kv,
+      restarted.writers,
+      {} as never,
+      undefined,
+      restarted.inventoryNamespace,
+    );
+    await expect(
+      replacementStore.putHashed({
+        ...PUT_C,
+        experimentId: "exp-after-reset",
+        targetingKeyHash: "app-v2:hash-c",
+        identityVersion: "app-v2",
+        sourceCreatedAtMs: 9_001,
+      }),
+    ).resolves.toMatchObject({ status: "stored" });
+    await expect(
+      replacementStore.putHashed({ ...PUT_C, experimentId: "exp-stale-retry" }),
+    ).rejects.toThrow(/generation changed|returned HTTP 409/u);
   });
 });
 
@@ -141,7 +161,7 @@ async function startMiniflare(
     kvPersist: join(root, "kv"),
     durableObjectsPersist: join(root, "durable-objects"),
     durableObjects: {
-      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObject" },
+      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObjectV2" },
       HOLDOVER_WRITE_OUTBOX: { className: "HoldoverWriteOutboxDurableObject" },
       HOLDOVER_WRITE_APP_INVENTORY: { className: "HoldoverWriteAppInventoryDurableObject" },
     },

@@ -1,24 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
-import { EntityMetricPrivacyDurableObject } from "./entity-metric-privacy-store";
-import type { Env } from "./types";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  ENTRY,
+  EVALUATION_ENTRY,
+  makeEntityMetricPrivacyStoreFixture,
+} from "./entity-metric-privacy-store-test-fixture";
 
-const ENTRY = {
-  dedupKey: "sha256:event-1",
-  fingerprint: "sha256:fingerprint-1",
-  eventDefinitionId: "event_definition_checkout",
-  eventDefinitionVersionId: "event_definition_checkout_v1",
-  targetingKeyHash: "app-v1:aaaaaaaa",
-  serverReceivedAt: "2026-08-07T00:00:00.000Z",
-};
-const EVALUATION_ENTRY = {
-  commitIdentity: "a".repeat(64),
-  eventId: "event-exposure-1",
-  serverReceivedAt: ENTRY.serverReceivedAt,
-};
+afterEach(() => vi.unstubAllGlobals());
 
 describe("Entity Metric privacy Durable Object", () => {
   it("serializes suppression with registration and accepts only newly collected rows", async () => {
-    const fixture = makeFixture();
+    const fixture = makeEntityMetricPrivacyStoreFixture();
     expect(await fixture.post("/register", ENTRY)).toEqual({ suppressed: false });
 
     expect(await fixture.post("/suppress", { deleteBeforeTs: "2026-08-07T00:00:01.000Z" })).toEqual(
@@ -38,7 +29,7 @@ describe("Entity Metric privacy Durable Object", () => {
   });
 
   it("serializes Entity inventory check-put against suppression", async () => {
-    const fixture = makeFixture();
+    const fixture = makeEntityMetricPrivacyStoreFixture();
     const gate = fixture.pauseNextGet("privacy:suppression");
     const registration = fixture.post("/register", ENTRY);
     await gate.started;
@@ -55,8 +46,53 @@ describe("Entity Metric privacy Durable Object", () => {
     await expect(fixture.post("/register", ENTRY)).resolves.toEqual({ suppressed: true });
   });
 
+  it("does not let suppression and zero proof overtake an admitted Tinybird append", async () => {
+    const fixture = makeEntityMetricPrivacyStoreFixture();
+    let releaseAppend!: () => void;
+    let markAppendStarted!: () => void;
+    const appendStarted = new Promise<void>((resolve) => {
+      markAppendStarted = resolve;
+    });
+    const appendGate = new Promise<void>((resolve) => {
+      releaseAppend = resolve;
+    });
+    const append = vi.fn(async () => {
+      markAppendStarted();
+      await appendGate;
+      return new Response(null, { status: 202 });
+    });
+    vi.stubGlobal("fetch", append);
+    const row = {
+      app_id: "app_1",
+      id_type: "user",
+      entity_family_hash: "app-v1:family",
+      targeting_key_hash: "app-v1:entity",
+      server_received_at: ENTRY.serverReceivedAt,
+    };
+
+    const delivery = fixture.post("/deliver-row", { datasource: "raw_events", row });
+    await appendStarted;
+    let deletionSettled = false;
+    const deletion = fixture
+      .post("/suppress", { deleteBeforeTs: "2026-08-07T00:00:01.000Z" })
+      .then(() => fixture.post("/delete", {}))
+      .finally(() => {
+        deletionSettled = true;
+      });
+    await Promise.resolve();
+    expect(deletionSettled).toBe(false);
+
+    releaseAppend();
+    await expect(delivery).resolves.toEqual({ suppressed: false });
+    await expect(deletion).resolves.toMatchObject({ proofs: expect.any(Array) });
+    await expect(fixture.post("/deliver-row", { datasource: "raw_events", row })).resolves.toEqual({
+      suppressed: true,
+    });
+    expect(append).toHaveBeenCalledTimes(1);
+  });
+
   it("exports pending outbox rows, redacts stale claims, and returns idempotent proofs", async () => {
-    const fixture = makeFixture();
+    const fixture = makeEntityMetricPrivacyStoreFixture();
     await fixture.post("/register", ENTRY);
     await fixture.post("/register-evaluation", EVALUATION_ENTRY);
 
@@ -94,7 +130,7 @@ describe("Entity Metric privacy Durable Object", () => {
 
 describe("App identity delivery reset", () => {
   it("keeps every Evaluation commit in the App reset inventory, including zero-Exposure commits", async () => {
-    const fixture = makeFixture();
+    const fixture = makeEntityMetricPrivacyStoreFixture();
     const commitIdentity = "b".repeat(64);
     await fixture.post("/register-app-evaluation", {
       appId: "app_1",
@@ -130,7 +166,7 @@ describe("App identity delivery reset", () => {
   });
 
   it("retains a failed Evaluation commit purge checkpoint across a Durable Object restart", async () => {
-    const fixture = makeFixture();
+    const fixture = makeEntityMetricPrivacyStoreFixture();
     const commitIdentity = "c".repeat(64);
     await fixture.post("/register-app-evaluation", {
       appId: "app_1",
@@ -160,7 +196,7 @@ describe("App identity delivery reset", () => {
   });
 
   it("serializes App inventory check-put against reset suppression and purge", async () => {
-    const fixture = makeFixture();
+    const fixture = makeEntityMetricPrivacyStoreFixture();
     const commitIdentity = "d".repeat(64);
     const gate = fixture.pauseNextGet("privacy:app-reset-suppression");
     const registration = fixture.post("/register-app-evaluation", {
@@ -185,110 +221,3 @@ describe("App identity delivery reset", () => {
     expect(fixture.evaluationOutbox.privacyDeleteAll).toHaveBeenCalledWith(commitIdentity);
   });
 });
-
-function makeFixture() {
-  const storage = new Map<string, unknown>();
-  let blockedGet: { key: string; started: () => void; wait: Promise<void> } | undefined;
-  const outboxFetch = vi.fn(async (input: RequestInfo | URL) => {
-    const path = new URL(String(input)).pathname;
-    if (path === "/export") {
-      return Response.json({
-        deleted: false,
-        row: { event_id: "event-1", targeting_key_hash: ENTRY.targetingKeyHash },
-      });
-    }
-    if (path === "/suppress") {
-      return Response.json({ deleted: true, proof: "metric-event-outbox-redacted-v1" });
-    }
-    return new Response("not found", { status: 404 });
-  });
-  const ctx = {
-    storage: {
-      async get<T>(key: string) {
-        if (blockedGet?.key === key) {
-          const gate = blockedGet;
-          blockedGet = undefined;
-          gate.started();
-          await gate.wait;
-        }
-        return storage.has(key) ? (structuredClone(storage.get(key)) as T) : undefined;
-      },
-      async put(key: string, value: unknown) {
-        storage.set(key, structuredClone(value));
-      },
-      async list<T>({ prefix }: { prefix: string }) {
-        return new Map(
-          [...storage.entries()]
-            .filter(([key]) => key.startsWith(prefix))
-            .map(([key, value]) => [key, structuredClone(value) as T]),
-        );
-      },
-      async delete(keys: string | string[]) {
-        if (Array.isArray(keys))
-          return keys.reduce((count, key) => count + Number(storage.delete(key)), 0);
-        return storage.delete(keys);
-      },
-    },
-  } as unknown as DurableObjectState;
-  const evaluationOutbox = {
-    lookup: vi.fn(async () => null),
-    commit: vi.fn(async () => {
-      throw new Error("not used");
-    }),
-    deliver: vi.fn(async () => {
-      throw new Error("not used");
-    }),
-    acknowledge: vi.fn(async () => undefined),
-    privacyExport: vi.fn(async () => [
-      { event_id: EVALUATION_ENTRY.eventId, source: "evaluation-commit" },
-    ]),
-    privacyDelete: vi.fn(async () => 1),
-    privacyDeleteAll: vi.fn(async () => "evaluation-commit-outbox-purged-v1" as const),
-  };
-  const env = {
-    SPLITCH_PLATFORM_TARGET: "production",
-    TINYBIRD_API_URL: "https://tinybird.test",
-    TINYBIRD_INGEST_TOKEN: "test-token",
-    METRIC_EVENT_OUTBOX: {
-      idFromName: () => ({}) as DurableObjectId,
-      get: () => ({ fetch: outboxFetch }),
-    },
-    EVALUATION_COMMIT_OUTBOX: evaluationOutbox,
-  } as Env;
-  let object = new EntityMetricPrivacyDurableObject(ctx, env);
-  return {
-    outboxFetch,
-    evaluationOutbox,
-    pauseNextGet(key: string) {
-      let release!: () => void;
-      let started!: () => void;
-      const wait = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      const startedPromise = new Promise<void>((resolve) => {
-        started = resolve;
-      });
-      blockedGet = { key, started, wait };
-      return { started: startedPromise, release };
-    },
-    restart() {
-      object = new EntityMetricPrivacyDurableObject(ctx, env);
-    },
-    async post(path: string, body: unknown) {
-      const response = await object.fetch(
-        new Request(`https://entity-privacy.local${path}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-      );
-      expect(response.status).toBe(200);
-      return response.json();
-    },
-    async get(path: string) {
-      const response = await object.fetch(new Request(`https://entity-privacy.local${path}`));
-      expect(response.status).toBe(200);
-      return response.json();
-    },
-  };
-}

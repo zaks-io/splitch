@@ -190,32 +190,6 @@ async function registerEntityEntry(
   return body.suppressed;
 }
 
-export async function isEntityEventSuppressed(
-  namespace: EntityMetricPrivacyNamespace | undefined,
-  row: Record<string, unknown>,
-  platformTarget: string | undefined,
-): Promise<boolean> {
-  if (!namespace && (platformTarget === "local" || platformTarget === "pr-ci")) return false;
-  const response = await entityStub(namespace, rowIdentity(row)).fetch(
-    "https://entity-privacy.local/suppressed",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        serverReceivedAt: stringValue(row.server_received_at, "server_received_at"),
-      }),
-    },
-  );
-  if (!response.ok) {
-    throw new Error(`Entity Metric suppression lookup returned HTTP ${response.status}`);
-  }
-  const body = (await response.json()) as { suppressed?: unknown };
-  if (typeof body.suppressed !== "boolean") {
-    throw new Error("Entity Metric suppression returned an invalid result");
-  }
-  return body.suppressed;
-}
-
 export function entityStub(
   namespace: EntityMetricPrivacyNamespace | undefined,
   identity: { appId: string; idType: string; entityFamilyHash: string },
@@ -283,7 +257,7 @@ export function atOrBefore(value: string, cutoff: string): boolean {
   return Date.parse(value) <= Date.parse(cutoff);
 }
 
-function rowIdentity(row: Record<string, unknown>) {
+export function rowIdentity(row: Record<string, unknown>) {
   return {
     appId: stringValue(row.app_id, "app_id"),
     idType: stringValue(row.id_type, "id_type"),

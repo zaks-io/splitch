@@ -1,5 +1,9 @@
 import { appScope, createRepository } from "@splitch/db";
-import { APP_IDENTITY_RESET_SUBJECT_REF, type AppIdentityResetPurgers } from "@splitch/privacy";
+import {
+  APP_IDENTITY_RESET_SUBJECT_REF,
+  type AppIdentityResetPurgers,
+  type AppIdentityResetReleasers,
+} from "@splitch/privacy";
 import { revokeEnvironmentCredentialsForAppDelete } from "./app-environment-credentials";
 import { durableCredentialCacheWriterAccess } from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
@@ -92,16 +96,21 @@ export function productionAppIdentityResetPurgers(
   };
 }
 
-export async function completeProductionAppIdentityReset(
+export function productionAppIdentityResetReleasers(
   env: ControlPlaneApiEnv,
   appId: string,
   resetId: string,
-  nextVersion: string,
-): Promise<void> {
-  await Promise.all([
-    env.EVALUATION_API.completeAppIdentityReset(appId, resetId, nextVersion),
-    env.EVENT_INGEST_API.completeAppIdentityReset(appId, resetId, nextVersion),
-  ]);
+): AppIdentityResetReleasers {
+  return {
+    evaluation: async (record) => {
+      await env.EVALUATION_API.completeAppIdentityReset(appId, resetId, record.currentVersion);
+      return `evaluation-release:${record.currentVersion}`;
+    },
+    event_ingest: async (record) => {
+      await env.EVENT_INGEST_API.completeAppIdentityReset(appId, resetId, record.currentVersion);
+      return `event-ingest-release:${record.currentVersion}`;
+    },
+  };
 }
 
 async function deleteKvPrefix(kv: KVNamespace, prefix: string): Promise<number> {
