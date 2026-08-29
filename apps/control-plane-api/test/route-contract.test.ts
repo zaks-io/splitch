@@ -74,11 +74,17 @@ beforeEach(async () => {
       door: "binding",
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
+          issuer: "https://auth.splitch.test",
           fetchJwks: async () => signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
         sessions: makeSessionStore(bindings.kv),
-        membershipAccess: { authorize: async () => true },
+        membershipAccess: {
+          authorize: async () => true,
+          resolve: async () => {
+            throw new Error("test fixture has no wide membership resolver");
+          },
+        },
         now: () => NOW_MS,
       }),
       rateLimiter: allowLimiter,

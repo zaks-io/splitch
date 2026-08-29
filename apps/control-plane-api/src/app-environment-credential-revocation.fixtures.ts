@@ -82,6 +82,7 @@ export function makeApp(
   credentialStore: KVNamespace,
 ) {
   const verifier = makeJwksVerifier({
+    issuer: "https://auth.splitch.test",
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -89,7 +90,12 @@ export function makeApp(
     authResolver: makeControlPlaneAuthResolver({
       verifier,
       sessions: makeSessionStore(bindings.kv),
-      membershipAccess: { authorize: async () => true },
+      membershipAccess: {
+        authorize: async () => true,
+        resolve: async () => {
+          throw new Error("credential revocation fixture has no wide membership fixture");
+        },
+      },
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,

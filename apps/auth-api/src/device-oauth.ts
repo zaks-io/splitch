@@ -1,3 +1,4 @@
+import type { AccessTokenAuthorization } from "@splitch/contracts";
 import { rememberMemberProfile } from "@splitch/contracts";
 import type { DeviceFlowPort } from "./device-flow";
 import { openDeviceGrant, sealDeviceGrant } from "./device-grant";
@@ -39,6 +40,11 @@ export interface DeviceOAuthDeps {
 interface ResourceBinding {
   scope: string;
   appId: string | null;
+}
+
+interface ResolvedAccess {
+  audience: string;
+  authorization?: AccessTokenAuthorization;
 }
 
 export function requireFirstPartyClient(clientId: string | undefined): void {
@@ -86,7 +92,10 @@ export async function exchangeDeviceCode(
   deps: DeviceOAuthDeps,
   body: unknown,
   nowSeconds: number,
-  resolveAudience: (resource: string | undefined) => string,
+  resolveAccess: (
+    resource: string | undefined,
+    authorization: AccessTokenAuthorization | undefined,
+  ) => ResolvedAccess,
 ): Promise<Response> {
   const parsed = DeviceTokenRequestSchema.safeParse(body);
   if (!parsed.success) {
@@ -94,25 +103,20 @@ export async function exchangeDeviceCode(
   }
   try {
     requireFirstPartyClient(parsed.data.client_id);
-    const audience = resolveAudience(parsed.data.resource);
+    const access = resolveAccess(parsed.data.resource, parsed.data.authorization);
     const grant = await openDeviceGrant(parsed.data.device_code, deps.accessSecret, deps.now());
-    if (parsed.data.scope) {
-      const polled = parseSelectedAppRequest(parsed.data.scope);
-      if (polled.selector !== grant.selectedAppSelector) {
-        throw new OAuthError(
-          "invalid_grant",
-          "device grant App selection cannot be changed while polling",
-        );
-      }
-    }
+    assertUnchangedDeviceSelection(parsed.data.scope, grant.selectedAppSelector);
+    assertCompatibleDeviceAuthorization(access.authorization, grant.selectedAppSelector);
     const deviceToken = await deps.deviceFlow.exchangeDeviceCode({
       deviceCode: grant.deviceCode,
     });
     const email = requireDeviceEmail(deviceToken);
     await rememberMemberProfile(deps.sessionStore, deviceToken.userId, email);
-    const binding = grant.selectedAppSelector
-      ? await resolveAppSelectionForUser(deps.repo, deviceToken.userId, grant.selectedAppSelector)
-      : null;
+    const binding = await resolveDeviceBinding(
+      deps.repo,
+      deviceToken.userId,
+      grant.selectedAppSelector,
+    );
     const session = requireRefreshSession(deviceToken, {
       userId: deviceToken.userId,
       providerOrganizationId: deviceToken.organizationId ?? null,
@@ -121,10 +125,11 @@ export async function exchangeDeviceCode(
     await deps.deviceRefreshSessions.remember(deviceToken.refreshToken as string, session);
     const accessToken = await deps.tokenSigner.mintAccessToken(
       deviceToken.userId,
-      binding ? [binding.scope] : [],
+      access.authorization ? [] : binding ? [binding.scope] : [],
       "device_flow",
       nowSeconds,
-      audience,
+      access.audience,
+      access.authorization,
     );
     return tokenResponse(
       accessToken,
@@ -138,11 +143,47 @@ export async function exchangeDeviceCode(
   }
 }
 
+function assertUnchangedDeviceSelection(
+  requestedScope: string | undefined,
+  grantedSelector: string | null,
+): void {
+  if (!requestedScope) return;
+  if (parseSelectedAppRequest(requestedScope).selector !== grantedSelector) {
+    throw new OAuthError(
+      "invalid_grant",
+      "device grant App selection cannot be changed while polling",
+    );
+  }
+}
+
+function assertCompatibleDeviceAuthorization(
+  authorization: AccessTokenAuthorization | undefined,
+  selector: string | null,
+): void {
+  if (authorization && selector) {
+    throw new OAuthError(
+      "invalid_request",
+      "membership-wide read authorization cannot be combined with an App selection",
+    );
+  }
+}
+
+async function resolveDeviceBinding(
+  repo: MembershipAuthorityRepo,
+  userId: string,
+  selector: string | null,
+): Promise<ResourceBinding | null> {
+  return selector ? resolveAppSelectionForUser(repo, userId, selector) : null;
+}
+
 export async function exchangeRefreshToken(
   deps: DeviceOAuthDeps,
   body: unknown,
   nowSeconds: number,
-  resolveAudience: (resource: string | undefined) => string,
+  resolveAccess: (
+    resource: string | undefined,
+    authorization: AccessTokenAuthorization | undefined,
+  ) => ResolvedAccess,
 ): Promise<Response> {
   const parsed = RefreshTokenRequestSchema.safeParse(body);
   if (!parsed.success) {
@@ -151,16 +192,18 @@ export async function exchangeRefreshToken(
   try {
     requireFirstPartyClient(parsed.data.client_id);
     const stored = await deps.deviceRefreshSessions.lookup(parsed.data.refresh_token);
-    if (!stored?.userId || !stored.providerSessionId) {
+    if (!stored?.userId || !stored.providerSessionId)
       throw new OAuthError("invalid_grant", "refresh token authority is unknown");
-    }
+    assertCompatibleDeviceAuthorization(parsed.data.authorization, stored.selectedAppSelector);
     // Resolve the binding BEFORE touching the provider: WorkOS refresh tokens
     // are single-use, so an unresolvable app/org selector must fail this one
     // request, not consume the token and strand the whole session.
     const binding = await resolveRefreshBinding(deps.repo, stored, {
       app: parsed.data.app,
       org: parsed.data.org,
+      authorization: parsed.data.authorization,
     });
+    const access = resolveAccess(parsed.data.resource, parsed.data.authorization);
     const providerToken = await deps.deviceFlow.refreshProviderToken({
       refreshToken: parsed.data.refresh_token,
       organizationId: stored.providerOrganizationId ?? undefined,
@@ -195,10 +238,11 @@ export async function exchangeRefreshToken(
     // failure. (The unverified-email path above already rotated.)
     const accessToken = await deps.tokenSigner.mintAccessToken(
       providerToken.userId,
-      binding ? [binding.scope] : [],
+      access.authorization ? [] : binding ? [binding.scope] : [],
       "device_flow",
       nowSeconds,
-      resolveAudience(parsed.data.resource),
+      access.audience,
+      access.authorization,
     );
     await deps.deviceRefreshSessions.rotate(
       parsed.data.refresh_token,
@@ -239,8 +283,15 @@ function requireUnchangedProviderAuthority(
 async function resolveRefreshBinding(
   repo: MembershipAuthorityRepo,
   stored: DeviceRefreshSession,
-  requested: { app?: string; org?: string },
+  requested: {
+    app?: string;
+    org?: string;
+    authorization?: AccessTokenAuthorization;
+  },
 ): Promise<ResourceBinding | null> {
+  if (requested.authorization) {
+    return null;
+  }
   if (requested.app) {
     const selected = await resolveAppSelectionForUser(repo, stored.userId, requested.app);
     return { scope: selected.scope, appId: selected.appId };

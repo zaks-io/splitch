@@ -1,10 +1,11 @@
-import type { ErrorResponse } from "@splitch/contracts";
+import { type ErrorResponse, MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
-import type {
-  AuthenticatedInputResolution,
-  AuthenticatedInputResolver,
-  AuthenticatedInputResolverArgs,
-  Principal,
+import {
+  type AuthenticatedInputResolution,
+  type AuthenticatedInputResolver,
+  type AuthenticatedInputResolverArgs,
+  appAccessCovers,
+  type Principal,
 } from "@splitch/worker-runtime";
 import { membershipClaimsInScopes } from "./scope-binding";
 
@@ -88,9 +89,17 @@ async function resolveApp(
   selector: string | undefined,
 ): Promise<{ ok: true; appId?: string } | { ok: false; error: ErrorResponse }> {
   if (selector === undefined || selector.startsWith(APP_ID_PREFIX)) return { ok: true };
+  // `findAppSelectorCandidatesForUser` already restricts the read to the caller's
+  // live memberships. The extra filter narrows a selector-bound token to the Apps
+  // its signed scopes actually name; a membership-wide token holds no App scopes,
+  // so it is covered by its memberships instead.
   const candidates = (
     await repo.identity.findAppSelectorCandidatesForUser(principal.id, selector)
-  ).filter((candidate) => hasAppScope(principal.scopes, candidate.appId));
+  ).filter((candidate) =>
+    principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION
+      ? appAccessCovers(principal, candidate.appId)
+      : hasAppScope(principal.scopes, candidate.appId),
+  );
   if (candidates.length === 0) return failure("APP_NOT_FOUND", "app not found");
   if (candidates.length > 1) {
     return {
@@ -201,8 +210,14 @@ function assignResolved(
   if (value !== undefined) params[name] = value;
 }
 
+// A membership-wide read token is App-unbound by design and carries its authority
+// in its live `memberships` set, so `principal.appId` is the wrong question to
+// ask it. `appAccessCovers` is the same predicate the registrar's scope step
+// uses; asking it here keeps one answer to "may this principal address this App"
+// and lets `requireWideMemberships` still throw loudly on a wide principal whose
+// memberships were never populated.
 function appScopeError(principal: Principal, appId: string | undefined): ErrorResponse | null {
-  if (appId === undefined || principal.appId === appId) return null;
+  if (appId === undefined || appAccessCovers(principal, appId)) return null;
   return { code: "FORBIDDEN", message: "credential is not scoped to this app", details: {} };
 }
 

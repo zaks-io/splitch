@@ -132,7 +132,34 @@ describe("OAuth device token authority", () => {
       },
     ]);
   });
+});
 
+describe("OAuth device token membership-wide read authority", () => {
+  it("rejects wide authority with a selected App before consuming the provider device code", async () => {
+    let exchanged = false;
+    const app = routeApp({
+      deviceFlow: {
+        ...exchangeOnlyDeviceFlow(),
+        exchangeDeviceCode: async () => {
+          exchanged = true;
+          throw new Error("must not exchange");
+        },
+      },
+      deviceRefreshSessions: unusedRefreshStore,
+    });
+
+    const res = await deviceCodeRequest(app, {
+      device_code: await selectedDeviceCode("approved", "app_selected"),
+      authorization: "membership-wide-read",
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_request" });
+    expect(exchanged).toBe(false);
+  });
+});
+
+describe("OAuth device token membership checks", () => {
   it("rejects a selected App the User's live memberships cannot reach", async () => {
     let minted = false;
     const app = routeApp({

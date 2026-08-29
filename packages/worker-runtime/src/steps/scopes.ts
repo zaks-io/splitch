@@ -1,5 +1,9 @@
-import type { ErrorResponse, RouteContract } from "@splitch/contracts";
-import type { Principal } from "../principal";
+import {
+  type ErrorResponse,
+  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+  type RouteContract,
+} from "@splitch/contracts";
+import type { Principal, PrincipalMemberships } from "../principal";
 
 /**
  * Step 5. Enforce required scopes, then Org/App/Environment co-scope (ADR-0027).
@@ -15,6 +19,9 @@ export function enforceScopes(
   principal: Principal,
   params: Record<string, string>,
 ): ErrorResponse | null {
+  const authorizationError = membershipWideReadError(contract, principal);
+  if (authorizationError) return authorizationError;
+
   const held = new Set(principal.scopes);
   const missing = contract.scopes.filter((scope) => !held.has(scope));
   if (missing.length > 0) {
@@ -37,7 +44,7 @@ export function enforceScopes(
   // already have run, but an org_id-less context never reaches the handler or an
   // Org resource repository call.
   const pathOrgId = params.orgId;
-  if (pathOrgId !== undefined && principal.orgId !== pathOrgId) {
+  if (pathOrgId !== undefined && !organizationAccessCovers(principal, pathOrgId)) {
     return forbidden("credential is not scoped to this organization");
   }
 
@@ -49,7 +56,7 @@ export function enforceScopes(
   // selector resolver may bind a null axis from one matching signed App scope;
   // otherwise it never reaches the handler or an App resource repository call.
   const pathAppId = params.appId;
-  if (pathAppId !== undefined && principal.appId !== pathAppId) {
+  if (pathAppId !== undefined && !appAccessCovers(principal, pathAppId)) {
     return forbidden("credential is not scoped to this app");
   }
 
@@ -68,6 +75,39 @@ export function enforceScopes(
   }
 
   return null;
+}
+
+function membershipWideReadError(
+  contract: RouteContract,
+  principal: Principal,
+): ErrorResponse | null {
+  if (principal.authorization !== MEMBERSHIP_WIDE_READ_AUTHORIZATION) return null;
+  if (contract.method !== "GET") return forbidden("credential grants read access only");
+  requireWideMemberships(principal);
+  return null;
+}
+
+export function requireWideMemberships(principal: Principal): PrincipalMemberships {
+  if (!principal.memberships) {
+    throw new Error("worker-runtime: membership-wide principal has no live memberships");
+  }
+  return principal.memberships;
+}
+
+export function organizationAccessCovers(principal: Principal, organizationId: string): boolean {
+  if (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+    return requireWideMemberships(principal).organizations.some(
+      (membership) => membership.id === organizationId,
+    );
+  }
+  return principal.orgId === organizationId;
+}
+
+export function appAccessCovers(principal: Principal, appId: string): boolean {
+  if (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+    return requireWideMemberships(principal).apps.some((membership) => membership.id === appId);
+  }
+  return principal.appId === appId;
 }
 
 function forbidden(message: string): ErrorResponse {

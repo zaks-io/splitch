@@ -1,4 +1,9 @@
 // biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the contracts surface is intentionally aggregated here
+export {
+  type AccessTokenAuthorization,
+  accessTokenAuthorizationFromClaim,
+  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+} from "./access-token-authorization";
 export { accessTokenRevocationKey, accessTokenRevocationTtl } from "./access-token-revocation";
 export type { ApprovalRequestId, ApprovalReviewId } from "./approval-identifiers";
 export { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";

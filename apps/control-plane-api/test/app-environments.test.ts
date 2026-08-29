@@ -11,9 +11,9 @@ import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
-import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 import { noOpExposureStatusCleanup } from "./exposure-status-cleanup-fixture";
 import { noOpHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup-fixture";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
@@ -29,6 +29,7 @@ const OWNER = "user_app_env_owner";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
+const rejectWideRead = () => Promise.reject<never>(new Error("memberships unavailable"));
 
 interface Harness {
   app: Hono;
@@ -57,6 +58,7 @@ beforeEach(async () => {
   const bindings = await makeLocalBindings();
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({
+    issuer: "https://auth.splitch.test",
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -65,7 +67,7 @@ beforeEach(async () => {
       authResolver: makeControlPlaneAuthResolver({
         verifier,
         sessions: makeSessionStore(bindings.kv),
-        membershipAccess: { authorize: async () => true },
+        membershipAccess: { authorize: async () => true, resolve: rejectWideRead },
         now: () => NOW_MS,
       }),
       rateLimiter: allowLimiter,
