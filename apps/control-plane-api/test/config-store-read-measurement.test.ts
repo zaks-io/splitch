@@ -64,8 +64,10 @@ describe("flag_config_get direct KV reads", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ flagId: ids.flagId, version: 1 });
-    // SPL-524 checks for legacy Environment-key collisions; SPL-541 removes the duplicate read.
-    expect(resolverD1.queries()).toBe(1);
+    // One read for the SPL-524 legacy Environment-key collision check (SPL-541 removed the
+    // duplicate), one for the SPL-532 live App membership recheck that backstops the KV
+    // membership cache. Both are on the request path, not the config-store path.
+    expect(resolverD1.queries()).toBe(2);
     expect(configStoreD1.queries()).toBe(0);
     expect(target.subrequests()).toBe(0);
     console.info("flag_config_get_measurement", {
@@ -125,7 +127,8 @@ describe("flag_config_get KV miss reads", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ flagId: ids.flagId, enabled: false });
-    expect(resolverD1.queries()).toBe(1);
+    // SPL-524 legacy Environment-key collision check plus the SPL-532 live membership recheck.
+    expect(resolverD1.queries()).toBe(2);
     expect(configStoreD1.queries()).toBeGreaterThan(0);
     expect(target.subrequests()).toBe(1);
     expect(backgroundTasks).toHaveLength(1);
@@ -144,8 +147,10 @@ describe("flag_config_get KV miss reads", () => {
     configStoreD1.reset();
     target.reset();
     expect((await getFlagConfig(app)).status).toBe(200);
-    // SPL-524 checks for legacy Environment-key collisions; SPL-541 removes the duplicate read.
-    expect(resolverD1.queries()).toBe(1);
+    // One read for the SPL-524 legacy Environment-key collision check (SPL-541 removed the
+    // duplicate), one for the SPL-532 live App membership recheck that backstops the KV
+    // membership cache. Both are on the request path, not the config-store path.
+    expect(resolverD1.queries()).toBe(2);
     expect(configStoreD1.queries()).toBe(0);
     expect(target.subrequests()).toBe(0);
   });
@@ -227,8 +232,10 @@ describe("flag_config_get snapshot failures", () => {
     const response = await getFlagConfig(app);
 
     expect(response.status).toBe(500);
-    // SPL-524 checks for legacy Environment-key collisions; SPL-541 removes the duplicate read.
-    expect(resolverD1.queries()).toBe(1);
+    // One read for the SPL-524 legacy Environment-key collision check (SPL-541 removed the
+    // duplicate), one for the SPL-532 live App membership recheck that backstops the KV
+    // membership cache. Both are on the request path, not the config-store path.
+    expect(resolverD1.queries()).toBe(2);
     expect(configStoreD1.queries()).toBe(0);
     expect(target.subrequests()).toBe(0);
     expect(error).toHaveBeenCalledWith(
