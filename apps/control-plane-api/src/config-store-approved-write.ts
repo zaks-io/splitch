@@ -1,16 +1,16 @@
 import { envScope } from "@splitch/db";
 import { approvedProposalFreeze } from "./config-store-freeze";
+import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import {
   type ApplyApprovedFlagConfigInput,
   buildSnapshotFromD1,
-  type ConfigStoreDeps,
+  type ConfigStoreRuntimeDeps,
   type FlagConfigWriteResult,
   json,
   missingAvailableVariants,
   missingRuleVariantNames,
   type Snapshot,
   targetingRuleRows,
-  writeSnapshotAndBroadcast,
 } from "./config-store-shared";
 import { targetingRulePersistFailure } from "./config-store-targeting-rules";
 import { baselineIsUnresolvable } from "./flag-config-rollout";
@@ -24,7 +24,7 @@ import { resolveTargetingRules } from "./targeting-rule-resolution";
  * carries the Review commit so a lost guard leaves the edge untouched.
  */
 export async function applyApprovedFlagConfig(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: ApplyApprovedFlagConfigInput,
 ): Promise<FlagConfigWriteResult> {
   const scope = envScope(input.appId, input.environmentId);
@@ -74,9 +74,7 @@ export async function applyApprovedFlagConfig(
   ) {
     return { ok: false, reason: "APPROVAL_NOT_APPLIED" };
   }
-  const committed = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
-  if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  return writeSnapshotAndBroadcast(deps, scope, input.flagId, committed);
+  return writeFlagConfigSnapshot(deps, scope, input.flagId);
 }
 
 /** Patch keys whose JSON Pointer appears in `diff.entries` (plus `updatedAt`). */
@@ -122,7 +120,7 @@ export function approvedPatchMovesConfig(patch: ReturnType<typeof approvedConfig
 }
 
 async function validateProposal(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   current: Snapshot,
   input: ApplyApprovedFlagConfigInput,
 ): Promise<Extract<FlagConfigWriteResult, { ok: false }> | null> {

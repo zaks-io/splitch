@@ -1,10 +1,14 @@
 import type { DeltaNudge } from "@splitch/contracts";
 import { DeltaNudgeSchema } from "@splitch/contracts";
 import type { QueryClient } from "@tanstack/react-query";
+import {
+  invalidateWithRetry,
+  jitteredReconnectDelay,
+  nudgeConvergenceDelaysMs,
+  reconnectDelaysMs,
+} from "./live-updates-retry";
 import { createNudgeRefetchFailureHandler } from "./panel-observability";
 import { type AppEnvironmentScope, nudgeInvalidationPrefix, queryKeys } from "./query-keys";
-
-const reconnectDelaysMs = [2_000, 4_000, 8_000] as const;
 
 type LiveUpdateSocket = {
   close(): void;
@@ -15,6 +19,15 @@ type LiveUpdateSocket = {
 };
 type SocketFactory = (url: string) => LiveUpdateSocket;
 type Timer = ReturnType<typeof setTimeout>;
+type NudgeOptions = {
+  cancellationSignal?: AbortSignal;
+  isCancelled?: () => boolean;
+  onConverged?: () => void;
+  onFreshData?: () => void;
+  onStaleData?: () => void;
+  random?: () => number;
+  refetchRoute?: () => Promise<void>;
+};
 
 export type LiveUpdateConnectionOptions = {
   readonly createSocket?: SocketFactory;
@@ -28,8 +41,12 @@ export type LiveUpdateConnectionOptions = {
 
 export class LiveUpdateConnection {
   private attempts = 0;
+  private nextNudgeGeneration = 0;
+  private readonly nudgeGenerations = new Map<string, number>();
+  private readonly nudgeRetryControllers = new Map<string, AbortController>();
   private reconnectTimer: Timer | undefined;
   private socket: LiveUpdateSocket | undefined;
+  private readonly staleNudgeTargets = new Set<string>();
   private stopped = false;
 
   constructor(private readonly options: LiveUpdateConnectionOptions) {}
@@ -42,6 +59,9 @@ export class LiveUpdateConnection {
 
   stop(): void {
     this.stopped = true;
+    this.nudgeGenerations.clear();
+    this.cancelNudgeRetries();
+    this.staleNudgeTargets.clear();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
     this.socket?.close();
@@ -63,13 +83,47 @@ export class LiveUpdateConnection {
     };
     socket.onmessage = (event) => {
       if (socket !== this.socket || this.stopped) return;
-      void handleNudge(event.data, this.options.scope, this.options.queryClient, {
-        onStaleData: () => this.options.onStaleDataChange?.(true),
+      const nudge = parseNudge(event.data);
+      if (!nudge) return;
+      const target = `${nudge.entity}:${nudge.id}`;
+      const generation = ++this.nextNudgeGeneration;
+      this.nudgeRetryControllers.get(target)?.abort();
+      const retryController = new AbortController();
+      this.nudgeRetryControllers.set(target, retryController);
+      this.nudgeGenerations.set(target, generation);
+      const isCurrent = () =>
+        !retryController.signal.aborted &&
+        generation === this.nudgeGenerations.get(target) &&
+        socket === this.socket &&
+        !this.stopped;
+      const handling = handleParsedNudge(nudge, this.options.scope, this.options.queryClient, {
+        cancellationSignal: retryController.signal,
+        isCancelled: () => !isCurrent(),
+        onStaleData: () => {
+          if (!isCurrent()) return;
+          this.staleNudgeTargets.add(target);
+          this.options.onStaleDataChange?.(true);
+        },
+        onConverged: () => {
+          if (!isCurrent()) return;
+          this.staleNudgeTargets.delete(target);
+          this.options.onStaleDataChange?.(this.staleNudgeTargets.size > 0);
+        },
+        random: this.options.random,
+        refetchRoute: this.options.refetchRoute,
+      });
+      void handling.finally(() => {
+        if (this.nudgeRetryControllers.get(target) === retryController) {
+          this.nudgeRetryControllers.delete(target);
+        }
       });
     };
     socket.onerror = () => socket.close();
     socket.onclose = () => {
       if (socket !== this.socket || this.stopped) return;
+      this.nudgeGenerations.clear();
+      this.cancelNudgeRetries();
+      this.staleNudgeTargets.clear();
       this.scheduleReconnect();
     };
   }
@@ -82,18 +136,23 @@ export class LiveUpdateConnection {
   }
 
   private async recoverAfterConnect(socket: LiveUpdateSocket): Promise<void> {
-    const recovered = await this.refreshScope();
+    const recovered = await this.refreshScope(() => socket === this.socket && !this.stopped);
     if (socket !== this.socket || this.stopped) return;
     this.options.onStaleDataChange?.(!recovered);
   }
 
-  private async refreshScope(): Promise<boolean> {
+  private async refreshScope(isCurrent = () => !this.stopped): Promise<boolean> {
     return invalidateWithRetry(
       this.options.queryClient,
       queryKeys.app.root(this.options.scope.appId, this.options.scope.environmentId),
-      undefined,
+      { isCancelled: () => !isCurrent(), random: this.options.random },
       this.options.refetchRoute,
     );
+  }
+
+  private cancelNudgeRetries(): void {
+    for (const controller of this.nudgeRetryControllers.values()) controller.abort();
+    this.nudgeRetryControllers.clear();
   }
 }
 
@@ -101,16 +160,40 @@ export async function handleNudge(
   rawPayload: unknown,
   scope: AppEnvironmentScope,
   queryClient: QueryClient,
-  options: { onStaleData?: () => void } = {},
+  options: NudgeOptions = {},
 ): Promise<void> {
   const parsed = parseNudge(rawPayload);
   if (!parsed) return;
 
+  return handleParsedNudge(parsed, scope, queryClient, options);
+}
+
+async function handleParsedNudge(
+  parsed: DeltaNudge,
+  scope: AppEnvironmentScope,
+  queryClient: QueryClient,
+  options: NudgeOptions,
+): Promise<void> {
+  if (options.isCancelled?.()) return;
   const detailKey = nudgeDetailKey(parsed, scope);
   const detail = detailKey ? queryClient.getQueryData<{ version?: number }>(detailKey) : undefined;
-  if (detail?.version !== undefined && detail.version >= parsed.version) return;
+  if (
+    parsed.deleted !== true &&
+    detail?.version !== undefined &&
+    detail.version >= parsed.version
+  ) {
+    options.onConverged?.();
+    options.onFreshData?.();
+    return;
+  }
 
-  await invalidateNudgeWithRetry(parsed, scope, queryClient, options.onStaleData);
+  await invalidateNudgeWithRetry(
+    parsed,
+    scope,
+    queryClient,
+    parsed.deleted === true || detail?.version === undefined ? null : detailKey,
+    options,
+  );
 }
 
 export function liveUpdateUrl(scope: { orgSlug: string; appSlug: string; env: string }): string {
@@ -122,47 +205,41 @@ export function liveUpdateUrl(scope: { orgSlug: string; appSlug: string; env: st
   return url.toString();
 }
 
-function jitteredReconnectDelay(attempt: number, random = Math.random): number {
-  const baseDelay = reconnectDelaysMs[Math.min(attempt, reconnectDelaysMs.length - 1)] ?? 8_000;
-  return Math.round(baseDelay * (0.8 + random() * 0.4));
-}
-
 async function invalidateNudgeWithRetry(
   nudge: DeltaNudge,
   scope: AppEnvironmentScope,
   queryClient: QueryClient,
-  onStaleData: (() => void) | undefined,
+  detailKey: readonly string[] | null,
+  options: NudgeOptions,
 ): Promise<void> {
   const prefix = nudgeInvalidationPrefix[nudge.entity](scope.appId, scope.environmentId);
   const reportFailure = createNudgeRefetchFailureHandler({
     entity: nudge.entity,
     id: nudge.id,
-    onStaleData: () => onStaleData?.(),
+    onStaleData: () => options.onStaleData?.(),
   });
 
-  await invalidateWithRetry(queryClient, prefix, reportFailure);
-}
-
-/** Initial refetch plus three retries after 2s, 4s, and 8s. */
-async function invalidateWithRetry(
-  queryClient: QueryClient,
-  queryKey: ReturnType<(typeof nudgeInvalidationPrefix)[DeltaNudge["entity"]]>,
-  onRetry?: (failure: { attempt: number; nextRetryMs: number }) => void,
-  refetchRoute?: () => Promise<void>,
-): Promise<boolean> {
-  for (let retry = 0; retry <= reconnectDelaysMs.length; retry += 1) {
-    try {
-      await queryClient.invalidateQueries({ queryKey, refetchType: "all" }, { throwOnError: true });
-      await refetchRoute?.();
-      return true;
-    } catch {
-      if (retry === reconnectDelaysMs.length) return false;
-      const nextRetryMs = reconnectDelaysMs[retry] ?? 8_000;
-      onRetry?.({ attempt: retry + 1, nextRetryMs });
-      await wait(jitteredReconnectDelay(retry));
-    }
-  }
-  return false;
+  const converged = await invalidateWithRetry(
+    queryClient,
+    prefix,
+    {
+      delaysMs: nudgeConvergenceDelaysMs,
+      cancellationSignal: options.cancellationSignal,
+      isFresh: detailKey
+        ? () => {
+            const refreshed = queryClient.getQueryData<{ version?: number }>(detailKey);
+            return refreshed?.version !== undefined && refreshed.version >= nudge.version;
+          }
+        : undefined,
+      onRetry: reportFailure,
+      isCancelled: () =>
+        options.cancellationSignal?.aborted === true || options.isCancelled?.() === true,
+      random: options.random,
+    },
+    options.refetchRoute,
+  );
+  if (converged) options.onConverged?.();
+  if (converged && nudge.deleted !== true) options.onFreshData?.();
 }
 
 function nudgeDetailKey(nudge: DeltaNudge, scope: AppEnvironmentScope): readonly string[] | null {
@@ -195,8 +272,4 @@ function parseNudge(rawPayload: unknown): DeltaNudge | null {
 
 function browserSocket(url: string): LiveUpdateSocket {
   return new WebSocket(url);
-}
-
-function wait(delay: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, delay));
 }

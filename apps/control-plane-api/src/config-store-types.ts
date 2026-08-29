@@ -1,4 +1,5 @@
 import type {
+  AuthKind,
   DeltaNudge,
   ExperimentConfigKV,
   FlagConfigKV,
@@ -7,7 +8,6 @@ import type {
   TargetingRule,
   TargetingRuleInput,
 } from "@splitch/contracts";
-import type { AuthKind } from "@splitch/contracts";
 import type { ApprovalCommit, Repository } from "@splitch/db";
 import type { RunFrozenFailure } from "./flag-config-run-freeze";
 
@@ -153,7 +153,7 @@ type FlagConfigWriteFailure =
   | RunFrozenFailure;
 
 export type FlagConfigWriteResult =
-  | { ok: true; config: FlagConfigResult; nudge: DeltaNudge }
+  | { ok: true; config: FlagConfigResult; nudge: DeltaNudge; snapshotRevision: number | null }
   | FlagConfigWriteFailure;
 
 export type PromoteFlagConfigResult =
@@ -162,15 +162,28 @@ export type PromoteFlagConfigResult =
       config: FlagConfigResult;
       diff: { before: FlagConfigResult; after: FlagConfigResult };
       nudge: DeltaNudge;
+      snapshotRevision: number | null;
     }
   | FlagConfigWriteFailure;
+
+export interface SnapshotRevisionRequest {
+  flagId: string;
+  operation: "write" | "repair" | "delete";
+}
 
 export interface ConfigStoreDeps {
   repo: Repository;
   kv: KVNamespace;
   broadcaster: { broadcast(nudge: DeltaNudge): Promise<void> | void };
-  logger?: Pick<Console, "warn">;
+  nextSnapshotRevision(request: SnapshotRevisionRequest): Promise<number> | number;
+  logger?: Pick<Console, "error" | "warn">;
   now?: () => Date;
+}
+
+export interface ConfigStoreRuntimeDeps extends ConfigStoreDeps {
+  snapshotMutations: {
+    run<T>(operation: () => Promise<T>): Promise<T>;
+  };
 }
 
 export interface Snapshot {

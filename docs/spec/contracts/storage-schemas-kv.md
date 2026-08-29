@@ -16,15 +16,16 @@ authoritative Config Store DO; control-plane readers rebuild KV from D1 (see
 [../platform/contracts-and-validation.md](../platform/contracts-and-validation.md)).
 (ADR-0025 "every KV read is Zod-parsed, including hot-path reads".)
 
-| Namespace key pattern                                   | Value schema         | TTL                          | Notes                                                                                        |
-| ------------------------------------------------------- | -------------------- | ---------------------------- | -------------------------------------------------------------------------------------------- |
-| `app:{appId}:{environmentId}:flag:{flagKey}`            | `FlagConfigKV`       | none (invalidated on change) | Hot-path flag config read; Flag CONFIGURATION is per-Environment (ADR-0027)                  |
-| `app:{appId}:{environmentId}:run:{runId}`               | `RunConfigKV`        | none                         | Hot-path live Experiment Run config, read only from `ExperimentConfigKV.liveRunId`           |
-| `app:{appId}:{environmentId}:experiment:{experimentId}` | `ExperimentConfigKV` | none (invalidated on change) | Edge Experiment config read; carries nullable `liveRunId` for evaluation and ingest          |
-| `live_run:{appId}:{environmentId}:{experimentId}`       | `LiveRunKV`          | none                         | Explicit live Run pointer written on Start and cleared on End; never inferred from latest D1 |
-| `ck:{keyMaterialHash}` / `ak:{keyHash}`                 | `CredentialCacheKV`  | active: none; revoked: 5m    | Mutable credential entry; prefixes distinguish Client Keys from API Keys                     |
-| `revoked:{credentialCacheKey}`                          | presence marker      | none                         | Terminal revocation marker; checked before the mutable credential entry                      |
-| `member-profile:{userId}`                               | `{ email }`          | none                         | SESSION_STORE identity cache for Org member email; written at login, never in D1             |
+| Namespace key pattern                                            | Value schema                              | TTL                          | Notes                                                                                        |
+| ---------------------------------------------------------------- | ----------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------- |
+| `app:{appId}:{environmentId}:flag:{flagKey}`                     | `FlagConfigKV`                            | none (invalidated on change) | Hot-path flag config read; Flag CONFIGURATION is per-Environment (ADR-0027)                  |
+| `app:{appId}:{environmentId}:control-plane-flag-config:{flagId}` | control-plane Flag Configuration snapshot | present: none; deleted: 62s  | Revisioned control-plane read snapshot; carries explicit present/deleted state               |
+| `app:{appId}:{environmentId}:run:{runId}`                        | `RunConfigKV`                             | none                         | Hot-path live Experiment Run config, read only from `ExperimentConfigKV.liveRunId`           |
+| `app:{appId}:{environmentId}:experiment:{experimentId}`          | `ExperimentConfigKV`                      | none (invalidated on change) | Edge Experiment config read; carries nullable `liveRunId` for evaluation and ingest          |
+| `live_run:{appId}:{environmentId}:{experimentId}`                | `LiveRunKV`                               | none                         | Explicit live Run pointer written on Start and cleared on End; never inferred from latest D1 |
+| `ck:{keyMaterialHash}` / `ak:{keyHash}`                          | `CredentialCacheKV`                       | active: none; revoked: 5m    | Mutable credential entry; prefixes distinguish Client Keys from API Keys                     |
+| `revoked:{credentialCacheKey}`                                   | presence marker                           | none                         | Terminal revocation marker; checked before the mutable credential entry                      |
+| `member-profile:{userId}`                                        | `{ email }`                               | none                         | SESSION_STORE identity cache for Org member email; written at login, never in D1             |
 
 ### FlagConfigKV
 
@@ -66,8 +67,43 @@ of `FlagConfigKV`, so the flag and its controlling-Experiment pointer can never 
 null `experimentId` flows straight to the evaluate path's "no live Run" branch — no separate lookup, no
 new entity, just a nullable field on config the path already reads.
 
-`ResolvedTargetingRule` contains concrete Conditions and cannot contain `segmentId`. Publication
-resolves authoring Segment references before this blob is written; edge evaluation performs no
+### Control-plane Flag Configuration snapshot
+
+The control-plane read snapshot is a flat revisioned object, not a `kvEnvelope` value. Every read
+validates `schemaVersion` and the embedded App, Environment, and Flag identity. Its state is one of:
+
+```
+{
+  schemaVersion: number
+  appId:          string
+  environmentId:  string
+  flagId:         string
+  revision:       number
+  state:          'present'
+  data:           FlagConfiguration
+}
+
+{
+  schemaVersion: number
+  appId:          string
+  environmentId:  string
+  flagId:         string
+  revision:       number
+  state:          'deleted'
+}
+```
+
+A Flag Configuration write replaces the snapshot with a higher-revision `present` value. Deletion
+writes a higher-revision tombstone before removing the evaluation snapshot, so stale Workers KV
+reads cannot make the deleted Flag Configuration authoritative again. The isolate-local
+write-through cache retains the tombstone for at most 60 seconds and removes it once KV returns an
+equal or newer revision. The KV tombstone expires after 62 seconds, matching ADR-0052's accepted
+initial-refetch-plus-five-retries propagation window. After expiry, the missing snapshot falls back
+to authoritative D1; because the Flag row is gone, the read returns `FLAG_NOT_FOUND` and does not
+repair the snapshot.
+
+`ResolvedTargetingRule` contains concrete Conditions and cannot contain `segmentId`. Snapshot writes
+resolve authoring Segment references before this blob is stored; edge evaluation performs no
 Segment read or recursive evaluation.
 
 ### RunConfigKV

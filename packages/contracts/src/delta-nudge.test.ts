@@ -14,6 +14,18 @@ describe("DeltaNudgeSchema", () => {
     }
   });
 
+  it("accepts an explicit deletion marker", () => {
+    expect(DeltaNudgeSchema.parse({ ...valid, version: 0, deleted: true })).toEqual({
+      ...valid,
+      version: 0,
+      deleted: true,
+    });
+  });
+
+  it("rejects false as an ambiguous deletion marker", () => {
+    expect(DeltaNudgeSchema.safeParse({ ...valid, deleted: false }).success).toBe(false);
+  });
+
   it("rejects an unknown type discriminator", () => {
     expect(DeltaNudgeSchema.safeParse({ ...valid, type: "stats.changed" }).success).toBe(false);
   });
