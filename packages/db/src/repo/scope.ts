@@ -126,3 +126,15 @@ export function withScope(columns: ScopeColumns, scope: TenantScope, extra?: SQL
   const base = scopePredicate(columns, scope);
   return extra ? (and(base, extra) as SQL) : base;
 }
+
+/**
+ * App-scoped predicate for an intentional cross-Environment read.
+ *
+ * The caller still supplies a minted TenantScope, so app_id remains the tenant
+ * boundary. The scoped-table method that uses this requires an explicit,
+ * non-empty Environment id set and adds that set as a separate predicate.
+ */
+export function withTenantScope(columns: ScopeColumns, scope: TenantScope, extra: SQL): SQL {
+  assertMintedScope(scope);
+  return and(eq(columns.appId, scope.appId), extra) as SQL;
+}

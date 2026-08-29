@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { FlagSchema } from "./leaf-schemas-flag";
+import { ExperimentSchema } from "./leaf-schemas-experiment";
+import { FlagSchema, PercentageRolloutSchema, TargetingRuleSchema } from "./leaf-schemas-flag";
 import {
   IdempotencyKeySchema,
   PersistedDescriptionSchema,
@@ -124,6 +125,42 @@ export type FlagListItem = z.infer<typeof FlagListItemSchema>;
 
 export const FlagListResponseSchema = listResponse(FlagListItemSchema);
 export type FlagListResponse = z.infer<typeof FlagListResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// Hydrated Flag reads
+//
+// `include=config` selects a distinct required envelope. The bare Flag and its
+// bounded list stay unchanged instead of gaining optional configuration fields.
+// ---------------------------------------------------------------------------
+
+export const HydratedFlagConfigurationSchema = z
+  .object({
+    environmentId: z.string().min(1),
+    enabled: z.boolean(),
+    availableVariantNames: z.array(z.string().min(1)),
+    targetingRules: z.array(TargetingRuleSchema),
+    rollout: PercentageRolloutSchema.nullable(),
+    experiment: ExperimentSchema.pick({ id: true, key: true }).strict().nullable(),
+  })
+  .strict();
+export type HydratedFlagConfiguration = z.infer<typeof HydratedFlagConfigurationSchema>;
+
+export const HydratedFlagResponseSchema = FlagResponseSchema.extend({
+  configurations: z.array(HydratedFlagConfigurationSchema),
+}).strict();
+export type HydratedFlagResponse = z.infer<typeof HydratedFlagResponseSchema>;
+
+export const HydratedFlagListResponseSchema = listResponse(HydratedFlagResponseSchema);
+export type HydratedFlagListResponse = z.infer<typeof HydratedFlagListResponseSchema>;
+
+export const FlagReadResponseSchema = z.union([FlagResponseSchema, HydratedFlagResponseSchema]);
+export type FlagReadResponse = z.infer<typeof FlagReadResponseSchema>;
+
+export const FlagListReadResponseSchema = z.union([
+  FlagListResponseSchema,
+  HydratedFlagListResponseSchema,
+]);
+export type FlagListReadResponse = z.infer<typeof FlagListReadResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // CreateVariantRequest (Variant sub-resource)

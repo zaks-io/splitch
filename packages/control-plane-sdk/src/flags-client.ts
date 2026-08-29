@@ -204,13 +204,15 @@ function flagsList(
   input: FlagsListInput,
   callOptions?: ControlPlaneOperationOptions,
 ) {
+  const query = {
+    ...(input.environmentId !== undefined ? { environmentId: input.environmentId } : {}),
+    ...(input.include !== undefined ? { include: input.include } : {}),
+    ...(input.envs !== undefined ? { envs: input.envs } : {}),
+  };
   const request =
-    input.environmentId === undefined
+    Object.keys(query).length === 0
       ? { param: { appId: input.appId } }
-      : {
-          param: { appId: input.appId },
-          query: { environmentId: input.environmentId },
-        };
+      : { param: { appId: input.appId }, query };
   return invokeHcRoute<FlagsListOutput>("flags_list", () =>
     hcClient.apps[":appId"].flags.$get(
       request as never,
@@ -236,11 +238,16 @@ function flagsGet(
     return Promise.reject(new FlagSelectorUnaddressableError(input.flagId));
   }
   const param = { appId: input.appId, flagId: encodeURIComponent(input.flagId) };
+  const query = {
+    ...(input.by !== undefined ? { by: input.by } : {}),
+    ...(input.include !== undefined ? { include: input.include } : {}),
+    ...(input.envs !== undefined ? { envs: input.envs } : {}),
+  };
   return invokeHcRoute<FlagsGetOutput>("flags_get", () =>
     hcClient.apps[":appId"].flags[":flagId"].$get(
-      // Omit `query` when `by` is absent so the id path stays byte-identical to
+      // Omit `query` when every option is absent so the id path stays byte-identical to
       // main (no trailing bare `?`). `as never` is the house hc pattern.
-      (input.by === undefined ? { param } : { param, query: { by: input.by } }) as never,
+      (Object.keys(query).length === 0 ? { param } : { param, query }) as never,
       hcRequestOptions(withAuthorization(hcOptions, callOptions)),
     ),
   );

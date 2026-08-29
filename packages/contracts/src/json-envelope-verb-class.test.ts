@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { z } from "zod";
+import { zodDefType, zodOptions } from "./request-body-help-unwrap";
 import { getRoute } from "./route-registry";
 
 /**
@@ -9,7 +11,12 @@ import { getRoute } from "./route-registry";
 
 function objectKeys(schema: unknown): string[] {
   const shape = (schema as { shape?: Record<string, unknown> } | undefined)?.shape;
-  return shape ? Object.keys(shape).sort() : [];
+  if (shape) return Object.keys(shape).sort();
+  const typed = schema as z.ZodTypeAny;
+  if (zodDefType(typed) !== "union") return [];
+  const options = zodOptions(typed).map(objectKeys);
+  const first = options[0] ?? [];
+  return first.filter((key) => options.every((keys) => keys.includes(key))).sort();
 }
 
 function resourceKeys(schema: unknown, sideChannels: readonly string[]): string[] {
