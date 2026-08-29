@@ -1,11 +1,10 @@
 import {
-  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
   type UnavailableControlPlaneOperationId,
   unavailableControlPlaneOperationIds,
 } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs, Registrar, RouteHandler } from "@splitch/worker-runtime";
-import { renderError } from "@splitch/worker-runtime";
+import { appAccessCovers, organizationAccessCovers, renderError } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { requireAppWrite } from "./app-authz";
 import { pathParam } from "./handler-input";
@@ -98,17 +97,12 @@ async function requireScopedOrgOwner(
   args: HandlerArgs<unknown>,
   privacyRequest: PrivacyRequest,
 ): Promise<Response | null | undefined> {
-  if (
-    args.principal.orgId !== privacyRequest.orgId &&
-    !(
-      args.principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION &&
-      args.principal.memberships?.organizations.some(
-        (membership) => membership.id === privacyRequest.orgId,
-      )
-    )
-  ) {
-    return undefined;
-  }
+  // This asks the same question as the registrar's scope step, so it asks with the
+  // registrar's predicate instead of a second copy that can drift from it. That
+  // also makes a wide principal whose memberships were never populated throw,
+  // where the optional chain this replaces read that broken invariant as an
+  // ordinary "not scoped to this organization".
+  if (!organizationAccessCovers(args.principal, privacyRequest.orgId)) return undefined;
   return requireOrgRole(
     deps,
     privacyRequest.orgId,
@@ -123,15 +117,7 @@ async function requireScopedAppAdmin(
   args: HandlerArgs<unknown>,
   appId: string,
 ): Promise<Response | null | undefined> {
-  if (
-    args.principal.appId !== appId &&
-    !(
-      args.principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION &&
-      args.principal.memberships?.apps.some((membership) => membership.id === appId)
-    )
-  ) {
-    return undefined;
-  }
+  if (!appAccessCovers(args.principal, appId)) return undefined;
   return requireAppWrite(deps, appId, args.principal, args.requestId);
 }
 

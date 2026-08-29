@@ -308,6 +308,24 @@ describe("control-plane auth middleware: rejections", () => {
     });
     expect(allowed.status).toBe(200);
   });
+
+  // The case above addresses the App by its canonical id, where selector resolution
+  // has nothing to do. A wide token holding the App now clears the App check on the
+  // slug path too, so the read-only gate is the only thing standing between it and
+  // this write -- assert that gate, not resolution, is what refuses it.
+  it("refuses a wide token on a write addressed by App slug", async () => {
+    const wide = await token(h.signer, ALICE, [], "membership-wide-read");
+    const res = await h.scopeGatedApp.request(`/apps/${PAYMENTS.appKey}`, {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${wide}`, "content-type": "application/json" },
+      body: JSON.stringify({ name: "Renamed" }),
+    });
+    expect(res.status).toBe(403);
+    expect(await bodyOf(res)).toMatchObject({
+      code: "FORBIDDEN",
+      message: "credential grants read access only",
+    });
+  });
 });
 
 describe("control-plane auth middleware: fail-loud KV fault", () => {
