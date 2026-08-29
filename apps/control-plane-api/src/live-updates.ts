@@ -8,6 +8,7 @@ import {
   emptyError,
   renderError,
   type AuthResolver,
+  type Observability,
   type Principal,
   type RateLimiter,
   requireWideMemberships,
@@ -26,6 +27,7 @@ export interface LiveUpdateDeps {
   configStore?: ConfigStoreAccess;
   repo: Repository;
   defaultHeaders?: Record<string, string>;
+  observability?: Observability;
 }
 
 export function mountLiveUpdateRoute(app: Hono, deps: LiveUpdateDeps): void {
@@ -94,7 +96,13 @@ async function handleLiveUpdate(c: Context, deps: LiveUpdateDeps): Promise<Respo
     return deps.configStore
       .liveUpdatesFor(appId, environmentId)
       .connect(serverAuthenticatedLiveUpdateRequest(resolved.principal, appId, environmentId));
-  } catch {
+  } catch (cause) {
+    deps.observability?.onError?.({
+      requestId,
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+      cause,
+    });
     return renderError(emptyError("INTERNAL_SERVER_ERROR", "unhandled runtime fault"), {
       requestId,
       defaultHeaders: deps.defaultHeaders,

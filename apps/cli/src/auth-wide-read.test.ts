@@ -105,4 +105,48 @@ describe("principal-keyed Organization discovery token reuse", () => {
     expect(run).toHaveBeenNthCalledWith(2, "Bearer selector-access-token");
     expect(stored?.credential.accessTokenBinding).toBe("app:app_1");
   });
+
+  it("does not reuse a cached wide token for a scope-free mutation", async () => {
+    let stored: CliCredentialFile | null = {
+      ...storedCredential(),
+      credential: {
+        ...storedCredential().credential,
+        accessToken: "wide-access-token",
+        accessTokenBinding: MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+      },
+    };
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = new URLSearchParams(String(init?.body));
+      expect(body.has("authorization")).toBe(false);
+      expect(body.has("app")).toBe(false);
+      expect(body.has("org")).toBe(false);
+      return Response.json({
+        access_token: "selector-access-token",
+        refresh_token: "rotated-refresh-token",
+        expires_in: 3600,
+        app_id: "app_1",
+      });
+    });
+    const credentialStore = {
+      load: async () => stored,
+      save: async (next: CliCredentialFile) => {
+        stored = next;
+      },
+      clear: async () => {
+        stored = null;
+      },
+    };
+    const run = vi.fn(async () => ({ status: 200, value: "ok" }));
+
+    await expect(
+      withAuthorizationRetry(
+        { credentialStore, fetch: fetchImpl as typeof fetch, platformTarget: "local" },
+        run,
+      ),
+    ).resolves.toBe("ok");
+
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(run).toHaveBeenCalledWith("Bearer selector-access-token");
+    expect(stored?.credential.accessTokenBinding).toBe("app:app_1");
+  });
 });
