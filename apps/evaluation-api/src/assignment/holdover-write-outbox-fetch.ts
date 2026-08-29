@@ -191,6 +191,7 @@ function parseEnsureRequest(value: unknown): {
     experimentId: requireString(value, "experimentId"),
     idType: requireString(value, "idType"),
     targetingKeyHash: requireString(value, "targetingKeyHash"),
+    identityVersion: requireString(value, "identityVersion"),
     runId: requireString(value, "runId"),
     variant: requireString(value, "variant"),
   };

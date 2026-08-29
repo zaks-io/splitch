@@ -1,6 +1,6 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { targetingRule } from "./evaluate/evaluate-path-test-fixtures";
+import { RecordingAssignmentStore, targetingRule } from "./evaluate/evaluate-path-test-fixtures";
 import { type EvaluationCommitEvent, EvaluationCommitSinkError } from "./evaluation-commit-sink";
 import {
   API_KEY,
@@ -186,6 +186,33 @@ describe("POST /api/sdk/evaluate", () => {
     // and the entity's Exposure would be lost for this Run. The re-fire instead
     // re-assigns deterministically and re-attempts the Exposure.
     expect(assignmentStore.putCalls).toEqual([]);
+  });
+});
+
+class RejectingAssignmentStore extends RecordingAssignmentStore {
+  override put(
+    input: Parameters<RecordingAssignmentStore["put"]>[0],
+  ): ReturnType<RecordingAssignmentStore["put"]> {
+    return super.put(input).then(() => {
+      throw new Error("forced stale Assignment generation");
+    });
+  }
+}
+
+describe("POST /api/sdk/evaluate Assignment completion", () => {
+  it("does not return success when the required Assignment commit rejects", async () => {
+    const assignmentStore = new RejectingAssignmentStore();
+    const { app } = await makeSdkRouteHarness({
+      assignmentStore,
+      liveRun: true,
+      runOverrides: { allocation: { control: 0, treatment: 100 }, targetingRules: [] },
+    });
+
+    const response = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
+
+    expect(response.status).toBe(503);
+    expect(((await response.json()) as ErrorResponse).code).toBe("SERVICE_UNAVAILABLE");
+    expect(assignmentStore.putCalls).toHaveLength(1);
   });
 });
 

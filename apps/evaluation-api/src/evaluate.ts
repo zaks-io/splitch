@@ -29,11 +29,6 @@ type EvaluateInput = {
 interface EvaluateRouteDeps extends EvaluatePathDeps {
   readonly exposureAssembly: ExposureAssemblyDeps;
   readonly evaluationCommitSink: EvaluationCommitSink;
-  /**
-   * `ctx.waitUntil` seam for the fire-and-forget Assignment Store write
-   * (holdover-write-contract.md). When absent (unit harnesses), the write still
-   * fires but nothing keeps the runtime alive for it.
-   */
   readonly waitUntil?: (promise: Promise<unknown>) => void;
 }
 
@@ -155,7 +150,17 @@ async function evaluateResponse(
   // first and then returning 503 would make the SDK retry hit holdover replay
   // without another Exposure, dropping the event. Writing it last lets retries
   // re-attempt the Exposure.
-  scheduleHoldoverWrite(output.result, deps);
+  try {
+    await writeHoldoverAssignment(output.result, deps);
+  } catch (cause) {
+    deps.logger?.error("assignment_store_put_failed", { cause });
+    return renderError(
+      errorResponse("SERVICE_UNAVAILABLE", "Assignment commit is temporarily unavailable"),
+      { requestId },
+    );
+  }
+  const assignmentStale = await appIdentityAdmissionValidationError(admission);
+  if (assignmentStale !== null) return renderError(assignmentStale, { requestId });
 
   const response = Response.json(DataPlaneEvaluateResponseSchema.parse(body.value));
   if (output.result.liveRunId !== null) {
@@ -177,33 +182,24 @@ async function evaluateResponse(
  * The holdover write (holdover-write-contract.md): every result that fires an
  * Exposure records its first-touch `(run_id, variant)` in the Assignment Store
  * so a Run boundary replays the sticky Variant instead of re-assigning
- * (ADR-0006). Fire-and-forget in `ctx.waitUntil` — the SDK caller never waits;
- * a failed write self-heals on the next evaluate (the writer re-asserts KV).
+ * (ADR-0006). The route waits for the durable winner because success cannot be
+ * returned while an App identity reset could still reject the Assignment.
  * Holdover replays carry `exposure: null`, so they never re-write.
  */
-function scheduleHoldoverWrite(result: EvaluateResult, deps: EvaluateRouteDeps): void {
+async function writeHoldoverAssignment(
+  result: EvaluateResult,
+  deps: EvaluateRouteDeps,
+): Promise<void> {
   const exposure = result.kind === "error" ? null : result.exposure;
   if (exposure === null) return;
-
-  const write = deps.assignmentStore
-    .put({
-      appId: exposure.appId,
-      idType: exposure.idType,
-      targetingKey: exposure.targetingKey,
-      experimentId: exposure.experimentId,
-      runId: exposure.liveRunId,
-      variant: exposure.variant,
-    })
-    .then(
-      () => undefined,
-      (cause) => {
-        // Non-blocking per the failure contract: a missed holdover write is a
-        // cosmetic cross-POP miss (assign() is deterministic), retried on the
-        // next evaluate. Loud in logs so operators see repeated failures.
-        deps.logger?.error("assignment_store_put_failed", { cause });
-      },
-    );
-  deps.waitUntil?.(write);
+  await deps.assignmentStore.put({
+    appId: exposure.appId,
+    idType: exposure.idType,
+    targetingKey: exposure.targetingKey,
+    experimentId: exposure.experimentId,
+    runId: exposure.liveRunId,
+    variant: exposure.variant,
+  });
 }
 
 async function writeEvaluationCommit(

@@ -1,4 +1,4 @@
-import { parseAppIdBody } from "./holdover-write-app-deletion-input";
+import { parseIdentityResetCompletionBody } from "./holdover-write-app-deletion-input";
 import { readAppDeletionSaga } from "./holdover-write-app-deletion-saga";
 import { appInventoryStatus } from "./holdover-write-app-inventory";
 
@@ -24,9 +24,10 @@ export async function completeHoldoverWriteAppIdentityReset(
   storage: DurableObjectStorage,
   request: Request,
   appId: string | undefined,
+  activate: (identityVersion: string) => Promise<void>,
   cancel: (appId: string, resetId: string) => Promise<CancellationResult>,
 ): Promise<Response> {
-  const parsed = await parseAppIdBody(request, appId);
+  const parsed = await parseIdentityResetCompletionBody(request, appId);
   if (!parsed.ok) return parsed.response;
   if ((await storage.get<string>(COMPLETED_IDENTITY_RESET_KEY)) === parsed.generationId) {
     return completedResponse();
@@ -35,6 +36,7 @@ export async function completeHoldoverWriteAppIdentityReset(
     return Response.json({ error: "App identity reset was not prepared" }, { status: 400 });
   }
   try {
+    await activate(parsed.identityVersion);
     if (await canCompleteCancelledReset(storage)) {
       await markCompleted(storage, parsed.generationId);
       return completedResponse();

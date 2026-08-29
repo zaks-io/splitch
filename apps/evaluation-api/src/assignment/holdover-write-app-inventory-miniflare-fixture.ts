@@ -16,6 +16,7 @@ export interface HoldoverWriteMiniflareOptions {
   missingSuppressionReadsRemaining?: number;
   pauseCancelAlarmAfterSnapshot?: boolean;
   pausePreparedAlarmAfterSnapshot?: boolean;
+  pauseAssignmentWriterPut?: boolean;
 }
 
 export interface DeadlockBarrierStatus {
@@ -24,6 +25,7 @@ export interface DeadlockBarrierStatus {
   readonly finalizeInventoryListReached: boolean;
   readonly cancelAlarmSnapshotReached: boolean;
   readonly preparedAlarmSnapshotReached: boolean;
+  readonly assignmentWriterPutReached: boolean;
 }
 
 export function miniflareWithInventoryAndOutbox(options: HoldoverWriteMiniflareOptions): Miniflare {

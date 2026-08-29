@@ -30,7 +30,11 @@ function productionAssignmentStoreScript(): string {
   const assignmentDo = readFileSync(join(root, "assignment-store-do.ts"), "utf8")
     .replace(/^import \{ DurableObject \} from "cloudflare:workers";\s*/m, "")
     .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m, "")
+    .replace(/^import[\s\S]*?from ["']\.\/assignment-store-input["'];?\s*/m, "")
     .replace(/^import[\s\S]*?from ["']\.\/assignment-store-writer["'];?\s*/m, "");
+  const assignmentInput = readFileSync(join(root, "assignment-store-input.ts"), "utf8")
+    .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m, "")
+    .replace(/^export /gm, "");
   const stubs = `
 const CURRENT_KV_SCHEMA_VERSION = 1;
 function assignmentKey(appId, idType, targetingKeyHash) {
@@ -55,6 +59,7 @@ async function readAssignmentValue(kv, key) {
     `
 import { DurableObject } from "cloudflare:workers";
 ${stubs}
+${assignmentInput}
 ${stripExport(writer)}
 ${assignmentDo}
 export default { async fetch() { return new Response("ok"); } };

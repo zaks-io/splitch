@@ -113,6 +113,7 @@ export async function ensureHoldoverWrite(
     readonly experiment_id: string;
     readonly id_type: string;
     readonly targeting_key_hash: string;
+    readonly identity_version: string;
     readonly run_id: string;
     readonly variant: string;
     readonly issued_at: string;
@@ -132,6 +133,7 @@ export async function ensureHoldoverWrite(
         experimentId: ticket.experiment_id,
         idType: ticket.id_type,
         targetingKeyHash: ticket.targeting_key_hash,
+        identityVersion: ticket.identity_version,
         runId: ticket.run_id,
         variant: ticket.variant,
       },

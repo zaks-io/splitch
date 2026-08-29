@@ -99,7 +99,7 @@ export async function completeProductionAppIdentityReset(
   nextVersion: string,
 ): Promise<void> {
   await Promise.all([
-    env.EVALUATION_API.completeAppIdentityReset(appId, resetId),
+    env.EVALUATION_API.completeAppIdentityReset(appId, resetId, nextVersion),
     env.EVENT_INGEST_API.completeAppIdentityReset(appId, resetId, nextVersion),
   ]);
 }

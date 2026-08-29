@@ -180,6 +180,7 @@ async function attemptHoldoverWriteJob(
       experimentId: job.experimentId,
       idType: job.idType,
       targetingKeyHash: job.targetingKeyHash,
+      identityVersion: job.identityVersion,
       runId: job.runId,
       variant: job.variant,
     });

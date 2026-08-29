@@ -1,4 +1,4 @@
-import type { SaltStore } from "@splitch/privacy";
+import { keyVersionOf, type SaltStore } from "@splitch/privacy";
 import {
   type AssignmentIdentity,
   type AssignmentKv,
@@ -15,6 +15,8 @@ import {
   readAssignmentValue,
   retainedAssignmentIdentities,
 } from "./assignment-store";
+import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
+import { DurableHoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
 
 export interface AssignmentWriterNamespace {
   idFromName(name: string): DurableObjectId;
@@ -31,6 +33,7 @@ export class KvAssignmentStore implements AssignmentStore {
     private readonly writerNamespace: AssignmentWriterNamespace,
     private readonly saltStore: SaltStore,
     private readonly logger?: AssignmentStoreLogger,
+    private readonly appInventory?: HoldoverWriteAppInventoryNamespace,
   ) {}
 
   async getAll(input: AssignmentIdentity): Promise<Map<string, AssignmentStoreEntry>> {
@@ -62,6 +65,15 @@ export class KvAssignmentStore implements AssignmentStore {
   async putHashed(
     input: Parameters<AssignmentStore["putHashed"]>[0],
   ): Promise<AssignmentStorePutResult> {
+    if (this.appInventory) {
+      if (input.identityVersion === undefined) {
+        throw new AssignmentStoreError("Assignment identityVersion is required");
+      }
+      return new DurableHoldoverWriteAppInventoryClient(this.appInventory).putAssignment({
+        ...input,
+        identityVersion: input.identityVersion,
+      });
+    }
     const name = assignmentWriterName(input);
     const id = this.writerNamespace.idFromName(name);
     const stub = this.writerNamespace.get(id);
@@ -74,6 +86,7 @@ export class KvAssignmentStore implements AssignmentStore {
         experimentId: input.experimentId,
         idType: input.idType,
         targetingKeyHash: input.targetingKeyHash,
+        identityVersion: input.identityVersion ?? keyVersionOf(input.targetingKeyHash),
         runId: input.runId,
         variant: input.variant,
       }),

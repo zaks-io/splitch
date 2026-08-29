@@ -241,7 +241,10 @@ async function ensureConvexHoldover(
   item: ConvexServerExposureItem,
   targetingKeyHash: string,
   config: ConvexExposureVerificationConfig,
-  deps: Pick<ConvexExposureDeps, "holdoverWrite" | "logger" | "integrationKind">,
+  deps: Pick<
+    AdmittedConvexExposureDeps,
+    "holdoverWrite" | "logger" | "integrationKind" | "identityAdmission"
+  >,
 ): Promise<ConvexServerExposureResponse["results"][number] | null> {
   try {
     const result = await deps.holdoverWrite.ensure(
@@ -250,6 +253,7 @@ async function ensureConvexHoldover(
         experimentId: item.experimentId,
         idType: item.evaluationContext.idType,
         targetingKeyHash,
+        identityVersion: deps.identityAdmission.identityVersion,
         runId: item.runId,
         variant: item.variantName,
       },

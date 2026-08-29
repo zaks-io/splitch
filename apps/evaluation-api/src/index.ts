@@ -38,8 +38,8 @@ import {
 import { HoldoverWriteOutboxDurableObject } from "./assignment/holdover-write-outbox-do";
 import { KvAssignmentStore } from "./assignment/kv-assignment-store";
 import {
-  makeEvaluationControlPlaneJwksVerifier,
   makeControlPlaneAuthResolver,
+  makeEvaluationControlPlaneJwksVerifier,
   makeSessionStore,
 } from "./control-plane-auth";
 import { makeDataPlaneAuthResolver } from "./data-plane-auth";
@@ -117,8 +117,8 @@ export class ControlPlaneEntrypoint extends WorkerEntrypoint<EvaluationApiEnv> {
     return purgeAppIdentityRetryClaims(this.env, appId, environmentIds);
   }
 
-  completeAppIdentityReset(appId: string, resetId: string): Promise<void> {
-    return completeAppIdentityReset(this.env, appId, resetId);
+  completeAppIdentityReset(appId: string, resetId: string, identityVersion: string): Promise<void> {
+    return completeAppIdentityReset(this.env, appId, resetId, identityVersion);
   }
 }
 
@@ -167,6 +167,8 @@ async function handleRequest(
       env.ASSIGNMENTS_KV,
       env.ASSIGNMENT_STORE_WRITER,
       saltStore,
+      undefined,
+      requiredHoldoverWriteAppInventoryBinding(env.HOLDOVER_WRITE_APP_INVENTORY),
     ),
     holdoverWrite: new DurableHoldoverWriteCoordinator(holdoverWriteOutbox),
     holdoverWriteOutboxCleanup: {

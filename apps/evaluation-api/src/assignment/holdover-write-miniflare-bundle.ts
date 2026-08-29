@@ -6,6 +6,10 @@ import ts from "typescript";
 import { holdoverWriteFaultHooks } from "./holdover-write-miniflare-faults";
 import { holdoverWriteInventoryClientStubs } from "./holdover-write-miniflare-harness";
 import {
+  type HoldoverWriteMiniflareOptions,
+  resolveHoldoverWriteMiniflareOptions,
+} from "./holdover-write-miniflare-options";
+import {
   readSource,
   stripExport,
   stripImport,
@@ -13,44 +17,13 @@ import {
   stripIsRecordHelpers,
 } from "./holdover-write-miniflare-source";
 
-interface HoldoverWriteMiniflareOptions {
-  registerFailsRemaining?: number;
-  suppressPutFailsRemaining?: number;
-  cancelStatePutFailsRemaining?: number;
-  cancelKvDeleteFailsRemaining?: number;
-  staleSuppressionReadsRemaining?: number;
-  writerPutFailsRemaining?: number;
-  purgeFailsRemaining?: number;
-  markTransactionFailsBeforeCommitRemaining?: number;
-  markTransactionThrowsAfterCommitRemaining?: number;
-  pauseCancelAfterKvDelete?: boolean;
-  pauseFinalizeAfterInventoryList?: boolean;
-  missingSuppressionReadsRemaining?: number;
-  pauseCancelAlarmAfterSnapshot?: boolean;
-  pausePreparedAlarmAfterSnapshot?: boolean;
-}
-
-const DEFAULT_OPTIONS = {
-  registerFailsRemaining: 0,
-  suppressPutFailsRemaining: 0,
-  cancelStatePutFailsRemaining: 0,
-  cancelKvDeleteFailsRemaining: 0,
-  staleSuppressionReadsRemaining: 0,
-  writerPutFailsRemaining: 0,
-  purgeFailsRemaining: 0,
-  markTransactionFailsBeforeCommitRemaining: 0,
-  markTransactionThrowsAfterCommitRemaining: 0,
-  pauseCancelAfterKvDelete: false,
-  pauseFinalizeAfterInventoryList: false,
-  missingSuppressionReadsRemaining: 0,
-  pauseCancelAlarmAfterSnapshot: false,
-  pausePreparedAlarmAfterSnapshot: false,
-} satisfies Required<HoldoverWriteMiniflareOptions>;
-
 export function bundleHoldoverWriteInventoryAndOutboxWorker(
   options?: HoldoverWriteMiniflareOptions,
 ): string {
-  const source = renderWorkerSource(readWorkerSources(), { ...DEFAULT_OPTIONS, ...options });
+  const source = renderWorkerSource(
+    readWorkerSources(),
+    resolveHoldoverWriteMiniflareOptions(options),
+  );
   return ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.ESNext,
@@ -72,6 +45,7 @@ function readWorkerSources() {
     sagaCancel: stripImports(readSource("holdover-write-app-deletion-saga-cancel.ts"), [
       "./assignment-store",
       "./holdover-write-app-inventory",
+      "./holdover-write-app-inventory-client",
       "./holdover-write-outbox-core",
       "./holdover-write-app-deletion-saga-storage",
     ]),
@@ -104,9 +78,20 @@ function readWorkerSources() {
       "./holdover-write-app-deletion-saga",
       "./holdover-write-app-inventory",
     ]),
+    assignmentInput: stripIsRecordHelpers(
+      stripImport(readSource("assignment-store-input.ts"), "./assignment-store"),
+    ),
+    appAssignment: stripImports(readSource("holdover-write-app-assignment.ts"), [
+      "@splitch/privacy",
+      "./assignment-store",
+      "./assignment-store-input",
+      "./holdover-write-app-inventory",
+      "./kv-assignment-store",
+    ]),
     inventoryDo: stripImports(readSource("holdover-write-app-inventory-do.ts"), [
       "cloudflare:workers",
       "./assignment-store",
+      "./holdover-write-app-assignment",
       "./holdover-write-app-inventory",
       "./holdover-write-app-identity-reset",
       "./holdover-write-app-inventory-fetch",
@@ -148,12 +133,14 @@ function readWorkerSources() {
       "./holdover-write-outbox-core",
       "./holdover-write-outbox-ensure",
       "./holdover-write-outbox-fetch",
+      "./holdover-write-outbox-binding",
     ]),
     writer: stripImport(readSource("assignment-store-writer.ts"), "./assignment-store"),
     assignmentDo: stripIsRecordHelpers(
       stripImports(readSource("assignment-store-do.ts"), [
         "cloudflare:workers",
         "./assignment-store",
+        "./assignment-store-input",
         "./assignment-store-writer",
       ]),
     ),
@@ -174,6 +161,8 @@ function renderWorkerSource(
     inventoryFetch,
     inventoryEntityPort,
     identityReset,
+    assignmentInput,
+    appAssignment,
     inventoryDo,
     core,
     ensure,
@@ -198,6 +187,7 @@ function renderWorkerSource(
     missingSuppressionReadsRemaining,
     pauseCancelAlarmAfterSnapshot,
     pausePreparedAlarmAfterSnapshot,
+    pauseAssignmentWriterPut,
   } = options;
   return `
 import { DurableObject } from "cloudflare:workers";
@@ -216,6 +206,7 @@ ${holdoverWriteInventoryClientStubs(
   missingSuppressionReadsRemaining,
   pauseCancelAlarmAfterSnapshot,
   pausePreparedAlarmAfterSnapshot,
+  pauseAssignmentWriterPut,
 )}
 ${stripExport(inventory)}
 ${stripExport(deletionInput)}
@@ -226,6 +217,8 @@ ${stripExport(saga)}
 ${stripExport(inventoryFetch)}
 ${stripExport(inventoryEntityPort)}
 ${stripExport(identityReset)}
+${stripExport(assignmentInput)}
+${stripExport(appAssignment)}
 ${inventoryDo}
 ${stripExport(core)}
 ${stripExport(ensure)}
@@ -249,6 +242,7 @@ ${holdoverWriteFaultHooks(
   missingSuppressionReadsRemaining,
   pauseCancelAlarmAfterSnapshot,
   pausePreparedAlarmAfterSnapshot,
+  pauseAssignmentWriterPut,
 )}
 export default {
   async fetch(request) {
@@ -260,6 +254,7 @@ export default {
         finalizeInventoryListReached: globalThis.__finalizeInventoryListReached,
         cancelAlarmSnapshotReached: globalThis.__cancelAlarmSnapshotReached,
         preparedAlarmSnapshotReached: globalThis.__preparedAlarmSnapshotReached,
+        assignmentWriterPutReached: globalThis.__assignmentWriterPutReached,
       });
     }
     if (url.pathname === "/__test/release-cancel-kv-delete" && request.method === "POST") {
@@ -276,6 +271,10 @@ export default {
     }
     if (url.pathname === "/__test/release-prepared-alarm-snapshot" && request.method === "POST") {
       globalThis.__preparedAlarmSnapshotReleased = true;
+      return Response.json({ released: true });
+    }
+    if (url.pathname === "/__test/release-assignment-writer-put" && request.method === "POST") {
+      globalThis.__assignmentWriterPutReleased = true;
       return Response.json({ released: true });
     }
     return new Response("harness", { status: 200 });

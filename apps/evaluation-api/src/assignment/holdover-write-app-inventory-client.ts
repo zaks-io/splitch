@@ -1,3 +1,4 @@
+import type { AssignmentStorePutResult, HashedAssignmentPutInput } from "./assignment-store";
 import type { HoldoverWriteAppDeletionSagaPhase } from "./holdover-write-app-deletion-saga";
 import {
   type HoldoverWriteAppDeletionBeginResult,
@@ -58,6 +59,13 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
     return { status: body.status };
   }
 
+  async putAssignment(
+    input: HashedAssignmentPutInput & { readonly identityVersion: string },
+  ): Promise<AssignmentStorePutResult> {
+    const body = await this.postJson(input.appId, "/put-assignment", input);
+    return parseAssignmentPutResult(body);
+  }
+
   async beginDeletion(
     appId: string,
     generationId: string,
@@ -106,10 +114,12 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
   async completeIdentityReset(
     appId: string,
     generationId: string,
+    identityVersion: string,
   ): Promise<HoldoverWriteAppInventoryCancelResult> {
     const body = await this.postJson(appId, "/complete-identity-reset", {
       appId,
       generationId,
+      identityVersion,
     });
     if (!isRecord(body) || typeof body.cancelled !== "boolean" || !Array.isArray(body.entities)) {
       throw new HoldoverWriteAppInventoryError(
@@ -226,6 +236,24 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
     }
     return response.json();
   }
+}
+
+function parseAssignmentPutResult(value: unknown): AssignmentStorePutResult {
+  if (!isRecord(value) || (value.status !== "stored" && value.status !== "existing")) {
+    throw new HoldoverWriteAppInventoryError("put-assignment returned an invalid payload");
+  }
+  const assignment = value.assignment;
+  if (
+    !isRecord(assignment) ||
+    typeof assignment.runId !== "string" ||
+    typeof assignment.variant !== "string"
+  ) {
+    throw new HoldoverWriteAppInventoryError("put-assignment returned an invalid Assignment");
+  }
+  return {
+    status: value.status,
+    assignment: { runId: assignment.runId, variant: assignment.variant },
+  };
 }
 
 function parseEntityRef(value: unknown): HoldoverWriteAppEntityRef {

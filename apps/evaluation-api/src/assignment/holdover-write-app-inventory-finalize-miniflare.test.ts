@@ -13,7 +13,8 @@ const PUT = {
   appId: "app-A",
   experimentId: "exp-checkout",
   idType: "user",
-  targetingKeyHash: "hash-entity-1",
+  targetingKeyHash: "v1:hash-entity-1",
+  identityVersion: "v1",
   runId: "run-42",
   variant: "treatment",
 } as const;

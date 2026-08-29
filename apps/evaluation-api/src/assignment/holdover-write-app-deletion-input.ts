@@ -88,6 +88,26 @@ export async function parseAppIdBody(
   return { ok: true, appId, generationId };
 }
 
+export async function parseIdentityResetCompletionBody(
+  request: Request,
+  doName: string | undefined,
+): Promise<
+  | { ok: true; appId: string; generationId: string; identityVersion: string }
+  | { ok: false; response: Response }
+> {
+  const parsed = await parseAppIdBody(request.clone() as Request, doName);
+  if (!parsed.ok) return parsed;
+  const body: unknown = await request.json().catch(() => ({}));
+  const identityVersion = readString(body, "identityVersion");
+  if (identityVersion.length === 0) {
+    return {
+      ok: false,
+      response: Response.json({ error: "identityVersion is required" }, { status: 400 }),
+    };
+  }
+  return { ...parsed, identityVersion };
+}
+
 export async function parseMarkD1Body(
   request: Request,
 ): Promise<

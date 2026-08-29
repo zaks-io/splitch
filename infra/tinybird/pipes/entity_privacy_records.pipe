@@ -26,10 +26,14 @@ SQL >
             'event_id', event_id,
             'variant', ifNull(variant, '')
         )) AS record
-    FROM raw_events
-    WHERE app_id = {{String(app_id)}}
-        AND id_type = {{String(id_type)}}
-        AND entity_family_hash = {{String(entity_family_hash)}}
+    FROM raw_events AS events
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', events.targeting_key_hash)[1]
+    WHERE events.app_id = {{String(app_id)}}
+        AND events.id_type = {{String(id_type)}}
+        AND events.entity_family_hash = {{String(entity_family_hash)}}
+        AND generation_tombstones.app_id = ''
     UNION ALL
     SELECT
         'metric_events' AS store,
@@ -45,10 +49,14 @@ SQL >
             'fields', fields,
             'dimensions', dimensions
         )) AS record
-    FROM metric_events
-    WHERE app_id = {{String(app_id)}}
-        AND id_type = {{String(id_type)}}
-        AND entity_family_hash = {{String(entity_family_hash)}}
+    FROM metric_events AS events
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', events.targeting_key_hash)[1]
+    WHERE events.app_id = {{String(app_id)}}
+        AND events.id_type = {{String(id_type)}}
+        AND events.entity_family_hash = {{String(entity_family_hash)}}
+        AND generation_tombstones.app_id = ''
     UNION ALL
     SELECT
         'deduped_exposures' AS store,
@@ -62,10 +70,14 @@ SQL >
             'run_id', run_id,
             'variant', variant
         )) AS record
-    FROM deduped_exposures
-    WHERE app_id = {{String(app_id)}}
-        AND id_type = {{String(id_type)}}
-        AND entity_family_hash = {{String(entity_family_hash)}}
+    FROM deduped_exposures AS exposures
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = exposures.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', exposures.targeting_key_hash)[1]
+    WHERE exposures.app_id = {{String(app_id)}}
+        AND exposures.id_type = {{String(id_type)}}
+        AND exposures.entity_family_hash = {{String(entity_family_hash)}}
+        AND generation_tombstones.app_id = ''
     UNION ALL
     SELECT
         'deduped_metric_events_state' AS store,
@@ -77,10 +89,14 @@ SQL >
             'environment_id', environment_id,
             'event_definition_id', event_definition_id
         )) AS record
-    FROM deduped_metric_events_state
-    WHERE app_id = {{String(app_id)}}
-        AND id_type = {{String(id_type)}}
-        AND entity_family_hash = {{String(entity_family_hash)}}
+    FROM deduped_metric_events_state AS events
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', events.targeting_key_hash)[1]
+    WHERE events.app_id = {{String(app_id)}}
+        AND events.id_type = {{String(id_type)}}
+        AND events.entity_family_hash = {{String(entity_family_hash)}}
+        AND generation_tombstones.app_id = ''
 
 NODE entity_records
 SQL >

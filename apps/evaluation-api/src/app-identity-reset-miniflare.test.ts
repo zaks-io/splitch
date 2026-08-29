@@ -3,16 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { completeAppIdentityReset, purgeAppIdentityAssignments } from "./app-identity-reset";
 import type { HoldoverWriteAppInventoryNamespace } from "./assignment/holdover-write-app-inventory";
 import { DurableHoldoverWriteAppInventoryClient } from "./assignment/holdover-write-app-inventory-client";
-import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store";
-import { KvAssignmentStore } from "./assignment/kv-assignment-store";
 import { bundleHoldoverWriteInventoryAndOutboxWorker } from "./assignment/holdover-write-miniflare-bundle";
 import {
   DurableHoldoverWriteCoordinator,
   type HoldoverWriteOutboxNamespace,
 } from "./assignment/holdover-write-outbox";
-import { completeAppIdentityReset, purgeAppIdentityAssignments } from "./app-identity-reset";
+import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store";
+import { KvAssignmentStore } from "./assignment/kv-assignment-store";
 import type { EvaluationApiEnv } from "./env";
 
 const APP_ID = "app-A";
@@ -22,6 +22,7 @@ const PUT_A = {
   experimentId: "exp-a",
   idType: "user",
   targetingKeyHash: "v1:hash-a",
+  identityVersion: "v1",
   runId: "run-a",
   variant: "control",
 } as const;
@@ -32,6 +33,13 @@ const PUT_B = {
   targetingKeyHash: "v1:hash-b",
   runId: "run-b",
   variant: "treatment",
+} as const;
+const PUT_C = {
+  ...PUT_A,
+  experimentId: "exp-c",
+  idType: "account",
+  targetingKeyHash: "v1:hash-c",
+  runId: "run-c",
 } as const;
 
 let mf: Miniflare | undefined;
@@ -52,6 +60,14 @@ describe("App identity reset with production Durable Objects", () => {
     mf = await startMiniflare(persistenceRoot, 1);
     const first = await bindings(mf);
     const coordinator = new DurableHoldoverWriteCoordinator(first.outboxes);
+    const directStore = new KvAssignmentStore(
+      first.kv,
+      first.writers,
+      {} as never,
+      undefined,
+      first.inventoryNamespace,
+    );
+    await expect(directStore.putHashed(PUT_C)).resolves.toMatchObject({ status: "stored" });
     await expect(coordinator.ensure(PUT_A, { sourceCreatedAtMs: 8_000 })).resolves.toEqual({
       status: "completed",
     });
@@ -69,6 +85,7 @@ describe("App identity reset with production Durable Objects", () => {
       entities: expect.arrayContaining([
         { idType: PUT_A.idType, targetingKeyHash: PUT_A.targetingKeyHash },
         { idType: PUT_B.idType, targetingKeyHash: PUT_B.targetingKeyHash },
+        { idType: PUT_C.idType, targetingKeyHash: PUT_C.targetingKeyHash },
       ]),
     });
 
@@ -79,6 +96,7 @@ describe("App identity reset with production Durable Objects", () => {
     const oldHashRetries = await Promise.allSettled([
       assignmentStore.putHashed(PUT_A),
       assignmentStore.putHashed(PUT_B),
+      assignmentStore.putHashed(PUT_C),
     ]);
     const tombstoned = oldHashRetries.filter(
       (result): result is PromiseRejectedResult => result.status === "rejected",
@@ -87,7 +105,7 @@ describe("App identity reset with production Durable Objects", () => {
     expect(String(tombstoned[0]?.reason)).toMatch(/Entity assignments are deleted/u);
 
     await expect(purgeAppIdentityAssignments(restarted.env, APP_ID, RESET_ID)).resolves.toBe(
-      "evaluation-assignments:kv=2;durable_inventory=empty;durable_objects=4",
+      "evaluation-assignments:kv=3;durable_inventory=empty;durable_objects=6",
     );
     await expect(restarted.inventory.status(APP_ID)).resolves.toMatchObject({
       generationId: RESET_ID,
@@ -97,7 +115,7 @@ describe("App identity reset with production Durable Objects", () => {
     });
 
     await expect(
-      completeAppIdentityReset(restarted.env, APP_ID, RESET_ID),
+      completeAppIdentityReset(restarted.env, APP_ID, RESET_ID, "app-v2"),
     ).resolves.toBeUndefined();
     await expect(restarted.inventory.status(APP_ID)).resolves.toMatchObject({
       generationId: null,
@@ -146,6 +164,7 @@ async function bindings(runtime: Miniflare) {
     writers,
     outboxes,
     inventory: new DurableHoldoverWriteAppInventoryClient(inventoryNamespace),
+    inventoryNamespace,
     env: {
       ASSIGNMENTS_KV: kv,
       ASSIGNMENT_STORE_WRITER: writers,

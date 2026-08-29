@@ -71,6 +71,7 @@ interface SdkRouteHarnessOptions {
   readonly rateLimiter?: RateLimiter;
   readonly clientKeyRateLimitRps?: number | null;
   readonly saltStore?: SaltStore;
+  readonly assignmentStore?: RecordingAssignmentStore;
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -194,7 +195,7 @@ async function seededCredentialKv(options: SdkRouteHarnessOptions = {}): Promise
 export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) {
   const configKv = seededConfigKv(options);
   const credentialKv = await seededCredentialKv(options);
-  const assignmentStore = new RecordingAssignmentStore({ holdovers: options.holdovers });
+  const assignmentStore = routeAssignmentStore(options);
   const exposureSink = new RecordingExposureSink();
   const evaluationUsageSink = options.evaluationUsageSink ?? new RecordingEvaluationUsageSink();
   const evaluationCommitSink =
@@ -247,6 +248,10 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     evaluationUsageSink,
     logger,
   };
+}
+
+function routeAssignmentStore(options: SdkRouteHarnessOptions): RecordingAssignmentStore {
+  return options.assignmentStore ?? new RecordingAssignmentStore({ holdovers: options.holdovers });
 }
 
 function routeSaltStore(options: SdkRouteHarnessOptions): SaltStore {

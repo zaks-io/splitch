@@ -15,6 +15,7 @@ export function holdoverWriteInventoryClientStubs(
   missingSuppressionReadsRemaining: number,
   pauseCancelAlarmAfterSnapshot: boolean,
   pausePreparedAlarmAfterSnapshot: boolean,
+  pauseAssignmentWriterPut: boolean,
 ): string {
   const transportAware = registerFailsRemaining > 0;
   return `
@@ -50,9 +51,21 @@ globalThis.__cancelAlarmSnapshotReleased = false;
 globalThis.__preparedAlarmSnapshotReached = false;
 globalThis.__preparedAlarmSnapshotReleased = false;
 globalThis.__alarmInvocationActive = false;
+globalThis.__pauseAssignmentWriterPut = ${String(pauseAssignmentWriterPut)};
+globalThis.__assignmentWriterPutReached = false;
+globalThis.__assignmentWriterPutReleased = false;
 const CURRENT_KV_SCHEMA_VERSION = 1;
 function assignmentWriterName(input) {
   return input.appId + ":" + input.idType + ":" + input.targetingKeyHash;
+}
+function keyVersionOf(targetingKeyHash) {
+  const separator = targetingKeyHash.indexOf(":");
+  if (separator <= 0) throw new Error("privacy: invalid Targeting Key hash");
+  return targetingKeyHash.slice(0, separator);
+}
+function requiredHoldoverWriteAppInventoryBinding(namespace) {
+  if (!namespace) throw new Error("HOLDOVER_WRITE_APP_INVENTORY is required");
+  return namespace;
 }
 function assignmentKey(appId, idType, targetingKeyHash) {
   return "assignment:" + appId + ":" + idType + ":" + targetingKeyHash;
@@ -217,6 +230,19 @@ class DurableHoldoverWriteAppInventoryClient {
           : `"mark-entity-purged failed"`
       });
     }
+  }
+  async putAssignment(input) {
+    const stub = this.namespace.get(this.namespace.idFromName(input.appId));
+    const response = await stub.fetch(
+      "https://holdover-write-app-inventory.local/put-assignment",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+    if (!response.ok) throw new Error("put-assignment failed");
+    return response.json();
   }
 }
 function inventoryRegisterPortForApp(client, appId) {

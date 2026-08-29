@@ -2,7 +2,10 @@ import type { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it } from "vitest";
 import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
 import { DurableHoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
-import { miniflareWithInventoryAndOutbox } from "./holdover-write-app-inventory-miniflare-fixture";
+import {
+  miniflareWithInventoryAndOutbox,
+  waitForDeadlockBarrier,
+} from "./holdover-write-app-inventory-miniflare-fixture";
 import {
   DurableHoldoverWriteCoordinator,
   type HoldoverWriteOutboxNamespace,
@@ -13,7 +16,8 @@ const PUT = {
   appId: "app-A",
   experimentId: "exp-checkout",
   idType: "user",
-  targetingKeyHash: "hash-entity-1",
+  targetingKeyHash: "v1:hash-entity-1",
+  identityVersion: "v1",
   runId: "run-42",
   variant: "treatment",
 } as const;
@@ -24,6 +28,37 @@ let mf: Miniflare | undefined;
 afterEach(async () => {
   await mf?.dispose();
   mf = undefined;
+});
+
+describe("HoldoverWriteAppInventoryDurableObject Assignment reset serialization", () => {
+  it("serializes reset after durable writer admission and before the writer mutation", async () => {
+    mf = miniflareWithInventoryAndOutbox({
+      registerFailsRemaining: 0,
+      pauseAssignmentWriterPut: true,
+    });
+    const inventoryNs = (await mf.getDurableObjectNamespace(
+      "HOLDOVER_WRITE_APP_INVENTORY",
+    )) as unknown as HoldoverWriteAppInventoryNamespace;
+    const inventory = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
+
+    const put = inventory.putAssignment(PUT);
+    await waitForDeadlockBarrier(mf, (status) => status.assignmentWriterPutReached);
+    let deletionSettled = false;
+    const deletion = inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000).finally(() => {
+      deletionSettled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(deletionSettled).toBe(false);
+
+    await mf.dispatchFetch("https://harness.local/__test/release-assignment-writer-put", {
+      method: "POST",
+    });
+    await expect(put).resolves.toMatchObject({ status: "stored" });
+    await expect(deletion).resolves.toMatchObject({ suppressed: true });
+    await expect(inventory.status(PUT.appId)).resolves.toMatchObject({
+      entities: [{ idType: PUT.idType, targetingKeyHash: PUT.targetingKeyHash }],
+    });
+  });
 });
 
 describe("HoldoverWriteAppInventoryDurableObject via Miniflare", () => {
@@ -137,7 +172,7 @@ describe("HoldoverWriteAppInventoryDurableObject via Miniflare", () => {
     expect(await kv.get(appHoldoverWriteSuppressKey(PUT.appId))).toBeNull();
   });
 
-  it("recovers identity reset completion after cancellation committed before its marker", async () => {
+  it("retries identity reset completion idempotently", async () => {
     mf = await miniflareWithInventoryAndOutbox({ registerFailsRemaining: 0 });
     const inventoryNs = (await mf.getDurableObjectNamespace(
       "HOLDOVER_WRITE_APP_INVENTORY",
@@ -145,18 +180,12 @@ describe("HoldoverWriteAppInventoryDurableObject via Miniflare", () => {
     const inventory = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
 
     await inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000);
-    await expect(inventory.cancelDeletion(PUT.appId, GENERATION_ID)).resolves.toMatchObject({
-      cancelled: true,
-      done: true,
-      sagaPhase: null,
-    });
-
     const restartedClient = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
     await expect(
-      restartedClient.completeIdentityReset(PUT.appId, GENERATION_ID),
+      restartedClient.completeIdentityReset(PUT.appId, GENERATION_ID, "app-v2"),
     ).resolves.toMatchObject({ cancelled: true, done: true, sagaPhase: null });
     await expect(
-      restartedClient.completeIdentityReset(PUT.appId, GENERATION_ID),
+      restartedClient.completeIdentityReset(PUT.appId, GENERATION_ID, "app-v2"),
     ).resolves.toMatchObject({ cancelled: true, done: true, sagaPhase: null });
     expect(await restartedClient.status(PUT.appId)).toMatchObject({
       suppressed: false,

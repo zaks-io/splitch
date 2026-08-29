@@ -13,6 +13,10 @@ export async function purgeAppIdentityAssignments(
   const inventory = new DurableHoldoverWriteAppInventoryClient(
     required(env.HOLDOVER_WRITE_APP_INVENTORY, "HOLDOVER_WRITE_APP_INVENTORY"),
   );
+  const status = await inventory.status(appId);
+  if (isOpenInventory(status)) {
+    await registerSettledAssignmentWriters(env.ASSIGNMENTS_KV, inventory, appId);
+  }
   await inventory.beginDeletion(appId, resetId, Date.now());
   const frozen = await frozenResetInventory(inventory, appId, resetId);
   let durableObjects = 0;
@@ -67,13 +71,14 @@ export async function completeAppIdentityReset(
   env: EvaluationApiEnv,
   appId: string,
   resetId: string,
+  identityVersion: string,
 ): Promise<void> {
   const inventory = new DurableHoldoverWriteAppInventoryClient(
     required(env.HOLDOVER_WRITE_APP_INVENTORY, "HOLDOVER_WRITE_APP_INVENTORY"),
   );
   const status = await inventory.status(appId);
   assertResetCancellationReady(status, resetId);
-  const cancellation = await inventory.completeIdentityReset(appId, resetId);
+  const cancellation = await inventory.completeIdentityReset(appId, resetId, identityVersion);
   if (!cancellation.cancelled || !cancellation.done) {
     throw new Error(
       `App identity reset Assignment cancellation is incomplete in phase ${cancellation.sagaPhase ?? "idle"} with ${String(cancellation.entities.length)} Entity checkpoint(s) pending`,
@@ -106,6 +111,16 @@ function isIdleInventory(status: HoldoverWriteAppInventoryStatus): boolean {
     !status.deletionComplete &&
     status.deleteBeforeTsMs === null &&
     status.entities.length === 0 &&
+    status.sagaPhase === null
+  );
+}
+
+function isOpenInventory(status: HoldoverWriteAppInventoryStatus): boolean {
+  return (
+    status.generationId === null &&
+    !status.suppressed &&
+    !status.deletionComplete &&
+    status.deleteBeforeTsMs === null &&
     status.sagaPhase === null
   );
 }
@@ -174,6 +189,41 @@ async function deleteKvPrefix(kv: KVNamespace, prefix: string): Promise<number> 
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
   return deleted;
+}
+
+async function registerSettledAssignmentWriters(
+  kv: KVNamespace,
+  inventory: DurableHoldoverWriteAppInventoryClient,
+  appId: string,
+): Promise<void> {
+  const prefix = `assignment:${appId}:`;
+  let cursor: string | undefined;
+  do {
+    const page = await kv.list({ prefix, ...(cursor ? { cursor } : {}) });
+    for (const key of page.keys) {
+      const ref = assignmentRefFromKvKey(key.name, prefix);
+      const result = await inventory.registerEntity(appId, ref);
+      if (result.status !== "registered") {
+        throw new Error("App identity reset Assignment inventory froze during winner discovery");
+      }
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+}
+
+function assignmentRefFromKvKey(
+  key: string,
+  prefix: string,
+): { readonly idType: string; readonly targetingKeyHash: string } {
+  const suffix = key.slice(prefix.length);
+  const separator = suffix.indexOf(":");
+  if (!key.startsWith(prefix) || separator <= 0 || separator === suffix.length - 1) {
+    throw new Error(`Invalid Assignment KV key in App reset inventory: ${key}`);
+  }
+  return {
+    idType: suffix.slice(0, separator),
+    targetingKeyHash: suffix.slice(separator + 1),
+  };
 }
 
 function required<T>(value: T | undefined, name: string): T {

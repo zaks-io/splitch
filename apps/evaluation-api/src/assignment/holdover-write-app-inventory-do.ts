@@ -1,6 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import type { AssignmentKv } from "./assignment-store";
 import {
+  type HoldoverWriteAppAssignmentEnv,
+  putHoldoverWriteAppAssignment,
+} from "./holdover-write-app-assignment";
+import {
   parseAppIdBody,
   parseDeletionBody,
   parseMarkD1Body,
@@ -20,6 +24,7 @@ import {
   prepareHoldoverWriteAppIdentityReset,
 } from "./holdover-write-app-identity-reset";
 import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
+import { activateAppInventoryIdentityVersion } from "./holdover-write-app-inventory";
 import {
   purgeAppDeletionEntityOutbox,
   resumeAppDeletionEntityAlarms,
@@ -27,7 +32,7 @@ import {
 import { handleHoldoverWriteAppInventoryFetch } from "./holdover-write-app-inventory-fetch";
 import type { HoldoverWriteOutboxNamespace } from "./holdover-write-outbox";
 
-export interface HoldoverWriteAppInventoryEnv {
+export interface HoldoverWriteAppInventoryEnv extends HoldoverWriteAppAssignmentEnv {
   ASSIGNMENTS_KV: AssignmentKv;
   HOLDOVER_WRITE_OUTBOX?: HoldoverWriteOutboxNamespace;
   HOLDOVER_WRITE_APP_INVENTORY?: HoldoverWriteAppInventoryNamespace;
@@ -64,6 +69,11 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
 
   private async handleFetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname === "/put-assignment") {
+      const appId = this.ctx.id.name;
+      if (!appId) throw new Error("App inventory Durable Object must be named");
+      return putHoldoverWriteAppAssignment(this.ctx.storage, this.env, appId, request);
+    }
     if (request.method === "POST" && url.pathname === "/begin-deletion") {
       return this.beginDeletion(request);
     }
@@ -154,6 +164,10 @@ export class HoldoverWriteAppInventoryDurableObject extends DurableObject<Holdov
       this.ctx.storage,
       request,
       this.ctx.id.name,
+      (identityVersion) =>
+        this.serialized(() =>
+          activateAppInventoryIdentityVersion(this.ctx.storage, identityVersion),
+        ),
       (appId, resetId) => this.advanceCancel(appId, resetId),
     );
   }
