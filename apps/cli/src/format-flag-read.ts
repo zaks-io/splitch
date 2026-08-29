@@ -2,25 +2,34 @@ import {
   FlagListResponseSchema,
   FlagResponseSchema,
   HydratedFlagListResponseSchema,
-  HydratedFlagResponseSchema,
   type HydratedFlagResponse,
+  HydratedFlagResponseSchema,
 } from "@splitch/sdk/control-plane";
 import { SplitchCliError } from "./errors.js";
 
 export function formatFlagRead(operationId: string, payload: unknown, summary: boolean): string {
   if (summary) {
-    return operationId === "flags_list"
-      ? formatFlagSummaryList(FlagListResponseSchema.parse(payload).items)
-      : formatFlagSummaryList([FlagResponseSchema.parse(payload)]);
+    return formatFlagSummary(operationId, payload);
   }
   if (operationId === "flags_list") {
     const parsed = HydratedFlagListResponseSchema.safeParse(payload);
-    if (!parsed.success) throw missingHydrationError(operationId);
+    if (!parsed.success) throw flagReadContractError(operationId, "hydrated");
     return parsed.data.items.map(formatHydratedFlag).join("\n\n");
   }
   const parsed = HydratedFlagResponseSchema.safeParse(payload);
-  if (!parsed.success) throw missingHydrationError(operationId);
+  if (!parsed.success) throw flagReadContractError(operationId, "hydrated");
   return formatHydratedFlag(parsed.data);
+}
+
+function formatFlagSummary(operationId: string, payload: unknown): string {
+  const parsed =
+    operationId === "flags_list"
+      ? FlagListResponseSchema.safeParse(payload)
+      : FlagResponseSchema.safeParse(payload);
+  if (!parsed.success) throw flagReadContractError(operationId, "summary");
+  return operationId === "flags_list"
+    ? formatFlagSummaryList((parsed.data as { items: SummaryFlag[] }).items)
+    : formatFlagSummaryList([parsed.data as SummaryFlag]);
 }
 
 export function assertHydratedFlagRead(operationId: string, payload: unknown): void {
@@ -28,13 +37,16 @@ export function assertHydratedFlagRead(operationId: string, payload: unknown): v
     operationId === "flags_list"
       ? HydratedFlagListResponseSchema.safeParse(payload)
       : HydratedFlagResponseSchema.safeParse(payload);
-  if (!parsed.success) throw missingHydrationError(operationId);
+  if (!parsed.success) throw flagReadContractError(operationId, "hydrated");
 }
 
-function missingHydrationError(operationId: string): SplitchCliError {
+function flagReadContractError(operationId: string, mode: "summary" | "hydrated"): SplitchCliError {
   return new SplitchCliError({
-    code: "CLI_UNEXPECTED_ERROR",
-    causeSummary: `${operationId} requested complete Flag Configurations, but the server returned an unhydrated response`,
+    code: "INTERNAL_SERVER_ERROR",
+    causeSummary:
+      mode === "hydrated"
+        ? `${operationId} requested complete Flag Configurations, but the server returned an unhydrated response`
+        : `${operationId} requested a compact Flag summary, but the server returned an out-of-contract response`,
     remediation:
       "Update the server to the SPL-529 Flag-read contract or report the response mismatch",
   });

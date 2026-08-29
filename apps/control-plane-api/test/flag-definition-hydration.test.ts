@@ -192,6 +192,32 @@ describe("hydrated Flag definition reads", () => {
     expect(await response.json()).toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
   });
 
+  it("names the Flag and Environment when a Configuration row is missing", async () => {
+    const createdApp = await createDefaultApp(h);
+    const jwt = await appToken(h, createdApp.app.id);
+    const flag = await createFlag(h, createdApp.app.id, jwt);
+    const prod = requiredEnvironment(createdApp.environments, "prod");
+
+    await h.bindings.d1
+      .prepare("DELETE FROM flag_configs WHERE app_id = ? AND environment_id = ? AND flag_id = ?")
+      .bind(createdApp.app.id, prod.id, flag.id)
+      .run();
+
+    const response = await request(
+      h,
+      "GET",
+      `/apps/${createdApp.app.id}/flags/${flag.id}?include=config`,
+      jwt,
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      code: "INTERNAL_SERVER_ERROR",
+      message: `Flag ${flag.id} has no Configuration in Environment ${prod.id}`,
+      details: { fault: "FLAG_CONFIGURATION_MISSING" },
+    });
+  });
+
   it("makes a foreign Environment id indistinguishable from a nonexistent id", async () => {
     const createdApp = await createDefaultApp(h);
     const jwt = await appToken(h, createdApp.app.id);

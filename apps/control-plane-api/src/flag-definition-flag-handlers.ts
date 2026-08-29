@@ -5,7 +5,7 @@ import {
   type Variant,
 } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
-import type { HandlerArgs } from "@splitch/worker-runtime";
+import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
 import { flagNotFound, validationErrors } from "./flag-definition-errors";
 import {
@@ -17,7 +17,7 @@ import {
   type Result,
   serializeSchema,
 } from "./flag-definition-handler-utils";
-import { hydrateFlags } from "./flag-definition-hydration";
+import { FlagConfigurationMissingError, hydrateFlags } from "./flag-definition-hydration";
 import {
   flagFrom,
   flagResponse,
@@ -84,8 +84,10 @@ export async function listFlags(
             rows.map((row) => flagFrom(row, catalogs.get(row.id) ?? [])),
           )
         : withEnvironmentConfigurations(deps, appId, environmentId, rows, catalogsResult);
+  const resolvedItems = await diagnosableHydration(requestId, () => items);
+  if (resolvedItems instanceof Response) return resolvedItems;
   return Response.json({
-    items: await items,
+    items: resolvedItems,
     readTruncated,
     readLimit,
     cursor,
@@ -148,18 +150,40 @@ export async function getFlag(
   const flag = await deps.repo.flags.getFlag(appScope(appId), flagId);
   if (!flag) return flagNotFound(requestId);
   if (include === "config") {
-    const hydrated = await hydrateFlags(
-      deps,
-      appId,
-      [flag],
-      deps.repo.flags.listVariantsForFlags(appScope(appId), [flag.id]),
-      resolvedEnvironmentIdsFromQuery(input),
+    const hydrated = await diagnosableHydration(requestId, () =>
+      hydrateFlags(
+        deps,
+        appId,
+        [flag],
+        deps.repo.flags.listVariantsForFlags(appScope(appId), [flag.id]),
+        resolvedEnvironmentIdsFromQuery(input),
+      ),
     );
+    if (hydrated instanceof Response) return hydrated;
     const response = hydrated[0];
     if (!response) throw new Error("hydrated flag get: expected one Flag response");
     return Response.json(response);
   }
   return Response.json(await flagResponse(deps.repo, appId, flag));
+}
+
+async function diagnosableHydration<T>(
+  requestId: string,
+  body: () => Promise<T>,
+): Promise<T | Response> {
+  try {
+    return await body();
+  } catch (cause) {
+    if (!(cause instanceof FlagConfigurationMissingError)) throw cause;
+    return renderError(
+      {
+        code: "INTERNAL_SERVER_ERROR",
+        message: cause.message,
+        details: { fault: "FLAG_CONFIGURATION_MISSING" },
+      },
+      { requestId },
+    );
+  }
 }
 
 function resolvedEnvironmentIdsFromQuery(input: unknown): string[] | undefined {

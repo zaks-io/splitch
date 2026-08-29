@@ -1,11 +1,10 @@
-import type { CliCommandDefinition } from "./command-registry.js";
 import { writeCliError } from "./errors.js";
 import type { CliIo, CliResult } from "./execute-types.js";
 import { EXIT_USAGE } from "./exit-codes.js";
 import type { ParsedInvocation } from "./parse-args.js";
 
 export function validateFlagReadUsage(
-  command: CliCommandDefinition,
+  command: { readonly operationId: string | null; readonly path: readonly string[] },
   invocation: ParsedInvocation,
   io: CliIo,
 ): CliResult | null {

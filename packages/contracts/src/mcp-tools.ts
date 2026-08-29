@@ -119,7 +119,18 @@ function deriveInputSchema(route: ApiRouteContract): z.ZodTypeAny {
     }
     return body;
   }
-  return z.object(withIdempotencyKeyField(route, shape));
+  return z.object(withFlagReadFields(route, withIdempotencyKeyField(route, shape)));
+}
+
+function withFlagReadFields(route: ApiRouteContract, shape: z.ZodRawShape): z.ZodRawShape {
+  if (route.operationId !== "flags_list" && route.operationId !== "flags_get") return shape;
+  return {
+    ...shape,
+    summary: z
+      .boolean()
+      .optional()
+      .describe("Return the compact Flag definition response instead of hydrated Configurations."),
+  };
 }
 
 /** A non-object body can only be the whole tool input when the route needs no sibling fields. */

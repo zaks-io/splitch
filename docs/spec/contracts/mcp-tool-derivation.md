@@ -121,7 +121,10 @@ three tools to exist.
 definition, Variant catalog, every requested Environment's complete Flag Configuration, and its
 running Experiment reference. The derived input keeps `include` and the optional comma-separated
 Environment ID-or-key `envs` selector subset visible; omitting `envs` hydrates every Environment in
-the App.
+the App. Both tools also expose `summary: boolean`, matching the CLI `--summary` capability. When
+`summary` is true, MCP omits the hydration default and returns the compact Flag definition response.
+For `flags_list`, a caller-supplied `environmentId` without `summary` becomes the equivalent
+`include=config&envs={environmentId}` request, so a default never creates an invalid query.
 
 ### Variants (Flag sub-resource)
 

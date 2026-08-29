@@ -309,5 +309,8 @@ export function handleExecutionError(error: unknown, io: CliIo): CliResult {
   if (cliError.code === "CLI_SCOPE_UNRESOLVED" || cliError.code === "CLI_TOKEN_BINDING_REFUSED") {
     return { exitCode: EXIT_SCOPE };
   }
+  if (cliError.code === "INTERNAL_SERVER_ERROR") {
+    return { exitCode: EXIT_API };
+  }
   return { exitCode: EXIT_USAGE };
 }

@@ -1,4 +1,4 @@
-import { and, asc, eq, or } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { appMemberships, apps, environments, organizations, orgMemberships } from "../schema/index";
 import type { Db } from "./client";
 import type { TenantScope } from "./scope";
@@ -52,6 +52,26 @@ export function makeIdentitySelectorReads(db: Db) {
           and(
             eq(environments.appId, scope.appId),
             or(eq(environments.id, selector), eq(environments.key, selector)),
+          ),
+        )
+        .orderBy(asc(environments.id));
+    },
+
+    findEnvironmentSelectorCandidatesForSelectors(
+      scope: TenantScope,
+      selectors: readonly string[],
+    ): Promise<EnvironmentSelectorCandidate[]> {
+      if (selectors.length === 0) return Promise.resolve([]);
+      return db
+        .select({
+          environmentId: environments.id,
+          environmentKey: environments.key,
+        })
+        .from(environments)
+        .where(
+          and(
+            eq(environments.appId, scope.appId),
+            or(inArray(environments.id, [...selectors]), inArray(environments.key, [...selectors])),
           ),
         )
         .orderBy(asc(environments.id));

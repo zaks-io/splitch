@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
-import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
+import { EXIT_API, EXIT_OK } from "./exit-codes.js";
 import { FakeCliTransport, flagListPage, flagRecord, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
@@ -197,7 +197,7 @@ describe("hydrated Flag reads", () => {
       fetch: transport.fetch,
     });
 
-    expect(code).toBe(EXIT_USAGE);
+    expect(code).toBe(EXIT_API);
     expect(error).toHaveBeenCalledWith(
       expect.stringContaining("server returned an unhydrated response"),
     );
@@ -205,6 +205,28 @@ describe("hydrated Flag reads", () => {
 });
 
 describe("flags list --summary", () => {
+  it("returns the curated server-contract error for a malformed summary envelope", async () => {
+    const credentials = await credentialPath();
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => !new URL(request.url).searchParams.has("include"),
+        status: 200,
+        body: hydratedPage,
+      },
+    ]);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli(["flags", "list", "--app", "app_1", "--summary"], {
+      credentialPath: credentials,
+      fetch: transport.fetch,
+    });
+
+    expect(code).toBe(EXIT_API);
+    expect(error.mock.calls.join(" ")).toContain("INTERNAL_SERVER_ERROR");
+    expect(error.mock.calls.join(" ")).toContain("compact Flag summary");
+    expect(error.mock.calls.join(" ")).not.toContain("invalid_type");
+  });
+
   it("uses the compact list-table pattern without requesting hydration", async () => {
     const credentials = await credentialPath();
     const transport = new FakeCliTransport([

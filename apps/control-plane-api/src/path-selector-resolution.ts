@@ -7,6 +7,11 @@ import {
   appAccessCovers,
   type Principal,
 } from "@splitch/worker-runtime";
+import {
+  environmentSelectorFromInput,
+  environmentSelectorsFromInput,
+  withResolvedInput,
+} from "./path-selector-input-rewrite";
 import { membershipClaimsInScopes } from "./scope-binding";
 
 const APP_ID_PREFIX = "app_";
@@ -61,6 +66,16 @@ export async function resolveControlPlanePathSelectors(
   );
   if (!environments.ok) return environments;
 
+  const queryEnvironment = await resolveEnvironment(
+    repo,
+    resolvedParams.appId,
+    environmentSelectorFromInput(contract.id, input),
+    false,
+    true,
+    "ENVIRONMENT_NOT_FOUND",
+  );
+  if (!queryEnvironment.ok) return queryEnvironment;
+
   const flag = await resolveFlag(
     repo,
     resolvedParams.appId,
@@ -72,7 +87,13 @@ export async function resolveControlPlanePathSelectors(
 
   return {
     ok: true,
-    input: withResolvedInput(input, params, resolvedParams, environments.environmentIds),
+    input: withResolvedInput(
+      input,
+      params,
+      resolvedParams,
+      environments.environmentIds,
+      queryEnvironment.environmentId,
+    ),
     params: resolvedParams,
     principal: resolvedPrincipal,
   };
@@ -120,6 +141,7 @@ async function resolveEnvironment(
   selector: string | undefined,
   forceCanonicalId: boolean,
   requireMatch = false,
+  notFoundCode: "APP_NOT_FOUND" | "ENVIRONMENT_NOT_FOUND" = "APP_NOT_FOUND",
 ): Promise<{ ok: true; environmentId?: string } | { ok: false; error: ErrorResponse }> {
   if (selector === undefined) return { ok: true };
   if (!appId?.startsWith(APP_ID_PREFIX)) return failure("APP_NOT_FOUND", "app not found");
@@ -147,15 +169,20 @@ async function resolveEnvironment(
       },
     };
   }
-  // Environment not-found uses APP_NOT_FOUND throughout the Control Plane because
-  // the Environment is part of the App resource boundary, unlike an App-level Flag.
+  // Path selectors keep APP_NOT_FOUND so a caller cannot use a nested route to
+  // disclose whether an Environment exists outside the authorized App. Flag-read
+  // query filters run after the App resolved and passed authorization, so their
+  // miss names the actual filter with ENVIRONMENT_NOT_FOUND.
   const environment = candidates[0];
   return environment
     ? {
         ok: true,
         environmentId: environment.environmentId,
       }
-    : failure("APP_NOT_FOUND", "app not found");
+    : failure(
+        notFoundCode,
+        notFoundCode === "ENVIRONMENT_NOT_FOUND" ? "environment not found" : "app not found",
+      );
 }
 
 async function resolveEnvironmentSelectors(
@@ -164,13 +191,28 @@ async function resolveEnvironmentSelectors(
   selectors: readonly string[] | undefined,
 ): Promise<{ ok: true; environmentIds?: string[] } | { ok: false; error: ErrorResponse }> {
   if (!selectors) return { ok: true };
+  if (!appId?.startsWith(APP_ID_PREFIX)) return failure("APP_NOT_FOUND", "app not found");
+  const candidates = await repo.identity.findEnvironmentSelectorCandidatesForSelectors(
+    appScope(appId),
+    selectors,
+  );
   const environmentIds: string[] = [];
   for (const selector of selectors) {
-    const environment = await resolveEnvironment(repo, appId, selector, false, true);
-    if (!environment.ok) return environment;
-    if (!environment.environmentId) {
-      throw new Error("Environment selector resolution did not return a canonical ID");
+    const matches = candidates.filter(
+      (candidate) => candidate.environmentId === selector || candidate.environmentKey === selector,
+    );
+    if (matches.length > 1) {
+      return {
+        ok: false,
+        error: {
+          code: "SELECTOR_AMBIGUOUS",
+          message: `Environment selector "${selector}" matches more than one Environment`,
+          details: { candidates: matches, recommendedAction: "USE_CANONICAL_ID" },
+        },
+      };
     }
+    const environment = matches[0];
+    if (!environment) return failure("ENVIRONMENT_NOT_FOUND", "environment not found");
     environmentIds.push(environment.environmentId);
   }
   return { ok: true, environmentIds };
@@ -238,72 +280,8 @@ function canonicalEnvironmentLookup(request: Request): boolean {
   return new URL(request.url).searchParams.get("by") === "id";
 }
 
-function withResolvedInput(
-  input: unknown,
-  rawParams: Record<string, string>,
-  resolvedParams: Record<string, string>,
-  environmentIds: readonly string[] | undefined,
-): unknown {
-  return withResolvedEnvironmentIds(
-    withResolvedParams(input, rawParams, resolvedParams),
-    environmentIds,
-  );
-}
-
-function withResolvedParams(
-  input: unknown,
-  rawParams: Record<string, string>,
-  resolvedParams: Record<string, string>,
-): unknown {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new Error("path selector resolver received non-object parsed input");
-  }
-  if (Object.keys(rawParams).length === 0) return input;
-  const parsedParams = "params" in input ? input.params : undefined;
-  if (!parsedParams || typeof parsedParams !== "object" || Array.isArray(parsedParams)) {
-    throw new Error("path selector resolver received parsed input without object params");
-  }
-  const replacements = Object.fromEntries(
-    Object.entries(resolvedParams).filter(([name, value]) => rawParams[name] !== value),
-  );
-  return Object.keys(replacements).length === 0
-    ? input
-    : { ...input, params: { ...parsedParams, ...replacements } };
-}
-
-function withResolvedEnvironmentIds(
-  input: unknown,
-  environmentIds: readonly string[] | undefined,
-): unknown {
-  if (environmentIds === undefined) return input;
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new Error("Environment selector resolver received non-object parsed input");
-  }
-  const query = "query" in input ? input.query : undefined;
-  if (!query || typeof query !== "object" || Array.isArray(query)) {
-    throw new Error("Environment selector resolver received parsed input without object query");
-  }
-  const envs = environmentIds.join(",");
-  return { ...input, query: { ...query, envs } };
-}
-
-function environmentSelectorsFromInput(contractId: string, input: unknown): string[] | undefined {
-  if (contractId !== "flags_list" && contractId !== "flags_get") return undefined;
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new Error("Environment selector resolver received non-object parsed input");
-  }
-  const query = "query" in input ? input.query : undefined;
-  if (!query || typeof query !== "object" || Array.isArray(query)) return undefined;
-  const envs = "envs" in query ? query.envs : undefined;
-  if (envs === undefined) return undefined;
-  if (typeof envs !== "string") {
-    throw new Error("Environment selector resolver received invalid envs query");
-  }
-  return envs.split(",");
-}
-
 function failure(
-  code: "APP_NOT_FOUND" | "FLAG_NOT_FOUND",
+  code: "APP_NOT_FOUND" | "ENVIRONMENT_NOT_FOUND" | "FLAG_NOT_FOUND",
   message: string,
 ): { ok: false; error: ErrorResponse } {
   return { ok: false, error: { code, message, details: {} } };

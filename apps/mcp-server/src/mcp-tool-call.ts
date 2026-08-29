@@ -106,7 +106,7 @@ export async function callTool(
     const result = await sdk.callOperationById(call.name, operationInput, {
       delegation: { subject: actor.subject, scopes: actor.scopes, authDoor: actor.authDoor },
     });
-    assertHydratedFlagResult(call.name, result);
+    assertHydratedFlagResult(call.name, operationInput, result);
     return recordToolResult(
       fault.span,
       jsonRpcResult(
@@ -123,20 +123,27 @@ function withFlagReadDefaults(
   operationId: string,
   input: Record<string, unknown>,
 ): Record<string, unknown> {
+  if (operationId !== "flags_list" && operationId !== "flags_get") return input;
+  const { summary, ...requestInput } = input;
+  if (summary === true) return requestInput;
+  if (requestInput.include !== undefined) return requestInput;
   if (
-    (operationId === "flags_list" || operationId === "flags_get") &&
-    input.include === undefined
+    operationId === "flags_list" &&
+    typeof requestInput.environmentId === "string" &&
+    requestInput.envs === undefined
   ) {
-    return { ...input, include: "config" };
+    const { environmentId, ...hydratedInput } = requestInput;
+    return { ...hydratedInput, include: "config", envs: environmentId };
   }
-  return input;
+  return { ...requestInput, include: "config" };
 }
 
 function assertHydratedFlagResult(
   operationId: string,
+  input: Record<string, unknown>,
   result: { ok: true; data: unknown } | { ok: false },
 ): void {
-  if (!result.ok) return;
+  if (!result.ok || input.include !== "config") return;
   const payload = result.data;
   if (operationId === "flags_list") {
     if (HydratedFlagListResponseSchema.safeParse(payload).success) return;
@@ -145,9 +152,26 @@ function assertHydratedFlagResult(
   } else {
     return;
   }
-  throw new Error(
-    `${operationId} requested complete Flag Configurations but received an unhydrated response`,
-  );
+  throw new McpFlagReadContractError(operationId);
+}
+
+class McpFlagReadContractError extends Error {
+  readonly errorResponse: Record<string, unknown>;
+
+  constructor(operationId: string) {
+    const message = `${operationId} requested complete Flag Configurations but received an unhydrated response`;
+    super(message);
+    this.name = "McpFlagReadContractError";
+    this.errorResponse = {
+      code: "INTERNAL_SERVER_ERROR",
+      message,
+      remediation:
+        "Update the server to the SPL-529 Flag-read contract or report the response mismatch",
+      recommendedAction: "UPDATE_SERVER",
+      docsUrl: "https://splitch.dev/docs/error/INTERNAL_SERVER_ERROR",
+      details: { fault: "FLAG_READ_CONTRACT_MISMATCH" },
+    };
+  }
 }
 
 /**
@@ -196,6 +220,12 @@ function toolCallFailure(id: JsonRpcId, error: unknown, fault: McpToolCallFault)
         argument: error.argument,
         message: error.message,
       }),
+    );
+  }
+  if (error instanceof McpFlagReadContractError) {
+    return recordToolResult(
+      fault.span,
+      jsonRpcResult(id, toolResult(error.errorResponse, { isError: true })),
     );
   }
   return recordToolResult(fault.span, jsonRpcInternalError(id, error, fault.reportFault));

@@ -21,6 +21,27 @@ beforeEach(async () => {
 afterEach(async () => h.bindings.dispose());
 
 describe("hydrated Flag Environment selectors", () => {
+  it("resolves the compact environmentId query selector to its canonical ID", async () => {
+    const fixture = await flagFixture();
+    const prod = requiredEnvironment(fixture.environments, "prod");
+    await h.bindings.d1
+      .prepare("UPDATE flag_configs SET enabled = 1 WHERE app_id = ? AND environment_id = ?")
+      .bind(fixture.appId, prod.id)
+      .run();
+
+    const response = await request(
+      h,
+      "GET",
+      `/apps/${fixture.appId}/flags?environmentId=prod`,
+      fixture.jwt,
+    );
+
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(await response.json()).toMatchObject({
+      items: [{ flagConfiguration: { enabled: true } }],
+    });
+  });
+
   it("resolves an Environment key to its canonical ID before hydration", async () => {
     const fixture = await flagFixture();
     const prod = requiredEnvironment(fixture.environments, "prod");
@@ -93,7 +114,19 @@ describe("hydrated Flag Environment selectors", () => {
     );
 
     expect(missing.status).toBe(404);
-    expect(await missing.json()).toMatchObject({ code: "APP_NOT_FOUND" });
+    expect(await missing.json()).toMatchObject({
+      code: "ENVIRONMENT_NOT_FOUND",
+      message: "environment not found",
+    });
+
+    const partial = await request(
+      h,
+      "GET",
+      `/apps/${fixture.appId}/flags/${fixture.flagId}?include=config&envs=prod,does-not-exist`,
+      fixture.jwt,
+    );
+    expect(partial.status).toBe(404);
+    expect(await partial.json()).toMatchObject({ code: "ENVIRONMENT_NOT_FOUND" });
   });
 });
 

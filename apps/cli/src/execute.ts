@@ -42,6 +42,12 @@ export async function executeInvocation(
 ): Promise<CliResult> {
   const io = withJsonMode(deps.io ?? consoleIo(), invocation.flags.json);
   if (invocation.metaCommand) {
+    const usageError = validateFlagReadUsage(
+      { operationId: null, path: [invocation.metaCommand] },
+      invocation,
+      io,
+    );
+    if (usageError) return usageError;
     return executeMeta(invocation, deps, io);
   }
   const command = findCommand(invocation.commandPath);
@@ -53,6 +59,8 @@ export async function executeInvocation(
     });
     return { exitCode: EXIT_USAGE };
   }
+  const usageError = validateFlagReadUsage(command, invocation, io);
+  if (usageError) return usageError;
   return executeCommand(command, invocation, deps, io);
 }
 
@@ -222,7 +230,7 @@ function validateSpecializedUsage(
   if (command.kind === "flag_targeting_rules_add") {
     return validateFlagTargetingRulesAddUsage(invocation, io);
   }
-  return validateFlagReadUsage(command, invocation, io);
+  return null;
 }
 
 function isCloudflareCommand(command: CliCommandDefinition): command is CliCommandDefinition & {

@@ -50,8 +50,8 @@ no storage internals (`version`, `createdBy`).
 
 ### FlagListResponse
 
-`flags_list` accepts an optional, non-empty `environmentId`. Omission requests the App-level catalog
-alone. Supplying an Environment ID requests the same bounded catalog with a
+`flags_list` accepts an optional, non-empty `environmentId` Environment ID-or-key selector. Omission
+requests the App-level catalog alone. Supplying a selector requests the same bounded catalog with a
 `flagConfiguration` summary on every item:
 
 ```
@@ -74,6 +74,10 @@ percentage or `null`, `defaultVariant` is the Variant name, and availability and
 absent. `flagConfiguration` is absent from every item when `environmentId` is omitted and required
 on every item when it is supplied. An empty `environmentId` is invalid rather than equivalent to
 omission.
+
+The App has already resolved and passed authorization before this query filter resolves. A miss
+therefore returns `ENVIRONMENT_NOT_FOUND`; unlike an Environment path segment, the filter does not
+use `APP_NOT_FOUND` because there is no remaining App-boundary fact to withhold.
 
 ---
 

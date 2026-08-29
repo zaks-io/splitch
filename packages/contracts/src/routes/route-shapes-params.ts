@@ -11,13 +11,19 @@ const FlagSelectorSchema = z
   .string()
   .describe("Canonical Flag ID (flag_...) or human-readable Flag key.");
 
+export const FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT = 45;
+
 export const OrgParams = z.object({ orgId: z.string() });
 export const OrgMemberParams = z.object({ orgId: z.string(), userId: z.string() });
 export const AppParams = z.object({ appId: AppSelectorSchema });
 const EnvironmentSelectorsQuerySchema = z
   .string()
   .min(1)
-  .regex(/^[^,]+(?:,[^,]+)*$/, "envs must be a comma-separated list of Environment selectors");
+  .regex(/^[^,]+(?:,[^,]+)*$/, "envs must be a comma-separated list of Environment selectors")
+  .refine(
+    (selectors) => selectors.split(",").length <= FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT,
+    `envs accepts at most ${FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT} Environment selectors`,
+  );
 export const FlagListQuerySchema = z
   .object({
     environmentId: z.string().min(1).optional(),

@@ -19,6 +19,7 @@ import { CLI_MCP_CONTRACT_EXCEPTIONS } from "./lib/cli-mcp-contract-exceptions.j
 import {
   assertCliMcpParity,
   assertDerivedMcpSchemaParity,
+  assertFlagReadSummaryParity,
   assertPublicAgentSurface,
 } from "./lib/cli-mcp-parity.mjs";
 import { assertSharedOperationParity } from "./lib/cli-mcp-shared-operation.js";
@@ -137,9 +138,21 @@ const publishedSchemas = new Map(
   ]),
 );
 const sharedSchemas = assertDerivedMcpSchemaParity({ derivedSchemas, publishedSchemas });
+const sharedFlagReadFields = assertFlagReadSummaryParity({
+  cliHelp: new Map(
+    CLI_COMMANDS.filter(
+      (command) => command.operationId === "flags_list" || command.operationId === "flags_get",
+    ).map((command) => [command.operationId, renderCommandHelp(command)]),
+  ),
+  mcpInputSchemas: new Map(
+    MCP_TOOL_DEFINITIONS.filter(
+      (tool) => tool.name === "flags_list" || tool.name === "flags_get",
+    ).map((tool) => [tool.name, tool.inputSchema]),
+  ),
+});
 
 const sharedOperations = await assertSharedOperationParity();
 
 console.log(
-  `CLI/MCP parity and published-surface gate passed: ${cliOperationIds.length} CLI operations, ${mcpOperationIds.length} MCP tools, ${sharedSchemas} identical tool schemas, ${sharedOperations} shared-operation runs through both surfaces`,
+  `CLI/MCP parity and published-surface gate passed: ${cliOperationIds.length} CLI operations, ${mcpOperationIds.length} MCP tools, ${sharedSchemas} identical tool schemas, ${sharedFlagReadFields} shared Flag-read fields, ${sharedOperations} shared-operation runs through both surfaces`,
 );

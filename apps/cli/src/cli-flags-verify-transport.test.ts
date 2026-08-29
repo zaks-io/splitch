@@ -26,6 +26,40 @@ afterEach(async () => {
 });
 
 describe("flags verify transport", () => {
+  it("refuses --summary before any control-plane call", async () => {
+    const { credentialPath } = await makeTempHome();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    let called = false;
+
+    const code = await runCli(
+      [
+        "flags",
+        "verify",
+        "checkout",
+        "--app",
+        "app_1",
+        "--env",
+        "env_1",
+        "--targeting-key",
+        "user-1",
+        "--summary",
+      ],
+      {
+        credentialPath,
+        fetch: async () => {
+          called = true;
+          return Response.json({});
+        },
+      },
+    );
+
+    expect(code).toBe(EXIT_USAGE);
+    expect(called).toBe(false);
+    expect(error.mock.calls.join(" ")).toContain(
+      "--summary is not accepted by splitch flags verify",
+    );
+  });
+
   it("names the positional as a Flag key in the coded usage error", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const log = vi.spyOn(console, "log").mockImplementation(() => {});

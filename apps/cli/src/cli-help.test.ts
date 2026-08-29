@@ -77,11 +77,14 @@ describe("published CLI help", () => {
 
   it("documents hydrated Flag reads and the compact human summary", () => {
     const help = renderHelp(["flags", "list", "--help"]);
+    const getHelp = renderHelp(["flags", "get", "--help"]);
 
     expect(help).toContain("complete per-Environment Flag Configurations");
     expect(help).toContain("--summary");
     expect(help).not.toContain("--with-config");
     expect(help).toContain("splitch flags list --json");
+    expect(getHelp).toContain("cannot be combined with --summary");
+    expect(getHelp).not.toContain("flags list --summary");
   });
 
   it("surfaces the kill-switch-off exemption on flag-config update and env-policy help (SPL-312)", () => {
