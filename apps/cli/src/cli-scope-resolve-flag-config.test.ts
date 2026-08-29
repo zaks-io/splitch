@@ -1,9 +1,14 @@
 import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
-import { EXIT_OK, EXIT_SCOPE } from "./exit-codes.js";
-import { flagsListStub, scopeResolutionStubs } from "./scope-resolution-fixtures.js";
-import { FakeCliTransport, flagConfigResponse, storedCredential } from "./test-fixtures.js";
+import { EXIT_API, EXIT_OK } from "./exit-codes.js";
+import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
+import {
+  FakeCliTransport,
+  flagConfigResponse,
+  jsonError,
+  storedCredential,
+} from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
 afterEach(async () => {
@@ -11,19 +16,16 @@ afterEach(async () => {
   await cleanupTempHomes();
 });
 
-const FLAG_1 = [{ id: "flag_1", key: "flag-1", name: "Flag 1" }] as const;
-
 describe("flag-config get --app/--env slug resolution", () => {
-  it("accepts an Environment slug and calls the API with the canonical ID", async () => {
+  it("forwards App and Environment selectors unchanged", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs({ appKey: "cold-test-app" }),
-      flagsListStub({ flags: FLAG_1 }),
       {
         match: (request) =>
           request.method === "GET" &&
-          request.url.includes("/apps/app_1/envs/env_prod/flags/flag_1/config"),
+          request.url.includes("/apps/cold-test-app/envs/prod/flags/flag_1/config"),
         status: 200,
         body: flagConfigResponse,
       },
@@ -37,7 +39,7 @@ describe("flag-config get --app/--env slug resolution", () => {
     expect(code).toBe(EXIT_OK);
     expect(
       transport.requests.some((request) =>
-        request.url.includes("/apps/app_1/envs/env_prod/flags/flag_1/config"),
+        request.url.includes("/apps/cold-test-app/envs/prod/flags/flag_1/config"),
       ),
     ).toBe(true);
   });
@@ -47,7 +49,6 @@ describe("flag-config get --app/--env slug resolution", () => {
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
-      flagsListStub({ flags: FLAG_1 }),
       {
         match: (request) =>
           request.method === "GET" &&
@@ -65,11 +66,17 @@ describe("flag-config get --app/--env slug resolution", () => {
     expect(code).toBe(EXIT_OK);
   });
 
-  it("fails with CLI_SCOPE_UNRESOLVED naming the unknown Environment slug", async () => {
+  it("lets the server refuse an unknown Environment", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
-    // Env fails before Flag resolution, so no flags stub is required.
-    const transport = new FakeCliTransport([...scopeResolutionStubs()]);
+    const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
+      {
+        match: (request) => request.url.includes("/apps/app_1/envs/nosuch/flags/flag_1/config"),
+        status: 404,
+        body: jsonError("APP_NOT_FOUND", "app not found"),
+      },
+    ]);
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const code = await runCli(
@@ -77,34 +84,24 @@ describe("flag-config get --app/--env slug resolution", () => {
       { credentialPath, fetch: transport.fetch },
     );
 
-    expect(code).toBe(EXIT_SCOPE);
+    expect(code).toBe(EXIT_API);
     const message = error.mock.calls.join(" ");
-    expect(message).toContain("CLI_SCOPE_UNRESOLVED");
-    expect(message).toContain("nosuch");
-    expect(message).not.toContain("FLAG_NOT_FOUND");
+    expect(message).toContain("APP_NOT_FOUND");
+    expect(message).not.toContain("CLI_SCOPE_UNRESOLVED");
     expect(transport.requests.some((request) => request.url.includes("/flags/flag_1/config"))).toBe(
-      false,
+      true,
     );
   });
 
-  it("resolves a Flag key before the config GET", async () => {
+  it("forwards a Flag key before the config GET", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
-      flagsListStub({
-        flags: [
-          {
-            id: "flag_checkout_banner",
-            key: "checkout-banner",
-            name: "Checkout banner",
-          },
-        ],
-      }),
       {
         match: (request) =>
           request.method === "GET" &&
-          request.url.includes("/apps/app_1/envs/env_prod/flags/flag_checkout_banner/config"),
+          request.url.includes("/apps/app_1/envs/env_prod/flags/checkout-banner/config"),
         status: 200,
         body: { ...flagConfigResponse, flagId: "flag_checkout_banner" },
       },
@@ -118,7 +115,7 @@ describe("flag-config get --app/--env slug resolution", () => {
     expect(code).toBe(EXIT_OK);
     expect(
       transport.requests.some((request) =>
-        request.url.includes("/apps/app_1/envs/env_prod/flags/flag_checkout_banner/config"),
+        request.url.includes("/apps/app_1/envs/env_prod/flags/checkout-banner/config"),
       ),
     ).toBe(true);
   });

@@ -220,8 +220,8 @@ describe("hydrated Flag definition reads", () => {
       jwt,
     );
 
-    expect(foreign.status).toBe(200);
-    expect(missing.status).toBe(200);
+    expect(foreign.status).toBe(404);
+    expect(missing.status).toBe(404);
     expect(await foreign.text()).toBe(await missing.text());
   });
 });

@@ -53,6 +53,13 @@ export async function resolveControlPlanePathSelectors(
   if (!target.ok) return target;
   assignResolved(resolvedParams, "targetEnvironmentId", target.environmentId);
 
+  const environments = await resolveEnvironmentSelectors(
+    repo,
+    resolvedParams.appId,
+    environmentSelectorsFromInput(contract.id, input),
+  );
+  if (!environments.ok) return environments;
+
   const flag = await resolveFlag(
     repo,
     resolvedParams.appId,
@@ -64,7 +71,7 @@ export async function resolveControlPlanePathSelectors(
 
   return {
     ok: true,
-    input: withResolvedParams(input, params, resolvedParams),
+    input: withResolvedInput(input, params, resolvedParams, environments.environmentIds),
     params: resolvedParams,
     principal: resolvedPrincipal,
   };
@@ -103,6 +110,7 @@ async function resolveEnvironment(
   appId: string | undefined,
   selector: string | undefined,
   forceCanonicalId: boolean,
+  requireMatch = false,
 ): Promise<{ ok: true; environmentId?: string } | { ok: false; error: ErrorResponse }> {
   if (selector === undefined) return { ok: true };
   if (!appId?.startsWith(APP_ID_PREFIX)) return failure("APP_NOT_FOUND", "app not found");
@@ -117,7 +125,7 @@ async function resolveEnvironment(
     appScope(appId),
     selector,
   );
-  if (candidates.length === 0 && selector.startsWith(ENVIRONMENT_ID_PREFIX)) {
+  if (candidates.length === 0 && selector.startsWith(ENVIRONMENT_ID_PREFIX) && !requireMatch) {
     return { ok: true };
   }
   if (candidates.length > 1) {
@@ -136,11 +144,27 @@ async function resolveEnvironment(
   return environment
     ? {
         ok: true,
-        ...(environment.environmentId === selector
-          ? {}
-          : { environmentId: environment.environmentId }),
+        environmentId: environment.environmentId,
       }
     : failure("APP_NOT_FOUND", "app not found");
+}
+
+async function resolveEnvironmentSelectors(
+  repo: Repository,
+  appId: string | undefined,
+  selectors: readonly string[] | undefined,
+): Promise<{ ok: true; environmentIds?: string[] } | { ok: false; error: ErrorResponse }> {
+  if (!selectors) return { ok: true };
+  const environmentIds: string[] = [];
+  for (const selector of selectors) {
+    const environment = await resolveEnvironment(repo, appId, selector, false, true);
+    if (!environment.ok) return environment;
+    if (!environment.environmentId) {
+      throw new Error("Environment selector resolution did not return a canonical ID");
+    }
+    environmentIds.push(environment.environmentId);
+  }
+  return { ok: true, environmentIds };
 }
 
 async function resolveFlag(
@@ -199,6 +223,18 @@ function canonicalEnvironmentLookup(request: Request): boolean {
   return new URL(request.url).searchParams.get("by") === "id";
 }
 
+function withResolvedInput(
+  input: unknown,
+  rawParams: Record<string, string>,
+  resolvedParams: Record<string, string>,
+  environmentIds: readonly string[] | undefined,
+): unknown {
+  return withResolvedEnvironmentIds(
+    withResolvedParams(input, rawParams, resolvedParams),
+    environmentIds,
+  );
+}
+
 function withResolvedParams(
   input: unknown,
   rawParams: Record<string, string>,
@@ -215,8 +251,40 @@ function withResolvedParams(
   const replacements = Object.fromEntries(
     Object.entries(resolvedParams).filter(([name, value]) => rawParams[name] !== value),
   );
-  if (Object.keys(replacements).length === 0) return input;
-  return { ...input, params: { ...parsedParams, ...replacements } };
+  return Object.keys(replacements).length === 0
+    ? input
+    : { ...input, params: { ...parsedParams, ...replacements } };
+}
+
+function withResolvedEnvironmentIds(
+  input: unknown,
+  environmentIds: readonly string[] | undefined,
+): unknown {
+  if (environmentIds === undefined) return input;
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Environment selector resolver received non-object parsed input");
+  }
+  const query = "query" in input ? input.query : undefined;
+  if (!query || typeof query !== "object" || Array.isArray(query)) {
+    throw new Error("Environment selector resolver received parsed input without object query");
+  }
+  const envs = environmentIds.join(",");
+  return { ...input, query: { ...query, envs } };
+}
+
+function environmentSelectorsFromInput(contractId: string, input: unknown): string[] | undefined {
+  if (contractId !== "flags_list" && contractId !== "flags_get") return undefined;
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Environment selector resolver received non-object parsed input");
+  }
+  const query = "query" in input ? input.query : undefined;
+  if (!query || typeof query !== "object" || Array.isArray(query)) return undefined;
+  const envs = "envs" in query ? query.envs : undefined;
+  if (envs === undefined) return undefined;
+  if (typeof envs !== "string") {
+    throw new Error("Environment selector resolver received invalid envs query");
+  }
+  return envs.split(",");
 }
 
 function failure(

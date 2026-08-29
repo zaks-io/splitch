@@ -69,16 +69,21 @@ describe("flags verify transport", () => {
     });
 
     expect(code).toBe(EXIT_OK);
-    const clientKeyCall = transport.requests.find((request) => request.url.includes("/client-key"));
-    const verifyCall = transport.requests.find((request) =>
+    const controlPlaneCalls = transport.requests.filter((request) =>
+      new URL(request.url).pathname.startsWith("/apps/"),
+    );
+    const dataPlaneCalls = transport.requests.filter((request) =>
       request.url.includes("/api/sdk/verify"),
     );
+    expect(controlPlaneCalls).toHaveLength(1);
+    expect(dataPlaneCalls).toHaveLength(1);
+    const clientKeyCall = controlPlaneCalls[0];
+    const verifyCall = dataPlaneCalls[0];
     expect(clientKeyCall?.authorization).toBe(authHeader());
     expect(new URL(clientKeyCall?.url ?? "https://invalid.test").searchParams.get("by")).toBe("id");
     expect(verifyCall?.authorization).toBe(`Bearer ${clientKeyMaterial}`);
     expect(verifyCall?.authorization).not.toBe(authHeader());
     expect(verifyCall?.body).toMatchObject({ flagKey: "checkout" });
-    expect(transport.requests).toHaveLength(3);
   });
 
   it("returns EXIT_API when the SDK reason is ERROR", async () => {

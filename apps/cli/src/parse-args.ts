@@ -27,6 +27,7 @@ export interface ParsedGlobalFlags {
 }
 
 export interface ParsedInvocation {
+  readonly rawArgs: readonly string[];
   readonly metaCommand?: string;
   readonly commandPath: readonly string[];
   readonly positionals: readonly string[];
@@ -100,6 +101,7 @@ export function parseInvocation(args: readonly string[]): ParsedInvocation {
   const meta = commandTokens[0];
   if (meta && META_COMMANDS.has(meta) && commandTokens.length === 1) {
     return {
+      rawArgs: args,
       metaCommand: meta,
       commandPath: [],
       positionals,
@@ -108,6 +110,7 @@ export function parseInvocation(args: readonly string[]): ParsedInvocation {
   }
 
   return {
+    rawArgs: args,
     commandPath: commandTokens,
     positionals,
     flags: toParsedFlags(flags),

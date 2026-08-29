@@ -11,7 +11,7 @@ describe("Flag list route", () => {
     expect(FlagListQuerySchema.safeParse({ environmentId: "" }).success).toBe(false);
   });
 
-  it("accepts hydrated reads for all Environments or an explicit subset", () => {
+  it("accepts hydrated reads for all Environments or an explicit selector subset", () => {
     expect(FlagListQuerySchema.safeParse({ include: "config" }).success).toBe(true);
     expect(
       FlagListQuerySchema.safeParse({ include: "config", envs: "env_dev,env_prod" }).success,
@@ -19,6 +19,9 @@ describe("Flag list route", () => {
     expect(
       FlagGetQuerySchema.safeParse({ by: "key", include: "config", envs: "env_prod" }).success,
     ).toBe(true);
+    expect(FlagListQuerySchema.safeParse({ include: "config", envs: "dev,prod" }).success).toBe(
+      true,
+    );
   });
 
   it("rejects an Environment subset without hydration", () => {

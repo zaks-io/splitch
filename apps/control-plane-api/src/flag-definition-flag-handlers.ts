@@ -42,7 +42,7 @@ export async function listFlags(
   const appId = pathParam(input, "appId");
   const environmentId = optionalQueryParam(input, "environmentId");
   const include = optionalQueryParam(input, "include");
-  const requestedEnvironmentIds = environmentIdsFromQuery(input);
+  const requestedEnvironmentIds = resolvedEnvironmentIdsFromQuery(input);
   const scope = appScope(appId);
   // The existence checks and the catalog read depend on nothing but the path, so
   // they issue CONCURRENTLY: run in sequence they are three D1 round trips deep
@@ -153,7 +153,7 @@ export async function getFlag(
       appId,
       [flag],
       deps.repo.flags.listVariantsForFlags(appScope(appId), [flag.id]),
-      environmentIdsFromQuery(input),
+      resolvedEnvironmentIdsFromQuery(input),
     );
     const response = hydrated[0];
     if (!response) throw new Error("hydrated flag get: expected one Flag response");
@@ -162,7 +162,7 @@ export async function getFlag(
   return Response.json(await flagResponse(deps.repo, appId, flag));
 }
 
-function environmentIdsFromQuery(input: unknown): string[] | undefined {
+function resolvedEnvironmentIdsFromQuery(input: unknown): string[] | undefined {
   const envs = optionalQueryParam(input, "envs");
   return envs?.split(",");
 }

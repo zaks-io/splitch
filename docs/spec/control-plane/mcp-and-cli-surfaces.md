@@ -166,7 +166,7 @@ require a `--confirm` affordance (ADR-0029); it submits the canonical
 
 `splitch flags list` and `splitch flags get` send `include=config` by default, returning each Flag's
 complete per-Environment Configurations and running Experiment reference in the same request. An
-explicit `--env` is resolved to its canonical Environment ID and sent as `envs`; when `--env` is
+explicit `--env` is sent verbatim as an `envs` selector and resolved by the server; when `--env` is
 absent the CLI omits `envs`, so the server hydrates every Environment in the App. Active
 `SPLITCH_ENV` or config context does not silently narrow an App-level read. `--summary` selects
 compact human columns and does not request hydration. `flags list --summary --env` uses the

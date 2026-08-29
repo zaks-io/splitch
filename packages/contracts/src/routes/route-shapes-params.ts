@@ -14,10 +14,10 @@ const FlagSelectorSchema = z
 export const OrgParams = z.object({ orgId: z.string() });
 export const OrgMemberParams = z.object({ orgId: z.string(), userId: z.string() });
 export const AppParams = z.object({ appId: AppSelectorSchema });
-const EnvironmentIdsQuerySchema = z
+const EnvironmentSelectorsQuerySchema = z
   .string()
   .min(1)
-  .regex(/^[^,]+(?:,[^,]+)*$/, "envs must be a comma-separated list of Environment IDs");
+  .regex(/^[^,]+(?:,[^,]+)*$/, "envs must be a comma-separated list of Environment selectors");
 export const FlagListQuerySchema = z
   .object({
     environmentId: z.string().min(1).optional(),
@@ -27,8 +27,8 @@ export const FlagListQuerySchema = z
       .describe(
         "Include complete per-Environment Flag Configurations; CLI and MCP reads use this by default.",
       ),
-    envs: EnvironmentIdsQuerySchema.optional().describe(
-      "Comma-separated Environment IDs to hydrate; omission hydrates every Environment in the App.",
+    envs: EnvironmentSelectorsQuerySchema.optional().describe(
+      "Comma-separated Environment IDs or keys to hydrate; omission hydrates every Environment in the App.",
     ),
   })
   .strict()
@@ -66,8 +66,8 @@ export const FlagGetQuerySchema = z
       .describe(
         "Include complete per-Environment Flag Configurations; CLI and MCP reads use this by default.",
       ),
-    envs: EnvironmentIdsQuerySchema.optional().describe(
-      "Comma-separated Environment IDs to hydrate; omission hydrates every Environment in the App.",
+    envs: EnvironmentSelectorsQuerySchema.optional().describe(
+      "Comma-separated Environment IDs or keys to hydrate; omission hydrates every Environment in the App.",
     ),
   })
   .strict()

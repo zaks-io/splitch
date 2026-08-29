@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
-import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import { FakeCliTransport, flagListPage, flagRecord, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
@@ -161,16 +160,13 @@ describe("hydrated Flag reads", () => {
     expect(transport.requests.filter((request) => request.url.includes("/flags"))).toHaveLength(1);
   });
 
-  it("resolves an explicit --env and sends it through envs on the hydrated request", async () => {
+  it("sends an explicit --env verbatim through envs on the hydrated request", async () => {
     const credentials = await credentialPath();
     const transport = new FakeCliTransport([
-      ...scopeResolutionStubs({ appId: "app_1" }),
       {
         match: (request) => {
           const url = new URL(request.url);
-          return (
-            url.pathname === "/apps/app_1/flags" && url.searchParams.get("envs") === "env_prod"
-          );
+          return url.pathname === "/apps/app_1/flags" && url.searchParams.get("envs") === "prod";
         },
         status: 200,
         body: {

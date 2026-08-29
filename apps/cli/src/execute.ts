@@ -1,4 +1,3 @@
-import { getRoute } from "@splitch/sdk/control-plane";
 import {
   API_KEY_CREATE_OPERATION_ID,
   apiKeyOutputPathError,
@@ -34,7 +33,6 @@ import { executeFlagTargetingRulesAdd } from "./flag-targeting-rules-add.js";
 import { validateFlagTargetingRulesAddUsage } from "./flag-targeting-rules-add-input.js";
 import { buildOperationInput } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
-import { resolveContextSelectors, resolveFlagSelector } from "./scope-resolve.js";
 
 export type { CliDeps, CliResult } from "./execute-types.js";
 
@@ -133,7 +131,7 @@ async function executeCommand(
     return positionalError;
   }
 
-  let context = await resolveContext({
+  const context = await resolveContext({
     flags: { app: invocation.flags.app, env: invocation.flags.env },
     env: deps.env,
     cwd: deps.cwd,
@@ -151,12 +149,6 @@ async function executeCommand(
     return executeCloudflareCommand(command.kind, invocation, deps, io, context);
   }
 
-  try {
-    context = await resolveContextSelectors(deps, context, command);
-  } catch (error) {
-    return handleExecutionError(error, io);
-  }
-
   const specialized = executeSpecializedCommand(command, invocation, deps, io, context);
   if (specialized) {
     return specialized;
@@ -166,7 +158,6 @@ async function executeCommand(
   try {
     input = buildOperationInput(command, invocation, context);
     assertPathParamsPresent(command, input);
-    input = await resolveFlagIdInInput(deps, command, context, input);
   } catch (error) {
     return handleInputError(error, invocation, io);
   }
@@ -268,37 +259,6 @@ function validateRequiredPositionals(
     }
     throw error;
   }
-}
-
-/**
- * Commands whose route carries `:flagId` accept a Flag key as well as a
- * canonical ID. Resolve keys to IDs within the selected App before the request
- * hits the wire; leave body-only `flagId` fields (e.g. experiments create) untouched.
- */
-async function resolveFlagIdInInput(
-  deps: CliDeps,
-  command: CliCommandDefinition,
-  context: ResolvedContext,
-  input: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
-  if (command.operationId === "flags_get") {
-    return input;
-  }
-  const routePath = getRoute(command.operationId)?.path ?? "";
-  if (!routePath.includes(":flagId")) {
-    return input;
-  }
-  if (typeof input.flagId !== "string" || !input.flagId) {
-    return input;
-  }
-  if (!context.appId) {
-    return input;
-  }
-  const resolved = await resolveFlagSelector(deps, context.appId, input.flagId);
-  if (resolved.id === input.flagId) {
-    return input;
-  }
-  return { ...input, flagId: resolved.id };
 }
 
 function handleInputError(error: unknown, invocation: ParsedInvocation, io: CliIo): CliResult {

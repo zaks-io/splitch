@@ -120,7 +120,8 @@ three tools to exist.
 `flags_list` and `flags_get` default to `include=config`, so one tool call returns the Flag
 definition, Variant catalog, every requested Environment's complete Flag Configuration, and its
 running Experiment reference. The derived input keeps `include` and the optional comma-separated
-`envs` subset visible; omitting `envs` hydrates every Environment in the App.
+Environment ID-or-key `envs` selector subset visible; omitting `envs` hydrates every Environment in
+the App.
 
 ### Variants (Flag sub-resource)
 
