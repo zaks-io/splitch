@@ -20,12 +20,6 @@ export function assertEnvironmentExposureStatusContract(root, fail) {
     "Environment Exposure status sorting key must be App/Environment scoped",
     fail,
   );
-  requireInstruction(
-    datasource,
-    /^FORWARD_QUERY >\s+SELECT app_id, environment_id, defaultValueOfTypeName\('String'\) AS targeting_key_version, first_exposure_state$/m,
-    "Environment Exposure status must carry its one-release legacy-state migration until production promotion",
-    fail,
-  );
   requireIdentityFree(datasource, "Environment Exposure status", fail);
 
   requireColumns(deletions, ["`app_id`", "`environment_id`"], fail);

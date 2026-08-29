@@ -101,6 +101,29 @@ test("selects only the Tinybird phase for Tinybird datafiles", () => {
   assert.equal(plan.workers, false);
 });
 
+test("classifies the staged Assignment recovery without a full-fleet fallback", () => {
+  const plan = classifyProductionChanges([
+    "apps/evaluation-api/wrangler.jsonc",
+    "apps/evaluation-api/src/wrangler-config.test.ts",
+    "infra/tinybird/datasources/raw_events.datasource",
+    "scripts/check-tinybird-local.mjs",
+    "scripts/lib/production-deploy-plan.mjs",
+    "scripts/lib/tinybird-forward-query-cleanup-contract.mjs",
+    "scripts/lib/tinybird-retained-family-migration-contract.mjs",
+    "scripts/plan-ci-verification.mjs",
+    "scripts/plan-ci-verification.test.mjs",
+    "scripts/tinybird-forward-query-cleanup-contract.test.mjs",
+    "scripts/tinybird-retained-family-migration-contract.test.mjs",
+  ]);
+
+  assert.equal(plan.shouldDeploy, true);
+  assert.equal(plan.tinybird, true);
+  assert.equal(plan.d1, false);
+  assert.equal(plan.workers, true);
+  assert.deepEqual(plan.workerPackages, ["@splitch/evaluation-api"]);
+  assert.deepEqual(plan.unknownPaths, []);
+});
+
 test("selects only the D1 phase for migrations", () => {
   const plan = classifyProductionChanges(["packages/db/migrations/0015_example.sql"]);
 

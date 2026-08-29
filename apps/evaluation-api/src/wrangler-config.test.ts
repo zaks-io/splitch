@@ -86,9 +86,9 @@ describe("Evaluation Worker service bindings", () => {
 
   it.each(
     targets,
-  )("retires every legacy Assignment writer and binds the cutoff-aware namespace for %s", (_target, target) => {
-    // Cloudflare's class Delete migration deletes every object and all stored
-    // data for that class: https://developers.cloudflare.com/durable-objects/reference/durable-object-class-migrations-legacy/
+  )("stages the cutoff-aware Assignment writer before retiring the legacy namespace for %s", (_target, target) => {
+    // Cloudflare rejects deletion while a live deployment still binds V1, so
+    // this release switches to V2 and a later release can delete V1.
     expect(
       target?.durable_objects?.bindings?.find(
         (candidate) => candidate.name === "ASSIGNMENT_STORE_WRITER",
@@ -101,10 +101,11 @@ describe("Evaluation Worker service bindings", () => {
       tag: "v6_assignment_store_writer_v2",
       new_sqlite_classes: ["AssignmentStoreDurableObjectV2"],
     });
-    expect(target?.migrations).toContainEqual({
-      tag: "v7_retire_assignment_store_writer_v1",
-      deleted_classes: ["AssignmentStoreDurableObject"],
-    });
+    expect(
+      target?.migrations?.some((migration) =>
+        migration.deleted_classes?.includes("AssignmentStoreDurableObject"),
+      ),
+    ).toBe(false);
     const worker = readFileSync(fileURLToPath(new URL("./index.ts", import.meta.url)), "utf8");
     expect(worker).toContain("AssignmentStoreDurableObjectV2");
     expect(worker).not.toMatch(/\bAssignmentStoreDurableObject\b/u);
