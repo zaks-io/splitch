@@ -34,8 +34,16 @@ type TargetingRuleView = {
   priority: number;
   /** Catalog name of the served Variant, or the raw id if it left the catalog. */
   variantName: string;
-  conditions: Array<{ attribute: string; operator: string; value: Condition["value"] }>;
-  segmentConditions: Array<{ attribute: string; operator: string; value: Condition["value"] }>;
+  conditions: Array<{
+    attribute: string;
+    operator: Condition["operator"];
+    value: Condition["value"];
+  }>;
+  segmentConditions: Array<{
+    attribute: string;
+    operator: Condition["operator"];
+    value: Condition["value"];
+  }>;
   rolloutPercentage: number | null;
   segmentId: string | null;
   segmentName: string | null;

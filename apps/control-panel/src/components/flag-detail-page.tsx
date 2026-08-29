@@ -1,4 +1,5 @@
 import type { FlagDetailView } from "#lib/flag-detail-view";
+import { flagImplementationConfigurationFromView } from "#lib/flag-implementation-configuration";
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { renderFlagImplementationPrompt } from "#lib/implementation-prompt";
 import { useFlagEditing } from "#lib/use-flag-editing";
@@ -93,16 +94,7 @@ export function FlagDetailPage({
           prompt={renderFlagImplementationPrompt({
             clientKey,
             environment: view.env,
-            flag: {
-              key: view.key,
-              enabled: view.enabled,
-              defaultVariant: view.defaultVariantName,
-              variants: view.catalog.map((variant) => ({
-                name: variant.name,
-                value: JSON.parse(variant.value) as unknown,
-                isDefault: variant.isDefault,
-              })),
-            },
+            flag: flagImplementationConfigurationFromView(view),
           })}
           testId="flag-detail-code-agent-prompt"
         />

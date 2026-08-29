@@ -69,15 +69,7 @@ export function CreateFlagSuccess({
           <ConnectYourCodeCard
             clientKey={settings.data.clientKey}
             flagKey={flag.key}
-            flag={{
-              key: flag.key,
-              defaultVariant: flag.variants.find(({ id }) => id === flag.defaultVariantId)?.name,
-              variants: flag.variants.map((variant) => ({
-                name: variant.name,
-                value: JSON.parse(variant.valueJson) as unknown,
-                isDefault: variant.id === flag.defaultVariantId,
-              })),
-            }}
+            flag={flag}
             settingsHref={settingsHref}
           />
           <FlagVerifyPanel appId={appId} environmentId={environmentId} flagKey={flag.key} />

@@ -158,8 +158,8 @@ describe("Flag detail page", () => {
         ...firstRule,
         segmentId: "segment_paid",
         segmentName: "Paid plan",
-        conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
-        segmentConditions: [{ attribute: "tier", operator: "eq", value: "paid" }],
+        conditions: [{ attribute: "plan", operator: "eq" as const, value: "paid" }],
+        segmentConditions: [{ attribute: "tier", operator: "eq" as const, value: "paid" }],
       },
     ];
 

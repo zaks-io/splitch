@@ -43,13 +43,15 @@ export function ConnectYourCodeCard({
         wrap
       />
 
-      <CodeAgentPrompt
-        prompt={renderFlagImplementationPrompt({
-          clientKey: clientKey.keyMaterial,
-          flag: flag ?? { key: flagKey },
-        })}
-        testId="flag-code-agent-prompt"
-      />
+      {flag ? (
+        <CodeAgentPrompt
+          prompt={renderFlagImplementationPrompt({
+            clientKey: clientKey.keyMaterial,
+            flag,
+          })}
+          testId="flag-code-agent-prompt"
+        />
+      ) : null}
 
       <CopyableCode label="Install" testId="connect-install" value={SDK_INSTALL_COMMAND} />
 

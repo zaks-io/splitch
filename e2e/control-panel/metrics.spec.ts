@@ -179,4 +179,7 @@ async function createMetric(page: import("@playwright/test").Page, input: Metric
   }
   await dialog.getByRole("button", { name: "Create Metric" }).click();
   await expect(page.locator(`[data-metric-key='${input.key}']`)).toBeVisible();
+  const success = page.getByTestId("metric-code-agent-success");
+  await expect(success).toBeVisible();
+  await success.getByRole("button", { name: "Close" }).click();
 }

@@ -1,4 +1,4 @@
-import type { Metric } from "@splitch/contracts";
+import type { Condition, Metric } from "@splitch/contracts";
 import type {
   PanelExperimentDetailOutput,
   PanelExperimentRun,
@@ -11,23 +11,57 @@ export interface FlagImplementationInput {
   readonly environment?: string;
   readonly flag: {
     readonly key: string;
-    readonly enabled?: boolean;
-    readonly defaultVariant?: string;
-    readonly variants?: readonly {
+    readonly configured: boolean;
+    readonly enabled: boolean;
+    readonly defaultVariant: string;
+    readonly availableVariantNames: readonly string[];
+    readonly variants: readonly {
       readonly name: string;
-      readonly value: unknown;
+      readonly valueJson: string;
       readonly isDefault: boolean;
+      readonly availability: "available" | "unavailable" | "not-narrowed";
     }[];
+    readonly targetingRules: readonly {
+      readonly id: string;
+      readonly priority: number;
+      readonly variant: string;
+      readonly conditions: readonly {
+        readonly attribute: string;
+        readonly operator: Condition["operator"];
+        readonly value: Condition["value"];
+      }[];
+      readonly segment: {
+        readonly id: string;
+        readonly name: string;
+        readonly conditions: readonly {
+          readonly attribute: string;
+          readonly operator: Condition["operator"];
+          readonly value: Condition["value"];
+        }[];
+      } | null;
+      readonly rolloutPercentage: number | null;
+    }[];
+    readonly baselineRolloutPercentage: number | null;
   };
 }
 
 export function renderFlagImplementationPrompt(input: FlagImplementationInput): string {
-  return prompt("Implement this Splitch Flag in this codebase.", input, [
+  const configuration = {
+    ...input,
+    flag: {
+      ...input.flag,
+      variants: input.flag.variants.map(({ valueJson, ...variant }) => ({
+        ...variant,
+        value: parseJson(valueJson, `Variant ${variant.name} value`),
+      })),
+    },
+  };
+  return prompt("Implement this Splitch Flag in this codebase.", configuration, [
     "Inspect the repository first and identify the real runtime, package manager, existing feature-flag seam, and the user path where this Flag is encountered.",
     "Follow the matching official Splitch runtime guide. Install the official package only if it is not already present, and reuse an existing Splitch client instead of creating a second one.",
     "Configure the shared client with the supplied public Client Key. Follow the repository's existing environment-variable convention when one exists. Never substitute an API Key into browser or mobile code.",
     "Evaluate the exact Flag key on the real user path. Use the application's stable Targeting Key and one caller-stable idempotency key per logical Evaluation, reused if that Evaluation is retried.",
-    "Map every configured Variant deliberately and preserve the current behavior as the default path. Do not guess a Variant value that is absent from the configuration block.",
+    "Map every configured Variant deliberately and preserve the current behavior as the default path. Respect the Environment's availability, Targeting Rules, and baseline rollout; do not guess a value absent from the configuration block.",
     "Keep failures observable. Where fallback behavior can be confused with a real Variant, use ResolutionDetails and handle reason ERROR explicitly.",
     "Add focused tests for each Variant and the error path, run the relevant checks, and report the files changed plus the verification evidence.",
   ]);
@@ -60,14 +94,21 @@ export function renderExperimentImplementationPrompt({
     run: {
       id: run.id,
       number: run.runNumber,
+      status: run.status,
       targetingKeyField: run.targetingKey,
       entityType: run.targetingKeyType,
+      salt: run.salt,
       allocation: run.allocation,
+      controlVariantId: run.controlVariantId,
       variants: parseJson(run.variantsJson, `Run ${run.id} variants`),
       targetingRules: parseJson(run.targetingRulesJson, `Run ${run.id} targeting rules`),
       activationMetricId: run.activationMetricId,
       decisionMetricIds: run.decisionMetricIds,
       decisionGuardrailMetricIds: run.decisionGuardrailMetricIds,
+      confidenceLevel: run.confidenceLevel,
+      horizon: run.horizon,
+      sampleSizeLocked: run.sampleSizeLocked,
+      configHash: run.configHash,
     },
     measurement: {
       conversionWindowMs: data.experiment.conversionWindowMs,

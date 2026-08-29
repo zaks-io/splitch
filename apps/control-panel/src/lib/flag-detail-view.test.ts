@@ -2,6 +2,7 @@ import type { FlagConfigGetOutput } from "@splitch/control-plane-sdk";
 import { describe, expect, it } from "vitest";
 import type { FlagDetailData } from "./flag-detail-data";
 import { flagDetailView as buildFlagDetailView, isLocked } from "./flag-detail-view";
+import { flagImplementationConfigurationFromView } from "./flag-implementation-configuration";
 
 const NO_SEGMENTS = {
   items: [],
@@ -105,6 +106,20 @@ describe("Flag detail view model", () => {
       segmentName: "Paid plan",
       segmentConditions: [{ attribute: "tier", operator: "eq", value: "paid" }],
       conditions: [{ attribute: "plan", operator: "eq", value: "pro" }],
+    });
+    expect(flagImplementationConfigurationFromView(view)).toMatchObject({
+      key: "new-checkout",
+      availableVariantNames: ["disabled", "enabled"],
+      targetingRules: [
+        {
+          variant: "enabled",
+          segment: {
+            id: "segment_paid",
+            name: "Paid plan",
+            conditions: [{ attribute: "tier", operator: "eq", value: "paid" }],
+          },
+        },
+      ],
     });
   });
 
