@@ -174,6 +174,7 @@ async function makeControlPlaneApp(): Promise<TestApp> {
     import(new URL("../../control-plane-api/src/token-membership.ts", import.meta.url).href),
   ]);
   const verifier = jwksModule.makeJwksVerifier({
+    issuer: AUTH_ORIGIN,
     fetchJwks: async () => {
       const response = await authFetch(new Request(`${AUTH_ORIGIN}/.well-known/jwks.json`));
       return response.json();

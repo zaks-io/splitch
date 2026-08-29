@@ -1,3 +1,7 @@
+import {
+  type AccessTokenAuthorization,
+  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+} from "@splitch/contracts";
 import { accessTokenPrivateJwkFromSecret, accessTokenSigningKey } from "./access-token-key";
 import { OAuthError } from "./oauth-errors";
 
@@ -48,6 +52,7 @@ interface AccessTokenClaims {
   scopes: string[];
   auth_door: AccessTokenAuthDoor;
   demo_expires_at?: string;
+  authorization?: AccessTokenAuthorization;
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {
@@ -165,7 +170,12 @@ function exchangedAssertionClaims(
 
 function accessTokenClaimsForExchange(
   exchanged: ExchangedAssertion,
-  options: { issuer: string; audience: string; nowSeconds: number },
+  options: {
+    issuer: string;
+    audience: string;
+    nowSeconds: number;
+    authorization?: AccessTokenAuthorization;
+  },
 ): AccessTokenClaims {
   return {
     typ: "access_token",
@@ -174,9 +184,10 @@ function accessTokenClaimsForExchange(
     aud: options.audience,
     iat: options.nowSeconds,
     exp: options.nowSeconds + ACCESS_TOKEN_TTL_SECONDS,
-    scopes: exchanged.scopes,
+    scopes: options.authorization ? [] : exchanged.scopes,
     auth_door: exchanged.authDoor,
     ...(exchanged.demoExpiresAt ? { demo_expires_at: exchanged.demoExpiresAt } : {}),
+    ...(options.authorization ? { authorization: options.authorization } : {}),
   };
 }
 
@@ -212,7 +223,12 @@ export interface TokenSigner {
     nowSeconds: number,
     demoExpiresAt?: string,
   ): Promise<string>;
-  exchangeForAccessToken(assertion: string, nowSeconds: number, audience?: string): Promise<string>;
+  exchangeForAccessToken(
+    assertion: string,
+    nowSeconds: number,
+    audience?: string,
+    authorization?: AccessTokenAuthorization,
+  ): Promise<string>;
   /**
    * Verify a provisional identity_assertion and return its claims (the claim
    * ceremony needs the `sub` + pre-claim `scopes`, not an access token yet).
@@ -230,6 +246,7 @@ export interface TokenSigner {
     authDoor: AccessTokenClaims["auth_door"],
     nowSeconds: number,
     audience?: string,
+    authorization?: AccessTokenAuthorization,
   ): Promise<string>;
 }
 
@@ -263,13 +280,19 @@ export function makeTokenSigner(opts: {
       return signHmacJwt(claims, opts.assertionSecret);
     },
 
-    async exchangeForAccessToken(assertion, nowSeconds, audience = opts.controlPlaneAudience) {
+    async exchangeForAccessToken(
+      assertion,
+      nowSeconds,
+      audience = opts.controlPlaneAudience,
+      authorization,
+    ) {
       const claims = await verifyAndDecode(assertion, opts.assertionSecret);
       const exchanged = exchangedAssertionClaims(claims, nowSeconds);
       const access = accessTokenClaimsForExchange(exchanged, {
         issuer: opts.issuer,
         audience,
         nowSeconds,
+        ...(authorization ? { authorization } : {}),
       });
       return signAccessJwt(access, opts.accessSecret, accessTokenTrustContract);
     },
@@ -294,7 +317,11 @@ export function makeTokenSigner(opts: {
       authDoor,
       nowSeconds,
       audience = opts.controlPlaneAudience,
+      authorization,
     ) {
+      if (authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION && scopes.length !== 0) {
+        throw new Error("membership-wide read tokens cannot carry selector scopes");
+      }
       const access: AccessTokenClaims = {
         typ: "access_token",
         sub: userId,
@@ -304,6 +331,7 @@ export function makeTokenSigner(opts: {
         exp: nowSeconds + ACCESS_TOKEN_TTL_SECONDS,
         scopes,
         auth_door: authDoor,
+        ...(authorization ? { authorization } : {}),
       };
       return signAccessJwt(access, opts.accessSecret, accessTokenTrustContract);
     },

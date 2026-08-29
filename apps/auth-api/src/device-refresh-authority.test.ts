@@ -55,6 +55,63 @@ function refreshRequest(app: ReturnType<typeof routeApp>, extra: Record<string, 
   });
 }
 
+describe("OAuth membership-wide read refresh", () => {
+  it("refuses membership-wide read authority when the session has a stored App selection", async () => {
+    const minted: Array<{ scopes: string[]; authorization: string | undefined }> = [];
+    const app = routeApp({
+      tokenSigner: {
+        ...tokenSigner,
+        mintAccessToken: async (
+          _userId,
+          scopes,
+          _authDoor,
+          _nowSeconds,
+          _audience,
+          authorization,
+        ) => {
+          minted.push({ scopes: [...scopes], authorization });
+          return "membership-wide-read-token";
+        },
+      },
+      repo: memberRepo,
+      deviceFlow: refreshOnlyDeviceFlow("org_selected"),
+      deviceRefreshSessions: {
+        remember: async () => {},
+        lookup: async () => storedSession(),
+        rotate: async () => {},
+        forget: async () => {},
+      },
+    });
+
+    const res = await refreshRequest(app, { authorization: "membership-wide-read" });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_request" });
+    expect(minted).toEqual([]);
+  });
+
+  it("rejects membership-wide read authority combined with a selector", async () => {
+    const app = routeApp({
+      repo: memberRepo,
+      deviceFlow: refreshOnlyDeviceFlow("org_selected"),
+      deviceRefreshSessions: {
+        remember: async () => {},
+        lookup: async () => storedSession(),
+        rotate: async () => {},
+        forget: async () => {},
+      },
+    });
+
+    const res = await refreshRequest(app, {
+      authorization: "membership-wide-read",
+      app: "app_selected",
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_request" });
+  });
+});
+
 describe("OAuth refresh token authority", () => {
   it("rotates refresh authority and mints only after live membership reintersection", async () => {
     const rotations: Array<{ previous: string; next: string; selector: string | null }> = [];

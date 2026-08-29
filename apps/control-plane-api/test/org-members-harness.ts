@@ -121,6 +121,7 @@ export async function setup(): Promise<void> {
 
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({
+    issuer: "https://auth.splitch.test",
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -128,7 +129,12 @@ export async function setup(): Promise<void> {
     authResolver: makeControlPlaneAuthResolver({
       verifier,
       sessions: makeSessionStore(bindings.kv),
-      membershipAccess: { authorize: async () => true },
+      membershipAccess: {
+        authorize: async () => true,
+        resolve: async () => {
+          throw new Error("Organization members harness has no wide membership fixture");
+        },
+      },
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,

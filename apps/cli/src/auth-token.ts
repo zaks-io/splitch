@@ -5,7 +5,7 @@ import {
   isTokenBindingRefusal,
   type OAuthFault,
   readOAuthFault,
-  type TokenBinding,
+  type TokenAuthorization,
 } from "./auth-binding.js";
 import type { CliCredentialFile, CredentialStore } from "./credentials.js";
 import { SplitchCliError } from "./errors.js";
@@ -30,7 +30,7 @@ interface RefreshTokenBody {
 export async function refreshAccessToken(
   deps: AuthDeps,
   stored: CliCredentialFile,
-  binding: TokenBinding | null,
+  binding: TokenAuthorization | null,
   explicitBinding: boolean,
   retryOnRotation = true,
 ): Promise<CliCredentialFile> {
@@ -61,7 +61,7 @@ export async function refreshAccessToken(
 async function refreshAccessTokenFault(
   deps: AuthDeps,
   stored: CliCredentialFile,
-  binding: TokenBinding | null,
+  binding: TokenAuthorization | null,
   explicitBinding: boolean,
   response: Response,
   retryOnRotation: boolean,
@@ -220,7 +220,7 @@ async function reloadRotatedCredential(
 function mintedCredential(
   stored: CliCredentialFile,
   body: RefreshTokenBody,
-  mint: { binding: TokenBinding | null; explicitBinding: boolean },
+  mint: { binding: TokenAuthorization | null; explicitBinding: boolean },
 ): CliCredentialFile {
   // Label the token with what the server actually bound, not what we asked
   // for: a key selector ("checkout") resolves server-side to a canonical ID,

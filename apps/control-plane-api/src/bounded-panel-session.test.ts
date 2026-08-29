@@ -94,7 +94,12 @@ function deps() {
   return {
     verifier: { verify: async () => null } as unknown as JwksVerifier,
     sessions: { isRevoked: async () => false },
-    membershipAccess: { authorize: async () => true },
+    membershipAccess: {
+      authorize: async () => true,
+      resolve: async () => {
+        throw new Error("test fixture has no wide membership resolver");
+      },
+    },
     now: () => NOW * 1000,
   };
 }
