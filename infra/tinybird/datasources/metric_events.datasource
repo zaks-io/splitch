@@ -24,3 +24,8 @@ ENGINE_TTL "toDateTime(server_received_at) + toIntervalDay(90)"
 TOKEN raw_events_ingest APPEND
 
 # DEDUP_KEY=dedup_key
+
+# Derive the family used by deletion joins for retained rows.
+# Remove this one-release migration after shared-preview promotion.
+FORWARD_QUERY >
+    SELECT dedup_key, event_id, app_id, environment_id, event_definition_id, event_definition_version_id, event_name, id_type, targeting_key_hash, if(startsWith(targeting_key_hash, 'local-v1:'), concat('v1:', substring(targeting_key_hash, 10)), targeting_key_hash) AS entity_family_hash, fields, dimensions, server_received_at, ingest_ts

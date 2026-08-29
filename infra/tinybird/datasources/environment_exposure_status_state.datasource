@@ -8,3 +8,9 @@ SCHEMA >
 
 ENGINE "AggregatingMergeTree"
 ENGINE_SORTING_KEY "app_id, environment_id, targeting_key_version"
+
+# Legacy aggregate rows predate epoch attribution, which cannot be recovered from their state.
+# Shared preview has no retained Exposure history, so the migration-only empty epoch is intentional.
+# Remove this one-release migration after shared-preview promotion.
+FORWARD_QUERY >
+    SELECT app_id, environment_id, defaultValueOfTypeName('String') AS targeting_key_version, first_exposure_state
