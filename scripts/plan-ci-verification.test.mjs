@@ -129,8 +129,11 @@ test("a lockfile bump revalidates D1 but not Tinybird", () => {
 test("every helper the Tinybird validator imports triggers it", () => {
   for (const helperPath of [
     "scripts/check-tinybird-local.mjs",
+    "scripts/lib/tinybird-analysis-scope-proof.mjs",
+    "scripts/lib/tinybird-exposure-status-contract.mjs",
     "scripts/lib/tinybird-process.mjs",
     "scripts/lib/tinybird-metric-stub-tripwire.mjs",
+    "scripts/lib/tinybird-retained-family-migration-contract.mjs",
     "scripts/machine-lock.mjs",
     "tinybird.config.json",
   ]) {

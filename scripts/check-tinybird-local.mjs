@@ -4,6 +4,7 @@ import { proveAnalysisScopePredicates } from "./lib/tinybird-analysis-scope-proo
 import { assertEnvironmentExposureStatusContract } from "./lib/tinybird-exposure-status-contract.mjs";
 import { assertMetricStubsRetiredWhenMetricEventsExist } from "./lib/tinybird-metric-stub-tripwire.mjs";
 import { output, quietExitCode, quietExitCodeWithInput, run } from "./lib/tinybird-process.mjs";
+import { assertRetainedFamilyMigrationContract } from "./lib/tinybird-retained-family-migration-contract.mjs";
 import { acquireMachineLock } from "./machine-lock.mjs";
 
 const projectDir = ".";
@@ -112,11 +113,6 @@ function validateSplitchDatasourceContracts(root) {
     /^# DEDUP_KEY=dedup_key$/m,
     "raw_events must declare splitch DEDUP_KEY=dedup_key",
   );
-  requireInstruction(
-    rawEvents,
-    /^(?![\s\S]*FORWARD_QUERY)/,
-    "raw_events must not retain the one-shot exposure_at migration query",
-  );
 
   requireColumns(dedupedExposures, [
     "`app_id`",
@@ -129,6 +125,7 @@ function validateSplitchDatasourceContracts(root) {
     /^ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, run_id, variant, entity_family_hash"$/m,
     "deduped_exposures sorting key must be app_id-first",
   );
+  assertRetainedFamilyMigrationContract(root, fail);
 
   requireIdenticalFirstTouchRule(root);
   assertEnvironmentExposureStatusContract(root, fail);
