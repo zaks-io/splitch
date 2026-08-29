@@ -111,7 +111,7 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
     },
 
     async promoteFlagConfig(input) {
-      return promoteFlagConfig(runtimeDeps, input);
+      return catchSegmentNotFound(() => promoteFlagConfig(runtimeDeps, input));
     },
 
     async previewFlagConfig(input) {
@@ -123,7 +123,9 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
     },
 
     async previewPromotion(input) {
-      return promoteFlagConfig(runtimeDeps, { ...input, preview: true });
+      return catchSegmentNotFound(() =>
+        promoteFlagConfig(runtimeDeps, { ...input, preview: true }),
+      );
     },
 
     async applyApprovedFlagConfig(input) {

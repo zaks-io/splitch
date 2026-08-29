@@ -60,6 +60,33 @@ describe("Flag Configuration snapshot publication order", () => {
       state: "deleted",
     });
   });
+
+  it("returns not found when a Promotion reaches publication after deletion", async () => {
+    const store = makeStore(h.kv);
+    expect(await store.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
+    const pausedPromotion = pauseFirstReadAfterConfigCommit();
+
+    const promotion = store.promoteFlagConfig({
+      appId: ids.appId,
+      flagId: ids.flagId,
+      fromEnvironmentId: ids.devEnvironmentId,
+      targetEnvironmentId: ids.environmentId,
+      actor: { ref: "user_spl_526", via: "session" },
+      select: { enabled: true },
+    });
+    await pausedPromotion.paused;
+    expect(await store.deleteFlagConfig(configIdentity())).toMatchObject({
+      ok: true,
+      snapshotRevision: 2,
+    });
+
+    pausedPromotion.release();
+    expect(await promotion).toEqual({ ok: false, reason: "FLAG_NOT_FOUND" });
+    expect(JSON.parse(await requiredSnapshot(snapshotKey()))).toMatchObject({
+      revision: 2,
+      state: "deleted",
+    });
+  });
 });
 
 function makeStore(kv: KVNamespace): ConfigStoreWriter {
